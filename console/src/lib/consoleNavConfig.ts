@@ -14,7 +14,6 @@ import {
   FileCode2,
   FileSearch,
   Gauge,
-  GitBranch,
   HeartPulse,
   History,
   LifeBuoy,
@@ -283,7 +282,6 @@ export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
           { id: 'ib-gateway-manage', label: 'IB Client', icon: Plug },
           { id: 'market-data-manage', label: 'Massive', icon: Database },
           { id: 'flex-query-manage', label: 'IB Flex', icon: FileSearch },
-          { id: 'analytics-pipeline', label: 'Analytics', icon: GitBranch },
         ],
       },
       {
@@ -367,7 +365,8 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'ib-gateway-manage': 'Plugin',
   'market-data-manage': 'Plugin',
   'flex-query-manage': 'Plugin',
-  'analytics-pipeline': 'Plugin',
+  /** Legacy `#analytics-pipeline` — plane during redirect flash to Research Engine. */
+  'analytics-pipeline': 'Research',
   'research-engine': 'Research',
   'research-release': 'Research',
   'plugin-release': 'Plugin',

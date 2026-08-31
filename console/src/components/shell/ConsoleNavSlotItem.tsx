@@ -15,6 +15,7 @@ import {
   shellNavSubItemIconClass,
   type ShellNavItem,
 } from '@bifrost/ui'
+import { NavAgentAskSlot } from '@/components/shell/NavAgentAskSlot'
 
 export type ConsoleNavSlotSignals = {
   isDimmed?: (id: string) => boolean
@@ -79,14 +80,17 @@ export function ConsoleNavSlotItem({
     return (
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
-            className={cn(shellNavCollapsedIconButtonClass(isActive), signalClass)}
-            title={signalTitle}
-            onClick={() => onSelect(item.id)}
-          >
-            {icon}
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              className={cn(shellNavCollapsedIconButtonClass(isActive), signalClass)}
+              title={signalTitle}
+              onClick={() => onSelect(item.id)}
+            >
+              {icon}
+            </button>
+            <NavAgentAskSlot itemId={item.id} collapsed />
+          </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="text-xs font-medium">
           {tip}
@@ -97,36 +101,42 @@ export function ConsoleNavSlotItem({
 
   if (flyout) {
     return (
-      <button
-        type="button"
-        onClick={() => onSelect(item.id)}
-        className={cn(
-          shellNavFlyoutItemBaseClass,
-          'w-full px-2.5',
-          shellNavFlyoutItemClass(isActive),
-          signalClass,
-        )}
-        title={signalTitle}
-      >
-        {leading}
-        {icon}
-        {labelWithCount}
-      </button>
+      <div className="flex min-w-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => onSelect(item.id)}
+          className={cn(
+            shellNavFlyoutItemBaseClass,
+            'min-w-0 flex-1 px-2.5',
+            shellNavFlyoutItemClass(isActive),
+            signalClass,
+          )}
+          title={signalTitle}
+        >
+          {leading}
+          {icon}
+          {labelWithCount}
+        </button>
+        <NavAgentAskSlot itemId={item.id} />
+      </div>
     )
   }
 
   return (
     <SidebarMenuSubItem>
-      <SidebarMenuSubButton
-        isActive={isActive}
-        className={shellNavSubItemButtonClassName({ className: signalClass })}
-        title={signalTitle}
-        onClick={() => onSelect(item.id)}
-      >
-        {leading}
-        {icon}
-        {labelWithCount}
-      </SidebarMenuSubButton>
+      <div className="flex min-w-0 items-center gap-0.5">
+        <SidebarMenuSubButton
+          isActive={isActive}
+          className={shellNavSubItemButtonClassName({ flex: true, className: signalClass })}
+          title={signalTitle}
+          onClick={() => onSelect(item.id)}
+        >
+          {leading}
+          {icon}
+          {labelWithCount}
+        </SidebarMenuSubButton>
+        <NavAgentAskSlot itemId={item.id} />
+      </div>
     </SidebarMenuSubItem>
   )
 }

@@ -1,6 +1,9 @@
-.PHONY: dev dev-api dev-console dev-agent start-agent test test-api test-console lint-api vet-api build-api start check-spine check install-lint-api
+.PHONY: dev dev-api dev-console dev-agent start-agent test test-api test-console lint-api vet-api build-api start check-spine check install-lint-api check-code-health
 
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
+check-code-health:
+	bash ../scripts/code-health/scan.sh --repo bifrost-platform
 
 # Preferred: frees :8780 / :5180 if busy, then starts both
 start dev:

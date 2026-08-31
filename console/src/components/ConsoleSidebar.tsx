@@ -1,5 +1,8 @@
 import { useCallback, useMemo, type ReactNode } from 'react'
-import { ShellNavSidebar, cn, shellNavSubItemIconClass, StatusLamp, type ShellNavItem } from '@bifrost/ui'
+import { useQuery } from '@tanstack/react-query'
+import { ShellNavSidebar, cn, shellNavSubItemIconClass, type ShellNavItem } from '@bifrost/ui'
+import { fetchCodeHealth } from '@/api/codeHealth'
+import { buildCodeHealthLens } from '@/lib/code-health/codeHealthLens'
 import {
   buildPartnerNavSections,
   buildSeatNavItems,
@@ -13,10 +16,7 @@ import { TradeMonitoringPeerLinks } from '@/components/TradeMonitoringPeerLinks'
 import { useControlRoomBayNavSignal } from '@/hooks/useControlRoomBayNavSignal'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
-import {
-  useLaunchDeskChecklistSignals,
-  type LaunchDeskLaneId,
-} from '@/hooks/useLaunchDeskChecklistSignals'
+import { useLaunchDeskChecklistSignals } from '@/hooks/useLaunchDeskChecklistSignals'
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { useMarketIngestQueuePulse } from '@/hooks/useMarketIngestQueuePulse'
 import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
@@ -24,7 +24,10 @@ import { useResearchEngineLiveProbe } from '@/hooks/useResearchEngineLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePatrolSnapshot } from '@/hooks/usePatrolSnapshot'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
-import { missionStatus, signalColor, type Signal } from '@/lib/control-room/missionSignals'
+import { NavAgentAskProvider, NavAgentAskSlot } from '@/components/shell/NavAgentAskSlot'
+import { resolveSidebarNavSignal } from '@/lib/nav/sidebarNavSignal'
+import { signalColor, type Signal } from '@/lib/control-room/missionSignals'
+import { rollupSatelliteBusNav } from '@/lib/satellite-bus/satelliteBusNavSignal'
 import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
 import {
   buildTaskNavGroups,
@@ -83,7 +86,6 @@ export type ConsoleViewTab =
   | 'ib-gateway-manage'
   | 'market-data-manage'
   | 'flex-query-manage'
-  | 'analytics-pipeline'
   | 'research-engine'
   | 'defects'
   | 'dev-sessions'
@@ -104,7 +106,20 @@ export function ConsoleSidebar({
   ambientJobScope?: string | null
 }) {
   const { modeId, mode, isTaskLens } = useTaskMode()
-  const { fleet, snapshot, viewerEnv, viewerEnvLoading } = useFleetSnapshot()
+  const {
+    fleet,
+    snapshot,
+    matrices,
+    busesByEnv,
+    busDeepLoading,
+    viewerEnv,
+    viewerEnvLoading,
+    isLoading: fleetLoading,
+  } = useFleetSnapshot()
+  const busNav = useMemo(
+    () => rollupSatelliteBusNav(busesByEnv, matrices),
+    [busesByEnv, matrices],
+  )
   const queueQ = useOperateQueue()
   const patrol = usePatrolSnapshot()
   const controlRoomBaySignal = useControlRoomBayNavSignal()
@@ -113,6 +128,13 @@ export function ConsoleSidebar({
   const marketQueuePulse = useMarketIngestQueuePulse()
   const flexQueryProbe = useFlexQueryLiveProbe()
   const researchEngineProbe = useResearchEngineLiveProbe()
+  const codeHealthQ = useQuery({
+    queryKey: ['code-health', 'sidebar'],
+    queryFn: () => fetchCodeHealth(5),
+    refetchInterval: 5 * 60_000,
+    retry: false,
+  })
+  const codeHealthLens = useMemo(() => buildCodeHealthLens(codeHealthQ.data), [codeHealthQ.data])
   const launchDeskSignals = useLaunchDeskChecklistSignals({
     ambientJobId,
     ambientJobStatus,
@@ -169,65 +191,47 @@ export function ConsoleSidebar({
 
   const productContext = mode.label
 
-  const renderItemIcon = useCallback(
-    (item: ShellNavItem) => {
-      const ItemIcon = item.icon
-      if (ItemIcon == null) return null
-
-      let signal: Signal | null = null
-      let title: string | undefined
-      if (item.id === 'control-room') {
-        signal = controlRoomBaySignal
-        title = `Control Room Bay Scan: ${missionStatus(controlRoomBaySignal)}`
-      } else if (item.id === 'ib-gateway-manage') {
-        signal = ibGatewayProbe.isLoading ? 'unknown' : ibGatewayProbe.probeReach
-        title = `IB Client: ${ibGatewayProbe.summary}`
-      } else if (item.id === 'market-data-manage') {
-        // Prefer ingest queue husbandry when active; else plugin reach.
-        if (marketQueuePulse.view.active) {
-          signal = marketQueuePulse.view.lamp
-          title = `Massive queue: ${marketQueuePulse.view.verdict} · ${marketQueuePulse.view.pending} ready · ${marketQueuePulse.view.detail}`
-        } else {
-          signal = marketDataProbe.isLoading ? 'unknown' : marketDataProbe.probeReach
-          title = `Massive: ${marketDataProbe.summary}`
-        }
-      } else if (item.id === 'flex-query-manage') {
-        signal = flexQueryProbe.isLoading ? 'unknown' : flexQueryProbe.probeReach
-        title = `IB Flex: ${flexQueryProbe.summary}`
-      } else if (item.id === 'research-engine') {
-        signal = researchEngineProbe.isLoading ? 'unknown' : researchEngineProbe.probeReach
-        title = `Research Engine: ${researchEngineProbe.summary}`
-      } else if (
-        item.id === 'platform-release' ||
-        item.id === 'trade-release' ||
-        item.id === 'research-release' ||
-        item.id === 'plugin-release' ||
-        item.id === 'agent-release' ||
-        item.id === 'satellite-launch'
-      ) {
-        const laneId =
-          item.id === 'satellite-launch' ? 'trade-release' : (item.id as LaunchDeskLaneId)
-        const lane = launchDeskSignals[laneId]
-        signal = lane.signal
-        title = lane.title
-      }
-
-      if (signal == null) {
-        return <ItemIcon className={shellNavSubItemIconClass} aria-hidden />
-      }
-
-      // SidebarMenuSubButton forces data-[active=true]:[&_svg]:text-sidebar-accent-foreground.
-      // Inherit lamp color onto the SVG with !important so status stays visible when selected.
-      return (
-        <span
-          title={title}
-          className="inline-flex shrink-0 [&_svg]:!text-[inherit]"
-          style={{ color: signalColor(signal) }}
-        >
-          <ItemIcon className={cn(shellNavSubItemIconClass, 'opacity-100')} aria-hidden />
-        </span>
-      )
-    },
+  const navProbe = useMemo(
+    () => ({
+      controlRoomBaySignal,
+      ibGateway: {
+        isLoading: ibGatewayProbe.isLoading,
+        probeReach: ibGatewayProbe.probeReach,
+        summary: ibGatewayProbe.summary,
+      },
+      marketQueue: {
+        active: marketQueuePulse.view.active,
+        lamp: marketQueuePulse.view.lamp,
+        verdict: marketQueuePulse.view.verdict,
+        pending: marketQueuePulse.view.pending,
+        detail: marketQueuePulse.view.detail,
+      },
+      marketData: {
+        isLoading: marketDataProbe.isLoading,
+        probeReach: marketDataProbe.probeReach,
+        summary: marketDataProbe.summary,
+      },
+      flexQuery: {
+        isLoading: flexQueryProbe.isLoading,
+        probeReach: flexQueryProbe.probeReach,
+        summary: flexQueryProbe.summary,
+      },
+      researchEngine: {
+        isLoading: researchEngineProbe.isLoading,
+        probeReach: researchEngineProbe.probeReach,
+        summary: researchEngineProbe.summary,
+      },
+      codeHealth: {
+        isLoading: codeHealthQ.isLoading,
+        signal: codeHealthLens.planningLamp,
+        title: codeHealthLens.planningTitle,
+      },
+      fleetLoading,
+      snapshot,
+      busDeepLoading,
+      busNav,
+      launchDeskSignals,
+    }),
     [
       controlRoomBaySignal,
       ibGatewayProbe.isLoading,
@@ -247,55 +251,49 @@ export function ConsoleSidebar({
       researchEngineProbe.isLoading,
       researchEngineProbe.probeReach,
       researchEngineProbe.summary,
+      codeHealthQ.isLoading,
+      codeHealthLens.planningLamp,
+      codeHealthLens.planningTitle,
       launchDeskSignals,
+      fleetLoading,
+      snapshot,
+      busDeepLoading,
+      busNav,
     ],
   )
 
-  const renderItemExtras = useCallback(
+  const signalFor = useCallback(
+    (tabId: string): Signal | null => resolveSidebarNavSignal(tabId, navProbe)?.signal ?? null,
+    [navProbe],
+  )
+
+  const renderItemIcon = useCallback(
     (item: ShellNavItem) => {
-      if (item.id === 'market-data-manage') {
-        const signal = marketQueuePulse.view.active
-          ? marketQueuePulse.view.lamp
-          : marketDataProbe.isLoading
-            ? 'unknown'
-            : marketDataProbe.probeReach
-        const title = marketQueuePulse.view.active
-          ? `Massive queue: ${marketQueuePulse.view.verdict} · ${marketQueuePulse.view.pending} ready`
-          : `Massive: ${marketDataProbe.summary}`
-        return (
-          <span
-            title={title}
-            className="ml-auto inline-flex shrink-0 items-center"
-            aria-label={`Massive health ${signal}`}
-          >
-            <StatusLamp value={signal} kind="reach" />
-          </span>
-        )
+      const ItemIcon = item.icon
+      if (ItemIcon == null) return null
+      const lamp = resolveSidebarNavSignal(item.id, navProbe)
+      if (lamp == null) {
+        return <ItemIcon className={shellNavSubItemIconClass} aria-hidden />
       }
-      if (item.id !== 'research-engine') return null
-      const signal = researchEngineProbe.isLoading ? 'unknown' : researchEngineProbe.probeReach
+
+      // SidebarMenuSubButton forces data-[active=true]:[&_svg]:text-sidebar-accent-foreground.
+      // Inherit lamp color onto the SVG with !important so status stays visible when selected.
       return (
         <span
-          title={`Research Engine: ${researchEngineProbe.summary}`}
-          className="ml-auto inline-flex shrink-0 items-center"
-          aria-label={`Research health ${signal}`}
+          title={lamp.title}
+          className="inline-flex shrink-0 [&_svg]:!text-[inherit]"
+          style={{ color: signalColor(lamp.signal) }}
         >
-          <StatusLamp value={signal} kind="reach" />
+          <ItemIcon className={cn(shellNavSubItemIconClass, 'opacity-100')} aria-hidden />
         </span>
       )
     },
-    [
-      marketDataProbe.isLoading,
-      marketDataProbe.probeReach,
-      marketDataProbe.summary,
-      marketQueuePulse.view.active,
-      marketQueuePulse.view.lamp,
-      marketQueuePulse.view.verdict,
-      marketQueuePulse.view.pending,
-      researchEngineProbe.isLoading,
-      researchEngineProbe.probeReach,
-      researchEngineProbe.summary,
-    ],
+    [navProbe],
+  )
+
+  const renderItemExtras = useCallback(
+    (item: ShellNavItem) => <NavAgentAskSlot itemId={item.id} />,
+    [],
   )
 
   const footer: ReactNode = (
@@ -318,6 +316,7 @@ export function ConsoleSidebar({
   const operateQueueOpen = queueQ.data?.open.length ?? 0
 
   return (
+    <NavAgentAskProvider signalFor={signalFor}>
     <ShellNavSidebar
       productName="Bifrost Ops"
       productBadge="Ops"
@@ -375,5 +374,6 @@ export function ConsoleSidebar({
       }
       footer={footer}
     />
+    </NavAgentAskProvider>
   )
 }

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Code-health ratchet — refuse commit when value > baseline.
+set -e
+ROOT="$(git rev-parse --show-toplevel)"
+bash "${ROOT}/../scripts/code-health/scan.sh" --repo bifrost-platform

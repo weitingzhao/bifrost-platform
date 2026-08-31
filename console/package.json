@@ -14,7 +14,9 @@
     "test:fleet": "npx tsx scripts/fleet-snapshot-test.ts",
     "test:agent-capability": "npx tsx scripts/agent-capability-viewmodel-test.ts",
     "test:governance-pack": "npx tsx scripts/governance-active-pack-test.ts",
-    "test:lane-detail": "npx tsx scripts/lane-detail-context-test.ts"
+    "test:lane-detail": "npx tsx scripts/lane-detail-context-test.ts",
+    "check:code-health": "bash ../../scripts/code-health/scan.sh --repo bifrost-platform",
+    "prepare": "cd .. && husky"
   },
   "dependencies": {
     "@bifrost/ui": "file:../../bifrost-ui",
@@ -43,6 +45,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "lucide-react": "^1.18.0",
     "radix-ui": "^1.5.0",

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
@@ -10,16 +10,28 @@ import {
   DenseTableHeadRow,
   DenseTableRow,
   DenseTag,
-  type DenseTagVariant,
 } from '@bifrost/ui'
-import { fetchCodeHealth, type CodeHealthMetricDto } from '@/api/codeHealth'
+import { fetchCodeHealth } from '@/api/codeHealth'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
+import {
+  OpsVerdictStrip,
+  type OpsVerdictTagVariant,
+} from '@/components/layout/OpsVerdictStrip'
 import {
   SYSTEM_DOMAINS,
   systemDomainLabel,
   type SystemDomainId,
 } from '@/lib/architecture/systemDomainCatalog'
+import {
+  buildCodeHealthLens,
+  dimensionLabel,
+  formatDeltaSlack,
+  type CodeHealthMetricLens,
+} from '@/lib/code-health/codeHealthLens'
+import {
+  buildCodeHealthAgentPack,
+  gatherCodeHealthSnapshot,
+} from '@/lib/code-health/codeHealthAgentPack'
 
 /** A reading older than this describes code that has probably moved on. */
 const STALE_MS = 24 * 60 * 60 * 1000
@@ -34,88 +46,133 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function statusTag(status: CodeHealthMetricDto['status']) {
-  const map: Record<CodeHealthMetricDto['status'], { variant: DenseTagVariant; label: string; title: string }> = {
-    over: { variant: 'danger', label: 'OVER', title: 'Above baseline — CI blocks this' },
-    at_baseline: { variant: 'neutral', label: 'HELD', title: 'At baseline — no regression' },
-    improved: {
-      variant: 'success',
-      label: 'LOWER BASELINE',
-      title: 'Below baseline — lower it in baselines.env so the gain is locked in',
-    },
+function statusTag(row: CodeHealthMetricLens) {
+  if (row.over) {
+    return (
+      <DenseTag variant="danger" title="Above baseline — CI blocks this">
+        OVER
+      </DenseTag>
+    )
   }
-  const t = map[status]
+  if (row.improved) {
+    return (
+      <DenseTag
+        variant="success"
+        title="Below baseline — lower it in baselines.env so the gain is locked in"
+      >
+        LOWER BASELINE
+      </DenseTag>
+    )
+  }
+  if (row.atCeiling) {
+    return (
+      <DenseTag variant="warning" title="At baseline — next regression fails CI">
+        AT CEILING
+      </DenseTag>
+    )
+  }
   return (
-    <DenseTag variant={t.variant} title={t.title}>
-      {t.label}
+    <DenseTag variant="neutral" title="At or below baseline with headroom">
+      HELD
     </DenseTag>
   )
+}
+
+function planningTagVariant(lamp: string): OpsVerdictTagVariant {
+  switch (lamp) {
+    case 'fail':
+      return 'danger'
+    case 'degraded':
+      return 'warning'
+    case 'ok':
+      return 'success'
+    default:
+      return 'warning'
+  }
 }
 
 export function CodeHealthPage() {
   const query = useQuery({
     queryKey: ['code-health', 'page'],
-    queryFn: () => fetchCodeHealth(10),
+    queryFn: () => fetchCodeHealth(30),
     refetchInterval: 5 * 60_000,
     retry: false,
   })
 
-  const report = query.data?.reported === true ? query.data.latest : undefined
+  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+
+  const lens = useMemo(() => buildCodeHealthLens(query.data), [query.data])
 
   const byDomain = useMemo(() => {
-    const groups = new Map<SystemDomainId, CodeHealthMetricDto[]>()
-    for (const m of report?.metrics ?? []) {
-      const key = m.domain as SystemDomainId
-      groups.set(key, [...(groups.get(key) ?? []), m])
+    const groups = new Map<SystemDomainId, CodeHealthMetricLens[]>()
+    for (const row of lens.metrics) {
+      const key = row.metric.domain as SystemDomainId
+      groups.set(key, [...(groups.get(key) ?? []), row])
     }
-    // Keep the Apollo domain order so this page reads like the sidebar.
-    return SYSTEM_DOMAINS.map(d => ({ domain: d.id, metrics: groups.get(d.id) ?? [] })).filter(
-      g => g.metrics.length > 0,
+    return SYSTEM_DOMAINS.map(d => ({ domain: d.id, rows: groups.get(d.id) ?? [] })).filter(
+      g => g.rows.length > 0,
     )
-  }, [report])
+  }, [lens.metrics])
 
-  const overCount = (report?.metrics ?? []).filter(m => m.status === 'over').length
-  const owedCount = (report?.metrics ?? []).filter(m => m.status === 'improved').length
-  const stale = report != null && Date.now() - new Date(report.received_at).getTime() > STALE_MS
-
-  // Never scanned is NOT healthy. It is the absence of a measurement, and the
-  // verdict has to say so rather than default to a reassuring green.
-  const neverScanned = query.isSuccess && query.data?.reported !== true
+  const report = lens.report
+  const stale =
+    report != null && Date.now() - new Date(report.received_at).getTime() > STALE_MS
+  const neverScanned = query.isSuccess && !lens.reported
 
   const lamp = query.isLoading
     ? ('unknown' as const)
-    : query.isError || neverScanned
+    : query.isError
       ? ('unknown' as const)
-      : overCount > 0
-        ? ('degraded' as const)
-        : ('ok' as const)
+      : lens.planningLamp
 
   const tagLabel = query.isLoading
     ? 'PROBING'
     : query.isError
       ? 'UNREACHABLE'
-      : neverScanned
-        ? 'NOT OBSERVED'
-        : overCount > 0
-          ? `${overCount} OVER BASELINE`
-          : 'HELD'
+      : lens.planningTag
 
-  const tagVariant: DenseTagVariant = query.isLoading
+  const tagVariant: OpsVerdictTagVariant = query.isLoading
     ? 'neutral'
-    : query.isError || neverScanned
+    : query.isError
       ? 'warning'
-      : overCount > 0
-        ? 'danger'
-        : 'success'
+      : planningTagVariant(lens.planningLamp)
 
   const summary = query.isLoading
     ? 'Loading code-health readings…'
     : query.isError
       ? `platform-api did not return a reading: ${(query.error as Error).message}`
       : neverScanned
-        ? (query.data?.note ??
+        ? (lens.note ??
           'No code-health report has ever been submitted — nothing has been measured.')
-        : `${report?.metrics.length ?? 0} metric(s) · ${overCount} over baseline · reading from commit ${report?.commit ?? '—'} (${relativeTime(report?.received_at ?? '')})`
+        : `${lens.metrics.length} metric(s) · ${lens.overCount} over · ${lens.atCeilingCount} at ceiling · min slack ${lens.minSlack ?? '—'} · commit ${report?.commit ?? '—'} (${relativeTime(report?.received_at ?? '')})`
+
+  const trendMeta =
+    neverScanned || query.isLoading || query.isError
+      ? null
+      : !lens.hasTrend
+        ? 'NO TREND — need ≥2 reported readings'
+        : `slack vs previous reading: ${
+            lens.totalDeltaSlack == null
+              ? '—'
+              : lens.totalDeltaSlack > 0
+                ? `+${lens.totalDeltaSlack}`
+                : String(lens.totalDeltaSlack)
+          }`
+
+  async function handleCopyForAgent() {
+    if (copyState === 'busy') return
+    setCopyState('busy')
+    try {
+      const snap = await gatherCodeHealthSnapshot()
+      const text = buildCodeHealthAgentPack(snap)
+      await navigator.clipboard.writeText(text)
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
@@ -128,7 +185,7 @@ export function CodeHealthPage() {
         tagTitle={
           neverScanned
             ? 'Absence of data is reported as NOT OBSERVED, never as healthy'
-            : undefined
+            : lens.planningTitle
         }
         summary={summary}
         extraTags={
@@ -138,30 +195,104 @@ export function CodeHealthPage() {
                 STALE
               </DenseTag>
             )}
-            {owedCount > 0 && (
+            {lens.owedCount > 0 && (
               <DenseTag variant="info" title="A metric improved — lower its baseline to lock the gain in">
-                {owedCount} BASELINE LOWERING OWED
+                {lens.owedCount} BASELINE LOWERING OWED
               </DenseTag>
             )}
             {report?.not_measured != null && report.not_measured.trim() !== '' && (
-              <DenseTag variant="warning" title="These repos were absent from the scan — their metrics are unknown, not zero">
+              <DenseTag
+                variant="warning"
+                title="These repos were absent from the scan — their metrics are unknown, not zero"
+              >
                 NOT MEASURED: {report.not_measured.trim()}
+              </DenseTag>
+            )}
+            {trendMeta != null && (
+              <DenseTag
+                variant={lens.hasTrend ? 'neutral' : 'warning'}
+                title="Planning trend from stored history — not a composite health score"
+              >
+                {trendMeta}
               </DenseTag>
             )}
           </>
         }
         actions={
-          <Button size="sm" variant="outline" className="shrink-0" onClick={() => void query.refetch()}>
-            Refresh
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              disabled={copyState === 'busy'}
+              onClick={() => void handleCopyForAgent()}
+            >
+              {copyState === 'busy'
+                ? 'Gathering…'
+                : copyState === 'copied'
+                  ? 'Copied'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy for Agent'}
+            </Button>
+            <Button size="sm" variant="outline" className="shrink-0" onClick={() => void query.refetch()}>
+              Refresh
+            </Button>
+          </>
         }
         meta={
           <span>
-            Readings come from <code>make check-code-health</code> (bifrost-trade-infra) — a ratchet:
-            a metric may never exceed its baseline, and a metric that drops below it owes a lowering.
+            Gate: value may never exceed baseline (<code>make check-code-health</code>). Planning: slack
+            = baseline − value; at ceiling means the next regression fails CI — not a weighted score.
           </span>
         }
       />
+
+      {!neverScanned && !query.isLoading && !query.isError && (
+        <OpsSection
+          title="POSTURE SUMMARY"
+          description="Gate vs planning — not a weighted score"
+          variant="elevated"
+        >
+          <div className="flex flex-col gap-2 text-dense-body">
+            <p className="m-0 font-medium text-foreground">{lens.posture.summaryLine}</p>
+            <p className="m-0 text-[var(--muted-foreground)]">
+              Headroom: {lens.posture.headroomLine}
+            </p>
+            <p className="m-0 text-[var(--muted-foreground)]">Trend: {lens.posture.trendLine}</p>
+            {lens.posture.nextLine !== '' && (
+              <p className="m-0 text-[var(--muted-foreground)]">{lens.posture.nextLine}</p>
+            )}
+            {lens.dimensionSummaries.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground shrink-0">
+                  Dimensions:
+                </span>
+                {lens.dimensionSummaries.map(d => (
+                  <button
+                    key={d.dimension}
+                    type="button"
+                    className="inline-flex border-0 bg-transparent p-0"
+                    title={`${d.label}: ${d.metricCount} metric(s) · min slack ${d.minSlack ?? '—'} · ${d.atCeilingCount} at ceiling · ${d.overCount} over`}
+                    onClick={() => {
+                      const el = document.querySelector(`[data-code-health-dim="${d.dimension}"]`)
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                    }}
+                  >
+                    <DenseTag
+                      variant={
+                        d.overCount > 0 ? 'danger' : d.atCeilingCount > 0 ? 'warning' : 'neutral'
+                      }
+                    >
+                      {d.chipLabel}
+                    </DenseTag>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </OpsSection>
+      )}
 
       {neverScanned && (
         <OpsSection title="HOW TO PRODUCE A READING" variant="elevated">
@@ -177,20 +308,67 @@ export function CodeHealthPage() {
         </OpsSection>
       )}
 
+      {lens.paydownQueue.length > 0 && (
+        <OpsSection
+          title="PAYDOWN QUEUE"
+          description="Next cuts for Agent — OVER first, then ascending slack (at ceiling)"
+          variant="elevated"
+          collapsible
+          defaultCollapsed={false}
+          bodyPadding="none"
+        >
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Priority</DenseTableHead>
+                <DenseTableHead>Dimension</DenseTableHead>
+                <DenseTableHead>Metric</DenseTableHead>
+                <DenseTableHead>Repo</DenseTableHead>
+                <DenseTableHead>Slack</DenseTableHead>
+                <DenseTableHead>Status</DenseTableHead>
+                <DenseTableHead>Detail</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {lens.paydownQueue.map((row, i) => (
+                <DenseTableRow key={row.metric.id} data-code-health-dim={row.dimension}>
+                  <DenseTableCell>{i + 1}</DenseTableCell>
+                  <DenseTableCell>{dimensionLabel(row.dimension)}</DenseTableCell>
+                  <DenseTableCell title={row.metric.id}>{row.metric.label}</DenseTableCell>
+                  <DenseTableCell>{row.metric.repo}</DenseTableCell>
+                  <DenseTableCell className="font-mono tabular-nums">{row.slack}</DenseTableCell>
+                  <DenseTableCell>{statusTag(row)}</DenseTableCell>
+                  <DenseTableCell className="text-[var(--muted-foreground)]">
+                    {row.metric.detail ?? '—'}
+                  </DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </OpsSection>
+      )}
+
       {byDomain.map(group => {
-        const groupOver = group.metrics.filter(m => m.status === 'over').length
+        const groupOver = group.rows.filter(r => r.over).length
+        const groupCeiling = group.rows.filter(r => r.atCeiling).length
+        const groupMinSlack =
+          group.rows.length > 0 ? Math.min(...group.rows.map(r => r.slack)) : null
         return (
           <OpsSection
             key={group.domain}
             title={`${systemDomainLabel(group.domain).toUpperCase()} · CODE HEALTH`}
-            description={group.metrics[0]?.repo}
+            description={group.rows[0]?.metric.repo}
             collapsible
-            defaultCollapsed={groupOver === 0}
+            defaultCollapsed={groupOver === 0 && groupCeiling === 0}
             headerExtra={
               groupOver > 0 ? (
                 <DenseTag variant="danger">{groupOver} over baseline</DenseTag>
+              ) : groupCeiling > 0 ? (
+                <DenseTag variant="warning">
+                  {groupCeiling} at ceiling · min slack {groupMinSlack}
+                </DenseTag>
               ) : (
-                <DenseTag variant="neutral">held at baseline</DenseTag>
+                <DenseTag variant="neutral">min slack {groupMinSlack}</DenseTag>
               )
             }
             bodyPadding="none"
@@ -201,19 +379,27 @@ export function CodeHealthPage() {
                   <DenseTableHead>Metric</DenseTableHead>
                   <DenseTableHead>Now</DenseTableHead>
                   <DenseTableHead>Baseline</DenseTableHead>
+                  <DenseTableHead>Slack</DenseTableHead>
+                  <DenseTableHead>Δ Slack</DenseTableHead>
                   <DenseTableHead>Status</DenseTableHead>
                   <DenseTableHead>Detail</DenseTableHead>
                 </DenseTableHeadRow>
               </DenseTableHeader>
               <DenseTableBody>
-                {group.metrics.map(m => (
-                  <DenseTableRow key={m.id}>
-                    <DenseTableCell title={m.id}>{m.label}</DenseTableCell>
-                    <DenseTableCell>{m.value}</DenseTableCell>
-                    <DenseTableCell>{m.baseline}</DenseTableCell>
-                    <DenseTableCell>{statusTag(m.status)}</DenseTableCell>
+                {group.rows.map(row => (
+                  <DenseTableRow key={row.metric.id} data-code-health-dim={row.dimension}>
+                    <DenseTableCell title={row.metric.id}>{row.metric.label}</DenseTableCell>
+                    <DenseTableCell className="font-mono tabular-nums">{row.metric.value}</DenseTableCell>
+                    <DenseTableCell className="font-mono tabular-nums">
+                      {row.metric.baseline}
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono tabular-nums">{row.slack}</DenseTableCell>
+                    <DenseTableCell className="font-mono tabular-nums">
+                      {formatDeltaSlack(row.deltaSlack, lens.hasTrend)}
+                    </DenseTableCell>
+                    <DenseTableCell>{statusTag(row)}</DenseTableCell>
                     <DenseTableCell className="text-[var(--muted-foreground)]">
-                      {m.detail ?? '—'}
+                      {row.metric.detail ?? '—'}
                     </DenseTableCell>
                   </DenseTableRow>
                 ))}
