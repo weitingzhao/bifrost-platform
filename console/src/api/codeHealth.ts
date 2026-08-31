@@ -15,6 +15,8 @@ export type CodeHealthMetricDto = {
   repo: string
   value: number
   baseline: number
+  /** baselines.env variable name — required for the lower-baseline workflow. */
+  baseline_var?: string
   /** over = regression, at_baseline = held, improved = baseline owes a lowering. */
   status: 'over' | 'at_baseline' | 'improved'
   detail?: string

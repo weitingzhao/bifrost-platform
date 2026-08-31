@@ -12,14 +12,15 @@ import "time"
 // value > baseline is a regression, value < baseline means the baseline owes a
 // lowering.
 type Metric struct {
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	Domain   string `json:"domain"`
-	Repo     string `json:"repo"`
-	Value    int    `json:"value"`
-	Baseline int    `json:"baseline"`
-	Status   string `json:"status"` // over | at_baseline | improved
-	Detail   string `json:"detail,omitempty"`
+	ID          string `json:"id"`
+	Label       string `json:"label"`
+	Domain      string `json:"domain"`
+	Repo        string `json:"repo"`
+	Value       int    `json:"value"`
+	Baseline    int    `json:"baseline"`
+	BaselineVar string `json:"baseline_var,omitempty"` // baselines.env key; required to lower
+	Status      string `json:"status"`                 // over | at_baseline | improved
+	Detail      string `json:"detail,omitempty"`
 }
 
 // Report is one scan.sh run.

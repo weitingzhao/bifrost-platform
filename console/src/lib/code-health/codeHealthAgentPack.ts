@@ -8,6 +8,7 @@ import {
   buildCodeHealthLens,
   type CodeHealthLens,
 } from '@/lib/code-health/codeHealthLens'
+import { listLowerBaselineProposals } from '@/lib/code-health/codeHealthLowerBaseline'
 
 export type CodeHealthAgentPackSnapshot = {
   generatedAt: string
@@ -125,9 +126,21 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push('')
 
   push('## How to lower a baseline after improvement')
-  push('1. Run `bash agent-config/scripts/code-health/scan.sh` and note the printed value.')
-  push('2. Set that exact number in `agent-config/scripts/code-health/baselines.env`.')
-  push('3. Never hand-edit a baseline to a number scan.sh has not printed.')
+  const owed = listLowerBaselineProposals(snap.response.latest?.metrics ?? [])
+  if (owed.length === 0) {
+    push('1. Run `bash agent-config/scripts/code-health/scan.sh` and note the printed value.')
+    push('2. Set that exact number in `agent-config/scripts/code-health/baselines.env`.')
+    push('3. Never hand-edit a baseline to a number scan.sh has not printed.')
+  } else {
+    push('Owed lock-ins from this reading (value is locked — do not invent another number):')
+    for (const p of owed) {
+      push('')
+      push(p.agentBrief)
+      push('```')
+      push(p.patch)
+      push('```')
+    }
+  }
   push('')
 
   push('## Forbidden')

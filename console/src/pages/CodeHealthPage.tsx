@@ -10,6 +10,12 @@ import {
   DenseTableHeadRow,
   DenseTableRow,
   DenseTag,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@bifrost/ui'
 import { fetchCodeHealth } from '@/api/codeHealth'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -32,6 +38,11 @@ import {
   buildCodeHealthAgentPack,
   gatherCodeHealthSnapshot,
 } from '@/lib/code-health/codeHealthAgentPack'
+import {
+  listLowerBaselineProposals,
+  proposeLowerBaseline,
+  type LowerBaselineProposal,
+} from '@/lib/code-health/codeHealthLowerBaseline'
 
 /** A reading older than this describes code that has probably moved on. */
 const STALE_MS = 24 * 60 * 60 * 1000
@@ -100,8 +111,31 @@ export function CodeHealthPage() {
   })
 
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+  const [lowerOpen, setLowerOpen] = useState<LowerBaselineProposal | null>(null)
+  const [lowerCopyState, setLowerCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
 
   const lens = useMemo(() => buildCodeHealthLens(query.data), [query.data])
+
+  const lowerProposals = useMemo(
+    () => listLowerBaselineProposals(query.data?.latest?.metrics ?? []),
+    [query.data],
+  )
+
+  const openLower = (row: CodeHealthMetricLens) => {
+    const p = proposeLowerBaseline(row.metric)
+    if (p == null) return
+    setLowerCopyState('idle')
+    setLowerOpen(p)
+  }
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setLowerCopyState('copied')
+    } catch {
+      setLowerCopyState('error')
+    }
+  }
 
   const byDomain = useMemo(() => {
     const groups = new Map<SystemDomainId, CodeHealthMetricLens[]>()
@@ -308,6 +342,49 @@ export function CodeHealthPage() {
         </OpsSection>
       )}
 
+      {lowerProposals.length > 0 && (
+        <OpsSection
+          title="BASELINE LOWERING OWED"
+          description="IMPROVED readings — lock the gain in baselines.env (value is fixed to the scan)"
+          variant="elevated"
+          collapsible
+          defaultCollapsed={false}
+          bodyPadding="none"
+        >
+          <DenseDataTable>
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                <DenseTableHead>Metric</DenseTableHead>
+                <DenseTableHead>Repo</DenseTableHead>
+                <DenseTableHead>Env var</DenseTableHead>
+                <DenseTableHead>From → To</DenseTableHead>
+                <DenseTableHead>Action</DenseTableHead>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
+              {lowerProposals.map(p => (
+                <DenseTableRow key={p.metricId}>
+                  <DenseTableCell title={p.metricId}>{p.label}</DenseTableCell>
+                  <DenseTableCell>{p.repo}</DenseTableCell>
+                  <DenseTableCell className="font-mono text-dense-meta">{p.baselineVar}</DenseTableCell>
+                  <DenseTableCell className="font-mono tabular-nums">
+                    {p.from} → {p.to}
+                  </DenseTableCell>
+                  <DenseTableCell>
+                    <Button size="sm" variant="outline" onClick={() => {
+                      setLowerCopyState('idle')
+                      setLowerOpen(p)
+                    }}>
+                      Lower baseline…
+                    </Button>
+                  </DenseTableCell>
+                </DenseTableRow>
+              ))}
+            </DenseTableBody>
+          </DenseDataTable>
+        </OpsSection>
+      )}
+
       {lens.paydownQueue.length > 0 && (
         <OpsSection
           title="PAYDOWN QUEUE"
@@ -383,6 +460,7 @@ export function CodeHealthPage() {
                   <DenseTableHead>Δ Slack</DenseTableHead>
                   <DenseTableHead>Status</DenseTableHead>
                   <DenseTableHead>Detail</DenseTableHead>
+                  <DenseTableHead>Action</DenseTableHead>
                 </DenseTableHeadRow>
               </DenseTableHeader>
               <DenseTableBody>
@@ -401,6 +479,15 @@ export function CodeHealthPage() {
                     <DenseTableCell className="text-[var(--muted-foreground)]">
                       {row.metric.detail ?? '—'}
                     </DenseTableCell>
+                    <DenseTableCell>
+                      {row.improved ? (
+                        <Button size="sm" variant="outline" onClick={() => openLower(row)}>
+                          Lower…
+                        </Button>
+                      ) : (
+                        <span className="text-[var(--muted-foreground)]">—</span>
+                      )}
+                    </DenseTableCell>
                   </DenseTableRow>
                 ))}
               </DenseTableBody>
@@ -408,6 +495,62 @@ export function CodeHealthPage() {
           </OpsSection>
         )
       })}
+
+      <Dialog
+        open={lowerOpen != null}
+        onOpenChange={next => {
+          if (!next) setLowerOpen(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Lower baseline</DialogTitle>
+            <DialogDescription>
+              {lowerOpen == null
+                ? ''
+                : `Lock ${lowerOpen.label} at ${lowerOpen.to} (scan reading). Console does not edit the file — copy the patch into bifrost-trade-infra.`}
+            </DialogDescription>
+          </DialogHeader>
+          {lowerOpen != null && (
+            <div className="flex flex-col gap-2 text-dense-body">
+              <p className="m-0 font-mono text-dense-meta">
+                {lowerOpen.baselineVar}: {lowerOpen.from} → <strong>{lowerOpen.to}</strong>
+              </p>
+              <p className="m-0 text-[var(--muted-foreground)] text-dense-meta">
+                Path: {lowerOpen.path}. The new value must be exactly {lowerOpen.to} — never invent
+                another number. Do not raise baselines.
+              </p>
+              <pre className="overflow-x-auto rounded bg-[var(--secondary)] px-3 py-2 text-dense-meta m-0">
+                {lowerOpen.patch}
+              </pre>
+              {lowerCopyState === 'copied' && (
+                <p className="m-0 text-success text-dense-meta">Copied to clipboard.</p>
+              )}
+              {lowerCopyState === 'error' && (
+                <p className="m-0 text-destructive text-dense-meta">Clipboard write failed.</p>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLowerOpen(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="outline"
+              disabled={lowerOpen == null}
+              onClick={() => lowerOpen && void copyText(lowerOpen.agentBrief)}
+            >
+              Copy for Agent
+            </Button>
+            <Button
+              disabled={lowerOpen == null}
+              onClick={() => lowerOpen && void copyText(lowerOpen.patch)}
+            >
+              Copy patch
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
