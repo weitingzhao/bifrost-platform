@@ -9,6 +9,7 @@ import {
   type CodeHealthLens,
 } from '@/lib/code-health/codeHealthLens'
 import { listLowerBaselineProposals } from '@/lib/code-health/codeHealthLowerBaseline'
+import { buildSuggestedTasks } from '@/lib/code-health/codeHealthSuggestedTasks'
 
 export type CodeHealthAgentPackSnapshot = {
   generatedAt: string
@@ -114,6 +115,18 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
         `${i + 1}. [${row.over ? 'OVER' : 'AT CEILING'}] ${row.metric.label} (${row.metric.repo}) slack=${row.slack} · ${row.metric.detail ?? ''}`,
       )
     })
+  }
+  push('')
+
+  push('## Suggested cuts (playbooks)')
+  const tasks = buildSuggestedTasks(lens.paydownQueue, { limit: 5 })
+  if (tasks.length === 0) {
+    push('- (none)')
+  } else {
+    for (const t of tasks) {
+      push('')
+      push(t.agentBrief)
+    }
   }
   push('')
 

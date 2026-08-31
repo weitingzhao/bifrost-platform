@@ -48,6 +48,8 @@ describe('buildCodeHealthAgentPack', () => {
     expect(text).toContain('AT CEILING')
     expect(text).toContain('Posture Summary')
     expect(text).toContain('Gate CLEAR')
+    expect(text).toContain('Suggested cuts')
+    expect(text).toContain('Split oversized')
     expect(text).toContain('Do not invent a composite health score')
     expect(text).toContain('D10')
   })
