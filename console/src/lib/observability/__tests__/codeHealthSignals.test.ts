@@ -46,7 +46,12 @@ function signal(codeHealth: CodeHealthResponse | null | undefined, id: string): 
 describe('code-health signals', () => {
   it('registers one rollup per owning domain, all optional-contract evidence', () => {
     const defs = SIGNAL_REGISTRY.filter(s => s.source === 'code_health')
-    expect(defs.map(d => d.domain).sort()).toEqual(['research', 'rocket', 'satellite'])
+    expect(defs.map(d => d.domain).sort()).toEqual([
+      'research',
+      'rocket',
+      'satellite',
+      'subcontractors',
+    ])
     for (const d of defs) {
       // evidence: a duplicated helper must not flip a verdict operators page on.
       expect(d.role).toBe('evidence')
@@ -96,5 +101,13 @@ describe('code-health signals', () => {
     )
     expect(s.state).toBe('healthy')
     expect(s.summary).toContain('1 baseline lowering owed')
+  })
+
+  it('evaluates subcontractors domain the same way (healthy when measured)', () => {
+    const s = signal(
+      report([metric({ domain: 'subcontractors', id: 'code.oversized.subcontractors.plugin' })]),
+      'code-health.subcontractors',
+    )
+    expect(s.state).toBe('healthy')
   })
 })

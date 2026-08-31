@@ -942,6 +942,7 @@ export function buildObservabilityViewModel(
   signals.push(evaluateCodeHealth('code-health.satellite', 'satellite', input.codeHealth))
   signals.push(evaluateCodeHealth('code-health.research', 'research', input.codeHealth))
   signals.push(evaluateCodeHealth('code-health.rocket', 'rocket', input.codeHealth))
+  signals.push(evaluateCodeHealth('code-health.subcontractors', 'subcontractors', input.codeHealth))
 
   // Mission Control / Governance — NOT OBSERVED
   signals.push(evaluateOptionalNone('mission-control.hub'))

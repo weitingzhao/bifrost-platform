@@ -39,6 +39,10 @@ import {
   gatherCodeHealthSnapshot,
 } from '@/lib/code-health/codeHealthAgentPack'
 import {
+  CODE_HEALTH_COVERAGE,
+  CODE_HEALTH_EXCLUSIONS,
+} from '@/lib/code-health/codeHealthCoverage'
+import {
   listLowerBaselineProposals,
   proposeLowerBaseline,
   type LowerBaselineProposal,
@@ -360,7 +364,8 @@ export function CodeHealthPage() {
         }
         meta={
           <span>
-            Gate blocks OVER only. Cut planning lives in Agent IDE — Console only ships live metrics.
+            Gate blocks OVER only. Coverage map below lists Domain ↔ repo. Cut planning
+            lives in Agent IDE — Console only ships live metrics.
             {copyHint != null && (
               <>
                 {' '}
@@ -426,6 +431,67 @@ export function CodeHealthPage() {
           </div>
         </OpsSection>
       )}
+
+      <OpsSection
+        title="COVERAGE"
+        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS (not one repo per domain)"
+        variant="elevated"
+        collapsible
+        defaultCollapsed={false}
+        bodyPadding="compact"
+      >
+        <div className="flex flex-col gap-3">
+          {CODE_HEALTH_COVERAGE.map(plane => {
+            const measured =
+              report?.metrics
+                .filter(m => m.domain === plane.domain)
+                .map(m => m.repo)
+                .filter((r, i, a) => a.indexOf(r) === i) ?? []
+            return (
+              <div key={plane.domain} className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-dense-label font-medium">{systemDomainLabel(plane.domain)}</span>
+                  <span className="text-dense-meta text-muted-foreground">{plane.metricsNote}</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {plane.repos.map(r => {
+                    const seen = measured.length === 0 || measured.includes(r.repo)
+                    return (
+                      <DenseTag
+                        key={r.repo}
+                        variant={seen ? 'neutral' : 'warning'}
+                        title={
+                          seen
+                            ? `${r.repo} (${r.short}) — in coverage`
+                            : `${r.repo} expected but absent from latest reading (NOT MEASURED)`
+                        }
+                      >
+                        {r.repo}
+                      </DenseTag>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+          <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+            <span className="text-dense-label font-medium text-muted-foreground">Out of scope</span>
+            <div className="flex flex-col gap-1">
+              {CODE_HEALTH_EXCLUSIONS.map(ex => (
+                <div
+                  key={ex.repo}
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-dense-meta"
+                >
+                  <DenseTag variant="warning" title={ex.reason}>
+                    {ex.repo}
+                  </DenseTag>
+                  <span className="text-muted-foreground">{ex.reason}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </OpsSection>
 
       {neverScanned && (
         <OpsSection title="HOW TO PRODUCE A READING" variant="elevated">
@@ -521,6 +587,7 @@ export function CodeHealthPage() {
               <DenseTableHeader>
                 <DenseTableHeadRow>
                   <DenseTableHead>Metric</DenseTableHead>
+                  <DenseTableHead>Repo</DenseTableHead>
                   <DenseTableHead>Now</DenseTableHead>
                   <DenseTableHead>Baseline</DenseTableHead>
                   <DenseTableHead>Slack</DenseTableHead>
@@ -538,6 +605,9 @@ export function CodeHealthPage() {
                     data-code-health-metric={row.metric.id}
                   >
                     <DenseTableCell title={row.metric.id}>{row.metric.label}</DenseTableCell>
+                    <DenseTableCell className="font-mono text-dense-meta" title={row.metric.repo}>
+                      {row.metric.repo}
+                    </DenseTableCell>
                     <DenseTableCell className="font-mono tabular-nums">{row.metric.value}</DenseTableCell>
                     <DenseTableCell className="font-mono tabular-nums">
                       {row.metric.baseline}

@@ -132,9 +132,10 @@ export const SCOPE_ROWS: ScopeRow[] = [
   },
   {
     tag: 'SOCKET',
-    component: 'bifrost-trade-socket',
-    technology: 'Python · IB ingestor / account agent / operator · Polygon WS (Plugin)',
-    notes: 'Only layer that talks to TWS (IB_HOST → Win11 LAN). Writes Redis streams/hashes; operator listens ib:operator:cmd. Polygon options WS is Plugin polygon-ws-ingestor → redis-massive.',
+    component: 'bifrost-trade-socket (RETIRED / reference-only)',
+    technology: 'Python · legacy IB ingestor / account / operator (reference)',
+    notes:
+      'Wave 14G-F: production IB edge is Platform IB Gateway Plugin → redis-ib (IBGP). Do not start trade-socket for Inner Loop or K3s. Repo kept as reference until Phase 3 archive. Compose default path still pending Phase 1 profile cutover.',
   },
   {
     tag: 'CORE',
@@ -252,11 +253,11 @@ export const FLOW_ROWS: FlowRow[] = [
     status: 'planned',
   },
   {
-    path: 'IB edge (socket)',
+    path: 'IB edge (Platform Gateway)',
     stage: 'Production',
-    trigger: 'Socket containers on prod host · IB_HOST env',
-    runtime: 'bifrost-trade-socket → Win11 TWS LAN',
-    dataStore: 'Redis on .70 · no direct daemon→TWS',
+    trigger: 'data/ib-gateway Deployment · redis-ib (data NS)',
+    runtime: 'bifrost-platform-plugin IB Gateway → Win11 TWS LAN',
+    dataStore: 'redis-ib · ExternalName in bifrost-{dev,stg,prod}; trade-socket RETIRED (14G-F)',
     status: 'live',
   },
   {

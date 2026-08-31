@@ -56,7 +56,18 @@ func looksLikeWorkspace(dir string) bool {
 		return false
 	}
 	// Need at least one measured repo present.
-	for _, repo := range []string{"bifrost-platform", "bifrost-trade-frontend", "bifrost-research"} {
+	for _, repo := range []string{
+		"bifrost-platform",
+		"bifrost-trade-frontend",
+		"bifrost-research",
+		"bifrost-trade-api",
+		"bifrost-trade-core",
+		"bifrost-trade-worker",
+		"bifrost-ui",
+		"bifrost-platform-plugin",
+		"bifrost-platform-plugin-market-data",
+		"bifrost-platform-plugin-flex-query",
+	} {
 		if st, err := os.Stat(filepath.Join(dir, repo)); err == nil && st.IsDir() {
 			return true
 		}

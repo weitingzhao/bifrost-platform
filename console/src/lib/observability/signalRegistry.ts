@@ -234,7 +234,8 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     source: 'code_health',
     optionalContract: true,
     detailRoute: 'code-health',
-    description: 'Duplication / oversized files / API contract coverage vs ratchet baselines',
+    description:
+      'Trade FE + OLTP (api/core/worker): duplication / oversized / FE API contract coverage vs baselines',
   },
   {
     id: 'code-health.research',
@@ -256,7 +257,18 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     source: 'code_health',
     optionalContract: true,
     detailRoute: 'code-health',
-    description: 'Oversized files vs ratchet baseline',
+    description: 'Oversized files (platform + bifrost-ui) vs ratchet baselines',
+  },
+  {
+    id: 'code-health.subcontractors',
+    label: 'Code health (Plugins)',
+    domain: 'subcontractors',
+    scope: 'shared',
+    role: 'evidence',
+    source: 'code_health',
+    optionalContract: true,
+    detailRoute: 'code-health',
+    description: 'Duplication / oversized files across IB Gateway / Market Data / Flex Query plugins',
   },
 
   /* ── Mission Control / Governance — no invented metrics ── */
