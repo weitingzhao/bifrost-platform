@@ -17,6 +17,8 @@ const (
 	// write-consolidation DROP on Trade DBs (bifrost_dev / _stg / _prod).
 	defaultFreshnessDB = "bifrost_golden_source"
 	freshnessMaxAgeH   = 24.0
+	// Weekend / Monday-before-EOD allowance for session-bound EOD dimensions.
+	freshnessWeekendMaxAgeH = 72.0
 )
 
 // Config holds optional overrides for health / freshness probing / Plugin API proxy.

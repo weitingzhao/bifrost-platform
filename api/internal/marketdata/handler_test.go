@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -101,7 +102,7 @@ func TestStatusProbesBothPools(t *testing.T) {
 }
 
 func TestParseFreshnessOutput(t *testing.T) {
-	now := time.Date(2024, 6, 20, 18, 0, 0, 0, time.UTC)
+	now := time.Date(2024, 6, 20, 18, 0, 0, 0, time.UTC) // Thursday
 	out := "stock_daily|2024-06-20 17:00:00+00|42|ok\noption_snapshot|2024-06-18 17:00:00+00|5|ok\n"
 	rows := parseFreshnessOutput(out, now)
 	if len(rows) != 2 {
@@ -112,6 +113,26 @@ func TestParseFreshnessOutput(t *testing.T) {
 	}
 	if rows[1].Verdict != "stale" {
 		t.Fatalf("expected stale for old snapshot, got %+v", rows[1])
+	}
+}
+
+func TestParseFreshnessWeekendAllowanceAndVoidDims(t *testing.T) {
+	// Monday before EOD — Friday night snapshot (~33h) must stay ok under weekend allowance.
+	now := time.Date(2026, 8, 31, 14, 30, 0, 0, time.UTC)
+	out := strings.Join([]string{
+		"option_snapshot|2026-08-30 05:31:00+00|50|ok",
+		"option_open_interest|2026-08-30 05:31:00+00|50|ok",
+		"ratios|2026-08-26 22:47:00+00|1|ok",
+		"short_interest|2026-08-26 22:47:00+00|1|ok",
+	}, "\n")
+	rows := parseFreshnessOutput(out, now)
+	if len(rows) != 4 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	for _, r := range rows {
+		if r.Verdict != "ok" {
+			t.Fatalf("expected ok for %s got %+v", r.Dimension, r)
+		}
 	}
 }
 

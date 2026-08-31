@@ -135,12 +135,17 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	}
 	if len(resp.Freshness) > 0 {
 		stale := 0
+		scoped := 0
 		for _, f := range resp.Freshness {
+			if !freshnessAffectsReach(f.Dimension) {
+				continue
+			}
+			scoped++
 			if f.Verdict != "ok" {
 				stale++
 			}
 		}
-		parts = append(parts, fmt.Sprintf("freshness %d/%d ok", len(resp.Freshness)-stale, len(resp.Freshness)))
+		parts = append(parts, fmt.Sprintf("freshness %d/%d ok", scoped-stale, scoped))
 	} else if freshReach != probe.ReachOK {
 		parts = append(parts, "freshness="+string(freshReach))
 	}
@@ -306,6 +311,9 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	}
 	reach := probe.ReachOK
 	for _, r := range rows {
+		if !freshnessAffectsReach(r.Dimension) {
+			continue
+		}
 		switch r.Verdict {
 		case "stale":
 			reach = worseReach(reach, probe.ReachDegraded)
@@ -489,7 +497,11 @@ func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
 					age = 0
 				}
 				info.AgeHours = age
-				if strings.EqualFold(status, "ok") && age < freshnessMaxAgeH {
+				limit := freshnessAgeLimitHours(dim, now)
+				if strings.EqualFold(status, "ok") && age < limit {
+					info.Verdict = "ok"
+				} else if strings.EqualFold(status, "ok") && !freshnessAffectsReach(dim) {
+					// Slow-rotate / source_void dims: age must not degrade probe (void ≠ fail).
 					info.Verdict = "ok"
 				} else {
 					info.Verdict = "stale"
@@ -499,6 +511,28 @@ func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
 		rows = append(rows, info)
 	}
 	return rows
+}
+
+// Session-bound dims that gate plugin freshness_reachability (matches Plugin quality.py).
+func freshnessAffectsReach(dim string) bool {
+	switch strings.ToLower(strings.TrimSpace(dim)) {
+	case "stock_daily", "option_snapshot", "option_open_interest", "calendar":
+		return true
+	default:
+		return false
+	}
+}
+
+func freshnessAgeLimitHours(dim string, now time.Time) float64 {
+	if !freshnessAffectsReach(dim) {
+		return freshnessMaxAgeH
+	}
+	wd := now.Weekday()
+	// Sat/Sun, or Monday before UTC 22:00 (next Cron/Dagster EOD window): allow weekend gap.
+	if wd == time.Saturday || wd == time.Sunday || (wd == time.Monday && now.Hour() < 22) {
+		return freshnessWeekendMaxAgeH
+	}
+	return freshnessMaxAgeH
 }
 
 func parseFreshnessTimestamp(raw string) (time.Time, error) {
