@@ -80,6 +80,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'dismiss_operate_queue_item',
   'get_checklist_signals',
   'get_checklist_kpis',
+  'get_code_health',
   'get_telemetry_overview',
   'get_telemetry_alerts',
   'get_telemetry_targets',

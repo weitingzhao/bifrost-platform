@@ -215,6 +215,50 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
     description: 'Mac-adjacent bridge — NOT OBSERVED on prod/stg seats',
   },
 
+  /* ── Code health (ratchet readings, one rollup per owning domain) ──
+   *
+   * Role is `evidence`, deliberately: a duplicated helper should be visible
+   * here, but it should not flip a fleet verdict that operators page on. CI
+   * (pipeline-ci-*) is where a regression actually blocks. Promotion to
+   * `required` is a separate Owner decision, once readings have proven stable.
+   *
+   * optionalContract: never reported → NOT OBSERVED. A green board must not
+   * imply code health that was never measured.
+   */
+  {
+    id: 'code-health.satellite',
+    label: 'Code health (Trade)',
+    domain: 'satellite',
+    scope: 'shared',
+    role: 'evidence',
+    source: 'code_health',
+    optionalContract: true,
+    detailRoute: 'code-health',
+    description: 'Duplication / oversized files / API contract coverage vs ratchet baselines',
+  },
+  {
+    id: 'code-health.research',
+    label: 'Code health (Research)',
+    domain: 'research',
+    scope: 'shared',
+    role: 'evidence',
+    source: 'code_health',
+    optionalContract: true,
+    detailRoute: 'code-health',
+    description: 'Duplication / oversized files / image version spread vs ratchet baselines',
+  },
+  {
+    id: 'code-health.rocket',
+    label: 'Code health (Ops Platform)',
+    domain: 'rocket',
+    scope: 'shared',
+    role: 'evidence',
+    source: 'code_health',
+    optionalContract: true,
+    detailRoute: 'code-health',
+    description: 'Oversized files vs ratchet baseline',
+  },
+
   /* ── Mission Control / Governance — no invented metrics ── */
   {
     id: 'mission-control.hub',

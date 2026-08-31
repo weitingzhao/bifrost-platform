@@ -71,6 +71,7 @@ export const TASK_CC_NAV_ITEM: ShellNavItem = {
 export const MISSION_CONTROL_ITEMS: ShellNavItem[] = [
   { id: 'control-room', label: 'Control Room', icon: Gauge },
   { id: 'observability', label: 'Observability', icon: LineChart },
+  { id: 'code-health', label: 'Code Health', icon: HeartPulse },
 ]
 
 /**

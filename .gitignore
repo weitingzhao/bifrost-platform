@@ -10,6 +10,7 @@ config/release_gate.log
 
 # Drift proposal runtime JSON (created by nightly agent / API)
 agent/drift-proposals/*.json
+agent/code-health/*.json
 
 # Agent remediation job archives (full task log + summary)
 agent/remediation-jobs/*.json

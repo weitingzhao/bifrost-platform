@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchClusterMetrics, fetchClusterNodes, fetchClusterObservability } from '@/api/cluster'
+import { fetchCodeHealth } from '@/api/codeHealth'
 import { fetchIbGatewayStatus, fetchNetworkSla } from '@/api/network'
 import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
 import { fetchRemediationHealth } from '@/api/remediation'
@@ -130,6 +131,14 @@ export function useObservabilitySnapshot(): {
     refetchInterval: REFETCH,
     retry: false,
   })
+  // Code-health readings change per commit, not per scrape — a slower cadence
+  // than REFETCH is enough and keeps the board's request budget for runtime.
+  const codeHealthQ = useQuery({
+    queryKey: ['code-health', 'observability'],
+    queryFn: () => fetchCodeHealth(1),
+    refetchInterval: 5 * 60_000,
+    retry: false,
+  })
   const remediationQ = useQuery({
     queryKey: ['remediation', 'health'],
     queryFn: fetchRemediationHealth,
@@ -221,6 +230,7 @@ export function useObservabilitySnapshot(): {
         remediation: remediationQ.data,
         agentBridge: bridgeQ.data,
         selfHealth: selfQ.data,
+        codeHealth: codeHealthQ.data,
         standbyNodes,
       }),
     [
@@ -238,6 +248,7 @@ export function useObservabilitySnapshot(): {
       ibQ.data,
       networkSlaQ.data,
       remediationQ.data,
+      codeHealthQ.data,
       bridgeQ.data,
       selfQ.data,
       standbyNodes,

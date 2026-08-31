@@ -21,7 +21,7 @@ describe('Seat / Partner zone builders', () => {
   it('system seat shows pinned Mission Control without Defects/Audit', () => {
     const items = buildSeatNavItems(null, false)
     expect(items.map(i => i.id)).toEqual(MISSION_CONTROL_ITEMS.map(i => i.id))
-    expect(items.map(i => i.id)).toEqual(['control-room', 'observability'])
+    expect(items.map(i => i.id)).toEqual(['control-room', 'observability', 'code-health'])
     expect(buildSeatRecordsItems(null).map(i => i.id)).toEqual(
       MISSION_CONTROL_RECORDS_ITEMS.map(i => i.id),
     )

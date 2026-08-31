@@ -71,6 +71,7 @@ import { ResearchReleasePage } from '@/pages/ResearchReleasePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
+import { CodeHealthPage } from '@/pages/CodeHealthPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { RocketHealthPage } from '@/pages/RocketHealthPage'
 import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
@@ -121,6 +122,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-release': 'Launch Agent',
   'control-room': 'Control Room',
   observability: 'Observability',
+  'code-health': 'Code Health',
   'task-cc': 'Task Control Center',
   audit: 'Audit',
   'runtime-map': 'Runtime Map',
@@ -173,6 +175,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Situation / bay posture deep-dive — Bay Scan, topology sheet, Operate/Release context. Not the Mission launch home; primary execution is on Task Control Center.',
   observability:
     'Apollo-domain read-only system health hub — domain signals and Attention; Grafana is deep evidence, not a second control plane.',
+  'code-health':
+    'Code-asset ratchet readings — duplication, oversized files, contract coverage, image spread. Every other signal measures runtime; this one measures whether the code inside it is still maintainable. Never reported reads as NOT OBSERVED, never as healthy.',
   'task-cc':
     'Sole Task Mode / Mission execution entry — checklist, Fleet Desk, Launch board, and primary Agent CTAs for the active lens.',
   audit:
@@ -276,6 +280,7 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-release',
   'control-room',
   'observability',
+  'code-health',
   'task-cc',
   'delivery-board',
   'trade-release',
@@ -1154,6 +1159,8 @@ function ConsolePageInner() {
             onStartAgentJob={startAmbientAgentJob}
           />
         )}
+
+        {viewTab === 'code-health' && <CodeHealthPage />}
 
         {viewTab === 'plugin-gallery' && (
           <PluginGalleryPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />

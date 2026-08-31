@@ -17,7 +17,10 @@ function namesFromStdioToolNamesTs(): string[] {
 
 function serverToolNamesFromIndex(): string[] {
   const src = fs.readFileSync(path.join(mcpSrcDir, 'index.ts'), 'utf8')
-  const names = [...src.matchAll(/server\.tool\(\s*'([a-z0-9_]+)'/g)].map(m => m[1])
+  // index.ts registers through the local `reg()` helper, not `server.tool()`
+  // directly. Matching the old shape silently found zero tools, which made this
+  // parity guard pass vacuously for every tool it was meant to check.
+  const names = [...src.matchAll(/^reg\(\s*\n?\s*'([a-z0-9_]+)'/gm)].map(m => m[1])
   return [...new Set(names)]
 }
 

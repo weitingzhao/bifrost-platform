@@ -28,6 +28,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
+	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
@@ -84,6 +85,7 @@ type Server struct {
 	agentbridge     *agentbridge.Handler
 	agentgovernance *agentgovernance.Handler
 	agentdeploy     *agentdeploy.Handler
+	codehealth      *codehealth.Handler
 	driftproposal   *driftproposal.Handler
 	hermesgateway   *hermesgateway.Handler
 	hermesreadiness *hermesreadiness.Handler
@@ -191,6 +193,7 @@ func New(cfg *config.Config) (*Server, error) {
 		agentbridge:     agentbridge.NewHandler(),
 		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
 		agentdeploy:     agentdeploy.NewHandler(audit),
+		codehealth:      codehealth.NewHandler(audit),
 		driftproposal:   driftproposal.NewHandler(audit),
 		hermesgateway:   hermesgateway.NewHandler(),
 		hermesreadiness: hermesReadinessH,
@@ -329,6 +332,16 @@ func (s *Server) Router() http.Handler {
 			r.Put("/patrol/skills/{id}/enable", s.patrol.HandleEnable)
 			r.Post("/patrol/trigger/{id}", s.patrol.HandleTrigger)
 			r.Post("/patrol/webhook/{event}", s.patrol.HandleWebhook)
+		})
+		// Code-health ratchet readings (agent-config/scripts/code-health/scan.sh).
+		// Read is viewer-level; writing is operator-gated so a reading cannot be
+		// overwritten by anything that can reach the port.
+		r.Route("/code-health", func(r chi.Router) {
+			r.Get("/", s.codehealth.HandleGet)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.Require(actuation.RoleOperator))
+				r.Post("/report", s.codehealth.HandleReport)
+			})
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {
 			r.Get("/", s.driftproposal.HandleList)

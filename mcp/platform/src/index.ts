@@ -783,6 +783,13 @@ reg(
 )
 
 reg(
+  'get_code_health',
+  'Code-health ratchet readings (duplication, oversized files, contract coverage, image spread). reported=false means NOT OBSERVED — never read it as healthy.',
+  {},
+  async () => jsonResult(await platformGet('/api/v1/code-health')),
+)
+
+reg(
   'get_telemetry_overview',
   'Prometheus telemetry overview snapshot (preset metrics)',
   { namespace: z.string().optional().describe('Optional K8s namespace filter') },

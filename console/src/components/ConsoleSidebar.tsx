@@ -52,6 +52,7 @@ export type ConsoleViewTab =
   | 'operator-plane'
   | 'control-room'
   | 'observability'
+  | 'code-health'
   | 'task-cc'
   | 'delivery-board'
   | 'audit'
