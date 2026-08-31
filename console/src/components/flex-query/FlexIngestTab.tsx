@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -34,6 +34,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { describeCronSchedule } from '@/lib/patrol/cronSchedule'
 import { FlexManualOpsPanel } from '@/components/flex-query/FlexManualOpsPanel'
+import { flexEnqueueBlockReason } from '@/lib/flex-query/flexEnqueueGuards'
 
 type IngestSubTab = 'schedule' | 'jobs' | 'enqueue' | 'manual'
 
@@ -77,6 +78,12 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
     refetchInterval: 15_000,
     retry: 1,
   })
+  const failedGuardQ = useQuery({
+    queryKey: ['flex-query', 'ingest', 'jobs', 'failed-guard'],
+    queryFn: () => fetchFlexIngestJobs({ limit: 20, status: 'failed' }),
+    refetchInterval: 30_000,
+    retry: 1,
+  })
 
   const kindsRaw = kindsQ.data
   const kinds = kindsRaw != null && !isProxyError(kindsRaw) ? (kindsRaw.kinds ?? []) : []
@@ -93,7 +100,14 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
   const jobsErr = jobsRaw != null && isProxyError(jobsRaw) ? jobsRaw.error : null
   const jobs: FlexIngestJob[] =
     jobsRaw != null && !isProxyError(jobsRaw) ? (jobsRaw.jobs ?? []) : []
-
+  const failedJobs: FlexIngestJob[] =
+    failedGuardQ.data != null && !isProxyError(failedGuardQ.data)
+      ? (failedGuardQ.data.jobs ?? [])
+      : []
+  const enqueueBlock = useMemo(
+    () => flexEnqueueBlockReason({ counts, recentJobs: failedJobs }),
+    [counts, failedJobs],
+  )
   const onPlan = slots.filter(
     s => (s.adherence ?? (s.late ? 'late' : 'on_plan')) === 'on_plan',
   ).length
@@ -103,6 +117,12 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
   ).length
 
   async function runEnqueue() {
+    if (enqueueBlock != null) {
+      setActionFailed(true)
+      setActionMsg(enqueueBlock.message)
+      setConfirmOpen(false)
+      return
+    }
     setActing(true)
     setActionMsg(null)
     try {
@@ -403,13 +423,21 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
             </label>
             <Button
               size="sm"
-              disabled={!canOperate || acting || !selectedKind}
+              disabled={!canOperate || acting || !selectedKind || enqueueBlock != null}
               onClick={() => setConfirmOpen(true)}
-              title={canOperate ? undefined : 'Operator auth required'}
+              title={
+                enqueueBlock?.message ??
+                (canOperate ? undefined : 'Operator auth required')
+              }
             >
               Enqueue
             </Button>
           </div>
+          {enqueueBlock != null ? (
+            <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--color-warning,#f59e0b)]">
+              {enqueueBlock.message}
+            </p>
+          ) : null}
           {!canOperate ? (
             <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Authenticate as operator to enqueue jobs.

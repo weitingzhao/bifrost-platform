@@ -1,11 +1,17 @@
 import { useMemo, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
-import { enqueueFlexIngestJob, isProxyError } from '@/api/flexQueryPlugin'
+import {
+  enqueueFlexIngestJob,
+  fetchFlexIngestJobs,
+  fetchFlexIngestQueueSummary,
+  isProxyError,
+} from '@/api/flexQueryPlugin'
 import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { flexEnqueueBlockReason } from '@/lib/flex-query/flexEnqueueGuards'
 import {
   analyzeFlexProbe,
   buildFlexDiagnosePrefill,
@@ -33,6 +39,32 @@ export function FlexRemediationPanel({
   const [msg, setMsg] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
+  const queueQ = useQuery({
+    queryKey: ['flex-query', 'ingest', 'queue-summary'],
+    queryFn: fetchFlexIngestQueueSummary,
+    refetchInterval: 15_000,
+    retry: 1,
+    enabled: analysis.needsAttention || probeReach !== 'ok',
+  })
+  const failedJobsQ = useQuery({
+    queryKey: ['flex-query', 'ingest', 'jobs', 'failed-guard'],
+    queryFn: () => fetchFlexIngestJobs({ limit: 20, status: 'failed' }),
+    refetchInterval: 30_000,
+    retry: 1,
+    enabled: analysis.needsAttention || probeReach !== 'ok',
+  })
+
+  const queueCounts =
+    queueQ.data != null && !isProxyError(queueQ.data) ? queueQ.data : null
+  const failedJobs =
+    failedJobsQ.data != null && !isProxyError(failedJobsQ.data)
+      ? (failedJobsQ.data.jobs ?? [])
+      : []
+  const enqueueBlock = useMemo(
+    () => flexEnqueueBlockReason({ counts: queueCounts, recentJobs: failedJobs }),
+    [queueCounts, failedJobs],
+  )
+
   if (!analysis.needsAttention && probeReach === 'ok') {
     return null
   }
@@ -43,6 +75,12 @@ export function FlexRemediationPanel({
       : ['flex-trades', 'flex-transactions']
 
   async function runEnqueueStale() {
+    if (enqueueBlock != null) {
+      setFailed(true)
+      setMsg(enqueueBlock.message)
+      setConfirmOpen(false)
+      return
+    }
     setActing(true)
     setMsg(null)
     const results: string[] = []
@@ -72,6 +110,7 @@ export function FlexRemediationPanel({
   }
 
   const diagnosePrefill = buildFlexDiagnosePrefill(status, analysis)
+  const enqueueDisabled = !canOperate || acting || enqueueBlock != null
 
   return (
     <OpsSection
@@ -119,9 +158,12 @@ export function FlexRemediationPanel({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
           size="sm"
-          disabled={!canOperate || acting}
+          disabled={enqueueDisabled}
           onClick={() => setConfirmOpen(true)}
-          title={canOperate ? undefined : 'Operator auth required'}
+          title={
+            enqueueBlock?.message ??
+            (canOperate ? undefined : 'Operator auth required')
+          }
         >
           {acting ? 'Enqueueing…' : 'Enqueue stale jobs'}
         </Button>
@@ -137,6 +179,12 @@ export function FlexRemediationPanel({
           />
         ) : null}
       </div>
+
+      {enqueueBlock != null ? (
+        <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--color-warning,#f59e0b)]">
+          {enqueueBlock.message}
+        </p>
+      ) : null}
 
       {!canOperate ? (
         <p className="m-0 mt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
