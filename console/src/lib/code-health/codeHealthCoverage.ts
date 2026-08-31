@@ -4,6 +4,9 @@
  * Must stay aligned with scan.sh KNOWN_REPOS + add_metric domains.
  * UI shows this so operators do not have to open the script to answer
  * “which repos does this plane actually measure?”
+ *
+ * Contract (v10): every **git repo in the multi-root workspace** is either in
+ * CODE_HEALTH_COVERAGE or documented in CODE_HEALTH_EXCLUSIONS. No silent gaps.
  */
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
@@ -24,15 +27,16 @@ export type CodeHealthCoveragePlane = {
 export const CODE_HEALTH_COVERAGE: CodeHealthCoveragePlane[] = [
   {
     domain: 'rocket',
-    metricsNote: 'oversized files',
+    metricsNote: 'oversized · infra shell/py dup',
     repos: [
       { repo: 'bifrost-platform', short: 'platform' },
       { repo: 'bifrost-ui', short: 'ui' },
+      { repo: 'bifrost-trade-infra', short: 'infra' },
     ],
   },
   {
     domain: 'satellite',
-    metricsNote: 'dup · oversized · FE API contract',
+    metricsNote: 'dup · oversized · FE contract',
     repos: [
       { repo: 'bifrost-trade-frontend', short: 'frontend' },
       { repo: 'bifrost-trade-api', short: 'trade-api' },
@@ -61,23 +65,22 @@ export type CodeHealthExclusion = {
   reason: string
 }
 
-/** Workspace actives deliberately outside the ratchet (not a measurement gap). */
+/**
+ * Not measured — must still appear here so Coverage has no silent gaps.
+ * Do not list multi-root workspace git repos here unless Owner documents why.
+ */
 export const CODE_HEALTH_EXCLUSIONS: CodeHealthExclusion[] = [
   {
-    repo: 'bifrost-trade-socket',
-    reason: 'Wave 14G-F Phase 0–2 done — Plugin→redis-ib; ARCHIVED.md; workspace remove after ≥90d',
-  },
-  {
-    repo: 'bifrost-trade-infra',
-    reason: 'Governance host (YAML/scripts) — runs the scanner, not a measured product surface',
-  },
-  {
     repo: 'Research-workspace',
-    reason: 'Non-product draft directory (not a git delivery repo)',
+    reason: 'Multi-root folder but not a git repo (draft drop zone) — no scan target',
+  },
+  {
+    repo: 'bifrost-trade-socket',
+    reason: 'GitHub Archived · removed from workspace (Wave 14G-F) — not a live checkout',
   },
   {
     repo: 'bifrost-analytics',
-    reason: 'Archived into bifrost-research dbt (D13)',
+    reason: 'Archived into bifrost-research dbt (D13); not in multi-root workspace — do not edit',
   },
 ]
 
