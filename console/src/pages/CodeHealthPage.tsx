@@ -126,6 +126,7 @@ export function CodeHealthPage() {
 
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
   const [copyHint, setCopyHint] = useState<string | null>(null)
+  const [domainPackBusy, setDomainPackBusy] = useState<SystemDomainId | null>(null)
   const [lowerOpen, setLowerOpen] = useState<LowerBaselineProposal | null>(null)
   const [lowerCopyState, setLowerCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [rescanHint, setRescanHint] = useState<string | null>(null)
@@ -222,32 +223,44 @@ export function CodeHealthPage() {
                 : String(lens.totalDeltaSlack)
           }`
 
-  async function handleCopyRefactorTask() {
-    if (copyState === 'busy') return
-    setCopyState('busy')
+  async function handleCopyRefactorTask(domain?: SystemDomainId) {
+    if (copyState === 'busy' || domainPackBusy != null) return
+    if (domain != null) setDomainPackBusy(domain)
+    else setCopyState('busy')
     setCopyHint(null)
     try {
       const snap = await gatherCodeHealthSnapshot({ liveRescanFirst: true })
-      const text = buildCodeHealthAgentPack(snap)
+      const text = buildCodeHealthAgentPack(snap, domain != null ? { domain } : {})
       await navigator.clipboard.writeText(text)
       await queryClient.invalidateQueries({ queryKey: ['code-health'] })
-      setCopyState('copied')
+      const label = domain != null ? systemDomainLabel(domain) : null
+      setCopyState(domain != null ? 'idle' : 'copied')
       setCopyHint(
         snap.gatherMode === 'live-rescan'
-          ? 'Live Re-scan done — Agent pack copied; paste into Agent IDE'
+          ? label != null
+            ? `Live Re-scan done — ${label} Agent pack copied`
+            : 'Live Re-scan done — Agent pack copied; paste into Agent IDE'
           : snap.gatherMode === 'rescan-unavailable'
-            ? 'Rescan unavailable — stored reading packed for Agent'
+            ? label != null
+              ? `Rescan unavailable — ${label} pack from stored reading`
+              : 'Rescan unavailable — stored reading packed for Agent'
             : snap.gatherMode === 'rescan-failed'
-              ? 'Rescan failed — packed last reading (see pack gather note)'
-              : 'Agent pack copied',
+              ? label != null
+                ? `Rescan failed — ${label} pack from last reading`
+                : 'Rescan failed — packed last reading (see pack gather note)'
+              : label != null
+                ? `${label} Agent pack copied`
+                : 'Agent pack copied',
       )
       window.setTimeout(() => {
         setCopyState('idle')
+        setDomainPackBusy(null)
         setCopyHint(null)
       }, 5000)
     } catch {
-      setCopyState('error')
-      setCopyHint('Copy failed')
+      setCopyState(domain != null ? 'idle' : 'error')
+      setDomainPackBusy(null)
+      setCopyHint(domain != null ? `${systemDomainLabel(domain)} pack copy failed` : 'Copy failed')
       window.setTimeout(() => {
         setCopyState('idle')
         setCopyHint(null)
@@ -321,7 +334,7 @@ export function CodeHealthPage() {
               size="sm"
               variant="default"
               className="shrink-0"
-              disabled={copyState === 'busy' || rescan.isPending}
+              disabled={copyState === 'busy' || domainPackBusy != null || rescan.isPending}
               title="Generate Code Refactor Agent Task content: Live Re-scan when available, then copy a brief for Agent IDE (Agent proposes Suggested tasks from live metrics)"
               onClick={() => void handleCopyRefactorTask()}
             >
@@ -337,7 +350,7 @@ export function CodeHealthPage() {
               size="sm"
               variant={staleVsHead || neverScanned ? 'default' : 'outline'}
               className="shrink-0"
-              disabled={rescan.isPending || copyState === 'busy' || !rescanAvailable}
+              disabled={rescan.isPending || copyState === 'busy' || domainPackBusy != null || !rescanAvailable}
               title={
                 rescanAvailable
                   ? 'Run scan.sh against the local workspace and replace the stored reading'
@@ -434,7 +447,7 @@ export function CodeHealthPage() {
 
       <OpsSection
         title="COVERAGE"
-        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS (not one repo per domain)"
+        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS (not one repo per domain). Per-domain Agent Pack scopes Suggested tasks to that plane."
         variant="elevated"
         collapsible
         defaultCollapsed={false}
@@ -447,11 +460,22 @@ export function CodeHealthPage() {
                 .filter(m => m.domain === plane.domain)
                 .map(m => m.repo)
                 .filter((r, i, a) => a.indexOf(r) === i) ?? []
+            const domainBusy = domainPackBusy === plane.domain
             return (
               <div key={plane.domain} className="flex flex-col gap-1.5">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-dense-label font-medium">{systemDomainLabel(plane.domain)}</span>
                   <span className="text-dense-meta text-muted-foreground">{plane.metricsNote}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-7 shrink-0 px-2 text-dense-meta"
+                    disabled={copyState === 'busy' || domainPackBusy != null || rescan.isPending}
+                    title={`Generate Agent Pack focused on ${systemDomainLabel(plane.domain)} repos only (${plane.repos.map(r => r.repo).join(', ')})`}
+                    onClick={() => void handleCopyRefactorTask(plane.domain)}
+                  >
+                    {domainBusy ? 'Generating…' : 'Generate Agent Pack'}
+                  </Button>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {plane.repos.map(r => {

@@ -11,9 +11,15 @@ import {
   type CodeHealthResponse,
 } from '@/api/codeHealth'
 import {
+  systemDomainLabel,
+  type SystemDomainId,
+} from '@/lib/architecture/systemDomainCatalog'
+import {
   buildCodeHealthLens,
   type CodeHealthLens,
+  type CodeHealthMetricLens,
 } from '@/lib/code-health/codeHealthLens'
+import { CODE_HEALTH_COVERAGE } from '@/lib/code-health/codeHealthCoverage'
 import { listLowerBaselineProposals } from '@/lib/code-health/codeHealthLowerBaseline'
 
 export type CodeHealthAgentPackSnapshot = {
@@ -31,6 +37,14 @@ export type GatherRefactorTaskOptions = {
    * describes live workspace code. Falls back to GET if rescan is unavailable.
    */
   liveRescanFirst?: boolean
+}
+
+export type BuildCodeHealthAgentPackOptions = {
+  /**
+   * When set, pack only includes metrics / paydown for this domain (Coverage
+   * plane). Suggested tasks must stay inside that domain's repos.
+   */
+  domain?: SystemDomainId
 }
 
 export async function gatherCodeHealthSnapshot(
@@ -94,13 +108,36 @@ export async function gatherCodeHealthSnapshot(
 /** @deprecated alias — prefer gatherCodeHealthSnapshot({ liveRescanFirst: true }) */
 export const gatherCodeHealthRefactorTask = gatherCodeHealthSnapshot
 
-export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): string {
+function scopeMetrics(
+  metrics: CodeHealthMetricLens[],
+  domain: SystemDomainId | undefined,
+): CodeHealthMetricLens[] {
+  if (domain == null) return metrics
+  return metrics.filter(m => m.metric.domain === domain)
+}
+
+export function buildCodeHealthAgentPack(
+  snap: CodeHealthAgentPackSnapshot,
+  options: BuildCodeHealthAgentPackOptions = {},
+): string {
   const lines: string[] = []
   const push = (s = '') => lines.push(s)
+  const domain = options.domain
+  const domainTitle = domain != null ? systemDomainLabel(domain) : null
+  const coveragePlane =
+    domain != null ? CODE_HEALTH_COVERAGE.find(p => p.domain === domain) : undefined
 
-  push('# Code Health — Code Refactor Agent Task Content')
+  push(
+    domainTitle != null
+      ? `# Code Health — Code Refactor Agent Task Content (${domainTitle})`
+      : '# Code Health — Code Refactor Agent Task Content',
+  )
   push(`Generated: ${snap.generatedAt}`)
-  push('Source: Ops Console → Mission Control → Code Health (Generate Agent Pack)')
+  push(
+    domainTitle != null
+      ? `Source: Ops Console → Mission Control → Code Health → Coverage → ${domainTitle} (Generate Agent Pack)`
+      : 'Source: Ops Console → Mission Control → Code Health (Generate Agent Pack)',
+  )
   push('')
   push('## Your job (IDE Agent)')
   push(
@@ -117,6 +154,13 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
     '4. After a real reduction, lock baselines only to values `scan.sh` prints — never invent numbers.',
   )
   push('5. Do **not** invent a weighted health score or re-weight dimensions.')
+  if (domainTitle != null && coveragePlane != null) {
+    push(
+      `6. **Domain focus = ${domainTitle}.** Suggested tasks MUST only touch these repos: ${coveragePlane.repos
+        .map(r => `\`${r.repo}\``)
+        .join(', ')}. Ignore other domains unless the Owner expands scope.`,
+    )
+  }
   push('')
   push('## Required deliverable from you')
   push('Reply with a **Suggested task list** (markdown), each item:')
@@ -136,6 +180,11 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push('## Pack gather')
   push(`- Mode: ${snap.gatherMode}`)
   if (snap.gatherNote) push(`- Note: ${snap.gatherNote}`)
+  if (domainTitle != null && coveragePlane != null) {
+    push(`- Domain focus: ${domainTitle} (${domain})`)
+    push(`- Metrics note: ${coveragePlane.metricsNote}`)
+    push(`- Covered repos: ${coveragePlane.repos.map(r => r.repo).join(', ')}`)
+  }
   push('')
 
   const { lens } = snap
@@ -150,11 +199,32 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
     push('bash agent-config/scripts/code-health/scan.sh --report')
     push('```')
     push('Or Ops Console → Code Health → Live Re-scan (local DEV platform-api).')
-    push('Treat absence of data as unmeasured — never as healthy. Do not invent a task list without metrics.')
+    push(
+      'Treat absence of data as unmeasured — never as healthy. Do not invent a task list without metrics.',
+    )
     return lines.join('\n')
   }
 
   const report = lens.report
+  const metrics = scopeMetrics(lens.metrics, domain)
+  const paydown = scopeMetrics(lens.paydownQueue, domain)
+  const overCount = metrics.filter(m => m.over).length
+  const atCeilingCount = metrics.filter(m => m.atCeiling).length
+  const minSlack =
+    metrics.length === 0 ? null : Math.min(...metrics.map(m => m.slack))
+
+  if (domainTitle != null) {
+    push('## Domain focus')
+    push(`- Plane: ${domainTitle}`)
+    push(
+      `- In-scope metrics: ${metrics.length} · over ${overCount} · at ceiling ${atCeilingCount} · min slack ${minSlack ?? '—'}`,
+    )
+    push(
+      '- Fleet Posture Summary below is for context; **Suggested tasks stay in this domain.**',
+    )
+    push('')
+  }
+
   push('## Posture Summary')
   push(`- ${lens.posture.summaryLine}`)
   push(`- Headroom: ${lens.posture.headroomLine}`)
@@ -187,11 +257,18 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push(`- Received: ${report.received_at}`)
   push(`- Source: ${report.source ?? 'unknown'}`)
   push(`- Planning lamp: ${lens.planningLamp} (${lens.planningTag})`)
-  push(`- Metrics: ${lens.metrics.length}`)
-  push(`- Over baseline: ${lens.overCount}`)
-  push(`- At ceiling (slack 0): ${lens.atCeilingCount}`)
-  push(`- Baseline lowering owed: ${lens.owedCount}`)
-  push(`- Min slack: ${lens.minSlack ?? '—'}`)
+  if (domainTitle != null) {
+    push(`- Metrics (domain ${domainTitle}): ${metrics.length}`)
+    push(`- Over baseline (domain): ${overCount}`)
+    push(`- At ceiling (domain): ${atCeilingCount}`)
+    push(`- Min slack (domain): ${minSlack ?? '—'}`)
+  } else {
+    push(`- Metrics: ${lens.metrics.length}`)
+    push(`- Over baseline: ${lens.overCount}`)
+    push(`- At ceiling (slack 0): ${lens.atCeilingCount}`)
+    push(`- Baseline lowering owed: ${lens.owedCount}`)
+    push(`- Min slack: ${lens.minSlack ?? '—'}`)
+  }
   if (lens.hasTrend) {
     push(
       `- Δ slack vs previous (sum): ${
@@ -211,10 +288,26 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push('')
 
   push('## Dimensions (labels only — not weighted)')
-  if (lens.dimensionSummaries.length === 0) {
+  const dimSummaries =
+    domain == null
+      ? lens.dimensionSummaries
+      : lens.dimensionSummaries
+          .map(d => {
+            const rows = metrics.filter(m => m.dimension === d.dimension)
+            if (rows.length === 0) return null
+            return {
+              ...d,
+              metricCount: rows.length,
+              minSlack: Math.min(...rows.map(r => r.slack)),
+              atCeilingCount: rows.filter(r => r.atCeiling).length,
+              overCount: rows.filter(r => r.over).length,
+            }
+          })
+          .filter((d): d is NonNullable<typeof d> => d != null)
+  if (dimSummaries.length === 0) {
     push('- (none)')
   } else {
-    for (const d of lens.dimensionSummaries) {
+    for (const d of dimSummaries) {
       push(
         `- ${d.label}: ${d.metricCount} metric(s), min slack ${d.minSlack ?? '—'}, ${d.atCeilingCount} at ceiling, ${d.overCount} over`,
       )
@@ -222,11 +315,19 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   }
   push('')
 
-  push('## Paydown queue (priority order for your Suggested tasks)')
-  if (lens.paydownQueue.length === 0) {
-    push('- (empty — all metrics have positive slack; suggest only lock-baseline owed items if any)')
+  push(
+    domainTitle != null
+      ? `## Paydown queue (${domainTitle} only)`
+      : '## Paydown queue (priority order for your Suggested tasks)',
+  )
+  if (paydown.length === 0) {
+    push(
+      domainTitle != null
+        ? `- (empty for ${domainTitle} — no OVER / at-ceiling metrics in this domain)`
+        : '- (empty — all metrics have positive slack; suggest only lock-baseline owed items if any)',
+    )
   } else {
-    lens.paydownQueue.forEach((row, i) => {
+    paydown.forEach((row, i) => {
       push(
         `${i + 1}. [${row.over ? 'OVER' : 'AT CEILING'}] ${row.metric.id} · ${row.metric.label} (${row.metric.repo})`,
       )
@@ -239,18 +340,29 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   }
   push('')
 
-  push('## All metrics')
-  for (const row of lens.metrics) {
-    push(
-      `- ${row.metric.id}: value=${row.metric.value} baseline=${row.metric.baseline} slack=${row.slack} status=${row.metric.status} dim=${row.dimension} repo=${row.metric.repo}${
-        row.metric.detail ? ` · ${row.metric.detail}` : ''
-      }`,
-    )
+  push(domainTitle != null ? `## Metrics (${domainTitle})` : '## All metrics')
+  if (metrics.length === 0) {
+    push('- (none in scope)')
+  } else {
+    for (const row of metrics) {
+      push(
+        `- ${row.metric.id}: value=${row.metric.value} baseline=${row.metric.baseline} slack=${row.slack} status=${row.metric.status} dim=${row.dimension} repo=${row.metric.repo}${
+          row.metric.detail ? ` · ${row.metric.detail}` : ''
+        }`,
+      )
+    }
   }
   push('')
 
   push('## How to lower a baseline after improvement')
-  const owed = listLowerBaselineProposals(snap.response.latest?.metrics ?? [])
+  const owedAll = listLowerBaselineProposals(snap.response.latest?.metrics ?? [])
+  const owed =
+    domain == null
+      ? owedAll
+      : owedAll.filter(p => {
+          const m = snap.response.latest?.metrics.find(x => x.id === p.metricId)
+          return m?.domain === domain
+        })
   if (owed.length === 0) {
     push('1. Run `bash agent-config/scripts/code-health/scan.sh` and note the printed value.')
     push('2. Set that exact number in `agent-config/scripts/code-health/baselines.env`.')
@@ -273,6 +385,9 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push('- Do not raise baselines to silence OVER.')
   push('- Do not paste generic playbook steps without reading the offender files.')
   push('- Do not propose cuts that change product behavior unless the Owner explicitly asks.')
+  if (domainTitle != null) {
+    push(`- Do not expand Suggested tasks outside ${domainTitle} repos without Owner approval.`)
+  }
 
   return lines.join('\n')
 }

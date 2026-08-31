@@ -71,4 +71,54 @@ describe('buildCodeHealthAgentPack', () => {
     expect(text).not.toContain('Suggested cuts (playbooks)')
     expect(text).not.toContain('Split oversized Console / API modules')
   })
+
+  it('scopes pack to one Coverage domain when domain option is set', () => {
+    const response: CodeHealthResponse = {
+      reported: true,
+      latest: {
+        generated_at: '2026-08-31T00:00:00Z',
+        commit: 'abc1234',
+        received_at: '2026-08-31T00:00:00Z',
+        source: 'live-rescan',
+        metrics: [
+          {
+            id: 'code.oversized.rocket',
+            label: 'files over 800 lines',
+            domain: 'rocket',
+            repo: 'bifrost-platform',
+            value: 30,
+            baseline: 30,
+            status: 'at_baseline',
+            detail: 'largest: x.tsx(900)',
+          },
+          {
+            id: 'code.duplication.satellite',
+            label: 'duplicated function names',
+            domain: 'satellite',
+            repo: 'bifrost-trade-frontend',
+            value: 3,
+            baseline: 3,
+            status: 'at_baseline',
+          },
+        ],
+      },
+    }
+    const text = buildCodeHealthAgentPack(
+      {
+        generatedAt: '2026-08-31T00:00:00Z',
+        response,
+        lens: buildCodeHealthLens(response),
+        gatherMode: 'live-rescan',
+      },
+      { domain: 'rocket' },
+    )
+    expect(text).toContain('Code Refactor Agent Task Content (Rocket)')
+    expect(text).toContain('Domain focus = Rocket')
+    expect(text).toContain('bifrost-trade-infra')
+    expect(text).toContain('code.oversized.rocket')
+    expect(text).toContain('Paydown queue (Rocket only)')
+    expect(text).toContain('Metrics (Rocket)')
+    expect(text).not.toContain('code.duplication.satellite')
+    expect(text).toContain('Do not expand Suggested tasks outside Rocket')
+  })
 })
