@@ -1,48 +1,141 @@
 /**
- * Code Health Copy / Ask for Agent pack — page-independent gather.
- * Planning language only (slack / paydown). No weighted score. D10 freeze noted.
+ * Code Health → Code Refactor Task pack for Agent IDE.
+ *
+ * Console owns the ratchet reading (Live Re-scan + metrics). The IDE Agent
+ * owns semantic cut planning — this pack never invents playbook steps.
  */
 
-import { fetchCodeHealth, type CodeHealthResponse } from '@/api/codeHealth'
+import {
+  fetchCodeHealth,
+  rescanCodeHealth,
+  type CodeHealthResponse,
+} from '@/api/codeHealth'
 import {
   buildCodeHealthLens,
   type CodeHealthLens,
 } from '@/lib/code-health/codeHealthLens'
 import { listLowerBaselineProposals } from '@/lib/code-health/codeHealthLowerBaseline'
-import { buildSuggestedTasks } from '@/lib/code-health/codeHealthSuggestedTasks'
 
 export type CodeHealthAgentPackSnapshot = {
   generatedAt: string
   response: CodeHealthResponse
   lens: CodeHealthLens
+  /** How the reading was obtained for this pack. */
+  gatherMode: 'live-rescan' | 'stored-snapshot' | 'rescan-unavailable' | 'rescan-failed'
+  gatherNote?: string
 }
 
-export async function gatherCodeHealthSnapshot(): Promise<CodeHealthAgentPackSnapshot> {
+export type GatherRefactorTaskOptions = {
+  /**
+   * When true (default), attempt POST /code-health/rescan first so the pack
+   * describes live workspace code. Falls back to GET if rescan is unavailable.
+   */
+  liveRescanFirst?: boolean
+}
+
+export async function gatherCodeHealthSnapshot(
+  options: GatherRefactorTaskOptions = {},
+): Promise<CodeHealthAgentPackSnapshot> {
+  const liveRescanFirst = options.liveRescanFirst !== false
+  const generatedAt = new Date().toISOString()
+
+  if (liveRescanFirst) {
+    // Probe freshness without auth first — avoid a doomed rescan when cluster-only.
+    let probe: CodeHealthResponse | null = null
+    try {
+      probe = await fetchCodeHealth(1)
+    } catch {
+      probe = null
+    }
+    const available = probe?.freshness?.rescan_available === true
+    if (available) {
+      try {
+        await rescanCodeHealth()
+        const response = await fetchCodeHealth(30)
+        return {
+          generatedAt,
+          response,
+          lens: buildCodeHealthLens(response),
+          gatherMode: 'live-rescan',
+          gatherNote: 'Live Re-scan completed before building this pack.',
+        }
+      } catch (err) {
+        const response = probe ?? (await fetchCodeHealth(30))
+        return {
+          generatedAt,
+          response,
+          lens: buildCodeHealthLens(response),
+          gatherMode: 'rescan-failed',
+          gatherNote: err instanceof Error ? err.message : String(err),
+        }
+      }
+    }
+    const response = probe ?? (await fetchCodeHealth(30))
+    return {
+      generatedAt,
+      response,
+      lens: buildCodeHealthLens(response),
+      gatherMode: 'rescan-unavailable',
+      gatherNote:
+        response.freshness?.note ??
+        'Live Re-scan unavailable on this API host — pack uses the last stored reading.',
+    }
+  }
+
   const response = await fetchCodeHealth(30)
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     response,
     lens: buildCodeHealthLens(response),
+    gatherMode: 'stored-snapshot',
   }
 }
+
+/** @deprecated alias — prefer gatherCodeHealthSnapshot({ liveRescanFirst: true }) */
+export const gatherCodeHealthRefactorTask = gatherCodeHealthSnapshot
 
 export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): string {
   const lines: string[] = []
   const push = (s = '') => lines.push(s)
 
-  push('# Code Health — Agent paydown pack')
+  push('# Code Health — Code Refactor Agent Task Content')
   push(`Generated: ${snap.generatedAt}`)
-  push('Source: Ops Console → Mission Control → Code Health (Copy for Agent)')
+  push('Source: Ops Console → Mission Control → Code Health (Generate Agent Pack)')
   push('')
-  push('## Goal')
+  push('## Your job (IDE Agent)')
   push(
-    'Pay down structural debt in priority order (OVER first, then ascending slack). Do NOT invent a weighted health score. Gate remains: value may never exceed baseline.',
+    'You receive a **mechanical ratchet reading** below (scan.sh / Live Re-scan). Console does **not** invent refactor steps.',
   )
+  push('1. Treat the metrics + offender `detail` as ground truth for this pack.')
+  push(
+    '2. Open the listed offender files in the workspace and propose a **Suggested task list** grounded in current code — no feature drift, no speculative refactors.',
+  )
+  push(
+    '3. Prefer the paydown queue order (OVER first, then ascending slack). One primary cut at a time unless the Owner asks for a backlog.',
+  )
+  push(
+    '4. After a real reduction, lock baselines only to values `scan.sh` prints — never invent numbers.',
+  )
+  push('5. Do **not** invent a weighted health score or re-weight dimensions.')
+  push('')
+  push('## Required deliverable from you')
+  push('Reply with a **Suggested task list** (markdown), each item:')
+  push('- Title (one cut)')
+  push('- Repo + metric id')
+  push('- Why (cite value / baseline / slack / detail from this pack)')
+  push('- Concrete steps (files / symbols you actually inspected)')
+  push('- Verify command (`scan.sh --repo …` or repo check script)')
+  push('- Risk / no-drift notes (what must stay behavior-compatible)')
   push('')
   push('## D10')
   push(
     'Trade execution remains BLOCKED. Do not enable live trading, scale daemon for trade, or write ib:operator:cmd.',
   )
+  push('')
+
+  push('## Pack gather')
+  push(`- Mode: ${snap.gatherMode}`)
+  if (snap.gatherNote) push(`- Note: ${snap.gatherNote}`)
   push('')
 
   const { lens } = snap
@@ -51,11 +144,13 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
     push(lens.note ?? 'No code-health report has ever been submitted.')
     push('')
     push('## Required first step')
+    push('Produce a reading before proposing tasks:')
     push('```bash')
     push('cd bifrost-trade-infra')
     push('bash agent-config/scripts/code-health/scan.sh --report')
     push('```')
-    push('Treat absence of data as unmeasured — never as healthy.')
+    push('Or Ops Console → Code Health → Live Re-scan (local DEV platform-api).')
+    push('Treat absence of data as unmeasured — never as healthy. Do not invent a task list without metrics.')
     return lines.join('\n')
   }
 
@@ -66,6 +161,27 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push(`- Trend: ${lens.posture.trendLine}`)
   if (lens.posture.nextLine !== '') push(`- ${lens.posture.nextLine}`)
   push('')
+
+  push('## Freshness')
+  const fresh = snap.response.freshness
+  if (fresh == null) {
+    push('- Freshness: unknown (API did not return freshness)')
+  } else {
+    push(`- Rescan available: ${fresh.rescan_available ? 'yes' : 'no'}`)
+    if (fresh.workspace_root) push(`- Workspace: ${fresh.workspace_root}`)
+    if (fresh.infra_head) push(`- Live infra HEAD: ${fresh.infra_head}`)
+    if (fresh.reading_commit) push(`- Reading commit: ${fresh.reading_commit}`)
+    push(
+      `- Stale vs HEAD: ${
+        fresh.stale_vs_head
+          ? 'YES — prefer Live Re-scan before trusting this reading for cut planning'
+          : 'no'
+      }`,
+    )
+    if (fresh.note) push(`- Note: ${fresh.note}`)
+  }
+  push('')
+
   push('## Snapshot')
   push(`- Commit: ${report.commit}`)
   push(`- Received: ${report.received_at}`)
@@ -106,34 +222,29 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   }
   push('')
 
-  push('## Paydown queue (do these first)')
+  push('## Paydown queue (priority order for your Suggested tasks)')
   if (lens.paydownQueue.length === 0) {
-    push('- (empty — all metrics have positive slack)')
+    push('- (empty — all metrics have positive slack; suggest only lock-baseline owed items if any)')
   } else {
     lens.paydownQueue.forEach((row, i) => {
       push(
-        `${i + 1}. [${row.over ? 'OVER' : 'AT CEILING'}] ${row.metric.label} (${row.metric.repo}) slack=${row.slack} · ${row.metric.detail ?? ''}`,
+        `${i + 1}. [${row.over ? 'OVER' : 'AT CEILING'}] ${row.metric.id} · ${row.metric.label} (${row.metric.repo})`,
       )
+      push(
+        `   value=${row.metric.value} baseline=${row.metric.baseline} slack=${row.slack} status=${row.metric.status}`,
+      )
+      if (row.metric.detail) push(`   detail: ${row.metric.detail}`)
+      if (row.metric.baseline_var) push(`   baseline_var: ${row.metric.baseline_var}`)
     })
-  }
-  push('')
-
-  push('## Suggested cuts (playbooks)')
-  const tasks = buildSuggestedTasks(lens.paydownQueue, { limit: 5 })
-  if (tasks.length === 0) {
-    push('- (none)')
-  } else {
-    for (const t of tasks) {
-      push('')
-      push(t.agentBrief)
-    }
   }
   push('')
 
   push('## All metrics')
   for (const row of lens.metrics) {
     push(
-      `- ${row.metric.id}: value=${row.metric.value} baseline=${row.metric.baseline} slack=${row.slack} status=${row.metric.status} dim=${row.dimension}`,
+      `- ${row.metric.id}: value=${row.metric.value} baseline=${row.metric.baseline} slack=${row.slack} status=${row.metric.status} dim=${row.dimension} repo=${row.metric.repo}${
+        row.metric.detail ? ` · ${row.metric.detail}` : ''
+      }`,
     )
   }
   push('')
@@ -160,6 +271,8 @@ export function buildCodeHealthAgentPack(snap: CodeHealthAgentPackSnapshot): str
   push('- Do not invent a composite health score or re-weight dimensions.')
   push('- Do not treat NOT OBSERVED / missing scan as healthy.')
   push('- Do not raise baselines to silence OVER.')
+  push('- Do not paste generic playbook steps without reading the offender files.')
+  push('- Do not propose cuts that change product behavior unless the Owner explicitly asks.')
 
   return lines.join('\n')
 }

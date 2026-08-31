@@ -341,6 +341,7 @@ func (s *Server) Router() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/report", s.codehealth.HandleReport)
+				r.Post("/rescan", s.codehealth.HandleRescan)
 			})
 		})
 		r.Route("/agent/drift-proposals", func(r chi.Router) {

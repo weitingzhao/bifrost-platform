@@ -10,20 +10,30 @@ describe('buildCodeHealthAgentPack', () => {
       generatedAt: '2026-08-31T00:00:00Z',
       response,
       lens: buildCodeHealthLens(response),
+      gatherMode: 'stored-snapshot',
     })
     expect(text).toContain('NOT OBSERVED')
     expect(text).toContain('D10')
     expect(text).toContain('scan.sh --report')
+    expect(text).toContain('Code Refactor Agent Task Content')
     expect(text).not.toContain('Planning lamp: ok')
+    expect(text).not.toContain('Suggested cuts (playbooks)')
   })
 
-  it('includes paydown queue and forbids composite scores', () => {
+  it('packs live metrics and asks Agent for Suggested tasks — no playbooks', () => {
     const response: CodeHealthResponse = {
       reported: true,
+      freshness: {
+        rescan_available: true,
+        infra_head: 'abc1234',
+        reading_commit: 'abc1234',
+        stale_vs_head: false,
+      },
       latest: {
         generated_at: '2026-08-31T00:00:00Z',
         commit: 'abc1234',
         received_at: '2026-08-31T00:00:00Z',
+        source: 'live-rescan',
         metrics: [
           {
             id: 'code.oversized.rocket',
@@ -33,7 +43,7 @@ describe('buildCodeHealthAgentPack', () => {
             value: 34,
             baseline: 34,
             status: 'at_baseline',
-            detail: 'largest: x',
+            detail: 'largest: ObservabilityPage.tsx(1775)',
           },
         ],
       },
@@ -42,15 +52,23 @@ describe('buildCodeHealthAgentPack', () => {
       generatedAt: '2026-08-31T00:00:00Z',
       response,
       lens: buildCodeHealthLens(response),
+      gatherMode: 'live-rescan',
+      gatherNote: 'Live Re-scan completed before building this pack.',
     })
-    expect(text).toContain('Copy for Agent')
+    expect(text).toContain('Code Refactor Agent Task Content')
+    expect(text).toContain('Your job (IDE Agent)')
+    expect(text).toContain('Suggested task list')
+    expect(text).toContain('Mode: live-rescan')
+    expect(text).toContain('Freshness')
     expect(text).toContain('Paydown queue')
+    expect(text).toContain('code.oversized.rocket')
+    expect(text).toContain('ObservabilityPage.tsx')
     expect(text).toContain('AT CEILING')
     expect(text).toContain('Posture Summary')
     expect(text).toContain('Gate CLEAR')
-    expect(text).toContain('Suggested cuts')
-    expect(text).toContain('Split oversized')
     expect(text).toContain('Do not invent a composite health score')
     expect(text).toContain('D10')
+    expect(text).not.toContain('Suggested cuts (playbooks)')
+    expect(text).not.toContain('Split oversized Console / API modules')
   })
 })

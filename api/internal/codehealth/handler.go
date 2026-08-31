@@ -6,18 +6,20 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
 const neverReportedNote = "no code-health report has ever been submitted — " +
-	"treat as NOT OBSERVED, never as healthy. Run `make check-code-health` " +
-	"in bifrost-trade-infra, or let CI report it."
+	"treat as NOT OBSERVED, never as healthy. Run Live Re-scan from the Console " +
+	"(DEV), or `bash agent-config/scripts/code-health/scan.sh --report`."
 
 type Handler struct {
 	store *Store
 	audit *actuation.AuditLog
+	mu    sync.Mutex // serialise live rescans (scan.sh is CPU/IO heavy)
 }
 
 func NewHandler(audit *actuation.AuditLog) *Handler {
@@ -37,14 +39,24 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	latest, ok := h.store.Latest()
+	fresh := buildFreshness(nil)
+	if ok {
+		fresh = buildFreshness(latest)
+	}
+
 	if !ok {
-		writeJSON(w, http.StatusOK, StatusResponse{Reported: false, Note: neverReportedNote})
+		writeJSON(w, http.StatusOK, StatusResponse{
+			Reported:  false,
+			Note:      neverReportedNote,
+			Freshness: &fresh,
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, StatusResponse{
-		Reported: true,
-		Latest:   latest,
-		History:  h.store.List(limit),
+		Reported:  true,
+		Latest:    latest,
+		History:   h.store.List(limit),
+		Freshness: &fresh,
 	})
 }
 
@@ -93,6 +105,61 @@ func (h *Handler) HandleReport(w http.ResponseWriter, r *http.Request) {
 		"metrics":       len(rep.Metrics),
 		"over_baseline": over,
 	})
+}
+
+// HandleRescan runs scan.sh against the local workspace and stores the reading.
+// Operator-gated. This is the Live Re-scan path for DEV Inner Loop — not an LLM.
+func (h *Handler) HandleRescan(w http.ResponseWriter, r *http.Request) {
+	if !h.mu.TryLock() {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "a live re-scan is already running — wait for it to finish",
+		})
+		return
+	}
+	defer h.mu.Unlock()
+
+	rep, stderr, err := runLiveScan(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error":  err.Error(),
+			"stderr": truncate(string(stderr), 4000),
+		})
+		return
+	}
+	if err := h.store.Put(rep); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	over := 0
+	for _, m := range rep.Metrics {
+		if m.Status == "over" {
+			over++
+		}
+	}
+	if h.audit != nil {
+		h.audit.Record(r, "code-health.rescan", rep.Commit, "stored",
+			fmt.Sprintf("metrics=%d over=%d source=live-rescan", len(rep.Metrics), over))
+	}
+
+	fresh := buildFreshness(&rep)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"stored":        true,
+		"commit":        rep.Commit,
+		"metrics":       len(rep.Metrics),
+		"over_baseline": over,
+		"source":        rep.Source,
+		"received_at":   rep.ReceivedAt,
+		"freshness":     fresh,
+		"latest":        rep,
+	})
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

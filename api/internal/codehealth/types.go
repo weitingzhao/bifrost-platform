@@ -44,8 +44,21 @@ type Report struct {
 // and found clean". Conflating the two is how a dashboard reports health it
 // never observed.
 type StatusResponse struct {
-	Reported bool     `json:"reported"`
-	Note     string   `json:"note,omitempty"`
-	Latest   *Report  `json:"latest,omitempty"`
-	History  []Report `json:"history,omitempty"`
+	Reported   bool       `json:"reported"`
+	Note       string     `json:"note,omitempty"`
+	Latest     *Report    `json:"latest,omitempty"`
+	History    []Report   `json:"history,omitempty"`
+	Freshness  *Freshness `json:"freshness,omitempty"`
+}
+
+// Freshness tells the Console whether Agent cut planning should trust the
+// stored reading, or Live Re-scan first. RescanAvailable is true only when this
+// API host can see the multi-repo workspace and run scan.sh (typical: local DEV).
+type Freshness struct {
+	RescanAvailable bool   `json:"rescan_available"`
+	WorkspaceRoot   string `json:"workspace_root,omitempty"`
+	InfraHead       string `json:"infra_head,omitempty"`
+	ReadingCommit   string `json:"reading_commit,omitempty"`
+	StaleVsHead     bool   `json:"stale_vs_head"`
+	Note            string `json:"note,omitempty"`
 }

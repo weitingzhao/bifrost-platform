@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, type MouseEvent, type ReactNode } from 'react'
 import { cn, Popover, PopoverContent, PopoverTrigger } from '@bifrost/ui'
-import { Check, Loader2, Sparkles } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import { signalColor, type Signal } from '@/lib/control-room/missionSignals'
 import {
   gatherNavAgentPack,
   isNavAgentCapable,
+  navAgentAskIcon,
+  navAgentAskIdleTitle,
   navAgentNeedsAsk,
 } from '@/lib/nav/navAgentCapability'
 
@@ -46,8 +48,8 @@ async function writeClipboard(text: string): Promise<void> {
 }
 
 /**
- * Trailing Sparkles on nav rows that have a page-independent Ask-for-Agent pack.
- * Always visible (capability mark). Colored + louder when the lamp is not green.
+ * Trailing Ask affordance on nav rows that have a page-independent Agent pack.
+ * Always visible (capability mark). Colored louder when needsAsk.
  * Must sit as a sibling of the row link — never nested inside SidebarMenuSubButton.
  */
 export function NavAgentAskSlot({
@@ -64,8 +66,10 @@ export function NavAgentAskSlot({
   if (ctx == null || !isNavAgentCapable(itemId)) return null
 
   const signal = ctx.signalFor(itemId)
-  const needsAsk = navAgentNeedsAsk(signal)
+  const needsAsk = navAgentNeedsAsk(signal, itemId)
   const busy = copyState === 'busy'
+  const AskIcon = navAgentAskIcon(itemId)
+  const isCodeHealth = itemId === 'code-health'
 
   async function handleAsk(event: MouseEvent) {
     event.preventDefault()
@@ -91,16 +95,18 @@ export function NavAgentAskSlot({
 
   const title =
     copyState === 'copied'
-      ? 'Copied diagnose pack — paste into Agent IDE'
+      ? isCodeHealth
+        ? 'Agent pack copied — paste into Agent IDE'
+        : 'Copied diagnose pack — paste into Agent IDE'
       : copyState === 'error' && fallbackText != null
         ? 'Clipboard blocked — pack is in the popover, copy from there'
         : copyState === 'error'
           ? 'Copy failed'
           : copyState === 'busy'
-            ? 'Gathering diagnose pack…'
-            : needsAsk
-              ? 'Ask for Agent — copy diagnose pack (same as the page button)'
-              : 'Ask for Agent available — copy diagnose pack'
+            ? isCodeHealth
+              ? 'Generating Agent Pack…'
+              : 'Gathering diagnose pack…'
+            : navAgentAskIdleTitle(itemId, needsAsk)
 
   const color =
     copyState === 'copied'
@@ -132,7 +138,7 @@ export function NavAgentAskSlot({
       ) : copyState === 'copied' ? (
         <Check className={collapsed ? 'size-2.5' : 'size-3'} aria-hidden />
       ) : (
-        <Sparkles
+        <AskIcon
           className={cn(collapsed ? 'size-2.5' : 'size-3', !needsAsk && 'text-muted-foreground')}
           aria-hidden
         />
@@ -152,7 +158,7 @@ export function NavAgentAskSlot({
         onClick={e => e.stopPropagation()}
       >
         <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
-          Clipboard blocked. Select and copy this diagnose pack into Agent IDE.
+          Clipboard blocked. Select and copy this pack into Agent IDE.
         </p>
         <textarea
           readOnly

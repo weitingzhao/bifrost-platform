@@ -258,7 +258,7 @@ func Catalog() []ToolView {
 		tool("get_checklist_signals", "Latest Daily Ops Checklist per-item signals + KPIs", "read", "GET", "/api/v1/checklist/signals", "viewer", "Agent", true),
 		tool("report_checklist_signals", "Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)", "routine", "POST", "/api/v1/checklist/signals", "operator", "Agent", true),
 		tool("get_checklist_kpis", "Checklist quiet-success streak + last-run summary", "read", "GET", "/api/v1/checklist/kpis", "viewer", "Agent", true),
-		tool("get_code_health", "Code-health ratchet readings (duplication, oversized files, contract coverage, image spread); reported=false means NOT OBSERVED, not healthy", "read", "GET", "/api/v1/code-health", "viewer", "Agent", true),
+		tool("get_code_health", "Code-health ratchet readings (duplication, oversized files, contract coverage, image spread); reported=false means NOT OBSERVED; freshness.stale_vs_head means Live Re-scan before Agent cut planning", "read", "GET", "/api/v1/code-health", "viewer", "Agent", true),
 		tool("get_telemetry_overview", "Prometheus telemetry overview snapshot (preset metrics)", "read", "GET", "/api/v1/telemetry/overview", "viewer", "P4", true),
 		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),

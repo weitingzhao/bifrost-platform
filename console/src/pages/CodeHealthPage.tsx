@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
   DenseDataTable,
@@ -18,7 +18,7 @@ import {
   DialogTitle,
   cn,
 } from '@bifrost/ui'
-import { fetchCodeHealth } from '@/api/codeHealth'
+import { fetchCodeHealth, rescanCodeHealth } from '@/api/codeHealth'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   OpsVerdictStrip,
@@ -43,11 +43,6 @@ import {
   proposeLowerBaseline,
   type LowerBaselineProposal,
 } from '@/lib/code-health/codeHealthLowerBaseline'
-import {
-  buildSuggestedTasks,
-  suggestedTaskKindLabel,
-  type CodeHealthSuggestedTask,
-} from '@/lib/code-health/codeHealthSuggestedTasks'
 
 /** A reading older than this describes code that has probably moved on. */
 const STALE_MS = 24 * 60 * 60 * 1000
@@ -107,12 +102,6 @@ function planningTagVariant(lamp: string): OpsVerdictTagVariant {
   }
 }
 
-function kindTagVariant(kind: CodeHealthSuggestedTask['kind']): 'danger' | 'warning' | 'info' {
-  if (kind === 'unblock_gate') return 'danger'
-  if (kind === 'lock_baseline') return 'info'
-  return 'warning'
-}
-
 async function writeClipboard(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text)
@@ -123,6 +112,7 @@ async function writeClipboard(text: string): Promise<boolean> {
 }
 
 export function CodeHealthPage() {
+  const queryClient = useQueryClient()
   const query = useQuery({
     queryKey: ['code-health', 'page'],
     queryFn: () => fetchCodeHealth(30),
@@ -131,21 +121,34 @@ export function CodeHealthPage() {
   })
 
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
-  const [taskCopyId, setTaskCopyId] = useState<string | null>(null)
+  const [copyHint, setCopyHint] = useState<string | null>(null)
   const [lowerOpen, setLowerOpen] = useState<LowerBaselineProposal | null>(null)
   const [lowerCopyState, setLowerCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
-  const [stepsOpen, setStepsOpen] = useState<Record<string, boolean>>({})
+  const [rescanHint, setRescanHint] = useState<string | null>(null)
 
   const lens = useMemo(() => buildCodeHealthLens(query.data), [query.data])
+  const freshness = query.data?.freshness
+  const staleVsHead = freshness?.stale_vs_head === true
+  const rescanAvailable = freshness?.rescan_available === true
+
+  const rescan = useMutation({
+    mutationFn: () => rescanCodeHealth(),
+    onSuccess: async result => {
+      setRescanHint(
+        `Live re-scan stored · commit ${result.commit} · ${result.metrics} metric(s) · ${result.over_baseline} over`,
+      )
+      await queryClient.invalidateQueries({ queryKey: ['code-health'] })
+      window.setTimeout(() => setRescanHint(null), 8000)
+    },
+    onError: (err: Error) => {
+      setRescanHint(err.message)
+      window.setTimeout(() => setRescanHint(null), 12_000)
+    },
+  })
 
   const lowerProposals = useMemo(
     () => listLowerBaselineProposals(query.data?.latest?.metrics ?? []),
     [query.data],
-  )
-
-  const suggestedTasks = useMemo(
-    () => buildSuggestedTasks(lens.paydownQueue, { limit: 8 }),
-    [lens.paydownQueue],
   )
 
   const openLower = (row: CodeHealthMetricLens) => {
@@ -157,12 +160,6 @@ export function CodeHealthPage() {
 
   const copyLower = async (text: string) => {
     setLowerCopyState((await writeClipboard(text)) ? 'copied' : 'error')
-  }
-
-  const copyTask = async (task: CodeHealthSuggestedTask) => {
-    const ok = await writeClipboard(task.agentBrief)
-    setTaskCopyId(ok ? task.id : null)
-    if (ok) window.setTimeout(() => setTaskCopyId(null), 2000)
   }
 
   const byDomain = useMemo(() => {
@@ -221,24 +218,37 @@ export function CodeHealthPage() {
                 : String(lens.totalDeltaSlack)
           }`
 
-  async function handleCopyForAgent() {
+  async function handleCopyRefactorTask() {
     if (copyState === 'busy') return
     setCopyState('busy')
+    setCopyHint(null)
     try {
-      const snap = await gatherCodeHealthSnapshot()
+      const snap = await gatherCodeHealthSnapshot({ liveRescanFirst: true })
       const text = buildCodeHealthAgentPack(snap)
       await navigator.clipboard.writeText(text)
+      await queryClient.invalidateQueries({ queryKey: ['code-health'] })
       setCopyState('copied')
-      window.setTimeout(() => setCopyState('idle'), 2000)
+      setCopyHint(
+        snap.gatherMode === 'live-rescan'
+          ? 'Live Re-scan done — Agent pack copied; paste into Agent IDE'
+          : snap.gatherMode === 'rescan-unavailable'
+            ? 'Rescan unavailable — stored reading packed for Agent'
+            : snap.gatherMode === 'rescan-failed'
+              ? 'Rescan failed — packed last reading (see pack gather note)'
+              : 'Agent pack copied',
+      )
+      window.setTimeout(() => {
+        setCopyState('idle')
+        setCopyHint(null)
+      }, 5000)
     } catch {
       setCopyState('error')
-      window.setTimeout(() => setCopyState('idle'), 3000)
+      setCopyHint('Copy failed')
+      window.setTimeout(() => {
+        setCopyState('idle')
+        setCopyHint(null)
+      }, 3000)
     }
-  }
-
-  const focusEvidence = (metricId: string) => {
-    const el = document.querySelector(`[data-code-health-metric="${metricId}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
   return (
@@ -257,9 +267,25 @@ export function CodeHealthPage() {
         summary={summary}
         extraTags={
           <>
-            {stale && (
+            {staleVsHead && (
+              <DenseTag
+                variant="danger"
+                title={
+                  freshness?.note ??
+                  `Stored reading ${freshness?.reading_commit ?? '?'} ≠ live infra HEAD ${freshness?.infra_head ?? '?'} — Live Re-scan or Generate Agent Pack before planning cuts`
+                }
+              >
+                STALE VS HEAD
+              </DenseTag>
+            )}
+            {!staleVsHead && stale && (
               <DenseTag variant="warning" title="Reading is over a day old — the code has likely moved on">
-                STALE
+                STALE (&gt;24h)
+              </DenseTag>
+            )}
+            {report?.source === 'live-rescan' && !staleVsHead && (
+              <DenseTag variant="success" title="Last reading came from Live Re-scan on this API host">
+                LIVE RESCAN
               </DenseTag>
             )}
             {lens.owedCount > 0 && (
@@ -289,72 +315,76 @@ export function CodeHealthPage() {
           <>
             <Button
               size="sm"
-              variant="outline"
+              variant="default"
               className="shrink-0"
-              disabled={copyState === 'busy'}
-              onClick={() => void handleCopyForAgent()}
+              disabled={copyState === 'busy' || rescan.isPending}
+              title="Generate Code Refactor Agent Task content: Live Re-scan when available, then copy a brief for Agent IDE (Agent proposes Suggested tasks from live metrics)"
+              onClick={() => void handleCopyRefactorTask()}
             >
               {copyState === 'busy'
-                ? 'Gathering…'
+                ? 'Generating…'
                 : copyState === 'copied'
                   ? 'Copied'
                   : copyState === 'error'
                     ? 'Copy failed'
-                    : 'Copy for Agent'}
+                    : 'Generate Agent Pack'}
             </Button>
-            <Button size="sm" variant="outline" className="shrink-0" onClick={() => void query.refetch()}>
+            <Button
+              size="sm"
+              variant={staleVsHead || neverScanned ? 'default' : 'outline'}
+              className="shrink-0"
+              disabled={rescan.isPending || copyState === 'busy' || !rescanAvailable}
+              title={
+                rescanAvailable
+                  ? 'Run scan.sh against the local workspace and replace the stored reading'
+                  : (freshness?.note ??
+                    'Live Re-scan needs a local DEV platform-api with workspace access (BIFROST_WORKSPACE_ROOT)')
+              }
+              onClick={() => {
+                setRescanHint(null)
+                rescan.mutate()
+              }}
+            >
+              {rescan.isPending ? 'Re-scanning…' : 'Live Re-scan'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0"
+              title="Re-fetch the last stored snapshot — does not re-run scan.sh"
+              onClick={() => void query.refetch()}
+            >
               Refresh
             </Button>
           </>
         }
         meta={
           <span>
-            Gate blocks OVER only. Planning uses slack (baseline − value) — not a weighted score.
+            Gate blocks OVER only. Cut planning lives in Agent IDE — Console only ships live metrics.
+            {copyHint != null && (
+              <>
+                {' '}
+                · <span className={cn(copyState === 'error' ? 'text-destructive' : 'text-success')}>{copyHint}</span>
+              </>
+            )}
+            {rescanHint != null && (
+              <>
+                {' '}
+                · <span className={cn(rescan.isError ? 'text-destructive' : 'text-success')}>{rescanHint}</span>
+              </>
+            )}
+            {freshness?.infra_head != null && freshness.infra_head !== '' && (
+              <>
+                {' '}
+                · infra HEAD {freshness.infra_head}
+                {freshness.reading_commit != null && freshness.reading_commit !== ''
+                  ? ` · reading ${freshness.reading_commit}`
+                  : ''}
+              </>
+            )}
           </span>
         }
       />
-
-      {!neverScanned && !query.isLoading && !query.isError && (
-        <OpsSection
-          title="PAYDOWN PATH"
-          description="How to move from at-ceiling → headroom → locked baseline"
-          variant="elevated"
-          bodyPadding="compact"
-        >
-          <ol className="m-0 flex list-none flex-col gap-2 p-0 sm:flex-row sm:gap-3">
-            {[
-              {
-                n: '1',
-                t: 'Pick a cut',
-                d: 'Suggested Cuts rank OVER first, then slack 0. One metric = one Agent task.',
-              },
-              {
-                n: '2',
-                t: 'Reduce the value',
-                d: 'Split files, collapse dup names, add schemas, or pin image tags — lower-is-better.',
-              },
-              {
-                n: '3',
-                t: 'Lock the baseline',
-                d: 'When status is IMPROVED, Lower baseline… copies a patch with the exact scan value.',
-              },
-            ].map(step => (
-              <li
-                key={step.n}
-                className="flex min-w-0 flex-1 gap-2 rounded-md border border-border/60 bg-background/40 px-2.5 py-2"
-              >
-                <span className="font-mono text-dense-caption text-muted-foreground tabular-nums shrink-0">
-                  {step.n}
-                </span>
-                <div className="min-w-0">
-                  <p className="m-0 text-dense-label font-medium text-foreground">{step.t}</p>
-                  <p className="m-0 mt-0.5 text-dense-meta text-muted-foreground">{step.d}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </OpsSection>
-      )}
 
       {!neverScanned && !query.isLoading && !query.isError && (
         <OpsSection
@@ -401,100 +431,15 @@ export function CodeHealthPage() {
         <OpsSection title="HOW TO PRODUCE A READING" variant="elevated">
           <div className="flex flex-col gap-2 text-dense-body">
             <p className="m-0">
-              Nothing has been reported yet — this is NOT OBSERVED, not healthy. Publish a reading:
+              Nothing has been reported yet — this is NOT OBSERVED, not healthy. Prefer Generate
+              Agent Pack (Live Re-scan + brief) on local DEV, or publish from the shell:
             </p>
             <pre className="m-0 overflow-x-auto rounded-md bg-background/50 px-3 py-2 text-dense-meta">
               {'cd bifrost-trade-infra\nbash agent-config/scripts/code-health/scan.sh --report'}
             </pre>
-          </div>
-        </OpsSection>
-      )}
-
-      {suggestedTasks.length > 0 && (
-        <OpsSection
-          id="code-health-suggested-cuts"
-          title="SUGGESTED CUTS"
-          description="Potential optimization tasks from the current reading — copy a brief for Agent"
-          variant="elevated"
-          headerExtra={
-            suggestedTasks[0] != null ? (
-              <DenseTag variant={kindTagVariant(suggestedTasks[0].kind)}>
-                Next: #{suggestedTasks[0].priority} · {suggestedTasks[0].repo}
-              </DenseTag>
-            ) : null
-          }
-        >
-          <div className="flex flex-col gap-2">
-            {suggestedTasks.map(task => {
-              const open = stepsOpen[task.id] ?? task.priority === 1
-              return (
-                <article
-                  key={task.id}
-                  data-code-health-dim={task.dimension}
-                  className={cn(
-                    'rounded-md border border-border/70 bg-background/35 px-3 py-2.5',
-                    task.priority === 1 && 'border-[var(--warning)]/40',
-                  )}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-dense-caption text-muted-foreground tabular-nums">
-                          #{task.priority}
-                        </span>
-                        <DenseTag variant={kindTagVariant(task.kind)}>
-                          {suggestedTaskKindLabel(task.kind)}
-                        </DenseTag>
-                        <DenseTag variant="neutral">{task.dimensionLabel}</DenseTag>
-                        <span className="text-dense-meta text-muted-foreground">{task.repo}</span>
-                      </div>
-                      <h4 className="m-0 mt-1 text-dense-body font-medium text-foreground">
-                        {task.title}
-                      </h4>
-                      <p className="m-0 mt-1 text-dense-meta text-muted-foreground">{task.why}</p>
-                      <p className="m-0 mt-1 text-dense-meta text-foreground/90">
-                        <span className="text-muted-foreground">Outcome: </span>
-                        {task.outcome}
-                      </p>
-                      <p className="m-0 mt-1 font-mono text-dense-caption text-muted-foreground tabular-nums">
-                        now {task.value} · baseline {task.baseline} · slack {task.slack}
-                        {task.detail ? ` · ${task.detail}` : ''}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setStepsOpen(prev => ({
-                            ...prev,
-                            [task.id]: !(prev[task.id] ?? task.priority === 1),
-                          }))
-                        }
-                      >
-                        {open ? 'Hide steps' : 'Steps'}
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => focusEvidence(task.id)}>
-                        Evidence
-                      </Button>
-                      <Button size="sm" onClick={() => void copyTask(task)}>
-                        {taskCopyId === task.id ? 'Copied' : 'Copy task'}
-                      </Button>
-                    </div>
-                  </div>
-                  {open && (
-                    <ol className="m-0 mt-2 list-decimal space-y-1 border-t border-border/50 pt-2 pl-4 text-dense-meta text-muted-foreground">
-                      {task.steps.map(step => (
-                        <li key={step}>{step}</li>
-                      ))}
-                      <li className="text-foreground/80">
-                        Verify: <code className="text-dense-caption">{task.verify}</code>
-                      </li>
-                    </ol>
-                  )}
-                </article>
-              )
-            })}
+            {!rescanAvailable && freshness?.note != null && freshness.note !== '' && (
+              <p className="m-0 text-dense-meta text-muted-foreground">{freshness.note}</p>
+            )}
           </div>
         </OpsSection>
       )}
@@ -512,8 +457,7 @@ export function CodeHealthPage() {
             <DenseTableHeader>
               <DenseTableHeadRow>
                 <DenseTableHead>Metric</DenseTableHead>
-                <DenseTableHead>Repo</DenseTableHead>
-                <DenseTableHead>Env var</DenseTableHead>
+                <DenseTableHead>Var</DenseTableHead>
                 <DenseTableHead>From → To</DenseTableHead>
                 <DenseTableHead>Action</DenseTableHead>
               </DenseTableHeadRow>
@@ -521,8 +465,7 @@ export function CodeHealthPage() {
             <DenseTableBody>
               {lowerProposals.map(p => (
                 <DenseTableRow key={p.metricId}>
-                  <DenseTableCell title={p.metricId}>{p.label}</DenseTableCell>
-                  <DenseTableCell>{p.repo}</DenseTableCell>
+                  <DenseTableCell>{p.label}</DenseTableCell>
                   <DenseTableCell className="font-mono text-dense-meta">{p.baselineVar}</DenseTableCell>
                   <DenseTableCell className="font-mono tabular-nums">
                     {p.from} → {p.to}
@@ -536,7 +479,7 @@ export function CodeHealthPage() {
                         setLowerOpen(p)
                       }}
                     >
-                      Lower baseline…
+                      Lower…
                     </Button>
                   </DenseTableCell>
                 </DenseTableRow>
@@ -549,18 +492,21 @@ export function CodeHealthPage() {
       {byDomain.map(group => {
         const groupOver = group.rows.filter(r => r.over).length
         const groupCeiling = group.rows.filter(r => r.atCeiling).length
-        const groupMinSlack =
-          group.rows.length > 0 ? Math.min(...group.rows.map(r => r.slack)) : null
+        const groupMinSlack = group.rows.reduce(
+          (min, r) => (r.slack < min ? r.slack : min),
+          group.rows[0]?.slack ?? 0,
+        )
         return (
           <OpsSection
             key={group.domain}
-            title={`${systemDomainLabel(group.domain).toUpperCase()} · EVIDENCE`}
-            description={group.rows[0]?.metric.repo}
+            title={systemDomainLabel(group.domain)}
+            description="Evidence — mechanical readings only"
+            variant="elevated"
             collapsible
-            defaultCollapsed={groupOver === 0}
+            defaultCollapsed={false}
             headerExtra={
               groupOver > 0 ? (
-                <DenseTag variant="danger">{groupOver} over baseline</DenseTag>
+                <DenseTag variant="danger">{groupOver} over · min slack {groupMinSlack}</DenseTag>
               ) : groupCeiling > 0 ? (
                 <DenseTag variant="warning">
                   {groupCeiling} at ceiling · min slack {groupMinSlack}
@@ -613,14 +559,11 @@ export function CodeHealthPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setStepsOpen(prev => ({ ...prev, [row.metric.id]: true }))
-                            document
-                              .getElementById('code-health-suggested-cuts')
-                              ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                          }}
+                          disabled={copyState === 'busy'}
+                          title="Generate Code Refactor Agent Task content (Live Re-scan + copy for Agent IDE)"
+                          onClick={() => void handleCopyRefactorTask()}
                         >
-                          Open cut
+                          Generate pack
                         </Button>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -652,7 +595,7 @@ export function CodeHealthPage() {
           {lowerOpen != null && (
             <div className="flex flex-col gap-2 text-dense-body">
               <p className="m-0 font-mono text-dense-meta">
-                {lowerOpen.baselineVar}: {lowerOpen.from} → <strong>{lowerOpen.to}</strong>
+                {lowerOpen.baselineVar}: {lowerOpen.from} → {lowerOpen.to}
               </p>
               <p className="m-0 text-dense-meta text-muted-foreground">
                 Path: {lowerOpen.path}. The new value must be exactly {lowerOpen.to} — never invent

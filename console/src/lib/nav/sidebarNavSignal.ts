@@ -43,10 +43,16 @@ export function resolveSidebarNavSignal(
     }
   }
   if (itemId === 'code-health') {
-    return {
-      signal: input.codeHealth.isLoading ? 'unknown' : input.codeHealth.signal,
-      title: input.codeHealth.isLoading ? 'Code Health: loading…' : input.codeHealth.title,
+    // Planning slack is not fleet traffic-light. Only OVER paints the nav icon red;
+    // AT CEILING / HELD stay muted (no green/yellow on the HeartPulse).
+    if (input.codeHealth.isLoading) {
+      return { signal: 'unknown', title: 'Code Health: loading…' }
     }
+    const title = input.codeHealth.title
+    if (input.codeHealth.signal === 'fail') {
+      return { signal: 'fail', title }
+    }
+    return { signal: 'unknown', title }
   }
   if (itemId === 'ib-gateway-manage') {
     return {

@@ -32,10 +32,25 @@ function baseInput(over: Partial<SidebarNavProbeInput> = {}): SidebarNavProbeInp
 }
 
 describe('resolveSidebarNavSignal code-health', () => {
-  it('uses planning lamp title for Code Health nav item', () => {
+  it('keeps planning title but does not paint yellow for AT CEILING', () => {
     const lamp = resolveSidebarNavSignal('code-health', baseInput())
-    expect(lamp?.signal).toBe('degraded')
+    expect(lamp?.signal).toBe('unknown')
     expect(lamp?.title).toContain('at ceiling')
+  })
+
+  it('does not paint green for HELD', () => {
+    const lamp = resolveSidebarNavSignal(
+      'code-health',
+      baseInput({
+        codeHealth: {
+          isLoading: false,
+          signal: 'ok',
+          title: 'Code Health: HELD · min slack 2',
+        },
+      }),
+    )
+    expect(lamp?.signal).toBe('unknown')
+    expect(lamp?.title).toContain('HELD')
   })
 
   it('is unknown while loading', () => {
@@ -48,7 +63,7 @@ describe('resolveSidebarNavSignal code-health', () => {
     expect(lamp?.signal).toBe('unknown')
   })
 
-  it('maps OVER planning lamp to fail', () => {
+  it('maps OVER planning lamp to fail (red)', () => {
     const lamp = resolveSidebarNavSignal(
       'code-health',
       baseInput({
