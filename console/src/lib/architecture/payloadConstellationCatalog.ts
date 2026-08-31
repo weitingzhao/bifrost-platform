@@ -66,7 +66,6 @@ export const SATELLITE_PAYLOADS: readonly PayloadInstrument[] = [
     mirrorRepos: [
       'bifrost-trade-core',
       'bifrost-trade-worker',
-      'bifrost-trade-socket',
       'bifrost-trade-api',
       'bifrost-trade-frontend',
       'bifrost-trade-infra',
