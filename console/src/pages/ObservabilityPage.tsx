@@ -29,8 +29,10 @@ import {
   cn,
 } from '@bifrost/ui'
 import { Wrench } from 'lucide-react'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { startRemediation } from '@/api/remediation'
 import { postAttentionMute } from '@/api/telemetry'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { TradeNsSegmentControl } from '@/components/TradeNsSegmentControl'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
@@ -64,6 +66,8 @@ import {
   attentionCtaActionLabel,
   buildAttentionBatchRemediationPrompt,
   buildAttentionRemediationPrompt,
+  buildObservabilityAgentPack,
+  buildObservabilityDiagnosePrefill,
   filterMutedAttention,
   largestAttentionBatchGroup,
   listActiveAttentionMutes,
@@ -479,11 +483,13 @@ export function ObservabilityPage({
   ambientJobId,
   ambientJobStatus,
   onStartAgentJob,
+  onOpenAgentDesk,
 }: {
   onNavigate?: (tab: string) => void
   ambientJobId?: string | null
   ambientJobStatus?: AmbientAgentJob['status'] | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
+  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
 }) {
   const {
     viewModel,
@@ -507,6 +513,8 @@ export function ObservabilityPage({
   const [muteConfirmItem, setMuteConfirmItem] = useState<AttentionItem | null>(null)
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [muteMessage, setMuteMessage] = useState<string | null>(null)
+  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const system = viewModel.system
   const selected = viewModel.selected
 
@@ -712,6 +720,37 @@ export function ObservabilityPage({
     document.getElementById('obs-attention')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
+  const packCtx = useMemo(
+    () => ({
+      generatedAt: new Date().toISOString(),
+      tradeEnv,
+      namespace,
+      selectedDomain,
+      viewModel,
+    }),
+    [namespace, selectedDomain, tradeEnv, viewModel],
+  )
+
+  async function handleCopyForAgent() {
+    if (copyState === 'busy') return
+    setCopyState('busy')
+    try {
+      await navigator.clipboard.writeText(buildObservabilityAgentPack(packCtx))
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }
+
+  function handleDiagnoseWithAgent() {
+    if (diagnoseBusy || onOpenAgentDesk == null) return
+    setDiagnoseBusy(true)
+    onOpenAgentDesk({ prefill: buildObservabilityDiagnosePrefill(packCtx) })
+    window.setTimeout(() => setDiagnoseBusy(false), 400)
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <OpsVerdictStrip
@@ -731,6 +770,35 @@ export function ObservabilityPage({
               {isLoading ? 'Aggregating probes…' : system.primaryCause}
             </span>
           </span>
+        }
+        actions={
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={copyState === 'busy' || isLoading}
+              title="Copy a repair pack (verdict + domains + Attention + Alerts) for an AI agent"
+              onClick={() => void handleCopyForAgent()}
+            >
+              {copyState === 'busy'
+                ? 'Exporting…'
+                : copyState === 'copied'
+                  ? 'Copied!'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy for Agent'}
+            </Button>
+            {onOpenAgentDesk != null ? (
+              <AgentTriggerButton
+                label="Diagnose with Agent"
+                size="sm"
+                pending={diagnoseBusy}
+                disabled={isLoading}
+                title="Open Agent Desk with Observability diagnose prefill (includes firing alerts)"
+                onClick={handleDiagnoseWithAgent}
+              />
+            ) : null}
+          </div>
         }
         meta={
           <>

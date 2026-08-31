@@ -112,6 +112,19 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
     }
   }
 
+  if (/^KubeJobFailed$/i.test(name)) {
+    const jobName = labels.job_name ?? labels.job ?? ''
+    const ns = labels.namespace ?? ''
+    return {
+      track: 'agent-adhoc',
+      cta: 'diagnose',
+      trackReason:
+        'Failed Job object still present — kube-prometheus fires until the Job is removed',
+      suggestedAction:
+        `Diagnose ${ns !== '' ? `${ns}/` : ''}${jobName || 'Job'}: confirm CronJob suspend / Dagster ownership, read Job logs, then delete leftover Failed Jobs (not mute)`,
+    }
+  }
+
   if (/TargetDown|ScrapeFailed/i.test(name)) {
     return {
       track: 'agent-adhoc',

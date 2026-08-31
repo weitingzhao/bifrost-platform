@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import {
+  annotateExpectedNeutralAlerts,
   annotateStandbyAlerts,
   isElasticStandbyAlert,
   mapAlert,
@@ -348,7 +349,7 @@ describe('alert mapping', () => {
     )
     expect(fallback.severity).toBe('critical')
 
-    // Label severity info neutralizes a critical rule (info never affects verdict).
+    // Label severity info is mapped (identity known) but never verdict-affecting.
     const info = mapAlert(
       {
         labels: { alertname: 'TargetDown', severity: 'info', namespace: 'monitoring' },
@@ -357,7 +358,7 @@ describe('alert mapping', () => {
       2,
     )
     expect(info.severity).toBe('info')
-    expect(info.mapped).toBe(false)
+    expect(info.mapped).toBe(true)
     expect(verdictAffectingAlerts([warn, fallback, info])).toHaveLength(2)
   })
 
@@ -527,6 +528,73 @@ describe('alert mapping', () => {
     ]
     const attention = buildAttentionItems(domains, annotated)
     expect(attention.some(a => a.signalLabel === 'KubeNodeNotReady')).toBe(true)
+  })
+
+  it('Watchdog / info alerts are mapped but never verdict-affecting', () => {
+    const watchdog = mapAlert(
+      {
+        labels: { alertname: 'Watchdog', severity: 'none' },
+        annotations: { summary: 'Alertmanager heartbeat' },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(watchdog.mapped).toBe(true)
+    expect(watchdog.severity).toBe('info')
+    expect(watchdog.domain).toBe('rocket')
+    expect(verdictAffectingAlerts([watchdog])).toHaveLength(0)
+  })
+
+  it('k3s unscraped control-plane *Down is expectedNeutral', () => {
+    const down = mapAlert(
+      {
+        labels: { alertname: 'KubeControllerManagerDown', severity: 'critical', job: 'kube-controller-manager' },
+        annotations: { summary: 'Target disappeared from Prometheus target discovery.' },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(down.mapped).toBe(true)
+    expect(down.domain).toBe('rocket')
+    const annotated = annotateExpectedNeutralAlerts([down])
+    expect(annotated[0].expectedNeutral).toBe(true)
+    expect(verdictAffectingAlerts(annotated)).toHaveLength(0)
+  })
+
+  it('KubeJobFailed maps to subcontractors and can affect verdict', () => {
+    const job = mapAlert(
+      {
+        labels: {
+          alertname: 'KubeJobFailed',
+          severity: 'warning',
+          namespace: 'plugin-market-data',
+          job_name: 'market-data-stock-eod-29779050',
+        },
+        annotations: { summary: 'Job failed to complete.' },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(job.mapped).toBe(true)
+    expect(job.domain).toBe('subcontractors')
+    expect(verdictAffectingAlerts([job])).toHaveLength(1)
+  })
+
+  it('kube-system KubePodNotReady maps to rocket', () => {
+    const pod = mapAlert(
+      {
+        labels: {
+          alertname: 'KubePodNotReady',
+          severity: 'warning',
+          namespace: 'kube-system',
+          pod: 'svclb-traefik-8df577f9-vc4rn',
+        },
+        state: 'firing',
+      },
+      0,
+    )
+    expect(pod.mapped).toBe(true)
+    expect(pod.domain).toBe('rocket')
   })
 
   it('demand TargetDown on gpu-server still affects rocket when not in standby list', () => {

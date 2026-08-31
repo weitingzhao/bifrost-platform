@@ -195,6 +195,12 @@ export type MappedAlert = {
    * Neutral: never Attention WARNING and never degrades Rocket verdict.
    */
   standbyNeutral?: boolean
+  /**
+   * Catalog-expected noise that must not degrade a domain (k3s embedded
+   * control-plane scrape gaps, kube-prometheus stock version-skew).
+   * Listed in Alerts; never Attention / verdict-affecting. Not a mute.
+   */
+  expectedNeutral?: boolean
 }
 
 export type SystemVerdict = {
@@ -292,6 +298,8 @@ export type ObservabilityViewModel = {
   system: SystemVerdict
   domains: DomainHealth[]
   attention: AttentionItem[]
+  /** All mapped Prometheus alerts (including unmapped / standby-neutral / info). */
+  alerts: MappedAlert[]
   selected: SelectedDomainDetail
   dashboards: Array<GrafanaDashboardEntry & { available: boolean; url: string | null }>
   layerBStatus: string

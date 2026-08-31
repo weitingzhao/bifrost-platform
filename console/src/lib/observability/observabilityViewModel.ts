@@ -12,6 +12,7 @@ import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import {
+  annotateExpectedNeutralAlerts,
   annotateStandbyAlerts,
   hostMatchesStandbyNode,
   mapAlerts,
@@ -822,10 +823,8 @@ export function buildObservabilityViewModel(
       instance: t.labels?.instance,
       health: t.health,
     }))
-  const mappedAlerts = annotateStandbyAlerts(
-    mapAlerts(input.alerts ?? []),
-    standbyNodes,
-    downScrapeTargets,
+  const mappedAlerts = annotateExpectedNeutralAlerts(
+    annotateStandbyAlerts(mapAlerts(input.alerts ?? []), standbyNodes, downScrapeTargets),
   )
   const targets = mapTargets(input.targets)
 
@@ -967,6 +966,7 @@ export function buildObservabilityViewModel(
     system,
     domains,
     attention,
+    alerts: mappedAlerts,
     selected,
     dashboards,
     layerBStatus: input.observability?.layer_b_status ?? 'unknown',

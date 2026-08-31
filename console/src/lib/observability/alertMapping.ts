@@ -39,8 +39,21 @@ type AlertRule = {
  */
 const ALERT_RULES: AlertRule[] = [
   { nameMatch: /^Watchdog$/i, domain: 'rocket', severity: 'info' },
+  { nameMatch: /^InfoInhibitor$/i, domain: 'ground-systems', severity: 'info' },
+  { nameMatch: /^BifrostElasticStandbyMarker$/i, domain: 'rocket', severity: 'info' },
   { nameMatch: /TargetDown|ScrapeFailed|Prometheus/i, domain: 'rocket', severity: 'critical' },
-  { nameMatch: /KubeNode|KubePodCrash|KubeDeployment|NodeNotReady|NodeFilesystem/i, domain: 'rocket', severity: 'warning' },
+  {
+    nameMatch: /KubeControllerManagerDown|KubeSchedulerDown|KubeProxyDown/i,
+    domain: 'rocket',
+    severity: 'critical',
+  },
+  { nameMatch: /KubeVersionMismatch/i, domain: 'rocket', severity: 'warning' },
+  {
+    nameMatch: /KubeNode|Kubelet|KubePod|KubeDaemonSet|KubeDeployment|NodeNotReady|NodeFilesystem/i,
+    domain: 'rocket',
+    severity: 'warning',
+  },
+  { nameMatch: /^KubeJobFailed$/i, domain: 'subcontractors', severity: 'warning' },
   { nameMatch: /CPUThrottling|HighCPU|HighMemory|MemoryPressure/i, domain: 'rocket', severity: 'warning' },
   { nameMatch: /Redis|CNPG|Postgres|PostgreSQL|DiskSpace/i, domain: 'ground-systems', severity: 'critical' },
   { nameMatch: /Http5xx|ApiError|ApiLatency|TradeApi/i, domain: 'satellite', severity: 'critical' },
@@ -71,9 +84,9 @@ function domainFromLabels(labels: Record<string, string>): SystemDomainId | null
 
   const ns = labels.namespace ?? labels.exported_namespace ?? ''
   if (/^bifrost-(dev|stg|prod)$/.test(ns)) return 'satellite'
-  if (ns === 'data' || ns === 'monitoring') {
-    return ns === 'data' ? 'ground-systems' : 'rocket'
-  }
+  if (/^plugin-/.test(ns)) return 'subcontractors'
+  if (ns === 'kube-system' || ns === 'monitoring') return 'rocket'
+  if (ns === 'data') return 'ground-systems'
   return null
 }
 
@@ -107,8 +120,14 @@ export function mapAlert(raw: RawAlertInput, index: number): MappedAlert {
   // only a fallback when the label carries none (e.g. TargetDown without a
   // severity label defaults to the rule's critical).
   const severity = labelSeverity ?? rule?.severity
-  const domain = rule?.domain ?? labelDomain
-  const mapped = severity != null && domain != null && severity !== 'info'
+  // Job Failed: namespace owns the domain (plugin → subcontractors, Trade → satellite).
+  const domain =
+    /^KubeJobFailed$/i.test(name) && labelDomain != null
+      ? labelDomain
+      : (rule?.domain ?? labelDomain)
+  // Identity is known when both domain and severity resolve — including info.
+  // Info never degrades a verdict (see verdictAffectingAlerts).
+  const mapped = severity != null && domain != null
 
   const summary =
     annotations.summary ??
@@ -289,12 +308,45 @@ export function annotateStandbyAlerts(
   })
 }
 
+/**
+ * kube-prometheus stock rules expect separate scrape jobs for
+ * kube-controller-manager / kube-scheduler / kube-proxy. k3s embeds those
+ * in the apiserver process — targets never appear, so *Down fires forever
+ * with "disappeared from Prometheus target discovery". Not a Rocket crash.
+ */
+const K3S_UNSCRAPED_CONTROL_PLANE =
+  /^(KubeControllerManagerDown|KubeSchedulerDown|KubeProxyDown)$/i
+
+const K3S_COMPONENT_VERSION_SKEW = /^KubeVersionMismatch$/i
+
+function annotationBlob(alert: MappedAlert): string {
+  return `${alert.summary} ${alert.annotations.description ?? ''} ${alert.annotations.message ?? ''}`
+}
+
+/** True when this alert is expected kube-prometheus/k3s catalog noise. */
+export function isExpectedNeutralAlert(alert: MappedAlert): boolean {
+  if (alert.standbyNeutral) return false
+  if (K3S_UNSCRAPED_CONTROL_PLANE.test(alert.name)) {
+    return /disappeared from Prometheus target discovery/i.test(annotationBlob(alert))
+  }
+  return K3S_COMPONENT_VERSION_SKEW.test(alert.name)
+}
+
+/** Annotate k3s / kube-prometheus expected-off catalog noise. */
+export function annotateExpectedNeutralAlerts(alerts: MappedAlert[]): MappedAlert[] {
+  return alerts.map(a => {
+    if (!isExpectedNeutralAlert(a)) return a
+    return { ...a, expectedNeutral: true }
+  })
+}
+
 /** Firing alerts that are allowed to influence verdict. */
 export function verdictAffectingAlerts(alerts: MappedAlert[]): MappedAlert[] {
   return alerts.filter(
     a =>
       a.mapped &&
       !a.standbyNeutral &&
+      !a.expectedNeutral &&
       a.domain != null &&
       (a.state === 'firing' || a.state === 'pending') &&
       (a.severity === 'critical' || a.severity === 'warning'),
