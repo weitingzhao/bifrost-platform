@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SIGNAL_HEALTH_FRESH_SLA_HOURS,
+  SIGNAL_HEALTH_WEEKEND_SLA_HOURS,
   ageToFillPct,
+  freshnessSlaHours,
   freshnessStatusTone,
   stackFreshnessStatuses,
 } from '@/lib/research/signalHealthAgeMeters'
@@ -10,6 +13,18 @@ import {
 } from '@/lib/research/massiveNav'
 
 describe('signalHealthAgeMeters', () => {
+  it('widens SLA to 72h Sat/Sun/Mon before 22:00 UTC', () => {
+    expect(freshnessSlaHours(new Date('2026-08-31T17:25:00Z'))).toBe(
+      SIGNAL_HEALTH_WEEKEND_SLA_HOURS,
+    )
+    expect(freshnessSlaHours(new Date('2026-08-31T22:30:00Z'))).toBe(
+      SIGNAL_HEALTH_FRESH_SLA_HOURS,
+    )
+    expect(freshnessSlaHours(new Date('2026-09-01T17:00:00Z'))).toBe(
+      SIGNAL_HEALTH_FRESH_SLA_HOURS,
+    )
+  })
+
   it('maps age to fill pct against 36h SLA', () => {
     expect(ageToFillPct(0)).toBe(0)
     expect(ageToFillPct(18)).toBe(50)

@@ -12,7 +12,7 @@
 
 import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 
-export const CONSOLE_SEAT_VERSION = '2026-08-29'
+export const CONSOLE_SEAT_VERSION = '2026-08-31'
 export const CONSOLE_SEAT_SOURCE = 'console/src/lib/architecture/consoleSeatCatalog.ts'
 
 /** Where an operator should habitually sit for this page. Home ≠ hide — both seats keep all pages. */
@@ -287,13 +287,6 @@ export const CONSOLE_SEAT_PAGES: ConsoleSeatPageRow[] = [
   {
     id: 'flex-query-manage',
     label: 'IB Flex',
-    plane: 'Plugin',
-    home: 'both',
-    roomPosture: false,
-  },
-  {
-    id: 'analytics-pipeline',
-    label: 'Analytics',
     plane: 'Plugin',
     home: 'both',
     roomPosture: false,

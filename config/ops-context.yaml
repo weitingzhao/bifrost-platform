@@ -824,6 +824,30 @@ decisions:
              are skipped/unmapped — they do not enter failing.
       signed_at: "2026-08-29"
       authority: "bifrost-research 0.48.4 api/agents.apply_draft_approval + harness/{data_sources,gate,runtime} + tests/api/test_approve_{all_policy_suggestion,candidate_batch}.py; bifrost-trade-frontend HarnessConsolePage + CandidateBatchBody"
+    - id: D-Loop-Orchestrator-0
+      status: SIGNED
+      topic: Loop Orchestrator LO-0 — operational baseline
+      conclusion: "Seed objective + DEV Cron unsuspend + scan freshness gate + LOOP_ORCHESTRATOR_RUNBOOK. Package ≥0.55.0; D10 BLOCKED."
+      signed_at: "2026-08-31"
+      authority: "bifrost-research scripts/seed_loop_objective.py · k8s/engines/cronjob-harness.yaml"
+    - id: D-Loop-Orchestrator-1
+      status: SIGNED
+      topic: Loop Orchestrator LO-1 — headless CuratorRun
+      conclusion: "copilot/curator/* + POST /research/objective-runs/{id}/curate + batch HMAC pass. D10 BLOCKED."
+      signed_at: "2026-08-31"
+      authority: "bifrost-research 0.55.0 copilot/curator/runtime.py"
+    - id: D-Loop-Orchestrator-4
+      status: SIGNED
+      topic: Loop Orchestrator LO-4 — Trust L0 batch auto-accept
+      conclusion: "research-loop-batch skill + --batch-mode Cron; auto-accept research draft kinds only when Trust L0. D10 BLOCKED."
+      signed_at: "2026-08-31"
+      authority: "bifrost-platform config/agent-tasks.yaml · bifrost-research copilot/harness/{trust_gate,entry}.py"
+    - id: D-Market-Option-History
+      status: SIGNED
+      topic: Option history backfill program LO-5
+      conclusion: "Suspended Cron market-data-option-backfill + worker/backfill.py enqueue stub; Owner Polygon tier decision gate."
+      signed_at: "2026-08-31"
+      authority: "bifrost-platform-plugin-market-data k8s/cronjob-option-backfill.yaml"
 platform_phases:
     - id: A
       label: Gate
@@ -845,7 +869,7 @@ coupling_surfaces:
     - unifi_session_v2
 promotion:
     last_gate:
-        at: "2026-08-18T15:56:08Z"
+        at: "2026-09-01T03:34:53Z"
         result: pass
         log_path: bifrost-trade-infra/scripts/release_gate.log
 environments_extended:

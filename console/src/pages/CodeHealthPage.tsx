@@ -31,12 +31,15 @@ import {
 } from '@/lib/architecture/systemDomainCatalog'
 import {
   buildCodeHealthLens,
+  dimensionLabel,
   formatDeltaSlack,
+  type CodeHealthDimension,
   type CodeHealthMetricLens,
 } from '@/lib/code-health/codeHealthLens'
 import {
   buildCodeHealthAgentPack,
   gatherCodeHealthSnapshot,
+  type BuildCodeHealthAgentPackOptions,
 } from '@/lib/code-health/codeHealthAgentPack'
 import {
   CODE_HEALTH_COVERAGE,
@@ -47,73 +50,13 @@ import {
   proposeLowerBaseline,
   type LowerBaselineProposal,
 } from '@/lib/code-health/codeHealthLowerBaseline'
-
-/** A reading older than this describes code that has probably moved on. */
-const STALE_MS = 24 * 60 * 60 * 1000
-
-function relativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  return `${Math.floor(hrs / 24)}d ago`
-}
-
-function statusTag(row: CodeHealthMetricLens) {
-  if (row.over) {
-    return (
-      <DenseTag variant="danger" title="Above baseline — CI blocks this">
-        OVER
-      </DenseTag>
-    )
-  }
-  if (row.improved) {
-    return (
-      <DenseTag
-        variant="success"
-        title="Below baseline — lower it in baselines.env so the gain is locked in"
-      >
-        LOWER BASELINE
-      </DenseTag>
-    )
-  }
-  if (row.atCeiling) {
-    return (
-      <DenseTag variant="warning" title="At baseline — next regression fails CI">
-        AT CEILING
-      </DenseTag>
-    )
-  }
-  return (
-    <DenseTag variant="neutral" title="At or below baseline with headroom">
-      HELD
-    </DenseTag>
-  )
-}
-
-function planningTagVariant(lamp: string): OpsVerdictTagVariant {
-  switch (lamp) {
-    case 'fail':
-      return 'danger'
-    case 'degraded':
-      return 'warning'
-    case 'ok':
-      return 'success'
-    default:
-      return 'warning'
-  }
-}
-
-async function writeClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    return false
-  }
-}
+import {
+  CODE_HEALTH_STALE_MS as STALE_MS,
+  codeHealthStatusTag as statusTag,
+  planningTagVariant,
+  relativeTime,
+  writeClipboard,
+} from '@/lib/code-health/codeHealthPageHelpers'
 
 export function CodeHealthPage() {
   const queryClient = useQueryClient()
@@ -126,7 +69,7 @@ export function CodeHealthPage() {
 
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
   const [copyHint, setCopyHint] = useState<string | null>(null)
-  const [domainPackBusy, setDomainPackBusy] = useState<SystemDomainId | null>(null)
+  const [packBusyKey, setPackBusyKey] = useState<string | null>(null)
   const [lowerOpen, setLowerOpen] = useState<LowerBaselineProposal | null>(null)
   const [lowerCopyState, setLowerCopyState] = useState<'idle' | 'copied' | 'error'>('idle')
   const [rescanHint, setRescanHint] = useState<string | null>(null)
@@ -223,50 +166,61 @@ export function CodeHealthPage() {
                 : String(lens.totalDeltaSlack)
           }`
 
-  async function handleCopyRefactorTask(domain?: SystemDomainId) {
-    if (copyState === 'busy' || domainPackBusy != null) return
-    if (domain != null) setDomainPackBusy(domain)
-    else setCopyState('busy')
+  async function handleCopyRefactorTask(
+    options: BuildCodeHealthAgentPackOptions = {},
+    busyKey = 'fleet',
+  ) {
+    if (copyState === 'busy' || packBusyKey != null) return
+    const isFleet = busyKey === 'fleet'
+    if (isFleet) setCopyState('busy')
+    else setPackBusyKey(busyKey)
     setCopyHint(null)
     try {
       const snap = await gatherCodeHealthSnapshot({ liveRescanFirst: true })
-      const text = buildCodeHealthAgentPack(snap, domain != null ? { domain } : {})
+      const text = buildCodeHealthAgentPack(snap, options)
       await navigator.clipboard.writeText(text)
       await queryClient.invalidateQueries({ queryKey: ['code-health'] })
-      const label = domain != null ? systemDomainLabel(domain) : null
-      setCopyState(domain != null ? 'idle' : 'copied')
+      const focusBits: string[] = []
+      if (options.domain != null) focusBits.push(systemDomainLabel(options.domain))
+      if (options.dimension != null) focusBits.push(dimensionLabel(options.dimension))
+      if (options.metricId != null) focusBits.push(options.metricId)
+      const focus = focusBits.length > 0 ? focusBits.join(' · ') : null
+      if (isFleet) setCopyState('copied')
+      else setPackBusyKey(null)
       setCopyHint(
         snap.gatherMode === 'live-rescan'
-          ? label != null
-            ? `Live Re-scan done — ${label} Agent pack copied`
+          ? focus != null
+            ? `Live Re-scan done — ${focus} Agent pack copied`
             : 'Live Re-scan done — Agent pack copied; paste into Agent IDE'
           : snap.gatherMode === 'rescan-unavailable'
-            ? label != null
-              ? `Rescan unavailable — ${label} pack from stored reading`
+            ? focus != null
+              ? `Rescan unavailable — ${focus} pack from stored reading`
               : 'Rescan unavailable — stored reading packed for Agent'
             : snap.gatherMode === 'rescan-failed'
-              ? label != null
-                ? `Rescan failed — ${label} pack from last reading`
+              ? focus != null
+                ? `Rescan failed — ${focus} pack from last reading`
                 : 'Rescan failed — packed last reading (see pack gather note)'
-              : label != null
-                ? `${label} Agent pack copied`
+              : focus != null
+                ? `${focus} Agent pack copied`
                 : 'Agent pack copied',
       )
       window.setTimeout(() => {
         setCopyState('idle')
-        setDomainPackBusy(null)
+        setPackBusyKey(null)
         setCopyHint(null)
       }, 5000)
     } catch {
-      setCopyState(domain != null ? 'idle' : 'error')
-      setDomainPackBusy(null)
-      setCopyHint(domain != null ? `${systemDomainLabel(domain)} pack copy failed` : 'Copy failed')
+      setCopyState(isFleet ? 'error' : 'idle')
+      setPackBusyKey(null)
+      setCopyHint('Copy failed')
       window.setTimeout(() => {
         setCopyState('idle')
         setCopyHint(null)
       }, 3000)
     }
   }
+
+  const packBusy = copyState === 'busy' || packBusyKey != null
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
@@ -334,9 +288,9 @@ export function CodeHealthPage() {
               size="sm"
               variant="default"
               className="shrink-0"
-              disabled={copyState === 'busy' || domainPackBusy != null || rescan.isPending}
+              disabled={packBusy || rescan.isPending}
               title="Generate Code Refactor Agent Task content: Live Re-scan when available, then copy a brief for Agent IDE (Agent proposes Suggested tasks from live metrics)"
-              onClick={() => void handleCopyRefactorTask()}
+              onClick={() => void handleCopyRefactorTask({}, 'fleet')}
             >
               {copyState === 'busy'
                 ? 'Generating…'
@@ -350,7 +304,7 @@ export function CodeHealthPage() {
               size="sm"
               variant={staleVsHead || neverScanned ? 'default' : 'outline'}
               className="shrink-0"
-              disabled={rescan.isPending || copyState === 'busy' || domainPackBusy != null || !rescanAvailable}
+              disabled={rescan.isPending || packBusy || !rescanAvailable}
               title={
                 rescanAvailable
                   ? 'Run scan.sh against the local workspace and replace the stored reading'
@@ -418,27 +372,45 @@ export function CodeHealthPage() {
               <span>Trend: {lens.posture.trendLine}</span>
             </div>
             {lens.dimensionSummaries.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {lens.dimensionSummaries.map(d => (
-                  <button
-                    key={d.dimension}
-                    type="button"
-                    className="inline-flex border-0 bg-transparent p-0"
-                    title={`${d.label}: ${d.metricCount} metric(s) · min slack ${d.minSlack ?? '—'} · ${d.atCeilingCount} at ceiling · ${d.overCount} over`}
-                    onClick={() => {
-                      const el = document.querySelector(`[data-code-health-dim="${d.dimension}"]`)
-                      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-                    }}
-                  >
-                    <DenseTag
-                      variant={
-                        d.overCount > 0 ? 'danger' : d.atCeilingCount > 0 ? 'warning' : 'neutral'
-                      }
-                    >
-                      {d.chipLabel}
-                    </DenseTag>
-                  </button>
-                ))}
+              <div className="flex flex-col gap-1.5">
+                <span className="text-dense-meta text-muted-foreground">
+                  Dimension packs (all repos with that metric family):
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {lens.dimensionSummaries.map(d => {
+                    const key = `dim:${d.dimension}`
+                    const busy = packBusyKey === key
+                    return (
+                      <Button
+                        key={d.dimension}
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 gap-1.5 px-2"
+                        disabled={packBusy || rescan.isPending}
+                        data-code-health-dim={d.dimension}
+                        title={`Generate Agent Pack for ${d.label} across all domains (${d.metricCount} metrics)`}
+                        onClick={() =>
+                          void handleCopyRefactorTask({ dimension: d.dimension }, key)
+                        }
+                      >
+                        <DenseTag
+                          variant={
+                            d.overCount > 0
+                              ? 'danger'
+                              : d.atCeilingCount > 0
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {d.chipLabel}
+                        </DenseTag>
+                        <span className="text-dense-meta">
+                          {busy ? 'Generating…' : 'Pack'}
+                        </span>
+                      </Button>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -447,7 +419,7 @@ export function CodeHealthPage() {
 
       <OpsSection
         title="COVERAGE"
-        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS (not one repo per domain). Per-domain Agent Pack scopes Suggested tasks to that plane."
+        description="Domain ↔ repo — must match scan.sh KNOWN_REPOS. Domain Pack = whole plane; metric Pack = one dimension inside that plane; POSTURE chips = dimension across all planes."
         variant="elevated"
         collapsible
         defaultCollapsed={false}
@@ -460,19 +432,27 @@ export function CodeHealthPage() {
                 .filter(m => m.domain === plane.domain)
                 .map(m => m.repo)
                 .filter((r, i, a) => a.indexOf(r) === i) ?? []
-            const domainBusy = domainPackBusy === plane.domain
+            const domainKey = `domain:${plane.domain}`
+            const domainBusy = packBusyKey === domainKey
+            const domainMetricRows = lens.metrics.filter(m => m.metric.domain === plane.domain)
+            const dimsInDomain = (
+              ['size', 'duplication', 'contract', 'image_spread'] as CodeHealthDimension[]
+            ).filter(dim => domainMetricRows.some(m => m.dimension === dim))
             return (
               <div key={plane.domain} className="flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-dense-label font-medium">{systemDomainLabel(plane.domain)}</span>
-                  <span className="text-dense-meta text-muted-foreground">{plane.metricsNote}</span>
+                  <span className="text-dense-label font-medium">
+                    {systemDomainLabel(plane.domain)}
+                  </span>
                   <Button
                     size="sm"
-                    variant="outline"
-                    className="ml-auto h-7 shrink-0 px-2 text-dense-meta"
-                    disabled={copyState === 'busy' || domainPackBusy != null || rescan.isPending}
-                    title={`Generate Agent Pack focused on ${systemDomainLabel(plane.domain)} repos only (${plane.repos.map(r => r.repo).join(', ')})`}
-                    onClick={() => void handleCopyRefactorTask(plane.domain)}
+                    variant="default"
+                    className="ml-auto h-7 shrink-0 px-2.5"
+                    disabled={packBusy || rescan.isPending}
+                    title={`Generate Agent Pack for entire ${systemDomainLabel(plane.domain)} plane (${plane.repos.map(r => r.repo).join(', ')})`}
+                    onClick={() =>
+                      void handleCopyRefactorTask({ domain: plane.domain }, domainKey)
+                    }
                   >
                     {domainBusy ? 'Generating…' : 'Generate Agent Pack'}
                   </Button>
@@ -495,6 +475,40 @@ export function CodeHealthPage() {
                     )
                   })}
                 </div>
+                {dimsInDomain.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-dense-meta text-muted-foreground shrink-0">
+                      Metrics:
+                    </span>
+                    {dimsInDomain.map(dim => {
+                      const key = `domain-dim:${plane.domain}:${dim}`
+                      const busy = packBusyKey === key
+                      const rows = domainMetricRows.filter(m => m.dimension === dim)
+                      const over = rows.filter(m => m.over).length
+                      const ceiling = rows.filter(m => m.atCeiling).length
+                      return (
+                        <Button
+                          key={dim}
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 px-2"
+                          disabled={packBusy || rescan.isPending}
+                          title={`Generate Agent Pack for ${systemDomainLabel(plane.domain)} · ${dimensionLabel(dim)} (${rows.length} metrics)`}
+                          onClick={() =>
+                            void handleCopyRefactorTask(
+                              { domain: plane.domain, dimension: dim },
+                              key,
+                            )
+                          }
+                        >
+                          {busy
+                            ? 'Generating…'
+                            : `${dimensionLabel(dim)}${over > 0 ? ` ${over} OVER` : ceiling > 0 ? ` ${ceiling}c` : ''} Pack`}
+                        </Button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )
           })}

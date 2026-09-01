@@ -39,6 +39,7 @@ import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
 import type { AuditRecord } from '@/api/auditTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { phaseJoinKey } from '@/lib/briefing/phaseJoinKey'
+import { resolveActiveSessionBoardMode } from '@/lib/briefing/activeSessionLaneMode'
 
 const PHASE_TABLE_COL_COUNT = 6
 
@@ -507,6 +508,9 @@ export interface ActiveSessionPhaseBoardProps {
   auditRecords?: AuditRecord[]
   auditLoading?: boolean
   onOpenAudit?: () => void
+  onOpenCluster?: () => void
+  onOpenOperateQueue?: () => void
+  onOpenControlRoom?: () => void
 }
 
 /**
@@ -524,6 +528,9 @@ export function ActiveSessionPhaseBoard({
   auditRecords = [],
   auditLoading,
   onOpenAudit,
+  onOpenCluster,
+  onOpenOperateQueue,
+  onOpenControlRoom,
 }: ActiveSessionPhaseBoardProps) {
   const programsQuery = useQuery({
     queryKey: PROGRAMS_BOARD_QUERY_KEY,
@@ -556,6 +563,7 @@ export function ActiveSessionPhaseBoard({
   }
 
   if (lanePrograms.length === 0) {
+    const boardMode = resolveActiveSessionBoardMode(lane, 0)
     return (
       <TaskQueuePanel
         items={queue}
@@ -566,6 +574,10 @@ export function ActiveSessionPhaseBoard({
         auditRecords={auditRecords}
         auditLoading={auditLoading}
         onOpenAudit={onOpenAudit}
+        boardMode={boardMode}
+        onOpenCluster={onOpenCluster}
+        onOpenOperateQueue={onOpenOperateQueue}
+        onOpenControlRoom={onOpenControlRoom}
       />
     )
   }

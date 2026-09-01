@@ -34,6 +34,10 @@ export const RESEARCH_ENGINE_SUMMARY = {
   consoleTab: 'research-engine',
   runtimeIgnition:
     'DONE — research NS live; Dagster multi-schedule husbandry (replicas≥1); NodePort :30301 via Ops Tool Rack; all Golden Source husbandry CronJobs suspended after migrate',
+  /** Former Plugin → Analytics page. Hash `#analytics-pipeline` redirects here (dbt / Lineage tab). */
+  retiredPluginTab: 'analytics-pipeline',
+  elementaryReportProxy: '/api/v1/research/analytics/elementary/files/elementary_report.html',
+  elementaryStatus: 'GET /api/v1/research/analytics/elementary',
   /** Legacy CronJob names — suspended; ignition is Dagster schedule/asset (same logical trigger). */
   cronjobTriggers: [
     { trigger_id: 'dbt-sepa', cronjob: 'bifrost-analytics-daily', empty_hint: 'SEPA empty', scheduler: 'dagster' },
@@ -107,7 +111,66 @@ export const RESEARCH_GOVERNANCE_SURFACES = [
     api: 'GET /research/forecast/sessions',
     metrics: ['recent forecast sessions'],
   },
+  {
+    id: 'dbt-catalog',
+    title: 'dbt / Lineage (absorbed from retired Plugin → Analytics)',
+    api: 'Catalog is static contract; Elementary HTML via Research API /analytics/elementary/files/*',
+    metrics: [
+      '21 dbt models (staging / intermediate / marts)',
+      'lineage RAW market.* → STG → INT → MART dw_stock.mart_sepa_*',
+      'Elementary report open (not CronJob health)',
+    ],
+  },
 ] as const
+
+export const RESEARCH_DBT_MODELS: { layer: 'staging' | 'intermediate' | 'marts'; name: string; note: string }[] = [
+  { layer: 'staging', name: 'stg_income_stmt', note: 'Polygon income jsonb → columns' },
+  { layer: 'staging', name: 'stg_balance_sheet', note: 'Balance sheet extract' },
+  { layer: 'staging', name: 'stg_cash_flow', note: 'Cash flow extract' },
+  { layer: 'staging', name: 'stg_ratios', note: 'Placeholder (vendor gap)' },
+  { layer: 'staging', name: 'stg_short_interest', note: 'Short interest' },
+  { layer: 'staging', name: 'stg_short_volume', note: 'Short volume' },
+  { layer: 'intermediate', name: 'dim_universe', note: 'CS equity universe' },
+  { layer: 'intermediate', name: 'dim_trading_calendar', note: 'US holidays' },
+  { layer: 'intermediate', name: 'int_stock_daily_enriched', note: 'SMA / ATR / ROC (incremental)' },
+  { layer: 'intermediate', name: 'int_stock_crs', note: '252d CRS (needs depth)' },
+  { layer: 'intermediate', name: 'int_financials_yoy', note: 'YoY growth' },
+  { layer: 'marts', name: 'mart_sepa_fundamental_eval', note: '8 core fund conditions' },
+  { layer: 'marts', name: 'mart_sepa_fundamental_ext', note: '25 extended fund conditions' },
+  { layer: 'marts', name: 'mart_sepa_technical_eval', note: '11 tech conditions' },
+  { layer: 'marts', name: 'mart_sepa_tier_momentum', note: 'Tier 2 momentum' },
+  { layer: 'marts', name: 'mart_sepa_tier_structure', note: 'Tier 3 structure' },
+  { layer: 'marts', name: 'mart_sepa_tier_sentiment', note: 'Tier 4 sentiment' },
+  { layer: 'marts', name: 'mart_sepa_composite_score', note: 'Weighted composite' },
+  { layer: 'marts', name: 'mart_sepa_screening_ranked', note: 'Rank / decile' },
+  { layer: 'marts', name: 'mart_sepa_criteria_stats', note: 'Pre-agg pass rates' },
+  { layer: 'marts', name: 'mart_sepa_screener_wide', note: 'Wide screener join' },
+]
+
+export const RESEARCH_DBT_LINEAGE: { id: string; title: string; detail: string }[] = [
+  {
+    id: 'raw',
+    title: 'RAW · raw_market.*',
+    detail: 'Golden Source producer tables (stock_daily, stock_financials, ticker, holidays)',
+  },
+  {
+    id: 'stg',
+    title: 'STG · staging',
+    detail: 'jsonb → scalar columns (income / balance / cash flow / short interest)',
+  },
+  {
+    id: 'int',
+    title: 'INT · intermediate',
+    detail: 'Universe, calendar, enriched bars, CRS, YoY financials',
+  },
+  {
+    id: 'mart',
+    title: 'MART · dw_stock.mart_sepa_*',
+    detail: 'Fundamental / technical / tiers → composite → screener wide',
+  },
+]
+
+export const RESEARCH_DBT_MODEL_COUNT = RESEARCH_DBT_MODELS.length
 
 export function buildResearchEngineLlmPack(): string {
   const lines = [
@@ -116,9 +179,10 @@ export function buildResearchEngineLlmPack(): string {
     `- Repo: ${RESEARCH_ENGINE_SUMMARY.vendor} · NS ${RESEARCH_ENGINE_SUMMARY.namespace} · API :${RESEARCH_ENGINE_SUMMARY.apiPort}`,
     `- Golden Source: ${RESEARCH_ENGINE_SUMMARY.goldenSource} (${RESEARCH_ENGINE_SUMMARY.schemas.join(', ')})`,
     `- Platform: ${RESEARCH_ENGINE_SUMMARY.platformStatus} · ${RESEARCH_ENGINE_SUMMARY.platformProxy}`,
-    `- Console: Plugin → Research (tab ${RESEARCH_ENGINE_SUMMARY.consoleTab})`,
+    `- Console: Satellite → Research Engine (tab ${RESEARCH_ENGINE_SUMMARY.consoleTab})`,
     `- Decision: D13 Research domain · D10 BLOCKED (no trade actuation)`,
     `- Runtime: ${RESEARCH_ENGINE_SUMMARY.runtimeIgnition}`,
+    `- Retired: Plugin → Analytics (\`${RESEARCH_ENGINE_SUMMARY.retiredPluginTab}\`) — hash redirects here; dbt catalog is the dbt / Lineage tab`,
     '',
     '## Engines',
   ]
@@ -144,11 +208,18 @@ export function buildResearchEngineLlmPack(): string {
     '- Feedstock → Massive Readiness deep-link + readiness_rollup one-liner; Product age meters (36h SLA FillBar, not chart library)',
   )
   lines.push(
-    '- Sidebar Research Engine icon follows research_olap only — Market missed / Flex source=none do not paint it red',
+    '- Sidebar Research Engine icon tint follows research_olap human copy (no trailing StatusLamp — icon color is the signal). Market missed / Flex source=none do not paint it red',
   )
   lines.push('- OpsVerdictStrip = API reachable ∧ research_olap; Accuracy/Cost are downstream quality tabs')
   lines.push('- Token cost KPIs are placeholders until forecast_session persists token metadata')
   lines.push('- Accuracy aggregates computed in Console from settlement rows (proxy is GET-only)')
+  lines.push(
+    `- dbt catalog: ${RESEARCH_DBT_MODEL_COUNT} models on dw_stock.*; CronJob bifrost-analytics-daily is NOT a health signal (Dagster dbt-sepa)`,
+  )
+  lines.push(
+    `- Elementary HTML: ${RESEARCH_ENGINE_SUMMARY.elementaryReportProxy} · status ${RESEARCH_ENGINE_SUMMARY.elementaryStatus}`,
+    '- Retired Plugin → Analytics HTTP: /plugins/analytics/* → 308 /research/analytics/elementary*',
+  )
   lines.push(
     '- Research Harness observe surface (Wave A+O, package ≥0.47.0): Trade FE `/research/loop/harness` — propose-only objectives/runs; D10 BLOCKED (no ib:operator:cmd)',
   )

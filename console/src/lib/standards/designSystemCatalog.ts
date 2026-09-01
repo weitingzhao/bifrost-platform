@@ -148,7 +148,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Rocket lane operate pages (Launch Rocket / Deploy Satellite / Launch Plugin): LaneStateStrip is the Verdict equivalent — do not replace with OpsVerdictStrip',
     ],
     examples: [
-      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — alerts meta → Attention (triage + assisted Agent Fix / Diagnose)',
+      'Observability: OpsVerdictStrip SYSTEM VERDICT · PROD · HEALTHY — Copy for Agent / Diagnose with Agent pack includes firing Alerts even when domains are HEALTHY; alerts meta → Attention (triage + assisted Agent Fix / Diagnose)',
       'Control Room: OpsVerdictStrip ROOM POSTURE + Bay Scan cards → open bay detail (accordion Single) — no page-level Launch/Deploy',
       'Task Control Center: OpsVerdictStrip TASK VERDICT · {MODE} — sole Mission/Launch/Fleet primary CTAs; Refresh DEV ledger only when last_clone_at >7d and fleet is clear. Daily Ops Focus chips Agent · Release · Environment filter Body; Environment maintenance (DEV ledger) lives in Body, not as a permanent Verdict action',
       'Audit: OpsVerdictStrip ACTUATION HISTORY · Download JSON in actions',
@@ -217,7 +217,7 @@ export const PAGE_COMPOSITION: PageCompositionAct[] = [
       'Control Room: VerdictStrip has no Launch/Deploy actions — Bay Scan opens one bay; Launch bay Open TCC + detail deep-links',
       'Observability: Domain Health one runtime row — Trade env on Satellite only; Grafana links for deployed UIDs (Satellite/Ground/IB/Agent Bifrost + Rocket kube-prometheus stock; unset uid → catalog LAN Tool Rack / “not deployed”); Attention Mute/Agent Fix/batch → Dock',
       'External UIs (Gitea / Grafana / Dagster): header Tools popover + contextual Open — new tab only, never iframe (opsToolRackCatalog)',
-      'Research Engine: always-on Feedstock / Batch / Product lamps under OpsVerdictStrip; default Pipeline health tab; sidebar icon tint + StatusLamp follows research_olap human copy; Feedstock → Massive Readiness deep-link + readiness_rollup KPI; Product age meters (not chart library)',
+      'Research Engine: always-on Feedstock / Batch / Product lamps under OpsVerdictStrip; default Pipeline health tab; sidebar icon tint follows research_olap human copy (no trailing lamp); Satellite/Rocket sibling items use the same icon-tint language; Feedstock → Massive Readiness deep-link + readiness_rollup KPI; Product age meters (not chart library)',
       'Defects: PatternDebt Verdict + Fix top pattern; PageToolbar Refresh below',
       'Launch Rocket: AI Release on LaneStateStrip; Step detail observe-only (no Deploy/Gate CTAs — Agent owns stages)',
       'Deploy Satellite: AI Deploy on LaneStateStrip (+ Evidence links); Step detail observe-only (no Deploy/Gate CTAs)',
@@ -361,7 +361,8 @@ export const DUAL_PERSPECTIVE_LIFECYCLE: DualPerspectiveLifecycleRow[] = [
   },
   {
     node: 'In Flight — what is being done',
-    owner: 'Phase grid + Owner sign-off column. Phase work runs in Cursor IDE Agent; Console records Owner sign-off only.',
+    owner:
+      'Program lanes: phase grid + Owner sign-off. Troubleshooting / ops-issue lanes: issue queue + Cluster/Operate/Control Room CTAs (no Sign-off; clears when probes healthy).',
     agent: 'Does not execute session phases via SDK. Reads the scoped pack; does not record Owner sign-off.',
   },
   {
@@ -373,6 +374,7 @@ export const DUAL_PERSPECTIVE_LIFECYCLE: DualPerspectiveLifecycleRow[] = [
 
 export const DUAL_PERSPECTIVE_LIFECYCLE_RULES: string[] = [
   'Phase work runs in Cursor IDE Agent. Owner sign-off is a separate admin action on In Flight (POST /programs/{id}/phases/{pid}/signoff). Console does not host a session SDK runtime.',
+  'Troubleshooting (ops-issue) In Flight lanes have no phase Sign-off — unblock via Cluster / Operate / Control Room; queue clears when matrix/cluster are healthy.',
   'Daily run and sign-off stay on In Flight. Delivery is the catalog and close surface.',
   'Briefing `N auto` is quiet by default (render nothing when count is 0).',
   'Delivery agent trace is per-program persisted history (GET /programs/{id}/jobs). Not a cross-program scrape.',

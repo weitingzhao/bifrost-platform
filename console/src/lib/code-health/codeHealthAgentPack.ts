@@ -16,6 +16,9 @@ import {
 } from '@/lib/architecture/systemDomainCatalog'
 import {
   buildCodeHealthLens,
+  dimensionLabel,
+  resolveCodeHealthDimension,
+  type CodeHealthDimension,
   type CodeHealthLens,
   type CodeHealthMetricLens,
 } from '@/lib/code-health/codeHealthLens'
@@ -45,6 +48,13 @@ export type BuildCodeHealthAgentPackOptions = {
    * plane). Suggested tasks must stay inside that domain's repos.
    */
   domain?: SystemDomainId
+  /**
+   * When set, pack only includes metrics in this planning dimension
+   * (Size / Dup / Contract / Image) across one or all domains.
+   */
+  dimension?: CodeHealthDimension
+  /** When set, pack only the single metric id (narrowest focus). */
+  metricId?: string
 }
 
 export async function gatherCodeHealthSnapshot(
@@ -110,10 +120,29 @@ export const gatherCodeHealthRefactorTask = gatherCodeHealthSnapshot
 
 function scopeMetrics(
   metrics: CodeHealthMetricLens[],
-  domain: SystemDomainId | undefined,
+  options: BuildCodeHealthAgentPackOptions,
 ): CodeHealthMetricLens[] {
-  if (domain == null) return metrics
-  return metrics.filter(m => m.metric.domain === domain)
+  let out = metrics
+  if (options.domain != null) {
+    out = out.filter(m => m.metric.domain === options.domain)
+  }
+  if (options.dimension != null) {
+    out = out.filter(m => m.dimension === options.dimension)
+  }
+  if (options.metricId != null && options.metricId !== '') {
+    out = out.filter(m => m.metric.id === options.metricId)
+  }
+  return out
+}
+
+function focusTitle(options: BuildCodeHealthAgentPackOptions): string | null {
+  if (options.metricId) {
+    return `metric ${options.metricId}`
+  }
+  const parts: string[] = []
+  if (options.domain != null) parts.push(systemDomainLabel(options.domain))
+  if (options.dimension != null) parts.push(dimensionLabel(options.dimension))
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
 export function buildCodeHealthAgentPack(
@@ -123,19 +152,23 @@ export function buildCodeHealthAgentPack(
   const lines: string[] = []
   const push = (s = '') => lines.push(s)
   const domain = options.domain
+  const dimension = options.dimension
+  const metricId = options.metricId
+  const focus = focusTitle(options)
   const domainTitle = domain != null ? systemDomainLabel(domain) : null
+  const dimTitle = dimension != null ? dimensionLabel(dimension) : null
   const coveragePlane =
     domain != null ? CODE_HEALTH_COVERAGE.find(p => p.domain === domain) : undefined
 
   push(
-    domainTitle != null
-      ? `# Code Health — Code Refactor Agent Task Content (${domainTitle})`
+    focus != null
+      ? `# Code Health — Code Refactor Agent Task Content (${focus})`
       : '# Code Health — Code Refactor Agent Task Content',
   )
   push(`Generated: ${snap.generatedAt}`)
   push(
-    domainTitle != null
-      ? `Source: Ops Console → Mission Control → Code Health → Coverage → ${domainTitle} (Generate Agent Pack)`
+    focus != null
+      ? `Source: Ops Console → Mission Control → Code Health (Generate Agent Pack · ${focus})`
       : 'Source: Ops Console → Mission Control → Code Health (Generate Agent Pack)',
   )
   push('')
@@ -154,11 +187,25 @@ export function buildCodeHealthAgentPack(
     '4. After a real reduction, lock baselines only to values `scan.sh` prints — never invent numbers.',
   )
   push('5. Do **not** invent a weighted health score or re-weight dimensions.')
-  if (domainTitle != null && coveragePlane != null) {
+  if (metricId != null) {
+    push(
+      `6. **Metric focus = \`${metricId}\`.** Suggested tasks MUST only address this metric (and its repo).`,
+    )
+  } else if (domainTitle != null && dimTitle != null && coveragePlane != null) {
+    push(
+      `6. **Focus = ${domainTitle} · ${dimTitle}.** Suggested tasks MUST only touch ${coveragePlane.repos
+        .map(r => `\`${r.repo}\``)
+        .join(', ')} and only ${dimTitle} metrics.`,
+    )
+  } else if (domainTitle != null && coveragePlane != null) {
     push(
       `6. **Domain focus = ${domainTitle}.** Suggested tasks MUST only touch these repos: ${coveragePlane.repos
         .map(r => `\`${r.repo}\``)
         .join(', ')}. Ignore other domains unless the Owner expands scope.`,
+    )
+  } else if (dimTitle != null) {
+    push(
+      `6. **Dimension focus = ${dimTitle}.** Suggested tasks MUST only address ${dimTitle} metrics (any covered repo). Do not expand into other dimensions without Owner approval.`,
     )
   }
   push('')
@@ -180,11 +227,13 @@ export function buildCodeHealthAgentPack(
   push('## Pack gather')
   push(`- Mode: ${snap.gatherMode}`)
   if (snap.gatherNote) push(`- Note: ${snap.gatherNote}`)
+  if (metricId != null) push(`- Metric focus: ${metricId}`)
   if (domainTitle != null && coveragePlane != null) {
     push(`- Domain focus: ${domainTitle} (${domain})`)
     push(`- Metrics note: ${coveragePlane.metricsNote}`)
     push(`- Covered repos: ${coveragePlane.repos.map(r => r.repo).join(', ')}`)
   }
+  if (dimTitle != null) push(`- Dimension focus: ${dimTitle} (${dimension})`)
   push('')
 
   const { lens } = snap
@@ -206,22 +255,26 @@ export function buildCodeHealthAgentPack(
   }
 
   const report = lens.report
-  const metrics = scopeMetrics(lens.metrics, domain)
-  const paydown = scopeMetrics(lens.paydownQueue, domain)
+  const metrics = scopeMetrics(lens.metrics, options)
+  const paydown = scopeMetrics(lens.paydownQueue, options)
   const overCount = metrics.filter(m => m.over).length
   const atCeilingCount = metrics.filter(m => m.atCeiling).length
   const minSlack =
     metrics.length === 0 ? null : Math.min(...metrics.map(m => m.slack))
 
-  if (domainTitle != null) {
-    push('## Domain focus')
-    push(`- Plane: ${domainTitle}`)
+  if (focus != null) {
+    push('## Focus')
+    if (domainTitle != null) push(`- Plane: ${domainTitle}`)
+    if (dimTitle != null) push(`- Dimension: ${dimTitle}`)
+    if (metricId != null) push(`- Metric id: ${metricId}`)
     push(
       `- In-scope metrics: ${metrics.length} · over ${overCount} · at ceiling ${atCeilingCount} · min slack ${minSlack ?? '—'}`,
     )
     push(
-      '- Fleet Posture Summary below is for context; **Suggested tasks stay in this domain.**',
+      '- Fleet Posture Summary below is for context; **Suggested tasks stay in this focus.**',
     )
+    const repos = [...new Set(metrics.map(m => m.metric.repo))]
+    if (repos.length > 0) push(`- Repos in focus: ${repos.join(', ')}`)
     push('')
   }
 
@@ -257,11 +310,11 @@ export function buildCodeHealthAgentPack(
   push(`- Received: ${report.received_at}`)
   push(`- Source: ${report.source ?? 'unknown'}`)
   push(`- Planning lamp: ${lens.planningLamp} (${lens.planningTag})`)
-  if (domainTitle != null) {
-    push(`- Metrics (domain ${domainTitle}): ${metrics.length}`)
-    push(`- Over baseline (domain): ${overCount}`)
-    push(`- At ceiling (domain): ${atCeilingCount}`)
-    push(`- Min slack (domain): ${minSlack ?? '—'}`)
+  if (focus != null) {
+    push(`- Metrics (focus ${focus}): ${metrics.length}`)
+    push(`- Over baseline (focus): ${overCount}`)
+    push(`- At ceiling (focus): ${atCeilingCount}`)
+    push(`- Min slack (focus): ${minSlack ?? '—'}`)
   } else {
     push(`- Metrics: ${lens.metrics.length}`)
     push(`- Over baseline: ${lens.overCount}`)
@@ -289,7 +342,7 @@ export function buildCodeHealthAgentPack(
 
   push('## Dimensions (labels only — not weighted)')
   const dimSummaries =
-    domain == null
+    focus == null
       ? lens.dimensionSummaries
       : lens.dimensionSummaries
           .map(d => {
@@ -316,14 +369,14 @@ export function buildCodeHealthAgentPack(
   push('')
 
   push(
-    domainTitle != null
-      ? `## Paydown queue (${domainTitle} only)`
+    focus != null
+      ? `## Paydown queue (${focus} only)`
       : '## Paydown queue (priority order for your Suggested tasks)',
   )
   if (paydown.length === 0) {
     push(
-      domainTitle != null
-        ? `- (empty for ${domainTitle} — no OVER / at-ceiling metrics in this domain)`
+      focus != null
+        ? `- (empty for ${focus} — no OVER / at-ceiling metrics in this focus)`
         : '- (empty — all metrics have positive slack; suggest only lock-baseline owed items if any)',
     )
   } else {
@@ -340,7 +393,7 @@ export function buildCodeHealthAgentPack(
   }
   push('')
 
-  push(domainTitle != null ? `## Metrics (${domainTitle})` : '## All metrics')
+  push(focus != null ? `## Metrics (${focus})` : '## All metrics')
   if (metrics.length === 0) {
     push('- (none in scope)')
   } else {
@@ -356,13 +409,14 @@ export function buildCodeHealthAgentPack(
 
   push('## How to lower a baseline after improvement')
   const owedAll = listLowerBaselineProposals(snap.response.latest?.metrics ?? [])
-  const owed =
-    domain == null
-      ? owedAll
-      : owedAll.filter(p => {
-          const m = snap.response.latest?.metrics.find(x => x.id === p.metricId)
-          return m?.domain === domain
-        })
+  const owed = owedAll.filter(p => {
+    const m = snap.response.latest?.metrics.find(x => x.id === p.metricId)
+    if (m == null) return false
+    if (metricId != null) return m.id === metricId
+    if (domain != null && m.domain !== domain) return false
+    if (dimension != null && resolveCodeHealthDimension(m.id) !== dimension) return false
+    return true
+  })
   if (owed.length === 0) {
     push('1. Run `bash agent-config/scripts/code-health/scan.sh` and note the printed value.')
     push('2. Set that exact number in `agent-config/scripts/code-health/baselines.env`.')
@@ -385,8 +439,8 @@ export function buildCodeHealthAgentPack(
   push('- Do not raise baselines to silence OVER.')
   push('- Do not paste generic playbook steps without reading the offender files.')
   push('- Do not propose cuts that change product behavior unless the Owner explicitly asks.')
-  if (domainTitle != null) {
-    push(`- Do not expand Suggested tasks outside ${domainTitle} repos without Owner approval.`)
+  if (focus != null) {
+    push(`- Do not expand Suggested tasks outside focus (${focus}) without Owner approval.`)
   }
 
   return lines.join('\n')

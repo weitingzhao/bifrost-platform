@@ -71,6 +71,10 @@ export type ResearchProxyError = {
 const STATUS_URL = '/api/v1/research/status'
 const RESEARCH_PROXY = '/api/v1/research'
 
+/** Elementary HTML via Research API (platform proxy). */
+export const ELEMENTARY_REPORT_URL =
+  '/api/v1/research/analytics/elementary/files/elementary_report.html'
+
 export function isResearchProxyError(data: unknown): data is ResearchProxyError {
   return (
     typeof data === 'object' &&
@@ -136,6 +140,7 @@ export type SignalHealthFreshnessRow = {
   table?: string
   status: string
   age_hours?: number | null
+  sla_hours?: number | null
   max_computed_at?: string | null
   row_count?: number
 }
@@ -143,6 +148,7 @@ export type SignalHealthFreshnessRow = {
 export type SignalHealthData = {
   overall: string
   as_of?: string
+  sla_hours?: number
   freshness: SignalHealthFreshnessRow[]
   extra_tables?: SignalHealthFreshnessRow[]
 }

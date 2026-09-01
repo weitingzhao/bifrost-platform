@@ -16,10 +16,27 @@ describe('dataVitalsModel', () => {
     })
   })
 
-  it('marks upcoming next_run within 6h as Scheduled', () => {
-    const now = new Date('2026-08-22T15:00:00.000Z')
-    const next = '2026-08-22T18:00:00.000Z'
-    expect(computeVerdict('2026-08-21T22:00:00.000Z', next, now).kind).toBe('scheduled')
+  it('marks upcoming next_run within 12h as Scheduled on a weekday', () => {
+    const now = new Date('2026-08-27T15:00:00.000Z') // Thursday
+    const next = '2026-08-27T22:00:00.000Z'
+    expect(computeVerdict('2026-08-26T22:00:00.000Z', next, now)).toEqual({
+      text: 'Scheduled ~7h',
+      kind: 'scheduled',
+    })
+  })
+
+  it('marks Mon afternoon next_run tonight as Scheduled when last_run too old for session', () => {
+    const now = new Date('2026-08-31T15:00:00.000Z') // Monday
+    const next = '2026-08-31T22:00:00.000Z'
+    expect(computeVerdict('2026-08-20T05:00:00.000Z', next, now).kind).toBe('scheduled')
+  })
+
+  it('marks Fri EOD on Monday morning as Session OK', () => {
+    const now = new Date('2026-08-31T15:00:00.000Z') // Monday
+    expect(computeVerdict('2026-08-30T05:31:00.000Z', '2026-08-31T22:00:00.000Z', now)).toEqual({
+      text: 'Session OK',
+      kind: 'ok',
+    })
   })
 
   it('counts freshness today ratio', () => {

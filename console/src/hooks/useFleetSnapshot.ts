@@ -23,6 +23,8 @@ import {
   type FleetViewerEnv,
 } from '@/lib/control-room/fleetSnapshot'
 import { buildMissionSnapshot, type MissionSnapshot } from '@/lib/control-room/missionSignals'
+import type { BusEnvId } from '@/lib/satellite/socketHealthSemantics'
+import { indexSatelliteBuses } from '@/lib/satellite-bus/satelliteBusNavSignal'
 
 const REFETCH = 20_000
 
@@ -48,6 +50,8 @@ export function useFleetSnapshot(): {
   fleet: FleetSnapshot
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
+  busesByEnv: Partial<Record<BusEnvId, SatelliteBusDeepResponse>>
+  busDeepLoading: boolean
   viewerEnv: FleetViewerEnv
   /** True until self-health returns viewer_env (avoid wrong seat badge flash). */
   viewerEnvLoading: boolean
@@ -88,6 +92,11 @@ export function useFleetSnapshot(): {
     if (!data) return []
     return isAllMatrices(data) ? data.matrices : [data]
   }, [matrixQ.data])
+
+  const busesByEnv = useMemo(
+    () => indexSatelliteBuses(busDeepQ.data),
+    [busDeepQ.data],
+  )
 
   const daemonIbObserve = useMemo(() => {
     const data = busDeepQ.data
@@ -181,5 +190,15 @@ export function useFleetSnapshot(): {
     busDeepQ.dataUpdatedAt,
   )
 
-  return { fleet, snapshot, matrices, viewerEnv, viewerEnvLoading, dataUpdatedAt, isLoading }
+  return {
+    fleet,
+    snapshot,
+    matrices,
+    busesByEnv,
+    busDeepLoading: busDeepQ.isLoading && busDeepQ.data == null,
+    viewerEnv,
+    viewerEnvLoading,
+    dataUpdatedAt,
+    isLoading,
+  }
 }

@@ -2,8 +2,8 @@ import { cn } from '@bifrost/ui'
 import type { SignalHealthFreshnessRow } from '@/api/researchEngine'
 import { Meter, StackedBar } from '@/components/market-data/overviewDash'
 import {
-  SIGNAL_HEALTH_FRESH_SLA_HOURS,
   ageToFillPct,
+  freshnessSlaHours,
   freshnessStatusTone,
   stackFreshnessStatuses,
   toneToMeterClass,
@@ -14,16 +14,17 @@ type Props = {
   className?: string
 }
 
-/** Dense age meters for signal-health freshness (36h SLA). Not a chart library. */
+/** Dense age meters for signal-health freshness (36h weekday / 72h weekend SLA). Not a chart library. */
 export function SignalHealthAgeMeters({ rows, className }: Props) {
   const stack = stackFreshnessStatuses(rows)
   if (rows.length === 0) return null
+  const slaHours = rows.find(r => r.sla_hours != null)?.sla_hours ?? freshnessSlaHours()
 
   return (
     <div className={cn('mb-2 flex flex-col gap-1.5', className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="m-0 text-dense-meta text-muted-foreground">
-          Age vs {SIGNAL_HEALTH_FRESH_SLA_HOURS}h fresh SLA · {stack.fresh} fresh / {stack.stale}{' '}
+          Age vs {slaHours}h fresh SLA · {stack.fresh} fresh / {stack.stale}{' '}
           stale|missing / {stack.other} other
         </p>
       </div>
@@ -39,15 +40,18 @@ export function SignalHealthAgeMeters({ rows, className }: Props) {
 export function AgeMeterCell({
   ageHours,
   status,
+  slaHours,
 }: {
   ageHours: number | null | undefined
   status: string | null | undefined
+  slaHours?: number | null
 }) {
+  const sla = slaHours ?? freshnessSlaHours()
   const tone = freshnessStatusTone(status)
-  const fillPct = ageToFillPct(ageHours)
+  const fillPct = ageToFillPct(ageHours, sla)
   const label =
     ageHours != null && Number.isFinite(ageHours)
-      ? `${ageHours.toFixed(1)}h / ${SIGNAL_HEALTH_FRESH_SLA_HOURS}h SLA`
+      ? `${ageHours.toFixed(1)}h / ${sla}h SLA`
       : 'no age'
 
   return (

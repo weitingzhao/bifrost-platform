@@ -480,6 +480,7 @@ function buildTroubleshootQueue(
         id: `matrix-${id}`,
         label: `Prod probe failing: ${id}`,
         status: 'issue',
+        note: 'Open Control Room for matrix evidence; fix via Operate or Agent. Clears when probe reachability is ok. No Owner Sign-off on this lane.',
       })
     }
   }
@@ -492,6 +493,7 @@ function buildTroubleshootQueue(
           id: `dev-matrix-${t.id}`,
           label: `Dev probe failing: ${t.id}`,
           status: 'issue',
+          note: 'Open Control Room for Dev matrix evidence. Clears when the probe is ok.',
         })
       }
     }
@@ -502,7 +504,9 @@ function buildTroubleshootQueue(
       id: 'cluster-reach',
       label: 'Cluster unreachable',
       status: 'issue',
-      note: clusterSummary.detail,
+      note:
+        clusterSummary.detail ??
+        'Open Cluster to restore reachability; this row clears when the cluster is reachable.',
     })
   }
 
@@ -511,6 +515,7 @@ function buildTroubleshootQueue(
       id: 'cluster-pods',
       label: `${clusterSummary.failing_pods} failing pod(s)`,
       status: 'issue',
+      note: 'Open Cluster → inspect failing pods → L1 rollout/delete as needed. Clears when failing_pods === 0. No Owner Sign-off on this lane.',
     })
   }
 
@@ -519,6 +524,7 @@ function buildTroubleshootQueue(
       id: 'all-clear',
       label: 'No active issues — matrix and cluster healthy',
       status: 'done',
+      note: 'Issue queue clear. Re-prepare in Briefing only if you want a fresh Agent pack.',
     })
   }
 

@@ -30,6 +30,7 @@ import {
 import { MarketDataJsonProbeCard } from '@/components/market-data/MarketDataJsonProbeCard'
 import { isMdDebugProbeEnabled } from '@/components/market-data/quality/mdNavParams'
 import { JobQueuePressure } from '@/components/market-data/JobQueuePressure'
+import { IngestDailyVolume } from '@/components/market-data/IngestDailyVolume'
 import { QueueDashboardPanel } from '@/components/market-data/QueueDashboardPanel'
 import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
 import { ScoreRing } from '@/components/market-data/overviewDash'
@@ -337,6 +338,13 @@ export function MarketDataIngestTab() {
         onOpenJobQueue={({ kind, status }) => {
           setJobKindFilter(kind)
           setStatusFilter(status)
+          setDetailTab('jobs')
+        }}
+      />
+
+      <IngestDailyVolume
+        onSelectKind={kind => {
+          setJobKindFilter(kind)
           setDetailTab('jobs')
         }}
       />

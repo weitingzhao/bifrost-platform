@@ -743,6 +743,39 @@ export type IngestKindsResponse = {
   error?: string
 }
 
+export type IngestHistoryKindBucket = {
+  kind: string
+  done?: number
+  failed?: number
+  pending?: number
+  running?: number
+  total?: number
+}
+
+export type IngestHistoryDay = {
+  day: string
+  done?: number
+  failed?: number
+  pending?: number
+  running?: number
+  total?: number
+  by_kind?: IngestHistoryKindBucket[]
+}
+
+export type IngestHistoryKindTotal = IngestHistoryKindBucket
+
+export type IngestHistoryResponse = {
+  ok: boolean
+  days?: number
+  start_day?: string
+  end_day?: string
+  retention_note?: string
+  days_series?: IngestHistoryDay[]
+  kind_totals?: IngestHistoryKindTotal[]
+  generated_at?: string
+  error?: string
+}
+
 export type EnqueueResponse = {
   ok: boolean
   job_id?: string
@@ -775,6 +808,13 @@ export function fetchIngestQueueDashboard(params?: { grace_minutes?: number }) {
   return proxyGet<IngestQueueDashboardResponse>(
     `/market/ingest/queue-dashboard${qs ? `?${qs}` : ''}`,
   )
+}
+
+export function fetchIngestHistory(params?: { days?: number }) {
+  const q = new URLSearchParams()
+  if (params?.days != null) q.set('days', String(params.days))
+  const qs = q.toString()
+  return proxyGet<IngestHistoryResponse>(`/market/ingest/history${qs ? `?${qs}` : ''}`)
 }
 
 export function enqueueIngestJob(body: {

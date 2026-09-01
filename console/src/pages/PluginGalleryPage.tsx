@@ -48,24 +48,6 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     openTabId: 'flex-query-manage',
     openLabel: 'Open IB Flex',
   },
-  {
-    id: 'analytics-pipeline',
-    name: 'Analytics',
-    vendor: 'dbt + Elementary',
-    role: 'SEPA dbt marts · Elementary lineage/catalog report · CronJob @ plugin-market-data NS',
-    lifecycle: 'live',
-    openTabId: 'analytics-pipeline',
-    openLabel: 'Open Analytics',
-  },
-  {
-    id: 'research-engine',
-    name: 'Research',
-    vendor: 'bifrost-research',
-    role: 'OLAP engines · forecast accuracy / token cost / pipeline health · Research API :8795 @ research NS',
-    lifecycle: 'live',
-    openTabId: 'research-engine',
-    openLabel: 'Open Research',
-  },
 ]
 
 function reachLabel(reach: 'ok' | 'degraded' | 'fail' | 'unknown', loading: boolean): string {
@@ -165,7 +147,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
 
       <OpsSection
         title="Plugin registry"
-        description="Directory only — open IB Client / Massive / IB Flex for probes; Launch Desk → Plugin to publish."
+        description="Directory only — IB Client / Massive / IB Flex. dbt SEPA catalog is Satellite → Research Engine (Plugin → Analytics retired)."
         bodyPadding="default"
         overflow="visible"
       >

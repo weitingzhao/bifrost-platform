@@ -65,7 +65,6 @@ import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
 import { MarketDataManagePage } from '@/pages/MarketDataManagePage'
 import { FlexQueryManagePage } from '@/pages/FlexQueryManagePage'
-import { AnalyticsPipelinePage } from '@/pages/AnalyticsPipelinePage'
 import { ResearchEnginePage } from '@/pages/ResearchEnginePage'
 import { ResearchReleasePage } from '@/pages/ResearchReleasePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
@@ -76,6 +75,7 @@ import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { RocketHealthPage } from '@/pages/RocketHealthPage'
 import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
 import { setSatelliteHealthSection } from '@/lib/task-mode/readinessChipActions'
+import { setResearchEngineLandingTab } from '@/lib/research/researchEngineLanding'
 import {
   DEFAULT_FACILITY_CATEGORY,
   writeCategoryToUrl,
@@ -153,7 +153,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'ib-gateway-manage': 'IB Client',
   'market-data-manage': 'Massive',
   'flex-query-manage': 'IB Flex',
-  'analytics-pipeline': 'Analytics',
   'research-engine': 'Research',
   defects: 'Defects',
 }
@@ -162,7 +161,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
 const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   briefing: 'Plan and start work — pick scope and lane, pack, then Launch.',
   'active-session':
-    'Track Doing lanes — queue progress, verify, Owner sign-off. Phase work runs in Cursor IDE Agent.',
+    'Track Doing lanes — program lanes: phase table + Owner sign-off; Troubleshooting: issue queue + Cluster/Operate unblock. Phase work runs in Cursor IDE Agent.',
   'delivery-board': 'Completed programs catalog (read-only archive).',
   queue: 'Operate and observe — run agent tasks, review remediation, close sessions.',
   'analysis-workspace':
@@ -203,17 +202,15 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
   'satellite-api':
     'Legacy hash — opens Satellite Health → Probes.',
   'plugin-gallery':
-    'Subcontractor plugin directory — bus rollup + registry. Open IB Client / Massive / IB Flex for probes; publish via Launch Desk → Plugin.',
+    'Subcontractor plugin directory — bus rollup + registry. Open IB Client / Massive / IB Flex for probes; publish via Launch Desk → Plugin. dbt / SEPA lives on Satellite → Research Engine.',
   'ib-gateway-manage':
     'IB Client (Gateway plugin) — TWS socket observe, Trade cutover, reconnect. Data plane is redis-ib, not PostgreSQL.',
   'market-data-manage':
     'Massive (Polygon) plugin — Overview, Coverage checklist, Ingest queue, Analytics. Shared Golden Source CNPG.',
   'flex-query-manage':
     'IB Flex Plugin — scheduled Flex ingest into brokerage Golden Source (CNPG). Overview, Ingest, Coverage, Config.',
-  'analytics-pipeline':
-    'dbt SEPA analytics + Elementary observability — lineage DAG, catalog, CronJob status. Report hosted by analytics-docs.',
   'research-engine':
-    'Research Engine OLAP governance — forecast accuracy (Path Hit / Close Miss), token cost KPIs, pipeline health, recent forecast runs. D10 blocked.',
+    'Research Engine OLAP governance — pipeline health, dbt / Lineage (SEPA catalog + Elementary), forecast accuracy, token cost, recent runs. D10 blocked. Former Plugin → Analytics hash redirects here.',
   'plugin-release':
     'Mission Launch third lane — Detect → Approve → Install → Verify → Live (make install-ib-gateway; not Tekton). Manage pages ≠ Publish.',
   'agent-release':
@@ -273,7 +270,6 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'ib-gateway-manage',
   'market-data-manage',
   'flex-query-manage',
-  'analytics-pipeline',
   'research-engine',
   'research-release',
   'plugin-release',
@@ -317,6 +313,8 @@ const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   telemetry: 'satellite-health',
   'satellite-telemetry': 'satellite-health',
   'satellite-api': 'satellite-health',
+  /** Plugin → Analytics retired — dbt catalog lives on Research Engine. */
+  'analytics-pipeline': 'research-engine',
 }
 
 function isConsoleViewTab(value: string): value is ConsoleViewTab {
@@ -334,6 +332,7 @@ function tabFromHash(): ConsoleViewTab | null {
     if (tabPart === 'satellite-telemetry' || tabPart === 'telemetry') {
       setSatelliteHealthSection('runtime')
     }
+    if (tabPart === 'analytics-pipeline') setResearchEngineLandingTab('catalog')
     return legacy
   }
   if (isConsoleViewTab(tabPart)) return tabPart
@@ -971,6 +970,9 @@ function ConsolePageInner() {
             onOpenAudit={openAudit}
             onOpenBriefing={opts => openBriefing(opts)}
             onOpenDeliveryBoard={openDeliveryBoard}
+            onOpenCluster={openCluster}
+            onOpenOperateQueue={() => setViewTab('queue')}
+            onOpenControlRoom={() => setViewTab('control-room')}
           />
         )}
 
@@ -1157,6 +1159,7 @@ function ConsolePageInner() {
             ambientJobId={ambientJob?.id ?? null}
             ambientJobStatus={ambientJob?.status ?? null}
             onStartAgentJob={startAmbientAgentJob}
+            onOpenAgentDesk={openAgentDesk}
           />
         )}
 
@@ -1172,9 +1175,11 @@ function ConsolePageInner() {
         {viewTab === 'flex-query-manage' && (
           <FlexQueryManagePage onOpenAgentDesk={openAgentDesk} />
         )}
-        {viewTab === 'analytics-pipeline' && <AnalyticsPipelinePage />}
         {viewTab === 'research-engine' && (
-          <ResearchEnginePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+          <ResearchEnginePage
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            onOpenAgentDesk={openAgentDesk}
+          />
         )}
         {viewTab === 'research-release' && (
           <ResearchReleasePage
@@ -1272,9 +1277,6 @@ function ConsolePageInner() {
         onComplete={handleAmbientJobComplete}
         onJobStatus={status => {
           setAmbientJob(prev => (prev == null ? prev : { ...prev, status }))
-        }}
-        onSelectTab={tabId => {
-          if (isConsoleViewTab(tabId)) setViewTab(tabId)
         }}
       />
     </SidebarProvider>

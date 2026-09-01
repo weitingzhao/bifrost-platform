@@ -71,6 +71,30 @@ func TestProxyHTTPForwardsPathAndQuery(t *testing.T) {
 	}
 }
 
+func TestLegacyAnalyticsRedirectTarget(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"/api/v1/plugins/analytics/status", "/api/v1/research/analytics/elementary"},
+		{
+			"/api/v1/plugins/analytics/api/elementary_report.html",
+			"/api/v1/research/analytics/elementary/files/elementary_report.html",
+		},
+		{
+			"/api/v1/plugins/analytics/api/static/app.js",
+			"/api/v1/research/analytics/elementary/files/static/app.js",
+		},
+		{"/api/v1/plugins/analytics/api", "/api/v1/research/analytics/elementary/files/elementary_report.html"},
+		{"/api/v1/plugins/analytics/api/", "/api/v1/research/analytics/elementary/files/elementary_report.html"},
+	}
+	for _, tc := range cases {
+		if got := legacyAnalyticsRedirectTarget(tc.in); got != tc.want {
+			t.Fatalf("legacyAnalyticsRedirectTarget(%q)=%q want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestProxyHTTPHealthPath(t *testing.T) {
 	var sawPath string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

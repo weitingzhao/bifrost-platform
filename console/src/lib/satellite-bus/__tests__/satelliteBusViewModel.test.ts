@@ -13,6 +13,10 @@ import {
   buildSatelliteBusViewModel,
   type SatelliteBusViewModelInput,
 } from '@/lib/satellite-bus/satelliteBusViewModel'
+import {
+  indexSatelliteBuses,
+  rollupSatelliteBusNav,
+} from '@/lib/satellite-bus/satelliteBusNavSignal'
 
 function component(
   reachability: Reachability,
@@ -307,5 +311,28 @@ describe('buildSatelliteBusViewModel', () => {
     const redis = vm.path.find(n => n.id === 'redis-ib')
     expect(redis).toBeTruthy()
     expect(redis!.health).toBe('fail')
+  })
+})
+
+describe('satelliteBusNavSignal', () => {
+  it('indexes all-env bus-deep payloads', () => {
+    const indexed = indexSatelliteBuses({
+      buses: [bus('dev'), bus('stg'), bus('prod')],
+    })
+    expect(indexed.dev?.environment).toBe('dev')
+    expect(indexed.stg?.environment).toBe('stg')
+    expect(indexed.prod?.environment).toBe('prod')
+  })
+
+  it('rolls up worst env into the sidebar lamp', () => {
+    const buses = {
+      dev: bus('dev', { daemonPolicyOff: true }),
+      stg: bus('stg', { daemonPolicyOff: true, ib_ingestor: component('fail', 'down') }),
+      prod: bus('prod'),
+    }
+    const rollup = rollupSatelliteBusNav(buses, [])
+    expect(rollup.signal).toBe('fail')
+    expect(rollup.title).toContain('STG UNAVAILABLE')
+    expect(rollup.title).toContain('DEV HEALTHY')
   })
 })

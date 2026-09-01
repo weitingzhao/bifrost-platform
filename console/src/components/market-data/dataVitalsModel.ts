@@ -5,14 +5,24 @@ export type VitalVerdict = {
   kind: VitalKind
 }
 
-const SCHEDULED_WINDOW_MS = 6 * 60 * 60 * 1000
+/** Widen scheduled window so Mon afternoon → tonight EOD shows Scheduled, not Missing. */
+const SCHEDULED_WINDOW_MS = 12 * 60 * 60 * 1000
+/** Align with platform/plugin weekend freshness (72h Sat/Sun/Mon-before-22UTC). */
+const SESSION_GAP_MAX_AGE_MS = 72 * 60 * 60 * 1000
 
 export function utcToday(now = new Date()): string {
   return now.toISOString().slice(0, 10)
 }
 
+/** Sat/Sun, or Monday before UTC 22:00 (next Cron/Dagster EOD window). */
+export function isWeekendGapWindow(now = new Date()): boolean {
+  const day = now.getUTCDay() // 0 Sun … 6 Sat
+  const hour = now.getUTCHours()
+  return day === 0 || day === 6 || (day === 1 && hour < 22)
+}
+
 export function classifyVitalText(text: string): VitalKind {
-  if (text === 'Today OK') return 'ok'
+  if (text === 'Today OK' || text === 'Session OK') return 'ok'
   if (text.startsWith('Scheduled')) return 'scheduled'
   if (text === 'Missing') return 'missing'
   return 'unknown'
@@ -34,7 +44,10 @@ export function vitalTagVariant(
   return 'neutral'
 }
 
-/** Today's-data verdict: UTC date of last_run_at vs next_run within 6h. */
+/**
+ * Today's-data verdict: UTC date of last_run_at vs weekend session gap vs next_run.
+ * Fri EOD on Mon morning → Session OK (not Missing).
+ */
 export function computeVerdict(
   lastRunAt?: string,
   nextRunAt?: string,
@@ -44,6 +57,15 @@ export function computeVerdict(
   const lastDate = lastRunAt?.trim().slice(0, 10)
   if (lastDate && lastDate === today) {
     return { text: 'Today OK', kind: 'ok' }
+  }
+  if (lastRunAt?.trim() && isWeekendGapWindow(now)) {
+    const lastMs = new Date(lastRunAt).getTime()
+    if (Number.isFinite(lastMs)) {
+      const age = now.getTime() - lastMs
+      if (age >= 0 && age <= SESSION_GAP_MAX_AGE_MS) {
+        return { text: 'Session OK', kind: 'ok' }
+      }
+    }
   }
   if (nextRunAt?.trim()) {
     const nextMs = new Date(nextRunAt).getTime()

@@ -182,6 +182,13 @@ describe('Seat / Partner zone builders', () => {
     const pluginGroup = CONSOLE_NAV_GROUPS.find(g => g.label === 'Plugin')
     expect(pluginGroup?.subGroups?.map(sg => sg.label)).toEqual(['', 'Infra'])
     expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).not.toContain('research-engine')
+    expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).not.toContain('analytics-pipeline')
+    expect(pluginGroup?.subGroups?.[0]?.items.map(i => i.id)).toEqual([
+      'plugin-gallery',
+      'ib-gateway-manage',
+      'market-data-manage',
+      'flex-query-manage',
+    ])
     expect(pluginGroup?.subGroups?.[1]?.items.map(i => i.id)).toEqual(['network'])
     expect(CONSOLE_NAV_GROUPS[0].defaultOpen).toBe(true)
     expect(CONSOLE_NAV_GROUPS[1].defaultOpen).toBe(true)

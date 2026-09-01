@@ -15,7 +15,16 @@ import {
   denseTableNumCell,
 } from '@bifrost/ui'
 import { ExternalLink, RefreshCw } from 'lucide-react'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import {
+  analyzeResearchEngine,
+  buildResearchEngineAgentPack,
+  buildResearchEngineDiagnosePrefill,
+  gatherResearchEngineSnapshot,
+} from '@/components/research/researchEngineAgentPack'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
+import {
+  ELEMENTARY_REPORT_URL,
   fetchElementaryStatus,
   fetchForecastSessions,
   fetchForecastSettlements,
@@ -29,8 +38,8 @@ import {
   type OrchestrationStatusData,
   type SignalHealthData,
 } from '@/api/researchEngine'
-import { fetchAnalyticsStatus } from '@/api/analyticsPlugin'
 import { fetchDataHusbandry } from '@/api/dataHusbandry'
+import { ResearchDbtCatalogTab } from '@/components/research/ResearchDbtCatalogTab'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import {
@@ -38,7 +47,14 @@ import {
   type OpsVerdictLamp,
   type OpsVerdictTagVariant,
 } from '@/components/layout/OpsVerdictStrip'
-import { RESEARCH_ENGINE_SUMMARY } from '@/lib/architecture/researchEngineCatalog'
+import {
+  RESEARCH_DBT_MODEL_COUNT,
+  RESEARCH_ENGINE_SUMMARY,
+} from '@/lib/architecture/researchEngineCatalog'
+import {
+  consumeResearchEngineLandingTab,
+  type ResearchEngineTab,
+} from '@/lib/research/researchEngineLanding'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { buildResearchVerdictCopy } from '@/lib/research/researchHealthCopy'
 import {
@@ -55,7 +71,7 @@ import {
 import { useMarketDataLiveProbe } from '@/hooks/useMarketDataLiveProbe'
 import { stackFreshnessStatuses } from '@/lib/research/signalHealthAgeMeters'
 
-type ManageTab = 'accuracy' | 'cost' | 'health' | 'runs'
+type ManageTab = ResearchEngineTab
 
 function formatPct(n: number | null | undefined, digits = 1): string {
   if (n == null || !Number.isFinite(n)) return '—'
@@ -116,10 +132,14 @@ function laneLamp(verdict: string | undefined): 'ok' | 'degraded' | 'fail' | 'un
 
 export function ResearchEnginePage({
   onNavigate,
+  onOpenAgentDesk,
 }: {
   onNavigate?: (tabId: string) => void
+  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
 } = {}) {
-  const [tab, setTab] = useState<ManageTab>('health')
+  const [tab, setTab] = useState<ManageTab>(() => consumeResearchEngineLandingTab())
+  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const marketProbe = useMarketDataLiveProbe()
 
   const statusQ = useQuery({
@@ -163,13 +183,6 @@ export function ResearchEnginePage({
     refetchInterval: 60_000,
     retry: 1,
   })
-  const analyticsQ = useQuery({
-    queryKey: ['analytics-pipeline-status'],
-    queryFn: fetchAnalyticsStatus,
-    refetchInterval: 60_000,
-    retry: 1,
-  })
-
   const settlementRows = useMemo<ForecastSettlementRow[]>(() => {
     if (settlementsQ.data != null && !isResearchProxyError(settlementsQ.data)) {
       return settlementsQ.data.rows
@@ -274,6 +287,63 @@ export function ResearchEnginePage({
 
   const dagsterUrl = resolveOpsToolUrl('dagster')
 
+  const livePackSnap = useMemo(
+    () => ({
+      generatedAt: new Date().toISOString(),
+      husbandry: husbandryQ.data ?? null,
+      husbandryError: husbandryQ.error ? String(husbandryQ.error) : null,
+      status: statusQ.data ?? null,
+      statusError: statusQ.error ? String(statusQ.error) : null,
+      health: null,
+      signalHealth,
+      signalHealthError: signalHealthErr,
+      orchestration,
+      orchestrationError: orchestrationErr,
+      elementary,
+      elementaryError: elementaryErr,
+    }),
+    [
+      husbandryQ.data,
+      husbandryQ.error,
+      statusQ.data,
+      statusQ.error,
+      signalHealth,
+      signalHealthErr,
+      orchestration,
+      orchestrationErr,
+      elementary,
+      elementaryErr,
+    ],
+  )
+  const liveAnalysis = useMemo(() => analyzeResearchEngine(livePackSnap), [livePackSnap])
+
+  async function handleCopyForAgent() {
+    if (copyState === 'busy') return
+    setCopyState('busy')
+    try {
+      const snap = await gatherResearchEngineSnapshot().catch(() => livePackSnap)
+      await navigator.clipboard.writeText(buildResearchEngineAgentPack(snap))
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2000)
+    } catch {
+      try {
+        await navigator.clipboard.writeText(buildResearchEngineAgentPack(livePackSnap))
+        setCopyState('copied')
+        window.setTimeout(() => setCopyState('idle'), 2000)
+      } catch {
+        setCopyState('error')
+        window.setTimeout(() => setCopyState('idle'), 3000)
+      }
+    }
+  }
+
+  function handleDiagnoseWithAgent() {
+    if (diagnoseBusy || onOpenAgentDesk == null) return
+    setDiagnoseBusy(true)
+    onOpenAgentDesk({ prefill: buildResearchEngineDiagnosePrefill(livePackSnap) })
+    window.setTimeout(() => setDiagnoseBusy(false), 400)
+  }
+
   const refreshAll = () => {
     void statusQ.refetch()
     void husbandryQ.refetch()
@@ -282,7 +352,6 @@ export function ResearchEnginePage({
     void settlementsQ.refetch()
     void sessionsQ.refetch()
     void elementaryQ.refetch()
-    void analyticsQ.refetch()
   }
 
   return (
@@ -295,22 +364,55 @@ export function ResearchEnginePage({
         tagLabel={verdict.tagLabel}
         tagVariant={verdict.tagVariant as OpsVerdictTagVariant}
         actions={
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={
-              statusQ.isFetching ||
-              husbandryQ.isFetching ||
-              signalHealthQ.isFetching ||
-              orchestrationQ.isFetching ||
-              settlementsQ.isFetching ||
-              sessionsQ.isFetching
-            }
-            onClick={refreshAll}
-          >
-            <RefreshCw className="size-3.5" />
-            Refresh
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={copyState === 'busy'}
+              title="Copy a repair pack (husbandry + signal-health + Dagster) for an AI agent"
+              onClick={() => void handleCopyForAgent()}
+            >
+              {copyState === 'busy'
+                ? 'Exporting…'
+                : copyState === 'copied'
+                  ? 'Copied!'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy for Agent'}
+            </Button>
+            {onOpenAgentDesk != null ? (
+              <AgentTriggerButton
+                label="Diagnose with Agent"
+                size="sm"
+                pending={diagnoseBusy}
+                title="Open Agent Desk with Research Engine diagnose prefill (read-first)"
+                onClick={() => void handleDiagnoseWithAgent()}
+              />
+            ) : null}
+            <Button asChild size="sm" variant="outline">
+              <a href={ELEMENTARY_REPORT_URL} target="_blank" rel="noreferrer">
+                <ExternalLink className="size-3.5" />
+                Open Elementary
+              </a>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={
+                statusQ.isFetching ||
+                husbandryQ.isFetching ||
+                signalHealthQ.isFetching ||
+                orchestrationQ.isFetching ||
+                settlementsQ.isFetching ||
+                sessionsQ.isFetching ||
+                elementaryQ.isFetching
+              }
+              onClick={refreshAll}
+            >
+              <RefreshCw className="size-3.5" />
+              Refresh
+            </Button>
+          </>
         }
         meta={
           <span className="text-dense-meta text-muted-foreground">
@@ -332,9 +434,10 @@ export function ResearchEnginePage({
           onChange={v => setTab(v as ManageTab)}
           ariaLabel="Research engine governance tabs"
           options={[
+            { value: 'health', label: 'Pipeline health' },
+            { value: 'catalog', label: 'dbt / Lineage' },
             { value: 'accuracy', label: 'Accuracy' },
             { value: 'cost', label: 'Token cost' },
-            { value: 'health', label: 'Pipeline health' },
             { value: 'runs', label: 'Runs' },
           ]}
         />
@@ -525,6 +628,43 @@ export function ResearchEnginePage({
 
       {tab === 'health' && (
         <>
+          {liveAnalysis.findings.length > 0 ? (
+            <OpsSection
+              title="Diagnose"
+              collapsible
+              defaultCollapsed={!liveAnalysis.needsAttention}
+            >
+              {liveAnalysis.primaryCause ? (
+                <p className="mb-2 text-dense-meta text-foreground">
+                  Primary: {liveAnalysis.primaryCause}
+                </p>
+              ) : null}
+              <ul className="m-0 list-none space-y-1.5 p-0">
+                {liveAnalysis.findings.map(f => (
+                  <li
+                    key={f.id}
+                    className="rounded border border-border/60 bg-card px-2 py-1.5"
+                  >
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <DenseTag
+                        variant={
+                          f.severity === 'danger'
+                            ? 'danger'
+                            : f.severity === 'warning'
+                              ? 'warning'
+                              : 'neutral'
+                        }
+                      >
+                        {f.severity}
+                      </DenseTag>
+                      <span className="text-dense-meta font-medium">{f.title}</span>
+                    </div>
+                    <p className="m-0 mt-1 text-dense-caption text-muted-foreground">{f.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </OpsSection>
+          ) : null}
           <OpsSection
             title="Feedstock (upstream)"
             collapsible
@@ -694,25 +834,9 @@ export function ResearchEnginePage({
                 }
               />
               <Metric
-                label="dbt Analytics"
-                value={
-                  <span className="inline-flex items-center gap-1.5">
-                    <StatusLamp
-                      value={
-                        analyticsQ.data?.healthy
-                          ? 'ok'
-                          : analyticsQ.isLoading
-                            ? 'unknown'
-                            : analyticsQ.data?.report_available
-                              ? 'degraded'
-                              : 'fail'
-                      }
-                      kind="reach"
-                    />
-                    {analyticsQ.data?.models_total ?? 21} models
-                  </span>
-                }
-                detail={`Cron last: ${formatWhen(analyticsQ.data?.last_schedule)}`}
+                label="dbt models"
+                value={String(RESEARCH_DBT_MODEL_COUNT)}
+                detail="Dagster dbt-sepa · catalog on dbt / Lineage"
               />
             </div>
             {signalHealthErr ? (
@@ -751,7 +875,11 @@ export function ResearchEnginePage({
                           </DenseTag>
                         </DenseTableCell>
                         <DenseTableCell>
-                          <AgeMeterCell ageHours={row.age_hours} status={row.status} />
+                          <AgeMeterCell
+                            ageHours={row.age_hours}
+                            status={row.status}
+                            slaHours={row.sla_hours ?? signalHealth?.sla_hours}
+                          />
                         </DenseTableCell>
                         <DenseTableCell className="text-dense-meta text-muted-foreground">
                           {formatWhen(row.max_computed_at)}
@@ -777,11 +905,22 @@ export function ResearchEnginePage({
             </ul>
             <p className="mt-3 text-dense-meta text-muted-foreground">
               Schemas: {RESEARCH_ENGINE_SUMMARY.schemas.join(' · ')} on{' '}
-              {RESEARCH_ENGINE_SUMMARY.goldenSource}. Adjacent dbt surface:{' '}
-              <span className="font-medium text-foreground">Plugin → Analytics</span>.
+              {RESEARCH_ENGINE_SUMMARY.goldenSource}. SEPA dbt inventory lives on the{' '}
+              <button
+                type="button"
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+                onClick={() => setTab('catalog')}
+              >
+                dbt / Lineage
+              </button>{' '}
+              tab.
             </p>
           </OpsSection>
         </>
+      )}
+
+      {tab === 'catalog' && (
+        <ResearchDbtCatalogTab elementary={elementary} elementaryErr={elementaryErr} />
       )}
 
       {tab === 'runs' && (

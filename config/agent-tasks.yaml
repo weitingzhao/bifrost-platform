@@ -218,3 +218,11 @@ tasks:
     default_level: L0
     domain: Health
     action: "Check"
+
+  - id: research-loop-batch
+    scope: "research.loop.batch"
+    label: "Research · Loop Batch"
+    tier: automated
+    default_level: L1
+    domain: Research
+    action: "Orchestrate"

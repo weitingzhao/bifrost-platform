@@ -40,14 +40,13 @@ export function ToolsMenu({ className }: { className?: string }) {
           variant="outline"
           size="sm"
           className={cn(
-            'h-7 gap-1 px-2 text-dense-caption font-medium shadow-sm',
+            'h-7 w-7 shrink-0 px-0 text-muted-foreground shadow-sm',
             className,
           )}
           title="External tools — Gitea, Grafana, Dagster"
           aria-label="Open Tools menu"
         >
           <Wrench size={14} aria-hidden />
-          Tools
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-2" sideOffset={6}>

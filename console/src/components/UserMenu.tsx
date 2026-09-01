@@ -100,7 +100,6 @@ export function UserMenu({
           aria-label="User menu"
         >
           <User size={14} aria-hidden />
-          <span className="text-[var(--text-dense-caption)] font-semibold">User</span>
           <span
             className={cn(
               'badge-ui max-w-[4.5rem] truncate text-[9px] uppercase leading-none',

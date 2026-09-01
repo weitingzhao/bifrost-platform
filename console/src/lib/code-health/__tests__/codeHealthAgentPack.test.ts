@@ -119,6 +119,61 @@ describe('buildCodeHealthAgentPack', () => {
     expect(text).toContain('Paydown queue (Rocket only)')
     expect(text).toContain('Metrics (Rocket)')
     expect(text).not.toContain('code.duplication.satellite')
-    expect(text).toContain('Do not expand Suggested tasks outside Rocket')
+    expect(text).toContain('Do not expand Suggested tasks outside focus (Rocket)')
+  })
+
+  it('scopes pack to a dimension across domains', () => {
+    const response: CodeHealthResponse = {
+      reported: true,
+      latest: {
+        generated_at: '2026-08-31T00:00:00Z',
+        commit: 'abc1234',
+        received_at: '2026-08-31T00:00:00Z',
+        source: 'live-rescan',
+        metrics: [
+          {
+            id: 'code.oversized.rocket',
+            label: 'files over 800 lines',
+            domain: 'rocket',
+            repo: 'bifrost-platform',
+            value: 30,
+            baseline: 30,
+            status: 'at_baseline',
+          },
+          {
+            id: 'code.oversized.satellite',
+            label: 'files over 800 lines',
+            domain: 'satellite',
+            repo: 'bifrost-trade-frontend',
+            value: 6,
+            baseline: 6,
+            status: 'at_baseline',
+          },
+          {
+            id: 'code.duplication.satellite',
+            label: 'duplicated function names',
+            domain: 'satellite',
+            repo: 'bifrost-trade-frontend',
+            value: 3,
+            baseline: 3,
+            status: 'at_baseline',
+          },
+        ],
+      },
+    }
+    const text = buildCodeHealthAgentPack(
+      {
+        generatedAt: '2026-08-31T00:00:00Z',
+        response,
+        lens: buildCodeHealthLens(response),
+        gatherMode: 'stored-snapshot',
+      },
+      { dimension: 'size' },
+    )
+    expect(text).toContain('Code Refactor Agent Task Content (Size)')
+    expect(text).toContain('Dimension focus = Size')
+    expect(text).toContain('code.oversized.rocket')
+    expect(text).toContain('code.oversized.satellite')
+    expect(text).not.toContain('code.duplication.satellite')
   })
 })

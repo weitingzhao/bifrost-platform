@@ -57,7 +57,7 @@ export const UI_PROGRESS_OVERRIDES: Record<string, UiProgressOverride> = {
   'research-engine': {
     status: 'partial',
     notes:
-      'Wave 5.2 Research governance — accuracy / token cost / pipeline health / runs via /api/v1/research/*; Dagster freshness pending W5.1',
+      'Research governance — pipeline health / dbt Lineage / accuracy / token cost / runs via /api/v1/research/*; Plugin → Analytics retired (hash → this page)',
   },
   program: {
     status: 'done',

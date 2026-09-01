@@ -22,6 +22,11 @@ import { LANE_ICONS } from '@/lib/briefing/briefingIconMaps'
 import { queueItemToBriefingStatus } from '@/lib/briefing/briefingStatus'
 import { splitQueueByCompletion } from '@/lib/briefing/queueDisplay'
 import type { QueueItem, WorkLane } from '@/lib/briefing/workLanes'
+import {
+  formatOpsIssueAgentClipboard,
+  opsIssueNavTarget,
+  type ActiveSessionBoardMode,
+} from '@/lib/briefing/activeSessionLaneMode'
 
 /**
  * Parse spine note that uses circled-number milestones: "preamble ① foo ② bar ③ baz"
@@ -45,12 +50,22 @@ function parseNoteMilestones(note: string): { preamble: string; milestones: stri
 
 function QueueItemRow({
   item,
+  lane,
   canAdmin,
   reconcileFindings,
+  boardMode,
+  onOpenCluster,
+  onOpenOperateQueue,
+  onOpenControlRoom,
 }: {
   item: QueueItem
+  lane: WorkLane
   canAdmin: boolean
   reconcileFindings: ReturnType<typeof reconcileBriefing>
+  boardMode: ActiveSessionBoardMode
+  onOpenCluster?: () => void
+  onOpenOperateQueue?: () => void
+  onOpenControlRoom?: () => void
 }) {
   const qc = useQueryClient()
   const [expanded, setExpanded] = useState(false)
@@ -58,6 +73,7 @@ function QueueItemRow({
   const [signConfirmOpen, setSignConfirmOpen] = useState(false)
   const [actError, setActError] = useState<string | null>(null)
   const [gateReady, setGateReady] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const invalidateSpine = () => {
     void qc.invalidateQueries({ queryKey: ['context'] })
@@ -95,6 +111,16 @@ function QueueItemRow({
   const showActuation = canAdmin && hasActuation
   const showActuationHint = !canAdmin && hasActuation && item.waveActuation === 'signoff'
   const workStatus = queueItemToBriefingStatus(item.status)
+  const navTarget = boardMode === 'ops-issue-queue' ? opsIssueNavTarget(item) : null
+  const showOpsActions = boardMode === 'ops-issue-queue' && navTarget != null
+
+  const copyForAgent = () => {
+    const text = formatOpsIssueAgentClipboard(item, lane)
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <li className="min-w-0 border-b border-[var(--border)] last:border-b-0">
@@ -144,6 +170,35 @@ function QueueItemRow({
           </div>
         </button>
       </div>
+
+      {showOpsActions && (
+        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+          <p className="m-0 mb-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            Next: diagnose → fix on the desk below. This lane has no Owner Sign-off — it clears when
+            probes are healthy.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {navTarget === 'cluster' && onOpenCluster != null && (
+              <Button type="button" size="sm" variant="default" onClick={onOpenCluster}>
+                Open Cluster
+              </Button>
+            )}
+            {navTarget === 'control-room' && onOpenControlRoom != null && (
+              <Button type="button" size="sm" variant="default" onClick={onOpenControlRoom}>
+                Open Control Room
+              </Button>
+            )}
+            {onOpenOperateQueue != null && (
+              <Button type="button" size="sm" variant="secondary" onClick={onOpenOperateQueue}>
+                Open Operate Queue
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={copyForAgent}>
+              {copied ? 'Copied' : 'Copy for Agent'}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {showActuation && item.waveActuation != null && (
         <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
@@ -279,12 +334,22 @@ function QueueItemRow({
 
 function CompletedQueueGroup({
   items,
+  lane,
   canAdmin,
   reconcileFindings,
+  boardMode,
+  onOpenCluster,
+  onOpenOperateQueue,
+  onOpenControlRoom,
 }: {
   items: QueueItem[]
+  lane: WorkLane
   canAdmin: boolean
   reconcileFindings: ReturnType<typeof reconcileBriefing>
+  boardMode: ActiveSessionBoardMode
+  onOpenCluster?: () => void
+  onOpenOperateQueue?: () => void
+  onOpenControlRoom?: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -309,8 +374,13 @@ function CompletedQueueGroup({
             <QueueItemRow
               key={item.id}
               item={item}
+              lane={lane}
               canAdmin={canAdmin}
               reconcileFindings={reconcileFindings}
+              boardMode={boardMode}
+              onOpenCluster={onOpenCluster}
+              onOpenOperateQueue={onOpenOperateQueue}
+              onOpenControlRoom={onOpenControlRoom}
             />
           ))}
         </ul>
@@ -328,6 +398,11 @@ export interface TaskQueuePanelProps {
   auditRecords: AuditRecord[]
   auditLoading?: boolean
   onOpenAudit?: () => void
+  /** When ops-issue-queue, show Unblock CTAs instead of promising phase Sign-off. */
+  boardMode?: ActiveSessionBoardMode
+  onOpenCluster?: () => void
+  onOpenOperateQueue?: () => void
+  onOpenControlRoom?: () => void
 }
 
 export function TaskQueuePanel({
@@ -339,8 +414,13 @@ export function TaskQueuePanel({
   auditRecords,
   auditLoading,
   onOpenAudit,
+  boardMode = 'program-phases',
+  onOpenCluster,
+  onOpenOperateQueue,
+  onOpenControlRoom,
 }: TaskQueuePanelProps) {
   const isWaveLane = MIGRATE_LANE_STREAM_IDS[lane.id] != null
+  const isOpsQueue = boardMode === 'ops-issue-queue'
   const laneReconcileOptions = useMemo(
     () =>
       buildReconcileBriefingOptions({
@@ -362,10 +442,18 @@ export function TaskQueuePanel({
     return (
       <div className="flex flex-col items-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-4 py-6 text-center">
         <BriefingIconBadge icon={LANE_ICONS[lane.id]} />
-        <p className="m-0 text-sm font-medium text-[var(--foreground)]">No active tasks</p>
+        <p className="m-0 text-sm font-medium text-[var(--foreground)]">
+          {isOpsQueue ? 'No open issues' : 'No active tasks'}
+        </p>
         <p className="m-0 max-w-md text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          This lane has no queue items yet. Use the Session CTA above to copy an Init pack for{' '}
-          <strong>{lane.shortLabel}</strong>.
+          {isOpsQueue ? (
+            'Matrix and cluster look clear for this lane. Use Briefing only if you need a fresh Agent pack.'
+          ) : (
+            <>
+              This lane has no queue items yet. Use the Session CTA above to copy an Init pack for{' '}
+              <strong>{lane.shortLabel}</strong>.
+            </>
+          )}
         </p>
       </div>
     )
@@ -378,14 +466,19 @@ export function TaskQueuePanel({
           <BriefingIconBadge icon={LANE_ICONS[lane.id]} size="sm" />
           <h3
             className="m-0 min-w-0 break-words text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] [overflow-wrap:anywhere]"
-            title={`Task queue · ${lane.shortLabel}`}
+            title={
+              isOpsQueue
+                ? `Issue queue · ${lane.shortLabel}`
+                : `Task queue · ${lane.shortLabel}`
+            }
           >
-            Task queue · {lane.shortLabel}
+            {isOpsQueue ? 'Issue queue' : 'Task queue'} · {lane.shortLabel}
           </h3>
         </div>
         <span className="shrink-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          {active.length} active
-          {completed.length > 0 ? ` · ${completed.length} completed` : ''}
+          {isOpsQueue
+            ? `${active.length} open`
+            : `${active.length} active${completed.length > 0 ? ` · ${completed.length} completed` : ''}`}
         </span>
       </header>
       {isWaveLane && (
@@ -398,14 +491,24 @@ export function TaskQueuePanel({
           <QueueItemRow
             key={item.id}
             item={item}
+            lane={lane}
             canAdmin={canAdmin}
             reconcileFindings={laneFindings}
+            boardMode={boardMode}
+            onOpenCluster={onOpenCluster}
+            onOpenOperateQueue={onOpenOperateQueue}
+            onOpenControlRoom={onOpenControlRoom}
           />
         ))}
         <CompletedQueueGroup
           items={completed}
+          lane={lane}
           canAdmin={canAdmin}
           reconcileFindings={laneFindings}
+          boardMode={boardMode}
+          onOpenCluster={onOpenCluster}
+          onOpenOperateQueue={onOpenOperateQueue}
+          onOpenControlRoom={onOpenControlRoom}
         />
       </ul>
       {isWaveLane && streamId != null && (
