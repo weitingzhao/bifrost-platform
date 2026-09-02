@@ -38,6 +38,11 @@ import { computeAllTracks } from '@/lib/briefing/workTracks'
 import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import {
+  buildControlRoomAgentPack,
+  buildControlRoomDiagnosePrefill,
+  gatherControlRoomAgentSnapshot,
+} from '@/lib/control-room/controlRoomAgentPack'
+import {
   buildControlRoomAttentionItems,
   buildControlRoomBaySignals,
   loadOpenControlRoomBayIds,
@@ -324,6 +329,25 @@ export function ControlRoomPage({
     return missionDegradationSummary(collectMissionDegradationItems(snapshot))
   }, [snapshot])
 
+  const [attentionDiagnoseBusy, setAttentionDiagnoseBusy] = useState(false)
+
+  const handleAttentionCopyForAgent = useCallback(async () => {
+    const snap = await gatherControlRoomAgentSnapshot()
+    await navigator.clipboard.writeText(buildControlRoomAgentPack(snap))
+  }, [])
+
+  const handleAttentionAskForAgent = useCallback(() => {
+    if (attentionDiagnoseBusy || onOpenAgentDesk == null) return
+    setAttentionDiagnoseBusy(true)
+    void gatherControlRoomAgentSnapshot()
+      .then(snap => {
+        onOpenAgentDesk({ prefill: buildControlRoomDiagnosePrefill(snap) })
+      })
+      .finally(() => {
+        window.setTimeout(() => setAttentionDiagnoseBusy(false), 400)
+      })
+  }, [attentionDiagnoseBusy, onOpenAgentDesk])
+
   const jumpToBay = useCallback((id: ControlRoomBayId) => {
     setActiveBay(id)
     setOpenBayIds(() => {
@@ -398,7 +422,13 @@ export function ControlRoomPage({
         />
       )}
 
-      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
+      <ControlRoomAttentionStrip
+        items={attentionItems}
+        onSelectBay={jumpToBay}
+        onCopyForAgent={handleAttentionCopyForAgent}
+        onDiagnoseWithAgent={onOpenAgentDesk != null ? handleAttentionAskForAgent : undefined}
+        diagnoseBusy={attentionDiagnoseBusy}
+      />
 
       <ControlRoomBayCards
         bays={baySignals}

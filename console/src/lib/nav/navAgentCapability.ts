@@ -23,6 +23,10 @@ import {
   buildCodeHealthAgentPack,
   gatherCodeHealthSnapshot,
 } from '@/lib/code-health/codeHealthAgentPack'
+import {
+  buildControlRoomAgentPack,
+  gatherControlRoomAgentSnapshot,
+} from '@/lib/control-room/controlRoomAgentPack'
 import type { Signal } from '@/lib/control-room/missionSignals'
 
 export type NavAgentCapableId =
@@ -30,12 +34,14 @@ export type NavAgentCapableId =
   | 'flex-query-manage'
   | 'research-engine'
   | 'code-health'
+  | 'control-room'
 
 const CAPABLE = new Set<string>([
   'market-data-manage',
   'flex-query-manage',
   'research-engine',
   'code-health',
+  'control-room',
 ])
 
 export function isNavAgentCapable(tabId: string): tabId is NavAgentCapableId {
@@ -81,6 +87,9 @@ export async function gatherNavAgentPack(tabId: string): Promise<string> {
   }
   if (tabId === 'code-health') {
     return buildCodeHealthAgentPack(await gatherCodeHealthSnapshot({ liveRescanFirst: true }))
+  }
+  if (tabId === 'control-room') {
+    return buildControlRoomAgentPack(await gatherControlRoomAgentSnapshot())
   }
   throw new Error(`No Ask-for-Agent pack for ${tabId}`)
 }
