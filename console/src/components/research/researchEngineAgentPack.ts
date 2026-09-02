@@ -80,21 +80,21 @@ export const RESEARCH_SIGNAL_OWNERS: Record<
   },
   iv_reconstructed: {
     table: 'features.option_iv_reconstructed_daily',
-    schedule: 'research_vol_surface_svi_schedule',
-    job: 'research_vol_surface_svi_job',
-    note: 'research aux schedule',
+    schedule: 'research_iv_solver_schedule',
+    job: 'research_iv_solver_job',
+    note: 'IDS iv_solver — not SVI surface (SVI writes option_surface_*)',
   },
   playbook_trigger: {
     table: 'features.stock_signal_playbook_trigger_intraday',
     schedule: 'research_intraday_schedule',
     job: 'research_intraday_job',
-    note: 'intraday aux',
+    note: 'emitted from terrain-intraday after spot resolve',
   },
   forecast_settlement: {
     table: 'features.stock_backtest_settlement',
     schedule: 'research_settlement_schedule',
     job: 'research_settlement_job',
-    note: 'research aux schedule',
+    note: 'needs research_forecast_schedule sessions first',
   },
 }
 
