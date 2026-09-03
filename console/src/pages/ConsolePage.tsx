@@ -1169,7 +1169,10 @@ function ConsolePageInner() {
           <PluginGalleryPage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
         )}
         {viewTab === 'ib-gateway-manage' && (
-          <IbGatewayManagePage onNavigate={tab => setViewTab(tab as ConsoleViewTab)} />
+          <IbGatewayManagePage
+            onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
+            onOpenAgentDesk={openAgentDesk}
+          />
         )}
         {viewTab === 'market-data-manage' && <MarketDataManagePage />}
         {viewTab === 'flex-query-manage' && (

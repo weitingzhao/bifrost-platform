@@ -98,6 +98,7 @@ export const IB_GATEWAY_SELF_HEAL_LADDER = {
   title: 'Self-heal ladder (L0 → L1)',
   steps: [
     'L0 Plugin: snapshot stale ≥90s → disconnect_all + reconnect_all (in-process; cooldown 60s)',
+    'L0.5 Plugin: streak ≥3 and snapshot still stale after soft reconnect → process exit → K8s pod restart',
     'L1 Console reconnect: soft reconnect_all via operator RPC → wait snapshot fresh → else rollout restart',
     'L1 Auto-repair (OPS_IB_AUTOREPAIR_ENABLED): stale_streak ≥3 + rollout_recommended → auto reconnect ladder with 900s cooldown',
     'Escalation: TWS host on Mac Mini — not automated; verify API Clients on .30/.32',
@@ -134,7 +135,7 @@ export const REDIS_IB_CONTRACT = {
     'ib:health:{account_id}',
     'ib:events:{account_id}',
     'ib:control:{account_id}',
-    'bifrost:ib:gateway:self_heal (HASH — L0 self-heal ladder state)',
+    'ib:control:gateway_self_heal (HASH — L0 self-heal ladder state; under ~ib:control:* ACL)',
   ],
   onDemandStk: {
     writer: 'Trade Market API GET /quotes (SADD + heartbeat)',

@@ -12,7 +12,7 @@ const (
 	operatorCmdStream       = "ib:operator:cmd"
 	operatorResultPrefix    = "ib:operator:result:"
 	accountSnapshotKey      = "ib:account:snapshot:v1"
-	selfHealRedisKey        = "bifrost:ib:gateway:self_heal"
+	selfHealRedisKey        = "ib:control:gateway_self_heal"
 	defaultSnapshotStaleSec = 90.0
 )
 

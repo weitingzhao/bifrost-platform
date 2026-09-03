@@ -1,13 +1,21 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import { postIbGatewayControl } from '@/api/network'
+import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { IbGatewayCutoverStatusPanel } from '@/components/cluster/IbGatewayCutoverStatusPanel'
 import { IbGatewayLiveStatusPanel } from '@/components/cluster/IbGatewayLiveStatusPanel'
+import {
+  analyzeIbGatewayProbe,
+  buildIbGatewayAgentPack,
+  buildIbGatewayDiagnosePrefill,
+  gatherIbGatewayAgentSnapshot,
+} from '@/components/cluster/ibGatewayAgentPack'
 import {
   compactIbGatewaySummary,
   ibGatewayExtraTags,
 } from '@/components/cluster/ibGatewaySummaryModel'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import {
   OpsVerdictStrip,
   type OpsVerdictLamp,
@@ -36,17 +44,70 @@ function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
 /**
  * Subcontractors → IB Gateway — observe live probe + Trade cutover (≠ Launch Plugin publish).
  */
-export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: string) => void } = {}) {
+type CopyState = 'idle' | 'busy' | 'copied' | 'error'
+
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return
+  } catch {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.left = '-9999px'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    if (!ok) throw new Error('clipboard write failed')
+  }
+}
+
+export function IbGatewayManagePage({
+  onNavigate,
+  onOpenAgentDesk,
+}: {
+  onNavigate?: (tabId: string) => void
+  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
+} = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const { canOperate } = usePlatformAuth()
   const [reconnectOpen, setReconnectOpen] = useState(false)
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
+  const [copyState, setCopyState] = useState<CopyState>('idle')
 
   const ibReach = liveProbe.isLoading ? 'unknown' : liveProbe.probeReach
   const verdict = reachToVerdict(ibReach)
   const extraTags = ibGatewayExtraTags(liveProbe.status)
+
+  const diagnosePrefill = useMemo(() => {
+    const analysis = analyzeIbGatewayProbe(liveProbe.status)
+    return buildIbGatewayDiagnosePrefill({
+      generatedAt: new Date().toISOString(),
+      status: liveProbe.status ?? null,
+      statusError: liveProbe.status?.error ?? null,
+      selfHeal: null,
+      selfHealError: null,
+      analysis,
+    })
+  }, [liveProbe.status])
+
+  const handleCopyForAgent = useCallback(async () => {
+    setCopyState('busy')
+    try {
+      const snap = await gatherIbGatewayAgentSnapshot()
+      await writeClipboard(buildIbGatewayAgentPack(snap))
+      setCopyState('copied')
+      window.setTimeout(() => setCopyState('idle'), 2500)
+    } catch {
+      setCopyState('error')
+      window.setTimeout(() => setCopyState('idle'), 3000)
+    }
+  }, [])
 
   const runReconnect = useCallback(async () => {
     setActing(true)
@@ -91,6 +152,29 @@ export function IbGatewayManagePage({ onNavigate }: { onNavigate?: (tabId: strin
         }
         actions={
           <>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={copyState === 'busy'}
+              title="Copy a repair pack (status + self-heal + ghost-session checks) for an AI agent"
+              onClick={() => void handleCopyForAgent()}
+            >
+              {copyState === 'busy'
+                ? 'Exporting…'
+                : copyState === 'copied'
+                  ? 'Copied!'
+                  : copyState === 'error'
+                    ? 'Copy failed'
+                    : 'Copy for Agent'}
+            </Button>
+            {onOpenAgentDesk != null ? (
+              <AgentTriggerButton
+                label="Diagnose with Agent"
+                size="sm"
+                title="Open Agent Desk with IB Client diagnose prefill (read-first plan)"
+                onClick={() => onOpenAgentDesk({ prefill: diagnosePrefill })}
+              />
+            ) : null}
             <Button
               variant="outline"
               size="sm"
