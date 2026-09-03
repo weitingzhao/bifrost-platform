@@ -8,13 +8,14 @@ import {
 } from '@/lib/nav/navAgentCapability'
 
 describe('navAgentCapability', () => {
-  it('marks Massive / Flex / Research Engine / Code Health / Control Room as pack-capable', () => {
+  it('marks Massive / Flex / IB Client / Research Engine / Code Health / Control Room as pack-capable', () => {
     expect(isNavAgentCapable('market-data-manage')).toBe(true)
     expect(isNavAgentCapable('flex-query-manage')).toBe(true)
+    expect(isNavAgentCapable('ib-gateway-manage')).toBe(true)
     expect(isNavAgentCapable('research-engine')).toBe(true)
     expect(isNavAgentCapable('code-health')).toBe(true)
     expect(isNavAgentCapable('control-room')).toBe(true)
-    expect(isNavAgentCapable('ib-gateway-manage')).toBe(false)
+    expect(isNavAgentCapable('plugin-gallery')).toBe(false)
   })
 
   it('raises Ask when the lamp is not green (diagnose pages)', () => {

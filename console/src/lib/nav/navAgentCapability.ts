@@ -24,6 +24,10 @@ import {
   gatherCodeHealthSnapshot,
 } from '@/lib/code-health/codeHealthAgentPack'
 import {
+  buildIbGatewayAgentPack,
+  gatherIbGatewayAgentSnapshot,
+} from '@/components/cluster/ibGatewayAgentPack'
+import {
   buildControlRoomAgentPack,
   gatherControlRoomAgentSnapshot,
 } from '@/lib/control-room/controlRoomAgentPack'
@@ -32,6 +36,7 @@ import type { Signal } from '@/lib/control-room/missionSignals'
 export type NavAgentCapableId =
   | 'market-data-manage'
   | 'flex-query-manage'
+  | 'ib-gateway-manage'
   | 'research-engine'
   | 'code-health'
   | 'control-room'
@@ -39,6 +44,7 @@ export type NavAgentCapableId =
 const CAPABLE = new Set<string>([
   'market-data-manage',
   'flex-query-manage',
+  'ib-gateway-manage',
   'research-engine',
   'code-health',
   'control-room',
@@ -81,6 +87,9 @@ export async function gatherNavAgentPack(tabId: string): Promise<string> {
   }
   if (tabId === 'flex-query-manage') {
     return buildFlexAgentPack(await gatherFlexAgentSnapshot())
+  }
+  if (tabId === 'ib-gateway-manage') {
+    return buildIbGatewayAgentPack(await gatherIbGatewayAgentSnapshot())
   }
   if (tabId === 'research-engine') {
     return buildResearchEngineAgentPack(await gatherResearchEngineSnapshot())
