@@ -18,7 +18,9 @@ import (
 
 const (
 	dataCloneRemoteDump = "/var/lib/postgresql/data/bifrost-clone-prod.sql"
-	dataCloneMinDumpB   = 1_000_000
+	// Trade OLTP DBs are slim after Wave hygiene (~100–200 KiB dumps are complete).
+	// 1 MiB previously rejected valid full dumps and left Dev stale.
+	dataCloneMinDumpB = 50_000
 )
 
 var safeIdentRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
