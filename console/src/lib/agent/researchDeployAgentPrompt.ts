@@ -1,5 +1,4 @@
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
-import { RESEARCH_DEFAULT_TAG } from '@/lib/task-mode/researchLaunchVerdict'
 
 export const RESEARCH_DEPLOY_SCOPE = 'research-deploy'
 
@@ -14,7 +13,10 @@ export function buildResearchDeployPrompt(ctx: {
   tag: string
   latestRun?: DeliveryPipelineRunView
 }): string {
-  const tag = ctx.tag.trim() || RESEARCH_DEFAULT_TAG
+  // No fallback. This string becomes the agent's instruction, and defaulting an
+  // empty box to a constant is how a deploy agent gets told to ship a version
+  // nobody chose. The desk's own checklist already gates GO on a valid tag.
+  const tag = ctx.tag.trim()
   const snapshot = {
     pipeline: 'bifrost-deliver-research',
     tag,

@@ -79,7 +79,7 @@ import {
   hasDeliverInFlight,
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
-import { RESEARCH_DEFAULT_TAG } from '@/lib/task-mode/researchLaunchVerdict'
+import { useResearchLiveTag } from '@/hooks/useResearchLiveTag'
 
 const AI_DEPLOY_LABEL = 'AI Deploy'
 const AI_DEPLOY_TASK_LABEL = scopeToLabel(TRADE_DEPLOY_SCOPE)
@@ -227,6 +227,7 @@ export function TradeReleasePage({
     supplyChain.data?.last_deliver_run?.revision?.trim() ||
     supplyChain.data?.default_revision?.trim() ||
     'main'
+  const { tag: researchLiveTag } = useResearchLiveTag()
   const constellationImpact = useConstellationImpact({
     origin: 'trade',
     revision: deployRevision,
@@ -679,7 +680,7 @@ export function TradeReleasePage({
         onFormationLaunch={() =>
           formation.requestLaunch({
             revision: deployRevision,
-            tag: RESEARCH_DEFAULT_TAG,
+            tag: researchLiveTag,
             env: 'stg',
           })
         }

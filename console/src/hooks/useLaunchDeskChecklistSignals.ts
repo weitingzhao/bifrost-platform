@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useResearchLiveTag } from '@/hooks/useResearchLiveTag'
 import { fetchDeliveryPipelines, fetchPipelineRuns } from '@/api/delivery'
 import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
 import {
@@ -36,7 +37,6 @@ import {
 } from '@/lib/task-mode/pluginLaunchVerdict'
 import { RESEARCH_DEPLOY_SCOPE } from '@/lib/agent/researchDeployAgentPrompt'
 import {
-  RESEARCH_DEFAULT_TAG,
   buildResearchLaunchCheckpoints,
   resolveResearchLaunchVerdict,
 } from '@/lib/task-mode/researchLaunchVerdict'
@@ -168,6 +168,8 @@ export function useLaunchDeskChecklistSignals(opts?: {
     enabled,
   })
 
+  const { tag: researchLiveTag } = useResearchLiveTag()
+
   return useMemo(() => {
     void agentEvidenceTick
     const rocketInput = {
@@ -235,7 +237,7 @@ export function useLaunchDeskChecklistSignals(opts?: {
     const researchInput = {
       canOperate,
       pipelinePresent: (pipelinesQ.data?.pipelines ?? []).some(p => p.name === RESEARCH_PIPELINE),
-      tag: RESEARCH_DEFAULT_TAG,
+      tag: researchLiveTag,
       deliverInFlight: hasDeliverInFlight(researchRuns.data?.runs),
       agentInFlight: ambientActive && scope === RESEARCH_DEPLOY_SCOPE,
     }
@@ -335,6 +337,7 @@ export function useLaunchDeskChecklistSignals(opts?: {
     tradeProdRuns.data?.runs,
     researchRuns.data?.runs,
     researchRuns.isLoading,
+    researchLiveTag,
     pipelinesQ.data?.pipelines,
     pipelinesQ.isLoading,
     ambientActive,

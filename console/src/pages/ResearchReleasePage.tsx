@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
 import {
@@ -46,7 +46,8 @@ import {
   isResearchImageLandedLog,
 } from '@/lib/task-mode/researchLaunchSteps'
 import {
-  RESEARCH_DEFAULT_TAG,
+  RESEARCH_TAG_PLACEHOLDER,
+  researchDefaultTag,
   buildResearchLaunchCheckpoints,
   isResearchReleaseTag,
   resolveResearchLaunchVerdict,
@@ -75,7 +76,8 @@ export function ResearchReleasePage({
 }: ResearchReleasePageProps) {
   const { canOperate } = usePlatformAuth()
   const [detailReason] = useState(readLaneDetailReasonFromLocation)
-  const [tag, setTag] = useState(RESEARCH_DEFAULT_TAG)
+  const [tag, setTag] = useState('')
+  const [tagTouched, setTagTouched] = useState(false)
 
   const agentInFlight =
     isAmbientAgentActive(ambientJobId, ambientJobStatus) &&
@@ -135,6 +137,15 @@ export function ResearchReleasePage({
   )
   const verdict = resolveResearchLaunchVerdict(verdictInput)
   const checkpoints = buildResearchLaunchCheckpoints(verdictInput)
+
+  // Start the box on what is running, so the operator is looking at a true
+  // statement without typing anything — and edits only to name the version they
+  // intend to ship. Stops once they touch it; their input is never overwritten.
+  useEffect(() => {
+    if (tagTouched) return
+    const live = researchDefaultTag(health?.version)
+    if (live !== '' && live !== tag) setTag(live)
+  }, [health?.version, tagTouched, tag])
 
   const cycleSteps = deriveResearchLaunchSteps({
     run: latestRun,
@@ -250,8 +261,11 @@ export function ResearchReleasePage({
             </span>
             <input
               value={tag}
-              onChange={e => setTag(e.target.value)}
-              placeholder={RESEARCH_DEFAULT_TAG}
+              onChange={e => {
+                setTagTouched(true)
+                setTag(e.target.value)
+              }}
+              placeholder={RESEARCH_TAG_PLACEHOLDER}
               className="h-7 w-32 rounded border border-[var(--border)] bg-[var(--card)] px-2 font-mono text-sm"
               aria-label="Image tag"
             />

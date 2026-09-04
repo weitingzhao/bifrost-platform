@@ -3,8 +3,30 @@ import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteL
 /** Semver pin required by Launch Research (must match the Kaniko tag). */
 export const RESEARCH_TAG_RE = /^\d+\.\d+\.\d+$/
 
-/** Loop Smartness pin — page default + sidebar lamp. */
-export const RESEARCH_DEFAULT_TAG = '0.48.4'
+/**
+ * Format hint for the empty tag box — an example of the shape, never a value
+ * anyone should launch.
+ *
+ * This used to be `RESEARCH_DEFAULT_TAG = '0.48.4'`, pre-filled into the input
+ * and read straight back out by the lane's step derivation, which calls the
+ * manifest pinned only when `liveVersion === tag`. Nobody had typed 0.48.4 in
+ * months, so the desk sat at "Pin manifest 2/4" forever, describing a release
+ * of a version that was never being released — while the real fleet moved from
+ * 0.48 to 0.64. A stale constant that renders in a state field is worse than a
+ * blank one: it reads as fact.
+ */
+export const RESEARCH_TAG_PLACEHOLDER = '0.0.0'
+
+/**
+ * What the tag box should start on: what is running now. The operator edits it
+ * to the version they intend to ship, so the box always begins at a true
+ * statement, and an empty box means "we could not read the live version" rather
+ * than a number from last quarter.
+ */
+export function researchDefaultTag(liveVersion?: string | null): string {
+  const v = (liveVersion ?? '').trim()
+  return isResearchReleaseTag(v) ? v : ''
+}
 
 export function isResearchReleaseTag(tag: string): boolean {
   return RESEARCH_TAG_RE.test(tag.trim())
@@ -35,7 +57,7 @@ export function buildResearchLaunchCheckpoints(
       id: 'tag',
       label: 'Image tag',
       ok: tagOk,
-      detail: tagOk ? input.tag.trim() : 'semver required (e.g. 0.48.4)',
+      detail: tagOk ? input.tag.trim() : 'semver required (e.g. 1.2.3)',
     },
   ]
 }
