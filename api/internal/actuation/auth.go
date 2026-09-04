@@ -15,7 +15,17 @@ import (
 type Role string
 
 const (
-	RoleViewer   Role = "viewer"
+	RoleViewer Role = "viewer"
+	// RoleReporter may write evidence about itself and nothing else.
+	//
+	// It exists because the alternative was worse. A workload that needs to
+	// record its own outcomes — the Research Loop's CronJob reporting to the
+	// trust matrix — would otherwise need an operator token, and operator also
+	// carries `POST /cluster/workloads/scale` and
+	// `PUT /agent/governance/trust-overrides/{skill_id}`. That would let the
+	// Loop scale the trade `daemon`, which D10 forbids outright, and grant
+	// itself the very autonomy the trust gate is there to withhold.
+	RoleReporter Role = "reporter"
 	RoleOperator Role = "operator"
 	RoleAdmin    Role = "admin"
 )
@@ -99,7 +109,7 @@ func (a *AuthService) Require(min Role) func(http.Handler) http.Handler {
 			principal, ok := a.Authenticate(r)
 			if !ok || roleLevel(principal.Role) < roleLevel(min) {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{
-					"error": "operator token required",
+					"error": fmt.Sprintf("%s token required", min),
 				})
 				return
 			}
@@ -128,8 +138,10 @@ func (a *AuthService) Authenticate(r *http.Request) (Principal, bool) {
 func roleLevel(role Role) int {
 	switch role {
 	case RoleAdmin:
-		return 3
+		return 4
 	case RoleOperator:
+		return 3
+	case RoleReporter:
 		return 2
 	default:
 		return 1

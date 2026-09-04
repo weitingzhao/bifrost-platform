@@ -326,7 +326,6 @@ func (s *Server) Router() http.Handler {
 			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
 			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
-			r.Post("/agent/governance/skill-runs", s.agentgovernance.HandleRecordSkillRun)
 			r.Put("/patrol/skills/{id}/enable", s.patrol.HandleEnable)
 			r.Post("/patrol/trigger/{id}", s.patrol.HandleTrigger)
 			r.Post("/patrol/webhook/{event}", s.patrol.HandleWebhook)
@@ -440,6 +439,14 @@ func (s *Server) Router() http.Handler {
 				r.Post("/{id}/respond", s.remediation.HandleRespond)
 			})
 		})
+		// Recording a skill's own outcome is evidence, not actuation. It sits
+		// below operator on purpose: the workload that reports must not also be
+		// able to scale deployments or write its own trust override.
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleReporter))
+			r.Post("/agent/governance/skill-runs", s.agentgovernance.HandleRecordSkillRun)
+		})
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)

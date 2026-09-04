@@ -6,6 +6,14 @@ tokens:
     role: viewer
     token_env: PLATFORM_VIEWER_TOKEN
     token: platform-viewer-dev
+  # Workloads that record their own outcomes and nothing else — the Research
+  # Loop CronJob reporting to the trust matrix. Deliberately below operator:
+  # operator also carries cluster scale (D10 forbids scaling the trade daemon)
+  # and trust-override writes, which would let a skill grant itself autonomy.
+  - name: reporter
+    role: reporter
+    token_env: PLATFORM_REPORTER_TOKEN
+    token: platform-reporter-dev
   - name: operator
     role: operator
     token_env: PLATFORM_OPERATOR_TOKEN
