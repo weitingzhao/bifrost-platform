@@ -1,0 +1,355 @@
+id: research-loop-automation
+title: Research Loop Automation — Analyze consolidation + Copilot linkage
+description: |
+    Research / Product — close the research loop and sharpen what feeds it.
+    Wave A: one lens registry + Exhibit for every lens + Signal Decay lens expansion.
+    Wave B: LLM plan repair, two-model (DeepSeek + OpenAI) Persona judgement with
+    per-provider caps, outcome-rule hypothesis resolution, every objective on the Cron.
+    Wave C: Analyze 12 pages → 5 hubs with redirects; per-lens analytical depth; Daily
+    Brief on exhibits. Wave D: Copilot reads runs, one daily digest, unattended
+    auto-accept under Trust L0 with quality gates, Copilot verdicts back on pages.
+    D10 BLOCKED — research drafts and advisory verdicts only; order intents never
+    auto-accepted. P0 hygiene (DDL apply / image alignment) out of scope by Owner.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/research-loop-automation/SKILL.md
+model: composer-2.5
+delivery:
+    board_visible: true
+    former_location: Research · research-loop-automation (Build)
+    sign_off_mechanism: api
+phases:
+    - id: A1
+      title: Lens registry — one vocabulary for pages, engines, Copilot
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Follow {{skill_path}} and
+        bifrost-research/docs/plans/RESEARCH_LOOP_AUTOMATION_PLAN.md § Phase A1.
+        New src/bifrost_research/lenses/registry.py (LensSpec, classify, public_registry),
+        GET /research/lenses, MCP research.lenses.list; signal_hit / scan / alert_scan /
+        similar_regime read the registry. Bands: hot ≥ 80 · cold ≤ 20 · lean 60–80 / 20–40.
+        No new tables. D10 BLOCKED.
+      verify_cmd: cd bifrost-research && make lint && make test && make check-code-health
+      acceptance:
+        - GET /research/lenses lists ≥ 10 lenses with bands and page routes
+        - signal_hit and scan classification tests pin equality with the registry
+        - No numeric threshold literal left in engines/signal_hit or engines/scan
+      depends_on: []
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: A2
+      title: Exhibit for every lens — verdict, track record, similar
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase A2.
+        api/exhibit.py readers for every registry lens; each exhibit adds verdict,
+        track_record (from stock_signal_lens_hit_daily), similar (resolved-only k-NN
+        summary) and data-dependency caveats. MCP research.exhibit.get lens set = registry;
+        analyze specialist tool filter gains exhibit / lenses / signal-decay / similar-regime.
+      verify_cmd: cd bifrost-research && make lint && make test && make test-mcp
+      acceptance:
+        - Every registry lens returns 200 for NVDA and SPY on DEV with verdict + track_record
+        - Analyze specialist answers a GEX question citing research.exhibit.get
+      depends_on: [A1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: A3
+      title: Signal Decay lens expansion + similar-regime hygiene
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase A3.
+        signal_hit gains skew / gex_regime / terrain_regime (order_sentiment only on tape);
+        scripts/backfill_signal_hit.py; similar_regime returns resolved-only, de-clustered
+        neighbours plus a summary block. API window default unchanged (FE moves to 60 in A5).
+      verify_cmd: cd bifrost-research && make lint && make test
+      acceptance:
+        - GET /research/signal-decay?lens=skew&window_days=90 returns evaluated triggers
+        - Similar-regime rows all carry fwd_return; no two neighbours within 5 sessions
+      depends_on: [A1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: A4
+      title: Analysis defects — brief sign, opportunity scope, gamma zone, VRP 30d, tape caveat
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase A4. Four fixes, each with a
+        regression test: brief narrative sign + symbol-scoped Opportunity card + no-tape
+        sentiment wording; terrain gamma zone never degenerate; VRP atm_iv_30d interpolation
+        + fwd_ret_20d aux asset; order_sentiment exhibit caveat without tape.
+      verify_cmd: cd bifrost-research && make lint && make test
+      acceptance:
+        - NVDA brief narrative sign correct on DEV; NVDA VRP exhibit non-null
+        - Gamma zone bounds are null-with-caveat or low < high, never equal
+        - SPY sentiment exhibit carries the tape caveat and no verdict
+      depends_on: []
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: A5
+      title: Pages read the registry — verdict, track record, similar distribution
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase A5 (frontend).
+        useLensRegistry + lib/lensVerdict; AnalyzeVerdictStrip gains the track-record line;
+        SimilarRegimeCard shows the distribution; every Analyze lab drops its local threshold
+        functions; Signal Decay default window 60 with 20d visible; CopilotAutoInsightChip on
+        every lab. Dense UI only; no file over 800 lines.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run test:run && npm run build && npm run check:legacy-css && npm run check:code-health
+      acceptance:
+        - Each lab verdict label equals the registry band for the symbol's exhibit on :5173
+        - Signal Decay shows 20d numbers by default
+        - No threshold literals remain in pages/research/analyze/*.tsx
+      depends_on: [A1, A2, A3, A4]
+      sign_off:
+        required: true
+        checklist:
+            - Owner read the new verdict wording and track-record line on at least three labs at :5173
+      agent_session:
+        enabled: true
+    - id: B1
+      title: LLM plan repair — chat model, json mode, provider chain
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase B1.
+        plan_llm.py: default deepseek-chat, response_format json_object, 60 s timeout,
+        chain DeepSeek → OpenAI gpt-4o-mini → heuristic; trace records generated_by,
+        llm_model, attempts. Tests with mocked httpx. Bump the harness Cron image pin.
+      verify_cmd: cd bifrost-research && make lint && make test
+      acceptance:
+        - Unit tests cover timeout → OpenAI → success and both-fail → heuristic with reason
+        - Next DEV Cron run trace shows plan.generated_by == llm with the model named
+      depends_on: []
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: B2
+      title: Two models judge every candidate — DeepSeek + OpenAI with caps
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase B2.
+        persona_eval runs the verdict agent per model in PERSONA_EVAL_MODELS concurrently;
+        consensus = agreed stance or dissent; any block blocks; a failed model counts as
+        dissent. Per-provider daily caps persisted in research.ai_action_log (add provider,
+        cost_usd if absent — approved by D-RLA-3). Cron env: agents on, models, caps,
+        timeout 240 s. FE: per-model chips + agree/dissent tag in CandidateBatchBody and the
+        Judge stage.
+      verify_cmd: cd bifrost-research && make lint && make test && cd ../bifrost-trade-frontend && npm run lint && npm run test:run && npm run build
+      acceptance:
+        - DEV Cron run trace shows mode agent, two models, non-uniform verdicts, cost under caps
+        - A dissent is visible on the Inbox candidate card
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+            - Owner confirmed per-provider daily caps and the first agent-mode Cron run cost
+      agent_session:
+        enabled: true
+    - id: B3
+      title: Hypotheses resolve themselves from candidate outcomes
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase B3.
+        policy_json.resolution knobs (horizon 20 · +3% validated · −3% rejected vs SPY);
+        eod_review applies unambiguous resolutions directly with evidence in
+        research.hypothesis.resolution_json (new column — approved by D-RLA-2) and posts an
+        informational briefing; ambiguous cases stay drafts. Dagster: candidate_outcome
+        before eod_review; bump the dagster pin. FE: knobs, resolution line, learn segment.
+      verify_cmd: cd bifrost-research && make lint && make test && cd ../bifrost-trade-frontend && npm run lint && npm run test:run && npm run build
+      acceptance:
+        - After the first candidates reach 20 sessions, validated + rejected > 0 without an Owner click
+        - Each resolved hypothesis carries its evidence; ambiguous ones still arrive as drafts
+      depends_on: []
+      sign_off:
+        required: true
+        checklist:
+            - Owner reviewed the first automatic resolution and its evidence on the Hypothesis Board
+      agent_session:
+        enabled: true
+    - id: B4
+      title: Every objective runs; evidence is per symbol
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase B4.
+        Cron drops the objective pin and runs --schedule daily_open with per-objective failure
+        isolation; verify with a fresh run that backtest evidence is symbol-scoped, fix
+        event_query / validate_hook if five hypotheses still share identical numbers.
+      verify_cmd: cd bifrost-research && make lint && make test
+      acceptance:
+        - Both active objectives have DEV runs; Morning IV Hot Watch produced a batch
+        - Evidence numbers differ across symbols
+      depends_on: [B1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: C1
+      title: Analyze hubs — 12 pages into 5 with redirects
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase C1 (frontend).
+        LabHub shell with ?view= tabs; vol-regime (iv-rank | vrp | skew), dealer-levels
+        (gex | opex), scenario (model | sessions | playbook), flow placeholder per D-RLA-4,
+        discovery unchanged, Contract Greeks under Data. Old routes redirect. Update nav,
+        AppHeader, scopeRegistry, LENS_ROUTES, SEGMENT_HREF. No file over 800 lines.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run test:run && npm run build && npm run check:legacy-css && npm run check:code-health
+      acceptance:
+        - Analyze menu shows five entries; every old URL lands on the matching hub view
+        - Every former page's content is reachable; Flow states the subscription reason
+      depends_on: [A5]
+      sign_off:
+        required: true
+        checklist:
+            - Owner walked the five hubs on :5173 and confirmed nothing went missing
+      agent_session:
+        enabled: true
+    - id: C2
+      title: Per-lens analytical depth — skew, OpEx, GEX, scenario calibration, IV, VRP
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase C2, one item at a time with
+        its own test: normalised skew + term slope + rich/cheap strikes; OpEx pin magnet +
+        historical pin rate; GEX gamma-regime verdict; scenario reliability calibration per
+        regime from settlement; IV Radar bucket track record; VRP fwd_ret_20d hit line.
+      verify_cmd: cd bifrost-research && make lint && make test && cd ../bifrost-trade-frontend && npm run lint && npm run test:run && npm run build && npm run check:legacy-css
+      acceptance:
+        - Every hub verdict strip shows band · track record · similar distribution
+        - Scenario hub shows a calibration table with n per regime
+      depends_on: [A5, C1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: C3
+      title: Daily Brief on exhibits — one source for card and page
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase C3.
+        brief/synth.py builds cards from the exhibit readers; Daily Brief links to hub views;
+        lamps from exhibit freshness.
+      verify_cmd: cd bifrost-research && make lint && make test && cd ../bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - A Brief card and the hub view it opens show the same numbers and verdict
+      depends_on: [A2, C1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: D1
+      title: Copilot reads and explains a harness run
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase D1.
+        MCP read tools research.loop.list_runs / get_run / explain_candidate; write tool
+        research.loop.run_objective (dry-run default, approval-gated); instruction updates;
+        Harness drawer and candidate rows get Ask Copilot with the run as snapshot.
+        Ships in research-mcp — bump that pin.
+      verify_cmd: cd bifrost-research && make lint && make test && make test-mcp && cd ../bifrost-trade-frontend && npm run lint && npm run build
+      acceptance:
+        - From the Harness drawer, why-was-X-proposed is answered from the run's own evidence with tool citations
+      depends_on: [B2]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: D2
+      title: One daily digest replaces per-candidate cards
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase D2.
+        copilot/agents/daily_digest.py (verdict agent over exhibits, loop state, resolutions,
+        dissents) → one daily_digest briefing; morning_prep folded in; Dagster aux asset
+        11:30 UTC. Inbox Briefings and the Copilot InboxBanner open on the digest.
+      verify_cmd: cd bifrost-research && make lint && make test && cd ../bifrost-trade-frontend && npm run lint && npm run test:run && npm run build
+      acceptance:
+        - One digest per trading day on DEV; the Inbox opens on it; candidate cards folded beneath
+      depends_on: [A2, B3]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+    - id: D3
+      title: Unattended on a leash — Trust L0 auto-accept with quality gates
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase D3.
+        batch_orchestrate gate = models agree ∧ validate ≠ block ∧ evidence present ∧
+        source hit-rate known (knob min_source_hit_rate 0.45); weekly
+        policy_suggestion_from_outcomes as a Dagster aux asset; Inbox default filter Decisions.
+        The Owner sets research-loop-batch to L0 in Console → Agent Governance.
+        Research draft kinds only — policy_suggestion and order_intent never auto-accept.
+      verify_cmd: cd bifrost-research && make lint && make test
+      acceptance:
+        - A trading day passes with candidates proposed, judged, accepted and digested without an Owner click
+        - Policy and order-intent drafts still wait; the weekly rule proposal appears with evidence
+      depends_on: [B2, B3, D2]
+      sign_off:
+        required: true
+        checklist:
+            - Owner promoted research-loop-batch to L0 and confirmed the first unattended day
+      agent_session:
+        enabled: true
+    - id: D4
+      title: Copilot verdicts back on the pages
+      status: pending
+      prompt_template: |
+        Execute {{phase_title}} for program {{id}}. Plan § Phase D4.
+        CopilotAutoInsightChip on every hub fed by the digest's per-symbol verdicts; chat-side
+        proposals surface as chips on the symbol's hub view with their approval state.
+      verify_cmd: cd bifrost-trade-frontend && npm run lint && npm run test:run && npm run build && npm run check:legacy-css
+      acceptance:
+        - A verdict produced in chat for NVDA is visible on the NVDA vol-regime view with its approval state
+      depends_on: [D2, C1]
+      sign_off:
+        required: false
+        checklist: []
+      agent_session:
+        enabled: true
+post_completion:
+    new_capabilities:
+        - "One lens registry read by pages, scan, alerts, Signal Decay, exhibits and Copilot"
+        - "Exhibit for every Analyze lens with verdict, track record and similar-regime summary"
+        - "Harness: LLM plan on chat model with provider chain; two-model Persona judgement with per-provider caps"
+        - "Hypotheses resolve from candidate outcomes by rule; Research Home learn segment live"
+        - "Analyze: five hubs with redirects; Flow placeholder explaining the subscription limit"
+        - "Copilot reads runs, composes one daily digest; unattended auto-accept under Trust L0 gates"
+    new_risks:
+        - "Two LLM providers on the daily Cron — spend bounded by per-provider caps; a cap hit degrades to heuristic for that provider and counts as dissent"
+        - "Automatic hypothesis resolution is rule-driven; ambiguous cases still need the Owner"
+        - "Flow analytics stay proxy-only until options trades tape is entitled"
+        - "D10 BLOCKED — nothing here places or arms orders"
+    operate_queue_items:
+        - id: research-loop-automation-accept
+          source_lane_id: research-loop-automation
+          operate_lane: business-advisory
+          title: "Research Loop Automation — Owner :5173 + Cron acceptance"
+          description: >
+            After Delivery Sign-off, walk the five Analyze hubs, read one daily digest,
+            confirm one unattended Cron day on DEV and the per-provider spend.
+          handoff_kind: one_off
+          reason: "Program changes what the Owner sees daily and what runs without them"
+          acceptance_criteria:
+            - "Five hubs smoke on :5173 with verdict + track record"
+            - "One unattended Cron day with digest, resolutions and spend under caps"
+          verification_steps:
+            - "npm run dev:k3s → /research/vol-regime, /research/dealer-levels, /research/scenario"
+            - "kubectl logs -n research job/research-harness-<id> → mode agent, two models"
+          risk_level: low
+          owner: vision-mac-trader
