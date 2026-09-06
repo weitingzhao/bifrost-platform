@@ -96,21 +96,98 @@ func (h *Handler) HandleEnqueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, saved)
 }
 
+// FindOpenChecklistHandoff returns the open checklist_dispatch handoff for a
+// checklist item, when one exists.
+func (h *Handler) FindOpenChecklistHandoff(checklistItemID string) (Item, bool) {
+	want := strings.TrimSpace(checklistItemID)
+	if want == "" {
+		return Item{}, false
+	}
+	list, err := h.store.List()
+	if err != nil {
+		return Item{}, false
+	}
+	for _, item := range list.Open {
+		if item.Source != SourceChecklistDispatch {
+			continue
+		}
+		if ExtractChecklistItemID(item) == want {
+			return item, true
+		}
+	}
+	return Item{}, false
+}
+
 // EnqueueChecklistDispatch adds a semi_auto checklist handoff (source=checklist_dispatch).
-func (h *Handler) EnqueueChecklistDispatch(req EnqueueRequest) (Item, error) {
+// The bool reports whether a new item was created.
+//
+// One condition, one handoff. The dispatcher's own 24h window lives in a
+// snapshot it overwrites on every run, so a failure that stayed open used to
+// enqueue a fresh handoff every other run. The open queue is the durable state,
+// so dedupe against it: an item already carrying this checklist item is
+// returned as-is.
+func (h *Handler) EnqueueChecklistDispatch(req EnqueueRequest) (Item, bool, error) {
 	item, err := NewItemFromManual(req)
 	if err != nil {
-		return Item{}, err
+		return Item{}, false, err
 	}
 	item.Source = SourceChecklistDispatch
 	if strings.TrimSpace(item.Reason) == "" {
 		item.Reason = "checklist_dispatch"
 	}
+	if checklistID := ExtractChecklistItemID(item); checklistID != "" {
+		if existing, ok := h.FindOpenChecklistHandoff(checklistID); ok {
+			return existing, false, nil
+		}
+	}
 	saved, err := h.store.Add(item)
 	if err != nil {
-		return Item{}, err
+		return Item{}, false, err
 	}
-	return saved, nil
+	return saved, true, nil
+}
+
+// RetireRecoveredChecklistHandoffs dismisses open checklist_dispatch handoffs
+// whose checklist item is ok again, and returns the ones it closed.
+//
+// An item whose remediation job is still running is left alone — the sweep
+// closes those once the job reports, with its post-fix evidence.
+func (h *Handler) RetireRecoveredChecklistHandoffs(checklistItemID, detail string) []Item {
+	want := strings.TrimSpace(checklistItemID)
+	if want == "" {
+		return nil
+	}
+	list, err := h.store.List()
+	if err != nil {
+		return nil
+	}
+	var out []Item
+	for _, item := range list.Open {
+		if item.Source != SourceChecklistDispatch || ExtractChecklistItemID(item) != want {
+			continue
+		}
+		if jobID := strings.TrimSpace(item.ExecutionJobID); jobID != "" && h.jobs != nil {
+			if job, ok := h.jobs.Get(jobID); ok && job.Status == remediation.JobRunning {
+				continue
+			}
+		}
+		evidence := []string{
+			"dismiss:resolved",
+			"checklist: " + want + " signal=ok — condition cleared, handoff retired automatically",
+		}
+		if strings.TrimSpace(detail) != "" {
+			evidence = append(evidence, "signal: "+detail)
+		}
+		closed, err := h.store.Dismiss(item.ID, DismissRequest{
+			CompletionEvidence: evidence,
+			Reason:             "resolved",
+		})
+		if err != nil {
+			continue
+		}
+		out = append(out, closed)
+	}
+	return out
 }
 
 func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {

@@ -33,21 +33,41 @@ func GateForCapability(cap FixCapability) string {
 func PlanActions(signals []ItemSignal, recent []DispatchAction, activeAutoJobs int) []DispatchAction {
 	now := time.Now().UTC()
 	recentByItem := map[string]bool{}
+	// When the item was dispatched, so a run that only *skips* still remembers.
+	// The snapshot this reads is overwritten every run: a deduped run used to
+	// record a bare `skip`, which the next run did not count, so a condition
+	// that stayed broken was dispatched again every other run. One market_batch
+	// gap produced eight Operate handoffs in two days that way.
+	dispatchedAt := map[string]string{}
 	for _, a := range recent {
-		if a.Gate != "auto" && a.Gate != "queue" {
+		stamp := a.At
+		switch a.Gate {
+		case "auto", "queue":
+			if a.DispatchedAt != "" {
+				stamp = a.DispatchedAt
+			}
+		case "skip":
+			stamp = a.DispatchedAt
+			if stamp == "" {
+				continue // pre-0.x action, or a skip that never dispatched
+			}
+		default:
 			continue
 		}
-		if a.At == "" {
+		if stamp == "" {
+			// Unknown dispatch time on a real dispatch: assume recent rather
+			// than risk a duplicate.
 			recentByItem[a.ItemID] = true
 			continue
 		}
-		at, err := time.Parse(time.RFC3339, a.At)
+		at, err := time.Parse(time.RFC3339, stamp)
 		if err != nil {
 			recentByItem[a.ItemID] = true
 			continue
 		}
 		if now.Sub(at) < dedupWindow {
 			recentByItem[a.ItemID] = true
+			dispatchedAt[a.ItemID] = stamp
 		}
 	}
 
@@ -88,7 +108,8 @@ func PlanActions(signals []ItemSignal, recent []DispatchAction, activeAutoJobs i
 		if recentByItem[meta.ID] {
 			out = append(out, DispatchAction{
 				ItemID: meta.ID, Gate: "skip", FixScope: meta.FixScope, At: stamp,
-				Detail: "dedup: dispatched within last 24h window",
+				DispatchedAt: dispatchedAt[meta.ID],
+				Detail:       "dedup: dispatched within last 24h window",
 			})
 			continue
 		}
@@ -97,21 +118,24 @@ func PlanActions(signals []ItemSignal, recent []DispatchAction, activeAutoJobs i
 			if autoSlots <= 0 {
 				out = append(out, DispatchAction{
 					ItemID: meta.ID, Gate: "queue", FixScope: meta.FixScope, At: stamp,
-					Detail: "concurrent auto limit reached — demoted to Operate Queue",
+					DispatchedAt: stamp,
+					Detail:       "concurrent auto limit reached — demoted to Operate Queue",
 				})
 				continue
 			}
 			autoSlots--
 			out = append(out, DispatchAction{
 				ItemID: meta.ID, Gate: "auto", FixScope: meta.FixScope, At: stamp,
-				Detail: truncate(sig.Detail, 200),
+				DispatchedAt: stamp,
+				Detail:       truncate(sig.Detail, 200),
 			})
 			continue
 		}
 
 		out = append(out, DispatchAction{
 			ItemID: meta.ID, Gate: "queue", FixScope: meta.FixScope, At: stamp,
-			Detail: truncate(sig.Detail, 200),
+			DispatchedAt: stamp,
+			Detail:       truncate(sig.Detail, 200),
 		})
 	}
 	return out
@@ -155,7 +179,7 @@ func (h *Handler) executeDispatch(ctx context.Context, signals []ItemSignal) []D
 			if a.ItemID == "git-bridge" || meta.FixScope == "git-dirty-remediate" {
 				agentTaskID = "git-dirty-remediate"
 			}
-			item, err := h.operate.EnqueueChecklistDispatch(operatequeue.EnqueueRequest{
+			item, created, err := h.operate.EnqueueChecklistDispatch(operatequeue.EnqueueRequest{
 				ProgramID:   "daily-ops-checklist",
 				OperateLane: "troubleshoot",
 				Title:       fmt.Sprintf("Checklist · %s", meta.Label),
@@ -180,17 +204,58 @@ func (h *Handler) executeDispatch(ctx context.Context, signals []ItemSignal) []D
 				continue
 			}
 			a.QueueID = item.ID
+			switch {
+			case !created:
+				// One condition, one handoff — the open queue already carries it.
+				a.Detail = "existing Operate Queue handoff still open (" + item.ID + ")"
 			// Preserve busy-demote reason (concurrent auto=1) for Action UI (Queued (busy)).
-			if strings.Contains(strings.ToLower(a.Detail), "concurrent auto") ||
-				strings.Contains(strings.ToLower(a.Detail), "demoted") {
+			case strings.Contains(strings.ToLower(a.Detail), "concurrent auto"),
+				strings.Contains(strings.ToLower(a.Detail), "demoted"):
 				a.Detail = "concurrent auto limit — demoted; enqueued Operate Queue (checklist_dispatch)"
-			} else {
+			default:
 				a.Detail = "enqueued Operate Queue (checklist_dispatch)"
 			}
 			out = append(out, a)
 		default:
 			out = append(out, a)
 		}
+	}
+	return append(out, h.retireRecovered(signals)...)
+}
+
+// retireRecovered dismisses open Operate handoffs for checklist items that are
+// ok again.
+//
+// Dispatch used to be one-way: a failing item enqueued a handoff and nothing
+// ever retired it, so the Owner drained the queue by hand while the conditions
+// behind it had long since cleared. A condition that clears now clears its own
+// work item, and the Console shows a backlog only while something is actually
+// wrong.
+func (h *Handler) retireRecovered(signals []ItemSignal) []DispatchAction {
+	if h.operate == nil {
+		return nil
+	}
+	stamp := time.Now().UTC().Format(time.RFC3339)
+	var out []DispatchAction
+	for _, sig := range signals {
+		if sig.Signal != SignalOK {
+			continue
+		}
+		retired := h.operate.RetireRecoveredChecklistHandoffs(sig.ItemID, truncate(sig.Detail, 160))
+		if len(retired) == 0 {
+			continue
+		}
+		ids := make([]string, 0, len(retired))
+		for _, item := range retired {
+			ids = append(ids, item.ID)
+		}
+		out = append(out, DispatchAction{
+			ItemID: sig.ItemID,
+			Gate:   "skip",
+			At:     stamp,
+			Detail: fmt.Sprintf("recovered — dismissed %d stale Operate handoff(s): %s",
+				len(ids), strings.Join(ids, ", ")),
+		})
 	}
 	return out
 }

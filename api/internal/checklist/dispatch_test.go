@@ -88,6 +88,42 @@ func TestPlanActionsDedup(t *testing.T) {
 	}
 }
 
+// The snapshot PlanActions reads is overwritten every run, so a deduped run
+// records a `skip`. Unless that skip carries the original dispatch time, the
+// next run has no memory and dispatches the same open condition again — which
+// is how one market_batch gap produced eight Operate handoffs in two days.
+func TestPlanActionsDedupSurvivesADedupedRun(t *testing.T) {
+	dispatchedAt := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
+	signals := []ItemSignal{{ItemID: "failing-pods", Signal: SignalFail}}
+
+	recent := []DispatchAction{{
+		ItemID: "failing-pods", Gate: "auto", At: dispatchedAt, DispatchedAt: dispatchedAt,
+	}}
+	for run := 2; run <= 6; run++ {
+		actions := PlanActions(signals, recent, 0)
+		if len(actions) != 1 || actions[0].Gate != "skip" {
+			t.Fatalf("run %d re-dispatched an already-open condition: %+v", run, actions)
+		}
+		if actions[0].DispatchedAt != dispatchedAt {
+			t.Fatalf("run %d lost the original dispatch time: %+v", run, actions[0])
+		}
+		recent = actions
+	}
+}
+
+func TestPlanActionsDedupExpiresAfterTheWindow(t *testing.T) {
+	old := time.Now().UTC().Add(-25 * time.Hour).Format(time.RFC3339)
+	actions := PlanActions([]ItemSignal{
+		{ItemID: "failing-pods", Signal: SignalFail},
+	}, []DispatchAction{{ItemID: "failing-pods", Gate: "skip", At: old, DispatchedAt: old}}, 0)
+	if len(actions) != 1 || actions[0].Gate != "auto" {
+		t.Fatalf("a condition still open a day later must dispatch again, got %+v", actions)
+	}
+	if actions[0].DispatchedAt == "" {
+		t.Fatalf("a fresh dispatch must stamp DispatchedAt: %+v", actions[0])
+	}
+}
+
 func TestCatalogHas22Items(t *testing.T) {
 	if len(CatalogItems) != 22 {
 		t.Fatalf("expected 22 catalog items, got %d", len(CatalogItems))
