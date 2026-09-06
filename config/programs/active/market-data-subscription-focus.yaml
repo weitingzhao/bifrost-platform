@@ -63,7 +63,7 @@ phases:
 
   - id: P2
     title: "Converge — only the subscribed data, once"
-    status: pending
+    status: done
     prompt_template: |
       Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
 
