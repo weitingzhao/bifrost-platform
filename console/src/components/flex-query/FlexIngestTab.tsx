@@ -19,6 +19,7 @@ import {
   fetchFlexIngestKinds,
   fetchFlexIngestQueueDashboard,
   isProxyError,
+  runFlexJobNow,
   type FlexIngestJob,
   type FlexQueueSlot,
 } from '@/api/flexQueryPlugin'
@@ -51,6 +52,23 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [actionFailed, setActionFailed] = useState(false)
+  const [runNowMsg, setRunNowMsg] = useState<string | null>(null)
+  const [runNowBusy, setRunNowBusy] = useState<number | null>(null)
+
+  async function runNow(job: FlexIngestJob) {
+    if (job.id == null) return
+    setRunNowBusy(job.id)
+    setRunNowMsg(null)
+    try {
+      const res = await runFlexJobNow(job.id)
+      setRunNowMsg(
+        isProxyError(res) ? `#${job.id}: ${res.error}` : `#${job.id}: ${res.message ?? 'cleared'}`,
+      )
+      void queryClient.invalidateQueries({ queryKey: ['flex-query'] })
+    } finally {
+      setRunNowBusy(null)
+    }
+  }
 
   useEffect(() => {
     if (initialSub != null) setSub(initialSub)
@@ -351,28 +369,80 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
                     <DenseTableHead>ID</DenseTableHead>
                     <DenseTableHead>Kind</DenseTableHead>
                     <DenseTableHead>Status</DenseTableHead>
+                    <DenseTableHead>Attempts</DenseTableHead>
+                    <DenseTableHead>Retry at</DenseTableHead>
                     <DenseTableHead>Created</DenseTableHead>
                     <DenseTableHead>Result</DenseTableHead>
+                    <DenseTableHead />
                   </DenseTableHeadRow>
                 </DenseTableHeader>
                 <DenseTableBody>
-                  {jobs.map(j => (
-                    <DenseTableRow key={String(j.id)}>
-                      <DenseTableCell className="font-mono text-xs">{j.id ?? '—'}</DenseTableCell>
-                      <DenseTableCell className="font-mono text-xs">{j.kind}</DenseTableCell>
-                      <DenseTableCell>
-                        <DenseTag variant={flexStatusVariant(j.status)}>{j.status}</DenseTag>
-                      </DenseTableCell>
-                      <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
-                        {j.created_at ?? '—'}
-                      </DenseTableCell>
-                      <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                        {formatFlexResult(j.result)}
-                      </DenseTableCell>
-                    </DenseTableRow>
-                  ))}
+                  {jobs.map(j => {
+                    const deferred =
+                      j.status === 'pending' &&
+                      j.not_before != null &&
+                      Date.parse(j.not_before) > Date.now()
+                    const manual = Boolean((j.payload as { manual?: unknown } | undefined)?.manual)
+                    return (
+                      <DenseTableRow key={String(j.id)}>
+                        <DenseTableCell className="font-mono text-xs">{j.id ?? '—'}</DenseTableCell>
+                        <DenseTableCell className="font-mono text-xs">
+                          {j.kind}
+                          {manual ? (
+                            <span className="ml-1 text-[var(--muted-foreground)]">manual</span>
+                          ) : null}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          <span className="flex items-center gap-1">
+                            <DenseTag variant={flexStatusVariant(j.status)}>{j.status}</DenseTag>
+                            {j.error_category ? (
+                              <DenseTag variant={j.error_category === 'config' ? 'danger' : 'warning'}>
+                                {j.error_category}
+                              </DenseTag>
+                            ) : null}
+                          </span>
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                          {j.attempts ?? 0}/{j.max_attempts ?? '?'}
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                          {deferred ? (j.not_before ?? '—') : '—'}
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono text-[var(--text-dense-caption)]">
+                          {j.created_at ?? '—'}
+                        </DenseTableCell>
+                        <DenseTableCell className="font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                          {formatFlexResult(j.result)}
+                        </DenseTableCell>
+                        <DenseTableCell>
+                          {deferred ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!canOperate || runNowBusy != null}
+                              title={
+                                j.error_category === 'throttled'
+                                  ? 'IB throttle cooldown — the plugin refuses until it ends'
+                                  : canOperate
+                                    ? 'Clear the wait; the worker claims it on its next poll'
+                                    : 'Operator auth required'
+                              }
+                              onClick={() => void runNow(j)}
+                            >
+                              {runNowBusy === j.id ? '…' : 'Run now'}
+                            </Button>
+                          ) : null}
+                        </DenseTableCell>
+                      </DenseTableRow>
+                    )
+                  })}
                 </DenseTableBody>
               </DenseDataTable>
+              {runNowMsg != null ? (
+                <p className="m-0 px-3 py-1.5 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+                  {runNowMsg}
+                </p>
+              ) : null}
             </OpsSection>
           )}
         </OpsSection>

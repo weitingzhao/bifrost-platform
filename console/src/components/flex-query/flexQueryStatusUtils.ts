@@ -102,3 +102,58 @@ export function lastRunTone(status: string | null | undefined): FlexKpiTone {
   if (s === 'running' || s === 'pending') return 'scheduled'
   return 'unknown'
 }
+
+
+/** Tag variant for a self-check verdict (GET /flex/ops/check). */
+export function checkVerdictVariant(
+  verdict: string | null | undefined,
+): 'success' | 'warning' | 'danger' | 'neutral' | 'info' {
+  switch ((verdict ?? '').toLowerCase()) {
+    case 'ok':
+      return 'success'
+    case 'failed':
+    case 'missed':
+      return 'danger'
+    case 'throttled':
+    case 'waiting':
+    case 'attention':
+      return 'warning'
+    case 'running':
+    case 'queued':
+      return 'info'
+    default:
+      return 'neutral'
+  }
+}
+
+/** Lamp for the verdict strip: red only when a human has to act. */
+export function checkVerdictLamp(
+  verdict: string | null | undefined,
+): 'ok' | 'degraded' | 'fail' | 'unknown' {
+  switch ((verdict ?? '').toLowerCase()) {
+    case 'ok':
+    case 'running':
+    case 'queued':
+      return 'ok'
+    case 'failed':
+    case 'missed':
+      return 'fail'
+    case 'throttled':
+    case 'waiting':
+    case 'attention':
+    case 'idle':
+      return 'degraded'
+    default:
+      return 'unknown'
+  }
+}
+
+/** "in 27m" / "now" from a seconds-until value. */
+export function fmtUntil(secs: number | null | undefined): string {
+  if (secs == null) return '—'
+  if (secs <= 0) return 'now'
+  if (secs < 3600) return `in ${Math.ceil(secs / 60)}m`
+  const h = Math.floor(secs / 3600)
+  const m = Math.round((secs % 3600) / 60)
+  return m ? `in ${h}h ${m}m` : `in ${h}h`
+}

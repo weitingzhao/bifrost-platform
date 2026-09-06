@@ -79,6 +79,10 @@ export type FlexIngestJob = {
   result?: unknown
   attempts?: number
   max_attempts?: number
+  /** 0.6.0: why the last attempt did not finish (not_ready / throttled / config / transient / unknown / stale). */
+  error_category?: string | null
+  /** 0.6.0: a pending job is claimable only after this instant. */
+  not_before?: string | null
   created_at?: string
   started_at?: string
   finished_at?: string
@@ -195,14 +199,113 @@ export type FlexFreshnessKpiUntil = {
   slot?: string | null
 }
 
+export type FlexFreshnessDimension = {
+  kind: string
+  last_success_at: string | null
+  last_ok: boolean | null
+  last_error: string | null
+  processed_rows: number | null
+  new_rows: number | null
+  last_job_id: number | null
+  last_finished_at: string | null
+}
+
 export type FlexFreshnessKpis = {
   generated_at: string
   last_successful_sync: FlexFreshnessKpiMetric
-  last_run: FlexFreshnessKpiMetric & { status: string | null; kind: string | null }
+  last_run: FlexFreshnessKpiMetric & {
+    status: string | null
+    kind: string | null
+    error?: string | null
+    error_category?: string | null
+    next_retry_at?: string | null
+  }
   latest_execution: FlexFreshnessKpiMetric & { row_count: number | null }
   latest_transaction: FlexFreshnessKpiMetric & { row_count: number | null }
   next_scheduled_run: FlexFreshnessKpiUntil
   last_planned: FlexFreshnessKpiMetric
+  dimensions?: FlexFreshnessDimension[]
+  schedule?: { timezone: string; owner: string }
+}
+
+/** GET /flex/ops/check — the self-check: verdict, next step, actions. Never calls IB. */
+export type FlexCheckVerdict =
+  | 'failed'
+  | 'missed'
+  | 'throttled'
+  | 'waiting'
+  | 'running'
+  | 'queued'
+  | 'ok'
+  | 'idle'
+  | 'attention'
+  | 'unknown'
+
+export type FlexCheckAction = {
+  id: string
+  label: string
+  method: string
+  path: string
+  body: Record<string, unknown> | null
+  enabled: boolean
+  reason: string | null
+}
+
+export type FlexCheckKind = {
+  kind: string
+  verdict: FlexCheckVerdict
+  headline: string
+  detail: string | null
+  next_at: string | null
+  next_in_seconds: number | null
+  last_success_at: string | null
+  job: {
+    id: number | null
+    status: string | null
+    attempts: number | null
+    max_attempts: number | null
+    error_category: string | null
+    not_before: string | null
+    created_at: string | null
+    finished_at: string | null
+    error: string | null
+    manual: boolean
+  } | null
+  actions: FlexCheckAction[]
+}
+
+export type FlexCheckResponse = {
+  generated_at: string
+  timezone: string
+  verdict: FlexCheckVerdict
+  next_step: string
+  kinds: FlexCheckKind[]
+  checks: Array<{ id: string; ok: boolean; detail: string }>
+}
+
+export function fetchFlexOpsCheck() {
+  return proxyGet<FlexCheckResponse>('/flex/ops/check')
+}
+
+export type FlexRunNowResponse = {
+  ok: boolean
+  job_id?: number
+  kind?: string
+  was_not_before?: string | null
+  message?: string
+  error?: string
+}
+
+export function runFlexJobNow(jobId: number, force = false) {
+  return proxyPost<FlexRunNowResponse>(
+    `/flex/ingest/jobs/${jobId}/run-now${force ? '?force=true' : ''}`,
+    {},
+  )
+}
+
+/** Perform one of the actions the self-check offered, exactly as it described it. */
+export function runFlexCheckAction(action: FlexCheckAction) {
+  return proxyPost<FlexEnqueueResponse & FlexRunNowResponse>(action.path, action.body ?? {})
 }
 
 export function fetchFlexFreshnessKpis() {

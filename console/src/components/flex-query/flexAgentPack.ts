@@ -10,7 +10,9 @@ import {
   fetchFlexCoverageFreshness,
   fetchFlexFreshnessKpis,
   fetchFlexIngestQueueDashboard,
+  fetchFlexOpsCheck,
   isProxyError,
+  type FlexCheckResponse,
   type FlexConfigSummary,
   type FlexCoverageDbSummary,
   type FlexFreshnessKpis,
@@ -38,6 +40,8 @@ export type FlexAgentPackSnapshot = {
   config: FlexConfigSummary | null
   coverageFreshness: FlexFreshnessResponse | null
   dbSummary: FlexCoverageDbSummary | null
+  /** GET /flex/ops/check — verdict per kind, next step, actions. Optional: older plugins lack it. */
+  check?: FlexCheckResponse | null
 }
 
 function line(s: string): string {
@@ -59,6 +63,7 @@ export async function gatherFlexAgentSnapshot(): Promise<FlexAgentPackSnapshot> 
     configRes,
     freshRes,
     dbRes,
+    checkRes,
   ] = await Promise.allSettled([
     fetchDataHusbandry(),
     fetchFlexQueryStatus(),
@@ -67,6 +72,7 @@ export async function gatherFlexAgentSnapshot(): Promise<FlexAgentPackSnapshot> 
     fetchFlexConfigSummary(),
     fetchFlexCoverageFreshness(),
     fetchFlexCoverageDbSummary(),
+    fetchFlexOpsCheck(),
   ])
 
   const husbandry = husbandryRes.status === 'fulfilled' ? husbandryRes.value : null
@@ -95,6 +101,7 @@ export async function gatherFlexAgentSnapshot(): Promise<FlexAgentPackSnapshot> 
     config: configRes.status === 'fulfilled' ? unwrapOk(configRes.value) : null,
     coverageFreshness: freshRes.status === 'fulfilled' ? unwrapOk(freshRes.value) : null,
     dbSummary: dbRes.status === 'fulfilled' ? unwrapOk(dbRes.value) : null,
+    check: checkRes.status === 'fulfilled' ? unwrapOk(checkRes.value) : null,
   }
 }
 
@@ -117,6 +124,37 @@ export function buildFlexAgentPack(snap: FlexAgentPackSnapshot): string {
     'Token source must be secret (K8s bifrost-flex-tokens); enqueue fail-closed when source=none.',
     '',
   )
+
+  push('## Self-check (GET /flex/ops/check — the plugin\'s own verdict, no IB request)')
+  if (snap.check != null) {
+    const c = snap.check
+    push(`verdict: ${c.verdict} (${c.timezone}, ${c.generated_at})`, `next_step: ${c.next_step}`)
+    for (const k of c.kinds) {
+      push(`- ${k.kind}: ${k.verdict} — ${k.headline}`)
+      if (k.detail) push(`    detail: ${k.detail}`)
+      if (k.next_at) push(`    next_at: ${k.next_at}`)
+      if (k.job) {
+        push(
+          `    job: #${k.job.id ?? '?'} ${k.job.status ?? '—'} attempts=${k.job.attempts ?? '?'}/${k.job.max_attempts ?? '?'}` +
+            (k.job.error_category ? ` category=${k.job.error_category}` : '') +
+            (k.job.not_before ? ` not_before=${k.job.not_before}` : '') +
+            (k.job.manual ? ' manual' : ''),
+        )
+        if (k.job.error) push(`    error: ${k.job.error}`)
+      }
+      for (const a of k.actions) {
+        push(
+          `    action ${a.id}: ${a.method} ${a.path}${a.body ? ` ${JSON.stringify(a.body)}` : ''} — ${
+            a.enabled ? 'available' : `disabled: ${a.reason ?? ''}`
+          }`,
+        )
+      }
+    }
+    for (const chk of c.checks) push(`- check ${chk.id}: ${chk.ok ? 'ok' : 'ATTENTION'} — ${chk.detail}`)
+  } else {
+    push('unavailable: plugin predates 0.6.1 or the proxy failed — fall back to the sections below')
+  }
+  push('')
 
   push('## Data husbandry')
   if (snap.husbandry != null) {
@@ -266,14 +304,16 @@ export function buildFlexAgentPack(snap: FlexAgentPackSnapshot): string {
 
   push(
     '## Suggested investigation order',
-    '1. If token_source=none → sync Flex tokens (make sync-flex-tokens / Secret bifrost-flex-tokens); do not enqueue blind.',
-    '2. If flex_batch healthy but Overview degraded → trust freshness/KPI cards; enqueue stale kinds or Flex Refresh on Manual.',
-    '3. If worker fail count high + freshness stale → plugin-flex-query worker logs; restart flex-query-worker if stuck.',
-    '4. If queue.running>0 for hours → stale running reclaim (worker startup / FLEX_STALE_RUNNING_SEC); do not spam enqueue.',
-    '5. If last failures include [1018] → cool down ~30m before enqueue (Console blocks Enqueue during cooldown).',
-    '6. If last_planned FAIL / Cron overdue → Dagster research_trading_day flex assets; Cron remains suspended.',
-    '7. Confirm ops_jobs.flex_ingest_freshness + brokerage table ages after jobs done.',
-    '8. Research OLAP may stay degraded until Flex + Market feedstock are healthy for husbandry_gate.',
+    '0. Start from the Self-check verdict above: it already names the cause, the next automatic step and the action that applies.',
+    '1. waiting → IB has no statement yet; the worker retries at next_at (30 min steps, 8 attempts). POST run-now skips the wait.',
+    '2. throttled → IB [1018]; every request before next_at fails again. Do nothing; do not enqueue; do not press Run now.',
+    '3. failed/config → expired or invalid token / bad query id: rotate in IB Account Management, sync Flex tokens (make sync-flex-tokens, sets FLEX_TOKENS_ISSUED_AT), then enqueue.',
+    '4. failed (attempts exhausted) → enqueue again; check the error text for a new IB code and classify it in worker/retry.py.',
+    '5. missed → Dagster research_flex_morning_schedule (06:30 America/New_York Mon–Sat) did not enqueue; the worker catch-up does it 45 min after the slot, or enqueue now.',
+    '6. check worker not ok → flex-query-worker heartbeat silent: kubectl -n plugin-flex-query logs deploy/flex-query-worker; it reconnects to Postgres on its own.',
+    '7. Manual runs (Trade UI Flex Refresh / Console Manual) send one request per account; fallback:true widens and can trip [1018].',
+    '8. Confirm ops_jobs.flex_ingest_freshness (last_ok / new_rows) + brokerage table ages after jobs done.',
+    '9. Research OLAP: husbandry_gate blocks dbt when the last Flex attempt failed or no success in 96h.',
     '',
     '## Owner ask',
     'Propose the smallest durable fix, verify with the same endpoints this pack used, then report before/after reachability + freshness verdicts.',

@@ -196,3 +196,54 @@ describe('buildFlexAgentPack', () => {
     expect(text).toMatch(/sync Flex tokens/i)
   })
 })
+
+describe('self-check section', () => {
+  it('leads with the verdict, the next step and the actions with their reasons', () => {
+    const text = buildFlexAgentPack(
+      baseSnap({
+        check: {
+          generated_at: '2026-09-08T11:05:00Z',
+          timezone: 'America/New_York',
+          verdict: 'waiting',
+          next_step: 'The worker retries flex-trades at Tue 07:32 EDT; press Run now to skip the wait.',
+          kinds: [
+            {
+              kind: 'flex-trades',
+              verdict: 'waiting',
+              headline: 'IB has not generated the statement yet; the worker retries at Tue 07:32 EDT (attempt 1/8).',
+              detail: 'Flex query 1/2 (host): [1003] Statement is not available.',
+              next_at: '2026-09-08T11:32:00Z',
+              next_in_seconds: 1620,
+              last_success_at: '2026-09-07T10:31:00Z',
+              job: {
+                id: 90, status: 'pending', attempts: 1, max_attempts: 8, error_category: 'not_ready',
+                not_before: '2026-09-08T11:32:00Z', created_at: '2026-09-08T10:30:03Z', finished_at: null,
+                error: '[1003] Statement is not available.', manual: false,
+              },
+              actions: [
+                { id: 'run_now', label: 'Run now', method: 'POST', path: '/flex/ingest/jobs/90/run-now', body: null, enabled: true, reason: null },
+              ],
+            },
+          ],
+          checks: [
+            { id: 'worker', ok: true, detail: 'worker alive, seen 20s ago' },
+            { id: 'cooldown', ok: false, detail: 'IB throttle cooldown until Tue 07:40 EDT' },
+          ],
+        },
+      }),
+    )
+    const selfCheck = text.indexOf('## Self-check')
+    expect(selfCheck).toBeGreaterThan(-1)
+    expect(selfCheck).toBeLessThan(text.indexOf('## Data husbandry'))
+    expect(text).toContain('verdict: waiting (America/New_York, 2026-09-08T11:05:00Z)')
+    expect(text).toContain('next_step: The worker retries flex-trades at Tue 07:32 EDT')
+    expect(text).toContain('- flex-trades: waiting — IB has not generated the statement yet')
+    expect(text).toContain('job: #90 pending attempts=1/8 category=not_ready not_before=2026-09-08T11:32:00Z')
+    expect(text).toContain('action run_now: POST /flex/ingest/jobs/90/run-now — available')
+    expect(text).toContain('- check cooldown: ATTENTION — IB throttle cooldown until Tue 07:40 EDT')
+    expect(text).toContain('0. Start from the Self-check verdict above')
+  })
+  it('says so when the plugin predates the self-check', () => {
+    expect(buildFlexAgentPack(baseSnap({ check: null }))).toContain('unavailable: plugin predates 0.6.1')
+  })
+})

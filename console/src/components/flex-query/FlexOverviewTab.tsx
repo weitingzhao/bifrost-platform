@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   DenseDataTable,
@@ -32,6 +32,7 @@ import {
   buildFlexAgentPack,
   gatherFlexAgentSnapshot,
 } from '@/components/flex-query/flexAgentPack'
+import { FlexCheckPanel, FLEX_CHECK_QUERY_KEY } from '@/components/flex-query/FlexCheckPanel'
 import { FlexRemediationPanel } from '@/components/flex-query/FlexRemediationPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
@@ -214,6 +215,7 @@ function FreshnessKpiSection() {
 }
 
 export function FlexOverviewTab({ onOpenIngest, onOpenAgentDesk }: FlexOverviewTabProps) {
+  const queryClient = useQueryClient()
   const probe = useFlexQueryLiveProbe()
   const mdReach = probe.isLoading ? 'unknown' : probe.probeReach
   const verdict = flexReachToVerdict(mdReach)
@@ -266,13 +268,18 @@ export function FlexOverviewTab({ onOpenIngest, onOpenAgentDesk }: FlexOverviewT
               variant="outline"
               size="sm"
               disabled={probe.isLoading}
-              onClick={() => probe.refetch()}
+              onClick={() => {
+                probe.refetch()
+                void queryClient.invalidateQueries({ queryKey: FLEX_CHECK_QUERY_KEY })
+              }}
             >
               Refresh
             </Button>
           </div>
         }
       />
+
+      <FlexCheckPanel />
 
       <FlexRemediationPanel
         status={probe.status}
