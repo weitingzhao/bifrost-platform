@@ -33,6 +33,7 @@ import { JobQueuePressure } from '@/components/market-data/JobQueuePressure'
 import { IngestDailyVolume } from '@/components/market-data/IngestDailyVolume'
 import { QueueDashboardPanel } from '@/components/market-data/QueueDashboardPanel'
 import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
+import { SubscriptionCoveragePanel } from '@/components/market-data/SubscriptionCoveragePanel'
 import { ScoreRing } from '@/components/market-data/overviewDash'
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import {
@@ -427,6 +428,7 @@ export function MarketDataIngestTab() {
       </div>
 
       {detailTab === 'schedule' ? (
+        <>
         <OpsSection
           title="Schedule plan & adherence"
           description="Ignition = Dagster (DenseTag on lanes). Diamond = planned fire · bar = drain. CronJobs suspended. Open Tools → Dagster for runs."
@@ -650,6 +652,8 @@ export function MarketDataIngestTab() {
             </>
           )}
         </OpsSection>
+        <SubscriptionCoveragePanel />
+        </>
       ) : null}
 
       {detailTab === 'jobs' ? (
