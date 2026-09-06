@@ -96,28 +96,6 @@ func (h *Handler) HandleEnqueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, saved)
 }
 
-// FindOpenChecklistHandoff returns the open checklist_dispatch handoff for a
-// checklist item, when one exists.
-func (h *Handler) FindOpenChecklistHandoff(checklistItemID string) (Item, bool) {
-	want := strings.TrimSpace(checklistItemID)
-	if want == "" {
-		return Item{}, false
-	}
-	list, err := h.store.List()
-	if err != nil {
-		return Item{}, false
-	}
-	for _, item := range list.Open {
-		if item.Source != SourceChecklistDispatch {
-			continue
-		}
-		if ExtractChecklistItemID(item) == want {
-			return item, true
-		}
-	}
-	return Item{}, false
-}
-
 // EnqueueChecklistDispatch adds a semi_auto checklist handoff (source=checklist_dispatch).
 // The bool reports whether a new item was created.
 //
@@ -135,16 +113,11 @@ func (h *Handler) EnqueueChecklistDispatch(req EnqueueRequest) (Item, bool, erro
 	if strings.TrimSpace(item.Reason) == "" {
 		item.Reason = "checklist_dispatch"
 	}
-	if checklistID := ExtractChecklistItemID(item); checklistID != "" {
-		if existing, ok := h.FindOpenChecklistHandoff(checklistID); ok {
-			return existing, false, nil
-		}
-	}
-	saved, err := h.store.Add(item)
+	saved, created, err := h.store.AddChecklistDispatch(item, ExtractChecklistItemID(item))
 	if err != nil {
 		return Item{}, false, err
 	}
-	return saved, true, nil
+	return saved, created, nil
 }
 
 // RetireRecoveredChecklistHandoffs dismisses open checklist_dispatch handoffs

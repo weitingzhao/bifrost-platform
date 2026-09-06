@@ -3,6 +3,7 @@ package operatequeue
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
@@ -152,4 +153,48 @@ func indexOf(haystack, needle string) int {
 		}
 	}
 	return -1
+}
+
+// Two husbandry syncs a second apart is the normal cadence here (Console
+// refresh fires them); a dedupe check made outside the store lock let both
+// through and opened two handoffs 13 seconds apart on 2026-09-05.
+func TestEnqueueChecklistDispatchDedupesUnderConcurrency(t *testing.T) {
+	h := newTestHandler(t)
+
+	const runs = 8
+	var wg sync.WaitGroup
+	created := make([]bool, runs)
+	ids := make([]string, runs)
+	errs := make([]error, runs)
+	for i := 0; i < runs; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			item, ok, err := h.EnqueueChecklistDispatch(marketBatchRequest())
+			created[i], ids[i], errs[i] = ok, item.ID, err
+		}(i)
+	}
+	wg.Wait()
+
+	madeCount := 0
+	for i := range created {
+		if errs[i] != nil {
+			t.Fatalf("run %d: %v", i, errs[i])
+		}
+		if created[i] {
+			madeCount++
+		}
+	}
+	if madeCount != 1 {
+		t.Fatalf("expected exactly 1 of %d concurrent runs to create a handoff, got %d", runs, madeCount)
+	}
+	list, _ := h.store.List()
+	if len(list.Open) != 1 {
+		t.Fatalf("expected 1 open handoff after %d concurrent runs, got %d", runs, len(list.Open))
+	}
+	for i, id := range ids {
+		if id != list.Open[0].ID {
+			t.Fatalf("run %d returned %s, want the single open item %s", i, id, list.Open[0].ID)
+		}
+	}
 }

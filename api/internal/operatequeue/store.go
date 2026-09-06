@@ -290,6 +290,37 @@ func (s *Store) Add(item Item) (Item, error) {
 	return item, nil
 }
 
+// AddChecklistDispatch adds a checklist_dispatch handoff unless one for the same
+// checklist item is already open; the bool reports whether it created anything.
+//
+// The check runs under the store lock, like the pending_id guard in Add: the
+// husbandry sync fires several times within a second or two (Console refresh,
+// sweep), and a check made outside the lock let every one of them through.
+func (s *Store) AddChecklistDispatch(item Item, checklistItemID string) (Item, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rec, err := s.loadLocked()
+	if err != nil {
+		return Item{}, false, err
+	}
+	if want := strings.TrimSpace(checklistItemID); want != "" {
+		for _, existing := range rec.Items {
+			if existing.Status != StatusOpen || existing.Source != SourceChecklistDispatch {
+				continue
+			}
+			if ExtractChecklistItemID(existing) == want {
+				return existing, false, nil
+			}
+		}
+	}
+	rec.Items = append(rec.Items, item)
+	if err := s.saveLocked(rec); err != nil {
+		return Item{}, false, err
+	}
+	return item, true, nil
+}
+
 func NewItemFromApproval(params ApprovalInjectParams) Item {
 	now := time.Now().UTC().Format(time.RFC3339)
 	lane := strings.TrimSpace(params.OperateLane)
