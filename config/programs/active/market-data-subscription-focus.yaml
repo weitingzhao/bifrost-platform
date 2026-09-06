@@ -1,0 +1,192 @@
+id: market-data-subscription-focus
+title: "Market Data Subscription Focus — exploit Options/Stocks Starter + Financials & Ratios"
+description: |
+  Owner strategy (2026-09-06): before any Massive upgrade, use the three
+  subscribed data products fully — Options Starter, Stocks Starter,
+  Financials & Ratios — to feed Research, and stop pulling anything the plan
+  does not cover (trades / quotes / last-trade, indices). Measured in the API
+  pod: unlimited calls, stock aggregates rolling 5y, option aggregates
+  rolling 2y, ratios / short data fetchable full-market by date.
+
+  Authority: bifrost-platform-plugin-market-data/docs/SUBSCRIPTION_FOCUS_PROGRAM.md
+  Assessment page: https://claude.ai/code/artifact/727e00e9-5903-48cd-9c50-118171f1823a
+
+  Owner decisions (locked):
+    D1: unentitled pulls stop now; revisit only after an upgrade
+    D2: Plugin stays kubectl-apply (build via bifrost-build-market-data, no Argo)
+    D3: D10 BLOCKED — observe/data surfaces only
+
+  Forbidden: D10 unlock, daemon scale, unsuspending husbandry CronJobs (Dagster
+  owns the batch), writing raw_market.* from Trade, Argo Application for the plugin.
+status: active
+workspace: /Users/vision-mac-trader/Desktop/stocks
+skill_path: .cursor/skills/market-data-subscription-focus/SKILL.md
+model: composer-2.5
+delivery:
+  board_visible: true
+  sign_off_mechanism: api
+
+phases:
+  - id: P1
+    title: "Stop the bleeding — 0.10.3"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
+
+      Plugin 0.10.3: fix the trim-branch UnboundLocalError; starter tier = paid
+      (8 req/s soft ceiling, rate_per_sec/burst overrides); gate holiday skips
+      on the fire date; session-once dedup for stock-eod / eod-pipeline; OI
+      and expirations derived from the snapshot / contract downloads; retire
+      option-trades and I:SPX spot; drop trades-quotes / filings / float routes;
+      maintenance slots out of the husbandry verdict. Build with
+      bifrost-build-market-data, kubectl apply -k k8s/base, delete the
+      option-trades CronJob. Trade FE: Option Discovery liquidity panel stops
+      calling last-trade / quotes.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      kubectl -n plugin-market-data get deploy -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.template.spec.containers[0].image}{"\n"}{end}' | grep -c ':0.10.3' | grep -qE '^3$' &&
+      ! kubectl -n plugin-market-data get cronjob market-data-option-trades >/dev/null 2>&1 &&
+      curl -sf http://127.0.0.1:8780/api/v1/plugins/market-data/api/market/ingest/queue-dashboard | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["husbandry"]["verdict"] != "missed", d["husbandry"]; print(d["husbandry"])'
+    acceptance:
+      - "API + stocks + options workers on 0.10.3; option-trades CronJob gone"
+      - "queue-dashboard husbandry verdict not missed; trim listed as maintenance"
+      - "Daily vendor requests <= 4,500 (was ~7,400); EOD option window <= 15 min"
+      - "job_ingest failed rows per day = 0 excluding vendor-empty results"
+      - "Console market lane: no false alarm for 5 trading days"
+    depends_on: []
+    sign_off:
+      required: true
+      checklist:
+        - "Owner sees market lane green on Console for 5 trading days"
+    agent_session:
+      enabled: true
+
+  - id: P2
+    title: "Converge — only the subscribed data, once"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
+
+      Re-plan slots against the entitlement matrix; add ratios-daily,
+      short-daily and dividends-splits-market (full-market by date); option-bars
+      → ATM ±10 strikes × next 3 expiries; contract catalogue pages sized to
+      SPX plus expired=true enumeration; universe hygiene from vendor type/active
+      with a per-symbol data_source_void so the fundamentals rotate skips
+      confirmed voids; watchlist union cached in Golden Source; oi-gap-heal and
+      trim partition work moved to worker jobs; enqueue-slot batched insert;
+      Dagster RetryPolicy + failure alert on the Bifrost route; Dagster
+      market_corporate_trades drops option-trades.
+    verify_cmd: |
+      cd bifrost-platform-plugin-market-data && make lint && make test
+    acceptance:
+      - "fundamentals rotate never retries a confirmed-void symbol"
+      - "raw_market.ratios / short_interest / short_volume updated full-market daily"
+      - "Dagster: 0 unretried failures over 14 days"
+      - "prod platform-api outage drill: 22:00 UTC universe unchanged"
+    depends_on:
+      - P1
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirms retirement list (option-trades, ws-ingestor, dead routes, stock_financials legacy table)"
+
+  - id: P3
+    title: "Model — observe-time snapshots, session-scoped health"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
+
+      ARCHITECTURE-LEVEL: raw_market.option_snapshot PK → (option_ticker,
+      observed_at) with last_trade_ts as a column; migrate old rows by
+      fetched_at; OI derived from the snapshot; retire gap-heal / backfill_oi /
+      vendor_gap_fix; job idempotency keyed by session_date with session-based
+      retention; resumable pagination; preStop drain; health = per-session
+      expected-vs-actual (snapshot coverage >= 95% of live contracts, OI rows,
+      stock_daily >= 12k rows); husbandry_gate reads only EOD-critical
+      dimensions; Console lane + platform data-husbandry follow the new model.
+      Do not start without the Owner's explicit DDL approval.
+    verify_cmd: |
+      cd bifrost-platform-plugin-market-data && make lint && make test
+    acceptance:
+      - "Per-session chain snapshot coverage >= 95% per underlying"
+      - "ATM IV / Surface / OpEx engines no longer fall back for missing same-day rows"
+      - "Zero weekend / Monday false alarms"
+    depends_on:
+      - P2
+    sign_off:
+      required: true
+      checklist:
+        - "Owner approved the option_snapshot PK change (DDL)"
+
+  - id: P4
+    title: "Mine — fill the subscribed depth and wire Research"
+    status: pending
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
+
+      Backfill stock_daily 2021-09 → 2025-05 (grouped daily, ~950 calls);
+      option history 2024-09 → today for watchlist ∪ SPY/QQQ/IWM/SPX ∪ M7 with
+      strike ±30% / DTE <= 90 (rewrite worker/backfill.py first); intraday
+      chain snapshots 10:30 / 13:00 / 15:30 ET, 90-day retention; Financials &
+      Ratios full-market; treasury yields daily; Research: stg_ratios reads
+      raw_market.ratios, stg_short_* use snake_case + percent units,
+      mart_sepa_tier_sentiment / fundamental_ext revived; BACKTEST_DATA_COVERAGE
+      and LO-5 docs rewritten.
+    verify_cmd: |
+      export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
+      PRIMARY=$(kubectl -n data get cluster bifrost-postgres -o jsonpath='{.status.currentPrimary}')
+      kubectl -n data exec "$PRIMARY" -c postgres -- psql -U postgres -d bifrost_golden_source -tAc "SELECT min(bar_date) FROM raw_market.stock_daily" | grep -q '^2021-'
+    acceptance:
+      - "stock_daily 60 months x 14k symbols; option_daily 24 months x 22 underlyings"
+      - "SEPA sentiment tier and ratio conditions non-null rate >= 80%"
+      - "Event backtest: NVDA 3y, all 12 earnings events priced"
+    depends_on:
+      - P2
+    sign_off:
+      required: true
+      checklist:
+        - "Owner confirmed backfill universe and intraday snapshot cadence"
+
+post_completion:
+  new_capabilities:
+    - "Plugin ingests only subscribed data, once per session, without a self-inflicted throttle"
+    - "Snapshot-derived OI; maintenance slots excluded from the husbandry verdict"
+    - "5y stock / 2y option history available to Research backtests"
+    - "Ratios and short data feed SEPA sentiment and fundamental tiers"
+  new_risks:
+    - "Rolling vendor windows: history older than 5y (stocks) / 2y (options) is lost unless stored"
+    - "Plugin still kubectl-apply, not Argo"
+  operate_queue_items:
+    - id: massive-upgrade-review
+      source_lane_id: market-data-gs-closeout
+      operate_lane: business-advisory
+      title: "Re-evaluate a Massive upgrade once Research shows value on the current plans"
+      description: >
+        Trades / quotes / indices stay unentitled by decision. Reopen when
+        Research capabilities on the three current subscriptions produce
+        measurable business value.
+      handoff_kind: one_off
+      reason: "Owner strategy: exploit current subscriptions first"
+      acceptance_criteria:
+        - "Owner decision on upgrade, with the Research value evidence attached"
+      verification_steps:
+        - "Console Massive overview: subscribed capabilities in use, none unentitled"
+      risk_level: low
+      owner: vision-mac-trader
+
+metadata:
+  created_at: "2026-09-06"
+  owner: "vision-mac-trader"
+  lane_id: market-data-gs-closeout
+  operate_lane: governance
+  prerequisite_programs:
+    - market-data-gs-ops-closeout
+  tags:
+    - market-data
+    - golden-source
+    - ingest
+    - research
+  decisions:
+    D1: "Unentitled pulls stop now; revisit only after an upgrade (Owner 2026-09-06)"
+    D2: "Plugin stays kubectl-apply; build via bifrost-build-market-data"
+    D10: "BLOCKED — no live trading, no daemon scale"
