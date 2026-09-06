@@ -15,6 +15,8 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_cluster_summary',
   'get_cluster_nodes',
   'get_data_freshness',
+  'market_data_doctor',
+  'market_data_heal',
   'get_postgres_backup_status',
   'trigger_cnpg_backup',
   'repair_cnpg_wal_store',

@@ -34,6 +34,7 @@ import { IngestDailyVolume } from '@/components/market-data/IngestDailyVolume'
 import { QueueDashboardPanel } from '@/components/market-data/QueueDashboardPanel'
 import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
 import { SubscriptionCoveragePanel } from '@/components/market-data/SubscriptionCoveragePanel'
+import { DoctorPanel } from '@/components/market-data/DoctorPanel'
 import { ScoreRing } from '@/components/market-data/overviewDash'
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import {
@@ -349,6 +350,8 @@ export function MarketDataIngestTab() {
           setDetailTab('jobs')
         }}
       />
+
+      <DoctorPanel />
 
       {/* ── Detail secondary tabs ── */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">

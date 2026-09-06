@@ -93,6 +93,29 @@ reg(
 )
 
 reg(
+  'market_data_doctor',
+  'Market Data Plugin doctor: what the last session should hold vs what it does (snapshot/OI/bars/ratios), staleness, failed jobs, workers, vendor — each finding carries a prescription',
+  { probes: z.boolean().optional() },
+  async ({ probes }) =>
+    jsonResult(
+      await platformGet(`/api/v1/plugins/market-data/api/market/doctor${probes === false ? '?probes=false' : ''}`),
+    ),
+)
+
+reg(
+  'market_data_heal',
+  'Execute the Market Data doctor prescriptions (enqueue-slot / retry-jobs). dry_run=true previews; finding_ids restricts to chosen findings (operator)',
+  { dry_run: z.boolean().optional(), finding_ids: z.array(z.string()).optional() },
+  async ({ dry_run, finding_ids }) =>
+    jsonResult(
+      await platformPost('/api/v1/plugins/market-data/api/market/doctor/heal', {
+        dry_run: dry_run ?? false,
+        ...(finding_ids != null && finding_ids.length > 0 ? { finding_ids } : {}),
+      }),
+    ),
+)
+
+reg(
   'get_postgres_backup_status',
   'CNPG Backup CR freshness (completed < 48h)',
   {},

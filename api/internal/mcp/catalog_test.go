@@ -37,6 +37,8 @@ var stdioMirroredTools = map[string]bool{
 	"get_cluster_summary":               true,
 	"get_cluster_nodes":                 true,
 	"get_data_freshness":                true,
+	"market_data_doctor":                true,
+	"market_data_heal":                  true,
 	"get_postgres_backup_status":        true,
 	"trigger_cnpg_backup":               true,
 	"repair_cnpg_wal_store":             true,
@@ -139,8 +141,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 86 {
-		t.Errorf("stdioMirroredTools size=%d want 86 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 88 {
+		t.Errorf("stdioMirroredTools size=%d want 88 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

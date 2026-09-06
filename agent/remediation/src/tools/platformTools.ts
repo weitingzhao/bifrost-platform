@@ -227,6 +227,45 @@ export function buildPlatformTools(jobId: string): Record<string, SDKCustomTool>
         return textResult(jsonText(data))
       },
     },
+    market_data_doctor: {
+      description:
+        'Market Data Plugin doctor: for the session the tables should hold by now — option snapshot / OI per underlying, stock bars, ratios + short volume, slot staleness, failed jobs, workers, vendor. Each finding has severity, expected vs actual, and a prescription (fix) the plugin can execute.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          probes: { type: 'boolean', description: 'Also probe worker /health and the vendor (default true)' },
+        },
+      },
+      async execute(args) {
+        const qs = args.probes === false ? '?probes=false' : ''
+        const data = await platformGet(`/api/v1/plugins/market-data/api/market/doctor${qs}`)
+        return textResult(jsonText(data))
+      },
+    },
+    market_data_heal: {
+      description:
+        'Execute the Market Data doctor prescriptions (enqueue-slot with explicit date / retry failed jobs). ' +
+        'IMPORTANT: call request_operator_approval BEFORE using this tool unless dry_run=true. Re-run market_data_doctor after the queue drains.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          dry_run: { type: 'boolean', description: 'Preview the actions without enqueueing (default false)' },
+          finding_ids: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Restrict to these finding ids from market_data_doctor; omit for every auto-fixable finding',
+          },
+        },
+      },
+      async execute(args) {
+        const body: Record<string, unknown> = { dry_run: args.dry_run === true }
+        if (Array.isArray(args.finding_ids) && args.finding_ids.length > 0) {
+          body.finding_ids = args.finding_ids.map(v => String(v))
+        }
+        const data = await platformPost('/api/v1/plugins/market-data/api/market/doctor/heal', body)
+        return textResult(jsonText(data))
+      },
+    },
     ib_gateway_control: {
       description:
         'IB Gateway plugin control (reconnect / mode / maintenance). ' +

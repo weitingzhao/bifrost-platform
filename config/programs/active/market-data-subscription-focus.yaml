@@ -90,6 +90,33 @@ phases:
       checklist:
         - "Owner confirms retirement list (option-trades, ws-ingestor, dead routes, stock_financials legacy table)"
 
+  - id: doctor
+    title: "P2.5 Doctor — check now, fix now, agent can act, nightly self-heal"
+    status: done
+    prompt_template: |
+      Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
+
+      Plugin 0.12.0: GET /market/doctor (session completeness per slot,
+      staleness, failed jobs, stuck running, worker /health, vendor probe —
+      each finding with severity, expected vs actual and a prescription) and
+      POST /market/doctor/heal (dry_run, finding_ids; enqueue-slot with the
+      session date pinned + force, retry-jobs). Console DoctorPanel on the
+      Ingest tab (Check now / Fix / Fix all / Copy doctor report for Agent).
+      Platform MCP market_data_doctor + market_data_heal; Massive Feed Recover
+      runner goes doctor → heal → drain → recheck. Dagster market_self_heal at
+      45 0 * * 2-6 UTC: doctor → heal → wait for the queue → recheck; fails
+      (Alertmanager) only when still critical.
+    verify_cmd: |
+      curl -sf http://127.0.0.1:8780/api/v1/plugins/market-data/api/market/doctor | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session"], d["verdict"], len(d["prescriptions"]))' &&
+      cd bifrost-platform-plugin-market-data && make lint && make test
+    acceptance:
+      - "Console Doctor panel answers in seconds with per-slot expected vs actual for the session"
+      - "Fix / Fix all enqueue exactly the missing slot for the exact session; recheck turns the row ok"
+      - "An agent given the copied report can heal via MCP without reading code"
+      - "market_self_heal materializes nightly; a critical-after-heal run reaches Alertmanager"
+    depends_on:
+      - P2
+
   - id: P3
     title: "Model — observe-time snapshots, session-scoped health"
     status: pending
