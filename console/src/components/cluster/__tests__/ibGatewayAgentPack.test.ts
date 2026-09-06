@@ -22,7 +22,7 @@ function baseSnap(over: Partial<IbGatewayAgentPackSnapshot> = {}): IbGatewayAgen
     slots: [
       {
         slot: 'host',
-        account_id: 'wzhao1503',
+        account_id: 'U11111111',
         status: 'connected · feed stale',
         connected: true,
         reachability: 'ok' as const,
@@ -30,7 +30,7 @@ function baseSnap(over: Partial<IbGatewayAgentPackSnapshot> = {}): IbGatewayAgen
       },
       {
         slot: 'secondary',
-        account_id: 'vzhao1503',
+        account_id: 'U22222222',
         status: 'connected',
         connected: true,
         reachability: 'ok' as const,

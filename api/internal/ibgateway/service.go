@@ -321,7 +321,7 @@ func (s *Service) SetMaintenance(_ context.Context, req ControlRequest) (Control
 	now := time.Now().UTC()
 	accountID := strings.TrimSpace(req.AccountID)
 	if accountID == "" {
-		accountID = "wzhao1503"
+		accountID = "U17123565"
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -391,8 +391,8 @@ func (s *Service) readSlots() []SlotStatus {
 	accounts := []struct {
 		slot, account string
 	}{
-		{"host", "wzhao1503"},
-		{"secondary", "vzhao1503"},
+		{"host", "U17123565"},
+		{"secondary", "U8829175"},
 	}
 	out := make([]SlotStatus, 0, len(accounts))
 	for _, acct := range accounts {
