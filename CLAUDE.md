@@ -8,6 +8,19 @@
 
 与本项目用户对话一律使用中文回复（无论用户用何种语言提问）；UI 字符串与代码标识符使用 English。
 
+## 工作区定位（2026-09-06）
+
+| 项 | 值 |
+|---|---|
+| 域 / 载荷 | Ops 控制面（**Rocket**）· Flywheel B · spine 宿主（`config/ops-context.yaml`）· 永不了解 Greeks / IB 协议 / SEPA / straddles / daemon 策略 |
+| 运行位置 | 本机 `bdev`：platform-api `:8780` + console `:5180`；K3s `bifrost-platform-{stg,prod}`（Argo 自动同步 infra main） |
+| 发布链 | `bifrost-deliver-platform` / `bifrost-deliver-platform-prod`；MCP server 源码在 `mcp/`（6 个 bridge，viewer/operator 令牌分级） |
+| 仓库可见性 | GitHub **PUBLIC**（12 个 repo 全部公开）—— `.env`、Secret YAML、dump、kubeconfig、账户内容永不入库 |
+| 硬边界 | D10 交易执行冻结（BLOCKED）· D13 三域边界 · 平台/业务解耦（Flywheel A/B） |
+| 事实基线 | `../AGENT_FACTS.md`（§8c 运行时与安全事实）· 规则 `../CLAUDE.md`（§8 Claude Code 运行配置） |
+
+会话请在工作区根 `/stocks` 启动（加载治理层 hooks / auto mode / 共享记忆）；运行时与安全事实以 `../AGENT_FACTS.md` §8c 为准。
+
 ## 文档优先级
 
 1. **代码** — `api/`、`console/`、`config/` 为行为与契约的 ground truth
