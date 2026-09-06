@@ -141,8 +141,10 @@ function FreshnessKpiSection() {
           value: kpis.last_planned.age_label,
           raw: kpis.last_planned.age_seconds,
           caption: kpis.last_planned.at?.slice(0, 10) ?? '—',
+          // The plan is Mon–Sat 06:30 ET: Saturday's slot is 48h old by Monday
+          // morning, so a day-old plan is normal. Warn past a missed weekday.
           tone: kpiVariantToTone(
-            kpiAgeVariant(kpis.last_planned.age_seconds, 86400, 172800),
+            kpiAgeVariant(kpis.last_planned.age_seconds, 50 * 3600, 74 * 3600),
           ),
         },
       ]
