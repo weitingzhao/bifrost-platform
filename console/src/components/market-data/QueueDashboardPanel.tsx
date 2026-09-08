@@ -341,7 +341,9 @@ export function QueueDashboardPanel({
   // the clock time it lands on, and the net drain — done minus fed — because
   // an ETA at the gross rate understates whenever the queue is being topped up.
   const elapsedMs =
-    readyHist.previous != null ? readyHist.current.atMs - readyHist.previous.atMs : null
+    readyHist.current != null && readyHist.previous != null
+      ? readyHist.current.atMs - readyHist.previous.atMs
+      : null
   const netRate = netPerMinute(readyDelta, elapsedMs)
   const etaAtNet = etaMinutesAtNet(readyNow, netRate)
   const etaValue = formatEtaMinutes(eta) ?? (idle ? '—' : inFlight ? 'in flight' : 'stalled')
