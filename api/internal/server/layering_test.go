@@ -24,6 +24,7 @@ var operatorPlanePackages = []string{
 	"agentgovernance",
 	"agentreport",
 	"driftproposal",
+	"hermesgateway",
 	"hermesinsight",
 	"hermesreadiness",
 	"patrol",

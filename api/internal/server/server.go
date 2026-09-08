@@ -14,10 +14,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
@@ -29,13 +26,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
-	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesinsight"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
@@ -43,8 +36,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
+	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
-	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
@@ -80,17 +73,13 @@ type Server struct {
 	operatequeue    *operatequeue.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
-	patrol          *patrol.Handler
 	remediation     *remediation.Handler
-	agentreport     *agentreport.Handler
-	agentbridge     *agentbridge.Handler
 	agentgovernance *agentgovernance.Handler
-	agentdeploy     *agentdeploy.Handler
 	codehealth      *codehealth.Handler
-	driftproposal   *driftproposal.Handler
-	hermesgateway   *hermesgateway.Handler
-	hermesreadiness *hermesreadiness.Handler
-	hermesinsight   *hermesinsight.Handler
+	// The out-of-band operator plane (L-1). It is one field because it is one
+	// deployable: cmd/operator-plane serves exactly these routes beside the
+	// remediation runners, where a bad platform-api release cannot reach it.
+	plane           *operatorplane.Plane
 	retrospective   *retrospective.Handler
 	satellite       *satellite.Handler
 	selfhealth      *selfhealth.Handler
@@ -151,19 +140,16 @@ func New(cfg *config.Config) (*Server, error) {
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	checklistH.BindRemediation(remediationH)
 	checklistH.BindOperateQueue(operatequeueH)
-	patrolH, err := patrol.NewHandler(cfg.ConfigDir())
-	if err != nil {
-		return nil, fmt.Errorf("patrol: %w", err)
-	}
-	if role.RunsWorkers() {
-		patrolH.Start(context.Background())
-	}
-	hermesReadinessH := hermesreadiness.NewHandler()
-	hermesInsightH, err := hermesinsight.NewHandlerWithOptions(hermesinsight.HandlerOptions{
-		Readiness: hermesReadinessH,
+	plane, err := operatorplane.New(operatorplane.Deps{
+		Auth:      auth,
+		Audit:     audit,
+		ConfigDir: cfg.ConfigDir(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("hermesinsight: %w", err)
+		return nil, fmt.Errorf("operator plane: %w", err)
+	}
+	if role.RunsWorkers() {
+		plane.StartBackground(context.Background())
 	}
 	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
 		resp, err := checklistH.Store().Get()
@@ -200,17 +186,10 @@ func New(cfg *config.Config) (*Server, error) {
 		operatequeue:    operatequeueH,
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
-		patrol:          patrolH,
 		remediation:     remediationH,
-		agentreport:     agentreport.NewHandler(),
-		agentbridge:     agentbridge.NewHandler(),
+		plane:           plane,
 		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
-		agentdeploy:     agentdeploy.NewHandler(audit),
 		codehealth:      codehealth.NewHandler(audit),
-		driftproposal:   driftproposal.NewHandler(audit),
-		hermesgateway:   hermesgateway.NewHandler(),
-		hermesreadiness: hermesReadinessH,
-		hermesinsight:   hermesInsightH,
 		retrospective:   retrospective.NewHandler(retroAnalyzer),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
@@ -258,6 +237,9 @@ func (s *Server) Router() http.Handler {
 	// what /api/v1/plugins/*/status already answers anonymously.
 	r.Get("/metrics", s.handleMetrics)
 	r.Route("/api/v1", func(r chi.Router) {
+		// L-1 surface. Served here for convenience while platform-api is healthy;
+		// cmd/operator-plane serves the same routes off-cluster for when it is not.
+		s.plane.Mount(r)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)
@@ -310,26 +292,11 @@ func (s *Server) Router() http.Handler {
 		// Research API (:8795) — preferred /research/* + plugin-style alias.
 		r.Get("/research/*", s.research.HandleAPIProxy)
 		r.Get("/plugins/research/api/*", s.research.HandleAPIProxy)
-		r.Get("/agent/nightly-report", s.agentreport.HandleNightlyReport)
-		r.Get("/agent/bridge", s.agentbridge.HandleBridge)
-		r.Get("/agent/hermes/readiness", s.hermesreadiness.HandleReadiness)
-		r.Get("/agent/hermes/first-task", s.hermesreadiness.HandleFirstTask)
-		r.Get("/hermes/insights", s.hermesinsight.HandleList)
-		r.Post("/hermes/run-first-task", s.hermesinsight.HandleRunFirstTask)
 		r.Get("/agent/governance/performance", s.agentgovernance.HandlePerformance)
 		r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
 		r.Get("/agent/governance/capability-map", s.agentgovernance.HandleCapabilityMap)
 		r.Get("/agent/governance/snapshot", s.agentgovernance.HandleSnapshot)
 		r.Get("/agent/governance/trust-overrides", s.agentgovernance.HandleTrustOverrides)
-		r.Get("/agent/smoke", s.agentbridge.HandleSmoke)
-		r.Get("/agent/deploy", s.agentdeploy.HandleStatus)
-		r.Get("/agent/hermes/health", s.hermesgateway.HandleHealth)
-		r.Get("/agent/skills", s.hermesgateway.HandleSkills)
-		r.Get("/agent/schedules", s.hermesgateway.HandleSchedules)
-		r.Get("/agent/executions", s.hermesgateway.HandleExecutions)
-		r.Get("/patrol/skills", s.patrol.HandleListSkills)
-		r.Get("/patrol/skills/{id}", s.patrol.HandleGetSkill)
-		r.Get("/patrol/runs", s.patrol.HandleListRuns)
 		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
 		r.Get("/agent/retrospective/patterns", s.retrospective.HandlePatterns)
 		r.Get("/agent/retrospective/insights", s.retrospective.HandleInsights)
@@ -337,16 +304,10 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/audit/append", s.audit.HandleAppend)
-			r.Post("/agent/nightly-run", s.agentreport.HandleTriggerNightly)
-			r.Post("/agent/deploy", s.agentdeploy.HandleStart)
 			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
 			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
 			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
-			r.Put("/agent/skills/{id}/actuation-level", s.hermesgateway.HandleSkillActuationLevel)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
-			r.Put("/patrol/skills/{id}/enable", s.patrol.HandleEnable)
-			r.Post("/patrol/trigger/{id}", s.patrol.HandleTrigger)
-			r.Post("/patrol/webhook/{event}", s.patrol.HandleWebhook)
 		})
 		// Code-health ratchet readings (agent-config/scripts/code-health/scan.sh).
 		// Read is viewer-level; writing is operator-gated so a reading cannot be
@@ -357,16 +318,6 @@ func (s *Server) Router() http.Handler {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				r.Post("/report", s.codehealth.HandleReport)
 				r.Post("/rescan", s.codehealth.HandleRescan)
-			})
-		})
-		r.Route("/agent/drift-proposals", func(r chi.Router) {
-			r.Get("/", s.driftproposal.HandleList)
-			r.Get("/{id}", s.driftproposal.HandleGet)
-			r.Group(func(r chi.Router) {
-				r.Use(s.auth.Require(actuation.RoleOperator))
-				r.Post("/", s.driftproposal.HandleCreate)
-				r.Post("/{id}/approve", s.driftproposal.HandleApprove)
-				r.Post("/{id}/reject", s.driftproposal.HandleReject)
 			})
 		})
 		r.Get("/gitops/apps", s.gitops.HandleApps)

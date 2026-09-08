@@ -262,9 +262,9 @@ func TestRoleDecidesWhoRunsTheBackgroundLoops(t *testing.T) {
 			if err != nil {
 				t.Fatalf("server.New: %v", err)
 			}
-			t.Cleanup(func() { srv.patrol.Stop() })
+			t.Cleanup(func() { srv.plane.StopBackground() })
 
-			if got := srv.patrol.Running(); got != tc.loops {
+			if got := srv.plane.Patrol().Running(); got != tc.loops {
 				t.Fatalf("patrol autopilot running = %v, want %v", got, tc.loops)
 			}
 
