@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Prometheus exposition for the plugins Trade runs on.
@@ -24,19 +26,37 @@ import (
 // This exports what the status endpoints already compute, so a plugin gains
 // alerting by answering PluginHealth and nothing else.
 
+// Per plugin, not for the scrape as a whole. A single shared deadline made the
+// probes race each other: market-data is much the slowest (deployments, worker
+// pools, freshness) and would spend most of a shared budget, leaving the other
+// three a cancelled context and reporting them unreachable when they were fine.
 const pluginProbeTimeout = 8 * time.Second
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	// A plugin probe that hangs must not hold the scrape open past its timeout.
-	ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
-	defer cancel()
-
-	healths := []probe.PluginHealth{
-		s.marketdata.PluginHealth(ctx),
-		s.flexquery.PluginHealth(ctx),
-		s.ibgateway.PluginHealth(ctx),
-		s.research.PluginHealth(ctx),
+	probes := []func(context.Context) probe.PluginHealth{
+		s.marketdata.PluginHealth,
+		s.flexquery.PluginHealth,
+		s.ibgateway.PluginHealth,
+		s.research.PluginHealth,
 	}
+
+	// Concurrent as well as independently bounded, so the scrape costs the
+	// slowest plugin rather than the sum of all four.
+	healths := make([]probe.PluginHealth, len(probes))
+	var wg sync.WaitGroup
+	for i, fn := range probes {
+		wg.Add(1)
+		go func(i int, fn func(context.Context) probe.PluginHealth) {
+			// A panic in one probe must not take platform-api with it — this
+			// fan-out is the case safego's package doc names.
+			defer safego.Recover("server.metrics.pluginProbe")
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
+			defer cancel()
+			healths[i] = fn(ctx)
+		}(i, fn)
+	}
+	wg.Wait()
 
 	var b strings.Builder
 	b.WriteString("# HELP bifrost_plugin_reachable Whether platform-api could reach the plugin (1) or not (0)\n")
