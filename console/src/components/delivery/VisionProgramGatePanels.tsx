@@ -1,18 +1,5 @@
-import { VisionS3GatePanel } from '@/components/architecture/VisionS3GatePanel'
-import { VisionV1GatePanel } from '@/components/architecture/VisionV1GatePanel'
-import { VisionV2GatePanel } from '@/components/architecture/VisionV2GatePanel'
-import { VisionV3GatePanel } from '@/components/architecture/VisionV3GatePanel'
-import { VisionV4GatePanel } from '@/components/architecture/VisionV4GatePanel'
-import { VisionV5GatePanel } from '@/components/architecture/VisionV5GatePanel'
-
-const VISION_GATES = [
-  { id: 'V5', Panel: VisionV5GatePanel },
-  { id: 'V4', Panel: VisionV4GatePanel },
-  { id: 'V3', Panel: VisionV3GatePanel },
-  { id: 'V2', Panel: VisionV2GatePanel },
-  { id: 'S3', Panel: VisionS3GatePanel },
-  { id: 'V1', Panel: VisionV1GatePanel },
-] as const
+import { VisionGatePanel } from '@/components/architecture/VisionGatePanel'
+import { VISION_GATE_IDS } from '@/api/vision'
 
 export function VisionProgramGatePanels() {
   return (
@@ -21,9 +8,9 @@ export function VisionProgramGatePanels() {
       <p className="text-dense-meta text-muted-foreground m-0 px-3">
         Run gate checks here in Briefing Session (lane governance). Delivery Board shows progress as a read-only catalog.
       </p>
-      {VISION_GATES.map(({ id, Panel }) => (
+      {VISION_GATE_IDS.map(id => (
         <div key={id} className="border-t border-border/50 pt-1 first:border-t-0">
-          <Panel />
+          <VisionGatePanel id={id} />
         </div>
       ))}
     </section>
