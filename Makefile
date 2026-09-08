@@ -1,4 +1,4 @@
-.PHONY: dev dev-api dev-console dev-agent start-agent test test-api test-console lint-api vet-api build-api start check-spine check install-lint-api check-code-health
+.PHONY: build-operator-plane dev dev-api dev-console dev-agent start-agent test test-api test-console lint-api vet-api build-api start check-spine check install-lint-api check-code-health
 
 ROOT := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
@@ -73,3 +73,11 @@ check: test
 build-api:
 	cd api && go build -o bin/platform-api ./cmd/platform-api
 	@echo "Built api/bin/platform-api"
+
+# The out-of-band operator plane (L-1). Same module, no cluster dependency — it
+# runs beside the remediation runners on the Mac minis, so build it for their
+# architecture rather than whatever this machine happens to be:
+#   make build-operator-plane GOOS=darwin GOARCH=arm64
+build-operator-plane:
+	cd api && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o bin/operator-plane ./cmd/operator-plane
+	@echo "Built api/bin/operator-plane"
