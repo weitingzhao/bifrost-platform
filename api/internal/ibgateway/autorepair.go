@@ -69,8 +69,7 @@ func (s *Service) maybeAutoRollout(
 	if deployReach != probe.ReachOK || mode != "live" {
 		return
 	}
-	accountRaw, _ := s.redisCLI("HGETALL", "bifrost:health:ws_ib_account_agent")
-	account := parseRedisHash(accountRaw)
+	account, _ := s.redisHGetAll("bifrost:health:ws_ib_account_agent")
 	if !strings.EqualFold(strings.TrimSpace(account["host_connected"]), "true") {
 		return
 	}

@@ -70,7 +70,7 @@ func (s *Service) sendOperatorCommand(ctx context.Context, op string, timeout ti
 			return ctx.Err()
 		default:
 		}
-		raw, getErr := s.redisCLI("GET", operatorResultPrefix+reqID)
+		raw, getErr := s.redisGet(operatorResultPrefix + reqID)
 		if getErr == nil && strings.TrimSpace(raw) != "" {
 			var envelope map[string]any
 			if json.Unmarshal([]byte(raw), &envelope) == nil {
@@ -102,7 +102,7 @@ func (s *Service) waitSnapshotFresh(ctx context.Context, maxWait time.Duration, 
 			return false
 		default:
 		}
-		raw, err := s.redisCLI("GET", accountSnapshotKey)
+		raw, err := s.redisGet(accountSnapshotKey)
 		if err == nil && snapshotFresh(raw, time.Now().UTC(), staleSec) {
 			return true
 		}

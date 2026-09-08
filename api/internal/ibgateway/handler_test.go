@@ -98,10 +98,13 @@ func TestSnapshotAgeSec(t *testing.T) {
 	}
 }
 
-func TestParseRedisHash(t *testing.T) {
-	m := parseRedisHash("connected\nTrue\nmode\nmock\n")
-	if m["connected"] != "True" || m["mode"] != "mock" {
-		t.Fatalf("unexpected map %v", m)
+// parseRedisHash is gone: the redis-cli text output it parsed is gone with the
+// shell-out, and HGetAll returns a map directly. What still needs pinning is
+// that the one write path stays closed while spine D10 is BLOCKED.
+func TestOperatorWriteStaysBlocked(t *testing.T) {
+	s := &Service{cfg: Config{RedisPlatformPass: "not-empty"}}
+	if _, err := s.redisCLI("anything"); err == nil {
+		t.Fatal("platform-api must not write the operator command stream while D10 is BLOCKED")
 	}
 }
 

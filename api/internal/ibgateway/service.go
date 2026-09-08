@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -16,6 +18,9 @@ import (
 type Service struct {
 	cfg     Config
 	cluster *cluster.Service
+
+	redisOnce sync.Once
+	redis     *redis.Client
 }
 
 func NewService(clusterSvc *cluster.Service) *Service {
@@ -51,25 +56,23 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	resp.Deployment.Detail = deployDetail
 	resp.Mode = mode
 
-	ingestor, err := s.redisCLI("HGETALL", "bifrost:health:ws_ib_ingestor")
+	ingestor, err := s.redisHGetAll("bifrost:health:ws_ib_ingestor")
 	if err != nil {
 		resp.RedisReach = probe.ReachFail
 		resp.Error = err.Error()
-		resp.Hint = "Ensure redis-ib @ data NS and kubectl access"
+		resp.Hint = "Ensure redis-ib @ data NS admits this namespace on 6379"
 		resp.Summary = fmt.Sprintf("redis-ib probe failed · deployment %s", ready)
 		return resp
 	}
 	resp.RedisReach = probe.ReachOK
-	resp.IngestorHealth = parseRedisHash(ingestor)
+	resp.IngestorHealth = ingestor
 
-	accountRaw, _ := s.redisCLI("HGETALL", "bifrost:health:ws_ib_account_agent")
-	resp.AccountHealth = parseRedisHash(accountRaw)
-	operatorRaw, _ := s.redisCLI("HGETALL", "bifrost:health:ws_ib_operator")
-	resp.OperatorHealth = parseRedisHash(operatorRaw)
+	resp.AccountHealth, _ = s.redisHGetAll("bifrost:health:ws_ib_account_agent")
+	resp.OperatorHealth, _ = s.redisHGetAll("bifrost:health:ws_ib_operator")
 
-	tick, _ := s.redisCLI("GET", "ib:ingester:tick:NVDA|STK|||")
+	tick, _ := s.redisGet("ib:ingester:tick:NVDA|STK|||")
 	resp.SampleTick = tick
-	snapshot, _ := s.redisCLI("GET", "ib:account:snapshot:v1")
+	snapshot, _ := s.redisGet("ib:account:snapshot:v1")
 	resp.AccountSnapshot = snapshot
 	resp.Slots = s.readSlots()
 
@@ -229,13 +232,12 @@ func (s *Service) SelfHealStatus(ctx context.Context) SelfHealStatusResponse {
 		out.Error = "REDIS_IB_PLATFORM_PASS not configured"
 		return out
 	}
-	raw, err := s.redisCLI("HGETALL", selfHealRedisKey)
+	fields, err := s.redisHGetAll(selfHealRedisKey)
 	if err != nil {
 		out.Reach = probe.ReachFail
 		out.Error = err.Error()
 		return out
 	}
-	fields := parseRedisHash(raw)
 	out.LastAction = fields["last_action"]
 	if v, ok := parseFloatField(fields["last_action_ts"]); ok {
 		out.LastActionTS = v
@@ -256,7 +258,7 @@ func (s *Service) SelfHealStatus(ctx context.Context) SelfHealStatusResponse {
 	if v, ok := parseFloatField(fields["snapshot_age_sec"]); ok {
 		out.SnapshotAgeSec = v
 	}
-	snapRaw, _ := s.redisCLI("GET", accountSnapshotKey)
+	snapRaw, _ := s.redisGet(accountSnapshotKey)
 	if age, ok := snapshotAgeSec(snapRaw, now); ok {
 		out.SnapshotAgeSec = age
 	}
@@ -277,7 +279,7 @@ func (s *Service) SetSelfHealEnabled(_ context.Context, enabled bool) (ControlRe
 	if enabled {
 		val = "true"
 	}
-	if _, err := s.redisCLI("HSET", key, "enabled", val, "updated_at", fmt.Sprintf("%d", now.Unix())); err != nil {
+	if err := s.redisHSet(key, "enabled", val, "updated_at", fmt.Sprintf("%d", now.Unix())); err != nil {
 		return ControlResponse{
 			OK: false, Action: "ib-gateway.self-heal", Target: key,
 			Autonomy: "L1", Message: err.Error(), GeneratedAt: now,
@@ -335,7 +337,7 @@ func (s *Service) SetMaintenance(_ context.Context, req ControlRequest) (Control
 			Autonomy: "L1", Message: "REDIS_IB_PLATFORM_PASS not configured", GeneratedAt: now,
 		}, fmt.Errorf("REDIS_IB_PLATFORM_PASS not configured")
 	}
-	if _, err := s.redisCLI("SET", key, payload, "EX", "3600"); err != nil {
+	if err := s.redisSet(key, payload, time.Hour); err != nil {
 		return ControlResponse{
 			OK: false, Action: "ib-gateway.maintenance", Target: key,
 			Autonomy: "L1", Message: err.Error(), GeneratedAt: now,
@@ -397,7 +399,7 @@ func (s *Service) readSlots() []SlotStatus {
 	out := make([]SlotStatus, 0, len(accounts))
 	for _, acct := range accounts {
 		slot := SlotStatus{Slot: acct.slot, AccountID: acct.account, Reach: probe.ReachUnknown}
-		raw, err := s.redisCLI("GET", "ib:health:"+acct.account)
+		raw, err := s.redisGet("ib:health:" + acct.account)
 		if err != nil || raw == "" {
 			slot.Status = "unknown"
 			slot.Detail = "no ib:health key"

@@ -13,6 +13,8 @@ const (
 	redisDeployName    = "redis-ib"
 	configMapName      = "ib-gateway-config"
 	redisServiceHost   = "redis-ib.data.svc.cluster.local:6379"
+	// ACL user on redis-ib scoped to ib:* and bifrost:health:ws_ib_* (see acl.conf).
+	redisACLUser       = "platform"
 	consumerGroupName  = "ib-gateway"
 )
 
@@ -22,6 +24,7 @@ var legacyIBStatefulSets = []string{"ib-market-gateway", "ib-account-agent", "ib
 
 type Config struct {
 	RedisPlatformPass       string
+	RedisAddr               string
 	Kubeconfig              string
 	AutoRepairEnabled       bool
 	AutoRolloutCooldownSec  int
@@ -33,6 +36,14 @@ func ConfigFromEnv() (Config, error) {
 	pass := os.Getenv("REDIS_IB_PLATFORM_PASS")
 	if pass == "" {
 		return Config{}, fmt.Errorf("REDIS_IB_PLATFORM_PASS required (redis-ib ACL user platform)")
+	}
+	// In-cluster this resolves through kube-dns. A developer running platform-api
+	// on their machine has no such DNS, and the probe used to reach redis-ib by
+	// shelling out to kubectl — so give that case an explicit override
+	// (kubectl port-forward -n data svc/redis-ib 6379:6379, then set this).
+	redisAddr := strings.TrimSpace(os.Getenv("OPS_IB_REDIS_ADDR"))
+	if redisAddr == "" {
+		redisAddr = redisServiceHost
 	}
 	kc := os.Getenv("PLATFORM_KUBECONFIG")
 	if kc == "" {
@@ -61,6 +72,7 @@ func ConfigFromEnv() (Config, error) {
 	}
 	return Config{
 		RedisPlatformPass:       pass,
+		RedisAddr:               redisAddr,
 		Kubeconfig:              kc,
 		AutoRepairEnabled:       autoRepair,
 		AutoRolloutCooldownSec:  cooldown,
