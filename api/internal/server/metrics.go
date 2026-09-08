@@ -47,8 +47,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	for i, fn := range probes {
 		wg.Add(1)
 		go func(i int, fn func(context.Context) probe.PluginHealth) {
-			// A panic in one probe must not take platform-api with it — this
-			// fan-out is the case safego's package doc names.
+			// Outside the request stack chi's Recoverer cannot reach these, so
+			// one bad probe would take platform-api down and blind the Console
+			// with it — the fan-out case safego's package doc names.
 			defer safego.Recover("server.metrics.pluginProbe")
 			defer wg.Done()
 			ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
