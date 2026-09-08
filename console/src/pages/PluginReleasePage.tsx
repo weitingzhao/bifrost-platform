@@ -173,12 +173,11 @@ function buildSteps(
     statusLabel: detectLabel,
   }
 
-  let approveStatus: StepStatus = 'pending'
-  let approveLabel = 'Not started'
-  if (!hasCycleEvidence) {
-    approveStatus = 'pending'
-    approveLabel = 'Not started'
-  } else if (detect.status !== 'done') {
+  // The chain below is exhaustive, so an initial value here would only ever be
+  // overwritten; TypeScript checks the definite assignment instead.
+  let approveStatus: StepStatus
+  let approveLabel: string
+  if (!hasCycleEvidence || detect.status !== 'done') {
     approveStatus = 'pending'
     approveLabel = 'Not started'
   } else if (approve.status === 'done' || progress?.approveDone) {

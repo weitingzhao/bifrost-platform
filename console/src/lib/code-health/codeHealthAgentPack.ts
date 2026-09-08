@@ -65,7 +65,7 @@ export async function gatherCodeHealthSnapshot(
 
   if (liveRescanFirst) {
     // Probe freshness without auth first — avoid a doomed rescan when cluster-only.
-    let probe: CodeHealthResponse | null = null
+    let probe: CodeHealthResponse | null
     try {
       probe = await fetchCodeHealth(1)
     } catch {

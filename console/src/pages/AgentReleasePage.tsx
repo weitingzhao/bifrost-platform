@@ -218,12 +218,11 @@ function buildSteps(evidence: AgentLaunchEvidence, rt: StepRuntime): PluginFlowS
     hostLastOk ||
     hostLastFailed
 
-  let approveStatus: StepStatus = 'pending'
-  let approveLabel = 'Not started'
-  if (!cycleOpen) {
-    approveStatus = 'pending'
-    approveLabel = 'Not started'
-  } else if (detect.status !== 'done') {
+  // The chain below is exhaustive, so an initial value here would only ever be
+  // overwritten; TypeScript checks the definite assignment instead.
+  let approveStatus: StepStatus
+  let approveLabel: string
+  if (!cycleOpen || detect.status !== 'done') {
     approveStatus = 'pending'
     approveLabel = 'Not started'
   } else if (approveDone) {

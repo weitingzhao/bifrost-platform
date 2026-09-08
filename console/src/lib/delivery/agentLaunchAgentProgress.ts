@@ -111,11 +111,6 @@ export function inferAgentLaunchAgentProgress(
       deployOutcome = 'ok'
       verifyAwaiting = true
       focusStep = 'verify'
-    } else if (deployDoneHint) {
-      approveDone = true
-      deployOutcome = 'ok'
-      verifyAwaiting = true
-      focusStep = 'verify'
     } else {
       approveAwaiting = true
       focusStep = 'approve'
