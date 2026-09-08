@@ -28,6 +28,7 @@ import {
 } from '@/components/market-data/overviewDash'
 import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
 import { shortIngestKind } from '@/components/market-data/ingestKindLabel'
+import { etaClockLabel, etaMinutesAtNet, formatEtaMinutes, netPerMinute } from '@/components/market-data/queueEta'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
   formatReadyCheckCaption,
@@ -336,13 +337,29 @@ export function QueueDashboardPanel({
   const runSummary = runningJobsSummary(runningJobs, clockMs)
   const inspectSummary = runningJobsSummary(inspectJobs, clockMs)
   const inFlight = readyNow === 0 && running > 0
-  const etaValue =
-    eta != null ? `${eta}m` : idle ? '—' : inFlight ? 'in flight' : 'stalled'
+  // The API's minutes, read three ways: a duration in the units it deserves,
+  // the clock time it lands on, and the net drain — done minus fed — because
+  // an ETA at the gross rate understates whenever the queue is being topped up.
+  const elapsedMs =
+    readyHist.previous != null ? readyHist.current.atMs - readyHist.previous.atMs : null
+  const netRate = netPerMinute(readyDelta, elapsedMs)
+  const etaAtNet = etaMinutesAtNet(readyNow, netRate)
+  const etaValue = formatEtaMinutes(eta) ?? (idle ? '—' : inFlight ? 'in flight' : 'stalled')
+  const etaClock = etaClockLabel(eta)
+  const netDiffers = netRate != null && Math.abs(netRate - rate) >= Math.max(1, rate * 0.1)
   const etaCaption = idle
     ? 'queue empty'
     : inFlight
       ? 'ready empty · workers busy'
-      : 'at last-15m rate'
+      : [
+          etaClock != null ? `≈ ${etaClock}` : null,
+          'at last-15m rate',
+          netDiffers
+            ? `net ${Math.round(netRate)}/min → ${etaAtNet != null ? formatEtaMinutes(etaAtNet) : 'not shrinking'}`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
   const toggleInspect = (kind: string) => {
     if (inspectOpen && inspectKind === kind) {
       setInspectOpen(false)
