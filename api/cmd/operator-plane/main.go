@@ -6,9 +6,10 @@
 // the Mac minis, where a bad platform-api release — or a dead cluster — cannot
 // take away the surface you would use to repair either.
 //
-// It owns the patrol autopilot loop. Exactly one process may: set
-// PLATFORM_ROLE=api on platform-api, or leave OPERATOR_PLANE_URL unset there
-// and do not run this, but never both.
+// It can own the patrol autopilot loop, but does not by default: platform-workers
+// already runs one per environment, and exactly one process may. Set
+// OPERATOR_PLANE_AUTOPILOT=on here only together with PLATFORM_ROLE=api on the
+// platform-workers that currently runs it.
 package main
 
 import (
@@ -29,7 +30,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-const defaultListen = ":8782"
+// 8781 is the remediation runner and 8782 the Hermes gateway on the same hosts.
+const defaultListen = ":8783"
 
 func main() {
 	loadDotEnv()
@@ -56,16 +58,20 @@ func main() {
 		log.Fatalf("operator plane: %v", err)
 	}
 
+	autopilot := os.Getenv("OPERATOR_PLANE_AUTOPILOT") == "on"
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-operator-plane","contained_panics":` +
-			itoa(safego.Contained()) + `}`))
+		_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-operator-plane","autopilot":` +
+			btoa(autopilot) + `,"contained_panics":` + itoa(safego.Contained()) + `}`))
 	})
 	r.Route("/api/v1", plane.Mount)
 
-	plane.StartBackground(context.Background())
+	if autopilot {
+		plane.StartBackground(context.Background())
+	}
 
 	listen := os.Getenv("OPERATOR_PLANE_LISTEN")
 	if listen == "" {
@@ -74,10 +80,18 @@ func main() {
 	slog.Info("bifrost-operator-plane listening",
 		"addr", listen,
 		"config", cfg.ConfigPath,
+		"autopilot", autopilot,
 		"note", "cluster-free by construction — see internal/operatorplane doc")
 	if err := http.ListenAndServe(listen, r); err != nil {
 		log.Fatalf("operator plane: %v", err)
 	}
+}
+
+func btoa(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
 }
 
 func itoa(n int64) string {
