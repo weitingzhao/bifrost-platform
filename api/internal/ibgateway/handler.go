@@ -19,9 +19,14 @@ type Handler struct {
 
 func NewHandler(clusterSvc *cluster.Service, audit *actuation.AuditLog) *Handler {
 	svc := NewService(clusterSvc)
-	h := &Handler{svc: svc, audit: audit}
-	svc.StartAutoRepair(context.Background(), audit)
-	return h
+	return &Handler{svc: svc, audit: audit}
+}
+
+// StartBackground starts the auto-repair loop. Kept out of NewHandler so the
+// caller decides: only the process holding the workers role runs the loops, and
+// a constructor side effect cannot be gated.
+func (h *Handler) StartBackground(ctx context.Context, audit *actuation.AuditLog) {
+	h.svc.StartAutoRepair(ctx, audit)
 }
 
 func (h *Handler) HandleStatus(w http.ResponseWriter, r *http.Request) {

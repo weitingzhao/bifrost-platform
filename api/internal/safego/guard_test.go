@@ -48,8 +48,9 @@ func TestNoUnguardedGoroutines(t *testing.T) {
 			if strings.Contains(trimmed, "safego.") {
 				continue
 			}
-			window := strings.Join(lines[i+1:min(i+4, len(lines))], "\n")
-			if strings.Contains(window, "safego.Recover") {
+			// The guard must be among the first statements of the body, but a
+			// comment explaining why is normal and must not read as a miss.
+			if guardedWithin(lines[i+1:], 3) {
 				continue
 			}
 			rel, _ := filepath.Rel(root, path)
@@ -66,11 +67,24 @@ func TestNoUnguardedGoroutines(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// guardedWithin reports whether one of the first maxStatements statements of a
+// goroutine body registers safego.Recover, skipping blank lines and comments.
+func guardedWithin(body []string, maxStatements int) bool {
+	seen := 0
+	for _, line := range body {
+		t := strings.TrimSpace(line)
+		if t == "" || strings.HasPrefix(t, "//") || strings.HasPrefix(t, "/*") || strings.HasPrefix(t, "*") {
+			continue
+		}
+		if strings.Contains(t, "safego.Recover") {
+			return true
+		}
+		seen++
+		if seen >= maxStatements {
+			return false
+		}
 	}
-	return b
+	return false
 }
 
 func itoa(n int) string {

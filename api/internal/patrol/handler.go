@@ -108,6 +108,18 @@ func (h *Handler) Start(ctx context.Context) {
 	safego.Go("patrol.loop", func() { h.loop(loopCtx) })
 }
 
+// Running reports whether the autopilot loop is live. Only the process holding
+// the workers role starts it, so this is also how you tell a workers pod from
+// an api pod without reading its environment.
+func (h *Handler) Running() bool {
+	if h == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.stop != nil
+}
+
 func (h *Handler) Stop() {
 	if h == nil {
 		return

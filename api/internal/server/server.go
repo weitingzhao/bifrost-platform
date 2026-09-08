@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -121,8 +122,19 @@ func New(cfg *config.Config) (*Server, error) {
 	gitopsH := gitops.NewHandler(cfg, audit)
 	remediationH := remediation.NewHandler(audit)
 	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
+	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
-	clusterH.Service().StartDataCloneScheduler(context.Background())
+	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
+	if role.RunsWorkers() {
+		ibgatewayH.StartBackground(context.Background(), audit)
+	}
+	slog.Info("platform-api role",
+		"role", role.String(),
+		"runs_background_loops", role.RunsWorkers(),
+		"note", "workers must stay a singleton — the loops keep per-process last-run state")
+	if role.RunsWorkers() {
+		clusterH.Service().StartDataCloneScheduler(context.Background())
+	}
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
 	devagentH, err := devagent.NewHandler(cfg.ConfigDir())
@@ -143,7 +155,9 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("patrol: %w", err)
 	}
-	patrolH.Start(context.Background())
+	if role.RunsWorkers() {
+		patrolH.Start(context.Background())
+	}
 	hermesReadinessH := hermesreadiness.NewHandler()
 	hermesInsightH, err := hermesinsight.NewHandlerWithOptions(hermesinsight.HandlerOptions{
 		Readiness: hermesReadinessH,
@@ -204,7 +218,7 @@ func New(cfg *config.Config) (*Server, error) {
 		sessionsnapshot: sessionsnapshot.NewHandler(),
 		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
-		ibgateway:       ibgateway.NewHandler(clusterH.Service(), audit),
+		ibgateway:       ibgatewayH,
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
 		research:        research.NewHandler(clusterH.Service(), audit),
@@ -557,9 +571,12 @@ func (s *Server) Router() http.Handler {
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	// contained_panics is not decoration: a non-zero count means some worker
 	// died mid-flight and the surface it feeds may be stale while /health is ok.
+	role := config.CurrentRole()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":           "ok",
 		"service":          "bifrost-platform-api",
+		"role":             role.String(),
+		"background_loops": role.RunsWorkers(),
 		"contained_panics": safego.Contained(),
 	})
 }

@@ -242,3 +242,53 @@ func TestHandleEnvironmentsListsConfiguredEnvironments(t *testing.T) {
 		t.Fatalf("environments payload = %+v", payload.Environments)
 	}
 }
+
+// The split exists so the always-on loops run exactly once. Before it, every
+// replica started its own patrol autopilot, IB auto-repair loop and hourly
+// data-clone scheduler; prod runs two replicas, so each of those ran twice
+// against per-pod state that could not see the other run.
+func TestRoleDecidesWhoRunsTheBackgroundLoops(t *testing.T) {
+	for _, tc := range []struct {
+		role  string
+		loops bool
+	}{
+		{"api", false},
+		{"workers", true},
+		{"", true}, // unset stays all-in-one: local make start is unchanged
+	} {
+		t.Run("role="+tc.role, func(t *testing.T) {
+			t.Setenv(config.RoleEnv, tc.role)
+			srv, err := New(newTestConfig(t))
+			if err != nil {
+				t.Fatalf("server.New: %v", err)
+			}
+			t.Cleanup(func() { srv.patrol.Stop() })
+
+			if got := srv.patrol.Running(); got != tc.loops {
+				t.Fatalf("patrol autopilot running = %v, want %v", got, tc.loops)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/health", nil)
+			rec := httptest.NewRecorder()
+			srv.Router().ServeHTTP(rec, req)
+			var payload struct {
+				Role            string `json:"role"`
+				BackgroundLoops bool   `json:"background_loops"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if payload.BackgroundLoops != tc.loops {
+				t.Fatalf("health background_loops = %v, want %v", payload.BackgroundLoops, tc.loops)
+			}
+			// /health names the role so an operator can tell the two pods apart.
+			wantRole := tc.role
+			if wantRole == "" {
+				wantRole = string(config.RoleAll)
+			}
+			if payload.Role != wantRole {
+				t.Fatalf("health role = %q, want %q", payload.Role, wantRole)
+			}
+		})
+	}
+}
