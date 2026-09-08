@@ -12,9 +12,17 @@ REMOTE_DIR="/Users/vision/bifrost-agent"
 #   AGENT_ROLE  primary | standby   (default primary; standby disables nightly-drift)
 #   PEER_SSH    vision@192.168.10.52 (peer SSH target for watchdog restart)
 #   PEER_URL    http://192.168.10.52:8781 (peer runner base URL for health probe)
+# Operator plane (L-1 Go binary, optional — skipped when Go is absent):
+#   OPERATOR_PLANE_PORT       8783
+#   OPERATOR_PLANE_AUTOPILOT  on | off (default off — platform-workers still owns patrol)
+#   PLATFORM_LAN_HOST         192.168.10.40 (this host, as the Minis address it)
 AGENT_ROLE="${AGENT_ROLE:-primary}"
 PEER_SSH="${PEER_SSH:-}"
 PEER_URL="${PEER_URL:-}"
+OPERATOR_PLANE_PORT="${OPERATOR_PLANE_PORT:-8783}"
+OPERATOR_PLANE_AUTOPILOT="${OPERATOR_PLANE_AUTOPILOT:-off}"
+PLATFORM_LAN_HOST="${PLATFORM_LAN_HOST:-192.168.10.40}"
+HERMES_GATEWAY_REMOTE="${HERMES_GATEWAY_REMOTE:-192.168.10.52}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM_LOCAL="$(cd "${SCRIPT_DIR}/../../" && pwd)"
 AGENT_SRC="${PLATFORM_LOCAL}/agent/remediation"
@@ -227,6 +235,61 @@ if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
   run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.peer-watchdog.plist"
 else
   echo "==> No PEER_SSH/PEER_URL — skipping peer watchdog install"
+fi
+
+echo "==> Operator plane (L-1)"
+if command -v go >/dev/null 2>&1; then
+  # Build for the Mini, not for whatever this host is.
+  PLANE_ARCH="$(run_remote 'uname -m' | tr -d '\r')"
+  case "${PLANE_ARCH}" in
+    arm64) PLANE_GOARCH=arm64 ;;
+    x86_64) PLANE_GOARCH=amd64 ;;
+    *) echo "  ERROR: unknown remote arch '${PLANE_ARCH}'" >&2; exit 1 ;;
+  esac
+  echo "  building darwin/${PLANE_GOARCH}"
+  make -C "${PLATFORM_LOCAL}" build-operator-plane GOOS=darwin GOARCH="${PLANE_GOARCH}" >/dev/null
+  run_remote "mkdir -p ${REMOTE_DIR}/operator-plane-data"
+  # Plane-only env: kept out of env.local.sh so the Node runner's environment
+  # does not change when the plane's does.
+  run_remote "cat > ${REMOTE_DIR}/config/env.operator-plane.sh << 'ENVEOF'
+# Managed by deploy_mac_mini.sh — operator plane (L-1) only.
+# git-bridge and the satellite probe bridge run on the platform host, so the
+# Minis address it by LAN IP; the 127.0.0.1 in that host's .env means itself.
+export PLATFORM_CONFIG=${REMOTE_DIR}/workspace/bifrost-platform/config/environments.yaml
+export PLATFORM_DATA_DIR=${REMOTE_DIR}/operator-plane-data
+export OPERATOR_PLANE_LISTEN=:${OPERATOR_PLANE_PORT}
+export OPERATOR_PLANE_AUTOPILOT=${OPERATOR_PLANE_AUTOPILOT}
+export GIT_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8785
+export SATELLITE_PROBE_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8786
+export HERMES_GATEWAY_URL=http://${HERMES_GATEWAY_REMOTE}:8782
+export NOUS_HERMES_URL=http://192.168.10.50:9119
+ENVEOF
+echo '  wrote env.operator-plane.sh (port=${OPERATOR_PLANE_PORT} autopilot=${OPERATOR_PLANE_AUTOPILOT})'"
+  # Stop first: macOS refuses to overwrite a running executable.
+  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.operator-plane 2>/dev/null || true"
+  run_scp "${PLATFORM_LOCAL}/api/bin/operator-plane" "${REMOTE}:${REMOTE_DIR}/operator-plane"
+  run_remote "chmod +x ${REMOTE_DIR}/operator-plane"
+  run_scp "${DEPLOY_DIR}/com.bifrost.operator-plane.plist" "${REMOTE}:~/Library/LaunchAgents/"
+  run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.operator-plane.plist"
+
+  PLANE_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${OPERATOR_PLANE_PORT}/health"
+  PLANE_OK=false
+  for i in 1 2 3 4 5; do
+    sleep 2
+    if PLANE_JSON="$(curl -sf --max-time 5 "${PLANE_URL}" 2>/dev/null)"; then
+      echo "  ✓ operator-plane healthy: ${PLANE_JSON}"
+      PLANE_OK=true
+      break
+    fi
+    echo "  attempt ${i}/5 — waiting for operator-plane on ${PLANE_URL}…"
+  done
+  if [[ "${PLANE_OK}" != "true" ]]; then
+    echo "  ✗ operator-plane did not answer ${PLANE_URL}" >&2
+    run_remote "tail -20 ${REMOTE_DIR}/logs/operator-plane.err 2>/dev/null || true"
+    exit 1
+  fi
+else
+  echo "  skip — no Go toolchain on this host; the Node agent stack above is unaffected"
 fi
 
 echo "==> Syncing Bifrost MCP server (for Nous Hermes Agent)"

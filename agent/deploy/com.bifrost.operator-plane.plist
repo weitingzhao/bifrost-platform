@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bifrost.operator-plane</string>
+
+  <!-- A static Go binary, unlike the Node runner beside it: no npm install, no
+       tsx, and deliberately no KUBECONFIG. The plane is L-1 — it must survive a
+       cluster it exists to repair. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>source /Users/vision/bifrost-agent/config/env.sh &amp;&amp; source /Users/vision/bifrost-agent/config/.env 2>/dev/null; source /Users/vision/bifrost-agent/config/env.operator-plane.sh; exec /Users/vision/bifrost-agent/operator-plane</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/vision/bifrost-agent</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>/Users/vision</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/vision/bifrost-agent/logs/operator-plane.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/vision/bifrost-agent/logs/operator-plane.err</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>
