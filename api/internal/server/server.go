@@ -239,6 +239,9 @@ func (s *Server) Router() http.Handler {
 	}))
 
 	r.Get("/health", s.handleHealth)
+	// Unauthenticated like /health: Prometheus scrapes it, and it exposes only
+	// what /api/v1/plugins/*/status already answers anonymously.
+	r.Get("/metrics", s.handleMetrics)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
