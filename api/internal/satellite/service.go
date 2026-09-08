@@ -13,6 +13,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -94,14 +95,17 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() {
+		defer safego.Recover("satellite.fetchMonitorDeep")
 		defer wg.Done()
 		resp.Monitor = s.fetchMonitorDeep(ctx, env, base+"/api/monitor/status")
 	}()
 	go func() {
+		defer safego.Recover("satellite.fetchOpsDeep")
 		defer wg.Done()
 		resp.Ops = s.fetchOpsDeep(ctx, env, base+"/api/ops/health")
 	}()
 	go func() {
+		defer safego.Recover("satellite.fetchIngestDeep")
 		defer wg.Done()
 		resp.Ingest = s.fetchIngestDeep(ctx, env, base+"/api/ops/ops/market-ingest/services")
 	}()

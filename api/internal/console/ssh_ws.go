@@ -21,6 +21,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 var upgrader = websocket.Upgrader{
@@ -219,10 +220,11 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	wg.Add(2)
-	go pump(stdout)
-	go pump(stderr)
+	safego.Go("console.ssh.pumpStdout", func() { pump(stdout) })
+	safego.Go("console.ssh.pumpStderr", func() { pump(stderr) })
 
 	go func() {
+		defer safego.Recover("console.ssh.readLoop")
 		defer close(done)
 		for {
 			mt, data, err := ws.ReadMessage()

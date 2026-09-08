@@ -12,6 +12,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 type ProbeStatus string
@@ -85,6 +86,7 @@ func (s *Service) Probe(ctx context.Context) SelfHealthResponse {
 	for _, t := range targets {
 		wg.Add(1)
 		go func(tgt target) {
+			defer safego.Recover("selfhealth.probeHTTP")
 			defer wg.Done()
 			p := s.probeHTTP(ctx, tgt.id, tgt.category, tgt.env, tgt.url)
 			mu.Lock()
@@ -95,6 +97,7 @@ func (s *Service) Probe(ctx context.Context) SelfHealthResponse {
 
 	wg.Add(1)
 	go func() {
+		defer safego.Recover("selfhealth.probeArgo")
 		defer wg.Done()
 		argoProbes := s.probeArgo(ctx)
 		mu.Lock()

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const fixtureEnvironmentsYAML = `
@@ -120,12 +121,22 @@ func TestNewBuildsServerAndHealthRoute(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var payload map[string]string
+	var payload struct {
+		Status          string `json:"status"`
+		Service         string `json:"service"`
+		ContainedPanics int64  `json:"contained_panics"`
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if payload["status"] != "ok" || payload["service"] != "bifrost-platform-api" {
+	if payload.Status != "ok" || payload.Service != "bifrost-platform-api" {
 		t.Fatalf("unexpected health payload: %+v", payload)
+	}
+	// A contained goroutine panic must be visible here, not only in the log:
+	// /health saying ok while a worker died mid-flight is the failure we are
+	// paying for with safego.
+	if payload.ContainedPanics != safego.Contained() {
+		t.Fatalf("contained_panics = %d, want %d", payload.ContainedPanics, safego.Contained())
 	}
 }
 

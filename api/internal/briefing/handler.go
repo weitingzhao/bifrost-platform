@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/opscontext"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 )
 
@@ -169,6 +170,7 @@ func (h *Handler) probeAllMatrices(r *http.Request) []probe.MatrixResponse {
 	for i, env := range h.cfg.Environments {
 		wg.Add(1)
 		go func(idx int, e config.Environment) {
+			defer safego.Recover("briefing.probeEnvironment")
 			defer wg.Done()
 			results[idx] = h.prober.ProbeEnvironmentWithDatastore(ctx, e, ds)
 		}(i, env)

@@ -13,6 +13,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const defaultTick = 30 * time.Second
@@ -103,7 +105,7 @@ func (h *Handler) Start(ctx context.Context) {
 	loopCtx, cancel := context.WithCancel(ctx)
 	h.stop = cancel
 	h.mu.Unlock()
-	go h.loop(loopCtx)
+	safego.Go("patrol.loop", func() { h.loop(loopCtx) })
 }
 
 func (h *Handler) Stop() {
@@ -122,13 +124,15 @@ func (h *Handler) Stop() {
 func (h *Handler) loop(ctx context.Context) {
 	ticker := time.NewTicker(h.tick)
 	defer ticker.Stop()
-	h.scanDue()
+	// Guard the tick, not just the goroutine: a panic in scanDue must cost one
+	// scan, not the autopilot. Losing the loop silently is the failure mode.
+	safego.Do("patrol.scanDue", h.scanDue)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			h.scanDue()
+			safego.Do("patrol.scanDue", h.scanDue)
 		}
 	}
 }
@@ -164,6 +168,7 @@ func (h *Handler) scanDue() {
 			continue
 		}
 		go func(skillID string) {
+			defer safego.Recover("patrol.execute.cron")
 			_, _ = h.execute(context.Background(), skillID, TriggerCron)
 		}(id)
 	}
@@ -266,6 +271,7 @@ func (h *Handler) TriggerInternal(skillID string) {
 	}
 	slog.Info("patrol internal trigger", "skill_id", skillID)
 	go func() {
+		defer safego.Recover("patrol.execute.webhook")
 		_, _ = h.execute(context.Background(), skillID, TriggerWebhook)
 	}()
 }
@@ -335,6 +341,7 @@ func (h *Handler) enqueue(id string, trigger Trigger) (TriggerResponse, int) {
 	started := h.now().UTC()
 	run := h.startRecord(skill, trigger, started)
 	go func() {
+		defer safego.Recover("patrol.dispatch")
 		defer h.end(id)
 		prompt := buildPrompt(skill, trigger, started)
 		outcome := h.dispatch.Dispatch(context.Background(), skill, trigger, prompt, h.progressWriter(run.ID))

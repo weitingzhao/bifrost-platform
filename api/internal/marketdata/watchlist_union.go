@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // envDBMapping maps environment IDs to their PostgreSQL database names.
@@ -67,6 +69,7 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 	for envID, db := range envDBMapping {
 		wg.Add(1)
 		go func(eid, database string) {
+			defer safego.Recover("marketdata.queryWatchlist")
 			defer wg.Done()
 			syms, err := s.queryWatchlist(ctx, database)
 			results <- result{envID: eid, symbols: syms, err: err}
@@ -74,6 +77,7 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 	}
 
 	go func() {
+		defer safego.Recover("marketdata.watchlistUnion.close")
 		wg.Wait()
 		close(results)
 	}()

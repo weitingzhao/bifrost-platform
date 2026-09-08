@@ -8,6 +8,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // StartAutoRepair runs L1 auto rollout when plugin self-heal streak exceeds threshold.
@@ -15,7 +16,7 @@ func (s *Service) StartAutoRepair(ctx context.Context, audit *actuation.AuditLog
 	if !s.cfg.AutoRepairEnabled {
 		return
 	}
-	go s.autoRepairLoop(ctx, audit)
+	safego.Go("ibgateway.autoRepairLoop", func() { s.autoRepairLoop(ctx, audit) })
 }
 
 func (s *Service) autoRepairLoop(ctx context.Context, audit *actuation.AuditLog) {
@@ -40,7 +41,9 @@ func (s *Service) autoRepairLoop(ctx context.Context, audit *actuation.AuditLog)
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			s.maybeAutoRollout(ctx, audit, &lastAutoRollout, maxStreak, cooldown)
+			safego.Do("ibgateway.maybeAutoRollout", func() {
+				s.maybeAutoRollout(ctx, audit, &lastAutoRollout, maxStreak, cooldown)
+			})
 		}
 	}
 }

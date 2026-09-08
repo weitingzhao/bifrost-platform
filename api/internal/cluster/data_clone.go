@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -470,19 +471,19 @@ func (s *Service) ensureCloneStores() {
 
 func (s *Service) StartDataCloneScheduler(ctx context.Context) {
 	s.ensureCloneStores()
-	go func() {
+	safego.Go("cluster.dataCloneScheduler", func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
-		s.maybeAutoClone(ctx)
+		safego.Do("cluster.maybeAutoClone", func() { s.maybeAutoClone(ctx) })
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				s.maybeAutoClone(ctx)
+				safego.Do("cluster.maybeAutoClone", func() { s.maybeAutoClone(ctx) })
 			}
 		}
-	}()
+	})
 }
 
 func (s *Service) maybeAutoClone(ctx context.Context) {
@@ -541,7 +542,7 @@ func (s *Service) startDataClone(ctx context.Context, req DataCloneRequest, trig
 	if busy != nil {
 		return nil, busy
 	}
-	go s.runDataClone(context.Background(), job.ID)
+	safego.Go("cluster.runDataClone", func() { s.runDataClone(context.Background(), job.ID) })
 	_ = ctx
 	return &job, nil
 }

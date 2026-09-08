@@ -49,6 +49,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
@@ -554,9 +555,12 @@ func (s *Server) Router() http.Handler {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status":  "ok",
-		"service": "bifrost-platform-api",
+	// contained_panics is not decoration: a non-zero count means some worker
+	// died mid-flight and the surface it feeds may be stale while /health is ok.
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":           "ok",
+		"service":          "bifrost-platform-api",
+		"contained_panics": safego.Contained(),
 	})
 }
 
@@ -593,6 +597,7 @@ func (s *Server) handleMatrix(w http.ResponseWriter, r *http.Request) {
 	for i, env := range s.cfg.Environments {
 		wg.Add(1)
 		go func(idx int, e config.Environment) {
+			defer safego.Recover("server.probeEnvironment")
 			defer wg.Done()
 			results[idx] = s.prober.ProbeEnvironmentWithDatastore(ctx, e, ds)
 		}(i, env)

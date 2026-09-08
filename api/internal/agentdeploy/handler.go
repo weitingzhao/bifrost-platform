@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -167,7 +168,9 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		fmt.Sprintf("job=%s role=%s script=%s", id, selected.Role, script),
 	)
 
-	go h.runDeploy(id, script, remote, selected.Role, selected.PeerSSH, selected.PeerURL, principal.Role)
+	safego.Go("agentdeploy.runDeploy", func() {
+		h.runDeploy(id, script, remote, selected.Role, selected.PeerSSH, selected.PeerURL, principal.Role)
+	})
 
 	writeJSON(w, http.StatusAccepted, StartResponse{
 		Status: "accepted",

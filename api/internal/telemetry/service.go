@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 type Service struct {
@@ -42,6 +43,7 @@ func (s *Service) Overview(ctx context.Context, namespace string) (OverviewRespo
 	for i, spec := range queries {
 		wg.Add(1)
 		go func(idx int, q QuerySpec) {
+			defer safego.Recover("telemetry.runQuery")
 			defer wg.Done()
 			metrics[idx] = s.runQuery(ctx, client, q, ns)
 		}(i, spec)

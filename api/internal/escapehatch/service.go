@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const runbookVersion = "2026-07-07.1"
@@ -43,6 +44,7 @@ func (s *Service) Snapshot(ctx context.Context) (Response, error) {
 
 	wg.Add(1)
 	go func() {
+		defer safego.Recover("escapehatch.localRoute")
 		defer wg.Done()
 		probes := []RouteProbe{
 			s.probeHTTP(ctx, "local-api", "Platform API", localAPI),
@@ -69,6 +71,7 @@ func (s *Service) Snapshot(ctx context.Context) (Response, error) {
 
 	wg.Add(1)
 	go func() {
+		defer safego.Recover("escapehatch.nodeportRoute")
 		defer wg.Done()
 		var probes []RouteProbe
 		entry := s.cfg.DefaultCluster()
@@ -121,6 +124,7 @@ func (s *Service) Snapshot(ctx context.Context) (Response, error) {
 
 	wg.Add(1)
 	go func() {
+		defer safego.Recover("escapehatch.kubeconfigRoute")
 		defer wg.Done()
 		kc := strings.TrimSpace(os.Getenv("PLATFORM_KUBECONFIG"))
 		if kc == "" {

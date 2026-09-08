@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -111,7 +112,7 @@ func (d *DrainWorker) Kick() bool {
 	}
 	d.running = true
 	d.mu.Unlock()
-	go d.loop()
+	safego.Go("operatequeue.drain.loop", d.loop)
 	return true
 }
 
@@ -131,9 +132,16 @@ func (d *DrainWorker) loop() {
 		if !ok {
 			return
 		}
-		if err := d.runOne(item); err != nil {
+		// One unrunnable item must not end the drain worker for the session.
+		if !safego.Do("operatequeue.drain.runOne", func() {
+			if err := d.runOne(item); err != nil {
+				d.mu.Lock()
+				d.lastError = err.Error()
+				d.mu.Unlock()
+			}
+		}) {
 			d.mu.Lock()
-			d.lastError = err.Error()
+			d.lastError = "panic contained while running item " + item.ID
 			d.mu.Unlock()
 		}
 		// Post-run re-sweep (triage only — do not auto-chain unbounded drains)
@@ -340,6 +348,7 @@ func (h *Handler) OnRemediationTerminal(job remediation.Job) {
 		}
 	}
 	go func() {
+		defer safego.Recover("operatequeue.postRunSweep")
 		_, _ = h.Sweep(SweepRequest{AutoDrain: false})
 	}()
 }
