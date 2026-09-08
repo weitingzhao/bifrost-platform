@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +16,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
+
+// An IB account number, the only identity this API relays for a slot.
+var ibAccountID = regexp.MustCompile(`^U[0-9]{6,}$`)
 
 type Service struct {
 	cfg     Config
@@ -34,12 +39,12 @@ func NewService(clusterSvc *cluster.Service) *Service {
 func (s *Service) Status(ctx context.Context) StatusResponse {
 	now := time.Now().UTC()
 	resp := StatusResponse{
-		Reachable:       false,
-		Reachability:    probe.ReachUnknown,
-		Autonomy:        "L0",
-		ConsumerGroup:   consumerGroupName,
-		Deployment:      DeploymentStatus{Namespace: dataNamespace, Name: gatewayDeployName, Reach: probe.ReachUnknown},
-		GeneratedAt:     now,
+		Reachable:     false,
+		Reachability:  probe.ReachUnknown,
+		Autonomy:      "L0",
+		ConsumerGroup: consumerGroupName,
+		Deployment:    DeploymentStatus{Namespace: dataNamespace, Name: gatewayDeployName, Reach: probe.ReachUnknown},
+		GeneratedAt:   now,
 	}
 
 	if s.cfg.RedisPlatformPass == "" {
@@ -321,9 +326,16 @@ func parseIntField(raw string) (int, bool) {
 
 func (s *Service) SetMaintenance(_ context.Context, req ControlRequest) (ControlResponse, error) {
 	now := time.Now().UTC()
+	// No default. This used to fall back to a hardcoded Trade account, so an
+	// omitted field silently toggled maintenance on whichever account the
+	// platform happened to have compiled in. Callers name the account — the
+	// Console reads it from the slot list — and the platform carries none.
 	accountID := strings.TrimSpace(req.AccountID)
-	if accountID == "" {
-		accountID = "U17123565"
+	if !ibAccountID.MatchString(accountID) {
+		return ControlResponse{
+			OK: false, Action: "ib-gateway.maintenance", Target: "ib:control:",
+			Autonomy: "L1", Message: "account_id must be an IB account number", GeneratedAt: now,
+		}, fmt.Errorf("account_id must be an IB account number")
 	}
 	enabled := true
 	if req.Enabled != nil {
@@ -389,34 +401,86 @@ func (s *Service) readDeployment(ctx context.Context) (probe.Reachability, strin
 	return reach, mode, ready, detail
 }
 
+// slotHealth is what the gateway publishes per slot under ib:health:<account>.
+type slotHealth struct {
+	Status    string `json:"status"`
+	AccountID string `json:"account_id"`
+	Slot      string `json:"slot"`
+	ClientID  int    `json:"client_id"`
+}
+
+// Host first: the Console and the Trade panel read slots in this order.
+var slotRank = map[string]int{"host": 0, "secondary": 1}
+
+// readSlots discovers the slots from the keys the gateway actually writes.
+//
+// It used to build those keys from two hardcoded Trade account numbers. The
+// platform should not carry Trade's account ids at all, and the moment the
+// gateway's configured identity differed from what was compiled in here, every
+// slot reported "no ib:health key" — which is exactly what the cluster showed:
+// the gateway's live ConfigMap still names a TWS login where the repo has long
+// since moved to account numbers, so neither key was ever found.
+//
+// Discovery makes the mismatch impossible: whatever identity the gateway is
+// configured with, it names its own slot in the payload.
 func (s *Service) readSlots() []SlotStatus {
-	accounts := []struct {
-		slot, account string
-	}{
-		{"host", "U17123565"},
-		{"secondary", "U8829175"},
+	keys, err := s.redisScanKeys("ib:health:*")
+	if err != nil {
+		return nil
 	}
-	out := make([]SlotStatus, 0, len(accounts))
-	for _, acct := range accounts {
-		slot := SlotStatus{Slot: acct.slot, AccountID: acct.account, Reach: probe.ReachUnknown}
-		raw, err := s.redisGet("ib:health:" + acct.account)
-		if err != nil || raw == "" {
-			slot.Status = "unknown"
-			slot.Detail = "no ib:health key"
-			out = append(out, slot)
+	out := make([]SlotStatus, 0, len(keys))
+	for _, key := range keys {
+		raw, getErr := s.redisGet(key)
+		if getErr != nil || raw == "" {
 			continue
 		}
-		slot.Connected = strings.Contains(raw, `"status": "connected"`) || strings.Contains(raw, `"status":"connected"`)
-		if slot.Connected {
+		var h slotHealth
+		if json.Unmarshal([]byte(raw), &h) != nil {
+			continue
+		}
+		if h.Slot == "" {
+			// Nothing to attribute it to; a slot-less key is not a slot.
+			continue
+		}
+		slot := SlotStatus{Slot: h.Slot, ClientID: h.ClientID, Reach: probe.ReachUnknown}
+		// Account identity is the IB account number (Owner, 2026-09-06). A
+		// gateway still configured with a TWS login name must not have it
+		// relayed out through this API.
+		if ibAccountID.MatchString(h.AccountID) {
+			slot.AccountID = h.AccountID
+		} else {
+			slot.Detail = "gateway reports a login name, not an IB account number — fix its config"
+		}
+		slot.Connected = h.Status == "connected"
+		switch {
+		case slot.Connected:
 			slot.Status = "connected"
 			slot.Reach = probe.ReachOK
-		} else {
-			slot.Status = "disconnected"
+		case h.Status != "":
+			slot.Status = h.Status
 			slot.Reach = probe.ReachDegraded
+		default:
+			slot.Status = "unknown"
 		}
 		out = append(out, slot)
 	}
+	sortSlots(out)
 	return out
+}
+
+// sortSlots puts host first, then secondary, then anything the gateway grows.
+func sortSlots(out []SlotStatus) {
+	sort.Slice(out, func(i, j int) bool {
+		ri, oki := slotRank[out[i].Slot]
+		rj, okj := slotRank[out[j].Slot]
+		if oki != okj {
+			return oki
+		}
+		if oki && ri != rj {
+			return ri < rj
+		}
+		return out[i].Slot < out[j].Slot
+	})
 }
 
 func classifyReach(deployOK, ingestorOK, hostOK, secOK bool, mode string) probe.Reachability {

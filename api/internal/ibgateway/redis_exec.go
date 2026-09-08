@@ -21,6 +21,10 @@ import (
 
 const redisOpTimeout = 3 * time.Second
 
+// A handful of slots is the real shape; the cap only stops a probe from
+// walking an unexpectedly large keyspace.
+const redisScanMaxKeys = 64
+
 var errRedisPassMissing = errors.New("REDIS_IB_PLATFORM_PASS not set")
 
 // redisClient is built once and reused; go-redis pools connections internally.
@@ -73,6 +77,28 @@ func (s *Service) redisGet(key string) (string, error) {
 		return "", nil
 	}
 	return v, err
+}
+
+// redisScanKeys walks the keyspace with SCAN rather than KEYS so a growing
+// keyspace cannot stall the probe. The ACL user is scoped to the patterns it is
+// allowed to see, and Redis filters the cursor to those.
+func (s *Service) redisScanKeys(pattern string) ([]string, error) {
+	c, err := s.redisClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := s.redisCtx()
+	defer cancel()
+
+	var keys []string
+	iter := c.Scan(ctx, 0, pattern, 100).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+		if len(keys) >= redisScanMaxKeys {
+			break
+		}
+	}
+	return keys, iter.Err()
 }
 
 func (s *Service) redisSet(key, value string, ttl time.Duration) error {

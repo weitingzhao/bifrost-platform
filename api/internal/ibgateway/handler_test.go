@@ -115,3 +115,33 @@ func TestPatchGatewayYamlMode(t *testing.T) {
 		t.Fatalf("unexpected yaml %q", out)
 	}
 }
+
+// The platform must not carry Trade's account numbers, and must not relay a TWS
+// login name if the gateway is still configured with one (Owner, 2026-09-06:
+// account identity is the IB account number). Both went wrong at once before
+// discovery replaced the hardcoded pair — the compiled-in ids no longer matched
+// the keys the gateway wrote, so every slot read "no ib:health key".
+func TestSlotAccountIDAcceptsOnlyIBAccountNumbers(t *testing.T) {
+	for _, ok := range []string{"U17123565", "U8829175", "U11111111"} {
+		if !ibAccountID.MatchString(ok) {
+			t.Fatalf("%q should be accepted as an IB account number", ok)
+		}
+	}
+	for _, bad := range []string{"", "wzhao1503", "vzhao1503", "u1712356", "U123", "U17123565x", " U17123565"} {
+		if ibAccountID.MatchString(bad) {
+			t.Fatalf("%q must not be relayed as an account id", bad)
+		}
+	}
+}
+
+func TestSlotsAreOrderedHostFirst(t *testing.T) {
+	out := []SlotStatus{{Slot: "zzz"}, {Slot: "secondary"}, {Slot: "host"}}
+	sortSlots(out)
+	got := []string{out[0].Slot, out[1].Slot, out[2].Slot}
+	want := []string{"host", "secondary", "zzz"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("slot order = %v, want %v", got, want)
+		}
+	}
+}
