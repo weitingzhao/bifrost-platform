@@ -154,18 +154,29 @@ phases:
 
   - id: P4
     title: "Mine — fill the subscribed depth and wire Research"
-    status: pending
+    status: in_progress
     prompt_template: |
       Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
 
-      Backfill stock_daily 2021-09 → 2025-05 (grouped daily, ~950 calls);
-      option history 2024-09 → today for watchlist ∪ SPY/QQQ/IWM/SPX ∪ M7 with
-      strike ±30% / DTE <= 90 (rewrite worker/backfill.py first); intraday
-      chain snapshots 10:30 / 13:00 / 15:30 ET, 90-day retention; Financials &
-      Ratios full-market; treasury yields daily; Research: stg_ratios reads
-      raw_market.ratios, stg_short_* use snake_case + percent units,
-      mart_sepa_tier_sentiment / fundamental_ext revived; BACKTEST_DATA_COVERAGE
-      and LO-5 docs rewritten.
+      Owner approved on 2026-09-08: backfill option A (watchlist ∪
+      SPY/QQQ/IWM/SPX ∪ M7, 24 expiry months, strike ±30%, at most 90 days
+      priced per contract) and intraday option A (10:30 / 13:00 / 15:30 ET,
+      intraday rows kept 30 days, EOD unchanged at 90 sessions — three full
+      chains a session is ~3x the EOD volume and the CNPG volume is 30Gi).
+
+      stock_daily backfilled 2021-09 → 2025-05 by grouped daily, one job per
+      trading day; the plan's 5-year rolling window starts at 2021-09-09, so
+      the first six days answer "past historical entitlements" and are not a
+      defect. Option history via the new option_backfill_plan kind, split one
+      underlying-month at a time because SPY and SPX each list over 50,000
+      contracts in the window; it reads stock_daily closes for the strike
+      filter, so it runs after the stock backfill. Intraday reuses P3's
+      observation-time model. treasury_yield is a new table (7 tenors, free on
+      every plan). Research: stg_ratios reads raw_market.ratios instead of
+      being a hard-coded empty table, stg_short_* read the vendor's real
+      snake_case keys, mart_sepa_fundamental_ext drops the quarterly filter
+      that matched no daily ratio rows; short_pct_float stays null because
+      float is not in the subscription.
     verify_cmd: |
       export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
       PRIMARY=$(kubectl -n data get cluster bifrost-postgres -o jsonpath='{.status.currentPrimary}')
@@ -179,7 +190,8 @@ phases:
     sign_off:
       required: true
       checklist:
-        - "Owner confirmed backfill universe and intraday snapshot cadence"
+        - "Owner confirmed backfill universe and intraday snapshot cadence (option A / option A, 2026-09-08)"
+        - "option_daily spans 24 months for the approved universe once the backfill drains"
 
 post_completion:
   new_capabilities:
