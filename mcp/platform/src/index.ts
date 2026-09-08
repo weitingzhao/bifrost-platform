@@ -212,7 +212,7 @@ reg(
 
 reg(
   'start_pipeline_run',
-  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s.',
+  'Start Tekton PipelineRun (operator). Pass revision (Gitea tag) to pin deploy version. For bifrost-deliver-research, pass tag (semver image pin, e.g. 0.48.4) — default tag is the moving smoke tag `dev` and must not pin k8s. For bifrost-build-research-dagster, pass the same semver: the `-dagster` suffix is appended for you, because both research image lines share one repository and a bare tag would build the Dagster image over the one research-api runs.',
   { name: z.string(), revision: z.string().optional(), tag: z.string().optional() },
   async ({ name, revision, tag }) =>
     jsonResult(

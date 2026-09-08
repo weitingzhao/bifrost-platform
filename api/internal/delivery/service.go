@@ -251,15 +251,25 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			"name": pipelineName,
 		},
 	}
-	if pipelineName == "bifrost-deliver-stg" || pipelineName == "bifrost-deliver-prod" || pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" || pipelineName == "bifrost-deliver-research" {
+	if pipelineTakesRevision(pipelineName) {
 		params := []map[string]any{
 			{"name": "revision", "value": rev},
 		}
-		// research builds an explicitly tagged image; the tag must match what
-		// k8s/api/deployment.yaml will point at once the image lands.
-		if pipelineName == "bifrost-deliver-research" {
+		switch pipelineName {
+		case "bifrost-deliver-research":
+			// research builds an explicitly tagged image; the tag must match what
+			// k8s/api/deployment.yaml will point at once the image lands.
 			if t := strings.TrimSpace(tag); t != "" {
 				params = append(params, map[string]any{"name": "tag", "value": t})
+			}
+		case "bifrost-build-research-dagster":
+			// This pipeline names a full image rather than a tag, and Dagster's
+			// image shares a repository with the runtime one — only the suffix
+			// tells them apart. Asking for "0.94.1" here would build a Dagster
+			// image over the image research-api runs, so the suffix is enforced
+			// rather than trusted.
+			if img := researchDagsterImage(tag); img != "" {
+				params = append(params, map[string]any{"name": "image", "value": img})
 			}
 		}
 		spec["params"] = params
@@ -307,11 +317,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			"metadata": map[string]any{
 				"name":      runName,
 				"namespace": ns,
-			"labels": map[string]any{
-				"tekton.dev/pipeline": pipelineName,
-				"bifrost.io/trigger":  "platform-api",
-				"bifrost.io/revision": sanitizeLabelValue(rev),
-			},
+				"labels": map[string]any{
+					"tekton.dev/pipeline": pipelineName,
+					"bifrost.io/trigger":  "platform-api",
+					"bifrost.io/revision": sanitizeLabelValue(rev),
+				},
 			},
 			"spec": spec,
 		},
@@ -455,6 +465,38 @@ func amd64CITaskRunTemplate() map[string]any {
 	}
 }
 
+// The in-cluster registry service, as Tekton sees it from a build pod. Both
+// research image lines live here; k8s manifests reference the same registry by
+// its NodePort address instead.
+const researchRegistryRepo = "registry.cicd.svc.cluster.local:5000/bifrost-research"
+
+// Pipelines whose first parameter is the Gitea revision to build.
+func pipelineTakesRevision(name string) bool {
+	switch name {
+	case "bifrost-deliver-stg", "bifrost-deliver-prod",
+		"bifrost-deliver-platform", "bifrost-deliver-platform-prod",
+		"bifrost-deliver-research", "bifrost-build-research-dagster":
+		return true
+	}
+	return false
+}
+
+// researchDagsterImage turns a caller's tag into the image the Dagster build
+// pipeline expects. The `-dagster` suffix is appended when missing: the two
+// research image lines live in one repository and are told apart by that suffix
+// alone, so a bare semver would overwrite the runtime image with a Dagster
+// build. An empty tag yields an empty image and the pipeline keeps its default.
+func researchDagsterImage(tag string) string {
+	t := strings.TrimSpace(tag)
+	if t == "" {
+		return ""
+	}
+	if !strings.HasSuffix(t, "-dagster") {
+		t += "-dagster"
+	}
+	return researchRegistryRepo + ":" + t
+}
+
 func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 	buildContextPVC := map[string]any{
 		"name": "build-context",
@@ -506,6 +548,24 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 		}
 	case "bifrost-deliver-research", "bifrost-build-frontend-stg":
 		return []map[string]any{buildContextPVC}
+	case "bifrost-build-research-dagster":
+		// The Dagster image carries the full dbt project, so its context needs
+		// more room than the runtime image — 8Gi is what the hand-run template
+		// in k8s/cicd/tekton has always used.
+		return []map[string]any{
+			{
+				"name": "build-context",
+				"volumeClaimTemplate": map[string]any{
+					"spec": map[string]any{
+						"accessModes":      []any{"ReadWriteOnce"},
+						"storageClassName": "local-path",
+						"resources": map[string]any{
+							"requests": map[string]any{"storage": "8Gi"},
+						},
+					},
+				},
+			},
+		}
 	default:
 		return nil
 	}

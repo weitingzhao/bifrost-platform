@@ -10,13 +10,14 @@ import (
 
 // Kaniko pipelines must schedule TaskRuns on amd64 (see workload placement G2).
 var kanikoPipelineNames = map[string]bool{
-	"bifrost-deliver-stg":           true,
-	"bifrost-deliver-prod":          true,
-	"bifrost-deliver-platform":      true,
-	"bifrost-deliver-platform-prod": true,
-	"bifrost-deliver-research":      true,
-	"bifrost-build-stg":             true,
-	"bifrost-build-frontend-stg":    true,
+	"bifrost-deliver-stg":            true,
+	"bifrost-deliver-prod":           true,
+	"bifrost-deliver-platform":       true,
+	"bifrost-deliver-platform-prod":  true,
+	"bifrost-deliver-research":       true,
+	"bifrost-build-stg":              true,
+	"bifrost-build-frontend-stg":     true,
+	"bifrost-build-research-dagster": true,
 }
 
 func isKanikoPipeline(name string) bool {
@@ -40,11 +41,11 @@ func (s *Service) ciNodeInputs(ctx context.Context) []placement.NodeInput {
 func (s *Service) PipelinePreflight(ctx context.Context, pipelineName string) PipelinePreflightResponse {
 	now := time.Now().UTC()
 	resp := PipelinePreflightResponse{
-		ClusterID:   s.clusterID(),
-		Pipeline:    pipelineName,
-		BuildReady:  true,
+		ClusterID:    s.clusterID(),
+		Pipeline:     pipelineName,
+		BuildReady:   true,
 		Reachability: probe.ReachOK,
-		GeneratedAt: now,
+		GeneratedAt:  now,
 	}
 	if !isKanikoPipeline(pipelineName) {
 		return resp
