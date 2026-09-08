@@ -108,6 +108,11 @@ export function DoctorPanel() {
       headerExtra={
         <div className="flex flex-wrap items-center gap-2">
           {verdictTag}
+          {report?.eod_critical != null ? (
+            <DenseTag variant={verdictVariant(report.eod_critical.verdict)}>
+              EOD {report.eod_critical.verdict}
+            </DenseTag>
+          ) : null}
           {report != null ? (
             <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
               checked {report.generated_at}

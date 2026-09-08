@@ -119,20 +119,26 @@ phases:
 
   - id: P3
     title: "Model — observe-time snapshots, session-scoped health"
-    status: pending
+    status: done
     prompt_template: |
       Execute {{phase_title}} for program {{id}}. Follow {{skill_path}}.
 
-      ARCHITECTURE-LEVEL: raw_market.option_snapshot PK → (option_ticker,
-      observed_at) with last_trade_ts as a column; migrate old rows by
-      fetched_at; OI derived from the snapshot; retire gap-heal / backfill_oi /
-      vendor_gap_fix; job idempotency keyed by session_date with session-based
-      retention; resumable pagination; preStop drain; health = per-session
-      expected-vs-actual (snapshot coverage >= 95% of live contracts, OI rows,
-      stock_daily >= 12k rows); husbandry_gate reads only EOD-critical
-      dimensions; Console lane + platform data-husbandry follow the new model.
-      Do not start without the Owner's explicit DDL approval.
+      ARCHITECTURE-LEVEL, Owner approved option A on 2026-09-08: keep the
+      column name and the PK shape and redefine snapshot_ts as the observation
+      time (16:00 NY session anchor for EOD, the instant for intraday), moving
+      the old last-trade value to last_trade_ts — so every consumer query
+      becomes correct with no code change. Migrate history by fetched_at,
+      snapping weekend catch-ups back onto the session they were healing.
+      OI derived from the snapshot; retire the oi-gap-heal slot, handler,
+      script and CronJob (vendor_gap_fix is KEPT — Trade API data-readiness
+      calls it, and it is a stock_daily_grouped alias unrelated to the OI
+      model). Job idempotency keyed by the session rather than a 12h window;
+      preStop drain; health = per-session expected-vs-actual (chain coverage
+      >= 95% of live contracts, OI rows, stock_daily >= 12k rows) exposed as
+      doctor.eod_critical, which husbandry_gate reads instead of cron
+      adherence; Console lane follows the new model.
     verify_cmd: |
+      curl -sf http://127.0.0.1:8780/api/v1/plugins/market-data/api/market/doctor | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["session"], d["verdict"], d["eod_critical"]["verdict"])' &&
       cd bifrost-platform-plugin-market-data && make lint && make test
     acceptance:
       - "Per-session chain snapshot coverage >= 95% per underlying"
@@ -143,7 +149,8 @@ phases:
     sign_off:
       required: true
       checklist:
-        - "Owner approved the option_snapshot PK change (DDL)"
+        - "Owner approved the option_snapshot model change (option A, 2026-09-08)"
+        - "Chain coverage >= 95% observed on a full EOD session after 0.13.0"
 
   - id: P4
     title: "Mine — fill the subscribed depth and wire Research"

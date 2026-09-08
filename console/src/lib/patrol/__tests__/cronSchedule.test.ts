@@ -64,7 +64,7 @@ describe('iterCronFiresUtc', () => {
     ])
   })
 
-  it('matches weekly Saturday oi-gap-heal', () => {
+  it('matches a weekly Saturday cron', () => {
     const fires = iterCronFiresUtc(
       '0 4 * * 6',
       new Date('2026-08-10T00:00:00Z'),

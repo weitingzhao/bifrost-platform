@@ -11,7 +11,6 @@ const DAGSTER_SLOTS = new Set([
   'calendar',
   'stock-snapshot',
   'stock-movers',
-  'oi-gap-heal',
   'option-bars',
   'minute-bars',
   'option-trades',
@@ -39,7 +38,6 @@ export const SLOT_TO_DAGSTER_SCHEDULE: Readonly<Record<string, string>> = {
   'fundamentals-rotate': 'market_fundamentals_rotate_schedule',
   'option-refresh': 'market_option_refresh_schedule',
   trim: 'market_trim_schedule',
-  'oi-gap-heal': 'market_oi_gap_heal_schedule',
 }
 
 /** Analytics slots moved to Research — not Massive Cron. */

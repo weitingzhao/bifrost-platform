@@ -64,6 +64,7 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
     '',
     `Session: ${report.session}${report.session_is_today ? ' (today, EOD window passed)' : ' (last completed)'}`,
     `Verdict: ${report.verdict} — ${report.summary}`,
+    `EOD data (gates the Research dbt batch): ${report.eod_critical?.verdict ?? 'unknown'} — ${report.eod_critical?.detail ?? 'not reported'}`,
     `Generated: ${report.generated_at}`,
     `Universe: watchlist ${report.universe.watchlist} · underlyings ${report.universe.underlyings} · optionable ${report.universe.optionable}`,
     '',

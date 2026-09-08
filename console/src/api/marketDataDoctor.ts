@@ -37,6 +37,13 @@ export type DoctorFinding = {
 
 export type DoctorPrescription = DoctorFix & { finding_ids: string[] }
 
+export type DoctorEodCritical = {
+  verdict: DoctorVerdict
+  checks: string[]
+  findings: string[]
+  detail: string
+}
+
 export type DoctorReport = {
   ok: boolean
   generated_at: string
@@ -47,6 +54,8 @@ export type DoctorReport = {
   summary: string
   findings: DoctorFinding[]
   prescriptions: DoctorPrescription[]
+  /** What gates the Research dbt batch: the session's own data, not cron adherence. */
+  eod_critical?: DoctorEodCritical
   retired_slots: string[]
 }
 

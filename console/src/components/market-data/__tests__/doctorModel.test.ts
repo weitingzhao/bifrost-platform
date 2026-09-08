@@ -27,6 +27,12 @@ const report: DoctorReport = {
     { finding_ids: ['stale:calendar'], action: 'enqueue-slot', slot: 'calendar', force: true },
   ],
   retired_slots: ['option-trades'],
+  eod_critical: {
+    verdict: 'critical',
+    checks: ['option_snapshot', 'option_open_interest', 'stock_daily', 'stock_daily_watchlist'],
+    findings: ['option_snapshot:2026-09-04'],
+    detail: 'Option chain snapshot: 51% (2050)',
+  },
 }
 
 describe('doctorModel', () => {
@@ -65,6 +71,7 @@ describe('doctorModel', () => {
     expect(text).not.toContain('Stock daily bars')
     expect(text).toContain('- Enqueue calendar (force) ← stale:calendar')
     expect(text).toContain('`market_data_heal` with `{"dry_run": true}`')
+    expect(text).toContain('EOD data (gates the Research dbt batch): critical — Option chain snapshot: 51% (2050)')
     expect(text).toContain('D10 BLOCKED')
   })
 })

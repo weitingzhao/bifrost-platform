@@ -15,7 +15,6 @@ export const MARKET_DATA_SCHEDULE_SLOTS: ReadonlyArray<{
   { id: 'reference', cron: '30 21 * * *', note: 'Ticker sync' },
   { id: 'stock-snapshot', cron: '5 21 * * *', note: 'Stock snapshots' },
   { id: 'stock-movers', cron: '10 21 * * *', note: 'Stock movers' },
-  { id: 'oi-gap-heal', cron: '0 4 * * 6', note: 'OI gap heal (weekly)' },
   { id: 'max-pain', cron: '45 22 * * *', note: 'Max Pain analytics' },
   { id: 'atm-iv-pcr', cron: '0 23 * * *', note: 'ATM IV + PCR' },
   { id: 'iv-percentile', cron: '15 23 * * *', note: 'IV Percentile' },
