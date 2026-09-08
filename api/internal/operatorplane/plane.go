@@ -21,6 +21,15 @@ package operatorplane
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -94,56 +103,115 @@ func (p *Plane) StartBackground(ctx context.Context) { p.patrol.Start(ctx) }
 // StopBackground stops the autopilot.
 func (p *Plane) StopBackground() { p.patrol.Stop() }
 
-// Mount registers the L-1 routes on an /api/v1 router. Read paths are viewer
-// level; anything that actuates a runner, a deploy or a skill is operator
-// gated, matching what platform-api served before the plane was extracted.
-func (p *Plane) Mount(r chi.Router) {
-	r.Get("/agent/nightly-report", p.agentReport.HandleNightlyReport)
-	r.Get("/agent/bridge", p.agentBridge.HandleBridge)
-	r.Get("/agent/smoke", p.agentBridge.HandleSmoke)
-	r.Get("/agent/deploy", p.agentDeploy.HandleStatus)
-	r.Get("/agent/hermes/readiness", p.hermesReadiness.HandleReadiness)
-	r.Get("/agent/hermes/first-task", p.hermesReadiness.HandleFirstTask)
-	r.Get("/agent/hermes/health", p.hermesGateway.HandleHealth)
-	r.Get("/agent/skills", p.hermesGateway.HandleSkills)
-	r.Get("/agent/schedules", p.hermesGateway.HandleSchedules)
-	r.Get("/agent/executions", p.hermesGateway.HandleExecutions)
-	r.Get("/hermes/insights", p.hermesInsight.HandleList)
-	r.Post("/hermes/run-first-task", p.hermesInsight.HandleRunFirstTask)
-	r.Get("/patrol/skills", p.patrol.HandleListSkills)
-	r.Get("/patrol/skills/{id}", p.patrol.HandleGetSkill)
-	r.Get("/patrol/runs", p.patrol.HandleListRuns)
-
-	r.Group(func(r chi.Router) {
-		r.Use(p.auth.Require(actuation.RoleOperator))
-		r.Post("/agent/nightly-run", p.agentReport.HandleTriggerNightly)
-		r.Post("/agent/deploy", p.agentDeploy.HandleStart)
-		r.Put("/agent/skills/{id}/actuation-level", p.hermesGateway.HandleSkillActuationLevel)
-		r.Put("/patrol/skills/{id}/enable", p.patrol.HandleEnable)
-		r.Post("/patrol/trigger/{id}", p.patrol.HandleTrigger)
-		r.Post("/patrol/webhook/{event}", p.patrol.HandleWebhook)
-	})
-
-	r.Route("/agent/drift-proposals", func(r chi.Router) {
-		r.Get("/", p.driftProposal.HandleList)
-		r.Get("/{id}", p.driftProposal.HandleGet)
-		r.Group(func(r chi.Router) {
-			r.Use(p.auth.Require(actuation.RoleOperator))
-			r.Post("/", p.driftProposal.HandleCreate)
-			r.Post("/{id}/approve", p.driftProposal.HandleApprove)
-			r.Post("/{id}/reject", p.driftProposal.HandleReject)
-		})
-	})
+// route is one entry of the plane's route table. Mount and MountProxy both walk
+// this table, so what a proxying host forwards cannot drift from what the plane
+// actually serves — the two used to be maintained as separate lists.
+type route struct {
+	method   string
+	pattern  string
+	operator bool
+	pick     func(*Plane) http.HandlerFunc
 }
 
-// Routes is the path set this plane owns, for the host that proxies to it.
-func Routes() []string {
-	return []string{
-		"/agent/nightly-report", "/agent/bridge", "/agent/smoke", "/agent/deploy",
-		"/agent/hermes/readiness", "/agent/hermes/first-task", "/agent/hermes/health",
-		"/agent/skills", "/agent/schedules", "/agent/executions",
-		"/hermes/insights", "/hermes/run-first-task",
-		"/patrol/skills", "/patrol/runs",
-		"/agent/nightly-run", "/agent/drift-proposals",
+// routeTable is the L-1 surface. Read paths are viewer level; anything that
+// actuates a runner, a deploy or a skill is operator gated, matching what
+// platform-api served before the plane was extracted.
+func routeTable() []route {
+	return []route{
+		{"GET", "/agent/nightly-report", false, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleNightlyReport }},
+		{"GET", "/agent/bridge", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleBridge }},
+		{"GET", "/agent/smoke", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleSmoke }},
+		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }},
+		{"GET", "/agent/hermes/readiness", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleReadiness }},
+		{"GET", "/agent/hermes/first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleFirstTask }},
+		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }},
+		{"GET", "/agent/skills", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkills }},
+		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }},
+		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }},
+		{"GET", "/hermes/insights", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleList }},
+		{"POST", "/hermes/run-first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }},
+		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }},
+		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }},
+		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }},
+
+		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }},
+		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }},
+		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }},
+		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }},
+		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }},
+		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }},
+
+		// The collection is registered both with and without the trailing slash.
+		// chi's nested Route used to answer both; the Console calls the bare form
+		// and the tests the slashed one, and neither should start 404-ing.
+		{"GET", "/agent/drift-proposals", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
+		{"GET", "/agent/drift-proposals/", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
+		{"GET", "/agent/drift-proposals/{id}", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleGet }},
+		{"POST", "/agent/drift-proposals", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
+		{"POST", "/agent/drift-proposals/", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
+		{"POST", "/agent/drift-proposals/{id}/approve", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleApprove }},
+		{"POST", "/agent/drift-proposals/{id}/reject", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleReject }},
 	}
+}
+
+func register(r chi.Router, rt route, auth *actuation.AuthService, h http.HandlerFunc) {
+	if rt.operator {
+		r.With(auth.Require(actuation.RoleOperator)).Method(rt.method, rt.pattern, h)
+		return
+	}
+	r.Method(rt.method, rt.pattern, h)
+}
+
+// Mount registers the L-1 routes on an /api/v1 router, served in this process.
+func (p *Plane) Mount(r chi.Router) {
+	for _, rt := range routeTable() {
+		register(r, rt, p.auth, rt.pick(p))
+	}
+}
+
+// NewProxyMount returns a mount function that registers the same routes on a
+// host router but forwards each call to an operator plane running elsewhere. The
+// host still enforces operator auth, so a call that will be refused does not
+// cross the network first; the plane checks it again against the same
+// platform-auth.yaml. A bad URL fails here, at startup, rather than at mount.
+//
+// A host that proxies must not also construct a Plane: the patrol autopilot
+// keeps its due-scan marks in memory, and exactly one process may hold them.
+func NewProxyMount(auth *actuation.AuthService, target string) (func(chi.Router), error) {
+	base, err := url.Parse(strings.TrimRight(strings.TrimSpace(target), "/"))
+	if err != nil {
+		return nil, fmt.Errorf("operator plane url %q: %w", target, err)
+	}
+	if base.Scheme == "" || base.Host == "" {
+		return nil, fmt.Errorf("operator plane url %q needs a scheme and host", target)
+	}
+	proxy := newProxy(base)
+	return func(r chi.Router) {
+		for _, rt := range routeTable() {
+			register(r, rt, auth, proxy.ServeHTTP)
+		}
+	}, nil
+}
+
+func newProxy(base *url.URL) *httputil.ReverseProxy {
+	proxy := httputil.NewSingleHostReverseProxy(base)
+	proxy.Transport = &http.Transport{
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
+	// Say which half is down. Without this the operator sees a bare 502 from
+	// platform-api and debugs the wrong process — the exact confusion the split
+	// was meant to remove.
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		slog.Error("operator plane unreachable", "plane", base.String(), "path", r.URL.Path, "err", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadGateway)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":  "operator plane unreachable",
+			"plane":  base.String(),
+			"detail": err.Error(),
+			"hint":   "the L-1 plane runs beside the remediation runners; platform-api itself is up",
+		})
+	}
+	return proxy
 }

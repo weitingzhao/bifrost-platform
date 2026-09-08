@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -76,10 +78,14 @@ type Server struct {
 	remediation     *remediation.Handler
 	agentgovernance *agentgovernance.Handler
 	codehealth      *codehealth.Handler
-	// The out-of-band operator plane (L-1). It is one field because it is one
-	// deployable: cmd/operator-plane serves exactly these routes beside the
-	// remediation runners, where a bad platform-api release cannot reach it.
+	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
+	// serves exactly these routes beside the remediation runners, where a bad
+	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
+	// points at such a process — then mountPlane forwards instead of serving, and
+	// nothing here constructs a second patrol autopilot.
 	plane           *operatorplane.Plane
+	planeURL        string
+	mountPlane      func(chi.Router)
 	retrospective   *retrospective.Handler
 	satellite       *satellite.Handler
 	selfhealth      *selfhealth.Handler
@@ -140,16 +146,31 @@ func New(cfg *config.Config) (*Server, error) {
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	checklistH.BindRemediation(remediationH)
 	checklistH.BindOperateQueue(operatequeueH)
-	plane, err := operatorplane.New(operatorplane.Deps{
-		Auth:      auth,
-		Audit:     audit,
-		ConfigDir: cfg.ConfigDir(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("operator plane: %w", err)
-	}
-	if role.RunsWorkers() {
-		plane.StartBackground(context.Background())
+	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward the routes
+	// rather than serving them, and do not build the handlers at all. Building
+	// them would start a second patrol autopilot's worth of state for nobody.
+	planeURL := strings.TrimSpace(os.Getenv("OPERATOR_PLANE_URL"))
+	var plane *operatorplane.Plane
+	var mountPlane func(chi.Router)
+	if planeURL == "" {
+		plane, err = operatorplane.New(operatorplane.Deps{
+			Auth:      auth,
+			Audit:     audit,
+			ConfigDir: cfg.ConfigDir(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("operator plane: %w", err)
+		}
+		if role.RunsWorkers() {
+			plane.StartBackground(context.Background())
+		}
+		mountPlane = plane.Mount
+	} else {
+		mountPlane, err = operatorplane.NewProxyMount(auth, planeURL)
+		if err != nil {
+			return nil, fmt.Errorf("operator plane proxy: %w", err)
+		}
+		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; no local patrol autopilot")
 	}
 	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
 		resp, err := checklistH.Store().Get()
@@ -188,6 +209,8 @@ func New(cfg *config.Config) (*Server, error) {
 		opsagent:        opsagent.NewHandler(audit),
 		remediation:     remediationH,
 		plane:           plane,
+		planeURL:        planeURL,
+		mountPlane:      mountPlane,
 		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
 		codehealth:      codehealth.NewHandler(audit),
 		retrospective:   retrospective.NewHandler(retroAnalyzer),
@@ -239,7 +262,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(r chi.Router) {
 		// L-1 surface. Served here for convenience while platform-api is healthy;
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
-		s.plane.Mount(r)
+		s.mountPlane(r)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)
@@ -529,7 +552,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"role":             role.String(),
 		"background_loops": role.RunsWorkers(),
 		"contained_panics": safego.Contained(),
+		"operator_plane":   s.operatorPlaneMode(),
 	})
+}
+
+// operatorPlaneMode tells an operator which process is answering the L-1 routes,
+// so a 502 from them is not mistaken for platform-api being down.
+func (s *Server) operatorPlaneMode() string {
+	if s.planeURL != "" {
+		return "proxy:" + s.planeURL
+	}
+	return "in-process"
 }
 
 func (s *Server) handleEnvironments(w http.ResponseWriter, _ *http.Request) {
