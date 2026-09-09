@@ -23,6 +23,7 @@ import {
   writeMdSearchParams,
 } from '@/components/market-data/quality/mdNavParams'
 import { BlueprintPanel } from '@/components/market-data/BlueprintPanel'
+import { CoverageDimensionsPanel } from '@/components/market-data/CoverageDimensionsPanel'
 import { DataInventoryStrip } from '@/components/market-data/DataInventoryStrip'
 import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
 import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
@@ -210,7 +211,12 @@ export function MarketDataCoverageTab({
         </>
       ) : null}
 
-      {panel === 'blueprint' ? <BlueprintPanel /> : null}
+      {panel === 'blueprint' ? (
+        <>
+          <CoverageDimensionsPanel />
+          <BlueprintPanel />
+        </>
+      ) : null}
 
       {panel === 'readiness' ? <ReadinessPanel /> : null}
 
