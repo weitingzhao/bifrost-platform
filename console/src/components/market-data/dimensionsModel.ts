@@ -64,3 +64,62 @@ export function breadthLabel(d: DatasetDimensions): string {
   if (b.of == null) return `${b.held.toLocaleString()}`;
   return `${b.held.toLocaleString()}/${b.of.toLocaleString()}${b.pct != null ? ` · ${b.pct}%` : ""}`;
 }
+
+/**
+ * Continuity: whether the middle is solid.
+ *
+ * A session that never landed and a session that landed nearly empty are
+ * counted together here, because for a reader both are a day of missing data —
+ * but the label keeps them apart, because for whoever fixes it they are
+ * different faults.
+ */
+export function continuityVerdict(d: DatasetDimensions): AxisVerdict {
+  if (d.error) return "unknown";
+  const c = d.continuity;
+  if (!c?.measured) {
+    // A catalogue has no cadence and a quarterly filing is not a daily series;
+    // neither can have a gap, so neither is a gap.
+    return c?.why ? "boundary" : "unknown";
+  }
+  const present = c.days_present ?? 0;
+  const absent = c.days_absent ?? 0;
+  const holes = absent + (c.days_thin ?? 0);
+  const sessions = present + absent;
+  if (sessions === 0) return "unknown";
+  if (holes === 0) return "ok";
+  return holes / sessions <= 0.1 ? "partial" : "thin";
+}
+
+export function continuityLabel(d: DatasetDimensions): string {
+  const c = d.continuity;
+  if (!c?.measured) return c?.why ?? "not measured";
+  const present = c.days_present ?? 0;
+  const absent = c.days_absent ?? 0;
+  const thin = c.days_thin ?? 0;
+  const sessions = present + absent;
+  if (absent + thin === 0) return `${sessions} sessions clean`;
+  const parts: string[] = [];
+  if (absent > 0) parts.push(`${absent} missing`);
+  if (thin > 0) parts.push(`${thin} thin`);
+  return `${parts.join(" · ")} of ${sessions}`;
+}
+
+/** The worst hole, for the cell's tooltip. */
+export function continuityDetail(d: DatasetDimensions): string | undefined {
+  const c = d.continuity;
+  if (!c?.measured) return c?.why;
+  const bits: string[] = [];
+  const worst = c.worst?.[0];
+  if (worst) {
+    bits.push(
+      `thinnest ${worst.date}: ${worst.rows.toLocaleString()} rows where it had been ${worst.neighbours.toLocaleString()}`,
+    );
+  }
+  if (c.absent_sample?.length) {
+    bits.push(`missing ${c.absent_sample.join(", ")}`);
+  }
+  if (c.cadence && c.cadence !== "session") {
+    bits.push(`published per ${c.cadence}, not every trading day`);
+  }
+  return bits.join(" · ") || undefined;
+}

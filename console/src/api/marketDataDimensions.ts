@@ -33,6 +33,27 @@ export type DatasetFreshness = {
   days_behind?: number | null;
 };
 
+/**
+ * The fourth axis. Breadth, depth and freshness can all read healthy over a
+ * dataset full of holes, and did: stock_daily reported 20,695 symbols, five
+ * years of history and a fresh session while seven ordinary trading days in the
+ * previous ninety held eighteen rows instead of twelve thousand.
+ *
+ * Absent and thin are separate because their causes are: one day never landed,
+ * the other landed nearly empty.
+ */
+export type DatasetContinuity = {
+  measured: boolean;
+  why?: string;
+  cadence?: string;
+  window_days?: number;
+  days_present?: number;
+  days_absent?: number;
+  days_thin?: number;
+  worst?: Array<{ date: string; rows: number; neighbours: number }>;
+  absent_sample?: string[];
+};
+
 export type DatasetDimensions = {
   dataset: string;
   tier: DimensionTier;
@@ -42,6 +63,7 @@ export type DatasetDimensions = {
   breadth: DatasetBreadth;
   depth: DatasetDepth;
   freshness: DatasetFreshness;
+  continuity: DatasetContinuity;
 };
 
 export type CoverageDimensions = {

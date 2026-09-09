@@ -17,6 +17,9 @@ import {
   breadthLabel,
   breadthVerdict,
   depthLabel,
+  continuityDetail,
+  continuityLabel,
+  continuityVerdict,
   depthVerdict,
   freshnessVerdict,
   type AxisVerdict,
@@ -37,11 +40,15 @@ const TONE: Record<
 const TIER_ORDER = ["whole-market", "universe", "benchmark-only", "global"];
 
 /**
- * The three axes of the Massive blueprint, each against the denominator its
+ * The four axes of the Massive blueprint, each against the denominator its
  * dataset contract declares. Before this the console answered freshness seven
  * times with four thresholds, breadth with four denominators — two of them
  * always 100% by construction — and depth not at all, which is how 47 of 575
  * names having any option history stayed invisible through a 34-hour backfill.
+ *
+ * Continuity came last and for the same reason: the other three all read
+ * healthy over a stock_daily holding seven blank trading days, because none of
+ * them looks at the middle.
  */
 export function CoverageDimensionsPanel() {
   const q = useQuery({
@@ -60,7 +67,7 @@ export function CoverageDimensionsPanel() {
 
   return (
     <OpsSection
-      title="Three axes — breadth · depth · freshness"
+      title="Four axes — breadth · depth · freshness · continuity"
       description="Every dataset against the denominator its contract declares. Blueprint §2–3."
       bodyPadding="compact"
       overflow="visible"
@@ -117,6 +124,7 @@ export function CoverageDimensionsPanel() {
                 <DenseTableHead>Breadth</DenseTableHead>
                 <DenseTableHead>Depth</DenseTableHead>
                 <DenseTableHead>Freshness</DenseTableHead>
+                <DenseTableHead>Continuity</DenseTableHead>
                 <DenseTableHead>Slots</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
@@ -184,6 +192,17 @@ function Row({ d }: { d: DatasetDimensions }) {
           title={`deadline ${d.freshness.deadline_hours}h`}
         >
           {d.freshness.newest ?? "—"}
+        </DenseTag>
+      </DenseTableCell>
+      <DenseTableCell>
+        <DenseTag
+          variant={TONE[continuityVerdict(d)]}
+          title={
+            continuityDetail(d) ??
+            `sessions with data over the last ${d.continuity?.window_days ?? 120} days`
+          }
+        >
+          {continuityLabel(d)}
         </DenseTag>
       </DenseTableCell>
       <DenseTableCell>
