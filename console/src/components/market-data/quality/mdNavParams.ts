@@ -11,6 +11,7 @@ export type CoverageDetailPanel =
   | 'financials'
   | 'db-summary'
   | 'capability'
+  | 'blueprint'
 
 const VALID_TABS = new Set<MarketDataManageTab>([
   'overview',
@@ -25,6 +26,7 @@ const VALID_PANELS = new Set<CoverageDetailPanel>([
   'financials',
   'db-summary',
   'capability',
+  'blueprint',
 ])
 
 export function readMdSearchParams(search = window.location.search): {

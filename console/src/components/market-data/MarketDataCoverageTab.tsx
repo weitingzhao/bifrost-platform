@@ -22,6 +22,7 @@ import {
   isMdDebugProbeEnabled,
   writeMdSearchParams,
 } from '@/components/market-data/quality/mdNavParams'
+import { BlueprintPanel } from '@/components/market-data/BlueprintPanel'
 import { DataInventoryStrip } from '@/components/market-data/DataInventoryStrip'
 import { OptionCoverageSection } from '@/components/market-data/OptionCoverageSection'
 import { QualityScoreSection } from '@/components/market-data/QualityScoreSection'
@@ -181,6 +182,7 @@ export function MarketDataCoverageTab({
             { value: 'financials', label: 'Financials' },
             { value: 'db-summary', label: 'DB Summary' },
             { value: 'capability', label: 'Capability' },
+            { value: 'blueprint', label: 'Blueprint' },
           ]}
         />
         {panel === 'capability' ? (
@@ -207,6 +209,8 @@ export function MarketDataCoverageTab({
           <OptionCoverageSection />
         </>
       ) : null}
+
+      {panel === 'blueprint' ? <BlueprintPanel /> : null}
 
       {panel === 'readiness' ? <ReadinessPanel /> : null}
 
