@@ -32,6 +32,7 @@ import { isMdDebugProbeEnabled } from '@/components/market-data/quality/mdNavPar
 import { JobQueuePressure } from '@/components/market-data/JobQueuePressure'
 import { IngestDailyVolume } from '@/components/market-data/IngestDailyVolume'
 import { QueueDashboardPanel } from '@/components/market-data/QueueDashboardPanel'
+import { QueueHistoryPanel } from '@/components/market-data/QueueHistoryPanel'
 import { ScheduleSwimlane } from '@/components/market-data/ScheduleSwimlane'
 import { SubscriptionCoveragePanel } from '@/components/market-data/SubscriptionCoveragePanel'
 import { DoctorPanel } from '@/components/market-data/DoctorPanel'
@@ -343,6 +344,9 @@ export function MarketDataIngestTab() {
           setDetailTab('jobs')
         }}
       />
+
+      {/* The dashboard above is a probe; this is the record. */}
+      <QueueHistoryPanel />
 
       <IngestDailyVolume
         onSelectKind={kind => {
