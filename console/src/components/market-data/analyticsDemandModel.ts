@@ -1,3 +1,4 @@
+import type { CoverageDimensions } from '@/api/marketDataDimensions'
 import type { CoverageInventoryResponse } from '@/api/marketDataPlugin'
 import type { MarketDataFreshnessInfo } from '@/api/satelliteBusTypes'
 
@@ -32,7 +33,8 @@ export type FeedMeter = {
   label: string
   count: number | null
   target: number | null
-  fillPct: number
+  /** null when no contract declares a denominator for this feed — draw no bar. */
+  fillPct: number | null
 }
 
 export type AnalyticsDemandView = {
@@ -41,7 +43,7 @@ export type AnalyticsDemandView = {
   blocked: number
   unknown: number
   rows: AnalyticsDemandRow[]
-  optionUniverse: number
+  optionUniverse: number | null
   optionFeed: FeedMeter[]
   equityFeed: FeedMeter[]
 }
@@ -53,10 +55,13 @@ function findFresh(
   return rows?.find(f => (f.dimension ?? '').toLowerCase() === dimension.toLowerCase())
 }
 
-export const CS_FUND_TARGET = 5000
-
-export function meterPct(count: number | null, target: number | null): number {
-  if (count == null || target == null || target <= 0) return 0
+/**
+ * Share of the declared scope this feed holds, or null when there is nothing
+ * honest to divide by. A bar drawn against an unknown denominator reads as
+ * "0% covered", which is a claim; no bar is the truth (blueprint C-G1).
+ */
+export function meterPct(count: number | null, target: number | null): number | null {
+  if (count == null || target == null || target <= 0) return null
   return Math.min(100, (count / target) * 100)
 }
 
@@ -70,7 +75,12 @@ function inputOf(
   label: string,
   count: number | null,
   fresh: MarketDataFreshnessInfo | undefined,
-  target: number | null = count,
+  /**
+   * The scope this input is measured against. Defaults to null, not to `count`:
+   * a target that is the measurement is a denominator that can never disagree
+   * with its numerator, and every such bar sat at 100%.
+   */
+  target: number | null = null,
   required = true,
 ): DemandInputStatus {
   return {
@@ -120,6 +130,8 @@ export function buildAnalyticsDemand(args: {
   freshness?: MarketDataFreshnessInfo[]
   inventory?: CoverageInventoryResponse | null
   incomeStatementSymbols?: number | null
+  /** `GET /market/coverage/dimensions` → the contract table's denominators. */
+  denominators?: CoverageDimensions['denominators'] | null
 }): AnalyticsDemandView {
   const fresh = args.freshness ?? []
   const inv = args.inventory
@@ -131,9 +143,13 @@ export function buildAnalyticsDemand(args: {
   const oiCount = opt?.oi_symbols ?? null
   const stockCount = stock?.symbols ?? null
   const income = args.incomeStatementSymbols ?? null
-  const watchlist = inv?.watchlist_symbols?.length ?? 0
-  const optionTarget = Math.max(watchlist, snapshotCount ?? 0, oiCount ?? 0, 1)
-  const fundTarget = CS_FUND_TARGET
+  // Denominators come from the contract table, never from the page. The option
+  // feeds used to divide by `max(watchlist, snapshot, oi, 1)`, which is at least
+  // as large as what it measured, so the meters read 100% however few symbols
+  // were collected; the fundamentals target was a hand-typed 5,000.
+  const optionTarget = args.denominators?.universe?.total ?? null
+  const wholeMarket = args.denominators?.['whole-market'] ?? null
+  const fundTarget = wholeMarket
 
   const defs: Array<{
     id: string
@@ -280,10 +296,12 @@ export function buildAnalyticsDemand(args: {
     ],
     equityFeed: [
       {
+        // Was "greater than zero fills the bar" — an existence flag drawn as a
+        // coverage meter. The whole-market tier's scope is the denominator.
         label: 'Stock daily',
         count: stockCount,
-        target: stockCount,
-        fillPct: stockCount != null && stockCount > 0 ? 100 : 0,
+        target: wholeMarket,
+        fillPct: meterPct(stockCount, wholeMarket),
       },
       {
         label: 'Income',

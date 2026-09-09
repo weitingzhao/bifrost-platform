@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag, cn } from '@bifrost/ui'
+import { fetchCoverageDimensions } from '@/api/marketDataDimensions'
 import {
   fetchCoverageInventory,
   fetchReadinessFinancialsByType,
@@ -37,19 +38,28 @@ function FeedRow({ meters }: { meters: FeedMeter[] }) {
           <span className="w-[4.25rem] shrink-0 truncate text-[var(--text-dense-micro)] uppercase tracking-wide text-[var(--muted-foreground)]">
             {m.label}
           </span>
-          <Meter
-            fillPct={m.fillPct}
-            toneClass={
-              m.count == null || m.count <= 0
-                ? 'bg-[var(--color-danger,var(--destructive))]/70'
-                : m.fillPct >= 80
-                  ? 'bg-[var(--color-success)]'
-                  : m.fillPct >= 20
-                    ? 'bg-[var(--color-warning)]'
-                    : 'bg-[var(--color-danger,var(--destructive))]'
-            }
-            label={`${m.label} ${fmtCount(m.count)}${m.target != null ? ` / ${fmtCount(m.target)}` : ''}`}
-          />
+          {m.fillPct == null ? (
+            <span
+              className="min-w-0 flex-1 truncate text-[var(--text-dense-micro)] text-[var(--muted-foreground)]"
+              title={`${m.label}: no denominator declared for this feed`}
+            >
+              no scope
+            </span>
+          ) : (
+            <Meter
+              fillPct={m.fillPct}
+              toneClass={
+                m.count == null || m.count <= 0
+                  ? 'bg-[var(--color-danger,var(--destructive))]/70'
+                  : m.fillPct >= 80
+                    ? 'bg-[var(--color-success)]'
+                    : m.fillPct >= 20
+                      ? 'bg-[var(--color-warning)]'
+                      : 'bg-[var(--color-danger,var(--destructive))]'
+              }
+              label={`${m.label} ${fmtCount(m.count)}${m.target != null ? ` / ${fmtCount(m.target)}` : ''}`}
+            />
+          )}
           <FlashValue
             value={m.count}
             className="w-[4.5rem] shrink-0 text-right font-mono text-[var(--text-dense-micro)] tabular-nums text-[var(--muted-foreground)]"
@@ -103,22 +113,21 @@ function ProductCard({
           {primary?.label ?? 'input'}
         </span>
       </div>
+      {/* One rule for every input: a bar needs a declared scope to divide by.
+          This used to be a per-key exception for 'stock', whose target was its
+          own count. */}
       {row.inputs
-        .filter(input => !(input.key === 'stock' && input.target === input.count && row.inputs.length > 1))
-        .map(input => {
-          const hideBar = input.key === 'stock' && input.target === input.count
-          return (
-            <div key={input.key} className="flex items-center gap-1.5">
-              {hideBar ? null : (
-                <Meter
-                  fillPct={meterPct(input.count, input.target)}
-                  toneClass={toneByLevel(row.level)}
-                  label={`${input.label} ${fmtCount(input.count)} / ${fmtCount(input.target)}`}
-                />
-              )}
-            </div>
-          )
-        })}
+        .map(input => ({ input, pct: meterPct(input.count, input.target) }))
+        .filter(({ pct }) => pct != null)
+        .map(({ input, pct }) => (
+          <div key={input.key} className="flex items-center gap-1.5">
+            <Meter
+              fillPct={pct as number}
+              toneClass={toneByLevel(row.level)}
+              label={`${input.label} ${fmtCount(input.count)} / ${fmtCount(input.target)}`}
+            />
+          </div>
+        ))}
       {showResearch ? (
         <div className="flex items-center gap-1.5">
           <Meter
@@ -158,6 +167,14 @@ export function AnalyticsDemandPanel({
     retry: 1,
   })
 
+  // Same query key as the coverage panels: the contract table's denominators are
+  // fetched once and shared, not re-derived per panel.
+  const dimensionsQ = useQuery({
+    queryKey: ['market-data', 'coverage', 'dimensions'],
+    queryFn: fetchCoverageDimensions,
+    staleTime: 60_000,
+    retry: 1,
+  })
   const inventory =
     inventoryQ.data != null && !isProxyError(inventoryQ.data) ? inventoryQ.data : null
   const income =
@@ -168,6 +185,7 @@ export function AnalyticsDemandPanel({
     freshness,
     inventory,
     incomeStatementSymbols: income,
+    denominators: dimensionsQ.data?.denominators ?? null,
   })
   const total = view.rows.length
   const loading = inventoryQ.isLoading && inventory == null

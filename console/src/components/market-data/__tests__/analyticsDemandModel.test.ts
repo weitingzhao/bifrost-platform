@@ -2,9 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAnalyticsDemand,
   coverPct,
-  CS_FUND_TARGET,
   meterPct,
 } from '@/components/market-data/analyticsDemandModel'
+
+const DENOMINATORS = {
+  'whole-market': 5317,
+  universe: { total: 575, by_tier: { resident: 27, core: 527, edge: 21 }, months: {} },
+  'benchmark-only': 91,
+  global: 1,
+}
 
 describe('buildAnalyticsDemand', () => {
   it('marks option analytics ready when snapshot + OI exist and freshness is ok', () => {
@@ -21,6 +27,7 @@ describe('buildAnalyticsDemand', () => {
         analytics: { max_pain: { symbols: 0 } },
       },
       incomeStatementSymbols: 40,
+      denominators: DENOMINATORS,
     })
     expect(view.rows.find(r => r.id === 'max-pain')?.level).toBe('ready')
     expect(view.rows.find(r => r.id === 'pcr')?.level).toBe('ready')
@@ -28,13 +35,50 @@ describe('buildAnalyticsDemand', () => {
     expect(view.rows.find(r => r.id === 'sepa-fundamental')?.level).toBe('thin')
     expect(view.ready).toBeGreaterThanOrEqual(3)
     expect(view.thin).toBeGreaterThanOrEqual(1)
-    expect(view.rows.find(r => r.id === 'max-pain')?.inputs[0]?.target).toBe(120)
-    expect(view.rows.find(r => r.id === 'sepa-fundamental')?.inputs[0]?.target).toBe(CS_FUND_TARGET)
-    expect(view.equityFeed.find(f => f.label === 'Income')?.fillPct).toBe(meterPct(40, CS_FUND_TARGET))
+    // Denominators come from the contract table, not from the measurement.
+    expect(view.rows.find(r => r.id === 'max-pain')?.inputs[0]?.target).toBe(575)
+    expect(view.rows.find(r => r.id === 'sepa-fundamental')?.inputs[0]?.target).toBe(5317)
+    expect(view.equityFeed.find(f => f.label === 'Income')?.fillPct).toBe(meterPct(40, 5317))
+    // Stock daily used to fill the bar whenever the count was above zero.
+    expect(view.equityFeed.find(f => f.label === 'Stock daily')?.fillPct).toBe(
+      meterPct(5200, 5317),
+    )
+  })
+
+  it('draws no meter when no contract declares a denominator', () => {
+    const view = buildAnalyticsDemand({
+      freshness: [],
+      inventory: {
+        ok: true,
+        option: { snapshot_symbols: 120, oi_symbols: 110 },
+        stock_daily: { symbols: 5200, total_rows: 800000 },
+      },
+      incomeStatementSymbols: 40,
+    })
+    expect(view.optionUniverse).toBeNull()
+    for (const meter of [...view.optionFeed, ...view.equityFeed]) {
+      expect(meter.fillPct).toBeNull()
+    }
+  })
+
+  it('never divides a feed by a target it helped set', () => {
+    // The old target was max(watchlist, snapshot, oi, 1), so collecting one
+    // symbol of 575 still filled the bar.
+    const view = buildAnalyticsDemand({
+      freshness: [],
+      inventory: { ok: true, option: { snapshot_symbols: 1, oi_symbols: 1 } },
+      incomeStatementSymbols: 0,
+      denominators: DENOMINATORS,
+    })
+    expect(view.optionFeed.find(f => f.label === 'Snapshot')?.fillPct).toBeCloseTo(
+      (1 / 575) * 100,
+      6,
+    )
   })
 
   it('clamps meter and cover percentages', () => {
-    expect(meterPct(null, 10)).toBe(0)
+    expect(meterPct(null, 10)).toBeNull()
+    expect(meterPct(12, null)).toBeNull()
     expect(meterPct(12, 10)).toBe(100)
     expect(coverPct(22, 22)).toBe(100)
     expect(coverPct(11, 22)).toBe(50)
