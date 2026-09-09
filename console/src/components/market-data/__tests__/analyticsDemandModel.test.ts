@@ -76,6 +76,32 @@ describe('buildAnalyticsDemand', () => {
     )
   })
 
+  it('treats a still-counting inventory as unknown, not blocked', () => {
+    // The inventory takes about 150s behind its cache. Reading absent counts as
+    // zero marked all six products blocked while it was simply not done yet.
+    const view = buildAnalyticsDemand({
+      freshness: [],
+      inventory: { ok: true, computing: true } as never,
+      incomeStatementSymbols: null,
+      denominators: DENOMINATORS,
+    })
+    expect(view.pending).toBe(true)
+    expect(view.blocked).toBe(0)
+    expect(view.unknown).toBe(view.rows.length)
+    expect(view.rows[0]?.detail).toContain('still being counted')
+  })
+
+  it('reports blocked once the inventory has actually been counted', () => {
+    const view = buildAnalyticsDemand({
+      freshness: [],
+      inventory: { ok: true, computing: false, option: { snapshot_symbols: 0, oi_symbols: 0 } },
+      incomeStatementSymbols: 0,
+      denominators: DENOMINATORS,
+    })
+    expect(view.pending).toBe(false)
+    expect(view.rows.find(r => r.id === 'max-pain')?.level).toBe('blocked')
+  })
+
   it('clamps meter and cover percentages', () => {
     expect(meterPct(null, 10)).toBeNull()
     expect(meterPct(12, null)).toBeNull()

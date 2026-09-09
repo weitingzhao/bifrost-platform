@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchCoverageDimensions } from "@/api/marketDataDimensions";
+import {
+  ageLabel,
+  isComputing,
+  pollWhileComputing,
+} from "@/lib/market-data/backgroundAnswer";
 import { DenseTag, Skeleton } from "@bifrost/ui";
 import {
   fetchCoverageInventory,
@@ -107,7 +112,9 @@ export function DataInventoryStrip() {
   const inventoryQ = useQuery({
     queryKey: ["market-data", "coverage", "inventory"],
     queryFn: fetchCoverageInventory,
-    refetchInterval: REFETCH_MS,
+    // The inventory is computed behind a cache; poll faster while a recompute
+    // is in flight so the first figures land as soon as they exist.
+    refetchInterval: pollWhileComputing(REFETCH_MS),
     retry: 1,
   });
   // Same key as the three-axis panel, so the denominators on this strip and in
@@ -160,16 +167,32 @@ export function DataInventoryStrip() {
       ? null
       : Math.min(100, (held / of) * 100);
   const analytics = analyticsActive(data?.analytics);
-  const loading = inventoryQ.isLoading && data == null;
+  // "Still counting" is not "counted, and it is zero": keep the skeleton until
+  // the first pass lands, then show the answer even while the next one runs.
+  const computing = isComputing(data);
+  const loading =
+    (inventoryQ.isLoading && data == null) ||
+    (computing && data?.stock_daily == null);
+  const age = ageLabel(data);
 
   return (
     <OpsSection
       title="Data inventory"
       headerExtra={
         data != null ? (
-          <DenseTag variant="neutral" title="Ingest policy scope">
-            {scopeLabel(data)}
-          </DenseTag>
+          <div className="flex items-center gap-1.5">
+            <DenseTag variant="neutral" title="Ingest policy scope">
+              {scopeLabel(data)}
+            </DenseTag>
+            {age != null ? (
+              <DenseTag
+                variant={computing ? "warning" : "neutral"}
+                title="A full pass over stock_daily takes about 150 seconds, so this figure is served from cache"
+              >
+                {computing ? `${age} · refreshing` : age}
+              </DenseTag>
+            ) : null}
+          </div>
         ) : null
       }
       bodyPadding="compact"

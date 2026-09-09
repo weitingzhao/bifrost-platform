@@ -1,6 +1,7 @@
 import type { CoverageDimensions } from '@/api/marketDataDimensions'
 import type { CoverageInventoryResponse } from '@/api/marketDataPlugin'
 import type { MarketDataFreshnessInfo } from '@/api/satelliteBusTypes'
+import { isComputing } from '@/lib/market-data/backgroundAnswer'
 
 export type DemandLevel = 'ready' | 'thin' | 'blocked' | 'unknown'
 export type CoverageJump = 'readiness' | 'financials' | 'quality'
@@ -42,6 +43,8 @@ export type AnalyticsDemandView = {
   thin: number
   blocked: number
   unknown: number
+  /** The inventory's first pass has not finished — counts are absent, not zero. */
+  pending: boolean
   rows: AnalyticsDemandRow[]
   optionUniverse: number | null
   optionFeed: FeedMeter[]
@@ -110,7 +113,11 @@ function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean })
   return 'ready'
 }
 
-function detailFor(level: DemandLevel, inputs: DemandInputStatus[], outputSymbols: number | null): string {
+function detailFor(
+  level: DemandLevel | 'pending',
+  inputs: DemandInputStatus[],
+  outputSymbols: number | null,
+): string {
   const bits = inputs.map(i => {
     const n = i.count == null ? '—' : String(i.count)
     const fresh = i.freshnessVerdict ?? (i.lastRunAt != null ? i.lastRunAt : 'no freshness')
@@ -120,6 +127,7 @@ function detailFor(level: DemandLevel, inputs: DemandInputStatus[], outputSymbol
     outputSymbols != null
       ? ` · Research wrote ${outputSymbols} symbols`
       : ' · Research output not required for this verdict'
+  if (level === 'pending') return `Inventory is still being counted — ${bits.join(' · ')}`
   if (level === 'blocked') return `Missing Massive inputs — ${bits.join(' · ')}${out}`
   if (level === 'thin') return `Inputs present but thin or stale — ${bits.join(' · ')}${out}`
   if (level === 'ready') return `Inputs can feed Research — ${bits.join(' · ')}${out}`
@@ -254,8 +262,12 @@ export function buildAnalyticsDemand(args: {
     },
   ]
 
+  // The inventory is computed behind a cache and takes about 150 seconds. While
+  // its first pass runs, every count is absent — which the scorer would read as
+  // "zero rows collected" and mark all six products blocked. Absent is unknown.
+  const pending = isComputing(inv) && stock == null && opt == null
   const rows: AnalyticsDemandRow[] = defs.map(d => {
-    const level = scoreInputs(d.inputs, { thinIf: d.thinIf })
+    const level = pending ? 'unknown' : scoreInputs(d.inputs, { thinIf: d.thinIf })
     const outputSymbols = d.output?.symbols ?? null
     const primaryIn = d.inputs[0]?.count ?? null
     return {
@@ -266,7 +278,7 @@ export function buildAnalyticsDemand(args: {
       jump: d.jump,
       inputs: d.inputs,
       level,
-      detail: detailFor(level, d.inputs, outputSymbols),
+      detail: detailFor(pending ? 'pending' : level, d.inputs, outputSymbols),
       outputSymbols,
       outputLatest: d.output?.latest ?? null,
       coverPct: coverPct(outputSymbols, primaryIn),
@@ -278,6 +290,7 @@ export function buildAnalyticsDemand(args: {
     thin: rows.filter(r => r.level === 'thin').length,
     blocked: rows.filter(r => r.level === 'blocked').length,
     unknown: rows.filter(r => r.level === 'unknown').length,
+    pending,
     rows,
     optionUniverse: optionTarget,
     optionFeed: [

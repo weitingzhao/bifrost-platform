@@ -21,6 +21,7 @@ import {
   ScoreRing,
 } from '@/components/market-data/overviewDash'
 import { fmtCount, toneByLevel } from '@/components/market-data/overviewDashModel'
+import { ageLabel, pollWhileComputing } from '@/lib/market-data/backgroundAnswer'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 function levelVariant(level: DemandLevel): 'success' | 'warning' | 'danger' | 'neutral' {
@@ -157,7 +158,8 @@ export function AnalyticsDemandPanel({
   const inventoryQ = useQuery({
     queryKey: ['market-data', 'coverage', 'inventory'],
     queryFn: fetchCoverageInventory,
-    refetchInterval: 60_000,
+    // Computed behind a cache; poll faster while its pass is running.
+    refetchInterval: pollWhileComputing(60_000),
     retry: 1,
   })
   const financialsQ = useQuery({
@@ -188,16 +190,30 @@ export function AnalyticsDemandPanel({
     denominators: dimensionsQ.data?.denominators ?? null,
   })
   const total = view.rows.length
-  const loading = inventoryQ.isLoading && inventory == null
+  // While the inventory's first pass runs the counts are absent, not zero, so
+  // this stays a loading state rather than reporting six blocked products.
+  const loading = (inventoryQ.isLoading && inventory == null) || view.pending
+  const age = ageLabel(inventory)
 
   return (
     <OpsSection
       title="Analytics demand"
       headerExtra={
         <div className="flex flex-wrap items-center gap-1.5">
-          <DenseTag variant="success">ready {view.ready}</DenseTag>
-          <DenseTag variant="warning">thin {view.thin}</DenseTag>
-          <DenseTag variant="danger">blocked {view.blocked}</DenseTag>
+          {view.pending ? (
+            <DenseTag variant="neutral">counting inventory…</DenseTag>
+          ) : (
+            <>
+              <DenseTag variant="success">ready {view.ready}</DenseTag>
+              <DenseTag variant="warning">thin {view.thin}</DenseTag>
+              <DenseTag variant="danger">blocked {view.blocked}</DenseTag>
+            </>
+          )}
+          {age != null && !view.pending ? (
+            <DenseTag variant="neutral" title="Inventory is served from a cache; a full pass takes about 150 seconds">
+              {age}
+            </DenseTag>
+          ) : null}
         </div>
       }
       actions={
@@ -219,7 +235,9 @@ export function AnalyticsDemandPanel({
     >
       {loading ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Loading inventory…
+          {view.pending
+            ? 'Counting the inventory — a full pass over stock_daily takes about 150 seconds.'
+            : 'Loading inventory…'}
         </p>
       ) : (
         <div className="flex flex-col gap-1.5">
