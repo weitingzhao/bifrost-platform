@@ -73,6 +73,17 @@ export function coverPct(output: number | null, input: number | null): number | 
   return Math.min(100, Math.round((output / input) * 1000) / 10)
 }
 
+/** A dataset's breadth as the contract endpoint measured it, numerator and
+ *  denominator drawn from one population. */
+function breadthOf(
+  dimensions: CoverageDimensions | null | undefined,
+  dataset: string,
+): { held: number; of: number | null } | null {
+  const row = dimensions?.datasets?.find(d => d.dataset === dataset)
+  if (row == null) return null
+  return { held: row.breadth.held, of: row.breadth.of }
+}
+
 function inputOf(
   key: string,
   label: string,
@@ -140,6 +151,8 @@ export function buildAnalyticsDemand(args: {
   incomeStatementSymbols?: number | null
   /** `GET /market/coverage/dimensions` → the contract table's denominators. */
   denominators?: CoverageDimensions['denominators'] | null
+  /** The same read, whole: per-dataset breadth already scoped to its own denominator. */
+  dimensions?: CoverageDimensions | null
 }): AnalyticsDemandView {
   const fresh = args.freshness ?? []
   const inv = args.inventory
@@ -149,15 +162,23 @@ export function buildAnalyticsDemand(args: {
 
   const snapshotCount = opt?.snapshot_symbols ?? null
   const oiCount = opt?.oi_symbols ?? null
-  const stockCount = stock?.symbols ?? null
   const income = args.incomeStatementSymbols ?? null
   // Denominators come from the contract table, never from the page. The option
   // feeds used to divide by `max(watchlist, snapshot, oi, 1)`, which is at least
   // as large as what it measured, so the meters read 100% however few symbols
   // were collected; the fundamentals target was a hand-typed 5,000.
-  const optionTarget = args.denominators?.universe?.total ?? null
-  const wholeMarket = args.denominators?.['whole-market'] ?? null
+  const denominators = args.denominators ?? args.dimensions?.denominators ?? null
+  const optionTarget = denominators?.universe?.total ?? null
+  const wholeMarket = denominators?.['whole-market'] ?? null
   const fundTarget = wholeMarket
+  // stock_daily holds every symbol it has ever seen -- 20,695 against 5,317
+  // active tickers, because delisted names keep their history. Divided by the
+  // whole-market scope that reads 389%, and clamped it reads a full bar. The
+  // contract endpoint already scopes the numerator to its own denominator, so
+  // take both from there rather than pairing two different populations.
+  const stockBreadth = breadthOf(args.dimensions, 'raw_market.stock_daily')
+  const stockHeld = stockBreadth?.held ?? null
+  const stockScope = stockBreadth?.of ?? null
 
   const defs: Array<{
     id: string
@@ -194,7 +215,7 @@ export function buildAnalyticsDemand(args: {
           findFresh(fresh, 'option_snapshot'),
           optionTarget,
         ),
-        inputOf('stock', 'Stock daily', stockCount, findFresh(fresh, 'stock_daily'), stockCount),
+        inputOf('stock', 'Stock daily', stockHeld, findFresh(fresh, 'stock_daily'), stockScope),
       ],
       output: analytics?.atm_iv ?? null,
     },
@@ -239,7 +260,9 @@ export function buildAnalyticsDemand(args: {
       owner: 'Research dbt',
       needs: 'market stock daily bars',
       jump: 'quality',
-      inputs: [inputOf('stock', 'Stock daily', stockCount, findFresh(fresh, 'stock_daily'), stockCount)],
+      inputs: [
+        inputOf('stock', 'Stock daily', stockHeld, findFresh(fresh, 'stock_daily'), stockScope),
+      ],
       output: null,
     },
     {
@@ -310,11 +333,11 @@ export function buildAnalyticsDemand(args: {
     equityFeed: [
       {
         // Was "greater than zero fills the bar" — an existence flag drawn as a
-        // coverage meter. The whole-market tier's scope is the denominator.
+        // coverage meter. Now both halves come from the same population.
         label: 'Stock daily',
-        count: stockCount,
-        target: wholeMarket,
-        fillPct: meterPct(stockCount, wholeMarket),
+        count: stockHeld,
+        target: stockScope,
+        fillPct: meterPct(stockHeld, stockScope),
       },
       {
         label: 'Income',

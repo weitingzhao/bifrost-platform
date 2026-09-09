@@ -5,6 +5,18 @@ import {
   meterPct,
 } from '@/components/market-data/analyticsDemandModel'
 
+// stock_daily holds every symbol it has ever seen; the contract endpoint is
+// what pairs a numerator with its own denominator.
+const DIMENSIONS = {
+  denominators: undefined as never,
+  datasets: [
+    {
+      dataset: 'raw_market.stock_daily',
+      breadth: { held: 5182, held_total: 20695, outside_scope: 7336, of: 5317, pct: 97.5 },
+    },
+  ],
+} as never
+
 const DENOMINATORS = {
   'whole-market': 5317,
   universe: { total: 575, by_tier: { resident: 27, core: 527, edge: 21 }, months: {} },
@@ -28,6 +40,7 @@ describe('buildAnalyticsDemand', () => {
       },
       incomeStatementSymbols: 40,
       denominators: DENOMINATORS,
+      dimensions: DIMENSIONS,
     })
     expect(view.rows.find(r => r.id === 'max-pain')?.level).toBe('ready')
     expect(view.rows.find(r => r.id === 'pcr')?.level).toBe('ready')
@@ -39,10 +52,12 @@ describe('buildAnalyticsDemand', () => {
     expect(view.rows.find(r => r.id === 'max-pain')?.inputs[0]?.target).toBe(575)
     expect(view.rows.find(r => r.id === 'sepa-fundamental')?.inputs[0]?.target).toBe(5317)
     expect(view.equityFeed.find(f => f.label === 'Income')?.fillPct).toBe(meterPct(40, 5317))
-    // Stock daily used to fill the bar whenever the count was above zero.
-    expect(view.equityFeed.find(f => f.label === 'Stock daily')?.fillPct).toBe(
-      meterPct(5200, 5317),
-    )
+    // Stock daily used to fill the bar whenever the count was above zero, then
+    // briefly read "20,695 / 5,317" — symbols ever, over tickers active today.
+    const stockMeter = view.equityFeed.find(f => f.label === 'Stock daily')
+    expect(stockMeter?.count).toBe(5182)
+    expect(stockMeter?.target).toBe(5317)
+    expect(stockMeter?.fillPct).toBe(meterPct(5182, 5317))
   })
 
   it('draws no meter when no contract declares a denominator', () => {

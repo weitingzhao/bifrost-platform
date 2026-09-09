@@ -42,9 +42,13 @@ function FeedRow({ meters }: { meters: FeedMeter[] }) {
           {m.fillPct == null ? (
             <span
               className="min-w-0 flex-1 truncate text-[var(--text-dense-micro)] text-[var(--muted-foreground)]"
-              title={`${m.label}: no denominator declared for this feed`}
+              title={
+                m.target == null
+                  ? `${m.label}: no contract declares a scope for this feed`
+                  : `${m.label}: scope is ${fmtCount(m.target)}, but the count has not arrived`
+              }
             >
-              no scope
+              {m.target == null ? 'no scope' : 'no count'}
             </span>
           ) : (
             <Meter
@@ -188,6 +192,7 @@ export function AnalyticsDemandPanel({
     inventory,
     incomeStatementSymbols: income,
     denominators: dimensionsQ.data?.denominators ?? null,
+    dimensions: dimensionsQ.data ?? null,
   })
   const total = view.rows.length
   // While the inventory's first pass runs the counts are absent, not zero, so
