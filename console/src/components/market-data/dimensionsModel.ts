@@ -160,7 +160,12 @@ export function continuityLabel(d: DatasetDimensions): string {
   const absent = c.days_absent ?? 0;
   const thin = c.days_thin ?? 0;
   const sessions = present + absent;
-  if (absent + thin === 0) return `${sessions} sessions clean`;
+  const pending = c.days_not_due ?? 0;
+  if (absent + thin === 0) {
+    return pending > 0
+      ? `${sessions - pending} clean · ${pending} still writing`
+      : `${sessions} sessions clean`;
+  }
   const parts: string[] = [];
   if (absent > 0) parts.push(`${absent} missing`);
   if (thin > 0) parts.push(`${thin} thin`);
@@ -191,6 +196,15 @@ export function continuityDetail(d: DatasetDimensions): string | undefined {
       ? ` (${c.off_calendar_sample.join(", ")})`
       : "";
     bits.push(`${c.days_off_calendar} day(s) of rows outside the calendar${sample}`);
+  }
+  // Present but held out of the judgement, which is different from clean and
+  // different from missing. Without saying so, the count of "sessions clean"
+  // appears to move on its own during the EOD window.
+  if (c.days_not_due) {
+    const sample = c.not_due_sample?.length ? ` (${c.not_due_sample.join(", ")})` : "";
+    bits.push(
+      `${c.days_not_due} session(s) still being written${sample} — present, not yet judged`,
+    );
   }
   return bits.join(" · ") || undefined;
 }

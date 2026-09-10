@@ -87,3 +87,31 @@ describe("rows outside the trading calendar", () => {
     expect(continuityDetail(d)).toContain("2026-08-22");
   });
 });
+
+describe("the session being written", () => {
+  it("is present, not clean, and not thin", () => {
+    // Measured 2026-09-10: between 22:00 and 22:10 UTC the EOD chain was
+    // writing stock_daily and this axis read the fraction as thin — ok →
+    // partial → ok inside seven minutes. Correct as a reading, useless as a
+    // verdict; it would repeat every night.
+    const d = base({
+      measured: true,
+      cadence: "session",
+      days_present: 82,
+      days_absent: 0,
+      days_thin: 0,
+      days_not_due: 1,
+      not_due_sample: ["2026-09-10"],
+    });
+    expect(continuityVerdict(d)).toBe("ok");
+    // Not "82 sessions clean" — one of them has not closed its books.
+    expect(continuityLabel(d)).toBe("81 clean · 1 still writing");
+    expect(continuityDetail(d)).toContain("still being written");
+    expect(continuityDetail(d)).toContain("2026-09-10");
+  });
+
+  it("says nothing extra once every session is due", () => {
+    const d = base({ measured: true, days_present: 82, days_absent: 0, days_thin: 0 });
+    expect(continuityLabel(d)).toBe("82 sessions clean");
+  });
+});

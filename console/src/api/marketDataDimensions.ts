@@ -106,6 +106,14 @@ export type DatasetContinuity = {
   /** Rows dated on a day the market was shut — the opposite of a hole. */
   days_off_calendar?: number;
   off_calendar_sample?: string[];
+  /**
+   * Present, and deliberately not judged: the session has not closed its books
+   * yet. While the EOD chain writes a day's rows the table holds a fraction of
+   * a session, and calling that thin turned every night's 22:00–22:10 window
+   * into a false regression.
+   */
+  days_not_due?: number;
+  not_due_sample?: string[];
 };
 
 /** What one row of a dataset is — the second axis of the coverage matrix. */
