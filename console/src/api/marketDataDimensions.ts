@@ -4,9 +4,17 @@
  * declares. Read-only; bare fetch through the platform-api proxy.
  */
 export type DimensionTier =
-  "whole-market" | "universe" | "benchmark-only" | "global";
+  | "whole-market"
+  /** Active USD common stock — an ETF or a trust files nothing. */
+  | "common-stock"
+  | "universe"
+  | "benchmark-only"
+  | "global";
 
 export type DatasetBreadth = {
+  /** False where dividing by the tier's scope is the wrong question entirely. */
+  judged?: boolean;
+  why?: string | null;
   held: number;
   held_total: number;
   outside_scope: number;
@@ -18,6 +26,12 @@ export type DatasetBreadth = {
 export type DatasetDepth = {
   target: { kind: string; value: number | string | null; why: string };
   measured: boolean;
+  /**
+   * False where the spread is the answer and a pass count would be a count of
+   * nothing: a company that listed in 2020 can never reach a 2009 target.
+   */
+  judged?: boolean;
+  why?: string;
   need_days?: number;
   at_target?: number | null;
   of?: number | null;
@@ -42,6 +56,9 @@ export type DatasetFreshness = {
   cadence?: string;
   expected_interval_days?: number | null;
   overdue?: boolean | null;
+  /** False where a clock is the wrong instrument — a company files when it files. */
+  judged?: boolean;
+  why?: string;
 };
 
 /**

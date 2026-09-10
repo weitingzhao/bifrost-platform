@@ -190,3 +190,60 @@ describe("a dataset with no clock", () => {
     expect(freshnessVerdict(empty)).toBe("unknown");
   });
 });
+
+describe("an instrument pointed at the wrong question", () => {
+  it("does not judge breadth for a top-N list", () => {
+    // stock_movers holds the whole list of the session's biggest moves. 22 of
+    // 5,317 is not 0.4% coverage of the market; it is the list.
+    const movers = on({
+      dataset: "raw_market.stock_movers",
+      breadth: {
+        judged: false,
+        why: "a top-N list of the session's biggest moves",
+        held: 22,
+        held_total: 22,
+        outside_scope: 0,
+        of: 5317,
+        pct: 0.4,
+        entitlement_pct: null,
+      },
+    });
+    expect(breadthVerdict(movers)).toBe("boundary");
+  });
+
+  it("does not judge depth against a start no symbol can reach", () => {
+    const filings = on({
+      depth: {
+        target: { kind: "since", value: "2009-01-01", why: "" },
+        measured: true,
+        judged: false,
+        at_target: null,
+        of: 4467,
+        median_days: 3540,
+      },
+    });
+    expect(depthVerdict(filings)).toBe("boundary");
+  });
+
+  it("does not judge a filing by a clock", () => {
+    const filing = on({
+      freshness: {
+        newest: "2026-08-02",
+        deadline_hours: 48,
+        measured: true,
+        days_behind: 39,
+        cadence: "filing",
+        judged: false,
+      },
+    });
+    expect(freshnessVerdict(filing)).toBe("boundary");
+  });
+
+  it("still judges everything that is judgeable", () => {
+    expect(breadthVerdict(base)).not.toBe("boundary");
+    expect(depthVerdict(base)).not.toBe("boundary");
+    expect(
+      freshnessVerdict(base, new Date("2026-09-09T20:00:00Z")),
+    ).toBe("ok");
+  });
+});

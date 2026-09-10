@@ -11,6 +11,10 @@ export const BOUNDARY_KINDS = new Set([
 
 export function breadthVerdict(d: DatasetDimensions): AxisVerdict {
   if (d.error) return "unknown";
+  // A top-N list is not partial coverage of the market, and a catalogue of
+  // events that happened is not partial coverage of the instruments they could
+  // have happened to. Both rendered red — 0.4% and 14.2% — with nothing wrong.
+  if (d.breadth.judged === false) return "boundary";
   const pct = d.breadth.pct;
   if (pct == null) return "unknown";
   if (pct >= 95) return "ok";
@@ -23,6 +27,10 @@ export function depthVerdict(d: DatasetDimensions): AxisVerdict {
   // A boundary is not a gap: the vendor cannot backfill it, or it is not a series.
   if (!d.depth.measured)
     return BOUNDARY_KINDS.has(d.depth.target.kind) ? "boundary" : "unknown";
+  // An absolute start cannot be judged per symbol without knowing when each
+  // instrument began: every one of income_statement's 4,467 symbols "failed" a
+  // 2009 target while the median held 9.7 years.
+  if (d.depth.judged === false) return "boundary";
   const at = d.depth.at_target ?? 0;
   const of = d.depth.of ?? 0;
   if (of === 0) return "unknown";
@@ -54,6 +62,9 @@ export function freshnessVerdict(
   // of four catalogues were rendering grey "unknown" for having no clock.
   if (!d.freshness.measured) return "boundary";
   if (!d.freshness.newest) return "unknown";
+  // A company files when it files. Against a 48-hour deadline the three
+  // statements read 39 days late with nothing wrong.
+  if (d.freshness.judged === false) return "boundary";
   if (d.freshness.cadence != null && d.freshness.cadence !== "session") {
     // null means the plugin could not measure an interval — not a licence to
     // fall back on an hour deadline that does not apply to this cadence.
