@@ -197,12 +197,17 @@ function ChainHeadlineTag() {
     <span className="flex items-center gap-1.5">
       <DenseTag
         variant={pct >= 90 ? 'success' : pct >= 60 ? 'warning' : 'danger'}
-        title={`${g.at_90} of ${g.underlyings} underlyings have full greeks on at least 90% of their live contracts · ${g.at_70} more are between 70% and 90%`}
+        title={
+          `${g.at_90} of ${g.underlyings} underlyings have full greeks on at least 90% of ` +
+          `their contracts in the ${g.session ?? 'latest'} session · ${g.at_70} more are ` +
+          `between 70% and 90% · ${g.contracts.toLocaleString()} contracts observed`
+        }
       >
         {g.at_90}/{g.underlyings} greeks
       </DenseTag>
       <span className="font-mono text-[var(--text-dense-micro)] tabular-nums text-[var(--muted-foreground)]">
         {g.pct_full != null ? `${g.pct_full}% of contracts` : '—'}
+        {g.session != null ? ` · ${g.session.slice(5)}` : ''}
       </span>
     </span>
   )

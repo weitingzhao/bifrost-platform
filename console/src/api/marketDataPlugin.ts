@@ -213,6 +213,13 @@ export type ChainHeadline = {
     max_expiry?: string | null
   } | null
   greeks: {
+    /**
+     * Which session these contracts were observed in. Both halves of the ratio
+     * come from it, so a half-written session (the intraday chain's benchmarks
+     * before the evening sweep) is a small sample rather than a false reading —
+     * but only this date lets a reader tell the two apart.
+     */
+    session?: string | null
     underlyings: number
     contracts: number
     with_full_greeks: number
