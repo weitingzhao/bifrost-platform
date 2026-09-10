@@ -13,7 +13,9 @@ import {
 import {
   fetchCoverageDimensions,
   type DatasetDimensions,
+  type CoverageMemory,
   type TierDefinition,
+  type VerdictChange,
 } from "@/api/marketDataDimensions";
 import {
   VERDICT_IS_RANKED,
@@ -27,6 +29,8 @@ import {
   GRAIN_ORDER,
   TIER_ORDER,
   buildMatrix,
+  changeIndex,
+  changeSummary,
   matrixSummary,
   occupiedGrains,
   type AxisCell,
@@ -112,11 +116,17 @@ function Marks({
             selected === a.axis ? "ring-1 ring-[var(--foreground)] ring-offset-1 ring-offset-[var(--card)]" : ""
           }`}
           title={
-            a.progress != null
-              ? `${name} · ${a.axis}: accruing, ${Math.round(a.progress * 100)}% of the way — click for the numbers`
-              : `${name} · ${a.axis}: ${a.verdict} — click for the rule`
+            a.change
+              ? `${name} · ${a.axis}: ${a.change.from ?? "absent"} → ${a.change.to ?? "absent"} (${a.change.direction}) — click for the rule`
+              : a.progress != null
+                ? `${name} · ${a.axis}: accruing, ${Math.round(a.progress * 100)}% of the way — click for the numbers`
+                : `${name} · ${a.axis}: ${a.verdict} — click for the rule`
           }
-          aria-label={`${name} ${a.axis} ${a.verdict}`}
+          aria-label={
+            a.change
+              ? `${name} ${a.axis} ${a.verdict}, ${a.change.direction}`
+              : `${name} ${a.axis} ${a.verdict}`
+          }
         >
           {/* Inside the no-verdict channel: the boundary's own colour, so it
               ranks nothing. The height is how far it has climbed. */}
@@ -128,9 +138,69 @@ function Marks({
             />
           ) : null}
           <span className="relative">{AXIS_INITIAL[i]}</span>
+          {/* A third channel, and deliberately not a fourth colour: the two
+              rulers already in use are colour for rank and fill for whether a
+              verdict was made. "This moved since last time" is a fact about
+              time, not about the data's health, so it gets a shape — a nick in
+              the corner — and inherits the mark's own foreground. Which way it
+              moved is in the tooltip, the detail strip and the count above the
+              grid, where there is room to say it in words. */}
+          {a.change ? (
+            <span
+              aria-hidden
+              className="absolute right-0 top-0 h-[5px] w-[5px] bg-current"
+              style={{ clipPath: "polygon(100% 0, 0 0, 100% 100%)" }}
+            />
+          ) : null}
         </button>
       ))}
     </span>
+  );
+}
+
+/**
+ * What has moved since the last reading — the sentence a still frame could not
+ * say. Three states that a single count would flatten into one: no previous
+ * reading to compare against, a comparison that found nothing, and a record
+ * that could not be written at all.
+ */
+function MemoryTag({
+  moved,
+  memory,
+}: {
+  moved: ReturnType<typeof changeSummary>;
+  memory: CoverageMemory | undefined;
+}) {
+  const when = (memory?.changed_at ?? "").slice(0, 16).replace("T", " ");
+  if (memory?.recorded === false) {
+    return (
+      <DenseTag variant="neutral" title={memory.why ?? "the verdict record could not be written"}>
+        no memory
+      </DenseTag>
+    );
+  }
+  if (moved.firstReading) {
+    return <DenseTag variant="info">first reading</DenseTag>;
+  }
+  if (moved.total === 0) {
+    return (
+      <DenseTag variant="neutral" title={`These verdicts have held since ${when}`}>
+        unchanged since {when.slice(5, 10)}
+      </DenseTag>
+    );
+  }
+  const parts = [
+    moved.regressed > 0 ? `${moved.regressed} worse` : null,
+    moved.recovered > 0 ? `${moved.recovered} better` : null,
+    moved.other > 0 ? `${moved.other} changed` : null,
+  ].filter(Boolean);
+  return (
+    <DenseTag
+      variant={moved.regressed > 0 ? "warning" : "success"}
+      title={`Against the previous reading, which stood until ${when}`}
+    >
+      {parts.join(" · ")} since {when.slice(5, 10)}
+    </DenseTag>
   );
 }
 
@@ -138,9 +208,13 @@ function Marks({
 function AxisDetail({
   dataset,
   axis,
+  change,
+  changedAt,
 }: {
   dataset: DatasetDimensions | null;
   axis: string | null;
+  change: VerdictChange | null;
+  changedAt: string | null;
 }) {
   if (dataset == null || axis == null) {
     return (
@@ -170,6 +244,23 @@ function AxisDetail({
       <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
         {e.rule}
       </span>
+      {/* The one thing a still frame could never say. Recorded forward because
+          a verdict cannot be computed backwards: freshness divides by how late
+          the newest row is *now*, breadth by the tier scope as it stood. */}
+      {change ? (
+        <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+          {change.direction === "regressed"
+            ? "Worse than last reading"
+            : change.direction === "recovered"
+              ? "Better than last reading"
+              : "Changed since last reading"}
+          {": "}
+          <span className="font-mono">
+            {change.from ?? "absent"} → {change.to ?? "absent"}
+          </span>
+          {changedAt ? ` · since ${changedAt.slice(0, 16).replace("T", " ")}` : ""}
+        </span>
+      ) : null}
       {e.note ? (
         <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
           {e.note}
@@ -200,7 +291,9 @@ export function CoverageMatrixPanel() {
     refetchInterval: (d) => (d.state.data?.computing ? 15_000 : false),
   });
   const data = q.data;
-  const matrix = buildMatrix(data?.datasets);
+  const changes = changeIndex(data?.memory);
+  const matrix = buildMatrix(data?.datasets, changes);
+  const moved = changeSummary(data?.memory);
   const grains = occupiedGrains(matrix);
   const shown: Grain[] = grains.length > 0 ? grains : GRAIN_ORDER;
   const sum = matrixSummary(matrix);
@@ -274,6 +367,11 @@ export function CoverageMatrixPanel() {
               {sum.clean}/{sum.total} clean
             </DenseTag>
           ) : null}
+          {/* Direction in words, here, rather than as a fourth colour in the
+              grid. "Nothing changed" and "nothing to compare against" are
+              different claims, and so is "the record could not be written" —
+              a matrix that shows the same thing for all three has no memory. */}
+          {sum.total > 0 ? <MemoryTag moved={moved} memory={data?.memory} /> : null}
           {/* Two groups, not one row of five. Green, amber and red rank a
               dataset against its target; blue and grey do not rank it at all,
               and a single ramp invites "is blue better than green". */}
@@ -428,6 +526,8 @@ export function CoverageMatrixPanel() {
               (data?.datasets ?? []).find((x) => x.dataset === picked?.dataset) ?? null
             }
             axis={picked?.axis ?? null}
+            change={picked ? (changes.get(`${picked.dataset}|${picked.axis}`) ?? null) : null}
+            changedAt={data?.memory?.changed_at ?? null}
           />
         </div>
       )}

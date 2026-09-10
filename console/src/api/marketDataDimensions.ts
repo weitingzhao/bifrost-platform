@@ -141,6 +141,45 @@ export type DatasetDimensions = {
   depth: DatasetDepth;
   freshness: DatasetFreshness;
   continuity: DatasetContinuity;
+  /**
+   * The rank, decided by the plugin. It used to be decided here, which meant
+   * the thresholds lived somewhere no other reader could see them — the doctor
+   * prescribes in Python and could never have been told a verdict went
+   * backwards. Optional only so a console deployed ahead of the plugin still
+   * renders; `dimensionsModel` keeps the same rules as the fallback.
+   */
+  verdicts?: Partial<Record<AxisName, AxisVerdictName>>;
+};
+
+export type AxisName = "breadth" | "depth" | "freshness" | "continuity";
+export type AxisVerdictName = "ok" | "partial" | "thin" | "boundary" | "unknown";
+
+/** One axis of one dataset whose verdict differs from the previous reading. */
+export type VerdictChange = {
+  dataset: string;
+  axis: AxisName;
+  from: AxisVerdictName | null;
+  to: AxisVerdictName | null;
+  direction: "regressed" | "recovered" | "changed";
+};
+
+/**
+ * What the estate looked like last time, and what has moved since.
+ *
+ * Recorded forward because a verdict cannot be computed backwards: freshness
+ * divides by how late the newest row is *now*, breadth by the tier scope as it
+ * stood. Continuity is the opposite and stays computed on read — the sessions
+ * it reads are still in the table.
+ */
+export type CoverageMemory = {
+  recorded: boolean;
+  why?: string;
+  /** When the *current* verdicts first appeared. */
+  changed_at?: string | null;
+  /** When the previous, different verdicts first appeared. */
+  previous_at?: string | null;
+  samples?: number;
+  changes: VerdictChange[];
 };
 
 export type CoverageDimensions = {
@@ -159,6 +198,7 @@ export type CoverageDimensions = {
     global: number;
   };
   datasets: DatasetDimensions[];
+  memory?: CoverageMemory;
 };
 
 export async function fetchCoverageDimensions(): Promise<CoverageDimensions> {

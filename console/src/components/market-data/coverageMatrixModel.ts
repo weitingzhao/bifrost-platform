@@ -10,7 +10,12 @@
  * scans the grid and a reader who reads the table can never be told different
  * things about the same dataset.
  */
-import type { DatasetDimensions, DimensionTier } from "@/api/marketDataDimensions";
+import type {
+  CoverageMemory,
+  DatasetDimensions,
+  DimensionTier,
+  VerdictChange,
+} from "@/api/marketDataDimensions";
 import {
   accrualFraction,
   breadthVerdict,
@@ -69,7 +74,46 @@ export type AxisCell = {
   verdict: AxisVerdict;
   /** 0–1 where a boundary is climbing toward a ceiling, else null. */
   progress: number | null;
+  /**
+   * How this axis got to its current verdict, when the plugin remembers a
+   * different previous one. A still frame cannot say "this got worse", and
+   * that was the whole gap: if tonight's option-bars fix regressed, tomorrow's
+   * matrix would look identical to today's.
+   */
+  change: VerdictChange | null;
 };
+
+/** `dataset|axis` → the move that produced today's verdict. */
+export type ChangeIndex = Map<string, VerdictChange>;
+
+export function changeIndex(memory: CoverageMemory | undefined): ChangeIndex {
+  const out: ChangeIndex = new Map();
+  for (const c of memory?.changes ?? []) out.set(`${c.dataset}|${c.axis}`, c);
+  return out;
+}
+
+/** What moved, counted by direction — the one line above the grid. */
+export function changeSummary(memory: CoverageMemory | undefined): {
+  regressed: number;
+  recovered: number;
+  other: number;
+  total: number;
+  /** True before there is a second reading to compare against. */
+  firstReading: boolean;
+} {
+  const changes = memory?.changes ?? [];
+  const by = (d: VerdictChange["direction"]) =>
+    changes.filter(c => c.direction === d).length;
+  return {
+    regressed: by("regressed"),
+    recovered: by("recovered"),
+    other: by("changed"),
+    total: changes.length,
+    // "Nothing changed" and "nothing to compare against" are different claims,
+    // and a matrix that conflates them is back to having no memory at all.
+    firstReading: memory?.recorded === true && !memory?.previous_at,
+  };
+}
 
 export type MatrixEntry = {
   dataset: string;
@@ -87,14 +131,30 @@ export type MatrixCell = {
   worst: AxisVerdict | null;
 };
 
-export function axesOf(d: DatasetDimensions): AxisCell[] {
+export function axesOf(d: DatasetDimensions, changes?: ChangeIndex): AxisCell[] {
+  const moved = (axis: string) => changes?.get(`${d.dataset}|${axis}`) ?? null;
   return [
-    { axis: "breadth", verdict: breadthVerdict(d), progress: null },
+    { axis: "breadth", verdict: breadthVerdict(d), progress: null, change: moved("breadth") },
     // Only depth has a climb to show: a chain snapshot cannot be backfilled but
     // is still accruing toward the sessions trim keeps.
-    { axis: "depth", verdict: depthVerdict(d), progress: accrualFraction(d) },
-    { axis: "freshness", verdict: freshnessVerdict(d), progress: null },
-    { axis: "continuity", verdict: continuityVerdict(d), progress: null },
+    {
+      axis: "depth",
+      verdict: depthVerdict(d),
+      progress: accrualFraction(d),
+      change: moved("depth"),
+    },
+    {
+      axis: "freshness",
+      verdict: freshnessVerdict(d),
+      progress: null,
+      change: moved("freshness"),
+    },
+    {
+      axis: "continuity",
+      verdict: continuityVerdict(d),
+      progress: null,
+      change: moved("continuity"),
+    },
   ];
 }
 
@@ -103,8 +163,8 @@ export function worstOf(verdicts: AxisVerdict[]): AxisVerdict | null {
   return verdicts.reduce((a, b) => (SEVERITY[b] > SEVERITY[a] ? b : a));
 }
 
-export function entryOf(d: DatasetDimensions): MatrixEntry {
-  const axes = axesOf(d);
+export function entryOf(d: DatasetDimensions, changes?: ChangeIndex): MatrixEntry {
+  const axes = axesOf(d, changes);
   return {
     dataset: d.dataset,
     name: d.dataset.replace(/^raw_market\./, ""),
@@ -118,7 +178,10 @@ export function entryOf(d: DatasetDimensions): MatrixEntry {
  * "no minute data outside the benchmarks" is something a reader should be able
  * to see without knowing to look for it.
  */
-export function buildMatrix(datasets: DatasetDimensions[] | undefined): MatrixCell[][] {
+export function buildMatrix(
+  datasets: DatasetDimensions[] | undefined,
+  changes?: ChangeIndex,
+): MatrixCell[][] {
   const byKey = new Map<string, DatasetDimensions[]>();
   for (const d of datasets ?? []) {
     const grain = (d.grain ?? "daily") as Grain;
@@ -130,7 +193,7 @@ export function buildMatrix(datasets: DatasetDimensions[] | undefined): MatrixCe
   return TIER_ORDER.map(tier =>
     GRAIN_ORDER.map(grain => {
       const entries = (byKey.get(`${tier}|${grain}`) ?? [])
-        .map(entryOf)
+        .map(d => entryOf(d, changes))
         .sort((a, b) => a.name.localeCompare(b.name));
       return {
         tier,

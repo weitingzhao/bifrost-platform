@@ -2,6 +2,19 @@ import type { DatasetDimensions } from "@/api/marketDataDimensions";
 
 export type AxisVerdict = "ok" | "partial" | "thin" | "boundary" | "unknown";
 
+/**
+ * The plugin decides the rank now (C-G1: the contract table is the only source
+ * of thresholds). These functions keep the same rules as the fallback for a
+ * console deployed ahead of the plugin, and the plugin's `tests/test_verdicts.py`
+ * carries the same cases as this file's suite so the two cannot drift.
+ */
+function declared(
+  d: DatasetDimensions,
+  axis: "breadth" | "depth" | "freshness" | "continuity",
+): AxisVerdict | null {
+  return (d.verdicts?.[axis] as AxisVerdict | undefined) ?? null;
+}
+
 /** Depth kinds that name a plan boundary rather than a target to reach. */
 export const BOUNDARY_KINDS = new Set([
   "current_only",
@@ -10,6 +23,8 @@ export const BOUNDARY_KINDS = new Set([
 ]);
 
 export function breadthVerdict(d: DatasetDimensions): AxisVerdict {
+  const said = declared(d, "breadth");
+  if (said) return said;
   if (d.error) return "unknown";
   // A top-N list is not partial coverage of the market, and a catalogue of
   // events that happened is not partial coverage of the instruments they could
@@ -23,6 +38,8 @@ export function breadthVerdict(d: DatasetDimensions): AxisVerdict {
 }
 
 export function depthVerdict(d: DatasetDimensions): AxisVerdict {
+  const said = declared(d, "depth");
+  if (said) return said;
   if (d.error) return "unknown";
   // A boundary is not a gap: the vendor cannot backfill it, or it is not a series.
   if (!d.depth.measured)
@@ -55,6 +72,8 @@ export function freshnessVerdict(
   d: DatasetDimensions,
   today = new Date(),
 ): AxisVerdict {
+  const said = declared(d, "freshness");
+  if (said) return said;
   if (d.error) return "unknown";
   // The plugin reports measured:false only where the contract has no date
   // column at all — a catalogue lists what exists, it does not observe it. That
@@ -116,6 +135,8 @@ export function breadthLabel(d: DatasetDimensions): string {
  * different faults.
  */
 export function continuityVerdict(d: DatasetDimensions): AxisVerdict {
+  const said = declared(d, "continuity");
+  if (said) return said;
   if (d.error) return "unknown";
   const c = d.continuity;
   if (!c?.measured) {
