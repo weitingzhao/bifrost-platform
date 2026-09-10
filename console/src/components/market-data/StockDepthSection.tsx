@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   DenseDataTable,
@@ -231,15 +231,24 @@ function buildSummary(rows: DepthRow[]): string {
 export function StockDepthSection({
   symbols,
   watchlistLoading,
+  onActiveChange,
 }: {
   symbols: string[]
   watchlistLoading?: boolean
+  /**
+   * Told when this section is actually being looked at, so the parent can hold
+   * back the watchlist read (7.5s measured 2026-09-10) that feeds `symbols`.
+   * Without it the parent has no way to know: `<details>` hides a body, it does
+   * not unmount it.
+   */
+  onActiveChange?: (active: boolean) => void
 }) {
+  const [open, setOpen] = useState(false)
   const depthQ = useQuery({
     queryKey: ['market-data', 'coverage', 'stock-depth', symbols],
     queryFn: () => fetchDepthRows(symbols),
-    enabled: symbols.length > 0,
-    refetchInterval: 120_000,
+    enabled: open && symbols.length > 0,
+    refetchInterval: open ? 120_000 : false,
     retry: 1,
   })
 
@@ -247,7 +256,7 @@ export function StockDepthSection({
   const summary = useMemo(() => (rows.length > 0 ? buildSummary(rows) : null), [rows])
   const recentGaps = useMemo(() => buildRecentGapRows(rows), [rows])
 
-  const loading = Boolean(watchlistLoading) || (symbols.length > 0 && depthQ.isLoading)
+  const loading = open && (Boolean(watchlistLoading) || (symbols.length > 0 && depthQ.isLoading))
   const zeroGaps = rows.filter(r => r.status === 'ok' || r.missingDays === 0).length
   const gapKnown = rows.filter(r => typeof r.missingDays === 'number').length
   const errored = rows.filter(r => r.status === 'error').length
@@ -266,7 +275,11 @@ export function StockDepthSection({
       bodyPadding="compact"
       overflow="visible"
       collapsible
-      defaultCollapsed={false}
+      defaultCollapsed
+      onOpenChange={next => {
+        setOpen(next)
+        onActiveChange?.(next)
+      }}
     >
       {loading ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

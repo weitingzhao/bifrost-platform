@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   DenseDataTable,
@@ -170,16 +170,23 @@ async function loadGreeks() {
 }
 
 export function OptionCoverageSection() {
+  // Measured 2026-09-10 through the proxy: contracts 21s, greeks 52s. Together
+  // they were the coverage tab's whole load time, paid on mount whether or not
+  // anyone opened this section — and `<details>` hides a body without
+  // unmounting it, so collapsing alone would not have stopped them.
+  const [open, setOpen] = useState(false)
   const contractsQ = useQuery({
     queryKey: ['market-data', 'coverage', 'contracts'],
     queryFn: loadContracts,
-    refetchInterval: 90_000,
+    enabled: open,
+    refetchInterval: open ? 90_000 : false,
     retry: 1,
   })
   const greeksQ = useQuery({
     queryKey: ['market-data', 'coverage', 'greeks'],
     queryFn: loadGreeks,
-    refetchInterval: 90_000,
+    enabled: open,
+    refetchInterval: open ? 90_000 : false,
     retry: 1,
   })
 
@@ -195,7 +202,7 @@ export function OptionCoverageSection() {
   ).length
   const greeksFail = rows.length - greeksOk - greeksThin
 
-  const loading = contractsQ.isLoading || greeksQ.isLoading
+  const loading = open && (contractsQ.isLoading || greeksQ.isLoading)
   const error =
     contractsQ.isError || greeksQ.isError
       ? contractsQ.error instanceof Error
@@ -212,7 +219,8 @@ export function OptionCoverageSection() {
       bodyPadding="compact"
       overflow="visible"
       collapsible
-      defaultCollapsed={false}
+      defaultCollapsed
+      onOpenChange={setOpen}
     >
       {loading ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

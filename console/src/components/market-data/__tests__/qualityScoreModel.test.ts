@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   qualityCheckCaption,
   qualityCheckFill,
+  qualityVerdict,
 } from '@/components/market-data/qualityScoreModel'
 
 describe('qualityCheckFill', () => {
@@ -53,5 +54,37 @@ describe('qualityCheckCaption', () => {
 
   it('keeps freshness ok short', () => {
     expect(qualityCheckCaption({ check: 'freshness', ok: true, detail: 'ok' })).toBe('Fresh')
+  })
+})
+
+describe('the verdict while the checks are still running', () => {
+  it('is null, not PASS', () => {
+    // Plugin 0.24.0 moved the score behind a background cache because it cost
+    // 12 seconds. Its first answer is ok:true with nothing in it, and reading
+    // `ok` alone painted a green 4/4 over a run that had not happened.
+    expect(qualityVerdict({ ok: true, summary: null, checks: [], computing: true })).toBeNull()
+  })
+
+  it('is null before any answer at all', () => {
+    expect(qualityVerdict(null)).toBeNull()
+    expect(qualityVerdict({ ok: true, summary: null, checks: [] })).toBeNull()
+  })
+
+  it('reads a real answer once there is one', () => {
+    expect(qualityVerdict({ ok: true, summary: 'PASS', checks: [{}, {}] })).toBe('PASS')
+    expect(qualityVerdict({ ok: true, summary: 'FAIL', checks: [{}] })).toBe('FAIL')
+  })
+
+  it('still answers from a stale pass while the next one runs', () => {
+    // computing with checks in hand means "this is last pass's answer", which
+    // is exactly what a background cache is for.
+    expect(
+      qualityVerdict({ ok: true, summary: 'PASS', checks: [{}, {}], computing: true }),
+    ).toBe('PASS')
+  })
+
+  it('falls back to ok only when checks are actually present', () => {
+    expect(qualityVerdict({ ok: true, summary: null, checks: [{}] })).toBe('PASS')
+    expect(qualityVerdict({ ok: false, summary: null, checks: [{}] })).toBe('FAIL')
   })
 })

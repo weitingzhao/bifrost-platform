@@ -70,9 +70,21 @@ export type DatasetContinuity = {
   off_calendar_sample?: string[];
 };
 
+/** What one row of a dataset is — the second axis of the coverage matrix. */
+export type DatasetGrain =
+  "catalogue" | "daily" | "snapshot" | "minute" | "filing";
+
 export type DatasetDimensions = {
   dataset: string;
   tier: DimensionTier;
+  /**
+   * Declared on the plugin's contract, not derived here. Tier says which
+   * instruments; grain says what one row is, and neither follows from the
+   * other: option_snapshot and option_daily share a tier and differ in grain.
+   */
+  grain?: DatasetGrain;
+  /** The slot that can refill one named past session; null when it is gone. */
+  backfill_slot?: string | null;
   slots: string[];
   breadth_window: "session" | "ever";
   error: string | null;

@@ -32,6 +32,7 @@ import { FinancialsPanel } from '@/components/market-data/quality/FinancialsPane
 import { ReadinessPanel } from '@/components/market-data/quality/ReadinessPanel'
 import { SepaStatsSection } from '@/components/market-data/quality/SepaStatsSection'
 import { SnapshotQualityTrend } from '@/components/market-data/quality/SnapshotQualityTrend'
+import { CoverageMatrixPanel } from '@/components/market-data/CoverageMatrixPanel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import {
   CAPABILITY_GROUP_LABELS,
@@ -119,16 +120,24 @@ export function MarketDataCoverageTab({
     writeMdSearchParams({ tab: 'coverage', panel })
   }, [panel])
 
+  // Both of these fired on mount, every minute, whichever panel was showing.
+  // Measured 2026-09-10 through the proxy: db-summary 16.4s, watchlist 7.5s —
+  // and the reader's first question, "is Massive healthy", needs neither.
+  const [depthActive, setDepthActive] = useState(false)
   const summaryQ = useQuery({
     queryKey: ['market-data', 'coverage', 'db-summary'],
     queryFn: fetchCoverageDbSummary,
-    refetchInterval: 60_000,
+    enabled: panel === 'db-summary',
+    refetchInterval: panel === 'db-summary' ? 60_000 : false,
     retry: 1,
   })
   const watchlistQ = useQuery({
     queryKey: ['market-data', 'coverage', 'watchlist'],
     queryFn: fetchCoverageWatchlist,
-    refetchInterval: 60_000,
+    // The db-summary panel lists the symbols; the depth section asks for them
+    // only once someone opens it.
+    enabled: panel === 'db-summary' || depthActive,
+    refetchInterval: panel === 'db-summary' ? 60_000 : false,
     retry: 1,
   })
 
@@ -169,7 +178,11 @@ export function MarketDataCoverageTab({
 
   return (
     <div className="flex flex-col gap-2">
+      {/* The macro layer: what the estate is and whether it is healthy. Both
+          reads are served from the plugin's background cache — 7ms and 9ms
+          measured 2026-09-10 — so this paints before anything below it. */}
       <DataInventoryStrip />
+      <CoverageMatrixPanel />
 
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
         <SegmentControl
@@ -206,7 +219,11 @@ export function MarketDataCoverageTab({
           <QualityScoreSection />
           <SnapshotQualityTrend />
           <SepaStatsSection />
-          <StockDepthSection symbols={symbols} watchlistLoading={watchlistQ.isLoading} />
+          <StockDepthSection
+            symbols={symbols}
+            watchlistLoading={watchlistQ.isLoading}
+            onActiveChange={setDepthActive}
+          />
           <OptionCoverageSection />
         </>
       ) : null}

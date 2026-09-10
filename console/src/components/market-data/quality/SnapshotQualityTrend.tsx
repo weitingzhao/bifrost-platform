@@ -55,11 +55,14 @@ export function SnapshotQualityTrend({
   const [symbolInput, setSymbolInput] = useState(defaultSymbol)
   const [symbol, setSymbol] = useState(defaultSymbol.toUpperCase())
 
+  // 11 seconds for one symbol's fourteen days, measured 2026-09-10. That is
+  // detail about a single name, and it was on the tab's critical path.
+  const [open, setOpen] = useState(false)
   const q = useQuery({
     queryKey: ['market-data', 'coverage', 'snapshot-quality-detail', symbol],
     queryFn: () => fetchSnapshotQualityDetail({ symbol, days: 14 }),
-    enabled: symbol.length > 0,
-    refetchInterval: 120_000,
+    enabled: open && symbol.length > 0,
+    refetchInterval: open ? 120_000 : false,
     retry: 1,
   })
 
@@ -83,7 +86,8 @@ export function SnapshotQualityTrend({
       bodyPadding="compact"
       overflow="visible"
       collapsible
-      defaultCollapsed={false}
+      defaultCollapsed
+      onOpenChange={setOpen}
     >
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
         <span className="shrink-0 text-xs font-medium text-[var(--muted-foreground)]">

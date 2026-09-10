@@ -31,6 +31,13 @@ export interface OpsSectionProps {
   collapsible?: boolean
   /** Initial collapsed state when `collapsible` is true. */
   defaultCollapsed?: boolean
+  /**
+   * Called when the reader opens or closes the section. Collapsing hides the
+   * body but does not unmount it — this is `<details>`, not a conditional — so
+   * a section whose contents cost real time has to be told, and stop fetching.
+   * The coverage tab spent 52 seconds on detail nobody had asked to see.
+   */
+  onOpenChange?: (open: boolean) => void
 }
 
 const bodyPaddingClass: Record<OpsSectionBodyPadding, string> = {
@@ -104,6 +111,7 @@ export function OpsSection({
   id,
   collapsible = false,
   defaultCollapsed = false,
+  onOpenChange,
 }: OpsSectionProps) {
   const hasBody = children != null
   const showHeader = title != null || description != null || actions != null || leading != null
@@ -135,7 +143,11 @@ export function OpsSection({
         id={id}
         className={sectionClassName}
         open={open}
-        onToggle={e => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+        onToggle={e => {
+          const next = (e.currentTarget as HTMLDetailsElement).open
+          setOpen(next)
+          onOpenChange?.(next)
+        }}
       >
         {showHeader && (
           <OpsSectionHeader

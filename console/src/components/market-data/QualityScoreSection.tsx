@@ -16,7 +16,9 @@ import {
   qualityCheckCaption,
   qualityCheckFill,
   qualityCheckLabel,
+  qualityVerdict,
 } from '@/components/market-data/qualityScoreModel'
+import { isComputing, pollWhileComputing } from '@/lib/market-data/backgroundAnswer'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 function CheckCard({ item }: { item: QualityCheckItem }) {
@@ -46,7 +48,9 @@ export function QualityScoreSection() {
   const q = useQuery({
     queryKey: ['market-data', 'coverage', 'quality-score'],
     queryFn: fetchQualityScore,
-    refetchInterval: 60_000,
+    // Poll fast while the first pass runs, then settle: the panel should fill
+    // in on its own rather than leave the reader on "running the checks".
+    refetchInterval: pollWhileComputing(60_000),
     retry: 1,
   })
 
@@ -60,12 +64,18 @@ export function QualityScoreSection() {
         ? q.error.message
         : 'Failed to load quality score'
       : proxyErr?.error ?? null
-  const summary =
-    score?.summary ?? (score?.ok === true ? 'PASS' : score != null ? 'FAIL' : null)
+  // The verdict moved behind a background cache (plugin 0.24.0) because it cost
+  // 12 seconds. Its first answer is `{ok: true, summary: null, checks: []}` —
+  // "still checking" — and `ok` alone used to be read as PASS, which would have
+  // painted a green verdict over a run that had not happened. Still counting is
+  // not counted-and-clean; that is the shape of the bug the fourth axis exists
+  // for, where a skipped job counted as a successful one.
+  const computing = isComputing(score)
+  const summary = qualityVerdict(score == null ? null : { ...score, computing })
   const checks: QualityCheckItem[] = score?.checks ?? []
   const passed = checks.filter(c => c.ok).length
   const failed = checks.length - passed
-  const overallPass = summary === 'PASS' || score?.ok === true
+  const overallPass = summary === 'PASS'
 
   return (
     <OpsSection
@@ -80,9 +90,9 @@ export function QualityScoreSection() {
       collapsible
       defaultCollapsed={false}
     >
-      {q.isLoading ? (
+      {q.isLoading || (computing && checks.length === 0) ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          Loading quality score…
+          {computing ? 'Running the checks…' : 'Loading quality score…'}
         </p>
       ) : err != null ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--destructive)]">{err}</p>

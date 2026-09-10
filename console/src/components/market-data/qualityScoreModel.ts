@@ -76,3 +76,23 @@ export function qualityCheckCaption(item: QualityCheckItem): string {
   }
   return d
 }
+
+/**
+ * The verdict, or null while there is not one yet.
+ *
+ * The score moved behind a background cache in plugin 0.24.0 because it cost
+ * 12 seconds, and its first answer is `{ok: true, summary: null, checks: []}` —
+ * "still checking". Reading `ok` on its own turned that into PASS, which would
+ * paint a green verdict over a run that had not happened. Still counting is not
+ * counted-and-clean; that is the shape of the bug the fourth axis exists for,
+ * where a skipped job counted as a successful one.
+ */
+export function qualityVerdict(
+  score: { ok?: boolean; summary?: string | null; checks?: unknown[]; computing?: boolean } | null,
+): 'PASS' | 'FAIL' | null {
+  if (score == null) return null
+  if (score.computing === true && (score.checks?.length ?? 0) === 0) return null
+  if (score.summary == null && (score.checks?.length ?? 0) === 0) return null
+  if (score.summary != null) return score.summary === 'PASS' ? 'PASS' : 'FAIL'
+  return score.ok === true ? 'PASS' : 'FAIL'
+}
