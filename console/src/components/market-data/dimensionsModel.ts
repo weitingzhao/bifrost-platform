@@ -173,3 +173,161 @@ export function continuityDetail(d: DatasetDimensions): string | undefined {
   }
   return bits.join(" · ") || undefined;
 }
+
+/**
+ * Why an axis is the colour it is: the rule, and the numbers it was applied to.
+ *
+ * The marks are a scan surface — four squares say "look here" and nothing more.
+ * A reader who does look deserves the threshold that decided it, not a second
+ * colour. Green, amber and red are one scale; blue and grey are not on it, and
+ * saying so is half the answer.
+ */
+export type AxisExplain = {
+  axis: "breadth" | "depth" | "freshness" | "continuity";
+  verdict: AxisVerdict;
+  /** What was measured, in the dataset's own units. */
+  reading: string;
+  /** The rule that turned that reading into this colour. */
+  rule: string;
+  /** Why the axis was not judged at all, where it was not. */
+  note?: string;
+};
+
+const SHARE_RULE = "ok at 95% or more · partial at 50% or more · thin below";
+
+export function explainBreadth(d: DatasetDimensions): AxisExplain {
+  const v = breadthVerdict(d);
+  const b = d.breadth;
+  const window =
+    d.breadth_window === "session" ? "in the last complete session" : "ever held";
+  if (b.judged === false) {
+    return {
+      axis: "breadth",
+      verdict: v,
+      reading: breadthLabel(d),
+      rule: "not judged as coverage",
+      note: b.why ?? undefined,
+    };
+  }
+  return {
+    axis: "breadth",
+    verdict: v,
+    reading: `${breadthLabel(d)} ${window}${
+      b.outside_scope ? ` · ${b.outside_scope.toLocaleString()} held outside this tier` : ""
+    }`,
+    rule: SHARE_RULE,
+  };
+}
+
+export function explainDepth(d: DatasetDimensions): AxisExplain {
+  const v = depthVerdict(d);
+  const t = d.depth.target;
+  if (!d.depth.measured) {
+    return {
+      axis: "depth",
+      verdict: v,
+      reading: t.kind.replace(/_/g, " "),
+      rule: "a plan boundary, not a target",
+      note: t.why || undefined,
+    };
+  }
+  const median = d.depth.median_days ?? 0;
+  const shallow = d.depth.shallowest;
+  const spread = `median ${median.toLocaleString()}d${
+    shallow ? ` · shallowest ${shallow.symbol} at ${shallow.days.toLocaleString()}d` : ""
+  }`;
+  if (d.depth.judged === false) {
+    return {
+      axis: "depth",
+      verdict: v,
+      reading: `${spread} over ${(d.depth.of ?? 0).toLocaleString()} symbols`,
+      rule: "the spread is the answer; a pass count is not",
+      note: d.depth.why,
+    };
+  }
+  return {
+    axis: "depth",
+    verdict: v,
+    reading: `${depthLabel(d)} · ${spread}`,
+    rule: `${SHARE_RULE}, against ${(d.depth.need_days ?? 0).toLocaleString()} days (${t.why || t.kind})`,
+  };
+}
+
+export function explainFreshness(d: DatasetDimensions): AxisExplain {
+  const v = freshnessVerdict(d);
+  const f = d.freshness;
+  const reading = `newest ${f.newest ?? "—"}${
+    f.days_behind != null ? ` · ${f.days_behind}d behind` : ""
+  }`;
+  if (f.judged === false || !f.measured) {
+    return {
+      axis: "freshness",
+      verdict: v,
+      reading,
+      rule: "not judged by a clock",
+      note: f.why ?? (f.measured ? undefined : "this dataset carries no observation date"),
+    };
+  }
+  if (f.cadence != null && f.cadence !== "session") {
+    return {
+      axis: "freshness",
+      verdict: v,
+      reading: `${reading}${
+        f.expected_interval_days ? ` · publishes about every ${f.expected_interval_days}d` : ""
+      }`,
+      rule: "late once behind by more than two of its own publication intervals",
+    };
+  }
+  const allowed = Math.ceil(f.deadline_hours / 24) + 1;
+  return {
+    axis: "freshness",
+    verdict: v,
+    reading,
+    rule: `the session plus a ${f.deadline_hours}h deadline allows ${allowed}d · partial to ${allowed * 3}d · thin beyond`,
+  };
+}
+
+export function explainContinuity(d: DatasetDimensions): AxisExplain {
+  const v = continuityVerdict(d);
+  const c = d.continuity;
+  if (!c?.measured) {
+    return {
+      axis: "continuity",
+      verdict: v,
+      reading: "not a per-session series",
+      rule: "nothing to be missing from",
+      note: c?.why,
+    };
+  }
+  const detail = continuityDetail(d);
+  return {
+    axis: "continuity",
+    verdict: v,
+    reading: `${continuityLabel(d)} over ${c.window_days ?? 120}d${detail ? ` · ${detail}` : ""}`,
+    rule: "ok with no holes · partial up to 1 session in 10 · thin beyond",
+  };
+}
+
+export function explainAxis(
+  d: DatasetDimensions,
+  axis: AxisExplain["axis"],
+): AxisExplain {
+  if (axis === "breadth") return explainBreadth(d);
+  if (axis === "depth") return explainDepth(d);
+  if (axis === "freshness") return explainFreshness(d);
+  return explainContinuity(d);
+}
+
+/**
+ * Green, amber and red rank a dataset against its target. Blue and grey do not
+ * rank it at all — the first says the question does not apply, the second that
+ * it could not be answered. Rendering all five in one row reads as a five-step
+ * severity ramp and invites the question "is blue better than green".
+ */
+export const VERDICT_IS_RANKED: Record<AxisVerdict, boolean> = {
+  ok: true,
+  partial: true,
+  thin: true,
+  boundary: false,
+  unknown: false,
+};

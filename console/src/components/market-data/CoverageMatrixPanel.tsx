@@ -3,9 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { DenseTag } from "@bifrost/ui";
 import {
   fetchCoverageDimensions,
+  type DatasetDimensions,
   type TierDefinition,
 } from "@/api/marketDataDimensions";
-import type { AxisVerdict } from "@/components/market-data/dimensionsModel";
+import {
+  VERDICT_IS_RANKED,
+  explainAxis,
+  type AxisExplain,
+  type AxisVerdict,
+} from "@/components/market-data/dimensionsModel";
 import {
   GRAIN_HINT,
   GRAIN_LABEL,
@@ -57,23 +63,80 @@ const AXIS_INITIAL = ["B", "D", "F", "C"];
 function Marks({
   axes,
   name,
+  selected,
+  onPick,
 }: {
   axes: { axis: string; verdict: AxisVerdict }[];
   name: string;
+  selected?: string | null;
+  onPick: (axis: string) => void;
 }) {
   return (
     <span className="flex shrink-0 items-center gap-[2px]">
       {axes.map((a, i) => (
-        <span
+        <button
           key={a.axis}
-          className={`inline-flex h-3 w-3 items-center justify-center rounded-[2px] text-[7px] font-semibold leading-none text-[var(--background)] ${MARK[a.verdict]}`}
-          title={`${name} · ${a.axis}: ${a.verdict}`}
+          type="button"
+          onClick={() => onPick(a.axis)}
+          className={`inline-flex h-3 w-3 items-center justify-center rounded-[2px] text-[7px] font-semibold leading-none text-[var(--background)] ${MARK[a.verdict]} ${
+            selected === a.axis ? "ring-1 ring-[var(--foreground)] ring-offset-1 ring-offset-[var(--card)]" : ""
+          }`}
+          title={`${name} · ${a.axis}: ${a.verdict} — click for the rule`}
           aria-label={`${name} ${a.axis} ${a.verdict}`}
         >
           {AXIS_INITIAL[i]}
-        </span>
+        </button>
       ))}
     </span>
+  );
+}
+
+/** Why a mark is the colour it is: the reading, and the rule applied to it. */
+function AxisDetail({
+  dataset,
+  axis,
+}: {
+  dataset: DatasetDimensions | null;
+  axis: string | null;
+}) {
+  if (dataset == null || axis == null) {
+    return (
+      <p className="m-0 pt-2 text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+        Click any B · D · F · C to see the reading and the rule behind it.
+      </p>
+    );
+  }
+  const e = explainAxis(dataset, axis as AxisExplain["axis"]);
+  const ranked = VERDICT_IS_RANKED[e.verdict];
+  return (
+    <div className="mt-2 flex flex-col gap-0.5 rounded-sm border border-[var(--border)] px-2 py-1.5">
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="font-mono text-[var(--text-dense-caption)]">
+          {dataset.dataset.replace(/^raw_market\./, "")} · {e.axis}
+        </span>
+        <span
+          className={`inline-flex h-3 items-center rounded-[2px] px-1 text-[8px] font-semibold text-[var(--background)] ${MARK[e.verdict]}`}
+        >
+          {e.verdict}
+        </span>
+        {!ranked ? (
+          <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+            not on the ok / partial / thin scale — no verdict was made
+          </span>
+        ) : null}
+      </div>
+      <span className="font-mono text-[var(--text-dense-micro)] tabular-nums">
+        {e.reading}
+      </span>
+      <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+        {e.rule}
+      </span>
+      {e.note ? (
+        <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+          {e.note}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -104,6 +167,7 @@ export function CoverageMatrixPanel() {
   const sum = matrixSummary(matrix);
   const den = data?.denominators;
   const [copied, setCopied] = useState(false);
+  const [picked, setPicked] = useState<{ dataset: string; axis: string } | null>(null);
   const notClean = sum.total - sum.clean;
 
   const copyForAgent = async () => {
@@ -171,15 +235,30 @@ export function CoverageMatrixPanel() {
               {sum.clean}/{sum.total} clean
             </DenseTag>
           ) : null}
-          <span className="flex items-center gap-2 font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
-            {(["ok", "partial", "thin", "boundary", "unknown"] as AxisVerdict[]).map(
-              (v) => (
+          {/* Two groups, not one row of five. Green, amber and red rank a
+              dataset against its target; blue and grey do not rank it at all,
+              and a single ramp invites "is blue better than green". */}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+            <span className="flex items-center gap-2">
+              <span className="uppercase tracking-wide">judged</span>
+              {(["ok", "partial", "thin"] as AxisVerdict[]).map((v) => (
                 <span key={v} className="flex items-center gap-1">
                   <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK[v]}`} />
                   {v}
                 </span>
-              ),
-            )}
+              ))}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="uppercase tracking-wide">no verdict</span>
+              <span className="flex items-center gap-1" title="the question does not apply to this dataset">
+                <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK.boundary}`} />
+                boundary
+              </span>
+              <span className="flex items-center gap-1" title="the reading could not be taken">
+                <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK.unknown}`} />
+                unknown
+              </span>
+            </span>
           </span>
         </div>
       }
@@ -252,7 +331,20 @@ export function CoverageMatrixPanel() {
                               <span className="truncate font-mono text-[var(--text-dense-micro)]">
                                 {e.name}
                               </span>
-                              <Marks axes={e.axes} name={e.name} />
+                              <Marks
+                                axes={e.axes}
+                                name={e.name}
+                                selected={
+                                  picked?.dataset === e.dataset ? picked.axis : null
+                                }
+                                onPick={(axis) =>
+                                  setPicked((cur) =>
+                                    cur?.dataset === e.dataset && cur.axis === axis
+                                      ? null
+                                      : { dataset: e.dataset, axis },
+                                  )
+                                }
+                              />
                             </div>
                           ))}
                         </div>
@@ -263,6 +355,12 @@ export function CoverageMatrixPanel() {
               ))}
             </tbody>
           </table>
+          <AxisDetail
+            dataset={
+              (data?.datasets ?? []).find((x) => x.dataset === picked?.dataset) ?? null
+            }
+            axis={picked?.axis ?? null}
+          />
         </div>
       )}
     </OpsSection>

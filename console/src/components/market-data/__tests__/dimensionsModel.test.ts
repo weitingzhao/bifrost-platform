@@ -5,8 +5,12 @@ import {
   breadthVerdict,
   depthLabel,
   depthVerdict,
+  explainAxis,
+  explainBreadth,
+  explainFreshness,
   freshnessDetail,
   freshnessVerdict,
+  VERDICT_IS_RANKED,
 } from "@/components/market-data/dimensionsModel";
 
 const base: DatasetDimensions = {
@@ -245,5 +249,75 @@ describe("an instrument pointed at the wrong question", () => {
     expect(
       freshnessVerdict(base, new Date("2026-09-09T20:00:00Z")),
     ).toBe("ok");
+  });
+});
+
+describe("why a mark is the colour it is", () => {
+  it("gives the reading and the threshold that decided it", () => {
+    const e = explainBreadth(base);
+    expect(e.verdict).toBe("ok");
+    expect(e.reading).toContain("5,182/5,317");
+    expect(e.rule).toContain("95%");
+  });
+
+  it("gives the reason instead of a threshold where nothing was judged", () => {
+    // A reader asking "why is this blue" is owed the reason, not a number.
+    const movers = on({
+      breadth: {
+        judged: false,
+        why: "a top-N list of the session's biggest moves",
+        held: 22,
+        held_total: 22,
+        outside_scope: 0,
+        of: 5317,
+        pct: 0.4,
+        entitlement_pct: null,
+      },
+    });
+    const e = explainBreadth(movers);
+    expect(e.verdict).toBe("boundary");
+    expect(e.rule).toContain("not judged");
+    expect(e.note).toContain("top-N");
+  });
+
+  it("spells out the freshness allowance in days, not hours", () => {
+    // "deadline 2h" reads as two hours; the rule is the session plus that.
+    const e = explainFreshness(base);
+    expect(e.rule).toContain("allows 2d");
+    expect(e.rule).toContain("partial to 6d");
+  });
+
+  it("says a filing is not judged by a clock", () => {
+    const filing = on({
+      freshness: {
+        newest: "2026-08-02",
+        deadline_hours: 48,
+        measured: true,
+        days_behind: 39,
+        cadence: "filing",
+        judged: false,
+        why: "a filing arrives when the company files",
+      },
+    });
+    const e = explainFreshness(filing);
+    expect(e.verdict).toBe("boundary");
+    expect(e.rule).toContain("not judged by a clock");
+    expect(e.note).toContain("when the company files");
+  });
+
+  it("keeps blue and grey off the ok/partial/thin scale", () => {
+    // The question this answers is "is blue better than green", and the answer
+    // is that it is not on that scale at all.
+    expect(VERDICT_IS_RANKED.ok).toBe(true);
+    expect(VERDICT_IS_RANKED.partial).toBe(true);
+    expect(VERDICT_IS_RANKED.thin).toBe(true);
+    expect(VERDICT_IS_RANKED.boundary).toBe(false);
+    expect(VERDICT_IS_RANKED.unknown).toBe(false);
+  });
+
+  it("routes every axis to its own explanation", () => {
+    for (const axis of ["breadth", "depth", "freshness", "continuity"] as const) {
+      expect(explainAxis(base, axis).axis).toBe(axis);
+    }
   });
 });
