@@ -179,6 +179,12 @@ export type CoverageMemory = {
   /** When the previous, different verdicts first appeared. */
   previous_at?: string | null;
   samples?: number;
+  /**
+   * Datasets whose read failed this time; their verdicts below are last-known,
+   * not just-measured. A failed read is not a reading — recorded as-is, a
+   * dataset that times out now and then would report "1 changed" on every flap.
+   */
+  carried_forward?: string[];
   changes: VerdictChange[];
 };
 

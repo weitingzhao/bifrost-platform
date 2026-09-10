@@ -136,6 +136,18 @@ describe('the agent brief says what moved', () => {
     expect(text).not.toContain('No verdict changed')
   })
 
+  it('names the datasets whose numbers are last-known rather than just-measured', () => {
+    const text = buildCoverageMatrixPack(
+      {
+        datasets: [ds()],
+        memory: memory({ carried_forward: ['raw_market.short_volume'] }),
+      },
+      '2026-09-12T00:00:00Z',
+    )
+    expect(text).toContain('Not read this time')
+    expect(text).toContain('raw_market.short_volume')
+  })
+
   it('never claims calm when the record failed to write', () => {
     const text = buildCoverageMatrixPack(
       { datasets: [ds()], memory: { recorded: false, why: 'no such table', changes: [] } },

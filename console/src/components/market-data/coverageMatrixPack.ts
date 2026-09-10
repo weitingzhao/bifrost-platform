@@ -105,11 +105,19 @@ function movementSection(memory: CoverageMemory | undefined): string[] {
       "",
     ];
   }
+  const stale =
+    (memory.carried_forward ?? []).length > 0
+      ? [
+          `Not read this time (verdicts below are last-known, not just-measured): ` +
+            `${(memory.carried_forward ?? []).join(", ")}.`,
+        ]
+      : [];
   if (changes.length === 0) {
     return [
       "## Since last reading",
       `No verdict changed. These have held since ${when}, and the previous`,
       `reading stood from ${memory.previous_at}.`,
+      ...stale,
       "",
     ];
   }
@@ -123,6 +131,7 @@ function movementSection(memory: CoverageMemory | undefined): string[] {
       ? `${worse.length} of them got worse. Start there: a regression has a cause` +
         " that a long-standing gap does not."
       : "None of them got worse.",
+    ...stale,
     "",
     ...changes.map(line),
     "",
