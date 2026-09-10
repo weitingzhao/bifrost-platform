@@ -54,7 +54,9 @@ function NumberedLogTail({
   onScroll,
 }: {
   text: string
-  preRef: RefObject<HTMLPreElement>
+  // React 19 types: useRef<T>(null) yields RefObject<T | null>, because the
+  // ref genuinely is null until the element mounts. The prop now says so.
+  preRef: RefObject<HTMLPreElement | null>
   onScroll: () => void
 }) {
   const lines = useMemo(() => {
