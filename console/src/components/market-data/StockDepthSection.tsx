@@ -12,7 +12,9 @@ import {
 } from '@bifrost/ui'
 import {
   fetchBarQualityDetail,
+  fetchQualityScore,
   fetchStockDayGap,
+  isProxyError,
   type BarQualityDetailResponse,
   type StockDayGapResponse,
 } from '@/api/marketDataPlugin'
@@ -228,6 +230,50 @@ function buildSummary(rows: DepthRow[]): string {
   return parts.join(' · ')
 }
 
+/**
+ * The verdict while the section is shut.
+ *
+ * The detail is one request per watchlist symbol behind a 7.5s watchlist read,
+ * so it only runs when opened — which left the header blank exactly when a
+ * reader wants the answer most. This reads the check the quality score already
+ * computes over the same window and the same watchlist, from the same cached
+ * payload the score card above is already showing: no second request, and no
+ * second definition of "a gap" (C-G1).
+ */
+function StockDepthHeadlineTag() {
+  const q = useQuery({
+    queryKey: ['market-data', 'coverage', 'quality-score'],
+    queryFn: fetchQualityScore,
+    staleTime: 60_000,
+    retry: 1,
+  })
+  const data = q.data != null && !isProxyError(q.data) ? q.data : null
+  const check = (data?.checks ?? []).find(c => c.check === 'stock_daily_coverage')
+  // No check yet is not a pass. The score is background-computed and answers
+  // with an empty payload until its first pass lands.
+  if (check == null) return null
+  const gaps = typeof check.gap_count === 'number' ? check.gap_count : null
+  const days = Array.isArray(check.trading_days) ? check.trading_days.length : null
+  const watchlist =
+    typeof check.watchlist_symbols === 'number' ? check.watchlist_symbols : null
+  return (
+    <DenseTag
+      variant={gaps === 0 ? 'success' : gaps == null ? 'neutral' : 'warning'}
+      title={
+        days != null && watchlist != null
+          ? `Measured over ${days} trading days × ${watchlist} watchlist symbols — the same window the quality score uses`
+          : undefined
+      }
+    >
+      {gaps == null
+        ? 'gaps not measured'
+        : gaps === 0
+          ? `${days ?? '—'}d clear`
+          : `${gaps} gaps / ${days ?? '—'}d`}
+    </DenseTag>
+  )
+}
+
 export function StockDepthSection({
   symbols,
   watchlistLoading,
@@ -270,7 +316,9 @@ export function StockDepthSection({
           <DenseTag variant={recentGaps.length === 0 ? 'success' : 'warning'}>
             {recentGaps.length === 0 ? '7d clear' : `${recentGaps.length} recent gaps`}
           </DenseTag>
-        ) : null
+        ) : (
+          <StockDepthHeadlineTag />
+        )
       }
       bodyPadding="compact"
       overflow="visible"

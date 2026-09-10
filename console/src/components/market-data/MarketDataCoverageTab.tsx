@@ -30,7 +30,6 @@ import { QualityScoreSection } from '@/components/market-data/QualityScoreSectio
 import { StockDepthSection } from '@/components/market-data/StockDepthSection'
 import { FinancialsPanel } from '@/components/market-data/quality/FinancialsPanel'
 import { ReadinessPanel } from '@/components/market-data/quality/ReadinessPanel'
-import { SepaStatsSection } from '@/components/market-data/quality/SepaStatsSection'
 import { SnapshotQualityTrend } from '@/components/market-data/quality/SnapshotQualityTrend'
 import { CoverageMatrixPanel } from '@/components/market-data/CoverageMatrixPanel'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
@@ -218,7 +217,6 @@ export function MarketDataCoverageTab({
         <>
           <QualityScoreSection />
           <SnapshotQualityTrend />
-          <SepaStatsSection />
           <StockDepthSection
             symbols={symbols}
             watchlistLoading={watchlistQ.isLoading}
@@ -256,11 +254,29 @@ export function MarketDataCoverageTab({
             </p>
           ) : counts != null ? (
             <div className="flex flex-wrap gap-2">
-              {Object.entries(counts).map(([k, v]) => (
-                <DenseTag key={k} variant="neutral">
-                  {k}: {v ?? '—'}
-                </DenseTag>
-              ))}
+              {Object.entries(counts).map(([k, v]) => {
+                // A planner estimate and an exact count must not look the same.
+                // option_daily holds 37.3M rows across monthly partitions and
+                // its COUNT(*) does not finish; the retired SEPA panel timed
+                // out on exactly that and drew the timeout as a red zero.
+                const estimated = (summaryQ.data != null && !isProxyError(summaryQ.data)
+                  ? (summaryQ.data.estimated ?? [])
+                  : []
+                ).includes(k)
+                return (
+                  <DenseTag
+                    key={k}
+                    variant="neutral"
+                    title={
+                      estimated
+                        ? 'Planner estimate — too large to count exactly; drifts between ANALYZE runs'
+                        : undefined
+                    }
+                  >
+                    {k}: {v == null ? '—' : `${estimated ? '~' : ''}${v.toLocaleString()}`}
+                  </DenseTag>
+                )
+              })}
             </div>
           ) : (
             <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">

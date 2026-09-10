@@ -11,6 +11,7 @@ import {
   DenseTag,
 } from '@bifrost/ui'
 import {
+  fetchChainHeadline,
   fetchCoverageContracts,
   fetchCoverageGreeks,
   isProxyError,
@@ -169,6 +170,44 @@ async function loadGreeks() {
   return res.rows ?? []
 }
 
+/**
+ * The verdict, without the detail behind it.
+ *
+ * The detail costs 21s + 52s and only loads when the section is opened, which
+ * meant the health of the chain could not be seen at all without paying for
+ * it. This reads a background-cached headline instead — and over the whole
+ * estate: the detail asks for 500 underlyings and drew a ring reading
+ * "301/500" while 570 exist and 379 were at target, so both halves of that
+ * ratio were bounded by the page size rather than by the population.
+ */
+function ChainHeadlineTag() {
+  const q = useQuery({
+    queryKey: ['market-data', 'coverage', 'chain-headline'],
+    queryFn: fetchChainHeadline,
+    staleTime: 120_000,
+    refetchInterval: d => (d.state.data && !isProxyError(d.state.data) && d.state.data.computing ? 20_000 : false),
+    retry: 1,
+  })
+  const data = q.data != null && !isProxyError(q.data) ? q.data : null
+  if (data?.computing === true) return <DenseTag variant="info">computing…</DenseTag>
+  const g = data?.greeks
+  if (g == null || g.underlyings === 0) return null
+  const pct = Math.round((g.at_90 / g.underlyings) * 100)
+  return (
+    <span className="flex items-center gap-1.5">
+      <DenseTag
+        variant={pct >= 90 ? 'success' : pct >= 60 ? 'warning' : 'danger'}
+        title={`${g.at_90} of ${g.underlyings} underlyings have full greeks on at least 90% of their live contracts · ${g.at_70} more are between 70% and 90%`}
+      >
+        {g.at_90}/{g.underlyings} greeks
+      </DenseTag>
+      <span className="font-mono text-[var(--text-dense-micro)] tabular-nums text-[var(--muted-foreground)]">
+        {g.pct_full != null ? `${g.pct_full}% of contracts` : '—'}
+      </span>
+    </span>
+  )
+}
+
 export function OptionCoverageSection() {
   // Measured 2026-09-10 through the proxy: contracts 21s, greeks 52s. Together
   // they were the coverage tab's whole load time, paid on mount whether or not
@@ -216,6 +255,7 @@ export function OptionCoverageSection() {
     <OpsSection
       title="Option chain coverage"
       description="Bar = contracts vs max underlying. Color = Greeks fill."
+      headerExtra={<ChainHeadlineTag />}
       bodyPadding="compact"
       overflow="visible"
       collapsible

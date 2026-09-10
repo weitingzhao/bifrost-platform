@@ -89,13 +89,12 @@ async function proxyPost<T>(
 export function isProxyError<T>(
   v: T | MarketDataProxyError,
 ): v is MarketDataProxyError {
-  return (
-    v != null &&
-    typeof v === 'object' &&
-    'ok' in v &&
-    (v as MarketDataProxyError).ok === false &&
-    'error' in v
-  )
+  if (v == null || typeof v !== 'object') return false
+  const o = v as Record<string, unknown>
+  // Domain reports (quality-score, inventory, …) also use ok:false — they carry
+  // checks/summary, not a transport error. Do not treat those as proxy failures.
+  if (Array.isArray(o.checks) || typeof o.summary === 'string') return false
+  return o.ok === false && typeof o.error === 'string'
 }
 
 /* ── Coverage ─────────────────────────────────────────── */
@@ -122,6 +121,12 @@ export type CoverageDbSummary = {
   ok: boolean
   source?: string
   counts?: Record<string, number | null>
+  /**
+   * Which of `counts` are planner estimates rather than COUNT(*). option_daily
+   * holds 37.3M rows across monthly partitions and does not finish a count;
+   * a reader who cannot tell the two apart has a number with no error bar.
+   */
+  estimated?: string[]
   freshness?: Array<{
     dimension: string
     last_run_at?: string
@@ -186,6 +191,40 @@ export type CoverageWatchlist = {
   symbols?: CoverageWatchlistSymbol[]
   symbols_count?: number
   error?: string
+}
+
+/**
+ * The option chain panel's own headline, over the whole estate.
+ *
+ * Separate from the detail because the detail is not affordable on mount:
+ * contracts measured 21s and greeks 52s through the proxy. Aggregating does
+ * not fix that — rolled to one row the greeks pass still measured 40.5s — so
+ * the plugin serves it from a background cache, the way it does the four-axis
+ * page and the quality score.
+ */
+export type ChainHeadline = {
+  ok: boolean
+  computing?: boolean
+  age_sec?: number | null
+  contracts: {
+    underlyings: number
+    contracts: number
+    min_expiry?: string | null
+    max_expiry?: string | null
+  } | null
+  greeks: {
+    underlyings: number
+    contracts: number
+    with_full_greeks: number
+    pct_full: number | null
+    at_90: number
+    at_70: number
+  } | null
+  error?: string
+}
+
+export function fetchChainHeadline() {
+  return proxyGet<ChainHeadline>('/market/coverage/chain-headline')
 }
 
 export function fetchCoverageDbSummary() {
@@ -517,18 +556,6 @@ export type ReferenceCoverageResponse = {
   error?: string
 }
 
-export type SepaStatsTable = {
-  table?: string
-  row_count?: number | null
-  latest?: string | null
-}
-
-export type SepaStatsResponse = {
-  ok: boolean
-  tables?: SepaStatsTable[]
-  error?: string
-}
-
 export function fetchReadinessSnapshotCoverage() {
   return proxyGet<SnapshotCoverageResponse>('/market/readiness/snapshot-coverage')
 }
@@ -614,10 +641,6 @@ export function fetchReferenceRelatedCoverage() {
   return proxyGet<ReferenceCoverageResponse>(
     '/market/reference/tickers/related-coverage',
   )
-}
-
-export function fetchSepaStats() {
-  return proxyGet<SepaStatsResponse>('/market/coverage/sepa-stats')
 }
 
 /* ── Ingest ───────────────────────────────────────────── */
