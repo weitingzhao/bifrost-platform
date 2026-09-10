@@ -119,7 +119,7 @@ export function DoctorPanel() {
             </span>
           ) : null}
           {q.isError ? (
-            <span className="text-[var(--text-dense-caption)] text-[var(--danger)]">
+            <span className="text-[var(--text-dense-caption)] text-[var(--destructive)]">
               {q.error instanceof Error ? q.error.message : String(q.error)}
             </span>
           ) : null}
@@ -191,7 +191,7 @@ export function DoctorPanel() {
         </div>
       ) : null}
       {heal.isError ? (
-        <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--danger)]">
+        <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
           {heal.error instanceof Error ? heal.error.message : String(heal.error)}
         </p>
       ) : null}

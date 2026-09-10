@@ -47,6 +47,12 @@
   --color-warning: var(--color-lamp-yellow);
   --color-success: var(--color-lamp-green);
   --color-danger: var(--color-lamp-red);
+  /* Info is not a health lamp, so it carries its own hue. 19 call sites already
+     hard-coded #38bdf8 as a var() fallback; this promotes that agreed value into
+     the token layer so the bare var(--color-info) sites resolve too. An
+     undefined token is not a faint color — SVG fill falls back to black and
+     stroke to none, which is how the Ready plot lost its line entirely. */
+  --color-info: #38bdf8;
   /* Bare --warning/--success used by dock + remediation; must resolve or color-mix backgrounds go transparent */
   --warning: var(--color-lamp-yellow);
   --success: var(--color-lamp-green);
