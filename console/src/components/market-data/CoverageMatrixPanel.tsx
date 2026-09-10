@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DenseTag } from "@bifrost/ui";
+import {
+  DenseDataTable,
+  DenseTableBody,
+  DenseTableCell,
+  DenseTableHead,
+  DenseTableHeadRow,
+  DenseTableHeader,
+  DenseTableRow,
+  DenseTag,
+} from "@bifrost/ui";
 import {
   fetchCoverageDimensions,
   type DatasetDimensions,
@@ -25,23 +34,43 @@ import {
 import { buildCoverageMatrixPack } from "@/components/market-data/coverageMatrixPack";
 import { OpsSection } from "@/components/layout/OpsSection";
 
-/** One colour per verdict, shared with the dimensions table so they agree. */
+/**
+ * Two scales, two channels — they have nothing to do with each other, so they
+ * must not share one.
+ *
+ * Colour ranks a dataset against its target: green, amber, red. Fill says
+ * whether a verdict was made at all. A filled square is a verdict; a hollow one
+ * is not, and its colour carries no rank. Rendered as five filled swatches they
+ * read as a five-step severity ramp, which is what made "is blue better than
+ * green" a reasonable question to ask.
+ */
 const MARK: Record<AxisVerdict, string> = {
-  ok: "bg-[var(--color-success)]",
-  partial: "bg-[var(--color-warning)]",
-  thin: "bg-[var(--color-danger)]",
-  boundary: "bg-[var(--color-info)]",
-  unknown: "bg-[var(--muted-foreground)]",
+  ok: "bg-[var(--color-success)] text-[var(--background)] border border-transparent",
+  partial: "bg-[var(--color-warning)] text-[var(--background)] border border-transparent",
+  thin: "bg-[var(--color-danger)] text-[var(--background)] border border-transparent",
+  boundary:
+    "border border-[var(--color-info)] text-[var(--color-info)] bg-transparent",
+  unknown:
+    "border border-dashed border-[var(--muted-foreground)] text-[var(--muted-foreground)] bg-transparent",
 };
 
 /** Cell tint by its worst member, so the grid can be scanned before it is read. */
+/** A cell is tinted only by a verdict. No verdict, no tint. */
 const CELL_TINT: Record<AxisVerdict, string> = {
-  ok: "border-[var(--border)]",
-  boundary: "border-[var(--border)]",
-  partial:
-    "border-[color-mix(in_oklab,var(--color-warning)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-warning)_7%,transparent)]",
-  thin: "border-[color-mix(in_oklab,var(--color-danger)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-danger)_8%,transparent)]",
-  unknown: "border-[var(--border)]",
+  ok: "",
+  boundary: "",
+  unknown: "",
+  partial: "bg-[color-mix(in_oklab,var(--color-warning)_7%,transparent)]",
+  thin: "bg-[color-mix(in_oklab,var(--color-danger)_8%,transparent)]",
+};
+
+/** The verdict chip in the detail strip speaks the console's own tag language. */
+const TONE: Record<AxisVerdict, "success" | "warning" | "danger" | "info" | "neutral"> = {
+  ok: "success",
+  partial: "warning",
+  thin: "danger",
+  boundary: "info",
+  unknown: "neutral",
 };
 
 /**
@@ -78,7 +107,7 @@ function Marks({
           key={a.axis}
           type="button"
           onClick={() => onPick(a.axis)}
-          className={`inline-flex h-3 w-3 items-center justify-center rounded-[2px] text-[7px] font-semibold leading-none text-[var(--background)] ${MARK[a.verdict]} ${
+          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-[2px] text-[8px] font-semibold leading-none ${MARK[a.verdict]} ${
             selected === a.axis ? "ring-1 ring-[var(--foreground)] ring-offset-1 ring-offset-[var(--card)]" : ""
           }`}
           title={`${name} · ${a.axis}: ${a.verdict} — click for the rule`}
@@ -114,11 +143,7 @@ function AxisDetail({
         <span className="font-mono text-[var(--text-dense-caption)]">
           {dataset.dataset.replace(/^raw_market\./, "")} · {e.axis}
         </span>
-        <span
-          className={`inline-flex h-3 items-center rounded-[2px] px-1 text-[8px] font-semibold text-[var(--background)] ${MARK[e.verdict]}`}
-        >
-          {e.verdict}
-        </span>
+        <DenseTag variant={TONE[e.verdict]}>{e.verdict}</DenseTag>
         {!ranked ? (
           <span className="text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
             not on the ok / partial / thin scale — no verdict was made
@@ -238,24 +263,41 @@ export function CoverageMatrixPanel() {
           {/* Two groups, not one row of five. Green, amber and red rank a
               dataset against its target; blue and grey do not rank it at all,
               and a single ramp invites "is blue better than green". */}
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]">
+          <span className="flex flex-wrap items-center gap-y-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             <span className="flex items-center gap-2">
-              <span className="uppercase tracking-wide">judged</span>
+              <span className="text-[var(--text-dense-micro)] uppercase tracking-wide">
+                filled = judged
+              </span>
               {(["ok", "partial", "thin"] as AxisVerdict[]).map((v) => (
                 <span key={v} className="flex items-center gap-1">
-                  <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK[v]}`} />
+                  <span
+                    className={`inline-flex h-3 w-3 rounded-[2px] ${MARK[v]}`}
+                    aria-hidden
+                  />
                   {v}
                 </span>
               ))}
             </span>
+            <span
+              className="mx-3 h-3.5 w-px bg-[var(--border)]"
+              aria-hidden
+            />
             <span className="flex items-center gap-2">
-              <span className="uppercase tracking-wide">no verdict</span>
-              <span className="flex items-center gap-1" title="the question does not apply to this dataset">
-                <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK.boundary}`} />
+              <span className="text-[var(--text-dense-micro)] uppercase tracking-wide">
+                hollow = no verdict
+              </span>
+              <span
+                className="flex items-center gap-1"
+                title="the question does not apply to this dataset"
+              >
+                <span className={`inline-flex h-3 w-3 rounded-[2px] ${MARK.boundary}`} aria-hidden />
                 boundary
               </span>
-              <span className="flex items-center gap-1" title="the reading could not be taken">
-                <span className={`inline-block h-2 w-2 rounded-[2px] ${MARK.unknown}`} />
+              <span
+                className="flex items-center gap-1"
+                title="the reading could not be taken"
+              >
+                <span className={`inline-flex h-3 w-3 rounded-[2px] ${MARK.unknown}`} aria-hidden />
                 unknown
               </span>
             </span>
@@ -274,29 +316,29 @@ export function CoverageMatrixPanel() {
             : "No dataset contracts returned."}
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] border-separate border-spacing-1">
-            <thead>
-              <tr>
-                <th className="w-28 text-left align-bottom text-[var(--text-dense-micro)] uppercase tracking-wide text-[var(--muted-foreground)]">
-                  tier
-                </th>
+        <div>
+          <DenseDataTable tableClassName="min-w-[680px]">
+            <DenseTableHeader>
+              <DenseTableHeadRow>
+                {/* DenseTableHead is the <th>; DenseTableHeader is the <thead>. */}
+                {/* max-w-none: the shared cell base sets max-w-0, which beats a
+                    width and collapses the column to one character per line. */}
+                <DenseTableHead className="w-40 max-w-none">tier</DenseTableHead>
                 {shown.map((g) => (
-                  <th
-                    key={g}
-                    title={GRAIN_HINT[g]}
-                    className="text-left align-bottom text-[var(--text-dense-micro)] uppercase tracking-wide text-[var(--muted-foreground)]"
-                  >
+                  <DenseTableHead key={g} title={GRAIN_HINT[g]}>
                     {GRAIN_LABEL[g]}
-                  </th>
+                  </DenseTableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </DenseTableHeadRow>
+            </DenseTableHeader>
+            <DenseTableBody>
               {TIER_ORDER.map((tier, ti) => (
-                <tr key={tier}>
-                  <th className="text-left align-top" title={tierRule(tier)}>
-                    <span className="block font-mono text-[var(--text-dense-caption)]">
+                <DenseTableRow key={tier}>
+                  <DenseTableCell
+                    className="w-40 max-w-none align-top"
+                    title={tierRule(tier)}
+                  >
+                    <span className="block text-[var(--text-dense-caption)] leading-tight">
                       {tierLabel(tier)}
                     </span>
                     {tierCount(tier) ? (
@@ -304,23 +346,23 @@ export function CoverageMatrixPanel() {
                         {tierCount(tier)}
                       </span>
                     ) : null}
-                  </th>
+                  </DenseTableCell>
                   {shown.map((g) => {
                     const cell = matrix[ti][GRAIN_ORDER.indexOf(g)];
                     if (cell.entries.length === 0) {
                       return (
-                        <td
+                        <DenseTableCell
                           key={g}
-                          className="rounded-sm border border-dashed border-[var(--border)] px-1.5 py-1 text-center align-top font-mono text-[var(--text-dense-micro)] text-[var(--muted-foreground)]"
+                          className="max-w-none border-l border-[var(--border)] text-center align-top text-[var(--muted-foreground)]"
                         >
                           —
-                        </td>
+                        </DenseTableCell>
                       );
                     }
                     return (
-                      <td
+                      <DenseTableCell
                         key={g}
-                        className={`rounded-sm border px-1.5 py-1 align-top ${CELL_TINT[cell.worst ?? "ok"]}`}
+                        className={`max-w-none border-l border-[var(--border)] align-top ${CELL_TINT[cell.worst ?? "ok"]}`}
                       >
                         <div className="flex flex-col gap-1">
                           {cell.entries.map((e) => (
@@ -328,7 +370,7 @@ export function CoverageMatrixPanel() {
                               key={e.dataset}
                               className="flex items-center justify-between gap-2"
                             >
-                              <span className="truncate font-mono text-[var(--text-dense-micro)]">
+                              <span className="truncate font-mono text-[var(--text-dense-caption)]">
                                 {e.name}
                               </span>
                               <Marks
@@ -348,13 +390,13 @@ export function CoverageMatrixPanel() {
                             </div>
                           ))}
                         </div>
-                      </td>
+                      </DenseTableCell>
                     );
                   })}
-                </tr>
+                </DenseTableRow>
               ))}
-            </tbody>
-          </table>
+            </DenseTableBody>
+          </DenseDataTable>
           <AxisDetail
             dataset={
               (data?.datasets ?? []).find((x) => x.dataset === picked?.dataset) ?? null
