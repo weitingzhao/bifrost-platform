@@ -3,6 +3,9 @@
  * dataset that has a contract, each against the denominator that contract
  * declares. Read-only; bare fetch through the platform-api proxy.
  */
+/** What a tier's denominator actually is — declared by the plugin, not here. */
+export type TierDefinition = { label: string; rule: string };
+
 export type DimensionTier =
   | "whole-market"
   | "universe"

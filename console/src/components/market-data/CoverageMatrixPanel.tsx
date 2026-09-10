@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DenseTag } from "@bifrost/ui";
-import { fetchCoverageDimensions } from "@/api/marketDataDimensions";
+import {
+  fetchCoverageDimensions,
+  type TierDefinition,
+} from "@/api/marketDataDimensions";
 import type { AxisVerdict } from "@/components/market-data/dimensionsModel";
 import {
   GRAIN_HINT,
@@ -35,7 +38,14 @@ const CELL_TINT: Record<AxisVerdict, string> = {
   unknown: "border-[var(--border)]",
 };
 
-const TIER_LABEL: Record<string, string> = {
+/**
+ * Fallback only. The plugin declares what each denominator is, because a number
+ * with no definition gets guessed at: "Whole market 5,317" reads as the market
+ * and is the vendor's active common-stock list, and "Universe 575" said nothing
+ * at all — its core tier is 20-session average dollar volume over $200M, which
+ * is not market value.
+ */
+const TIER_FALLBACK: Record<string, string> = {
   "whole-market": "Whole market",
   universe: "Universe",
   "benchmark-only": "Benchmarks",
@@ -108,6 +118,12 @@ export function CoverageMatrixPanel() {
       setCopied(false);
     }
   };
+
+  const definitions = (den as { definitions?: Record<string, TierDefinition> } | undefined)
+    ?.definitions;
+  const tierLabel = (tier: string): string =>
+    definitions?.[tier]?.label ?? TIER_FALLBACK[tier] ?? tier;
+  const tierRule = (tier: string): string | undefined => definitions?.[tier]?.rule;
 
   const tierCount = (tier: string): string | null => {
     if (!den) return null;
@@ -200,9 +216,9 @@ export function CoverageMatrixPanel() {
             <tbody>
               {TIER_ORDER.map((tier, ti) => (
                 <tr key={tier}>
-                  <th className="text-left align-top">
+                  <th className="text-left align-top" title={tierRule(tier)}>
                     <span className="block font-mono text-[var(--text-dense-caption)]">
-                      {TIER_LABEL[tier] ?? tier}
+                      {tierLabel(tier)}
                     </span>
                     {tierCount(tier) ? (
                       <span className="block font-mono text-[var(--text-dense-micro)] tabular-nums text-[var(--muted-foreground)]">

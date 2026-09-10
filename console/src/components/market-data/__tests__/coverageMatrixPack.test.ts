@@ -190,3 +190,38 @@ describe("the three reasons there is nothing to prescribe", () => {
     expect(text).toContain("the contract does not say");
   });
 });
+
+describe("what the denominators mean", () => {
+  it("carries the plugin's own definition of each tier", () => {
+    // An agent guessing at "Universe 575" guesses market value. It is
+    // 20-session average dollar volume over $200M.
+    const text = buildCoverageMatrixPack({
+      datasets: [broken],
+      denominators: {
+        "whole-market": 5317,
+        universe: { total: 575 },
+        definitions: {
+          "whole-market": {
+            label: "Active US common stock",
+            rule: "raw_market.ticker WHERE active. Not a screen.",
+          },
+          universe: {
+            label: "Option universe",
+            rule: "core = 20-session average dollar volume over $200M. Dollar volume, not market value.",
+          },
+        },
+      },
+    });
+    expect(text).toContain("## What each denominator is");
+    expect(text).toContain("Active US common stock");
+    expect(text).toContain("not market value");
+  });
+
+  it("says nothing extra when the plugin is older than the field", () => {
+    const text = buildCoverageMatrixPack({
+      datasets: [broken],
+      denominators: { "whole-market": 5317 },
+    });
+    expect(text).not.toContain("## What each denominator is");
+  });
+});

@@ -32,6 +32,18 @@ const TIER_LABEL: Record<string, string> = {
   global: "global",
 };
 
+/** What each denominator is, in the plugin's own words. An agent guessing at
+ *  "Universe 575" would guess market value; it is dollar volume. */
+function tierDefinitions(den: Record<string, unknown> | undefined): string[] {
+  const defs = den?.definitions as
+    | Record<string, { label?: string; rule?: string }>
+    | undefined;
+  if (!defs) return [];
+  return Object.entries(defs).map(
+    ([tier, d]) => `- ${tier} — ${d.label ?? tier}: ${d.rule ?? ""}`,
+  );
+}
+
 function denominatorLine(den: Record<string, unknown> | undefined): string {
   if (!den) return "unavailable";
   const u = den.universe as { total?: number; by_tier?: Record<string, number> } | undefined;
@@ -95,6 +107,10 @@ export function buildCoverageMatrixPack(
     `Denominators: ${denominatorLine(data?.denominators)}`,
     "",
   );
+  const defs = tierDefinitions(data?.denominators);
+  if (defs.length > 0) {
+    push("## What each denominator is", ...defs, "");
+  }
 
   if (datasets.length === 0) {
     push("## Nothing to report", "The coverage read returned no datasets — it may still be computing.");
