@@ -24,8 +24,28 @@ export type DatasetBreadth = {
   entitlement_pct: number | null;
 };
 
+export type DatasetAccrual = {
+  sessions_held: number;
+  since?: string | null;
+  newest?: string | null;
+  capped?: boolean;
+  /** The ceiling it is climbing to, where anything caps it. */
+  accrues_to?: number;
+  pct?: number;
+};
+
 export type DatasetDepth = {
-  target: { kind: string; value: number | string | null; why: string };
+  target: {
+    kind: string;
+    value: number | string | null;
+    why: string;
+    accrues_to_sessions?: number | null;
+  };
+  /**
+   * What a forward-only depth has managed to accrue. A boundary says the depth
+   * cannot be bought; it does not say nothing is happening.
+   */
+  accrual?: DatasetAccrual;
   measured: boolean;
   /**
    * False where the spread is the answer and a pass count would be a count of

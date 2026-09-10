@@ -321,3 +321,49 @@ describe("why a mark is the colour it is", () => {
     }
   });
 });
+
+describe("a boundary that reports its climb", () => {
+  const chain = (accrual?: Record<string, unknown>) =>
+    on({
+      depth: {
+        target: {
+          kind: "forward_only",
+          value: null,
+          why: "a chain download only returns the current session",
+          accrues_to_sessions: 90,
+        },
+        measured: false,
+        ...(accrual ? { accrual } : {}),
+      },
+    } as never);
+
+  it("reads the climb instead of the word forward_only", () => {
+    // Depth was inert for thirteen of nineteen datasets; a boundary said "this
+    // cannot be bought" and stopped there.
+    const e = explainAxis(
+      chain({ sessions_held: 36, accrues_to: 90, pct: 40, since: "2026-07-27" }),
+      "depth",
+    );
+    expect(e.reading).toContain("36 of 90 sessions accrued");
+    expect(e.reading).toContain("since 2026-07-27");
+    expect(e.rule).toContain("only accrues");
+  });
+
+  it("reports what it holds where nothing caps it", () => {
+    const e = explainAxis(chain({ sessions_held: 23, since: "2026-08-18" }), "depth");
+    expect(e.reading).toContain("23 sessions accrued");
+    expect(e.reading).not.toContain(" of ");
+  });
+
+  it("falls back to the boundary's own words when the climb is unreadable", () => {
+    const e = explainAxis(chain(), "depth");
+    expect(e.reading).toBe("forward only");
+    expect(e.note).toContain("only returns the current session");
+  });
+
+  it("is still not on the ok / partial / thin scale", () => {
+    const e = explainAxis(chain({ sessions_held: 36, accrues_to: 90 }), "depth");
+    expect(e.verdict).toBe("boundary");
+    expect(VERDICT_IS_RANKED[e.verdict]).toBe(false);
+  });
+});

@@ -129,3 +129,47 @@ describe("the marks", () => {
     expect(broken.worst).not.toBe("ok");
   });
 });
+
+describe("a boundary that is still climbing", () => {
+  const accruing = (over: Record<string, unknown>) =>
+    ds({
+      dataset: "raw_market.option_snapshot",
+      tier: "universe",
+      grain: "snapshot",
+      depth: {
+        target: {
+          kind: "forward_only",
+          value: null,
+          why: "a chain download only returns the current session",
+          accrues_to_sessions: 90,
+        },
+        measured: false,
+        ...over,
+      },
+    } as never);
+
+  it("carries the climb on the depth mark only", () => {
+    const e = entryOf(accruing({ accrual: { sessions_held: 36, accrues_to: 90, pct: 40 } }));
+    const byAxis = Object.fromEntries(e.axes.map((a) => [a.axis, a.progress]));
+    expect(byAxis.depth).toBeCloseTo(36 / 90);
+    // Nothing else accrues, so nothing else shows a fill.
+    expect(byAxis.breadth).toBeNull();
+    expect(byAxis.freshness).toBeNull();
+    expect(byAxis.continuity).toBeNull();
+  });
+
+  it("shows no climb where nothing caps it", () => {
+    // ratios accrues forward with no ceiling to be a fraction of.
+    const e = entryOf(accruing({ accrual: { sessions_held: 23 } }));
+    expect(e.axes.find((a) => a.axis === "depth")?.progress).toBeNull();
+  });
+
+  it("shows no climb when the accrual could not be read", () => {
+    expect(entryOf(accruing({})).axes.find((a) => a.axis === "depth")?.progress).toBeNull();
+  });
+
+  it("stays a boundary — the fill is progress, not a verdict", () => {
+    const e = entryOf(accruing({ accrual: { sessions_held: 36, accrues_to: 90, pct: 40 } }));
+    expect(e.axes.find((a) => a.axis === "depth")?.verdict).toBe("boundary");
+  });
+});

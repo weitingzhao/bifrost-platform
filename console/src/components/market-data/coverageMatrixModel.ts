@@ -12,6 +12,7 @@
  */
 import type { DatasetDimensions, DimensionTier } from "@/api/marketDataDimensions";
 import {
+  accrualFraction,
   breadthVerdict,
   continuityVerdict,
   depthVerdict,
@@ -63,7 +64,12 @@ const SEVERITY: Record<AxisVerdict, number> = {
   ok: 0,
 };
 
-export type AxisCell = { axis: string; verdict: AxisVerdict };
+export type AxisCell = {
+  axis: string;
+  verdict: AxisVerdict;
+  /** 0–1 where a boundary is climbing toward a ceiling, else null. */
+  progress: number | null;
+};
 
 export type MatrixEntry = {
   dataset: string;
@@ -83,10 +89,12 @@ export type MatrixCell = {
 
 export function axesOf(d: DatasetDimensions): AxisCell[] {
   return [
-    { axis: "breadth", verdict: breadthVerdict(d) },
-    { axis: "depth", verdict: depthVerdict(d) },
-    { axis: "freshness", verdict: freshnessVerdict(d) },
-    { axis: "continuity", verdict: continuityVerdict(d) },
+    { axis: "breadth", verdict: breadthVerdict(d), progress: null },
+    // Only depth has a climb to show: a chain snapshot cannot be backfilled but
+    // is still accruing toward the sessions trim keeps.
+    { axis: "depth", verdict: depthVerdict(d), progress: accrualFraction(d) },
+    { axis: "freshness", verdict: freshnessVerdict(d), progress: null },
+    { axis: "continuity", verdict: continuityVerdict(d), progress: null },
   ];
 }
 

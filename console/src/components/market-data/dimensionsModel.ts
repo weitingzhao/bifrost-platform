@@ -223,11 +223,23 @@ export function explainDepth(d: DatasetDimensions): AxisExplain {
   const v = depthVerdict(d);
   const t = d.depth.target;
   if (!d.depth.measured) {
+    const a = d.depth.accrual;
+    // A boundary that is still climbing has something to say. Without this the
+    // square was inert, and depth was inert for thirteen of nineteen datasets.
+    const accrued = a
+      ? a.accrues_to
+        ? `${a.sessions_held} of ${a.accrues_to} sessions accrued${
+            a.pct != null ? ` · ${a.pct}%` : ""
+          }${a.since ? ` · since ${a.since}` : ""}`
+        : `${a.sessions_held} sessions accrued${a.since ? ` · since ${a.since}` : ""}`
+      : null;
     return {
       axis: "depth",
       verdict: v,
-      reading: t.kind.replace(/_/g, " "),
-      rule: "a plan boundary, not a target",
+      reading: accrued ?? t.kind.replace(/_/g, " "),
+      rule: accrued
+        ? "cannot be backfilled, so it only accrues — this is the climb, not a verdict"
+        : "a plan boundary, not a target",
       note: t.why || undefined,
     };
   }
@@ -306,6 +318,19 @@ export function explainContinuity(d: DatasetDimensions): AxisExplain {
     reading: `${continuityLabel(d)} over ${c.window_days ?? 120}d${detail ? ` · ${detail}` : ""}`,
     rule: "ok with no holes · partial up to 1 session in 10 · thin beyond",
   };
+}
+
+/**
+ * How far a boundary has climbed, 0–1, or null where nothing caps it.
+ *
+ * Rendered as a fill inside the hollow square. It stays inside the no-verdict
+ * channel: the colour is the boundary's own, so it ranks nothing — the height
+ * is progress, not severity.
+ */
+export function accrualFraction(d: DatasetDimensions): number | null {
+  const a = d.depth.accrual;
+  if (!a?.accrues_to || a.accrues_to <= 0) return null;
+  return Math.max(0, Math.min(1, a.sessions_held / a.accrues_to));
 }
 
 export function explainAxis(

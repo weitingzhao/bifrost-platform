@@ -29,6 +29,7 @@ import {
   buildMatrix,
   matrixSummary,
   occupiedGrains,
+  type AxisCell,
   type Grain,
 } from "@/components/market-data/coverageMatrixModel";
 import { buildCoverageMatrixPack } from "@/components/market-data/coverageMatrixPack";
@@ -95,7 +96,7 @@ function Marks({
   selected,
   onPick,
 }: {
-  axes: { axis: string; verdict: AxisVerdict }[];
+  axes: AxisCell[];
   name: string;
   selected?: string | null;
   onPick: (axis: string) => void;
@@ -107,13 +108,26 @@ function Marks({
           key={a.axis}
           type="button"
           onClick={() => onPick(a.axis)}
-          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-[2px] text-[8px] font-semibold leading-none ${MARK[a.verdict]} ${
+          className={`relative inline-flex h-3.5 w-3.5 items-center justify-center overflow-hidden rounded-[2px] text-[8px] font-semibold leading-none ${MARK[a.verdict]} ${
             selected === a.axis ? "ring-1 ring-[var(--foreground)] ring-offset-1 ring-offset-[var(--card)]" : ""
           }`}
-          title={`${name} · ${a.axis}: ${a.verdict} — click for the rule`}
+          title={
+            a.progress != null
+              ? `${name} · ${a.axis}: accruing, ${Math.round(a.progress * 100)}% of the way — click for the numbers`
+              : `${name} · ${a.axis}: ${a.verdict} — click for the rule`
+          }
           aria-label={`${name} ${a.axis} ${a.verdict}`}
         >
-          {AXIS_INITIAL[i]}
+          {/* Inside the no-verdict channel: the boundary's own colour, so it
+              ranks nothing. The height is how far it has climbed. */}
+          {a.progress != null ? (
+            <span
+              aria-hidden
+              className="absolute inset-x-0 bottom-0 bg-[color-mix(in_oklab,var(--color-info)_45%,transparent)]"
+              style={{ height: `${Math.round(a.progress * 100)}%` }}
+            />
+          ) : null}
+          <span className="relative">{AXIS_INITIAL[i]}</span>
         </button>
       ))}
     </span>
@@ -299,6 +313,18 @@ export function CoverageMatrixPanel() {
               >
                 <span className={`inline-flex h-3 w-3 rounded-[2px] ${MARK.unknown}`} aria-hidden />
                 unknown
+              </span>
+              <span
+                className="flex items-center gap-1"
+                title="a boundary that cannot be backfilled but is still accruing — the fill is how far it has climbed"
+              >
+                <span
+                  className={`relative inline-flex h-3 w-3 overflow-hidden rounded-[2px] ${MARK.boundary}`}
+                  aria-hidden
+                >
+                  <span className="absolute inset-x-0 bottom-0 h-2/5 bg-[color-mix(in_oklab,var(--color-info)_45%,transparent)]" />
+                </span>
+                accruing
               </span>
             </span>
           </span>
