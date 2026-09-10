@@ -122,10 +122,20 @@ export function buildCoverageMatrixPack(
         `- refill a missing session: POST /market/ingest/enqueue-slot ` +
           `{"slot":"${d.backfill_slot}","date":"<YYYY-MM-DD>","force":true}`,
       );
-    } else {
+    } else if (grain === "daily" || grain === "snapshot" || grain === "minute") {
       push(
-        "- refill: not possible. The contract declares no backfill slot, which " +
-          "means a missed session is gone for good — do not enqueue for a past date.",
+        "- refill: not possible. The contract declares no backfill slot for a " +
+          "per-session series, which means a missed session is gone for good — " +
+          "do not enqueue for a past date.",
+      );
+    } else {
+      // A quarterly filing has no session to miss, and a catalogue is a list of
+      // what exists. Telling an agent a session went missing would send it after
+      // a problem that does not exist — the failure this brief is meant to avoid.
+      push(
+        `- refill: not by date. A ${GRAIN_LABEL[grain].toLowerCase()} is not a ` +
+          "per-session series; a gap here is coverage or vendor scope, not a " +
+          "missed run. Widen the slot or check what the vendor answers for.",
       );
     }
     push("");

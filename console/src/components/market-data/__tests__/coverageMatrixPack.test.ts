@@ -64,6 +64,33 @@ describe("the brief", () => {
     expect(text).toContain("do not enqueue for a past date");
   });
 
+  it("does not tell an agent a quarterly filing missed a session", () => {
+    // income_statement has no backfill slot and no sessions either. "A missed
+    // session is gone for good" would send an agent after a problem that does
+    // not exist — the exact failure this brief is meant to avoid.
+    const filing = ds({
+      dataset: "raw_market.income_statement",
+      grain: "filing",
+      backfill_slot: null,
+      slots: ["fundamentals-rotate"],
+      breadth: { held: 4417, held_total: 4467, outside_scope: 50, of: 5317, pct: 83.1, entitlement_pct: null },
+    });
+    const text = buildCoverageMatrixPack({ datasets: [filing] });
+    expect(text).toContain("not by date");
+    expect(text).not.toContain("missed session is gone");
+    expect(text).toContain("not a per-session series");
+  });
+
+  it("still says a missed session is gone where there are sessions", () => {
+    const snap = ds({
+      dataset: "raw_market.option_snapshot",
+      grain: "snapshot",
+      backfill_slot: null,
+      breadth: { held: 26, held_total: 26, outside_scope: 0, of: 575, pct: 4.5, entitlement_pct: null },
+    });
+    expect(buildCoverageMatrixPack({ datasets: [snap] })).toContain("gone for good");
+  });
+
   it("does not list an axis that is at a declared boundary", () => {
     const boundaryDepth = ds({
       dataset: "raw_market.option_snapshot",
