@@ -24,7 +24,6 @@ export type Grain = "catalogue" | "daily" | "snapshot" | "minute" | "filing";
 /** Widest first: a reader scans down from "the whole market" to "one series". */
 export const TIER_ORDER: DimensionTier[] = [
   "whole-market",
-  "common-stock",
   "universe",
   "benchmark-only",
   "global",

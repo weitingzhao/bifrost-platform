@@ -27,7 +27,6 @@ import {
 
 const TIER_LABEL: Record<string, string> = {
   "whole-market": "whole-market",
-  "common-stock": "common-stock",
   universe: "universe",
   "benchmark-only": "benchmark-only",
   global: "global",

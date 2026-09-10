@@ -5,8 +5,6 @@
  */
 export type DimensionTier =
   | "whole-market"
-  /** Active USD common stock — an ETF or a trust files nothing. */
-  | "common-stock"
   | "universe"
   | "benchmark-only"
   | "global";

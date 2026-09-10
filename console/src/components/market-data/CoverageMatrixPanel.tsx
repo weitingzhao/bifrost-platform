@@ -37,7 +37,6 @@ const CELL_TINT: Record<AxisVerdict, string> = {
 
 const TIER_LABEL: Record<string, string> = {
   "whole-market": "Whole market",
-  "common-stock": "Common stock",
   universe: "Universe",
   "benchmark-only": "Benchmarks",
   global: "Global",
