@@ -147,5 +147,13 @@ export function continuityDetail(d: DatasetDimensions): string | undefined {
   if (c.cadence && c.cadence !== "session") {
     bits.push(`published per ${c.cadence}, not every trading day`);
   }
+  // Not a hole — the opposite. Rows dated on a day the market was shut are
+  // still worth naming: nothing else in the console would say so.
+  if (c.days_off_calendar) {
+    const sample = c.off_calendar_sample?.length
+      ? ` (${c.off_calendar_sample.join(", ")})`
+      : "";
+    bits.push(`${c.days_off_calendar} day(s) of rows outside the calendar${sample}`);
+  }
   return bits.join(" · ") || undefined;
 }

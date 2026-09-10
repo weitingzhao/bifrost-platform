@@ -67,3 +67,23 @@ describe('continuity verdict', () => {
     expect(detail).toContain('per settlement')
   })
 })
+
+describe("rows outside the trading calendar", () => {
+  it("names them — they are the opposite of a hole and nothing else reports them", () => {
+    // option_open_interest carried thousands of rows on 2026-08-22 and 08-23,
+    // a Saturday and a Sunday, while option-bars and eod-pipeline both sit in
+    // the skip-on-holiday set. The fourth axis used to call those days thin.
+    const d = base({
+      measured: true,
+      cadence: "session",
+      days_present: 56,
+      days_absent: 0,
+      days_thin: 0,
+      days_off_calendar: 4,
+      off_calendar_sample: ["2026-08-22", "2026-08-23"],
+    });
+    expect(continuityVerdict(d)).toBe("ok");
+    expect(continuityDetail(d)).toContain("4 day(s) of rows outside the calendar");
+    expect(continuityDetail(d)).toContain("2026-08-22");
+  });
+});
