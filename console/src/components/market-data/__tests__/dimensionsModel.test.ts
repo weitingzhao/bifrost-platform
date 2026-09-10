@@ -103,13 +103,17 @@ describe("freshness", () => {
   });
 
   it("does not judge a dataset that carries no date", () => {
+    // Not judged, and specifically not *unjudgeable*: the plugin reports
+    // measured:false only where the contract has no date column, which is a
+    // property of the dataset rather than a failure to read it. Depth has
+    // always called that a boundary.
     expect(
       freshnessVerdict(
         on({
           freshness: { newest: null, deadline_hours: 48, measured: false },
         }),
       ),
-    ).toBe("unknown");
+    ).toBe("boundary");
   });
 });
 
@@ -164,5 +168,25 @@ describe("freshness reads the cadence it was given", () => {
     });
     expect(freshnessVerdict(sess)).toBe("ok");
     expect(freshnessDetail(sess)).toBe("deadline 2h · 1d behind");
+  });
+});
+
+describe("a dataset with no clock", () => {
+  it("reads as a boundary, not as unknown", () => {
+    // ticker, option_contract and us_market_holiday have no date column: they
+    // list what exists rather than observe it. Depth has always said boundary
+    // for the same reason; freshness said unknown and painted them grey.
+    const cat = on({
+      dataset: "raw_market.option_contract",
+      freshness: { newest: null, deadline_hours: 24, measured: false },
+    });
+    expect(freshnessVerdict(cat)).toBe("boundary");
+  });
+
+  it("still says unknown for a dated dataset that holds nothing", () => {
+    const empty = on({
+      freshness: { newest: null, deadline_hours: 2, measured: true },
+    });
+    expect(freshnessVerdict(empty)).toBe("unknown");
   });
 });

@@ -48,7 +48,12 @@ export function freshnessVerdict(
   today = new Date(),
 ): AxisVerdict {
   if (d.error) return "unknown";
-  if (!d.freshness.measured || !d.freshness.newest) return "unknown";
+  // The plugin reports measured:false only where the contract has no date
+  // column at all — a catalogue lists what exists, it does not observe it. That
+  // is a plan boundary, the way depth already treats one, not ignorance; three
+  // of four catalogues were rendering grey "unknown" for having no clock.
+  if (!d.freshness.measured) return "boundary";
+  if (!d.freshness.newest) return "unknown";
   if (d.freshness.cadence != null && d.freshness.cadence !== "session") {
     // null means the plugin could not measure an interval — not a licence to
     // fall back on an hour deadline that does not apply to this cadence.
