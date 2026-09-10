@@ -28,6 +28,7 @@ import {
   GRAIN_LABEL,
   GRAIN_ORDER,
   TIER_ORDER,
+  accrualSummary,
   buildMatrix,
   changeIndex,
   changeSummary,
@@ -119,7 +120,7 @@ function Marks({
             a.change
               ? `${name} · ${a.axis}: ${a.change.from ?? "absent"} → ${a.change.to ?? "absent"} (${a.change.direction}) — click for the rule`
               : a.progress != null
-                ? `${name} · ${a.axis}: accruing, ${Math.round(a.progress * 100)}% of the way — click for the numbers`
+                ? `${name} · ${a.axis}: ${a.stalled === true ? "stalled at" : "accruing,"} ${Math.round(a.progress * 100)}% of the way — click for the numbers`
                 : `${name} · ${a.axis}: ${a.verdict} — click for the rule`
           }
           aria-label={
@@ -293,7 +294,8 @@ export function CoverageMatrixPanel() {
   const data = q.data;
   const changes = changeIndex(data?.memory);
   const matrix = buildMatrix(data?.datasets, changes);
-  const moved = changeSummary(data?.memory);
+  const moved = changeSummary(data?.memory)
+  const accruals = accrualSummary(data?.datasets);
   const grains = occupiedGrains(matrix);
   const shown: Grain[] = grains.length > 0 ? grains : GRAIN_ORDER;
   const sum = matrixSummary(matrix);
@@ -372,6 +374,19 @@ export function CoverageMatrixPanel() {
               different claims, and so is "the record could not be written" —
               a matrix that shows the same thing for all three has no memory. */}
           {sum.total > 0 ? <MemoryTag moved={moved} memory={data?.memory} /> : null}
+          {/* The estate-growing alarm. A mark reading "60% of the way" looks
+              identical whether it gained a session last night or stopped three
+              weeks ago — and only one of those needs a look. In words, above
+              the grid, for the same reason direction is: the grid already has
+              its two rulers. */}
+          {accruals.stalled > 0 ? (
+            <DenseTag
+              variant="warning"
+              title={`Not gaining a session in the rate window: ${accruals.stalledNames.join(', ')}`}
+            >
+              {accruals.stalled} of {accruals.accruing} accruals stalled
+            </DenseTag>
+          ) : null}
           {/* Two groups, not one row of five. Green, amber and red rank a
               dataset against its target; blue and grey do not rank it at all,
               and a single ramp invites "is blue better than green". */}

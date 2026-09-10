@@ -15,6 +15,7 @@ import type {
   DatasetDimensions,
 } from "@/api/marketDataDimensions";
 import {
+  accrualPace,
   breadthLabel,
   continuityLabel,
   depthLabel,
@@ -138,6 +139,37 @@ function movementSection(memory: CoverageMemory | undefined): string[] {
   ];
 }
 
+/**
+ * Which plan boundaries are still filling, and which have stopped.
+ *
+ * A boundary is not a fault, so the "not clean" section below never mentions
+ * one — which left an agent no way to learn that a pile meant to reach 90
+ * sessions had gained nothing in a fortnight. That is not a gap to backfill
+ * (the vendor cannot sell the past here); it is a collector to go and look at.
+ */
+function accrualSection(datasets: DatasetDimensions[]): string[] {
+  const rows = datasets.filter(d => d.depth.accrual?.accrues_to);
+  if (rows.length === 0) return [];
+  const line = (d: DatasetDimensions) => {
+    const a = d.depth.accrual!;
+    const pace = accrualPace(d) ?? "pace not measurable";
+    return `- ${d.dataset}: ${a.sessions_held}/${a.accrues_to} sessions · ${pace}`;
+  };
+  const stalled = rows.filter(d => d.depth.accrual?.stalled === true);
+  const out = [
+    `## Accruing boundaries — ${rows.length}, ${stalled.length} stalled`,
+    stalled.length > 0
+      ? "A stalled accrual cannot be backfilled — the vendor does not sell these" +
+        " sessions after the fact. Check whether its collector is still running;" +
+        " every session it misses is gone."
+      : "All of them gained ground in the rate window.",
+    "",
+    ...rows.map(line),
+    "",
+  ];
+  return out;
+}
+
 export function buildCoverageMatrixPack(
   data:
     | {
@@ -186,6 +218,7 @@ export function buildCoverageMatrixPack(
   }
 
   push(...movementSection(data?.memory));
+  push(...accrualSection(datasets));
 
   const unclean = datasets.filter(d => {
     const w = entryOf(d, changes).worst;

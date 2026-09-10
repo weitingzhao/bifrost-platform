@@ -18,6 +18,7 @@ import type {
 } from "@/api/marketDataDimensions";
 import {
   accrualFraction,
+  accrualStalled,
   breadthVerdict,
   continuityVerdict,
   depthVerdict,
@@ -74,6 +75,8 @@ export type AxisCell = {
   verdict: AxisVerdict;
   /** 0–1 where a boundary is climbing toward a ceiling, else null. */
   progress: number | null;
+  /** True where that climb has stopped; null where it could not be asked. */
+  stalled: boolean | null;
   /**
    * How this axis got to its current verdict, when the plugin remembers a
    * different previous one. A still frame cannot say "this got worse", and
@@ -134,25 +137,28 @@ export type MatrixCell = {
 export function axesOf(d: DatasetDimensions, changes?: ChangeIndex): AxisCell[] {
   const moved = (axis: string) => changes?.get(`${d.dataset}|${axis}`) ?? null;
   return [
-    { axis: "breadth", verdict: breadthVerdict(d), progress: null, change: moved("breadth") },
+    { axis: "breadth", verdict: breadthVerdict(d), progress: null, stalled: null, change: moved("breadth") },
     // Only depth has a climb to show: a chain snapshot cannot be backfilled but
     // is still accruing toward the sessions trim keeps.
     {
       axis: "depth",
       verdict: depthVerdict(d),
       progress: accrualFraction(d),
+      stalled: accrualStalled(d),
       change: moved("depth"),
     },
     {
       axis: "freshness",
       verdict: freshnessVerdict(d),
       progress: null,
+      stalled: null,
       change: moved("freshness"),
     },
     {
       axis: "continuity",
       verdict: continuityVerdict(d),
       progress: null,
+      stalled: null,
       change: moved("continuity"),
     },
   ];
@@ -208,6 +214,30 @@ export function buildMatrix(
 /** Columns that hold nothing at all — dropped so the grid stays readable. */
 export function occupiedGrains(matrix: MatrixCell[][]): Grain[] {
   return GRAIN_ORDER.filter((_g, i) => matrix.some(row => row[i].entries.length > 0));
+}
+
+/**
+ * The estate-growing view: how many boundaries are climbing, and how many have
+ * stopped.
+ *
+ * Not a fifth colour in the grid. Colour ranks a dataset and fill says whether
+ * a verdict was made; "it stopped moving" is a fact about time, like "it
+ * changed since last time", and both belong in words above the grid where
+ * there is room to say them.
+ */
+export function accrualSummary(datasets: DatasetDimensions[] | undefined): {
+  accruing: number;
+  stalled: number;
+  /** Names of the stalled ones, so the tag can say which without a click. */
+  stalledNames: string[];
+} {
+  const rows = (datasets ?? []).filter(d => d.depth.accrual?.accrues_to);
+  const stalled = rows.filter(d => d.depth.accrual?.stalled === true);
+  return {
+    accruing: rows.length,
+    stalled: stalled.length,
+    stalledNames: stalled.map(d => d.dataset.replace(/^raw_market\./, "")),
+  };
 }
 
 /** One line a reader can act on: how many datasets are not clean, and where. */

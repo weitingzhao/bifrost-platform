@@ -29,6 +29,23 @@ export type DatasetAccrual = {
   since?: string | null;
   newest?: string | null;
   capped?: boolean;
+  /**
+   * Whether the pile is still growing, and how long it has left at that speed.
+   * A fraction alone reads the same whether the dataset gained a session last
+   * night or stopped three weeks ago, and those are the two states that matter
+   * when the goal is growing the estate.
+   *
+   * `rate` is sessions gained over the trading days that actually fell in the
+   * window, so a closed market is not a stall; it is null when the window held
+   * no trading days at all. `sessions_remaining` is in trading days, not a
+   * date — projecting a date needs the forward calendar.
+   */
+  rate_window_days?: number;
+  gained_recent?: number;
+  sessions_due_recent?: number | null;
+  rate?: number | null;
+  stalled?: boolean | null;
+  sessions_remaining?: number | null;
   /** The ceiling it is climbing to, where anything caps it. */
   accrues_to?: number;
   pct?: number;

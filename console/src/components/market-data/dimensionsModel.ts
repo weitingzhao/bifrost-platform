@@ -268,10 +268,11 @@ export function explainDepth(d: DatasetDimensions): AxisExplain {
           }${a.since ? ` · since ${a.since}` : ""}`
         : `${a.sessions_held} sessions accrued${a.since ? ` · since ${a.since}` : ""}`
       : null;
+    const pace = accrualPace(d);
     return {
       axis: "depth",
       verdict: v,
-      reading: accrued ?? t.kind.replace(/_/g, " "),
+      reading: pace == null ? (accrued ?? t.kind.replace(/_/g, " ")) : `${accrued} · ${pace}`,
       rule: accrued
         ? "cannot be backfilled, so it only accrues — this is the climb, not a verdict"
         : "a plan boundary, not a target",
@@ -362,6 +363,32 @@ export function explainContinuity(d: DatasetDimensions): AxisExplain {
  * channel: the colour is the boundary's own, so it ranks nothing — the height
  * is progress, not severity.
  */
+/**
+ * Whether an accruing boundary has stopped moving.
+ *
+ * The one alarm the estate-growing view was missing: a mark reading "60% of
+ * the way" looks identical whether it gained a session last night or stopped
+ * three weeks ago. `null` where the question could not be asked — no calendar,
+ * or a window with no trading days in it — which is not the same as "fine".
+ */
+export function accrualStalled(d: DatasetDimensions): boolean | null {
+  return d.depth.accrual?.stalled ?? null;
+}
+
+/** "1 session/day · 45 to go" — the pace, in the unit the contract counts in. */
+export function accrualPace(d: DatasetDimensions): string | null {
+  const a = d.depth.accrual;
+  if (a == null || a.rate == null) return null;
+  if (a.stalled === true) {
+    const window = a.rate_window_days ?? 14;
+    return `stalled — nothing gained in ${window}d`;
+  }
+  const pace = `${a.rate} session per trading day`;
+  return a.sessions_remaining != null
+    ? `${pace} · ~${a.sessions_remaining} sessions to go`
+    : pace;
+}
+
 export function accrualFraction(d: DatasetDimensions): number | null {
   const a = d.depth.accrual;
   if (!a?.accrues_to || a.accrues_to <= 0) return null;
