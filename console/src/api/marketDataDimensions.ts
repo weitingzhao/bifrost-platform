@@ -83,8 +83,19 @@ export type DatasetDimensions = {
    * other: option_snapshot and option_daily share a tier and differ in grain.
    */
   grain?: DatasetGrain;
-  /** The slot that can refill one named past session; null when it is gone. */
-  backfill_slot?: string | null;
+  /**
+   * How a missed session is repaired, or why it needs no repairing. Three
+   * different reasons for "nothing to prescribe" — gone for good, repairs
+   * itself, no sessions here — used to collapse into one nullable slot name,
+   * and this brief told a reader treasury_yield's gaps were unrecoverable when
+   * its slot re-pulls thirty days on every run.
+   */
+  refill?: {
+    how: "slot" | "kind" | "lookback" | "unrecoverable";
+    target?: string | null;
+    lookback_days?: number | null;
+    why?: string;
+  };
   slots: string[];
   breadth_window: "session" | "ever";
   error: string | null;

@@ -115,28 +115,35 @@ export function buildCoverageMatrixPack(
     push(`### ${d.dataset} — ${TIER_LABEL[d.tier] ?? d.tier} · ${GRAIN_LABEL[grain]}`);
     push(...axisLines(d));
     push(`- slots: ${d.slots.join(", ") || "none"}`);
-    // The one thing only the contract knows: whether a past session can be
-    // refilled at all, and by what.
-    if (d.backfill_slot) {
+    // The one thing only the contract knows: how a missed session is repaired,
+    // or why it needs no repairing. Three different reasons used to collapse
+    // into one nullable slot name, and this brief read the first for all of
+    // them — telling a reader treasury_yield's gaps were gone when its slot
+    // re-pulls thirty days on every run.
+    const r = d.refill;
+    if (r?.how === "slot" && r.target) {
       push(
         `- refill a missing session: POST /market/ingest/enqueue-slot ` +
-          `{"slot":"${d.backfill_slot}","date":"<YYYY-MM-DD>","force":true}`,
+          `{"slot":"${r.target}","date":"<YYYY-MM-DD>","force":true}`,
       );
-    } else if (grain === "daily" || grain === "snapshot" || grain === "minute") {
+    } else if (r?.how === "kind" && r.target) {
       push(
-        "- refill: not possible. The contract declares no backfill slot for a " +
-          "per-session series, which means a missed session is gone for good — " +
-          "do not enqueue for a past date.",
+        `- refill a missing session: POST /market/ingest/enqueue ` +
+          `{"kind":"${r.target}","payload":{"date":"<YYYY-MM-DD>"},"priority":4}`,
+      );
+      if (r.why) push(`  (not the slot: ${r.why})`);
+    } else if (r?.how === "lookback") {
+      const window = r.lookback_days ? ` (${r.lookback_days}-day window)` : "";
+      push(
+        `- refill: nothing to do. The ${r.target ?? "owning"} slot repairs this ` +
+          `itself${window}${r.why ? ` — ${r.why}` : ""}.`,
+      );
+    } else if (r?.how === "unrecoverable") {
+      push(
+        `- refill: not possible${r.why ? `. ${r.why}` : ""}. Do not enqueue for a past date.`,
       );
     } else {
-      // A quarterly filing has no session to miss, and a catalogue is a list of
-      // what exists. Telling an agent a session went missing would send it after
-      // a problem that does not exist — the failure this brief is meant to avoid.
-      push(
-        `- refill: not by date. A ${GRAIN_LABEL[grain].toLowerCase()} is not a ` +
-          "per-session series; a gap here is coverage or vendor scope, not a " +
-          "missed run. Widen the slot or check what the vendor answers for.",
-      );
+      push("- refill: the contract does not say. Check it before enqueuing anything.");
     }
     push("");
   }
