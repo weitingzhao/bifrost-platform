@@ -35,6 +35,13 @@ export function depthVerdict(d: DatasetDimensions): AxisVerdict {
  * rather than hours. `newest` is a date, so measuring from its midnight makes a
  * feed that landed at 22:00 look 44 hours old the next evening — which is how
  * one blanket 24-hour rule produced four different verdicts for one dataset.
+ *
+ * An hour deadline only applies to a feed published every session. short_interest
+ * settles twice a month and FINRA publishes about ten days after: against a
+ * 30-hour deadline it read 27 days behind and this table painted it red, while
+ * the database held every settlement the vendor had released. The plugin now
+ * answers `overdue` for those datasets from their own measured interval, and
+ * that answer wins here.
  */
 export function freshnessVerdict(
   d: DatasetDimensions,
@@ -42,6 +49,12 @@ export function freshnessVerdict(
 ): AxisVerdict {
   if (d.error) return "unknown";
   if (!d.freshness.measured || !d.freshness.newest) return "unknown";
+  if (d.freshness.cadence != null && d.freshness.cadence !== "session") {
+    // null means the plugin could not measure an interval — not a licence to
+    // fall back on an hour deadline that does not apply to this cadence.
+    if (d.freshness.overdue == null) return "unknown";
+    return d.freshness.overdue ? "thin" : "ok";
+  }
   const newest = Date.parse(`${d.freshness.newest}T00:00:00Z`);
   const behind =
     d.freshness.days_behind ?? Math.floor((today.getTime() - newest) / 864e5);
@@ -49,6 +62,19 @@ export function freshnessVerdict(
   const allowed = Math.ceil(d.freshness.deadline_hours / 24) + 1;
   if (behind <= allowed) return "ok";
   return behind <= allowed * 3 ? "partial" : "thin";
+}
+
+/** What the tone is claiming, in the unit the dataset is actually judged in. */
+export function freshnessDetail(d: DatasetDimensions): string {
+  const f = d.freshness;
+  const behind = f.days_behind == null ? "" : ` · ${f.days_behind}d behind`;
+  if (f.cadence != null && f.cadence !== "session") {
+    if (f.expected_interval_days == null) {
+      return `${f.cadence} cadence · interval not measurable${behind}`;
+    }
+    return `${f.cadence} cadence · publishes about every ${f.expected_interval_days}d${behind}`;
+  }
+  return `deadline ${f.deadline_hours}h${behind}`;
 }
 
 export function depthLabel(d: DatasetDimensions): string {

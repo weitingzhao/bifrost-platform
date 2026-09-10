@@ -5,6 +5,7 @@ import {
   breadthVerdict,
   depthLabel,
   depthVerdict,
+  freshnessDetail,
   freshnessVerdict,
 } from "@/components/market-data/dimensionsModel";
 
@@ -109,5 +110,59 @@ describe("freshness", () => {
         }),
       ),
     ).toBe("unknown");
+  });
+});
+
+
+describe("freshness reads the cadence it was given", () => {
+  const settlement = (over: Partial<DatasetDimensions["freshness"]>) =>
+    on({
+      dataset: "raw_market.short_interest",
+      freshness: {
+        newest: "2026-08-14",
+        deadline_hours: 30,
+        measured: true,
+        days_behind: 27,
+        cadence: "settlement",
+        expected_interval_days: 15,
+        overdue: false,
+        ...over,
+      },
+    });
+
+  it("does not paint a twice-monthly feed red for being 27 days old", () => {
+    // FINRA had published nothing newer than the 2026-08-14 settlement, and the
+    // database held 08-14 / 07-31 / 07-15 / 06-30 / 06-15 with no gap. Against
+    // the 30-hour deadline this table called it thin.
+    expect(freshnessVerdict(settlement({}))).toBe("ok");
+    expect(freshnessDetail(settlement({}))).toContain("about every 15d");
+  });
+
+  it("still calls it late once a whole settlement has gone missing", () => {
+    expect(freshnessVerdict(settlement({ overdue: true, days_behind: 48 }))).toBe(
+      "thin",
+    );
+  });
+
+  it("says unknown rather than falling back on a deadline that does not apply", () => {
+    expect(
+      freshnessVerdict(settlement({ overdue: null, expected_interval_days: null })),
+    ).toBe("unknown");
+  });
+
+  it("leaves a session feed on its hour deadline", () => {
+    const sess = on({
+      freshness: {
+        newest: "2026-09-09",
+        deadline_hours: 2,
+        measured: true,
+        days_behind: 1,
+        cadence: "session",
+        expected_interval_days: null,
+        overdue: null,
+      },
+    });
+    expect(freshnessVerdict(sess)).toBe("ok");
+    expect(freshnessDetail(sess)).toBe("deadline 2h · 1d behind");
   });
 });

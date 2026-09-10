@@ -21,6 +21,7 @@ import {
   continuityLabel,
   continuityVerdict,
   depthVerdict,
+  freshnessDetail,
   freshnessVerdict,
   type AxisVerdict,
 } from "@/components/market-data/dimensionsModel";
@@ -189,7 +190,7 @@ function Row({ d }: { d: DatasetDimensions }) {
       <DenseTableCell>
         <DenseTag
           variant={TONE[freshnessVerdict(d)]}
-          title={`deadline ${d.freshness.deadline_hours}h`}
+          title={freshnessDetail(d)}
         >
           {d.freshness.newest ?? "—"}
         </DenseTag>

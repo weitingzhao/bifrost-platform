@@ -31,6 +31,17 @@ export type DatasetFreshness = {
   deadline_hours: number;
   measured: boolean;
   days_behind?: number | null;
+  /**
+   * A deadline in hours only means something for a feed published every
+   * session. short_interest settles twice a month and FINRA publishes about ten
+   * days later: it read 27 days behind a 30-hour deadline while holding every
+   * settlement the vendor had released. For anything but session cadence the
+   * plugin measures the dataset's own publication interval and answers
+   * `overdue` against it; `overdue` is null where it cannot or should not judge.
+   */
+  cadence?: string;
+  expected_interval_days?: number | null;
+  overdue?: boolean | null;
 };
 
 /**
@@ -52,6 +63,11 @@ export type DatasetContinuity = {
   days_thin?: number;
   worst?: Array<{ date: string; rows: number; neighbours: number }>;
   absent_sample?: string[];
+  /** How often this dataset actually publishes, measured rather than assumed. */
+  median_interval_days?: number | null;
+  /** Rows dated on a day the market was shut — the opposite of a hole. */
+  days_off_calendar?: number;
+  off_calendar_sample?: string[];
 };
 
 export type DatasetDimensions = {
