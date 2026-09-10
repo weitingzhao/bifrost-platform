@@ -18,8 +18,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
-      "@bifrost/ui": ["../../bifrost-ui/src/index.ts"],
-      "@bifrost/ui/styles": ["../../bifrost-ui/src/styles/bifrost-ui.css"],
+      "@bifrost/ui": ["../../bifrost-ui/dist/index.d.ts"],
+      "@bifrost/ui/styles": ["../../bifrost-ui/dist/styles/bifrost-ui.css"],
       "react": ["./node_modules/@types/react"],
       "react-dom": ["./node_modules/@types/react-dom"],
       "radix-ui": ["./node_modules/radix-ui"],

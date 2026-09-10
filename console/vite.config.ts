@@ -16,9 +16,9 @@ export default defineConfig({
       // More specific path must come before `@bifrost/ui` (prefix would swallow `/styles`).
       {
         find: '@bifrost/ui/styles',
-        replacement: path.join(uiRoot, 'src/styles/bifrost-ui.css'),
+        replacement: path.join(uiRoot, 'dist/styles/bifrost-ui.css'),
       },
-      { find: '@bifrost/ui', replacement: path.join(uiRoot, 'src/index.ts') },
+      { find: '@bifrost/ui', replacement: path.join(uiRoot, 'dist/index.js') },
     ],
   },
   server: {

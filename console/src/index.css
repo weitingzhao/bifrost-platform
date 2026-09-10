@@ -4,7 +4,8 @@
 @import "@bifrost/ui/styles";
 @import "./styles/taskModeChrome.css";
 
-@source "../../../bifrost-ui/src/**/*.{ts,tsx}";
+/* Built output, not source: the class strings survive tsc verbatim. */
+@source "../../../bifrost-ui/dist/**/*.js";
 @source "./**/*.{ts,tsx}";
 
 @custom-variant dark (&:is(.dark *));
