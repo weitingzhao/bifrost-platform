@@ -1,0 +1,32 @@
+{
+  "projectName": "Bifrost Ops Console",
+  "projectId": "22cb3841-ca0a-4f7f-9e0e-7308cad260b9",
+  "shape": "hand-authored",
+  "uploadRoot": "project",
+  "separateFrom": {
+    "system": "Trade",
+    "inputs": "bifrost-ui/.design-sync",
+    "projectId": "72619b7a-f08a-4b68-9229-c1d9658ff36f"
+  },
+  "cards": {
+    "composition/VerdictStrip": "console/src/components/layout/OpsVerdictStrip.tsx",
+    "composition/Section": "console/src/components/layout/OpsSection.tsx",
+    "status/StatusLamp": "bifrost-ui StatusLamp (kind reach / auth)",
+    "status/StateTag": "bifrost-ui DenseTag — Ops severity vocabulary",
+    "status/ActionItem": "new — the 'Needs you' list (not yet in code)",
+    "data-display/DashCard": "console/src/components/market-data/overviewDash.tsx#DashCard",
+    "data-display/ScoreRing": "console/src/components/market-data/overviewDash.tsx#ScoreRing",
+    "data-display/AxisBar": "console/src/components/market-data/CoverageMatrixPanel.tsx (four-axis rollup)",
+    "patterns/FourQuestionOverview": "new — the data-source plugin Overview pattern"
+  },
+  "seededFrom": {
+    "date": "2026-09-11",
+    "tokens": "bifrost-ui/src/styles/bifrost-ui.css",
+    "rules": "console/src/lib/standards/designSystemCatalog.ts"
+  },
+  "lastSync": {
+    "date": "2026-09-11",
+    "files": 16,
+    "via": "DesignSync create_project + write_files"
+  }
+}

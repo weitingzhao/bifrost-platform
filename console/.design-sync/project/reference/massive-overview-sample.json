@@ -1,0 +1,622 @@
+{
+ "_about": "Live readings from the Massive plugin, 2026-09-11 17:32 UTC — the numbers drawn in massive-overview.html. Shapes follow GET /market/coverage/dimensions, /market/doctor and /market/coverage/inventory.",
+ "session": "2026-09-10",
+ "denominators": {
+  "whole_market": 5317,
+  "universe": {
+   "total": 585,
+   "by_tier": {
+    "resident": 569,
+    "core": 7,
+    "edge": 9
+   },
+   "months": {
+    "resident": 24,
+    "core": 24,
+    "edge": 12
+   }
+  },
+  "benchmark_only": 26
+ },
+ "memory": {
+  "since": "2026-09-11T01:17:59.221439+00:00",
+  "changes": [
+   {
+    "dataset": "raw_market.treasury_yield",
+    "axis": "freshness",
+    "from": "partial",
+    "to": "ok",
+    "direction": "recovered"
+   }
+  ]
+ },
+ "datasets": [
+  {
+   "dataset": "stock_daily",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "partial",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 2.0
+   },
+   "breadth": {
+    "held": 5183,
+    "of": 5317,
+    "pct": 97.5
+   },
+   "depth": {
+    "median_days": 1828,
+    "need_days": 1825,
+    "at_target": 3370,
+    "of": 5316
+   }
+  },
+  {
+   "dataset": "stock_snapshot",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 1.0
+   },
+   "breadth": {
+    "held": 5307,
+    "of": 5317,
+    "pct": 99.8
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "stock_movers",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "boundary",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 1.0
+   },
+   "breadth": {
+    "held": 26,
+    "of": 5317,
+    "pct": 0.5
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "ticker",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": null,
+    "cadence": null,
+    "days_behind": null,
+    "deadline_hours": 48.0
+   },
+   "breadth": {
+    "held": 5317,
+    "of": 5317,
+    "pct": 100.0
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "corporate_action",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "boundary",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-11-09",
+    "cadence": "session",
+    "days_behind": -59,
+    "deadline_hours": 168.0
+   },
+   "breadth": {
+    "held": 775,
+    "of": 5317,
+    "pct": 14.6
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "income_statement",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-08-02",
+    "cadence": "filing",
+    "days_behind": 40,
+    "deadline_hours": 48.0
+   },
+   "breadth": {
+    "held": 4416,
+    "of": 4418,
+    "pct": 100.0
+   },
+   "depth": {
+    "median_days": 3541,
+    "need_days": 6462,
+    "at_target": null,
+    "of": 4416
+   }
+  },
+  {
+   "dataset": "balance_sheet",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-08-02",
+    "cadence": "filing",
+    "days_behind": 40,
+    "deadline_hours": 48.0
+   },
+   "breadth": {
+    "held": 4418,
+    "of": 4418,
+    "pct": 100.0
+   },
+   "depth": {
+    "median_days": 3541,
+    "need_days": 6462,
+    "at_target": null,
+    "of": 4418
+   }
+  },
+  {
+   "dataset": "cash_flow",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": "2026-08-02",
+    "cadence": "filing",
+    "days_behind": 40,
+    "deadline_hours": 48.0
+   },
+   "breadth": {
+    "held": 4363,
+    "of": 4418,
+    "pct": 98.8
+   },
+   "depth": {
+    "median_days": 3602,
+    "need_days": 6462,
+    "at_target": null,
+    "of": 4363
+   }
+  },
+  {
+   "dataset": "ratios",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "boundary",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-09-09",
+    "cadence": "session",
+    "days_behind": 2,
+    "deadline_hours": 30.0
+   },
+   "breadth": {
+    "held": 3963,
+    "of": 5317,
+    "pct": 74.5
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "short_volume",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "partial",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 30.0
+   },
+   "breadth": {
+    "held": 5242,
+    "of": 5317,
+    "pct": 98.6
+   },
+   "depth": {
+    "median_days": 732,
+    "need_days": 730,
+    "at_target": 4193,
+    "of": 5316
+   }
+  },
+  {
+   "dataset": "short_interest",
+   "tier": "whole-market",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-08-31",
+    "cadence": "settlement",
+    "days_behind": 11,
+    "deadline_hours": 30.0
+   },
+   "breadth": {
+    "held": 5302,
+    "of": 5317,
+    "pct": 99.7
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "treasury_yield",
+   "tier": "global",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "ok",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-09-09",
+    "cadence": "session",
+    "days_behind": 2,
+    "deadline_hours": 24.0
+   },
+   "breadth": {
+    "held": 1,
+    "of": 1,
+    "pct": 100.0
+   },
+   "depth": {
+    "median_days": 1836,
+    "need_days": 30,
+    "at_target": 1,
+    "of": 1
+   }
+  },
+  {
+   "dataset": "us_market_holiday",
+   "tier": "global",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": null,
+    "cadence": null,
+    "days_behind": null,
+    "deadline_hours": 48.0
+   },
+   "breadth": {
+    "held": 1,
+    "of": 1,
+    "pct": 100.0
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "option_snapshot",
+   "tier": "universe",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "partial"
+   },
+   "freshness": {
+    "newest": "2026-09-11",
+    "cadence": "session",
+    "days_behind": 0,
+    "deadline_hours": 2.0
+   },
+   "breadth": {
+    "held": 569,
+    "of": 585,
+    "pct": 97.3
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "option_contract",
+   "tier": "universe",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "boundary",
+    "continuity": "boundary"
+   },
+   "freshness": {
+    "newest": null,
+    "cadence": null,
+    "days_behind": null,
+    "deadline_hours": 12.0
+   },
+   "breadth": {
+    "held": 580,
+    "of": 585,
+    "pct": 99.1
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "option_open_interest",
+   "tier": "universe",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "boundary",
+    "freshness": "ok",
+    "continuity": "partial"
+   },
+   "freshness": {
+    "newest": "2026-09-11",
+    "cadence": "session",
+    "days_behind": 0,
+    "deadline_hours": 2.0
+   },
+   "breadth": {
+    "held": 569,
+    "of": 585,
+    "pct": 97.3
+   },
+   "depth": {
+    "median_days": null,
+    "need_days": null,
+    "at_target": null,
+    "of": null
+   }
+  },
+  {
+   "dataset": "option_daily",
+   "tier": "universe",
+   "verdicts": {
+    "breadth": "ok",
+    "depth": "partial",
+    "freshness": "ok",
+    "continuity": "partial"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 24.0
+   },
+   "breadth": {
+    "held": 563,
+    "of": 585,
+    "pct": 96.2
+   },
+   "depth": {
+    "median_days": 732,
+    "need_days": 730,
+    "at_target": 506,
+    "of": 570
+   }
+  },
+  {
+   "dataset": "stock_minute",
+   "tier": "benchmark-only",
+   "verdicts": {
+    "breadth": "partial",
+    "depth": "thin",
+    "freshness": "ok",
+    "continuity": "ok"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 24.0
+   },
+   "breadth": {
+    "held": 18,
+    "of": 26,
+    "pct": 69.2
+   },
+   "depth": {
+    "median_days": 37,
+    "need_days": 365,
+    "at_target": 0,
+    "of": 18
+   }
+  },
+  {
+   "dataset": "option_minute",
+   "tier": "benchmark-only",
+   "verdicts": {
+    "breadth": "partial",
+    "depth": "thin",
+    "freshness": "ok",
+    "continuity": "thin"
+   },
+   "freshness": {
+    "newest": "2026-09-10",
+    "cadence": "session",
+    "days_behind": 1,
+    "deadline_hours": 24.0
+   },
+   "breadth": {
+    "held": 18,
+    "of": 26,
+    "pct": 69.2
+   },
+   "depth": {
+    "median_days": 36,
+    "need_days": 365,
+    "at_target": 0,
+    "of": 18
+   }
+  }
+ ],
+ "doctor": {
+  "verdict": "critical",
+  "summary": "2 critical · 2 warning · 13 ok",
+  "eod_critical": {
+   "verdict": "critical",
+   "detail": "Option chain snapshot: 26% (186686); Open interest: 26% (186686)"
+  },
+  "findings": [
+   {
+    "severity": "crit",
+    "title": "Option chain snapshot",
+    "expected": ">= 90% of 716787",
+    "actual": "26% (186686)",
+    "detail": "186686/716787 live contracts covered for 2026-09-10 (26%); 538 of 568 underlyings below 90%. Worst: CSGP 2%, GOOGL 3%, BKNG 3%, QXO 3%, ONDS 3%, NFLX 4%, FITB 4%, STLD 4%. The chain now reflects a later session, so this one can no longer be observed — it is lost, not pending.",
+    "auto_fixable": false
+   },
+   {
+    "severity": "crit",
+    "title": "Open interest",
+    "expected": ">= 90% of 716787",
+    "actual": "26% (186686)",
+    "detail": "186686/716787 live contracts covered for 2026-09-10 (26%); 538 of 568 underlyings below 90%. Worst: CSGP 2%, GOOGL 3%, BKNG 3%, QXO 3%, ONDS 3%, NFLX 4%, FITB 4%, STLD 4%. The chain now reflects a later session, so this one can no longer be observed — it is lost, not pending.",
+    "auto_fixable": false
+   },
+   {
+    "severity": "warn",
+    "title": "Ratios + short volume (whole market)",
+    "expected": "ratios >= 2000, short_volume >= 4000",
+    "actual": {
+     "ratios": 0,
+     "short_volume": 15359
+    },
+    "detail": "ratios=0, short_volume=15359 rows for 2026-09-10. Published the morning after the session; due 2026-09-12 02:00 UTC.",
+    "auto_fixable": false
+   },
+   {
+    "severity": "warn",
+    "title": "Failed jobs: option_snapshot",
+    "expected": 0,
+    "actual": 2,
+    "detail": "2 option_snapshot job(s) failed in 24h — the connection is lost",
+    "auto_fixable": true
+   }
+  ]
+ },
+ "downstream": {
+  "analytics": {
+   "max_pain": {
+    "symbols": 570,
+    "days": 48,
+    "latest": "2026-09-10"
+   },
+   "atm_iv": {
+    "symbols": 563,
+    "days": 209,
+    "latest": "2026-09-10"
+   },
+   "pcr": {
+    "symbols": 570,
+    "days": 279,
+    "latest": "2026-09-10"
+   },
+   "iv_percentile": {
+    "symbols": 563,
+    "days": 209,
+    "latest": "2026-09-10"
+   }
+  },
+  "research_trading_day": {
+   "status": "SUCCESS",
+   "window_utc": "2026-09-11 03:33 → 03:47",
+   "materializations": 69
+  }
+ }
+}

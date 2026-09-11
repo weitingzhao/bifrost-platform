@@ -1,0 +1,21 @@
+<!-- @dsCard group="status" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status lamp</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-grid">
+  <div class="ds-cell"><div class="ds-label">Filled — a live reading</div>
+    <div style="display:flex;gap:18px;align-items:center;font-size:12px">
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp is-ok"></span>ok</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp is-warn"></span>degraded</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp is-fail"></span>fail</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp is-unknown"></span>unknown</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Outline — an auth / config state</div>
+    <div style="display:flex;gap:18px;align-items:center;font-size:12px">
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp ops-lamp--outline is-ok"></span>ok</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp ops-lamp--outline is-warn"></span>missing</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp ops-lamp--outline is-fail"></span>invalid</span>
+      <span style="display:flex;gap:6px;align-items:center"><span class="ops-lamp ops-lamp--outline is-unknown"></span>skipped</span></div></div>
+</div>
+<p class="ds-note">Four states only. A lamp answers one question and says which in its title: two lamps side by side must answer the same class of question (on 2026-09-11 a green "reachable" Flex lamp sat beside a red "batch adherence" Massive lamp while Flex was the broken one).</p>
+</body></html>

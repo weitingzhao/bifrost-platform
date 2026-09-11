@@ -1,0 +1,15 @@
+<!-- @dsCard group="data-display" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Score ring</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+  <div class="ds-cell"><div class="ds-label">All held</div><div style="display:flex;gap:10px;align-items:center">
+    <span class="ops-ring" style="--ok:100" data-label="4/4"></span><span style="font-size:11px;color:var(--ops-ink-mute)">today 4</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Mixed</div><div style="display:flex;gap:10px;align-items:center">
+    <span class="ops-ring" style="--ok:66.7;--warn:16.7" data-label="4/6"></span><span style="font-size:11px;color:var(--ops-ink-mute)">ready 4 · thin 1 · pending 1</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Still loading</div><div style="display:flex;gap:10px;align-items:center">
+    <span class="ops-ring" style="--ok:25" data-label="1/4"></span><span style="font-size:11px;color:var(--ops-ink-mute)">today 1 · pending 3</span></div></div>
+</div>
+<p class="ds-note">Pending and unknown fill no segment — the track stays grey. On 2026-09-11 a ring that counted "not loaded" as missing read 0/4 red for twenty seconds on a complete estate.</p>
+</body></html>

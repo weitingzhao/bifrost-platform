@@ -1,0 +1,216 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/*
+ * Bifrost Ops Console — design tokens and component styles.
+ *
+ * Seeded 2026-09-11 from the running Console (the shared @bifrost/ui palette).
+ * From here this is the Ops design system's own file: it may diverge from the
+ * Trade system on purpose. The two share a hex today with opposite meanings —
+ * Trade's loss red is Ops' failure red — and the Ops names below say what a
+ * colour means here: severity, and nothing else.
+ *
+ * Mapping to the running Console, for whoever implements a design:
+ *   --ops-ground   = --background        --ops-surface = --card / --sidebar
+ *   --ops-raised   = --muted / --color-surface-elevated
+ *   --ops-line     = --border            --ops-accent  = --primary
+ *   --ops-ok       = --color-lamp-green  --ops-warn    = --color-lamp-yellow
+ *   --ops-fail     = --color-lamp-red    --ops-unknown = --color-lamp-gray
+ *   --ops-info     = --color-info
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ground and surfaces */
+  --ops-ground: #0a0c0f;
+  --ops-surface: #13171d;
+  --ops-raised: #1a1f26;
+  --ops-line: #2a313c;
+  --ops-line-soft: #20262f;
+
+  /* ink */
+  --ops-ink: #e4e9ef;
+  --ops-ink-mute: #7a8492;
+  --ops-ink-faint: #525b67;
+  --ops-ink-soft: #b6bfca;
+
+  /* the one primary action per view */
+  --ops-accent: #a3e635;
+  --ops-accent-ink: #11180a;
+
+  /* severity — fill / readable-on-dark ink */
+  --ops-ok: #16a34a;        --ops-ok-ink: #4ade80;
+  --ops-warn: #ca8a04;      --ops-warn-ink: #facc15;
+  --ops-fail: #dc2626;      --ops-fail-ink: #f87171;
+  --ops-info: #38bdf8;      --ops-info-ink: #38bdf8;
+  /* not a fault: the plan's edge, a feed on its own cadence, a T+1 publisher */
+  --ops-boundary: #475569;  --ops-boundary-ink: #94a3b8;
+  /* cannot be judged: a read failed, a source is unavailable */
+  --ops-unknown: #64748b;   --ops-unknown-ink: #94a3b8;
+
+  /* type */
+  --ops-sans: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
+  --ops-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --ops-t-body: 13px;
+  --ops-t-label: 12px;
+  --ops-t-meta: 11px;
+  --ops-t-cap: 10px;
+  --ops-t-micro: 9px;
+
+  --ops-radius: 10px;
+  --ops-radius-sm: 6px;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ops-ground);
+  color: var(--ops-ink);
+  font: 400 var(--ops-t-body)/1.5 var(--ops-sans);
+}
+.mono, .num { font-family: var(--ops-mono); }
+.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--ops-accent); outline-offset: 2px; }
+
+/* ── card harness (Design System pane) ─────────────────────────────────── */
+body.ds-card { padding: 20px; }
+.ds-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.ds-grid.ds-col { grid-template-columns: 1fr; }
+.ds-cell { border: 1px dashed var(--ops-line); border-radius: 8px; padding: 12px; min-width: 0; }
+.ds-label { font: 500 var(--ops-t-cap)/1 var(--ops-mono); color: var(--ops-ink-faint); text-transform: uppercase;
+  letter-spacing: .08em; margin-bottom: 10px; }
+.ds-note { font-size: var(--ops-t-meta); color: var(--ops-ink-mute); margin: 8px 0 0; max-width: 70ch; }
+
+/* ── status lamp ───────────────────────────────────────────────────────── */
+.ops-lamp { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: currentColor; color: var(--ops-unknown); }
+.ops-lamp.is-ok { color: var(--ops-ok); }
+.ops-lamp.is-warn { color: var(--ops-warn); }
+.ops-lamp.is-fail { color: var(--ops-fail); }
+.ops-lamp.is-unknown { color: var(--ops-unknown); }
+.ops-lamp--outline { background: transparent; border: 1.5px solid currentColor; }
+.ops-lamp--halo.is-ok { box-shadow: 0 0 0 3px #16a34a26; }
+.ops-lamp--halo.is-warn { box-shadow: 0 0 0 3px #ca8a0426; }
+.ops-lamp--halo.is-fail { box-shadow: 0 0 0 3px #dc262626; }
+
+/* ── state tag (DenseTag) ──────────────────────────────────────────────── */
+.ops-tag { display: inline-flex; align-items: center; gap: 4px; font: 600 var(--ops-t-cap)/1 var(--ops-sans);
+  letter-spacing: .06em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px; border: 1px solid;
+  white-space: nowrap; }
+.ops-tag.is-ok { color: var(--ops-ok-ink); border-color: #16a34a66; background: #16a34a14; }
+.ops-tag.is-warn { color: var(--ops-warn-ink); border-color: #ca8a0466; background: #ca8a0414; }
+.ops-tag.is-fail { color: var(--ops-fail-ink); border-color: #dc262666; background: #dc262614; }
+.ops-tag.is-info { color: var(--ops-info-ink); border-color: #38bdf866; background: #38bdf812; }
+.ops-tag.is-boundary { color: var(--ops-boundary-ink); border-color: #64748b66; background: #64748b14; }
+.ops-tag.is-unknown { color: var(--ops-unknown-ink); border-color: #64748b44; background: transparent; border-style: dashed; }
+.ops-tag.is-pending { color: var(--ops-ink-mute); border-color: var(--ops-line); background: transparent; letter-spacing: .12em; }
+.ops-tag.is-accent { color: var(--ops-accent); border-color: #a3e63566; background: #a3e63512; }
+
+/* ── buttons ───────────────────────────────────────────────────────────── */
+.ops-btn { font: 500 var(--ops-t-label)/1 var(--ops-sans); padding: 7px 11px; border-radius: 7px;
+  border: 1px solid var(--ops-line); background: var(--ops-raised); color: var(--ops-ink); cursor: pointer;
+  white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+.ops-btn:hover { border-color: #3a4350; }
+.ops-btn--primary { background: var(--ops-accent); color: var(--ops-accent-ink); border-color: var(--ops-accent); }
+.ops-btn--primary:hover { background: #b5ef52; }
+.ops-btn--sm { padding: 5px 9px; font-size: var(--ops-t-meta); }
+
+/* ── act 1: verdict strip (OpsVerdictStrip) ────────────────────────────── */
+.ops-verdict { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: var(--ops-radius);
+  padding: 12px 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center;
+  box-shadow: 0 1px 0 #ffffff08 inset, 0 8px 24px #00000055; }
+.ops-verdict > .ops-lamp { grid-row: 1 / span 2; align-self: start; margin-top: 6px; }
+.ops-verdict__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ops-verdict__title { font-size: var(--ops-t-cap); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ops-ink-mute); font-weight: 600; }
+.ops-verdict__line { font-size: 15px; font-weight: 500; text-wrap: balance; }
+.ops-verdict__meta { grid-column: 2 / 4; font-size: var(--ops-t-meta); color: var(--ops-ink-mute);
+  display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.ops-verdict__meta .num { color: var(--ops-ink); }
+.ops-verdict__actions { display: flex; gap: 6px; grid-row: 1 / span 2; grid-column: 3; align-self: start; }
+.ops-verdict--compact { padding: 7px 12px; grid-template-columns: auto auto 1fr auto; }
+.ops-verdict--compact > .ops-lamp { grid-row: auto; margin-top: 0; align-self: center; }
+.ops-verdict--compact .ops-verdict__line { font-size: var(--ops-t-label); color: var(--ops-ink-soft); }
+.ops-verdict--compact .ops-verdict__actions { grid-row: auto; grid-column: auto; }
+
+/* ── act 2: section (OpsSection) — native <details> for collapse ────────── */
+.ops-section { background: var(--ops-surface); border: 1px solid var(--ops-line); border-radius: var(--ops-radius); min-width: 0; }
+.ops-section > summary, .ops-section__head { display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+  cursor: pointer; list-style: none; border-bottom: 1px solid var(--ops-line-soft); }
+.ops-section > summary::-webkit-details-marker { display: none; }
+.ops-section:not([open]) > summary { border-bottom: 0; }
+.ops-section__chev { color: var(--ops-ink-faint); font: 400 10px/1 var(--ops-mono); transition: transform .12s; }
+.ops-section[open] .ops-section__chev { transform: rotate(90deg); }
+.ops-section__title { font-size: var(--ops-t-cap); letter-spacing: .1em; text-transform: uppercase; font-weight: 600;
+  color: var(--ops-ink-mute); }
+.ops-section__ask { font-size: var(--ops-t-body); font-weight: 600; color: var(--ops-ink); }
+.ops-section__no { font: 500 var(--ops-t-cap)/1 var(--ops-mono); color: var(--ops-accent-ink); background: var(--ops-accent);
+  border-radius: 4px; padding: 3px 5px; }
+.ops-section__body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+/* the source label every block carries: which read answers it, how fast */
+.ops-src { margin-left: auto; font: 400 var(--ops-t-cap)/1.3 var(--ops-mono); color: var(--ops-ink-faint); text-align: right; }
+
+/* ── data display ──────────────────────────────────────────────────────── */
+.ops-dash-card { background: var(--ops-raised); border: 1px solid var(--ops-line-soft); border-radius: 8px;
+  padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ops-dash-card__top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.ops-dash-card__title { font-size: var(--ops-t-cap); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-dash-card__value { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.ops-dash-card__value b { font: 600 var(--ops-t-body)/1 var(--ops-mono); font-variant-numeric: tabular-nums; }
+.ops-dash-card__value span { font-size: var(--ops-t-micro); color: var(--ops-ink-mute); }
+.ops-dash-card__cap { font-size: var(--ops-t-micro); color: var(--ops-ink-mute); margin: 0; }
+
+.ops-meter { height: 4px; border-radius: 2px; background: #0f1318; overflow: hidden; }
+.ops-meter i { display: block; height: 100%; background: var(--ops-ok); }
+.ops-meter.is-warn i { background: var(--ops-warn); }
+.ops-meter.is-fail i { background: var(--ops-fail); }
+.ops-meter.is-none { background: repeating-linear-gradient(90deg, var(--ops-line-soft) 0 4px, transparent 4px 8px); }
+
+.ops-ring { --ok: 0; --warn: 0; --fail: 0; width: 44px; height: 44px; border-radius: 50%; flex: none; position: relative;
+  background: conic-gradient(var(--ops-ok) 0 calc(var(--ok) * 1%),
+                             var(--ops-warn) 0 calc((var(--ok) + var(--warn)) * 1%),
+                             var(--ops-fail) 0 calc((var(--ok) + var(--warn) + var(--fail)) * 1%),
+                             var(--ops-line) 0 100%); }
+.ops-ring::after { content: attr(data-label); position: absolute; inset: 3px; border-radius: 50%; background: var(--ops-surface);
+  display: grid; place-items: center; font: 600 var(--ops-t-cap)/1 var(--ops-mono); color: var(--ops-ink); }
+
+.ops-axis { display: grid; grid-template-columns: 78px 1fr 110px; gap: 8px; align-items: center; font-size: var(--ops-t-meta); }
+.ops-axis__name { color: var(--ops-ink-mute); }
+.ops-axis__stack { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--ops-raised); }
+.ops-axis__stack i { display: block; height: 100%; }
+.ops-axis__stack .s-ok { background: var(--ops-ok); }
+.ops-axis__stack .s-boundary { background: var(--ops-boundary); }
+.ops-axis__stack .s-warn { background: var(--ops-warn); }
+.ops-axis__stack .s-fail { background: var(--ops-fail); }
+.ops-axis__counts { font-family: var(--ops-mono); color: var(--ops-ink-mute); text-align: right; font-variant-numeric: tabular-nums; }
+.ops-legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: var(--ops-t-cap); color: var(--ops-ink-mute); }
+.ops-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+
+/* ── act 3: the "needs you" action item ────────────────────────────────── */
+.ops-actions { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ops-action { display: grid; grid-template-columns: 4px 1fr; gap: 0 12px; background: var(--ops-raised); border-radius: 8px; overflow: hidden; }
+.ops-action__stripe { background: var(--ops-boundary); }
+.ops-action.is-decide .ops-action__stripe { background: var(--ops-fail); }
+.ops-action.is-explained .ops-action__stripe { background: var(--ops-warn); }
+.ops-action.is-fix .ops-action__stripe { background: var(--ops-info); }
+.ops-action__in { padding: 9px 12px 10px 0; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ops-action__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ops-action__title { font-weight: 600; font-size: var(--ops-t-body); }
+.ops-action p { margin: 0; font-size: var(--ops-t-label); color: var(--ops-ink-soft); max-width: 72ch; }
+.ops-action__btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.ops-cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.ops-cmp > div { background: var(--ops-surface); border: 1px solid var(--ops-line-soft); border-radius: 6px; padding: 6px 8px; }
+.ops-cmp .k { font-size: var(--ops-t-cap); color: var(--ops-ink-mute); text-transform: uppercase; letter-spacing: .08em; }
+.ops-cmp .v { font: 500 var(--ops-t-label)/1.35 var(--ops-mono); }
+.ops-cmp .v .bad { color: var(--ops-fail-ink); }
+
+/* ── dense row list (session table) ────────────────────────────────────── */
+.ops-rows { display: flex; flex-direction: column; gap: 3px; }
+.ops-row { display: grid; grid-template-columns: minmax(0, 1.4fr) 84px minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: var(--ops-t-label); }
+.ops-row .ds { font: 400 var(--ops-t-meta)/1.3 var(--ops-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-row .when { font: 400 var(--ops-t-meta)/1.2 var(--ops-mono); font-variant-numeric: tabular-nums; }
+.ops-row .note { font-size: var(--ops-t-meta); color: var(--ops-ink-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ops-row .ops-tag { justify-self: end; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

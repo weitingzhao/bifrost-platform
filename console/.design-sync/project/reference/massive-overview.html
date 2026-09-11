@@ -1,0 +1,412 @@
+<!-- @dsCard group="reference" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Massive Overview Sketch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* The Console is dark-only (bifrost-ui defines :root and .dark as one palette),
+     so this sketch commits to that one world and paints every color explicitly. */
+  :root {
+    --ground: #0a0c0f;
+    --card: #13171d;
+    --raised: #1a1f26;
+    --line: #2a313c;
+    --line-soft: #20262f;
+    --ink: #e4e9ef;
+    --mute: #7a8492;
+    --faint: #525b67;
+    --lime: #a3e635;
+    --ok: #16a34a;      --ok-ink: #4ade80;
+    --warn: #ca8a04;    --warn-ink: #facc15;
+    --fail: #dc2626;    --fail-ink: #f87171;
+    --bound: #64748b;   --bound-ink: #94a3b8;
+    --info: #38bdf8;
+    --sans: 'Geist', 'DM Sans', system-ui, -apple-system, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --t-body: 13px; --t-label: 12px; --t-meta: 11px; --t-cap: 10px;
+    --r: 10px;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 400 var(--t-body)/1.5 var(--sans); }
+  .mono, .num { font-family: var(--mono); }
+  .num { font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+  /* sketch band */
+  .band { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; padding: 7px 20px;
+    background: repeating-linear-gradient(135deg, #1a2410 0 10px, #16200d 10px 20px); border-bottom: 1px solid #3f5a16;
+    color: #d9f99d; font-size: var(--t-meta); }
+  .band b { color: var(--lime); letter-spacing: .12em; font-weight: 600; }
+
+  .shell { max-width: 1320px; margin: 0 auto; padding: 14px 20px 40px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* console header */
+  .crumbs { display: flex; align-items: center; gap: 8px; font-size: var(--t-label); color: var(--mute); }
+  .crumbs strong { color: var(--ink); font-weight: 600; }
+  .tabs { display: inline-flex; gap: 2px; padding: 3px; background: var(--raised); border: 1px solid var(--line); border-radius: 8px; width: fit-content; }
+  .tabs span { padding: 3px 12px; border-radius: 6px; font-size: var(--t-label); color: var(--mute); }
+  .tabs span[aria-current] { background: var(--card); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+
+  /* verdict strip */
+  .verdict { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center;
+    box-shadow: 0 1px 0 #ffffff08 inset, 0 8px 24px #00000055; }
+  .lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 3px #ca8a0426; grid-row: 1 / span 2; align-self: start; margin-top: 6px; }
+  .v-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .v-title { font-size: var(--t-cap); letter-spacing: .12em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+  .v-line { font-size: 15px; font-weight: 500; text-wrap: balance; }
+  .v-meta { grid-column: 2 / 4; font-size: var(--t-meta); color: var(--mute); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .v-meta .num { color: var(--ink); }
+  .actions { display: flex; gap: 6px; grid-row: 1 / span 2; grid-column: 3; align-self: start; }
+
+  .btn { font: 500 var(--t-label)/1 var(--sans); padding: 7px 11px; border-radius: 7px; border: 1px solid var(--line); background: var(--raised); color: var(--ink); cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: #3a4350; }
+  .btn.primary { background: var(--lime); color: #11180a; border-color: var(--lime); }
+  .btn.primary:hover { background: #b5ef52; }
+  .btn.sm { padding: 5px 9px; font-size: var(--t-meta); }
+
+  /* tags (DenseTag) */
+  .tag { display: inline-flex; align-items: center; gap: 4px; font: 600 var(--t-cap)/1 var(--sans); letter-spacing: .06em; text-transform: uppercase;
+    padding: 3px 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+  .tag.ok { color: var(--ok-ink); border-color: #16a34a66; background: #16a34a14; }
+  .tag.warn { color: var(--warn-ink); border-color: #ca8a0466; background: #ca8a0414; }
+  .tag.fail { color: var(--fail-ink); border-color: #dc262666; background: #dc262614; }
+  .tag.bound { color: var(--bound-ink); border-color: #64748b66; background: #64748b14; }
+  .tag.info { color: var(--info); border-color: #38bdf866; background: #38bdf812; }
+  .tag.lime { color: var(--lime); border-color: #a3e63566; background: #a3e63512; }
+
+  /* question grid */
+  .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
+  .q { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); display: flex; flex-direction: column; min-width: 0; }
+  .q1 { grid-column: span 7; } .q2 { grid-column: span 5; }
+  .q3 { grid-column: span 7; } .q4 { grid-column: span 5; }
+  .q-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px 8px; border-bottom: 1px solid var(--line-soft); }
+  .q-no { font: 500 var(--t-cap)/1 var(--mono); color: #11180a; background: var(--lime); border-radius: 4px; padding: 3px 5px; }
+  .q-title { font-size: var(--t-cap); letter-spacing: .1em; text-transform: uppercase; font-weight: 600; color: var(--mute); }
+  .q-ask { font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+  .q-src { margin-left: auto; font: 400 var(--t-cap)/1.3 var(--mono); color: var(--faint); text-align: right; }
+  .q-body { padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  /* Q1 — session table */
+  .fam { display: grid; grid-template-columns: 110px 1fr; gap: 0 12px; padding: 6px 0; border-top: 1px dashed var(--line-soft); }
+  .fam:first-child { border-top: 0; }
+  .fam-name { font-size: var(--t-meta); color: var(--mute); padding-top: 4px; }
+  .rows { display: flex; flex-direction: column; gap: 3px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1.4fr) 88px minmax(0, 1.6fr) auto; gap: 8px; align-items: center; font-size: var(--t-label); }
+  .row .ds { font-family: var(--mono); font-size: var(--t-meta); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .when { font: 400 var(--t-meta)/1.2 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .row .note { font-size: var(--t-meta); color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .tag { justify-self: end; }
+
+  /* Q2 — axes */
+  .headline { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .big { font: 500 28px/1 var(--mono); letter-spacing: -.02em; }
+  .big small { font-size: 15px; color: var(--mute); }
+  .delta { font-size: var(--t-meta); color: var(--ok-ink); }
+  .axis { display: grid; grid-template-columns: 78px 1fr 118px; gap: 8px; align-items: center; font-size: var(--t-meta); }
+  .axis .name { color: var(--mute); }
+  .stack { display: flex; height: 10px; border-radius: 3px; overflow: hidden; background: var(--raised); }
+  .stack i { display: block; height: 100%; }
+  .stack .s-ok { background: var(--ok); } .stack .s-bound { background: #475569; }
+  .stack .s-partial { background: var(--warn); } .stack .s-thin { background: var(--fail); }
+  .axis .counts { font-family: var(--mono); color: var(--mute); text-align: right; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: var(--t-cap); color: var(--mute); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .gaps { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
+  .gaps li { display: grid; grid-template-columns: 138px 1fr; gap: 8px; font-size: var(--t-meta); padding: 5px 8px; background: var(--raised); border-radius: 6px; }
+  .gaps .ds { font-family: var(--mono); color: var(--ink); }
+  .gaps .why { color: var(--mute); }
+  .gaps .why b { color: var(--ink); font-weight: 500; }
+
+  /* Q3 — actions */
+  .acts { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .act { display: grid; grid-template-columns: 4px 1fr; gap: 0 12px; background: var(--raised); border-radius: 8px; overflow: hidden; }
+  .act .stripe { background: var(--bound); }
+  .act.decide .stripe { background: var(--fail); } .act.explain .stripe { background: var(--warn); }
+  .act.fix .stripe { background: var(--info); } .act.wait .stripe { background: var(--bound); }
+  .act-in { padding: 9px 12px 10px 0; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .act-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .act-title { font-weight: 600; font-size: var(--t-body); }
+  .act p { margin: 0; font-size: var(--t-label); color: #b6bfca; max-width: 72ch; }
+  .act p .num { color: var(--ink); }
+  .act .btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .cmp { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 2px; }
+  .cmp div { background: var(--card); border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px 8px; }
+  .cmp .k { font-size: var(--t-cap); color: var(--mute); text-transform: uppercase; letter-spacing: .08em; }
+  .cmp .v { font: 500 var(--t-label)/1.35 var(--mono); }
+  .cmp .v.bad { color: var(--fail-ink); }
+
+  /* Q4 — downstream */
+  .prods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .prod { background: var(--raised); border-radius: 7px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px; }
+  .prod-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .prod-name { font-size: var(--t-label); font-weight: 500; }
+  .prod .fig { font: 500 var(--t-label)/1 var(--mono); font-variant-numeric: tabular-nums; }
+  .prod .fig small { color: var(--mute); font-weight: 400; }
+  .meter { height: 3px; border-radius: 2px; background: #0f1318; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--ok); }
+  .batch { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; font-size: var(--t-label); }
+  .batch .mute { color: var(--mute); font-size: var(--t-meta); grid-column: 1 / 3; }
+
+  /* closing — what changes */
+  .closing { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 14px; }
+  .panel { background: transparent; border: 1px dashed #3f5a16; border-radius: var(--r); padding: 12px 14px; }
+  .panel h2 { margin: 0 0 8px; font-size: var(--t-cap); letter-spacing: .12em; text-transform: uppercase; color: var(--lime); font-weight: 600; }
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: var(--t-label); }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  th { font-size: var(--t-cap); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); font-weight: 600; }
+  td.now { color: #b6bfca; } td.next { color: var(--ink); }
+  td .num { font-size: var(--t-meta); }
+  .moved { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: var(--t-label); }
+  .moved li { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 6px 8px; background: var(--card); border-radius: 6px; }
+  .moved .to { font-family: var(--mono); font-size: var(--t-meta); color: var(--mute); }
+  .foot { font-size: var(--t-cap); color: var(--faint); }
+
+  @media (max-width: 1100px) {
+    .q1, .q2, .q3, .q4 { grid-column: span 12; }
+    .closing { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 960px) {
+    .verdict { grid-template-columns: auto 1fr; }
+    .actions { grid-row: auto; grid-column: 2; }
+    .v-meta { grid-column: 2; }
+  }
+  @media (max-width: 640px) {
+    .verdict { grid-template-columns: auto 1fr; }
+    .actions { grid-row: auto; grid-column: 1 / 3; }
+    .v-meta { grid-column: 1 / 3; }
+    .fam { grid-template-columns: 1fr; }
+    .row { grid-template-columns: minmax(0, 1fr) auto; }
+    .row .note, .row .when { display: none; }
+    .prods, .cmp { grid-template-columns: 1fr; }
+    .gaps li { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .btn { transition: background-color .12s, border-color .12s; }
+  }
+</style>
+</head>
+<body>
+<div class="band" role="note">
+  <b>SKETCH</b>
+  <span>Massive Overview, redrawn around four questions — every figure is a live reading, 2026-09-11 17:32 UTC. Not wired; buttons are placeholders.</span>
+</div>
+
+<main class="shell">
+  <div class="crumbs"><span>PLUGIN</span><span aria-hidden="true">›</span><strong>Massive</strong></div>
+  <nav class="tabs" aria-label="Massive tabs"><span aria-current="page">Overview</span><span>Coverage</span><span>Ingest</span></nav>
+
+  <!-- Act 1 · Verdict -->
+  <section class="verdict" aria-label="Verdict">
+    <span class="lamp" aria-hidden="true"></span>
+    <div class="v-head">
+      <span class="v-title">Massive · session 2026-09-10</span>
+      <span class="tag ok">Held</span>
+      <span class="tag fail">1 decision</span>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="#q3">Review the tier change</a>
+      <button class="btn" type="button" title="Sketch — not wired">Copy for Agent</button>
+    </div>
+    <div class="v-line">Freshness is ok on all 13 feeds judged against the session. The Doctor’s two criticals trace to one cause: Research re-tiered the option universe this morning.</div>
+    <div class="v-meta">
+      <span>clean <span class="num">12/19</span> datasets</span>
+      <span>queue <span class="num">idle</span> · <span class="num">17/17</span> slots on plan</span>
+      <span>next: EOD <span class="num">22:00</span> · option-bars <span class="num">22:45</span> · Research batch <span class="num">02:30</span> UTC</span>
+    </div>
+  </section>
+
+  <!-- Act 2 · Body -->
+  <div class="grid">
+
+    <!-- Q1 -->
+    <section class="q q1" aria-labelledby="q1-t">
+      <header class="q-head">
+        <span class="q-no">1</span>
+        <div><div class="q-title">Session</div><div class="q-ask" id="q1-t">Does the store hold what 2026-09-10 should?</div></div>
+        <div class="q-src">dimensions · freshness<br>5 ms, cached</div>
+      </header>
+      <div class="q-body">
+        <div class="fam">
+          <div class="fam-name">Stocks · EOD</div>
+          <div class="rows">
+            <div class="row"><span class="ds">stock_daily</span><span class="when">09-10</span><span class="note">13,750,512 rows · next 22:00</span><span class="tag ok">Held</span></div>
+            <div class="row"><span class="ds">stock_snapshot</span><span class="when">09-10</span><span class="note">next 21:05</span><span class="tag ok">Held</span></div>
+            <div class="row"><span class="ds">stock_movers</span><span class="when">09-10</span><span class="note">next 21:10</span><span class="tag ok">Held</span></div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-name">Options · EOD</div>
+          <div class="rows">
+            <div class="row"><span class="ds">option_snapshot</span><span class="when">09-10</span><span class="note">≈187,000 contracts, as planned when taken</span><span class="tag warn">See 3</span></div>
+            <div class="row"><span class="ds">option_open_interest</span><span class="when">09-10</span><span class="note">same download as the snapshot</span><span class="tag warn">See 3</span></div>
+            <div class="row"><span class="ds">option_daily</span><span class="when">09-10</span><span class="note">563 of 585 underlyings · next 22:45</span><span class="tag ok">Held</span></div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-name">Minute bars</div>
+          <div class="rows">
+            <div class="row"><span class="ds">stock_minute</span><span class="when">09-10</span><span class="note">next 23:15</span><span class="tag ok">Held</span></div>
+            <div class="row"><span class="ds">option_minute</span><span class="when">09-10</span><span class="note">next 23:15</span><span class="tag ok">Held</span></div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-name">Next morning</div>
+          <div class="rows">
+            <div class="row"><span class="ds">short_volume</span><span class="when">09-10</span><span class="note">15,359 rows</span><span class="tag ok">Held</span></div>
+            <div class="row"><span class="ds">treasury_yield</span><span class="when">09-09</span><span class="note">vendor publishes T+1 · next 23:00</span><span class="tag bound">T+1</span></div>
+            <div class="row"><span class="ds">ratios</span><span class="when">09-09</span><span class="note">09-10 publishes next morning · due 09-12 02:00</span><span class="tag bound">T+1</span></div>
+            <div class="row"><span class="ds">short_interest</span><span class="when">08-31</span><span class="note">settlement cadence, not overdue</span><span class="tag bound">Cadence</span></div>
+          </div>
+        </div>
+        <div class="fam">
+          <div class="fam-name">Own cadence</div>
+          <div class="rows">
+            <div class="row"><span class="ds">income · balance · cash</span><span class="when">08-02</span><span class="note">filing cadence — 40 days is the normal lag</span><span class="tag bound">Filings</span></div>
+            <div class="row"><span class="ds">ticker · holiday · contract</span><span class="when">—</span><span class="note">reference — 21:30 · 22:00 · every 6 h</span><span class="tag bound">Reference</span></div>
+            <div class="row"><span class="ds">corporate_action</span><span class="when">11-09</span><span class="note">ex-dates run ahead of the calendar</span><span class="tag ok">Held</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Q2 -->
+    <section class="q q2" aria-labelledby="q2-t">
+      <header class="q-head">
+        <span class="q-no">2</span>
+        <div><div class="q-title">Subscription</div><div class="q-ask" id="q2-t">Are we holding what we pay for?</div></div>
+        <div class="q-src">dimensions · 76 verdicts<br>5 ms, cached</div>
+      </header>
+      <div class="q-body">
+        <div class="headline">
+          <span class="big num">12<small> / 19 clean</small></span>
+          <span class="delta">▲ 1 since 01:17 UTC — treasury_yield freshness partial → ok</span>
+        </div>
+        <div class="axis"><span class="name">Breadth</span>
+          <span class="stack" role="img" aria-label="Breadth: 14 ok, 3 boundary, 2 partial"><i class="s-ok" style="width:73.7%"></i><i class="s-bound" style="width:15.8%"></i><i class="s-partial" style="width:10.5%"></i></span>
+          <span class="counts">14 · 3 · 2 · 0</span></div>
+        <div class="axis"><span class="name">Depth</span>
+          <span class="stack" role="img" aria-label="Depth: 1 ok, 13 boundary, 3 partial, 2 thin"><i class="s-ok" style="width:5.3%"></i><i class="s-bound" style="width:68.4%"></i><i class="s-partial" style="width:15.8%"></i><i class="s-thin" style="width:10.5%"></i></span>
+          <span class="counts">1 · 13 · 3 · 2</span></div>
+        <div class="axis"><span class="name">Freshness</span>
+          <span class="stack" role="img" aria-label="Freshness: 13 ok, 6 boundary"><i class="s-ok" style="width:68.4%"></i><i class="s-bound" style="width:31.6%"></i></span>
+          <span class="counts">13 · 6 · 0 · 0</span></div>
+        <div class="axis"><span class="name">Continuity</span>
+          <span class="stack" role="img" aria-label="Continuity: 6 ok, 9 boundary, 3 partial, 1 thin"><i class="s-ok" style="width:31.6%"></i><i class="s-bound" style="width:47.4%"></i><i class="s-partial" style="width:15.8%"></i><i class="s-thin" style="width:5.3%"></i></span>
+          <span class="counts">6 · 9 · 3 · 1</span></div>
+        <div class="legend"><span><i style="background:var(--ok)"></i>ok</span><span><i style="background:#475569"></i>boundary — the plan’s edge, not a gap</span><span><i style="background:var(--warn)"></i>partial</span><span><i style="background:var(--fail)"></i>thin</span></div>
+        <ul class="gaps" aria-label="Datasets not clean">
+          <li><span class="ds">stock_minute · option_minute</span><span class="why"><b>Bought, not collected:</b> 18 of 26 names each; depth medians 37 d and 36 d against 365 d.</span></li>
+          <li><span class="ds">option_daily</span><span class="why">Median 732 d ≥ 730 target, but 506 of 570 at target; 4 thin days in 120.</span></li>
+          <li><span class="ds">stock_daily · short_volume</span><span class="why">Medians past target (1,828 / 732 d); 3,370 and 4,193 of 5,316 at it — late listings, pending <span class="mono">list_date</span>.</span></li>
+          <li><span class="ds">option_snapshot · OI</span><span class="why">Continuity: snapshot 1 absent + 1 thin of 27 sessions; OI 1 thin of 49.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Q3 -->
+    <section class="q q3" id="q3" aria-labelledby="q3-t">
+      <header class="q-head">
+        <span class="q-no">3</span>
+        <div><div class="q-title">Needs you</div><div class="q-ask" id="q3-t">What needs a decision or an action?</div></div>
+        <div class="q-src">doctor + dimensions<br>doctor 35 s live → cache it</div>
+      </header>
+      <div class="q-body">
+        <ol class="acts">
+          <li class="act decide"><span class="stripe" aria-hidden="true"></span>
+            <div class="act-in">
+              <div class="act-top"><span class="tag fail">Decide</span><span class="act-title">The option universe re-tiered: resident 27 → 569</span></div>
+              <p>Research’s rule counts <em>every underlying already ingested</em> as resident, and the plugin has now ingested all of them — so this morning’s refresh, the first to succeed since 09-05, promoted 542 names at once. The EOD slot snapshots resident names <em>whole</em>. Tonight at 22:00 UTC it will.</p>
+              <div class="cmp">
+                <div><div class="k">Contracts per session</div><div class="v">≈187,000 → <span class="bad">716,787</span></div></div>
+                <div><div class="k">90-session retention</div><div class="v">≈18 GB → <span class="bad">≈130 GB</span></div></div>
+              </div>
+              <div class="btns">
+                <button class="btn sm primary" type="button" title="Sketch — not wired">Keep the window · narrow the rule</button>
+                <button class="btn sm" type="button" title="Sketch — not wired">Accept whole chains</button>
+              </div>
+            </div>
+          </li>
+          <li class="act explain"><span class="stripe" aria-hidden="true"></span>
+            <div class="act-in">
+              <div class="act-top"><span class="tag warn">Explained</span><span class="act-title">Doctor: 09-10 chain 26% · open interest 26%</span></div>
+              <p>The same snapshot, <span class="num">186,686</span> of <span class="num">716,787</span> — measured against today’s tiers, not the ones it was taken under. The chain has moved on, so the session cannot be re-observed; it resolves with the decision above.</p>
+            </div>
+          </li>
+          <li class="act fix"><span class="stripe" aria-hidden="true"></span>
+            <div class="act-in">
+              <div class="act-top"><span class="tag info">Auto-fix</span><span class="act-title">2 option_snapshot jobs failed — connection lost</span>
+                <button class="btn sm" type="button" style="margin-left:auto" title="Sketch — not wired">Retry 2 jobs</button></div>
+            </div>
+          </li>
+          <li class="act wait"><span class="stripe" aria-hidden="true"></span>
+            <div class="act-in">
+              <div class="act-top"><span class="tag bound">Release</span><span class="act-title">prod platform-api still asks for vendor gaps every ~30 s</span></div>
+              <p>78 calls in 90 minutes against a query that runs at the plugin’s 60 s timeout. Fixed in platform <span class="mono">569fcf7</span>; waiting on a platform release.</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- Q4 -->
+    <section class="q q4" aria-labelledby="q4-t">
+      <header class="q-head">
+        <span class="q-no">4</span>
+        <div><div class="q-title">Downstream</div><div class="q-ask" id="q4-t">Is Research getting what it needs?</div></div>
+        <div class="q-src">inventory + orchestration<br>5 ms, cached</div>
+      </header>
+      <div class="q-body">
+        <div class="headline"><span class="big num">6<small> / 6 ready</small></span></div>
+        <div class="prods">
+          <div class="prod"><div class="prod-top"><span class="prod-name">Max Pain</span><span class="tag ok">Ready</span></div><span class="fig">570 <small>names · 48 d</small></span><span class="meter"><i style="width:97.4%"></i></span></div>
+          <div class="prod"><div class="prod-top"><span class="prod-name">PCR</span><span class="tag ok">Ready</span></div><span class="fig">570 <small>names · 279 d</small></span><span class="meter"><i style="width:97.4%"></i></span></div>
+          <div class="prod"><div class="prod-top"><span class="prod-name">ATM IV</span><span class="tag ok">Ready</span></div><span class="fig">563 <small>names · 209 d</small></span><span class="meter"><i style="width:96.2%"></i></span></div>
+          <div class="prod"><div class="prod-top"><span class="prod-name">IV Percentile</span><span class="tag ok">Ready</span></div><span class="fig">563 <small>names · 209 d</small></span><span class="meter"><i style="width:96.2%"></i></span></div>
+          <div class="prod"><div class="prod-top"><span class="prod-name">SEPA Technical</span><span class="tag ok">Ready</span></div><span class="fig">5,183 <small>/ 5,317 stock daily</small></span><span class="meter"><i style="width:97.5%"></i></span></div>
+          <div class="prod"><div class="prod-top"><span class="prod-name">SEPA Fundamental</span><span class="tag ok">Ready</span></div><span class="fig">4,467 <small>/ 5,317 income</small></span><span class="meter"><i style="width:84%"></i></span></div>
+        </div>
+        <div class="batch">
+          <span>research_trading_day</span><span class="tag ok">Success</span>
+          <span class="mute">09-11 03:33 → 03:47 UTC, 69 materializations — the first success since 09-05. Next run 02:30 UTC; its gate reads the Doctor’s EOD verdict for 09-11.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Act 3 · what changes -->
+  <div class="closing">
+    <section class="panel" aria-labelledby="chg-t">
+      <h2 id="chg-t">What changes against today’s Overview</h2>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th scope="col"></th><th scope="col">Today</th><th scope="col">This sketch</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Reads on load</th><td class="now">11 page queries, queued behind dozens of sidebar polls on six browser connections</td><td class="next">One snapshot — <span class="mono">GET /market/overview</span> composed from caches already built</td></tr>
+            <tr><th scope="row">First right frame</th><td class="now"><span class="num">24 s</span> before today’s fixes, wrong until then; now settles in <span class="num">8–15 s</span></td><td class="next">Under a second, once the Doctor is cached like the other reads (they answer in 5 ms)</td></tr>
+            <tr><th scope="row">Verdicts</th><td class="now">Recomputed in the Console per card</td><td class="next">The plugin’s own 76 verdicts, rendered, not re-judged (C-G4)</td></tr>
+            <tr><th scope="row">Lanes shown</th><td class="now">Market batch, IB Flex, Research OLAP</td><td class="next">Massive only; Research appears as a consumer in 4</td></tr>
+            <tr><th scope="row">Not arrived yet</th><td class="now">Drawn as Missing / thin</td><td class="next">Drawn as “…”, counted as pending</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel" aria-labelledby="mv-t">
+      <h2 id="mv-t">Moved off the Overview</h2>
+      <ul class="moved">
+        <li><span>Workers &amp; freshness · 21/21 dimensions</span><span class="to">→ Ingest</span></li>
+        <li><span>API reachability · 4/4</span><span class="to">→ Ingest</span></li>
+        <li><span>IB Flex lane</span><span class="to">→ IB Flex page</span></li>
+        <li><span>Research OLAP lane</span><span class="to">→ Research Engine</span></li>
+        <li><span>Stock summary cards</span><span class="to">→ folded into 1</span></li>
+      </ul>
+      <p class="foot">Readings: plugin 0.34.1 caches (dimensions, inventory, quality), <span class="mono">/market/doctor</span>, queue-dashboard, Dagster run acb451fa · retention figures from the eod-pipeline entry in schedule.yaml.</p>
+    </section>
+  </div>
+</main>
+</body></html>

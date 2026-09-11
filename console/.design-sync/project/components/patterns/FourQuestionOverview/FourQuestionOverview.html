@@ -1,0 +1,26 @@
+<!-- @dsCard group="patterns" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four-question overview</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div style="display:flex;flex-direction:column;gap:12px;max-width:1100px">
+  <section class="ops-verdict">
+    <span class="ops-lamp ops-lamp--halo is-warn" aria-hidden="true"></span>
+    <div class="ops-verdict__head"><span class="ops-verdict__title">{Plugin} · session {date}</span><span class="ops-tag is-ok">Held</span><span class="ops-tag is-fail">1 decision</span></div>
+    <div class="ops-verdict__actions"><a class="ops-btn ops-btn--primary" href="#">Review the decision</a></div>
+    <div class="ops-verdict__line">One sentence: does it hold what it should, and what is waiting on you.</div>
+    <div class="ops-verdict__meta"><span>evidence · evidence · next scheduled run</span></div>
+  </section>
+  <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+    <div class="ops-section"><div class="ops-section__head"><span class="ops-section__no">1</span><div><div class="ops-section__title">Session</div><div class="ops-section__ask">Does it hold what this session should?</div></div><span class="ops-src">freshness verdicts<br>cached</span></div>
+      <div class="ops-section__body"><div class="ops-row"><span class="ds">feed</span><span class="when">date</span><span class="note">rows · next run</span><span class="ops-tag is-ok">Held</span></div><div class="ops-row"><span class="ds">next-morning feed</span><span class="when">date</span><span class="note">publishes T+1</span><span class="ops-tag is-boundary">T+1</span></div></div></div>
+    <div class="ops-section"><div class="ops-section__head"><span class="ops-section__no">2</span><div><div class="ops-section__title">Subscription</div><div class="ops-section__ask">Are we holding what we pay for?</div></div><span class="ops-src">axis verdicts<br>cached</span></div>
+      <div class="ops-section__body"><div class="ops-axis"><span class="ops-axis__name">Breadth</span><span class="ops-axis__stack"><i class="s-ok" style="width:74%"></i><i class="s-boundary" style="width:16%"></i><i class="s-warn" style="width:10%"></i></span><span class="ops-axis__counts">14 · 3 · 2 · 0</span></div></div></div>
+    <div class="ops-section"><div class="ops-section__head"><span class="ops-section__no">3</span><div><div class="ops-section__title">Needs you</div><div class="ops-section__ask">What needs a decision or an action?</div></div><span class="ops-src">doctor findings<br>cached</span></div>
+      <div class="ops-section__body"><div class="ops-action is-decide"><span class="ops-action__stripe"></span><div class="ops-action__in"><div class="ops-action__top"><span class="ops-tag is-fail">Decide</span><span class="ops-action__title">cause · stake · action</span></div></div></div></div></div>
+    <div class="ops-section"><div class="ops-section__head"><span class="ops-section__no">4</span><div><div class="ops-section__title">Downstream</div><div class="ops-section__ask">Are consumers getting what they need?</div></div><span class="ops-src">consumer readiness<br>cached</span></div>
+      <div class="ops-section__body"><div style="display:flex;gap:10px;align-items:center"><span class="ops-ring" style="--ok:100" data-label="6/6"></span><span style="font-size:11px;color:var(--ops-ink-mute)">products ready · last batch success</span></div></div></div>
+  </div>
+</div>
+<p class="ds-note">The Overview of any data-source plugin. Numbered because the order is the reading order. Everything answered from one snapshot read; process signals (workers, API reachability) belong on the Ingest tab, sibling feeds on their own pages.</p>
+</body></html>

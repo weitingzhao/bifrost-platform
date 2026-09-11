@@ -1,0 +1,44 @@
+<!-- @dsCard group="composition" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verdict strip</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-grid ds-col">
+  <div class="ds-cell"><div class="ds-label">Act 1 · Verdict — holds, one decision waiting</div>
+    <section class="ops-verdict" aria-label="Verdict">
+      <span class="ops-lamp ops-lamp--halo is-warn" aria-hidden="true"></span>
+      <div class="ops-verdict__head"><span class="ops-verdict__title">Massive · session 2026-09-10</span>
+        <span class="ops-tag is-ok">Held</span><span class="ops-tag is-fail">1 decision</span></div>
+      <div class="ops-verdict__actions"><a class="ops-btn ops-btn--primary" href="#">Review the decision</a><a class="ops-btn" href="#">Copy for Agent</a></div>
+      <div class="ops-verdict__line">Freshness is ok on all 13 feeds judged against the session. The two criticals trace to one cause.</div>
+      <div class="ops-verdict__meta"><span>clean <span class="num">12/19</span></span><span>queue <span class="num">idle</span> · <span class="num">17/17</span> slots on plan</span><span>next: EOD <span class="num">22:00</span> UTC</span></div>
+    </section>
+    <p class="ds-note">Always visible, never collapsed. The line states the conclusion in words; the meta line carries the evidence; the one primary action goes top-right in the accent.</p></div>
+
+  <div class="ds-cell"><div class="ds-label">Healthy</div>
+    <section class="ops-verdict">
+      <span class="ops-lamp ops-lamp--halo is-ok" aria-hidden="true"></span>
+      <div class="ops-verdict__head"><span class="ops-verdict__title">IB Flex · day-end</span><span class="ops-tag is-ok">Healthy</span></div>
+      <div class="ops-verdict__actions"><a class="ops-btn" href="#">Copy for Agent</a></div>
+      <div class="ops-verdict__line">Every kind landed; next planned run Fri 06:30 ET.</div>
+      <div class="ops-verdict__meta"><span>flex-trades <span class="num">37</span> rows</span><span>last success <span class="num">10:30</span> UTC</span></div>
+    </section></div>
+
+  <div class="ds-cell"><div class="ds-label">Failing</div>
+    <section class="ops-verdict">
+      <span class="ops-lamp ops-lamp--halo is-fail" aria-hidden="true"></span>
+      <div class="ops-verdict__head"><span class="ops-verdict__title">Platform release · STG</span><span class="ops-tag is-fail">Failed</span></div>
+      <div class="ops-verdict__actions"><a class="ops-btn ops-btn--primary" href="#">Open the failing step</a></div>
+      <div class="ops-verdict__line">build-platform-console failed in 20 s — the cluster's Dockerfile ConfigMap predates the fix in git.</div>
+      <div class="ops-verdict__meta"><span>api image <span class="num">built</span></span><span>rollout <span class="num">not run</span> — STG unchanged</span></div>
+    </section></div>
+
+  <div class="ds-cell"><div class="ds-label">Compact — one row</div>
+    <section class="ops-verdict ops-verdict--compact">
+      <span class="ops-lamp is-ok" aria-hidden="true"></span>
+      <span class="ops-verdict__title">Research batch</span>
+      <span class="ops-verdict__line">research_trading_day succeeded 03:47 UTC · 69 materializations</span>
+      <div class="ops-verdict__actions"><span class="ops-tag is-ok">Success</span></div>
+    </section></div>
+</div>
+</body></html>

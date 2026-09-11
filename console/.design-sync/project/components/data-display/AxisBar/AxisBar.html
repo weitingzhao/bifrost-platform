@@ -1,0 +1,15 @@
+<!-- @dsCard group="data-display" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Axis bar</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-cell" style="max-width:560px;display:flex;flex-direction:column;gap:8px">
+  <div class="ds-label">Four axes over 19 datasets — 76 verdicts the service computed</div>
+  <div class="ops-axis"><span class="ops-axis__name">Breadth</span><span class="ops-axis__stack"><i class="s-ok" style="width:73.7%"></i><i class="s-boundary" style="width:15.8%"></i><i class="s-warn" style="width:10.5%"></i></span><span class="ops-axis__counts">14 · 3 · 2 · 0</span></div>
+  <div class="ops-axis"><span class="ops-axis__name">Depth</span><span class="ops-axis__stack"><i class="s-ok" style="width:5.3%"></i><i class="s-boundary" style="width:68.4%"></i><i class="s-warn" style="width:15.8%"></i><i class="s-fail" style="width:10.5%"></i></span><span class="ops-axis__counts">1 · 13 · 3 · 2</span></div>
+  <div class="ops-axis"><span class="ops-axis__name">Freshness</span><span class="ops-axis__stack"><i class="s-ok" style="width:68.4%"></i><i class="s-boundary" style="width:31.6%"></i></span><span class="ops-axis__counts">13 · 6 · 0 · 0</span></div>
+  <div class="ops-axis"><span class="ops-axis__name">Continuity</span><span class="ops-axis__stack"><i class="s-ok" style="width:31.6%"></i><i class="s-boundary" style="width:47.4%"></i><i class="s-warn" style="width:15.8%"></i><i class="s-fail" style="width:5.3%"></i></span><span class="ops-axis__counts">6 · 9 · 3 · 1</span></div>
+  <div class="ops-legend"><span><i style="background:var(--ops-ok)"></i>ok</span><span><i style="background:var(--ops-boundary)"></i>boundary — the plan's edge, not a gap</span><span><i style="background:var(--ops-warn)"></i>partial</span><span><i style="background:var(--ops-fail)"></i>thin</span></div>
+</div>
+<p class="ds-note">Counts read ok · boundary · partial · thin. Boundary is slate, never red: it marks what the subscription cannot buy, not what was missed.</p>
+</body></html>

@@ -1,0 +1,19 @@
+<!-- @dsCard group="status" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>State tag vocabulary</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-grid">
+  <div class="ds-cell"><div class="ds-label">It holds / it ran</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="ops-tag is-ok">Held</span><span class="ops-tag is-ok">Session OK</span><span class="ops-tag is-ok">Ready</span><span class="ops-tag is-ok">Success</span><span class="ops-tag is-ok">Healthy</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Not a fault — its own clock or the plan's edge</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="ops-tag is-boundary">T+1</span><span class="ops-tag is-boundary">Cadence</span><span class="ops-tag is-boundary">Filings</span><span class="ops-tag is-boundary">Reference</span><span class="ops-tag is-boundary">Boundary</span><span class="ops-tag is-boundary">Due 22:00</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Not judged yet / cannot be judged</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="ops-tag is-pending">…</span><span class="ops-tag is-pending">Pending 3</span><span class="ops-tag is-unknown">Unknown</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Needs attention</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="ops-tag is-warn">Thin</span><span class="ops-tag is-warn">Degraded</span><span class="ops-tag is-warn">See 3</span><span class="ops-tag is-fail">Missing</span><span class="ops-tag is-fail">Failed</span><span class="ops-tag is-fail">Stale</span></div></div>
+  <div class="ds-cell"><div class="ds-label">Action kinds (Needs you)</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="ops-tag is-fail">Decide</span><span class="ops-tag is-warn">Explained</span><span class="ops-tag is-info">Auto-fix</span><span class="ops-tag is-boundary">Release</span><span class="ops-tag is-boundary">Wait</span></div></div>
+</div>
+<p class="ds-note">A tag names a state the service computed; the page never invents one. "…" means the read has not answered yet — it is never drawn as Missing. A feed that publishes the next morning is T+1, not late.</p>
+</body></html>

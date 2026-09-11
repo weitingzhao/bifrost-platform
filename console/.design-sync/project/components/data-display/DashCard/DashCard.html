@@ -1,0 +1,25 @@
+<!-- @dsCard group="data-display" -->
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dash card</title><link rel="stylesheet" href="../../../styles.css"></head>
+<body class="ds-card">
+<div class="ds-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+  <div class="ds-cell"><div class="ds-label">Judged — holds the session</div>
+    <div class="ops-dash-card"><div class="ops-dash-card__top"><span class="ops-dash-card__title">Stock daily</span><span class="ops-tag is-ok">Session OK</span></div>
+      <div class="ops-dash-card__value"><b>13,750,512</b><span>rows</span></div><div class="ops-meter"><i style="width:100%"></i></div>
+      <p class="ops-dash-card__cap">newest 2026-09-10</p></div></div>
+  <div class="ds-cell"><div class="ds-label">Read not answered yet</div>
+    <div class="ops-dash-card"><div class="ops-dash-card__top"><span class="ops-dash-card__title">Option contracts</span><span class="ops-tag is-pending">…</span></div>
+      <div class="ops-dash-card__value"><b style="color:var(--ops-ink-faint)">—</b><span>underlyings</span></div><div class="ops-meter is-none"></div>
+      <p class="ops-dash-card__cap">waiting for the session</p></div></div>
+  <div class="ds-cell"><div class="ds-label">No declared denominator</div>
+    <div class="ops-dash-card"><div class="ops-dash-card__top"><span class="ops-dash-card__title">Snapshot</span><span class="ops-tag is-boundary">No scope</span></div>
+      <div class="ops-dash-card__value"><b>570</b><span>symbols</span></div><div class="ops-meter is-none"></div>
+      <p class="ops-dash-card__cap">no contract declares a scope — no bar</p></div></div>
+  <div class="ds-cell"><div class="ds-label">Genuinely short</div>
+    <div class="ops-dash-card"><div class="ops-dash-card__top"><span class="ops-dash-card__title">Stock minute</span><span class="ops-tag is-warn">Thin</span></div>
+      <div class="ops-dash-card__value"><b>18</b><span>/ 26 names</span></div><div class="ops-meter is-warn"><i style="width:69%"></i></div>
+      <p class="ops-dash-card__cap">depth median 37 d of 365</p></div></div>
+</div>
+<p class="ds-note">A bar is drawn only against a denominator the service declares. A bar divided by its own count always reads 100% — draw nothing instead (hatched track). A value that has not arrived is "—" with "…", never a zero.</p>
+</body></html>
