@@ -215,6 +215,7 @@ export function ConsoleSidebar({
         isLoading: flexQueryProbe.isLoading,
         probeReach: flexQueryProbe.probeReach,
         summary: flexQueryProbe.summary,
+        batch: flexQueryProbe.batch,
       },
       researchEngine: {
         isLoading: researchEngineProbe.isLoading,
@@ -248,6 +249,7 @@ export function ConsoleSidebar({
       flexQueryProbe.isLoading,
       flexQueryProbe.probeReach,
       flexQueryProbe.summary,
+      flexQueryProbe.batch,
       researchEngineProbe.isLoading,
       researchEngineProbe.probeReach,
       researchEngineProbe.summary,

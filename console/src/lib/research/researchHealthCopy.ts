@@ -260,8 +260,15 @@ export function buildResearchVerdictCopy(input: ResearchHealthCopyInput): Resear
   }
 }
 
+/**
+ * A husbandry lane verdict → nav lamp. Takes the raw lane string so each lane's
+ * own plugin icon can read it directly, and Massive and IB Flex then answer the
+ * same question — one lamp meaning "batch adherence" while the other means only
+ * "the HTTP port answered" is how a green Flex icon survived three days of
+ * failing Flex ingests (2026-09-08 .. 09-10).
+ */
 export function layerVerdictToLamp(
-  verdict: HealthLayerVerdict,
+  verdict: HealthLayerVerdict | string | null | undefined,
 ): 'ok' | 'degraded' | 'fail' | 'unknown' {
-  return toLamp(verdict)
+  return toLamp(norm(verdict))
 }

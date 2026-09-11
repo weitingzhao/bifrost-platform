@@ -74,9 +74,9 @@ export const RESEARCH_SIGNAL_OWNERS: Record<
   },
   vrp: {
     table: 'features.stock_signal_vrp_daily',
-    schedule: 'research_vrp_schedule',
-    job: 'research_vrp_job',
-    note: 'research aux schedule',
+    schedule: 'research_trading_day_schedule',
+    job: 'research_trading_day',
+    note: 'engines.vrp is inside trading_day, after engines.volatility — the 23:10 UTC aux schedule was retired',
   },
   iv_reconstructed: {
     table: 'features.option_iv_reconstructed_daily',
@@ -428,7 +428,6 @@ export function buildResearchEngineAgentPack(snap: ResearchEngineAgentPackSnapsh
       [
         'research_trading_day_schedule',
         'research_canonical_pnl_schedule',
-        'research_vrp_schedule',
         'research_settlement_schedule',
       ].includes(s.name),
     )

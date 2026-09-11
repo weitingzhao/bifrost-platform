@@ -55,6 +55,12 @@ export type HusbandryLane = {
   owner: string
   groundTruth: string
   schedulerTarget: 'dagster' | 'cron_until_migrated' | 'resident'
+  /**
+   * Sidebar icon this lane paints. Each lane paints its OWN plugin's icon with
+   * its OWN ground truth, so neighbouring lamps are comparable; no lane paints
+   * the Research icon (that is research_olap's alone — see RESEARCH_HEALTH_LAYERS).
+   */
+  navIcon: 'market-data-manage' | 'flex-query-manage' | 'research-engine'
   mustNot: string
 }
 
@@ -66,6 +72,7 @@ export const HUSBANDRY_LANES: readonly HusbandryLane[] = [
     groundTruth:
       'ops_jobs.ingest_freshness + queue-dashboard.husbandry + /market/readiness/summary (void ≠ fail)',
     schedulerTarget: 'dagster',
+    navIcon: 'market-data-manage',
     mustNot: 'Treat CronJob Complete as healthy; rewrite Polygon workers into Dagster',
   },
   {
@@ -75,7 +82,9 @@ export const HUSBANDRY_LANES: readonly HusbandryLane[] = [
     groundTruth:
       'ops_jobs.flex_ingest_freshness + /flex/coverage/* + config source=secret',
     schedulerTarget: 'dagster',
-    mustNot: 'Enqueue without Flex tokens (fail-closed); call IB Flex HTTPS from Dagster',
+    navIcon: 'flex-query-manage',
+    mustNot:
+      'Enqueue without Flex tokens (fail-closed); call IB Flex HTTPS from Dagster; paint the Flex nav icon from HTTP reachability alone (it stayed green through the 2026-09-08..09-10 [1003] outage)',
   },
   {
     id: 'research_olap',
@@ -84,6 +93,7 @@ export const HUSBANDRY_LANES: readonly HusbandryLane[] = [
     groundTruth:
       'Product asof (signal-health) + Batch (orchestration/status multi-schedule + trading_day SLA) — Feedstock is separate lanes; nav lamp = research_olap only',
     schedulerTarget: 'dagster',
+    navIcon: 'research-engine',
     mustNot:
       'Dual-write same features.* day via Cron and Dagster; put IB Client in the asset graph; paint Research nav red from Market missed / Flex source=none',
   },

@@ -9,7 +9,12 @@ function baseInput(over: Partial<SidebarNavProbeInput> = {}): SidebarNavProbeInp
     ibGateway: { isLoading: false, probeReach: 'ok', summary: 'ok' },
     marketQueue: { active: false, lamp: 'ok', verdict: 'idle', pending: 0, detail: '' },
     marketData: { isLoading: false, probeReach: 'ok', summary: 'ok' },
-    flexQuery: { isLoading: false, probeReach: 'ok', summary: 'ok' },
+    flexQuery: {
+      isLoading: false,
+      probeReach: 'ok',
+      summary: 'ok',
+      batch: { verdict: 'healthy', detail: 'source=secret · freshness ok', lamp: 'ok' },
+    },
     researchEngine: { isLoading: false, probeReach: 'ok', summary: 'ok' },
     codeHealth: {
       isLoading: false,

@@ -11,7 +11,13 @@ export type SidebarNavProbeInput = {
   ibGateway: { isLoading: boolean; probeReach: Signal; summary: string }
   marketQueue: { active: boolean; lamp: Signal; verdict: string; pending: number; detail: string }
   marketData: { isLoading: boolean; probeReach: Signal; summary: string }
-  flexQuery: { isLoading: boolean; probeReach: Signal; summary: string }
+  flexQuery: {
+    isLoading: boolean
+    probeReach: Signal
+    summary: string
+    /** `flex_batch` husbandry lane — did the day-end ingest land. */
+    batch: { verdict: string | undefined; detail: string | undefined; lamp: Signal }
+  }
   researchEngine: { isLoading: boolean; probeReach: Signal; summary: string }
   /** Planning lamp from codeHealthLens — not Observability fleet rollup. */
   codeHealth: { isLoading: boolean; signal: Signal; title: string }
@@ -73,6 +79,18 @@ export function resolveSidebarNavSignal(
     }
   }
   if (itemId === 'flex-query-manage') {
+    // Same class of signal Massive's lamp carries above: the lane says whether
+    // the day-end ingest landed. Reachability alone kept this icon green through
+    // the 2026-09-08..09-10 `[1003]` outage, while the Massive icon next to it
+    // went red on batch adherence — two lamps answering two different questions.
+    const laneVerdict = input.flexQuery.batch.verdict
+    const laneSpeaks = laneVerdict != null && laneVerdict !== '' && laneVerdict !== 'unknown'
+    if (laneSpeaks && input.flexQuery.batch.lamp !== 'ok') {
+      return {
+        signal: input.flexQuery.batch.lamp,
+        title: `IB Flex batch: ${laneVerdict} · ${input.flexQuery.batch.detail ?? input.flexQuery.summary}`,
+      }
+    }
     return {
       signal: input.flexQuery.isLoading ? 'unknown' : input.flexQuery.probeReach,
       title: `IB Flex: ${input.flexQuery.summary}`,
