@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -362,43 +361,21 @@ func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 		return nil
 	}
 
-	gapCount := 0
-	// Prefer detail rows so zero-close SPACs are not counted as actionable gaps
-	// (matches Ops Console Readiness; works before Plugin image excludes them).
-	if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap?detail=true&limit=500"); err == nil {
-		var gap struct {
-			GapCount int `json:"gap_count"`
-			Gaps     []struct {
-				SnapshotClose *float64 `json:"snapshot_close"`
-			} `json:"gaps"`
-		}
-		if json.Unmarshal(gapBody, &gap) == nil {
-			if len(gap.Gaps) > 0 && len(gap.Gaps) >= gap.GapCount {
-				actionable := 0
-				for _, row := range gap.Gaps {
-					if row.SnapshotClose != nil && math.Abs(*row.SnapshotClose) >= 1e-9 {
-						actionable++
-					}
-				}
-				gapCount = actionable
-			} else {
-				gapCount = gap.GapCount
-			}
-		}
-	} else if gapBody, err := s.fetchPluginJSON(ctx, "/market/readiness/vendor-gap"); err == nil {
-		var gap struct {
-			GapCount int `json:"gap_count"`
-		}
-		if json.Unmarshal(gapBody, &gap) == nil {
-			gapCount = gap.GapCount
-		}
-	}
-
+	// Vendor gap is deliberately not measured here. It compares every universe
+	// symbol's snapshot close with its latest stock_daily bar — a DISTINCT ON over
+	// ~5,300 symbols in a table the 5-year backfill grew to 13.7M rows — and it
+	// now runs right at the plugin's 60 s statement_timeout: over 90 minutes on
+	// 2026-09-11 this instance's calls came back 61 x HTTP 500 and 45 x 200. The
+	// probe, polled every 30 s by every Console page, spent ~60 of its 61 s on it
+	// either way, and a failed call left the count at 0 — a count not taken. The
+	// detail variant never arrived: ProxyGet escapes the "?" into the path, so all
+	// 107 of those calls were 404s.
+	// A liveness probe is the wrong home for a whole-market comparison; Coverage →
+	// Readiness asks the plugin for it directly.
 	return &ReadinessRollup{
 		Universe:        universe,
 		SnapshotRows:    cov.RowCount,
 		SnapshotCovered: covered,
-		VendorGapCount:  gapCount,
 		AsOf:            asOf,
 		Source:          "plugin",
 	}
@@ -462,7 +439,7 @@ func parseReadinessRollupOutput(out string) *ReadinessRollup {
 		Universe:        universe,
 		SnapshotRows:    covered,
 		SnapshotCovered: covered,
-		VendorGapCount:  gapCount,
+		VendorGapCount:  &gapCount,
 		AsOf:            asOf,
 		Source:          "legacy",
 	}

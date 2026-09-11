@@ -194,7 +194,9 @@ export function WorkersFreshnessPanel({
             </span>
             <Meter
               fillPct={snapPct}
-              toneClass={readiness.vendor_gap_count > 0 ? toneByLevel('thin') : toneByLevel('ready')}
+              toneClass={
+                (readiness.vendor_gap_count ?? 0) > 0 ? toneByLevel('thin') : toneByLevel('ready')
+              }
               label={`snapshot ${readiness.snapshot_covered}/${readiness.snapshot_rows}`}
             />
             <FlashValue

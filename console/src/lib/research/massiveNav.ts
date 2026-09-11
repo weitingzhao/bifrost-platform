@@ -60,7 +60,10 @@ export function formatReadinessRollupLine(
   const universe = rollup.universe
   const gap = rollup.vendor_gap_count
   const asOf = rollup.as_of ? formatShortAsOf(rollup.as_of) : '—'
-  return `snap ${covered}/${universe} · vendor_gap ${gap} · as_of ${asOf}`
+  // Omitted when unmeasured: the status probe no longer counts vendor gaps, and
+  // the "vendor_gap 0" it printed after a timed-out call was not a count.
+  const gapPart = gap != null ? ` · vendor_gap ${gap}` : ''
+  return `snap ${covered}/${universe}${gapPart} · as_of ${asOf}`
 }
 
 function formatShortAsOf(iso: string): string {

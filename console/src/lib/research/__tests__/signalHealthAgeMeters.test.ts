@@ -75,4 +75,18 @@ describe('massiveNav', () => {
     expect(line).toMatch(/vendor_gap 3/)
     expect(line).not.toMatch(/ops_dagster/)
   })
+
+  it('leaves vendor_gap out when the probe did not measure it', () => {
+    // platform-api's status probe stopped asking for vendor gaps (the endpoint runs
+    // at its 60 s statement_timeout) and reports null; a timed-out call printed 0.
+    const line = formatReadinessRollupLine({
+      universe: 5317,
+      snapshot_rows: 13178,
+      snapshot_covered: 5307,
+      vendor_gap_count: null,
+      as_of: '2026-09-10',
+    })
+    expect(line).toMatch(/snap 5307\/5317/)
+    expect(line).not.toMatch(/vendor_gap/)
+  })
 })

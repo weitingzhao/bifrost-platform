@@ -35,13 +35,15 @@ type FreshnessInfo struct {
 }
 
 // ReadinessRollup is a Plugin-native quality KPI from
-// /market/readiness/snapshot-coverage + /market/readiness/vendor-gap.
+// /market/readiness/snapshot-coverage (vendor gap is not part of this probe).
 // Null/omitted when the Plugin probe fails — Console hides the KPI.
 type ReadinessRollup struct {
 	Universe       int    `json:"universe"`
 	SnapshotRows   int    `json:"snapshot_rows"`
 	SnapshotCovered int   `json:"snapshot_covered"`
-	VendorGapCount int    `json:"vendor_gap_count"`
+	// VendorGapCount is null: this probe does not measure vendor gaps (see
+	// probeReadinessRollup). A timed-out call used to read 0 — a count not taken.
+	VendorGapCount *int   `json:"vendor_gap_count"`
 	AsOf           string `json:"as_of"`
 	Source         string `json:"source"` // "plugin"
 }

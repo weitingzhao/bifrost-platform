@@ -215,7 +215,7 @@ func TestParseReadinessRollupOutput(t *testing.T) {
 	if r == nil {
 		t.Fatal("expected rollup")
 	}
-	if r.Universe != 1200 || r.SnapshotCovered != 980 || r.VendorGapCount != 118 || r.AsOf != "2026-08-01" {
+	if r.Universe != 1200 || r.SnapshotCovered != 980 || r.VendorGapCount == nil || *r.VendorGapCount != 118 || r.AsOf != "2026-08-01" {
 		t.Fatalf("unexpected rollup: %+v", r)
 	}
 	if parseReadinessRollupOutput("") != nil {
@@ -245,6 +245,7 @@ func TestStatusIncludesReadinessRollup(t *testing.T) {
 	optionsSrv := httptest.NewServer(optionsMux)
 	defer optionsSrv.Close()
 
+	gap := 118
 	svc := &Service{
 		cfg: Config{
 			StocksHealthURL:  stocksSrv.URL + "/health",
@@ -263,12 +264,12 @@ func TestStatusIncludesReadinessRollup(t *testing.T) {
 		readinessProbe: func(ctx context.Context) *ReadinessRollup {
 			return &ReadinessRollup{
 				Universe: 5348, SnapshotRows: 13131, SnapshotCovered: 5307,
-				VendorGapCount: 118, AsOf: "2026-08-19", Source: "plugin",
+				VendorGapCount: &gap, AsOf: "2026-08-19", Source: "plugin",
 			}
 		},
 	}
 	resp := svc.Status(context.Background())
-	if resp.ReadinessRollup == nil || resp.ReadinessRollup.Universe != 5348 || resp.ReadinessRollup.VendorGapCount != 118 {
+	if resp.ReadinessRollup == nil || resp.ReadinessRollup.Universe != 5348 || resp.ReadinessRollup.VendorGapCount == nil || *resp.ReadinessRollup.VendorGapCount != 118 {
 		t.Fatalf("readiness_rollup=%+v", resp.ReadinessRollup)
 	}
 	if resp.Reachability != probe.ReachOK {
@@ -286,15 +287,13 @@ func TestProbeReadinessRollupFromPluginAPI(t *testing.T) {
 			},
 		})
 	})
+	// The liveness probe must never ask for vendor gaps: on 2026-09-11 that
+	// endpoint ran at the plugin's 60 s statement_timeout, and this probe —
+	// polled every 30 s by every Console page — spent ~60 of its 61 s on it.
+	vendorGapCalls := 0
 	mux.HandleFunc("/market/readiness/vendor-gap", func(w http.ResponseWriter, r *http.Request) {
-		// Simulate current Plugin: all "gaps" are zero-close noise.
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"ok": true, "gap_count": 2, "session_date": "2026-08-19",
-			"gaps": []map[string]any{
-				{"symbol": "AACO", "snapshot_close": 0.0, "reason": "vendor_gap"},
-				{"symbol": "AACP", "snapshot_close": 0.0, "reason": "vendor_gap"},
-			},
-		})
+		vendorGapCalls++
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -307,10 +306,16 @@ func TestProbeReadinessRollupFromPluginAPI(t *testing.T) {
 	if r == nil {
 		t.Fatal("expected rollup")
 	}
-	if r.Universe != 5348 || r.SnapshotRows != 13131 || r.SnapshotCovered != 5307 || r.VendorGapCount != 0 {
-		t.Fatalf("unexpected rollup (zero-close should not count): %+v", r)
+	if r.Universe != 5348 || r.SnapshotRows != 13131 || r.SnapshotCovered != 5307 {
+		t.Fatalf("unexpected rollup: %+v", r)
 	}
 	if r.Source != "plugin" || r.AsOf != "2026-08-19" {
 		t.Fatalf("source/as_of: %+v", r)
+	}
+	if vendorGapCalls != 0 {
+		t.Fatalf("liveness probe called /market/readiness/vendor-gap %d time(s)", vendorGapCalls)
+	}
+	if r.VendorGapCount != nil {
+		t.Fatalf("vendor_gap_count=%d, want null — this probe does not measure it", *r.VendorGapCount)
 	}
 }

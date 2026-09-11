@@ -214,12 +214,13 @@ export interface MarketDataFreshnessInfo {
   verdict: 'ok' | 'stale' | 'unknown' | string
 }
 
-/** Plugin-native quality KPI from snapshot-coverage + vendor-gap. */
+/** Plugin-native quality KPI from snapshot-coverage. */
 export interface MarketDataReadinessRollup {
   universe: number
   snapshot_rows: number
   snapshot_covered: number
-  vendor_gap_count: number
+  /** Null: platform-api's status probe no longer measures vendor gaps (a timed-out call read as 0). */
+  vendor_gap_count: number | null
   as_of: string
   source?: string
 }
