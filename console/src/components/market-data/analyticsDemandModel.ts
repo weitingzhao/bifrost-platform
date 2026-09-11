@@ -28,6 +28,8 @@ export type AnalyticsDemandRow = {
   outputSymbols: number | null
   outputLatest: string | null
   coverPct: number | null
+  /** A read this row needs has not answered yet — show that, not a level. */
+  waiting: boolean
 }
 
 export type FeedMeter = {
@@ -43,12 +45,30 @@ export type AnalyticsDemandView = {
   thin: number
   blocked: number
   unknown: number
+  /** Rows still waiting for one of their reads (counted inside `unknown` too). */
+  waiting: number
   /** The inventory's first pass has not finished — counts are absent, not zero. */
   pending: boolean
   rows: AnalyticsDemandRow[]
   optionUniverse: number | null
   optionFeed: FeedMeter[]
   equityFeed: FeedMeter[]
+}
+
+/** The page's reads that feed these rows: `true` while one has not answered. */
+export type DemandAwaiting = {
+  inventory?: boolean
+  dimensions?: boolean
+  financials?: boolean
+  freshness?: boolean
+}
+
+/** Which read each input's count comes from — so "not arrived" is not read as "absent". */
+const INPUT_SOURCE: Record<string, keyof DemandAwaiting> = {
+  oi: 'inventory',
+  snapshot: 'inventory',
+  stock: 'dimensions',
+  financials: 'financials',
 }
 
 function findFresh(
@@ -108,9 +128,22 @@ function inputOf(
   }
 }
 
-function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean }): DemandLevel {
+function scoreInputs(
+  inputs: DemandInputStatus[],
+  extras?: { thinIf?: boolean; awaiting?: DemandAwaiting },
+): DemandLevel | 'waiting' {
   const req = inputs.filter(i => i.required)
   if (req.length === 0) return 'unknown'
+  const awaiting = extras?.awaiting ?? {}
+  // A count whose read has not answered is not a count yet. Scoring it anyway is
+  // how a hard reload read `thin 5 · 0/6` at 14 s and `ready 4 · thin 1` at 24 s
+  // on the same data (2026-09-11): the rows were judged while the stock and
+  // freshness reads were still in flight. Nothing is scored until they are in.
+  const arriving = req.some(i => {
+    const source = INPUT_SOURCE[i.key]
+    return i.count == null && source != null && awaiting[source] === true
+  })
+  if (arriving) return 'waiting'
   // Unmeasured and measured-as-zero are different facts and were scored as one.
   // `null` means the source has not reported — the four-axis payload takes about
   // 220 seconds on a cold cache — and reading that as "zero rows collected"
@@ -120,9 +153,14 @@ function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean })
   // payload and that payload was still on its first pass.
   const unmeasured = req.filter(i => i.count == null)
   if (unmeasured.length === req.length) return 'unknown'
-  const empty = req.filter(i => (i.count ?? 0) <= 0)
+  // Only a measured zero is empty. `?? 0` here read an unmeasured input as a
+  // zero — the conflation the comment above retires — whenever a row had one
+  // input of each kind.
+  const empty = req.filter(i => i.count != null && i.count <= 0)
   if (empty.length === req.length) return 'blocked'
   if (empty.length > 0) return 'thin'
+  // `ready` and `stale` are both freshness claims; they wait for that read too.
+  if (awaiting.freshness === true) return 'waiting'
   const stale = req.some(i => {
     const v = (i.freshnessVerdict ?? '').toLowerCase()
     return v === 'stale' || v === 'fail'
@@ -137,7 +175,7 @@ function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean })
 }
 
 function detailFor(
-  level: DemandLevel | 'pending',
+  level: DemandLevel | 'pending' | 'waiting',
   inputs: DemandInputStatus[],
   outputSymbols: number | null,
 ): string {
@@ -151,6 +189,7 @@ function detailFor(
       ? ` · Research wrote ${outputSymbols} symbols`
       : ' · Research output not required for this verdict'
   if (level === 'pending') return `Inventory is still being counted — ${bits.join(' · ')}`
+  if (level === 'waiting') return `Still loading — not judged yet · ${bits.join(' · ')}`
   if (level === 'blocked') return `Missing Massive inputs — ${bits.join(' · ')}${out}`
   if (level === 'thin') return `Inputs present but thin or stale — ${bits.join(' · ')}${out}`
   if (level === 'ready') return `Inputs can feed Research — ${bits.join(' · ')}${out}`
@@ -165,6 +204,8 @@ export function buildAnalyticsDemand(args: {
   denominators?: CoverageDimensions['denominators'] | null
   /** The same read, whole: per-dataset breadth already scoped to its own denominator. */
   dimensions?: CoverageDimensions | null
+  /** Reads that have not answered yet — see scoreInputs. */
+  awaiting?: DemandAwaiting
 }): AnalyticsDemandView {
   const fresh = args.freshness ?? []
   const inv = args.inventory
@@ -302,7 +343,11 @@ export function buildAnalyticsDemand(args: {
   // "zero rows collected" and mark all six products blocked. Absent is unknown.
   const pending = isComputing(inv) && stock == null && opt == null
   const rows: AnalyticsDemandRow[] = defs.map(d => {
-    const level = pending ? 'unknown' : scoreInputs(d.inputs, { thinIf: d.thinIf })
+    const scored = pending
+      ? 'unknown'
+      : scoreInputs(d.inputs, { thinIf: d.thinIf, awaiting: args.awaiting })
+    const waiting = scored === 'waiting'
+    const level: DemandLevel = waiting ? 'unknown' : scored
     const outputSymbols = d.output?.symbols ?? null
     const primaryIn = d.inputs[0]?.count ?? null
     return {
@@ -313,10 +358,11 @@ export function buildAnalyticsDemand(args: {
       jump: d.jump,
       inputs: d.inputs,
       level,
-      detail: detailFor(pending ? 'pending' : level, d.inputs, outputSymbols),
+      detail: detailFor(pending ? 'pending' : waiting ? 'waiting' : level, d.inputs, outputSymbols),
       outputSymbols,
       outputLatest: d.output?.latest ?? null,
       coverPct: coverPct(outputSymbols, primaryIn),
+      waiting,
     }
   })
 
@@ -325,6 +371,7 @@ export function buildAnalyticsDemand(args: {
     thin: rows.filter(r => r.level === 'thin').length,
     blocked: rows.filter(r => r.level === 'blocked').length,
     unknown: rows.filter(r => r.level === 'unknown').length,
+    waiting: rows.filter(r => r.waiting).length,
     pending,
     rows,
     optionUniverse: optionTarget,

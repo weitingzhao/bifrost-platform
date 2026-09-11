@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { fetchMarketDataStatus } from '@/api/network'
 import { Button, DenseTag, cn } from '@bifrost/ui'
 import { fetchCoverageDimensions } from '@/api/marketDataDimensions'
 import {
@@ -105,7 +106,7 @@ function ProductCard({
           />
           <span className="truncate text-[var(--text-dense-caption)] font-medium">{row.title}</span>
         </div>
-        <DenseTag variant={levelVariant(row.level)}>{row.level}</DenseTag>
+        <DenseTag variant={levelVariant(row.level)}>{row.waiting ? '…' : row.level}</DenseTag>
       </div>
       <div className="flex items-baseline justify-between gap-1">
         <FlashValue
@@ -187,12 +188,27 @@ export function AnalyticsDemandPanel({
     financialsQ.data != null && !isProxyError(financialsQ.data)
       ? (financialsQ.data.counts?.income_statement_symbols ?? null)
       : null
+  // The page hands `freshness` down as [] while the shared live-probe read is in
+  // flight, which looks exactly like "no feed has run". Observe that read here —
+  // same key as the sidebar, so no extra request — to tell the two apart.
+  const probeQ = useQuery({
+    queryKey: ['market-data', 'live-probe', 'status'],
+    queryFn: fetchMarketDataStatus,
+    retry: 1,
+  })
+  const notYet = (q: { data: unknown; isError: boolean }) => q.data == null && !q.isError
   const view = buildAnalyticsDemand({
     freshness,
     inventory,
     incomeStatementSymbols: income,
     denominators: dimensionsQ.data?.denominators ?? null,
     dimensions: dimensionsQ.data ?? null,
+    awaiting: {
+      inventory: notYet(inventoryQ),
+      dimensions: notYet(dimensionsQ),
+      financials: notYet(financialsQ),
+      freshness: notYet(probeQ),
+    },
   })
   const total = view.rows.length
   // While the inventory's first pass runs the counts are absent, not zero, so
@@ -212,6 +228,11 @@ export function AnalyticsDemandPanel({
               <DenseTag variant="success">ready {view.ready}</DenseTag>
               <DenseTag variant="warning">thin {view.thin}</DenseTag>
               <DenseTag variant="danger">blocked {view.blocked}</DenseTag>
+              {view.waiting > 0 ? (
+                <DenseTag variant="neutral" title="Still loading — not judged yet">
+                  pending {view.waiting}
+                </DenseTag>
+              ) : null}
             </>
           )}
           {age != null && !view.pending ? (

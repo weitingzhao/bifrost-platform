@@ -4,7 +4,17 @@ export function fmtCount(n: number | null | undefined): string {
 }
 
 export function toneByLevel(
-  level: 'ready' | 'thin' | 'blocked' | 'unknown' | 'ok' | 'scheduled' | 'missing' | 'degraded' | 'fail',
+  level:
+    | 'ready'
+    | 'thin'
+    | 'blocked'
+    | 'unknown'
+    | 'pending'
+    | 'ok'
+    | 'scheduled'
+    | 'missing'
+    | 'degraded'
+    | 'fail',
 ): string {
   if (level === 'ready' || level === 'ok') return 'bg-[var(--color-success)]'
   if (level === 'thin' || level === 'scheduled' || level === 'degraded') {

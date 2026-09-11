@@ -1,4 +1,9 @@
-export type VitalKind = 'ok' | 'scheduled' | 'missing' | 'unknown'
+/**
+ * `pending` — the evidence has not arrived yet. `unknown` — it cannot arrive
+ * (the read failed, or the session is unavailable). Neither is a finding, and
+ * neither may be counted as `missing`.
+ */
+export type VitalKind = 'ok' | 'scheduled' | 'missing' | 'unknown' | 'pending'
 
 export type VitalVerdict = {
   text: string
@@ -25,6 +30,7 @@ export function classifyVitalText(text: string): VitalKind {
   if (text === 'Today OK' || text === 'Session OK') return 'ok'
   if (text.startsWith('Scheduled')) return 'scheduled'
   if (text === 'Missing') return 'missing'
+  if (text === PENDING.text) return 'pending'
   return 'unknown'
 }
 
@@ -105,17 +111,60 @@ export function freshnessToday(
   const todayCount = items.filter(i => (i.last_run_at?.trim().slice(0, 10) ?? '') >= bound).length
   const total = items.length
   const ratio = total > 0 ? (todayCount / total) * 100 : 0
-  let kind: VitalKind = 'missing'
+  // No rows is an empty answer, not a finding — the text already says '—'.
+  let kind: VitalKind = total === 0 ? 'unknown' : 'missing'
   if (total > 0 && todayCount === total) kind = 'ok'
   else if (todayCount > 0) kind = 'scheduled'
   const unit = session ? 'for session' : 'today'
   return { todayCount, total, ratio, kind, text: total > 0 ? `${todayCount}/${total} ${unit}` : '—' }
 }
 
-export function countByKind(kinds: VitalKind[]): { ok: number; scheduled: number; missing: number } {
+export function countByKind(kinds: VitalKind[]): {
+  ok: number
+  scheduled: number
+  missing: number
+  pending: number
+  unknown: number
+} {
+  // `unknown` used to be counted as missing. On a hard reload the header read
+  // `missing 4` at four seconds and `4/4 Session OK` at twenty-four, on the same
+  // data: the four cards had simply not loaded yet (2026-09-11, 16:5x UTC).
   return {
     ok: kinds.filter(k => k === 'ok').length,
     scheduled: kinds.filter(k => k === 'scheduled').length,
-    missing: kinds.filter(k => k === 'missing' || k === 'unknown').length,
+    missing: kinds.filter(k => k === 'missing').length,
+    pending: kinds.filter(k => k === 'pending').length,
+    unknown: kinds.filter(k => k === 'unknown').length,
   }
+}
+
+/** Whether a read has answered: its data is in, it failed, or neither yet. */
+export type Arrival = 'arrived' | 'pending' | 'failed'
+
+export const PENDING: VitalVerdict = { text: '…', kind: 'pending' }
+const UNREADABLE: VitalVerdict = { text: '—', kind: 'unknown' }
+
+/**
+ * The verdict a card may state now — `computeVerdict`, but only once its
+ * evidence is in. A value that has not arrived is not a finding.
+ *
+ * `session` is `undefined` while the plugin's answer is in flight and `null`
+ * when it cannot be had; only a string lets the card judge. There is no
+ * fallback to the UTC calendar here: that second definition of "the session"
+ * is what painted a complete estate `Missing` most of every weekday (C-F1).
+ *
+ * `schedule` is the read carrying the worker's next run. It is what turns
+ * `Missing` into `Scheduled`, so a `Missing` stated without it is premature.
+ */
+export function judgeVital(
+  lastRunAt: string | undefined,
+  nextRunAt: string | undefined,
+  evidence: { inputs: Arrival; session: string | null | undefined; schedule: Arrival },
+  now = new Date(),
+): VitalVerdict {
+  if (evidence.inputs === 'pending' || evidence.session === undefined) return PENDING
+  if (evidence.inputs === 'failed' || evidence.session === null) return UNREADABLE
+  const v = computeVerdict(lastRunAt, nextRunAt, now, evidence.session)
+  if (v.kind === 'missing' && evidence.schedule === 'pending') return PENDING
+  return v
 }

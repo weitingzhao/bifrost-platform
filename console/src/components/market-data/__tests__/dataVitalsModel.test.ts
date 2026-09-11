@@ -60,6 +60,8 @@ describe('dataVitalsModel', () => {
       ok: 2,
       scheduled: 1,
       missing: 1,
+      pending: 0,
+      unknown: 0,
     })
     expect(classifyVitalText('Today OK')).toBe('ok')
     expect(vitalFill('ok')).toBe(100)

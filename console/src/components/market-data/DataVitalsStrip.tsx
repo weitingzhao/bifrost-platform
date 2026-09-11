@@ -15,11 +15,13 @@ import {
 import { fetchMarketDataStatus } from '@/api/network'
 import type { MarketDataWorkerInfo } from '@/api/satelliteBusTypes'
 import {
-  computeVerdict,
+  PENDING,
   countByKind,
   freshnessToday,
+  judgeVital,
   vitalFill,
   vitalTagVariant,
+  type Arrival,
   type VitalKind,
 } from '@/components/market-data/dataVitalsModel'
 import {
@@ -86,6 +88,13 @@ function activeDimensions(data: MarketStatusResponse | undefined, errored: boole
   return { ok, total: items.length }
 }
 
+/** A card judges on whichever of its reads has answered; it waits while none has. */
+function arrivalOf(reads: Array<{ data: unknown; failed: boolean }>): Arrival {
+  if (reads.some(r => r.data != null && !r.failed)) return 'arrived'
+  if (reads.every(r => r.failed)) return 'failed'
+  return 'pending'
+}
+
 export function DataVitalsStrip({
   onOpenCoverage,
 }: {
@@ -98,7 +107,9 @@ export function DataVitalsStrip({
     queryFn: fetchCoverageDimensions,
     staleTime: 60_000,
   })
-  const session = dimsQ.data?.session ?? null
+  // undefined while in flight, null when the plugin cannot say — see judgeVital.
+  const session: string | null | undefined =
+    dimsQ.data != null ? (dimsQ.data.session ?? null) : dimsQ.isError ? null : undefined
 
   const universeQ = useQuery({
     queryKey: ['market-data', 'vitals', 'universe'],
@@ -158,13 +169,17 @@ export function DataVitalsStrip({
   const dbFresh = stockOk?.freshness
   const probeFresh = probeQ.data?.freshness
 
+  const probeRead = { data: probeQ.data, failed: probeQ.isError }
+  const schedule = arrivalOf([probeRead])
+
   const stockRows = stockDailyRows(stockOk, stockErr)
   const stockLast =
     freshnessLastRun(dbFresh, 'stock_daily') ?? freshnessLastRun(probeFresh, 'stock_daily')
-  const stockVerdict =
-    stockOk != null || probeQ.data != null
-      ? computeVerdict(stockLast, workerNextRun(workers, 'stocks'), undefined, session)
-      : { text: '—', kind: 'unknown' as const }
+  const stockVerdict = judgeVital(stockLast, workerNextRun(workers, 'stocks'), {
+    inputs: arrivalOf([{ data: stockOk, failed: stockErr }, probeRead]),
+    session,
+    schedule,
+  })
 
   const option = optionCounts(contractsOk, contractsErr)
   const optionLast =
@@ -172,22 +187,35 @@ export function DataVitalsStrip({
     freshnessLastRun(dbFresh, 'option_contracts') ??
     freshnessLastRun(probeFresh, 'option_contract') ??
     freshnessLastRun(probeFresh, 'option_contracts')
-  const optionVerdict =
-    contractsOk != null || stockOk != null || probeQ.data != null
-      ? computeVerdict(optionLast, workerNextRun(workers, 'options'), undefined, session)
-      : { text: '—', kind: 'unknown' as const }
+  const optionVerdict = judgeVital(optionLast, workerNextRun(workers, 'options'), {
+    inputs: arrivalOf([
+      { data: contractsOk, failed: contractsErr },
+      { data: stockOk, failed: stockErr },
+      probeRead,
+    ]),
+    session,
+    schedule,
+  })
 
   const dims = activeDimensions(statusOk, statusErr)
-  const today = !statusErr ? freshnessToday(statusOk?.freshness_summary ?? [], undefined, session) : null
-  const freshnessKind: VitalKind = today?.kind ?? 'unknown'
+  const statusArrival = arrivalOf([{ data: statusOk, failed: statusErr }])
+  const today =
+    statusArrival === 'arrived' && typeof session === 'string'
+      ? freshnessToday(statusOk?.freshness_summary ?? [], undefined, session)
+      : null
+  const freshnessKind: VitalKind =
+    today?.kind ??
+    (statusArrival === 'pending' || session === undefined ? 'pending' : 'unknown')
+  const freshnessText = today?.text ?? (freshnessKind === 'pending' ? PENDING.text : '—')
 
   const tickerLast =
     freshnessLastRun(dbFresh, 'ticker_sync') ?? freshnessLastRun(probeFresh, 'ticker_sync')
   const uniCount = universeCount(universeOk, universeErr)
-  const uniVerdict =
-    !universeErr && universeOk != null
-      ? computeVerdict(tickerLast, workerNextRun(workers, 'stocks'), undefined, session)
-      : { text: '—', kind: 'unknown' as const }
+  const uniVerdict = judgeVital(tickerLast, workerNextRun(workers, 'stocks'), {
+    inputs: arrivalOf([{ data: universeOk, failed: universeErr }]),
+    session,
+    schedule,
+  })
 
   const score = countByKind([stockVerdict.kind, optionVerdict.kind, freshnessKind, uniVerdict.kind])
   const total = 4
@@ -198,9 +226,25 @@ export function DataVitalsStrip({
       title="Stock summary"
       headerExtra={
         <div className="flex flex-wrap items-center gap-1.5">
-          <DenseTag variant="success">today {score.ok}</DenseTag>
-          <DenseTag variant="warning">scheduled {score.scheduled}</DenseTag>
-          <DenseTag variant="danger">missing {score.missing}</DenseTag>
+          {score.pending === total ? (
+            <DenseTag variant="neutral">loading…</DenseTag>
+          ) : (
+            <>
+              <DenseTag variant="success">today {score.ok}</DenseTag>
+              <DenseTag variant="warning">scheduled {score.scheduled}</DenseTag>
+              <DenseTag variant="danger">missing {score.missing}</DenseTag>
+              {score.pending > 0 ? (
+                <DenseTag variant="neutral" title="Still loading — not yet judged">
+                  pending {score.pending}
+                </DenseTag>
+              ) : null}
+              {score.unknown > 0 ? (
+                <DenseTag variant="neutral" title="A read failed or the session is unavailable — cannot judge">
+                  unknown {score.unknown}
+                </DenseTag>
+              ) : null}
+            </>
+          )}
         </div>
       }
       bodyPadding="compact"
@@ -220,6 +264,7 @@ export function DataVitalsStrip({
             ready={score.ok}
             thin={score.scheduled}
             blocked={score.missing}
+            unknown={score.pending + score.unknown}
             total={total}
             caption="today"
           />
@@ -258,7 +303,7 @@ export function DataVitalsStrip({
             </DashCard>
             <DashCard
               title="Data Freshness"
-              tag={today?.text ?? '—'}
+              tag={freshnessText}
               tagVariant={vitalTagVariant(freshnessKind)}
               value={dims.total > 0 ? `${dims.ok}/${dims.total}` : '—'}
               rawValue={today?.todayCount}
@@ -268,7 +313,7 @@ export function DataVitalsStrip({
               <Meter
                 fillPct={vitalFill(freshnessKind, today?.ratio)}
                 toneClass={toneByLevel(freshnessKind)}
-                label={today?.text}
+                label={freshnessText}
               />
             </DashCard>
             <DashCard
