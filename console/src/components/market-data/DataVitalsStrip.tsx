@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { fetchCoverageDimensions } from '@/api/marketDataDimensions'
 import { DenseTag, Skeleton } from '@bifrost/ui'
 import {
   fetchCoverageContracts,
@@ -90,6 +91,15 @@ export function DataVitalsStrip({
 }: {
   onOpenCoverage?: (panel: 'readiness' | 'financials' | 'quality') => void
 }) {
+  // The plugin's one definition of the session (C-F1). Same queryKey the
+  // coverage tab uses, so this shares its cache rather than adding a read.
+  const dimsQ = useQuery({
+    queryKey: ['market-data', 'coverage', 'dimensions'],
+    queryFn: fetchCoverageDimensions,
+    staleTime: 60_000,
+  })
+  const session = dimsQ.data?.session ?? null
+
   const universeQ = useQuery({
     queryKey: ['market-data', 'vitals', 'universe'],
     queryFn: fetchUniverseCount,
@@ -153,7 +163,7 @@ export function DataVitalsStrip({
     freshnessLastRun(dbFresh, 'stock_daily') ?? freshnessLastRun(probeFresh, 'stock_daily')
   const stockVerdict =
     stockOk != null || probeQ.data != null
-      ? computeVerdict(stockLast, workerNextRun(workers, 'stocks'))
+      ? computeVerdict(stockLast, workerNextRun(workers, 'stocks'), undefined, session)
       : { text: '—', kind: 'unknown' as const }
 
   const option = optionCounts(contractsOk, contractsErr)
@@ -164,11 +174,11 @@ export function DataVitalsStrip({
     freshnessLastRun(probeFresh, 'option_contracts')
   const optionVerdict =
     contractsOk != null || stockOk != null || probeQ.data != null
-      ? computeVerdict(optionLast, workerNextRun(workers, 'options'))
+      ? computeVerdict(optionLast, workerNextRun(workers, 'options'), undefined, session)
       : { text: '—', kind: 'unknown' as const }
 
   const dims = activeDimensions(statusOk, statusErr)
-  const today = !statusErr ? freshnessToday(statusOk?.freshness_summary ?? []) : null
+  const today = !statusErr ? freshnessToday(statusOk?.freshness_summary ?? [], undefined, session) : null
   const freshnessKind: VitalKind = today?.kind ?? 'unknown'
 
   const tickerLast =
@@ -176,7 +186,7 @@ export function DataVitalsStrip({
   const uniCount = universeCount(universeOk, universeErr)
   const uniVerdict =
     !universeErr && universeOk != null
-      ? computeVerdict(tickerLast, workerNextRun(workers, 'stocks'))
+      ? computeVerdict(tickerLast, workerNextRun(workers, 'stocks'), undefined, session)
       : { text: '—', kind: 'unknown' as const }
 
   const score = countByKind([stockVerdict.kind, optionVerdict.kind, freshnessKind, uniVerdict.kind])

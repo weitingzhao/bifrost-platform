@@ -45,17 +45,30 @@ export function vitalTagVariant(
 }
 
 /**
- * Today's-data verdict: UTC date of last_run_at vs weekend session gap vs next_run.
- * Fri EOD on Mon morning → Session OK (not Missing).
+ * Whether the feed has run for the session the tables should hold.
+ *
+ * `session` comes from the plugin, which owns the one definition (C-F1). Pass
+ * it. Without it this falls back to the UTC calendar date, which was the bug:
+ * at 2026-09-11 01:52 UTC — 21:52 on the 10th in New York, after that
+ * session's batch had completed — the strip read `Missing` for stock_daily
+ * while the table held 13,750,512 rows and the doctor called the session's EOD
+ * checks complete. Every weekday between 00:00 UTC and the next evening's
+ * batch looked like that, which is most of the day.
  */
 export function computeVerdict(
   lastRunAt?: string,
   nextRunAt?: string,
   now = new Date(),
+  session?: string | null,
 ): VitalVerdict {
-  const today = utcToday(now)
   const lastDate = lastRunAt?.trim().slice(0, 10)
-  if (lastDate && lastDate === today) {
+  if (session) {
+    // Ran for that session or later. A slot that fired after the session closed
+    // is current, whatever the calendar has since done.
+    if (lastDate && lastDate >= session) {
+      return { text: 'Session OK', kind: 'ok' }
+    }
+  } else if (lastDate && lastDate === utcToday(now)) {
     return { text: 'Today OK', kind: 'ok' }
   }
   if (lastRunAt?.trim() && isWeekendGapWindow(now)) {
@@ -80,15 +93,23 @@ export function computeVerdict(
   return { text: 'Missing', kind: 'missing' }
 }
 
-export function freshnessToday(items: Array<{ last_run_at?: string | null }>, now = new Date()) {
-  const today = utcToday(now)
-  const todayCount = items.filter(i => i.last_run_at?.trim().slice(0, 10) === today).length
+export function freshnessToday(
+  items: Array<{ last_run_at?: string | null }>,
+  now = new Date(),
+  session?: string | null,
+) {
+  // Same correction as computeVerdict: "how many ran for the session we should
+  // hold", not "how many ran since midnight UTC". At 01:52 UTC the second
+  // question answers 6/20 on an estate where every feed had run.
+  const bound = session || utcToday(now)
+  const todayCount = items.filter(i => (i.last_run_at?.trim().slice(0, 10) ?? '') >= bound).length
   const total = items.length
   const ratio = total > 0 ? (todayCount / total) * 100 : 0
   let kind: VitalKind = 'missing'
   if (total > 0 && todayCount === total) kind = 'ok'
   else if (todayCount > 0) kind = 'scheduled'
-  return { todayCount, total, ratio, kind, text: total > 0 ? `${todayCount}/${total} today` : '—' }
+  const unit = session ? 'for session' : 'today'
+  return { todayCount, total, ratio, kind, text: total > 0 ? `${todayCount}/${total} ${unit}` : '—' }
 }
 
 export function countByKind(kinds: VitalKind[]): { ok: number; scheduled: number; missing: number } {

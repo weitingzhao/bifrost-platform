@@ -215,6 +215,12 @@ export type CoverageMemory = {
 
 export type CoverageDimensions = {
   generated_at?: string;
+  /**
+   * The session the tables should hold, from the plugin's one definition
+   * (C-F1). Panels render it; none of them derives a second one. Null when the
+   * plugin could not resolve it — which is not "today".
+   */
+  session?: string | null;
   age_sec: number | null;
   computing?: boolean;
   computed_ms?: number;

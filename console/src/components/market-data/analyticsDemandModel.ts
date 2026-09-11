@@ -111,9 +111,18 @@ function inputOf(
 function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean }): DemandLevel {
   const req = inputs.filter(i => i.required)
   if (req.length === 0) return 'unknown'
-  const missing = req.filter(i => i.count == null || i.count <= 0)
-  if (missing.length === req.length) return 'blocked'
-  if (missing.length > 0) return 'thin'
+  // Unmeasured and measured-as-zero are different facts and were scored as one.
+  // `null` means the source has not reported — the four-axis payload takes about
+  // 220 seconds on a cold cache — and reading that as "zero rows collected"
+  // turns a restart into a red. Measured 2026-09-11 01:52 UTC, eight minutes
+  // after a deploy: SEPA Technical read `blocked — Stock daily` while the table
+  // held 13.7M rows, because its one required input comes from the dimensions
+  // payload and that payload was still on its first pass.
+  const unmeasured = req.filter(i => i.count == null)
+  if (unmeasured.length === req.length) return 'unknown'
+  const empty = req.filter(i => (i.count ?? 0) <= 0)
+  if (empty.length === req.length) return 'blocked'
+  if (empty.length > 0) return 'thin'
   const stale = req.some(i => {
     const v = (i.freshnessVerdict ?? '').toLowerCase()
     return v === 'stale' || v === 'fail'
@@ -121,6 +130,9 @@ function scoreInputs(inputs: DemandInputStatus[], extras?: { thinIf?: boolean })
   if (stale || extras?.thinIf) return 'thin'
   const unknownFresh = req.some(i => i.freshnessVerdict == null && i.lastRunAt == null)
   if (unknownFresh) return 'thin'
+  // A product whose inputs are partly unmeasured is not ready, but it is not
+  // blocked either — the difference is whether anyone should go looking.
+  if (unmeasured.length > 0) return 'thin'
   return 'ready'
 }
 
