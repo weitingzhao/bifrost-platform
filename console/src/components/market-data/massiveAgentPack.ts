@@ -16,6 +16,7 @@ import {
   type CoverageInventoryResponse,
   type IngestQueueDashboardResponse,
   type MarketDataProxyError,
+  type QualityScoreResponse,
   type UniverseCountResponse,
 } from '@/api/marketDataPlugin'
 import { fetchMarketDataStatus } from '@/api/network'
@@ -31,6 +32,8 @@ export type MassiveAgentPackSnapshot = {
   plugin: MarketDataStatusResponse | null
   pluginError: string | null
   qualitySummary: string | null
+  /** Full quality-score payload when available (FAIL still has checks). */
+  quality: QualityScoreResponse | null
   queue: IngestQueueDashboardResponse | null
   universe: UniverseCountResponse | null
   dbSummary: CoverageDbSummary | null
@@ -104,6 +107,7 @@ export async function gatherMassiveAgentSnapshot(): Promise<MassiveAgentPackSnap
     husbandryError,
     plugin,
     pluginError,
+    quality,
     qualitySummary:
       quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null),
     queue,
@@ -179,6 +183,44 @@ export function buildMassiveAgentPack(snap: MassiveAgentPackSnapshot): string {
     }
   } else {
     push(`unavailable: ${snap.pluginError ?? 'no probe'}`)
+  }
+  push('')
+
+  push('## Coverage quality score')
+  if (snap.quality != null) {
+    push(`summary: ${snap.qualitySummary ?? (snap.quality.ok ? 'PASS' : 'FAIL')}`)
+    const checks = snap.quality.checks ?? []
+    const failed = checks.filter(c => c.ok === false)
+    if (failed.length === 0) {
+      push('all checks ok')
+    } else {
+      push(`failed=${failed.length}/${checks.length}:`)
+      for (const c of failed) {
+        push(`  - ${c.check}: ${c.detail ?? 'fail'}`)
+        const missing = c.missing_sample
+        if (Array.isArray(missing) && missing.length > 0) {
+          push(`    missing_sample: ${missing.slice(0, 12).map(String).join(', ')}`)
+        }
+        const gaps = c.gaps_sample
+        if (Array.isArray(gaps) && gaps.length > 0) {
+          const gapText = gaps
+            .slice(0, 8)
+            .map(g =>
+              typeof g === 'object' && g != null
+                ? `${(g as { underlying?: string }).underlying ?? '?'}@${(g as { trade_date?: string }).trade_date ?? '?'}`
+                : String(g),
+            )
+            .join(', ')
+          push(`    gaps_sample: ${gapText}`)
+        }
+      }
+      push(
+        'Heal: enqueue option_snapshot for missing underlyings, then option_open_interest for gap dates',
+        '  (POST /market/ingest/enqueue via platform-api with operator token). void ≠ fail — do not gap-heal vendor voids.',
+      )
+    }
+  } else {
+    push('unavailable: quality-score fetch failed or proxy error')
   }
   push('')
 
@@ -284,12 +326,13 @@ export function buildMassiveAgentPack(snap: MassiveAgentPackSnapshot): string {
 
   push(
     '## Suggested investigation order',
-    '1. If Analytics Demand blocked with Snapshot/OI/Stock daily = — → fix /market/coverage/inventory (or proxy) first.',
-    '2. If Market batch missed → check queue-dashboard missed slots (trim needs job_trim freshness; EOD needs job evidence).',
-    '3. If Market batch draining → let workers drain OR triage fail kinds; do not Operate on mere due.',
-    '4. If Universe Missing → check Cron/reference ticker_sync last_run_at (UTC day), not ticker count.',
-    '5. If freshness not-ok on ratios/short_* → check source_void / vendor void (void ≠ fail) before gap-heal panic.',
-    '6. Research OLAP degraded → Dagster research_trading_day + husbandry_gate (Flex source=secret; Market not missed/degraded).',
+    '1. If Quality FAIL on option_snapshot / option_oi → heal missing underlyings (see Coverage quality score), then re-check quality-score.',
+    '2. If Analytics Demand blocked with Snapshot/OI/Stock daily = — → fix /market/coverage/inventory (or proxy) first.',
+    '3. If Market batch missed → check queue-dashboard missed slots (trim needs job_trim freshness; EOD needs job evidence).',
+    '4. If Market batch draining → let workers drain OR triage fail kinds; do not Operate on mere due.',
+    '5. If Universe Missing → check Cron/reference ticker_sync last_run_at (UTC day), not ticker count.',
+    '6. If freshness not-ok on ratios/short_* → check source_void / vendor void (void ≠ fail) before gap-heal panic.',
+    '7. Research OLAP degraded → Dagster research_trading_day + husbandry_gate (Flex source=secret; Market not missed/degraded).',
     '',
     '## Owner ask',
     'Propose the smallest durable fix, verify with the same endpoints this pack used, then report before/after lane verdicts.',

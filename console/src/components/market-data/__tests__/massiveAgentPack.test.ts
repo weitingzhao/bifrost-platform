@@ -53,6 +53,7 @@ function baseSnap(over: Partial<MassiveAgentPackSnapshot> = {}): MassiveAgentPac
     },
     pluginError: null,
     qualitySummary: 'PASS',
+    quality: { ok: true, summary: 'PASS', checks: [] },
     queue: {
       ok: true,
       husbandry: { verdict: 'draining', detail: '100 pending' },
@@ -107,5 +108,35 @@ describe('buildMassiveAgentPack', () => {
     expect(text).toContain('snapshot=28')
     expect(text).toContain('oi=28')
     expect(text).not.toContain('coverage/inventory unavailable')
+  })
+
+  it('includes failed quality checks with heal hint (Quality FAIL ≠ Copy fail)', () => {
+    const text = buildMassiveAgentPack(
+      baseSnap({
+        qualitySummary: 'FAIL',
+        quality: {
+          ok: false,
+          summary: 'FAIL',
+          checks: [
+            {
+              check: 'option_snapshot_coverage',
+              ok: false,
+              detail: 'target=2026-09-03; missing=1/18 optionable',
+              missing_sample: ['MU'],
+            },
+            {
+              check: 'option_oi_coverage',
+              ok: false,
+              detail: 'gaps=4 over 30 trading days',
+              gaps_sample: [{ underlying: 'MU', trade_date: '2026-09-03' }],
+            },
+          ],
+        },
+      }),
+    )
+    expect(text).toContain('## Coverage quality score')
+    expect(text).toContain('option_snapshot_coverage')
+    expect(text).toContain('missing_sample: MU')
+    expect(text).toContain('enqueue option_snapshot')
   })
 })

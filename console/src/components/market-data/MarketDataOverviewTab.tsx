@@ -16,6 +16,7 @@ import { FlashValue } from '@/components/market-data/overviewDash'
 import { fmtCount, parseReadyRatio } from '@/components/market-data/overviewDashModel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
+import { writeClipboard } from '@/lib/clipboardWrite'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
 
 function poolOf(workers: MarketDataWorkerInfo[], pool: string): MarketDataWorkerInfo | undefined {
@@ -76,19 +77,36 @@ export function MarketDataOverviewTab({
     quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null)
 
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
+  const [copyFallback, setCopyFallback] = useState<string | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
 
   async function handleCopyForAgent() {
     if (copyState === 'busy') return
     setCopyState('busy')
+    setCopyFallback(null)
+    setCopyError(null)
     try {
       const snap = await gatherMassiveAgentSnapshot()
       const text = buildMassiveAgentPack(snap)
-      await navigator.clipboard.writeText(text)
-      setCopyState('copied')
-      window.setTimeout(() => setCopyState('idle'), 2000)
-    } catch {
+      try {
+        await writeClipboard(text)
+        setCopyState('copied')
+        window.setTimeout(() => setCopyState('idle'), 2000)
+      } catch (clipErr) {
+        // Clipboard often blocked in Cursor/embedded browsers — keep pack visible.
+        setCopyFallback(text)
+        setCopyError(
+          clipErr instanceof Error ? clipErr.message : 'Clipboard blocked — pack below',
+        )
+        setCopyState('error')
+      }
+    } catch (err) {
+      setCopyError(err instanceof Error ? err.message : String(err))
       setCopyState('error')
-      window.setTimeout(() => setCopyState('idle'), 3000)
+      window.setTimeout(() => {
+        setCopyState('idle')
+        setCopyError(null)
+      }, 4000)
     }
   }
 
@@ -184,7 +202,9 @@ export function MarketDataOverviewTab({
                 : copyState === 'copied'
                   ? 'Copied!'
                   : copyState === 'error'
-                    ? 'Copy failed'
+                    ? copyFallback
+                      ? 'Select pack below'
+                      : 'Copy failed'
                     : 'Copy for Agent'}
             </Button>
             <Button
@@ -198,6 +218,23 @@ export function MarketDataOverviewTab({
           </div>
         }
       />
+
+      {copyError ? (
+        <p className="m-0 text-dense-caption text-destructive">{copyError}</p>
+      ) : null}
+      {copyFallback ? (
+        <label className="flex flex-col gap-1">
+          <span className="text-dense-caption text-muted-foreground">
+            Clipboard blocked — select all and copy manually (Cmd/Ctrl+C):
+          </span>
+          <textarea
+            readOnly
+            className="min-h-[8rem] w-full rounded-md border border-border bg-background p-2 font-mono text-dense-caption"
+            value={copyFallback}
+            onFocus={e => e.currentTarget.select()}
+          />
+        </label>
+      ) : null}
 
       <DataVitalsStrip onOpenCoverage={onOpenCoverage} />
 

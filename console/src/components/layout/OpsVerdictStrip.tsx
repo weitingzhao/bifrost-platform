@@ -63,36 +63,57 @@ export function OpsVerdictStrip({
       </div>
     ) : null
 
+  const identityRow = (
+    <>
+      <StatusLamp value={lamp} kind="reach" />
+      {leading}
+      {typeof title === 'string' ? (
+        <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">{title}</span>
+      ) : (
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{title}</div>
+      )}
+      <DenseTag variant={tagVariant} title={tagTitle} className="text-[10px] font-semibold">
+        {tagLabel}
+      </DenseTag>
+      {extraTags}
+    </>
+  )
+
+  const summaryNode = (
+    <span className="min-w-0 text-[var(--text-dense-meta)]">{summary}</span>
+  )
+
   return (
     <section
       className={cn('page-section panel-elevated px-3', compact ? 'py-1.5' : 'py-2.5', className)}
       aria-label={ariaLabel}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <StatusLamp value={lamp} kind="reach" />
-        {leading}
-        {typeof title === 'string' ? (
-          <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">{title}</span>
-        ) : (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">{title}</div>
-        )}
-        <DenseTag variant={tagVariant} title={tagTitle} className="text-[10px] font-semibold">
-          {tagLabel}
-        </DenseTag>
-        {extraTags}
-        <span
-          className={cn(
-            'min-w-0 flex-1 text-[var(--text-dense-meta)]',
-            !compact && 'truncate',
-          )}
-        >
-          {summary}
-        </span>
-        {compact ? metaNode : null}
-        {actions != null ? (
-          <div className="flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div>
-        ) : null}
-      </div>
+      {compact ? (
+        <div className="flex flex-col gap-y-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {identityRow}
+            {actions != null ? (
+              <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                {actions}
+              </div>
+            ) : null}
+          </div>
+          {(summary != null || meta != null) ? (
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              {summaryNode}
+              {metaNode}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {identityRow}
+          <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)]">{summary}</span>
+          {actions != null ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-1.5">{actions}</div>
+          ) : null}
+        </div>
+      )}
       {!compact ? metaNode : null}
       {body != null ? (
         <div className="cluster-health-verdict-body mt-2 border-t border-border pt-2">{body}</div>
