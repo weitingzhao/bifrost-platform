@@ -58,6 +58,7 @@ export const BOOTSTRAP_LAYERS: BootstrapLayerDef[] = [
     recoveryPath:
       'Mutual watchdog: each Mini launchctl-kickstarts its peer; platform-api primary/standby failover (REMEDIATION_RUNNER_*_URL); Owner SSH as final fallback',
     components: [
+      { name: 'operator-plane (26 L-1 routes, both Minis :8783, no kubeconfig)', status: 'deployed' },
       { name: 'Remediation Runner primary (mac-mini-1 .50)', status: 'deployed' },
       { name: 'Remediation Runner standby (mac-mini-2 .52)', status: 'deployed' },
       { name: 'launchd peer watchdog (com.bifrost.peer-watchdog, 60s interval)', status: 'deployed' },
