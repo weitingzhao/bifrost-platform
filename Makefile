@@ -80,4 +80,8 @@ build-api:
 #   make build-operator-plane GOOS=darwin GOARCH=arm64
 build-operator-plane:
 	cd api && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o bin/operator-plane ./cmd/operator-plane
+	@# Go's linker signs darwin binaries ad-hoc but names them all "a.out". macOS
+	@# keys local-network access per executable, so the plane needs an identity of
+	@# its own to be grantable at all. Re-sign only when this host can.
+	@if [ "$(GOOS)" = "darwin" ] && command -v codesign >/dev/null 2>&1; then 		codesign --force --sign - --identifier com.bifrost.operator-plane api/bin/operator-plane && 		echo "Signed api/bin/operator-plane as com.bifrost.operator-plane"; 	fi
 	@echo "Built api/bin/operator-plane"
