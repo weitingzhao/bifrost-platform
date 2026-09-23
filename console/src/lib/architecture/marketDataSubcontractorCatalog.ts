@@ -180,6 +180,10 @@ export const PG_SCHEMA_CONTRACT = {
     'raw_market.us_market_holiday',
     'raw_market.ticker_related',
     'raw_market.ticker_type',
+    // SEC filings as text, universe-scoped (plugin 0.37.0)
+    'raw_market.sec_8k_filing',
+    'raw_market.sec_8k_disclosure',
+    'raw_market.sec_10k_section',
   ] as const,
   dataOpsTables: [
     'ops_jobs.job_ingest',
