@@ -23,6 +23,15 @@ OPERATOR_PLANE_PORT="${OPERATOR_PLANE_PORT:-8783}"
 OPERATOR_PLANE_AUTOPILOT="${OPERATOR_PLANE_AUTOPILOT:-off}"
 PLATFORM_LAN_HOST="${PLATFORM_LAN_HOST:-192.168.10.40}"
 HERMES_GATEWAY_REMOTE="${HERMES_GATEWAY_REMOTE:-192.168.10.52}"
+# macOS gates local-network access per executable, and a launchd job does not
+# inherit it: a LAN address that works from a shell answers "no route to host"
+# in the plane. Loopback and the host's own address are exempt, so never send a
+# host across the LAN to reach a service it is already running.
+if [[ "$(echo "${REMOTE}" | cut -d@ -f2)" == "${HERMES_GATEWAY_REMOTE}" ]]; then
+  HERMES_GATEWAY_URL_FOR_REMOTE="http://127.0.0.1:8782"
+else
+  HERMES_GATEWAY_URL_FOR_REMOTE="http://${HERMES_GATEWAY_REMOTE}:8782"
+fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM_LOCAL="$(cd "${SCRIPT_DIR}/../../" && pwd)"
 AGENT_SRC="${PLATFORM_LOCAL}/agent/remediation"
@@ -261,7 +270,7 @@ export OPERATOR_PLANE_LISTEN=:${OPERATOR_PLANE_PORT}
 export OPERATOR_PLANE_AUTOPILOT=${OPERATOR_PLANE_AUTOPILOT}
 export GIT_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8785
 export SATELLITE_PROBE_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8786
-export HERMES_GATEWAY_URL=http://${HERMES_GATEWAY_REMOTE}:8782
+export HERMES_GATEWAY_URL=${HERMES_GATEWAY_URL_FOR_REMOTE}
 export NOUS_HERMES_URL=http://192.168.10.50:9119
 ENVEOF
 echo '  wrote env.operator-plane.sh (port=${OPERATOR_PLANE_PORT} autopilot=${OPERATOR_PLANE_AUTOPILOT})'"
