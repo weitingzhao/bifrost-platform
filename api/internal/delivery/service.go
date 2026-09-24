@@ -262,6 +262,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			if t := strings.TrimSpace(tag); t != "" {
 				params = append(params, map[string]any{"name": "tag", "value": t})
 			}
+		case "bifrost-build-market-data":
+			// Like the Dagster line, this pipeline names a full image rather
+			// than a tag; the repository is the plugin's own.
+			if t := strings.TrimSpace(tag); t != "" {
+				params = append(params, map[string]any{"name": "image", "value": marketDataRegistryRepo + ":" + t})
+			}
 		case "bifrost-build-research-dagster":
 			// This pipeline names a full image rather than a tag, and Dagster's
 			// image shares a repository with the runtime one — only the suffix
@@ -470,12 +476,15 @@ func amd64CITaskRunTemplate() map[string]any {
 // its NodePort address instead.
 const researchRegistryRepo = "registry.cicd.svc.cluster.local:5000/bifrost-research"
 
+const marketDataRegistryRepo = "registry.cicd.svc.cluster.local:5000/bifrost-market-data"
+
 // Pipelines whose first parameter is the Gitea revision to build.
 func pipelineTakesRevision(name string) bool {
 	switch name {
 	case "bifrost-deliver-stg", "bifrost-deliver-prod",
 		"bifrost-deliver-platform", "bifrost-deliver-platform-prod",
-		"bifrost-deliver-research", "bifrost-build-research-dagster":
+		"bifrost-deliver-research", "bifrost-build-research-dagster",
+		"bifrost-build-market-data":
 		return true
 	}
 	return false
@@ -546,7 +555,7 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 			{"name": "api-source", "emptyDir": map[string]any{}},
 			{"name": "frontend-source", "emptyDir": map[string]any{}},
 		}
-	case "bifrost-deliver-research", "bifrost-build-frontend-stg":
+	case "bifrost-deliver-research", "bifrost-build-frontend-stg", "bifrost-build-market-data":
 		return []map[string]any{buildContextPVC}
 	case "bifrost-build-research-dagster":
 		// The Dagster image carries the full dbt project, so its context needs
