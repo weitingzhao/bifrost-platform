@@ -9,6 +9,7 @@ import {
   DenseTag,
   denseTableNumCell,
 } from '@bifrost/ui'
+import type { ReactNode } from 'react'
 import type { DateCoverageEntry } from '@/api/marketDataPlugin'
 import { OpsSection } from '@/components/layout/OpsSection'
 
@@ -18,6 +19,8 @@ export function DateCoverageSection({
   loading,
   error,
   thinDaysIgnored = 0,
+  windowDays,
+  action,
 }: {
   dates: DateCoverageEntry[]
   count: number
@@ -25,6 +28,10 @@ export function DateCoverageSection({
   error: string | null
   /** Thin/non-session days filtered out of the producer verdict. */
   thinDaysIgnored?: number
+  /** The window this reading asked for — a limit nobody states reads as "there is nothing older". */
+  windowDays: number
+  /** The refill for this reading, on the reading itself. */
+  action?: ReactNode
 }) {
   const ok = !loading && error == null && count === 0
   const thinNote =
@@ -35,13 +42,16 @@ export function DateCoverageSection({
   return (
     <OpsSection
       title="Low date coverage"
-      description={`Actionable dates only (thin days <500 symbols ignored). Console window 30d / min 100 — Plugin GET /market/readiness/date-coverage${thinNote}`}
+      description={`Actionable dates only (thin days <500 symbols ignored). Window ${windowDays}d back / min 100 — nothing older is asked about. Plugin GET /market/readiness/date-coverage${thinNote}`}
       headerExtra={
-        loading || error != null ? null : (
-          <DenseTag variant={ok ? 'success' : 'warning'}>
-            {ok ? 'OK' : `${count} dates`}
-          </DenseTag>
-        )
+        <div className="flex items-center gap-2">
+          {loading || error != null ? null : (
+            <DenseTag variant={ok ? 'success' : 'warning'}>
+              {ok ? 'OK' : `${count} dates`}
+            </DenseTag>
+          )}
+          {action}
+        </div>
       }
       bodyPadding="none"
       overflow="visible"

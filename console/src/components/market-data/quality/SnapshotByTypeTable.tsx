@@ -8,6 +8,7 @@ import {
   DenseTableRow,
   denseTableNumCell,
 } from '@bifrost/ui'
+import type { ReactNode } from 'react'
 import type { SnapshotByInstrumentType } from '@/api/marketDataPlugin'
 import { OpsSection } from '@/components/layout/OpsSection'
 
@@ -21,11 +22,14 @@ export function SnapshotByTypeTable({
   loading,
   error,
   sessionDate,
+  action,
 }: {
   rows: SnapshotByInstrumentType[]
   loading: boolean
   error: string | null
   sessionDate: string | null
+  /** The refill for this reading, on the reading itself. */
+  action?: ReactNode
 }) {
   return (
     <OpsSection
@@ -35,6 +39,7 @@ export function SnapshotByTypeTable({
           ? `Latest session ${sessionDate} — Plugin GET /market/readiness/snapshot-coverage`
           : 'Plugin GET /market/readiness/snapshot-coverage'
       }
+      headerExtra={action}
       bodyPadding="none"
       overflow="visible"
       collapsible

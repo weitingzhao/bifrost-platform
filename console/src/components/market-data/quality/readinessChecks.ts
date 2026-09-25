@@ -63,12 +63,29 @@ export function partitionVendorGaps(rows: Array<{
   return { actionable, zeroSnapshot }
 }
 
-/** Drop thin/non-session dates from low-coverage list for producer verdict. */
+/**
+ * Drop the dates that were never a session; keep the sessions that are short.
+ *
+ * Thinness alone used to decide both, and it cannot: a handful of rows on a
+ * closed day is noise, while the same handful on a day the calendar calls a
+ * session is the largest kind of gap there is. Measured 2026-09-25 — fourteen
+ * June 2025 sessions hold one symbol each against ~11,050 on either side, and
+ * every one of them was being discarded here as a thin day.
+ *
+ * The plugin now says which it is (`session`). The thinness threshold stays as
+ * the fallback for a reading that predates the flag or whose calendar could
+ * not be read, because guessing "not a session" from a small number is still
+ * better than treating a holiday as a producer failure.
+ */
 export function filterActionableLowCoverageDates(
-  dates: Array<{ date?: string; symbol_count?: number }> | null | undefined,
+  dates: Array<{ date?: string; symbol_count?: number; session?: boolean | null }> | null | undefined,
   thinDayMax: number = READINESS_THRESHOLDS.dateCoverageThinDayMax,
-): Array<{ date?: string; symbol_count?: number }> {
-  return (dates ?? []).filter(d => Number(d.symbol_count ?? 0) >= thinDayMax)
+): Array<{ date?: string; symbol_count?: number; session?: boolean | null }> {
+  return (dates ?? []).filter(d => {
+    if (d.session === true) return true
+    if (d.session === false) return false
+    return Number(d.symbol_count ?? 0) >= thinDayMax
+  })
 }
 
 export type SnapshotCoverageDerived = {

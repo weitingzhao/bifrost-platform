@@ -488,12 +488,17 @@ export type VendorGapResponse = {
 export type DateCoverageEntry = {
   date?: string
   symbol_count?: number
+  /** Whether the trading calendar calls this date a session. `null` = calendar unreadable. */
+  session?: boolean | null
 }
 
 export type DateCoverageResponse = {
   ok: boolean
   low_coverage_dates?: DateCoverageEntry[]
   count?: number
+  /** Sessions the store holds no row for at all. `null` = the calendar could not be read. */
+  absent_dates?: string[] | null
+  absent_count?: number | null
   error?: string
 }
 
@@ -907,6 +912,30 @@ export function enqueueIngestJob(body: {
   priority?: number
 }) {
   return proxyPost<EnqueueResponse>('/market/ingest/enqueue', body)
+}
+
+export type EnqueueSlotResponse = {
+  ok: boolean
+  slot?: string
+  target_date?: string
+  symbols?: number
+  enqueued?: number
+  deduped?: number
+  skipped?: boolean
+  reason?: string
+  detail?: string
+  error?: string
+}
+
+/**
+ * Fire a schedule slot by hand — the same call the nightly Dagster batch makes.
+ *
+ * A slot fans out its own jobs inside the plugin, which is why a refill is one
+ * request and never a loop in the browser: `fundamentals-rotate` walks the
+ * universe, `fundamentals-market` takes the whole market in a page at a time.
+ */
+export function enqueueIngestSlot(body: { slot: string; date?: string; force?: boolean }) {
+  return proxyPost<EnqueueSlotResponse>('/market/ingest/enqueue-slot', body)
 }
 
 /* ── Analytics ────────────────────────────────────────── */

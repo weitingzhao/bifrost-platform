@@ -9,6 +9,7 @@ import {
   DenseTag,
   denseTableNumCell,
 } from '@bifrost/ui'
+import type { ReactNode } from 'react'
 import type { VendorGapRow } from '@/api/marketDataPlugin'
 import { OpsSection } from '@/components/layout/OpsSection'
 
@@ -25,6 +26,7 @@ export function VendorGapDetailTable({
   error,
   sessionDate,
   zeroSnapshotCount = 0,
+  action,
 }: {
   gaps: VendorGapRow[]
   gapCount: number
@@ -33,6 +35,8 @@ export function VendorGapDetailTable({
   sessionDate: string | null
   /** Zero-close snapshots excluded from actionable gap_count (SPAC / pre-open noise). */
   zeroSnapshotCount?: number
+  /** The refill for this reading, on the reading itself. */
+  action?: ReactNode
 }) {
   const ok = !loading && error == null && gapCount === 0
   const zeroNote =
@@ -49,11 +53,14 @@ export function VendorGapDetailTable({
           : `${gapCount.toLocaleString('en-US')} actionable gaps — Plugin GET /market/readiness/vendor-gap?detail=true${zeroNote}`
       }
       headerExtra={
-        loading || error != null ? null : (
-          <DenseTag variant={ok ? 'success' : 'warning'}>
-            {ok ? 'OK' : `${gapCount} gaps`}
-          </DenseTag>
-        )
+        <div className="flex items-center gap-2">
+          {loading || error != null ? null : (
+            <DenseTag variant={ok ? 'success' : 'warning'}>
+              {ok ? 'OK' : `${gapCount} gaps`}
+            </DenseTag>
+          )}
+          {action}
+        </div>
       }
       bodyPadding="none"
       overflow="visible"

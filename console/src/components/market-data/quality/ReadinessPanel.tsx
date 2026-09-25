@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
+  enqueueIngestJob,
+  enqueueIngestSlot,
   fetchMarketStatus,
   fetchQualityScore,
   fetchReadinessDateCoverage,
@@ -16,6 +18,15 @@ import {
   type VendorGapResponse,
 } from '@/api/marketDataPlugin'
 import { DateCoverageSection } from '@/components/market-data/quality/DateCoverageSection'
+import { RefillAction } from '@/components/market-data/quality/RefillAction'
+import {
+  SESSION_FILL_KIND,
+  SESSION_FILL_MAX,
+  SNAPSHOT_REFILL,
+  sessionFillMessage,
+  slotMessage,
+  slotNote,
+} from '@/components/market-data/quality/refillModel'
 import { DailyChecklistSection } from '@/components/market-data/quality/DailyChecklistSection'
 import { ReadinessKpiStrip } from '@/components/market-data/quality/ReadinessKpiStrip'
 import { ReadinessVerdictSection } from '@/components/market-data/quality/ReadinessVerdictSection'
@@ -31,8 +42,17 @@ import {
 
 const REFETCH_MS = 60_000
 
-/** Dashboard window — avoid Plugin defaults (days_back=420) that can 500 under load. */
-const DATE_COVERAGE_DAYS = 30
+/**
+ * How far back a short session is still worth asking about.
+ *
+ * This was 30 days, set when the plugin default of 420 could 500 under backfill
+ * load. The cost is that the panel could not see the gap it exists to find:
+ * fourteen sessions in June 2025 hold one symbol each, roughly 480 days back,
+ * and nothing on this screen ever reached them. Measured 2026-09-25, the same
+ * read answers in 0.6s at 30 days and 4.5s at 420 — well inside the 60s
+ * gateway — so the window now reaches past that gap, and the section states it.
+ */
+const DATE_COVERAGE_DAYS = 500
 const DATE_COVERAGE_MIN_SYMBOLS = 100
 
 function unwrap<T extends { ok?: boolean; error?: string }>(
@@ -204,6 +224,17 @@ export function ReadinessPanel() {
 
   const snapDerived = deriveSnapshotCoverage(snapshot.value)
 
+  // The sessions the refill would actually fill: the ones this panel is
+  // showing, never a blind sweep of the window behind them.
+  const fillDates = useMemo(
+    () =>
+      dateParts.actionableDates
+        .map(d => d.date)
+        .filter((d): d is string => typeof d === 'string' && d.length > 0)
+        .sort(),
+    [dateParts.actionableDates],
+  )
+
   return (
     <div className="flex flex-col gap-4">
       <ReadinessVerdictSection
@@ -223,6 +254,19 @@ export function ReadinessPanel() {
         loading={snapshotQ.isLoading}
         error={snapshot.error}
         sessionDate={snapshot.value?.session_date ?? null}
+        action={
+          <RefillAction
+            label={SNAPSHOT_REFILL.label}
+            title={SNAPSHOT_REFILL.title}
+            message={slotMessage(SNAPSHOT_REFILL, null)}
+            invalidateKeys={[['market-data', 'readiness', 'snapshot-coverage']]}
+            run={async () => {
+              const res = await enqueueIngestSlot({ slot: SNAPSHOT_REFILL.slot })
+              if (isProxyError(res)) throw new Error(res.error)
+              return { queued: res.enqueued ?? 0, deduped: res.deduped, note: slotNote(res) }
+            }}
+          />
+        }
       />
       <VendorGapDetailTable
         gaps={
@@ -235,6 +279,28 @@ export function ReadinessPanel() {
         error={vendor.error}
         sessionDate={vendor.value?.session_date ?? null}
         zeroSnapshotCount={vendorParts.zeroSnapshotCount}
+        action={
+          <RefillAction
+            label="Refetch session"
+            title="Refetch this session's bars"
+            message={
+              vendor.value?.session_date
+                ? `Queue one whole-market grouped-daily job for ${vendor.value.session_date}. A vendor gap is the snapshot close and the bar close disagreeing, so this refetches the day and upserts over it.`
+                : 'Queue a whole-market grouped-daily job for the latest session.'
+            }
+            disabled={vendorQ.isLoading || vendorParts.actionableCount === 0}
+            invalidateKeys={[['market-data', 'readiness', 'vendor-gap']]}
+            run={async () => {
+              const day = vendor.value?.session_date
+              const res = await enqueueIngestJob({
+                kind: SESSION_FILL_KIND,
+                ...(day ? { payload: { from: day } } : {}),
+              })
+              if (isProxyError(res)) throw new Error(res.error)
+              return { queued: 1 }
+            }}
+          />
+        }
       />
       <DateCoverageSection
         dates={dateParts.actionableDates}
@@ -242,6 +308,35 @@ export function ReadinessPanel() {
         loading={dateQ.isLoading}
         error={dateCov.error}
         thinDaysIgnored={dateParts.thinIgnored}
+        windowDays={DATE_COVERAGE_DAYS}
+        action={
+          <RefillAction
+            label={
+              dateQ.isLoading
+                ? 'Fill sessions'
+                : fillDates.length > SESSION_FILL_MAX
+                  ? `Fill ${SESSION_FILL_MAX} of ${fillDates.length}`
+                  : `Fill ${fillDates.length} session${fillDates.length === 1 ? '' : 's'}`
+            }
+            title="Fill the short sessions"
+            message={sessionFillMessage(fillDates.slice(0, SESSION_FILL_MAX))}
+            disabled={dateQ.isLoading || fillDates.length === 0}
+            invalidateKeys={[['market-data', 'readiness', 'date-coverage']]}
+            run={async () => {
+              let queued = 0
+              for (const day of fillDates.slice(0, SESSION_FILL_MAX)) {
+                const res = await enqueueIngestJob({
+                  kind: SESSION_FILL_KIND,
+                  payload: { from: day },
+                })
+                if (isProxyError(res)) throw new Error(`${day}: ${res.error}`)
+                queued += 1
+              }
+              const left = fillDates.length - queued
+              return { queued, note: left > 0 ? `${left} older sessions not queued` : undefined }
+            }}
+          />
+        }
       />
       <DailyChecklistSection />
     </div>
