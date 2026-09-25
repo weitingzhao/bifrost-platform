@@ -75,3 +75,35 @@ describe('doctorModel', () => {
     expect(text).toContain('D10 BLOCKED')
   })
 })
+
+describe('describeFix — a targeted refetch', () => {
+  it('names the underlyings a degraded-chain repair will refetch', () => {
+    expect(
+      describeFix({
+        action: 'enqueue',
+        kind: 'option_snapshot',
+        payloads: [
+          { underlying: 'AJG', trade_date: '2026-09-22' },
+          { underlying: 'CDW', trade_date: '2026-09-22' },
+        ],
+      }),
+    ).toBe('Enqueue option_snapshot for AJG, CDW for 2026-09-22')
+  })
+
+  it('counts the rest rather than listing a dozen names', () => {
+    const payloads = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(u => ({ underlying: u }))
+    expect(describeFix({ action: 'enqueue', kind: 'option_snapshot', payloads })).toBe(
+      'Enqueue option_snapshot for A, B, C, D, E, F +2',
+    )
+  })
+
+  it('still reads for the single-job refill it was written for', () => {
+    expect(
+      describeFix({
+        action: 'enqueue',
+        kind: 'short_volume_market',
+        payload: { date: '2026-09-22' },
+      }),
+    ).toBe('Enqueue 1 short_volume_market job for 2026-09-22')
+  })
+})

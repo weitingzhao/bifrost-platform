@@ -12,13 +12,26 @@ export type DoctorSeverity = 'ok' | 'warn' | 'crit'
 export type DoctorVerdict = 'healthy' | 'degraded' | 'critical'
 
 export type DoctorFix = {
-  action: 'enqueue-slot' | 'retry-jobs' | 'rollout-restart' | 'check-vendor-key' | string
+  action:
+    | 'enqueue-slot'
+    | 'enqueue'
+    | 'retry-jobs'
+    | 'rollout-restart'
+    | 'check-vendor-key'
+    | string
   slot?: string
   date?: string
   force?: boolean
   kind?: string
   job_ids?: number[]
   deployment?: string
+  /** `enqueue` of a single job. */
+  payload?: Record<string, unknown>
+  /**
+   * `enqueue` of a named set — the degraded-chain repair refetches only the
+   * underlyings that came back wrong, rather than re-running their whole slot.
+   */
+  payloads?: Record<string, unknown>[]
 }
 
 export type DoctorFinding = {

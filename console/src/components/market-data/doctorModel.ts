@@ -31,6 +31,21 @@ export function describeFix(fix: DoctorFix | null | undefined): string {
   if (fix.action === 'enqueue-slot') {
     return `Enqueue ${fix.slot ?? '?'}${fix.date != null ? ` for ${fix.date}` : ''}${fix.force ? ' (force)' : ''}`
   }
+  if (fix.action === 'enqueue') {
+    // One job kind rather than a whole slot. `payloads` is the same thing for a
+    // named set: the degraded-chain repair refetches the underlyings that came
+    // back wrong, and re-running their slot to reach them would enqueue all 662.
+    const bodies = fix.payloads ?? (fix.payload != null ? [fix.payload] : [])
+    const named = bodies
+      .map(b => b.underlying ?? b.symbol)
+      .filter((s): s is string => typeof s === 'string')
+    const date = bodies.map(b => b.date ?? b.trade_date).find(d => typeof d === 'string')
+    const what =
+      named.length === 0
+        ? `1 ${fix.kind ?? '?'} job`
+        : `${fix.kind ?? '?'} for ${named.slice(0, 6).join(', ')}${named.length > 6 ? ` +${named.length - 6}` : ''}`
+    return `Enqueue ${what}${typeof date === 'string' ? ` for ${date}` : ''}`
+  }
   if (fix.action === 'retry-jobs') return `Retry ${fix.job_ids?.length ?? 0} ${fix.kind ?? ''} job(s)`
   if (fix.action === 'rollout-restart') return `Restart ${fix.deployment ?? 'deployment'} (kubectl / agent)`
   if (fix.action === 'check-vendor-key') return 'Check the Polygon API key / plan (manual)'
