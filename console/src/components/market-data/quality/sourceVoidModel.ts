@@ -34,9 +34,9 @@ export type GapVerdict =
   /** Checked, and nothing is missing. */
   | { kind: 'ok' }
   /** Missing, and the operator has said the vendor never had it. */
-  | { kind: 'void'; acked: number; total: number }
+  | { kind: 'void'; acked: number; total: number; capped: boolean }
   /** Missing beyond anything acknowledged. */
-  | { kind: 'gaps'; actionable: number; acked: number; total: number }
+  | { kind: 'gaps'; actionable: number; acked: number; total: number; capped: boolean }
 
 export type GapReading = {
   loading: boolean
@@ -45,6 +45,8 @@ export type GapReading = {
   count: number | null
   /** The plugin's own explanation for a zero — a zero with a note is not a zero. */
   note: string | null
+  /** The `limit` the count was asked for. A count that reaches it is a floor, not a total. */
+  limit: number
 }
 
 export function judgeGaps(reading: GapReading, ack: SourceVoidEntry | null | undefined): GapVerdict {
@@ -56,14 +58,21 @@ export function judgeGaps(reading: GapReading, ack: SourceVoidEntry | null | und
   }
 
   const total = reading.count
+  // The endpoint counts the rows it returned, and it returns at most `limit`.
+  // A count that reaches the limit says "at least this many" and nothing more.
+  const capped = total >= reading.limit
   const isVoid = ack?.is_void === true
   const acked = isVoid ? Math.max(0, ack?.acked_gap_count ?? 0) : 0
 
-  if (total === 0) return isVoid ? { kind: 'void', acked, total } : { kind: 'ok' }
+  if (total === 0) return isVoid ? { kind: 'void', acked, total, capped } : { kind: 'ok' }
 
-  const actionable = Math.max(0, total - acked)
-  if (isVoid && actionable === 0) return { kind: 'void', acked, total }
-  return { kind: 'gaps', actionable, acked, total }
+  // Subtracting the acknowledgement is the plugin's own arithmetic
+  // (readiness_summary's *_actionable_gap_count), so it is safe to mirror —
+  // but only against a real total. Against a floor it would claim containment
+  // it cannot know, so a capped count defers to the standing judgement.
+  if (isVoid && (capped || total <= acked)) return { kind: 'void', acked, total, capped }
+  const actionable = isVoid ? Math.max(0, total - acked) : total
+  return { kind: 'gaps', actionable, acked, total, capped }
 }
 
 export type GapTone = 'success' | 'warning' | 'neutral' | 'info'
@@ -93,8 +102,15 @@ export function verdictLabel(v: GapVerdict): string {
     case 'void':
       return 'Vendor void'
     case 'gaps':
-      return `${v.actionable.toLocaleString('en-US')} gaps`
+      return v.capped
+        ? `${v.actionable.toLocaleString('en-US')}+ gaps`
+        : `${v.actionable.toLocaleString('en-US')} gaps`
   }
+}
+
+function missing(total: number, capped: boolean): string {
+  const n = total.toLocaleString('en-US')
+  return capped ? `at least ${n} missing` : `${n} missing`
 }
 
 /** The evidence line under the tag — what was counted, and what was forgiven. */
@@ -103,13 +119,15 @@ export function verdictDetail(v: GapVerdict): string | null {
     case 'unknown':
       return v.reason
     case 'void':
-      return v.total === 0
-        ? 'acknowledged as never published by the vendor'
-        : `${v.total.toLocaleString('en-US')} missing, all within the ${v.acked.toLocaleString('en-US')} acknowledged as vendor-void`
+      if (v.total === 0) return 'acknowledged as never published by the vendor'
+      return v.capped
+        ? `${missing(v.total, true)} · ${v.acked.toLocaleString('en-US')} acknowledged as vendor-void`
+        : `${missing(v.total, false)}, all within the ${v.acked.toLocaleString('en-US')} acknowledged as vendor-void`
     case 'gaps':
-      return v.acked > 0
-        ? `${v.total.toLocaleString('en-US')} missing − ${v.acked.toLocaleString('en-US')} acknowledged`
-        : null
+      if (v.acked > 0) {
+        return `${missing(v.total, v.capped)} − ${v.acked.toLocaleString('en-US')} acknowledged`
+      }
+      return v.capped ? missing(v.total, true) : null
     default:
       return null
   }

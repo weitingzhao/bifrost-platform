@@ -44,6 +44,12 @@ const SEPA_REPORT_TYPES = [
 
 const VOID_KEY = ['market-data', 'financials', 'source-void'] as const
 
+/** The endpoint counts the rows it returns, so this is also the ceiling of every count. */
+const GAP_LIMIT = 200
+
+/** Above the 5,411-ticker universe, so the count taken at acknowledgement time is a real total. */
+const GAP_COUNT_LIMIT = 20_000
+
 function reportLabel(t: string): string {
   return t.replace(/_/g, ' ')
 }
@@ -69,10 +75,10 @@ function GapTable({ symbols }: { symbols: string[] }) {
 }
 
 type PendingVoid = {
+  reportType: string
   dataType: SourceVoidDataType
   label: string
   isVoid: boolean
-  gapCount: number
 }
 
 /**
@@ -95,7 +101,7 @@ export function SepaGapsSection() {
   const queries = useQueries({
     queries: SEPA_REPORT_TYPES.map(report_type => ({
       queryKey: ['market-data', 'financials', 'sepa-gaps', report_type],
-      queryFn: () => fetchSepaGaps({ report_type, limit: 200 }),
+      queryFn: () => fetchSepaGaps({ report_type, limit: GAP_LIMIT }),
       refetchInterval: 120_000,
       retry: 1,
     })),
@@ -108,11 +114,23 @@ export function SepaGapsSection() {
   }, [voidQ.data])
 
   const mark = useMutation({
-    mutationFn: (p: PendingVoid) =>
-      setSourceVoid({ data_type: p.dataType, is_void: p.isVoid, gap_count: p.gapCount }),
+    mutationFn: async (p: PendingVoid) => {
+      // acked_gap_count is meant to be what was known to be missing at the
+      // moment of the acknowledgement, and the listing above is capped at
+      // GAP_LIMIT. Recording that cap would understate it and quietly make
+      // every later comparison against it wrong, so count it properly first.
+      let gapCount = 0
+      if (p.isVoid) {
+        const fresh = await fetchSepaGaps({ report_type: p.reportType, limit: GAP_COUNT_LIMIT })
+        if (isProxyError(fresh)) throw new Error(fresh.error)
+        gapCount = fresh.count ?? fresh.symbols?.length ?? 0
+      }
+      return setSourceVoid({ data_type: p.dataType, is_void: p.isVoid, gap_count: gapCount })
+    },
     onSettled: () => {
       setPending(null)
       void qc.invalidateQueries({ queryKey: VOID_KEY })
+      void qc.invalidateQueries({ queryKey: ['market-data', 'financials', 'sepa-gaps'] })
     },
   })
 
@@ -131,6 +149,7 @@ export function SepaGapsSection() {
             error: proxyErr,
             count: data?.count ?? data?.symbols?.length ?? null,
             note: data?.note ?? null,
+            limit: GAP_LIMIT,
           },
           ack,
         )
@@ -159,14 +178,10 @@ export function SepaGapsSection() {
                   title={canOperate ? undefined : 'Operator auth required'}
                   onClick={() =>
                     setPending({
+                      reportType: report_type,
                       dataType,
                       label: reportLabel(report_type),
                       isVoid: nextIsVoid,
-                      gapCount: verdict.kind === 'pending' || verdict.kind === 'unknown'
-                        ? 0
-                        : verdict.kind === 'ok'
-                          ? 0
-                          : verdict.total,
                     })
                   }
                 >
@@ -195,7 +210,8 @@ export function SepaGapsSection() {
               <div className="flex flex-col gap-2">
                 {symbols.length > 80 ? (
                   <p className="m-0 px-3 pt-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
-                    Showing 80 of {symbols.length.toLocaleString('en-US')} symbols
+                    Showing 80 of {symbols.length.toLocaleString('en-US')}
+                    {symbols.length >= GAP_LIMIT ? '+' : ''} symbols
                   </p>
                 ) : null}
                 <GapTable symbols={symbols} />
@@ -217,7 +233,7 @@ export function SepaGapsSection() {
         message={
           pending?.isVoid === false
             ? `${pending?.label ?? ''} goes back to being counted as work to do.`
-            : `${pending?.label ?? ''}: record that the vendor does not publish this, so its ${(pending?.gapCount ?? 0).toLocaleString('en-US')} missing symbols stop counting as work. Plugin state, not a console preference.`
+            : `${pending?.label ?? ''}: record that the vendor does not publish this, so its missing symbols stop counting as work. The count stored alongside it is read fresh and uncapped at that moment. Plugin state, not a console preference.`
         }
         confirmLabel={pending?.isVoid === false ? 'Clear' : 'Mark void'}
         confirming={mark.isPending}
