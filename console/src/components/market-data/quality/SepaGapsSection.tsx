@@ -47,9 +47,6 @@ const VOID_KEY = ['market-data', 'financials', 'source-void'] as const
 /** The endpoint counts the rows it returns, so this is also the ceiling of every count. */
 const GAP_LIMIT = 200
 
-/** Above the 5,411-ticker universe, so the count taken at acknowledgement time is a real total. */
-const GAP_COUNT_LIMIT = 20_000
-
 function reportLabel(t: string): string {
   return t.replace(/_/g, ' ')
 }
@@ -115,15 +112,16 @@ export function SepaGapsSection() {
 
   const mark = useMutation({
     mutationFn: async (p: PendingVoid) => {
-      // acked_gap_count is meant to be what was known to be missing at the
-      // moment of the acknowledgement, and the listing above is capped at
-      // GAP_LIMIT. Recording that cap would understate it and quietly make
-      // every later comparison against it wrong, so count it properly first.
+      // acked_gap_count is what was known to be missing at the moment of the
+      // acknowledgement, so it has to be the uncapped number: storing the cap
+      // would understate it and make every later comparison against that row
+      // wrong. Read fresh rather than from the poll above, since the operator
+      // may have been looking at this screen for a while.
       let gapCount = 0
       if (p.isVoid) {
-        const fresh = await fetchSepaGaps({ report_type: p.reportType, limit: GAP_COUNT_LIMIT })
+        const fresh = await fetchSepaGaps({ report_type: p.reportType, limit: GAP_LIMIT })
         if (isProxyError(fresh)) throw new Error(fresh.error)
-        gapCount = fresh.count ?? fresh.symbols?.length ?? 0
+        gapCount = fresh.total ?? fresh.count ?? fresh.symbols?.length ?? 0
       }
       return setSourceVoid({ data_type: p.dataType, is_void: p.isVoid, gap_count: gapCount })
     },
@@ -150,6 +148,7 @@ export function SepaGapsSection() {
             count: data?.count ?? data?.symbols?.length ?? null,
             note: data?.note ?? null,
             limit: GAP_LIMIT,
+            total: data?.total ?? null,
           },
           ack,
         )

@@ -552,8 +552,12 @@ export type FinancialsCoverageSymbolsResponse = {
 
 export type SepaGapsResponse = {
   ok: boolean
+  /** How many rows came back — capped by `limit`, so a floor when `truncated`. */
   count?: number
   symbols?: string[]
+  /** The same statement counted without the cap. Absent on plugins before 0.38.3. */
+  total?: number
+  truncated?: boolean
   note?: string
   error?: string
 }

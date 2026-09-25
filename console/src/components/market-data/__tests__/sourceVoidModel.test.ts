@@ -94,6 +94,21 @@ describe('judgeGaps — an acknowledged gap is a boundary, not work', () => {
   })
 })
 
+describe('judgeGaps — the plugin\'s uncapped total settles it when present', () => {
+  it('uses total over a count that merely hit the limit', () => {
+    // Plugin 0.38.3 counts the same statement without the cap, which is what
+    // makes the containment arithmetic below safe again.
+    const v = judgeGaps({ ...READ, count: 200, total: 4_180 }, ack({ acked_gap_count: 3_136 }))
+    expect(v).toEqual({ kind: 'gaps', actionable: 1_044, acked: 3_136, total: 4_180, capped: false })
+    expect(verdictDetail(v)).toBe('4,180 missing − 3,136 acknowledged')
+  })
+
+  it('reads void when the real total is inside the acknowledgement', () => {
+    const v = judgeGaps({ ...READ, count: 200, total: 900 }, ack({ acked_gap_count: 3_136 }))
+    expect(v).toEqual({ kind: 'void', acked: 3_136, total: 900, capped: false })
+  })
+})
+
 describe('judgeGaps — a count that reaches the limit is a floor, not a total', () => {
   it('says "at least" instead of reporting the cap as the number', () => {
     // Measured 2026-09-25: four of the six sections rendered "200 missing"

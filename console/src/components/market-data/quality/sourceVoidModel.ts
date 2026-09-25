@@ -47,6 +47,8 @@ export type GapReading = {
   note: string | null
   /** The `limit` the count was asked for. A count that reaches it is a floor, not a total. */
   limit: number
+  /** The plugin's uncapped count, when it supplies one — then nothing is a floor. */
+  total?: number | null
 }
 
 export function judgeGaps(reading: GapReading, ack: SourceVoidEntry | null | undefined): GapVerdict {
@@ -57,10 +59,12 @@ export function judgeGaps(reading: GapReading, ack: SourceVoidEntry | null | und
     return { kind: 'unknown', reason: reading.note }
   }
 
-  const total = reading.count
-  // The endpoint counts the rows it returned, and it returns at most `limit`.
-  // A count that reaches the limit says "at least this many" and nothing more.
-  const capped = total >= reading.limit
+  // The endpoint counts the rows it returned, and it returns at most `limit`,
+  // so a count that reaches the limit says "at least this many" and no more.
+  // Plugin 0.38.3 answers the same statement counted without the cap; where
+  // that number is present nothing is a floor and the arithmetic below is safe.
+  const total = reading.total ?? reading.count
+  const capped = reading.total == null && reading.count >= reading.limit
   const isVoid = ack?.is_void === true
   const acked = isVoid ? Math.max(0, ack?.acked_gap_count ?? 0) : 0
 
