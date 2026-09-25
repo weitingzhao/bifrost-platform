@@ -34,10 +34,40 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/**
+ * Relative `@import`s, followed the way the bundler follows them.
+ *
+ * Reading only the files listed above made this test a list that goes stale
+ * on someone else's refactor: `@bifrost/ui` 0.4.14 moved the semantic palette
+ * into `styles/semantic.css`, `bifrost-ui.css` kept it with an `@import`, and
+ * this scanner — which reads that file as text — lost four lamp tokens it had
+ * always seen. The page still rendered them correctly; only the check broke.
+ * Bare URLs (`@import "tailwindcss"`) are packages, not paths, and are skipped.
+ */
+function readCssWithImports(file: string, seen = new Set<string>()): string {
+  const full = path.resolve(file)
+  if (seen.has(full)) return ''
+  seen.add(full)
+  let css: string
+  try {
+    css = readFileSync(full, 'utf8')
+  } catch {
+    return '' // a package import resolved to a path that is not there
+  }
+  let out = css
+  for (const m of css.matchAll(/@import\s+(?:url\()?["']([^"']+)["']\)?/g)) {
+    const spec = m[1]
+    if (!spec.startsWith('.') && !spec.startsWith('/')) continue
+    out += `\n${readCssWithImports(path.resolve(path.dirname(full), spec), seen)}`
+  }
+  return out
+}
+
 function definedTokens(): Set<string> {
   const names = new Set<string>()
+  const seen = new Set<string>()
   for (const file of CSS_FILES) {
-    const css = readFileSync(file, 'utf8')
+    const css = readCssWithImports(file, seen)
     // Anchored on a declaration boundary: `.task-mode-trigger--accent:hover`
     // is a class selector, not a definition of `--accent`.
     for (const m of css.matchAll(/(?:^|[\s{;])(--[a-zA-Z0-9-]+)\s*:/gm)) names.add(m[1])
