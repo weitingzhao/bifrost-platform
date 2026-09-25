@@ -553,6 +553,60 @@ export type SepaGapsResponse = {
   error?: string
 }
 
+/* ── Source void ──────────────────────────────────────
+ * The operator's standing judgement that a vendor simply does not publish a
+ * data type, so its gap is a boundary and not work. Plugin state in
+ * ops_jobs.data_source_void — migrated out of Trade with the Data Readiness
+ * page; this console is the only place left that can set it.
+ */
+
+export type SourceVoidDataType =
+  | 'income_statements'
+  | 'balance_sheets'
+  | 'cash_flows'
+  | 'ratios'
+  | 'short_interest'
+  | 'short_volume'
+
+export type SourceVoidEntry = {
+  is_void: boolean
+  acked_gap_count: number | null
+  note: string | null
+  void_reason: string | null
+  updated_at: string | null
+  acked_at: string | null
+}
+
+export type SourceVoidResponse = {
+  ok: boolean
+  voids?: Partial<Record<SourceVoidDataType, SourceVoidEntry>>
+  error?: string
+}
+
+export type SourceVoidWriteResponse = {
+  ok: boolean
+  data_type?: string
+  is_void?: boolean
+  acked_gap_count?: number | null
+  void_reason?: string | null
+  updated_at?: string | null
+  error?: string
+}
+
+export function fetchSourceVoid() {
+  return proxyGet<SourceVoidResponse>('/market/readiness/source-void')
+}
+
+/** `gap_count` lands in `acked_gap_count`: what was known to be missing when it was acknowledged. */
+export function setSourceVoid(body: {
+  data_type: SourceVoidDataType
+  is_void: boolean
+  gap_count?: number
+  note?: string
+}) {
+  return proxyPost<SourceVoidWriteResponse>('/market/readiness/source-void', body)
+}
+
 export type ReferenceCoverageResponse = {
   ok: boolean
   total?: number
