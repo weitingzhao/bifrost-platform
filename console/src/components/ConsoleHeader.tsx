@@ -101,7 +101,7 @@ export function ConsoleHeader({
     <header
       className={cn(
         SHELL_TOP_BAR_HEIGHT_CLASS,
-        'flex items-center gap-2 border-b border-border bg-card px-3',
+        'flex items-center gap-2 border-b border-[var(--table-rule)] bg-card px-3',
       )}
     >
       <SidebarTrigger />
@@ -169,12 +169,12 @@ export function ConsoleHeader({
           variant="outline"
           size="sm"
           className={cn(
-            'relative h-7 w-7 shrink-0 px-0 shadow-sm',
+            'relative h-7 w-7 shrink-0 px-0',
             ambientAgent.expanded
               ? 'border-[color-mix(in_oklab,var(--color-primary)_55%,var(--border))] bg-[color-mix(in_oklab,var(--color-primary)_16%,var(--card))] text-primary'
               : ambientAgent.running
                 ? 'border-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent,#f59e0b)_14%,var(--card))]'
-                : 'border-border bg-secondary/50 text-muted-foreground',
+                : 'text-muted-foreground',
           )}
           onClick={ambientAgent.onToggle}
           aria-expanded={ambientAgent.expanded === true}

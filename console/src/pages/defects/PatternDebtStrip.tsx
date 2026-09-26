@@ -89,7 +89,7 @@ export function PatternDebtStrip({
       className="page-section panel-elevated overflow-hidden"
       aria-label="Pattern debt verdict"
     >
-      <div className="flex flex-wrap items-center gap-3 border-b border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-3 border-b border-[var(--table-rule)] px-3 py-2">
         <StatusLamp value={lampValue} />
         <span className="text-[var(--text-dense-label)] font-semibold tracking-wide">
           PATTERN DEBT
@@ -117,7 +117,7 @@ export function PatternDebtStrip({
           </Button>
         )}
       </div>
-      <div className="grid grid-cols-2 divide-x divide-y divide-border sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
+      <div className="grid grid-cols-2 divide-x divide-y divide-[var(--table-rule)] sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
         {metrics.map(m => (
           <div key={m.label} className="flex min-w-0 flex-col gap-0.5 px-3 py-2.5">
             <span className="text-dense-meta text-muted-foreground">{m.label}</span>

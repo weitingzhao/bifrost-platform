@@ -126,7 +126,7 @@ export function SessionDetailSection({
     <section
       className={
         isArchive
-          ? 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--border)]/60 px-3 py-2.5'
+          ? 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden px-3 py-2.5'
           : 'page-section panel-elevated w-full min-w-0 max-w-full overflow-x-hidden border-[var(--primary)]/25 px-3 py-2.5'
       }
     >
@@ -233,11 +233,11 @@ export function SessionDetailSection({
       <BriefingProgramAutoPhases laneId={lane.id} />
 
       {!isArchive && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[var(--border)]/60 pt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-[var(--table-rule)] pt-2">
           {!isDoingRedirect && (
             <>
           <div
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)]/50 bg-[var(--muted)]/20 px-1.5 py-0.5"
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5"
             title="Agent dialogue language"
           >
             <Languages
@@ -258,7 +258,7 @@ export function SessionDetailSection({
           </div>
 
           <div
-            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)]/50 bg-[var(--muted)]/20 px-1.5 py-0.5"
+            className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5"
             title="Session pack size"
           >
             <Package
@@ -312,7 +312,7 @@ export function SessionDetailSection({
       )}
 
       {isArchive && (
-        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--border)]/60 pt-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] pt-2">
           <button
             type="button"
             className="inline-flex items-center gap-1 text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"

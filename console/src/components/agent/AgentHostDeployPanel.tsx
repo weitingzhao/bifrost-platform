@@ -145,7 +145,7 @@ export function AgentHostDeployPanel() {
             return (
               <div
                 key={t.id}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-2 py-1.5"
+                className="flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
               >
                 <StatusLamp value={reach} kind="reach" />
                 <DenseTag variant={t.role === 'primary' ? 'success' : 'neutral'}>{t.role}</DenseTag>

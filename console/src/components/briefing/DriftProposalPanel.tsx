@@ -202,7 +202,7 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
       </div>
 
       {activeFixProposal != null && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
           <DenseTag variant={statusVariant(activeFixProposal.status)}>
             L4 fix · {activeFixProposal.status}
           </DenseTag>
@@ -287,7 +287,7 @@ export function DriftProposalPanel({ onOpenAgentDesk }: DriftProposalPanelProps)
       {pending.length > 0 && (
         <div className="mt-3 flex flex-col gap-3">
           {pending.map(p => (
-            <div key={p.id} className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+            <div key={p.id} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <DenseTag variant={statusVariant(p.status)}>{p.status}</DenseTag>
                 <span className="font-mono-tabular text-[var(--text-dense-meta)]">{p.id}</span>

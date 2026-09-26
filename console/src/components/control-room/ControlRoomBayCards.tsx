@@ -34,10 +34,10 @@ function BayCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        'control-room-bay-card flex min-w-[9.5rem] flex-1 flex-col gap-1 rounded-md border px-2.5 py-2 text-left transition-colors',
+        'control-room-bay-card flex min-w-[9.5rem] flex-1 flex-col gap-1 rounded-[var(--card-radius)] border px-2.5 py-2 text-left transition-colors',
         selected || open
           ? 'border-[var(--ring)] bg-[var(--accent)]'
-          : 'border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--accent)]/60',
+          : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
       )}
       aria-pressed={open}
     >

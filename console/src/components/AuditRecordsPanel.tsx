@@ -154,7 +154,7 @@ export function AuditRecordsPanel({
       bodyClassName="ops-section-body--table"
     >
       {showCategoryFilter && (
-        <div className="flex flex-col gap-2 border-b border-[var(--border)] px-3 py-2">
+        <div className="flex flex-col gap-2 border-b border-[var(--table-rule)] px-3 py-2">
           <div
             className="flex flex-wrap items-center gap-1.5"
             role="group"
@@ -190,7 +190,7 @@ export function AuditRecordsPanel({
             {ACTUATION_ORIGIN_OPTIONS.map(opt => {
               const selected = origin === opt.id
               const originTone =
-                opt.id === 'all' ? 'border-border bg-muted/50 text-muted-foreground font-semibold' : actuationOriginTagClass(opt.id)
+                opt.id === 'all' ? 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground font-semibold' : actuationOriginTagClass(opt.id)
               return (
                 <DenseTagButton
                   key={opt.id}

@@ -92,7 +92,7 @@ function ProductCard({
     <button
       type="button"
       className={cn(
-        'flex min-w-0 flex-col gap-1 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1.5 text-left',
+        'flex min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-left',
         onOpen && 'cursor-pointer hover:border-[var(--foreground)]/20',
       )}
       onClick={() => onOpen?.(row.jump)}

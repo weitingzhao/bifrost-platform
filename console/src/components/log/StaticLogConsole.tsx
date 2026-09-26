@@ -82,11 +82,11 @@ export function StaticLogConsole({
   return (
     <div
       className={cn(
-        'min-w-0 overflow-hidden rounded-md border border-[var(--border)] bg-[#0a0c0f]',
+        'min-w-0 overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[#0a0c0f]',
         className,
       )}
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] bg-[var(--color-surface-elevated)] px-3 py-1.5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--table-rule)] bg-[var(--color-surface-elevated)] px-3 py-1.5">
         <div className="flex flex-wrap items-center gap-0.5">
           {STATIC_LOG_LEVEL_FILTER_OPTIONS.map(lv => (
             <button
@@ -108,7 +108,7 @@ export function StaticLogConsole({
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Filter…"
-          className="h-6 w-28 rounded border border-[var(--border)] bg-[var(--background)] px-2 text-[10px] outline-none focus:ring-1 focus:ring-[var(--ring)]"
+          className="h-6 w-28 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-[10px] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
         />
         <span className="ml-auto text-[10px] text-[var(--muted-foreground)]">
           {loading ? 'Loading…' : `${filtered.length} / ${parsed.length} lines`}
@@ -136,7 +136,7 @@ export function StaticLogConsole({
       <div
         role="separator"
         aria-label="Resize log console height"
-        className="h-2 cursor-row-resize border-t border-[var(--border)] bg-[var(--color-surface-elevated)] hover:bg-[var(--muted)]/40"
+        className="h-2 cursor-row-resize border-t border-[var(--table-rule)] bg-[var(--color-surface-elevated)] hover:bg-[var(--muted)]/40"
         onMouseDown={e => {
           e.preventDefault()
           const startY = e.clientY

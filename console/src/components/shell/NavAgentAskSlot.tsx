@@ -163,7 +163,7 @@ export function NavAgentAskSlot({
         <textarea
           readOnly
           value={fallbackText}
-          className="h-48 w-full resize-y rounded-sm border border-border bg-background p-1.5 font-mono text-[var(--text-dense-caption)]"
+          className="h-48 w-full resize-y rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-1.5 font-mono text-[var(--text-dense-caption)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
           onFocus={e => e.currentTarget.select()}
         />
       </PopoverContent>

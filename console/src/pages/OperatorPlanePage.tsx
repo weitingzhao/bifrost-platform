@@ -113,7 +113,7 @@ export function OperatorPlanePage({
           {runners.map((r, i) => (
             <span
               key={r.url || r.role || String(i)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1"
+              className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-1 bg-[var(--card-fill)]"
             >
               <StatusLamp value={runnerReach(r.status)} kind="reach" />
               <span className="text-[var(--text-dense-meta)] font-medium">
@@ -129,7 +129,7 @@ export function OperatorPlanePage({
             </span>
           ))}
           {bridge?.nous_hermes != null && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1">
+            <span className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-1 bg-[var(--card-fill)]">
               <StatusLamp
                 value={
                   bridge.nous_hermes.status === 'ok'
@@ -173,7 +173,7 @@ export function OperatorPlanePage({
             </span>
           )}
           {showLegacyScheduler && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 opacity-60">
+            <span className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-1 opacity-60 bg-[var(--card-fill)]">
               <StatusLamp
                 value={
                   hermes?.status === 'ok' ? 'ok' : hermes?.status === 'unavailable' ? 'fail' : 'unknown'

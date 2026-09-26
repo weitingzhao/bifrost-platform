@@ -39,7 +39,7 @@ function AgentJobRow({ job }: { job: DevAgentJob }) {
   const approvedBy = job.approved_by?.trim() ?? ''
 
   return (
-    <li className="border-b border-border/50 last:border-b-0">
+    <li className="border-b border-[var(--table-rule)] last:border-b-0">
       <button
         type="button"
         className="flex w-full items-start gap-2 px-0 py-1.5 text-left disabled:cursor-default"

@@ -9,7 +9,7 @@ export function VisionProgramGatePanels() {
         Run gate checks here in Briefing Session (lane governance). Delivery Board shows progress as a read-only catalog.
       </p>
       {VISION_GATE_IDS.map(id => (
-        <div key={id} className="border-t border-border/50 pt-1 first:border-t-0">
+        <div key={id} className="border-t border-[var(--table-rule)] pt-1 first:border-t-0">
           <VisionGatePanel id={id} />
         </div>
       ))}

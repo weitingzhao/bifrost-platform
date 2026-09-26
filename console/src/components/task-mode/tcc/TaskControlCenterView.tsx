@@ -403,7 +403,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     isDailyOps || isDevLoop || mode.id === 'analysis' ? null : phases.length > 0 ? (
     <details
       id="task-cc-phase-progress"
-      className="rounded-lg border border-border bg-card px-3 py-1.5"
+      className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-1.5"
       open={phaseOpen}
       onToggle={e => setPhaseOpen((e.currentTarget as HTMLDetailsElement).open)}
     >

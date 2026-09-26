@@ -494,7 +494,7 @@ export function QueueDashboardPanel({
             onSelectKind={toggleInspect}
           />
           {inspectOpen ? (
-            <div className="border-t border-[var(--border)] pt-1.5">
+            <div className="border-t border-[var(--table-rule)] pt-1.5">
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <span className="text-[var(--text-dense-caption)] font-medium">
                   {inspectKind !== '' ? shortIngestKind(inspectKind) : 'All kinds'}

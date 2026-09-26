@@ -48,7 +48,7 @@ function KpiCard({ label, value, sub, className }: {
   className?: string
 }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-4 py-3">
+    <div className="flex flex-col gap-0.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-4 py-3">
       <span className="text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">{label}</span>
       <span className={`text-lg font-semibold tabular-nums ${className ?? ''}`}>{value}</span>
       {sub != null && (

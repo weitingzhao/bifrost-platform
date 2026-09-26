@@ -17,7 +17,7 @@ export function CopyChip({ label, value }: { label: string; value: string }) {
     <button
       type="button"
       onClick={copy}
-      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-dense-meta font-mono-tabular hover:border-[var(--ring)] hover:bg-[var(--secondary)]"
+      className="inline-flex items-center gap-1.5 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-1 text-dense-meta font-mono-tabular hover:border-[var(--ring)] hover:bg-[var(--control-fill-hover)]"
       title={`Copy ${label}`}
     >
       <span className="text-[var(--muted-foreground)]">{label}</span>

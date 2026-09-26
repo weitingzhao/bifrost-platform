@@ -43,7 +43,7 @@ export function ClusterFacilityPoolsPanel({ placement, isLoading }: FacilityPane
         {pools.map(pool => (
           <div
             key={pool.id}
-            className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2"
+            className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium text-[var(--text-dense-label)]">{pool.label}</span>

@@ -93,7 +93,7 @@ export function DevTaskStrips({
 
           {/* Single program-binding strip — follows Active Session */}
           {programDetail != null ? (
-            <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+            <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <ClipboardList size={16} />
                 <span className="text-[var(--text-dense-label)] font-semibold">Linked program</span>
@@ -147,7 +147,7 @@ export function DevTaskStrips({
               Loading program…
             </p>
           ) : !hasActiveSession ? (
-            <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+            <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <Code2 size={16} />
                 <span className="text-[var(--text-dense-label)] font-semibold">
@@ -168,7 +168,7 @@ export function DevTaskStrips({
               </Button>
             </div>
           ) : needsProgram ? (
-            <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+            <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <Code2 size={16} />
                 <span className="text-[var(--text-dense-label)] font-semibold">

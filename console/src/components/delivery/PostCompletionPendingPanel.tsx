@@ -31,7 +31,7 @@ function DetailList({ label, values }: { label: string; values?: string[] }) {
 
 function ItemDetail({ item }: { item: PostCompletionItem }) {
   return (
-    <div className="mt-1 grid gap-1.5 rounded border border-border/60 bg-background/60 p-2 sm:grid-cols-2">
+    <div className="mt-1 grid gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 sm:grid-cols-2">
       <p className="m-0 text-dense-meta"><span className="text-muted-foreground">Reason:</span> {item.reason ?? item.description ?? '—'}</p>
       <p className="m-0 text-dense-meta"><span className="text-muted-foreground">Operate lane:</span> {item.operate_lane ?? '—'}</p>
       <p className="m-0 text-dense-meta"><span className="text-muted-foreground">Agent task:</span> {item.agent_task_id ?? 'Prepare manually'}</p>
@@ -151,10 +151,10 @@ export function PostCompletionPendingPanel({
   return (
     <div
       className={[
-        'flex flex-col gap-2 rounded-md border px-3 py-2',
+        'flex flex-col gap-2 rounded-[var(--card-radius)] border px-3 py-2',
         emphasize
           ? 'border-[var(--color-lamp-yellow)]/45 bg-[color-mix(in_srgb,var(--color-lamp-yellow)_12%,transparent)]'
-          : 'border-border bg-secondary/30',
+          : 'border-[var(--card-border)] bg-[var(--card-fill)]',
       ].join(' ')}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -171,7 +171,7 @@ export function PostCompletionPendingPanel({
       )}
       <ul className="m-0 flex flex-col gap-2 p-0 list-none">
         {items.map(item => (
-          <li key={item.id} className="rounded border border-border/60 bg-secondary/20 p-2">
+          <li key={item.id} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
               <span className="font-medium">{item.title}</span>
@@ -231,7 +231,7 @@ export function PostCompletionPendingPanel({
         </p>
       )}
       {programId != null && gatesComplete && canAdmin && allowApprove && assessmentStatus !== 'NO HANDOFF' && assessmentStatus !== 'CLOSED' && (
-        <div className="flex flex-col gap-2 border-t border-border/60 pt-3">
+        <div className="flex flex-col gap-2 border-t border-[var(--table-rule)] pt-3">
           <p className="m-0 text-dense-label font-medium">Close this program — Owner decision</p>
           <p className="m-0 text-dense-meta text-muted-foreground">
             All required gates are signed. Record that no ongoing operational handoff is needed to close.
@@ -239,7 +239,7 @@ export function PostCompletionPendingPanel({
           <label className="text-dense-caption font-medium text-muted-foreground" htmlFor={`no-handoff-${programId}`}>Reason</label>
           <textarea
             id={`no-handoff-${programId}`}
-            className="min-h-16 rounded border border-border bg-background px-2 py-1.5 text-dense-meta"
+            className="min-h-16 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1.5 text-dense-meta outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
             placeholder="e.g. All phases delivered. No ongoing operational responsibility."
             value={decisionReason}
             onChange={event => setDecisionReason(event.target.value)}

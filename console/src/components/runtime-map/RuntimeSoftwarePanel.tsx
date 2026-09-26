@@ -177,7 +177,7 @@ function ScopeLayerCard({
     <div
       data-scope-tag={layer.tag}
       className={[
-        'runtime-scope-card border border-[var(--border)] rounded-[var(--radius)]',
+        'runtime-scope-card border border-[var(--card-border)] rounded-[var(--card-radius)] bg-[var(--card-fill)]',
         selected ? 'runtime-scope-card--selected' : '',
       ]
         .filter(Boolean)

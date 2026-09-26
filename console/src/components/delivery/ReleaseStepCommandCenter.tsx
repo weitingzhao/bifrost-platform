@@ -26,7 +26,7 @@ const RELEASE_OUTCOME_BADGE: Record<string, string> = {
   released: 'border-success/40 bg-success/10 text-success',
   in_progress: 'border-primary/40 bg-primary/10 text-primary',
   failed: 'border-destructive/40 bg-destructive/10 text-destructive',
-  idle: 'border-border bg-secondary/40 text-muted-foreground',
+  idle: 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground',
 }
 
 const STEP_CIRCLE: Record<StepStatus, string> = {
@@ -138,7 +138,7 @@ function ReleaseIdentityHeader({
   const outcome = deriveReleaseOutcome(steps)
 
   return (
-    <div className="release-cc__identity border-b border-border px-4 py-3">
+    <div className="release-cc__identity border-b border-[var(--table-rule)] px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
         <div className="flex min-w-0 items-center gap-3">
           <span className="shrink-0 text-dense-label font-semibold uppercase tracking-wider text-muted-foreground">
@@ -269,12 +269,12 @@ function StepActionZone({
   if (!preferPrimaryActions && status === 'done') {
     const isDeployStep = activeIndex === 0 || activeIndex === 2
     return (
-      <details className="group rounded-md border border-border/50 bg-background/40">
+      <details className="group rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
         <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
           <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
           {isDeployStep ? 'Re-deploy with a different revision' : 'Re-run this gate'}
         </summary>
-        <div className="border-t border-border/50 px-3 py-2.5">{renderStepActions(activeIndex)}</div>
+        <div className="border-t border-[var(--table-rule)] px-3 py-2.5">{renderStepActions(activeIndex)}</div>
       </details>
     )
   }
@@ -361,12 +361,12 @@ function ReleaseCycleTerminalPanel({
         </div>
       )}
       {!agentDriven && (
-        <details className="group rounded-md border border-border/50 bg-background/40">
+        <details className="group rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
             <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
             Re-run a stage (advanced)
           </summary>
-          <div className="border-t border-border/50 px-3 py-2.5">
+          <div className="border-t border-[var(--table-rule)] px-3 py-2.5">
             {renderStepActions(activeIndex)}
           </div>
         </details>
@@ -472,7 +472,7 @@ export function ReleaseStepCommandCenter({
         aiReleasePending={aiReleasePending}
         launchLabel={aiReleaseLabel}
       />
-      <div className="border-t border-border/40 px-4 py-1.5">{summary}</div>
+      <div className="border-t border-[var(--table-rule)] px-4 py-1.5">{summary}</div>
     </>
   ) : agentDriven ? (
     <>
@@ -484,7 +484,7 @@ export function ReleaseStepCommandCenter({
         stepRevision={stepRevision}
         launchLabel={aiReleaseLabel}
       />
-      <div className="border-t border-border/40 px-4 py-1.5">
+      <div className="border-t border-[var(--table-rule)] px-4 py-1.5">
         {summary}
         {renderStepDetail?.(activeIndex)}
       </div>
@@ -510,7 +510,7 @@ export function ReleaseStepCommandCenter({
         />
       </div>
 
-      <div className="border-t border-border/40 px-4 py-1.5">
+      <div className="border-t border-[var(--table-rule)] px-4 py-1.5">
         {summary}
         {renderStepDetail?.(activeIndex)}
       </div>
@@ -535,7 +535,7 @@ export function ReleaseStepCommandCenter({
       : 'Summary · stepper only'
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-card">
+    <div className="relative overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
       <div className={cn('release-cc__accent', accentClass)} />
 
       <ReleaseIdentityHeader
@@ -556,7 +556,7 @@ export function ReleaseStepCommandCenter({
 
       {collapsibleBody ? (
         <details
-          className="group border-t border-border"
+          className="group border-t border-[var(--table-rule)]"
           open={bodyOpen}
           onToggle={e => setBodyOpen((e.currentTarget as HTMLDetailsElement).open)}
         >
@@ -575,7 +575,7 @@ export function ReleaseStepCommandCenter({
           {actionBody}
         </details>
       ) : (
-        <div className="border-t border-border">{actionBody}</div>
+        <div className="border-t border-[var(--table-rule)]">{actionBody}</div>
       )}
     </div>
   )

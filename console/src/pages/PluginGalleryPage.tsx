@@ -155,7 +155,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
           {PLUGIN_REGISTRY.map(plugin => (
             <div
               key={plugin.id}
-              className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2"
+              className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
             >
               <div className="flex flex-wrap items-center gap-2">
                 {plugin.id === 'ib-gateway' ? (

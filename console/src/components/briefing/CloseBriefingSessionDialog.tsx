@@ -72,7 +72,7 @@ export function CloseBriefingSessionDialog({
           <label className="flex flex-col gap-1">
             <span className="text-dense-meta text-muted-foreground">Summary</span>
             <textarea
-              className="min-h-[72px] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm"
+              className="min-h-[72px] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1.5 text-sm outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={effectiveSummary}
               onChange={e => setSummary(e.target.value)}
             />
@@ -80,7 +80,7 @@ export function CloseBriefingSessionDialog({
           <label className="flex flex-col gap-1">
             <span className="text-dense-meta text-muted-foreground">Spine note (optional)</span>
             <input
-              className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm"
+              className="rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1.5 text-sm outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={spineNote}
               placeholder="e.g. W3 verify complete — ready for Owner sign-off"
               onChange={e => setSpineNote(e.target.value)}

@@ -320,7 +320,7 @@ export function ObservabilityAttentionPanel({
               {remediationError != null && (
                 <p className="m-0 text-[var(--text-dense-caption)] text-danger">{remediationError}</p>
               )}
-              <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-2">
+              <div className="flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2">
                 {attentionDetail.triage.cta === 'agent_fix' && (
                   <Button
                     size="sm"

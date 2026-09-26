@@ -85,10 +85,10 @@ export function GovernanceCatalogShell<T extends string>({
                   aria-pressed={selected}
                   onClick={() => onChange(section.id)}
                   className={cn(
-                    'rounded-md border px-3 py-2 text-left transition-colors',
+                    'rounded-[var(--card-radius)] border px-3 py-2 text-left transition-colors',
                     selected
                       ? 'border-[var(--primary)]/50 bg-[var(--primary)]/10'
-                      : 'border-[var(--border)] bg-[var(--secondary)]/30 hover:bg-[var(--secondary)]/55',
+                      : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-2">

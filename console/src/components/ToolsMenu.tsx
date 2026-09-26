@@ -83,7 +83,7 @@ export function ToolsMenu({ className }: { className?: string }) {
             )
           })}
         </ul>
-        <p className="m-0 border-t border-border/60 px-1.5 pt-1.5 text-dense-micro text-muted-foreground">
+        <p className="m-0 border-t border-[var(--table-rule)] px-1.5 pt-1.5 text-dense-micro text-muted-foreground">
           Opens in a new tab — not embedded in Console.
         </p>
       </PopoverContent>

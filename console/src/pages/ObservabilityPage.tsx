@@ -480,7 +480,7 @@ export function ObservabilityPage({
           ) : null}
 
           {referenceDomains.length > 0 ? (
-            <div className="flex flex-col gap-1 border-t border-[var(--border)] pt-2">
+            <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
               <OpsSubsectionTitle>Reference domains (not probed)</OpsSubsectionTitle>
               <div className="flex flex-wrap gap-1.5">
                 {referenceDomains.map(d => (
@@ -552,7 +552,7 @@ export function ObservabilityPage({
               Deep evidence · {viewModel.dashboards.length} catalogued · expand when needed
             </span>
           </summary>
-          <div className="border-t border-border">
+          <div className="border-t border-[var(--table-rule)]">
             <DenseDataTable>
               <DenseTableHeader>
                 <DenseTableHeadRow>

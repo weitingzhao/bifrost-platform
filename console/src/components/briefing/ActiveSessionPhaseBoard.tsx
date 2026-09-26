@@ -265,7 +265,7 @@ function PhaseGridFold({
       </CollapsibleGroupHeader>
       {open ? (
         <CollapsibleGroupBody className="px-0 pb-0">
-          <div className="min-w-0 overflow-x-auto border-t border-border">{children}</div>
+          <div className="min-w-0 overflow-x-auto border-t border-[var(--table-rule)]">{children}</div>
         </CollapsibleGroupBody>
       ) : null}
     </CollapsibleGroup>
@@ -594,7 +594,7 @@ export function ActiveSessionPhaseBoard({
       {lanePrograms.map((program, index) => (
         <div
           key={program.id}
-          className={index > 0 ? 'border-t border-border/60 pt-4' : undefined}
+          className={index > 0 ? 'border-t border-[var(--table-rule)] pt-4' : undefined}
         >
           <ProgramUnifiedBoard
             program={program}

@@ -109,8 +109,8 @@ export function ClusterServiceReadinessPanel({
   if (embedded) {
     const domain = filteredDomain
     return (
-      <div className="satellite-bus-shared-domain-card flex min-w-0 flex-col overflow-hidden rounded-md border border-[var(--border)] bg-[var(--background)]/40">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-[var(--border)] px-2.5 py-1.5">
+      <div className="satellite-bus-shared-domain-card flex min-w-0 flex-col overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-[var(--table-rule)] px-2.5 py-1.5">
           <span className="text-[var(--text-dense-meta)] font-medium">
             {domain?.label ?? domainFilter ?? 'Domain'}
           </span>

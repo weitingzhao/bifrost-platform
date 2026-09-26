@@ -141,7 +141,7 @@ function DailyOpsFixTargetBar({
 
   return (
     <div
-      className="mb-2 rounded-md border border-border/50 bg-background/70 px-2.5 py-1.5"
+      className="mb-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5"
       aria-label="Current fix target"
     >
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -221,7 +221,7 @@ function QueueItemRow({
     (linked.id === ambientJobId || onAdoptJob != null)
 
   return (
-    <li className="flex min-w-0 items-center gap-1.5 rounded border border-border/40 bg-background/50 px-2 py-1">
+    <li className="flex min-w-0 items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1">
       <span className="min-w-0 flex-1 truncate text-[var(--text-dense-meta)] text-foreground">
         {item.title}
       </span>
@@ -449,10 +449,10 @@ export function DailyOpsExecutionPanel({
     <div
       data-daily-ops-execution
       className={cn(
-        'rounded-md border px-2.5 py-2',
+        'rounded-[var(--card-radius)] border px-2.5 py-2',
         activeTone
           ? 'border-amber-500/45 bg-amber-500/10'
-          : 'border-border/60 bg-secondary/80',
+          : 'border-[var(--card-border)] bg-[var(--card-fill)]',
       )}
       aria-label="Execution"
     >
@@ -568,7 +568,7 @@ export function DailyOpsExecutionPanel({
               onVerifyReprobe={onVerifyReprobe}
             />
           ) : showStartingHint ? (
-            <div className="flex items-center gap-1.5 rounded-md border border-border/60 bg-background/80 px-2.5 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
+            <div className="flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2 text-[var(--text-dense-caption)] text-muted-foreground">
               <Loader2 className="size-3 animate-spin" aria-hidden />
               Starting Agent…
             </div>
@@ -581,7 +581,7 @@ export function DailyOpsExecutionPanel({
                   proposeDisabled={!canOperate || proposeCommitPending}
                 />
               )}
-              <div className="rounded-md border border-border/50 bg-background/60 px-2.5 py-3 text-center">
+              <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-3 text-center">
               {primaryBlocker != null ? (
                 <>
                   <p className="m-0 text-[var(--text-dense-meta)] font-medium text-muted-foreground">
@@ -840,7 +840,7 @@ export function DailyOpsExecutionPanel({
                   return (
                     <li
                       key={row.key}
-                      className="flex min-w-0 items-center gap-1.5 rounded border border-border/40 bg-background/50 px-2 py-1"
+                      className="flex min-w-0 items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
                     >
                       <span className="shrink-0 font-mono text-[var(--text-dense-micro)] text-muted-foreground">
                         {formatRemediationJobWhen(row.at)}
@@ -899,7 +899,7 @@ export function DailyOpsExecutionPanel({
         </label>
         <textarea
           id="exec-dismiss-evidence"
-          className="mt-1 min-h-14 w-full rounded border border-border bg-background px-2 py-1 text-[var(--text-dense-meta)]"
+          className="mt-1 min-h-14 w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
           placeholder="operator: already resolved / fleet clean…"
           value={dismissEvidence}
           onChange={e => setDismissEvidence(e.target.value)}

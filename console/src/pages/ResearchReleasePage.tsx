@@ -266,7 +266,7 @@ export function ResearchReleasePage({
                 setTag(e.target.value)
               }}
               placeholder={RESEARCH_TAG_PLACEHOLDER}
-              className="h-7 w-32 rounded border border-[var(--border)] bg-[var(--card)] px-2 font-mono text-sm"
+              className="h-7 w-32 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 font-mono text-sm outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               aria-label="Image tag"
             />
           </label>
@@ -421,7 +421,7 @@ function ResearchRunList({
     )
   }
   return (
-    <ul className="m-0 flex list-none flex-col divide-y divide-border/50 p-0">
+    <ul className="m-0 flex list-none flex-col divide-y divide-[var(--table-rule)] p-0">
       {runs.slice(0, 8).map(run => {
         const variant = isPipelineRunSucceeded(run)
           ? 'success'

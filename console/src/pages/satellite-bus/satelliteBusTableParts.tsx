@@ -281,7 +281,7 @@ export function BusPathNodeCard({
       type="button"
       onClick={onInspect}
       title={`Inspect ${node.label}`}
-      className="flex min-w-[10.5rem] flex-1 flex-col gap-0.5 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--accent)]"
+      className="flex min-w-[10.5rem] flex-1 flex-col gap-0.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-left transition-colors hover:bg-[var(--card-fill-hover)]"
     >
       <span className="flex items-center gap-1.5">
         <StatusLamp value={busNodeHealthToReach(node.health)} kind="reach" />

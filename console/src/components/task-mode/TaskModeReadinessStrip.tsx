@@ -71,7 +71,7 @@ export function DailyOpsMissionStrip({ compact = false }: { compact?: boolean })
   const color = missionStatusColor(status)
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Gauge size={16} style={{ color }} />
         <span className="text-[var(--text-dense-label)] font-semibold">Mission signals</span>

@@ -199,10 +199,10 @@ export function QueueHistoryPanel() {
               key={r.label}
               type="button"
               className={cn(
-                "rounded-sm border px-1.5 py-0.5 font-mono text-[var(--text-dense-caption)]",
+                "rounded-[var(--control-radius)] border px-1.5 py-0.5 font-mono text-[var(--text-dense-caption)]",
                 hours === r.hours
                   ? "border-[var(--color-info)] bg-[var(--color-info)]/10"
-                  : "border-[var(--border)] text-[var(--muted-foreground)]",
+                  : "border-transparent bg-[var(--control-fill)] text-[var(--muted-foreground)] hover:bg-[var(--control-fill-hover)]",
               )}
               onClick={() => setHours(r.hours)}
             >

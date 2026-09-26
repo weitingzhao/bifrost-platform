@@ -183,7 +183,7 @@ export function MarketDataCoverageTab({
       <DataInventoryStrip />
       <CoverageMatrixPanel />
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--table-rule)] pb-2">
         <SegmentControl
           size="sm"
           ariaLabel="Coverage detail panel"

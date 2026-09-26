@@ -71,7 +71,7 @@ export function ReadinessChip({ label, signal, detail, onDrillDown, title }: Rea
   )
   if (onDrillDown == null) {
     return (
-      <div className="rounded border border-border/60 bg-card px-2 py-1.5" title={title}>
+      <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5" title={title}>
         {inner}
       </div>
     )
@@ -80,8 +80,8 @@ export function ReadinessChip({ label, signal, detail, onDrillDown, title }: Rea
     <button
       type="button"
       className={cn(
-        'w-full rounded border bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5',
-        failing ? 'border-warning/40' : 'border-border/60',
+        'w-full rounded-[var(--card-radius)] border bg-[var(--card-fill)] px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5',
+        failing ? 'border-warning/40' : 'border-[var(--card-border)]',
       )}
       title={title ?? `Open details: ${label}`}
       onClick={onDrillDown}
@@ -139,7 +139,7 @@ export function EnvironmentReadinessPanel({
     <div
       id={readinessAnchor != null ? readinessAnchorDomId(readinessAnchor) : undefined}
       className={cn(
-        'rounded-lg border border-border bg-secondary scroll-mt-2 transition-shadow',
+        'rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] scroll-mt-2 transition-shadow',
         dense ? 'px-2.5 py-2' : 'px-3 py-2.5',
         summaryColumn && 'flex h-full min-h-0 flex-col',
       )}
@@ -483,7 +483,7 @@ export function SharedRocketStrip({
     <div
       id={readinessAnchorDomId('rocket')}
       className={cn(
-        'rounded-lg border border-border bg-secondary scroll-mt-2 transition-shadow',
+        'rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] scroll-mt-2 transition-shadow',
         compact ? 'px-2.5 py-2' : 'px-3 py-2.5',
       )}
     >

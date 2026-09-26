@@ -241,7 +241,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
                   {AGENT_LAYERING.map(l => (
                     <div
                       key={l.layer}
-                      className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2"
+                      className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
                     >
                       <div className="flex items-center gap-2">
                         <strong className="text-[var(--text-dense-label)]">{l.layer}</strong>
@@ -374,7 +374,7 @@ export function BlueprintPage({ context }: { context?: OpsContextResponse }) {
 
               <CatalogSection title="AI Platform capabilities">
                 {AI_PLATFORM_CAPABILITIES.map(cap => (
-                  <div key={cap.name} className="border-b border-[var(--border)] last:border-b-0">
+                  <div key={cap.name} className="border-b border-[var(--table-rule)] last:border-b-0">
                     <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
                       {cap.name}
                     </div>

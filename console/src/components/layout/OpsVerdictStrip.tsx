@@ -116,7 +116,7 @@ export function OpsVerdictStrip({
       )}
       {!compact ? metaNode : null}
       {body != null ? (
-        <div className="cluster-health-verdict-body mt-2 border-t border-border pt-2">{body}</div>
+        <div className="cluster-health-verdict-body mt-2 border-t border-[var(--table-rule)] pt-2">{body}</div>
       ) : null}
     </section>
   )

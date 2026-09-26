@@ -78,7 +78,7 @@ export function WaveVerifyGateCard({
   const actuationLabel = actuation === 'deliver' ? 'Mark delivered' : 'Sign off'
 
   return (
-    <div className="mt-2 rounded-md border border-[var(--border)] bg-[var(--accent)]/20 px-3 py-2">
+    <div className="mt-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">

@@ -187,7 +187,7 @@ export function DualFlywheelVisionPage() {
         <>
           <CatalogSection title="Three-layer Agent Architecture">
             {AGENT_LAYERS.map(layer => (
-              <div key={layer.layer} className="border-b border-[var(--border)] px-3 py-3 last:border-b-0">
+              <div key={layer.layer} className="border-b border-[var(--table-rule)] px-3 py-3 last:border-b-0">
                 <div className="mb-2 flex items-center gap-2">
                   <DenseTag variant="success">Layer {layer.layer}</DenseTag>
                   <span className="text-sm font-medium">{layer.name}</span>
@@ -375,7 +375,7 @@ export function DualFlywheelVisionPage() {
           </CatalogSection>
 
           <CatalogSection title="Redis Ideal Topology (Per Environment)">
-            <div className="border-b border-[var(--border)] px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">
+            <div className="border-b border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense)] text-[var(--muted-foreground)]">
               {REDIS_TOPOLOGY_STATEMENT}
             </div>
             <DenseDataTable>
@@ -596,7 +596,7 @@ export function DualFlywheelVisionPage() {
 
         <CatalogSection title="Convergence Milestones (V1–V5)">
           {VISION_MILESTONES.map(m => (
-            <div key={m.id} className="border-b border-[var(--border)] px-3 py-3 last:border-b-0">
+            <div key={m.id} className="border-b border-[var(--table-rule)] px-3 py-3 last:border-b-0">
               <div className="mb-1 flex items-center gap-2">
                 <DenseTag variant="success">{m.id}</DenseTag>
                 <span className="text-sm font-medium">{m.title}</span>

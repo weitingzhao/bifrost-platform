@@ -13,7 +13,7 @@ export function MissionSignalProgramPanels() {
         Session for lane platform-health. Phase table syncs from unified programs API.
       </p>
       {MISSION_SIGNAL_PHASES.map(phase => (
-        <div key={phase.id} className="border-t border-border/50 pt-1 first:border-t-0">
+        <div key={phase.id} className="border-t border-[var(--table-rule)] pt-1 first:border-t-0">
           <MissionSignalPhasePanel phase={phase} readiness={readiness[phase.id]} />
         </div>
       ))}

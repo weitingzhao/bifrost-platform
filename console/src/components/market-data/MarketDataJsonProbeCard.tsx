@@ -51,7 +51,7 @@ export function MarketDataJsonProbeCard({
             Plugin path
           </span>
           <input
-            className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 font-mono text-[var(--text-dense-meta)]"
+            className="h-8 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 font-mono text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
             value={path}
             onChange={e => setPath(e.target.value)}
             placeholder="/market/coverage/db-summary"

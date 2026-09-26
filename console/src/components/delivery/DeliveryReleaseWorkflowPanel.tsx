@@ -113,7 +113,7 @@ export function DeliveryReleaseWorkflowPanel({
         {phases.map(phase => (
           <li
             key={phase.id}
-            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2"
+            className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
           >
             <div className="flex flex-wrap items-center gap-2">
               <StatusLamp value={phaseLamp(phase.status)} kind="reach" />

@@ -142,14 +142,14 @@ export function NewLaneDialog({ open, onOpenChange, onCreated }: NewLaneDialogPr
               1. Describe the work
             </p>
             <input
-              className="w-full rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+              className="w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               placeholder="Lane label (becomes kebab-case id)"
               value={label}
               onChange={e => setLabel(e.target.value)}
               autoFocus
             />
             <textarea
-              className="mt-2 w-full resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+              className="mt-2 w-full resize-none rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               rows={3}
               placeholder="What problem does this solve? What will it deliver?"
               value={description}
@@ -157,7 +157,7 @@ export function NewLaneDialog({ open, onOpenChange, onCreated }: NewLaneDialogPr
             />
           </div>
 
-          <div className="rounded-md border border-[var(--border)]/70 bg-[var(--secondary)]/30 px-3 py-2.5">
+          <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
             <p className="m-0 mb-1 text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)]">
               2. Confirm classification
             </p>

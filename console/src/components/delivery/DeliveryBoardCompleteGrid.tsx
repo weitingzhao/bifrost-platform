@@ -31,7 +31,7 @@ export function DeliveryBoardCompleteGrid({
   if (programs.length === 0) return null
 
   return (
-    <div className="rounded-md border border-border/60 bg-secondary/20 px-2.5 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <button
         type="button"
         className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-secondary"
@@ -59,10 +59,10 @@ export function DeliveryBoardCompleteGrid({
                 key={program.id}
                 type="button"
                 className={[
-                  'flex w-full min-w-0 flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                  'flex w-full min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border px-3 py-2.5 text-left transition-colors',
                   selected
                     ? 'border-primary bg-primary/8'
-                    : 'border-border/60 bg-card/60 opacity-80 hover:opacity-100 hover:bg-secondary/40',
+                    : 'border-[var(--card-border)] bg-[var(--card-fill)] opacity-80 hover:opacity-100 hover:bg-[var(--card-fill-hover)]',
                 ].join(' ')}
                 onClick={() => onSelect(program.id)}
               >

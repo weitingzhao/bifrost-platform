@@ -160,7 +160,7 @@ export function SupplyChainPanel({
       bodyClassName={showInventory ? 'ops-section-body--table' : undefined}
     >
       {showActuation && (
-      <div className={showInventory ? 'border-b border-[var(--border)] px-3 py-2' : 'px-3 py-2'}>
+      <div className={showInventory ? 'border-b border-[var(--table-rule)] px-3 py-2' : 'px-3 py-2'}>
         <OpsSubsectionTitle>Revision & actuation</OpsSubsectionTitle>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Revision:</span>
@@ -226,7 +226,7 @@ export function SupplyChainPanel({
 
       {showInventory && (
       <>
-      <div className="border-b border-[var(--border)] px-3 py-2">
+      <div className="border-b border-[var(--table-rule)] px-3 py-2">
         <OpsSubsectionTitle>
           Dockerfile ConfigMaps ({supplyQuery.isLoading ? '…' : data?.dockerfile_configmaps.length ?? 0})
         </OpsSubsectionTitle>
@@ -278,7 +278,7 @@ export function SupplyChainPanel({
         </DenseTableBody>
       </DenseDataTable>
 
-      <div className="border-b border-t border-[var(--border)] px-3 py-2">
+      <div className="border-b border-t border-[var(--table-rule)] px-3 py-2">
         <OpsSubsectionTitle>
           STG workload images ({supplyQuery.isLoading ? '…' : data?.stg_workloads.length ?? 0})
         </OpsSubsectionTitle>
@@ -317,7 +317,7 @@ export function SupplyChainPanel({
       </DenseDataTable>
 
       {data?.tracked_repos != null && data.tracked_repos.length > 0 && (
-        <div className="border-t border-[var(--border)] px-3 py-2">
+        <div className="border-t border-[var(--table-rule)] px-3 py-2">
           <OpsSubsectionTitle>Tracked Gitea mirrors</OpsSubsectionTitle>
           <p className="m-0 mt-1 font-mono-tabular text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             {data.tracked_repos.join(' · ')}

@@ -93,7 +93,7 @@ export function NetworkHealthPanel({
         </DenseTag>
       </div>
 
-      <div className="mb-4 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-3 py-2">
+      <div className="mb-4 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           <StatusLamp value={liveProbe.probeReach} kind="reach" />
           <p className="m-0 text-[var(--text-dense-label)] font-medium">Live UniFi probe</p>
@@ -152,7 +152,7 @@ export function NetworkHealthPanel({
         </DenseTableBody>
       </DenseDataTable>
 
-      <div className="mt-4 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+      <div className="mt-4 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <p className="m-0 text-[var(--text-dense-label)] font-medium">
           ZBF firewall applied · spine {firewall.spineDecision}
         </p>

@@ -100,7 +100,7 @@ function StandardDenseRow({
   return (
     <div
       className={cn(
-        'border-b border-border/40 px-1.5 py-1 last:border-0',
+        'border-b border-[var(--table-rule)] px-1.5 py-1 last:border-0',
         failing && 'bg-destructive/5',
       )}
       data-standard-id={s.id}
@@ -347,10 +347,10 @@ export function DailyOpsFleetCellDetail({
   return (
     <div
       data-daily-ops-cell-detail
-      className="flex max-h-[min(28rem,50vh)] min-w-0 max-w-full flex-col overflow-hidden rounded-lg border border-border bg-secondary"
+      className="flex max-h-[min(28rem,50vh)] min-w-0 max-w-full flex-col overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
     >
       {/* Sticky chrome: title + Scope / Suggested next / Re-probe */}
-      <div className="shrink-0 border-b border-border/60 px-3 py-2">
+      <div className="shrink-0 border-b border-[var(--table-rule)] px-3 py-2">
         <div className="mb-1.5 flex min-w-0 flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="text-[var(--text-dense-label)] font-semibold">Cell detail</span>
@@ -380,7 +380,7 @@ export function DailyOpsFleetCellDetail({
           </button>
         </div>
 
-        <div className="rounded border border-border/60 bg-background/70 px-2 py-1.5">
+        <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5">
           <p className="m-0 text-[var(--text-dense-caption)] font-medium text-foreground">
             Scope:{' '}
             <span className="font-normal text-muted-foreground">
@@ -491,9 +491,9 @@ export function DailyOpsFleetCellDetail({
             return (
               <div
                 key={section.group}
-                className="overflow-hidden rounded border border-border/70 bg-background/60"
+                className="overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
               >
-                <div className="border-b border-border/60 px-1.5 py-0.5 text-[var(--text-dense-micro)] font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="border-b border-[var(--table-rule)] px-1.5 py-0.5 text-[var(--text-dense-micro)] font-semibold uppercase tracking-wide text-muted-foreground">
                   {section.label}
                 </div>
                 {items.map(s => (
@@ -527,7 +527,7 @@ export function DailyOpsFleetCellDetail({
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <p className="m-0 mt-1 rounded border border-border/50 bg-background/50 px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+              <p className="m-0 mt-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
                 {cellDetail}
               </p>
             </CollapsibleContent>
@@ -536,7 +536,7 @@ export function DailyOpsFleetCellDetail({
       </div>
 
       {/* Sticky manual actions — always reachable without scrolling past feeds */}
-      <div className="shrink-0 border-t border-border/60 bg-secondary px-3 py-2">
+      <div className="shrink-0 border-t border-[var(--table-rule)] bg-secondary px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
           {ibFeedFailing && (
             <Button
@@ -589,7 +589,7 @@ export function DailyOpsFleetCellDetail({
           )}
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] font-medium text-primary hover:bg-accent"
+            className="inline-flex items-center gap-1 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] font-medium text-primary hover:bg-[var(--control-fill-hover)]"
             onClick={() => onNavigate(detailTab)}
           >
             <RoleIcon className={cn('size-2.5', ROLE_COLOR[cell.role])} aria-hidden />
@@ -598,7 +598,7 @@ export function DailyOpsFleetCellDetail({
           {onReprobe != null && (
             <button
               type="button"
-              className="inline-flex items-center rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-foreground hover:bg-accent"
+              className="inline-flex items-center rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] text-foreground hover:bg-[var(--control-fill-hover)]"
               onClick={onReprobe}
             >
               Re-probe
@@ -607,7 +607,7 @@ export function DailyOpsFleetCellDetail({
           {failing.length > 0 && (
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground hover:bg-accent"
+              className="inline-flex items-center gap-1 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:text-foreground hover:bg-[var(--control-fill-hover)]"
               onClick={() => void handleCopyFailure()}
               title="Copy failing standards + manual action for IDE Agent"
             >

@@ -20,7 +20,7 @@ export function GuidesSettingsNav({
   return (
     <nav
       className={cn(
-        'flex w-52 shrink-0 flex-col gap-3 border-r border-border pr-3',
+        'flex w-52 shrink-0 flex-col gap-3 border-r border-[var(--table-rule)] pr-3',
         className,
       )}
       aria-label="Guides"

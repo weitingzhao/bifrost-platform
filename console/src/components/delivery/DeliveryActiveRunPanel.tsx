@@ -78,7 +78,7 @@ function NumberedLogTail({
       aria-label="Pipeline log tail"
     >
       <span
-        className="sticky left-0 shrink-0 select-none border-r border-border/60 bg-[var(--card)] pr-2 text-right text-[var(--muted-foreground)]/70"
+        className="sticky left-0 shrink-0 select-none border-r border-[var(--table-rule)] bg-[var(--card)] pr-2 text-right text-[var(--muted-foreground)]/70"
         style={{ minWidth: `${width + 1}ch` }}
         aria-hidden
       >

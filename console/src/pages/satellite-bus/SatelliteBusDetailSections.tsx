@@ -170,7 +170,7 @@ export function SatelliteBusDetailSections({
             ) : (
               <>
                 {selectedIssues.length > 0 && (
-                  <ul className="m-0 flex list-none flex-col divide-y divide-[var(--border)] p-0">
+                  <ul className="m-0 flex list-none flex-col divide-y divide-[var(--table-rule)] p-0">
                     {selectedIssues.map(issue => (
                       <AttentionIssueRow
                         key={issue.id}
@@ -182,11 +182,11 @@ export function SatelliteBusDetailSections({
                 )}
                 {crossEnvIssues.length > 0 && (
                   <>
-                    <p className="m-0 border-t border-[var(--border)] px-3 py-1 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
+                    <p className="m-0 border-t border-[var(--table-rule)] px-3 py-1 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
                       Cross-env attention — does not affect the {tradeEnv.toUpperCase()} verdict · see
                       View · Compare
                     </p>
-                    <ul className="m-0 flex list-none flex-col divide-y divide-[var(--border)] p-0">
+                    <ul className="m-0 flex list-none flex-col divide-y divide-[var(--table-rule)] p-0">
                       {crossEnvIssues.map(issue => (
                         <AttentionIssueRow
                           key={issue.id}

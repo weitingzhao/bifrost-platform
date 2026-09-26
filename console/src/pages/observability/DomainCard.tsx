@@ -75,10 +75,10 @@ export function DomainCard({
   return (
     <div
       className={cn(
-        'flex min-w-[10.5rem] flex-1 flex-col gap-1 rounded-md border px-2.5 py-2 transition-colors',
+        'flex min-w-[10.5rem] flex-1 flex-col gap-1 rounded-[var(--card-radius)] border px-2.5 py-2 transition-colors',
         selected
           ? 'border-[var(--ring)] bg-[var(--accent)]'
-          : 'border-[var(--border)] bg-[var(--secondary)] hover:bg-[var(--accent)]/60',
+          : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
       )}
     >
       <button
@@ -123,7 +123,7 @@ export function DomainCard({
       </button>
 
       {tradeScoped ? (
-        <div className="flex flex-col gap-1 border-t border-[var(--border)]/70 pt-1.5">
+        <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-1.5">
           <span
             className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
             title="Scopes Satellite probes / bus-deep only"
@@ -139,7 +139,7 @@ export function DomainCard({
         </div>
       ) : null}
 
-      <div className="mt-auto flex items-center border-t border-[var(--border)]/70 pt-1.5">
+      <div className="mt-auto flex items-center border-t border-[var(--table-rule)] pt-1.5">
         {grafana != null ? (
           <a
             href={grafana.url}

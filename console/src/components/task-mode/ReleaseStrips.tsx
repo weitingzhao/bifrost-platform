@@ -56,7 +56,7 @@ export function PlatformStgReleaseStrip({
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+      <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-1.5">
         <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
           Last STG deliver
         </span>
@@ -81,7 +81,7 @@ export function PlatformStgReleaseStrip({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Rocket size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Platform STG mainline</span>
@@ -127,7 +127,7 @@ export function SupplyChainStrip({ onNavigate }: { onNavigate: (tab: string) => 
   const present = cms.filter(c => c.present).length
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
       <div className="flex items-center gap-2">
         <Rocket size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Platform supply chain</span>
@@ -190,7 +190,7 @@ export function StgReleaseStrip({
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-1 border-t border-border/50 pt-1.5">
+      <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-1.5">
         <span className="text-[var(--text-dense-micro)] font-medium uppercase tracking-wide text-muted-foreground">
           Last STG deliver
         </span>
@@ -215,7 +215,7 @@ export function StgReleaseStrip({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Satellite size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Trade STG deliver</span>

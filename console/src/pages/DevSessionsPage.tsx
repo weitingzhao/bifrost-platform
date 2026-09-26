@@ -153,7 +153,7 @@ function LogViewer({
       <div className="flex items-center gap-2">
         <Terminal className="h-4 w-4 text-muted-foreground" />
         <select
-          className="rounded border border-border bg-background px-2 py-1 text-[var(--text-dense-label)]"
+          className="rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-[var(--text-dense-label)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
           value={activeName}
           onChange={e => setSelectedName(e.target.value)}
         >
@@ -173,7 +173,7 @@ function LogViewer({
       </div>
       <pre
         ref={scrollRef}
-        className="max-h-64 min-h-[8rem] overflow-auto rounded border border-border bg-background p-2 font-mono text-[var(--text-dense-caption)] leading-relaxed"
+        className="max-h-64 min-h-[8rem] overflow-auto rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 font-mono text-[var(--text-dense-caption)] leading-relaxed"
       >
         {lines != null && lines.length > 0
           ? lines.join('\n')

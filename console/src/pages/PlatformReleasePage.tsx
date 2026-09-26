@@ -380,7 +380,7 @@ export function PlatformReleasePage({
       stepDetail = (
         <>
           {awaitingNextCycleDeliver ? (
-            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+            <p className="m-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-dense-meta text-muted-foreground">
               No new Staging Deploy yet — finish Agent Session decisions (Commit &amp; Push /
               approvals) first. A prior failed PipelineRun in Tekton history is not this cycle.
             </p>
@@ -405,7 +405,7 @@ export function PlatformReleasePage({
       stepDetail = (
         <>
           {awaitingNextCycleDeliver ? (
-            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+            <p className="m-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-dense-meta text-muted-foreground">
               Staging Gate waits until the new Staging Deploy finishes.
             </p>
           ) : (
@@ -427,7 +427,7 @@ export function PlatformReleasePage({
       stepDetail = (
         <>
           {awaitingNextCycleDeliver ? (
-            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+            <p className="m-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-dense-meta text-muted-foreground">
               Production Deploy waits until Staging Gate passes for this cycle.
             </p>
           ) : (
@@ -451,7 +451,7 @@ export function PlatformReleasePage({
       stepDetail = (
         <>
           {awaitingNextCycleDeliver ? (
-            <p className="m-0 rounded-md border border-border/60 bg-secondary/40 px-3 py-2 text-dense-meta text-muted-foreground">
+            <p className="m-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-dense-meta text-muted-foreground">
               Production Gate waits until Production Deploy finishes.
             </p>
           ) : (
@@ -623,7 +623,7 @@ export function PlatformReleasePage({
             >
               <div className="flex flex-col gap-2">
                 {onOpenRocketHealth != null && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                     <div className="min-w-0">
                       <p className="m-0 text-dense-meta font-medium text-foreground">
                         Rocket Health

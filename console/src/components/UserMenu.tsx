@@ -84,10 +84,9 @@ export function UserMenu({
           variant="outline"
           size="sm"
           className={cn(
-            'h-7 shrink-0 gap-1.5 px-2 shadow-sm',
-            isAuthenticated
-              ? 'border-[color-mix(in_srgb,var(--color-env-dev)_45%,var(--border))]'
-              : 'border-border',
+            'h-7 shrink-0 gap-1.5 px-2',
+            isAuthenticated &&
+              'border-[color-mix(in_srgb,var(--color-env-dev)_45%,var(--border))]',
             className,
           )}
           title={

@@ -222,7 +222,7 @@ export function ClusterNodeDrawer({
               {power.workloads.map(w => (
                 <li
                   key={`${w.namespace}/${w.name}`}
-                  className="rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+                  className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium">{w.label}</span>

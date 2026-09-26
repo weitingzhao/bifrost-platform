@@ -614,7 +614,7 @@ export function ResearchEnginePage({
                 {[...providers.entries()].map(([name, count]) => (
                   <li
                     key={name}
-                    className="rounded border border-border/60 bg-secondary/40 px-2 py-1 text-dense-meta"
+                    className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1 text-dense-meta"
                   >
                     <span className="font-mono text-foreground">{name}</span>
                     <span className="text-muted-foreground"> — {count} sessions</span>
@@ -643,7 +643,7 @@ export function ResearchEnginePage({
                 {liveAnalysis.findings.map(f => (
                   <li
                     key={f.id}
-                    className="rounded border border-border/60 bg-card px-2 py-1.5"
+                    className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
                   >
                     <div className="flex flex-wrap items-center gap-1.5">
                       <DenseTag
@@ -702,7 +702,7 @@ export function ResearchEnginePage({
                 lane == null ? null : (
                   <li
                     key={lane.id}
-                    className="inline-flex items-center gap-1.5 rounded border border-border/60 bg-card px-2 py-1"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
                     title={lane.detail}
                   >
                     <StatusLamp value={laneLamp(lane.verdict)} kind="reach" />
@@ -897,7 +897,7 @@ export function ResearchEnginePage({
               {RESEARCH_ENGINE_SUMMARY.engines.map(name => (
                 <li
                   key={name}
-                  className="rounded border border-border/60 bg-secondary/40 px-2 py-1 text-dense-meta"
+                  className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1 text-dense-meta"
                 >
                   <span className="font-mono text-foreground">{name}</span>
                 </li>
@@ -1008,7 +1008,7 @@ function Metric({
   detail?: string
 }) {
   return (
-    <div className="rounded border border-border/60 bg-secondary/30 px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="text-dense-meta text-muted-foreground">{label}</div>
       <div className="text-dense-body font-medium text-foreground">{value}</div>
       {detail ? <div className="text-dense-meta text-muted-foreground">{detail}</div> : null}

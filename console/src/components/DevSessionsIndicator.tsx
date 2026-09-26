@@ -50,14 +50,12 @@ export function DevSessionsIndicator({
       variant="outline"
       size="sm"
       className={cn(
-        'h-7 shrink-0 gap-1.5 px-2 shadow-sm',
-        lamp === 'ok'
-          ? 'border-border bg-secondary/50'
-          : lamp === 'fail'
+        'h-7 shrink-0 gap-1.5 px-2',
+        lamp === 'fail'
             ? 'border-[color-mix(in_oklab,var(--color-danger,#ef4444)_45%,var(--border))] bg-[color-mix(in_oklab,var(--color-danger,#ef4444)_10%,var(--card))]'
             : lamp === 'degraded'
               ? 'border-[color-mix(in_oklab,var(--color-warning,#f59e0b)_45%,var(--border))] bg-[color-mix(in_oklab,var(--color-warning,#f59e0b)_10%,var(--card))]'
-              : 'border-border bg-secondary/50',
+              : undefined,
       )}
       onClick={onOpen}
       title={title}

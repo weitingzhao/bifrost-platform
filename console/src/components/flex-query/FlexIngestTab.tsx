@@ -178,7 +178,7 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
         error={dashErr}
       />
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--table-rule)] pb-2">
         <SegmentControl
           size="sm"
           value={sub}
@@ -468,7 +468,7 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
                 Kind
               </span>
               <select
-                className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-dense-meta)]"
+                className="h-8 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 value={selectedKind}
                 onChange={e => setKind(e.target.value)}
                 disabled={kinds.length === 0}
@@ -486,7 +486,7 @@ export function FlexIngestTab({ initialSub }: { initialSub?: IngestSubTab }) {
                 Payload (JSON)
               </span>
               <textarea
-                className="min-h-[4.5rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono text-[var(--text-dense-caption)]"
+                className="min-h-[4.5rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 font-mono text-[var(--text-dense-caption)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 value={payloadText}
                 onChange={e => setPayloadText(e.target.value)}
               />

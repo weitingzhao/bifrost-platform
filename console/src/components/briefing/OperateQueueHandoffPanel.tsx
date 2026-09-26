@@ -146,7 +146,7 @@ export function OperateQueueHandoffPanel({
   }
   if (loading) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+      <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <p className="m-0 text-dense-meta text-[var(--muted-foreground)]">Loading operate queue…</p>
       </div>
     )
@@ -157,7 +157,7 @@ export function OperateQueueHandoffPanel({
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <p className="m-0 text-dense-label font-medium">Operate queue handoffs</p>
       <p className="m-0 mt-0.5 text-dense-meta text-[var(--muted-foreground)]">
         Owner-approved handoffs awaiting execution. Source context is read-only; closing a handoff
@@ -213,10 +213,10 @@ export function OperateQueueHandoffPanel({
             key={item.id}
             data-operate-handoff-id={item.id}
             className={cn(
-              'flex flex-wrap items-start justify-between gap-2 rounded border px-2 py-1.5',
+              'flex flex-wrap items-start justify-between gap-2 rounded-[var(--card-radius)] border px-2 py-1.5',
               highlightedId === item.id
                 ? 'border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/35'
-                : 'border-[var(--border)]',
+                : 'border-[var(--card-border)] bg-[var(--card-fill)]',
             )}
           >
             <div className="min-w-0">
@@ -348,7 +348,7 @@ export function OperateQueueHandoffPanel({
         </label>
         <textarea
           id="dismiss-evidence"
-          className="mt-1 min-h-16 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-meta"
+          className="mt-1 min-h-16 w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-dense-meta outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
           placeholder="operator: fleet already clean / handoff superseded…"
           value={dismissEvidence}
           onChange={event => setDismissEvidence(event.target.value)}
@@ -367,7 +367,7 @@ export function OperateQueueHandoffPanel({
             </label>
             <textarea
               id="handoff-evidence-dialog"
-              className="min-h-20 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-meta"
+              className="min-h-20 w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-dense-meta outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               placeholder="e.g. git-dirty commit 8c02686; dirty_repos=[]; verify_mission_snapshot passed"
               value={evidence}
               onChange={event => {

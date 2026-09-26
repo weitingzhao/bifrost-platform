@@ -83,7 +83,7 @@ export function ControlRoomAttentionStrip({
     return (
       <section
         className={cn(
-          'control-room-attention rounded-md border border-border bg-secondary/30 px-3 py-2',
+          'control-room-attention rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2',
           className,
         )}
         aria-label="Attention"
@@ -107,7 +107,7 @@ export function ControlRoomAttentionStrip({
   return (
     <section
       className={cn(
-        'control-room-attention rounded-md border border-border bg-secondary/30 px-3 py-2',
+        'control-room-attention rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2',
         className,
       )}
       aria-label="Attention"
@@ -126,7 +126,7 @@ export function ControlRoomAttentionStrip({
           <li key={item.id}>
             <button
               type="button"
-              className="flex w-full min-w-0 items-center gap-2 rounded-md border border-transparent px-2 py-1 text-left hover:border-border hover:bg-accent/50"
+              className="flex w-full min-w-0 items-center gap-2 rounded-[var(--control-radius)] border border-transparent px-2 py-1 text-left hover:bg-[var(--card-fill-hover)]"
               onClick={() => onSelectBay(item.bayId)}
             >
               <StatusLamp value={severityLamp(item.severity)} kind="reach" />

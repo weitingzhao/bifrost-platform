@@ -29,7 +29,7 @@ function LaneOperateSplitRail({
     <div
       role="separator"
       aria-orientation="vertical"
-      className="flex w-7 shrink-0 flex-col items-center justify-center gap-1.5 border-x border-border/50 bg-secondary/30 py-2"
+      className="flex w-7 shrink-0 flex-col items-center justify-center gap-1.5 border-x border-[var(--table-rule)] bg-secondary/30 py-2"
     >
       <Button
         type="button"
@@ -78,7 +78,7 @@ function LaneOperateSplitDivider({
       role="separator"
       aria-orientation="vertical"
       aria-label="Release / support split — click to focus one side"
-      className="group flex w-7 shrink-0 flex-col items-center justify-center gap-1.5 border-x border-border/50 bg-secondary/20 py-2 transition-colors hover:bg-secondary/40"
+      className="group flex w-7 shrink-0 flex-col items-center justify-center gap-1.5 border-x border-[var(--table-rule)] bg-secondary/20 py-2 transition-colors hover:bg-secondary/40"
     >
       <Button
         type="button"

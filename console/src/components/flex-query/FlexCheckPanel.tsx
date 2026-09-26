@@ -46,7 +46,7 @@ function KindRow({
   onAction: (k: FlexCheckKind, a: FlexCheckAction) => void
 }) {
   return (
-    <li className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5">
+    <li className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-xs">{k.kind}</span>
         <DenseTag variant={checkVerdictVariant(k.verdict)}>{k.verdict}</DenseTag>

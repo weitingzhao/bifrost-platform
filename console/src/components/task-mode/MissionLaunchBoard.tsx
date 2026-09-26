@@ -278,7 +278,7 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
 
   return (
     <div id="task-cc-launch-board" className="flex scroll-mt-2 flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-secondary px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-label)] font-semibold shrink-0">Command</span>
           <SegmentControl
@@ -328,10 +328,10 @@ export function MissionLaunchBoard(props: MissionLaunchBoardProps) {
               },
             ]}
           />
-          {commandAction != null && <span className="h-5 border-l border-border" aria-hidden />}
+          {commandAction != null && <span className="h-5 border-l border-[var(--table-rule)]" aria-hidden />}
           {commandAction}
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-border pl-2 text-[var(--text-dense-caption)]">
+        <div className="ml-auto flex shrink-0 items-center gap-2 border-l border-[var(--table-rule)] pl-2 text-[var(--text-dense-caption)]">
           <SegmentControl
             size="sm"
             ariaLabel="Data service lanes"

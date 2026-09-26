@@ -56,10 +56,10 @@ export function BusActuationStrip({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5',
+        'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--card-radius)] border px-2.5 py-1.5',
         flying
           ? 'border-[color-mix(in_oklab,var(--color-info,#38bdf8)_45%,var(--border))] bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_8%,var(--card))]'
-          : 'border-border bg-secondary/40',
+          : 'border-[var(--card-border)] bg-[var(--card-fill)]',
       )}
       role="status"
       aria-live="polite"

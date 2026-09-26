@@ -261,7 +261,7 @@ export function ProgramDetailView({
               {canOperate ? (
                 <>
                   <select
-                    className="h-7 rounded border border-border bg-background px-2 text-dense-label"
+                    className="h-7 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-dense-label outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                     value={targetLane}
                     onChange={e => {
                       setPendingLane(e.target.value)

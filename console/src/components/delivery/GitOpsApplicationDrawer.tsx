@@ -46,7 +46,7 @@ function HintBlock({
   hint: ReturnType<typeof gitOpsApplicationHints>['sync']
 }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-label)] font-medium">{title}</span>
         <DenseTag variant={hintTagVariant(hint.level)}>{hint.shortLabel}</DenseTag>
@@ -174,7 +174,7 @@ export function GitOpsApplicationDrawer({
               {app.conditions?.map(condition => (
                 <div
                   key={`${condition.type}-${condition.last_transition_time ?? condition.message.slice(0, 32)}`}
-                  className="rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2"
+                  className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2">
                     <DenseTag

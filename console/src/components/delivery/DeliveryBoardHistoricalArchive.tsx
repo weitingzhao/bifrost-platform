@@ -24,11 +24,11 @@ import {
 export function DeliveryBoardHistoricalArchive() {
   return (
     <>
-    <details className="rounded-lg border border-border/50 bg-card">
+    <details className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
       <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
         Historical archive — Deploy Mainline phases (seq 0–3, 6)
       </summary>
-      <div className="flex flex-col gap-4 border-t border-border/50 px-1 pb-4 pt-2">
+      <div className="flex flex-col gap-4 border-t border-[var(--table-rule)] px-1 pb-4 pt-2">
         <CatalogSection title="Historical mainline phases">
           <p className="m-0 px-3 py-2 text-dense-meta text-muted-foreground">
             Completed phases from the migration decision chain. Live spine state: Control Room /
@@ -60,11 +60,11 @@ export function DeliveryBoardHistoricalArchive() {
       </div>
     </details>
 
-    <details className="rounded-lg border border-border/50 bg-card">
+    <details className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
       <summary className="cursor-pointer list-none px-4 py-3 text-dense-label font-medium text-foreground hover:bg-secondary/30">
         Historical archive — Local Prod Final sign-off (2026-06-04 CLOSED)
       </summary>
-      <div className="flex flex-col gap-4 border-t border-border/50 px-1 pb-4 pt-2">
+      <div className="flex flex-col gap-4 border-t border-[var(--table-rule)] px-1 pb-4 pt-2">
         <CatalogSection title="Phase L — Local Prod Final (2C-B pre-gate)">
           <div className="flex flex-col gap-2 px-3 py-2 text-dense-body">
             <p className="m-0">

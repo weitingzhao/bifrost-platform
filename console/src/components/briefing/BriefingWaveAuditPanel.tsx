@@ -30,7 +30,7 @@ export function BriefingWaveAuditPanel({
   const recent = migrateWaveAuditForStream(records, streamId, 5)
 
   return (
-    <div className="rounded border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
           Wave actuation audit · {streamId}

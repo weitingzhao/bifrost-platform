@@ -1103,7 +1103,7 @@ export function DockDevSessionsPanel({
             >
               <span className="shrink-0">Slots</span>
               <select
-                className="h-5 max-w-[3.25rem] rounded border border-border bg-background px-0.5 font-mono text-[10px] text-foreground"
+                className="h-5 max-w-[3.25rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-0.5 font-mono text-[10px] text-foreground outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 value={paneCap}
                 onChange={e => changePaneCap(e.target.value)}
                 aria-label="Max console slots"

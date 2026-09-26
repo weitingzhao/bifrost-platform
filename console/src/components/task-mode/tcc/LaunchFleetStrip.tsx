@@ -129,8 +129,8 @@ export function LaunchFleetStrip({
               key={lane.id}
               type="button"
               className={cn(
-                'rounded border bg-card px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5',
-                failing ? 'border-warning/40' : 'border-border/60',
+                'rounded-[var(--card-radius)] border bg-[var(--card-fill)] px-2 py-1.5 text-left transition-colors hover:border-primary/40 hover:bg-primary/5',
+                failing ? 'border-warning/40' : 'border-[var(--card-border)]',
               )}
               title={lane.verdict.detail || lane.verdict.title}
               onClick={() => scrollToTarget(lane.scrollAnchor, lane.fallbackDomId)}

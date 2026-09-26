@@ -25,7 +25,7 @@ export function OpsContextStrip({
       className={cn(
         'ops-context-strip page-section shrink-0 px-3 py-1.5',
         density === 'seat'
-          ? 'border border-border/40 bg-secondary/20'
+          ? 'rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]'
           : 'panel-elevated',
       )}
       aria-label={

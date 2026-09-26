@@ -310,7 +310,7 @@ export function AgentMcpPanel({
         <CollapsibleTrigger asChild>
           <button
             type="button"
-            className="flex w-full items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-2 py-1.5 text-left text-[var(--text-dense-meta)] hover:bg-[var(--secondary)]/70"
+            className="flex w-full items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-left text-[var(--text-dense-meta)] hover:bg-[var(--card-fill-hover)]"
           >
             <ChevronRight className="size-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-data-[state=open]/tools:rotate-90" />
             <span className="font-semibold">

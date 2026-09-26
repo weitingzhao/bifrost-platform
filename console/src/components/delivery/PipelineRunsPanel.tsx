@@ -283,7 +283,7 @@ export function PipelineRunsPanel({
       bodyClassName="ops-section-body--table"
     >
       <>
-      <div className="border-b border-[var(--border)] px-3 py-2">
+      <div className="border-b border-[var(--table-rule)] px-3 py-2">
         <OpsSubsectionTitle>
           Tekton pipelines ({pipelinesLoading ? '…' : pipelineList.length})
         </OpsSubsectionTitle>
@@ -358,7 +358,7 @@ export function PipelineRunsPanel({
 
       {activePipeline !== '' && (
         <>
-          <div className="border-b border-t border-[var(--border)] px-3 py-2">
+          <div className="border-b border-t border-[var(--table-rule)] px-3 py-2">
             <OpsSubsectionTitle>
               Runs — {activePipeline} ({runsQuery.isLoading ? '…' : runs.length})
             </OpsSubsectionTitle>

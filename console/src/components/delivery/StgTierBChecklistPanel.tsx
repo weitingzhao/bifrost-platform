@@ -123,7 +123,7 @@ export function StgTierBChecklistPanel({
       ) : (
         <>
           {data != null && (
-            <p className="m-0 border-b border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            <p className="m-0 border-b border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               {data.detail}
               {data.signed_off && data.signoff_at != null && (
                 <span>
@@ -135,7 +135,7 @@ export function StgTierBChecklistPanel({
             </p>
           )}
           {(data?.items ?? []).length === 0 && !loading && (
-            <p className="m-0 border-b border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            <p className="m-0 border-b border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               No Tier B checks loaded — restart platform-api after P4 deploy, then use Refresh above.
             </p>
           )}
@@ -164,13 +164,13 @@ export function StgTierBChecklistPanel({
             </DenseTableBody>
           </DenseDataTable>
           {allowSignOff ? (
-            <div className="flex flex-col gap-2 border-t border-[var(--border)] px-3 py-3">
+            <div className="flex flex-col gap-2 border-t border-[var(--table-rule)] px-3 py-3">
               {canAdmin ? (
                 <>
                   <label className="flex flex-col gap-1 text-[var(--text-dense-meta)]">
                     <span className="font-medium text-[var(--muted-foreground)]">Sign-off notes (optional)</span>
                     <textarea
-                      className="min-h-[3rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-[var(--text-dense-meta)]"
+                      className="min-h-[3rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1.5 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
                       placeholder="IB TWS live · Massive REST/Celery OK (Starter) or WS quotes (Developer+) · …"
@@ -213,7 +213,7 @@ export function StgTierBChecklistPanel({
           ) : (
             data != null &&
             !data.signed_off && (
-              <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+              <p className="m-0 border-t border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 Sign-off pending — switch to Satellite → Deploy Satellite after probes look good (admin token required).
               </p>
             )

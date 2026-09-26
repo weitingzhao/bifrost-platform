@@ -217,7 +217,7 @@ export function OpsDeskFocusSummary({
 
   return (
     <div
-      className="flex flex-col gap-1.5 rounded-lg border border-border bg-secondary/40 px-3 py-2"
+      className="flex flex-col gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
       data-ops-desk-focus-summary
       role="group"
       aria-label="Ops desk focus"
@@ -230,10 +230,10 @@ export function OpsDeskFocusSummary({
           type="button"
           aria-pressed={focus === 'all'}
           className={cn(
-            'rounded border px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors',
+            'rounded-[var(--control-radius)] border px-2 py-0.5 text-[var(--text-dense-meta)] font-medium transition-colors',
             focus === 'all'
               ? 'border-primary/50 bg-primary/10 text-foreground'
-              : 'border-border/60 bg-card text-muted-foreground hover:border-primary/30',
+              : 'border-transparent bg-[var(--control-fill)] text-muted-foreground hover:bg-[var(--control-fill-hover)]',
           )}
           onClick={() => onChange('all')}
         >
@@ -254,12 +254,12 @@ export function OpsDeskFocusSummary({
               title={chip.summary}
               onClick={() => select(chip.id)}
               className={cn(
-                'rounded border px-2.5 py-1.5 text-left transition-colors',
+                'rounded-[var(--card-radius)] border px-2.5 py-1.5 text-left transition-colors',
                 selected
                   ? 'border-primary/50 bg-primary/10'
                   : chip.attention
-                    ? 'border-warning/40 bg-card hover:border-primary/40'
-                    : 'border-border/60 bg-card hover:border-primary/30',
+                    ? 'border-warning/40 bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]'
+                    : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
               )}
             >
               <div className="flex items-center gap-1.5">

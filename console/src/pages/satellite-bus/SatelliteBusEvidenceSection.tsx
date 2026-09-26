@@ -69,7 +69,7 @@ export function SatelliteBusEvidenceSection({
       >
         <MonitorKvTable rows={daemonRows} loading={busLoading} />
       </OpsSection>
-      <div className="grid divide-x divide-[var(--border)] border-t border-[var(--border)] sm:grid-cols-2">
+      <div className="grid divide-x divide-[var(--table-rule)] border-t border-[var(--table-rule)] sm:grid-cols-2">
         <OpsSection variant="flat" title="Account sync" bodyPadding="none" overflow="hidden">
           <MonitorKvTable rows={accountSyncRows} loading={busLoading} />
         </OpsSection>

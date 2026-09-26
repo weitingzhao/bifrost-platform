@@ -79,7 +79,7 @@ function RedisLanAccessSection({ endpoints }: { endpoints: ClusterRedisStatusRes
           {list.map(ep => (
             <div
               key={ep.name}
-              className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--background)]/40 px-2 py-1.5"
+              className="flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
             >
               <StatusLamp value={ep.reachability} kind="reach" />
               <span className="font-mono-tabular text-dense-meta min-w-[9rem]">{ep.name}</span>
@@ -140,7 +140,7 @@ export function ClusterRedisDetailPanel({
 
   return (
     <div className="cluster-redis-detail flex flex-col gap-3 p-3">
-      <section className="rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+      <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusLamp value={redis.reachability} kind="reach" />

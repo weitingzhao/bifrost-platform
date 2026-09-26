@@ -192,7 +192,7 @@ export function ClusterGovernancePanel({ data, isLoading, compact = false }: Clu
   if (compact) {
     return (
       <div className="flex flex-col gap-3 p-3">
-        <section className="rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+        <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusLamp value={overallReach} kind="reach" />
             <span className="text-dense-label font-semibold">
@@ -210,7 +210,7 @@ export function ClusterGovernancePanel({ data, isLoading, compact = false }: Clu
 
   return (
     <div className="flex flex-col gap-3 p-3">
-      <section className="rounded-md border border-[var(--border)] bg-[var(--background)]/60 px-3 py-2">
+      <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <StatusLamp value={overallReach} kind="reach" />

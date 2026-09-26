@@ -255,14 +255,14 @@ export function LaunchLiveView({
       {/* Phase 1 — Agent (one-line summary; Dock is SSOT for feed/approvals) */}
       <section
         className={cn(
-          'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5',
+          'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--card-radius)] border px-2.5 py-1.5',
           isApproval
             ? 'border-warning/50 bg-warning/5'
             : agentFailed
               ? 'border-destructive/35 bg-destructive/5'
               : agentDone
                 ? 'border-success/35 bg-success/5'
-                : 'border-border/60 bg-card',
+                : 'border-[var(--card-border)] bg-[var(--card-fill)]',
         )}
       >
         <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -319,7 +319,7 @@ export function LaunchLiveView({
       </section>
 
       {/* Phase 2 — Pipeline */}
-      <section className="rounded-md border border-border/60 bg-card px-2.5 py-2">
+      <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
         <div className="mb-1.5 flex flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
             2 · Pipeline
@@ -369,7 +369,7 @@ export function LaunchLiveView({
       </section>
 
       {/* Phase 3 — Post-deploy */}
-      <section className="rounded-md border border-border/60 bg-card px-2.5 py-2">
+      <section className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
         <div className="mb-1.5 flex flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
             3 · Post-deploy

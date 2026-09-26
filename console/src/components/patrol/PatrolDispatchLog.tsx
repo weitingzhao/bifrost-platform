@@ -40,14 +40,14 @@ export function PatrolDispatchLog({
   }
 
   return (
-    <div className="rounded-md border border-border bg-background px-2.5 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
         <span className="text-[var(--text-dense-caption)] font-medium text-muted-foreground">
           Dispatch log · {run.trigger} · {run.result}
         </span>
         {onLangChange != null && (
           <div
-            className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-muted/20 px-1 py-0.5"
+            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5"
             title="Log language"
           >
             <Languages className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />

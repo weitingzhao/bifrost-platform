@@ -149,7 +149,7 @@ export function DeliveryBoardFilterChrome({
   const allCounts = scopeBandCounts?.all ?? EMPTY_BANDS
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-secondary/20 px-2.5 py-2">
+    <div className="flex flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="m-0 text-dense-meta font-semibold uppercase tracking-wide text-muted-foreground">
           Scope → Track → Lane
@@ -187,7 +187,7 @@ export function DeliveryBoardFilterChrome({
       </div>
 
       <div
-        className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border"
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--card-radius)]"
         role="group"
         aria-label="Delivery Board scope"
       >
@@ -276,10 +276,10 @@ export function DeliveryBoardFilterChrome({
         <button
           type="button"
           className={[
-            'rounded-md border px-2 py-1 text-dense-caption font-medium transition-colors',
+            'rounded-[var(--control-radius)] border px-2 py-1 text-dense-caption font-medium transition-colors',
             laneId == null
-              ? 'border-border border-b-2 border-b-primary bg-card text-foreground'
-              : 'border-border/50 bg-muted/30 text-muted-foreground hover:bg-secondary',
+              ? 'border-transparent border-b-2 border-b-primary bg-[var(--control-fill-hover)] text-foreground'
+              : 'border-transparent bg-[var(--control-fill)] text-muted-foreground hover:bg-[var(--control-fill-hover)]',
           ].join(' ')}
           onClick={() => onLaneChange(null)}
         >
@@ -293,12 +293,12 @@ export function DeliveryBoardFilterChrome({
               key={lane.id}
               type="button"
               className={[
-                'rounded-md border px-2 py-1 text-dense-caption font-medium transition-colors',
+                'rounded-[var(--control-radius)] border px-2 py-1 text-dense-caption font-medium transition-colors',
                 active
-                  ? 'border-border border-b-2 border-b-primary bg-card text-foreground'
+                  ? 'border-transparent border-b-2 border-b-primary bg-[var(--control-fill-hover)] text-foreground'
                   : linked
-                    ? 'border-border/50 bg-muted/20 text-foreground hover:bg-secondary'
-                    : 'border-border/40 bg-muted/10 text-muted-foreground/70 hover:bg-secondary/60',
+                    ? 'border-transparent bg-[var(--control-fill)] text-foreground hover:bg-[var(--control-fill-hover)]'
+                    : 'border-transparent bg-[var(--control-fill)] text-muted-foreground/70 hover:bg-[var(--control-fill-hover)]',
               ].join(' ')}
               onClick={() => onLaneChange(lane.id)}
               title={lane.description}

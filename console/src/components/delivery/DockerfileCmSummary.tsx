@@ -22,7 +22,7 @@ export function DockerfileCmSummary({ configmaps, loading = false }: DockerfileC
   const allOk = presentCount === EXPECTED_DOCKERFILE_CONFIGMAPS.length
 
   return (
-    <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-2">
+    <div className="mt-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-label)] font-medium">
           Dockerfile ConfigMaps: {presentCount}/{EXPECTED_DOCKERFILE_CONFIGMAPS.length}

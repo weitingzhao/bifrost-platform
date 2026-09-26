@@ -46,7 +46,7 @@ function StateGauge({
   lamp: ObservedStateLamp
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-[var(--border)]/50 bg-[var(--background)] px-2.5 py-1.5">
+    <div className="flex items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5">
       <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${gaugeColor(lamp)}`} />
       <div className="min-w-0 flex-1">
         <p className="m-0 truncate text-dense-caption text-[var(--muted-foreground)]">{label}</p>
@@ -68,7 +68,7 @@ export function NodeObservedStatePanel({
 
   return (
     <section
-      className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--secondary)]/30 px-3 py-2"
+      className="min-w-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
       aria-label="Observed node state"
     >
       <h4 className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">

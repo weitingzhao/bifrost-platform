@@ -227,7 +227,7 @@ function AxisDetail({
   const e = explainAxis(dataset, axis as AxisExplain["axis"]);
   const ranked = VERDICT_IS_RANKED[e.verdict];
   return (
-    <div className="mt-2 flex flex-col gap-0.5 rounded-sm border border-[var(--border)] px-2 py-1.5">
+    <div className="mt-2 flex flex-col gap-0.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-1.5 bg-[var(--card-fill)]">
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="font-mono text-[var(--text-dense-caption)]">
           {dataset.dataset.replace(/^raw_market\./, "")} · {e.axis}
@@ -355,7 +355,7 @@ export function CoverageMatrixPanel() {
                   ? `Copy ${notClean} unhealthy dataset(s), with the enqueue that refills each`
                   : "Copy the estate as an agent brief"
               }
-              className="rounded-sm border border-[var(--border)] px-1.5 py-0.5 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              className="rounded-[var(--control-radius)] border border-transparent px-1.5 py-0.5 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] bg-[var(--control-fill)] hover:bg-[var(--control-fill-hover)]"
             >
               {copied
                 ? "Copied"
@@ -492,7 +492,7 @@ export function CoverageMatrixPanel() {
                       return (
                         <DenseTableCell
                           key={g}
-                          className="max-w-none border-l border-[var(--border)] text-center align-top text-[var(--muted-foreground)]"
+                          className="max-w-none border-l border-[var(--table-rule)] text-center align-top text-[var(--muted-foreground)]"
                         >
                           —
                         </DenseTableCell>
@@ -501,7 +501,7 @@ export function CoverageMatrixPanel() {
                     return (
                       <DenseTableCell
                         key={g}
-                        className={`max-w-none border-l border-[var(--border)] align-top ${CELL_TINT[cell.worst ?? "ok"]}`}
+                        className={`max-w-none border-l border-[var(--table-rule)] align-top ${CELL_TINT[cell.worst ?? "ok"]}`}
                       >
                         <div className="flex flex-col gap-1">
                           {cell.entries.map((e) => (

@@ -149,7 +149,7 @@ export function SatelliteBusSharedRocketSection({
       </div>
 
       {signal.reach !== 'ok' && (
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] px-3 py-1.5">
           <span className="text-[var(--text-dense-caption)] text-muted-foreground">
             Shared {signal.label}
             {signal.detail != null ? ` — ${signal.detail}` : ''}

@@ -180,7 +180,7 @@ export function DoctorPanel() {
       )}
 
       {lastHeal != null ? (
-        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)]">
+        <div className="flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)]">
           <DenseTag variant={lastHeal.enqueued > 0 ? 'success' : 'neutral'}>
             {lastHeal.enqueued} job(s) enqueued
           </DenseTag>
@@ -191,7 +191,7 @@ export function DoctorPanel() {
         </div>
       ) : null}
       {heal.isError ? (
-        <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
+        <p className="m-0 border-t border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">
           {heal.error instanceof Error ? heal.error.message : String(heal.error)}
         </p>
       ) : null}

@@ -403,7 +403,7 @@ function ActiveSessionDetail({
           </div>
         )}
         {!opsIssueMode && selectedComplete && (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5">
             <p className="m-0 flex-1 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
               Queue items are complete — review Delivery archive for this lane.
             </p>

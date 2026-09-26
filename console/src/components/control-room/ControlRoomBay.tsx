@@ -46,7 +46,7 @@ export function ControlRoomBay({
     <section
       id={domId}
       className={cn(
-        'control-room-bay scroll-mt-28 rounded-md border border-border bg-secondary/40',
+        'control-room-bay scroll-mt-28 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]',
         className,
       )}
       aria-label={title}
@@ -72,7 +72,7 @@ export function ControlRoomBay({
         )}
       </div>
       {open && (
-        <div id={`${domId}-body`} className="control-room-bay__body flex flex-col gap-3 border-t border-border px-3 py-2.5">
+        <div id={`${domId}-body`} className="control-room-bay__body flex flex-col gap-3 border-t border-[var(--table-rule)] px-3 py-2.5">
           {children}
         </div>
       )}

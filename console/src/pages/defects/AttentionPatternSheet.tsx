@@ -49,7 +49,7 @@ export function AttentionPatternSheet({
       <SheetContent side="right" className="flex w-full max-w-md flex-col gap-0 overflow-y-auto p-0 sm:max-w-lg">
         {pattern != null && (
           <>
-            <SheetHeader className="shrink-0 space-y-2 border-b border-border px-4 py-3 pr-12 text-left">
+            <SheetHeader className="shrink-0 space-y-2 border-b border-[var(--table-rule)] px-4 py-3 pr-12 text-left">
               <div className="flex flex-wrap items-center gap-1.5">
                 <RoleTag role={patternToFleetRole(pattern)} />
                 <span className="text-border" aria-hidden>
@@ -183,7 +183,7 @@ export function AttentionPatternSheet({
               )}
 
               {showFix && (
-                <div className="border-t border-border pt-3">
+                <div className="border-t border-[var(--table-rule)] pt-3">
                   <Button
                     size="sm"
                     disabled={fixPending}

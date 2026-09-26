@@ -95,7 +95,7 @@ export function AnalysisWorkspacePage() {
               href={HERMES_CHAT_UI_URL}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-6 items-center rounded-md border border-border px-2 text-[var(--text-dense-caption)] text-primary hover:bg-secondary"
+              className="inline-flex h-6 items-center rounded-[var(--control-radius)] border border-transparent px-2 text-[var(--text-dense-caption)] text-primary hover:bg-[var(--control-fill-hover)] bg-[var(--control-fill)]"
             >
               Open Chat UI ↗
             </a>
@@ -134,7 +134,7 @@ export function AnalysisWorkspacePage() {
             {items.map((item: HermesInsight) => (
               <li
                 key={item.id}
-                className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md border border-border bg-secondary/40 px-2.5 py-1.5"
+                className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5"
               >
                 <span className="font-mono-tabular text-[var(--text-dense-caption)] text-muted-foreground">
                   {formatInsightTime(item.time)}

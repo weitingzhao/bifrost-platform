@@ -117,11 +117,11 @@ export const ACTUATION_ORIGIN_OPTIONS: { id: ActuationOrigin | 'all'; label: str
 export function actuationOriginTagClass(origin: ActuationOrigin): string {
   switch (origin) {
     case 'human':
-      return 'border-sky-500/50 bg-sky-500/18 text-sky-800 dark:text-sky-200 font-semibold tracking-wide'
+      return 'border-transparent bg-sky-500/18 text-sky-800 dark:text-sky-200 font-semibold tracking-wide'
     case 'agent':
-      return 'border-violet-500/50 bg-violet-500/18 text-violet-800 dark:text-violet-200 font-semibold tracking-wide'
+      return 'border-transparent bg-violet-500/18 text-violet-800 dark:text-violet-200 font-semibold tracking-wide'
     case 'system':
-      return 'border-border bg-muted/70 text-muted-foreground font-semibold tracking-wide'
+      return 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground font-semibold tracking-wide'
   }
 }
 

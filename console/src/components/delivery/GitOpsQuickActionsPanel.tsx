@@ -111,7 +111,7 @@ export function GitOpsQuickActionsPanel({
             return (
               <li
                 key={`${app.namespace}/${app.name}`}
-                className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--border)] bg-[var(--secondary)]/30 px-2.5 py-2"
+                className="flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2"
               >
                 <span className="font-mono-tabular text-dense-label">{app.name}</span>
                 <DenseTag variant={hintTagVariant(hints.sync.level) === 'neutral' ? 'warning' : hintTagVariant(hints.sync.level)}>

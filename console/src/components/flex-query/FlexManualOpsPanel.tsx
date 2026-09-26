@@ -98,7 +98,7 @@ export function FlexManualOpsPanel() {
               Kind
             </span>
             <select
-              className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-dense-meta)]"
+              className="h-8 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={triggerKind}
               onChange={e => setTriggerKind(e.target.value as 'trades' | 'transactions')}
             >
@@ -130,7 +130,7 @@ export function FlexManualOpsPanel() {
           </p>
         ) : null}
         {triggerResult != null && !triggerFailed ? (
-          <div className="mt-2 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+          <div className="mt-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
             <div className="flex flex-wrap gap-x-6 gap-y-1 text-[var(--text-dense-caption)] font-mono">
               {triggerResult.count != null ? <span>count: {String(triggerResult.count)}</span> : null}
               {triggerResult.range_mode ? <span>mode: {String(triggerResult.range_mode)}</span> : null}

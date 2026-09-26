@@ -34,7 +34,7 @@ function TrackMiniCard({
   return (
     <button
       type="button"
-      className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-left transition-colors hover:bg-[var(--secondary)]/40"
+      className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left transition-colors hover:bg-[var(--card-fill-hover)]"
       onClick={() => onOpenBriefing({ track: track.id })}
     >
       <div className="flex items-center gap-2">

@@ -229,7 +229,7 @@ export function MarketDataOverviewTab({
           </span>
           <textarea
             readOnly
-            className="min-h-[8rem] w-full rounded-md border border-border bg-background p-2 font-mono text-dense-caption"
+            className="min-h-[8rem] w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 font-mono text-dense-caption outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
             value={copyFallback}
             onFocus={e => e.currentTarget.select()}
           />

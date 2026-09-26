@@ -115,7 +115,7 @@ export function StackInstallWizardPanel({
       <WizardProcedureSteps steps={steps as NodeWizardStep[]} flowLabel="Stack install" />
 
       {current != null && current.action != null && (
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] pt-3">
           <span className="text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Next: <strong className="text-[var(--foreground)]">{current.label}</strong>
           </span>

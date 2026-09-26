@@ -22,7 +22,7 @@ function verdictVariant(v: string): DenseTagVariant {
 function LaneChip({ lane }: { lane: HusbandryLaneView }) {
   return (
     <li
-      className="inline-flex items-center gap-1.5 rounded border border-border/60 bg-card px-2 py-1"
+      className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
       title={lane.detail}
     >
       <DenseTag variant={verdictVariant(lane.verdict)}>{lane.verdict.toUpperCase()}</DenseTag>
@@ -88,7 +88,7 @@ export function HusbandryStrip({ className }: { className?: string }) {
   return (
     <div
       className={[
-        'flex flex-col gap-1.5 rounded-md border border-border bg-secondary/20 px-2.5 py-2',
+        'flex flex-col gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2',
         className ?? '',
       ].join(' ')}
     >

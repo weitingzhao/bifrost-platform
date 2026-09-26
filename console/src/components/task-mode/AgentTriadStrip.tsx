@@ -173,11 +173,11 @@ export function AgentTriadStrip({
             aria-pressed={active}
             aria-label={`${cell.label}: ${cell.summary}`}
             className={cn(
-              'flex min-w-0 items-start gap-2 rounded-md border px-2.5 py-2 text-left',
-              'hover:bg-secondary/80',
+              'flex min-w-0 items-start gap-2 rounded-[var(--card-radius)] border px-2.5 py-2 text-left',
+              'hover:bg-[var(--card-fill-hover)]',
               active
                 ? 'border-[color-mix(in_oklab,var(--task-mode-accent)_55%,var(--border))] bg-[color-mix(in_oklab,var(--task-mode-accent)_10%,var(--card))]'
-                : 'border-border bg-secondary/40',
+                : 'border-[var(--card-border)] bg-[var(--card-fill)]',
             )}
             onClick={() => pick(cell.modeId)}
           >

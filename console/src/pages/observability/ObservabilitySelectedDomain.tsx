@@ -81,7 +81,7 @@ export function ObservabilitySelectedDomain({
             title={selected.soloEmbed.title}
             description="Deep evidence · Grafana solo panel"
             variant="flat"
-            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+            className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
             collapsible
             defaultCollapsed={selectedDomainHealthy}
             bodyPadding="compact"
@@ -123,7 +123,7 @@ export function ObservabilitySelectedDomain({
             <StatusLamp value={checkpointsQuiet ? 'ok' : 'degraded'} kind="reach" />
           }
           variant="flat"
-          className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+          className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
           collapsible
           defaultCollapsed={checkpointsQuiet}
           bodyPadding="compact"
@@ -194,7 +194,7 @@ export function ObservabilitySelectedDomain({
             <StatusLamp value={dependencyQuiet ? 'ok' : 'degraded'} kind="reach" />
           }
           variant="flat"
-          className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+          className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
           collapsible
           defaultCollapsed={dependencyQuiet}
           bodyPadding="compact"
@@ -209,7 +209,7 @@ export function ObservabilitySelectedDomain({
               {selected.dependencyPath.map(hop => (
                 <div
                   key={hop.id}
-                  className="rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-1"
+                  className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
                 >
                   <span className="flex items-center gap-1.5">
                     <StatusLamp
@@ -249,7 +249,7 @@ export function ObservabilitySelectedDomain({
             }
             leading={<StatusLamp value={goldenQuiet ? 'ok' : 'degraded'} kind="reach" />}
             variant="flat"
-            className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+            className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
             collapsible
             defaultCollapsed={goldenQuiet}
             bodyPadding="compact"
@@ -292,7 +292,7 @@ export function ObservabilitySelectedDomain({
           description={selected.scrapeRollup.label}
           leading={<StatusLamp value={scrapeQuiet ? 'ok' : 'degraded'} kind="reach" />}
           variant="flat"
-          className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/25"
+          className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
           collapsible
           defaultCollapsed={scrapeQuiet}
           bodyPadding="compact"

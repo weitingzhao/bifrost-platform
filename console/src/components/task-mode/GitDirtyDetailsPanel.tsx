@@ -74,7 +74,7 @@ export function GitDirtyDetailsPanel({
             return (
               <li
                 key={d.repo}
-                className="rounded border border-border/40 bg-background/60 px-2 py-1"
+                className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1"
               >
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="font-mono text-[var(--text-dense-meta)] font-medium text-foreground">

@@ -133,7 +133,7 @@ export function AutopilotHistorySection() {
             const isExpanded = expandedRunId === run.id
             const runSummary = parseAutopilotSummary(run)
             return (
-              <div key={run.id} className="rounded-md border border-border/60">
+              <div key={run.id} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
                 <button
                   type="button"
                   className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-muted/30"
@@ -162,7 +162,7 @@ export function AutopilotHistorySection() {
                   </span>
                 </button>
                 {isExpanded && (
-                  <div className="border-t border-border/40 px-2 py-1.5">
+                  <div className="border-t border-[var(--table-rule)] px-2 py-1.5">
                     <PatrolDispatchLog
                       run={run}
                       skill={autopilotSkill}

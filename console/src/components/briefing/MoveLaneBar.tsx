@@ -84,7 +84,7 @@ export function MoveLaneBar({ lane, canOperate, onMoved }: MoveLaneBarProps) {
   }
 
   return (
-    <div className="mt-2 rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-2">
+    <div className="mt-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-caption)] font-medium text-[var(--muted-foreground)]">
           Classification

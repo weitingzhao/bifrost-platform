@@ -77,7 +77,7 @@ function LifecycleStepper({
       role="list"
       aria-label="Lane maturity pipeline: Ready, Planned, Doing, Done"
       className={[
-        'inline-flex min-w-0 max-w-full flex-wrap items-stretch overflow-hidden rounded-md border border-[var(--border)]/60 bg-[var(--muted)]/20',
+        'inline-flex min-w-0 max-w-full flex-wrap items-stretch overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]',
         compact ? 'p-0.5' : 'p-1',
       ].join(' ')}
     >

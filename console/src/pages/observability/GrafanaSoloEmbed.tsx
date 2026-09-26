@@ -15,7 +15,7 @@ export function GrafanaSoloEmbed({
   const [failed, setFailed] = useState(false)
   if (failed) {
     return (
-      <p className="m-0 rounded-md border border-[var(--border)] px-2 py-3 text-center text-[var(--text-dense-caption)] text-muted-foreground">
+      <p className="m-0 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-3 text-center text-[var(--text-dense-caption)] text-muted-foreground bg-[var(--card-fill)]">
         Grafana panel unavailable
       </p>
     )
@@ -26,7 +26,7 @@ export function GrafanaSoloEmbed({
       src={url}
       loading="lazy"
       sandbox={SOLO_EMBED_SANDBOX}
-      className="w-full rounded-md border border-[var(--border)] bg-[var(--background)]"
+      className="w-full rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]"
       style={{ height }}
       onError={() => setFailed(true)}
     />

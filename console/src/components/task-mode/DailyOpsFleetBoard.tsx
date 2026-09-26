@@ -142,7 +142,7 @@ function chipLabel(s: FleetStandard): string {
 
 function chipTone(signal: FleetCellSignal, required: boolean): string {
   if (required === false) {
-    return 'border-border/60 bg-muted/30 text-muted-foreground'
+    return 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground'
   }
   switch (signal) {
     case 'ok':
@@ -152,9 +152,9 @@ function chipTone(signal: FleetCellSignal, required: boolean): string {
     case 'fail':
       return 'border-destructive/50 bg-destructive/15 text-destructive'
     case 'unavailable':
-      return 'border-border/50 bg-muted/40 text-muted-foreground line-through decoration-muted-foreground/50'
+      return 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground line-through decoration-muted-foreground/50'
     default:
-      return 'border-border/60 bg-muted/40 text-muted-foreground'
+      return 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground'
   }
 }
 
@@ -283,10 +283,10 @@ function FleetCellCard({
   return (
     <div
       className={cn(
-        'flex min-w-0 max-w-full flex-col gap-1 overflow-hidden rounded border px-1.5 py-1',
-        highlight ? 'border-primary/50 bg-primary/5' : 'border-border/70 bg-background/60',
+        'flex min-w-0 max-w-full flex-col gap-1 overflow-hidden rounded-[var(--card-radius)] border px-1.5 py-1',
+        highlight ? 'border-primary/50 bg-primary/5' : 'border-[var(--card-border)] bg-[var(--card-fill)]',
         selected && 'ring-1 ring-primary/60 border-primary/50',
-        prodWeight && !highlight && !selected && 'border-border bg-background/80',
+        prodWeight && !highlight && !selected && 'bg-[var(--card-fill-hover)]',
         gate === 'NO-GO' && 'border-destructive/40',
         gate === 'N/A' && 'opacity-80',
         cellFlashing && 'checklist-fleet-cell-flash',
@@ -509,10 +509,10 @@ export function DailyOpsFleetBoard({
 
   const renderGoSummaryRow = (role: FleetRole) => {
     return (
-      <tr key={role} className="border-t border-border/40">
+      <tr key={role} className="border-t border-[var(--table-rule)]">
         <td className="whitespace-nowrap px-1 py-1 align-middle">{renderRoleLabel(role)}</td>
         <td className="min-w-0 px-0.5 py-1 align-middle" colSpan={colSpanAll}>
-          <div className="flex min-w-0 items-center gap-1.5 rounded border border-border/50 bg-background/40 px-1.5 py-1">
+          <div className="flex min-w-0 items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-1.5 py-1">
             <StatusLamp value="ok" kind="reach" />
             <DenseTag variant="success" className="text-[8px]">
               GO
@@ -607,7 +607,7 @@ export function DailyOpsFleetBoard({
   return (
     <div
       data-daily-ops-fleet-board
-      className="min-w-0 max-w-full overflow-x-auto rounded-lg border border-border bg-secondary px-3 py-2.5"
+      className="min-w-0 max-w-full overflow-x-auto rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5"
     >
       <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
         <span className="text-[var(--text-dense-label)] font-semibold">Fleet board</span>

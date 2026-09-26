@@ -132,7 +132,7 @@ export function FlexRemediationPanel({
         {analysis.findings.map(f => (
           <li
             key={f.id}
-            className="rounded-md border border-[var(--border)] bg-[var(--background)] px-2.5 py-1.5"
+            className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5"
           >
             <div className="flex flex-wrap items-center gap-2">
               <DenseTag

@@ -250,7 +250,7 @@ export function DailyOpsOperatorPlanPanel({
       className={cn(
         compactColumns
           ? 'min-w-0'
-          : 'mt-1.5 rounded-md border border-border/60 bg-background/60 px-2.5 py-2',
+          : 'mt-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2',
       )}
     >
       <ChecklistKPIHeader

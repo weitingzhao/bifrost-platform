@@ -106,7 +106,7 @@ export function TaskPhaseProgress({
     ) ?? []
 
   return (
-    <div className="overflow-hidden rounded-md border border-border/60">
+    <div className="overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
       <nav
         className="dense-scroll-x flex items-stretch gap-0 overflow-x-auto px-1 py-2"
         aria-label="Task phase progress"
@@ -162,7 +162,7 @@ export function TaskPhaseProgress({
         })}
       </nav>
 
-      <div className="border-t border-border/60 bg-secondary/25 px-3 py-2.5">
+      <div className="border-t border-[var(--table-rule)] bg-secondary/25 px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[var(--text-dense-label)] font-semibold">{selectedPhase.title}</span>
           <DenseTag variant={STATUS_VARIANT[selectedStatus]} className="text-[9px]">

@@ -255,7 +255,7 @@ export function DataFreshnessPanel({
           </DenseDataTable>
         )}
 
-        <div className="flex flex-col gap-2 border-t border-[var(--border)] px-3 py-2">
+        <div className="flex flex-col gap-2 border-t border-[var(--table-rule)] px-3 py-2">
           {canAdmin ? (
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap items-center gap-2 text-dense-meta">

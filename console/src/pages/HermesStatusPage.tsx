@@ -127,7 +127,7 @@ function StatusCell({
   lamp?: Reachability
 }) {
   return (
-    <div className="rounded-md border border-border bg-secondary/40 px-2.5 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <div className="flex items-center gap-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
         {lamp != null ? <StatusLamp value={lamp} kind="reach" /> : null}
         {label}

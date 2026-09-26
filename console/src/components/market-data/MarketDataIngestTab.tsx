@@ -358,7 +358,7 @@ export function MarketDataIngestTab() {
       <DoctorPanel />
 
       {/* ── Detail secondary tabs ── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--table-rule)] pb-2">
         <SegmentControl
           size="sm"
           ariaLabel="Ingest detail panel"
@@ -502,7 +502,7 @@ export function MarketDataIngestTab() {
               />
               )}
               {selectedSlotRow != null ? (
-                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] px-3 py-2">
                   <DenseTag variant={statusVariant(selectedSlotRow.adherence ?? '')}>
                     {selectedSlotRow.slot}
                   </DenseTag>
@@ -765,7 +765,7 @@ export function MarketDataIngestTab() {
                 ))}
               </DenseTableBody>
             </DenseDataTable>
-            <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
+            <p className="m-0 border-t border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
               {jobsShowing}
               {statusFilter === 'pending' || statusFilter === 'running'
                 ? ` · page size ${JOB_PAGE_LIMIT}`
@@ -797,7 +797,7 @@ export function MarketDataIngestTab() {
                 Kind
               </span>
               <select
-                className="h-8 rounded-md border border-[var(--border)] bg-[var(--background)] px-2 text-[var(--text-dense-meta)]"
+                className="h-8 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 value={selectedKind}
                 onChange={e => setKind(e.target.value)}
                 disabled={kinds.length === 0}
@@ -815,7 +815,7 @@ export function MarketDataIngestTab() {
                 Payload (JSON)
               </span>
               <textarea
-                className="min-h-[4.5rem] rounded-md border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono text-[var(--text-dense-caption)]"
+                className="min-h-[4.5rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 font-mono text-[var(--text-dense-caption)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 value={payloadText}
                 onChange={e => setPayloadText(e.target.value)}
               />

@@ -40,7 +40,7 @@ export function ResearchDbtCatalogTab({
   return (
     <>
       <OpsSection title="Open Elementary report" collapsible defaultCollapsed={false}>
-        <div className="flex flex-col gap-3 rounded border border-border/60 bg-secondary/30 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2 text-dense-label font-medium text-foreground">
               <GitBranch className="size-4 shrink-0 text-muted-foreground" />
@@ -77,7 +77,7 @@ export function ResearchDbtCatalogTab({
           {RESEARCH_DBT_LINEAGE.map((layer, idx) => (
             <li
               key={layer.id}
-              className="flex gap-3 rounded border border-border/60 bg-background/60 px-3 py-2"
+              className="flex gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2"
             >
               <span className="text-dense-meta font-mono text-muted-foreground tabular-nums">
                 {idx + 1}
@@ -105,7 +105,7 @@ export function ResearchDbtCatalogTab({
                 {(byLayer.get(layer) ?? []).map(m => (
                   <li
                     key={m.name}
-                    className="rounded border border-border/60 bg-secondary/40 px-2 py-1 text-dense-meta"
+                    className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1 text-dense-meta"
                   >
                     <span className="font-mono text-foreground">{m.name}</span>
                     <span className="text-muted-foreground"> — {m.note}</span>

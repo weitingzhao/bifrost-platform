@@ -114,7 +114,7 @@ export function DecisionBriefPanel({
 
   if (briefsQuery.isLoading) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+      <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <p className="m-0 text-dense-meta text-[var(--muted-foreground)]">
           Loading decision briefs…
         </p>
@@ -124,7 +124,7 @@ export function DecisionBriefPanel({
 
   if (briefsQuery.isError) {
     return (
-      <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+      <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
         <OpsFeedback variant="error" title="Decision briefs unavailable">
           {(briefsQuery.error as Error).message}
         </OpsFeedback>
@@ -137,7 +137,7 @@ export function DecisionBriefPanel({
   }
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <p className="m-0 text-dense-label font-medium">
         Decision briefs ({pending.length} pending)
       </p>
@@ -169,10 +169,10 @@ export function DecisionBriefPanel({
             key={brief.id}
             data-decision-brief-id={brief.id}
             className={cn(
-              'flex flex-wrap items-start justify-between gap-2 rounded border px-2 py-1.5',
+              'flex flex-wrap items-start justify-between gap-2 rounded-[var(--card-radius)] border px-2 py-1.5',
               highlightedId === brief.id
                 ? 'border-amber-500/60 bg-amber-500/10 ring-1 ring-amber-500/35'
-                : 'border-[var(--border)]',
+                : 'border-[var(--card-border)] bg-[var(--card-fill)]',
             )}
           >
             <div className="min-w-0 flex-1">

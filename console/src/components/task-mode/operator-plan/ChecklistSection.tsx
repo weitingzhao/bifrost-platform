@@ -308,7 +308,7 @@ function ChecklistLegend() {
         </button>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="mt-1.5 flex flex-col gap-1 rounded border border-border/40 bg-muted/20 px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
+        <div className="mt-1.5 flex flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-[var(--text-dense-caption)] text-muted-foreground">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="font-semibold text-foreground/80">Legend</span>
             <span className="inline-flex items-center gap-1.5">
@@ -440,7 +440,7 @@ function StepCard({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded border border-border/50 bg-background/80 transition-[box-shadow,border-color]',
+        'overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] transition-[box-shadow,border-color]',
         active && !remediating && 'border-primary/60 ring-1 ring-primary/40',
         remediating &&
           'border-sky-500/80 ring-2 ring-sky-400/50 shadow-[0_0_12px_-2px] shadow-sky-500/35 animate-pulse',
@@ -494,7 +494,7 @@ function StepCard({
         </span>
       </button>
 
-      <DenseDataTable wrapClassName="rounded-none border-0 border-t border-border/40">
+      <DenseDataTable wrapClassName="rounded-none border-0 border-t border-[var(--table-rule)]">
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead className={cn(cellTight, 'w-6')}> </DenseTableHead>
@@ -804,10 +804,10 @@ function ItemTableRow({
                 title={rowFixTitle}
                 aria-label={`Ops Agent Fix · ${item.label}`}
                 className={cn(
-                  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border shadow-sm transition-colors',
+                  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--control-radius)] border transition-colors',
                   // Secondary to Ops loop primary CTA (P4)
-                  'border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
-                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-background',
+                  'border-transparent bg-[var(--control-fill)] text-muted-foreground hover:bg-[var(--control-fill-hover)] hover:text-foreground',
+                  'disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[var(--control-fill)]',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                   remediating &&
                     'border-sky-500/55 bg-sky-500/15 text-sky-800 hover:bg-sky-500/25 dark:text-sky-200',
@@ -847,8 +847,8 @@ function ItemTableRow({
               }
               aria-label={`Ask for AI · copy Cursor pack · ${item.label}`}
               className={cn(
-                'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border shadow-sm transition-colors',
-                'border-border bg-background text-foreground hover:bg-muted',
+                'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[var(--control-radius)] border transition-colors',
+                'border-transparent bg-[var(--control-fill)] text-foreground hover:bg-[var(--control-fill-hover)]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                 copyState === 'copied' &&
                   copiedItemId === item.id &&

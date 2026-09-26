@@ -123,7 +123,7 @@ function QueueItemRow({
   }
 
   return (
-    <li className="min-w-0 border-b border-[var(--border)] last:border-b-0">
+    <li className="min-w-0 border-b border-[var(--table-rule)] last:border-b-0">
       <div className="flex w-full min-w-0 items-start gap-2 px-3 py-2">
         <button
           type="button"
@@ -172,7 +172,7 @@ function QueueItemRow({
       </div>
 
       {showOpsActions && (
-        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+        <div className="border-t border-[var(--table-rule)] bg-[var(--background)] px-3 py-2 pl-8">
           <p className="m-0 mb-2 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
             Next: diagnose → fix on the desk below. This lane has no Owner Sign-off — it clears when
             probes are healthy.
@@ -201,7 +201,7 @@ function QueueItemRow({
       )}
 
       {showActuation && item.waveActuation != null && (
-        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+        <div className="border-t border-[var(--table-rule)] bg-[var(--background)] px-3 py-2 pl-8">
           <WaveVerifyGateCard
             item={item}
             actuation={item.waveActuation}
@@ -238,7 +238,7 @@ function QueueItemRow({
       )}
 
       {showActuationHint && (
-        <div className="border-t border-[var(--border)] px-3 py-1.5 pl-8">
+        <div className="border-t border-[var(--table-rule)] px-3 py-1.5 pl-8">
           <span className="text-dense-caption text-[var(--muted-foreground)]">
             Sign-off available with admin authentication
           </span>
@@ -266,7 +266,7 @@ function QueueItemRow({
       />
 
       {expanded && (
-        <div className="border-t border-[var(--border)] bg-[var(--background)] px-3 py-2 pl-8">
+        <div className="border-t border-[var(--table-rule)] bg-[var(--background)] px-3 py-2 pl-8">
           {parsed != null && parsed.preamble !== '' && (
             <p className="m-0 break-words text-[var(--text-dense-meta)] text-[var(--foreground)] [overflow-wrap:anywhere]">
               {parsed.preamble}
@@ -356,7 +356,7 @@ function CompletedQueueGroup({
   if (items.length === 0) return null
 
   return (
-    <li className="border-b border-[var(--border)] last:border-b-0">
+    <li className="border-b border-[var(--table-rule)] last:border-b-0">
       <button
         type="button"
         className="flex w-full items-center gap-2 bg-[var(--background)] px-3 py-2 text-left hover:bg-[var(--secondary)]/40"
@@ -369,7 +369,7 @@ function CompletedQueueGroup({
         <CollapseExpandIcon open={expanded} className="ml-auto" />
       </button>
       {expanded && (
-        <ul className="m-0 flex list-none flex-col border-t border-[var(--border)] p-0 opacity-80">
+        <ul className="m-0 flex list-none flex-col border-t border-[var(--table-rule)] p-0 opacity-80">
           {items.map(item => (
             <QueueItemRow
               key={item.id}
@@ -460,8 +460,8 @@ export function TaskQueuePanel({
   }
 
   return (
-    <div className="min-w-0 max-w-full overflow-hidden rounded-lg border border-[var(--border)]">
-      <header className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--background)] px-3 py-2">
+    <div className="min-w-0 max-w-full overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
+      <header className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--table-rule)] bg-[var(--background)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <BriefingIconBadge icon={LANE_ICONS[lane.id]} size="sm" />
           <h3
@@ -482,7 +482,7 @@ export function TaskQueuePanel({
         </span>
       </header>
       {isWaveLane && (
-        <div className="border-b border-[var(--border)] px-3 py-2">
+        <div className="border-b border-[var(--table-rule)] px-3 py-2">
           <BriefingSyncBanner context={context} options={laneReconcileOptions} />
         </div>
       )}
@@ -512,7 +512,7 @@ export function TaskQueuePanel({
         />
       </ul>
       {isWaveLane && streamId != null && (
-        <div className="border-t border-[var(--border)] px-3 py-2">
+        <div className="border-t border-[var(--table-rule)] px-3 py-2">
           <BriefingWaveAuditPanel
             streamId={streamId}
             records={auditRecords}

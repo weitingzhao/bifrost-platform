@@ -354,7 +354,7 @@ export function BriefingViewTabsSection({
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-px rounded-md border border-[var(--border)]/60 bg-[var(--border)]/40 overflow-hidden">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[var(--card-radius)]">
           <ScopeGridCell
             label="All"
             icon={LayoutGrid}
@@ -413,7 +413,7 @@ export function BriefingViewTabsSection({
         )}
 
         {/* Summary strip — lane lifecycle vs queue-item progress (different grains). */}
-        <div className="mt-2 flex flex-col gap-1.5 rounded-md border border-border bg-[var(--card)] px-2.5 py-2">
+        <div className="mt-2 flex flex-col gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
           <div className="flex flex-wrap items-start gap-2">
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex flex-wrap items-center gap-1.5">
@@ -474,7 +474,7 @@ export function BriefingViewTabsSection({
             )}
           </div>
           {inventoryVisible.length > 0 && (
-            <div className="border-t border-border/60 pt-1.5">
+            <div className="border-t border-[var(--table-rule)] pt-1.5">
               <p
                 className="m-0 mb-1 text-[var(--text-dense-micro)] uppercase tracking-wider text-muted-foreground"
                 title="Up to 3 lanes: Doing first, then Planned, then Done. Overflow and full Done history live on Delivery."

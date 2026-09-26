@@ -278,7 +278,7 @@ export function McpToolsPanel() {
             </div>
 
             {showSetup && statusQuery.data != null ? (
-              <div className="mx-3 mb-2 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+              <div className="mx-3 mb-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                 <p className="m-0 font-medium text-[var(--foreground)]">Cursor setup</p>
                 <p className="m-0 mt-1 font-mono-tabular text-[var(--muted-foreground)]">
                   platform-api: {statusQuery.data.platform_api_url} · script: {statusQuery.data.script_path}

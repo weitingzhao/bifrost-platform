@@ -1163,7 +1163,7 @@ export function PluginReleasePage({
         storageKey="bifrost.console.pluginLaneOperateSplit"
         primary={
           <>
-            <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 px-3 py-2">
+            <div className="flex flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
                   Target:
@@ -1257,7 +1257,7 @@ export function PluginReleasePage({
                 restart. Publish stays on AI Launch Plugin.
               </p>
               {ibReachFail && (
-                <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-secondary/30 px-3 py-2">
+                <div className="flex flex-col gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                   <p className="m-0 text-dense-caption text-muted-foreground">
                     {liveProbe.status?.hint ??
                       liveProbe.status?.summary ??
@@ -1336,7 +1336,7 @@ export function PluginReleasePage({
               </p>
               {onNavigate != null && (
                 <div className="flex flex-col gap-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                     <div className="min-w-0">
                       <p className="m-0 text-dense-meta font-medium text-foreground">
                         Plugin Gallery
@@ -1353,7 +1353,7 @@ export function PluginReleasePage({
                       Open Gallery →
                     </button>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                     <div className="min-w-0">
                       <p className="m-0 text-dense-meta font-medium text-foreground">IB Gateway</p>
                       <p className="m-0 text-dense-caption text-muted-foreground">
@@ -1368,7 +1368,7 @@ export function PluginReleasePage({
                       Open IB Client →
                     </button>
                   </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/40 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                     <div className="min-w-0">
                       <p className="m-0 text-dense-meta font-medium text-foreground">Market Data</p>
                       <p className="m-0 text-dense-caption text-muted-foreground">
@@ -1399,7 +1399,7 @@ export function PluginReleasePage({
                 Escape hatch only. Primary path is AI Launch Plugin on the lane strip — approvals
                 stay in Agent Session / Operator Dock. Step detail is observe-only.
               </p>
-              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+              <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
                 {renderStepActions(activeIndex)}
               </div>
               {cycleTerminal && (

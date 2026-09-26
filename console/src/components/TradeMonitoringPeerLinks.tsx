@@ -64,7 +64,7 @@ export function TradeMonitoringPeerLinks({
   return (
     <div
       className={cn(
-        'mb-1.5 flex items-center gap-1.5 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2 py-1',
+        'mb-1.5 flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1',
         className,
       )}
     >

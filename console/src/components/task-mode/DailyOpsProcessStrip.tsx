@@ -159,7 +159,7 @@ export function DailyOpsProcessStrip({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className="text-[var(--text-dense-meta)] font-semibold text-foreground">
           Ops loop
@@ -173,7 +173,7 @@ export function DailyOpsProcessStrip({
               Help
               <span className="ml-1 no-underline text-muted-foreground/60">· reference</span>
             </summary>
-            <div className="mt-1 rounded border border-border/40 bg-background/50 px-2 py-1.5">
+            <div className="mt-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5">
               <p className="m-0 mb-1.5 text-[var(--text-dense-micro)] text-muted-foreground">
                 Reference only — Ops loop + Fleet board are authoritative.
               </p>
@@ -373,7 +373,7 @@ export function DailyOpsProcessStrip({
               {action.secondary != null && onSecondaryAction != null && (
                 <button
                   type="button"
-                  className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+                  className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-[var(--control-fill-hover)]"
                   disabled={!canOperate || operatorPlanFixPending}
                   title="Optional — stash dirty repos after operator approval (never drops WIP)"
                   onClick={onSecondaryAction}
@@ -386,7 +386,7 @@ export function DailyOpsProcessStrip({
           {(isManualNext || isProposeCommit) && action.secondary != null && onSecondaryAction != null && isManualNext && (
             <button
               type="button"
-              className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+              className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-[var(--control-fill-hover)]"
               disabled={!canOperate || operatorPlanFixPending}
               title={
                 !canOperate
@@ -430,7 +430,7 @@ export function DailyOpsProcessStrip({
             action.kind === 'verify') && (
             <button
               type="button"
-              className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-muted"
+              className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-[var(--control-fill-hover)]"
               onClick={onPrimaryAction}
             >
               {action.kind === 'navigate' || action.kind === 'clear-queue'
@@ -446,7 +446,7 @@ export function DailyOpsProcessStrip({
           {showSweepQueue && (
             <button
               type="button"
-              className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary"
+              className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-caption)] text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-[var(--control-fill-hover)]"
               disabled={!canOperate || sweepQueuePending}
               title={
                 canOperate
@@ -462,7 +462,7 @@ export function DailyOpsProcessStrip({
       </div>
 
       {(workflow.blockers.length > 0 || agentFixError || manualCopyError) && (
-        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-border/50 pt-1.5">
+        <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-t border-[var(--table-rule)] pt-1.5">
           {showRemediateBanner && (
             <p
               className={cn(
@@ -618,7 +618,7 @@ export function DailyOpsAgentLivePanel({
         {succeeded && onVerifyReprobe != null && (
           <button
             type="button"
-            className="rounded border border-border bg-background px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-muted"
+            className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-2 py-0.5 text-[var(--text-dense-meta)] font-medium text-primary hover:bg-[var(--control-fill-hover)]"
             onClick={() => {
               onVerifyReprobe()
               void qc.invalidateQueries({ queryKey: ['checklist', 'signals'] })

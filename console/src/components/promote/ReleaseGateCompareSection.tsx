@@ -314,7 +314,7 @@ export function ReleaseGateCompareSection({
 
       {checkRows.length > 0 && (
         <>
-          <div className="border-t border-[var(--border)] px-3 py-2">
+          <div className="border-t border-[var(--table-rule)] px-3 py-2">
             <OpsSubsectionTitle>Checks</OpsSubsectionTitle>
             <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
               Shared STG smoke targets appear in both columns — required on STG, informational on Prod.
@@ -346,7 +346,7 @@ export function ReleaseGateCompareSection({
       )}
 
       {checkRows.length === 0 && !stgGateLoading && !prodGateLoading && stgGate == null && prodGate == null && (
-        <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+        <p className="m-0 border-t border-[var(--table-rule)] px-3 py-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
           No gate recorded — Run gate with admin token.
         </p>
       )}

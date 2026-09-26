@@ -96,7 +96,7 @@ function WizardNextActionBar({
   const needsAdmin = actionRequiresAdmin(action)
 
   return (
-    <div className="flex min-w-0 flex-col gap-2 border-t border-[var(--border)] pt-3">
+    <div className="flex min-w-0 flex-col gap-2 border-t border-[var(--table-rule)] pt-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-dense-meta shrink-0 text-[var(--muted-foreground)]">Next action</span>
         <Button
@@ -182,7 +182,7 @@ export function ClusterNodeWizardPanel({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-dense-meta text-muted-foreground shrink-0">Node</span>
             <select
-              className="min-w-[12rem] rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-body font-mono-tabular"
+              className="min-w-[12rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-dense-body font-mono-tabular outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={selectedNodeName ?? ''}
               onChange={e => {
                 const v = e.target.value
@@ -211,7 +211,7 @@ export function ClusterNodeWizardPanel({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-dense-meta text-muted-foreground shrink-0">Profile</span>
             <select
-              className="min-w-[16rem] rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-dense-body"
+              className="min-w-[16rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-dense-body outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={selectedJoinProfileId ?? joinProfiles.profiles[0]?.id ?? ''}
               onChange={e => onSelectJoinProfileId(e.target.value || null)}
             >
@@ -256,7 +256,7 @@ export function ClusterNodeWizardPanel({
                   />
                 )}
               {(current?.action === 'select_node' || current?.action === 'select_profile') && (
-                <p className="m-0 border-t border-[var(--border)] pt-3 text-dense-meta text-[var(--muted-foreground)]">
+                <p className="m-0 border-t border-[var(--table-rule)] pt-3 text-dense-meta text-[var(--muted-foreground)]">
                   {current.description}
                 </p>
               )}
@@ -278,7 +278,7 @@ export function ClusterNodeWizardPanel({
                 />
               )}
             {(current?.action === 'select_node' || current?.action === 'select_profile') && (
-              <p className="m-0 border-t border-[var(--border)] pt-3 text-dense-meta text-[var(--muted-foreground)]">
+              <p className="m-0 border-t border-[var(--table-rule)] pt-3 text-dense-meta text-[var(--muted-foreground)]">
                 {current.description}
               </p>
             )}

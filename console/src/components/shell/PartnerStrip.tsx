@@ -88,7 +88,7 @@ function NumberedDeskSection({
     <div>
       <div className="mx-3 mb-0.5 mt-2 flex items-center gap-2">
         <span className={shellNavSubGroupSectionLabelClass}>{label}</span>
-        <div className="flex-1 border-t border-sidebar-border/50" />
+        <div className="flex-1 border-t border-[var(--table-rule)]" />
       </div>
       <SidebarMenu>
         <SidebarMenuSub>
@@ -185,7 +185,7 @@ function NumberedDeskItem({
         </button>
       </div>
       {open && (
-        <ul className="m-0 mb-0.5 ml-3 list-none border-l border-sidebar-border/50 py-0.5 pl-2">
+        <ul className="m-0 mb-0.5 ml-3 list-none border-l border-[var(--table-rule)] py-0.5 pl-2">
           {children!.map(child => (
             <li key={child.id}>
               <ConsoleNavSlotItem
@@ -362,12 +362,12 @@ function PartnerSection({
     <div>
       <div className="mx-3 mb-0.5 mt-2 flex items-center gap-2">
         <span className={shellNavSubGroupSectionLabelClass}>{label}</span>
-        <div className="flex-1 border-t border-sidebar-border/50" />
+        <div className="flex-1 border-t border-[var(--table-rule)]" />
       </div>
       <SidebarMenu>
         {blocks.map((block, index) => (
           <div key={block.label !== '' ? block.label : `ops-trail-${index}`}>
-            {index > 0 && <div className="mx-3 my-1 border-t border-sidebar-border/40" />}
+            {index > 0 && <div className="mx-3 my-1 border-t border-[var(--table-rule)]" />}
             {block.label !== '' ? (
               <p className={cn(shellNavSubGroupSectionLabelClass, 'mx-3 mt-1 mb-0.5 px-0')}>
                 {block.label}
@@ -542,7 +542,7 @@ function FlyoutSection({
               {block.label}
             </p>
           ) : blockIndex > 0 ? (
-            <div className="my-1 border-t border-sidebar-border/40" />
+            <div className="my-1 border-t border-[var(--table-rule)]" />
           ) : null}
           {block.items.map((item, index) => (
             <ConsoleNavSlotItem

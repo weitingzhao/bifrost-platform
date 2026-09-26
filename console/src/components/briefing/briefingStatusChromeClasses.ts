@@ -8,10 +8,10 @@
 /** Digest status tiles — selected = White + left primary rail; unselected = Gray. */
 export function briefingDigestTileClass(selected: boolean): string {
   return [
-    'box-border flex h-[4.75rem] flex-col justify-center overflow-hidden rounded-md border px-3 py-2 text-left transition-colors',
+    'box-border flex h-[4.75rem] flex-col justify-center overflow-hidden rounded-[var(--card-radius)] border px-3 py-2 text-left transition-colors',
     selected
-      ? 'border-[var(--border)] border-l-2 border-l-[var(--primary)] bg-[var(--card)]'
-      : 'border-[var(--border)]/50 bg-[var(--muted)]/30 opacity-70 hover:opacity-90 hover:border-[var(--border)]',
+      ? 'border-transparent border-l-2 border-l-[var(--primary)] bg-[var(--card-fill-hover)]'
+      : 'border-[var(--card-border)] bg-[var(--card-fill)] opacity-70 hover:opacity-90',
   ].join(' ')
 }
 
@@ -21,10 +21,10 @@ export function briefingDigestTileClass(selected: boolean): string {
  */
 export function briefingScopeLineChipClass(active: boolean): string {
   return [
-    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border px-2 text-left transition-colors',
+    'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[var(--control-radius)] border px-2 text-left transition-colors',
     active
-      ? 'border-[var(--border)] border-b-2 border-b-[var(--task-mode-accent)] bg-[var(--card)]'
-      : 'border-[var(--border)]/50 bg-[var(--muted)]/30 opacity-80 hover:opacity-100 hover:bg-[var(--secondary)]',
+      ? 'border-transparent border-b-2 border-b-[var(--task-mode-accent)] bg-[var(--control-fill-hover)]'
+      : 'border-transparent bg-[var(--control-fill)] opacity-80 hover:opacity-100 hover:bg-[var(--control-fill-hover)]',
   ].join(' ')
 }
 
@@ -34,16 +34,16 @@ export function briefingScopeLineChipClass(active: boolean): string {
  */
 export function briefingScopeLineRowClass(active: boolean): string {
   return [
-    'flex h-7 w-full items-center gap-1.5 rounded border px-1.5 text-left transition-colors',
+    'flex h-7 w-full items-center gap-1.5 rounded-[var(--control-radius)] border px-1.5 text-left transition-colors',
     active
-      ? 'border-[var(--border)] border-l-2 border-l-[var(--task-mode-accent)] bg-[var(--card)]'
-      : 'border-transparent bg-transparent opacity-80 hover:opacity-100 hover:bg-[var(--secondary)]/60',
+      ? 'border-transparent border-l-2 border-l-[var(--task-mode-accent)] bg-[var(--control-fill)]'
+      : 'border-transparent bg-transparent opacity-80 hover:opacity-100 hover:bg-[var(--control-fill)]',
   ].join(' ')
 }
 
 /**
  * Compact 2-col grid cell for Scope Line picker.
- * Grid container uses `gap-px` + border-color bg for hairline dividers.
+ * Grid container uses `gap-px` on the page ground, so the gaps read as hairline dividers.
  * Active = accent bottom bar + card surface; idle = muted surface.
  * `span2` makes the cell span both columns (used for "All").
  */
@@ -52,8 +52,8 @@ export function briefingScopeGridCellClass(active: boolean, span2 = false): stri
     'flex items-center gap-1.5 px-2 py-1.5 text-left transition-colors',
     span2 ? 'col-span-2' : '',
     active
-      ? 'bg-[var(--card)] shadow-[inset_0_-2px_0_var(--task-mode-accent)]'
-      : 'bg-[var(--muted)]/20 hover:bg-[var(--secondary)]/80',
+      ? 'bg-[var(--card-fill-hover)] shadow-[inset_0_-2px_0_var(--task-mode-accent)]'
+      : 'bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
   ].join(' ')
 }
 
@@ -70,20 +70,20 @@ export const BRIEFING_DPR_COLOR = {
 /** Scope chip (All / Line) — active = White; inactive = Gray. No primary fill. */
 export function briefingScopeChipClass(active: boolean): string {
   return [
-    'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[var(--text-dense-label)] transition-colors',
+    'inline-flex h-8 items-center gap-1.5 rounded-[var(--control-radius)] border px-2.5 text-[var(--text-dense-label)] transition-colors',
     active
-      ? 'border-[var(--border)] border-b-2 border-b-[var(--primary)] bg-[var(--card)] font-semibold text-[var(--foreground)]'
-      : 'border-[var(--border)]/50 bg-[var(--muted)]/40 font-medium text-[var(--muted-foreground)] hover:bg-[var(--secondary)] hover:text-[var(--foreground)]',
+      ? 'border-transparent border-b-2 border-b-[var(--primary)] bg-[var(--control-fill-hover)] font-semibold text-[var(--foreground)]'
+      : 'border-transparent bg-[var(--control-fill)] font-medium text-[var(--muted-foreground)] hover:bg-[var(--control-fill-hover)] hover:text-[var(--foreground)]',
   ].join(' ')
 }
 
 /** Track-type cards — selected = White; unselected = Gray. No primary fill. */
 export function briefingTrackTypeCardClass(selected: boolean): string {
   return [
-    'flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
+    'flex items-center gap-2 rounded-[var(--card-radius)] border px-2.5 py-1.5 text-left transition-colors',
     selected
-      ? 'border-[var(--foreground)]/20 bg-[var(--card)]'
-      : 'border-[var(--border)]/50 bg-[var(--muted)]/30 opacity-70 hover:opacity-90 hover:bg-[var(--secondary)]',
+      ? 'border-[var(--foreground)]/20 bg-[var(--card-fill-hover)]'
+      : 'border-[var(--card-border)] bg-[var(--card-fill)] opacity-70 hover:opacity-90 hover:bg-[var(--card-fill-hover)]',
   ].join(' ')
 }
 
@@ -104,9 +104,9 @@ export function briefingSolidCardClass(selected: boolean, dimmed = false): strin
     return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--primary)] bg-[var(--primary)]/8 px-3 py-2.5 text-left transition-colors'
   }
   if (dimmed) {
-    return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--border)]/50 bg-[var(--muted)]/30 px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:bg-[var(--secondary)]'
+    return 'flex w-full min-w-0 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5 text-left opacity-70 transition-colors hover:opacity-90 hover:bg-[var(--card-fill-hover)]'
   }
-  return 'flex w-full min-w-0 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--secondary)]'
+  return 'flex w-full min-w-0 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5 text-left transition-colors hover:bg-[var(--card-fill-hover)]'
 }
 
 /** List-row variant of lane selection chrome. */
@@ -124,13 +124,13 @@ export function briefingLaneListRowClass(
       'flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left opacity-70 transition-colors hover:opacity-90',
       emptyHint
         ? 'border-dashed border-[var(--border)]/50 bg-transparent hover:bg-[var(--secondary)]/40'
-        : 'border-[var(--border)]/50 bg-[var(--muted)]/30 hover:bg-[var(--secondary)]',
+        : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
     ].join(' ')
   }
   return [
     'flex w-full min-w-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition-colors',
     emptyHint
       ? 'border-dashed border-[var(--border)] bg-transparent hover:border-[var(--primary)]/40 hover:bg-[var(--secondary)]/40'
-      : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--secondary)]',
+      : 'border-[var(--card-border)] bg-[var(--card-fill)] hover:bg-[var(--card-fill-hover)]',
   ].join(' ')
 }

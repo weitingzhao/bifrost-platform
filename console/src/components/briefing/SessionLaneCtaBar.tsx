@@ -46,7 +46,7 @@ function LaneProblemBlock({ description }: { description: string }) {
   const trimmed = description.trim()
   if (trimmed === '') return null
   return (
-    <div className="min-w-0 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/70 px-2.5 py-2">
+    <div className="min-w-0 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         Problem
       </p>
@@ -112,11 +112,10 @@ export function SessionLaneCtaBar({
     ? `${queueCount} archived item${queueCount !== 1 ? 's' : ''} · Intent: ${intentLabel}`
     : `Queue: ${queueSummary} · Intent: ${intentLabel}`
 
-  /** Solid / bordered chrome so actions never read as plain text on tinted Session card. */
+  /** Solid primary so the main action never reads as plain text on the Session card. */
   const actionPrimaryClass =
     'h-8 border border-[var(--primary)]/40 bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm hover:bg-[var(--primary)]/90'
-  const actionSecondaryClass =
-    'h-8 border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] shadow-sm hover:bg-[var(--muted)]/60'
+  const actionSecondaryClass = 'h-8'
 
   const body = (
     <div className="flex min-w-0 flex-col gap-2.5">
@@ -158,11 +157,11 @@ export function SessionLaneCtaBar({
       </p>
 
       {/* 4. Actions + pack guidance */}
-      <div className="min-w-0 border-t border-[var(--border)]/55 pt-2.5">
+      <div className="min-w-0 border-t border-[var(--table-rule)] pt-2.5">
         <p className="m-0 mb-1.5 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
           Actions
         </p>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-md border border-[var(--border)]/60 bg-[var(--background)]/55 p-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">
           {isArchive ? (
             <>
               <Button
@@ -277,7 +276,7 @@ export function SessionLaneCtaBar({
       </div>
 
       {launchStatus != null && (
-        <p className="m-0 break-words rounded-md border border-[var(--border)]/50 bg-[var(--secondary)]/40 px-2 py-1.5 text-[var(--text-dense-caption)] text-[var(--foreground)] [overflow-wrap:anywhere]">
+        <p className="m-0 break-words rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5 text-[var(--text-dense-caption)] text-[var(--foreground)] [overflow-wrap:anywhere]">
           {withBriefingCommandHighlight(launchStatus)}
         </p>
       )}
@@ -289,7 +288,7 @@ export function SessionLaneCtaBar({
       <div
         className={
           isArchive
-            ? 'w-full min-w-0 max-w-full rounded-md border border-[var(--border)]/70 bg-[var(--secondary)]/30 px-3 py-2.5'
+            ? 'w-full min-w-0 max-w-full rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5'
             : 'w-full min-w-0 max-w-full rounded-md border border-[var(--primary)]/30 bg-[var(--primary)]/5 px-3 py-2.5'
         }
       >
@@ -302,7 +301,7 @@ export function SessionLaneCtaBar({
     <section
       className={
         isArchive
-          ? 'page-section panel-elevated border-[var(--border)]/70 px-4 py-3'
+          ? 'page-section panel-elevated px-4 py-3'
           : 'page-section panel-elevated border-[var(--primary)]/30 px-4 py-3'
       }
     >

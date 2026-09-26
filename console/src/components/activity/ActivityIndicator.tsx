@@ -33,10 +33,10 @@ export function ActivityIndicator({
       variant="outline"
       size="sm"
       className={cn(
-        'relative h-7 w-7 shrink-0 px-0 shadow-sm',
+        'relative h-7 w-7 shrink-0 px-0',
         inFlightCount > 0
           ? 'border-[color-mix(in_oklab,var(--color-info,#38bdf8)_45%,var(--border))] bg-[color-mix(in_oklab,var(--color-info,#38bdf8)_10%,var(--card))]'
-          : 'border-border bg-secondary/50',
+          : undefined,
       )}
       title={
         inFlightCount > 0

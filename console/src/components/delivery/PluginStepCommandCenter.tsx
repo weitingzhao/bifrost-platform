@@ -18,7 +18,7 @@ const OUTCOME_BADGE: Record<string, string> = {
   released: 'border-success/40 bg-success/10 text-success',
   in_progress: 'border-primary/40 bg-primary/10 text-primary',
   failed: 'border-destructive/40 bg-destructive/10 text-destructive',
-  idle: 'border-border bg-secondary/40 text-muted-foreground',
+  idle: 'border-transparent bg-[color-mix(in_srgb,currentColor_15%,transparent)] text-muted-foreground',
 }
 
 const STEP_CIRCLE: Record<StepStatus, string> = {
@@ -198,10 +198,10 @@ export function PluginStepCommandCenter({
   const showInlineAiLaunch = onAiLaunch != null && !agentDriven
 
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border bg-card">
+    <div className="relative overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
       <div className="release-cc__accent release-cc__accent--stg" />
 
-      <div className="release-cc__identity border-b border-border px-4 py-3">
+      <div className="release-cc__identity border-b border-[var(--table-rule)] px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
           <div className="flex min-w-0 items-center gap-3">
             <span className="shrink-0 text-dense-label font-semibold uppercase tracking-wider text-muted-foreground">
@@ -257,7 +257,7 @@ export function PluginStepCommandCenter({
 
       <PluginFlowStepper steps={steps} activeIndex={activeIndex} onSelect={onSelect} />
 
-      <div className="border-t border-border">
+      <div className="border-t border-[var(--table-rule)]">
         <div className="release-cc__action-zone px-4 py-3">
           {cycleTerminal ? (
             <div className="flex flex-col gap-3">
@@ -280,11 +280,11 @@ export function PluginStepCommandCenter({
                 )}
               </div>
               {!agentDriven && (
-                <details className="group rounded-md border border-border/50 bg-background/40">
+                <details className="group rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-1.5 text-dense-caption text-muted-foreground hover:text-foreground">
                     Re-record a stage (advanced)
                   </summary>
-                  <div className="border-t border-border/50 px-3 py-2.5">
+                  <div className="border-t border-[var(--table-rule)] px-3 py-2.5">
                     {renderStepActions(activeIndex)}
                   </div>
                 </details>

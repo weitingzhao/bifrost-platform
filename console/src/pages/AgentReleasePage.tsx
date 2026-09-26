@@ -971,7 +971,7 @@ export function AgentReleasePage({
                 </div>
                 <pre
                   ref={logRef}
-                  className="max-h-[280px] overflow-y-auto rounded-md border border-border/60 bg-background p-2 font-mono text-dense-caption leading-relaxed"
+                  className="max-h-[280px] overflow-y-auto rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 font-mono text-dense-caption leading-relaxed"
                   aria-live="polite"
                 >
                   {deployLogText.trim() !== ''
@@ -1127,7 +1127,7 @@ export function AgentReleasePage({
         storageKey="bifrost.console.agentLaneOperateSplit"
         primary={
           <>
-            <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-secondary/20 px-3 py-2">
+            <div className="flex flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-dense-meta font-medium text-muted-foreground shrink-0">
                   Target:
@@ -1224,7 +1224,7 @@ export function AgentReleasePage({
                 {checklistItems.map(c => (
                   <li
                     key={c.id}
-                    className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-secondary/30 px-2 py-1.5"
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
                   >
                     <StatusLamp value={c.ok ? 'ok' : 'fail'} kind="reach" />
                     <span className="text-dense-meta font-medium">{c.label}</span>
@@ -1264,7 +1264,7 @@ export function AgentReleasePage({
                 {runners.map((r, i) => (
                   <span
                     key={r.url || r.role || String(i)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1"
+                    className="inline-flex items-center gap-1.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-2 py-1 bg-[var(--card-fill)]"
                   >
                     <StatusLamp value={runnerReach(r.status)} kind="reach" />
                     <span className="text-dense-meta font-medium">
@@ -1306,7 +1306,7 @@ export function AgentReleasePage({
                   </Button>
                 )}
               </div>
-              <div className="rounded-md border border-border/60 bg-background/40 p-3">
+              <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
                 {renderStepActions(activeIndex)}
               </div>
               <span className="text-dense-micro font-semibold uppercase tracking-wider text-muted-foreground/70">

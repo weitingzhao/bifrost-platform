@@ -244,7 +244,7 @@ export function DefectsPage({
             Scope · Tool · Namespace
           </span>
         </summary>
-        <div className="space-y-4 border-t border-border px-3 py-3">
+        <div className="space-y-4 border-t border-[var(--table-rule)] px-3 py-3">
           <div className="grid grid-cols-2 gap-4">
             <ScopeStatsTable stats={filteredScopeStats} />
             <ToolUsageTable tools={data.tool_usage ?? []} />

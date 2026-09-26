@@ -26,7 +26,7 @@ interface DeliveryObserveOverviewProps {
 
 function OverviewCell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
       <p className="m-0 text-[var(--text-dense-caption)] font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
         {label}
       </p>
@@ -155,7 +155,7 @@ export function DeliveryCouplingGatePanel({
       className="coupling-gate-panel"
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2">
+        <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
           <p className="m-0 flex items-center gap-2 font-medium text-[var(--text-dense-label)]">
             <StatusLamp value={stgLamp} kind="reach" />
             STG release
@@ -166,7 +166,7 @@ export function DeliveryCouplingGatePanel({
               : stgRelease.releaseReasons.join(' · ')}
           </p>
         </div>
-        <div className="rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2">
+        <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
           <p className="m-0 flex items-center gap-2 font-medium text-[var(--text-dense-label)]">
             <StatusLamp value={prodLamp} kind="reach" />
             Prod cutover

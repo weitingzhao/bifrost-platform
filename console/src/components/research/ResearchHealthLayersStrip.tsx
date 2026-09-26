@@ -25,13 +25,13 @@ export function ResearchHealthLayersStrip({ layers, className, onSelectLayer }: 
           {onSelectLayer != null ? (
             <button
               type="button"
-              className="flex w-full items-start gap-2 rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2 text-left hover:bg-secondary/50"
+              className="flex w-full items-start gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2 text-left hover:bg-[var(--card-fill-hover)]"
               onClick={() => onSelectLayer(layer.id)}
             >
               <LayerBody layer={layer} />
             </button>
           ) : (
-            <div className="flex w-full items-start gap-2 rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2">
+            <div className="flex w-full items-start gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
               <LayerBody layer={layer} />
             </div>
           )}

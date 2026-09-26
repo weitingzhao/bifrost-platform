@@ -36,7 +36,7 @@ export function ClusterPageDialogs({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           role="presentation"
         >
-          <div className="w-full max-w-md rounded-lg border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
+          <div className="w-full max-w-md rounded-[var(--card-radius)] border border-[var(--glass-border)] bg-[var(--card)] p-4 shadow-xl">
             <h2 className="m-0 text-base font-semibold">Scale deployment</h2>
             <p className="mt-2 text-sm text-[var(--muted-foreground)]">
               Set replicas for {scaleState.workload.namespace}/{scaleState.workload.name}.
@@ -44,7 +44,7 @@ export function ClusterPageDialogs({
             <label className="mt-3 block text-sm">
               Replicas
               <input
-                className="mt-1 w-full rounded border border-[var(--border)] bg-[var(--background)] px-2 py-1 font-mono-tabular"
+                className="mt-1 w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 font-mono-tabular outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                 type="number"
                 min={0}
                 max={20}

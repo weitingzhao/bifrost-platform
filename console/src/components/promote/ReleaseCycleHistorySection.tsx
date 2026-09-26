@@ -67,7 +67,7 @@ function CycleStepTimeline({ steps }: { steps: ReleaseCycleStepView[] }) {
       {(steps ?? []).map(step => (
         <div
           key={step.kind}
-          className="rounded-md border border-border/50 bg-background/50 px-2.5 py-1.5"
+          className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-1.5"
         >
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <span className="text-dense-meta font-medium text-foreground">
@@ -124,8 +124,8 @@ function CycleCard({
   return (
     <div
       className={cn(
-        'rounded-md border border-border/60 bg-secondary/20',
-        open && 'border-border bg-secondary/35',
+        'rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]',
+        open && 'bg-[var(--card-fill-hover)]',
       )}
     >
       <div className="flex items-start gap-1.5 px-2.5 py-2">
@@ -201,7 +201,7 @@ function CycleCard({
       </div>
 
       {open ? (
-        <div className="border-t border-border/50 px-2.5 py-2">
+        <div className="border-t border-[var(--table-rule)] px-2.5 py-2">
           <div className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-dense-caption text-muted-foreground">
             <span className="font-mono truncate">{cycle.id}</span>
             <span aria-hidden>·</span>
@@ -266,7 +266,7 @@ export function ReleaseCycleHistorySection({
 
   return (
     <div className="flex min-w-0 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--table-rule)] px-3 py-2">
         {description ? (
           <p className="m-0 min-w-0 flex-1 text-dense-meta text-muted-foreground">{description}</p>
         ) : (

@@ -56,7 +56,7 @@ export function ControlRoomRuntimeMapSheet({
         showCloseButton
         className="w-full gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,80rem)]"
       >
-        <SheetHeader className="shrink-0 border-b border-border px-4 py-3 pr-12 text-left">
+        <SheetHeader className="shrink-0 border-b border-[var(--table-rule)] px-4 py-3 pr-12 text-left">
           <SheetTitle>Runtime Map</SheetTitle>
           <SheetDescription>
             Hardware topology and SCOPE stack — drill-down from Control Room (not a daily top-level page).

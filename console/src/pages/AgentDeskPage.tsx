@@ -399,7 +399,7 @@ export function AgentDeskPage({
               {context.focus.headline}
             </p>
           )}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)]/60 pt-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--table-rule)] pt-2">
             <SegmentControl
               ariaLabel="Agent Desk view"
               value={deskView}

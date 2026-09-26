@@ -277,7 +277,7 @@ function NewLaneInlineForm({
         </div>
       )}
       <input
-        className="mt-2 w-full min-w-0 rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
         placeholder="Lane label (becomes kebab-case id)"
         value={label}
         onChange={e => setLabel(e.target.value)}
@@ -285,7 +285,7 @@ function NewLaneInlineForm({
       />
       <textarea
         ref={inputRef}
-        className="mt-2 w-full min-w-0 resize-none rounded-md border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none"
+        className="mt-2 w-full min-w-0 resize-none rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
         rows={2}
         placeholder="Describe this work direction — what problem does it solve, what will it deliver?"
         value={description}
@@ -570,7 +570,7 @@ function CompletedLanesGroup({
   if (items.length === 0) return null
 
   return (
-    <div className="rounded-md border border-[var(--border)]/60 bg-[var(--secondary)]/20 px-2.5 py-2">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2.5 py-2">
       <button
         type="button"
         className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left transition-colors hover:bg-[var(--secondary)]"
@@ -862,7 +862,7 @@ export function TrackLaneSection({
       )}
 
       {allComplete && (
-        <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
+        <div className="mt-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">All lanes complete</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Start a new lane under Backlog. Program sign-off in In Flight; Delivery is
@@ -872,7 +872,7 @@ export function TrackLaneSection({
       )}
 
       {backlogOnly && (
-        <div className="mt-3 rounded-md border border-[var(--border)] bg-[var(--secondary)]/40 px-3 py-2.5 text-center">
+        <div className="mt-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5 text-center">
           <p className="m-0 text-sm font-medium text-[var(--foreground)]">Nothing in Doing</p>
           <p className="m-0 mt-0.5 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
             Pick a Backlog lane below, or create a new one.

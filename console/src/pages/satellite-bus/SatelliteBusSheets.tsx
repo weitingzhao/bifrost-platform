@@ -80,12 +80,12 @@ export function SatelliteBusInspectSheet({
                   <p className="m-0 mb-0.5 text-[var(--text-dense-caption)] font-medium text-muted-foreground">
                     Raw status
                   </p>
-                  <pre className="m-0 max-h-72 overflow-auto rounded-md border border-[var(--border)] bg-[var(--secondary)] p-2 text-[10px] leading-snug">
+                  <pre className="m-0 max-h-72 overflow-auto rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 text-[10px] leading-snug">
                     {JSON.stringify(inspectData.raw, null, 2)}
                   </pre>
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
+              <div className="flex flex-wrap items-center gap-2 border-t border-[var(--table-rule)] pt-2">
                 <AgentTriggerButton
                   label="Agent Triage"
                   size="xs"

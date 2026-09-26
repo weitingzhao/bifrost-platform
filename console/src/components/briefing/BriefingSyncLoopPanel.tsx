@@ -169,7 +169,7 @@ export function BriefingSyncLoopPanel({
       )}
 
       {fixPack.hasIssues && (
-        <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-3">
+        <div className="mt-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--foreground)]">
@@ -256,7 +256,7 @@ export function BriefingSyncLoopPanel({
                   →
                 </div>
               )}
-              <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2">
+              <div className="flex min-w-0 flex-1 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2">
                 <div className="flex items-center gap-2">
                   <StatusLamp value={lampReach} kind="reach" />
                   <span className="text-xs font-semibold uppercase tracking-wide">{step.label}</span>

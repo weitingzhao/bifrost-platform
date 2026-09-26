@@ -95,7 +95,7 @@ export function ExecutionLogPage() {
             </>
           )}
           <div
-            className="ml-auto inline-flex items-center gap-1 rounded-md border border-border/50 bg-muted/20 px-1 py-0.5"
+            className="ml-auto inline-flex items-center gap-1 rounded-md px-1 py-0.5"
             title="Skill output language"
           >
             <Languages className="h-3 w-3 shrink-0 text-muted-foreground" strokeWidth={2} aria-hidden />

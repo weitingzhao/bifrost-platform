@@ -100,7 +100,7 @@ export function ClusterDrawer({
           ) : (
             <ul className="m-0 list-none space-y-2 text-[var(--text-dense-meta)]">
               {events.slice(0, 10).map((e, i) => (
-                <li key={`${e.reason}-${e.last_seen}-${i}`} className="border-b border-[var(--border)] pb-2">
+                <li key={`${e.reason}-${e.last_seen}-${i}`} className="border-b border-[var(--table-rule)] pb-2">
                   <div className="font-mono-tabular text-[var(--text-dense)]">
                     {e.type} · {e.reason}
                   </div>

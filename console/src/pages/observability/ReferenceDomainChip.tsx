@@ -19,10 +19,10 @@ export function ReferenceDomainChip({
       onClick={onSelect}
       title={`${domain.label} — by design · no runtime contract`}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-left transition-colors',
+        'inline-flex items-center gap-1.5 rounded-[var(--control-radius)] border px-2 py-1 text-left transition-colors',
         selected
           ? 'border-[var(--ring)] bg-[var(--accent)]'
-          : 'border-[var(--border)] bg-[var(--secondary)]/70 hover:bg-[var(--accent)]/50',
+          : 'border-transparent bg-[var(--control-fill)] hover:bg-[var(--control-fill-hover)]',
       )}
     >
       <Icon className="size-3 shrink-0 text-muted-foreground" aria-hidden />

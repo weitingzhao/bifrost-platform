@@ -512,7 +512,7 @@ export function CodeHealthPage() {
               </div>
             )
           })}
-          <div className="flex flex-col gap-1.5 border-t border-border/60 pt-2">
+          <div className="flex flex-col gap-1.5 border-t border-[var(--table-rule)] pt-2">
             <span className="text-dense-label font-medium text-muted-foreground">Out of scope</span>
             <div className="flex flex-col gap-1">
               {CODE_HEALTH_EXCLUSIONS.map(ex => (

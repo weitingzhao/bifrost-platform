@@ -128,7 +128,7 @@ function CompactRunRow({
         : 'text-muted-foreground'
 
   return (
-    <li className="border-b border-border/40 py-1.5 last:border-b-0">
+    <li className="border-b border-[var(--table-rule)] py-1.5 last:border-b-0">
       <button
         type="button"
         className="flex w-full min-w-0 flex-col gap-0.5 rounded px-0.5 text-left hover:bg-primary/5"
@@ -172,7 +172,7 @@ function CompactRunRow({
       </button>
 
       {expanded && (
-        <div className="mt-1.5 space-y-1.5 border-l border-border/50 pl-3 ml-1.5">
+        <div className="mt-1.5 space-y-1.5 border-l border-[var(--table-rule)] pl-3 ml-1.5">
           <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[var(--text-dense-micro)]">
             {startedAbs != null && (
               <>

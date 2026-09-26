@@ -90,7 +90,7 @@ export function TaskBriefingLauncher({
     focus.progress != null ? `${focus.progress.done}/${focus.progress.total}` : null
 
   return (
-    <div className="rounded-lg border border-border bg-secondary px-3 py-2.5">
+    <div className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <ClipboardList size={16} />
         <span className="text-[var(--text-dense-label)] font-semibold">Briefing</span>
@@ -102,8 +102,8 @@ export function TaskBriefingLauncher({
         {intentLabel != null && <DenseTag variant="info">Intent · {intentLabel}</DenseTag>}
       </div>
 
-      <div className="mt-2.5 overflow-hidden rounded-md border border-border/60 bg-background">
-        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 px-2.5 py-1.5">
+      <div className="mt-2.5 overflow-hidden rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--table-rule)] px-2.5 py-1.5">
           <span className="text-[var(--text-dense-caption)] font-semibold uppercase tracking-wide text-muted-foreground">
             Session lane
           </span>
