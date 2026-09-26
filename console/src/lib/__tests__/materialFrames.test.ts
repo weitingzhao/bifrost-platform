@@ -26,8 +26,6 @@ const NEUTRAL_CLASS = new RegExp(
 
 /** Neutral frame classes still allowed, per file, with the count that is there today. */
 const KNOWN_NEUTRAL: ReadonlyMap<string, { count: number; why: string }> = new Map([
-  ['components/ui/dropdown-menu.tsx', { count: 2, why: 'popper content — materials.css repaints its border and fill' }],
-  ['components/shell/PartnerStrip.tsx', { count: 1, why: 'PopoverContent — materials.css repaints its border and fill' }],
   ['components/delivery/PluginStepCommandCenter.tsx', { count: 1, why: 'pending step ring (24px) — the hollow ring is the reading' }],
   ['components/delivery/ReleaseStepCommandCenter.tsx', { count: 1, why: 'pending step ring (24px) — the hollow ring is the reading' }],
   ['components/task-mode/TaskPhaseProgress.tsx', { count: 2, why: 'planned / unknown step rings (24px)' }],

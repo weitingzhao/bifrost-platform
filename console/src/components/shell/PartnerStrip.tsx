@@ -447,7 +447,7 @@ function CollapsedPartnerButton({
         side="right"
         align="start"
         sideOffset={8}
-        className="w-52 border-sidebar-border bg-sidebar p-2 shadow-xl"
+        className="w-52 p-2"
       >
         <p className={shellNavFlyoutSectionTitleClass(isActive)}>Engineer</p>
         {sections.lifecycle.length > 0 && (
