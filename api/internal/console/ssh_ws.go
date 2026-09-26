@@ -173,6 +173,21 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = agentConn.Close() }()
 	}
 
+	pipeShell(ws, client)
+}
+
+// pipeShell runs an interactive shell over client and pipes it to ws until
+// either side goes away, and then tears the other side down:
+//
+//   - the browser leaves (reload, tab closed, a StrictMode remount): close the
+//     SSH connection. An idle shell writes nothing, so the pumps sit in Read
+//     and nothing else would ever end them. Until 2026-09-26 this path closed
+//     nothing: every page load leaked one connection until platform-api
+//     restarted, and a Mini's sshd (launchd, Instances=42) then reset every new
+//     SSH to it — deploys and the peer watchdog included.
+//   - the shell exits: close the socket, so the browser sees the session end
+//     and the read loop returns.
+func pipeShell(ws *websocket.Conn, client *ssh.Client) {
 	session, err := client.NewSession()
 	if err != nil {
 		_ = ws.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("\r\n\x1b[31mSSH session: %v\x1b[0m\r\n", err)))
@@ -203,6 +218,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	var wg sync.WaitGroup
 	done := make(chan struct{})
+	// stdout and stderr pump into one socket, which allows one writer at a time.
+	var writeMu sync.Mutex
 
 	pump := func(r io.Reader) {
 		defer wg.Done()
@@ -210,7 +227,10 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, err := r.Read(buf)
 			if n > 0 {
-				if werr := ws.WriteMessage(websocket.BinaryMessage, buf[:n]); werr != nil {
+				writeMu.Lock()
+				werr := ws.WriteMessage(websocket.BinaryMessage, buf[:n])
+				writeMu.Unlock()
+				if werr != nil {
 					return
 				}
 			}
@@ -226,6 +246,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer safego.Recover("console.ssh.readLoop")
 		defer close(done)
+		// The browser went away: drop the connection so the pumps' Reads return.
+		defer func() { _ = client.Close() }()
 		for {
 			mt, data, err := ws.ReadMessage()
 			if err != nil {
@@ -247,6 +269,8 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	wg.Wait()
+	// The shell ended first: close the socket so the read loop returns too.
+	_ = ws.Close()
 	<-done
 }
 
