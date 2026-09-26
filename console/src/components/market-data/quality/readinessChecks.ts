@@ -4,7 +4,6 @@
  */
 
 import type {
-  BarAggregateResponse,
   MarketStatusResponse,
   SnapshotCoverageResponse,
   UniverseCountResponse,
@@ -115,40 +114,6 @@ export function deriveSnapshotCoverage(
     coveragePct,
     sessionDate: cov?.session_date ?? null,
   }
-}
-
-export type BarAggregateDerived = {
-  symbolCount: number
-  totalBars: number
-  nullCloseRows: number
-  nullClosePct: number | null
-}
-
-export function deriveBarAggregate(
-  agg: BarAggregateResponse | null | undefined,
-): BarAggregateDerived {
-  if (agg?.summary === true || (agg?.total_bars != null && agg.symbols == null)) {
-    const totalBars = agg.total_bars ?? 0
-    const nullCloseRows = agg.null_close_rows ?? 0
-    const nullClosePct = totalBars > 0 ? (nullCloseRows / totalBars) * 100 : null
-    return {
-      symbolCount: agg.symbol_count ?? 0,
-      totalBars,
-      nullCloseRows,
-      nullClosePct,
-    }
-  }
-  const symbols = agg?.symbols ?? {}
-  let totalBars = 0
-  let nullCloseRows = 0
-  let symbolCount = 0
-  for (const stats of Object.values(symbols)) {
-    symbolCount += 1
-    totalBars += stats.bar_rows ?? 0
-    nullCloseRows += stats.null_close_rows ?? 0
-  }
-  const nullClosePct = totalBars > 0 ? (nullCloseRows / totalBars) * 100 : null
-  return { symbolCount, totalBars, nullCloseRows, nullClosePct }
 }
 
 export function buildReadinessChecks(input: {

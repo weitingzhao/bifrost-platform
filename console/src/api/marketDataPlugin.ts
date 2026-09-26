@@ -502,26 +502,6 @@ export type DateCoverageResponse = {
   error?: string
 }
 
-export type BarAggregateSymbol = {
-  bar_rows?: number
-  first_bar_date?: string | null
-  last_bar_date?: string | null
-  null_close_rows?: number
-  null_volume_rows?: number
-}
-
-export type BarAggregateResponse = {
-  ok: boolean
-  /** Present when ?summary=true — totals only, no per-symbol map. */
-  summary?: boolean
-  symbol_count?: number
-  total_bars?: number
-  null_close_rows?: number
-  null_volume_rows?: number
-  symbols?: Record<string, BarAggregateSymbol>
-  error?: string
-}
-
 export type FinancialsByTypeResponse = {
   ok: boolean
   counts?: {
@@ -647,20 +627,6 @@ export function fetchReadinessDateCoverage(params?: {
   const qs = q.toString()
   return proxyGet<DateCoverageResponse>(
     `/market/readiness/date-coverage${qs ? `?${qs}` : ''}`,
-  )
-}
-
-export function fetchReadinessBarAggregate(params?: {
-  window_days?: number
-  /** Prefer summary for Ops Console — avoids multi-MiB per-symbol payload. */
-  summary?: boolean
-}) {
-  const q = new URLSearchParams()
-  if (params?.window_days != null) q.set('window_days', String(params.window_days))
-  if (params?.summary === true) q.set('summary', 'true')
-  const qs = q.toString()
-  return proxyGet<BarAggregateResponse>(
-    `/market/readiness/bar-aggregate${qs ? `?${qs}` : ''}`,
   )
 }
 
