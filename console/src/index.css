@@ -2032,6 +2032,19 @@ html {
   box-shadow: 0 1px 0 var(--table-rule);
 }
 
+/* The picked pod / namespace row (workloads explorer, workloads table,
+   namespaces panel). The class was applied from 2026-06 on but never defined,
+   so the pick never showed. A selection is a reading: the accent tint the
+   Runtime Map's selected target row uses, plus a rail on the first cell.
+   Unlayered, so it holds while the row is hovered. */
+.dense-table__row--selected {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.dense-table__row--selected > td:first-child {
+  box-shadow: inset 2px 0 0 var(--primary);
+}
+
 /* Fixed column layout: Workload gets the lion's share so names render in full;
    the trailing metric columns are sized to their (short) content instead of
    eating leftover width. table-layout:fixed makes these <col> widths authoritative. */
