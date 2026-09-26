@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.hermes.dashboard</string>
+
+  <!-- The Nous Hermes dashboard on the primary Mini (:9119). Its gateway has a
+       launchd job of its own (ai.hermes.gateway, written by `hermes gateway
+       install`); the dashboard had none and ran for 44 days as a process left
+       behind by an SSH session, on code older than the gateway's — it reported
+       the gateway stopped while it ran. Same interpreter, environment and
+       session types as ai.hermes.gateway. Basic auth comes from
+       ~/.hermes/config.yaml (dashboard.basic_auth), not from here. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/vision/.hermes/hermes-agent/venv/bin/python</string>
+    <string>-m</string>
+    <string>hermes_cli.main</string>
+    <string>dashboard</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--port</string>
+    <string>9119</string>
+    <string>--no-open</string>
+    <string>--skip-build</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/vision/.hermes</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/vision/.hermes/hermes-agent/venv/bin:/Users/vision/.hermes/hermes-agent/node_modules/.bin:/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:/Users/vision/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>VIRTUAL_ENV</key>
+    <string>/Users/vision/.hermes/hermes-agent/venv</string>
+    <key>HERMES_HOME</key>
+    <string>/Users/vision/.hermes</string>
+  </dict>
+
+  <key>LimitLoadToSessionType</key>
+  <array>
+    <string>Aqua</string>
+    <string>Background</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/vision/.hermes/logs/dashboard.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/vision/.hermes/logs/dashboard.error.log</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>

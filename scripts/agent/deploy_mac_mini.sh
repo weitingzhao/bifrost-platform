@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy agent stack (remediation-runner + Nous Hermes MCP + nightly drift) to Mac Mini.
+# Deploy agent stack (remediation-runner + Nous Hermes MCP + nightly drift) to Mac Mini,
+# and on the primary the Nous Hermes dashboard's launchd job (ai.hermes.dashboard).
 # Invoked by: python scripts/run_agent.py deploy · Console Operator Plane → Update primary/standby
 #
 # Non-interactive only: Console cannot type SSH passwords. Uses BatchMode + publickey.
@@ -311,6 +312,36 @@ run_remote "cd ${REMOTE_DIR}/mcp-platform && npm install --no-audit --no-fund"
 
 echo "==> Pin Hermes tool_search=off (keep L0 MCP tools eager: verify_mission_snapshot / verify_payload)"
 run_remote 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; if command -v hermes >/dev/null 2>&1; then hermes config set tools.tool_search.enabled off; else echo "  skip — hermes CLI not on PATH"; fi'
+
+echo "==> Nous Hermes dashboard (launchd ai.hermes.dashboard — primary only)"
+# :9119 lives beside the gateway it reports on: the primary, and only where Nous
+# Hermes is installed (the standby has none). Its gateway already has a launchd
+# job of its own (ai.hermes.gateway, from `hermes gateway install`).
+if [[ "${AGENT_ROLE}" != "standby" ]] && run_remote 'test -x "$HOME/.hermes/hermes-agent/venv/bin/python"'; then
+  run_scp "${DEPLOY_DIR}/ai.hermes.dashboard.plist" "${REMOTE}:~/Library/LaunchAgents/"
+  run_remote "launchctl bootout gui/\$(id -u)/ai.hermes.dashboard 2>/dev/null || true"
+  # A dashboard started by hand (from an SSH session) holds :9119 and would
+  # leave the launchd job crash-looping on the port: stop it — only if it is
+  # one. Anything else on the port is reported, and the job is not loaded.
+  DASH_PORT_STATE="$(run_remote '
+    for i in 1 2 3 4 5 6 7 8 9 10; do
+      pid=$(/usr/sbin/lsof -t -i :9119 -sTCP:LISTEN 2>/dev/null | head -1)
+      [ -z "$pid" ] && { echo free; exit 0; }
+      case "$(ps -o command= -p "$pid")" in
+        *"hermes dashboard"*|*"hermes_cli.main dashboard"*) kill "$pid"; sleep 1 ;;
+        *) echo "held:$pid"; exit 0 ;;
+      esac
+    done
+    echo "held:$(/usr/sbin/lsof -t -i :9119 -sTCP:LISTEN 2>/dev/null | head -1)"')"
+  if [[ "${DASH_PORT_STATE}" == "free" ]]; then
+    run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/ai.hermes.dashboard.plist"
+    echo "  loaded ai.hermes.dashboard"
+  else
+    echo "  ⚠ :9119 is held by something other than the Hermes dashboard (${DASH_PORT_STATE}) — ai.hermes.dashboard not loaded" >&2
+  fi
+else
+  echo "  skip — standby, or Nous Hermes is not installed on ${REMOTE}"
+fi
 
 echo "==> Post-deploy health smoke"
 RUNNER_PORT="${RUNNER_PORT:-8781}"
