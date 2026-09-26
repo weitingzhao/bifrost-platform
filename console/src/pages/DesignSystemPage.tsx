@@ -152,7 +152,7 @@ export function DesignSystemPage() {
               </DenseDataTable>
             </CatalogSection>
 
-            <CatalogSection title="Page canvas (three surfaces)">
+            <CatalogSection title="Page canvas and 1a surfaces">
               <DenseDataTable>
                 <DenseTableHeader>
                   <DenseTableHeadRow>

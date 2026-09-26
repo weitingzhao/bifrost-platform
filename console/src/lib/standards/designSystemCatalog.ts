@@ -10,7 +10,7 @@
  * governance summary that Ops Console and LLM agents need.
  */
 
-export const DESIGN_SYSTEM_VERSION = '2026-08-10.8'
+export const DESIGN_SYSTEM_VERSION = '2026-09-26.1'
 export const DESIGN_SYSTEM_SOURCE = 'console/src/lib/standards/designSystemCatalog.ts'
 export const LIVING_CONTRACT_PATH = '/settings/ui-design-system'
 
@@ -45,10 +45,25 @@ export type SurfaceRow = {
   usage: string
 }
 
+/**
+ * Groups, rules, tags and hand-rolled controls read the 1a material from
+ * @bifrost/ui 0.5.0 (design Rev .59–.74; Owner 2026-09-25: Ops adopts it too).
+ * The neutral 1px --border frame is gone; materialFrames.test.ts holds the line.
+ */
 export const PAGE_SURFACES: SurfaceRow[] = [
   { surface: 'Canvas', tailwind: 'bg-card', usage: 'Page root (PageShell) — same color as sidebar' },
-  { surface: 'Elevated', tailwind: 'bg-secondary / Card variant="elevated"', usage: 'KPI bars, filter panels, chart containers' },
-  { surface: 'Inset', tailwind: 'bg-background', usage: 'Nested chart wells, intentionally recessed areas' },
+  {
+    surface: 'Group',
+    tailwind: 'panel-elevated · rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)]',
+    usage: 'Panels, cards, KPI tiles, list boxes, nested boxes — ink 4%, radius 12; the 1px frame stays transparent so a state colour (warning / fail / selected) still draws; hover = --card-fill-hover',
+  },
+  { surface: 'Rule', tailwind: 'border-[var(--table-rule)]', usage: 'Headers, dividers and table lines inside a group (ink 6%)' },
+  {
+    surface: 'Control / field',
+    tailwind: 'bg-[var(--control-fill)] · bg-[var(--field-fill)] · rounded-[var(--control-radius)]',
+    usage: 'Only where DS Button / Input cannot be used — frameless, radius 8; fields focus with the --focus-glow ring',
+  },
+  { surface: 'Tag', tailwind: 'rounded-full bg-[color-mix(in_srgb,currentColor_15%,transparent)]', usage: 'Hand-rolled tags / pills — prefer DenseTag; no frame' },
 ]
 
 /* ── Business semantic colors ── */
@@ -440,6 +455,7 @@ export const FORBIDDEN_PATTERNS: string[] = [
   'Sticky OpsContextBar / FocusStrip under shell chrome — use OpsContextStrip inside PageShell instead',
   'Hand-rolled Mission Control / Rocket Cluster verdict strip — use OpsVerdictStrip',
   'Cluster hand-rolled page-section panel-elevated chrome — use OpsVerdictStrip + OpsSection for Bootstrap',
+  'Neutral 1px --border frames (border-border, border-[var(--border)], bg-secondary / bg-background boxes) — use the Group / Rule / Control / Tag surfaces; dashed empty slots and state-coloured borders are fine',
 ]
 
 /* ── Allowed CSS exceptions ── */
