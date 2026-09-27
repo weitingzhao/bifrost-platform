@@ -4,6 +4,7 @@ import {
   autoFixableIds,
   buildDoctorAgentReport,
   describeFix,
+  severityVariant,
   sortFindings,
   verdictVariant,
 } from '@/components/market-data/doctorModel'
@@ -21,6 +22,7 @@ const report: DoctorReport = {
     { id: 'stock_daily:2026-09-04', slot: 'universe-daily', severity: 'ok', title: 'Stock daily bars', expected: '>= 4000', actual: 9000, detail: '9000 rows.', fix: null, auto_fixable: false },
     { id: 'option_snapshot:2026-09-04', slot: 'eod-pipeline', severity: 'crit', title: 'Option chain snapshot', expected: 25, actual: 3, detail: '3/25 underlyings have rows.', session: '2026-09-04', fix: { action: 'enqueue-slot', slot: 'eod-pipeline', force: true, date: '2026-09-04' }, auto_fixable: true, missing_sample: ['AAPL', 'MSFT'] },
     { id: 'worker:options', slot: 'workers', severity: 'crit', title: 'options workers', expected: 'reachable', actual: 'unreachable', detail: '/health did not answer.', fix: { action: 'rollout-restart', deployment: 'polygon-worker-options' }, auto_fixable: false },
+    { id: 'chain_spot:2026-09-04', slot: 'eod-pipeline', severity: 'boundary', title: 'Spot behind the chain', expected: 'every chain carries a spot', actual: 1, detail: '1 on a derived spot (SPYx10): SPX.', session: '2026-09-04', fix: null, auto_fixable: false, missing_sample: [] },
   ],
   prescriptions: [
     { finding_ids: ['option_snapshot:2026-09-04'], action: 'enqueue-slot', slot: 'eod-pipeline', force: true, date: '2026-09-04' },
@@ -37,7 +39,13 @@ const report: DoctorReport = {
 
 describe('doctorModel', () => {
   it('sorts critical first and keeps ok last', () => {
-    expect(sortFindings(report.findings).map(f => f.severity)).toEqual(['crit', 'crit', 'warn', 'ok'])
+    expect(sortFindings(report.findings).map(f => f.severity)).toEqual([
+      'crit',
+      'crit',
+      'warn',
+      'boundary',
+      'ok',
+    ])
   })
 
   it('describes a prescription as the action the button will take', () => {
@@ -105,5 +113,29 @@ describe('describeFix — a targeted refetch', () => {
         payload: { date: '2026-09-22' },
       }),
     ).toBe('Enqueue 1 short_volume_market job for 2026-09-22')
+  })
+})
+
+describe('boundary severity', () => {
+  it('renders slate, not green — a derived level is not a vendor close', () => {
+    expect(severityVariant('boundary')).toBe('neutral')
+    expect(severityVariant('ok')).toBe('success')
+  })
+
+  it('sorts after everything actionable and before the plain passes', () => {
+    expect(sortFindings(report.findings).map(f => f.severity).indexOf('boundary')).toBe(
+      sortFindings(report.findings).map(f => f.severity).lastIndexOf('warn') + 1,
+    )
+  })
+
+  it('is kept out of the actionable list an agent works through', () => {
+    const out = buildDoctorAgentReport(report)
+    const actionable = out.slice(
+      out.indexOf('## Findings (actionable)'),
+      out.indexOf('## Boundaries'),
+    )
+    expect(actionable).not.toContain('chain_spot:2026-09-04')
+    expect(out).toContain('## Boundaries (no action available — do not try to fix these)')
+    expect(out).toContain('1 on a derived spot (SPYx10): SPX.')
   })
 })

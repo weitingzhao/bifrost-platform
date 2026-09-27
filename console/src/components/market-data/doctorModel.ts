@@ -6,15 +6,20 @@ import type {
   DoctorVerdict,
 } from '@/api/marketDataDoctor'
 
-const SEVERITY_ORDER: Record<DoctorSeverity, number> = { crit: 0, warn: 1, ok: 2 }
+// A boundary reads after everything actionable and before the plain passes:
+// nothing to do about it, but it says why a number looks the way it does.
+const SEVERITY_ORDER: Record<DoctorSeverity, number> = { crit: 0, warn: 1, boundary: 2, ok: 3 }
 
 export function sortFindings(findings: readonly DoctorFinding[]): DoctorFinding[] {
   return [...findings].sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
 }
 
-export function severityVariant(sev: DoctorSeverity): 'danger' | 'warning' | 'success' {
+export function severityVariant(sev: DoctorSeverity): 'danger' | 'warning' | 'success' | 'neutral' {
   if (sev === 'crit') return 'danger'
   if (sev === 'warn') return 'warning'
+  // Slate, not green: a derived index level is not a vendor close, and painting
+  // it as a pass is the claim this severity exists to stop.
+  if (sev === 'boundary') return 'neutral'
   return 'success'
 }
 
@@ -73,7 +78,10 @@ export function autoFixableIds(report: DoctorReport | null | undefined): string[
  * Claude / Cursor session with the bifrost-platform MCP server attached.
  */
 export function buildDoctorAgentReport(report: DoctorReport): string {
-  const bad = sortFindings(report.findings.filter(f => f.severity !== 'ok'))
+  const bad = sortFindings(
+    report.findings.filter(f => f.severity === 'crit' || f.severity === 'warn'),
+  )
+  const boundaries = sortFindings(report.findings.filter(f => f.severity === 'boundary'))
   const lines: string[] = [
     '# Massive (Market Data) Plugin — doctor report',
     '',
@@ -83,7 +91,7 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
     `Generated: ${report.generated_at}`,
     `Universe: watchlist ${report.universe.watchlist} · underlyings ${report.universe.underlyings} · optionable ${report.universe.optionable}`,
     '',
-    '## Findings (non-ok)',
+    '## Findings (actionable)',
   ]
   if (bad.length === 0) {
     lines.push('- none')
@@ -96,6 +104,14 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
       lines.push(`  missing: ${f.missing_sample.join(', ')}`)
     }
     lines.push(`  fix: ${describeFix(f.fix)}${f.auto_fixable ? ' [auto]' : ' [manual]'}`)
+  }
+  // Listed, never mixed into the actionable set: an agent that sees a boundary
+  // under "findings" will try to fix what the vendor will not sell us.
+  if (boundaries.length > 0) {
+    lines.push('', '## Boundaries (no action available — do not try to fix these)')
+    for (const f of boundaries) {
+      lines.push(`- ${f.title} (${f.id}) — ${f.detail}`)
+    }
   }
   lines.push('', '## Prescriptions the plugin can execute')
   if (report.prescriptions.length === 0) {

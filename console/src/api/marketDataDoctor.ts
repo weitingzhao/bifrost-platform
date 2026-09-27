@@ -8,7 +8,13 @@
  */
 import { authedFetch } from './client'
 
-export type DoctorSeverity = 'ok' | 'warn' | 'crit'
+/**
+ * `boundary` is the coverage matrix's own word, reused: a boundary is not a
+ * gap, the vendor cannot backfill it. It separates a limit no action on our
+ * side moves from a fault a refetch would fix, so neither gets painted as the
+ * other. Only `crit` and `warn` move a verdict.
+ */
+export type DoctorSeverity = 'ok' | 'warn' | 'boundary' | 'crit'
 export type DoctorVerdict = 'healthy' | 'degraded' | 'critical'
 
 export type DoctorFix = {
