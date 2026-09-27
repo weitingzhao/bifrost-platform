@@ -16,7 +16,7 @@ import { fmtCount } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { dagsterSchedulesUrl } from '@/lib/architecture/opsToolRackCatalog'
 
-type DaysWindow = '7' | '14' | '30'
+type DaysWindow = '7' | '14' | '30' | '90'
 
 export function IngestDailyVolume({
   onSelectKind,
@@ -25,7 +25,7 @@ export function IngestDailyVolume({
 }) {
   const [daysWindow, setDaysWindow] = useState<DaysWindow>('14')
   const [kindFilter, setKindFilter] = useState('')
-  const days = Number(daysWindow) as 7 | 14 | 30
+  const days = Number(daysWindow) as 7 | 14 | 30 | 90
 
   const histQ = useQuery({
     queryKey: ['market-data', 'ingest', 'history', days],
@@ -50,7 +50,7 @@ export function IngestDailyVolume({
   return (
     <OpsSection
       title="Daily volume"
-      description="UTC calendar days from job_ingest · trim ~7d may empty older bars · Dagster = ignition, not job counts"
+      description="UTC calendar days · finished jobs from queue_sample (90d; job rows are trimmed after 48h) · Dagster = ignition, not job counts"
       headerExtra={
         hist != null ? (
           <DenseTag variant="neutral">
@@ -69,6 +69,7 @@ export function IngestDailyVolume({
               { value: '7', label: '7d' },
               { value: '14', label: '14d' },
               { value: '30', label: '30d' },
+              { value: '90', label: '90d' },
             ]}
           />
           <Button variant="outline" size="sm" asChild>
