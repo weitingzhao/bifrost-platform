@@ -771,9 +771,68 @@ func (s *Service) restoreTarget(ctx context.Context, primary, target, mode strin
 			return err
 		}
 	}
+	if _, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
+		dataCloneOwnerSQL); err != nil {
+		return fmt.Errorf("reassign public ownership in %s: %w", target, err)
+	}
 	_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-c", dataCloneGrantBifrostSQL)
 	return err
 }
+
+// dataCloneOwnerSQL hands every public relation and enum/domain type that the restore left
+// owned by postgres to the database owner (CNPG Database.spec.owner). pg_dump --no-owner
+// restored by psql -U postgres makes postgres the owner of everything, and GRANT ALL does
+// not confer ownership: the app's schema DDL on connect (ALTER TABLE … IF NOT EXISTS,
+// CREATE INDEX IF NOT EXISTS) then fails with "must be owner of table". Indexes and
+// OWNED BY sequences follow their table. Mirrors bifrost-trade-infra
+// scripts/k3s/fix-cnpg-db-ownership.sh, which the shell clone path runs.
+const dataCloneOwnerSQL = `
+DO $$
+DECLARE
+  db_owner text;
+  r RECORD;
+BEGIN
+  SELECT pg_get_userbyid(datdba) INTO db_owner FROM pg_database WHERE datname = current_database();
+  FOR r IN
+    SELECT c.relname, c.relkind
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public'
+      AND c.relkind IN ('r','p','v','m','f')
+      AND pg_get_userbyid(c.relowner) = 'postgres'
+  LOOP
+    EXECUTE format('ALTER %s public.%I OWNER TO %I',
+      CASE r.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'f' THEN 'FOREIGN TABLE' ELSE 'TABLE' END,
+      r.relname, db_owner);
+  END LOOP;
+  FOR r IN
+    SELECT t.typname, t.typtype
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typtype IN ('e','d')
+      AND pg_get_userbyid(t.typowner) = 'postgres'
+  LOOP
+    EXECUTE format('ALTER %s public.%I OWNER TO %I',
+      CASE r.typtype WHEN 'd' THEN 'DOMAIN' ELSE 'TYPE' END,
+      r.typname, db_owner);
+  END LOOP;
+END $$;
+`
+
+// dataCloneOwnerLeftoverSQL counts the public objects dataCloneOwnerSQL should have moved
+// but postgres still owns (zero when postgres is itself the database owner).
+const dataCloneOwnerLeftoverSQL = `
+SELECT
+  (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f')
+      AND pg_get_userbyid(c.relowner) = 'postgres'
+      AND c.relowner <> (SELECT datdba FROM pg_database WHERE datname = current_database()))
++ (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public' AND t.typtype IN ('e','d')
+      AND pg_get_userbyid(t.typowner) = 'postgres'
+      AND t.typowner <> (SELECT datdba FROM pg_database WHERE datname = current_database()))
+`
 
 // dataCloneFullResetSQL drops every user schema so a multi-schema pg_dump restore is clean.
 const dataCloneFullResetSQL = `
@@ -839,6 +898,22 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 	fmt.Sscanf(strings.TrimSpace(srcCountOut), "%d", &srcCount)
 	if srcCount > 0 && vr.TableCount < srcCount/2 {
 		vr.Detail = fmt.Sprintf("table count %d << source %d", vr.TableCount, srcCount)
+		return vr
+	}
+
+	leftoverOut, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
+		dataCloneOwnerLeftoverSQL)
+	if err != nil {
+		vr.Detail = "ownership check: " + err.Error()
+		return vr
+	}
+	var leftover int
+	if _, err = fmt.Sscanf(strings.TrimSpace(leftoverOut), "%d", &leftover); err != nil {
+		vr.Detail = fmt.Sprintf("ownership check: unreadable count %q", strings.TrimSpace(leftoverOut))
+		return vr
+	}
+	if leftover > 0 {
+		vr.Detail = fmt.Sprintf("%d public objects still owned by postgres, not the database owner", leftover)
 		return vr
 	}
 	vr.OK = true

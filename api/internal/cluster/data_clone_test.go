@@ -123,6 +123,8 @@ func TestRunDataCloneFullSuccess(t *testing.T) {
 			return "", nil
 		case strings.Contains(joined, "wc -c"):
 			return "5000000", nil
+		case strings.Contains(joined, dataCloneOwnerLeftoverSQL):
+			return "0", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
 		case strings.Contains(joined, "strategy_instance"):
@@ -234,6 +236,73 @@ func TestRestoreTargetFullDropsAllUserSchemas(t *testing.T) {
 	}
 }
 
+func TestRestoreTargetReassignsOwnershipBeforeGrants(t *testing.T) {
+	for _, mode := range []string{"full", "selective"} {
+		t.Run(mode, func(t *testing.T) {
+			var seen []string
+			svc := NewService(nil)
+			svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
+				seen = append(seen, strings.Join(command, " "))
+				return "", nil
+			})
+			if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", mode, []string{"strategy_instance"}); err != nil {
+				t.Fatal(err)
+			}
+			restore, owner, grant := -1, -1, -1
+			for i, s := range seen {
+				switch {
+				case strings.Contains(s, "-f "+dataCloneRemoteDump):
+					restore = i
+				case strings.Contains(s, dataCloneOwnerSQL):
+					owner = i
+					if !strings.Contains(s, "ON_ERROR_STOP=1") {
+						t.Errorf("ownership step must stop on error: %q", s)
+					}
+				case strings.Contains(s, dataCloneGrantBifrostSQL):
+					grant = i
+				}
+			}
+			if restore < 0 || owner < 0 || grant < 0 || restore >= owner || owner >= grant {
+				t.Fatalf("want restore < ownership < grants, got %d/%d/%d seen=%v", restore, owner, grant, seen)
+			}
+		})
+	}
+}
+
+func TestRestoreTargetFailsWhenOwnershipFails(t *testing.T) {
+	svc := NewService(nil)
+	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
+		if strings.Contains(strings.Join(command, " "), dataCloneOwnerSQL) {
+			return "", fmt.Errorf("must be superuser")
+		}
+		return "", nil
+	})
+	err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "full", nil)
+	if err == nil || !strings.Contains(err.Error(), "reassign public ownership in bifrost_dev") {
+		t.Fatalf("expected ownership error, got %v", err)
+	}
+}
+
+func TestVerifyTargetFailsWhenPostgresStillOwnsObjects(t *testing.T) {
+	svc := NewService(nil)
+	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
+		joined := strings.Join(command, " ")
+		switch {
+		case strings.Contains(joined, dataCloneOwnerLeftoverSQL):
+			return "46", nil
+		case strings.Contains(joined, "information_schema.tables"):
+			return "15", nil
+		case strings.Contains(joined, "strategy_instance"):
+			return "3", nil
+		}
+		return "", nil
+	})
+	vr := svc.verifyTarget(context.Background(), "pod", "bifrost_dev", "bifrost_prod")
+	if vr.OK || !strings.Contains(vr.Detail, "46 public objects still owned by postgres") {
+		t.Fatalf("expected ownership verify failure, got %+v", vr)
+	}
+}
+
 func TestRestoreTargetSelectiveFailsWhenTruncateFails(t *testing.T) {
 	svc := NewService(nil)
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
@@ -298,6 +367,8 @@ func TestRunDataCloneRecordsLastCloneAt(t *testing.T) {
 			return "", nil
 		case strings.Contains(joined, "wc -c"):
 			return "5000000", nil
+		case strings.Contains(joined, dataCloneOwnerLeftoverSQL):
+			return "0", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
 		case strings.Contains(joined, "strategy_instance"):
