@@ -382,12 +382,15 @@ for c in data.get("checks", []):
 fi
 
 echo "==> Post-deploy Nous Hermes Agent health probe"
+# /api/status is public on the Hermes dashboard; the endpoints behind basic auth
+# (/api/env, /api/config, /api/sessions …) are not needed here, so the probe sends
+# no credentials. Never put a default password here — this repo is public.
 HERMES_DASHBOARD_PORT="${HERMES_DASHBOARD_PORT:-9119}"
 HERMES_DASHBOARD_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT}/api/status"
 HERMES_OK=false
 for i in 1 2 3; do
   sleep 2
-  HERMES_JSON="$(curl -sf --max-time 5 -u "${NOUS_HERMES_USER:-bifrost}:${NOUS_HERMES_PASS:-bifrost-ops-2026}" "${HERMES_DASHBOARD_URL}" 2>/dev/null || echo '')"
+  HERMES_JSON="$(curl -sf --max-time 5 "${HERMES_DASHBOARD_URL}" 2>/dev/null || echo '')"
   if [[ -n "${HERMES_JSON}" ]]; then
     HERMES_VER="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
     HERMES_GW="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("gateway_state","?"))' 2>/dev/null || echo '?')"
