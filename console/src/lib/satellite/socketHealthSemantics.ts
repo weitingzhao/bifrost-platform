@@ -5,7 +5,6 @@ import type {
   SatelliteBusMonitorDaemon,
   SatelliteBusSocketComponent,
 } from '@/api/satelliteBusTypes'
-import { satelliteBusPolygonWs } from '@/api/satelliteBusTypes'
 import type { Signal } from '@/lib/control-room/missionSignals'
 import { worst } from '@/lib/control-room/missionSignals'
 
@@ -90,30 +89,6 @@ function ingestById(
   id: string,
 ): SatelliteBusIngestService | undefined {
   return services?.find(s => s.id === id)
-}
-
-/** Official polygon_ws ingest row only. */
-function polygonWsIngest(
-  services: SatelliteBusIngestService[] | undefined,
-): SatelliteBusIngestService | undefined {
-  return ingestById(services, 'polygon_ws')
-}
-
-function isPolygonWsConsumerId(id: string): boolean {
-  return id === 'polygon_ws'
-}
-
-function polygonWsRequired(env: TradeEnv, ingest?: SatelliteBusIngestService, raw?: Record<string, unknown>): SocketRequiredState {
-  const runtime = (ingest?.runtime_status ?? '').toLowerCase()
-  const display = (ingest?.display_active ?? '').toLowerCase()
-  const wsMode = rawStr(raw, 'ws_mode')
-  if (runtime === 'policy-off' || display.includes('ws-disabled') || wsMode === 'rest_only') {
-    return 'policy-off'
-  }
-  if (env === 'stg' && rawBool(raw, 'configured') === false) {
-    return 'policy-off'
-  }
-  return 'required'
 }
 
 function tradingDaemonPolicyOff(ingest?: SatelliteBusIngestService): boolean {
@@ -352,7 +327,6 @@ function classifyTradeSocketConsumer(
   id: string,
   label: string,
   component: SatelliteBusSocketComponent | undefined,
-  env: TradeEnv,
   ingest?: SatelliteBusIngestService,
 ): SocketHealthRow {
   const raw = component?.raw
@@ -360,23 +334,7 @@ function classifyTradeSocketConsumer(
   const connected = rawBool(raw, 'connected')
   const serviceAlive = rawBool(raw, 'service_alive')
   const ingestRuntime = (ingest?.runtime_status ?? '').toLowerCase()
-
-  let required: SocketRequiredState = 'required'
-  if (isPolygonWsConsumerId(id)) {
-    required = polygonWsRequired(env, ingest, raw)
-  }
-
-  if (required === 'policy-off') {
-    return {
-      id,
-      label,
-      layer: 'trade',
-      required,
-      reach: 'ok',
-      reachLabel: 'policy-off',
-      detail: 'Not required for this env (REST-only / ws disabled)',
-    }
-  }
+  const required: SocketRequiredState = 'required'
 
   if (transport === 'platform_gateway' || rawStr(raw, 'health_source') === 'platform_ib_gateway') {
     if (connected === true || serviceAlive === true || ingestRuntime === 'active') {
@@ -417,7 +375,6 @@ function classifyTradeSocketConsumer(
 
 export function buildSocketHealthRows(
   socket: {
-    polygon_ws?: SatelliteBusSocketComponent
     ib_ingestor?: SatelliteBusSocketComponent
     ib_account_agent?: SatelliteBusSocketComponent
     ib_operator?: SatelliteBusSocketComponent
@@ -432,22 +389,14 @@ export function buildSocketHealthRows(
   const rocket = [classifyPlatformIbGateway(socket?.platform_ib_gateway)]
 
   const trade: SocketHealthRow[] = [
-    classifyTradeSocketConsumer('ib_ingestor', 'IB Ingestor', socket?.ib_ingestor, env, ingest('ib_ingestor')),
+    classifyTradeSocketConsumer('ib_ingestor', 'IB Ingestor', socket?.ib_ingestor, ingest('ib_ingestor')),
     classifyTradeSocketConsumer(
       'ib_account_agent',
       'IB Account Agent',
       socket?.ib_account_agent,
-      env,
       ingest('ib_account_agent'),
     ),
-    classifyTradeSocketConsumer('ib_operator', 'IB Operator', socket?.ib_operator, env, ingest('ib_operator')),
-    classifyTradeSocketConsumer(
-      'polygon_ws',
-      'Polygon WS (Plugin)',
-      satelliteBusPolygonWs(socket),
-      env,
-      polygonWsIngest(ingestServices),
-    ),
+    classifyTradeSocketConsumer('ib_operator', 'IB Operator', socket?.ib_operator, ingest('ib_operator')),
   ]
 
   const daemonRow = classifyTradingDaemon(env, ingest('trading_engine'), daemon, socket)
@@ -593,7 +542,6 @@ const TRADE_CONSUMER_DEFS: { id: string; label: string; includeDaemon?: boolean 
   { id: 'ib_ingestor', label: 'IB Ingestor' },
   { id: 'ib_account_agent', label: 'IB Account Agent' },
   { id: 'ib_operator', label: 'IB Operator' },
-  { id: 'polygon_ws', label: 'Polygon WS (Plugin)' },
   { id: 'trading_engine', label: 'Trading daemon', includeDaemon: true },
 ]
 

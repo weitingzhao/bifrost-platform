@@ -203,7 +203,7 @@ lanes:
       track_type: build
       label: Polygon.io data pipeline
       short_label: Polygon
-      description: Options/stock WebSocket feeds, historical OHLCV, snapshot APIs, rate-limit management, data quality.
+      description: Historical OHLCV, snapshot APIs, rate-limit management, data quality.
       agent_mode: Ops
       work_intent: feature
     - id: market-data-expand

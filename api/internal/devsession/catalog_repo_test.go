@@ -19,7 +19,7 @@ func TestLoadSessionsCatalog_RepoFile(t *testing.T) {
 	}
 	stg := cat.EntriesForEnv("stg")
 	prod := cat.EntriesForEnv("prod")
-	if len(stg) < 13 || len(prod) < 13 {
+	if len(stg) < 12 || len(prod) < 12 {
 		t.Fatalf("expected expanded catalogs, got stg=%d prod=%d", len(stg), len(prod))
 	}
 	platform := cat.Lookup("stg", "platform")

@@ -16,7 +16,6 @@ var tierBManualItems = []struct {
 	label string
 }{
 	{id: "ib-tws-live", label: "IB TWS live connection verified (manual)"},
-	{id: "massive-ws-quotes", label: "Plugin Market Data: REST retired; WS via polygon-ws-ingestor / redis-massive (manual)"},
 }
 
 func (s *Service) TierBStatus(ctx context.Context) TierBStatusResponse {
@@ -79,7 +78,7 @@ func (s *Service) TierBStatus(ctx context.Context) TierBStatusResponse {
 		out.Detail = "Signed off but some auto probes not green"
 	default:
 		out.Reachability = probe.ReachDegraded
-		out.Detail = "Complete manual IB/Market Data Plugin checks then admin sign-off"
+		out.Detail = "Complete manual IB checks then admin sign-off"
 	}
 	return out
 }
@@ -125,7 +124,7 @@ func (s *Service) tierBAutoProbes() []struct {
 	return []struct{ id, label, url string }{
 		{id: "tierb-daemon", label: "Daemon status (monitor API)", url: gw + "/api/monitor/status"},
 		{id: "tierb-ops", label: "Ops API health", url: gw + "/api/ops/health"},
-		{id: "tierb-socket-massive", label: "Plugin Polygon WS ingest (ops market-ingest)", url: gw + "/api/ops/ops/market-ingest/services"},
+		{id: "tierb-market-ingest", label: "Ops market-ingest services", url: gw + "/api/ops/ops/market-ingest/services"},
 	}
 }
 

@@ -83,11 +83,6 @@ envs:
       group: worker
       namespace: bifrost-stg
       deployment: account-sync
-    - name: polygon-ws-ingestor
-      label: Polygon Options WS (Plugin)
-      group: market-data
-      namespace: plugin-market-data
-      deployment: polygon-ws-ingestor
 
     - name: polygon-worker-stocks
       label: Market Data Stocks
@@ -161,11 +156,6 @@ envs:
       group: worker
       namespace: bifrost-prod
       deployment: account-sync
-    - name: polygon-ws-ingestor
-      label: Polygon Options WS (Plugin)
-      group: market-data
-      namespace: plugin-market-data
-      deployment: polygon-ws-ingestor
 
     - name: polygon-worker-stocks
       label: Market Data Stocks

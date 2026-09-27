@@ -26,7 +26,6 @@ describe('resolveCriticalProcesses', () => {
       wl({ name: 'daemon', namespace: 'bifrost-prod', ready: '2/2' }),
       wl({ name: 'account-sync', namespace: 'bifrost-prod' }),
       wl({ name: 'api-massive', namespace: 'bifrost-prod' }),
-      wl({ name: 'polygon-ws-ingestor', namespace: 'bifrost-prod' }),
     ]
     const plugin = [
       wl({ name: IB_GATEWAY_WORKLOAD, namespace: IB_GATEWAY_PLUGIN_NS, ready: '1/1' }),
@@ -53,10 +52,6 @@ describe('resolveCriticalProcesses', () => {
     })
     // Must not confuse account-sync / api-massive
     expect(byLabel['IB Account Agent'].name).not.toBe('account-sync')
-    expect(byLabel['Polygon WS Ingestor']).toMatchObject({
-      name: 'polygon-ws-ingestor',
-      namespace: 'bifrost-prod',
-    })
     expect(byLabel['GsTrading daemon'].ready).toBe('2/2')
   })
 

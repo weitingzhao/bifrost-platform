@@ -5,9 +5,6 @@ import type { ClusterWorkload } from '@/api/clusterTypes'
 export const IB_GATEWAY_PLUGIN_NS = 'data'
 export const IB_GATEWAY_WORKLOAD = 'ib-gateway'
 
-/** Market Data Plugin NS. */
-export const MARKET_DATA_PLUGIN_NS = 'plugin-market-data'
-
 export type CriticalProcessRow = {
   label: string
   name: string
@@ -50,12 +47,6 @@ export const CRITICAL_PROCESS_SPECS: readonly CriticalProcessSpec[] = [
     label: 'IB Account Agent',
     tradeNames: ['ib-account-agent', 'ib-account-gateway'],
     pluginNames: [IB_GATEWAY_WORKLOAD],
-  },
-  {
-    label: 'Polygon WS Ingestor',
-    tradeNames: ['polygon-ws-ingestor'],
-    pluginNames: ['polygon-ws-ingestor'],
-    pluginNs: MARKET_DATA_PLUGIN_NS,
   },
 ]
 

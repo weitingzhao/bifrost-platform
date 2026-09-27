@@ -283,7 +283,7 @@ export function buildRegistryPullRecoverRunnerPrompt(req: StartRunRequest): stri
 export function buildMassiveFeedRecoverRunnerPrompt(req: StartRunRequest): string {
   return [
     'You are the Bifrost Market Data / Polygon Feed Recovery Agent (L1).',
-    'Diagnose Market Data Plugin (REST) and polygon-ws-ingestor / redis-massive ingest — restore reachability without touching IB live trading (D10).',
+    'Diagnose Market Data Plugin (REST) ingest — restore reachability without touching IB live trading (D10).',
     '',
     '## Operator context',
     userBlock(req),

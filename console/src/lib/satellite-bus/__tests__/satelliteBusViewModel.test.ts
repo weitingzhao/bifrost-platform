@@ -46,7 +46,6 @@ type BusOverrides = {
   ib_ingestor?: SatelliteBusSocketComponent
   ib_account_agent?: SatelliteBusSocketComponent
   ib_operator?: SatelliteBusSocketComponent
-  polygon_ws?: SatelliteBusSocketComponent
   platform_ib_gateway?: SatelliteBusSocketComponent
   ingest?: SatelliteBusIngestService[]
   daemonAlive?: boolean
@@ -68,13 +67,6 @@ function bus(env: 'dev' | 'stg' | 'prod', o: BusOverrides = {}): SatelliteBusDee
           },
         ]
       : []),
-    {
-      id: 'polygon_ws',
-      runtime_status: 'policy-off',
-      display_active: 'ws-disabled (rest-only)',
-      reachability: 'ok' as Reachability,
-      detail: 'policy-off',
-    },
   ]
   const daemonAlive = o.daemonAlive ?? o.daemonPolicyOff !== true
   return {
@@ -94,7 +86,6 @@ function bus(env: 'dev' | 'stg' | 'prod', o: BusOverrides = {}): SatelliteBusDee
         block_reasons: daemonAlive ? [] : ['heartbeat_stale'],
       },
       socket: {
-        polygon_ws: o.polygon_ws ?? component('ok'),
         ib_ingestor: o.ib_ingestor ?? component('ok', 'connected @ redis-ib'),
         ib_account_agent: o.ib_account_agent ?? component('ok', 'connected @ redis-ib'),
         ib_operator: o.ib_operator ?? component('ok', 'rpc consumer ready'),
@@ -135,9 +126,7 @@ describe('buildSatelliteBusViewModel', () => {
     expect(daemonRow).toBeTruthy()
     expect(daemonRow!.stateLabel).toBe('EXPECTED OFF')
     expect(daemonRow!.health).toBe('expected-off')
-    const polygonRow = vm.dataPathConsumers.find(r => r.id === 'polygon_ws')
-    expect(polygonRow).toBeTruthy()
-    expect(polygonRow!.stateLabel).toBe('EXPECTED OFF')
+    expect(vm.dataPathConsumers.map(r => r.id)).toEqual(['ib_ingestor', 'ib_account_agent', 'ib_operator'])
     // D10: no visible copy suggests enabling live trading / starting the daemon.
     const serialized = JSON.stringify(vm)
     expect(serialized).not.toMatch(/NO-GO|policy-off fail|start the daemon|enable live/i)

@@ -276,7 +276,7 @@ export const DEV_TOPOLOGY: DevTopoRow[] = [
   { component: 'Frontend Vite (HMR)', location: 'Mac Pro', reason: 'Sub-second hot-reload requires localhost' },
   { component: 'Active API (the one being edited)', location: 'Mac Pro', reason: 'uvicorn --reload <2s inner loop' },
   { component: 'Remaining 8 APIs', location: 'K3s dev namespace', reason: 'Not being edited; no need for local resources' },
-  { component: 'Socket (IB/Massive)', location: 'K3s', reason: 'LAN proximity to TWS; always-on edge services' },
+  { component: 'Socket (IB)', location: 'K3s', reason: 'LAN proximity to TWS; always-on edge services' },
   { component: 'Daemon', location: 'K3s', reason: 'Runs against K3s Redis/PG; debug mode via remote attach' },
   { component: 'Celery workers', location: 'K3s', reason: 'Distributed by nature; no local benefit' },
   { component: 'Redis (live + queue)', location: 'K3s data NS', reason: 'Stateful; HA; shared by all services' },
@@ -298,7 +298,7 @@ export const REDIS_ROLES: RedisRoleRow[] = [
   {
     role: 'R1 — Realtime quote bus',
     instance: 'redis-live',
-    keys: 'ib:ingester:tick:*, ib:ingester:channel, massive:stream, quote:*',
+    keys: 'ib:ingester:tick:*, ib:ingester:channel, quote:*',
     sla: 'ms latency; noeviction; AOF everysec',
   },
   {

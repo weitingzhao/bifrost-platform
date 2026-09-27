@@ -64,7 +64,6 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 				Reachability: probe.ReachUnknown,
 			},
 			Socket: MonitorSocketDeep{
-				PolygonWs:         SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
 				IBOperator:        SocketComponentDeep{Reachability: probe.ReachUnknown, Detail: "not reported"},
@@ -151,7 +150,6 @@ func (s *Service) busDeepFromBridge(ctx context.Context, env config.Environment)
 			Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
 			Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
 			Socket: MonitorSocketDeep{
-				PolygonWs:         SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
 				IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: "bridge unavailable"},
@@ -218,7 +216,6 @@ func monitorDeepFromBridgeError(msg string) MonitorDeep {
 		Health:       MonitorHealthDeep{Reachability: probe.ReachFail},
 		Daemon:       MonitorDaemonDeep{Reachability: probe.ReachFail},
 		Socket: MonitorSocketDeep{
-			PolygonWs:         SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBIngestor:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBAccountAgent:    SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
 			IBOperator:        SocketComponentDeep{Reachability: probe.ReachFail, Detail: msg},
@@ -319,10 +316,6 @@ func monitorDetailFromRaw(raw monitorStatusRaw, reach probe.Reachability) string
 			nullSockets = append(nullSockets, key)
 		}
 	}
-	// Prefer polygon_ws; briefly accept legacy monitor JSON key ``massive``.
-	if raw.Socket["polygon_ws"] == nil && raw.Socket["massive"] == nil {
-		nullSockets = append(nullSockets, "polygon_ws")
-	}
 	if len(nullSockets) > 0 {
 		parts = append(parts, "socket null: "+strings.Join(nullSockets, ", "))
 	}
@@ -356,19 +349,13 @@ func buildMonitorDeepFromRaw(raw monitorStatusRaw) MonitorDeep {
 		}
 	}
 
-	polygonRaw := raw.Socket["polygon_ws"]
-	if polygonRaw == nil {
-		polygonRaw = raw.Socket["massive"] // brief accept of legacy monitor JSON
-	}
 	socket := MonitorSocketDeep{
-		PolygonWs:         socketComponentDeep(polygonRaw),
 		IBIngestor:        socketComponentDeep(raw.Socket["ib_ingestor"]),
 		IBAccountAgent:    socketComponentDeep(raw.Socket["ib_account_agent"]),
 		IBOperator:        socketComponentDeep(raw.Socket["ib_operator"]),
 		PlatformIBGateway: socketComponentDeep(raw.Socket["platform_ib_gateway"]),
 	}
 	socketReach := aggregateReach(
-		socket.PolygonWs.Reachability,
 		socket.IBIngestor.Reachability,
 		socket.IBAccountAgent.Reachability,
 		socket.IBOperator.Reachability,
@@ -412,9 +399,6 @@ func buildIngestDeepFromRaw(services []map[string]any) IngestDeep {
 	reaches := make([]probe.Reachability, 0, len(services))
 	for _, item := range services {
 		id, _ := item["id"].(string)
-		if id == "massive_ws" {
-			id = "polygon_ws"
-		}
 		active, _ := item["process_active"].(string)
 		runtimeStatus, _ := item["runtime_status"].(string)
 		displayActive, _ := item["display_active"].(string)
@@ -542,14 +526,6 @@ func socketComponentDeep(v any) SocketComponentDeep {
 		return SocketComponentDeep{
 			Reachability: probe.ReachUnknown,
 			Detail:       "not reported",
-		}
-	}
-
-	if wsMode, _ := m["ws_mode"].(string); strings.EqualFold(strings.TrimSpace(wsMode), "rest_only") {
-		return SocketComponentDeep{
-			Reachability: probe.ReachOK,
-			Detail:       "policy-off · REST-only (ws not required)",
-			Raw:          m,
 		}
 	}
 

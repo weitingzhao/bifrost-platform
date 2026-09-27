@@ -74,7 +74,7 @@ var stgImageDeployments = []string{
 	"nginx", "frontend",
 	"api-monitor", "api-account", "api-market", "api-research",
 	"daemon", "account-sync",
-	"ib-market-gateway", "ib-account-agent", "ib-operator", "polygon-ws-ingestor",
+	"ib-market-gateway", "ib-account-agent", "ib-operator",
 }
 
 func (s *Service) stgNamespace() string {

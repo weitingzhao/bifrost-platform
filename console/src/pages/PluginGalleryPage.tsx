@@ -34,7 +34,7 @@ const PLUGIN_REGISTRY: PluginRegistryEntry[] = [
     id: 'market-data',
     name: 'Massive',
     vendor: 'Polygon.io',
-    role: 'REST ingest · stock/option bars + snapshots · redis-massive · PG-as-broker @ plugin-market-data NS',
+    role: 'REST ingest · stock/option bars + snapshots · PG-as-broker @ plugin-market-data NS',
     lifecycle: 'live',
     openTabId: 'market-data-manage',
     openLabel: 'Open Massive',

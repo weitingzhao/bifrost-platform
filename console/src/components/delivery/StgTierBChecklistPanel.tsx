@@ -90,7 +90,7 @@ export function StgTierBChecklistPanel({
       description={
         allowSignOff
           ? 'Beyond Tier A HTTP smoke: review probes below, then admin sign-off records Owner acceptance.'
-          : 'Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB/Massive verification (read-only). Sign-off on Rocket.'
+          : 'Beyond Tier A HTTP smoke: daemon, ops, socket probes + manual IB verification (read-only). Sign-off on Rocket.'
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -173,7 +173,7 @@ export function StgTierBChecklistPanel({
                       className="min-h-[3rem] rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1.5 text-[var(--text-dense-meta)] outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
                       value={notes}
                       onChange={e => setNotes(e.target.value)}
-                      placeholder="IB TWS live · Massive REST/Celery OK (Starter) or WS quotes (Developer+) · …"
+                      placeholder="IB TWS live · …"
                     />
                   </label>
                   <div className="flex flex-wrap gap-2">

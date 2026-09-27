@@ -26,20 +26,10 @@ export interface SatelliteBusMonitorDaemon {
 }
 
 export interface SatelliteBusMonitorSocket {
-  polygon_ws?: SatelliteBusSocketComponent
-  /** @deprecated No longer populated by platform-api; omit when absent. */
-  massive?: SatelliteBusSocketComponent
   ib_ingestor: SatelliteBusSocketComponent
   ib_account_agent: SatelliteBusSocketComponent
   ib_operator: SatelliteBusSocketComponent
   platform_ib_gateway: SatelliteBusSocketComponent
-}
-
-/** Read socket.polygon_ws only (no legacy massive fallback). */
-export function satelliteBusPolygonWs(
-  socket: Pick<SatelliteBusMonitorSocket, 'polygon_ws'> | null | undefined,
-): SatelliteBusSocketComponent | undefined {
-  return socket?.polygon_ws
 }
 
 export interface SatelliteBusMonitorAccountSync {

@@ -49,7 +49,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
     seq: 2,
     title: 'STG config & overlay',
     owner: 'Ops',
-    summary: 'IB client_id 210段、Plugin Polygon WS / redis-massive、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
+    summary: 'IB client_id 210段、Secrets — ConfigMap bifrost-config + bifrost-stg-secrets.',
     actions: [
       'make sync-stg-config (from .env)',
       'kubectl apply -k k8s/overlays/stg',
@@ -81,7 +81,7 @@ export const STG_RELEASE_PHASE_DEFINITIONS: DeliveryReleasePhaseDefinition[] = [
       'Pipeline task verify-stg (gateway + trade API path domains)',
       'Satellite → Deploy Satellite → Verify STG (or Mission Control → Stg smoke)',
       'make k3s-verify-phase-b-stg-v2 (rollout + HTTP)',
-      'Seed watchlist if Polygon WS empty: scripts/k3s/seed-stg-watchlist.sh',
+      'Seed watchlist if STG watchlist empty: scripts/k3s/seed-stg-watchlist.sh',
     ],
   },
   {

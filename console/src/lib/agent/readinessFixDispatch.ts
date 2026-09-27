@@ -151,7 +151,7 @@ export function buildDispatchedFixPrompt(input: {
         `Issue: ${failing.label} (${failing.signal}): ${failing.detail}`,
         '',
         '1. verify_mission_snapshot + verify_payload for market-data / polygon targets',
-        '2. get_cluster_summary — polygon-ws-ingestor / market-data-api / redis-massive pods',
+        '2. get_cluster_summary — market-data-api / polygon-worker-* pods (plugin-market-data)',
         '3. rollout_restart_deployment with approval; or manual Polygon API key rotation (Plugin)',
         '4. verify_mission_snapshot before close',
         '',
