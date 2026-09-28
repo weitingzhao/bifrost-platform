@@ -82,8 +82,10 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	resp.Slots = s.readSlots()
 
 	connected := strings.EqualFold(resp.IngestorHealth["connected"], "true")
-	hostOK := strings.EqualFold(resp.AccountHealth["host_connected"], "true")
-	secOK := strings.EqualFold(resp.AccountHealth["secondary_connected"], "true")
+	// Per-slot keys carry a TTL; the account-agent hash does not and freezes if
+	// the gateway hangs (see slotConnectedGauges).
+	hostOK := slotConnected(resp.Slots, "host")
+	secOK := slotConnected(resp.Slots, "secondary")
 	deployOK := deployReach == probe.ReachOK
 
 	resp.Reachable = deployOK && resp.RedisReach == probe.ReachOK && connected

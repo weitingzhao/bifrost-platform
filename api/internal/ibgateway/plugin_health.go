@@ -22,15 +22,7 @@ func (h *Handler) PluginHealth(ctx context.Context) probe.PluginHealth {
 		Reachability: st.Reachability,
 	}
 
-	// The account agent publishes one flag per slot; absent means not connected.
-	for slot, field := range map[string]string{"host": "host_connected", "secondary": "secondary_connected"} {
-		out.Gauges = append(out.Gauges, probe.Gauge{
-			Key:    "ib_gateway_slot_connected",
-			Labels: map[string]string{"slot": slot},
-			Value:  boolGauge(st.AccountHealth[field]),
-			Help:   "1 when the IB gateway holds a live TWS session for this slot",
-		})
-	}
+	out.Gauges = append(out.Gauges, slotConnectedGauges(st.Slots)...)
 
 	if age, ok := ageSeconds(st.IngestorHealth["last_msg_ts"]); ok {
 		out.Gauges = append(out.Gauges, probe.Gauge{
@@ -43,6 +35,39 @@ func (h *Handler) PluginHealth(ctx context.Context) probe.PluginHealth {
 		out.Gauges = append(out.Gauges, g)
 	}
 	return out
+}
+
+// slotConnectedGauges reports one gauge per slot from the per-account
+// ib:health:<account> keys (readSlots), which the gateway rewrites every 10s
+// with a 25s TTL. It used to read host_connected / secondary_connected from
+// bifrost:health:ws_ib_account_agent, a hash with no TTL: a gateway that hung
+// without exiting left "true" there and this gauge stayed 1, so
+// BifrostIBGatewayDisconnected could not fire (2026-09-28). A slot whose key
+// has expired, or that never reported, is not connected.
+func slotConnectedGauges(slots []SlotStatus) []probe.Gauge {
+	out := make([]probe.Gauge, 0, 2)
+	for _, slot := range []string{"host", "secondary"} {
+		v := 0.0
+		if slotConnected(slots, slot) {
+			v = 1
+		}
+		out = append(out, probe.Gauge{
+			Key:    "ib_gateway_slot_connected",
+			Labels: map[string]string{"slot": slot},
+			Value:  v,
+			Help:   "1 when the IB gateway holds a live TWS session for this slot",
+		})
+	}
+	return out
+}
+
+func slotConnected(slots []SlotStatus, slot string) bool {
+	for _, s := range slots {
+		if s.Slot == slot && s.Connected {
+			return true
+		}
+	}
+	return false
 }
 
 // optCacheProgressGauge exposes the gateway's option-quote cache heartbeat. On
@@ -61,13 +86,6 @@ func optCacheProgressGauge(operatorHealth map[string]string) (probe.Gauge, bool)
 		Value: age,
 		Help:  "Seconds since the IB gateway option quote cache loop last made progress",
 	}, true
-}
-
-func boolGauge(v string) float64 {
-	if strings.EqualFold(strings.TrimSpace(v), "true") || strings.TrimSpace(v) == "1" {
-		return 1
-	}
-	return 0
 }
 
 // ageSeconds reads a unix timestamp the gateway wrote and returns its age.
