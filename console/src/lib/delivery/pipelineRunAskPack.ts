@@ -51,15 +51,16 @@ export const TRADE_STG_ASK_CONTEXT: PipelineRunAskContext = {
 /** Ask context for an Ops Platform deliver pipeline (STG or PROD). */
 export function researchDeliverAskContext(): PipelineRunAskContext {
   return {
-    task: 'Diagnose this bifrost-deliver-research PipelineRun (Research OLAP payload). First-pass verify-research fail after a successful Kaniko push is expected until k8s/api/deployment.yaml is pinned.',
+    task: 'Diagnose this bifrost-deliver-research PipelineRun (Research OLAP payload). A run whose manifest does not pin the tag is build-only and Succeeds with gitops-sync / rollout / verify skipped; a Failed run is a real failure.',
     pipelineTitle: 'bifrost-deliver-research tasks (declared order)',
     pipelineOrder: [
       'mirror-sync: bifrost-gitea-mirror-sync (bifrost-research)',
       'clone-research: bifrost-git-clone-gitea → workspace build-context',
       'build-research: Kaniko → registry.cicd /bifrost-research:<tag>',
-      'rollout-research: rollout restart research-api (does not change the pinned tag)',
+      'pin-check: does k8s/api/deployment.yaml at this revision pin <tag>? (pinned=false → the three below are skipped)',
+      'gitops-sync: request Argo CD sync of Application bifrost-research',
+      'rollout-research: wait (≤5 min) for Argo CD to put <tag> on the Deployment spec, then rollout status',
       'verify-research: assert Deployment image tag + /health startup_ok',
-      'gitops-sync: Argo CD Application bifrost-research',
     ],
     clusterSignals: [
       'namespace: research — ImagePullBackOff means the manifest was pinned before the image landed',
@@ -149,6 +150,39 @@ export function formatPipelineRunStatus(run: DeliveryPipelineRunView): string {
 const ROLLOUT_WAIT_RE = /Waiting for deployment.*rollout to finish/i
 
 /** Explain kubectl rollout status lines that look like a hang but are normal progress output. */
+/** Log hint for a Failed bifrost-deliver-research run (build-only runs Succeed, so every Failed run is real). */
+export function researchRunLogHint(
+  logs: string | undefined,
+): { tone: 'info' | 'warning'; message: string } {
+  const text = logs ?? ''
+  if (/has not applied the manifest pinning/i.test(text)) {
+    return {
+      tone: 'warning',
+      message:
+        'rollout-research timed out waiting for Argo CD to apply the pinned tag. Check that the pin commit reached main and that Application bifrost-research synced.',
+    }
+  }
+  if (/image was pushed/i.test(text)) {
+    return {
+      tone: 'info',
+      message:
+        'Pre pin-check run: Kaniko pushed the image and verify-research failed only because the manifest was not pinned yet.',
+    }
+  }
+  if (/not running the tag this run built/i.test(text)) {
+    return {
+      tone: 'warning',
+      message:
+        'verify-research: the manifest pins this tag but the Deployment is not running it. Check Argo CD sync of bifrost-research.',
+    }
+  }
+  return {
+    tone: 'warning',
+    message:
+      'Research run failed. Build-only runs (manifest not yet pinned) succeed, so this is a real failure — open the failed phase logs.',
+  }
+}
+
 export function rolloutLogTailHint(
   logs: string | undefined,
   run: DeliveryPipelineRunView,
@@ -170,13 +204,6 @@ export function rolloutLogTailHint(
     }
   }
   if (isPipelineRunFailed(run)) {
-    if (/image was pushed|not running the tag this run built/i.test(logs)) {
-      return {
-        tone: 'info',
-        message:
-          'Kaniko pushed the image. verify-research failed because the Deployment still pins the previous tag — expected until k8s/api/deployment.yaml is pinned.',
-      }
-    }
     return {
       tone: 'warning',
       message:

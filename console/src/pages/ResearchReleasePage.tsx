@@ -320,7 +320,7 @@ export function ResearchReleasePage({
               idleHint="semver tag · bifrost-deliver-research"
               completeMessage="Research live on the pinned tag"
               revisionHint={isResearchReleaseTag(tag) ? tag.trim() : undefined}
-              evidenceSummary="Build → Verify image → Pin manifest → Live. verify-research fail before pin is expected."
+              evidenceSummary="Build → Verify image → Pin manifest → Live. Unpinned runs are build-only; re-run the same tag after the pin to verify."
               renderStepActions={() => null}
               renderStepDetail={() => stepDetail}
               agentDriven

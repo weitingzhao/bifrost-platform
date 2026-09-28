@@ -8,7 +8,7 @@ export const EXPECTED_DOCKERFILE_CONFIGMAPS = [
   { name: 'bifrost-socket-stg-dockerfile', short: 'socket' },
 ] as const
 
-export type DeliverStgPhaseStatus = 'pending' | 'running' | 'succeeded' | 'failed'
+export type DeliverStgPhaseStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'skipped'
 
 export function phaseStatusVariant(
   status: DeliverStgPhaseStatus,

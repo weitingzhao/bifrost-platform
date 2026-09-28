@@ -42,8 +42,10 @@ function step(
 
 /**
  * Owner-facing Research cycle: Build → Verify image → Pin → Live.
- * Tekton verify-research failing because the Deployment still pins the previous
- * tag is the expected first-pass outcome (image is in the registry).
+ * A run whose manifest does not yet pin the tag is build-only: pin-check skips
+ * gitops-sync / rollout / verify and the run Succeeds with the image in the
+ * registry. Runs from before pin-check existed failed verify-research instead;
+ * both shapes mean "image landed — pin next".
  */
 export function deriveResearchLaunchSteps(input: {
   run?: DeliveryPipelineRunView
@@ -69,9 +71,13 @@ export function deriveResearchLaunchSteps(input: {
   const imageLanded = input.imageLandedHint === true
 
   const kanikoDone = buildPhase === 'succeeded' || succeeded || imageLanded
-  const verifyExpectedFail =
-    (verifyPhase === 'failed' && kanikoDone && !succeeded) || (imageLanded && failed && !succeeded)
-  const verifyDone = verifyPhase === 'succeeded' || succeeded || verifyExpectedFail
+  const buildOnly = verifyPhase === 'skipped' && kanikoDone
+  const legacyUnpinnedFail =
+    phaseStatus(phases, 'pin-check') !== 'succeeded' &&
+    ((verifyPhase === 'failed' && kanikoDone && !succeeded) || (imageLanded && failed && !succeeded))
+  const imageAwaitingPin = buildOnly || legacyUnpinnedFail
+  const verifyFailed = verifyPhase === 'failed' && !legacyUnpinnedFail
+  const verifyDone = verifyPhase === 'succeeded' || (succeeded && !buildOnly) || imageAwaitingPin
 
   let build: PluginFlowStep
   if (paramMissing) {
@@ -91,9 +97,11 @@ export function deriveResearchLaunchSteps(input: {
   let verify: PluginFlowStep
   if (build.status === 'pending' || build.status === 'error') {
     verify = step('verify', 'pending', 'Waits for build')
+  } else if (verifyFailed) {
+    verify = step('verify', 'error', 'Tag assert failed')
   } else if (running && kanikoDone && !verifyDone) {
     verify = step('verify', 'active', 'Asserting tag…')
-  } else if (verifyExpectedFail) {
+  } else if (imageAwaitingPin) {
     verify = step('verify', 'done', 'Image landed — pin next')
   } else if (verifyDone) {
     verify = step('verify', 'done', 'Tag asserted')

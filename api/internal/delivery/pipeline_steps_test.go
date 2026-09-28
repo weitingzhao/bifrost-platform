@@ -1,6 +1,10 @@
 package delivery
 
-import "testing"
+import (
+	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
 
 func TestAggregatePhaseStatus(t *testing.T) {
 	tasks := []string{"a", "b", "c"}
@@ -31,16 +35,16 @@ func TestAggregatePhaseStatus(t *testing.T) {
 
 func TestAggregateDeliverPlatformProdPhasesAllSucceeded(t *testing.T) {
 	taskStatus := map[string]string{
-		"preflight-stg":          "succeeded",
-		"mirror-sync":            "succeeded",
-		"clone-platform":         "succeeded",
-		"clone-ui":               "succeeded",
-		"stage-api-dockerfile":   "succeeded",
+		"preflight-stg":            "succeeded",
+		"mirror-sync":              "succeeded",
+		"clone-platform":           "succeeded",
+		"clone-ui":                 "succeeded",
+		"stage-api-dockerfile":     "succeeded",
 		"stage-console-dockerfile": "succeeded",
-		"build-platform-api":     "succeeded",
-		"build-platform-console": "succeeded",
-		"rollout":                "succeeded",
-		"gitops-sync":            "succeeded",
+		"build-platform-api":       "succeeded",
+		"build-platform-console":   "succeeded",
+		"rollout":                  "succeeded",
+		"gitops-sync":              "succeeded",
 	}
 	phases := aggregateDeliverPlatformProdPhases(taskStatus)
 	if len(phases) != 6 {
@@ -83,7 +87,7 @@ func TestAggregateDeliverStgPhasesBuildRunning(t *testing.T) {
 	taskStatus := map[string]string{
 		"clone-core": "succeeded", "clone-worker": "succeeded", "clone-socket": "succeeded",
 		"clone-api": "succeeded", "clone-frontend": "succeeded", "clone-ui": "succeeded", "clone-infra": "succeeded",
-		"prepare": "succeeded",
+		"prepare":        "succeeded",
 		"build-all-apis": "running",
 	}
 	phases := aggregateDeliverStgPhases(taskStatus)
@@ -106,26 +110,76 @@ func TestAggregatePhasesForPipelineResearch(t *testing.T) {
 		"mirror-sync":      "succeeded",
 		"clone-research":   "succeeded",
 		"build-research":   "succeeded",
+		"pin-check":        "succeeded",
+		"gitops-sync":      "succeeded",
 		"rollout-research": "succeeded",
 		"verify-research":  "failed",
-		"gitops-sync":      "pending",
 	}
 	phases := aggregatePhasesForPipeline("bifrost-deliver-research", taskStatus)
-	if len(phases) != 6 {
-		t.Fatalf("expected 6 research phases, got %d", len(phases))
+	if len(phases) != 7 {
+		t.Fatalf("expected 7 research phases, got %d", len(phases))
 	}
-	if phases[0].ID != "mirror" || phases[2].ID != "build" || phases[4].ID != "verify" {
+	if phases[0].ID != "mirror" || phases[2].ID != "build" || phases[3].ID != "pin-check" || phases[6].ID != "verify" {
 		t.Fatalf("unexpected research phase ids: %+v", phases)
 	}
 	if phases[2].Status != "succeeded" {
 		t.Fatalf("build: %+v", phases[2])
 	}
-	if phases[4].Status != "failed" {
-		t.Fatalf("verify expected failed: %+v", phases[4])
+	if phases[6].Status != "failed" {
+		t.Fatalf("verify expected failed: %+v", phases[6])
 	}
 	for _, p := range phases {
 		if p.ID == "prepare" {
 			t.Fatalf("trade-stg prepare leaked into research phases")
 		}
+	}
+}
+
+func TestAggregatePhasesForPipelineResearchBuildOnly(t *testing.T) {
+	taskStatus := map[string]string{
+		"mirror-sync":      "succeeded",
+		"clone-research":   "succeeded",
+		"build-research":   "succeeded",
+		"pin-check":        "succeeded",
+		"gitops-sync":      "skipped",
+		"rollout-research": "skipped",
+		"verify-research":  "skipped",
+	}
+	phases := aggregatePhasesForPipeline("bifrost-deliver-research", taskStatus)
+	want := []string{"succeeded", "succeeded", "succeeded", "succeeded", "skipped", "skipped", "skipped"}
+	for i, p := range phases {
+		if p.Status != want[i] {
+			t.Fatalf("phase %s: got %s want %s", p.ID, p.Status, want[i])
+		}
+	}
+}
+
+func TestAggregatePhaseStatusSkippedMix(t *testing.T) {
+	st, _ := aggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "succeeded", "b": "skipped"})
+	if st != "succeeded" {
+		t.Fatalf("done+skipped: got %s", st)
+	}
+	st, _ = aggregatePhaseStatus([]string{"a", "b"}, map[string]string{"a": "skipped"})
+	if st != "running" && st != "pending" {
+		t.Fatalf("skipped+pending must not read as finished: got %s", st)
+	}
+}
+
+func TestPipelineRunSkippedTasks(t *testing.T) {
+	run := &unstructured.Unstructured{Object: map[string]any{
+		"status": map[string]any{
+			"skippedTasks": []any{
+				map[string]any{"name": "gitops-sync", "reason": "When Expressions evaluated to false"},
+				map[string]any{"name": "rollout-research"},
+				map[string]any{"reason": "no name"},
+			},
+		},
+	}}
+	got := pipelineRunSkippedTasks(run)
+	if len(got) != 2 || got[0] != "gitops-sync" || got[1] != "rollout-research" {
+		t.Fatalf("got %v", got)
+	}
+	if pipelineRunSkippedTasks(&unstructured.Unstructured{Object: map[string]any{}}) != nil {
+		t.Fatalf("no status must yield nil")
 	}
 }

@@ -77,9 +77,10 @@ var deliverResearchPhaseDefs = []struct {
 	{ID: "mirror", Label: "Mirror", Tasks: []string{"mirror-sync"}},
 	{ID: "clone", Label: "Clone", Tasks: []string{"clone-research"}},
 	{ID: "build", Label: "Build", Tasks: []string{"build-research"}},
+	{ID: "pin-check", Label: "Pin check", Tasks: []string{"pin-check"}},
+	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 	{ID: "rollout", Label: "Rollout", Tasks: []string{"rollout-research"}},
 	{ID: "verify", Label: "Verify", Tasks: []string{"verify-research"}},
-	{ID: "gitops", Label: "GitOps", Tasks: []string{"gitops-sync"}},
 }
 
 func aggregatePhasesForPipeline(pipelineName string, taskStatus map[string]string) []PipelinePhaseView {
@@ -125,7 +126,7 @@ func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status,
 	if len(tasks) == 0 {
 		return "pending", ""
 	}
-	var done, running, failed, pending int
+	var done, running, failed, skipped, pending int
 	for _, t := range tasks {
 		st := taskStatus[t]
 		if st == "" {
@@ -138,6 +139,8 @@ func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status,
 			running++
 		case "failed":
 			failed++
+		case "skipped":
+			skipped++
 		default:
 			pending++
 		}
@@ -146,13 +149,35 @@ func aggregatePhaseStatus(tasks []string, taskStatus map[string]string) (status,
 	switch {
 	case failed > 0:
 		return "failed", fmt.Sprintf("%d/%d failed", failed, total)
-	case done == total:
+	case skipped == total:
+		return "skipped", "skipped"
+	case done+skipped == total:
 		return "succeeded", fmt.Sprintf("%d/%d done", done, total)
 	case running > 0 || done > 0:
 		return "running", fmt.Sprintf("%d/%d done", done, total)
 	default:
 		return "pending", fmt.Sprintf("0/%d started", total)
 	}
+}
+
+// pipelineRunSkippedTasks lists status.skippedTasks[].name (when guards false,
+// or downstream of a skip).
+func pipelineRunSkippedTasks(run *unstructured.Unstructured) []string {
+	items, found, _ := unstructured.NestedSlice(run.Object, "status", "skippedTasks")
+	if !found {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, it := range items {
+		m, ok := it.(map[string]any)
+		if !ok {
+			continue
+		}
+		if name, ok := m["name"].(string); ok && name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 func tektonTaskRunState(obj unstructured.Unstructured) string {
@@ -215,11 +240,13 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		return out
 	}
 
+	skippedTasks := []string{}
 	if run, getErr := dyn.Resource(pipelineRunGVR).Namespace(ns).Get(ctx, runName, metav1.GetOptions{}); getErr == nil {
 		if ref, ok, _ := unstructured.NestedString(run.Object, "spec", "pipelineRef", "name"); ok && ref != "" {
 			pipelineName = ref
 			out.Pipeline = pipelineName
 		}
+		skippedTasks = pipelineRunSkippedTasks(run)
 	}
 	switch pipelineName {
 	case "bifrost-deliver-platform", "bifrost-deliver-platform-prod", "bifrost-deliver-research":
@@ -247,7 +274,12 @@ func (s *Service) PipelineRunSteps(ctx context.Context, namespace, runName strin
 		}
 	}
 
+	// Skipped tasks never get a TaskRun; without this they would read as pending
+	// on a run that already finished.
 	taskStatus := map[string]string{}
+	for _, name := range skippedTasks {
+		taskStatus[name] = "skipped"
+	}
 	tasks := make([]PipelineTaskRunView, 0, len(list.Items))
 	for _, item := range list.Items {
 		pt := pipelineTaskFromTaskRun(item, runName)

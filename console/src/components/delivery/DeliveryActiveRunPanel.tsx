@@ -22,6 +22,7 @@ import {
   isPipelineRunSucceeded,
   platformDeliverAskContext,
   researchDeliverAskContext,
+  researchRunLogHint,
   rolloutLogTailHint,
   runElapsedLabel,
 } from '@/lib/delivery/pipelineRunAskPack'
@@ -253,11 +254,7 @@ export function DeliveryActiveRunPanel({
     focusRun != null &&
     isPipelineRunFailed(focusRun) &&
     focusRun.reason !== 'ParameterMissing'
-      ? {
-          tone: 'info' as const,
-          message:
-            'Kaniko pushed the image. verify-research failed because the Deployment still pins the previous tag — expected until k8s/api/deployment.yaml is pinned.',
-        }
+      ? researchRunLogHint(logsText)
       : focusRun != null
         ? rolloutLogTailHint(logsText, focusRun)
         : null

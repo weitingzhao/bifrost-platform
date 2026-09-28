@@ -15,6 +15,7 @@ const PHASE_TEXT_CLASS: Record<string, string> = {
   running: 'text-primary font-medium',
   failed: 'text-destructive font-medium',
   pending: 'text-muted-foreground/30',
+  skipped: 'text-muted-foreground/30 line-through',
 }
 
 const DEPLOY_STATUS_CLASS: Record<string, string> = {

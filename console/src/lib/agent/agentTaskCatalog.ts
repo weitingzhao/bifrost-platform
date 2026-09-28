@@ -212,7 +212,7 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
     entryPoint: 'Launch Desk → Research · AI Deploy Research',
     trigger: 'Operator publishes Research OLAP payload via bifrost-deliver-research',
     description:
-      'Build tagged research image, confirm registry, then pin k8s/api/deployment.yaml. verify-research fail before pin is expected. D10 — research namespace only.',
+      'Build tagged research image (build-only run), confirm registry, pin k8s/api/deployment.yaml, then re-run the same tag to sync, roll out and verify. D10 — research namespace only.',
   },
   'plugin-launch': {
     entryPoint: 'Mission Launch · Launch Plugin · AI Launch Plugin · Subcontractors → Launch Plugin',

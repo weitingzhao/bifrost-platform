@@ -33,7 +33,45 @@ describe('deriveResearchLaunchSteps', () => {
     expect(steps[1].status).toBe('pending')
   })
 
-  it('treats verify-fail after a successful build as image-landed', () => {
+  it('reads a succeeded build-only run (verify skipped) as image-landed', () => {
+    const steps = deriveResearchLaunchSteps({
+      desiredTag: '0.48.4',
+      run: run({ status: 'True', reason: 'Completed' }),
+      phases: phases({
+        mirror: 'succeeded',
+        clone: 'succeeded',
+        build: 'succeeded',
+        'pin-check': 'succeeded',
+        gitops: 'skipped',
+        rollout: 'skipped',
+        verify: 'skipped',
+      }),
+    })
+    expect(steps[1].status).toBe('done')
+    expect(steps[1].statusLabel).toMatch(/pin next/i)
+    expect(steps[2].status).toBe('active')
+  })
+
+  it('reports verify failure on a pinned run as an error', () => {
+    const steps = deriveResearchLaunchSteps({
+      desiredTag: '0.48.4',
+      run: run({ status: 'False', reason: 'Failed' }),
+      phases: phases({
+        mirror: 'succeeded',
+        clone: 'succeeded',
+        build: 'succeeded',
+        'pin-check': 'succeeded',
+        gitops: 'succeeded',
+        rollout: 'succeeded',
+        verify: 'failed',
+      }),
+    })
+    expect(steps[0].status).toBe('done')
+    expect(steps[1].status).toBe('error')
+    expect(steps[2].status).toBe('pending')
+  })
+
+  it('treats verify-fail after a successful build as image-landed (pre pin-check runs)', () => {
     const steps = deriveResearchLaunchSteps({
       desiredTag: '0.48.4',
       run: run({ status: 'False', reason: 'Failed' }),

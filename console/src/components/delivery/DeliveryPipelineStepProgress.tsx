@@ -2,11 +2,11 @@ import { cn, DenseTag } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPipelineRunSteps } from '@/api/delivery'
 import type { PipelinePhaseView } from '@/api/deliveryTypes'
-import { phaseStatusVariant } from '@/lib/delivery/deliverStgPhases'
+import { type DeliverStgPhaseStatus, phaseStatusVariant } from '@/lib/delivery/deliverStgPhases'
 
 function phasesTerminal(phases: PipelinePhaseView[]): boolean {
   if (phases.length === 0) return false
-  return phases.every(p => p.status === 'succeeded' || p.status === 'failed')
+  return phases.every(p => p.status === 'succeeded' || p.status === 'failed' || p.status === 'skipped')
 }
 
 function PhaseChip({
@@ -20,7 +20,7 @@ function PhaseChip({
   selected: boolean
   onSelect: () => void
 }) {
-  const status = phase.status as 'pending' | 'running' | 'succeeded' | 'failed'
+  const status = phase.status as DeliverStgPhaseStatus
   const isRunning = status === 'running'
   return (
     <button
@@ -54,7 +54,7 @@ function PhaseChip({
 interface DeliveryPipelineStepProgressProps {
   runName: string | undefined
   namespace?: string
-  /** Poll every 3s until all phases reach succeeded/failed. */
+  /** Poll every 3s until all phases reach succeeded/failed/skipped. */
   pollUntilTerminal: boolean
   /** When the PipelineRun is already terminal, suppress misleading "in progress" labels. */
   runTerminal?: 'succeeded' | 'failed'
