@@ -39,7 +39,28 @@ func (h *Handler) PluginHealth(ctx context.Context) probe.PluginHealth {
 			Help:  "Seconds since the IB market ingest last received a message",
 		})
 	}
+	if g, ok := optCacheProgressGauge(st.OperatorHealth); ok {
+		out.Gauges = append(out.Gauges, g)
+	}
 	return out
+}
+
+// optCacheProgressGauge exposes the gateway's option-quote cache heartbeat. On
+// 2026-09-28 that loop had silently stopped in a 20-day-old pod while the slots
+// stayed connected. The operator health hash has no TTL, so the gateway
+// publishes the heartbeat as a timestamp and the age is taken here: it keeps
+// growing whether the cache loop or the gateway's own health loop stopped.
+// Absent before plugin 0.2.5.
+func optCacheProgressGauge(operatorHealth map[string]string) (probe.Gauge, bool) {
+	age, ok := ageSeconds(operatorHealth["opt_cache_progress_ts"])
+	if !ok {
+		return probe.Gauge{}, false
+	}
+	return probe.Gauge{
+		Key:   "ib_gateway_opt_cache_progress_age_seconds",
+		Value: age,
+		Help:  "Seconds since the IB gateway option quote cache loop last made progress",
+	}, true
 }
 
 func boolGauge(v string) float64 {
