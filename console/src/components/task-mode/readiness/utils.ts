@@ -10,6 +10,7 @@ import type { SelfHealthProbe } from '@/api/matrixTypes'
 import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import {
+  infraSignal,
   missionStatus,
   worst,
   type ModuleState,
@@ -88,14 +89,24 @@ export function namespacePods(cluster: ClusterSummary | undefined, ns: string): 
   if (cluster.reachability === 'fail') {
     return { signal: 'fail', value: 'down', detail: 'Cluster API unreachable' }
   }
+  // Nodes, not `reachability`: that is also degraded by a failing pod in any
+  // namespace, which held every launch gate NO-GO over one failed research Job.
+  const nodesDegraded =
+    cluster.nodes_ready < cluster.nodes_total || (cluster.elastic_degraded ?? 0) > 0
   return {
-    signal: cluster.reachability === 'degraded' ? 'degraded' : 'ok',
+    signal: nodesDegraded ? 'degraded' : 'ok',
     value: ns,
     detail:
       clusterFail > 0
         ? `${ns} OK · ${clusterFail} failing elsewhere`
         : `${ns} workloads nominal`,
   }
+}
+
+/** A lane's K8s row: judged on its namespace and the nodes; the cluster line is context. */
+export function laneK8s(cluster: ClusterSummary | undefined, ns: string): { signal: Signal; detail: string } {
+  const pods = namespacePods(cluster, ns)
+  return { signal: pods.signal, detail: `${infraSignal(cluster).detail} · ${pods.detail}` }
 }
 
 /**

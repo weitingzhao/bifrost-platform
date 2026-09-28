@@ -18,7 +18,6 @@ import {
 } from '@/lib/task-mode/readinessChipActions'
 import { readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'
 import {
-  infraSignal,
   missionStatus,
   missionStatusColor,
   worst,
@@ -33,6 +32,7 @@ import { SATELLITE_BUS_INGEST_TRIAGE_SCOPE } from '@/lib/agent/satelliteBusInges
 import { usePromoteVerifyReadiness, useRocketProdReadiness } from './hooks'
 import {
   isProdReleaseBlocked,
+  laneK8s,
   namespacePods,
   PLATFORM_PROD,
   PLATFORM_STG,
@@ -303,11 +303,7 @@ export function RocketReadinessStrip({
   const cicdDetail = cicdDomain?.summary ?? serviceQ.data?.detail ?? 'Tekton · platform namespaces'
 
   const cluster = clusterQ.data
-  const k8sStg = useMemo(() => {
-    const infra = infraSignal(cluster)
-    const ns = namespacePods(cluster, PLATFORM_STG)
-    return { signal: worst(infra.signal, ns.signal), detail: `${infra.detail} · ${ns.detail}` }
-  }, [cluster])
+  const k8sStg = useMemo(() => laneK8s(cluster, PLATFORM_STG), [cluster])
 
   const k8sProd = useMemo(() => namespacePods(cluster, PLATFORM_PROD), [cluster])
   const selfStg = useMemo(() => selfHealthEnvSignal(selfQ.data?.probes, 'stg'), [selfQ.data?.probes])

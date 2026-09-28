@@ -575,9 +575,17 @@ func countFailingPods(pods []corev1.Pod) int {
 	return n
 }
 
+// tektonTaskRunLabel marks a pod that runs one step of a Tekton TaskRun.
+const tektonTaskRunLabel = "tekton.dev/taskRun"
+
 func isFailingPod(p corev1.Pod) bool {
 	switch p.Status.Phase {
-	case corev1.PodFailed, corev1.PodUnknown:
+	case corev1.PodFailed:
+		// A failed CI step is a failed run, reported with its PipelineRun, not a
+		// workload down; counted here it marked the whole cluster degraded until
+		// the run was pruned, and every launch gate reading the summary with it.
+		return p.Labels[tektonTaskRunLabel] == ""
+	case corev1.PodUnknown:
 		return true
 	}
 	for _, cs := range p.Status.ContainerStatuses {

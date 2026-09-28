@@ -31,6 +31,7 @@ import {
   datastoreDetail,
   datastoreEnvSignal,
   isProdReleaseBlocked,
+  laneK8s,
   namespacePods,
   rocketLaunchProdOverall,
   accountSyncChipFromBus,
@@ -161,11 +162,7 @@ export function useSatelliteProdReadiness(enabled = true) {
   const prodMatrix = useMemo(() => matrices.find(m => m.environment === 'prod'), [matrices])
   const cluster = clusterQ.data
 
-  const k8s = useMemo(() => {
-    const infra = infraSignal(cluster)
-    const ns = namespacePods(cluster, PROD_NS)
-    return { signal: worst(infra.signal, ns.signal), detail: `${infra.detail} · ${ns.detail}` }
-  }, [cluster])
+  const k8s = useMemo(() => laneK8s(cluster, PROD_NS), [cluster])
 
   const datastore = useMemo(
     () => ({

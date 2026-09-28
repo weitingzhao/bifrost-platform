@@ -7,7 +7,7 @@ import { fetchReleaseGate } from '@/api/promote'
 import { fetchSatelliteBusDeep } from '@/api/core'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
-import { infraSignal, missionStatus, worst } from '@/lib/control-room/missionSignals'
+import { missionStatus, worst } from '@/lib/control-room/missionSignals'
 import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { usePromoteVerifyReadiness, useSatelliteProdReadiness } from './hooks'
@@ -15,7 +15,7 @@ import {
   datastoreDetail,
   datastoreEnvSignal,
   isProdReleaseBlocked,
-  namespacePods,
+  laneK8s,
   accountSyncChipFromBus,
   busForEnv,
   PROD_NS,
@@ -136,17 +136,8 @@ export function SatelliteReadinessStrip({
 
   const cluster = clusterDetailQ.data
 
-  const stgK8s = useMemo(() => {
-    const infra = infraSignal(cluster)
-    const ns = namespacePods(cluster, STG_NS)
-    return { signal: worst(infra.signal, ns.signal), detail: `${infra.detail} · ${ns.detail}` }
-  }, [cluster])
-
-  const prodK8s = useMemo(() => {
-    const infra = infraSignal(cluster)
-    const ns = namespacePods(cluster, PROD_NS)
-    return { signal: worst(infra.signal, ns.signal), detail: `${infra.detail} · ${ns.detail}` }
-  }, [cluster])
+  const stgK8s = useMemo(() => laneK8s(cluster, STG_NS), [cluster])
+  const prodK8s = useMemo(() => laneK8s(cluster, PROD_NS), [cluster])
 
   const stgDatastore = useMemo(
     () => ({
