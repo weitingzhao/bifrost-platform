@@ -50,6 +50,24 @@ type AuthService struct {
 	principals map[string]Principal
 }
 
+// placeholderMarkers flag inline values that only exist to be overridden by
+// token_env. They sit in a public repo, so one that is not overridden must not
+// become a credential: a shared placeholder once authenticated as admin because
+// principals are keyed by token and the last role holding it won.
+var placeholderMarkers = []string{"placeholder", "replace_me", "replace-me", "changeme", "change-me"}
+
+func isPlaceholderToken(token string) bool {
+	lower := strings.ToLower(token)
+	for _, marker := range placeholderMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// LoadAuth fails when two roles resolve to the same token, since one token can
+// only map to one principal and which role survives would depend on file order.
 func LoadAuth(path string) (*AuthService, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -62,6 +80,9 @@ func LoadAuth(path string) (*AuthService, error) {
 	auth := &AuthService{principals: map[string]Principal{}}
 	for _, t := range file.Tokens {
 		token := strings.TrimSpace(t.Token)
+		if isPlaceholderToken(token) {
+			token = ""
+		}
 		if t.TokenEnv != "" {
 			if envToken := strings.TrimSpace(os.Getenv(t.TokenEnv)); envToken != "" {
 				token = envToken
@@ -77,6 +98,9 @@ func LoadAuth(path string) (*AuthService, error) {
 		name := t.Name
 		if name == "" {
 			name = string(role)
+		}
+		if prev, dup := auth.principals[token]; dup {
+			return nil, fmt.Errorf("platform auth: %q and %q resolve to the same token", prev.Name, name)
 		}
 		auth.principals[token] = Principal{Name: name, Role: role}
 	}
