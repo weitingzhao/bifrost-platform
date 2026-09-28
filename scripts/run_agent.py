@@ -92,9 +92,6 @@ def _normalize_remediation_env() -> None:
         elif _DEFAULT_INFRA.is_dir():
             os.environ["REMEDIATION_CWD"] = str(_DEFAULT_INFRA.resolve())
 
-    if not os.environ.get("PLATFORM_OPERATOR_TOKEN", "").strip():
-        os.environ.setdefault("PLATFORM_OPERATOR_TOKEN", "platform-operator-dev")
-
 
 def _parse_port(raw: str, default: int) -> int:
     value = (raw or "").strip()

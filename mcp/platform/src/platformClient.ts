@@ -1,10 +1,51 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 const base = process.env.PLATFORM_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8780'
 
+// Local :8780 tokens live only in bifrost-platform/.env, so MCP configs carry none.
+// The fallback is read for a loopback base only: a local token must never be sent
+// to another host.
+const dotenvPath = fileURLToPath(new URL('../../../.env', import.meta.url))
+
+function isLoopbackBase(): boolean {
+  try {
+    const host = new URL(base).hostname
+    return host === '127.0.0.1' || host === 'localhost' || host === '[::1]'
+  } catch {
+    return false
+  }
+}
+
+function dotenvValue(key: string): string {
+  let text: string
+  try {
+    text = readFileSync(dotenvPath, 'utf8')
+  } catch {
+    return ''
+  }
+  for (const line of text.split('\n')) {
+    const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/)
+    if (m && m[1] === key) return m[2].trim().replace(/^["']|["']$/g, '')
+  }
+  return ''
+}
+
+let cachedToken: string | undefined
+
+function resolveToken(): string {
+  if (cachedToken !== undefined) return cachedToken
+  // PLATFORM_TOKEN_ENV_KEY pins a bridge to one role (the read-only bridges name the
+  // viewer key), so an inherited admin token must not stand in for it.
+  const pinnedKey = process.env.PLATFORM_TOKEN_ENV_KEY?.trim() || ''
+  const fromEnv =
+    process.env.PLATFORM_OPERATOR_TOKEN?.trim() || (pinnedKey ? '' : process.env.PLATFORM_ADMIN_TOKEN?.trim() || '')
+  cachedToken = fromEnv || (isLoopbackBase() ? dotenvValue(pinnedKey || 'PLATFORM_OPERATOR_TOKEN') : '')
+  return cachedToken
+}
+
 function authHeaders(): HeadersInit {
-  const token =
-    process.env.PLATFORM_OPERATOR_TOKEN?.trim() ||
-    process.env.PLATFORM_ADMIN_TOKEN?.trim() ||
-    ''
+  const token = resolveToken()
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (token !== '') headers.Authorization = `Bearer ${token}`
   return headers

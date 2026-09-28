@@ -9,8 +9,13 @@ Stdio MCP server that proxies `http://127.0.0.1:8780/api/v1/*` with Bearer token
 ```bash
 cd mcp/platform
 npm install
-PLATFORM_OPERATOR_TOKEN=platform-operator-dev npm start
+npm start
 ```
+
+Token: set `PLATFORM_OPERATOR_TOKEN` in the environment, or leave it unset and — when
+`PLATFORM_API_URL` is loopback — the server reads it from `bifrost-platform/.env`
+(`PLATFORM_TOKEN_ENV_KEY` picks another key, e.g. `PLATFORM_VIEWER_TOKEN` for read-only bridges).
+There are no default tokens; the old `platform-*-dev` values no longer authenticate.
 
 Cursor config snippet: **Ops Console → Architecture → MCP Contract → Copy Cursor config**
 
@@ -23,8 +28,7 @@ Or:
       "command": "npx",
       "args": ["tsx", "/path/to/bifrost-platform/mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_OPERATOR_TOKEN": "platform-operator-dev"
+        "PLATFORM_API_URL": "http://127.0.0.1:8780"
       }
     }
   }

@@ -1,13 +1,13 @@
 # Bifrost Ops Platform auth for L1+ actuation.
-# Inline tokens are public local-dev defaults for :8780 only. The cluster copies
-# (bifrost-trade-infra k8s/overlays/platform-*/config) carry no inline tokens —
-# sync_platform_k8s_config.sh strips them — so every cluster role comes from token_env.
+# No inline tokens anywhere: every role comes from its token_env. Local :8780 reads
+# them from bifrost-platform/.env (scripts/run_platform_api.sh); the cluster copies
+# (bifrost-trade-infra k8s/overlays/platform-*/config) read them from Secrets.
+# A role whose env var is unset cannot sign in.
 
 tokens:
   - name: viewer
     role: viewer
     token_env: PLATFORM_VIEWER_TOKEN
-    token: platform-viewer-dev
   # Workloads that record their own outcomes and nothing else — the Research
   # Loop CronJob reporting to the trust matrix. Deliberately below operator:
   # operator also carries cluster scale (D10 forbids scaling the trade daemon)
@@ -15,16 +15,12 @@ tokens:
   - name: reporter
     role: reporter
     token_env: PLATFORM_REPORTER_TOKEN
-    token: platform-reporter-dev
   - name: operator
     role: operator
     token_env: PLATFORM_OPERATOR_TOKEN
-    token: platform-operator-dev
   - name: admin
     role: admin
     token_env: PLATFORM_ADMIN_TOKEN
-    token: platform-admin-dev
   - name: trade-satellite
     role: operator
     token_env: PLATFORM_SATELLITE_AUDIT_TOKEN
-    token: platform-satellite-dev

@@ -199,14 +199,16 @@ export function StgTierBChecklistPanel({
                   )}
                   <p className="m-0 text-[var(--text-dense-caption)] text-[var(--muted-foreground)]">
                     Requires admin token in header (local dev:{' '}
-                    <code className="font-mono-tabular">platform-admin-dev</code>). Operator token can deliver-stg but
-                    cannot sign Tier B.
+                    <code className="font-mono-tabular">PLATFORM_ADMIN_TOKEN</code> in{' '}
+                    <code className="font-mono-tabular">bifrost-platform/.env</code>). Operator token can deliver-stg
+                    but cannot sign Tier B.
                   </p>
                 </>
               ) : (
                 <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-                  Admin token required — use header <strong>Connect</strong> with{' '}
-                  <code className="font-mono-tabular">platform-admin-dev</code> (operator token is not enough).
+                  Admin token required — use header <strong>Connect</strong> with the admin token (local dev:{' '}
+                  <code className="font-mono-tabular">PLATFORM_ADMIN_TOKEN</code> in{' '}
+                  <code className="font-mono-tabular">bifrost-platform/.env</code>; operator token is not enough).
                 </p>
               )}
             </div>

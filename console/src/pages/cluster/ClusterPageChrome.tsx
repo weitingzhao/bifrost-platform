@@ -94,7 +94,7 @@ export function ClusterPageChrome({
     actionError == null
       ? null
       : actionError.includes('401') || actionError.includes('operator token required')
-        ? 'Operator token required. Set PLATFORM_OPERATOR_TOKEN for the API and VITE_PLATFORM_OPERATOR_TOKEN for the console, then restart platform.'
+        ? 'Operator token required. Use Connect in the header with an operator or admin token.'
         : actionError
 
   const verdict = deriveClusterVerdict({

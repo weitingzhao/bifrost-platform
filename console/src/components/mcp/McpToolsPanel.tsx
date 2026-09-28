@@ -291,9 +291,9 @@ export function McpToolsPanel() {
                   </li>
                   <li>
                     Paste the copied config (merge with existing <code className="font-mono-tabular">mcpServers</code>{' '}
-                    if needed). Set <code className="font-mono-tabular">PLATFORM_OPERATOR_TOKEN</code> to{' '}
-                    <code className="font-mono-tabular">platform-operator-dev</code> or{' '}
-                    <code className="font-mono-tabular">platform-admin-dev</code>.
+                    if needed). Leave the token out: against a local API the server reads{' '}
+                    <code className="font-mono-tabular">PLATFORM_OPERATOR_TOKEN</code> from{' '}
+                    <code className="font-mono-tabular">bifrost-platform/.env</code>.
                   </li>
                   <li>
                     Restart Cursor or reload MCP. Confirm under Settings → Tools &amp; MCP that{' '}

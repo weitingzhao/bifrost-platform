@@ -48,9 +48,9 @@ func cursorConfigHints(scriptPath, apiURL string) CursorConfigHints {
 	return CursorConfigHints{
 		Command: "npx",
 		Args:    []string{"tsx", scriptPath},
+		// No token: against a loopback API the MCP client reads bifrost-platform/.env.
 		Env: []string{
 			"PLATFORM_API_URL=" + apiURL,
-			"PLATFORM_OPERATOR_TOKEN=<operator-or-admin-token>",
 		},
 	}
 }
