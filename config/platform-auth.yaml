@@ -1,5 +1,7 @@
 # Bifrost Ops Platform auth for L1+ actuation.
-# Prefer env overrides in real runs; inline defaults are local-dev placeholders only.
+# Inline tokens are public local-dev defaults for :8780 only. The cluster copies
+# (bifrost-trade-infra k8s/overlays/platform-*/config) carry no inline tokens —
+# sync_platform_k8s_config.sh strips them — so every cluster role comes from token_env.
 
 tokens:
   - name: viewer
