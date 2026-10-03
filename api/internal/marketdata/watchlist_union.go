@@ -3,24 +3,17 @@ package marketdata
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// envDBMapping maps environment IDs to their PostgreSQL database names.
-// dev-local shares the dev database, so we skip it.
-var envDBMapping = map[string]string{
-	"dev":  "bifrost_dev",
-	"stg":  "bifrost_stg",
-	"prod": "bifrost_prod",
-}
+// watchlistEnvs are the application environments whose watchlists are unioned. dev-local
+// shares the dev database, so it is not listed.
+var watchlistEnvs = []string{"dev", "stg", "prod"}
 
-const watchlistSQL = `SELECT DISTINCT symbol FROM public.watchlist WHERE sec_type = 'STK' AND optionable = true AND symbol IS NOT NULL AND trim(symbol) <> ''`
-
-// EnvWatchlistResult holds the watchlist query result for a single environment.
+// EnvWatchlistResult holds the watchlist read for a single environment.
 type EnvWatchlistResult struct {
 	Count  int    `json:"count"`
 	Status string `json:"status"` // ok | error
@@ -36,8 +29,12 @@ type WatchlistUnionResponse struct {
 	GeneratedAt string                        `json:"generated_at"`
 }
 
-// WatchlistUnion queries the watchlist from each Trade environment's database,
-// deduplicates, and returns the union set.
+// WatchlistUnion reads each environment's watchlist from the application's data probe
+// (GET <env gateway>/api/ops/ops/data-probe → watchlist.symbols), deduplicates, and returns
+// the union. The platform does not select from the application's tables (Owner 2026-10-03,
+// option A): an environment whose probe is unreachable, or that does not publish a watchlist,
+// is reported as an error under sources, never as an empty list, and nothing falls back to SQL.
+// ok is true when at least one environment answered, as before.
 func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 	now := time.Now().UTC()
 	resp := WatchlistUnionResponse{
@@ -47,14 +44,18 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 		GeneratedAt: now.Format(time.RFC3339),
 	}
 
-	if s.cluster == nil {
-		for envID := range envDBMapping {
-			resp.Sources[envID] = EnvWatchlistResult{
-				Status: "error",
-				Error:  "cluster service unavailable",
+	read := s.watchlistProbe
+	if read == nil {
+		if s.cluster == nil {
+			for _, envID := range watchlistEnvs {
+				resp.Sources[envID] = EnvWatchlistResult{
+					Status: "error",
+					Error:  "cluster service unavailable",
+				}
 			}
+			return resp
 		}
-		return resp
+		read = s.cluster.WatchlistSymbols
 	}
 
 	type result struct {
@@ -64,16 +65,16 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 	}
 
 	var wg sync.WaitGroup
-	results := make(chan result, len(envDBMapping))
+	results := make(chan result, len(watchlistEnvs))
 
-	for envID, db := range envDBMapping {
+	for _, envID := range watchlistEnvs {
 		wg.Add(1)
-		go func(eid, database string) {
-			defer safego.Recover("marketdata.queryWatchlist")
+		go func(eid string) {
+			defer safego.Recover("marketdata.readWatchlist")
 			defer wg.Done()
-			syms, err := s.queryWatchlist(ctx, database)
+			syms, err := read(ctx, eid)
 			results <- result{envID: eid, symbols: syms, err: err}
-		}(envID, db)
+		}(envID)
 	}
 
 	go func() {
@@ -113,26 +114,4 @@ func (s *Service) WatchlistUnion(ctx context.Context) WatchlistUnionResponse {
 	resp.Count = len(symbols)
 	resp.OK = anyOK
 	return resp
-}
-
-// queryWatchlist runs the watchlist SELECT on the given database via CNPG pod exec.
-func (s *Service) queryWatchlist(ctx context.Context, database string) ([]string, error) {
-	out, err := s.cluster.ExecSQLOnPrimary(ctx, database, watchlistSQL)
-	if err != nil {
-		return nil, err
-	}
-	return parseSymbolOutput(out), nil
-}
-
-// parseSymbolOutput parses psql -tA output (one symbol per line).
-func parseSymbolOutput(out string) []string {
-	var symbols []string
-	for _, line := range strings.Split(out, "\n") {
-		sym := strings.TrimSpace(line)
-		if sym == "" {
-			continue
-		}
-		symbols = append(symbols, strings.ToUpper(sym))
-	}
-	return symbols
 }

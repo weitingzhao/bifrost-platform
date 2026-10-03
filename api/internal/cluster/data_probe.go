@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -19,7 +20,12 @@ import (
 //	{"generated_at": "…Z",
 //	 "activity": [{"source": "<name>", "last_ts": "…Z" | null, "detail"?: "…"}],
 //	 "sample": {"label": "<name>", "rows": 12},
-//	 "clone_groups": [{"name": "<name>", "tables": ["<table>", …], "note": "…"}]}
+//	 "clone_groups": [{"name": "<name>", "tables": ["<table>", …], "note": "…"}],
+//	 "watchlist": {"label": "<name>", "symbols": ["<SYMBOL>", …] | null, "count": 2, "detail"?: "…"}}
+//
+// watchlist is the stocks the application wants option data for; the platform unions it across
+// environments for the market-data plugin (GET /api/v1/watchlist/union). symbols null means the
+// application could not say (detail tells why); an empty list means it watches nothing.
 //
 // An application without that endpoint (or one that is down) is "unknown" everywhere it is
 // read. Nothing falls back to querying tables.
@@ -63,11 +69,21 @@ type DataCloneGroup struct {
 	Note   string   `json:"note,omitempty"`
 }
 
+// DataProbeWatchlist is the application's list of stocks it wants option data for. Symbols is
+// nil when the application sent null (it could not read its list) and empty when it watches none.
+type DataProbeWatchlist struct {
+	Label   string   `json:"label"`
+	Symbols []string `json:"symbols"`
+	Count   *int     `json:"count"`
+	Detail  string   `json:"detail,omitempty"`
+}
+
 type DataProbe struct {
 	GeneratedAt string              `json:"generated_at"`
 	Activity    []DataProbeActivity `json:"activity"`
 	Sample      *DataProbeSample    `json:"sample"`
 	CloneGroups []DataCloneGroup    `json:"clone_groups"`
+	Watchlist   *DataProbeWatchlist `json:"watchlist"`
 }
 
 // dataProbeGateway resolves an environment's gateway base URL and its Host-header rule from
@@ -158,6 +174,47 @@ func parseDataProbe(body []byte, contentType string) (*DataProbe, error) {
 		return nil, fmt.Errorf("malformed data-probe response: %w", err)
 	}
 	return &probe, nil
+}
+
+// WatchlistSymbols is the environment's watchlist as its data probe publishes it: trimmed,
+// upper-cased, distinct and sorted. Every way of not knowing is an error — the probe is
+// unreachable, the application predates the watchlist key, or it sent symbols: null — so a
+// caller never mistakes "could not read" for "watches nothing". Nothing falls back to SQL.
+func (s *Service) WatchlistSymbols(ctx context.Context, env string) ([]string, error) {
+	probe, err := s.fetchDataProbe(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	return probe.watchlistSymbols()
+}
+
+func (p *DataProbe) watchlistSymbols() ([]string, error) {
+	w := p.Watchlist
+	if w == nil {
+		return nil, errors.New("data-probe has no watchlist (the application does not publish it yet)")
+	}
+	if w.Symbols == nil {
+		detail := strings.TrimSpace(w.Detail)
+		if detail == "" {
+			detail = "symbols: null"
+		}
+		return nil, fmt.Errorf("data-probe watchlist unavailable (%s)", detail)
+	}
+	seen := make(map[string]struct{}, len(w.Symbols))
+	out := make([]string, 0, len(w.Symbols))
+	for _, raw := range w.Symbols {
+		sym := strings.ToUpper(strings.TrimSpace(raw))
+		if sym == "" {
+			continue
+		}
+		if _, dup := seen[sym]; dup {
+			continue
+		}
+		seen[sym] = struct{}{}
+		out = append(out, sym)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 // latestActivity is the newest last_ts across the probe's sources, and the sources that

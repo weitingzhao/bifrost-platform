@@ -273,3 +273,45 @@ func TestVerifyTargetPassesWithAnUnknownSample(t *testing.T) {
 		t.Fatalf("verify: %+v", vr)
 	}
 }
+
+func TestWatchlistSymbolsFromTheDataProbe(t *testing.T) {
+	body := `{"generated_at": "2031-03-04T14:30:00Z", "activity": [],
+  "watchlist": {"label": "optionable_stocks", "symbols": ["qzbb ", "QZAA", "QZBB", ""], "count": 4}}`
+	svc := NewService(gatewayEntry(t, probeApp(t, body).URL, "", ""))
+	syms, err := svc.WatchlistSymbols(context.Background(), "dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(syms, ",") != "QZAA,QZBB" {
+		t.Fatalf("symbols %v (want trimmed, upper-cased, distinct, sorted)", syms)
+	}
+}
+
+func TestWatchlistSymbolsEmptyIsAnAnswer(t *testing.T) {
+	body := `{"activity": [], "watchlist": {"label": "optionable_stocks", "symbols": [], "count": 0}}`
+	svc := NewService(gatewayEntry(t, "", probeApp(t, body).URL, ""))
+	syms, err := svc.WatchlistSymbols(context.Background(), "stg")
+	if err != nil || syms == nil || len(syms) != 0 {
+		t.Fatalf("want an empty, non-nil list, got %v %v", syms, err)
+	}
+}
+
+func TestWatchlistSymbolsNeverReadsSilenceAsEmpty(t *testing.T) {
+	cases := map[string]struct {
+		body string
+		want string
+	}{
+		"probe without the key": {orderDeskProbe("2031-03-04T10:00:00Z", "2031-03-04T09:00:00Z", 3), "no watchlist"},
+		"symbols null":          {`{"activity": [], "watchlist": {"label": "x", "symbols": null, "count": null, "detail": "missing"}}`, "watchlist unavailable (missing)"},
+		"no probe at all (SPA)": {"", "data-probe unavailable"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc := NewService(gatewayEntry(t, "", "", probeApp(t, c.body).URL))
+			syms, err := svc.WatchlistSymbols(context.Background(), "prod")
+			if err == nil || !strings.Contains(err.Error(), c.want) || syms != nil {
+				t.Fatalf("want error containing %q, got %v %v", c.want, syms, err)
+			}
+		})
+	}
+}

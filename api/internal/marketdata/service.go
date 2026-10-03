@@ -24,6 +24,8 @@ type Service struct {
 	freshnessProbe func(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string)
 	// readinessProbe overrides Plugin readiness rollup in unit tests.
 	readinessProbe func(ctx context.Context) *ReadinessRollup
+	// watchlistProbe overrides the per-env data-probe watchlist read in unit tests.
+	watchlistProbe func(ctx context.Context, env string) ([]string, error)
 	// deploymentsOverride skips live K8s reads in unit tests.
 	deploymentsOverride []DeploymentInfo
 }
