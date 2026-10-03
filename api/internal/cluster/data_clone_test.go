@@ -173,24 +173,35 @@ func TestRunDataCloneSelectiveDumpArgs(t *testing.T) {
 		}
 		return "", nil
 	})
-	if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"strategy_instance"}); err != nil {
+	if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"parent", "child"}); err != nil {
 		t.Fatal(err)
 	}
-	foundTruncate := false
+	var restore string
 	for _, s := range seen {
-		if strings.Contains(s, "TRUNCATE TABLE strategy_instance") {
-			foundTruncate = true
+		if strings.Contains(s, "TRUNCATE") {
+			if restore != "" {
+				t.Fatalf("expected one truncate+restore command, seen=%v", seen)
+			}
+			restore = s
 		}
 	}
-	if !foundTruncate {
-		t.Fatalf("expected truncate in selective restore, seen=%v", seen)
+	for _, want := range []string{"--single-transaction", "TRUNCATE TABLE public.parent, public.child;", "-f " + dataCloneRemoteDump, "ON_ERROR_STOP=1"} {
+		if !strings.Contains(restore, want) {
+			t.Errorf("selective restore %q missing %q", restore, want)
+		}
+	}
+	if strings.Contains(restore, "CASCADE") {
+		t.Fatalf("selective restore must not truncate with CASCADE: %q", restore)
+	}
+	if strings.Index(restore, "TRUNCATE") > strings.Index(restore, dataCloneRemoteDump) {
+		t.Fatalf("truncate must run before the restore in the same transaction: %q", restore)
 	}
 }
 
 func TestDataCloneDumpArgsSelectiveIsDataOnly(t *testing.T) {
-	args := dataCloneDumpArgs("bifrost_prod", "selective", []string{"strategy_instance", "account_positions"})
+	args := dataCloneDumpArgs("bifrost_prod", "selective", []string{"parent", "child"})
 	joined := strings.Join(args, " ")
-	for _, want := range []string{"--data-only", "-t strategy_instance", "-t account_positions", "--no-owner", "--no-acl"} {
+	for _, want := range []string{"--data-only", "-t public.parent", "-t public.child", "--no-owner", "--no-acl"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("selective dump args %q missing %q", joined, want)
 		}
@@ -306,13 +317,13 @@ func TestVerifyTargetFailsWhenPostgresStillOwnsObjects(t *testing.T) {
 func TestRestoreTargetSelectiveFailsWhenTruncateFails(t *testing.T) {
 	svc := NewService(nil)
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
-		if strings.Contains(strings.Join(command, " "), "TRUNCATE TABLE strategy_instance") {
-			return "", fmt.Errorf("relation does not exist")
+		if strings.Contains(strings.Join(command, " "), "TRUNCATE TABLE public.parent") {
+			return "", fmt.Errorf("cannot truncate a table referenced in a foreign key constraint")
 		}
 		return "", nil
 	})
-	err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"strategy_instance"})
-	if err == nil || !strings.Contains(err.Error(), "truncate selective table") {
+	err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", "selective", []string{"parent"})
+	if err == nil || !strings.Contains(err.Error(), "truncate and restore selective tables in bifrost_dev (rolled back)") {
 		t.Fatalf("expected truncate error, got %v", err)
 	}
 }

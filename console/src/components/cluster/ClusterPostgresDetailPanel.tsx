@@ -48,7 +48,6 @@ const CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
 const SELECTIVE_TABLE_PRESETS = [
   'strategy_instance',
   'strategy_opportunity',
-  'account_positions',
   'preference_position_categories',
   'watchlist',
 ] as const
@@ -186,10 +185,7 @@ export function DataFreshnessSection({ canAdmin }: { canAdmin: boolean }) {
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [syncMode, setSyncMode] = useState<CloneSyncMode>('full')
-  const [selectedTables, setSelectedTables] = useState<string[]>([
-    'strategy_instance',
-    'account_positions',
-  ])
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
 
   const freshnessQuery = useQuery({
     queryKey: ['cluster', 'data-freshness'],

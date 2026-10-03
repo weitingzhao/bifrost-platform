@@ -20,7 +20,7 @@ import type {
   JoinProfilesResponse,
   NodePowerResponse,
 } from './clusterTypes'
-import { authedFetch, operatorToken } from './client'
+import { authHeaders, authedFetch, operatorToken, parseError } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
   const r = await fetch('/api/v1/cluster')
@@ -72,11 +72,36 @@ export async function triggerDataClone(body: {
   confirmation_token: string
   confirm: boolean
 }): Promise<DataCloneJob> {
-  const r = await authedFetch('data-clone', '/api/v1/cluster/data-clone', {
+  const r = await fetch('/api/v1/cluster/data-clone', {
     method: 'POST',
+    headers: authHeaders(true),
     body: JSON.stringify(body),
   })
+  if (r.status === 409) {
+    const refusal = (await r
+      .clone()
+      .json()
+      .catch(() => null)) as { error?: string; missing_tables?: string[] } | null
+    if (refusal?.missing_tables != null && refusal.missing_tables.length > 0) {
+      throw new DataCloneRefusedError(`data-clone: ${refusal.error ?? 'refused'}`, refusal.missing_tables)
+    }
+  }
+  if (!r.ok) throw await parseError('data-clone', r)
   return r.json() as Promise<DataCloneJob>
+}
+
+/**
+ * Selective clone refused because tables outside the selection reference the selected ones
+ * (TRUNCATE would have to empty them). `missingTables` is what to add to `tables`.
+ */
+export class DataCloneRefusedError extends Error {
+  readonly missingTables: string[]
+
+  constructor(message: string, missingTables: string[]) {
+    super(message)
+    this.name = 'DataCloneRefusedError'
+    this.missingTables = missingTables
+  }
 }
 
 export async function fetchDataCloneStatus(id: string): Promise<DataCloneJob> {

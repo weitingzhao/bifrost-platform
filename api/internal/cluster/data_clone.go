@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -528,6 +529,15 @@ func (s *Service) startDataClone(ctx context.Context, req DataCloneRequest, trig
 	if err := validateDataCloneRequest(req); err != nil {
 		return nil, err
 	}
+	if req.Mode == "selective" {
+		primary, err := s.resolveCNPGPrimary(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.checkSelectiveFKClosure(ctx, primary, req.Targets, req.Tables); err != nil {
+			return nil, err
+		}
+	}
 	job, busy := s.cloneJobs.CreateIfNoActive(DataCloneJob{
 		Status:  "queued",
 		Step:    "queued",
@@ -543,7 +553,6 @@ func (s *Service) startDataClone(ctx context.Context, req DataCloneRequest, trig
 		return nil, busy
 	}
 	safego.Go("cluster.runDataClone", func() { s.runDataClone(context.Background(), job.ID) })
-	_ = ctx
 	return &job, nil
 }
 
@@ -714,12 +723,14 @@ func (s *Service) runDataClone(ctx context.Context, jobID string) {
 
 // dataCloneDumpArgs returns a schema-inclusive dump for full clone, and a data-only
 // dump for selective clone. Selective restore assumes destination tables already exist.
+// One data-only pg_dump reads all tables from one snapshot and orders their data by
+// foreign key (referenced tables first), so the restore loads parents before children.
 func dataCloneDumpArgs(source, mode string, tables []string) []string {
 	args := []string{"pg_dump", "-U", "postgres", "-d", source, "--no-owner", "--no-acl", "--format=plain"}
 	if mode == "selective" {
 		args = append(args, "--data-only")
 		for _, table := range tables {
-			args = append(args, "-t", table)
+			args = append(args, "-t", dataCloneQualify(table))
 		}
 	}
 	return append(args, "-f", dataCloneRemoteDump)
@@ -744,19 +755,23 @@ func (s *Service) validateSelectiveSourceTables(ctx context.Context, primary, so
 
 func (s *Service) restoreTarget(ctx context.Context, primary, target, mode string, tables []string) error {
 	if mode == "selective" {
+		qualified := make([]string, 0, len(tables))
 		for _, table := range tables {
 			if !safeIdentRe.MatchString(table) {
 				return fmt.Errorf("invalid table %q", table)
 			}
-			_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-c",
-				fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", table))
-			if err != nil {
-				return fmt.Errorf("truncate selective table %q in %s: %w", table, target, err)
-			}
+			qualified = append(qualified, dataCloneQualify(table))
 		}
-		_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1", "-f", dataCloneRemoteDump)
+		// One TRUNCATE without CASCADE and the restore in one transaction: a table that
+		// references a selected table and is not selected fails the TRUNCATE instead of being
+		// emptied (startDataClone refuses such a selection up front), and any failure leaves
+		// the target as it was.
+		_, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-v", "ON_ERROR_STOP=1",
+			"--single-transaction",
+			"-c", fmt.Sprintf("TRUNCATE TABLE %s;", strings.Join(qualified, ", ")),
+			"-f", dataCloneRemoteDump)
 		if err != nil {
-			return err
+			return fmt.Errorf("truncate and restore selective tables in %s (rolled back): %w", target, err)
 		}
 	} else {
 		// Full clone dumps may include non-public schemas (market / data_ops / …).
@@ -944,6 +959,16 @@ func (h *Handler) HandleDataClone(w http.ResponseWriter, r *http.Request) {
 	job, err := h.svc.startDataClone(r.Context(), req, "manual", actor)
 	if err != nil {
 		h.recordAudit(r, "cluster.data.clone", strings.Join(req.Targets, ","), "failed", err.Error())
+		var refused *ErrCloneFKClosure
+		if errors.As(err, &refused) {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":          refused.Error(),
+				"target":         refused.Target,
+				"missing_tables": refused.MissingTables(),
+				"references":     refused.Missing,
+			})
+			return
+		}
 		if busy, ok := err.(*ErrCloneInProgress); ok {
 			writeJSON(w, http.StatusConflict, map[string]string{
 				"error":           busy.Error(),

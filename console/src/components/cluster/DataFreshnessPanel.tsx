@@ -16,6 +16,7 @@ import {
 } from '@bifrost/ui'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  DataCloneRefusedError,
   fetchDataCloneSchedule,
   fetchDataCloneStatus,
   fetchDataFreshness,
@@ -28,14 +29,17 @@ import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 
 const CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
 
-/** Selective sync presets — freshness probe tables + common business tables. */
-const SELECTIVE_TABLE_PRESETS = [
+/**
+ * Selective sync presets — freshness probe tables + common business tables. Nothing is
+ * selected by default: the API refuses a selection that leaves out a table referencing a
+ * selected one and names those tables, which the panel then offers to add.
+ */
+const SELECTIVE_TABLE_PRESETS: readonly string[] = [
   'strategy_instance',
   'strategy_opportunity',
-  'account_positions',
   'preference_position_categories',
   'watchlist',
-] as const
+]
 
 type CloneSyncMode = 'full' | 'selective'
 
@@ -89,10 +93,8 @@ export function DataFreshnessPanel({
   const [activeJobId, setActiveJobId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [syncMode, setSyncMode] = useState<CloneSyncMode>('full')
-  const [selectedTables, setSelectedTables] = useState<string[]>([
-    'strategy_instance',
-    'account_positions',
-  ])
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [missingTables, setMissingTables] = useState<string[]>([])
 
   const freshnessQuery = useQuery({
     queryKey: ['cluster', 'data-freshness'],
@@ -126,6 +128,14 @@ export function DataFreshnessPanel({
       prev.includes(table) ? prev.filter(t => t !== table) : [...prev, table],
     )
   }
+  const tableChips = [...SELECTIVE_TABLE_PRESETS, ...selectedTables.filter(t => !SELECTIVE_TABLE_PRESETS.includes(t))]
+  // Tables outside public come back schema-qualified and cannot be selected (full sync only).
+  const missingSelectable = missingTables.length > 0 && missingTables.every(t => !t.includes('.'))
+  const addMissingTables = () => {
+    setSelectedTables(prev => [...prev, ...missingTables.filter(t => !prev.includes(t))])
+    setMissingTables([])
+    setActionError(null)
+  }
   const selectiveReady = syncMode === 'full' || selectedTables.length > 0
 
   const cloneMutation = useMutation({
@@ -141,10 +151,12 @@ export function DataFreshnessPanel({
     onSuccess: job => {
       setActiveJobId(job.id)
       setActionError(null)
+      setMissingTables([])
       setConfirmOpen(false)
     },
     onError: (err: Error) => {
       setActionError(err.message)
+      setMissingTables(err instanceof DataCloneRefusedError ? err.missingTables : [])
       setConfirmOpen(false)
     },
   })
@@ -173,7 +185,7 @@ export function DataFreshnessPanel({
       : 'Sync bifrost_prod → bifrost_dev / bifrost_stg'
   const confirmMessage =
     syncMode === 'selective'
-      ? `This TRUNCATEs then restores these tables from bifrost_prod on bifrost_dev and bifrost_stg: ${selectedTables.join(', ') || '(none)'}. Prod is never written.`
+      ? `This TRUNCATEs then restores these tables from bifrost_prod on bifrost_dev and bifrost_stg, in one transaction per database: ${selectedTables.join(', ') || '(none)'}. Refused if another table references one of them and is not selected. Prod is never written.`
       : 'This overwrites bifrost_dev and bifrost_stg with a full copy of bifrost_prod (DROP SCHEMA public CASCADE). Prod is never written. Continue only if you intend to refresh non-prod data.'
 
   return (
@@ -276,7 +288,7 @@ export function DataFreshnessPanel({
                     Tables (TRUNCATE + data-only restore from prod):
                   </span>
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label="Selective sync tables">
-                    {SELECTIVE_TABLE_PRESETS.map(table => {
+                    {tableChips.map(table => {
                       const selected = selectedTables.includes(table)
                       return (
                         <DenseTagButton
@@ -360,9 +372,17 @@ export function DataFreshnessPanel({
           ) : null}
 
           {actionError != null ? <p className="m-0 text-dense-meta text-danger">{actionError}</p> : null}
+          {missingSelectable && canAdmin ? (
+            <div>
+              <Button size="sm" variant="outline" onClick={addMissingTables}>
+                Add {missingTables.length} referencing {missingTables.length === 1 ? 'table' : 'tables'}
+              </Button>
+            </div>
+          ) : null}
           <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
             Verdict+badge use lag vs prod (fresh &lt;3d · aging 3–7d · stale ≥7d). bifrost_prod is reference. Full =
-            DROP SCHEMA; Selective = TRUNCATE listed tables then data-only restore. Requires admin token + confirm:true +
+            DROP SCHEMA; Selective = TRUNCATE listed tables (no CASCADE) then data-only restore, refused unless every table
+            referencing them is listed too. Requires admin token + confirm:true +
             confirmation_token. Auto-clone stays disabled unless Owner enables weekly.
           </p>
         </div>
