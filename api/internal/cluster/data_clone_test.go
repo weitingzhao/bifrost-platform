@@ -45,7 +45,7 @@ func TestValidateDataCloneRequest(t *testing.T) {
 		t.Fatal("expected selective tables required")
 	}
 
-	sel.Tables = []string{"strategy_instance"}
+	sel.Tables = []string{"orders"}
 	if err := validateDataCloneRequest(sel); err != nil {
 		t.Fatalf("selective ok: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestRunDataCloneFullSuccess(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PLATFORM_DATA_CLONE_JOBS_DIR", dir)
 	t.Setenv("PLATFORM_DATA_CLONE_LAST", filepath.Join(t.TempDir(), "last.json"))
-	svc := NewService(nil)
+	svc := NewService(gatewayEntry(t, "", "", "")) // no gateway: the sample reads unknown
 	svc.primaryOverride = "bifrost-postgres-1"
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
 		joined := strings.Join(command, " ")
@@ -127,8 +127,6 @@ func TestRunDataCloneFullSuccess(t *testing.T) {
 			return "0", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
-		case strings.Contains(joined, "strategy_instance"):
-			return "3", nil
 		default:
 			return "", nil
 		}
@@ -167,9 +165,6 @@ func TestRunDataCloneSelectiveDumpArgs(t *testing.T) {
 		}
 		if strings.Contains(joined, "information_schema") {
 			return "10", nil
-		}
-		if strings.Contains(joined, "strategy_instance") {
-			return "1", nil
 		}
 		return "", nil
 	})
@@ -256,7 +251,7 @@ func TestRestoreTargetReassignsOwnershipBeforeGrants(t *testing.T) {
 				seen = append(seen, strings.Join(command, " "))
 				return "", nil
 			})
-			if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", mode, []string{"strategy_instance"}); err != nil {
+			if err := svc.restoreTarget(context.Background(), "pod", "bifrost_dev", mode, []string{"orders"}); err != nil {
 				t.Fatal(err)
 			}
 			restore, owner, grant := -1, -1, -1
@@ -303,8 +298,6 @@ func TestVerifyTargetFailsWhenPostgresStillOwnsObjects(t *testing.T) {
 			return "46", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "15", nil
-		case strings.Contains(joined, "strategy_instance"):
-			return "3", nil
 		}
 		return "", nil
 	})
@@ -369,7 +362,7 @@ func TestRunDataCloneRecordsLastCloneAt(t *testing.T) {
 	lastPath := filepath.Join(t.TempDir(), "last.json")
 	t.Setenv("PLATFORM_DATA_CLONE_JOBS_DIR", jobsDir)
 	t.Setenv("PLATFORM_DATA_CLONE_LAST", lastPath)
-	svc := NewService(nil)
+	svc := NewService(gatewayEntry(t, "", "", "")) // no gateway: the sample reads unknown
 	svc.primaryOverride = "bifrost-postgres-1"
 	svc.SetPodExecForTest(func(ctx context.Context, kubeconfig, namespace, pod, container string, command ...string) (string, error) {
 		joined := strings.Join(command, " ")
@@ -382,8 +375,6 @@ func TestRunDataCloneRecordsLastCloneAt(t *testing.T) {
 			return "0", nil
 		case strings.Contains(joined, "information_schema.tables"):
 			return "42", nil
-		case strings.Contains(joined, "strategy_instance"):
-			return "3", nil
 		default:
 			return "", nil
 		}

@@ -217,12 +217,28 @@ export interface DataFreshnessResponse {
   fresh_threshold_days: number
   stale_threshold_days: number
   last_clone_at?: string
+  /**
+   * Selective-clone groups published by the clone source's application (its data probe).
+   * Each group already includes every table that references it. Empty when the probe is
+   * unavailable — clone_groups_detail says why. The platform names no tables itself.
+   */
+  clone_groups?: DataCloneGroup[]
+  clone_groups_detail?: string
+}
+
+export interface DataCloneGroup {
+  name: string
+  tables: string[]
+  note?: string
 }
 
 export interface DataCloneVerifyResult {
   database: string
   table_count: number
-  sample_rows: number
+  /** The target application's sample label (data probe). */
+  sample_label?: string
+  /** null when the target's data probe could not be read. */
+  sample_rows: number | null
   ok: boolean
   detail?: string
 }

@@ -34,9 +34,13 @@ var safeIdentRe = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 type DataCloneVerifyResult struct {
 	Database   string `json:"database"`
 	TableCount int    `json:"table_count"`
-	SampleRows int    `json:"sample_rows"`
-	OK         bool   `json:"ok"`
-	Detail     string `json:"detail,omitempty"`
+	// SampleLabel / SampleRows are the target application's own sample count after the
+	// clone (its data probe). SampleRows is null when the probe could not be read; that is
+	// reported, never a verify failure.
+	SampleLabel string `json:"sample_label,omitempty"`
+	SampleRows  *int   `json:"sample_rows"`
+	OK          bool   `json:"ok"`
+	Detail      string `json:"detail,omitempty"`
 }
 
 type DataCloneJob struct {
@@ -901,12 +905,6 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 		return vr
 	}
 
-	sampleOut, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", target, "-tAc",
-		"SELECT count(*) FROM strategy_instance")
-	if err == nil {
-		fmt.Sscanf(strings.TrimSpace(sampleOut), "%d", &vr.SampleRows)
-	}
-
 	srcCountOut, _ := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", source, "-tAc",
 		"SELECT count(*) FROM information_schema.tables WHERE table_schema='public'")
 	var srcCount int
@@ -932,8 +930,33 @@ func (s *Service) verifyTarget(ctx context.Context, primary, target, source stri
 		return vr
 	}
 	vr.OK = true
-	vr.Detail = fmt.Sprintf("%d tables · strategy_instance rows=%d", vr.TableCount, vr.SampleRows)
+	vr.Detail = fmt.Sprintf("%d tables · %s", vr.TableCount, s.verifySample(ctx, target, &vr))
 	return vr
+}
+
+// verifySample reads the target application's sample count from its data probe. The platform
+// does not count any application table itself; an unreadable probe leaves the sample unknown
+// and does not fail the clone.
+func (s *Service) verifySample(ctx context.Context, target string, vr *DataCloneVerifyResult) string {
+	env, ok := dataProbeDatabases[target]
+	if !ok {
+		return "sample unknown (no environment for " + target + ")"
+	}
+	probe, err := s.fetchDataProbe(ctx, env)
+	if err != nil {
+		return "sample unknown: " + err.Error()
+	}
+	if probe.Sample == nil || probe.Sample.Rows == nil {
+		return "sample unknown: data-probe has no sample"
+	}
+	rows := *probe.Sample.Rows
+	vr.SampleRows = &rows
+	vr.SampleLabel = strings.TrimSpace(probe.Sample.Label)
+	label := vr.SampleLabel
+	if label == "" {
+		label = "sample"
+	}
+	return fmt.Sprintf("%s rows=%d", label, rows)
 }
 
 // ---------------------------------------------------------------------------

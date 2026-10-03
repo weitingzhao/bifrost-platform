@@ -9,29 +9,21 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
-	freshnessCacheTTL  = 30 * time.Second
-	freshnessFreshDays = 3.0
-	freshnessStaleDays = 7.0
+	freshnessCacheTTL   = 30 * time.Second
+	freshnessFreshDays  = 3.0
+	freshnessStaleDays  = 7.0
 	dataCloneConfirmTok = "CLONE-FROM-PROD"
 )
 
-// Activity probe columns — table may be missing; probe degrades gracefully.
-var freshnessProbeSpecs = []struct {
-	table  string
-	column string
-}{
-	{"strategy_instance", "updated_at"},
-	{"strategy_opportunity", "updated_at"},
-	{"watchlist", "created_at"},
-}
-
 type DataFreshnessDB struct {
-	Name           string   `json:"name"`
-	Environment    string   `json:"environment"`
-	LastActivityTS *string  `json:"last_activity_ts,omitempty"`
+	Name           string  `json:"name"`
+	Environment    string  `json:"environment"`
+	LastActivityTS *string `json:"last_activity_ts,omitempty"`
 	// AgeDays is wall-clock age (now − last_activity). Informational only — do not drive Sync decisions.
 	AgeDays *float64 `json:"age_days,omitempty"`
 	// LagVsProdDays is max(0, prod_activity − target_activity) in days. Nil for bifrost_prod (reference).
@@ -56,6 +48,10 @@ type DataFreshnessResponse struct {
 	StaleThreshold float64           `json:"stale_threshold_days"`
 	// LastCloneAt is when the most recent successful clone finished (global).
 	LastCloneAt *string `json:"last_clone_at,omitempty"`
+	// CloneGroups are the selective-clone groups the clone source (ReferenceDB) publishes in
+	// its data probe; empty when the probe is unavailable (CloneGroupsDetail says why).
+	CloneGroups       []DataCloneGroup `json:"clone_groups"`
+	CloneGroupsDetail string           `json:"clone_groups_detail,omitempty"`
 }
 
 type freshnessCache struct {
@@ -106,23 +102,58 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		resp.LastCloneAt = &iso
 	}
 
-	primary, err := s.resolveCNPGPrimary(ctx)
-	if err != nil {
-		resp.Detail = err.Error()
-		for i := range resp.Databases {
-			resp.Databases[i].Detail = "primary unavailable"
-		}
-		return resp
+	// Each environment's application says when its data last changed (data probe); the
+	// platform reads no tables. A probe that cannot be read leaves that database "unknown".
+	type envProbe struct {
+		ts      *time.Time
+		sources []string
+		err     error
 	}
-	resp.PrimaryPod = primary
+	probes := make([]envProbe, len(resp.Databases))
+	var cloneSource *DataProbe
+	var wg sync.WaitGroup
+	for i := range resp.Databases {
+		wg.Add(1)
+		go func(i int) {
+			defer safego.Recover("cluster.dataFreshness.probe")
+			defer wg.Done()
+			p, err := s.fetchDataProbe(ctx, resp.Databases[i].Environment)
+			if err != nil {
+				probes[i].err = err
+				return
+			}
+			if resp.Databases[i].Name == resp.ReferenceDB {
+				cloneSource = p
+			}
+			probes[i].ts, probes[i].sources, probes[i].err = p.latestActivity()
+		}(i)
+	}
+	wg.Wait()
 
-	prodTS, prodSources, prodErr := s.queryDBActivity(ctx, primary, "bifrost_prod")
+	resp.CloneGroups = []DataCloneGroup{}
+	switch {
+	case cloneSource == nil:
+		resp.CloneGroupsDetail = resp.ReferenceDB + " data-probe unavailable"
+	default:
+		resp.CloneGroups = usableCloneGroups(cloneSource.CloneGroups)
+		if len(resp.CloneGroups) == 0 {
+			resp.CloneGroupsDetail = resp.ReferenceDB + " data-probe publishes no clone groups"
+		}
+	}
+
+	var prodTS *time.Time
+	var prodErr error
+	for i, db := range resp.Databases {
+		if db.Name == resp.ReferenceDB {
+			prodTS, prodErr = probes[i].ts, probes[i].err
+		}
+	}
 	for i := range resp.Databases {
 		db := &resp.Databases[i]
-		if resp.LastCloneAt != nil && db.Name != "bifrost_prod" {
+		if resp.LastCloneAt != nil && db.Name != resp.ReferenceDB {
 			db.LastCloneAt = resp.LastCloneAt
 		}
-		ts, sources, qErr := s.queryDBActivity(ctx, primary, db.Name)
+		ts, sources, qErr := probes[i].ts, probes[i].sources, probes[i].err
 		if qErr != nil {
 			db.Verdict = "unknown"
 			db.Detail = qErr.Error()
@@ -131,7 +162,7 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		db.Sources = sources
 		if ts == nil {
 			db.Verdict = "unknown"
-			db.Detail = "no activity timestamps found"
+			db.Detail = "no activity timestamps reported"
 			continue
 		}
 		iso := ts.UTC().Format(time.RFC3339)
@@ -142,13 +173,9 @@ func (s *Service) probeDataFreshness(ctx context.Context) DataFreshnessResponse 
 		}
 		db.AgeDays = &age
 
-		if db.Name == "bifrost_prod" {
+		if db.Name == resp.ReferenceDB {
 			db.Verdict = "reference"
-			if len(prodSources) > 0 {
-				db.Detail = "reference · wall_age=" + fmt.Sprintf("%.1fd", age)
-			} else {
-				db.Detail = "reference"
-			}
+			db.Detail = "reference · wall_age=" + fmt.Sprintf("%.1fd", age)
 			continue
 		}
 
@@ -229,55 +256,6 @@ func (s *Service) resolveCNPGPrimary(ctx context.Context) (string, error) {
 	return primary, nil
 }
 
-func (s *Service) queryDBActivity(ctx context.Context, primary, database string) (*time.Time, []string, error) {
-	// Discover which probe tables exist.
-	var existsParts []string
-	for _, spec := range freshnessProbeSpecs {
-		existsParts = append(existsParts, fmt.Sprintf(
-			"SELECT '%s' AS t, '%s' AS c WHERE EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='%s' AND column_name='%s')",
-			spec.table, spec.column, spec.table, spec.column,
-		))
-	}
-	listSQL := strings.Join(existsParts, " UNION ALL ")
-	out, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", database, "-tAc", listSQL)
-	if err != nil {
-		return nil, nil, err
-	}
-	lines := splitNonEmpty(out)
-	if len(lines) == 0 {
-		return nil, nil, nil
-	}
-
-	var greatestParts []string
-	var sources []string
-	for _, line := range lines {
-		fields := strings.Split(strings.TrimSpace(line), "|")
-		if len(fields) != 2 {
-			continue
-		}
-		table, col := fields[0], fields[1]
-		sources = append(sources, table+"."+col)
-		greatestParts = append(greatestParts, fmt.Sprintf("(SELECT MAX(%s) FROM %s)", col, table))
-	}
-	if len(greatestParts) == 0 {
-		return nil, nil, nil
-	}
-	maxSQL := fmt.Sprintf("SELECT GREATEST(%s)", strings.Join(greatestParts, ", "))
-	raw, err := s.execOnPrimary(ctx, primary, "psql", "-U", "postgres", "-d", database, "-tAc", maxSQL)
-	if err != nil {
-		return nil, sources, err
-	}
-	raw = strings.TrimSpace(raw)
-	if raw == "" || strings.EqualFold(raw, "null") {
-		return nil, sources, nil
-	}
-	ts, err := parsePostgresTimestamp(raw)
-	if err != nil {
-		return nil, sources, fmt.Errorf("parse timestamp %q: %w", raw, err)
-	}
-	return &ts, sources, nil
-}
-
 func parsePostgresTimestamp(raw string) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	layouts := []string{
@@ -300,15 +278,4 @@ func parsePostgresTimestamp(raw string) (time.Time, error) {
 		return time.Unix(int64(f), 0).UTC(), nil
 	}
 	return time.Time{}, fmt.Errorf("unrecognized timestamp")
-}
-
-func splitNonEmpty(s string) []string {
-	var out []string
-	for _, line := range strings.Split(s, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			out = append(out, line)
-		}
-	}
-	return out
 }

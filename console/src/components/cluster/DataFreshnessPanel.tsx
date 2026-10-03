@@ -23,24 +23,19 @@ import {
   triggerDataClone,
   updateDataCloneSchedule,
 } from '@/api/cluster'
-import type { DataFreshnessDatabase } from '@/api/clusterTypes'
+import type { DataCloneGroup, DataFreshnessDatabase } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 
 const CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
 
 /**
- * Selective sync presets — freshness probe tables + common business tables. Nothing is
- * selected by default: the API refuses a selection that leaves out a table referencing a
- * selected one and names those tables, which the panel then offers to add.
+ * Selective sync offers the clone groups the clone source's application publishes in its data
+ * probe (`clone_groups` on the freshness response) — the platform names no tables itself.
+ * Each group already includes every table that references it. Nothing is selected by default;
+ * the API still refuses a selection that leaves out a referencing table and names those
+ * tables, which the panel then offers to add.
  */
-const SELECTIVE_TABLE_PRESETS: readonly string[] = [
-  'strategy_instance',
-  'strategy_opportunity',
-  'preference_position_categories',
-  'watchlist',
-]
-
 type CloneSyncMode = 'full' | 'selective'
 
 function freshnessLagDays(db: DataFreshnessDatabase): number | null {
@@ -128,7 +123,18 @@ export function DataFreshnessPanel({
       prev.includes(table) ? prev.filter(t => t !== table) : [...prev, table],
     )
   }
-  const tableChips = [...SELECTIVE_TABLE_PRESETS, ...selectedTables.filter(t => !SELECTIVE_TABLE_PRESETS.includes(t))]
+  const cloneGroups: DataCloneGroup[] = freshnessQuery.data?.clone_groups ?? []
+  const cloneGroupsDetail = freshnessQuery.data?.clone_groups_detail
+  const groupTables = [...new Set(cloneGroups.flatMap(g => g.tables))]
+  const isGroupSelected = (group: DataCloneGroup) => group.tables.every(t => selectedTables.includes(t))
+  const toggleGroup = (group: DataCloneGroup) => {
+    setSelectedTables(prev =>
+      group.tables.every(t => prev.includes(t))
+        ? prev.filter(t => !group.tables.includes(t))
+        : [...prev, ...group.tables.filter(t => !prev.includes(t))],
+    )
+  }
+  const tableChips = [...groupTables, ...selectedTables.filter(t => !groupTables.includes(t))]
   // Tables outside public come back schema-qualified and cannot be selected (full sync only).
   const missingSelectable = missingTables.length > 0 && missingTables.every(t => !t.includes('.'))
   const addMissingTables = () => {
@@ -285,8 +291,42 @@ export function DataFreshnessPanel({
               {syncMode === 'selective' ? (
                 <div className="flex flex-col gap-1.5">
                   <span className="text-dense-meta text-[var(--muted-foreground)]">
-                    Tables (TRUNCATE + data-only restore from prod):
+                    Groups (published by the bifrost_prod app&apos;s data probe):
                   </span>
+                  {cloneGroups.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Selective sync groups">
+                      {cloneGroups.map(group => {
+                        const selected = isGroupSelected(group)
+                        const tables = group.tables.join(', ')
+                        return (
+                          <DenseTagButton
+                            key={group.name}
+                            size="pill"
+                            variant={selected ? 'info' : 'neutral'}
+                            aria-pressed={selected}
+                            title={group.note != null && group.note !== '' ? `${group.note} — ${tables}` : tables}
+                            className={cn(
+                              selected ? 'ring-1 ring-[var(--color-entity-category)]' : 'opacity-80',
+                            )}
+                            onClick={() => toggleGroup(group)}
+                          >
+                            {group.name} · {group.tables.length}
+                          </DenseTagButton>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
+                      Clone groups unknown
+                      {cloneGroupsDetail != null && cloneGroupsDetail !== '' ? ` — ${cloneGroupsDetail}` : ''}. Full sync
+                      still works.
+                    </p>
+                  )}
+                  {tableChips.length > 0 ? (
+                    <span className="text-dense-meta text-[var(--muted-foreground)]">
+                      Tables (TRUNCATE + data-only restore from prod):
+                    </span>
+                  ) : null}
                   <div className="flex flex-wrap gap-1.5" role="group" aria-label="Selective sync tables">
                     {tableChips.map(table => {
                       const selected = selectedTables.includes(table)
@@ -310,7 +350,7 @@ export function DataFreshnessPanel({
                     })}
                   </div>
                   {selectedTables.length === 0 ? (
-                    <p className="m-0 text-dense-caption text-danger">Select at least one table.</p>
+                    <p className="m-0 text-dense-caption text-danger">Select a group or at least one table.</p>
                   ) : null}
                 </div>
               ) : null}
@@ -380,7 +420,8 @@ export function DataFreshnessPanel({
             </div>
           ) : null}
           <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
-            Verdict+badge use lag vs prod (fresh &lt;3d · aging 3–7d · stale ≥7d). bifrost_prod is reference. Full =
+            Last activity is what each environment&apos;s app reports at /api/ops/data-probe (unknown when it does
+            not answer). Verdict+badge use lag vs prod (fresh &lt;3d · aging 3–7d · stale ≥7d). bifrost_prod is reference. Full =
             DROP SCHEMA; Selective = TRUNCATE listed tables (no CASCADE) then data-only restore, refused unless every table
             referencing them is listed too. Requires admin token + confirm:true +
             confirmation_token. Auto-clone stays disabled unless Owner enables weekly.

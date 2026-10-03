@@ -1,0 +1,206 @@
+package cluster
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+)
+
+// The platform never names an application's tables (D13, double flywheel). What it may know
+// about an environment's application database — when it last changed, one sample count, and
+// which tables belong together for a selective clone — the application publishes itself at
+// GET <env gateway>/api/ops/data-probe:
+//
+//	{"generated_at": "…Z",
+//	 "activity": [{"source": "<name>", "last_ts": "…Z" | null, "detail"?: "…"}],
+//	 "sample": {"label": "<name>", "rows": 12},
+//	 "clone_groups": [{"name": "<name>", "tables": ["<table>", …], "note": "…"}]}
+//
+// An application without that endpoint (or one that is down) is "unknown" everywhere it is
+// read. Nothing falls back to querying tables.
+
+// dataProbePaths are tried in order on each env gateway; the application serves the probe at
+// both. On the Bifrost gateways (measured 2026-10-03, DEV/STG/PROD) only /api/ops/ops/… is
+// routed to it: /api/ops/data-probe falls through to the SPA and answers index.html with 200,
+// which is why every response is checked for the probe's shape rather than for a 200.
+var dataProbePaths = []string{"/api/ops/ops/data-probe", "/api/ops/data-probe"}
+
+const (
+	dataProbeTimeout  = 6 * time.Second
+	dataProbeMaxBytes = 1 << 20
+)
+
+// dataProbeDatabases maps the clone/freshness databases to the environment whose gateway
+// publishes their probe.
+var dataProbeDatabases = map[string]string{
+	"bifrost_dev":  "dev",
+	"bifrost_stg":  "stg",
+	"bifrost_prod": "prod",
+}
+
+type DataProbeActivity struct {
+	Source string  `json:"source"`
+	LastTS *string `json:"last_ts"`
+	Detail string  `json:"detail,omitempty"`
+}
+
+type DataProbeSample struct {
+	Label string `json:"label"`
+	Rows  *int   `json:"rows"`
+}
+
+// DataCloneGroup is a set of tables the application says can be cloned together: a group's
+// tables include every table that references them, so a selective clone of one group passes
+// the FK closure check.
+type DataCloneGroup struct {
+	Name   string   `json:"name"`
+	Tables []string `json:"tables"`
+	Note   string   `json:"note,omitempty"`
+}
+
+type DataProbe struct {
+	GeneratedAt string              `json:"generated_at"`
+	Activity    []DataProbeActivity `json:"activity"`
+	Sample      *DataProbeSample    `json:"sample"`
+	CloneGroups []DataCloneGroup    `json:"clone_groups"`
+}
+
+// dataProbeGateway resolves an environment's gateway base URL and its Host-header rule from
+// the cluster entry (the same gateways the smoke probes use).
+func (s *Service) dataProbeGateway(env string) (string, func(*http.Request)) {
+	e := s.entry
+	switch env {
+	case "dev":
+		return e.ResolvedDevGatewayURL(), e.ApplyDevGatewayHost
+	case "stg":
+		return e.ResolvedStgGatewayURL(), e.ApplyStgGatewayHost
+	case "prod":
+		return e.ResolvedProdGatewayURL(), e.ApplyProdGatewayHost
+	}
+	return "", nil
+}
+
+// fetchDataProbe reads the environment's data probe. Any failure — no gateway, unreachable,
+// non-200, or a body that is not a probe — is returned as an error; callers show "unknown".
+func (s *Service) fetchDataProbe(ctx context.Context, env string) (*DataProbe, error) {
+	base, applyHost := s.dataProbeGateway(env)
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	if base == "" {
+		return nil, fmt.Errorf("no %s gateway configured", env)
+	}
+	var errs []string
+	for _, path := range dataProbePaths {
+		probe, err := getDataProbe(ctx, base+path, applyHost)
+		if err == nil {
+			return probe, nil
+		}
+		errs = append(errs, path+": "+err.Error())
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, errors.New("data-probe unavailable (" + strings.Join(errs, "; ") + ")")
+}
+
+func getDataProbe(ctx context.Context, url string, applyHost func(*http.Request)) (*DataProbe, error) {
+	ctx, cancel := context.WithTimeout(ctx, dataProbeTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if applyHost != nil {
+		applyHost(req)
+	}
+	resp, err := (&http.Client{Timeout: dataProbeTimeout}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, dataProbeMaxBytes))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		var reason struct {
+			Detail string `json:"detail"`
+		}
+		if json.Unmarshal(body, &reason) == nil && strings.TrimSpace(reason.Detail) != "" {
+			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(reason.Detail))
+		}
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return parseDataProbe(body, resp.Header.Get("Content-Type"))
+}
+
+// parseDataProbe accepts a body only if it has the probe's shape: a JSON object carrying an
+// activity list. An SPA's index.html or another service's JSON is not a probe.
+func parseDataProbe(body []byte, contentType string) (*DataProbe, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		ct := strings.TrimSpace(contentType)
+		if ct == "" {
+			ct = "unknown content type"
+		}
+		return nil, fmt.Errorf("not a data-probe response (%s)", ct)
+	}
+	if _, ok := raw["activity"]; !ok {
+		return nil, fmt.Errorf("not a data-probe response (no activity)")
+	}
+	var probe DataProbe
+	if err := json.Unmarshal(body, &probe); err != nil {
+		return nil, fmt.Errorf("malformed data-probe response: %w", err)
+	}
+	return &probe, nil
+}
+
+// latestActivity is the newest last_ts across the probe's sources, and the sources that
+// reported one.
+func (p *DataProbe) latestActivity() (*time.Time, []string, error) {
+	var latest *time.Time
+	var sources []string
+	for _, a := range p.Activity {
+		if a.LastTS == nil || strings.TrimSpace(*a.LastTS) == "" {
+			continue
+		}
+		ts, err := parsePostgresTimestamp(*a.LastTS)
+		if err != nil {
+			return nil, sources, fmt.Errorf("data-probe %s last_ts %q: %w", a.Source, *a.LastTS, err)
+		}
+		sources = append(sources, a.Source)
+		if latest == nil || ts.After(*latest) {
+			t := ts
+			latest = &t
+		}
+	}
+	return latest, sources, nil
+}
+
+// usableCloneGroups drops groups without a name or without tables that pass the clone
+// request's identifier check, so the Console only offers selections the API would accept.
+func usableCloneGroups(groups []DataCloneGroup) []DataCloneGroup {
+	out := make([]DataCloneGroup, 0, len(groups))
+	for _, g := range groups {
+		name := strings.TrimSpace(g.Name)
+		if name == "" || len(g.Tables) == 0 {
+			continue
+		}
+		ok := true
+		for _, t := range g.Tables {
+			if !safeIdentRe.MatchString(t) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, DataCloneGroup{Name: name, Tables: append([]string{}, g.Tables...), Note: strings.TrimSpace(g.Note)})
+		}
+	}
+	return out
+}
