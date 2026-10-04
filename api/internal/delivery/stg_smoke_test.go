@@ -8,21 +8,28 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
-func TestStgAPIProbePath(t *testing.T) {
+// One gateway prefix per process (TD-55 B1): every smoke path is under /api/monitor, /api/account,
+// /api/market or /api/research; an alias domain from clusters.yaml resolves to its replacement.
+func TestStgAPIGatewayPath(t *testing.T) {
 	cases := []struct {
 		domain string
 		want   string
 	}{
-		{domain: "monitor", want: "/status"},
-		{domain: "docs", want: "/research/docs/health"},
-		{domain: "ops", want: "/ops/health"},
-		{domain: "trading", want: "/health"},
-		{domain: "", want: "/health"},
+		{domain: "monitor", want: "/api/monitor/status"},
+		{domain: "docs", want: "/api/monitor/research/docs/health"},
+		{domain: "ops", want: "/api/monitor/ops/health"},
+		{domain: "account", want: "/api/account/health"},
+		{domain: "market", want: "/api/market/health"},
+		{domain: "research", want: "/api/research/health"},
+		{domain: "trading", want: "/api/account/health"},
+		{domain: "strategy", want: "/api/account/health"},
+		{domain: "portfolio", want: "/api/account/health"},
+		{domain: "other", want: "/api/other/health"},
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%q→%q", tc.domain, tc.want), func(t *testing.T) {
-			if got := stgAPIProbePath(tc.domain); got != tc.want {
-				t.Fatalf("stgAPIProbePath(%q) = %q, want %q", tc.domain, got, tc.want)
+			if got := stgAPIGatewayPath(tc.domain); got != tc.want {
+				t.Fatalf("stgAPIGatewayPath(%q) = %q, want %q", tc.domain, got, tc.want)
 			}
 		})
 	}
@@ -143,16 +150,16 @@ func TestAggregateFailCountSmoke(t *testing.T) {
 }
 
 // The release smoke walks config.DefaultStgAPIDomains; the matrix walks probe.TradeGatewayRoutes.
-// Same eight prefixes in the same order, or a prefix is checked by one and not the other (TD-55).
+// Same routes in the same order, or a route is checked by one and not the other (TD-55).
 func TestDefaultStgAPIDomainsMatchTradeGatewayRoutes(t *testing.T) {
 	routes := probe.TradeGatewayRoutes()
 	domains := config.DefaultStgAPIDomains()
 	if len(domains) != len(routes) {
-		t.Fatalf("DefaultStgAPIDomains has %d prefixes, TradeGatewayRoutes %d", len(domains), len(routes))
+		t.Fatalf("DefaultStgAPIDomains has %d routes, TradeGatewayRoutes %d", len(domains), len(routes))
 	}
 	for i, r := range routes {
-		if domains[i] != r.Prefix {
-			t.Fatalf("prefix %d: DefaultStgAPIDomains %q, TradeGatewayRoutes %q", i, domains[i], r.Prefix)
+		if domains[i] != r.ID {
+			t.Fatalf("route %d: DefaultStgAPIDomains %q, TradeGatewayRoutes %q", i, domains[i], r.ID)
 		}
 	}
 }

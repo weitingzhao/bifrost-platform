@@ -7,7 +7,7 @@ Read-only HTTP bridge on the **developer Mac** — probes **K3s bifrost-dev** tr
 | Path | Description |
 |------|-------------|
 | `GET /health` | Bridge liveness + configured probe base |
-| `GET /bus-snapshot` | Probes `/api/monitor/status` and `/api/ops/ops/market-ingest/services` on K3s dev |
+| `GET /bus-snapshot` | Probes `/api/monitor/status` and `/api/monitor/ops/market-ingest/services` on K3s dev |
 
 ## Environment
 

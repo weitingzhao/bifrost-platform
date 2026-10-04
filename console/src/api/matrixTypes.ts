@@ -15,7 +15,7 @@ export interface Target {
   authorization_level: string
   detail: string
   url?: string
-  /** Deployment that answers (api-ops → api-monitor, api-trading → api-account); TD-55. */
+  /** Deployment that answers (api-ops → api-monitor, api-account → api-account); TD-55. */
   process?: string
 }
 

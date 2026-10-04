@@ -280,13 +280,15 @@ func TestApplyGatewayHostHelpers(t *testing.T) {
 }
 
 func TestResolvedStgAPIDomains(t *testing.T) {
-	if got := DefaultStgAPIDomains(); len(got) != 8 {
-		t.Fatalf("DefaultStgAPIDomains() len = %d, want 8 (Phase B; no massive)", len(got))
+	// TD-55 B1: monitor, docs, ops (both on api-monitor), account, market, research; no massive,
+	// no alias prefixes.
+	if got := DefaultStgAPIDomains(); len(got) != 6 {
+		t.Fatalf("DefaultStgAPIDomains() len = %d, want 6", len(got))
 	}
 
 	empty := &ClusterEntry{}
-	if got := empty.ResolvedStgAPIDomains(); len(got) != 8 {
-		t.Fatalf("ResolvedStgAPIDomains() default len = %d, want 8", len(got))
+	if got := empty.ResolvedStgAPIDomains(); len(got) != 6 {
+		t.Fatalf("ResolvedStgAPIDomains() default len = %d, want 6", len(got))
 	}
 
 	custom := &ClusterEntry{StgSmoke: StgSmokeConfig{APIDomains: []string{"monitor", " ", "trading"}}}

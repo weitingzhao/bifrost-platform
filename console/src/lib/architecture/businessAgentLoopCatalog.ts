@@ -9,13 +9,15 @@ export const BUSINESS_AGENT_LOOP_VERSION = '2026-06-19'
 export const BUSINESS_AGENT_LOOP_SOURCE = 'console/src/lib/architecture/businessAgentLoopCatalog.ts'
 
 export const BUSINESS_AGENT_LOOP_STATEMENT =
-  'Business Agent reads 8 Trade API domains via mcp-trade-api (read-only). ' +
+  'Business Agent reads 6 Trade API domains on 4 processes via mcp-trade-api (read-only). ' +
   'Scheduled pre/post-market briefs via Cursor SDK; ad-hoc Q&A in chat. ' +
   'Never writes orders, daemon Redis control, or strategy config — advisory only.'
 
 export type TradeAPIDomain = {
   id: string
-  /** The Deployment that answers the prefix (TD-55: eight prefixes, four processes). */
+  /** The process's own gateway prefix (TD-55: one per process); the probe is /api/{prefix}{probePath}. */
+  prefix: string
+  /** The Deployment that answers. */
   process: string
   port: number
   probePath: string
@@ -23,19 +25,26 @@ export type TradeAPIDomain = {
 }
 
 /**
- * Eight Trade gateway prefixes over four API processes — mirrors config/trade-api-domains.yaml
- * and api/internal/probe/trade_routes.go. docs and ops are api-monitor (:8765); trading,
- * strategy and portfolio are api-account (:8769). Probe paths are under the prefix.
+ * Trade API domains over four processes, one gateway prefix each (TD-55, Owner option B) —
+ * mirrors config/trade-api-domains.yaml and api/internal/probe/trade_routes.go. docs and ops are
+ * routers on api-monitor (:8765, /api/monitor); account is api-account (:8769, /api/account).
  */
 export const TRADE_API_DOMAINS: TradeAPIDomain[] = [
-  { id: 'monitor', process: 'api-monitor', port: 8765, probePath: '/status', readExamples: 'GET /status, GET /operations' },
-  { id: 'docs', process: 'api-monitor', port: 8765, probePath: '/research/docs/health', readExamples: 'OpenAPI aggregate' },
-  { id: 'ops', process: 'api-monitor', port: 8765, probePath: '/ops/health', readExamples: 'Executor mode, market-ingest services' },
-  { id: 'trading', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Executions, performance, transactions' },
-  { id: 'strategy', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Trades, gate sets, structures' },
-  { id: 'portfolio', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Model analysis, short legs' },
-  { id: 'market', process: 'api-market', port: 8772, probePath: '/health', readExamples: 'Quotes SSE, bars, watchlist' },
-  { id: 'research', process: 'api-research', port: 8773, probePath: '/health', readExamples: 'Screener, Greeks, data readiness, feedback' },
+  { id: 'monitor', prefix: 'monitor', process: 'api-monitor', port: 8765, probePath: '/status', readExamples: 'GET /status, GET /operations' },
+  { id: 'docs', prefix: 'monitor', process: 'api-monitor', port: 8765, probePath: '/research/docs/health', readExamples: 'OpenAPI aggregate' },
+  { id: 'ops', prefix: 'monitor', process: 'api-monitor', port: 8765, probePath: '/ops/health', readExamples: 'Executor mode, market-ingest services' },
+  { id: 'account', prefix: 'account', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Executions, performance, trades, gate sets, model analysis' },
+  { id: 'market', prefix: 'market', process: 'api-market', port: 8772, probePath: '/health', readExamples: 'Quotes SSE, bars, watchlist' },
+  { id: 'research', prefix: 'research', process: 'api-research', port: 8773, probePath: '/health', readExamples: 'Screener, Greeks, data readiness, feedback' },
+]
+
+/** Alias prefixes still routed until TD-55 B2 (7 days of zero Traefik traffic); `use` replaces each. */
+export const TRADE_API_ALIASES: { prefix: string; process: string; use: string }[] = [
+  { prefix: 'docs', process: 'api-monitor', use: 'docs' },
+  { prefix: 'ops', process: 'api-monitor', use: 'ops' },
+  { prefix: 'trading', process: 'api-account', use: 'account' },
+  { prefix: 'strategy', process: 'api-account', use: 'account' },
+  { prefix: 'portfolio', process: 'api-account', use: 'account' },
 ]
 
 export type BusinessAgentLoopStep = {

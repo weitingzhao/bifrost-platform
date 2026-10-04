@@ -102,14 +102,14 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 	go func() {
 		defer safego.Recover("satellite.fetchOpsDeep")
 		defer wg.Done()
-		// The ops router's own health (bifrost-ops: executor_mode, k8s_reachable). /api/ops/health
-		// is api-monitor's generic /health and carries neither (measured 2026-10-04, TD-55).
+		// The ops router's own health (bifrost-ops: executor_mode, k8s_reachable), at
+		// /api/monitor/ops/health (TD-55: one prefix per process; /api/ops is an alias B2 retires).
 		resp.Ops = s.fetchOpsDeep(ctx, env, base+opsRoute.GatewayPath())
 	}()
 	go func() {
 		defer safego.Recover("satellite.fetchIngestDeep")
 		defer wg.Done()
-		resp.Ingest = s.fetchIngestDeep(ctx, env, base+"/api/ops/ops/market-ingest/services")
+		resp.Ingest = s.fetchIngestDeep(ctx, env, base+probe.TradeGatewayPath("ops", "/ops/market-ingest/services"))
 	}()
 	wg.Wait()
 

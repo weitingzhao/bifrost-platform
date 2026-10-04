@@ -18,7 +18,7 @@ const (
 	tcpTimeout         = 4 * time.Second
 )
 
-// The SPA itself; the eight Trade API prefixes come from tradeGatewayRoutes (trade_routes.go).
+// The SPA itself; the Trade API routes come from tradeGatewayRoutes (trade_routes.go).
 var frontendEndpoint = HTTPEndpoint{ID: "nginx-spa", Category: "trade_frontend", Path: "/", Process: "frontend"}
 
 var policyBlockedTargets = []Target{
@@ -68,8 +68,9 @@ func (p *Prober) ProbeEnvironmentWithDatastore(ctx context.Context, env config.E
 	targets = append(targets, p.probePostgres(ctx, env.ID, postgresCfgAddr(env), ds))
 	targets = append(targets, p.probeRedis(ctx, env.ID, redisCfgAddr(env), ds))
 
-	// The ops router's capabilities on api-monitor (strip /api/ops → /ops/auth/capabilities).
-	capURL := base + "/api/ops/ops/auth/capabilities"
+	// The ops router's capabilities on api-monitor, through its own prefix (TD-55):
+	// /api/monitor/ops/auth/capabilities.
+	capURL := base + TradeGatewayPath("ops", "/ops/auth/capabilities")
 	token := env.OpsToken()
 	if token == "" {
 		targets = append(targets, Target{

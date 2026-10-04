@@ -36,12 +36,12 @@ func orderDeskProbe(lastOrders, lastRefunds string, rows int) string {
 }`, lastOrders, lastRefunds, rows)
 }
 
-// probeApp serves body as the data probe on the path the Bifrost gateways route
-// (/api/ops/ops/data-probe) and the SPA's index.html everywhere else, like Traefik + nginx do.
+// probeApp serves body as the data probe on api-monitor's own prefix
+// (/api/monitor/ops/data-probe) and the SPA's index.html everywhere else, like Traefik + nginx do.
 func probeApp(t *testing.T, body string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/ops/ops/data-probe" && body != "" {
+		if r.URL.Path == "/api/monitor/ops/data-probe" && body != "" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(body))
 			return
@@ -109,7 +109,7 @@ func TestParseDataProbeRejectsAnSPAIndex(t *testing.T) {
 func TestFetchDataProbeFallsBackPastTheSPA(t *testing.T) {
 	// The first path answers index.html with 200 (SPA fall-through); the second serves the probe.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/ops/data-probe" {
+		if r.URL.Path == "/api/monitor/data-probe" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(orderDeskProbe("2031-03-04T10:00:00Z", "2031-03-04T09:00:00Z", 3)))
 			return
@@ -313,5 +313,15 @@ func TestWatchlistSymbolsNeverReadsSilenceAsEmpty(t *testing.T) {
 				t.Fatalf("want error containing %q, got %v %v", c.want, syms, err)
 			}
 		})
+	}
+}
+
+// TD-55 B1: the data probe goes through api-monitor's own prefix; the /api/ops alias is retired in
+// B2 once its Traefik traffic is zero, so the platform must not be that traffic.
+func TestDataProbePathsUseTheMonitorPrefix(t *testing.T) {
+	for _, p := range dataProbePaths {
+		if !strings.HasPrefix(p, "/api/monitor/") {
+			t.Fatalf("data probe path %q is not under /api/monitor/", p)
+		}
 	}
 }

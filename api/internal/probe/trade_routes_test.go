@@ -14,18 +14,76 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
-func TestTradeRoutesEightPrefixesFourProcesses(t *testing.T) {
-	if n := len(TradeGatewayRoutes()); n != 8 {
-		t.Fatalf("routes = %d, want 8", n)
+func TestTradeRoutesOnePrefixPerProcess(t *testing.T) {
+	if n := len(TradeGatewayRoutes()); n != 6 {
+		t.Fatalf("routes = %d, want 6", n)
 	}
 	want := []string{"api-monitor", "api-account", "api-market", "api-research"}
 	got := TradeProcesses()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("processes = %v, want %v", got, want)
 	}
+	// TD-55 option B: each process has exactly one prefix, named after it.
+	prefixOf := map[string]string{}
+	for _, r := range TradeGatewayRoutes() {
+		if p, ok := prefixOf[r.Process]; ok && p != r.Prefix {
+			t.Fatalf("%s answers at two prefixes: %s and %s", r.Process, p, r.Prefix)
+		}
+		prefixOf[r.Process] = r.Prefix
+		if "api-"+r.Prefix != r.Process {
+			t.Fatalf("route %s: prefix %q is not its process %q", r.ID, r.Prefix, r.Process)
+		}
+	}
 	ops, _ := TradeRouteFor("ops")
-	if ops.GatewayPath() != "/api/ops/ops/health" || ops.Process != "api-monitor" {
-		t.Fatalf("ops route = %+v (want /api/ops/ops/health on api-monitor)", ops)
+	if ops.GatewayPath() != "/api/monitor/ops/health" || ops.Process != "api-monitor" || ops.TargetID() != "api-ops" {
+		t.Fatalf("ops route = %+v (want /api/monitor/ops/health on api-monitor, target api-ops)", ops)
+	}
+}
+
+// Each mapping: route id or alias prefix → the gateway path the platform asks for.
+func TestTradeRouteForMapsEveryNameToItsProcessPrefix(t *testing.T) {
+	cases := map[string]string{
+		"monitor":   "/api/monitor/status",
+		"docs":      "/api/monitor/research/docs/health",
+		"ops":       "/api/monitor/ops/health",
+		"account":   "/api/account/health",
+		"market":    "/api/market/health",
+		"research":  "/api/research/health",
+		"trading":   "/api/account/health",
+		"strategy":  "/api/account/health",
+		"portfolio": "/api/account/health",
+	}
+	for name, want := range cases {
+		r, ok := TradeRouteFor(name)
+		if !ok || r.GatewayPath() != want {
+			t.Fatalf("TradeRouteFor(%q) = %+v %v, want path %s", name, r, ok, want)
+		}
+	}
+	if _, ok := TradeRouteFor("nope"); ok {
+		t.Fatal("unknown name resolved")
+	}
+	if got := TradeGatewayPath("ops", "/ops/data-probe"); got != "/api/monitor/ops/data-probe" {
+		t.Fatalf("TradeGatewayPath = %s", got)
+	}
+}
+
+// B2 retires the alias prefixes after 7 days of zero Traefik traffic, so no probe may use one.
+func TestNoProbeUsesAnAliasPrefix(t *testing.T) {
+	aliases := map[string]bool{}
+	for _, a := range TradeGatewayAliases() {
+		aliases[a.Prefix] = true
+		r, ok := TradeRouteFor(a.Use)
+		if !ok || r.Process != a.Process {
+			t.Fatalf("alias %s → %s: replacement %+v is not on %s", a.Prefix, a.Use, r, a.Process)
+		}
+	}
+	if len(aliases) != 5 {
+		t.Fatalf("aliases = %v, want docs, ops, trading, strategy, portfolio", aliases)
+	}
+	for _, r := range TradeGatewayRoutes() {
+		if aliases[r.Prefix] {
+			t.Fatalf("route %s probes alias prefix /api/%s", r.ID, r.Prefix)
+		}
 	}
 }
 
@@ -38,11 +96,17 @@ func TestTradeRoutesMatchRegistry(t *testing.T) {
 	var reg struct {
 		Domains []struct {
 			ID        string `yaml:"id"`
+			Prefix    string `yaml:"prefix"`
 			Port      int    `yaml:"port"`
 			ProbePath string `yaml:"probe_path"`
 			Process   string `yaml:"process"`
 			Service   string `yaml:"service"`
 		} `yaml:"domains"`
+		Aliases []struct {
+			Prefix  string `yaml:"prefix"`
+			Process string `yaml:"process"`
+			Use     string `yaml:"use"`
+		} `yaml:"aliases"`
 	}
 	if err := yaml.Unmarshal(raw, &reg); err != nil {
 		t.Fatal(err)
@@ -53,8 +117,18 @@ func TestTradeRoutesMatchRegistry(t *testing.T) {
 	}
 	for i, r := range routes {
 		d := reg.Domains[i]
-		if d.ID != r.Prefix || d.Port != r.Port || d.ProbePath != r.ProbePath || d.Process != r.Process || d.Service != r.Service {
+		if d.ID != r.ID || d.Prefix != r.Prefix || d.Port != r.Port || d.ProbePath != r.ProbePath || d.Process != r.Process || d.Service != r.Service {
 			t.Fatalf("domain %d: registry %+v, catalog %+v", i, d, r)
+		}
+	}
+	aliases := TradeGatewayAliases()
+	if len(reg.Aliases) != len(aliases) {
+		t.Fatalf("registry has %d aliases, catalog %d", len(reg.Aliases), len(aliases))
+	}
+	for i, a := range aliases {
+		d := reg.Aliases[i]
+		if d.Prefix != a.Prefix || d.Process != a.Process || d.Use != a.Use {
+			t.Fatalf("alias %d: registry %+v, catalog %+v", i, d, a)
 		}
 	}
 }
@@ -87,7 +161,7 @@ func TestCheckAnswer(t *testing.T) {
 func TestProbeTradeRoute(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/ops/ops/health":
+		case "/api/monitor/ops/health":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-ops"}`))
 		case "/api/research/health":

@@ -30,7 +30,7 @@ type WatchlistUnionResponse struct {
 }
 
 // WatchlistUnion reads each environment's watchlist from the application's data probe
-// (GET <env gateway>/api/ops/ops/data-probe → watchlist.symbols), deduplicates, and returns
+// (GET <env gateway>/api/monitor/ops/data-probe → watchlist.symbols), deduplicates, and returns
 // the union. The platform does not select from the application's tables (Owner 2026-10-03,
 // option A): an environment whose probe is unreachable, or that does not publish a watchlist,
 // is reported as an error under sources, never as an empty list, and nothing falls back to SQL.

@@ -75,14 +75,14 @@ type ComputeNodeSpec struct {
 	Workloads        []ComputeWorkloadSpec `yaml:"workloads" json:"workloads"`
 }
 
-// DefaultStgAPIDomains — FastAPI path domains behind gateway /api/{domain}/.
-// Phase B: 4 process pods; path aliases retained (docs/ops → monitor; trading/strategy/portfolio → account).
+// DefaultStgAPIDomains — the release smoke's Trade API probes, by route id of
+// probe.TradeGatewayRoutes (same order; a test pins it). One gateway prefix per process (TD-55
+// option B): docs and ops are routers inside api-monitor, probed under /api/monitor; account is
+// api-account at /api/account. The alias prefixes (trading, strategy, portfolio, and /api/docs,
+// /api/ops) are not probed, so B2 can read their Traefik traffic as real callers only.
 // api-massive retired (P7) — do not list it (SPA catch-all would false-OK).
 func DefaultStgAPIDomains() []string {
-	return []string{
-		"monitor", "docs", "ops", "trading",
-		"strategy", "portfolio", "market", "research",
-	}
+	return []string{"monitor", "docs", "ops", "account", "market", "research"}
 }
 
 type ClusterEntry struct {

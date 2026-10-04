@@ -100,7 +100,7 @@ export function StandardsPage() {
         <>
           <CatalogSection
             title="HTTP probes (via nginx)"
-            description="Read-only reachability contract for the Trade SPA and the eight API gateway prefixes — four processes. A 200 counts only when the named service answers; an HTML 200 is the SPA fallback."
+            description="Read-only reachability contract for the Trade SPA and the four API processes, one gateway prefix each (TD-55); ops and docs are routers on api-monitor. A 200 counts only when the named service answers; an HTML 200 is the SPA fallback."
           >
             <DenseDataTable>
               <DenseTableHeader>

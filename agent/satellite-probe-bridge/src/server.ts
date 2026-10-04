@@ -64,7 +64,8 @@ app.get('/bus-snapshot', async (_req, res) => {
   const generatedAt = new Date().toISOString()
   const [monitor, marketIngest] = await Promise.all([
     probeJson('/api/monitor/status'),
-    probeJson('/api/ops/ops/market-ingest/services'),
+    // api-monitor's own prefix (TD-55); /api/ops is an alias retired in B2.
+    probeJson('/api/monitor/ops/market-ingest/services'),
   ])
 
   res.json({

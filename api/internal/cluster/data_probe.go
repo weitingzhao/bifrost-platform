@@ -15,7 +15,7 @@ import (
 // The platform never names an application's tables (D13, double flywheel). What it may know
 // about an environment's application database — when it last changed, one sample count, and
 // which tables belong together for a selective clone — the application publishes itself at
-// GET <env gateway>/api/ops/data-probe:
+// GET <env gateway>/api/monitor/ops/data-probe:
 //
 //	{"generated_at": "…Z",
 //	 "activity": [{"source": "<name>", "last_ts": "…Z" | null, "detail"?: "…"}],
@@ -30,11 +30,12 @@ import (
 // An application without that endpoint (or one that is down) is "unknown" everywhere it is
 // read. Nothing falls back to querying tables.
 
-// dataProbePaths are tried in order on each env gateway; the application serves the probe at
-// both. On the Bifrost gateways (measured 2026-10-03, DEV/STG/PROD) only /api/ops/ops/… is
-// routed to it: /api/ops/data-probe falls through to the SPA and answers index.html with 200,
+// dataProbePaths are tried in order on each env gateway; api-monitor serves the probe at both
+// /ops/data-probe and /data-probe, and both answer through its own prefix /api/monitor (measured
+// DEV 2026-10-04). The /api/ops/… alias is not used: TD-55 B2 retires it once its Traefik
+// traffic is zero. An unrouted path falls through to the SPA and answers index.html with 200,
 // which is why every response is checked for the probe's shape rather than for a 200.
-var dataProbePaths = []string{"/api/ops/ops/data-probe", "/api/ops/data-probe"}
+var dataProbePaths = []string{"/api/monitor/ops/data-probe", "/api/monitor/data-probe"}
 
 const (
 	dataProbeTimeout  = 6 * time.Second

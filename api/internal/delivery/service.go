@@ -614,7 +614,7 @@ func (s *Service) StgSmoke(ctx context.Context) StgSmokeResponse {
 				url string
 			}{
 				id:  "stg-api-" + domain,
-				url: gw + "/api/" + domain + stgAPIProbePath(domain),
+				url: gw + stgAPIGatewayPath(domain),
 			})
 		}
 	} else {
@@ -641,16 +641,16 @@ func (s *Service) StgSmoke(ctx context.Context) StgSmokeResponse {
 	return out
 }
 
-// stgAPIProbePath — monitor exposes rich GET /status; docs aggregate uses prefixed health;
-// other domains use /health after strip middleware.
-func stgAPIProbePath(domain string) string {
-	// One catalog with the connectivity matrix (probe.TradeGatewayRoutes), so the release smoke
-	// and the matrix cannot drift apart again (TD-55: the matrix read /api/ops/health — the
-	// monitor's generic /health — while this read /api/ops/ops/health).
+// stgAPIGatewayPath is the gateway path a release smoke asks for one domain. One catalog with
+// the connectivity matrix (probe.TradeGatewayRoutes), so the smoke and the matrix cannot drift
+// apart again (TD-55). Each probe goes through the process's own prefix (/api/monitor/ops/health,
+// /api/account/health); an alias domain name in clusters.yaml (trading, strategy, …) resolves to
+// the route that replaced it, so the smoke never counts as traffic on a prefix B2 retires.
+func stgAPIGatewayPath(domain string) string {
 	if r, ok := probe.TradeRouteFor(domain); ok {
-		return r.ProbePath
+		return r.GatewayPath()
 	}
-	return "/health"
+	return "/api/" + domain + "/health"
 }
 
 // smokeHTTPStatus maps an HTTP status code to smoke probe reachability + detail.
@@ -827,7 +827,7 @@ func (s *Service) ProdSmoke(ctx context.Context) StgSmokeResponse {
 				url string
 			}{
 				id:  "prod-api-" + domain,
-				url: gw + "/api/" + domain + stgAPIProbePath(domain),
+				url: gw + stgAPIGatewayPath(domain),
 			})
 		}
 	} else if u := s.entry.ResolvedProdAPIMonitorURL(); u != "" {
@@ -873,7 +873,7 @@ func (s *Service) DevSmoke(ctx context.Context) StgSmokeResponse {
 		return out
 	}
 	for _, domain := range s.entry.ResolvedStgAPIDomains() {
-		out.Targets = append(out.Targets, s.probeDevHTTP(ctx, "dev-api-"+domain, gw+"/api/"+domain+stgAPIProbePath(domain)))
+		out.Targets = append(out.Targets, s.probeDevHTTP(ctx, "dev-api-"+domain, gw+stgAPIGatewayPath(domain)))
 	}
 	if len(out.Targets) == 0 {
 		return out

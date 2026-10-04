@@ -1,61 +1,77 @@
 # Vision V4 — Trade API domain registry (read-only Business Agent)
-# Gateway routes: {gateway}/api/{id}/... — Traefik strips /api/{id} and forwards to a Service.
-# Eight prefixes, four processes (TD-55): the Services api-docs and api-ops select the
-# api-monitor pods; api-trading, api-strategy and api-portfolio select the api-account pods
-# (bifrost-trade-infra k8s/base/apis/manifest.yaml). A prefix is an alias, not a boundary.
+# One gateway prefix per process (TD-55, Owner 2026-10-04 option B): {gateway}/api/{prefix}/… —
+# Traefik strips /api/{prefix} and forwards to the process's Service. Four processes:
+# api-monitor (/api/monitor; it also serves the ops router at /ops/* and the docs aggregate at
+# /research/docs/*), api-account (/api/account), api-market (/api/market), api-research
+# (/api/research, the Trade API's research app).
 #
-# probe_path is the path under the prefix that the prefix's own router answers, and service is
-# the `service` its JSON names (measured DEV/STG/PROD 2026-10-04). /api/ops/health and
-# /api/docs/health reach api-monitor's generic /health (service bifrost-monitor), not the ops or
-# docs routers. Must match api/internal/probe/trade_routes.go (TestTradeRoutesMatchRegistry).
+# domains: what is probed. probe URL = /api/{prefix}{probe_path}; service is the `service` that
+# path's JSON names (measured DEV/STG/PROD 2026-10-04). An unrouted /api/{x}/… is the SPA (200 HTML).
+# aliases: old prefixes still routed to the same process until B2, which removes them after 7 days
+# of zero Traefik traffic; nothing probes them. `use` is the domain id that replaces each.
+# Must match api/internal/probe/trade_routes.go (TestTradeRoutesMatchRegistry).
 
-version: "2026-10-04"
+version: "2026-10-04b"
 authority: config/trade-api-domains.yaml
 mode: read_only
 
 domains:
   - id: monitor
+    prefix: monitor
     port: 8765
     probe_path: /status
     process: api-monitor
   - id: docs
+    prefix: monitor
     port: 8765
     probe_path: /research/docs/health
     process: api-monitor
     service: bifrost-docs
   - id: ops
+    prefix: monitor
     port: 8765
     probe_path: /ops/health
     process: api-monitor
     service: bifrost-ops
-  - id: trading
-    port: 8769
-    probe_path: /health
-    process: api-account
-    service: bifrost-account
-  - id: strategy
-    port: 8769
-    probe_path: /health
-    process: api-account
-    service: bifrost-account
-  - id: portfolio
+  - id: account
+    prefix: account
     port: 8769
     probe_path: /health
     process: api-account
     service: bifrost-account
   - id: market
+    prefix: market
     port: 8772
     probe_path: /health
     process: api-market
     service: bifrost-market
   - id: research
+    prefix: research
     port: 8773
     probe_path: /health
     process: api-research
     service: bifrost-research
 
+aliases:
+  - prefix: docs
+    process: api-monitor
+    use: docs
+  - prefix: ops
+    process: api-monitor
+    use: ops
+  - prefix: trading
+    process: api-account
+    use: account
+  - prefix: strategy
+    process: api-account
+    use: account
+  - prefix: portfolio
+    process: api-account
+    use: account
+
 forbidden_writes:
   - POST /api/monitor/control/*
+  - POST /api/account/orders
   - POST /api/trading/orders
   - ib:operator:cmd
   - Redis daemon control stream (bifrost:daemon:*:control)

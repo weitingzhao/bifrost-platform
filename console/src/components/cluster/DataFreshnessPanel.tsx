@@ -420,7 +420,7 @@ export function DataFreshnessPanel({
             </div>
           ) : null}
           <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
-            Last activity is what each environment&apos;s app reports at /api/ops/data-probe (unknown when it does
+            Last activity is what each environment&apos;s app reports at /api/monitor/ops/data-probe (unknown when it does
             not answer). Verdict+badge use lag vs prod (fresh &lt;3d · aging 3–7d · stale ≥7d). bifrost_prod is reference. Full =
             DROP SCHEMA; Selective = TRUNCATE listed tables (no CASCADE) then data-only restore, refused unless every table
             referencing them is listed too. Requires admin token + confirm:true +
