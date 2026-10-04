@@ -50,7 +50,7 @@ const rows: ChecklistRow[] = [
     purpose: 'Pull delayed chain or contract data from Polygon REST; chain persists bid/ask/last and greeks when returned.',
     helpVerification:
       'Option Chain Snapshot: Plugin ingest option_snapshot, mode=chain for an underlying. Option Contract Snapshot: mode=contract + option_contract. Unified Snapshot: mode=unified + tickers. '
-      + 'Then GET /research/option-snapshots?symbol=&expiration=&source=massive for chain persistence checks.',
+      + 'Then GET /research/option-snapshots?symbol=&expiry=&source=massive for chain persistence checks.',
   },
   {
     id: 'trades-quotes',
