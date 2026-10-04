@@ -17,9 +17,9 @@ import (
 // `/api/<Prefix>` and forwards to the process's Service.
 //
 // The older prefixes /api/docs, /api/ops (api-monitor) and /api/trading, /api/strategy,
-// /api/portfolio (api-account) are aliases of the same processes (TradeGatewayAliases). B1 keeps
-// them routed and moves every platform caller off them; B2 removes them once Traefik shows 7 days
-// of zero traffic on them, so nothing the platform does may count as that traffic.
+// /api/portfolio (api-account) were aliases of the same processes. B1 moved every platform caller
+// off them; B2 (Owner 2026-10-04) removed their routes and Services, so they now fall through to
+// the SPA (RetiredTradeGatewayPrefixes; nothing may probe them).
 //
 // ProbePath is the path under the prefix that the route's own router answers, and Service is the
 // `service` its JSON names (measured on DEV/STG/PROD 2026-10-04). An unrouted `/api/<x>/…` falls
@@ -34,13 +34,6 @@ type TradeGatewayRoute struct {
 	Service   string // `service` the probe path's JSON names; "" = not checked (/status has none)
 }
 
-// TradeGatewayAlias is an old gateway prefix that still reaches a process until TD-55 B2.
-type TradeGatewayAlias struct {
-	Prefix  string // the alias prefix without /api/, e.g. "trading"
-	Process string // the process its Service selects, e.g. "api-account"
-	Use     string // the TradeGatewayRoute ID that replaces it, e.g. "account"
-}
-
 var tradeGatewayRoutes = []TradeGatewayRoute{
 	{ID: "monitor", Prefix: "monitor", Process: "api-monitor", Port: 8765, ProbePath: "/status"},
 	{ID: "docs", Prefix: "monitor", Process: "api-monitor", Port: 8765, ProbePath: "/research/docs/health", Service: "bifrost-docs"},
@@ -50,13 +43,8 @@ var tradeGatewayRoutes = []TradeGatewayRoute{
 	{ID: "research", Prefix: "research", Process: "api-research", Port: 8773, ProbePath: "/health", Service: "bifrost-research"},
 }
 
-var tradeGatewayAliases = []TradeGatewayAlias{
-	{Prefix: "docs", Process: "api-monitor", Use: "docs"},
-	{Prefix: "ops", Process: "api-monitor", Use: "ops"},
-	{Prefix: "trading", Process: "api-account", Use: "account"},
-	{Prefix: "strategy", Process: "api-account", Use: "account"},
-	{Prefix: "portfolio", Process: "api-account", Use: "account"},
-}
+// retiredTradeGatewayPrefixes are the alias prefixes TD-55 B2 removed from the gateway.
+var retiredTradeGatewayPrefixes = []string{"docs", "ops", "trading", "strategy", "portfolio"}
 
 // TradeGatewayRoutes returns the probed routes in probe order: four processes, plus the ops and
 // docs routers inside api-monitor.
@@ -66,25 +54,21 @@ func TradeGatewayRoutes() []TradeGatewayRoute {
 	return out
 }
 
-// TradeGatewayAliases returns the alias prefixes B2 retires. Nothing in the platform probes them.
-func TradeGatewayAliases() []TradeGatewayAlias {
-	out := make([]TradeGatewayAlias, len(tradeGatewayAliases))
-	copy(out, tradeGatewayAliases)
+// RetiredTradeGatewayPrefixes returns the gateway prefixes TD-55 B2 removed (without /api/).
+// "docs" and "ops" stay route IDs (routers inside api-monitor, at /api/monitor/...); only their
+// own prefixes are gone.
+func RetiredTradeGatewayPrefixes() []string {
+	out := make([]string, len(retiredTradeGatewayPrefixes))
+	copy(out, retiredTradeGatewayPrefixes)
 	return out
 }
 
-// TradeRouteFor looks a route up by ID ("ops", not "/api/ops"). An alias prefix ("trading")
-// resolves to the route that replaces it, so a caller configured with an old domain name is
-// probed through the process's own prefix.
+// TradeRouteFor looks a route up by ID ("ops", not "/api/ops"). The retired account alias names
+// ("trading", "strategy", "portfolio") are not IDs and resolve to nothing since TD-55 B2.
 func TradeRouteFor(id string) (TradeGatewayRoute, bool) {
 	for _, r := range tradeGatewayRoutes {
 		if r.ID == id {
 			return r, true
-		}
-	}
-	for _, a := range tradeGatewayAliases {
-		if a.Prefix == id {
-			return TradeRouteFor(a.Use)
 		}
 	}
 	return TradeGatewayRoute{}, false

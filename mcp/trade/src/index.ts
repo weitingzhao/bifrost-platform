@@ -28,17 +28,11 @@ const DOMAINS = [
 ] as const
 
 /**
- * Old prefixes still routed to the same process until B2 removes them (after 7 days of zero
- * Traefik traffic). Nothing here requests them: the get_<alias>_health tools agents already
- * know read the domain in `use`.
+ * The alias prefixes TD-55 B2 removed from the gateway (Owner 2026-10-04): /api/<prefix>/… now
+ * falls through to the SPA. docs and ops stay domain ids under /api/monitor. Their
+ * get_trading/strategy/portfolio_health tools went with them (use get_account_health).
  */
-const ALIASES = [
-  { prefix: 'docs', process: 'api-monitor', use: 'docs' },
-  { prefix: 'ops', process: 'api-monitor', use: 'ops' },
-  { prefix: 'trading', process: 'api-account', use: 'account' },
-  { prefix: 'strategy', process: 'api-account', use: 'account' },
-  { prefix: 'portfolio', process: 'api-account', use: 'account' },
-] as const
+const RETIRED_PREFIXES = ['docs', 'ops', 'trading', 'strategy', 'portfolio'] as const
 
 const PROCESSES = [...new Set(DOMAINS.map((d) => d.process))]
 
@@ -66,28 +60,16 @@ server.tool('trade_mcp_capabilities', 'List read-only Trade domain probe tools',
 
 server.tool(
   'list_trade_domains',
-  'Trade API domains with probe paths, the four API processes (one gateway prefix each) and the alias prefixes B2 retires',
+  'Trade API domains with probe paths, the four API processes (one gateway prefix each) and the alias prefixes TD-55 B2 removed',
   {},
-  async () => jsonResult({ domains: DOMAINS, count: DOMAINS.length, processes: PROCESSES, aliases: ALIASES }),
+  async () =>
+    jsonResult({ domains: DOMAINS, count: DOMAINS.length, processes: PROCESSES, retired_prefixes: RETIRED_PREFIXES }),
 )
 
 for (const d of DOMAINS) {
   server.tool(
     `get_${d.id}_health`,
     `GET /api/${d.prefix}${d.probe} — read-only health probe (answered by ${d.process})`,
-    {},
-    async () => jsonResult(await tradeGet(`/api/${d.prefix}${d.probe}`)),
-  )
-}
-
-// Health tools agents knew by an alias name keep working until B2 and read the replacement route.
-for (const a of ALIASES) {
-  if (DOMAINS.some((d) => d.id === a.prefix)) continue
-  const d = DOMAINS.find((x) => x.id === a.use)
-  if (!d) throw new Error(`alias ${a.prefix} uses unknown domain ${a.use}`)
-  server.tool(
-    `get_${a.prefix}_health`,
-    `Alias of get_${d.id}_health until TD-55 B2: GET /api/${d.prefix}${d.probe} (answered by ${d.process})`,
     {},
     async () => jsonResult(await tradeGet(`/api/${d.prefix}${d.probe}`)),
   )

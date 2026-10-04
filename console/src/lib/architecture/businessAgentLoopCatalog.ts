@@ -38,14 +38,11 @@ export const TRADE_API_DOMAINS: TradeAPIDomain[] = [
   { id: 'research', prefix: 'research', process: 'api-research', port: 8773, probePath: '/health', readExamples: 'Screener, Greeks, data readiness, feedback' },
 ]
 
-/** Alias prefixes still routed until TD-55 B2 (7 days of zero Traefik traffic); `use` replaces each. */
-export const TRADE_API_ALIASES: { prefix: string; process: string; use: string }[] = [
-  { prefix: 'docs', process: 'api-monitor', use: 'docs' },
-  { prefix: 'ops', process: 'api-monitor', use: 'ops' },
-  { prefix: 'trading', process: 'api-account', use: 'account' },
-  { prefix: 'strategy', process: 'api-account', use: 'account' },
-  { prefix: 'portfolio', process: 'api-account', use: 'account' },
-]
+/**
+ * The alias prefixes TD-55 B2 removed from the gateway (Owner 2026-10-04): /api/<prefix>/… now
+ * falls through to the SPA. docs and ops stay domain ids under /api/monitor.
+ */
+export const TRADE_API_RETIRED_PREFIXES: string[] = ['docs', 'ops', 'trading', 'strategy', 'portfolio']
 
 export type BusinessAgentLoopStep = {
   order: number

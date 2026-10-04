@@ -9,7 +9,7 @@ import (
 )
 
 // One gateway prefix per process (TD-55 B1): every smoke path is under /api/monitor, /api/account,
-// /api/market or /api/research; an alias domain from clusters.yaml resolves to its replacement.
+// /api/market or /api/research. The alias names TD-55 B2 retired are not route IDs any more.
 func TestStgAPIGatewayPath(t *testing.T) {
 	cases := []struct {
 		domain string
@@ -21,9 +21,7 @@ func TestStgAPIGatewayPath(t *testing.T) {
 		{domain: "account", want: "/api/account/health"},
 		{domain: "market", want: "/api/market/health"},
 		{domain: "research", want: "/api/research/health"},
-		{domain: "trading", want: "/api/account/health"},
-		{domain: "strategy", want: "/api/account/health"},
-		{domain: "portfolio", want: "/api/account/health"},
+		{domain: "trading", want: "/api/trading/health"},
 		{domain: "other", want: "/api/other/health"},
 	}
 	for _, tc := range cases {

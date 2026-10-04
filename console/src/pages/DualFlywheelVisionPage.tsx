@@ -51,7 +51,7 @@ import { OPS_AGENT_LOOP_STEPS, OPS_AGENT_LOOP_SOURCE } from '@/lib/architecture/
 import {
   BUSINESS_AGENT_LOOP_STEPS,
   BUSINESS_AGENT_LOOP_SOURCE,
-  TRADE_API_ALIASES,
+  TRADE_API_RETIRED_PREFIXES,
   TRADE_API_DOMAINS,
 } from '@/lib/architecture/businessAgentLoopCatalog'
 import {
@@ -521,7 +521,7 @@ export function DualFlywheelVisionPage() {
 
         <CatalogSection
           title="Trade API gateway prefixes → processes (read-only · Vision V4)"
-          description={`One prefix per process (TD-55). Aliases until B2: ${TRADE_API_ALIASES.map(a => `/api/${a.prefix} → ${a.use}`).join(' · ')}`}
+          description={`One prefix per process (TD-55). Removed in B2: ${TRADE_API_RETIRED_PREFIXES.map(p => `/api/${p}`).join(' · ')}`}
         >
           <DenseDataTable>
             <DenseTableHeader>

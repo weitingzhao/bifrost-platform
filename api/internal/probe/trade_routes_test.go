@@ -40,18 +40,15 @@ func TestTradeRoutesOnePrefixPerProcess(t *testing.T) {
 	}
 }
 
-// Each mapping: route id or alias prefix → the gateway path the platform asks for.
+// Each mapping: route id → the gateway path the platform asks for; the retired alias names map to nothing.
 func TestTradeRouteForMapsEveryNameToItsProcessPrefix(t *testing.T) {
 	cases := map[string]string{
-		"monitor":   "/api/monitor/status",
-		"docs":      "/api/monitor/research/docs/health",
-		"ops":       "/api/monitor/ops/health",
-		"account":   "/api/account/health",
-		"market":    "/api/market/health",
-		"research":  "/api/research/health",
-		"trading":   "/api/account/health",
-		"strategy":  "/api/account/health",
-		"portfolio": "/api/account/health",
+		"monitor":  "/api/monitor/status",
+		"docs":     "/api/monitor/research/docs/health",
+		"ops":      "/api/monitor/ops/health",
+		"account":  "/api/account/health",
+		"market":   "/api/market/health",
+		"research": "/api/research/health",
 	}
 	for name, want := range cases {
 		r, ok := TradeRouteFor(name)
@@ -59,30 +56,28 @@ func TestTradeRouteForMapsEveryNameToItsProcessPrefix(t *testing.T) {
 			t.Fatalf("TradeRouteFor(%q) = %+v %v, want path %s", name, r, ok, want)
 		}
 	}
-	if _, ok := TradeRouteFor("nope"); ok {
-		t.Fatal("unknown name resolved")
+	for _, name := range []string{"nope", "trading", "strategy", "portfolio"} {
+		if _, ok := TradeRouteFor(name); ok {
+			t.Fatalf("%q resolved (TD-55 B2 retired the alias names)", name)
+		}
 	}
 	if got := TradeGatewayPath("ops", "/ops/data-probe"); got != "/api/monitor/ops/data-probe" {
 		t.Fatalf("TradeGatewayPath = %s", got)
 	}
 }
 
-// B2 retires the alias prefixes after 7 days of zero Traefik traffic, so no probe may use one.
-func TestNoProbeUsesAnAliasPrefix(t *testing.T) {
-	aliases := map[string]bool{}
-	for _, a := range TradeGatewayAliases() {
-		aliases[a.Prefix] = true
-		r, ok := TradeRouteFor(a.Use)
-		if !ok || r.Process != a.Process {
-			t.Fatalf("alias %s → %s: replacement %+v is not on %s", a.Prefix, a.Use, r, a.Process)
-		}
+// B2 removed the alias prefixes from the gateway (they answer the SPA), so no probe may use one.
+func TestNoProbeUsesARetiredPrefix(t *testing.T) {
+	retired := map[string]bool{}
+	for _, p := range RetiredTradeGatewayPrefixes() {
+		retired[p] = true
 	}
-	if len(aliases) != 5 {
-		t.Fatalf("aliases = %v, want docs, ops, trading, strategy, portfolio", aliases)
+	if len(retired) != 5 {
+		t.Fatalf("retired = %v, want docs, ops, trading, strategy, portfolio", retired)
 	}
 	for _, r := range TradeGatewayRoutes() {
-		if aliases[r.Prefix] {
-			t.Fatalf("route %s probes alias prefix /api/%s", r.ID, r.Prefix)
+		if retired[r.Prefix] {
+			t.Fatalf("route %s probes retired prefix /api/%s", r.ID, r.Prefix)
 		}
 	}
 }
@@ -102,11 +97,8 @@ func TestTradeRoutesMatchRegistry(t *testing.T) {
 			Process   string `yaml:"process"`
 			Service   string `yaml:"service"`
 		} `yaml:"domains"`
-		Aliases []struct {
-			Prefix  string `yaml:"prefix"`
-			Process string `yaml:"process"`
-			Use     string `yaml:"use"`
-		} `yaml:"aliases"`
+		Aliases         []any    `yaml:"aliases"`
+		RetiredPrefixes []string `yaml:"retired_prefixes"`
 	}
 	if err := yaml.Unmarshal(raw, &reg); err != nil {
 		t.Fatal(err)
@@ -121,14 +113,16 @@ func TestTradeRoutesMatchRegistry(t *testing.T) {
 			t.Fatalf("domain %d: registry %+v, catalog %+v", i, d, r)
 		}
 	}
-	aliases := TradeGatewayAliases()
-	if len(reg.Aliases) != len(aliases) {
-		t.Fatalf("registry has %d aliases, catalog %d", len(reg.Aliases), len(aliases))
+	if len(reg.Aliases) != 0 {
+		t.Fatalf("registry still lists aliases (TD-55 B2 removed them): %+v", reg.Aliases)
 	}
-	for i, a := range aliases {
-		d := reg.Aliases[i]
-		if d.Prefix != a.Prefix || d.Process != a.Process || d.Use != a.Use {
-			t.Fatalf("alias %d: registry %+v, catalog %+v", i, d, a)
+	retired := RetiredTradeGatewayPrefixes()
+	if len(reg.RetiredPrefixes) != len(retired) {
+		t.Fatalf("registry retired_prefixes %v, catalog %v", reg.RetiredPrefixes, retired)
+	}
+	for i, p := range retired {
+		if reg.RetiredPrefixes[i] != p {
+			t.Fatalf("retired prefix %d: registry %q, catalog %q", i, reg.RetiredPrefixes[i], p)
 		}
 	}
 }

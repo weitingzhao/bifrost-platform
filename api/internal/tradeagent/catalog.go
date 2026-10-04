@@ -21,13 +21,6 @@ type DomainView struct {
 	ReadOnly  bool   `json:"read_only"`
 }
 
-// AliasView is an old gateway prefix that still reaches a process until TD-55 B2.
-type AliasView struct {
-	Prefix  string `json:"prefix"`
-	Process string `json:"process"`
-	Use     string `json:"use"`
-}
-
 type ToolView struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
@@ -52,14 +45,9 @@ func Domains() []DomainView {
 	return out
 }
 
-// Aliases lists the alias prefixes B2 retires (probe.TradeGatewayAliases).
-func Aliases() []AliasView {
-	aliases := probe.TradeGatewayAliases()
-	out := make([]AliasView, 0, len(aliases))
-	for _, a := range aliases {
-		out = append(out, AliasView{Prefix: a.Prefix, Process: a.Process, Use: a.Use})
-	}
-	return out
+// RetiredPrefixes lists the gateway prefixes TD-55 B2 removed (probe.RetiredTradeGatewayPrefixes).
+func RetiredPrefixes() []string {
+	return probe.RetiredTradeGatewayPrefixes()
 }
 
 func tool(name, desc, domain, route string) ToolView {
@@ -78,23 +66,13 @@ func Catalog() []ToolView {
 	tools := []ToolView{
 		{Name: "trade_mcp_health", Description: "MCP server health + read-only mode", Level: "read", Implemented: true},
 		{Name: "trade_mcp_capabilities", Description: "List read-only Trade API tools", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/catalog", Implemented: true},
-		{Name: "list_trade_domains", Description: "Trade API routes: one gateway prefix per process (TD-55), plus the alias prefixes B2 retires", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/domains", Implemented: true},
+		{Name: "list_trade_domains", Description: "Trade API routes: one gateway prefix per process (TD-55); the alias prefixes went in B2", Level: "read", Method: "GET", Route: "/api/v1/trade-agent/domains", Implemented: true},
 	}
-	ids := map[string]bool{}
 	for _, d := range Domains() {
-		ids[d.ID] = true
 		tools = append(tools, tool("get_"+d.ID+"_health", "Probe "+d.ID+" health ("+d.Process+")", d.ID, d.Route))
 	}
-	// The health tools agents knew by an alias name keep working until B2, and read the route
-	// that replaced the alias, so they do not count as traffic on the alias prefix.
-	for _, a := range Aliases() {
-		if ids[a.Prefix] {
-			continue
-		}
-		r, _ := probe.TradeRouteFor(a.Use)
-		tools = append(tools, tool("get_"+a.Prefix+"_health",
-			"Alias of get_"+a.Use+"_health until TD-55 B2 ("+r.Process+")", a.Use, r.GatewayPath()))
-	}
+	// The alias health tools (get_trading/strategy/portfolio_health) went with the alias
+	// prefixes in TD-55 B2; get_account_health replaces all three.
 	return tools
 }
 

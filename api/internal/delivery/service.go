@@ -644,8 +644,9 @@ func (s *Service) StgSmoke(ctx context.Context) StgSmokeResponse {
 // stgAPIGatewayPath is the gateway path a release smoke asks for one domain. One catalog with
 // the connectivity matrix (probe.TradeGatewayRoutes), so the smoke and the matrix cannot drift
 // apart again (TD-55). Each probe goes through the process's own prefix (/api/monitor/ops/health,
-// /api/account/health); an alias domain name in clusters.yaml (trading, strategy, …) resolves to
-// the route that replaced it, so the smoke never counts as traffic on a prefix B2 retires.
+// /api/account/health). A name that is not a route ID (including the alias names TD-55 B2 retired:
+// trading, strategy, portfolio) is asked for as /api/<name>/health, which the gateway no longer
+// routes; clusters.yaml names none (it uses the defaults).
 func stgAPIGatewayPath(domain string) string {
 	if r, ok := probe.TradeRouteFor(domain); ok {
 		return r.GatewayPath()

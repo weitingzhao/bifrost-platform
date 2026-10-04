@@ -29,9 +29,8 @@ func TestDomainsReturnsOnePrefixPerProcess(t *testing.T) {
 
 func TestCatalogIncludesBaseToolsAndPerDomainHealthTools(t *testing.T) {
 	tools := Catalog()
-	// 3 base tools + one get_<domain>_health tool per domain + one per account alias name
-	// (get_trading/strategy/portfolio_health keep working until TD-55 B2).
-	want := 3 + len(Domains()) + 3
+	// 3 base tools + one get_<domain>_health tool per domain (the alias tools went in TD-55 B2).
+	want := 3 + len(Domains())
 	if len(tools) != want {
 		t.Fatalf("Catalog() len = %d, want %d", len(tools), want)
 	}
@@ -40,16 +39,21 @@ func TestCatalogIncludesBaseToolsAndPerDomainHealthTools(t *testing.T) {
 		names[tool.Name] = true
 		for _, alias := range []string{"/api/trading/", "/api/strategy/", "/api/portfolio/", "/api/ops/", "/api/docs/"} {
 			if len(tool.Route) >= len(alias) && tool.Route[:len(alias)] == alias {
-				t.Fatalf("tool %q reads alias prefix %s (TD-55 B2 retires it): %+v", tool.Name, alias, tool)
+				t.Fatalf("tool %q reads alias prefix %s (TD-55 B2 removed it): %+v", tool.Name, alias, tool)
 			}
 		}
 		if !tool.Implemented {
 			t.Fatalf("tool %q not implemented, want all read-only tools implemented", tool.Name)
 		}
 	}
-	for _, want := range []string{"trade_mcp_health", "trade_mcp_capabilities", "list_trade_domains", "get_monitor_health", "get_research_health", "get_account_health", "get_trading_health"} {
+	for _, want := range []string{"trade_mcp_health", "trade_mcp_capabilities", "list_trade_domains", "get_monitor_health", "get_research_health", "get_account_health"} {
 		if !names[want] {
 			t.Fatalf("Catalog() missing tool %q: %+v", want, names)
+		}
+	}
+	for _, gone := range []string{"get_trading_health", "get_strategy_health", "get_portfolio_health"} {
+		if names[gone] {
+			t.Fatalf("Catalog() still has alias tool %q (TD-55 B2)", gone)
 		}
 	}
 }

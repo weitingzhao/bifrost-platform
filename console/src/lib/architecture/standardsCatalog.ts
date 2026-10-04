@@ -25,7 +25,7 @@ export type ProbeRow = {
  * prefix per process (TD-55, Owner option B): api-monitor answers at /api/monitor (its ops and
  * docs routers too), api-account at /api/account. Target ids name routers: api-docs and api-ops
  * are routers on api-monitor. The alias prefixes /api/docs, /api/ops, /api/trading,
- * /api/strategy and /api/portfolio are not probed (B2 removes them after 7 days of zero traffic).
+ * /api/strategy and /api/portfolio went in TD-55 B2 (Owner 2026-10-04) and are not probed.
  */
 export const HTTP_PROBES: ProbeRow[] = [
   { targetId: 'nginx-spa', process: 'frontend', path: '/', okCodes: '200' },

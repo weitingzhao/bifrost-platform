@@ -32,8 +32,8 @@ import (
 
 // dataProbePaths are tried in order on each env gateway; api-monitor serves the probe at both
 // /ops/data-probe and /data-probe, and both answer through its own prefix /api/monitor (measured
-// DEV 2026-10-04). The /api/ops/… alias is not used: TD-55 B2 retires it once its Traefik
-// traffic is zero. An unrouted path falls through to the SPA and answers index.html with 200,
+// DEV 2026-10-04). The /api/ops/… alias went in TD-55 B2 (Owner
+// 2026-10-04). An unrouted path falls through to the SPA and answers index.html with 200,
 // which is why every response is checked for the probe's shape rather than for a 200.
 var dataProbePaths = []string{"/api/monitor/ops/data-probe", "/api/monitor/data-probe"}
 

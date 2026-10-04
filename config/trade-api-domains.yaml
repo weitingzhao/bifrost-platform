@@ -7,11 +7,11 @@
 #
 # domains: what is probed. probe URL = /api/{prefix}{probe_path}; service is the `service` that
 # path's JSON names (measured DEV/STG/PROD 2026-10-04). An unrouted /api/{x}/… is the SPA (200 HTML).
-# aliases: old prefixes still routed to the same process until B2, which removes them after 7 days
-# of zero Traefik traffic; nothing probes them. `use` is the domain id that replaces each.
+# retired_prefixes: the alias prefixes TD-55 B2 removed (Owner 2026-10-04) with their routes and
+# Services; they now fall through to the SPA. docs and ops stay domain ids under /api/monitor.
 # Must match api/internal/probe/trade_routes.go (TestTradeRoutesMatchRegistry).
 
-version: "2026-10-04b"
+version: "2026-10-04c"
 authority: config/trade-api-domains.yaml
 mode: read_only
 
@@ -52,22 +52,7 @@ domains:
     process: api-research
     service: bifrost-research
 
-aliases:
-  - prefix: docs
-    process: api-monitor
-    use: docs
-  - prefix: ops
-    process: api-monitor
-    use: ops
-  - prefix: trading
-    process: api-account
-    use: account
-  - prefix: strategy
-    process: api-account
-    use: account
-  - prefix: portfolio
-    process: api-account
-    use: account
+retired_prefixes: [docs, ops, trading, strategy, portfolio]
 
 forbidden_writes:
   - POST /api/monitor/control/*
