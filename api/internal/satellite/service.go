@@ -92,6 +92,7 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 	}
 
 	var wg sync.WaitGroup
+	opsRoute, _ := probe.TradeRouteFor("ops")
 	wg.Add(3)
 	go func() {
 		defer safego.Recover("satellite.fetchMonitorDeep")
@@ -101,7 +102,9 @@ func (s *Service) busDeepByEnvironment(ctx context.Context, env config.Environme
 	go func() {
 		defer safego.Recover("satellite.fetchOpsDeep")
 		defer wg.Done()
-		resp.Ops = s.fetchOpsDeep(ctx, env, base+"/api/ops/health")
+		// The ops router's own health (bifrost-ops: executor_mode, k8s_reachable). /api/ops/health
+		// is api-monitor's generic /health and carries neither (measured 2026-10-04, TD-55).
+		resp.Ops = s.fetchOpsDeep(ctx, env, base+opsRoute.GatewayPath())
 	}()
 	go func() {
 		defer safego.Recover("satellite.fetchIngestDeep")

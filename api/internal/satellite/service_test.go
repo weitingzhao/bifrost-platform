@@ -31,7 +31,7 @@ func TestBusDeepParsesFixtureAndAggregatesReachability(t *testing.T) {
 				},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":3,"last_ts":1751700012}}
 			}`))
-		case "/api/ops/health":
+		case "/api/ops/ops/health":
 			_, _ = w.Write([]byte(`{
 				"status":"ok",
 				"service":"bifrost-ops",
@@ -111,7 +111,7 @@ func TestBusDeepAllHealthy(t *testing.T) {
 				},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 			}`))
-		case "/api/ops/health":
+		case "/api/ops/ops/health":
 			_, _ = w.Write([]byte(`{"status":"ok","executor_mode":"local"}`))
 		case "/api/ops/ops/market-ingest/services":
 			_, _ = w.Write([]byte(`{

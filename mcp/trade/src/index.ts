@@ -15,11 +15,14 @@ const SERVER_VERSION = '0.1.0'
  * Service behind each prefix selects the Deployment named in `process`. `docs` and `ops`
  * answer from api-monitor; `trading`, `strategy` and `portfolio` from api-account. A
  * prefix is an alias, not a boundary — three healthy prefixes may be one healthy process.
+ * `probe` is under the prefix and answered by the prefix's own router: /api/docs/health and
+ * /api/ops/health are api-monitor's generic /health, so docs and ops read their routers'.
+ * Mirrors config/trade-api-domains.yaml.
  */
 const DOMAINS = [
   { id: 'monitor', probe: '/status', process: 'api-monitor' },
-  { id: 'docs', probe: '/health', process: 'api-monitor' },
-  { id: 'ops', probe: '/health', process: 'api-monitor' },
+  { id: 'docs', probe: '/research/docs/health', process: 'api-monitor' },
+  { id: 'ops', probe: '/ops/health', process: 'api-monitor' },
   { id: 'trading', probe: '/health', process: 'api-account' },
   { id: 'strategy', probe: '/health', process: 'api-account' },
   { id: 'portfolio', probe: '/health', process: 'api-account' },

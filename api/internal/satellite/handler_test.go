@@ -29,7 +29,7 @@ func newSatelliteFixtureServer(t *testing.T) *httptest.Server {
 				},
 				"account_sync_daemon":{"heartbeat":{"daemon_alive":true,"stream_lag":0}}
 			}`))
-		case "/api/ops/health":
+		case "/api/ops/ops/health":
 			_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-ops","executor_mode":"local"}`))
 		case "/api/ops/ops/market-ingest/services":
 			_, _ = w.Write([]byte(`{

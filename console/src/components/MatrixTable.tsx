@@ -25,6 +25,7 @@ export function MatrixTable({ matrix }: { matrix: MatrixResponse }) {
         <DenseTableHeader>
           <DenseTableHeadRow>
             <DenseTableHead>Target</DenseTableHead>
+            <DenseTableHead>Process</DenseTableHead>
             <DenseTableHead>Category</DenseTableHead>
             <DenseTableHead>Reach</DenseTableHead>
             <DenseTableHead>Auth</DenseTableHead>
@@ -36,6 +37,8 @@ export function MatrixTable({ matrix }: { matrix: MatrixResponse }) {
           {matrix.targets.map(row => (
             <DenseTableRow key={`${matrix.environment}-${row.id}`}>
               <DenseTableCell className="font-mono-tabular">{row.id}</DenseTableCell>
+              {/* Eight Trade prefixes are four processes (TD-55): the id names the prefix. */}
+              <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">{row.process ?? '—'}</DenseTableCell>
               <DenseTableCell>{row.category}</DenseTableCell>
               <DenseTableCell>
                 <StatusLamp value={row.reachability} kind="reach" />{' '}

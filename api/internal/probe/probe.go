@@ -18,19 +18,8 @@ const (
 	tcpTimeout         = 4 * time.Second
 )
 
-var tradeAPIEndpoints = []HTTPEndpoint{
-	{ID: "nginx-spa", Category: "trade_frontend", Path: "/"},
-	{ID: "api-monitor", Category: "trade_api", Path: "/api/monitor/status"},
-	// Phase B: docs/ops absorbed into api-monitor (path aliases retained)
-	{ID: "api-docs", Category: "trade_api", Path: "/api/docs/research/docs/health"},
-	{ID: "api-ops", Category: "trade_api", Path: "/api/ops/health"},
-	// Phase B: trading/portfolio/strategy absorbed into api-account (path aliases retained)
-	{ID: "api-trading", Category: "trade_api", Path: "/api/trading/health"},
-	{ID: "api-strategy", Category: "trade_api", Path: "/api/strategy/health"},
-	{ID: "api-portfolio", Category: "trade_api", Path: "/api/portfolio/health"},
-	{ID: "api-market", Category: "trade_api", Path: "/api/market/health"},
-	{ID: "api-research", Category: "trade_api", Path: "/api/research/health"},
-}
+// The SPA itself; the eight Trade API prefixes come from tradeGatewayRoutes (trade_routes.go).
+var frontendEndpoint = HTTPEndpoint{ID: "nginx-spa", Category: "trade_frontend", Path: "/", Process: "frontend"}
 
 var policyBlockedTargets = []Target{
 	{
@@ -67,16 +56,19 @@ func (p *Prober) ProbeEnvironment(ctx context.Context, env config.Environment) M
 
 func (p *Prober) ProbeEnvironmentWithDatastore(ctx context.Context, env config.Environment, ds *DatastoreSnapshot) MatrixResponse {
 	base := strings.TrimRight(env.NginxBase, "/")
-	targets := make([]Target, 0, len(tradeAPIEndpoints)+4+len(policyBlockedTargets))
+	targets := make([]Target, 0, len(tradeGatewayRoutes)+5+len(policyBlockedTargets))
 
-	for _, ep := range tradeAPIEndpoints {
-		url := base + ep.Path
-		targets = append(targets, p.probeHTTP(ctx, ep.ID, ep.Category, url, "", env))
+	spa := p.probeHTTP(ctx, frontendEndpoint.ID, frontendEndpoint.Category, base+frontendEndpoint.Path, "", env)
+	spa.Process = frontendEndpoint.Process
+	targets = append(targets, spa)
+	for _, r := range tradeGatewayRoutes {
+		targets = append(targets, p.probeTradeRoute(ctx, r, base, env))
 	}
 
 	targets = append(targets, p.probePostgres(ctx, env.ID, postgresCfgAddr(env), ds))
 	targets = append(targets, p.probeRedis(ctx, env.ID, redisCfgAddr(env), ds))
 
+	// The ops router's capabilities on api-monitor (strip /api/ops → /ops/auth/capabilities).
 	capURL := base + "/api/ops/ops/auth/capabilities"
 	token := env.OpsToken()
 	if token == "" {
@@ -88,9 +80,12 @@ func (p *Prober) ProbeEnvironmentWithDatastore(ctx context.Context, env config.E
 			AuthorizationLevel: "L0",
 			Detail:             "No ops token configured (" + env.OpsTokenEnv + " empty)",
 			URL:                capURL,
+			Process:            "api-monitor",
 		})
 	} else {
-		targets = append(targets, p.probeCapabilities(ctx, capURL, token, env))
+		capT := p.probeCapabilities(ctx, capURL, token, env)
+		capT.Process = "api-monitor"
+		targets = append(targets, capT)
 	}
 
 	targets = append(targets, policyBlockedTargets...)
@@ -138,6 +133,39 @@ func (p *Prober) probeHTTP(ctx context.Context, id, category, url, bearer string
 		Auth: AuthSkipped, AuthorizationLevel: "L0",
 		Detail: detail, URL: url,
 	}
+}
+
+// probeTradeRoute asks the gateway for one prefix's probe path and checks that the answer came from
+// the process the route names (TradeGatewayRoute.CheckAnswer): a 200 from the SPA fallback or from
+// another router is a failure, not a green row.
+func (p *Prober) probeTradeRoute(ctx context.Context, r TradeGatewayRoute, base string, env config.Environment) Target {
+	url := base + r.GatewayPath()
+	t := Target{
+		ID: r.TargetID(), Category: "trade_api", Auth: AuthSkipped, AuthorizationLevel: "L0",
+		URL: url, Process: r.Process,
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		t.Reachability, t.Detail = ReachFail, "request error: "+err.Error()
+		return t
+	}
+	env.ApplyIngressHost(req)
+	resp, err := p.Client.Do(req)
+	if err != nil {
+		t.Reachability, t.Detail = ReachFail, err.Error()
+		return t
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	t.Reachability, t.Detail = classifyHTTP(resp.StatusCode)
+	if resp.StatusCode == http.StatusOK {
+		ok, detail := r.CheckAnswer(resp.Header.Get("Content-Type"), body)
+		t.Detail = detail
+		if !ok {
+			t.Reachability = ReachFail
+		}
+	}
+	return t
 }
 
 func classifyHTTP(code int) (Reachability, string) {

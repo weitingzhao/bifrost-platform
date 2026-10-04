@@ -189,7 +189,9 @@ export const INFRA_COMPONENTS: Record<string, InfraComponentVisual> = {
     brandColor: '#00ADD8',
     simpleIconSlug: 'go',
     scopeTag: 'PLATFORM',
-    matrixTargets: ['api-ops', 'ops-capabilities'],
+    // The platform's own token probe into Trade. Not api-ops: that is a Trade gateway prefix
+    // answered by the api-monitor process, so it belongs to Trade APIs (TD-55).
+    matrixTargets: ['ops-capabilities'],
   },
   ib: {
     id: 'ib',
@@ -310,8 +312,8 @@ function reachForComponent(
   if (targets.length === 0) {
     const prefixMatch = services.filter(
       s =>
-        (component.id === 'fastapi' && s.id.startsWith('api-') && s.id !== 'api-ops') ||
-        (component.id === 'platform' && (s.id === 'api-ops' || s.id === 'ops-capabilities')),
+        (component.id === 'fastapi' && s.id.startsWith('api-')) ||
+        (component.id === 'platform' && s.id === 'ops-capabilities'),
     )
     if (prefixMatch.length === 0) return 'unknown'
     if (prefixMatch.some(s => s.reachability === 'fail')) return 'fail'
@@ -336,11 +338,11 @@ function matrixTargetForChip(
   if (explicitTarget) return explicitTarget
   if (component.matrixTargets?.length === 1) return component.matrixTargets[0]
   if (component.id === 'fastapi') {
-    const fail = services.find(s => s.id.startsWith('api-') && s.id !== 'api-ops' && s.reachability === 'fail')
+    const fail = services.find(s => s.id.startsWith('api-') && s.reachability === 'fail')
     if (fail) return fail.id
-    return services.find(s => s.id.startsWith('api-') && s.id !== 'api-ops')?.id
+    return services.find(s => s.id.startsWith('api-'))?.id
   }
-  if (component.id === 'platform') return 'api-ops'
+  if (component.id === 'platform') return 'ops-capabilities'
   return undefined
 }
 

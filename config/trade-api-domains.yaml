@@ -1,8 +1,15 @@
 # Vision V4 — Trade API domain registry (read-only Business Agent)
-# Gateway routes: {nginx}/api/{domain}/...
-# Phase B: 4 process pods; HTTP path prefixes preserved as aliases.
+# Gateway routes: {gateway}/api/{id}/... — Traefik strips /api/{id} and forwards to a Service.
+# Eight prefixes, four processes (TD-55): the Services api-docs and api-ops select the
+# api-monitor pods; api-trading, api-strategy and api-portfolio select the api-account pods
+# (bifrost-trade-infra k8s/base/apis/manifest.yaml). A prefix is an alias, not a boundary.
+#
+# probe_path is the path under the prefix that the prefix's own router answers, and service is
+# the `service` its JSON names (measured DEV/STG/PROD 2026-10-04). /api/ops/health and
+# /api/docs/health reach api-monitor's generic /health (service bifrost-monitor), not the ops or
+# docs routers. Must match api/internal/probe/trade_routes.go (TestTradeRoutesMatchRegistry).
 
-version: "2026-08-17"
+version: "2026-10-04"
 authority: config/trade-api-domains.yaml
 mode: read_only
 
@@ -15,30 +22,37 @@ domains:
     port: 8765
     probe_path: /research/docs/health
     process: api-monitor
+    service: bifrost-docs
   - id: ops
     port: 8765
     probe_path: /ops/health
     process: api-monitor
+    service: bifrost-ops
   - id: trading
     port: 8769
     probe_path: /health
     process: api-account
+    service: bifrost-account
   - id: strategy
     port: 8769
     probe_path: /health
     process: api-account
+    service: bifrost-account
   - id: portfolio
     port: 8769
     probe_path: /health
     process: api-account
+    service: bifrost-account
   - id: market
     port: 8772
     probe_path: /health
     process: api-market
+    service: bifrost-market
   - id: research
     port: 8773
     probe_path: /health
     process: api-research
+    service: bifrost-research
 
 forbidden_writes:
   - POST /api/monitor/control/*

@@ -100,22 +100,26 @@ export function StandardsPage() {
         <>
           <CatalogSection
             title="HTTP probes (via nginx)"
-            description="Read-only reachability contract for Trade SPA + API domains."
+            description="Read-only reachability contract for the Trade SPA and the eight API gateway prefixes — four processes. A 200 counts only when the named service answers; an HTML 200 is the SPA fallback."
           >
             <DenseDataTable>
               <DenseTableHeader>
                 <DenseTableHeadRow>
                   <DenseTableHead>Target ID</DenseTableHead>
+                  <DenseTableHead>Process</DenseTableHead>
                   <DenseTableHead>Path</DenseTableHead>
                   <DenseTableHead>OK codes</DenseTableHead>
+                  <DenseTableHead>Answered by</DenseTableHead>
                 </DenseTableHeadRow>
               </DenseTableHeader>
               <DenseTableBody>
                 {HTTP_PROBES.map(p => (
                   <DenseTableRow key={p.targetId}>
                     <DenseTableCell className="font-mono-tabular">{p.targetId}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular">{p.process}</DenseTableCell>
                     <DenseTableCell className="font-mono-tabular">{p.path}</DenseTableCell>
                     <DenseTableCell>{p.okCodes}</DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular">{p.service ?? '—'}</DenseTableCell>
                   </DenseTableRow>
                 ))}
               </DenseTableBody>

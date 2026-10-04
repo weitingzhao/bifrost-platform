@@ -15,21 +15,27 @@ export const BUSINESS_AGENT_LOOP_STATEMENT =
 
 export type TradeAPIDomain = {
   id: string
+  /** The Deployment that answers the prefix (TD-55: eight prefixes, four processes). */
+  process: string
   port: number
   probePath: string
   readExamples: string
 }
 
-/** Eight Trade FastAPI domains — read-only probe + example endpoints (massive retired P7). */
+/**
+ * Eight Trade gateway prefixes over four API processes — mirrors config/trade-api-domains.yaml
+ * and api/internal/probe/trade_routes.go. docs and ops are api-monitor (:8765); trading,
+ * strategy and portfolio are api-account (:8769). Probe paths are under the prefix.
+ */
 export const TRADE_API_DOMAINS: TradeAPIDomain[] = [
-  { id: 'monitor', port: 8765, probePath: '/status', readExamples: 'GET /status, GET /operations' },
-  { id: 'docs', port: 8767, probePath: '/health', readExamples: 'OpenAPI schema' },
-  { id: 'ops', port: 8768, probePath: '/health', readExamples: 'Celery queue status' },
-  { id: 'trading', port: 8769, probePath: '/health', readExamples: 'Positions, orders, history' },
-  { id: 'strategy', port: 8770, probePath: '/health', readExamples: 'Instances, gates, structures' },
-  { id: 'portfolio', port: 8771, probePath: '/health', readExamples: 'Accounts, Greeks aggregation' },
-  { id: 'market', port: 8772, probePath: '/health', readExamples: 'Quotes SSE, ingest status' },
-  { id: 'research', port: 8773, probePath: '/health', readExamples: 'SEPA, screener, backtest' },
+  { id: 'monitor', process: 'api-monitor', port: 8765, probePath: '/status', readExamples: 'GET /status, GET /operations' },
+  { id: 'docs', process: 'api-monitor', port: 8765, probePath: '/research/docs/health', readExamples: 'OpenAPI aggregate' },
+  { id: 'ops', process: 'api-monitor', port: 8765, probePath: '/ops/health', readExamples: 'Executor mode, market-ingest services' },
+  { id: 'trading', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Executions, performance, transactions' },
+  { id: 'strategy', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Trades, gate sets, structures' },
+  { id: 'portfolio', process: 'api-account', port: 8769, probePath: '/health', readExamples: 'Model analysis, short legs' },
+  { id: 'market', process: 'api-market', port: 8772, probePath: '/health', readExamples: 'Quotes SSE, bars, watchlist' },
+  { id: 'research', process: 'api-research', port: 8773, probePath: '/health', readExamples: 'Screener, Greeks, data readiness, feedback' },
 ]
 
 export type BusinessAgentLoopStep = {
@@ -101,7 +107,7 @@ export function buildBusinessAgentLoopLlmPack(): string {
     BUSINESS_AGENT_LOOP_STATEMENT,
     '',
     '## Trade API domains (read-only)',
-    ...TRADE_API_DOMAINS.map(d => `- **${d.id}** :${d.port} ${d.probePath} — ${d.readExamples}`),
+    ...TRADE_API_DOMAINS.map(d => `- **${d.id}** → ${d.process} :${d.port} /api/${d.id}${d.probePath} — ${d.readExamples}`),
     '',
     '## Loop steps',
     ...BUSINESS_AGENT_LOOP_STEPS.map(s =>

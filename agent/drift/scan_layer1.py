@@ -25,12 +25,10 @@ CANONICAL_PORTS: dict[int, str] = {
     8060: "platform docs",
     8780: "platform-api",
     8781: "remediation runner",
-    8765: "api-monitor",
-    8767: "api-docs",
-    8768: "api-ops",
-    8769: "api-trading",
-    8770: "api-strategy",
-    8771: "api-portfolio",
+    # Four Trade API processes (TD-55); docs/ops are api-monitor, trading/strategy/portfolio are
+    # api-account. 8766-8768 and 8770-8771 belonged to processes retired in Phase B.
+    8765: "api-monitor (monitor · docs · ops)",
+    8769: "api-account (trading · strategy · portfolio)",
     8772: "api-market",
     8773: "api-research",
     30878: "platform-console-stg NodePort",
@@ -174,8 +172,6 @@ def scan_file(stocks: Path, path: Path, findings: list[Finding]) -> None:
             if port in PORT_ALLOWLIST:
                 continue
             if port in CANONICAL_PORTS:
-                continue
-            if 8765 <= port <= 8773:
                 continue
             findings.append(
                 Finding(

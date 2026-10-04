@@ -17,7 +17,8 @@ export type ScopeLayer = {
 const PLANNED_ONLY_TAGS = new Set<ScopeTag>(['K3S', 'OBSERVE', 'AI', 'GITHUB'])
 
 const TARGET_SCOPE_RULES: Array<{ match: (id: string) => boolean; tag: ScopeTag }> = [
-  { match: id => id === 'api-ops' || id === 'ops-capabilities', tag: 'PLATFORM' },
+  // ops-capabilities is the platform's token probe; api-ops is a Trade prefix on api-monitor (TD-55).
+  { match: id => id === 'ops-capabilities', tag: 'PLATFORM' },
   { match: id => id.startsWith('api-'), tag: 'TRADE-API' },
   { match: id => id === 'nginx-spa', tag: 'INFRA' },
   { match: id => id === 'postgres', tag: 'PG' },

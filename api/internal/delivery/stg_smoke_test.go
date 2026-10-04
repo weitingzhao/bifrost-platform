@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
@@ -138,5 +139,20 @@ func TestAggregateFailCountSmoke(t *testing.T) {
 				t.Fatal("expected non-empty detail")
 			}
 		})
+	}
+}
+
+// The release smoke walks config.DefaultStgAPIDomains; the matrix walks probe.TradeGatewayRoutes.
+// Same eight prefixes in the same order, or a prefix is checked by one and not the other (TD-55).
+func TestDefaultStgAPIDomainsMatchTradeGatewayRoutes(t *testing.T) {
+	routes := probe.TradeGatewayRoutes()
+	domains := config.DefaultStgAPIDomains()
+	if len(domains) != len(routes) {
+		t.Fatalf("DefaultStgAPIDomains has %d prefixes, TradeGatewayRoutes %d", len(domains), len(routes))
+	}
+	for i, r := range routes {
+		if domains[i] != r.Prefix {
+			t.Fatalf("prefix %d: DefaultStgAPIDomains %q, TradeGatewayRoutes %q", i, domains[i], r.Prefix)
+		}
 	}
 }

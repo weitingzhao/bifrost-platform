@@ -518,11 +518,12 @@ export function DualFlywheelVisionPage() {
           </DenseDataTable>
         </CatalogSection>
 
-        <CatalogSection title="Trade API domains (read-only · Vision V4)">
+        <CatalogSection title="Trade API gateway prefixes → processes (read-only · Vision V4)">
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
-                <DenseTableHead>Domain</DenseTableHead>
+                <DenseTableHead>Prefix</DenseTableHead>
+                <DenseTableHead>Process</DenseTableHead>
                 <DenseTableHead>Port</DenseTableHead>
                 <DenseTableHead>Probe</DenseTableHead>
                 <DenseTableHead>Read examples</DenseTableHead>
@@ -532,6 +533,7 @@ export function DualFlywheelVisionPage() {
               {TRADE_API_DOMAINS.map(d => (
                 <DenseTableRow key={d.id}>
                   <DenseTableCell className="font-mono-tabular font-medium">{d.id}</DenseTableCell>
+                  <DenseTableCell className="font-mono-tabular">{d.process}</DenseTableCell>
                   <DenseTableCell className="font-mono-tabular">{d.port}</DenseTableCell>
                   <DenseTableCell className="font-mono-tabular">{d.probePath}</DenseTableCell>
                   <DenseTableCell className="text-[var(--muted-foreground)]">{d.readExamples}</DenseTableCell>

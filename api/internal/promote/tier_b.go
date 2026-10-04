@@ -121,9 +121,11 @@ func (s *Service) tierBAutoProbes() []struct {
 	if gw == "" {
 		return nil
 	}
+	opsRoute, _ := probe.TradeRouteFor("ops")
 	return []struct{ id, label, url string }{
 		{id: "tierb-daemon", label: "Daemon status (monitor API)", url: gw + "/api/monitor/status"},
-		{id: "tierb-ops", label: "Ops API health", url: gw + "/api/ops/health"},
+		// The ops router's health on api-monitor; /api/ops/health is the monitor's generic /health (TD-55).
+		{id: "tierb-ops", label: "Ops router health (api-monitor)", url: gw + opsRoute.GatewayPath()},
 		{id: "tierb-market-ingest", label: "Ops market-ingest services", url: gw + "/api/ops/ops/market-ingest/services"},
 	}
 }

@@ -12,21 +12,30 @@ export const STANDARDS_SOURCE = 'console/src/lib/architecture/standardsCatalog.t
 
 export type ProbeRow = {
   targetId: string
+  /** The Deployment that answers — eight gateway prefixes, four processes (TD-55). */
+  process: string
   path: string
   okCodes: string
+  /** The `service` a 200's JSON must name; an HTML 200 is the SPA fallback and fails. */
+  service?: string
 }
 
+/**
+ * Mirrors api/internal/probe/trade_routes.go and config/trade-api-domains.yaml. Target ids name
+ * gateway prefixes, not processes: api-docs and api-ops are api-monitor, api-trading,
+ * api-strategy and api-portfolio are api-account. /api/ops/health is api-monitor's generic
+ * /health (service bifrost-monitor), so the ops row reads the ops router's /api/ops/ops/health.
+ */
 export const HTTP_PROBES: ProbeRow[] = [
-  { targetId: 'nginx-spa', path: '/', okCodes: '200' },
-  { targetId: 'api-monitor', path: '/api/monitor/status', okCodes: '200, 503' },
-  // Phase B: docs/ops → api-monitor; trading/strategy/portfolio → api-account (path aliases)
-  { targetId: 'api-docs', path: '/api/docs/research/docs/health', okCodes: '200, 503' },
-  { targetId: 'api-ops', path: '/api/ops/health', okCodes: '200, 503' },
-  { targetId: 'api-trading', path: '/api/trading/health', okCodes: '200, 503' },
-  { targetId: 'api-strategy', path: '/api/strategy/health', okCodes: '200, 503' },
-  { targetId: 'api-portfolio', path: '/api/portfolio/health', okCodes: '200, 503' },
-  { targetId: 'api-market', path: '/api/market/health', okCodes: '200, 503' },
-  { targetId: 'api-research', path: '/api/research/health', okCodes: '200, 503' },
+  { targetId: 'nginx-spa', process: 'frontend', path: '/', okCodes: '200' },
+  { targetId: 'api-monitor', process: 'api-monitor', path: '/api/monitor/status', okCodes: '200, 503' },
+  { targetId: 'api-docs', process: 'api-monitor', path: '/api/docs/research/docs/health', okCodes: '200, 503', service: 'bifrost-docs' },
+  { targetId: 'api-ops', process: 'api-monitor', path: '/api/ops/ops/health', okCodes: '200, 503', service: 'bifrost-ops' },
+  { targetId: 'api-trading', process: 'api-account', path: '/api/trading/health', okCodes: '200, 503', service: 'bifrost-account' },
+  { targetId: 'api-strategy', process: 'api-account', path: '/api/strategy/health', okCodes: '200, 503', service: 'bifrost-account' },
+  { targetId: 'api-portfolio', process: 'api-account', path: '/api/portfolio/health', okCodes: '200, 503', service: 'bifrost-account' },
+  { targetId: 'api-market', process: 'api-market', path: '/api/market/health', okCodes: '200, 503', service: 'bifrost-market' },
+  { targetId: 'api-research', process: 'api-research', path: '/api/research/health', okCodes: '200, 503', service: 'bifrost-research' },
 ]
 
 export type AuthProbeRow = {
@@ -202,7 +211,7 @@ export function buildStandardsLlmPack(): string {
     '## Trade stack read-only contract',
     '',
     '### HTTP probes',
-    ...HTTP_PROBES.map(p => `- ${p.targetId}: ${p.path} → ${p.okCodes}`),
+    ...HTTP_PROBES.map(p => `- ${p.targetId} (${p.process}): ${p.path} → ${p.okCodes}${p.service ? ` · service=${p.service}` : ''}`),
     '',
     '### Auth probe',
     ...AUTH_PROBES.map(p => `- ${p.targetId}: ${p.path} (token: ${p.token})`),

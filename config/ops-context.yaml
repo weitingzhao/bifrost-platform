@@ -1258,4 +1258,4 @@ probe_hints:
       hint: "Daemon status and control overview"
     - target_id: api-ops
       trade_route: /operations/logs
-      hint: "Ops API health and log streams"
+      hint: "Trade ops router (answered by the api-monitor process): health and log streams"

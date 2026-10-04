@@ -1,6 +1,10 @@
 package tradeagent
 
-import "time"
+import (
+	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+)
 
 const (
 	ServerName    = "mcp-server-trade"
@@ -9,6 +13,7 @@ const (
 
 type DomainView struct {
 	ID        string `json:"id"`
+	Process   string `json:"process"`
 	Port      int    `json:"port"`
 	ProbePath string `json:"probe_path"`
 	ReadOnly  bool   `json:"read_only"`
@@ -25,18 +30,14 @@ type ToolView struct {
 }
 
 func Domains() []DomainView {
-	// Phase B: 4 process pods; HTTP path prefixes preserved for gateway strip.
-	// monitor also serves ops+docs; account serves trading+portfolio+strategy.
-	return []DomainView{
-		{ID: "monitor", Port: 8765, ProbePath: "/status", ReadOnly: true},
-		{ID: "docs", Port: 8765, ProbePath: "/research/docs/health", ReadOnly: true},
-		{ID: "ops", Port: 8765, ProbePath: "/ops/health", ReadOnly: true},
-		{ID: "trading", Port: 8769, ProbePath: "/health", ReadOnly: true},
-		{ID: "strategy", Port: 8769, ProbePath: "/health", ReadOnly: true},
-		{ID: "portfolio", Port: 8769, ProbePath: "/health", ReadOnly: true},
-		{ID: "market", Port: 8772, ProbePath: "/health", ReadOnly: true},
-		{ID: "research", Port: 8773, ProbePath: "/health", ReadOnly: true},
+	// Eight gateway prefixes, four processes (TD-55): the list is probe.TradeGatewayRoutes, the
+	// catalog the connectivity matrix and the release smoke read, so the three cannot disagree.
+	routes := probe.TradeGatewayRoutes()
+	out := make([]DomainView, 0, len(routes))
+	for _, r := range routes {
+		out = append(out, DomainView{ID: r.Prefix, Process: r.Process, Port: r.Port, ProbePath: r.ProbePath, ReadOnly: true})
 	}
+	return out
 }
 
 func tool(name, desc, domain, probe string) ToolView {

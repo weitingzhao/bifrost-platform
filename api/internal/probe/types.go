@@ -34,6 +34,9 @@ type Target struct {
 	AuthorizationLevel string       `json:"authorization_level"`
 	Detail             string       `json:"detail"`
 	URL                string       `json:"url,omitempty"`
+	// Process is the Deployment that answers the target (api-monitor answers api-docs and api-ops;
+	// api-account answers api-trading, api-strategy and api-portfolio). Empty for non-HTTP targets.
+	Process string `json:"process,omitempty"`
 }
 
 type MatrixResponse struct {
@@ -48,6 +51,7 @@ type HTTPEndpoint struct {
 	ID       string
 	Category string
 	Path     string
+	Process  string
 }
 
 // PluginHealth is what /metrics needs from a plugin, and the least a plugin can

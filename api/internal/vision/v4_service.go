@@ -12,7 +12,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 )
 
-const tradeDomainCount = 9
+// Eight gateway prefixes (four processes) — probe.TradeGatewayRoutes (TD-55).
+const tradeDomainCount = 8
 
 func (s *Service) V4Gate(ctx context.Context) V1GateResponse {
 	now := time.Now().UTC()
@@ -137,7 +138,7 @@ func (s *Service) collectV4Checks(ctx context.Context) []GateCheck {
 		"BUSINESS_AGENT_CLOSED_LOOP",
 	))
 	checks = append(checks, s.checkConfigFile(
-		"trade-api-domains", "Trade API domains registry (9)", true,
+		"trade-api-domains", "Trade API domains registry (8 prefixes, 4 processes)", true,
 		filepath.Join(s.configDir, "trade-api-domains.yaml"),
 		"id: research",
 	))
@@ -215,7 +216,7 @@ func (s *Service) checkBusinessAgentCatalog() GateCheck {
 func (s *Service) checkTradeDomainCount() GateCheck {
 	check := GateCheck{
 		ID: "trade-agent-domains", Label: "Trade Agent domain catalog", Required: true,
-		Reachability: probe.ReachFail, Detail: "expected 9 domains",
+		Reachability: probe.ReachFail, Detail: fmt.Sprintf("expected %d domains", tradeDomainCount),
 	}
 	n := len(tradeagent.Domains())
 	if n == tradeDomainCount {
