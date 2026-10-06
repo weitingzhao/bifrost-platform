@@ -79,7 +79,11 @@ type RepoCommits struct {
 // Session is empty for commits that carry a Change-Id but no session trailer
 // (Cursor, or a commit made outside an agent).
 type Thread struct {
-	Session     string    `json:"session"`
+	Session string `json:"session"`
+	// Title is the thread's human name: set by hand (TitleSource "manual") or
+	// the session title synced from its transcripts ("transcript").
+	Title       string    `json:"title,omitempty"`
+	TitleSource string    `json:"title_source,omitempty"`
 	Transcripts []string  `json:"transcripts"`
 	Link        string    `json:"link,omitempty"`
 	FirstAt     time.Time `json:"first_at"`

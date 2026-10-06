@@ -50,6 +50,14 @@ type fakeCommit struct {
 	at       time.Time
 }
 
+// parentOf lays each history out as a chain: a commit's parent is the next (older) one.
+func parentOf(h []fakeCommit, i int) []any {
+	if i+1 < len(h) {
+		return []any{map[string]any{"sha": h[i+1].sha}}
+	}
+	return []any{}
+}
+
 func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	t.Helper()
 	day := func(d int) time.Time { return now.AddDate(0, 0, -d) }
@@ -91,8 +99,9 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	mux.HandleFunc("/api/v1/repos/bifrost/r1/commits", func(w http.ResponseWriter, r *http.Request) {
 		var out []map[string]any
 		if r.URL.Query().Get("page") == "1" {
-			for _, c := range history[r.URL.Query().Get("sha")] {
-				out = append(out, map[string]any{"sha": c.sha, "commit": map[string]any{
+			h := history[r.URL.Query().Get("sha")]
+			for i, c := range h {
+				out = append(out, map[string]any{"sha": c.sha, "parents": parentOf(h, i), "commit": map[string]any{
 					"message": c.msg, "committer": map[string]any{"date": c.at}}})
 			}
 		}
@@ -309,7 +318,8 @@ func TestGraphLanesAndMarkers(t *testing.T) {
 		t.Fatalf("node flags = %+v", g.Main)
 	}
 	// lane-1 (re-landed + squashed) and lane-3 (landed by subject) are leftovers; lane-2 is open
-	if len(g.Branches) != 1 || g.Branches[0].Name != "lane-2" || g.Branches[0].Commits[0].LandedBy != "" {
+	// lane-2 = F on top of A: it forked from aaa
+	if len(g.Branches) != 1 || g.Branches[0].Name != "lane-2" || g.Branches[0].Commits[0].LandedBy != "" || g.Branches[0].ForkSHA != "aaa" {
 		t.Fatalf("branches = %+v", g.Branches)
 	}
 	if len(g.Markers) != 2 || g.Markers[0].Run != "prod-1" || g.Markers[0].SHA != "aaa" || g.Markers[1].SHA != "ccc" {
@@ -327,5 +337,59 @@ func TestGraphLanesAndMarkers(t *testing.T) {
 		if (len(got.Graph) > 0) != want {
 			t.Fatalf("query %q: graph present = %v", q, len(got.Graph) > 0)
 		}
+	}
+}
+
+func TestTitlesManualWinsThenLatestTranscript(t *testing.T) {
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	resp := Response{Threads: []Thread{
+		{Session: "local_a", Transcripts: []string{"t1", "t2"}},
+		{Session: "local_b", Transcripts: []string{"t3"}},
+		{Session: "", Transcripts: []string{"t1"}},
+	}}
+	tt := ThreadTitles{
+		Manual:     map[string]TitleAt{"local_b": {Title: "Hand set"}, "": {Title: "never"}},
+		Transcript: map[string]TitleAt{"t1": {Title: "Old", At: at}, "t2": {Title: "New", At: at.Add(time.Hour)}, "t3": {Title: "Synced", At: at}},
+	}
+	got := name(resp, tt)
+	if got.Threads[0].Title != "New" || got.Threads[0].TitleSource != "transcript" ||
+		got.Threads[1].Title != "Hand set" || got.Threads[1].TitleSource != "manual" ||
+		got.Threads[2].TitleSource != "transcript" {
+		t.Fatalf("titles = %+v", got.Threads)
+	}
+	if resp.Threads[0].Title != "" {
+		t.Fatal("name mutated the cached response")
+	}
+}
+
+func TestSetTitleEndpoint(t *testing.T) {
+	s, _ := newTestService(t)
+	var gotSession, gotTitle string
+	h := NewHandler(s).WithTitles(
+		func(context.Context) (ThreadTitles, error) {
+			return ThreadTitles{Manual: map[string]TitleAt{"local_s2": {Title: "Renamed"}}}, nil
+		},
+		func(_ context.Context, session, title string) error {
+			gotSession, gotTitle = session, title
+			return nil
+		},
+	)
+	rec := httptest.NewRecorder()
+	h.HandleSetTitle(rec, httptest.NewRequest(http.MethodPut, "/api/v1/lineage/thread-title",
+		strings.NewReader(`{"session":"local_s2","title":"Renamed"}`)))
+	if rec.Code != http.StatusOK || gotSession != "local_s2" || gotTitle != "Renamed" {
+		t.Fatalf("put = %d %q %q", rec.Code, gotSession, gotTitle)
+	}
+	rec = httptest.NewRecorder()
+	h.HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?session=local_s2", nil))
+	var resp Response
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if len(resp.Threads) != 1 || resp.Threads[0].Title != "Renamed" {
+		t.Fatalf("get = %+v", resp.Threads)
+	}
+	rec = httptest.NewRecorder()
+	h.HandleSetTitle(rec, httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`not json`)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad body = %d", rec.Code)
 	}
 }

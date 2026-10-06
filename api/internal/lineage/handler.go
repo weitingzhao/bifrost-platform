@@ -18,9 +18,11 @@ type cached struct {
 
 // Handler serves GET /api/v1/lineage.
 type Handler struct {
-	svc   *Service
-	mu    sync.Mutex
-	cache map[int]cached
+	svc      *Service
+	mu       sync.Mutex
+	cache    map[int]cached
+	titles   TitlesFunc
+	setTitle SetTitleFunc
 }
 
 func NewHandler(svc *Service) *Handler {
@@ -42,6 +44,12 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	resp = filter(resp, strings.TrimSpace(q.Get("session")), strings.TrimSpace(q.Get("change_id")))
 	if q.Get("graph") != "true" {
 		resp.Graph = nil
+	}
+	if h.titles != nil {
+		// read per request, not cached: a rename shows on the next load
+		if tt, err := h.titles(r.Context()); err == nil {
+			resp = name(resp, tt)
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

@@ -1,3 +1,5 @@
+import { authedFetch } from './client'
+
 /** GET /api/v1/lineage — agent threads and the commits they stamped (commit trailers on the Gitea mirror). */
 
 export type LineageLandedBy = 'sha' | 'change_id' | 'subject'
@@ -40,6 +42,9 @@ export type LineageCommit = {
 export type LineageThread = {
   /** Empty: commits with a Change-Id but no session trailer (Cursor, manual). */
   session: string
+  /** Human name: set by hand ("manual") or the session title synced from its transcripts ("transcript"). */
+  title?: string
+  title_source?: 'manual' | 'transcript'
   transcripts: string[]
   link?: string
   first_at: string
@@ -89,7 +94,8 @@ export type LineageRepoGraph = {
   /** default branch in the window, newest first */
   main: LineageGraphCommit[]
   /** branches with at least one change not on the default branch */
-  branches: { name: string; commits: LineageGraphCommit[] }[]
+  /** fork_sha: parent of the branch's oldest commit in the window (where it left the default branch) */
+  branches: { name: string; commits: LineageGraphCommit[]; fork_sha?: string }[]
   /** releases that built a default-branch commit in the window, newest first */
   markers: LineageGraphMarker[]
 }
@@ -107,6 +113,14 @@ export type LineageResponse = {
   /** only with graph=true */
   graph?: LineageRepoGraph[]
   errors: string[]
+}
+
+/** PUT /api/v1/lineage/thread-title (operator). An empty title clears the hand-set name. */
+export async function setThreadTitle(session: string, title: string): Promise<void> {
+  await authedFetch('thread title', '/api/v1/lineage/thread-title', {
+    method: 'PUT',
+    body: JSON.stringify({ session, title }),
+  })
 }
 
 export async function fetchLineage(days: number, refresh = false, graph = false): Promise<LineageResponse> {

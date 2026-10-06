@@ -51,6 +51,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
+	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
@@ -234,6 +235,13 @@ func New(cfg *config.Config) (*Server, error) {
 		releasesSvc.Start(context.Background(), 5*time.Minute)
 	}
 	srv.releases = releases.NewHandler(releasesSvc)
+	titleStore := threadtitles.NewStore(releasesSvc.Status().Namespace, func() (kubernetes.Interface, error) {
+		core, _, err := clusterH.Service().KubernetesClient()
+		return core, err
+	})
+	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
+		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
+	}
 	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
 		a, err := srv.delivery.GiteaAccess(ctx)
 		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
@@ -251,7 +259,19 @@ func New(cfg *config.Config) (*Server, error) {
 			out = append(out, lineage.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
 		}
 		return out, nil
-	}))
+	})).WithTitles(func(ctx context.Context) (lineage.ThreadTitles, error) {
+		tt, err := titleStore.Load(ctx)
+		out := lineage.ThreadTitles{Manual: map[string]lineage.TitleAt{}, Transcript: map[string]lineage.TitleAt{}}
+		for k, v := range tt.Manual {
+			out.Manual[k] = lineage.TitleAt{Title: v.Title, At: v.At}
+		}
+		for k, v := range tt.Transcripts {
+			out.Transcript[k] = lineage.TitleAt{Title: v.Title, At: v.At}
+		}
+		return out, err
+	}, func(ctx context.Context, session, title string) error {
+		return titleStore.SetManual(ctx, session, title, time.Now().UTC())
+	})
 	return srv, nil
 }
 
@@ -359,6 +379,10 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/compare", s.delivery.HandleCompare)
 		r.Get("/lineage", s.lineage.HandleGet)
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleOperator))
+			r.Put("/lineage/thread-title", s.lineage.HandleSetTitle)
+		})
 		r.Get("/releases", s.releases.HandleList)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)

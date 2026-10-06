@@ -23,6 +23,9 @@ type GraphCommit struct {
 type GraphBranch struct {
 	Name    string        `json:"name"`
 	Commits []GraphCommit `json:"commits"`
+	// ForkSHA is the parent of the branch's oldest commit in the window: the
+	// default-branch commit it forked from when that is in the window too.
+	ForkSHA string `json:"fork_sha,omitempty"`
 }
 
 // GraphMarker is a recorded release that built a default-branch commit inside the window.
@@ -81,7 +84,11 @@ func buildGraph(scans []repoScan, rels []Release) []RepoGraph {
 					ChangeID: t.changeID, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
 			}
 			if open { // a branch whose every change landed is a leftover, not a lane
-				g.Branches = append(g.Branches, GraphBranch{Name: b, Commits: cs})
+				gb := GraphBranch{Name: b, Commits: cs}
+				if raw := sc.branches[b]; len(raw) > 0 && len(raw[len(raw)-1].Parents) > 0 {
+					gb.ForkSHA = raw[len(raw)-1].Parents[0]
+				}
+				g.Branches = append(g.Branches, gb)
 			}
 		}
 		for _, r := range rels {

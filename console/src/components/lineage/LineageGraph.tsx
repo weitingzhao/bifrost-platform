@@ -21,9 +21,11 @@ const PALETTE = ['#f472b6', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa', '#f87171
 const NO_THREAD = 'var(--color-muted-foreground, #8a8f98)'
 /** Lane rails: visible on both themes without competing with thread colours. */
 const RAIL = 'color-mix(in srgb, var(--color-muted-foreground, #8a8f98) 70%, transparent)'
-const HEADER_H = 96
+const HEADER_H = 112
+/** Alternating repo-group bands: a repo and its branch lanes share one. */
+const BAND = 'color-mix(in srgb, var(--color-muted-foreground, #8a8f98) 7%, transparent)'
 
-type Lane = { key: string; repo: string; branch?: string; x: number }
+type Lane = { key: string; repo: string; branch?: string; x: number; group: number }
 
 type CommitRow = {
   kind: 'commit'
@@ -81,15 +83,35 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
 
   const lanes = useMemo(() => {
     const out: Lane[] = []
-    for (const g of visible) {
-      out.push({ key: g.repo, repo: g.repo, x: 0 })
-      for (const b of g.branches) out.push({ key: `${g.repo}::${b.name}`, repo: g.repo, branch: b.name, x: 0 })
-    }
+    visible.forEach((g, group) => {
+      out.push({ key: g.repo, repo: g.repo, x: 0, group })
+      for (const b of g.branches) out.push({ key: `${g.repo}::${b.name}`, repo: g.repo, branch: b.name, x: 0, group })
+    })
     out.forEach((l, i) => (l.x = PAD + i * LANE))
     return out
   }, [visible])
 
-  const { rows, span, prodRow } = useMemo(() => {
+  /** Repo groups: x extent of a repo's lanes (main + branches), for bands and headers. */
+  const groups = useMemo(() => {
+    const m = new Map<string, { repo: string; x0: number; x1: number; group: number }>()
+    for (const l of lanes) {
+      const g = m.get(l.repo)
+      if (g == null) m.set(l.repo, { repo: l.repo, x0: l.x, x1: l.x, group: l.group })
+      else g.x1 = l.x
+    }
+    return [...m.values()]
+  }, [lanes])
+
+  const titleOf = useMemo(() => {
+    const m = new Map(threads.map(t => [t.session, t.title ?? '']))
+    return (session?: string) => {
+      if (session == null || session === '') return ''
+      const title = m.get(session)
+      return title != null && title !== '' ? title : threadLabel(session)
+    }
+  }, [threads])
+
+  const { rows, span, prodRow, links } = useMemo(() => {
     const laneOf = new Map(lanes.map(l => [l.key, l]))
     type Ev = { lane: Lane; c: LineageGraphCommit; markers: LineageGraphMarker[] }
     const evs: Ev[] = []
@@ -143,7 +165,31 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
       const r = shaRow.get(`${repo}:${sha}`)
       if (r != null) prodRow.set(repo, r)
     }
-    return { rows, span, prodRow }
+    // Connectors: a branch leaves its repo's main lane at the fork commit (or below
+    // the window when it forked earlier); a branch change that landed points at
+    // the main commit that carries it.
+    type Link = { key: string; x1: number; r1: number; x2: number; r2: number; kind: 'fork' | 'landed' }
+    const links: Link[] = []
+    for (const g of visible) {
+      const main = laneOf.get(g.repo)
+      if (main == null) continue
+      for (const b of g.branches) {
+        const lane = laneOf.get(`${g.repo}::${b.name}`)
+        const oldest = b.commits[b.commits.length - 1]
+        if (lane == null || oldest == null) continue
+        const from = shaRow.get(`${g.repo}:${oldest.sha}`)
+        if (from == null) continue
+        const fork = b.fork_sha != null ? shaRow.get(`${g.repo}:${b.fork_sha}`) : undefined
+        links.push({ key: `fork:${lane.key}`, x1: lane.x, r1: from, x2: main.x, r2: fork ?? rows.length, kind: 'fork' })
+        for (const c of b.commits) {
+          if (!c.landed_sha) continue
+          const at = shaRow.get(`${g.repo}:${c.sha}`)
+          const to = shaRow.get(`${g.repo}:${c.landed_sha}`)
+          if (at != null && to != null) links.push({ key: `land:${lane.key}:${c.sha}`, x1: lane.x, r1: at, x2: main.x, r2: to, kind: 'landed' })
+        }
+      }
+    }
+    return { rows, span, prodRow, links }
   }, [visible, lanes, threadedOnly, allReleases])
 
   const viewH = VIEW_ROWS * ROW
@@ -204,7 +250,7 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
               } ${focus != null && focus !== t.session ? 'opacity-40' : ''}`}
             >
               <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: colorOf(t.session) }} />
-              <span className="font-mono-tabular">{threadLabel(t.session)}</span>
+              <span className="max-w-[220px] truncate">{titleOf(t.session)}</span>
               <span className="text-muted-foreground">{counts.get(t.session)}</span>
             </button>
           ))}
@@ -212,20 +258,31 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
           <svg width="12" height="12" aria-hidden>
             <circle cx="6" cy="6" r="4" fill="none" stroke={NO_THREAD} strokeWidth="1.5" />
           </svg>
-          no thread · dashed lane = landed, not in PROD yet
+          no thread · dashed lane = landed, not in PROD yet · yellow curve = branch forks off · dotted green = branch change landed here
         </span>
       </div>
 
       {rows.length > 0 && (
         <div className="relative" style={{ height: HEADER_H }} aria-label="Lanes">
+          {groups.map(g =>
+            g.group % 2 === 0 ? (
+              <span
+                key={`hband:${g.repo}`}
+                className="absolute top-0 bottom-0 rounded-t-[4px]"
+                style={{ left: g.x0 - LANE / 2, width: g.x1 - g.x0 + LANE, background: BAND }}
+              />
+            ) : null,
+          )}
           {lanes.map(l => (
             <span
               key={l.key}
-              title={l.branch != null ? `${l.repo} ⎇ ${l.branch}` : l.repo}
-              className={`absolute bottom-0 truncate text-[10px] leading-[14px] ${l.branch != null ? 'text-warning' : 'text-muted-foreground'}`}
-              style={{ left: l.x - 7, width: 14, maxHeight: HEADER_H, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+              title={l.branch != null ? `${l.repo} ⎇ ${l.branch} (branch with changes not on ${shortRepo(l.repo)}'s main)` : `${l.repo} — default branch`}
+              className={`absolute bottom-1 truncate text-[10px] leading-[14px] ${
+                l.branch != null ? 'text-warning' : 'font-semibold text-foreground'
+              }`}
+              style={{ left: l.x - 7, width: 14, maxHeight: HEADER_H - 6, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
             >
-              {l.branch != null ? `⎇ ${l.branch}` : shortRepo(l.repo)}
+              {l.branch != null ? `↳ ${l.branch.replace(/^(claude|fix|chore|td-batch|debt|feat)\//, '')}` : shortRepo(l.repo)}
             </span>
           ))}
           <span className="absolute bottom-0 text-[var(--text-dense-meta)] text-muted-foreground" style={{ left: graphW + 4 }}>
@@ -251,6 +308,28 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
               style={{ position: 'absolute', top: first * ROW, left: 0 }}
               aria-hidden
             >
+              {groups.map(g =>
+                g.group % 2 === 0 ? (
+                  <rect key={`band:${g.repo}`} x={g.x0 - LANE / 2} y={0} width={g.x1 - g.x0 + LANE} height={(last - first) * ROW} fill={BAND} />
+                ) : null,
+              )}
+              {links.map(k => {
+                if (Math.max(k.r1, k.r2) < first || Math.min(k.r1, k.r2) > last) return null
+                const y1 = (k.r1 - first) * ROW + ROW / 2
+                const y2 = (k.r2 - first) * ROW + ROW / 2
+                const mid = (y1 + y2) / 2
+                return (
+                  <path
+                    key={k.key}
+                    d={`M ${k.x1} ${y1} C ${k.x1} ${mid}, ${k.x2} ${mid}, ${k.x2} ${y2}`}
+                    fill="none"
+                    stroke={k.kind === 'fork' ? 'var(--color-warning)' : 'var(--color-success)'}
+                    strokeWidth={1.5}
+                    strokeDasharray={k.kind === 'landed' ? '2 3' : undefined}
+                    opacity={0.85}
+                  />
+                )
+              })}
               {lanes.map(l => {
                 const s = span.get(l.key)
                 if (s == null) return null
@@ -317,7 +396,7 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
                   title={[
                     `${c.sha}  ${r.lane.repo}${r.lane.branch != null ? ` @ ${r.lane.branch}` : ''}`,
                     c.subject,
-                    c.session ? `thread ${c.session}` : c.agent ? 'agent commit, no thread (before the hooks)' : 'no thread',
+                    c.session ? `thread ${titleOf(c.session)} (${c.session})` : c.agent ? 'agent commit, no thread (before the hooks)' : 'no thread',
                     c.change_id ? `Change-Id ${c.change_id}` : '',
                     branchState ?? '',
                     ...r.markers.map(m => `${markerLabel(m)} · ${m.run} · ${hhmm(m.at)}`),
@@ -341,7 +420,7 @@ export function LineageGraph({ graph, threads }: LineageGraphProps) {
                   ))}
                   {c.session && (
                     <span className="inline-flex shrink-0 items-center gap-1 pr-2 font-mono-tabular" style={{ color: colorOf(c.session) }}>
-                      ● {threadLabel(c.session)}
+                      ● <span className="max-w-[200px] truncate">{titleOf(c.session)}</span>
                     </span>
                   )}
                 </div>

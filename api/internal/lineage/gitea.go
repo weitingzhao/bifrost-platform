@@ -19,9 +19,10 @@ type Access struct {
 type AccessFunc func(ctx context.Context) (Access, error)
 
 type giteaCommit struct {
-	SHA string
-	Msg string
-	At  time.Time
+	SHA     string
+	Msg     string
+	At      time.Time
+	Parents []string
 }
 
 type giteaRepo struct {
@@ -131,6 +132,9 @@ func (g *gitea) commits(ctx context.Context, repo, ref string, since time.Time, 
 					Date time.Time `json:"date"`
 				} `json:"committer"`
 			} `json:"commit"`
+			Parents []struct {
+				SHA string `json:"sha"`
+			} `json:"parents"`
 		}
 		q := url.Values{
 			"sha": {ref}, "limit": {fmt.Sprint(pageLimit)}, "page": {fmt.Sprint(page)},
@@ -143,7 +147,11 @@ func (g *gitea) commits(ctx context.Context, repo, ref string, since time.Time, 
 			if c.Commit.Committer.Date.Before(since) || (stop != nil && stop(c.SHA)) {
 				return out, nil
 			}
-			out = append(out, giteaCommit{SHA: c.SHA, Msg: c.Commit.Message, At: c.Commit.Committer.Date})
+			gc := giteaCommit{SHA: c.SHA, Msg: c.Commit.Message, At: c.Commit.Committer.Date}
+			for _, p := range c.Parents {
+				gc.Parents = append(gc.Parents, p.SHA)
+			}
+			out = append(out, gc)
 		}
 		if len(raw) < pageLimit {
 			break

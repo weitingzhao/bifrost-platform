@@ -16,6 +16,7 @@ import {
 } from '@bifrost/ui'
 import {
   fetchLineage,
+  setThreadTitle,
   type LineageCommit,
   type LineageReach,
   type LineageResponse,
@@ -25,6 +26,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip, type OpsVerdictLamp, type OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import { LineageGraph } from '@/components/lineage/LineageGraph'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const WINDOWS = [7, 14, 30, 90] as const
 
@@ -72,6 +74,58 @@ function matches(t: LineageThread, needle: string): LineageThread | null {
   const reached: Record<string, number> = {}
   for (const c of commits) for (const r of c.reached ?? []) reached[`${r.lane}/${r.env}`] = (reached[`${r.lane}/${r.env}`] ?? 0) + 1
   return { ...t, repos, commit_count: commits.length, landed: commits.filter(c => c.landed).length, reached }
+}
+
+/** Thread name for display: its title when one is known, else a short id. */
+function threadName(t: LineageThread): string {
+  return t.title != null && t.title !== '' ? t.title : threadLabel(t.session)
+}
+
+/** Inline rename for one thread (operator). Empty saves clear a hand-set name. */
+function ThreadTitleEditor({
+  thread,
+  onDone,
+}: {
+  thread: LineageThread
+  onDone: (changed: boolean) => void
+}) {
+  const [value, setValue] = useState(thread.title_source === 'manual' ? (thread.title ?? '') : '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const save = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await setThreadTitle(thread.session, value.trim())
+      onDone(true)
+    } catch (e) {
+      setErr((e as Error).message)
+      setBusy(false)
+    }
+  }
+  return (
+    <span className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <Input
+        autoFocus
+        value={value}
+        maxLength={120}
+        placeholder={thread.title_source === 'transcript' ? `${thread.title} (synced) — type to override` : 'Name this thread'}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') void save()
+          if (e.key === 'Escape') onDone(false)
+        }}
+        className="h-6 w-[280px] text-[var(--text-dense-caption)]"
+      />
+      <Button type="button" size="xs" disabled={busy} onClick={() => void save()}>
+        {busy ? 'Saving…' : value.trim() === '' && thread.title_source === 'manual' ? 'Clear' : 'Save'}
+      </Button>
+      <Button type="button" size="xs" variant="ghost" onClick={() => onDone(false)}>
+        Cancel
+      </Button>
+      {err != null && <span className="text-[var(--text-dense-meta)] text-danger">{err}</span>}
+    </span>
+  )
 }
 
 /** A commit is in production once a deploying release in any lane's "prod" env contained it. */
@@ -188,6 +242,8 @@ export function CommitLineagePage() {
   const [needle, setNeedle] = useState('')
   const [open, setOpen] = useState<Set<string>>(new Set())
   const qc = useQueryClient()
+  const { canOperate } = usePlatformAuth()
+  const [renaming, setRenaming] = useState<string | null>(null)
 
   const q = useQuery({
     queryKey: ['lineage', days],
@@ -323,21 +379,52 @@ export function CommitLineagePage() {
                       aria-expanded={isOpen}
                       onClick={() => toggle(id)}
                     >
-                      <DenseTableCell className="font-mono-tabular whitespace-nowrap">
+                      <DenseTableCell className="whitespace-nowrap">
                         <span className="mr-1 text-muted-foreground">{isOpen ? '▾' : '▸'}</span>
-                        {t.link != null && t.link !== '' ? (
-                          <a
-                            href={t.link}
-                            title={`${t.session} — open thread`}
-                            className="text-primary hover:underline"
-                            onClick={e => e.stopPropagation()}
-                            target={t.link.startsWith('https:') ? '_blank' : undefined}
-                            rel="noreferrer"
-                          >
-                            {threadLabel(t.session)}
-                          </a>
+                        {renaming === t.session && t.session !== '' ? (
+                          <ThreadTitleEditor
+                            thread={t}
+                            onDone={changed => {
+                              setRenaming(null)
+                              if (changed) void qc.invalidateQueries({ queryKey: ['lineage'] })
+                            }}
+                          />
                         ) : (
-                          <span title={t.session}>{threadLabel(t.session)}</span>
+                          <>
+                            {t.link != null && t.link !== '' ? (
+                              <a
+                                href={t.link}
+                                title={`${t.session} — open thread${t.title_source === 'manual' ? ' · named by hand' : t.title_source === 'transcript' ? ' · session title' : ''}`}
+                                className="text-primary hover:underline"
+                                onClick={e => e.stopPropagation()}
+                                target={t.link.startsWith('https:') ? '_blank' : undefined}
+                                rel="noreferrer"
+                              >
+                                {threadName(t)}
+                              </a>
+                            ) : (
+                              <span title={t.session}>{threadName(t)}</span>
+                            )}
+                            {t.session !== '' && (
+                              <button
+                                type="button"
+                                className="ml-2 text-[var(--text-dense-meta)] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                                disabled={!canOperate}
+                                title={canOperate ? 'Rename this thread' : 'Authenticate as operator to rename'}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  setRenaming(t.session)
+                                }}
+                              >
+                                ✎
+                              </button>
+                            )}
+                            {t.title != null && t.title !== '' && (
+                              <span className="ml-2 font-mono-tabular text-[var(--text-dense-meta)] text-muted-foreground">
+                                {threadLabel(t.session)}
+                              </span>
+                            )}
+                          </>
                         )}
                       </DenseTableCell>
                       <DenseTableCell>
