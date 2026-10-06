@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +65,20 @@ func NewService(configDir string, clients Clients) *Service {
 // Enabled: there are rules to record by.
 func (s *Service) Enabled() bool { return len(s.rules.Rules) > 0 }
 
+// RecorderWanted says whether this process should write records. The records
+// live in the shared cluster, so by default only an in-cluster process (the
+// workers pod) writes them; a laptop dev server reads them but does not, unless
+// PLATFORM_RELEASE_RECORDER=on. PLATFORM_RELEASE_RECORDER=off turns it off anywhere.
+func RecorderWanted() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM_RELEASE_RECORDER"))) {
+	case "on", "true", "1":
+		return true
+	case "off", "false", "0":
+		return false
+	}
+	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
+}
+
 // Start runs Tick now and then every interval until ctx ends (workers role only:
 // records are idempotent by name, but one writer keeps the pass cheap).
 func (s *Service) Start(ctx context.Context, interval time.Duration) {
@@ -71,11 +87,18 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 		return
 	}
 	safego.Go("releases.recorder", func() {
+		first := true
 		tick := func() {
 			r := s.Tick(ctx)
-			if r.Recorded > 0 || len(r.Errors) > 0 {
-				slog.Info("release recorder", "runs", r.Runs, "matched", r.Matched, "recorded", r.Recorded, "errors", len(r.Errors))
+			// the first pass always logs, so a silent recorder is visibly alive
+			if first || r.Recorded > 0 || len(r.Errors) > 0 {
+				slog.Info("release recorder", "first", first, "runs", r.Runs, "matched", r.Matched, "recorded", r.Recorded,
+					"errors", len(r.Errors), "rules", len(s.rules.Rules), "path", s.rulesPath)
+				for _, e := range r.Errors {
+					slog.Warn("release recorder error", "err", e)
+				}
 			}
+			first = false
 		}
 		safego.Do("releases.recorder.tick", tick)
 		t := time.NewTicker(interval)

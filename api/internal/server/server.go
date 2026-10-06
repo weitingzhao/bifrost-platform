@@ -230,7 +230,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dyn, err := dynamic.NewForConfig(rc)
 		return core, dyn, err
 	})
-	if role.RunsWorkers() {
+	if role.RunsWorkers() && releases.RecorderWanted() {
 		releasesSvc.Start(context.Background(), 5*time.Minute)
 	}
 	srv.releases = releases.NewHandler(releasesSvc)

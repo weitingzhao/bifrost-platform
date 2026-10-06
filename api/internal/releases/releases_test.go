@@ -229,3 +229,22 @@ func TestParamSHAAndIncompleteRecordIsCompletedLater(t *testing.T) {
 		t.Fatalf("completed = %+v", recs)
 	}
 }
+
+func TestRecorderWanted(t *testing.T) {
+	cases := []struct {
+		flag, k8s string
+		want      bool
+	}{
+		{"", "", false},         // laptop: read only
+		{"", "10.43.0.1", true}, // in-cluster
+		{"on", "", true},        // explicit opt-in
+		{"off", "10.43.0.1", false},
+	}
+	for _, c := range cases {
+		t.Setenv("PLATFORM_RELEASE_RECORDER", c.flag)
+		t.Setenv("KUBERNETES_SERVICE_HOST", c.k8s)
+		if got := RecorderWanted(); got != c.want {
+			t.Errorf("flag=%q k8s=%q: got %v want %v", c.flag, c.k8s, got, c.want)
+		}
+	}
+}
