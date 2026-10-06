@@ -24,6 +24,7 @@ import {
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip, type OpsVerdictLamp, type OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
+import { LineageGraph } from '@/components/lineage/LineageGraph'
 
 const WINDOWS = [7, 14, 30, 90] as const
 
@@ -190,12 +191,12 @@ export function CommitLineagePage() {
 
   const q = useQuery({
     queryKey: ['lineage', days],
-    queryFn: () => fetchLineage(days),
+    queryFn: () => fetchLineage(days, false, true),
     staleTime: 60_000,
     retry: false,
   })
   const refresh = async () => {
-    const fresh = await fetchLineage(days, true)
+    const fresh = await fetchLineage(days, true, true)
     qc.setQueryData(['lineage', days], fresh)
   }
 
@@ -271,6 +272,16 @@ export function CommitLineagePage() {
           className="h-6 w-[340px] text-[var(--text-dense-caption)]"
         />
       </PageToolbar>
+
+      {data?.graph != null && data.graph.length > 0 && (
+        <OpsSection
+          title="Graph"
+          description="Every repo's default branch in one time-ordered view: one lane per repo (plus a lane per open branch), one row per commit. Colour = agent thread; hollow = no thread. A ring marks the commit a release built; a lane is dashed above its latest PROD build."
+          overflow="visible"
+        >
+          <LineageGraph graph={data.graph} threads={data.threads} />
+        </OpsSection>
+      )}
 
       <OpsSection
         title="Threads"

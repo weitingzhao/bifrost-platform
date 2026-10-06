@@ -119,5 +119,7 @@ type Response struct {
 	// release records exist yet); ReleasesError says why it is empty.
 	Releases      []ReleaseHead `json:"releases"`
 	ReleasesError string        `json:"releases_error,omitempty"`
-	Errors        []string      `json:"errors"`
+	// Graph is every repo's commit graph; only with ?graph=true (it is large).
+	Graph  []RepoGraph `json:"graph,omitempty"`
+	Errors []string    `json:"errors"`
 }

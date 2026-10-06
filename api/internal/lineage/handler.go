@@ -33,12 +33,16 @@ func NewHandler(svc *Service) *Handler {
 //	?session=local_…  only this thread
 //	?change_id=I…   only commits with this Change-Id (did this change land?)
 //	?refresh=true   bypass the 5-minute cache
+//	?graph=true     include every repo's commit graph (default branch, open branches, release markers)
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	days, _ := strconv.Atoi(q.Get("days"))
 	days = clampDays(days)
 	resp := h.get(r, days, q.Get("refresh") == "true")
 	resp = filter(resp, strings.TrimSpace(q.Get("session")), strings.TrimSpace(q.Get("change_id")))
+	if q.Get("graph") != "true" {
+		resp.Graph = nil
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }

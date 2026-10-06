@@ -281,3 +281,51 @@ func TestReachWithoutRecordsStillServesLineage(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 }
+
+func TestGraphLanesAndMarkers(t *testing.T) {
+	s, now := newTestService(t)
+	day := func(d float64) time.Time { return now.Add(-time.Duration(d * 24 * float64(time.Hour))) }
+	s.WithReleases(func(context.Context) ([]Release, error) {
+		return []Release{
+			{Run: "stg-1", Lane: "app", Env: "stg", Deploys: true, At: day(2.5), Repos: map[string]string{"r1": "ccc"}},
+			{Run: "prod-1", Lane: "app", Env: "prod", Deploys: true, At: day(0.2), Repos: map[string]string{"r1": "aaa"}},
+			{Run: "old", Lane: "app", Env: "prod", Deploys: true, At: day(30), Repos: map[string]string{"r1": "outside-window"}},
+		}, nil
+	})
+	resp := s.Build(context.Background(), 14)
+	if len(resp.Graph) != 1 {
+		t.Fatalf("graph = %+v", resp.Graph)
+	}
+	g := resp.Graph[0]
+	var main []string
+	for _, c := range g.Main {
+		main = append(main, c.SHA)
+	}
+	// the whole default branch in the window, newest first, threaded or not
+	if strings.Join(main, ",") != "aaa,bbb,ccc,ggg" {
+		t.Fatalf("main = %v", main)
+	}
+	if !g.Main[2].Agent || g.Main[0].Agent || g.Main[0].Session != "local_s1" {
+		t.Fatalf("node flags = %+v", g.Main)
+	}
+	// lane-1 (re-landed + squashed) and lane-3 (landed by subject) are leftovers; lane-2 is open
+	if len(g.Branches) != 1 || g.Branches[0].Name != "lane-2" || g.Branches[0].Commits[0].LandedBy != "" {
+		t.Fatalf("branches = %+v", g.Branches)
+	}
+	if len(g.Markers) != 2 || g.Markers[0].Run != "prod-1" || g.Markers[0].SHA != "aaa" || g.Markers[1].SHA != "ccc" {
+		t.Fatalf("markers = %+v", g.Markers)
+	}
+
+	h := NewHandler(s)
+	for q, want := range map[string]bool{"": false, "&graph=true": true} {
+		rec := httptest.NewRecorder()
+		h.HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?days=14"+q, nil))
+		var got Response
+		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		if (len(got.Graph) > 0) != want {
+			t.Fatalf("query %q: graph present = %v", q, len(got.Graph) > 0)
+		}
+	}
+}

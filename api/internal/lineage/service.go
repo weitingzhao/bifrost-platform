@@ -100,7 +100,8 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 		out.Coverage = append(out.Coverage, collect(sc, threads))
 	}
 	out.Threads = finish(threads)
-	s.annotateReach(ctx, &out, scans)
+	rels := s.annotateReach(ctx, &out, scans)
+	out.Graph = buildGraph(scans, rels)
 
 	switch {
 	case len(out.Errors) == 0:
@@ -178,20 +179,10 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 	}
 
 	seen := map[string]bool{}
-	mainTrailerCID := map[string]bool{}
-	mainAnyCID := map[string]string{} // Change-Id anywhere in a main message -> that main sha
-	mainSubject := map[string]string{}
+	mi := newMainIndex(sc)
 	for _, gc := range sc.main {
 		seen[gc.SHA] = true
 		subject, t := parseMessage(gc.Msg)
-		if _, ok := mainSubject[subject]; !ok {
-			mainSubject[subject] = gc.SHA
-		}
-		for _, cid := range changeIDsAnywhere(gc.Msg) {
-			if _, ok := mainAnyCID[cid]; !ok {
-				mainAnyCID[cid] = gc.SHA
-			}
-		}
 		if t.session != "" {
 			cov.WithSession++
 		} else if t.agent {
@@ -199,7 +190,6 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 		}
 		if t.changeID != "" {
 			cov.WithChangeID++
-			mainTrailerCID[t.changeID] = true
 		}
 		if t.session == "" && t.changeID == "" {
 			continue
@@ -223,20 +213,13 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			if t.session == "" && t.changeID == "" {
 				continue
 			}
-			c := Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-				Transcript: t.transcript, ChangeID: t.changeID, Ref: b}
-			if t.changeID != "" {
-				if mainTrailerCID[t.changeID] {
-					continue // the same change, already listed from main
-				}
-				if sha, ok := mainAnyCID[t.changeID]; ok {
-					c.Landed, c.LandedSHA, c.LandedBy = true, sha, "change_id" // folded into a squash
-				}
-			} else if sha, ok := mainSubject[subject]; ok {
-				// before the hooks: rebased lanes keep their subject (prune-merged-branches.sh does the same)
-				c.Landed, c.LandedSHA, c.LandedBy = true, sha, "subject"
+			dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
+			if dup {
+				continue // the same change, already listed from main
 			}
-			add(c)
+			add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
+				Transcript: t.transcript, ChangeID: t.changeID, Ref: b,
+				Landed: landedBy != "", LandedSHA: landedSHA, LandedBy: landedBy})
 		}
 	}
 	return cov
@@ -282,14 +265,14 @@ func clampDays(d int) int {
 
 // annotateReach adds Reached to every landed commit and the release heads.
 // Release records are optional: without them lineage still answers v1.
-func (s *Service) annotateReach(ctx context.Context, out *Response, scans []repoScan) {
+func (s *Service) annotateReach(ctx context.Context, out *Response, scans []repoScan) []Release {
 	if s.releases == nil {
-		return
+		return nil
 	}
 	rels, err := s.releases(ctx)
 	if err != nil {
 		out.ReleasesError = err.Error()
-		return
+		return nil
 	}
 	out.Releases = heads(rels)
 	ri := newReachIndex(scans, rels)
@@ -303,4 +286,52 @@ func (s *Service) annotateReach(ctx context.Context, out *Response, scans []repo
 		}
 		summarize(t)
 	}
+	return rels
+}
+
+// mainIndex answers, for a branch commit, whether and how its change reached the default branch.
+type mainIndex struct {
+	trailerCID map[string]bool   // Change-Id trailers of default-branch commits
+	anyCID     map[string]string // Change-Id anywhere in a default-branch message -> that sha
+	subject    map[string]string // subject -> newest default-branch sha with it
+}
+
+func newMainIndex(sc repoScan) mainIndex {
+	mi := mainIndex{trailerCID: map[string]bool{}, anyCID: map[string]string{}, subject: map[string]string{}}
+	for _, gc := range sc.main {
+		subject, t := parseMessage(gc.Msg)
+		if _, ok := mi.subject[subject]; !ok {
+			mi.subject[subject] = gc.SHA
+		}
+		for _, cid := range changeIDsAnywhere(gc.Msg) {
+			if _, ok := mi.anyCID[cid]; !ok {
+				mi.anyCID[cid] = gc.SHA
+			}
+		}
+		if t.changeID != "" {
+			mi.trailerCID[t.changeID] = true
+		}
+	}
+	return mi
+}
+
+// branchLanding: dup when a default-branch commit carries the same Change-Id
+// trailer (the same change, listed from there); otherwise landedBy is
+// "change_id" (folded into a squash), "subject" (no Change-Id, pre-hook
+// heuristic) or "" (not landed).
+func (mi mainIndex) branchLanding(subject, changeID string) (dup bool, landedSHA, landedBy string) {
+	if changeID != "" {
+		if mi.trailerCID[changeID] {
+			return true, "", ""
+		}
+		if sha, ok := mi.anyCID[changeID]; ok {
+			return false, sha, "change_id"
+		}
+		return false, "", ""
+	}
+	if sha, ok := mi.subject[subject]; ok {
+		// before the hooks: rebased lanes keep their subject (prune-merged-branches.sh does the same)
+		return false, sha, "subject"
+	}
+	return false, "", ""
 }

@@ -60,6 +60,40 @@ export type LineageCoverage = {
   branches: number
 }
 
+export type LineageGraphCommit = {
+  sha: string
+  subject: string
+  at: string
+  session?: string
+  change_id?: string
+  /** Claude co-author line but no session trailer (agent work before the hooks). */
+  agent?: boolean
+  /** branch commits: how the change reached the default branch ("" / absent = not yet) */
+  landed_sha?: string
+  landed_by?: LineageLandedBy
+}
+
+export type LineageGraphMarker = {
+  lane: string
+  env: string
+  run: string
+  at: string
+  deploys: boolean
+  /** default-branch commit the release built */
+  sha: string
+}
+
+export type LineageRepoGraph = {
+  repo: string
+  default: string
+  /** default branch in the window, newest first */
+  main: LineageGraphCommit[]
+  /** branches with at least one change not on the default branch */
+  branches: { name: string; commits: LineageGraphCommit[] }[]
+  /** releases that built a default-branch commit in the window, newest first */
+  markers: LineageGraphMarker[]
+}
+
 export type LineageResponse = {
   generated_at: string
   since: string
@@ -70,12 +104,15 @@ export type LineageResponse = {
   /** latest recorded release per lane/env */
   releases: LineageReleaseHead[]
   releases_error?: string
+  /** only with graph=true */
+  graph?: LineageRepoGraph[]
   errors: string[]
 }
 
-export async function fetchLineage(days: number, refresh = false): Promise<LineageResponse> {
+export async function fetchLineage(days: number, refresh = false, graph = false): Promise<LineageResponse> {
   const q = new URLSearchParams({ days: String(days) })
   if (refresh) q.set('refresh', 'true')
+  if (graph) q.set('graph', 'true')
   const r = await fetch(`/api/v1/lineage?${q.toString()}`)
   if (!r.ok) throw new Error(`lineage: HTTP ${r.status}`)
   return r.json() as Promise<LineageResponse>
