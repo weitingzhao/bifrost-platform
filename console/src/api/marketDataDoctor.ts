@@ -78,6 +78,26 @@ export type DoctorReport = {
   retired_slots: string[]
 }
 
+/**
+ * What /market/doctor answers while a recompute runs and nothing is cached yet (after a plugin
+ * restart): no session, no universe, no verdict — only the computing flag. Rendering it as a
+ * report blanked the whole Ingest tab (TD-165).
+ */
+export type DoctorComputing = {
+  ok: boolean
+  computing: true
+  generated_at?: string | null
+  age_sec?: number | null
+  findings?: DoctorFinding[]
+}
+
+export type DoctorResponse = DoctorReport | DoctorComputing
+
+/** True for the computing stub: a real report always carries `universe`. */
+export function isDoctorComputing(r: DoctorResponse | null | undefined): r is DoctorComputing {
+  return r != null && (r as Partial<DoctorReport>).universe == null
+}
+
 export type HealAction = DoctorFix & {
   finding_ids: string[]
   result: 'dry_run' | string | Record<string, unknown>
@@ -94,10 +114,10 @@ export type HealResponse = {
 
 const BASE = '/api/v1/plugins/market-data/api/market/doctor'
 
-export async function fetchMarketDataDoctor(probes = true): Promise<DoctorReport> {
+export async function fetchMarketDataDoctor(probes = true): Promise<DoctorResponse> {
   const r = await fetch(probes ? BASE : `${BASE}?probes=false`)
   if (!r.ok) throw new Error(`market doctor: HTTP ${r.status}`)
-  return (await r.json()) as DoctorReport
+  return (await r.json()) as DoctorResponse
 }
 
 export async function healMarketData(body: {

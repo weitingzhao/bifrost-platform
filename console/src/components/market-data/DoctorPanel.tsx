@@ -14,6 +14,7 @@ import {
 } from '@bifrost/ui'
 import {
   fetchMarketDataDoctor,
+  isDoctorComputing,
   healMarketData,
   type DoctorFinding,
   type HealResponse,
@@ -22,6 +23,7 @@ import {
   autoFixableIds,
   buildDoctorAgentReport,
   describeFix,
+  doctorPanelState,
   formatValue,
   severityVariant,
   sortFindings,
@@ -41,6 +43,8 @@ type PendingFix = { label: string; findingIds: string[] | null }
  * "Fix" executes one prescription, "Fix all" every auto-fixable one, and the
  * report copies as something an agent can act on, not just read.
  */
+const COMPUTING_RECHECK_MS = 15_000
+
 export function DoctorPanel() {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
@@ -53,8 +57,10 @@ export function DoctorPanel() {
     queryFn: () => fetchMarketDataDoctor(true),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
+    // While the plugin recomputes (cold cache after a restart) ask again until the report lands.
+    refetchInterval: query => (isDoctorComputing(query.state.data) ? COMPUTING_RECHECK_MS : false),
   })
-  const report = q.data ?? null
+  const { report, computing } = doctorPanelState(q.data)
   const findings = useMemo(() => sortFindings(report?.findings ?? []), [report])
   const fixable = useMemo(() => autoFixableIds(report), [report])
 
@@ -93,6 +99,8 @@ export function DoctorPanel() {
   const verdictTag =
     report != null ? (
       <DenseTag variant={verdictVariant(report.verdict)}>{report.verdict}</DenseTag>
+    ) : computing ? (
+      <DenseTag variant="neutral">computing</DenseTag>
     ) : q.isError ? (
       <DenseTag variant="danger">doctor unreachable</DenseTag>
     ) : null
@@ -102,8 +110,10 @@ export function DoctorPanel() {
       title="Doctor"
       description={
         report != null
-          ? `Session ${report.session}${report.session_is_today ? ' (today)' : ' (last completed)'} — ${report.summary}. Optionable underlyings: ${report.universe.optionable} of ${report.universe.underlyings}.`
-          : 'What the last session should hold vs what it does — each gap with the exact enqueue that fills it.'
+          ? `Session ${report.session}${report.session_is_today ? ' (today)' : ' (last completed)'} — ${report.summary}. Optionable underlyings: ${report.universe?.optionable ?? '—'} of ${report.universe?.underlyings ?? '—'}.`
+          : computing
+            ? 'The doctor is recomputing (the plugin restarted, nothing cached yet) — the report appears here in a minute or two.'
+            : 'What the last session should hold vs what it does — each gap with the exact enqueue that fills it.'
       }
       headerExtra={
         <div className="flex flex-wrap items-center gap-2">

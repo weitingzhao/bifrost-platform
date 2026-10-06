@@ -2,9 +2,11 @@ import type {
   DoctorFinding,
   DoctorFix,
   DoctorReport,
+  DoctorResponse,
   DoctorSeverity,
   DoctorVerdict,
 } from '@/api/marketDataDoctor'
+import { isDoctorComputing } from '@/api/marketDataDoctor'
 
 // A boundary reads after everything actionable and before the plain passes:
 // nothing to do about it, but it says why a number looks the way it does.
@@ -89,7 +91,7 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
     `Verdict: ${report.verdict} — ${report.summary}`,
     `EOD data (gates the Research dbt batch): ${report.eod_critical?.verdict ?? 'unknown'} — ${report.eod_critical?.detail ?? 'not reported'}`,
     `Generated: ${report.generated_at}`,
-    `Universe: watchlist ${report.universe.watchlist} · underlyings ${report.universe.underlyings} · optionable ${report.universe.optionable}`,
+    `Universe: watchlist ${report.universe?.watchlist ?? '—'} · underlyings ${report.universe?.underlyings ?? '—'} · optionable ${report.universe?.optionable ?? '—'}`,
     '',
     '## Findings (actionable)',
   ]
@@ -134,4 +136,17 @@ export function buildDoctorAgentReport(report: DoctorReport): string {
     'D10 BLOCKED: observe/data surfaces only — never scale daemon, never touch live trading.',
   )
   return lines.join('\n')
+}
+
+/**
+ * Split what the doctor answered into the report to render and the computing flag (TD-165).
+ * The computing stub has no universe or verdict: the panel says "computing" and asks again.
+ */
+export function doctorPanelState(data: DoctorResponse | null | undefined): {
+  report: DoctorReport | null
+  computing: boolean
+} {
+  if (data == null) return { report: null, computing: false }
+  if (isDoctorComputing(data)) return { report: null, computing: true }
+  return { report: data, computing: false }
 }
