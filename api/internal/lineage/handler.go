@@ -23,6 +23,7 @@ type Handler struct {
 	cache    map[int]cached
 	titles   TitlesFunc
 	setTitle SetTitleFunc
+	branches branchesCache
 }
 
 func NewHandler(svc *Service) *Handler {

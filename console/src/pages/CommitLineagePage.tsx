@@ -15,6 +15,7 @@ import {
   denseTableNumCell,
 } from '@bifrost/ui'
 import {
+  fetchBranches,
   fetchLineage,
   setThreadTitle,
   type LineageCommit,
@@ -25,10 +26,28 @@ import {
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip, type OpsVerdictLamp, type OpsVerdictTagVariant } from '@/components/layout/OpsVerdictStrip'
 import { PageToolbar } from '@/components/layout/PageToolbar'
+import { BranchesPanel } from '@/components/lineage/BranchesPanel'
 import { LineageGraph } from '@/components/lineage/LineageGraph'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const WINDOWS = [7, 14, 30, 90] as const
+const HELP_KEY = 'lineage.help'
+
+function readHelp(): boolean {
+  try {
+    return window.localStorage.getItem(HELP_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeHelp(on: boolean) {
+  try {
+    window.localStorage.setItem(HELP_KEY, on ? '1' : '0')
+  } catch {
+    // private window / blocked storage: the toggle still works for this visit
+  }
+}
 
 const meta = 'text-[var(--text-dense-meta)] text-muted-foreground'
 
@@ -244,6 +263,25 @@ export function CommitLineagePage() {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
   const [renaming, setRenaming] = useState<string | null>(null)
+  const [help, setHelp] = useState<boolean>(readHelp)
+  const toggleHelp = () =>
+    setHelp(h => {
+      writeHelp(!h)
+      return !h
+    })
+
+  const bq = useQuery({
+    queryKey: ['lineage-branches'],
+    queryFn: () => fetchBranches(),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const waiting = useMemo(() => {
+    const open = (bq.data?.branches ?? []).filter(b => b.status === 'open')
+    const oldest = open.map(b => Date.parse(b.oldest_open_at ?? '')).filter(Number.isFinite)
+    const days = oldest.length > 0 ? (Date.now() - Math.min(...oldest)) / 86_400_000 : null
+    return { count: open.length, days }
+  }, [bq.data])
 
   const q = useQuery({
     queryKey: ['lineage', days],
@@ -252,8 +290,9 @@ export function CommitLineagePage() {
     retry: false,
   })
   const refresh = async () => {
-    const fresh = await fetchLineage(days, true, true)
+    const [fresh, br] = await Promise.all([fetchLineage(days, true, true), fetchBranches(true)])
     qc.setQueryData(['lineage', days], fresh)
+    qc.setQueryData(['lineage-branches'], br)
   }
 
   const data = q.data
@@ -282,6 +321,9 @@ export function CommitLineagePage() {
       : `${totals.traced} of ${totals.main} main commits in the last ${data.days} days name their thread` +
         (totals.pending > 0 ? ` · ${totals.pending} thread commit${totals.pending === 1 ? '' : 's'} not on main yet` : '') +
         (totals.notInProd > 0 ? ` · ${totals.notInProd} landed, not in PROD yet` : '') +
+        (waiting.count > 0
+          ? ` · ${waiting.count} branch${waiting.count === 1 ? '' : 'es'} with unlanded work${waiting.days != null ? ` (oldest ${waiting.days.toFixed(1)} d)` : ''}`
+          : '') +
         ' · Gitea mirror, up to 8 h behind GitHub'
 
   const toggle = (id: string) =>
@@ -321,27 +363,44 @@ export function CommitLineagePage() {
             </Button>
           ))}
         </div>
-        <Input
-          value={needle}
-          onChange={e => setNeedle(e.target.value)}
-          placeholder="Filter: session, transcript, Change-Id, sha, subject, repo"
-          className="h-6 w-[340px] text-[var(--text-dense-caption)]"
-        />
+        <div className="flex items-center gap-2">
+          <Input
+            value={needle}
+            onChange={e => setNeedle(e.target.value)}
+            placeholder="Filter threads: session, Change-Id, sha, subject, repo"
+            className="h-6 w-[340px] text-[var(--text-dense-caption)]"
+          />
+          <Button type="button" size="xs" variant={help ? 'default' : 'ghost'} onClick={toggleHelp} title="Show or hide the explanations on this page">
+            {help ? 'Hide how to read' : 'How to read'}
+          </Button>
+        </div>
       </PageToolbar>
 
       {data?.graph != null && data.graph.length > 0 && (
         <OpsSection
           title="Graph"
-          description="Every repo's default branch in one time-ordered view: one lane per repo (plus a lane per open branch), one row per commit. Colour = agent thread; hollow = no thread. A ring marks the commit a release built; a lane is dashed above its latest PROD build."
           overflow="visible"
         >
-          <LineageGraph graph={data.graph} threads={data.threads} />
+          <LineageGraph graph={data.graph} threads={data.threads} showHelp={help} />
         </OpsSection>
       )}
 
+      <OpsSection title={`Branches${waiting.count > 0 ? ` · ${waiting.count} with unlanded work` : ''}`} overflow="visible">
+        {bq.isLoading ? (
+          <p className={`py-4 text-center ${meta}`}>Reading every branch…</p>
+        ) : bq.error != null ? (
+          <p className={`py-4 text-center ${meta}`}>Branches unavailable — {(bq.error as Error).message}</p>
+        ) : (
+          <>
+            <BranchesPanel branches={bq.data?.branches ?? []} showHelp={help} />
+            {(bq.data?.errors ?? []).length > 0 && <p className={`pt-2 ${meta}`}>{bq.data?.errors.join(' · ')}</p>}
+          </>
+        )}
+      </OpsSection>
+
       <OpsSection
         title="Threads"
-        description="A thread is a Claude-Session trailer. Expand a row for its commits; landing is decided by sha, then Change-Id (rebased, version-bumped or squashed), then subject for commits made before the hooks."
+        description={help ? "A thread is a Claude-Session trailer. Expand a row for its commits; landing is decided by sha, then Change-Id (rebased, version-bumped or squashed), then subject for commits made before the hooks." : undefined}
         overflow="visible"
       >
         {q.isLoading ? (
@@ -477,7 +536,7 @@ export function CommitLineagePage() {
       {data != null && (data.releases.length > 0 || data.releases_error != null) && (
         <OpsSection
           title="Releases"
-          description="Latest recorded release per lane and environment — the exact commit each repo was built from, read from the delivery runs and kept past CI retention. Deploying runs roll out; image builds are deployed later by a pin or GitOps sync."
+          description={help ? "Latest recorded release per lane and environment — the exact commit each repo was built from, read from the delivery runs and kept past CI retention. Deploying runs roll out; image builds are deployed later by a pin or GitOps sync." : undefined}
           overflow="visible"
         >
           {data.releases_error != null && data.releases_error !== '' ? (
@@ -523,7 +582,11 @@ export function CommitLineagePage() {
       {data != null && data.coverage.length > 0 && (
         <OpsSection
           title="Coverage"
-          description={`Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run.`}
+          description={
+            help
+              ? `Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run.`
+              : undefined
+          }
           collapsible
           defaultCollapsed
           overflow="visible"

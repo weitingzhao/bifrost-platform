@@ -131,3 +131,40 @@ export async function fetchLineage(days: number, refresh = false, graph = false)
   if (!r.ok) throw new Error(`lineage: HTTP ${r.status}`)
   return r.json() as Promise<LineageResponse>
 }
+
+/** One agent thread with commits on a branch. */
+export type BranchThread = { session: string; transcripts?: string[]; title?: string }
+
+/** GET /api/v1/lineage/branches — a non-default branch measured against its default branch. */
+export type BranchHealth = {
+  repo: string
+  branch: string
+  head_sha: string
+  head_at: string
+  /** commits the branch has that the default branch does not */
+  ahead: number
+  /** of those, changes not on the default branch in any form (Change-Id / subject) */
+  open: number
+  oldest_open_at?: string
+  /** default-branch commits since the branch forked; a floor when behind_is_floor */
+  behind: number
+  behind_is_floor?: boolean
+  fork_sha?: string
+  /** open: unlanded work · landed: every change is on main in another form (leftover) · even: merged */
+  status: 'open' | 'landed' | 'even'
+  threads: BranchThread[]
+  commits: LineageGraphCommit[]
+}
+
+export type BranchesResponse = {
+  generated_at: string
+  reachability: 'ok' | 'degraded' | 'fail' | 'unknown'
+  branches: BranchHealth[]
+  errors: string[]
+}
+
+export async function fetchBranches(refresh = false): Promise<BranchesResponse> {
+  const r = await fetch(`/api/v1/lineage/branches${refresh ? '?refresh=true' : ''}`)
+  if (!r.ok) throw new Error(`lineage branches: HTTP ${r.status}`)
+  return r.json() as Promise<BranchesResponse>
+}

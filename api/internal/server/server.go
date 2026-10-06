@@ -379,6 +379,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/compare", s.delivery.HandleCompare)
 		r.Get("/lineage", s.lineage.HandleGet)
+		r.Get("/lineage/branches", s.lineage.HandleBranches)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Put("/lineage/thread-title", s.lineage.HandleSetTitle)

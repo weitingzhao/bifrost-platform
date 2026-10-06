@@ -92,14 +92,22 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	mux.HandleFunc("/api/v1/repos/bifrost/r1/branches", func(w http.ResponseWriter, r *http.Request) {
 		var out []map[string]any
 		for _, b := range []string{"main", "lane-1", "lane-2", "lane-3", "stale"} {
-			out = append(out, map[string]any{"name": b, "commit": map[string]any{"timestamp": history[b][0].at}})
+			out = append(out, map[string]any{"name": b, "commit": map[string]any{"id": history[b][0].sha, "timestamp": history[b][0].at}})
 		}
 		write(w, out)
 	})
 	mux.HandleFunc("/api/v1/repos/bifrost/r1/commits", func(w http.ResponseWriter, r *http.Request) {
 		var out []map[string]any
 		if r.URL.Query().Get("page") == "1" {
-			h := history[r.URL.Query().Get("sha")]
+			ref := r.URL.Query().Get("sha")
+			h, ok := history[ref]
+			if !ok { // a head SHA: the history of the branch whose head it is
+				for _, hist := range history {
+					if hist[0].sha == ref {
+						h = hist
+					}
+				}
+			}
 			for i, c := range h {
 				out = append(out, map[string]any{"sha": c.sha, "parents": parentOf(h, i), "commit": map[string]any{
 					"message": c.msg, "committer": map[string]any{"date": c.at}}})
@@ -391,5 +399,33 @@ func TestSetTitleEndpoint(t *testing.T) {
 	h.HandleSetTitle(rec, httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`not json`)))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("bad body = %d", rec.Code)
+	}
+}
+
+func TestBranchesStatusAheadBehind(t *testing.T) {
+	s, _ := newTestService(t)
+	resp := s.Branches(context.Background())
+	if resp.Reachability != "ok" || len(resp.Errors) != 0 {
+		t.Fatalf("resp = %+v", resp)
+	}
+	by := map[string]BranchHealth{}
+	for _, b := range resp.Branches {
+		by[b.Branch] = b
+	}
+	// lane-2: F on top of A — one change that never landed, forked at the newest main commit
+	if b := by["lane-2"]; b.Status != "open" || b.Ahead != 1 || b.Open != 1 || b.Behind != 0 || b.ForkSHA != "aaa" ||
+		b.OldestOpenAt == nil || len(b.Threads) != 1 || b.Threads[0].Session != "local_s2" {
+		t.Fatalf("lane-2 = %+v", b)
+	}
+	// lane-1: D re-landed as A (same Change-Id), E squashed into B — nothing open
+	if b := by["lane-1"]; b.Status != "landed" || b.Ahead != 2 || b.Open != 0 {
+		t.Fatalf("lane-1 = %+v", b)
+	}
+	// stale: its head is an old default-branch commit — merged, 4 main commits behind
+	if b := by["stale"]; b.Status != "even" || b.Ahead != 0 || b.Behind != 4 || b.BehindIsFloor {
+		t.Fatalf("stale = %+v", b)
+	}
+	if resp.Branches[0].Status != "open" {
+		t.Fatalf("open branches sort first: %+v", resp.Branches[0])
 	}
 }

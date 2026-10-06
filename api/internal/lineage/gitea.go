@@ -31,6 +31,7 @@ type giteaRepo struct {
 
 type giteaBranch struct {
 	Name string
+	SHA  string
 	At   time.Time
 }
 
@@ -102,6 +103,7 @@ func (g *gitea) branches(ctx context.Context, repo string) ([]giteaBranch, error
 		var raw []struct {
 			Name   string `json:"name"`
 			Commit struct {
+				ID        string    `json:"id"`
 				Timestamp time.Time `json:"timestamp"`
 			} `json:"commit"`
 		}
@@ -110,7 +112,7 @@ func (g *gitea) branches(ctx context.Context, repo string) ([]giteaBranch, error
 			return nil, err
 		}
 		for _, b := range raw {
-			out = append(out, giteaBranch{Name: b.Name, At: b.Commit.Timestamp})
+			out = append(out, giteaBranch{Name: b.Name, SHA: b.Commit.ID, At: b.Commit.Timestamp})
 		}
 		if len(raw) < pageLimit {
 			break
