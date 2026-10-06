@@ -11,6 +11,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
 const (
@@ -32,6 +34,8 @@ var (
 type PostgresWalRepairResponse struct {
 	ActuationResponse
 	MinIOReady      bool     `json:"minio_ready"`
+	MinIOExternal   bool     `json:"minio_external,omitempty"`
+	MinIOEndpoint   string   `json:"minio_endpoint,omitempty"`
 	BucketOK        bool     `json:"bucket_ok"`
 	ProbeOK         bool     `json:"probe_ok"`
 	ClearedObjects  []string `json:"cleared_objects,omitempty"`
@@ -143,15 +147,36 @@ func (s *Service) RepairPostgresWalStore(ctx context.Context) (PostgresWalRepair
 		},
 	}
 
-	if err := s.ensureMinioReady(ctx, &resp); err != nil {
+	clientset, _, err := s.buildClient()
+	if err != nil {
 		resp.Message = err.Error()
 		return resp, err
 	}
-	resp.MinIOReady = true
+	backend := s.resolveMinioBackend(ctx, clientset)
+	if backend.External {
+		// MinIO outside the cluster (the NAS since 2026-10-06): nothing here can
+		// restart it or exec into it, and the in-cluster minio Deployment must stay
+		// at 0 — it would be a second server on the same data directory.
+		resp.MinIOExternal = true
+		resp.MinIOEndpoint = backend.Endpoint
+		if backend.Reach != probe.ReachOK {
+			err := fmt.Errorf("%s (not touching the in-cluster minio Deployment; restart the external MinIO)", backend.Detail)
+			resp.Message = err.Error()
+			return resp, err
+		}
+		resp.MinIOReady = true
+		resp.ProbeOK = true // /minio/health/cluster answers 200 only with write quorum
+	} else {
+		if err := s.ensureMinioReady(ctx, &resp); err != nil {
+			resp.Message = err.Error()
+			return resp, err
+		}
+		resp.MinIOReady = true
 
-	if err := s.repairMinioWALObjects(ctx, &resp); err != nil {
-		resp.Message = err.Error()
-		return resp, err
+		if err := s.repairMinioWALObjects(ctx, &resp); err != nil {
+			resp.Message = err.Error()
+			return resp, err
+		}
 	}
 
 	deleted, err := s.deleteStuckBackupCRs(ctx)
@@ -177,6 +202,9 @@ func (s *Service) RepairPostgresWalStore(ctx context.Context) (PostgresWalRepair
 	resp.WalArchiving = s.readWalArchivingDetail(ctx)
 	resp.OK = true
 	parts := []string{"minio probe ok"}
+	if resp.MinIOExternal {
+		parts = []string{"minio healthy at " + strings.TrimPrefix(resp.MinIOEndpoint, "http://") + " (outside the cluster)"}
+	}
 	if len(resp.ClearedObjects) > 0 {
 		parts = append(parts, fmt.Sprintf("cleared %d object(s)", len(resp.ClearedObjects)))
 	}

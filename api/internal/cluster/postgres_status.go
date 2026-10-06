@@ -184,7 +184,20 @@ func operatorDep(ctx context.Context, clientset kubernetes.Interface) ServiceDep
 }
 
 func minioDep(snap readinessSnapshot) ServiceDependencyView {
-	return deploymentDep(snap, cnpgNamespace, "minio", "MinIO backup (nfs-hot)")
+	return minioDepLabeled(snap, "MinIO backup (nfs-hot)")
+}
+
+// minioDepLabeled reports the backup MinIO: the minio Deployment when it runs in
+// the cluster, the health of the server behind Service data/minio when that
+// Service points outside it (the Deployment is then 0 on purpose).
+func minioDepLabeled(snap readinessSnapshot, label string) ServiceDependencyView {
+	if snap.minio.External {
+		return ServiceDependencyView{
+			ID: "minio-backup-external", Label: "MinIO backup (outside the cluster)",
+			Reachability: snap.minio.Reach, Detail: snap.minio.Detail,
+		}
+	}
+	return deploymentDep(snap, cnpgNamespace, "minio", label)
 }
 
 // lanAccessProbe reads the bifrost-postgres-lan NodePort Service and pairs it
@@ -364,8 +377,9 @@ func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapsho
 		reach = probe.ReachDegraded
 		detail += " · MinIO not ready"
 	}
+	// An external MinIO keeps its data on its own disk, not on nfs-hot.
 	nfsHot := clusterCapDep(snap, "storage-class-nfs-hot", "nfs-hot")
-	if nfsHot.Reachability != probe.ReachOK {
+	if !snap.minio.External && nfsHot.Reachability != probe.ReachOK {
 		reach = probe.ReachDegraded
 		detail += " · nfs-hot unavailable"
 	}

@@ -54,6 +54,7 @@ type readinessSnapshot struct {
 	pools         map[string]placement.PoolView
 	deployments   map[string]appsv1.Deployment
 	ingressRoutes map[string]bool // "namespace/name" → present
+	minio         minioBackend    // where Service data/minio points (in-cluster vs external)
 }
 
 func (s *Service) ServiceReadiness(ctx context.Context) ServiceReadinessResponse {
@@ -99,7 +100,12 @@ func (s *Service) buildReadinessSnapshot(ctx context.Context) (readinessSnapshot
 
 	deployments, depErr := s.loadReadinessDeployments(ctx)
 	ingressRoutes, irErr := s.loadTradeGatewayIngressRoutes(ctx)
+	var minio minioBackend
+	if clientset, _, err := s.buildClient(); err == nil {
+		minio = s.resolveMinioBackend(ctx, clientset)
+	}
 	snap := readinessSnapshot{
+		minio:         minio,
 		nodes:         nodesResp.Nodes,
 		clusterCaps:   capMap,
 		nodeCoverage:  covMap,
@@ -195,7 +201,7 @@ func evalDatabaseDomain(snap readinessSnapshot) ServiceDomainView {
 		schedulableArchDep(snap, "amd64", "Schedulable amd64 nodes"),
 	}
 	deps = append(deps, deploymentDep(snap, cnpgOperatorNS, cnpgOperatorDeploy, "CloudNativePG operator"))
-	deps = append(deps, deploymentDep(snap, cnpgNamespace, "minio", "MinIO backup target"))
+	deps = append(deps, minioDepLabeled(snap, "MinIO backup target"))
 
 	embedded := activeEmbeddedPostgresDep(snap)
 	if embedded != nil {

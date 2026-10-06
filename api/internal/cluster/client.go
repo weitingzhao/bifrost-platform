@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,8 @@ type Service struct {
 	cloneSched      *DataCloneScheduleStore
 	cloneLast       *DataCloneLastStore
 	primaryOverride string // unit tests only
+	// minioHealthProbe replaces the HTTP check of an external MinIO (unit tests only).
+	minioHealthProbe func(ctx context.Context, endpoint string) (int, error)
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
