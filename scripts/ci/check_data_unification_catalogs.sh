@@ -14,8 +14,6 @@ require_file() {
   fi
 }
 
-require_file "config/lanes.yaml"
-require_file "config/programs/_templates.yaml"
 require_file "config/migrate-waves/trade-k8s-native.yaml"
 require_file "config/migrate-waves/data-layer-k3s.yaml"
 require_file "config/agent-tasks.yaml"
@@ -41,18 +39,6 @@ if [[ "$data_yaml" -ne "$data_ts" ]]; then
   fail=1
 fi
 
-lane_count="$(grep -cE '^\s+- id:' config/lanes.yaml)"
-if [[ "$lane_count" -lt 26 ]]; then
-  echo "check_data_unification: expected >=26 lanes, got $lane_count" >&2
-  fail=1
-fi
-
-tpl_count="$(grep -cE '^\s+- id:' config/programs/_templates.yaml)"
-if [[ "$tpl_count" -lt 5 ]]; then
-  echo "check_data_unification: expected >=5 templates, got $tpl_count" >&2
-  fail=1
-fi
-
 task_count="$(grep -cE '^\s+- id:' config/agent-tasks.yaml)"
 if [[ "$task_count" -lt 17 ]]; then
   echo "check_data_unification: expected >=17 agent tasks, got $task_count" >&2
@@ -66,17 +52,13 @@ if ! grep -q '@deprecated' "$env_cat" || ! grep -q 'TRADE_ENVIRONMENTS' "$env_ca
   fail=1
 fi
 
-# Forbid reintroducing Go hardcode maps for migrate waves / templates
+# Forbid reintroducing Go hardcode maps for migrate waves
 if grep -qn 'var tradeK8sNativeWaves' api/internal/migratewave/*.go 2>/dev/null; then
   echo "check_data_unification: tradeK8sNativeWaves hardcoded again" >&2
-  fail=1
-fi
-if grep -qn 'var programTemplates = map' api/internal/devagent/*.go 2>/dev/null; then
-  echo "check_data_unification: programTemplates map hardcoded again" >&2
   fail=1
 fi
 
 if [[ "$fail" -ne 0 ]]; then
   exit 1
 fi
-echo "check_data_unification: OK (lanes=$lane_count templates=$tpl_count tasks=$task_count trade=$trade_yaml data=$data_yaml)"
+echo "check_data_unification: OK (tasks=$task_count trade=$trade_yaml data=$data_yaml)"

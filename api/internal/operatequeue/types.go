@@ -8,6 +8,8 @@ const (
 )
 
 const (
+	// SourcePostCompletion marks items written by the program post-completion
+	// hand-off, retired with Build Desk (2026-10-06); kept so old items still read.
 	SourcePostCompletion    = "post_completion"
 	SourceManual            = "manual"
 	SourceChecklistDispatch = "checklist_dispatch"
@@ -84,24 +86,6 @@ type EnqueueRequest struct {
 	RiskLevel          string   `json:"risk_level,omitempty"`
 	Owner              string   `json:"owner,omitempty"`
 	DueAt              string   `json:"due_at,omitempty"`
-}
-
-type ApprovalInjectParams struct {
-	PendingID          string
-	ProgramID          string
-	SourceLaneID       string
-	OperateLane        string
-	Title              string
-	Description        string
-	HandoffKind        string
-	Reason             string
-	AgentTaskID        string
-	AcceptanceCriteria []string
-	VerificationSteps  []string
-	RiskLevel          string
-	Owner              string
-	DueAt              string
-	ApprovedBy         string
 }
 
 type CloseRequest struct {

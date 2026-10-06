@@ -46,16 +46,18 @@ func TestStoreIdempotentPendingID(t *testing.T) {
 	t.Cleanup(func() { _ = os.Unsetenv("PLATFORM_DATA_DIR") })
 
 	store := NewStore(configDir)
-	first := NewItemFromApproval(ApprovalInjectParams{
-		PendingID: "pending-1", ProgramID: "p1", Title: "Handoff", ApprovedBy: "owner",
-	})
+	first := Item{
+		ID: "item-1", PendingID: "pending-1", ProgramID: "p1", Title: "Handoff",
+		Status: StatusOpen, Source: SourceManual,
+	}
 	saved, err := store.Add(first)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dup := NewItemFromApproval(ApprovalInjectParams{
-		PendingID: "pending-1", ProgramID: "p1", Title: "Handoff again", ApprovedBy: "owner",
-	})
+	dup := Item{
+		ID: "item-2", PendingID: "pending-1", ProgramID: "p1", Title: "Handoff again",
+		Status: StatusOpen, Source: SourceManual,
+	}
 	again, err := store.Add(dup)
 	if err != nil {
 		t.Fatal(err)

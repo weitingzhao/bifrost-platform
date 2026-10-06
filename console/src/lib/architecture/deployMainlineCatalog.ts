@@ -2,7 +2,7 @@
  * Deploy mainline catalog — migration decision chain data (archive + LLM pack).
  *
  * Source: bifrost-trade-infra/docs/LOCAL_PROD_FINAL_SIGNOFF.md (2026-06-15).
- * UI: historical phases on Delivery Board; live spine: Control Room / Briefing Reconciliation.
+ * UI: live spine on Control Room; historical phases in the LLM pack.
  */
 
 import type { OpsContextResponse } from '@/api/opsContextTypes'
@@ -36,7 +36,7 @@ export type MainlinePhase = MainlinePhaseDefinition & {
   spineStatus?: string
 }
 
-/** Full list — used by LLM pack (needs full context) and Delivery Board historical archive. */
+/** Full list — used by LLM pack (needs full context). */
 export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
   { seq: 0, phase: 'Phase 2B + 2C-A Session 0–9', authority: 'PHASE2C_SIGNOFF_MASTER.md', historicalNote: 'CLOSED (2026-06-08)' },
   { seq: 1, phase: 'Local Prod Final', authority: 'This page', historicalNote: 'CLOSED (2026-06-04 Owner L4)' },
@@ -81,10 +81,6 @@ export const ALL_MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] = [
 /** Spine-bound live phases (seq 4/5/7). */
 export const MAINLINE_PHASE_DEFINITIONS: MainlinePhaseDefinition[] =
   ALL_MAINLINE_PHASE_DEFINITIONS.filter(d => d.spineMilestoneId != null)
-
-/** Historical CLOSED phases (seq 0-3, 6) — shown on Delivery Board archive. */
-export const MAINLINE_HISTORICAL_PHASES: MainlinePhaseDefinition[] =
-  ALL_MAINLINE_PHASE_DEFINITIONS.filter(d => d.spineMilestoneId == null)
 
 /** @deprecated Use resolveMainlinePhases(context) — static export kept for LLM pack fallback only. */
 export const MAINLINE_PHASES: Array<MainlinePhaseDefinition & { status: string }> =
@@ -256,19 +252,6 @@ export const MIGRATION_SEQUENCE = [
   'data → socket/worker → api → frontend (Platform Roadmap)',
   'Legacy retirement: Phase 3 SIGNED (2026-06-29, D8) — Legacy runtime stopped, bifrost-trader-engine NAS-archived',
   'Auto-trade / R-DV3: Owner deferred, not in current milestone scope',
-]
-
-export type ChangeLogEntry = { date: string; content: string }
-
-export const CHANGE_LOG: ChangeLogEntry[] = [
-  {
-    date: '2026-07-01',
-    content:
-      'Governance Phase 6 — seq 4/5/7 spineMilestoneId only; resolveMainlinePhases(context) for live Projection; removed hardcoded IN_PROGRESS on 2c-b-prod-cutover',
-  },
-  { date: '2026-06-29', content: 'Phase 3 Legacy retirement SIGNED (decision D8): UI side-by-side gate dropped (Legacy already stopped; Phase 2B 9/9 domains business-equivalent); engine NAS-archived read-only; data layer on CNPG (.80 retired)' },
-  { date: '2026-06-08', content: 'Created; Agent prod-health + verify-2c-a1 revalidation passed' },
-  { date: '2026-06-04', content: 'Owner L2 Sessions 0–3/8 + L2.8; L3 D1–D5 revised; L4 CLOSED; K3s Phase 1 unlocked' },
 ]
 
 export function buildDeployMainlineLlmPack(context?: OpsContextResponse): string {

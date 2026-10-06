@@ -4,12 +4,12 @@
  * Prerequisite: TIBM0–4 + TIBM-PC signed; IBGP complete; spine decision D10 (trading frozen).
  *
  * Owner sign-off surfaces:
- * - Delivery Board · trade-ib-migration · phase W1
+ * - Program trade-ib-migration · phase W1 (history)
  * - Architecture → Trade IB Migration → Rollout W1 panel · anchor `#rollout-w1-signoff`
  *
  * Live state (not this catalog):
  * - Trade IB health: Rocket → Cluster + Monitor matrix probes
- * - Migrate lane: Engineer → Briefing · spine stream trade-ib-client-migration
+ * - Migrate progress: spine stream trade-ib-client-migration
  *
  * Trading execution (daemon FSM, live orders, scale-up for auto-trade) is intentionally BLOCKED
  * until Owner issues an explicit unlock — see TRADE_EXECUTION_FREEZE.

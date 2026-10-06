@@ -97,9 +97,6 @@ func (h *Handler) Sweep(req SweepRequest) (SweepResponse, error) {
 				sr.Reason = "stale dismiss failed: " + err.Error()
 				continue
 			}
-			if h.observer != nil {
-				h.observer.OnOperateQueueClosed(closed)
-			}
 			if h.audit != nil {
 				h.audit.RecordDirect("queue-sweep", actuation.RoleOperator, "operate.queue.dismiss", closed.ID, StatusClosed,
 					"sweep resolved: "+cr.Reason)

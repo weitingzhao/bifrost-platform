@@ -11,6 +11,8 @@ import {
 } from '@bifrost/ui'
 import { CatalogSection } from '@/components/CatalogSection'
 import { GovernanceArchiveSection } from '@/components/architecture/GovernanceArchiveSection'
+import { VisionGatePanel } from '@/components/architecture/VisionGatePanel'
+import { VISION_GATE_IDS } from '@/api/vision'
 import {
   GovernanceCatalogShell,
   type GovernanceCatalogSection,
@@ -576,14 +578,14 @@ export function DualFlywheelVisionPage() {
 
         <CatalogSection title={`Spine map (V1–V5 · ${VISION_SPINE_MAP_SOURCE})`}>
           <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-            Authoritative map for Agent Briefing and governance lane — v{VISION_SPINE_MAP_VERSION}
+            Vision ↔ spine milestone map — v{VISION_SPINE_MAP_VERSION}
           </p>
           <DenseDataTable>
             <DenseTableHeader>
               <DenseTableHeadRow>
                 <DenseTableHead>Vision</DenseTableHead>
                 <DenseTableHead>Spine milestone</DenseTableHead>
-                <DenseTableHead>Briefing hook</DenseTableHead>
+                <DenseTableHead>Hook</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
@@ -595,7 +597,7 @@ export function DualFlywheelVisionPage() {
                   <DenseTableCell className="font-mono-tabular text-[var(--muted-foreground)]">
                     {row.spineMilestoneId}
                   </DenseTableCell>
-                  <DenseTableCell>{row.briefingHook}</DenseTableCell>
+                  <DenseTableCell>{row.hook}</DenseTableCell>
                 </DenseTableRow>
               ))}
             </DenseTableBody>
@@ -618,6 +620,17 @@ export function DualFlywheelVisionPage() {
                 ))}
               </ul>
               <div className="mt-1 text-xs font-medium text-[var(--primary)]">Unlocks: {m.unlocks}</div>
+            </div>
+          ))}
+        </CatalogSection>
+
+        <CatalogSection title="Vision gates (V1–V5 · S3)">
+          <p className="m-0 mb-2 px-3 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Gate checks and Owner sign-offs for each convergence milestone.
+          </p>
+          {VISION_GATE_IDS.map(id => (
+            <div key={id} className="border-t border-[var(--table-rule)] pt-1 first:border-t-0">
+              <VisionGatePanel id={id} />
             </div>
           ))}
         </CatalogSection>

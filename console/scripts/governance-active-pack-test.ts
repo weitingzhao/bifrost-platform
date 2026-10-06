@@ -113,7 +113,6 @@ check('protocol — P2/P3 diagnostics remain live protocol', () => {
 check('protocol — P4–P7 collapsed to a program reference', () => {
   assert.ok(protocol.includes('## Mission Signal program references (P4–P7'))
   assert.ok(protocol.includes(MISSION_SIGNAL_PROGRAM_REFERENCE))
-  assert.ok(protocol.includes('Delivery Board'))
   assert.ok(protocol.includes('Agent System'))
 })
 

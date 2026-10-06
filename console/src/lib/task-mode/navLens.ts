@@ -2,12 +2,9 @@ import type { ShellNavGroup } from '@bifrost/ui'
 import { getAllNavItems } from '@bifrost/ui'
 import type { DeliveryPipelineRunView, ReleaseGateResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import type { ProgramDetailResponse } from '@/api/programsTypes'
 import type { DeliveryReleasePhase } from '@/lib/architecture/deliveryMainlineCatalog'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 import { gateStepStatus, runStepStatus } from '@/lib/delivery/releaseStepTypes'
-import { isPipelineRunSucceeded } from '@/lib/delivery/pipelineRunAskPack'
-import { isGatesComplete, isProgramCatalogComplete } from '@/lib/briefing/programClose'
 import type { PatrolRun } from '@/api/patrol'
 import { latestPatrolRun } from '@/lib/patrol/patrolStatus'
 import { taskModeById } from './taskModeCatalog'
@@ -19,17 +16,12 @@ export type TaskPhaseStatusInput = {
   supplyChain?: SupplyChainResponse
   stgReleasePhases?: DeliveryReleasePhase[]
   operateQueueOpenCount?: number
-  programDetail?: ProgramDetailResponse
   platformStgRun?: DeliveryPipelineRunView
   platformStgGate?: ReleaseGateResponse
   platformProdGate?: ReleaseGateResponse
   tradeStgRun?: DeliveryPipelineRunView
   tradeStgGate?: ReleaseGateResponse
   tradeStgSmokeOk?: boolean
-  /** True after user clicked "Open scoped Briefing" (localStorage; D-A). */
-  briefingOpened?: boolean
-  /** Dev Agent API phase completion — maps Task Mode phase ids (implement / pre-push). */
-  devAgentPhaseDone?: (phaseId: string) => boolean
   /** Daily Ops: true when pickFleetFixCell finds an Agent-Fixable cell (align phase CTA). */
   fleetAgentFixAvailable?: boolean
   /** Live patrol runs (GET /api/v1/patrol/runs). Omit / empty → review stays active (Idle). */
@@ -263,47 +255,6 @@ function resolveMissionLaunchPhase(phaseId: string, input: TaskPhaseStatusInput)
   }
 }
 
-/** Board/program progress when no Tekton pipeline run is available. */
-function resolveBoardDeliverStg(input: TaskPhaseStatusInput): TaskPhaseStatus {
-  const program = input.programDetail
-  if (program == null) return 'planned'
-  if (isProgramCatalogComplete(program.program)) return 'done'
-  if (program.active === true || program.program.active === true) return 'active'
-  return 'planned'
-}
-
-function resolveDevBuildPhase(
-  phaseId: string,
-  input: TaskPhaseStatusInput,
-): TaskPhaseStatus {
-  const program = input.programDetail
-  switch (phaseId) {
-    case 'briefing':
-      return input.briefingOpened === true ? 'done' : 'planned'
-    case 'implement': {
-      if (input.devAgentPhaseDone?.('implement') === true) return 'done'
-      return program?.active === true ? 'active' : 'planned'
-    }
-    case 'pre-push':
-      return input.devAgentPhaseDone?.('pre-push') === true ? 'done' : 'planned'
-    case 'deliver-stg': {
-      const run = input.tradeStgRun ?? input.platformStgRun
-      if (run != null && isPipelineRunSucceeded(run)) return 'done'
-      if (run != null) return 'active'
-      return resolveBoardDeliverStg(input)
-    }
-    case 'sign-off': {
-      if (program == null) return 'planned'
-      const signed = program.program.phases_signed ?? program.program.signed ?? 0
-      if (isGatesComplete(program.program)) return 'done'
-      if (signed > 0) return 'active'
-      return 'planned'
-    }
-    default:
-      return 'unknown'
-  }
-}
-
 function resolvePatrolPhase(phaseId: string, input: TaskPhaseStatusInput): TaskPhaseStatus {
   const latest = latestPatrolRun(input.patrolRuns ?? [])
   switch (phaseId) {
@@ -328,8 +279,6 @@ function rawPhaseStatus(
   switch (modeId) {
     case 'ops':
       return resolveOpsPhase(phaseId, input)
-    case 'build':
-      return resolveDevBuildPhase(phaseId, input)
     case 'analysis':
       return resolveAnalysisPhase(phaseId, input)
     default:

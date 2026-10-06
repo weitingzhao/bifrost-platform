@@ -6,11 +6,11 @@
  *
  * Live state (not this catalog):
  * - PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)
- * - Migrate progress: Engineer → Briefing · lane data-layer-k3s + spine projection
+ * - Migrate progress: spine stream data-layer-k3s (GET /api/v1/context) + spine projection
  */
 
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { projectWaveStatus } from '@/lib/briefing/waveProjection'
+import { projectWaveStatus } from '@/lib/architecture/waveProjection'
 import type { DataLayerMigrationPhase } from './dataLayerCatalogTypes'
 import { GENERATED_DATA_LAYER_PHASES } from './migrateWaves.generated'
 
@@ -143,8 +143,8 @@ export const DATA_SERVICES_MCP = {
   schedule: 'GET/PUT /api/v1/cluster/data-clone/schedule (default disabled; weekly optional)',
 } as const
 
-/** Briefing note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
-export const DATA_FRESHNESS_BRIEFING_NOTE =
+/** Freshness note — stale non-prod DBs surface in Console Postgres panel; Agent uses get_data_freshness. */
+export const DATA_FRESHNESS_NOTE =
   'Data freshness: Rocket → Cluster → Postgres → Data Freshness, or Ops TCC → Refresh DEV ledger (Agent Task data-layer-clone, bifrost_dev only). Verdict uses lag_vs_prod_days (fresh|aging|stale; not wall-clock age alone — wall_age in detail can be large while lag=0). Inner-loop cadence (Program trade-dev-inner-loop / D-IL2): prefer last_clone_at ≤7d (or on-demand) before ledger-heavy Trade UI work. If bifrost_dev/stg lag ≥ 7d (stale) or last_clone_at old, Sync from Prod (admin, both targets) or TCC Refresh DEV ledger / MCP trigger_data_clone (confirm:true; targets=["bifrost_dev"]). Aging (3–7d) is a soft warning. Live quotes ≠ PG — use redis-ib (never clone redis-live-prod → redis-dev).'
 
 /** Acceptance — Cursor MCP must list data tools after reload. */
@@ -206,7 +206,7 @@ export const DATA_RESPONSIBILITY: ResponsibilitySplit[] = [
 ]
 
 // ---------------------------------------------------------------------------
-// K3s data layer migration (Agent Briefing + spine stream data-layer-k3s)
+// K3s data layer migration (spine stream data-layer-k3s)
 // ---------------------------------------------------------------------------
 
 export type DataLayerPhaseStatus = 'pending' | 'next' | 'in_progress' | 'done'
@@ -234,8 +234,8 @@ export function activeDataLayerPhase(ctx?: OpsContextResponse): DataLayerMigrati
   return DATA_LAYER_MIGRATION_PHASES[idx]
 }
 
-/** Agent Briefing appendix — phased migration queue aligned with spine stream data-layer-k3s. */
-export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): string {
+/** Spine appendix — phased migration queue aligned with spine stream data-layer-k3s. */
+export function formatDataLayerSpineAppendix(ctx?: OpsContextResponse): string {
   const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === DATA_LAYER_MIGRATE_STREAM_ID)
   const lines = [
     '## Data layer migration phases (K3s)',
@@ -278,7 +278,7 @@ export function formatDataLayerBriefingAppendix(ctx?: OpsContextResponse): strin
   for (const c of DATA_LAYER_SESSION_CONSTRAINTS) lines.push(`- ${c}`)
   lines.push('')
   lines.push('### Data Services (freshness / clone)')
-  lines.push(`- ${DATA_FRESHNESS_BRIEFING_NOTE}`)
+  lines.push(`- ${DATA_FRESHNESS_NOTE}`)
   for (const step of DATA_SERVICES_AGENT_FLOW) lines.push(`- ${step}`)
   lines.push('')
   lines.push('### Data Services E2E (Owner-controlled)')
@@ -294,17 +294,17 @@ export const DATA_LAYER_RELATED_AUTHORITIES = [
   'Live PG/Redis/MinIO readiness: Rocket → Cluster (Postgres / Redis / Issues panels)',
   'Data Freshness + Sync from Prod: Rocket → Cluster → Postgres → Data Freshness OpsSection',
   'MCP: get_data_freshness · trigger_data_clone · get_data_clone_status',
-  'Migrate lane + spine-projected queue: Engineer → Briefing · lane data-layer-k3s',
+  'Migrate progress: spine stream data-layer-k3s (GET /api/v1/context)',
   'Target topology complement: k3sArchitectureCatalog.ts',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]
 
-/** Archived migration phase definitions — live done/total/next_task uses spine + formatDataLayerBriefingAppendix(ctx). */
+/** Archived migration phase definitions — live done/total/next_task uses spine + formatDataLayerSpineAppendix(ctx). */
 export function buildDataLayerHistoricalAppendix(): string {
   const lines: string[] = [
     '## Historical progress (archived phase definitions — do not treat spine counts as live here)',
     '',
-    `Spine stream: \`${DATA_LAYER_MIGRATE_STREAM_ID}\` · live progress: formatDataLayerBriefingAppendix(ctx) or Agent Briefing lane.`,
+    `Spine stream: \`${DATA_LAYER_MIGRATE_STREAM_ID}\` · live progress: formatDataLayerSpineAppendix(ctx).`,
     '',
     'Authority: decision **D2-prime** supersedes D2 (.80 bare-metal interim).',
     '',
@@ -324,7 +324,7 @@ export function buildDataLayerLlmPack(): string {
   const lines: string[] = [
     '# Bifrost Ops — Data Layer Architecture',
     `# Source: ${DATA_LAYER_SOURCE} v${DATA_LAYER_VERSION}`,
-    'Live cluster + migrate progress: Rocket → Cluster / Engineer → Briefing (data-layer-k3s) — not this catalog.',
+    'Live cluster + migrate progress: Rocket → Cluster / spine stream data-layer-k3s — not this catalog.',
     '',
     '## Redis instances (per environment)',
     ...REDIS_INSTANCES.map(r =>

@@ -1320,7 +1320,7 @@ export function PluginReleasePage({
                     After publish: Trade Live on-demand symbols &gt; default 5; dynamic subscribe works
                   </li>
                   <li>Ghost TWS / empty accounts_snapshot do not block P2 acceptance</li>
-                  <li>Program: Delivery Board · launch-plugin-lane</li>
+                  <li>Program: launch-plugin-lane (history)</li>
                 </ul>
               )}
             </LaneDetailCollapse>

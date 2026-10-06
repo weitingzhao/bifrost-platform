@@ -6,7 +6,7 @@
  *
  * Live state (not this catalog):
  * - LAN health + spine infra streams: Ground Systems → Network (summary also on Mission Control → Control Room)
- * - Infra lane: Engineer → Briefing · network-upgrade-core / network-upgrade-wifi
+ * - Infra progress: spine streams network-upgrade-core / network-upgrade-wifi
  * - API actuation: platform-api /api/v1/network/* · networkApiContractCatalog.ts
  */
 
@@ -471,7 +471,7 @@ export const AI_SCENARIOS: AiScenarioRow[] = [
 
 export const NETWORK_UPGRADE_RELATED_AUTHORITIES = [
   'Live LAN health + spine infra streams: Ground Systems → Network (Mission Control → Control Room summary)',
-  'Infra migrate lane: Engineer → Briefing · network-upgrade-core / network-upgrade-wifi',
+  'Infra progress: spine streams network-upgrade-core / network-upgrade-wifi (GET /api/v1/context)',
   'Network API actuation: GET/POST /api/v1/network/* · networkApiContractCatalog.ts',
   'Spine: config/ops-context.yaml · decision D9 (Session v2)',
 ]

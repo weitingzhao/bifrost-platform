@@ -106,7 +106,7 @@ app.post('/nightly/run', (_req, res) => {
     script,
     log_path: logPath,
     reports_dir: reportsDir,
-    hint: 'Refresh Agent Briefing in ~1–2 min for report and drift proposals',
+    hint: 'Open Ops Desk → Queue → Review in ~1–2 min for report and drift proposals',
   })
 })
 

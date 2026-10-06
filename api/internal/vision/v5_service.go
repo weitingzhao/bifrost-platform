@@ -169,7 +169,7 @@ func (s *Service) collectV5Checks(ctx context.Context) []GateCheck {
 	checks = append(checks, s.checkFileContains(
 		"vision-gate-panels", "V1–V5 gate panels in Console", true,
 		consolePath(s.configDir, "src/pages/DualFlywheelVisionPage.tsx"),
-		"VisionV5GatePanel",
+		"VisionGatePanel",
 	))
 	checks = append(checks, s.checkFileContains(
 		"l3-boundary", "L3 PR governance boundary", true,

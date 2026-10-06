@@ -17,7 +17,7 @@ import {
 } from '@bifrost/ui'
 import { Languages } from 'lucide-react'
 import { PatrolDispatchLog } from '@/components/patrol/PatrolDispatchLog'
-import { AGENT_DIALOGUE_LANGUAGE_OPTIONS } from '@/lib/briefing/agentDialogueLanguage'
+import { AGENT_DIALOGUE_LANGUAGE_OPTIONS } from '@/lib/agent/agentDialogueLanguage'
 import { localizePatrolLog, type PatrolOutputLanguage } from '@/lib/patrol/logLanguage'
 import { usePatrolOutputLanguage } from '@/lib/patrol/usePatrolOutputLanguage'
 import { OpsSection } from '@/components/layout/OpsSection'

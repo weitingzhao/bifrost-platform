@@ -1,8 +1,8 @@
 // Package safego keeps one goroutine's panic from taking the whole process
 // with it.
 //
-// platform-api runs five work surfaces in a single process: Mission Control,
-// Launch Desk, Build Desk, Plugin and Engineer. chi's middleware.Recoverer
+// platform-api runs four work surfaces in a single process: Mission Control,
+// Launch Desk, Plugin and Engineer. chi's middleware.Recoverer
 // guards only a request handler's own stack, so a panic in any background
 // goroutine — the patrol autopilot, the three-second operate-queue drain, a
 // probe fan-out — ended the process and took cluster monitoring down with the

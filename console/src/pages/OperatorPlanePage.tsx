@@ -31,13 +31,13 @@ function runnerTagVariant(status: string | undefined): 'success' | 'warning' | '
 
 export function OperatorPlanePage({
   onOpenMcpContract,
-  onOpenBriefing,
+  onOpenQueue,
   onOpenAgentLaunch,
   ambientJobId,
   onStartAgentJob,
 }: {
   onOpenMcpContract?: () => void
-  onOpenBriefing?: () => void
+  onOpenQueue?: () => void
   /** Launch Desk → Agent (Mac Mini host publish SSOT). */
   onOpenAgentLaunch?: () => void
 } & AmbientAgentShellProps) {
@@ -254,7 +254,7 @@ export function OperatorPlanePage({
         </div>
       </OpsSection>
 
-      <AgentMcpPanel onOpenMcpContract={onOpenMcpContract} onOpenBriefing={onOpenBriefing} />
+      <AgentMcpPanel onOpenMcpContract={onOpenMcpContract} onOpenQueue={onOpenQueue} />
     </div>
   )
 }

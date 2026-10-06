@@ -17,7 +17,6 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
-	"github.com/weitingzhao/bifrost-platform/api/internal/briefing"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -26,13 +25,11 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
-	"github.com/weitingzhao/bifrost-platform/api/internal/devagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
 	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
-	"github.com/weitingzhao/bifrost-platform/api/internal/lanes"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
@@ -48,8 +45,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
-	"github.com/weitingzhao/bifrost-platform/api/internal/sessions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/sessionsnapshot"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
@@ -71,7 +66,6 @@ type Server struct {
 	buildgate       *buildgate.Handler
 	migratewave     *migratewave.Handler
 	tradeagent      *tradeagent.Handler
-	devagent        *devagent.Handler
 	operatequeue    *operatequeue.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
@@ -83,28 +77,24 @@ type Server struct {
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
 	// points at such a process — then mountPlane forwards instead of serving, and
 	// nothing here constructs a second patrol autopilot.
-	plane           *operatorplane.Plane
-	planeURL        string
-	mountPlane      func(chi.Router)
-	retrospective   *retrospective.Handler
-	satellite       *satellite.Handler
-	selfhealth      *selfhealth.Handler
-	escapehatch     *escapehatch.Handler
-	sessionsnapshot *sessionsnapshot.Handler
-	briefing        *briefing.Handler
-	network         *network.Handler
-	ibgateway       *ibgateway.Handler
-	marketdata      *marketdata.Handler
-	flexquery       *flexquery.Handler
-	research        *research.Handler
-	datahusbandry   *datahusbandry.Handler
-	telemetry       *telemetry.Handler
-	lanes           *lanes.Handler
-	sessions        *sessions.Handler
-	devSession      *devsession.Handler
-	auth            *actuation.AuthService
-	audit           *actuation.AuditLog
-	jobs            *actuation.JobStore
+	plane         *operatorplane.Plane
+	planeURL      string
+	mountPlane    func(chi.Router)
+	retrospective *retrospective.Handler
+	satellite     *satellite.Handler
+	selfhealth    *selfhealth.Handler
+	escapehatch   *escapehatch.Handler
+	network       *network.Handler
+	ibgateway     *ibgateway.Handler
+	marketdata    *marketdata.Handler
+	flexquery     *flexquery.Handler
+	research      *research.Handler
+	datahusbandry *datahusbandry.Handler
+	telemetry     *telemetry.Handler
+	devSession    *devsession.Handler
+	auth          *actuation.AuthService
+	audit         *actuation.AuditLog
+	jobs          *actuation.JobStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -132,17 +122,10 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
-	devagentH, err := devagent.NewHandler(cfg.ConfigDir())
-	if err != nil {
-		return nil, fmt.Errorf("devagent: %w", err)
-	}
-	devagentH.BindAudit(audit)
 	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
 	operatequeueH.BindRemediationJobs(remediationH.Store())
 	operatequeueH.BindRemediationStarter(remediationH)
-	operatequeueH.BindLifecycleObserver(devagentH)
 	remediationH.BindTerminalObserver(operatequeueH)
-	devagentH.BindOperateQueue(operatequeueH)
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
 	checklistH.BindRemediation(remediationH)
 	checklistH.BindOperateQueue(operatequeueH)
@@ -185,10 +168,7 @@ func New(cfg *config.Config) (*Server, error) {
 		}
 		return operatequeue.BundleFromSignals(sigs, time.Now().UTC()), nil
 	}))
-	sessionsH := sessions.NewHandler(cfg.ConfigDir(), audit)
-	devagentH.BindSessions(sessionsH.Store())
 	visionH := vision.NewHandler(cfg, audit)
-	visionH.BindPrograms(devagentH)
 	srv := &Server{
 		cfg:             cfg,
 		prober:          prober,
@@ -203,7 +183,6 @@ func New(cfg *config.Config) (*Server, error) {
 		buildgate:       buildgate.NewHandler(cfg, audit),
 		migratewave:     migratewave.NewHandler(cfg, audit),
 		tradeagent:      tradeagent.NewHandler(),
-		devagent:        devagentH,
 		operatequeue:    operatequeueH,
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
@@ -217,16 +196,12 @@ func New(cfg *config.Config) (*Server, error) {
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
 		escapehatch:     escapehatch.NewHandler(cfg, audit),
-		sessionsnapshot: sessionsnapshot.NewHandler(),
-		briefing:        briefing.NewHandler(cfg, prober, audit, promoteH.Store(), clusterH),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
 		flexquery:       flexquery.NewHandler(clusterH.Service()),
 		research:        research.NewHandler(clusterH.Service(), audit),
 		telemetry:       telemetry.NewHandler(cfg, audit),
-		lanes:           lanes.NewHandler(cfg.ConfigDir(), audit),
-		sessions:        sessionsH,
 		devSession:      devsession.NewHandler(devsession.NewService(cfg, clusterH.Service())),
 		auth:            auth,
 		audit:           audit,
@@ -283,9 +258,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/context", s.handleContext)
 		r.Get("/auth/capabilities", s.auth.Capabilities)
 		r.Get("/audit", s.audit.HandleList)
-		r.Get("/session-snapshots/latest", s.sessionsnapshot.HandleLatest)
-		r.Get("/briefing/session-pack", s.briefing.HandleSessionPack)
-		r.Get("/briefing/session-results", s.briefing.HandleListSessionResults)
 		r.Get("/jobs", s.jobs.HandleList)
 		r.Get("/mcp/tools", s.mcp.HandleTools)
 		r.Get("/mcp/status", s.mcp.HandleStatus)
@@ -327,9 +299,6 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/audit/append", s.audit.HandleAppend)
-			r.Post("/session-snapshots", s.sessionsnapshot.HandleSave)
-			r.Post("/briefing/session-results", s.briefing.HandleCloseSession)
-			r.Post("/briefing/prepare", s.devagent.HandleBriefingPrepare)
 			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
 		})
 		// Code-health ratchet readings (agent-config/scripts/code-health/scan.sh).
@@ -369,10 +338,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
 		r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
-		r.Get("/lanes", s.lanes.HandleList)
-		r.Get("/lanes/{id}", s.lanes.HandleGet)
-		r.Get("/sessions", s.sessions.HandleList)
-		r.Get("/sessions/{id}", s.sessions.HandleGet)
 		r.Get("/agent-tasks", s.agentgovernance.HandleListTasks)
 		r.Get("/migrate-streams/catalog", s.migratewave.HandleListCatalog)
 		r.Group(func(r chi.Router) {
@@ -384,31 +349,6 @@ func (s *Server) Router() http.Handler {
 			r.Post("/operate/sweep", s.operatequeue.HandleSweep)
 			r.Post("/operate/briefs/{id}/decide", s.operatequeue.HandleDecideBrief)
 			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
-			r.Post("/lanes", s.lanes.HandleCreate)
-			r.Patch("/lanes/{id}", s.lanes.HandleUpdate)
-			r.Delete("/lanes/{id}", s.lanes.HandleDelete)
-			r.Post("/sessions", s.sessions.HandleCreate)
-		})
-		r.Route("/programs", func(r chi.Router) {
-			r.Get("/", s.devagent.HandlePrograms)
-			r.Get("/templates", s.devagent.HandleListTemplates)
-			r.Get("/post-completion/pending", s.devagent.HandleListPendingPostCompletion)
-			r.Get("/{programId}", s.devagent.HandleGetProgram)
-			r.Get("/{programId}/jobs", s.devagent.HandleProgramJobs)
-			r.Group(func(r chi.Router) {
-				r.Use(s.auth.Require(actuation.RoleOperator))
-				r.Post("/from-template", s.devagent.HandleCreateFromTemplate)
-				r.Patch("/{programId}", s.devagent.HandlePatchProgram)
-				r.Post("/{programId}/phases/{phaseId}/progress", s.devagent.HandlePhaseProgress)
-				r.Post("/{programId}/complete", s.devagent.HandleProgramComplete)
-			})
-			r.Group(func(r chi.Router) {
-				r.Use(s.auth.Require(actuation.RoleAdmin))
-				r.Post("/{programId}/phases/{phaseId}/signoff", s.devagent.HandlePhaseSignoff)
-				r.Post("/post-completion/{itemId}/approve", s.devagent.HandleApprovePostCompletionItem)
-				r.Post("/post-completion/{itemId}/reject", s.devagent.HandleRejectPostCompletionItem)
-				r.Post("/{programId}/post-completion/no-handoff", s.devagent.HandleNoPostCompletionHandoff)
-			})
 		})
 		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
 		r.Get("/promote/release-state", s.promote.HandleGetReleaseState)

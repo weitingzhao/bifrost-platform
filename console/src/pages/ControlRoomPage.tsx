@@ -21,8 +21,6 @@ import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { SpokeSignalCards } from '@/components/control-room/SpokeSignalCards'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
 import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
-import { MissionSignalProgramStrip } from '@/components/control-room/MissionSignalProgramStrip'
-import { WorkTracksStrip } from '@/components/control-room/WorkTracksStrip'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
@@ -34,8 +32,6 @@ import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { computeAllTracks } from '@/lib/briefing/workTracks'
-import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import {
   buildControlRoomAgentPack,
@@ -75,7 +71,6 @@ import { fetchRemediationJobs, startRemediation } from '@/api/remediation'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
-import type { ClusterSummary } from '@/api/clusterTypes'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 
 type ControlRoomPageProps = {
@@ -85,7 +80,6 @@ type ControlRoomPageProps = {
   matrixLoading: boolean
   matrixError: Error | null
   platformHealthy: boolean
-  clusterSummary?: ClusterSummary
   clusterLoading?: boolean
   stgSmoke?: StgSmokeResponse
   stgSmokeLoading?: boolean
@@ -96,7 +90,6 @@ type ControlRoomPageProps = {
   onOpenDelivery: () => void
   onOpenCluster: () => void
   onOpenAudit: () => void
-  onOpenBriefing: (opts?: BriefingUrlState) => void
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
   onOpenPlatformRelease?: () => void
   onOpenTradeDeploy?: () => void
@@ -126,7 +119,6 @@ export function ControlRoomPage({
   matrices,
   matrixLoading,
   matrixError,
-  clusterSummary,
   stgSmoke,
   stgGate,
   lastDeliverSucceeded = false,
@@ -135,7 +127,6 @@ export function ControlRoomPage({
   onOpenDelivery,
   onOpenCluster,
   onOpenAudit,
-  onOpenBriefing,
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenTradeDeploy,
@@ -238,18 +229,6 @@ export function ControlRoomPage({
     },
     [canOperate, playbookFixMutation, stgSmoke],
   )
-
-  const trackSummaries = useMemo(() => {
-    const clusterFailingPods = clusterSummary?.failing_pods
-    const clusterReach = clusterSummary?.reachability
-    return computeAllTracks(
-      context,
-      matrices,
-      clusterFailingPods,
-      clusterReach,
-      operateQueueQuery.data?.open,
-    )
-  }, [context, matrices, clusterSummary, operateQueueQuery.data?.open])
 
   const openAgentDeskPrefill = (opts?: { prefill: string }) => {
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
@@ -527,7 +506,6 @@ export function ControlRoomPage({
               context={context}
               onOpenAgentDesk={openAgentDeskPrefill}
               onDispatchReleaseAgent={dispatchReleaseAgent}
-              onOpenBriefing={onOpenBriefing}
               onOpenDelivery={onOpenDelivery}
               onOpenPromote={handleOpenPromotePreflight}
             />
@@ -562,8 +540,6 @@ export function ControlRoomPage({
               onOpenPromote={handleOpenPromotePreflight}
               onOpenDelivery={onOpenDelivery}
             />
-
-            <MissionSignalProgramStrip onOpenDelivery={onOpenDelivery} />
           </ControlRoomBay>
         )}
 
@@ -629,8 +605,6 @@ export function ControlRoomPage({
                     />
                   </div>
                 )}
-
-                <WorkTracksStrip tracks={trackSummaries} onOpenBriefing={onOpenBriefing} />
 
                 <div className="flex flex-col gap-1.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">

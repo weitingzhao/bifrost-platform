@@ -22,41 +22,7 @@ import {
 import { Bot, ChevronDown } from 'lucide-react'
 import { buildPartnerNavSections, resolveLaunchNavSelect } from '@/lib/consoleNavConfig'
 import { ConsoleNavSlotItem } from '@/components/shell/ConsoleNavSlotItem'
-import { useBuildDeskWorkloadCounts } from '@/hooks/useBuildDeskWorkloadCounts'
-import type { BuildDeskWorkloadCounts } from '@/lib/briefing/buildDeskWorkload'
-import { BRIEFING_DPR_COLOR } from '@/components/briefing/briefingStatusChromeClasses'
 import { flattenLaunchNav } from '@/lib/architecture/payloadConstellationCatalog'
-
-function workloadBadgeForItem(
-  itemId: string,
-  counts: BuildDeskWorkloadCounts,
-): ReactNode {
-  if (itemId === 'briefing') {
-    if (counts.briefing <= 0) return null
-    return (
-      <span
-        className={cn('shrink-0 text-dense-micro tabular-nums', BRIEFING_DPR_COLOR.ready)}
-        aria-label={`${counts.briefing} ready`}
-        title="Ready lanes"
-      >
-        {counts.briefing}
-      </span>
-    )
-  }
-  if (itemId === 'active-session') {
-    if (counts.activeSession <= 0) return null
-    return (
-      <span
-        className={cn('shrink-0 text-dense-micro tabular-nums', BRIEFING_DPR_COLOR.doing)}
-        aria-label={`${counts.activeSession} doing`}
-        title="Doing lanes"
-      >
-        {counts.activeSession}
-      </span>
-    )
-  }
-  return null
-}
 
 function resolveIdChecker(
   ids: Set<string> | string[] | undefined,
@@ -74,7 +40,6 @@ function NumberedDeskSection({
   onSelect,
   renderItemIcon,
   signals,
-  workloadCounts,
 }: {
   label: string
   items: ShellNavItem[]
@@ -82,7 +47,6 @@ function NumberedDeskSection({
   onSelect: (id: string) => void
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
-  workloadCounts?: BuildDeskWorkloadCounts
 }) {
   return (
     <div>
@@ -101,7 +65,6 @@ function NumberedDeskSection({
               onSelect={onSelect}
               renderItemIcon={renderItemIcon}
               signals={signals}
-              workloadCounts={workloadCounts}
             />
           ))}
         </SidebarMenuSub>
@@ -117,7 +80,6 @@ function NumberedDeskItem({
   onSelect,
   renderItemIcon,
   signals,
-  workloadCounts,
 }: {
   item: ShellNavItem
   index: number
@@ -125,7 +87,6 @@ function NumberedDeskItem({
   onSelect: (id: string) => void
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
-  workloadCounts?: BuildDeskWorkloadCounts
 }) {
   const children = item.children
   const hasChildren = children != null && children.length > 0
@@ -141,8 +102,6 @@ function NumberedDeskItem({
       {index + 1}
     </span>
   )
-  const trailing =
-    workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
 
   if (!hasChildren) {
     return (
@@ -153,7 +112,6 @@ function NumberedDeskItem({
         renderItemIcon={renderItemIcon}
         signals={signals}
         leading={leading}
-        trailing={trailing}
       />
     )
   }
@@ -169,7 +127,6 @@ function NumberedDeskItem({
             renderItemIcon={renderItemIcon}
             signals={signals}
             leading={leading}
-            trailing={trailing}
           />
         </div>
         <button
@@ -221,7 +178,6 @@ export function PartnerStrip({
   phaseFocusIds?: Set<string> | string[]
 }) {
   const sections = useMemo(() => buildPartnerNavSections(allowedTabIds), [allowedTabIds])
-  const workloadCounts = useBuildDeskWorkloadCounts()
   const signals = useMemo(
     () => ({
       isDimmed: resolveIdChecker(dimmedIds),
@@ -244,7 +200,6 @@ export function PartnerStrip({
   if (sections == null) return null
 
   const allItems = [
-    ...sections.lifecycle,
     ...flattenLaunchNav(sections.launch),
     ...sections.workspace,
     ...sections.profile,
@@ -263,7 +218,6 @@ export function PartnerStrip({
         signals={signals}
         isActive={partnerActive}
         showStatusDot={showStatusDot}
-        workloadCounts={workloadCounts}
       />
     )
   }
@@ -276,18 +230,6 @@ export function PartnerStrip({
         <Bot className="h-3.5 w-3.5 shrink-0 text-sidebar-primary/80" aria-hidden />
         <span className="text-dense-label font-semibold text-sidebar-foreground">Engineer</span>
       </div>
-
-      {sections.lifecycle.length > 0 && (
-        <NumberedDeskSection
-          label="Build Desk"
-          items={sections.lifecycle}
-          activeId={activeId}
-          onSelect={onSelect}
-          renderItemIcon={renderItemIcon}
-          signals={signals}
-          workloadCounts={workloadCounts}
-        />
-      )}
 
       {sections.launch.length > 0 && (
         <NumberedDeskSection
@@ -400,7 +342,6 @@ function CollapsedPartnerButton({
   signals,
   isActive,
   showStatusDot,
-  workloadCounts,
 }: {
   sections: NonNullable<ReturnType<typeof buildPartnerNavSections>>
   activeId: string
@@ -409,7 +350,6 @@ function CollapsedPartnerButton({
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
   isActive: boolean
   showStatusDot: boolean
-  workloadCounts: BuildDeskWorkloadCounts
 }) {
   const [open, setOpen] = useState(false)
 
@@ -450,18 +390,6 @@ function CollapsedPartnerButton({
         className="w-52 p-2"
       >
         <p className={shellNavFlyoutSectionTitleClass(isActive)}>Engineer</p>
-        {sections.lifecycle.length > 0 && (
-          <FlyoutSection
-            label="Build Desk"
-            items={sections.lifecycle}
-            activeId={activeId}
-            onSelect={handleSelect}
-            renderItemIcon={renderItemIcon}
-            signals={signals}
-            numbered
-            workloadCounts={workloadCounts}
-          />
-        )}
         {sections.launch.length > 0 && (
           <FlyoutSection
             label="Launch Desk"
@@ -507,7 +435,6 @@ function FlyoutSection({
   renderItemIcon,
   signals,
   numbered,
-  workloadCounts,
 }: {
   label: string
   items?: ShellNavItem[]
@@ -517,7 +444,6 @@ function FlyoutSection({
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   signals: { isDimmed?: (id: string) => boolean; isPhaseFocus?: (id: string) => boolean }
   numbered?: boolean
-  workloadCounts?: BuildDeskWorkloadCounts
 }) {
   const blocks: ShellNavSubGroup[] =
     groups != null && groups.length > 0
@@ -559,9 +485,6 @@ function FlyoutSection({
                     {index + 1}
                   </span>
                 ) : undefined
-              }
-              trailing={
-                workloadCounts != null ? workloadBadgeForItem(item.id, workloadCounts) : null
               }
             />
           ))}

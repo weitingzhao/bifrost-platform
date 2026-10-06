@@ -4,8 +4,7 @@
  * Research is a first-class **domain** (D13 OLAP write boundary) and an
  * **instrument** on the Satellite vehicle (display-host = Trade) — see
  * payloadConstellationCatalog.ts. Domain identity ≠ top-level Ops sidebar group:
- * Launch/Ops nest Research under Satellite; Briefing Lines do not gain a Research
- * line. Subcontractors supply data (Polygon / IB Flex → raw_*); Research consumes
+ * Launch/Ops nest Research under Satellite. Subcontractors supply data (Polygon / IB Flex → raw_*); Research consumes
  * raw_market.* and produces dw_stock.* / features.*.
  *
  * Authoritative for Ops Console → Governance → Blueprint / Agent Protocol,
@@ -93,7 +92,7 @@ export const SYSTEM_DOMAINS: SystemDomainRow[] = [
   {
     id: 'engineer',
     label: 'Engineer',
-    purpose: 'AI Agent workspace — Desk, Briefing, Operator Plane, trust (fate-isolated)',
+    purpose: 'AI Agent workspace — Desk, Operator Plane, trust (fate-isolated)',
   },
   {
     id: 'governance',
@@ -160,7 +159,7 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'trade-release-fix': 'satellite',
   'satellite-bus-ingest-triage': 'satellite',
 
-  // Research — OLAP instrument on Satellite (domain identity; lanes still hang under satellite for Briefing)
+  // Research — OLAP instrument on Satellite (domain identity)
   'research-deploy': 'research',
   'research-release-fix': 'research',
   'research-engine': 'research',

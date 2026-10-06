@@ -154,7 +154,7 @@ export const DESIGN_PRINCIPLES: DesignPrinciple[] = [
     id: 9,
     title: 'Payload constellation',
     description:
-      'Satellite is one vehicle (display-host = Trade); Research is an instrument. New payloads = catalog row + Launch child + edges — never a Briefing Line. Formation = two independent pipelines + ConfirmDialog (never merge Tekton).',
+      'Satellite is one vehicle (display-host = Trade); Research is an instrument. New payloads = catalog row + Launch child + edges. Formation = two independent pipelines + ConfirmDialog (never merge Tekton).',
   },
   {
     id: 10,
@@ -210,13 +210,11 @@ export type ConsoleViewRow = {
 }
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
-  { view: 'Queue', plane: 'Engineer', purpose: 'Ops Desk queue — operate, remediate, close sessions (legacy Agent Desk)' },
+  { view: 'Queue', plane: 'Engineer', purpose: 'Ops Desk queue — operate, remediate, work the operate queue (legacy Agent Desk)' },
   { view: 'Analysis Workspace', plane: 'Engineer', purpose: 'Analysis Desk V1 — Hermes status, Chat UI, First Task (D10 read-only)' },
   { view: 'Insight Log', plane: 'Engineer', purpose: 'Hermes insight history' },
   { view: 'Hermes Status', plane: 'Engineer', purpose: 'Nous Hermes gateway lamp, model, version, MCP tools' },
-  { view: 'Agent Briefing', plane: 'Engineer', purpose: 'New-session entry — work intent, progress, briefing pack' },
   { view: 'Agent Protocol', plane: 'Governance', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
-  { view: 'Briefing Reconciliation', plane: 'Governance', purpose: 'Spine projection rules and drift reconciliation' },
   { view: 'MCP Contract', plane: 'Governance', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
   { view: 'Skills & Schedules', plane: 'Engineer', purpose: 'Autonomous skill registry and triggers' },
   { view: 'Patrol Log', plane: 'Engineer', purpose: 'Patrol execution history (cron/manual Skill runs)' },
@@ -286,12 +284,11 @@ export const TASK_MODE_BLUEPRINT = {
   source: 'console/src/lib/task-mode/taskModeCatalog.ts',
   statement:
     'Task modes filter sidebar navigation and land on Task Control Center (or Analysis Workspace) for phased playbooks. ' +
-    'Four views: System · Build · Ops · Analysis. Launch / Daily Ops / Patrol merge into Ops. ' +
-    'Three Desks (Build / Ops / Analysis) is the System + Control Room switcher. ' +
+    'Three views: System · Ops · Analysis. Launch / Daily Ops / Patrol merge into Ops; the Build lens retired with Build Desk (2026-10-06). ' +
+    'The Ops / Analysis desk switcher sits on System TCC + Control Room. ' +
     'Ops / Dev Mode: Launch and primary Mission actions live on TCC Ops Desk Board + release tabs — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
     'Ops uses Fleet + Queue + Patrol on one board (Discover → Remediate → Deploy → Patrol → Clear). ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
-    'Build (unified) chains Briefing → Implement → Pre-push → Deliver STG → Sign-off; component line inherits from Active Session. ' +
     'Analysis Desk V1 is Hermes status + Chat UI + First Task (read-only, D10 blocked; no stock-analysis engine). ' +
     'Patrol skills stay on Ops Desk (Cursor SDK nightshift via GET /api/v1/patrol/*) — distinct from Hermes Analysis. ' +
     'Nav lens is focused-only (no More domains); phase-aware dimming highlights phase-relevant tabs. ' +
@@ -402,7 +399,7 @@ export const SYSTEM_DOMAINS: SystemDomainDef[] = [
   {
     id: 'research',
     name: 'Research (OLAP)',
-    role: 'OLAP instrument on the Satellite vehicle — analysis, screening, forecast, backtest on shared market facts (domain identity ≠ Briefing Line)',
+    role: 'OLAP instrument on the Satellite vehicle — analysis, screening, forecast, backtest on shared market facts',
     primaryRepos: 'bifrost-research (dbt + engines + Research API :8795)',
     database: 'bifrost_golden_source single instance (raw_market.* / dw_stock.* / features_* / ops_jobs.*)',
     mustNot: 'Write Trade DB; write raw_market.* (Plugin owns ingest); trigger trade execution (D10)',
@@ -437,9 +434,9 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Build & test via Tekton Pipeline (lint / pytest / npm build)',
       'Release via ArgoCD GitOps; release_gate.sh aggregates prod-health',
       'Config drift detection via ArgoCD diff + periodic make prod-health',
-      'Agent Briefing reconcile gate — briefingReconciliationCatalog.ts (queue ≟ spine ≟ appendix)',
+      'Migrate-wave reconcile — nightly drift L3 (agent/drift/scan_layer3.py) checks catalog waves ≟ spine progress',
       'Firewall policy drift — audit Bifrost zones/policies against networkUpgradeCatalog.ts FIREWALL_RULES',
-      'Three Desks landing — Build / Ops (queue + Patrol Cursor SDK) / Analysis (Hermes premium, D10 blocked)',
+      'Desk landing — Ops (queue + Patrol Cursor SDK) / Analysis (Hermes premium, D10 blocked)',
     ],
   },
   {

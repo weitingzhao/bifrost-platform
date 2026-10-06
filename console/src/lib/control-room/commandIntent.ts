@@ -14,13 +14,11 @@ import {
 import { buildControlRoomDispatchPack } from '@/lib/control-room/controlRoomOperatePack'
 import { evaluatePromoteStatus } from '@/lib/control-room/matrixSummary'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
-import type { TrackId } from '@/lib/briefing/workTracks'
 
 export type CommandIntentAction =
   | { type: 'agent_prefill'; prefill: string }
   | { type: 'agent_dispatch_release' }
   | { type: 'copy_text'; text: string }
-  | { type: 'open_briefing'; track?: string }
   | { type: 'open_delivery' }
   | { type: 'open_promote' }
 
@@ -132,16 +130,6 @@ export function buildCommandIntentStripModel(input: {
       type: 'agent_prefill',
       prefill: agentSessionPrefill(context, matrices, suggestedMode),
     },
-  })
-
-  const briefingTrack: TrackId =
-    context?.focus.flywheel_primary === 'B' || snapshot.payloadOverall !== 'ok' ? 'operate' : 'build'
-
-  primaryChips.push({
-    id: 'open-briefing',
-    label: 'Briefing',
-    detail: `Track: ${briefingTrack}`,
-    action: { type: 'open_briefing', track: briefingTrack },
   })
 
   const copyPacks: CommandIntentStripModel['copyPacks'] = []

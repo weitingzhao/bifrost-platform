@@ -2,7 +2,7 @@
  * Vision V2 — Dev Agent closed-loop contract.
  *
  * Authoritative for Ops Console → Governance → Vision (V2 gate)
- * and Agent Briefing Dev-layer release discipline.
+ * and Agent Dev-layer release discipline.
  */
 
 export const DEV_AGENT_LOOP_VERSION = '2026-06-26'

@@ -6,7 +6,7 @@
 import type { AgentNightlyReportResponse } from '@/api/agentTypes'
 import type { AuditRecord } from '@/api/auditTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
-import { parseNightlyLayerResults } from '@/lib/briefing/briefingSyncLoop'
+import { parseNightlyLayerResults } from '@/lib/agent/nightlyReportLayers'
 import {
   formatRemediationJobWhen,
   remediationScopeShortLabel,
@@ -192,7 +192,7 @@ export function buildNightlyDriftSummary(
       : 'recent'
 
   if (fails > 0) {
-    return `Nightly drift ${when}: L1=${layers.l1} · L2=${layers.l2} · L3=${layers.l3} — review Briefing sync loop${briefJob != null ? ` · brief job ${briefJob.status}` : ''}.`
+    return `Nightly drift ${when}: L1=${layers.l1} · L2=${layers.l2} · L3=${layers.l3} — review Ops Desk → Queue → Review${briefJob != null ? ` · brief job ${briefJob.status}` : ''}.`
   }
 
   return `Nightly drift ${when}: Layer 1–3 passed — engineer scan clean${briefJob != null ? ` · brief job ${briefJob.status}` : ''}.`

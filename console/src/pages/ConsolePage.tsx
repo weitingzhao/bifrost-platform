@@ -10,7 +10,6 @@ import {
   type OperatorToolId,
 } from '@/components/agent/operatorDockStorage'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { useLaneCatalog } from '@/hooks/useLaneCatalog'
 import { useAgentTaskCatalog } from '@/hooks/useAgentTaskCatalog'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import {
@@ -48,18 +47,10 @@ import { InsightLogPage } from '@/pages/InsightLogPage'
 import { HermesStatusPage } from '@/pages/HermesStatusPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
-import { BriefingReconciliationPage } from '@/pages/BriefingReconciliationPage'
 import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
 import { BlueprintPage } from '@/pages/BlueprintPage'
-import { BriefingPage } from '@/pages/BriefingPage'
-import { ActiveSessionPage } from '@/pages/ActiveSessionPage'
-import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
-import { writeBriefingUrlState } from '@/lib/briefing/briefingUrlState'
-import { writeActiveSessionFocus } from '@/lib/briefing/deliveryPipelineNav'
-import { componentLineForTaskMode, trackTypeForTaskMode } from '@/lib/briefing/briefingViewTabs'
 import { ClusterPage } from '@/pages/ClusterPage'
-import { DeliveryBoardPage } from '@/pages/DeliveryBoardPage'
 import { NetworkPage } from '@/pages/NetworkPage'
 import { PluginGalleryPage } from '@/pages/PluginGalleryPage'
 import { IbGatewayManagePage } from '@/pages/IbGatewayManagePage'
@@ -112,8 +103,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'insight-log': 'Insight Log',
   'hermes-status': 'Hermes Status',
   'agent-capability': 'Agent Capability',
-  briefing: 'Briefing',
-  'active-session': 'In Flight',
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Patrol Log',
   'agent-governance': 'Trust & Autonomy',
@@ -130,7 +119,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'rocket-health': 'Rocket Health',
   'trade-release': 'Deploy Satellite',
   'research-release': 'Launch Research',
-  'delivery-board': 'Delivery',
   blueprint: 'Blueprint',
   'flywheel-vision': 'Vision',
   roadmap: 'Roadmap',
@@ -138,7 +126,6 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'plugin-release': 'Launch Plugin',
   'platform-standards': 'Platform',
   'agent-protocol': 'Agent Protocol',
-  'briefing-reconciliation': 'Briefing Reconciliation',
   'mcp-contract': 'MCP Contract',
   'design-system': 'Design System',
   'ai-compute': 'AI Compute Strategy',
@@ -159,11 +146,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
 
 /** Page help — shown on breadcrumb ? tooltip (system-wide; no in-page PageHeader subtitle). */
 const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
-  briefing: 'Plan and start work — pick scope and lane, pack, then Launch.',
-  'active-session':
-    'Track Doing lanes — program lanes: phase table + Owner sign-off; Troubleshooting: issue queue + Cluster/Operate unblock. Phase work runs in Cursor IDE Agent.',
-  'delivery-board': 'Completed programs catalog (read-only archive).',
-  queue: 'Operate and observe — run agent tasks, review remediation, close sessions.',
+  queue: 'Operate and observe — run agent tasks, review remediation, work the operate queue.',
   'analysis-workspace':
     'Hermes Analysis Desk V1 — status, Chat UI deep link, and First Task. Read-only; D10 blocked.',
   'insight-log': 'Hermes insight history — time, symbol, type, verdict, duration.',
@@ -229,8 +212,6 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Single runtime, capability domains, task chains, and registry — the map before Agent Protocol and MCP Contract.',
   'agent-protocol':
     'Agent interaction modes, three-layer architecture, context pack layers, and forbidden actions.',
-  'briefing-reconciliation':
-    'Spine projection discipline — source of truth layers, reconcile gate (BRIEFING_STALE), Sync vs Health, drift layer map.',
   'mcp-contract': 'MCP tool catalog, Cursor setup, and governance contract (permissions, deny-list).',
   'design-system':
     'Dense UI layer stack, mandatory mapping, business semantic colors, and primitives inventory.',
@@ -258,8 +239,6 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'agent-governance',
   'operator-plane',
   'audit',
-  'briefing',
-  'active-session',
   'console',
   'network',
   'satellite-bus',
@@ -278,7 +257,6 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
   'observability',
   'code-health',
   'task-cc',
-  'delivery-board',
   'trade-release',
   'platform-release',
   'rocket-health',
@@ -288,7 +266,12 @@ const OPS_CONTEXT_TABS: ConsoleViewTab[] = [
 
 const LEGACY_RUNTIME_HASHES: Record<string, ConsoleViewTab> = {
   'agent-desk': 'queue',
-  'dev-agent': 'active-session',
+  'dev-agent': 'control-room',
+  /** Build Desk retired 2026-10-06 — old bookmarks land on Mission Control / Governance. */
+  briefing: 'control-room',
+  'active-session': 'control-room',
+  'delivery-board': 'control-room',
+  'briefing-reconciliation': 'agent-protocol',
   topology: 'runtime-map',
   matrix: 'runtime-map',
   pulse: 'control-room',
@@ -430,7 +413,6 @@ function ConsolePageInner() {
     staleTime: 60_000,
   })
 
-  useLaneCatalog()
   useAgentTaskCatalog()
 
   const envQuery = useQuery({
@@ -449,8 +431,6 @@ function ConsolePageInner() {
     queryFn: () => fetchMatrix(),
     refetchInterval: 30_000,
     enabled:
-      viewTab === 'briefing' ||
-      viewTab === 'active-session' ||
       viewTab === 'control-room' ||
       viewTab === 'task-cc' ||
       viewTab === 'trade-release' ||
@@ -463,8 +443,6 @@ function ConsolePageInner() {
     queryFn: fetchCluster,
     refetchInterval: 30_000,
     enabled:
-      viewTab === 'briefing' ||
-      viewTab === 'active-session' ||
       viewTab === 'cluster' ||
       viewTab === 'control-room' ||
       viewTab === 'task-cc' ||
@@ -509,7 +487,7 @@ function ConsolePageInner() {
     queryKey: ['platform', 'audit'],
     queryFn: fetchAudit,
     refetchInterval: 30_000,
-    enabled: viewTab === 'briefing' || viewTab === 'active-session' || viewTab === 'audit',
+    enabled: viewTab === 'audit',
   })
 
   const auditRecords = auditQuery.data?.records ?? []
@@ -585,45 +563,6 @@ function ConsolePageInner() {
     [setViewTab],
   )
   const openAudit = () => setViewTab('audit')
-  const openBriefing = useCallback((opts?: BriefingUrlState) => {
-    if (opts != null) {
-      const modeId = opts.taskModeContext?.modeId
-      const resolved = {
-        ...opts,
-        view: opts.view ?? (modeId != null ? componentLineForTaskMode(modeId) : undefined),
-        trackType: opts.trackType ?? (modeId != null ? trackTypeForTaskMode(modeId) : undefined),
-      }
-      writeBriefingUrlState(resolved)
-    }
-    setViewTab('briefing')
-  }, [setViewTab])
-  const openActiveSession = useCallback(
-    (opts?: { laneId?: string; programId?: string }) => {
-      if (opts?.laneId != null || opts?.programId != null) {
-        writeActiveSessionFocus({
-          laneId: opts.laneId as BriefingUrlState['lane'],
-          programId: opts.programId,
-        })
-      }
-      setViewTab('active-session')
-    },
-    [setViewTab],
-  )
-  const openDeliveryBoard = useCallback(
-    (opts?: { laneId?: string; scope?: string; trackType?: string }) => {
-      setViewTabState('delivery-board')
-      const params = new URLSearchParams()
-      if (opts?.laneId) params.set('lane_id', opts.laneId)
-      if (opts?.scope && opts.scope !== 'all') params.set('scope', opts.scope)
-      if (opts?.trackType) params.set('tt', opts.trackType)
-      const q = params.toString()
-      const nextHash = q ? `#delivery-board?${q}` : '#delivery-board'
-      if (window.location.hash !== nextHash) {
-        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`)
-      }
-    },
-    [],
-  )
   const openOperatorPlane = useCallback(() => {
     setViewTab('operator-plane')
   }, [setViewTab])
@@ -877,10 +816,6 @@ function ConsolePageInner() {
         {viewTab === 'queue' && (
           <AgentDeskPage
             context={contextQuery.data}
-            matrices={pulseMatrices}
-            clusterSummary={clusterQuery.data}
-            platformHealthy={healthQuery.data}
-            auditRecords={auditRecords}
             initialJobId={agentDeskJobId}
             prefillPrompt={agentDeskPrefill}
             focusHandoffId={agentDeskFocusHandoffId}
@@ -889,15 +824,12 @@ function ConsolePageInner() {
             onPrefillConsumed={() => setAgentDeskPrefill(null)}
             onFocusHandoffConsumed={() => setAgentDeskFocusHandoffId(null)}
             onFocusDecisionBriefsConsumed={() => setAgentDeskFocusDecisionBriefs(false)}
-            onOpenBriefing={openBriefing}
             onOpenCluster={openCluster}
             onOpenMcpContract={() => setViewTab('mcp-contract')}
             onOpenAgentProtocol={() => setViewTab('agent-protocol')}
             onOpenAgentSystem={() => setViewTab('agent-system')}
             onOpenOperatorPlane={openOperatorPlane}
             onOpenTrustAutonomy={() => setViewTab('agent-governance')}
-            onOpenDeliveryBoard={() => openDeliveryBoard()}
-            onOpenBriefingReconciliation={() => setViewTab('briefing-reconciliation')}
           />
         )}
 
@@ -914,7 +846,7 @@ function ConsolePageInner() {
         {viewTab === 'operator-plane' && (
           <OperatorPlanePage
             onOpenMcpContract={() => setViewTab('mcp-contract')}
-            onOpenBriefing={openBriefing}
+            onOpenQueue={() => setViewTab('queue')}
             onOpenAgentLaunch={openAgentLaunch}
             ambientJobId={ambientJob?.id ?? null}
             ambientJobStatus={ambientJob?.status ?? null}
@@ -941,41 +873,6 @@ function ConsolePageInner() {
 
         {viewTab === 'agent-governance' && <AgentGovernancePage />}
 
-        {viewTab === 'briefing' && (
-          <BriefingPage
-              context={contextQuery.data}
-              contextLoading={contextQuery.isLoading}
-              matrices={pulseMatrices}
-              matrixLoading={matrixForPulse.isLoading}
-              clusterSummary={clusterQuery.data}
-              clusterLoading={clusterQuery.isLoading}
-              platformHealthy={healthQuery.data}
-              auditRecords={auditRecords}
-              auditLoading={auditQuery.isLoading}
-              onOpenAudit={openAudit}
-              onOpenActiveSession={openActiveSession}
-              onOpenDeliveryBoard={openDeliveryBoard}
-            />
-        )}
-
-        {viewTab === 'active-session' && (
-          <ActiveSessionPage
-            context={contextQuery.data}
-            contextLoading={contextQuery.isLoading}
-            matrices={pulseMatrices}
-            matrixLoading={matrixForPulse.isLoading}
-            clusterSummary={clusterQuery.data}
-            auditRecords={auditRecords}
-            auditLoading={auditQuery.isLoading}
-            onOpenAudit={openAudit}
-            onOpenBriefing={opts => openBriefing(opts)}
-            onOpenDeliveryBoard={openDeliveryBoard}
-            onOpenCluster={openCluster}
-            onOpenOperateQueue={() => setViewTab('queue')}
-            onOpenControlRoom={() => setViewTab('control-room')}
-          />
-        )}
-
         {viewTab === 'control-room' && (
           <>
             <Suspense fallback={<p className="text-[var(--muted-foreground)]">Loading mission control…</p>}>
@@ -986,7 +883,6 @@ function ConsolePageInner() {
                 matrixLoading={matrixForPulse.isLoading}
                 matrixError={matrixForPulse.error as Error | null}
                 platformHealthy={healthQuery.data === true}
-                clusterSummary={clusterQuery.data}
                 clusterLoading={clusterQuery.isLoading}
                 stgSmoke={stgSmokeQuery.data}
                 stgSmokeLoading={stgSmokeQuery.isLoading}
@@ -997,7 +893,6 @@ function ConsolePageInner() {
                 onOpenDelivery={openDelivery}
                 onOpenCluster={openCluster}
                 onOpenAudit={openAudit}
-                onOpenBriefing={openBriefing}
                 onOpenAgentDesk={(opts) => openAgentDesk(opts)}
                 ambientJobId={ambientJob?.id ?? null}
                 ambientJobStatus={ambientJob?.status ?? null}
@@ -1023,15 +918,12 @@ function ConsolePageInner() {
           <TaskControlCenterPage
             context={contextQuery.data}
             matrices={pulseMatrices}
-            clusterSummary={clusterQuery.data}
-            platformHealthy={healthQuery.data}
             stgSmoke={stgSmokeQuery.data}
             stgGate={releaseGateStgQuery.data}
             lastDeliverSucceeded={lastDeliverSucceeded}
             tierB={tierBQuery.data}
             onNavigate={tab => setViewTab(tab as ConsoleViewTab)}
             onModeChange={handleTaskModeChange}
-            onOpenBriefing={openBriefing}
             onOpenPromote={openPromote}
             onOpenDelivery={openDelivery}
             ambientJobId={ambientJob?.id ?? null}
@@ -1069,13 +961,6 @@ function ConsolePageInner() {
               onExpandAgentDock={() => openOperatorDock('agent')}
               onSelectAgentJob={selectAmbientAgentJob}
             />
-        )}
-
-        {viewTab === 'delivery-board' && (
-          <DeliveryBoardPage
-            onOpenBriefing={openBriefing}
-            onOpenActiveSession={openActiveSession}
-          />
         )}
 
         {viewTab === 'trade-release' && (
@@ -1216,12 +1101,8 @@ function ConsolePageInner() {
               )}
               {viewTab === 'agent-protocol' && (
                 <AgentProtocolPage
-                  onOpenDeliveryBoard={() => openDeliveryBoard()}
                   onOpenAgentSystem={() => setViewTab('agent-system')}
                 />
-              )}
-              {viewTab === 'briefing-reconciliation' && (
-                <BriefingReconciliationPage context={contextQuery.data} onOpenAgentDesk={openAgentDesk} />
               )}
               {viewTab === 'mcp-contract' && <McpContractPage />}
               {viewTab === 'design-system' && <DesignSystemPage />}

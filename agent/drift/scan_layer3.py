@@ -5,8 +5,8 @@ Compares spine/catalog authority files with GET /api/v1/context and
 visionSpineMap milestone IDs. Surfaces semantic drift where Console
 catalogs and runtime spine disagree.
 
-Authority for briefing content drift extensions:
-  console/src/lib/architecture/briefingReconciliationCatalog.ts (DRIFT_LAYER_MAP)
+Migrate-wave reconcile (catalog waves vs spine progress) mirrors
+  console/src/lib/architecture/waveProjection.ts and api/internal/migratewave/projection.go.
 
 Stdout: markdown report. Exit 0 if no findings, 1 if drift detected.
 """
@@ -269,7 +269,7 @@ def check_migrate_stream_reconcile(
 def check_trade_k8s_reconcile(
     context: dict[str, Any], platform: Path
 ) -> list[Finding]:
-    """Briefing reconcile gate (offline) — full parity with reconcileBriefing.ts."""
+    """Migrate-wave reconcile gate (offline) for trade-k8s-native."""
     waves = sorted(read_trade_k8s_waves(platform), key=lambda t: t[1])
     wave_ids = [w for w, _ in waves]
     return check_migrate_stream_reconcile(
@@ -422,7 +422,7 @@ def check_catalog_milestone_refs(context: dict[str, Any], platform: Path) -> lis
 def check_data_layer_reconcile(
     context: dict[str, Any], platform: Path
 ) -> list[Finding]:
-    """Briefing reconcile gate for data-layer-k3s — parity with reconcileBriefing.ts S13."""
+    """Migrate-wave reconcile gate for data-layer-k3s."""
     phases = sorted(read_data_layer_phases(platform), key=lambda t: t[1])
     waves = [(pid, idx) for pid, idx, _ in phases]
     codes = [code for _, _, code in phases]
@@ -526,7 +526,7 @@ def main() -> int:
                         )
                     )
 
-        # Briefing reconcile gate (DRIFT_LAYER_MAP L3 — full SYNC parity)
+        # Migrate-wave reconcile gate (L3 — catalog waves vs spine progress)
         findings.extend(check_trade_k8s_reconcile(context, platform))
         findings.extend(check_data_layer_reconcile(context, platform))
         findings.extend(check_deploy_mainline_spine_parity(context, platform))

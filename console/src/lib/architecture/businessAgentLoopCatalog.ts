@@ -2,7 +2,7 @@
  * Vision V4 — Business Agent read-only contract.
  *
  * Authoritative for Ops Console → Governance → Vision (V4 gate)
- * and Agent Briefing Business-layer advisory discipline.
+ * and Agent Business-layer advisory discipline.
  */
 
 export const BUSINESS_AGENT_LOOP_VERSION = '2026-06-19'

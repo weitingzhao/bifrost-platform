@@ -1,5 +1,5 @@
 /**
- * Mission Signal program — Delivery Board phase catalog (Wave 4b).
+ * Mission Signal program — phase catalog (Wave 4b, history).
  * Authoritative playbooks: agentProtocolCatalog.ts (P2–P7 sections).
  */
 
@@ -14,8 +14,6 @@ export type MissionSignalPhaseDef = {
   acceptance: string[]
   dependsOn?: MissionSignalPhaseId[]
 }
-
-export const MISSION_SIGNAL_PROGRAM_ID = 'mission-signal'
 
 export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
   {
@@ -90,7 +88,7 @@ export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
     mcpTools: ['get_flight_director_snapshot', 'get_trust_matrix'],
     dependsOn: ['P5'],
     acceptance: [
-      'Agent Briefing Flight Director 24h digest panel',
+      'Flight Director 24h digest panel (Ops Desk → Queue → Review)',
       'PUT trust-overrides/{skill_id} documented and reachable (admin)',
       'Trust matrix reflects owner_overrides after actuation',
     ],
@@ -98,7 +96,7 @@ export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
   {
     id: 'P7',
     title: 'Program closure',
-    summary: 'Maintenance mode — P1–P6 signed via Briefing Session (Board catalog); event-driven patches only.',
+    summary: 'Maintenance mode — P1–P6 Owner-signed; event-driven patches only.',
     dependsOn: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'],
     acceptance: [
       'All phases P1–P6 signed via programs API',

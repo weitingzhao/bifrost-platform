@@ -5,8 +5,6 @@ import { Command, Copy, Check } from 'lucide-react'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { fetchVerifyPayload } from '@/api/core'
-import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
-import type { TrackId } from '@/lib/briefing/workTracks'
 import { buildCommandIntentStripModel, type CommandIntentChip } from '@/lib/control-room/commandIntent'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 
@@ -16,7 +14,6 @@ interface CommandIntentStripProps {
   context?: OpsContextResponse
   onOpenAgentDesk: (opts?: { prefill: string }) => void
   onDispatchReleaseAgent?: () => void
-  onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenDelivery?: () => void
   onOpenPromote?: () => void
 }
@@ -31,7 +28,6 @@ export function CommandIntentStrip({
   context,
   onOpenAgentDesk,
   onDispatchReleaseAgent,
-  onOpenBriefing,
   onOpenDelivery,
   onOpenPromote,
 }: CommandIntentStripProps) {
@@ -65,9 +61,6 @@ export function CommandIntentStrip({
       case 'copy_text':
         void handleCopy(chip.id, action.text)
         break
-      case 'open_briefing':
-        onOpenBriefing?.({ track: action.track as TrackId })
-        break
       case 'open_delivery':
         onOpenDelivery?.()
         break
@@ -84,7 +77,7 @@ export function CommandIntentStrip({
         <div className="command-intent-strip__titles">
           <h4 className="command-intent-strip__title">Command intent</h4>
           <p className="command-intent-strip__desc">
-            Mission-scoped actions — send to Agent Desk, copy governance packs, or open Briefing.
+            Mission-scoped actions — send to Agent Desk or copy governance packs.
           </p>
         </div>
         <DenseTag variant="category">Mode · {model.suggestedMode}</DenseTag>

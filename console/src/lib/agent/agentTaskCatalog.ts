@@ -263,16 +263,16 @@ const AGENT_TASK_DISPLAY: Record<string, DisplayOverlay> = {
       'Diagnose reported pod/node issues and apply safe remediation (restart, delete debug pods, etc.).',
   },
   'drift-autofix': {
-    entryPoint: 'Agent Briefing → approve drift proposal',
+    entryPoint: 'Ops Desk → Queue → Review → approve drift proposal',
     trigger: 'Owner approves a nightly drift Layer-4 proposal',
     description:
-      'Edit bifrost-platform catalog/YAML/scanners per briefingReconciliationCatalog WRITE_PATHS; branch agent/drift-YYYYMMDD, commit, push.',
+      'Edit bifrost-platform catalog/YAML/scanners named in the approved proposal; branch agent/drift-YYYYMMDD, commit, push.',
   },
   'drift-brief': {
-    entryPoint: 'Agent Briefing · nightly_drift.sh',
+    entryPoint: 'Ops Desk → Queue → Review · nightly_drift.sh',
     trigger: 'Scheduled nightly scan (primary runner)',
     description:
-      'Read-only Layer 1–3 drift summary — report only, no fixes. L3 extends per briefingReconciliationCatalog DRIFT_LAYER_MAP.',
+      'Read-only Layer 1–3 drift summary — report only, no fixes (agent/drift/scan_layer1–3.py).',
   },
   'nightly-health': {
     entryPoint: 'Skills & Schedules · launchd health job',

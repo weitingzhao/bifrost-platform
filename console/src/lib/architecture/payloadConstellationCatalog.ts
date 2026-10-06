@@ -3,7 +3,7 @@
  *
  * Rocket = control plane launcher. Satellite = on-orbit vehicle (display-host = Trade).
  * Payloads / instruments ride the vehicle; constellation edges decide who must/suggests
- * fly together. New payloads add a catalog row + Launch child + edges — not a Briefing Line.
+ * fly together. New payloads add a catalog row + Launch child + edges.
  *
  * System Domain `research` stays for D13 write boundaries; domain ≠ top-level sidebar group.
  */
@@ -115,7 +115,7 @@ export const CONSTELLATION_EDGES: readonly ConstellationEdge[] = [
 
 export const PAYLOAD_CONSTELLATION_RULES: string[] = [
   'Rocket = control-plane launcher; Satellite = on-orbit vehicle (display-host = Trade).',
-  'Payloads / instruments ride the Satellite; add a catalog row + Launch child + edges — never a Briefing Line.',
+  'Payloads / instruments ride the Satellite; add a catalog row + Launch child + edges.',
   'System Domain research remains for D13 write boundaries; domain identity ≠ top-level Ops sidebar group.',
   'Constellation edges are directed: Research → Trade suggests ui-surface / api-contract; Trade → Research has no static edge.',
   'Formation flights use two independent pipelines (never merge bifrost-deliver-stg + bifrost-deliver-research).',

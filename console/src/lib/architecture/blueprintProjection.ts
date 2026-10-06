@@ -111,15 +111,6 @@ export const UI_MCP_PARITY_MATRIX: UiMcpParityRow[] = [
     notes: 'Post-QA F2 — catalog-only gap closed',
   },
   {
-    uiRoute: 'Engineer → Briefing',
-    uiSurface: 'Prepare IDE briefing pack',
-    apiRoute: 'POST /api/v1/briefing/prepare',
-    mcpTool: 'prepare_briefing',
-    mcpServer: 'mcp-server-platform',
-    parity: 'matched',
-    notes: 'Post-QA F2 — catalog-only gap closed',
-  },
-  {
     uiRoute: 'Engineer → Agent Desk',
     uiSurface: 'Operate queue',
     apiRoute: 'GET /api/v1/operate/queue',

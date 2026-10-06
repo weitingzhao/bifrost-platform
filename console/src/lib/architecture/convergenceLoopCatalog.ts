@@ -61,7 +61,7 @@ export const CONVERGENCE_LOOP_STEPS: ConvergenceLoopStep[] = [
     phase: 'Feedback loop',
     agents: 'Any Agent → Platform',
     action: 'Trade insights → platform improvements per convergence-feedback-loop.yaml',
-    verify: 'Agent Briefing reconciled per briefingReconciliationCatalog.ts; spine updated from sign-off',
+    verify: 'Spine updated from sign-off; nightly drift L3 confirms catalog ≟ spine',
   },
   {
     order: 7,

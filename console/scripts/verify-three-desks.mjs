@@ -44,12 +44,13 @@ check('analysis includeTabs has hermes-status', taskMode.includes("'hermes-statu
 
 const types = read('src/lib/task-mode/types.ts')
 check(
-  'TaskModeId is system | build | ops | analysis',
+  'TaskModeId is system | ops | analysis',
   types.includes("'system'") &&
-    types.includes("'build'") &&
+    !types.includes("'build'") &&
     types.includes("'ops'") &&
     types.includes("'analysis'"),
 )
+check("legacy alias build → system", taskMode.includes("build: 'system'"))
 
 const nav = read('src/lib/consoleNavConfig.ts')
 check('consoleNav queue tab', nav.includes("id: 'queue'"))
@@ -73,7 +74,8 @@ function ENGINEER_PROFILE_COUNT(src) {
 }
 
 const partner = read('src/components/shell/PartnerStrip.tsx')
-check('PartnerStrip Build Desk label', partner.includes('Build Desk'))
+check('PartnerStrip has no Build Desk (retired 2026-10-06)', !partner.includes('Build Desk'))
+check('PartnerStrip Launch Desk label', partner.includes('Launch Desk'))
 check('PartnerStrip Ops Desk label', partner.includes('Ops Desk'))
 check('PartnerStrip Analysis Desk label', partner.includes('Analysis Desk'))
 check('PartnerStrip collapsed trigger Ops & Analysis', partner.includes('Ops & Analysis'))
@@ -91,17 +93,17 @@ check('hermes run-first-task client', hermesApi.includes('/api/v1/hermes/run-fir
 check('HERMES_CHAT_UI_URL', hermesApi.includes('http://192.168.10.50:9119/chat'))
 
 const protocol = read('src/lib/architecture/agentProtocolCatalog.ts')
-check('Agent Protocol Three Desks', protocol.includes('Three Desks'))
+check('Agent Protocol desks (Ops / Analysis)', protocol.includes('## Desks (Ops / Analysis)'))
 check('Agent Protocol PATROL distinct from Hermes', protocol.includes('distinctFrom') || protocol.includes('Distinct from Hermes'))
 check('Agent Protocol HERMES_ANALYSIS_DESK', protocol.includes('HERMES_ANALYSIS_DESK'))
 check('Agent Protocol D10 analysis read-only', protocol.includes('Analysis is read-only. No trading actuation.'))
 
 const blueprint = read('src/lib/architecture/blueprintCatalog.ts')
 check('Blueprint Three Desks modes', blueprint.includes("'analysis'") && blueprint.includes("'ops'"))
-check('Blueprint Three Desks criterion', blueprint.includes('Three Desks'))
+check('Blueprint desk landing criterion', blueprint.includes('Desk landing'))
 
 const design = read('src/lib/standards/designSystemCatalog.ts')
-check('Design system Three Desks labels', design.includes('Build Desk / Ops Desk / Analysis Desk'))
+check('Design system desk labels', design.includes('Launch Desk / Ops Desk / Analysis Desk'))
 
 const compute = read('src/lib/architecture/aiComputeStrategyCatalog.ts')
 check('AI Compute ANALYSIS_DESK_COMPUTE_NOTE', compute.includes('ANALYSIS_DESK_COMPUTE_NOTE'))

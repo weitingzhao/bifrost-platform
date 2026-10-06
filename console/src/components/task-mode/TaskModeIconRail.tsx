@@ -18,7 +18,7 @@ import type { LoopArchetype, TaskModeDef, TaskModeId } from '@/lib/task-mode/typ
 import { useTaskMode } from '@/lib/task-mode/useTaskMode'
 
 /**
- * Flat single-row rail: System | [Build · Ops · Analysis] via hairline divider.
+ * Flat single-row rail: System | [Ops · Analysis] via hairline divider.
  * Ops (expanded) shows DEV/STG/PROD posture strip; collapsed keeps icon + badge.
  */
 
@@ -28,7 +28,6 @@ const ARCHETYPE_TOOLTIP: Record<
 > = {
   system: { label: 'System', variant: 'neutral' },
   ops: { label: 'Ops', variant: 'warning' },
-  dev: { label: 'Build', variant: 'info' },
   analysis: { label: 'Analysis', variant: 'info' },
 }
 

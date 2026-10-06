@@ -31,7 +31,7 @@ export const LAYER_STACK: LayerRow[] = [
   { layer: 'Layout', location: 'console/src/components/layout/OpsSection.tsx', role: 'OpsSection + OpsSubsectionTitle — unified page-section panel-elevated chrome' },
   { layer: 'Layout', location: 'console/src/components/layout/OpsVerdictStrip.tsx', role: 'OpsVerdictStrip — page verdict for Mission Control + Rocket Cluster (lamp + title + tag + summary + actions/meta)' },
   { layer: 'Layout', location: '@bifrost/ui ShellNavSidebar + console ConsoleSidebar', role: 'Sidebar dual signal: route selected = pill; Task Mode phase path = inset accent rail; off-phase = muted ink (never whole-row opacity on current page)' },
-  { layer: 'Sidebar zones', location: '@bifrost/ui seatContent/partnerContent slots + console SeatStrip / PartnerStrip', role: 'Command hierarchy: Seat (Mission Control pinned + Defects & Audit collapsible) → Partner (Engineer persona: Build Desk / Launch Desk / Ops Desk / Analysis Desk) → Mission groups (Satellite / Rocket / Plugin); Trade omits slots (zero-change)' },
+  { layer: 'Sidebar zones', location: '@bifrost/ui seatContent/partnerContent slots + console SeatStrip / PartnerStrip', role: 'Command hierarchy: Seat (Mission Control pinned + Defects & Audit collapsible) → Partner (Engineer persona: Launch Desk / Ops Desk / Analysis Desk) → Mission groups (Satellite / Rocket / Plugin); Trade omits slots (zero-change)' },
   { layer: 'Layout', location: 'console/src/components/task-mode/AgentTriadStrip.tsx', role: 'Three Desks Strip — Build / Ops / Analysis mode switch (TCC System + Control Room); Ops lands OpsDeskBoard; Analysis lands Analysis Workspace' },
   { layer: 'Data display', location: 'src/components/data-display/', role: 'Tables, PnL, segments, icon actions, collapsible groups — 14 primitives' },
   { layer: 'Domain', location: 'src/pages/*, src/components/*/', role: 'Business columns, hooks, API wiring only — minimal styling' },
@@ -323,7 +323,7 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   },
   {
     interaction: 'Three Desks (Build / Ops / Analysis)',
-    use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Build+Ops+Analysis (Ops expanded = DEV/STG/PROD Fleet column lamps; collapsed = icon + badge); Engineer PartnerStrip labels Build Desk / Launch Desk / Ops Desk / Analysis Desk',
+    use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Ops+Analysis (Ops expanded = DEV/STG/PROD Fleet column lamps; collapsed = icon + badge); Engineer PartnerStrip labels Launch Desk / Ops Desk / Analysis Desk',
     never: 'Standalone daily-ops / mission-launch / patrol pills; fourth page-chrome mode banner; fake Hermes insights when API is empty',
   },
 ]
@@ -345,7 +345,7 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Build Desk always visible (Briefing → In Flight → Delivery); Dev Sessions is framework chrome (header indicator / Operator Dock), not a Build Desk rail item. Launch Desk always visible when allowed (Rocket → Satellite(Trade, Research instruments) → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status.',
+    intent: 'Engineer desks: Dev Sessions is framework chrome (header indicator / Operator Dock), not a desk rail item. Launch Desk always visible when allowed (Rocket → Satellite(Trade, Research instruments) → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status. Payload constellation (Plan C): Satellite = vehicle; Trade = display-host; Research = instrument. Launch Desk nests Research under Satellite. New payloads = catalog row + Launch child + edges. Formation = two independent pipelines + ConfirmDialog.',
   },
   {
     zone: 'Mission',
@@ -357,56 +357,6 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
     surface: 'navGroups — Satellite / Rocket / Plugin peer Mission groups, defaultOpen: true',
     intent: 'Mission peers share primary group chrome (no secondary opacity). Research observe lives under Satellite (not a peer group). Dual signal still applies.',
   },
-]
-
-/* ── Dual-perspective lifecycle (Engineer Partner) ── */
-
-export type DualPerspectiveLifecycleRow = {
-  node: string
-  owner: string
-  agent: string
-}
-
-/** Briefing / In Flight / Delivery — Owner vs Agent on one path. */
-export const DUAL_PERSPECTIVE_LIFECYCLE: DualPerspectiveLifecycleRow[] = [
-  {
-    node: 'Briefing — what to do today',
-    owner: 'Pick lane, pack, and intent. Quiet `N auto` = phases the agent can auto-verify; omit when 0.',
-    agent: 'Reads the scoped pack. Does not record Owner sign-off.',
-  },
-  {
-    node: 'In Flight — what is being done',
-    owner:
-      'Program lanes: phase grid + Owner sign-off. Troubleshooting / ops-issue lanes: issue queue + Cluster/Operate/Control Room CTAs (no Sign-off; clears when probes healthy).',
-    agent: 'Does not execute session phases via SDK. Reads the scoped pack; does not record Owner sign-off.',
-  },
-  {
-    node: 'Delivery — catalog and close',
-    owner: 'Catalog and gates. Record Owner sign-off on In Flight; Delivery phase table is read-only for typical programs.',
-    agent: 'Per-program job history via GET /programs/{id}/jobs. Job status is not Owner sign-off.',
-  },
-]
-
-export const DUAL_PERSPECTIVE_LIFECYCLE_RULES: string[] = [
-  'Phase work runs in Cursor IDE Agent. Owner sign-off is a separate admin action on In Flight (POST /programs/{id}/phases/{pid}/signoff). Console does not host a session SDK runtime.',
-  'Troubleshooting (ops-issue) In Flight lanes have no phase Sign-off — unblock via Cluster / Operate / Control Room; queue clears when matrix/cluster are healthy.',
-  'Daily run and sign-off stay on In Flight. Delivery is the catalog and close surface.',
-  'Briefing `N auto` is quiet by default (render nothing when count is 0).',
-  'Delivery agent trace is per-program persisted history (GET /programs/{id}/jobs). Not a cross-program scrape.',
-  'Program-first lanes (board-visible programs without spine task mapping): Briefing / In Flight queue may be projected from GET /programs?board=1 phases (SSOT = Programs runtime, not a third store).',
-  'Queue precedence: non-empty spine or hardcoded synthetic queue wins; program phase projection applies only when that queue would be empty. Do not add new hardcoded closed queues for program-first lanes.',
-  'Doing (In Flight) = projected/spine queue has active work OR (queue all done AND any linked program not sessionReleased). Empty spine alone must not hide an open program.',
-  'Build Desk nav badges: Briefing = Ready lane count (empty queue, Scope “r”); In Flight = Doing lane count. Badge colors use Ready / Doing DPR tokens (env-dev / lamp-yellow).',
-  'Payload constellation (Plan C): Satellite = vehicle; Trade = display-host; Research = instrument. Launch Desk nests Research under Satellite. New payloads = catalog row + Launch child + edges — never a Briefing Line. Formation = two independent pipelines + ConfirmDialog.',
-]
-
-/** Acceptance checkpoints for program→queue projection (Build Desk self-consistency). */
-export const PROGRAM_QUEUE_PROJECTION_ACCEPTANCE: string[] = [
-  'Q1: trade-iv-radar (or any open program-first lane) appears in Delivery In Progress and In Flight Doing together.',
-  'Q2: Spine/hardcoded lanes with non-empty queues are unchanged when board programs exist on other lanes.',
-  'Q3: After sessionReleased, lane leaves In Flight Doing; Briefing Ready badge stays empty-queue count (not open-program count).',
-  'Q4: Owner sign-off on In Flight still joins by phase id and invalidates PROGRAMS_BOARD_QUERY_KEY.',
-  'Q5: PartnerStrip shows Briefing / In Flight counts only when > 0; colors match Ready / Doing DPR tokens.',
 ]
 
 /* ── Primitives inventory ── */
@@ -519,18 +469,6 @@ export function buildDesignSystemLlmPack(): string {
     'Slot API on `@bifrost/ui` ShellNavSidebar (`seatContent` / `partnerContent`). No `zone` field on ShellNavGroup. Dual signal (route pill vs phase rail) still applies in every zone.',
     '',
     ...SIDEBAR_ZONES.map(z => `- **${z.zone}** — ${z.surface} — ${z.intent}`),
-    '',
-    '## Dual-perspective lifecycle',
-    '',
-    ...DUAL_PERSPECTIVE_LIFECYCLE.map(
-      n => `- **${n.node}** — Owner: ${n.owner} — Agent: ${n.agent}`,
-    ),
-    '',
-    ...DUAL_PERSPECTIVE_LIFECYCLE_RULES.map(r => `- ${r}`),
-    '',
-    '## Program → queue projection acceptance',
-    '',
-    ...PROGRAM_QUEUE_PROJECTION_ACCEPTANCE.map(a => `- ${a}`),
     '',
     '## Page canvas (three surfaces)',
     '',

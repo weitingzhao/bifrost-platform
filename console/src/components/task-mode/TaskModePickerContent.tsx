@@ -8,14 +8,12 @@ import type { LoopArchetype, TaskModeDef, TaskModeId } from '@/lib/task-mode/typ
 const LOOP_VARIANT: Record<LoopArchetype, 'neutral' | 'warning' | 'info'> = {
   system: 'neutral',
   ops: 'warning',
-  dev: 'info',
   analysis: 'info',
 }
 
 const LOOP_LABEL: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops loop',
-  dev: 'Dev loop',
   analysis: 'Analysis',
 }
 
@@ -117,7 +115,6 @@ export function TaskModePickerContent({
       system: allModes.filter(m => m.loopArchetype === 'system'),
       ops: allModes.filter(m => m.loopArchetype === 'ops'),
       analysis: allModes.filter(m => m.loopArchetype === 'analysis'),
-      dev: allModes.filter(m => m.loopArchetype === 'dev'),
     }),
     [allModes],
   )
@@ -127,7 +124,6 @@ export function TaskModePickerContent({
       <ModeSection title="View" modes={grouped.system} activeId={activeId} onPick={onPick} />
       <ModeSection title="Ops playbooks" modes={grouped.ops} activeId={activeId} onPick={onPick} />
       <ModeSection title="Analysis" modes={grouped.analysis} activeId={activeId} onPick={onPick} />
-      <ModeSection title="Build playbooks" modes={grouped.dev} activeId={activeId} onPick={onPick} />
     </div>
   )
 }

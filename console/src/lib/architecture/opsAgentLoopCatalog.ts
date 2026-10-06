@@ -2,7 +2,7 @@
  * Vision V3 — Ops Agent L1/L2 closed-loop contract.
  *
  * Authoritative for Ops Console → Governance → Vision (V3 gate)
- * and Agent Briefing Ops-layer runtime discipline.
+ * and Agent Ops-layer runtime discipline.
  */
 
 export const OPS_AGENT_LOOP_VERSION = '2026-06-19'

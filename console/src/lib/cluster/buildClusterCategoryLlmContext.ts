@@ -4,7 +4,7 @@ import {
   PG_DEPLOY_PRINCIPLES,
   REDIS_DEPLOY_PRINCIPLES,
   DATA_LAYER_SESSION_CONSTRAINTS,
-  formatDataLayerBriefingAppendix,
+  formatDataLayerSpineAppendix,
 } from '@/lib/architecture/dataLayerCatalog'
 import type { ClusterCategory } from '@/lib/cluster/clusterCategories'
 import {
@@ -150,7 +150,7 @@ function buildDatabaseTargetSection(ctx?: OpsContextResponse): string[] {
     ...llmSection('Target architecture (PostgreSQL · static catalog)', [
       ...PG_DEPLOY_PRINCIPLES.map(p => `- **${p.dimension}**: ${p.principle} — ${p.note}`),
     ]),
-    ...llmSection('Data layer migration (spine)', [formatDataLayerBriefingAppendix(ctx)]),
+    ...llmSection('Data layer migration (spine)', [formatDataLayerSpineAppendix(ctx)]),
     ...llmSection('Session constraints', DATA_LAYER_SESSION_CONSTRAINTS.map(c => `- ${c}`)),
   ]
 }
@@ -160,7 +160,7 @@ function buildRedisTargetSection(ctx?: OpsContextResponse): string[] {
     ...llmSection('Target architecture (Redis · static catalog)', [
       ...REDIS_DEPLOY_PRINCIPLES.map(p => `- **${p.dimension}**: ${p.principle} — ${p.note}`),
     ]),
-    ...llmSection('Data layer migration (spine)', [formatDataLayerBriefingAppendix(ctx)]),
+    ...llmSection('Data layer migration (spine)', [formatDataLayerSpineAppendix(ctx)]),
   ]
 }
 

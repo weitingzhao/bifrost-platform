@@ -1,4 +1,4 @@
-import type { AgentDialogueLanguage } from '@/lib/briefing/agentDialogueLanguage'
+import type { AgentDialogueLanguage } from '@/lib/agent/agentDialogueLanguage'
 
 export type PatrolOutputLanguage = AgentDialogueLanguage
 

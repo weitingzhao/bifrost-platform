@@ -137,26 +137,9 @@ func (s *Service) collectS3Checks(ctx context.Context) []GateCheck {
 	checks := make([]GateCheck, 0, 12)
 	checks = append(checks, s.checkV1Prerequisite())
 	checks = append(checks, s.checkSpineMapFile())
-	checks = append(checks, s.checkFileContains(
-		"briefing-pack-vision", "buildBriefingPack.ts includes vision appendix", true,
-		consolePath(s.configDir, "src/lib/briefing/buildBriefingPack.ts"),
-		"formatVisionBriefingSection",
-	))
-	checks = append(checks, s.checkFileContains(
-		"alignment-pack-vision", "buildBriefingAlignmentPack references visionSpineMap", true,
-		consolePath(s.configDir, "src/lib/briefing/buildBriefingAlignmentPack.ts"),
-		"visionSpineMap",
-	))
-	checks = append(checks, s.checkFileContains(
-		"ui-progress-vision", "uiProgressSnapshot lists Dual Flywheel Vision", true,
-		consolePath(s.configDir, "src/lib/briefing/uiProgressSnapshot.ts"),
-		"Dual Flywheel Vision",
-	))
-	checks = append(checks, s.checkFileContains(
-		"governance-queue-vision", "workLanes governance uses visionGovernanceQueueItems", true,
-		consolePath(s.configDir, "src/lib/briefing/workLanes.ts"),
-		"visionGovernanceQueueItems",
-	))
+	// The four Briefing-pack file checks (buildBriefingPack, alignment pack,
+	// uiProgressSnapshot, workLanes) went with Build Desk on 2026-10-06; S3 was
+	// signed 2026-06-19 and a rerun now checks the spine map and milestones only.
 	for _, id := range s3SpineMilestoneIDs {
 		checks = append(checks, s.checkSpineMilestone(id))
 	}

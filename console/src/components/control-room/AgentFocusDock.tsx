@@ -180,7 +180,7 @@ export function AgentFocusDock({ context, matrices, selection, onOpenAgentDesk }
   return (
     <OpsSection
       title="Agent focus dock"
-      description="Scoped governance pack (bay / milestone). New sessions → Agent Briefing; topology drill-down → Control Room Runtime Map sheet."
+      description="Scoped governance pack (bay / milestone). Topology drill-down → Control Room Runtime Map sheet."
       className="agent-focus-dock"
       headerExtra={headerExtra}
       actions={actions}

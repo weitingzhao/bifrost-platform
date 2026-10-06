@@ -1,15 +1,13 @@
 /**
  * Trade stack K8s-native refactor — Compose lift-and-shift → ideal runtime.
  *
- * Authoritative for Agent Briefing → Migrate → Trade K8s-native lane.
+ * Trade K8s-native wave catalog (Governance reference).
  * Spine stream: tracks.migrate.streams trade-k8s-native
  *
  * Context: STG v2 lift-and-shift is SIGNED; this catalog covers native runtime model
  * (Ingress, Lease HA, IB Edge Gateway, Ops kubernetes executor).
  */
 
-import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { projectWaveStatus } from '@/lib/briefing/waveProjection'
 import { GENERATED_TRADE_K8S_NATIVE_WAVES } from './migrateWaves.generated'
 
 export type { TradeK8sNativeWave } from './tradeK8sNativeCatalogTypes'
@@ -131,83 +129,28 @@ export const TRADE_K8S_NATIVE_SESSION_CONSTRAINTS = [
   'IB reference: TWS API Connectivity — max 32 clients/instance; clientId unique (Error 326)',
 ]
 
-// ---------------------------------------------------------------------------
-// Briefing appendix
-// ---------------------------------------------------------------------------
-
-export function formatTradeK8sNativeBriefingAppendix(ctx?: OpsContextResponse): string {
-  const stream = ctx?.tracks?.migrate?.streams.find(s => s.id === TRADE_K8S_NATIVE_MIGRATE_STREAM_ID)
-
-  const lines = [
-    '## Trade K8s-native refactor appendix',
-    '',
-    `Source: ${TRADE_K8S_NATIVE_SOURCE} · spine stream \`${TRADE_K8S_NATIVE_MIGRATE_STREAM_ID}\``,
-    stream != null
-      ? `Spine progress: ${stream.done}/${stream.total} · status=${stream.status}${stream.next_task != null ? ` · next: ${stream.next_task}` : ''}`
-      : 'Spine stream: (not loaded — use waves below)',
-    '',
-    '### IB TWS constraints (design north star)',
-    ...IB_TWS_CONSTRAINTS.map(r => `- **${r.constraint}**: ${r.limit} → ${r.k8sImplication}`),
-    '',
-    '### IB Edge principles',
-    ...IB_EDGE_DESIGN_PRINCIPLES.map(p => `- ${p}`),
-    '',
-    '### Client ID budget (target)',
-    ...IB_CLIENT_ID_BANDS.map(
-      r => `- **${r.env}** ${r.hostRole}: ${r.clientId}${r.mergedFrom != null ? ` (${r.mergedFrom})` : ''}`,
-    ),
-    '',
-    '### Trade gateway Ingress (W1)',
-    ...TRADE_GATEWAY_INGRESS.map(
-      g =>
-        `- **${g.env}**: \`http://${g.host}/\` → ${g.nodeIp}:${g.port} (Traefik web); legacy ${g.legacyNodePort}`,
-    ),
-    '',
-    '### Compose-on-K8s gaps',
-    ...COMPOSE_ON_K8S_GAPS.map(g => `- [${g.priority}] **${g.area}**: ${g.current} → ${g.ideal}`),
-    '',
-    '### Waves (W0–W11)',
-  ]
-
-  for (const w of TRADE_K8S_NATIVE_WAVES) {
-    // Status projected from spine (D-A/D-C) — same projectWaveStatus as the lane queue.
-    const projected =
-      stream != null
-        ? projectWaveStatus(w.spineIndex, {
-            done: stream.done,
-            readyForSignoff: stream.ready_for_signoff ?? 0,
-            streamStatus: stream.status,
-          })
-        : 'pending'
-    const marker =
-      projected === 'next'
-        ? ' *(spine next)*'
-        : projected === 'ready_for_signoff'
-          ? ' — ✅ DELIVERED, awaiting Owner sign-off'
-          : projected === 'done'
-            ? ' — ✔ signed'
-            : ''
-    lines.push(`${w.wave}. **${w.label}**${marker}`)
-    lines.push(`   - id: ${w.id} · repo: ${w.repo}`)
-    if (w.delivered) lines.push(`   - delivered: ${w.delivered}`)
-    lines.push(`   - verify: ${w.verify}`)
-    if (w.blockedBy) lines.push(`   - blocked_by: ${w.blockedBy}`)
-    lines.push('')
-  }
-
-  lines.push('### Session constraints')
-  for (const c of TRADE_K8S_NATIVE_SESSION_CONSTRAINTS) lines.push(`- ${c}`)
-
-  return lines.join('\n')
-}
-
 export function buildTradeK8sNativeLlmPack(): string {
   return [
     '# Bifrost Trade — K8s-native refactor + IB Edge Gateway',
     `# Source: ${TRADE_K8S_NATIVE_SOURCE} v${TRADE_K8S_NATIVE_VERSION}`,
     '',
+    `# Spine stream: ${TRADE_K8S_NATIVE_MIGRATE_STREAM_ID}`,
+    '',
     '## IB constraints',
-    ...IB_TWS_CONSTRAINTS.map(r => `- ${r.constraint}: ${r.limit}`),
+    ...IB_TWS_CONSTRAINTS.map(r => `- ${r.constraint}: ${r.limit} → ${r.k8sImplication}`),
+    '',
+    '## IB Edge principles',
+    ...IB_EDGE_DESIGN_PRINCIPLES.map(p => `- ${p}`),
+    '',
+    '## Client ID budget (target)',
+    ...IB_CLIENT_ID_BANDS.map(
+      r => `- ${r.env} ${r.hostRole}: ${r.clientId}${r.mergedFrom != null ? ` (${r.mergedFrom})` : ''}`,
+    ),
+    '',
+    '## Trade gateway Ingress (W1)',
+    ...TRADE_GATEWAY_INGRESS.map(
+      g => `- ${g.env}: http://${g.host}/ → ${g.nodeIp}:${g.port} (Traefik web); legacy ${g.legacyNodePort}`,
+    ),
     '',
     '## Waves',
     ...TRADE_K8S_NATIVE_WAVES.map(w => `${w.wave} ${w.id}: ${w.label}`),

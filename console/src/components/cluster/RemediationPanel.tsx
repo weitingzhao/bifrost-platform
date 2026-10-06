@@ -23,8 +23,6 @@ interface RemediationPanelProps {
   onDismiss?: () => void
   onComplete?: (job: RemediationJob) => void
   onOpenServerConsole?: () => void
-  /** Desk variant: record briefing session close (S9) instead of dismiss-only. */
-  onCloseSession?: () => void
   stopping?: boolean
 }
 
@@ -338,7 +336,6 @@ export function RemediationPanel({
   onDismiss,
   onComplete,
   onOpenServerConsole,
-  onCloseSession,
   stopping = false,
 }: RemediationPanelProps) {
   const qc = useQueryClient()
@@ -416,10 +413,6 @@ export function RemediationPanel({
   const events: RemediationEvent[] = isLiveView && !streamOrphan ? liveEvents : (snapshotQuery.data?.events ?? liveEvents)
   const isRunning = job?.status === 'running' && isLiveView && !streamOrphan
   const isHistorical = viewJobId != null && !isLiveView
-  const isTerminalJob =
-    job?.status === 'done' || job?.status === 'failed' || job?.status === 'cancelled'
-  const showCloseSession =
-    variant === 'desk' && onCloseSession != null && isTerminalJob && !isRunning
 
   useEffect(() => {
     if (!isLiveView || error == null) return
@@ -857,13 +850,8 @@ export function RemediationPanel({
               {dismissMutation.isPending ? 'Dismissing…' : 'Dismiss stale job'}
             </Button>
           )}
-          {showCloseSession && (
-            <Button variant="default" size="sm" onClick={onCloseSession}>
-              Close session
-            </Button>
-          )}
           <Button variant="outline" size="sm" onClick={onClose}>
-            {showCloseSession ? 'Dismiss' : 'Close'}
+            Close
           </Button>
         </div>
       </footer>

@@ -102,28 +102,7 @@ export const CONSOLE_SEAT_PAGES: ConsoleSeatPageRow[] = [
     roomPosture: false,
   },
 
-  // Partner — Build / Launch / Ops / Analysis
-  {
-    id: 'briefing',
-    label: 'Briefing',
-    plane: 'Engineer',
-    home: 'engineer',
-    roomPosture: false,
-  },
-  {
-    id: 'active-session',
-    label: 'In Flight',
-    plane: 'Engineer',
-    home: 'engineer',
-    roomPosture: false,
-  },
-  {
-    id: 'delivery-board',
-    label: 'Delivery',
-    plane: 'Engineer',
-    home: 'engineer',
-    roomPosture: false,
-  },
+  // Partner — Launch / Ops / Analysis
   {
     id: 'platform-release',
     label: 'Rocket (Launch)',

@@ -2,7 +2,7 @@
  * Trade Celery / Massive K8s Ideal — delivery program catalog.
  *
  * Program id: trade-celery-k8s-ideal · lane: trade-system-celery
- * Authority: this catalog + config/programs/completed/trade-celery-k8s-ideal.yaml
+ * Authority: this catalog (program YAML retired with Build Desk 2026-10-06; see git history)
  *
  * Status: **RETIRED** — Trade Celery (stocks_ib IB bars backfill) removed.
  * Stock OHLC ingest: Market Data Plugin `ops_jobs` → `raw_market.stock_daily` / `stock_minute`.

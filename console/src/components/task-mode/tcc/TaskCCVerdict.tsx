@@ -6,14 +6,12 @@ import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 const LOOP_VARIANT: Record<LoopArchetype, 'neutral' | 'warning' | 'info'> = {
   system: 'neutral',
   ops: 'neutral',
-  dev: 'info',
   analysis: 'info',
 }
 
 const LOOP_LABEL: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops loop',
-  dev: 'Dev loop',
   analysis: 'Analysis',
 }
 

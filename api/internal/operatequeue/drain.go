@@ -207,11 +207,6 @@ func (d *DrainWorker) runOne(item Item) error {
 	if _, recordErr := d.h.store.RecordExecution(item.ID, job.ID); recordErr != nil {
 		return d.demote(item, "record execution failed: "+recordErr.Error())
 	}
-	if d.h.observer != nil {
-		if updated, ok := d.h.store.FindByID(item.ID); ok {
-			d.h.observer.OnOperateQueueExecution(*updated)
-		}
-	}
 
 	final, err := d.waitJob(ctx, job.ID)
 	if err != nil {
@@ -220,7 +215,7 @@ func (d *DrainWorker) runOne(item Item) error {
 
 	passed := jobPostFixPassed(final)
 	if final.Status == remediation.JobDone && passed {
-		closed, cerr := d.h.store.Close(item.ID, CloseRequest{
+		_, cerr := d.h.store.Close(item.ID, CloseRequest{
 			CompletionEvidence: []string{
 				"job:" + final.ID,
 				"post_fix_verification:passed",
@@ -230,9 +225,6 @@ func (d *DrainWorker) runOne(item Item) error {
 		}, true)
 		if cerr != nil {
 			return d.demote(item, "close failed: "+cerr.Error())
-		}
-		if d.h.observer != nil {
-			d.h.observer.OnOperateQueueClosed(closed)
 		}
 		d.mu.Lock()
 		d.lastCompletedAt = time.Now().UTC().Format(time.RFC3339)

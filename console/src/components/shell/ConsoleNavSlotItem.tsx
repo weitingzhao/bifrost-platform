@@ -29,7 +29,6 @@ export function ConsoleNavSlotItem({
   renderItemIcon,
   collapsed,
   leading,
-  trailing,
   signals,
   flyout,
 }: {
@@ -39,8 +38,6 @@ export function ConsoleNavSlotItem({
   renderItemIcon?: (item: ShellNavItem) => ReactNode
   collapsed?: boolean
   leading?: ReactNode
-  /** Dense micro count (e.g. Build Desk workload) — omit when 0. */
-  trailing?: ReactNode
   signals?: ConsoleNavSlotSignals
   flyout?: boolean
 }) {
@@ -57,26 +54,9 @@ export function ConsoleNavSlotItem({
         ? <ItemIcon className={shellNavSubItemIconClass} aria-hidden />
         : null
 
-  const labelWithCount =
-    trailing != null ? (
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
-        {trailing}
-      </span>
-    ) : (
-      <span className="flex-1 truncate text-left">{item.label}</span>
-    )
+  const label = <span className="flex-1 truncate text-left">{item.label}</span>
 
   if (collapsed) {
-    const tip =
-      trailing != null ? (
-        <span className="inline-flex items-center gap-1.5">
-          {item.label}
-          {trailing}
-        </span>
-      ) : (
-        item.label
-      )
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -93,7 +73,7 @@ export function ConsoleNavSlotItem({
           </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="text-xs font-medium">
-          {tip}
+          {item.label}
         </TooltipContent>
       </Tooltip>
     )
@@ -115,7 +95,7 @@ export function ConsoleNavSlotItem({
         >
           {leading}
           {icon}
-          {labelWithCount}
+          {label}
         </button>
         <NavAgentAskSlot itemId={item.id} />
       </div>
@@ -133,7 +113,7 @@ export function ConsoleNavSlotItem({
         >
           {leading}
           {icon}
-          {labelWithCount}
+          {label}
         </SidebarMenuSubButton>
         <NavAgentAskSlot itemId={item.id} />
       </div>

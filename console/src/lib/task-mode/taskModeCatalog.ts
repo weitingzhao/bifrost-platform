@@ -4,21 +4,25 @@ export const TASK_MODE_STORAGE_KEY = 'bifrost-ops-task-mode'
 export const TASK_MODE_QUERY_PARAM = 'taskMode'
 
 export const TASK_MODE_CATALOG_VERSION = '2026-08-09'
-/** UI task-mode definitions. templateId must match config/programs/_templates.yaml (GET /api/v1/programs/templates). */
-export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts · templates: config/programs/_templates.yaml'
+/** UI task-mode definitions. */
+export const TASK_MODE_CATALOG_SOURCE = 'console/src/lib/task-mode/taskModeCatalog.ts'
 
-/** Legacy mode ids remapped after Three Desks consolidation (5 → 4). */
+/**
+ * Legacy mode ids remapped after Three Desks consolidation (5 → 4) and the
+ * Build lens retirement with Build Desk (2026-10-06): build ids open System.
+ */
 const LEGACY_TASK_MODE_ALIASES: Record<string, TaskModeId> = {
   'daily-ops': 'ops',
   'mission-launch': 'ops',
   patrol: 'ops',
   'rocket-launch': 'ops',
   'satellite-deploy': 'ops',
-  'rocket-build': 'build',
-  'satellite-build': 'build',
-  'engineer-build': 'build',
-  'ground-build': 'build',
-  'plugin-build': 'build',
+  build: 'system',
+  'rocket-build': 'system',
+  'satellite-build': 'system',
+  'engineer-build': 'system',
+  'ground-build': 'system',
+  'plugin-build': 'system',
 }
 
 /** Ops loop: Discover → Remediate → Deploy → Patrol → Clear. */
@@ -84,65 +88,6 @@ const OPS_PHASES: TaskModeDef['phases'] = [
   },
 ]
 
-/** Unified Build loop — Briefing → Implement → Pre-push → Deliver STG → Sign-off. */
-const UNIFIED_BUILD_PHASES: TaskModeDef['phases'] = [
-  {
-    id: 'briefing',
-    seq: 1,
-    title: 'Briefing',
-    summary: 'Open scoped Briefing from In Flight or explicit line selection — no static Build binding.',
-    navigateTab: 'briefing',
-    actions: [
-      { label: 'Briefing', tabId: 'briefing' },
-      { label: 'Task Control Center', tabId: 'task-cc' },
-    ],
-  },
-  {
-    id: 'implement',
-    seq: 2,
-    title: 'Implement in Cursor',
-    summary: 'Execute phase work in IDE; follow program skill when linked.',
-    dependsOn: ['briefing'],
-    navigateTab: 'active-session',
-    actions: [
-      { label: 'In Flight', tabId: 'active-session' },
-      { label: 'Dev Sessions', tabId: 'dev-sessions' },
-    ],
-  },
-  {
-    id: 'pre-push',
-    seq: 3,
-    title: 'Pre-push verify',
-    summary: 'Lint + build (+ legacy-css when UI touched) before git push.',
-    dependsOn: ['implement'],
-    navigateTab: 'active-session',
-    actions: [
-      { label: 'In Flight', tabId: 'active-session' },
-    ],
-  },
-  {
-    id: 'deliver-stg',
-    seq: 4,
-    title: 'Deliver STG',
-    summary: 'Advance Delivery / Control Room — release tabs are secondary (Ops lens owns them).',
-    dependsOn: ['pre-push'],
-    navigateTab: 'delivery-board',
-    actions: [
-      { label: 'Delivery', tabId: 'delivery-board' },
-      { label: 'Control Room', tabId: 'control-room' },
-    ],
-  },
-  {
-    id: 'sign-off',
-    seq: 5,
-    title: 'Delivery sign-off',
-    summary: 'Owner sign-off on linked program phases.',
-    dependsOn: ['deliver-stg'],
-    navigateTab: 'delivery-board',
-    actions: [{ label: 'Delivery', tabId: 'delivery-board' }],
-  },
-]
-
 const ANALYSIS_PHASES: TaskModeDef['phases'] = [
   {
     id: 'review-insights',
@@ -189,43 +134,6 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     loopArchetype: 'system',
     landingTab: 'control-room',
     navLens: {},
-  },
-  {
-    id: 'build',
-    label: 'Build',
-    description:
-      'Dev loop — unified Briefing → Implement → Pre-push → Deliver STG → Sign-off. Component line comes from Active Session or explicit Briefing choice.',
-    loopArchetype: 'dev',
-    landingTab: 'task-cc',
-    phases: UNIFIED_BUILD_PHASES,
-    navLens: {
-      showTaskControlCenter: true,
-      includeTabs: [
-        'task-cc',
-        'briefing',
-        'active-session',
-        'dev-sessions',
-        'delivery-board',
-        'queue',
-        'control-room',
-        'blueprint',
-      ],
-      phaseRelevantTabs: {
-        briefing: ['task-cc', 'briefing'],
-        implement: ['task-cc', 'active-session', 'dev-sessions'],
-        'pre-push': ['task-cc', 'active-session'],
-        'deliver-stg': ['task-cc', 'delivery-board', 'control-room'],
-        'sign-off': ['task-cc', 'delivery-board'],
-      },
-    },
-    dev: {
-      kind: 'dev',
-      templateId: 'build',
-      /** Spine track for inline pack readiness (Copy session). */
-      briefingTrack: 'build',
-      briefingTrackType: 'build',
-      briefingComponentLine: 'rocket',
-    },
   },
   {
     id: 'ops',
@@ -321,7 +229,7 @@ export function isTaskModeId(value: string): value is TaskModeId {
   return TASK_MODE_DEFINITIONS.some(m => m.id === value)
 }
 
-/** Resolve catalog id including legacy aliases (daily-ops → ops, rocket-build → build). */
+/** Resolve catalog id including legacy aliases (daily-ops → ops, rocket-build → system). */
 export function resolveTaskModeId(value: string): TaskModeId | null {
   if (isTaskModeId(value)) return value
   const aliased = LEGACY_TASK_MODE_ALIASES[value]

@@ -10,7 +10,6 @@ import { DAILY_OPS_CHECKLIST_RUN_SCOPE } from '@/lib/agent/agentScopes'
 import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { TRADE_DEPLOY_SCOPE } from '@/lib/agent/tradeDeployAgentPrompt'
 import { findActiveChecklistRunJob } from '@/lib/control-room/checklistProgress'
-import type { ProgramDetailResponse } from '@/api/programsTypes'
 import type { FleetCell, FleetSnapshot } from '@/lib/control-room/fleetSnapshot'
 import { missionStatus, type MissionSnapshot } from '@/lib/control-room/missionSignals'
 import { buildStgReleasePhases } from '@/lib/architecture/deliveryMainlineCatalog'
@@ -44,7 +43,6 @@ export function useTaskControlQueries({
   mode,
   isMissionLaunch,
   isDailyOps,
-  isDevLoop,
   fleet,
   fleetClear,
   ambientJobId,
@@ -52,9 +50,6 @@ export function useTaskControlQueries({
   context,
   snapshot,
   operateQueueOpenCount,
-  programDetail,
-  briefingOpened,
-  devAgentPhaseDone,
   dailyOpsTargetCell,
   canOperate,
   rocketProd,
@@ -65,7 +60,6 @@ export function useTaskControlQueries({
   mode: TaskModeDef
   isMissionLaunch: boolean
   isDailyOps: boolean
-  isDevLoop: boolean
   fleet: FleetSnapshot
   fleetClear: boolean
   ambientJobId?: string | null
@@ -73,9 +67,6 @@ export function useTaskControlQueries({
   context?: OpsContextResponse
   snapshot: MissionSnapshot
   operateQueueOpenCount: number
-  programDetail?: ProgramDetailResponse
-  briefingOpened: boolean
-  devAgentPhaseDone: (phaseId: string) => boolean
   dailyOpsTargetCell: FleetCell | null
   canOperate: boolean
   rocketProd: ReturnType<typeof useRocketProdReadiness>
@@ -171,14 +162,14 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === PLATFORM_RELEASE_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || isDevLoop || isDailyOps,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const platformStgGateQ = useQuery({
     queryKey: ['task-cc', 'platform-stg-gate'],
     queryFn: () => fetchReleaseGate('platform-stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop || isDailyOps,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const platformProdGateQ = useQuery({
@@ -197,21 +188,21 @@ export function useTaskControlQueries({
       if (ambientJobId != null && ambientJobScope === TRADE_DEPLOY_SCOPE) return 5_000
       return 20_000
     },
-    enabled: isMissionLaunch || isDevLoop || isDailyOps,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const tradeGateQ = useQuery({
     queryKey: ['task-cc', 'trade-gate-detail'],
     queryFn: () => fetchReleaseGate('stg'),
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop || isDailyOps,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const smokeQ = useQuery({
     queryKey: ['task-cc', 'smoke-detail'],
     queryFn: fetchStgSmoke,
     refetchInterval: 20_000,
-    enabled: isMissionLaunch || isDevLoop || isDailyOps,
+    enabled: isMissionLaunch || isDailyOps,
   })
 
   const statusInput = useMemo((): TaskPhaseStatusInput => {
@@ -232,15 +223,12 @@ export function useTaskControlQueries({
       supplyChain: supplyQ.data,
       stgReleasePhases: buildStgReleasePhases(context),
       operateQueueOpenCount,
-      programDetail,
       platformStgRun: platformRun,
       platformStgGate: platformStgGateQ.data,
       platformProdGate: platformProdGateQ.data,
       tradeStgRun: tradeRun,
       tradeStgGate: tradeGateData,
       tradeStgSmokeOk: tradeSmokeOk,
-      briefingOpened,
-      devAgentPhaseDone: isDevLoop ? devAgentPhaseDone : undefined,
       fleetAgentFixAvailable:
         isDailyOps && dailyOpsTargetCell != null && cellAllowsAgentFix(dailyOpsTargetCell),
       patrolRuns: patrol.runs,
@@ -250,16 +238,12 @@ export function useTaskControlQueries({
     snapshot,
     supplyQ.data,
     operateQueueOpenCount,
-    programDetail,
     platformRunsQ.data,
     platformStgGateQ.data,
     platformProdGateQ.data,
     tradeRunsQ.data,
     tradeGateQ.data,
     smokeQ.data,
-    briefingOpened,
-    isDevLoop,
-    devAgentPhaseDone,
     isDailyOps,
     dailyOpsTargetCell,
     patrol.runs,

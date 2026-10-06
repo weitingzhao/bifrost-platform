@@ -52,7 +52,7 @@ export type MarketDataPhase = {
   status: 'done' | 'in_progress' | 'pending'
 }
 
-/** Ten-phase program from config/programs/completed/market-data-subcontractor.yaml. */
+/** Ten-phase program (history; program YAML retired with Build Desk 2026-10-06). */
 export const MARKET_DATA_PHASES: MarketDataPhase[] = [
   {
     id: 'P0',

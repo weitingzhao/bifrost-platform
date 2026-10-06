@@ -1,9 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { StatusLamp, cn, type Reachability } from '@bifrost/ui'
-import { BrainCircuit, Gauge, Hammer } from 'lucide-react'
+import { BrainCircuit, Gauge } from 'lucide-react'
 import { fetchHermesInsights, fetchHermesReadiness } from '@/api/hermes'
-import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
-import { resolveActivePhaseId, resolveAllTaskPhaseStatuses } from '@/lib/task-mode/navLens'
 import { taskModeById } from '@/lib/task-mode/taskModeCatalog'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import { useTaskMode } from '@/lib/task-mode/useTaskMode'
@@ -17,33 +15,12 @@ export type AgentTriadStripProps = {
 }
 
 type TriadCell = {
-  id: 'build' | 'ops' | 'analysis'
+  id: 'ops' | 'analysis'
   modeId: TaskModeId
   label: string
   lamp: Reachability
   summary: string
-  Icon: typeof Hammer
-}
-
-function buildCell(currentModeId: TaskModeId): TriadCell {
-  const build = taskModeById('build')
-  const statuses = resolveAllTaskPhaseStatuses('build', {
-    briefingOpened: isBriefingOpened('build'),
-  })
-  const activeId = resolveActivePhaseId(statuses, build.phases?.map(p => p.id))
-  const phase = build.phases?.find(p => p.id === activeId)
-  const inBuild = currentModeId === 'build'
-  const blocked = phase != null && statuses[phase.id] === 'blocked'
-  const summary =
-    inBuild && phase != null ? `Phase ${phase.seq}: ${phase.title}` : 'Idle'
-  return {
-    id: 'build',
-    modeId: 'build',
-    label: 'Build',
-    lamp: blocked ? 'fail' : inBuild ? 'ok' : 'unknown',
-    summary,
-    Icon: Hammer,
-  }
+  Icon: typeof Gauge
 }
 
 function opsCell(
@@ -102,7 +79,7 @@ function analysisCell(
 }
 
 /**
- * Three-up desk switcher — Build / Ops / Analysis without a new page chrome row.
+ * Desk switcher — Ops / Analysis without a new page chrome row.
  */
 export function AgentTriadStrip({
   onModeChange,
@@ -146,7 +123,6 @@ export function AgentTriadStrip({
         [lastInsight.symbol, lastInsight.type, lastInsight.verdict].filter(s => s !== '').join(' · ')
 
   const cells: TriadCell[] = [
-    buildCell(modeId),
     opsCell(operateQueueOpen, recentRemediationFail, `${posture.label} · ${when}`, posture.lamp),
     analysisCell(hermesReachable, lastInsightLine),
   ]
@@ -158,9 +134,9 @@ export function AgentTriadStrip({
 
   return (
     <div
-      className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+      className="grid grid-cols-1 gap-2 sm:grid-cols-2"
       role="group"
-      aria-label="Three desks"
+      aria-label="Desks"
     >
       {cells.map(cell => {
         const active = modeId === cell.modeId

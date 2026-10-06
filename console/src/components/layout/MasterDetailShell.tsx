@@ -5,8 +5,6 @@ import { cn } from '@bifrost/ui'
  * Shared two-pane shell for Ops Console dense pages.
  *
  * Intended reuse:
- * - Agent Briefing no longer uses this shell (Scope | Lanes on one row, Archive below —
- *   see BriefingMasterDetail).
  * - Agent Desk — keep current composer + timeline + RemediationPanel layout for now;
  *   do not force Master-Detail onto Desk (ops workflow is not a classic list→detail browse).
  *

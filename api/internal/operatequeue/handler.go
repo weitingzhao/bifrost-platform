@@ -19,17 +19,11 @@ type Handler struct {
 	drain       *DrainWorker
 	audit       *actuation.AuditLog
 	jobs        *remediation.JobStore
-	observer    LifecycleObserver
 	evidence    EvidenceSource
 	remediation RemediationStarter
 
 	mu               sync.Mutex
 	lastSweepSummary string
-}
-
-type LifecycleObserver interface {
-	OnOperateQueueExecution(item Item)
-	OnOperateQueueClosed(item Item)
 }
 
 func (h *Handler) BindRemediationJobs(jobs *remediation.JobStore) {
@@ -38,10 +32,6 @@ func (h *Handler) BindRemediationJobs(jobs *remediation.JobStore) {
 
 func (h *Handler) BindRemediationStarter(starter RemediationStarter) {
 	h.remediation = starter
-}
-
-func (h *Handler) BindLifecycleObserver(observer LifecycleObserver) {
-	h.observer = observer
 }
 
 func (h *Handler) BindEvidenceSource(src EvidenceSource) {
@@ -193,9 +183,6 @@ func (h *Handler) HandleClose(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit.Record(r, "operate.queue.close", closed.ID, StatusClosed,
 		fmt.Sprintf("program=%s", closed.ProgramID))
-	if h.observer != nil {
-		h.observer.OnOperateQueueClosed(closed)
-	}
 	writeJSON(w, http.StatusOK, closed)
 }
 
@@ -223,9 +210,6 @@ func (h *Handler) HandleDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit.Record(r, "operate.queue.dismiss", closed.ID, StatusClosed,
 		fmt.Sprintf("program=%s", closed.ProgramID))
-	if h.observer != nil {
-		h.observer.OnOperateQueueClosed(closed)
-	}
 	writeJSON(w, http.StatusOK, closed)
 }
 
@@ -250,9 +234,6 @@ func (h *Handler) HandleRecordExecution(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	h.audit.Record(r, "operate.queue.execution", item.ID, item.Status, "job="+item.ExecutionJobID)
-	if h.observer != nil {
-		h.observer.OnOperateQueueExecution(item)
-	}
 	writeJSON(w, http.StatusOK, item)
 }
 
@@ -337,9 +318,6 @@ func (h *Handler) HandleDecideBrief(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		if h.observer != nil {
-			h.observer.OnOperateQueueClosed(closed)
-		}
 		h.audit.Record(r, "operate.brief.decide", brief.ID, DecisionDismissed, "item="+brief.ItemID)
 		writeJSON(w, http.StatusOK, map[string]any{"brief": brief, "item": closed})
 		return
@@ -370,20 +348,6 @@ func (h *Handler) HandleDrainStatus(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, h.drain.Status())
-}
-
-func (h *Handler) InjectFromApproval(r *http.Request, params ApprovalInjectParams) (Item, error) {
-	item := NewItemFromApproval(params)
-	saved, err := h.store.Add(item)
-	if err != nil {
-		return Item{}, err
-	}
-	detail := fmt.Sprintf("program=%s pending=%s", saved.ProgramID, saved.PendingID)
-	if strings.TrimSpace(saved.Lane) != "" {
-		detail += " lane=" + saved.Lane
-	}
-	h.audit.Record(r, "operate.queue.enqueue", saved.ID, StatusOpen, detail)
-	return saved, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

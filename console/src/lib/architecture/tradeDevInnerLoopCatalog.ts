@@ -5,7 +5,7 @@
  * Contract: bifrost-trade-infra/docs/TRADE_DEV_INNER_LOOP.md
  *
  * Live cluster evidence remains on Rocket → Cluster / MCP tools;
- * this catalog is governance copy + Agent briefing material only.
+ * this catalog is governance copy + Agent reference material only.
  */
 
 export const TRADE_DEV_INNER_LOOP_PROGRAM_ID = 'trade-dev-inner-loop'

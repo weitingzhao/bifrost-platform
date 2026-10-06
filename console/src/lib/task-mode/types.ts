@@ -1,11 +1,7 @@
-import type { TrackId } from '@/lib/briefing/workTracks'
-import type { LaneId, WorkTrackType, ComponentLineId } from '@/lib/briefing/workLanes'
-import type { WorkIntent } from '@/lib/briefing/workIntents'
+/** Task mode identifiers — focused Console lenses for the ops and analysis loops. */
+export type TaskModeId = 'system' | 'ops' | 'analysis'
 
-/** Task mode identifiers — focused Console lenses for ops vs build loops. */
-export type TaskModeId = 'system' | 'build' | 'ops' | 'analysis'
-
-export type LoopArchetype = 'system' | 'ops' | 'dev' | 'analysis'
+export type LoopArchetype = 'system' | 'ops' | 'analysis'
 
 export type TaskPhaseStatus = 'done' | 'active' | 'blocked' | 'planned' | 'unknown'
 
@@ -49,22 +45,6 @@ export type OpsLoopConfig = {
   showMissionSignals?: boolean
 }
 
-export type DevLoopConfig = {
-  kind: 'dev'
-  /** Delivery Board program blueprint id (frontend association — P5). */
-  programId?: string
-  /** Template for spawning program instances via POST /programs/from-template. */
-  templateId?: TaskModeId
-  /** Three-tier Layer 1 — component line (optional; Build inherits from session). */
-  briefingComponentLine?: ComponentLineId
-  /** Three-tier Layer 2 — work track type. */
-  briefingTrackType?: WorkTrackType
-  /** Spine data track (for queue building). */
-  briefingTrack?: TrackId
-  briefingLane?: LaneId
-  briefingIntent?: WorkIntent
-}
-
 export type TaskModeDef = {
   id: TaskModeId
   label: string
@@ -74,5 +54,4 @@ export type TaskModeDef = {
   phases?: TaskPhaseDef[]
   navLens: NavLensConfig
   ops?: OpsLoopConfig
-  dev?: DevLoopConfig
 }

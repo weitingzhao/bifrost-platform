@@ -43,7 +43,7 @@ const COMPACT_OPS_MAX_CHARS = 2_400
 
 function truncatePack(text: string, max: number): string {
   if (text.length <= max) return text
-  return `${text.slice(0, max)}\n\n… (compact ops context truncated — open Briefing for full pack)`
+  return `${text.slice(0, max)}\n\n… (compact ops context truncated — copy the full pack from Control Room → Command intent)`
 }
 
 /**

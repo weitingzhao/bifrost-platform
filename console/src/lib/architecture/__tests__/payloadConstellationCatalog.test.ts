@@ -9,21 +9,8 @@ import {
   SATELLITE_PAYLOADS,
 } from '@/lib/architecture/payloadConstellationCatalog'
 import type { ShellNavItem } from '@bifrost/ui'
-import { COMPONENT_LINE_IDS } from '@/lib/briefing/workLanes'
 
 describe('payloadConstellationCatalog', () => {
-  it('keeps Briefing Line count at six (no research line)', () => {
-    expect(COMPONENT_LINE_IDS).toEqual([
-      'rocket',
-      'satellite',
-      'engineer',
-      'ground',
-      'operations',
-      'subcontractor',
-    ])
-    expect(COMPONENT_LINE_IDS).not.toContain('research')
-  })
-
   it('maps repos to payloads', () => {
     expect(payloadsForRepos(['bifrost-research'])).toEqual(['research'])
     expect(payloadsForRepos(['bifrost-trade-api'])).toEqual(['trade'])

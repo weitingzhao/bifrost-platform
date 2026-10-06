@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, ConfirmDialog, DenseTag } from '@bifrost/ui'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
@@ -8,7 +8,6 @@ import { OpsDeskBoard } from '@/components/task-mode/OpsDeskBoard'
 import { OpsDeskFocusSummary } from '@/components/task-mode/OpsDeskFocusSummary'
 import { OpsDeskReleaseSection } from '@/components/task-mode/OpsDeskReleaseSection'
 import { AnalysisWorkspacePage } from '@/pages/AnalysisWorkspacePage'
-import { DevModeStrips } from '@/components/task-mode/DevModeController'
 import { TaskPhaseProgress } from '@/components/task-mode/TaskPhaseProgress'
 import type { CommandLane } from '@/components/task-mode/MissionLaunchBoard'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
@@ -23,16 +22,11 @@ import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
 import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
-import { resolveBuildWorkbenchVerdict } from '@/lib/task-mode/buildWorkbenchVerdict'
-import { useDeliveryProgramClosure } from '@/hooks/useDeliveryProgramClosure'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
 import type { TaskPhaseFixAction, TaskPhaseHint } from '@/lib/task-mode/taskPhaseDiagnostics'
 import type { TaskModeDef, TaskModeId, TaskPhaseDef, TaskPhaseStatus } from '@/lib/task-mode/types'
 import type { OpsDeskFocus } from '@/lib/task-mode/opsDeskFocus'
-import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
-import type { UseDevProgramInstanceResult } from '@/hooks/useDevProgramInstance'
-import type { InlineBriefingPackResult } from '@/hooks/useInlineBriefingPack'
 import type { useTaskControlQueries } from '@/components/task-mode/tcc/useTaskControlQueries'
 import type { useChecklistItemFix } from '@/components/task-mode/tcc/useChecklistItemFix'
 import type { useMissionLaunchFixAgents } from '@/components/task-mode/useMissionLaunchFixAgents'
@@ -83,7 +77,6 @@ export type TaskControlCenterViewProps = {
   mode: TaskModeDef
   isMissionLaunch: boolean
   isDailyOps: boolean
-  isDevLoop: boolean
   isSystem: boolean
   operateQueueOpen?: number
   recentRemediationFail?: boolean
@@ -103,12 +96,7 @@ export type TaskControlCenterViewProps = {
   satelliteProd: ReturnType<typeof useSatelliteProdReadiness>
   onOpenPhasePage: (phase: TaskPhaseDef) => void
   onPhaseFixAction: (action: TaskPhaseFixAction, phase: TaskPhaseDef) => void
-  devProgram: UseDevProgramInstanceResult
-  resolvedProgramId?: string
-  inlineBriefingPack: InlineBriefingPackResult
   onNavigate: (tabId: string) => void
-  onOpenBriefing?: (opts?: BriefingUrlState) => void
-  handleBriefingOpened: () => void
   context?: OpsContextResponse
   matrices?: MatrixResponse[]
   stgSmoke?: StgSmokeResponse
@@ -150,7 +138,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     mode,
     isMissionLaunch,
     isDailyOps,
-    isDevLoop,
     isSystem,
     canOperate,
     loopLabel,
@@ -172,7 +159,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
 
   const [phaseOpen, setPhaseOpen] = useState(phaseDefaultOpen)
   const [selectedPhaseId, setSelectedPhaseId] = useState<string | undefined>()
-  const { programsReleasedFor } = useDeliveryProgramClosure()
   const [selectedCommandLane, setSelectedCommandLane] = useState<CommandLane>('vehicle')
   const [opsDeskFocus, setOpsDeskFocus] = useState<OpsDeskFocus>('all')
   useEffect(() => {
@@ -246,35 +232,7 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const globalHealthClass = signalTextClass(props.missionOverall)
   const checklistClass = checklistTextClass(phases, statuses, doneCount)
 
-  const buildWorkbench = useMemo(() => {
-    if (!isDevLoop) return null
-    const program = props.devProgram.programDetail?.program
-    const lane = props.devProgram.activeLane
-    return resolveBuildWorkbenchVerdict({
-      hasActiveSession: props.devProgram.hasActiveSession,
-      activeLane: lane,
-      programId: props.resolvedProgramId,
-      programLoading: props.devProgram.programLoading,
-      packReady: props.inlineBriefingPack.isReady,
-      laneQueue: props.inlineBriefingPack.laneQueue,
-      programsReleased: lane != null ? programsReleasedFor(lane) : undefined,
-      programSigned: program?.phases_signed ?? program?.signed ?? 0,
-      programPhaseCount: program?.phase_count ?? 0,
-    })
-  }, [
-    isDevLoop,
-    props.devProgram.hasActiveSession,
-    props.devProgram.activeLane,
-    props.devProgram.programLoading,
-    props.devProgram.programDetail,
-    props.resolvedProgramId,
-    props.inlineBriefingPack.isReady,
-    props.inlineBriefingPack.laneQueue,
-    programsReleasedFor,
-  ])
-
   const verdictLamp = useMemo((): VerdictLamp => {
-    if (isDevLoop && buildWorkbench != null) return buildWorkbench.lamp
     if (isDailyOps) {
       if (!q.runnerHealthy) return 'fail'
       if (q.fleetClear) return 'ok'
@@ -291,8 +249,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     }
     return 'unknown'
   }, [
-    isDevLoop,
-    buildWorkbench,
     isDailyOps,
     isMissionLaunch,
     mode.id,
@@ -303,32 +259,8 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     props.pluginLaunchVerdict.kind,
   ])
 
-  const runBuildCta = useCallback((cta: NonNullable<typeof buildWorkbench>['cta']) => {
-    if (cta == null) return
-    if (cta.kind === 'navigate') {
-      onNavigate(cta.tabId)
-      return
-    }
-    document.getElementById(cta.elementId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [onNavigate])
-
   const verdictActions = useMemo(() => {
     const nodes: ReactNode[] = []
-    if (isDevLoop && buildWorkbench?.cta != null) {
-      const cta = buildWorkbench.cta
-      nodes.push(
-        <Button
-          key="build-workbench-cta"
-          type="button"
-          size="sm"
-          variant="outline"
-          className="shrink-0"
-          onClick={() => runBuildCta(cta)}
-        >
-          {cta.label}
-        </Button>,
-      )
-    }
     if (isDailyOps && q.fleetClear && fix.ledger.blocking) {
       nodes.push(
         <Button
@@ -387,8 +319,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     }
     return nodes.length > 0 ? <>{nodes}</> : undefined
   }, [
-    isDevLoop,
-    buildWorkbench,
     isDailyOps,
     isMissionLaunch,
     showLaunchPad,
@@ -396,11 +326,10 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     q.fleetClear,
     fix,
     verdictLamp,
-    runBuildCta,
   ])
 
   const phaseProgressBlock: ReactNode =
-    isDailyOps || isDevLoop || mode.id === 'analysis' ? null : phases.length > 0 ? (
+    isDailyOps || mode.id === 'analysis' ? null : phases.length > 0 ? (
     <details
       id="task-cc-phase-progress"
       className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-1.5"
@@ -440,19 +369,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
     </details>
   ) : null
 
-  const devStripsBlock = isDevLoop ? (
-    <DevModeStrips
-      mode={mode}
-      canOperate={canOperate}
-      devProgram={props.devProgram}
-      resolvedProgramId={props.resolvedProgramId}
-      onNavigate={onNavigate}
-      inlineBriefingPack={props.inlineBriefingPack}
-      onOpenFullBriefing={props.onOpenBriefing}
-      onBriefingOpened={props.handleBriefingOpened}
-    />
-  ) : null
-
   return (
     <div className="flex flex-col gap-4">
       <TaskCCVerdict
@@ -460,16 +376,12 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         lamp={verdictLamp}
         tagLabel={loopLabel}
         tagVariant={
-          mode.loopArchetype === 'dev' || mode.loopArchetype === 'analysis' ? 'info' : 'neutral'
+          mode.loopArchetype === 'analysis' ? 'info' : 'neutral'
         }
         tagTitle={
-          mode.loopArchetype === 'ops'
-            ? 'Workflow identity — not an alert'
-            : mode.loopArchetype === 'dev'
-              ? 'Workbench identity — Session bind + next action (not playbook progress)'
-              : undefined
+          mode.loopArchetype === 'ops' ? 'Workflow identity — not an alert' : undefined
         }
-        summary={buildWorkbench?.summary ?? props.headerDescription}
+        summary={props.headerDescription}
         meta={
           isMissionLaunch ? (
             <>
@@ -509,19 +421,6 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
                 </span>
               </span>
             </>
-          ) : isDevLoop && buildWorkbench != null ? (
-            buildWorkbench.cta != null ? (
-              <button
-                type="button"
-                className="text-left hover:text-foreground hover:underline"
-                title={buildWorkbench.cta.label}
-                onClick={() => runBuildCta(buildWorkbench.cta)}
-              >
-                <span className="font-semibold text-foreground">{buildWorkbench.nextLine}</span>
-              </button>
-            ) : (
-              <span className="font-semibold text-foreground">{buildWorkbench.nextLine}</span>
-            )
           ) : !isDailyOps && phases.length > 0 ? (
             <span className="font-mono-tabular">{doneCount}/{phases.length} phases complete</span>
           ) : undefined
@@ -865,44 +764,35 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
         />
       ) : null}
 
-      {isDevLoop ? (
-        <>
-          {devStripsBlock}
-          {phaseProgressBlock}
-        </>
-      ) : (
-        <>
-          {phaseProgressBlock}
-          {isMissionLaunch && (
-            <OpsTaskStrips
-              mode={mode}
-              context={props.context}
-              matrices={props.matrices}
-              stgSmoke={props.stgSmoke}
-              stgGate={props.stgGate}
-              lastDeliverSucceeded={props.lastDeliverSucceeded}
-              tierB={props.tierB}
-              onNavigate={onNavigate}
-              onOpenPromote={props.onOpenPromote}
-              onOpenDelivery={props.onOpenDelivery}
-              onDispatchRelease={showLaunchPad ? props.dispatchReleaseAgent : undefined}
-              onDispatchTradeDeploy={showLaunchPad ? props.dispatchTradeDeployAgent : undefined}
-              onDispatchPluginLaunch={showLaunchPad ? props.dispatchPluginLaunchAgent : undefined}
-              releasePending={agents.aiRelease.isPending}
-              tradeDeployPending={agents.aiTradeDeploy.isPending}
-              pluginLaunchPending={agents.aiPluginLaunch.isPending}
-              canDispatchRelease={props.releaseDispatchAllowed}
-              canDispatchTradeDeploy={props.tradeDeployDispatchAllowed}
-              canDispatchPluginLaunch={props.pluginLaunchDispatchAllowed}
-              releaseDisabledReason={props.releaseDisabledReason}
-              tradeDeployDisabledReason={props.tradeDeployDisabledReason}
-              pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
-              promoteOnly
-              selectedCommandLane={selectedCommandLane}
-              onSelectedCommandLaneChange={setSelectedCommandLane}
-            />
-          )}
-        </>
+      {phaseProgressBlock}
+      {isMissionLaunch && (
+        <OpsTaskStrips
+          mode={mode}
+          context={props.context}
+          matrices={props.matrices}
+          stgSmoke={props.stgSmoke}
+          stgGate={props.stgGate}
+          lastDeliverSucceeded={props.lastDeliverSucceeded}
+          tierB={props.tierB}
+          onNavigate={onNavigate}
+          onOpenPromote={props.onOpenPromote}
+          onOpenDelivery={props.onOpenDelivery}
+          onDispatchRelease={showLaunchPad ? props.dispatchReleaseAgent : undefined}
+          onDispatchTradeDeploy={showLaunchPad ? props.dispatchTradeDeployAgent : undefined}
+          onDispatchPluginLaunch={showLaunchPad ? props.dispatchPluginLaunchAgent : undefined}
+          releasePending={agents.aiRelease.isPending}
+          tradeDeployPending={agents.aiTradeDeploy.isPending}
+          pluginLaunchPending={agents.aiPluginLaunch.isPending}
+          canDispatchRelease={props.releaseDispatchAllowed}
+          canDispatchTradeDeploy={props.tradeDeployDispatchAllowed}
+          canDispatchPluginLaunch={props.pluginLaunchDispatchAllowed}
+          releaseDisabledReason={props.releaseDisabledReason}
+          tradeDeployDisabledReason={props.tradeDeployDisabledReason}
+          pluginLaunchDisabledReason={props.pluginLaunchDisabledReason}
+          promoteOnly
+          selectedCommandLane={selectedCommandLane}
+          onSelectedCommandLaneChange={setSelectedCommandLane}
+        />
       )}
     </div>
   )

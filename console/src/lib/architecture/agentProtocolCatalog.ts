@@ -22,7 +22,7 @@ export const AGENT_PROTOCOL_SOURCE = 'console/src/lib/architecture/agentProtocol
  */
 export const MISSION_SIGNAL_PROGRAM_REFERENCE =
   'Mission Signal Phases 4–7 (Hermes First Task, Flight Director governance, Flight Director operations, ' +
-  'program closure) are program delivery history — see Delivery Board (Engineer → Delivery) and Agent System ' +
+  'program closure) are program delivery history — see Agent System ' +
   '(Governance) for status and step detail. Active per-session protocol remains: modes, domains, forbidden ' +
   'actions, D10 freeze, and the P2/P3 diagnostic playbooks above.'
 
@@ -88,12 +88,6 @@ export type ContextPackLayer = {
 }
 
 export const CONTEXT_PACK_LAYERS: ContextPackLayer[] = [
-  {
-    order: 0,
-    name: 'Agent Briefing',
-    description:
-      'Briefing → session pack; reconcile gate per briefingReconciliationCatalog.ts (BRIEFING_STALE when queue/appendix/headline diverge from spine); Since your last session shows matrix/cluster deltas + agent tasks',
-  },
   { order: 1, name: 'Discipline', description: 'Workspace rules, migration-protocol, dense-ui-system' },
   { order: 2, name: 'Spine', description: 'GET /api/v1/context or Ops Console → Catalog → Copy for LLM' },
   { order: 3, name: 'Task scope', description: 'One milestone id, one env (dev/prod), one repo' },
@@ -109,11 +103,6 @@ export type ForbiddenAction = {
 export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'Redis daemon control write via platform AI (POST /api/monitor/control/*)', scope: 'All modes' },
   { action: 'ib:operator:cmd RPC', scope: 'All modes' },
-  {
-    action:
-      'Session SDK runtime (bridge.ts Start/Approve/Reject/Cancel/Launch) — removed; phase work for Briefing→In Flight→Delivery runs in Cursor IDE Agent',
-    scope: 'Session construction (Briefing→In Flight→Delivery)',
-  },
   {
     action:
       'Live trading enablement — scale daemon for auto-trade, remove STG daemon-scale-zero, enable live hedge/place_order, or Monitor /control/* that arms live trading (spine D10 BLOCKED until Owner explicit unlock)',
@@ -177,11 +166,10 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D11',
     topic: 'Operate Queue API',
     rule:
-      'Post-completion remains NOT ASSESSED until Briefing Owner decision. Only approved structured handoffs inject into GET/POST /api/v1/operate/queue (data/operate/queue.json); NO HANDOFF is explicit, and verified closure remains in recent_closed. Not spine tracks.operate.',
+      'Only structured handoffs (checklist dispatch or operator enqueue) enter GET/POST /api/v1/operate/queue (data/operate/queue.json); verified closure remains in recent_closed. Not spine tracks.operate. The program post-completion → queue hand-off was retired with Build Desk (2026-10-06).',
     wave3Deliverables: [
       'Operate queue store + GET list + POST enqueue on approve',
       'Control Room strip: open-count summary + deep-link to Agent Desk (full list in TCC / Desk)',
-      'Briefing operate track reads queue API',
       'MCP get_operate_queue (read)',
       'Structured reason/task/criteria/verification/risk contract with legacy JSON compatibility',
       'Agent Desk Start/Prepare → execution_job_id → evidence-gated close',
@@ -191,7 +179,7 @@ export const WAVE3_P0_DECISIONS: Wave3P0Decision[] = [
     id: 'D12',
     topic: 'Sign-off single path api',
     rule:
-      'Only POST /api/v1/programs/{id}/phases/{pid}/signoff writes phase_sign_offs. Session SDK runtime (bridge.ts /active/* /launch) is removed — phase work runs in Cursor IDE Agent. UI host = In Flight (Engineer → Delivery); Delivery is read-only catalog.',
+      'Retired 2026-10-06 with Build Desk: the programs API, phase sign-off and In Flight / Delivery are gone. Vision gate sign-off writes its own gate JSON; phased work is tracked in the program doc and the session report.',
     wave3Deliverables: [
       'Session SDK runtime removed; only programs signoff API writes phase_sign_offs',
       'Vision gate Owner sign → programs signoff API (gate JSON = run artifact only)',
@@ -590,7 +578,7 @@ export const FLIGHT_DIRECTOR_OPS_STEPS: FlightDirectorStep[] = [
     step: '1. Daily digest',
     tool: 'get_flight_director_snapshot',
     required: true,
-    detail: 'Agent Briefing → Flight Director 24h panel; review completed/failed/escalations before opening Cursor.',
+    detail: 'Ops Desk → Queue → Review → Flight Director 24h panel; review completed/failed/escalations before starting work.',
   },
   {
     step: '2. Trust override',
@@ -612,7 +600,7 @@ export const MISSION_SIGNAL_CLOSURE_STEPS: FlightDirectorStep[] = [
     step: '1. Program status',
     tool: 'Control Room → Mission Signal strip',
     required: true,
-    detail: 'P1–P6 show ✓ when Owner signed each phase via Briefing Session · mission-signal (visible on Delivery Board catalog); all six unlock Phase 7 closure.',
+    detail: 'P1–P6 were signed by the Owner phase by phase (program history); all six unlocked Phase 7 closure.',
   },
   {
     step: '2. Agent Protocol reference',
@@ -908,9 +896,9 @@ export function buildAgentProtocolLlmPack(): string {
     `- Available tags: MCP \`get_delivery_revisions\` — select revision for deploys`,
     `- Catalog: \`${DEV_AGENT_CLOSED_LOOP.catalog}\``,
     '',
-    '## Three Desks (Build / Ops / Analysis)',
-    '- Rail: System + Build + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops.',
-    '- Engineer Partner: Build Desk / Launch Desk / Ops Desk / Analysis Desk. Launch Desk: Rocket → Satellite(Trade, Research instruments) → Plugin → Agent (L-1 Mac Mini host publish). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Queue tab id `queue` (`#agent-desk` alias).',
+    '## Desks (Ops / Analysis)',
+    '- Rail: System + Ops + Analysis. Legacy daily-ops / mission-launch / patrol → ops; retired Build lens ids → system.',
+    '- Engineer Partner: Launch Desk / Ops Desk / Analysis Desk. Launch Desk: Rocket → Satellite(Trade, Research instruments) → Plugin → Agent (L-1 Mac Mini host publish). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Queue tab id `queue` (`#agent-desk` alias).',
     '',
     '## Data husbandry (batch Golden Source)',
     '- Same problem class → Dagster Data Assets for **all** Golden Source husbandry periodic ignition (Massive full slots / Flex / Research day+short+agents+maintenance) via multi-schedule.',

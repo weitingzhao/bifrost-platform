@@ -17,10 +17,8 @@ import {
   runVisionGate,
   signVisionGate,
   visionGateQueryKey,
-  VISION_PROGRAM_GATES_QUERY_KEY,
   type VisionGateId,
 } from '@/api/vision'
-import { invalidateProgramDeliveryQueries } from '@/api/programs'
 import type { VisionV1GateResponse } from '@/api/deliveryTypes'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
@@ -30,11 +28,8 @@ import { usePlatformAuth } from '@/hooks/usePlatformAuth'
  *
  * There were six of these files, ~152 lines each and 75–79% identical, differing
  * in a title, a description, a sign-off note and which API function they called.
- * The copies drifted: only V1 invalidated VISION_PROGRAM_GATES_QUERY_KEY after
- * signing, so signing any other gate left the Delivery Board's signed/total
- * showing the old count until something else happened to refetch. Every gate
- * does it now — the behaviour is written once, so it cannot be true of one gate
- * and not the rest.
+ * The copies drifted in which queries they invalidated after signing; the
+ * behaviour is written once now, so it cannot be true of one gate and not the rest.
  *
  * Run/sign/empty labels come from the id rather than the catalog; six copies of
  * "Run V3 gate" are six chances to write V2.
@@ -108,10 +103,8 @@ export function VisionGatePanel({ id }: { id: VisionGateId }) {
     onMutate: () => setSignError(null),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: visionGateQueryKey(id) })
-      void qc.invalidateQueries({ queryKey: [...VISION_PROGRAM_GATES_QUERY_KEY] })
       void qc.invalidateQueries({ queryKey: ['context'] })
       void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
-      invalidateProgramDeliveryQueries(qc, 'vision')
     },
     onError: (err: Error) => setSignError(err.message),
   })

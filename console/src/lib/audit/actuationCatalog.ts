@@ -172,12 +172,3 @@ export function isMigrateWaveAudit(record: AuditRecord): boolean {
   return record.action.startsWith('migratewave.')
 }
 
-export function migrateWaveAuditForStream(
-  records: AuditRecord[],
-  streamId: string,
-  limit = 5,
-): AuditRecord[] {
-  return records
-    .filter(r => isMigrateWaveAudit(r) && r.target.startsWith(`${streamId}/`))
-    .slice(0, limit)
-}

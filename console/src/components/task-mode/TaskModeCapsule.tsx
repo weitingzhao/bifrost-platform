@@ -8,7 +8,6 @@ import { TaskModePickerContent } from '@/components/task-mode/TaskModePickerCont
 const LOOP_TITLE: Record<LoopArchetype, string> = {
   system: 'System',
   ops: 'Ops loop',
-  dev: 'Dev loop',
   analysis: 'Analysis',
 }
 

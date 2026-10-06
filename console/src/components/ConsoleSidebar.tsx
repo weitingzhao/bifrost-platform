@@ -28,7 +28,6 @@ import { NavAgentAskProvider, NavAgentAskSlot } from '@/components/shell/NavAgen
 import { resolveSidebarNavSignal } from '@/lib/nav/sidebarNavSignal'
 import { signalColor, type Signal } from '@/lib/control-room/missionSignals'
 import { rollupSatelliteBusNav } from '@/lib/satellite-bus/satelliteBusNavSignal'
-import { isBriefingOpened } from '@/lib/task-mode/briefingOpenedFlag'
 import {
   buildTaskNavGroups,
   dimmedNavTabIds,
@@ -46,8 +45,6 @@ export type ConsoleViewTab =
   | 'insight-log'
   | 'hermes-status'
   | 'agent-capability'
-  | 'briefing'
-  | 'active-session'
   | 'autonomous-skills'
   | 'execution-log'
   | 'agent-governance'
@@ -57,7 +54,6 @@ export type ConsoleViewTab =
   | 'observability'
   | 'code-health'
   | 'task-cc'
-  | 'delivery-board'
   | 'audit'
   | 'runtime-map'
   | 'cluster'
@@ -71,7 +67,6 @@ export type ConsoleViewTab =
   | 'roadmap'
   | 'platform-standards'
   | 'agent-protocol'
-  | 'briefing-reconciliation'
   | 'mcp-contract'
   | 'design-system'
   | 'flywheel-vision'
@@ -166,12 +161,9 @@ export function ConsoleSidebar({
       resolveAllTaskPhaseStatuses(modeId, {
         snapshot,
         operateQueueOpenCount: queueQ.data?.open.length ?? 0,
-        briefingOpened: isBriefingOpened(modeId),
         patrolRuns: patrol.runs,
       }),
-    // activeTab forces recalc when user navigates after marking briefing opened
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [modeId, snapshot, queueQ.data?.open.length, patrol.runs, activeTab],
+    [modeId, snapshot, queueQ.data?.open.length, patrol.runs],
   )
 
   const activePhaseId = useMemo(

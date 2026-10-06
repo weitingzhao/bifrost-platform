@@ -24,7 +24,7 @@
 ## 文档优先级
 
 1. **代码** — `api/`、`console/`、`config/` 为行为与契约的 ground truth
-2. **Ops Console UI** — Governance 页（Vision / Blueprint / Roadmap / Standards / Agent Protocol / MCP Contract / Design System / Briefing Reconciliation / AI Compute）由 catalog TS 驱动，唯一权威治理源
+2. **Ops Console UI** — Governance 页（Vision / Blueprint / Roadmap / Standards / Agent Protocol / MCP Contract / Design System / AI Compute）由 catalog TS 驱动，唯一权威治理源
 3. **Spine** — `GET /api/v1/context`
 
 **本 repo 没有 `docs/` 目录** — 所有治理内容由 Governance catalog（TypeScript）驱动，不使用独立文档站。

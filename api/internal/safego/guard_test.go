@@ -15,8 +15,8 @@ var bareGo = regexp.MustCompile(`^go [a-zA-Z_][a-zA-Z0-9_.]*\(`)
 //
 // chi's middleware.Recoverer guards only a request handler's own stack, so an
 // unguarded goroutine takes the whole process with it — and this process runs
-// Mission Control, Launch Desk, Build Desk, Plugin and Engineer together, so a
-// panic in one work surface blinds the other four. This test is what keeps that
+// Mission Control, Launch Desk, Plugin and Engineer together, so a panic in one
+// work surface blinds the other three. This test is what keeps that
 // from creeping back in one `go func` at a time.
 func TestNoUnguardedGoroutines(t *testing.T) {
 	root, err := filepath.Abs("..")

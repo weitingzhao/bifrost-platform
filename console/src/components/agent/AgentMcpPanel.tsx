@@ -71,10 +71,10 @@ function buildCursorConfigJson(status: {
 
 export function AgentMcpPanel({
   onOpenMcpContract,
-  onOpenBriefing,
+  onOpenQueue,
 }: {
   onOpenMcpContract?: () => void
-  onOpenBriefing?: () => void
+  onOpenQueue?: () => void
 }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
   const qc = useQueryClient()
@@ -281,13 +281,13 @@ export function AgentMcpPanel({
           title={nightlyMutation.isError ? 'Drift scan failed to start' : 'Drift scan started'}
         >
           {nightlyMsg}
-          {onOpenBriefing != null && !nightlyMutation.isError && (
+          {onOpenQueue != null && !nightlyMutation.isError && (
             <p className="m-0 mt-2">
               After ~1–2 min open{' '}
-              <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onOpenBriefing}>
-                Briefing
+              <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={onOpenQueue}>
+                Queue
               </Button>{' '}
-              for the report and Layer 4 approval.
+              (Review) for the report and Layer 4 approval.
             </p>
           )}
         </OpsFeedback>

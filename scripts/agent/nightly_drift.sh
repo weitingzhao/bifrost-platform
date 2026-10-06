@@ -121,7 +121,7 @@ L3_EXIT=0
         -d "${CREATE_BODY}" \
         "${PROPOSAL_API%/}/api/v1/agent/drift-proposals" 2>&1) || CREATE_RESP="POST failed: ${CREATE_RESP}"
       echo "${CREATE_RESP}" | python3 -m json.tool 2>/dev/null || echo "${CREATE_RESP}"
-      echo "Owner approval: Ops Console → Agent Briefing → Drift auto-fix proposal"
+      echo "Owner approval: Ops Console → Ops Desk → Queue → Review → Drift auto-fix proposal"
     elif [[ "${HAS_DRIFT}" == "True" ]]; then
       echo "SKIP proposal POST — set PLATFORM_OPERATOR_TOKEN + PLATFORM_API_URL on agent host"
       echo "${L4_JSON}" | python3 -m json.tool 2>/dev/null || echo "${L4_JSON}"

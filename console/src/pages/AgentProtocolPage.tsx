@@ -101,10 +101,8 @@ function modeTagVariant(mode: string): 'info' | 'neutral' | 'warning' {
 }
 
 export function AgentProtocolPage({
-  onOpenDeliveryBoard,
   onOpenAgentSystem,
 }: {
-  onOpenDeliveryBoard?: () => void
   onOpenAgentSystem?: () => void
 }) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
@@ -590,9 +588,6 @@ export function AgentProtocolPage({
             title="Mission Signal program references (P4–P7)"
             action={
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={onOpenDeliveryBoard}>
-                  Open Delivery
-                </Button>
                 <Button size="sm" variant="outline" onClick={onOpenAgentSystem}>
                   Open Agent System
                 </Button>

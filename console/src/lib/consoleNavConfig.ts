@@ -1,13 +1,11 @@
 import type { ShellNavGroup, ShellNavItem, ShellNavSubGroup } from '@bifrost/ui'
 import {
   Activity,
-  Archive,
   BookOpen,
   Bot,
   Boxes,
   BrainCircuit,
   CalendarClock,
-  ClipboardList,
   Container,
   Cpu,
   Database,
@@ -27,7 +25,6 @@ import {
   Rocket,
   Ruler,
   Satellite,
-  Scale,
   Server,
   Shield,
   ShieldCheck,
@@ -48,7 +45,7 @@ import {
  * |----------|---------------------------------|--------------------------------------------------|
  * | Seat     | Mission Control (fixed)         | Execute (TCC) → Control Room → Observability     |
  * | Seat     | Defects & Audit (collapsible)   | Retrospective records adjacent to Seat           |
- * | Partner  | Engineer strip (persona)        | Build Desk + Launch Desk; Ops Desk / Analysis Desk |
+ * | Partner  | Engineer strip (persona)        | Launch Desk; Ops Desk / Analysis Desk            |
  * | Mission  | Satellite → Rocket → Plugin     | Vehicle (Trade+Research Engine) + Rocket + plugins |
  * | Support  | (none — Plugin is peer Mission) |                                                  |
  *
@@ -84,16 +81,9 @@ export const MISSION_CONTROL_RECORDS_ITEMS: ShellNavItem[] = [
 
 export const MISSION_CONTROL_RECORDS_LABEL = 'Defects & Audit'
 
-/** Build Desk — field name `lifecycle` kept; display label is Build Desk.
- * Dev Sessions lives at framework chrome (header indicator / Operator Dock), not here. */
-export const ENGINEER_LIFECYCLE_ITEMS: ShellNavItem[] = [
-  { id: 'briefing', label: 'Briefing', icon: ClipboardList },
-  { id: 'active-session', label: 'In Flight', icon: Orbit },
-  { id: 'delivery-board', label: 'Delivery', icon: Archive },
-]
-
 /**
- * Launch Desk — always under Engineer Partner (below Build Desk).
+ * Launch Desk — first desk under Engineer Partner.
+ * Dev Sessions lives at framework chrome (header indicator / Operator Dock), not here.
  * Rocket / Satellite(Trade·Research instruments) / Plugin / Agent (L-1).
  * Tab ids for instruments stay trade-release / research-release (flatten for filters).
  */
@@ -207,7 +197,6 @@ export function buildSeatRecordsItems(allowedTabIds: Set<string> | null): ShellN
 }
 
 export type PartnerNavSections = {
-  lifecycle: ShellNavItem[]
   launch: ShellNavItem[]
   /** Flat Ops Desk items (active detection / secondary open). */
   workspace: ShellNavItem[]
@@ -231,13 +220,12 @@ export function filterAllowedNavSubGroups(
 export function buildPartnerNavSections(
   allowedTabIds: Set<string> | null,
 ): PartnerNavSections | null {
-  const lifecycle = filterAllowedNavItems(ENGINEER_LIFECYCLE_ITEMS, allowedTabIds)
   const launch = filterAllowedNavItems(ENGINEER_LAUNCH_ITEMS, allowedTabIds)
   const workspaceGroups = filterAllowedNavSubGroups(ENGINEER_WORKSPACE_SUBGROUPS, allowedTabIds)
   const workspace = workspaceGroups.flatMap(g => g.items)
   const profile = filterAllowedNavItems(ENGINEER_PROFILE_ITEMS, allowedTabIds)
-  if (lifecycle.length + launch.length + workspace.length + profile.length === 0) return null
-  return { lifecycle, launch, workspace, workspaceGroups, profile }
+  if (launch.length + workspace.length + profile.length === 0) return null
+  return { launch, workspace, workspaceGroups, profile }
 }
 
 export const CONSOLE_NAV_GROUPS: ShellNavGroup[] = [
@@ -316,7 +304,6 @@ export const GOVERNANCE_MENU_GROUPS: ReadonlyArray<{
       { id: 'agent-system', label: 'Agent System', icon: Boxes },
       { id: 'mcp-contract', label: 'MCP Contract', icon: Plug },
       { id: 'design-system', label: 'Design System', icon: Ruler },
-      { id: 'briefing-reconciliation', label: 'Briefing Reconciliation', icon: Scale },
     ],
   },
   {
@@ -375,9 +362,6 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   /** Legacy `#agent-desk` hash alias — plane kept for breadcrumb flash before redirect. */
   'agent-desk': 'Engineer',
   'agent-capability': 'Engineer',
-  briefing: 'Engineer',
-  'active-session': 'Engineer',
-  'delivery-board': 'Engineer',
   'dev-sessions': 'Engineer',
   'autonomous-skills': 'Engineer',
   'execution-log': 'Engineer',
@@ -394,7 +378,6 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   'agent-system': 'Governance',
   'mcp-contract': 'Governance',
   'design-system': 'Governance',
-  'briefing-reconciliation': 'Governance',
   'ai-compute': 'Governance',
 }
 

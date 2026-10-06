@@ -2,7 +2,7 @@ import type { RunVisionV1GateResponse, VisionV1GateResponse } from './deliveryTy
 import { authedFetch } from './client'
 
 /**
- * Vision gates, in the order the Delivery Board and the gate panels show them.
+ * Vision gates, in the order the gate panels show them (Governance → Vision).
  *
  * There used to be three functions per gate — eighteen bodies that differed only
  * in a URL segment — and six components around them that differed in a title.
@@ -39,9 +39,3 @@ export function visionGateQueryKey(id: VisionGateId) {
   return ['vision', id, 'gate'] as const
 }
 
-/** All Vision gates for Delivery Board signed/total (V5 → V1 + S3). */
-export const VISION_PROGRAM_GATES_QUERY_KEY = ['vision', 'program', 'gates'] as const
-
-export async function fetchVisionProgramGates(): Promise<VisionV1GateResponse[]> {
-  return Promise.all(VISION_GATE_IDS.map(fetchVisionGate))
-}

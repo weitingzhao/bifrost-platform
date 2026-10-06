@@ -169,9 +169,4 @@ export interface RunBuildPhaseGateResponse extends ActuationResponse {
   gate: BuildPhaseGateResponse
 }
 
-export interface MigrateWaveActuationResponse extends ActuationResponse {
-  stream: MigrateStream
-  headline: string
-}
-
 // Hermes Gateway — Autonomous Agent types

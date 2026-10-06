@@ -67,13 +67,9 @@ func capabilityFor(name, route string) string {
 		return "stack"
 	case strings.HasPrefix(route, "/api/v1/promote"):
 		return "release"
-	case strings.HasPrefix(route, "/api/v1/briefing"),
-		strings.HasPrefix(route, "/api/v1/lanes"),
-		strings.HasPrefix(route, "/api/v1/agent"),
+	case strings.HasPrefix(route, "/api/v1/agent"),
 		strings.HasPrefix(route, "/api/v1/hermes"),
 		strings.HasPrefix(route, "/api/v1/remediation"),
-		strings.HasPrefix(route, "/api/v1/programs"),
-		strings.HasPrefix(route, "/api/v1/sessions"),
 		strings.HasPrefix(route, "/api/v1/operate"),
 		strings.HasPrefix(route, "/api/v1/checklist"),
 		strings.HasPrefix(route, "/api/v1/dev-sessions"):
@@ -116,11 +112,7 @@ func functionFor(name, method string) string {
 		strings.HasPrefix(name, "reject_"),
 		strings.HasPrefix(name, "record_"),
 		strings.HasPrefix(name, "close_"),
-		strings.HasPrefix(name, "dismiss_"),
-		strings.HasPrefix(name, "create_session"),
-		strings.HasPrefix(name, "prepare_briefing"),
-		strings.HasPrefix(name, "update_lane"),
-		strings.HasPrefix(name, "delete_lane"):
+		strings.HasPrefix(name, "dismiss_"):
 		return "govern"
 	default:
 		if method == "GET" || method == "" {
@@ -221,12 +213,6 @@ func Catalog() []ToolView {
 		tool("gitops_rollback_app", "Rollback Argo CD app to previous revision", "confirm", "POST", "/api/v1/gitops/apps/{name}/rollback", "admin", "P3", true),
 		tool("stack_install_addon", "Install CI/CD stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/install", "admin", "P4", true),
 		tool("stack_upgrade_addon", "Upgrade/reinstall stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/upgrade", "admin", "P4", true),
-		tool("get_session_briefing", "Compact/full session briefing pack (track/lane/intent/pack query params)", "read", "GET", "/api/v1/briefing/session-pack", "viewer", "Agent", true),
-		tool("list_briefing_session_results", "Recent Agent Desk session close records", "read", "GET", "/api/v1/briefing/session-results", "viewer", "Agent", true),
-		tool("close_briefing_session", "Record Agent Desk session close to audit (operator)", "routine", "POST", "/api/v1/briefing/session-results", "operator", "Agent", true),
-		tool("prepare_briefing", "Write briefing pack to data/briefing/active-pack.md for Cursor IDE /briefing (Console)", "routine", "POST", "/api/v1/briefing/prepare", "operator", "Console", true),
-		tool("update_lane", "Reclassify a Briefing lane (component_line / track_type / track / description)", "routine", "PATCH", "/api/v1/lanes/{id}", "operator", "Agent", true),
-		tool("delete_lane", "Delete a Briefing work lane from lanes.yaml", "routine", "DELETE", "/api/v1/lanes/{id}", "operator", "Agent", true),
 		tool("get_agent_bridge", "Agent host + MCP bridge status (runner, Hermes slot, platform MCP)", "read", "GET", "/api/v1/agent/bridge", "viewer", "Agent", true),
 		tool("get_hermes_readiness", "Hermes gateway + LLM key + platform MCP readiness for first L0 task", "read", "GET", "/api/v1/agent/hermes/readiness", "viewer", "Agent", true),
 		tool("get_hermes_first_task", "Canonical Hermes First Task prompt (L0 read-only Mission health pass)", "read", "GET", "/api/v1/agent/hermes/first-task", "viewer", "Agent", true),
@@ -244,15 +230,6 @@ func Catalog() []ToolView {
 		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
 		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", true),
 		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", true),
-		tool("get_program_context", "Program blueprint + phase sign-off state (archived still fetchable by id; list hides archived unless include_archived=true)", "read", "GET", "/api/v1/programs/{id}", "viewer", "Agent", true),
-		tool("get_program_agent_jobs", "Per-program agent job history (active_job + history). Does not switch active program. Not Owner sign-off.", "read", "GET", "/api/v1/programs/{id}/jobs", "viewer", "Agent", true),
-		tool("rebind_program_lane", "Rebind a Delivery program to another lane_id (D2: 409 if target lane already has a live program)", "routine", "PATCH", "/api/v1/programs/{id}", "operator", "Agent", true),
-		tool("create_session", "Create Session Job archive before phase progress (operator)", "routine", "POST", "/api/v1/sessions", "operator", "Agent", true),
-		tool("report_phase_progress", "Report agent phase progress to Delivery Board (session_id required — create_session or Console Copy first; done+verify_cmd requires verify_passed)", "routine", "POST", "/api/v1/programs/{id}/phases/{pid}/progress", "operator", "Agent", true),
-		tool("submit_post_completion", "Submit structured handoff draft for Owner review; never auto-approves", "routine", "POST", "/api/v1/programs/{id}/complete", "operator", "Agent", true),
-		tool("approve_post_completion_item", "Owner approve structured pending_review handoff into Agent Desk", "confirm", "POST", "/api/v1/programs/post-completion/{itemId}/approve", "admin", "Agent", true),
-		tool("reject_post_completion_item", "Owner reject pending handoff without queue injection", "confirm", "POST", "/api/v1/programs/post-completion/{itemId}/reject", "admin", "Agent", true),
-		tool("record_no_post_completion_handoff", "Owner record explicit NO HANDOFF assessment", "confirm", "POST", "/api/v1/programs/{id}/post-completion/no-handoff", "admin", "Agent", true),
 		tool("get_operate_queue", "Open + recently closed structured Agent Desk handoffs (D11)", "read", "GET", "/api/v1/operate/queue", "viewer", "Agent", true),
 		tool("record_operate_queue_execution", "Attach real remediation execution_job_id to open handoff", "routine", "POST", "/api/v1/operate/queue/{id}/execution", "operator", "Agent", true),
 		tool("close_operate_queue_item", "Close with completion evidence; linked job must be done and post-fix verification passed", "routine", "POST", "/api/v1/operate/queue/{id}/close", "operator", "Agent", true),

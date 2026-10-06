@@ -6,7 +6,6 @@ import {
   buildSeatRecordsItems,
   CONSOLE_NAV_GROUPS,
   ENGINEER_LAUNCH_ITEMS,
-  ENGINEER_LIFECYCLE_ITEMS,
   ENGINEER_PROFILE_ITEMS,
   ENGINEER_WORKSPACE_ITEMS,
   ENGINEER_WORKSPACE_SUBGROUPS,
@@ -26,9 +25,6 @@ describe('Seat / Partner zone builders', () => {
       MISSION_CONTROL_RECORDS_ITEMS.map(i => i.id),
     )
     expect(MISSION_CONTROL_RECORDS_LABEL).toBe('Defects & Audit')
-    expect(buildPartnerNavSections(null)?.lifecycle.map(i => i.id)).toEqual(
-      ENGINEER_LIFECYCLE_ITEMS.map(i => i.id),
-    )
     expect(buildPartnerNavSections(null)?.launch.map(i => i.id)).toEqual([
       'platform-release',
       'satellite-launch',
@@ -52,7 +48,6 @@ describe('Seat / Partner zone builders', () => {
     ])
     expect(buildSeatRecordsItems(allowed).map(i => i.id)).toEqual(['defects'])
     const partner = buildPartnerNavSections(allowed)
-    expect(partner?.lifecycle).toEqual([])
     expect(partner?.launch.map(i => i.id)).toEqual([
       'platform-release',
       'satellite-launch',
@@ -79,32 +74,17 @@ describe('Seat / Partner zone builders', () => {
     expect(partner?.profile).toEqual([])
   })
 
-  it('build seat is TCC + control-room; partner keeps Build Desk + Queue', () => {
-    const allowed = resolveAllowedTabIds('build')
-    expect(buildSeatNavItems(allowed, true).map(i => i.id)).toEqual([
-      'task-cc',
-      'control-room',
-    ])
-    expect(buildSeatRecordsItems(allowed)).toEqual([])
-    const partner = buildPartnerNavSections(allowed)
-    expect(partner?.lifecycle.map(i => i.id)).toEqual([
-      'briefing',
-      'active-session',
-      'delivery-board',
-    ])
-    expect(partner?.launch).toEqual([])
-    expect(partner?.workspace.map(i => i.id)).toEqual(['queue'])
-    expect(partner?.workspaceGroups.map(g => g.label)).toEqual(['Operate'])
-    expect(ENGINEER_LIFECYCLE_ITEMS.some(i => i.id === 'dev-sessions')).toBe(false)
-    expect(partner?.profile).toEqual([])
-  })
-
-  it('Build Desk sidebar labels are Briefing → In Flight → Delivery', () => {
-    expect(ENGINEER_LIFECYCLE_ITEMS.map(i => i.label)).toEqual([
-      'Briefing',
-      'In Flight',
-      'Delivery',
-    ])
+  it('the retired Build lens opens System: no Build Desk tabs anywhere', () => {
+    expect(resolveTaskModeId('build')).toBe('system')
+    const partner = buildPartnerNavSections(null)
+    const ids = [
+      ...(partner?.launch ?? []).flatMap(i => [i.id, ...(i.children ?? []).map(c => c.id)]),
+      ...(partner?.workspace ?? []).map(i => i.id),
+      ...(partner?.profile ?? []).map(i => i.id),
+    ]
+    for (const retired of ['briefing', 'active-session', 'delivery-board', 'briefing-reconciliation']) {
+      expect(ids).not.toContain(retired)
+    }
   })
 
   it('Launch Desk sidebar labels are Rocket → Satellite(Trade, Research) → Plugin → Agent', () => {
@@ -130,7 +110,6 @@ describe('Seat / Partner zone builders', () => {
       'agent-capability',
     ])
     expect(ENGINEER_WORKSPACE_SUBGROUPS.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
-    expect(ENGINEER_LIFECYCLE_ITEMS.some(i => i.id === 'queue')).toBe(false)
     expect(ENGINEER_PROFILE_ITEMS.some(i => i.id === 'queue')).toBe(false)
     const ops = buildPartnerNavSections(resolveAllowedTabIds('ops'))
     expect(ops?.workspace.some(i => i.id === 'queue')).toBe(true)
@@ -143,7 +122,6 @@ describe('Seat / Partner zone builders', () => {
       'hermes-status',
     ])
     const analysis = buildPartnerNavSections(resolveAllowedTabIds('analysis'))
-    expect(analysis?.lifecycle).toEqual([])
     expect(analysis?.launch).toEqual([])
     expect(analysis?.workspace).toEqual([])
     expect(analysis?.profile.map(i => i.id)).toEqual([

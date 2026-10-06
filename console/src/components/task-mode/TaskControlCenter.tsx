@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from 'react'
-import type { ClusterObservabilityResponse, ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
@@ -9,7 +8,6 @@ import {
   useSatelliteDeployOverall,
   useSatelliteProdReadiness,
 } from '@/components/task-mode/readiness/hooks'
-import { useDevModeController } from '@/components/task-mode/useDevModeController'
 import { useMissionLaunchFixAgents } from '@/components/task-mode/useMissionLaunchFixAgents'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
@@ -32,7 +30,6 @@ import {
 import type { FleetCell } from '@/lib/control-room/fleetSnapshot'
 import { useTaskMode } from '@/lib/task-mode/useTaskMode'
 import type { TaskModeId, TaskPhaseDef } from '@/lib/task-mode/types'
-import type { BriefingUrlState } from '@/lib/briefing/briefingUrlState'
 import type { TaskPhaseFixAction } from '@/lib/task-mode/taskPhaseDiagnostics'
 import { useTaskControlQueries } from '@/components/task-mode/tcc/useTaskControlQueries'
 import { useChecklistItemFix } from '@/components/task-mode/tcc/useChecklistItemFix'
@@ -41,16 +38,12 @@ import { TaskControlCenterView } from '@/components/task-mode/tcc/TaskControlCen
 export type TaskControlCenterProps = AmbientAgentShellProps & {
   context?: OpsContextResponse
   matrices?: MatrixResponse[]
-  clusterSummary?: ClusterSummary
-  clusterObservability?: ClusterObservabilityResponse
-  platformHealthy?: boolean
   stgSmoke?: StgSmokeResponse
   stgGate?: ReleaseGateResponse
   lastDeliverSucceeded?: boolean
   tierB?: TierBStatusResponse
   onNavigate: (tabId: string) => void
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
-  onOpenBriefing?: (opts?: BriefingUrlState) => void
   onOpenPromote?: () => void
   onOpenDelivery?: () => void
   onOpenAgentDesk?: (arg?: OpenAgentDeskArg) => void
@@ -60,16 +53,12 @@ export type TaskControlCenterProps = AmbientAgentShellProps & {
 export function TaskControlCenter({
   context,
   matrices = [],
-  clusterSummary,
-  clusterObservability,
-  platformHealthy,
   stgSmoke,
   stgGate,
   lastDeliverSucceeded,
   tierB,
   onNavigate,
   onModeChange,
-  onOpenBriefing,
   onOpenPromote,
   onOpenDelivery,
   onOpenAgentDesk,
@@ -90,7 +79,6 @@ export function TaskControlCenter({
   const isMissionLaunch = false
   const isDailyOps = isOps
   const isSystem = mode.id === 'system'
-  const isDevLoop = mode.loopArchetype === 'dev'
   const showLaunchPad = false
 
   /** Release Focus on Daily Ops needs the same readiness/gate data Mission Launch used. */
@@ -123,22 +111,10 @@ export function TaskControlCenter({
   const dailyOpsFixScope =
     resolveCellFixScope(dailyOpsTargetCell ?? emptyCell) ?? PROD_ENV_FIX_SCOPE
 
-  const {
-    devProgram,
-    resolvedProgramId,
-    inlineBriefingPack,
-    briefingOpened,
-    handleBriefingOpened,
-    devAgentPhaseDone,
-  } = useDevModeController({
-    mode, isDevLoop, context, matrices, clusterSummary, clusterObservability, platformHealthy,
-  })
-
   const q = useTaskControlQueries({
-    mode, isMissionLaunch, isDailyOps, isDevLoop, fleet,
+    mode, isMissionLaunch, isDailyOps, fleet,
     fleetClear: fleet.fleetClear, ambientJobId, ambientJobScope, context, snapshot,
     operateQueueOpenCount: queueQ.data?.open.length ?? 0,
-    programDetail: devProgram.programDetail, briefingOpened, devAgentPhaseDone,
     dailyOpsTargetCell, canOperate, rocketProd, satelliteProd, promoteVerify, satelliteDeploy,
   })
 
@@ -207,11 +183,9 @@ export function TaskControlCenter({
   const loopLabel =
     mode.loopArchetype === 'ops'
       ? 'Ops loop'
-      : mode.loopArchetype === 'dev'
-        ? 'Dev loop'
-        : mode.loopArchetype === 'analysis'
-          ? 'Analysis'
-          : 'System'
+      : mode.loopArchetype === 'analysis'
+        ? 'Analysis'
+        : 'System'
 
   const [phaseFixUnavailableHint, setPhaseFixUnavailableHint] = useState<string | null>(null)
 
@@ -236,9 +210,9 @@ export function TaskControlCenter({
   }
 
   const phaseDefaultOpen = useMemo(() => {
-    if (q.phases.length === 0 || isDevLoop || isDailyOps) return false
+    if (q.phases.length === 0 || isDailyOps) return false
     return !q.phases.every((p: TaskPhaseDef) => q.statuses[p.id] === 'done')
-  }, [q.phases, q.statuses, isDevLoop, isDailyOps])
+  }, [q.phases, q.statuses, isDailyOps])
 
   const headerDescription = (() => {
     if (isOps) {
@@ -258,7 +232,6 @@ export function TaskControlCenter({
       mode={mode}
       isMissionLaunch={isMissionLaunch}
       isDailyOps={isDailyOps}
-      isDevLoop={isDevLoop}
       isSystem={isSystem}
       operateQueueOpen={queueQ.data?.open.length ?? 0}
       onModeChange={onModeChange}
@@ -277,12 +250,7 @@ export function TaskControlCenter({
       satelliteProd={satelliteProd}
       onOpenPhasePage={handleOpenPhasePage}
       onPhaseFixAction={handlePhaseFixAction}
-      devProgram={devProgram}
-      resolvedProgramId={resolvedProgramId}
-      inlineBriefingPack={inlineBriefingPack}
       onNavigate={onNavigate}
-      onOpenBriefing={onOpenBriefing}
-      handleBriefingOpened={handleBriefingOpened}
       context={context}
       matrices={matrices}
       stgSmoke={stgSmoke}

@@ -156,7 +156,7 @@ milestones:
       status: NOT_STARTED
       pipeline_lane: parallel
       pipeline_after: vision-v5-convergence
-      authority: config/lanes.yaml · GET/POST /api/v1/lanes
+      authority: agent/drift (nightly drift scan) · Ops Desk → Queue → Review
     - id: legacy-retirement
       label: Phase 3 Legacy retirement
       status: SIGNED
@@ -179,7 +179,7 @@ milestones:
       status: DONE
       pipeline_lane: parallel
       pipeline_after: k3s-data-layer
-      authority: config/programs/completed/market-data-subcontractor.yaml
+      authority: console/src/lib/architecture/marketDataSubcontractorCatalog.ts (program YAML in git history; Build Desk retired 2026-10-06)
       note: "Program signed off 2026-07-30 (P0–P9). Post-P9 follow-on: STG/PROD promote + compat cleanup."
     - id: research-foundation
       label: Research Engine foundation (OLAP domain + dbt merge)
@@ -193,7 +193,7 @@ milestones:
       status: DONE
       pipeline_lane: parallel
       pipeline_after: research-foundation
-      authority: config/programs/active/research-runtime-ignition.yaml · bifrost-research/CLAUDE.md
+      authority: bifrost-research/CLAUDE.md (program YAML in git history; Build Desk retired 2026-10-06)
       note: "2026-08-21 — research NS, research-api:8795, dbt/volatility/engines/intraday CronJobs, Trade Intelligence honest empty states. Follow-ons: news source + options tape. 2026-08-30 — Dagster webserver/daemon replicas:1; research_trading_day_schedule default RUNNING; husbandry closed-loop."
 decisions:
     - id: D1
@@ -267,13 +267,13 @@ decisions:
       topic: Operate Queue — post-completion handoff contract (Wave 3 P0)
       conclusion: "Approved post-completion items inject into a dedicated Projection-layer Operate Queue API (GET/POST /api/v1/operate/queue), persisted under data/operate/queue.json — not spine tracks.operate. Backward-compatible structured extension: Program completion remains NOT ASSESSED until Briefing Owner decision; flow is submit_post_completion → pending_review → Owner approve or reject / explicit NO HANDOFF → queue open → Agent Desk execution_job_id → evidence-gated close with recent_closed history. Handoffs carry source/operate lane, kind, reason, validated agent task, acceptance criteria, verification steps, risk, owner/due, execution and completion evidence. Lane metadata is only a default and never decides handoff. Spine tracks.operate remains strategic flywheel classification only."
       signed_at: "2026-07-07"
-      authority: "console/src/lib/architecture/agentProtocolCatalog.ts · config/programs/_schema.yaml"
+      authority: "console/src/lib/architecture/agentProtocolCatalog.ts · api/internal/operatequeue (program post-completion hand-off retired with Build Desk 2026-10-06)"
     - id: D12
       status: SIGNED
       topic: Delivery Board sign-off — single write path api (Wave 3 P0)
       conclusion: "All program phase sign-offs converge on POST /api/v1/programs/{id}/phases/{pid}/signoff → data/programs/{id}.json phase_sign_offs. Deprecate sign_off_mechanism enums dev_agent and vision_gate; schema default and only mechanism is api. Dev Agent Mark as Verified and Vision gate Owner sign-off become adapters that call the same programs signoff API. Vision gate run/check artifacts remain on /api/v1/vision/*/gate; Delivery Board reads unified programs state only."
       signed_at: "2026-07-07"
-      authority: "console/src/lib/architecture/agentProtocolCatalog.ts · api/internal/devagent/programs_delivery.go"
+      authority: "console/src/lib/architecture/agentProtocolCatalog.ts (programs API and sign-off path retired with Build Desk 2026-10-06)"
     - id: D13
       status: SIGNED
       topic: Research Engine independent — OLAP domain separated from Trade/Ops
@@ -902,12 +902,6 @@ tracks:
             - id: p1-pod-logs
               label: "Pod log streaming in Cluster page"
               status: done
-            - id: p1-session-loop
-              label: "Briefing session delta + Control Room recent actions"
-              status: done
-            - id: p1-track-model
-              label: "Work Track model (build/migrate/operate)"
-              status: done
             - id: p2-node-lifecycle
               label: "Node join/drain via platform-api"
               status: done
@@ -1098,7 +1092,7 @@ tracks:
               done: 4
               status: closed
               next_task: ""
-              note: "① Layer 1 catalog scan ✓ ② Layer 2 API probes ✓ ③ Layer 3 spine semantic ✓ ④ Layer 4 Owner approval gate + auto-fix remediation ✓ · Briefing DriftProposalPanel · Session delta lists agent tasks since last copy"
+              note: "① Layer 1 catalog scan ✓ ② Layer 2 API probes ✓ ③ Layer 3 spine semantic ✓ ④ Layer 4 Owner approval gate + auto-fix remediation ✓ · DriftProposalPanel on Ops Desk → Queue → Review"
             - id: agent-mcp-integration
               label: "Agent Desk + MCP bridge"
               total: 3
@@ -1113,7 +1107,7 @@ tracks:
               total: 3
               done: 0
               status: not_started
-              note: "PARKED — aspirational; no delivery program / no executable phases until Owner opens one. Briefing lane agent-trade-advisory-parked is Ready (empty queue); not projected on agent-services Doing queue. Scope when resumed: ① Morning trade briefing ② Position risk alerts ③ SEPA opportunity notifications"
+              note: "PARKED — aspirational; no delivery program / no executable phases until Owner opens one. Scope when resumed: ① Morning trade briefing ② Position risk alerts ③ SEPA opportunity notifications"
               prerequisites:
                 - "agent-mcp-integration stream closed"
                 - "Trade API read endpoints stable"
@@ -1190,7 +1184,7 @@ tracks:
               total: 5
               done: 0
               status: not_started
-              note: "PARKED — aspirational after Hermes L0; no delivery program until Owner opens one. Briefing lane flight-director-parked is Ready (empty queue); not projected on agent-services Doing queue. Depends on hermes-gateway-integration ⑥ + retrospective-agent. Scope when resumed: ① Agent performance dashboard ② Trust & Autonomy matrix ③ Capability Map ④ Earned autonomy engine ⑤ Flight Director daily digest. (D8 was Legacy UI gate — SIGNED; not a blocker for this vision.)"
+              note: "PARKED — aspirational after Hermes L0; no delivery program until Owner opens one. Depends on hermes-gateway-integration ⑥ + retrospective-agent. Scope when resumed: ① Agent performance dashboard ② Trust & Autonomy matrix ③ Capability Map ④ Earned autonomy engine ⑤ Flight Director daily digest. (D8 was Legacy UI gate — SIGNED; not a blocker for this vision.)"
               prerequisites:
                 - "hermes-gateway-integration stream ③ skills API done"
                 - "retrospective-agent stream closed"
@@ -1234,7 +1228,7 @@ tracks:
               total: 5
               done: 0
               status: not_started
-              note: "PARKED — no delivery program / no executable phases until Owner opens one. Briefing lane ai-network is Ready (empty queue), not Planned. L0 dashboard/anomaly/predictive-lite already shipped via network-monitoring-ops; UniFi MCP foundation closed (unifi-mcp-server 4/4). Aspirational scope only (not a phase contract): ① Home Assistant + UniFi presence detection ② Automated network anomaly response (isolate + alert) ③ Ops Console unified Network dashboard (LAN + WiFi + IoT) ④ Predictive maintenance (node connectivity pattern → preemptive fix) ⑤ Self-healing network (auto-restart port, re-route traffic, failover)"
+              note: "PARKED — no delivery program / no executable phases until Owner opens one. L0 dashboard/anomaly/predictive-lite already shipped via network-monitoring-ops; UniFi MCP foundation closed (unifi-mcp-server 4/4). Aspirational scope only (not a phase contract): ① Home Assistant + UniFi presence detection ② Automated network anomaly response (isolate + alert) ③ Ops Console unified Network dashboard (LAN + WiFi + IoT) ④ Predictive maintenance (node connectivity pattern → preemptive fix) ⑤ Self-healing network (auto-restart port, re-route traffic, failover)"
               prerequisites:
                 - "unifi-mcp-server stream closed"
                 - "network-upgrade-wifi stream closed"

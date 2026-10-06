@@ -105,22 +105,6 @@ func (s *Store) List() (ListResponse, error) {
 	return ListResponse{Open: open, RecentClosed: closed}, nil
 }
 
-func (s *Store) FindByPendingID(pendingID string) (*Item, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	rec, err := s.loadLocked()
-	if err != nil {
-		return nil, false
-	}
-	for i := range rec.Items {
-		if rec.Items[i].PendingID == pendingID {
-			return &rec.Items[i], true
-		}
-	}
-	return nil, false
-}
-
 func (s *Store) FindByID(id string) (*Item, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -319,27 +303,6 @@ func (s *Store) AddChecklistDispatch(item Item, checklistItemID string) (Item, b
 		return Item{}, false, err
 	}
 	return item, true, nil
-}
-
-func NewItemFromApproval(params ApprovalInjectParams) Item {
-	now := time.Now().UTC().Format(time.RFC3339)
-	lane := strings.TrimSpace(params.OperateLane)
-	if lane != "" && !ValidLanes[lane] {
-		lane = ""
-	}
-	return Item{
-		ID: uuid.New().String(), ProgramID: params.ProgramID,
-		SourceLaneID: params.SourceLaneID, Lane: lane, OperateLane: lane,
-		Title: params.Title, Description: params.Description,
-		HandoffKind: defaultString(params.HandoffKind, HandoffOneOff),
-		Reason:      params.Reason, AgentTaskID: params.AgentTaskID,
-		AcceptanceCriteria: cleanStrings(params.AcceptanceCriteria),
-		VerificationSteps:  cleanStrings(params.VerificationSteps),
-		RiskLevel:          defaultString(params.RiskLevel, RiskLow),
-		Owner:              params.Owner, DueAt: params.DueAt,
-		Status: StatusOpen, CreatedAt: now, UpdatedAt: now,
-		Source: SourcePostCompletion, PendingID: params.PendingID, ApprovedBy: params.ApprovedBy,
-	}
 }
 
 func NewItemFromManual(req EnqueueRequest) (Item, error) {

@@ -3,17 +3,13 @@ import { Button, DenseTag, SegmentControl, StatusLamp } from '@bifrost/ui'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Square } from 'lucide-react'
 import type { AgentBridgeResponse } from '@/api/agentTypes'
-import type { AuditRecord } from '@/api/auditTypes'
-import type { ClusterSummary } from '@/api/clusterTypes'
-import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { cancelRemediationJob, fetchRemediationHealth, fetchRemediationJobs, startRemediation } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { CloseBriefingSessionDialog } from '@/components/briefing/CloseBriefingSessionDialog'
-import { FlightDirectorBriefingPanel } from '@/components/briefing/FlightDirectorBriefingPanel'
-import { BriefingFoldableSection } from '@/components/briefing/BriefingFoldableSection'
+import { FlightDirectorBriefingPanel } from '@/components/agent/FlightDirectorBriefingPanel'
+import { DeskFoldableSection } from '@/components/agent/DeskFoldableSection'
 import { AgentDeskSessionOpsPanels } from '@/components/agent/AgentDeskSessionOpsPanels'
 import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { AgentTaskCatalogPanel } from '@/components/agent/AgentTaskCatalogPanel'
@@ -25,13 +21,7 @@ import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { recordOperateQueueExecution, OPERATE_QUEUE_QUERY_KEY } from '@/api/operateQueue'
 import { catalogTaskById } from '@/lib/agent/agentTaskCatalog'
-import { buildBriefingDeepLink } from '@/lib/briefing/briefingUrlState'
-import { isLaneId } from '@/lib/briefing/workLanes'
 import { buildHandoffAgentPrompt } from '@/lib/operate/handoff'
-import {
-  attachJobToBriefingSession,
-  loadBriefingActiveSession,
-} from '@/lib/briefing/briefingActiveSession'
 import {
   formatRemediationJobWhen,
   groupRemediationJobsByScope,
@@ -41,10 +31,6 @@ import {
 
 interface AgentDeskPageProps {
   context: OpsContextResponse | undefined
-  matrices?: MatrixResponse[]
-  clusterSummary?: ClusterSummary
-  platformHealthy?: boolean
-  auditRecords?: AuditRecord[]
   initialJobId?: string | null
   prefillPrompt?: string | null
   focusHandoffId?: string | null
@@ -53,15 +39,12 @@ interface AgentDeskPageProps {
   onPrefillConsumed?: () => void
   onFocusHandoffConsumed?: () => void
   onFocusDecisionBriefsConsumed?: () => void
-  onOpenBriefing?: () => void
   onOpenCluster?: () => void
   onOpenMcpContract?: () => void
   onOpenAgentProtocol?: () => void
   onOpenAgentSystem?: () => void
   onOpenOperatorPlane?: () => void
   onOpenTrustAutonomy?: () => void
-  onOpenDeliveryBoard?: () => void
-  onOpenBriefingReconciliation?: () => void
 }
 
 type AgentScope = string
@@ -141,10 +124,6 @@ function runnerSummary(bridge: AgentBridgeResponse): string {
 
 export function AgentDeskPage({
   context,
-  matrices = [],
-  clusterSummary,
-  platformHealthy,
-  auditRecords = [],
   initialJobId,
   prefillPrompt,
   focusHandoffId,
@@ -153,15 +132,12 @@ export function AgentDeskPage({
   onPrefillConsumed,
   onFocusHandoffConsumed,
   onFocusDecisionBriefsConsumed,
-  onOpenBriefing,
   onOpenCluster,
   onOpenMcpContract,
   onOpenAgentProtocol,
   onOpenAgentSystem,
   onOpenOperatorPlane,
   onOpenTrustAutonomy,
-  onOpenDeliveryBoard,
-  onOpenBriefingReconciliation,
 }: AgentDeskPageProps) {
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
@@ -172,13 +148,10 @@ export function AgentDeskPage({
   const [panelOpen, setPanelOpen] = useState(false)
   const [userPrompts, setUserPrompts] = useState<Record<string, string>>({})
   const [stopConfirm, setStopConfirm] = useState<{ jobId: string; label: string } | null>(null)
-  const [closeSessionJob, setCloseSessionJob] = useState<RemediationJob | null>(null)
-  const [trackedJob, setTrackedJob] = useState<RemediationJob | null>(null)
   const [handoffLinkError, setHandoffLinkError] = useState<string | null>(null)
   const [deskView, setDeskView] = useState<AgentDeskView>(
     initialJobId != null ? 'observe' : 'operate',
   )
-  const briefingActiveSession = loadBriefingActiveSession()
   const operateQueueQuery = useOperateQueue()
   const decisionBriefsQuery = usePendingDecisionBriefs()
 
@@ -189,10 +162,6 @@ export function AgentDeskPage({
     setDeskView('observe')
     onInitialJobConsumed?.()
   }, [initialJobId, onInitialJobConsumed])
-
-  useEffect(() => {
-    if (initialJob != null) setTrackedJob(initialJob)
-  }, [initialJob])
 
   useEffect(() => {
     if (prefillPrompt == null || prefillPrompt === '') return
@@ -254,12 +223,10 @@ export function AgentDeskPage({
     onSuccess: (job, { prompt, handoff }) => {
       setUserPrompts(prev => ({ ...prev, [job.id]: prompt }))
       setInitialJob(job)
-      setTrackedJob(job)
       setJobId(job.id)
       setPanelOpen(true)
       setDeskView('observe')
       setComposerText('')
-      attachJobToBriefingSession(job.id)
       void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
       if (handoff != null) {
         setHandoffLinkError(null)
@@ -315,19 +282,6 @@ export function AgentDeskPage({
 
   const activeUserPrompt = jobId != null ? userPrompts[jobId] : undefined
 
-  const handleOpenHandoffSource = useCallback(
-    (item: OperateQueueItem) => {
-      if (item.source === 'post_completion') {
-        const lane = item.source_lane_id != null && isLaneId(item.source_lane_id)
-          ? item.source_lane_id
-          : undefined
-        window.location.assign(buildBriefingDeepLink({ lane, program: item.program_id }))
-      }
-      else onOpenDeliveryBoard?.()
-    },
-    [onOpenDeliveryBoard],
-  )
-
   const handlePrepareHandoffAgent = useCallback((item: OperateQueueItem) => {
     setSelectedScope('agent-desk')
     setComposerText(
@@ -382,11 +336,6 @@ export function AgentDeskPage({
               </DenseTag>
             </div>
             <div className="flex items-center gap-1.5">
-              {onOpenBriefing != null && (
-                <Button type="button" variant="ghost" size="sm" onClick={onOpenBriefing}>
-                  Briefing
-                </Button>
-              )}
               {onOpenCluster != null && (
                 <Button type="button" variant="ghost" size="sm" onClick={onOpenCluster}>
                   Cluster
@@ -530,16 +479,7 @@ export function AgentDeskPage({
 
         {deskView === 'operate' && (
           <AgentDeskSessionOpsPanels
-            context={context}
-            matrices={matrices}
-            clusterSummary={clusterSummary}
-            platformHealthy={platformHealthy}
-            auditRecords={auditRecords}
-            onOpenBriefing={onOpenBriefing}
-            onOpenDeliveryBoard={onOpenDeliveryBoard}
-            onOpenBriefingReconciliation={onOpenBriefingReconciliation}
             mode="operate"
-            onOpenHandoffSource={handleOpenHandoffSource}
             onPrepareHandoffAgent={handlePrepareHandoffAgent}
             onStartHandoffAgent={handleStartHandoffAgent}
             onObserveHandoffJob={handleObserveHandoffJob}
@@ -671,26 +611,17 @@ export function AgentDeskPage({
         {deskView === 'review' && (
           <>
             <AgentDeskSessionOpsPanels
-              context={context}
-              matrices={matrices}
-              clusterSummary={clusterSummary}
-              platformHealthy={platformHealthy}
-              auditRecords={auditRecords}
-              onOpenBriefing={onOpenBriefing}
-              onOpenDeliveryBoard={onOpenDeliveryBoard}
-              onOpenBriefingReconciliation={onOpenBriefingReconciliation}
               mode="review"
-              onOpenHandoffSource={handleOpenHandoffSource}
               onObserveHandoffJob={handleObserveHandoffJob}
             />
-            <BriefingFoldableSection
+            <DeskFoldableSection
               kicker="Review"
               title="Flight Director · 24h digest"
               description="Job outcomes, approval events, and current trust-matrix skill signals."
               defaultExpanded={false}
             >
               <FlightDirectorBriefingPanel onOpenTrustAutonomy={onOpenTrustAutonomy} />
-            </BriefingFoldableSection>
+            </DeskFoldableSection>
             <AgentTaskCatalogPanel
               onOpenAgentSystem={onOpenAgentSystem}
               onOpenDoctrine={tab => {
@@ -735,33 +666,14 @@ export function AgentDeskPage({
         stopping={cancelMutation.isPending}
         onStop={id => cancelMutation.mutate(id)}
         onClose={() => setPanelOpen(false)}
-        onCloseSession={
-          briefingActiveSession != null
-            ? () => {
-                const job = trackedJob ?? initialJob
-                if (job != null) setCloseSessionJob(job)
-              }
-            : undefined
-        }
         onDismiss={() => {
           void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
         }}
         onComplete={job => {
           setInitialJob(job)
-          setTrackedJob(job)
-          void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
+              void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
           void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
         }}
-      />
-
-      <CloseBriefingSessionDialog
-        job={closeSessionJob}
-        open={closeSessionJob != null}
-        onDone={() => {
-          setCloseSessionJob(null)
-          setPanelOpen(false)
-        }}
-        onCancel={() => setCloseSessionJob(null)}
       />
 
       <ConfirmDialog
