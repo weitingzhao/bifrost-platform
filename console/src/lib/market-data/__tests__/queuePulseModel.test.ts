@@ -15,6 +15,11 @@ import {
 } from '@/lib/market-data/queuePulseModel'
 import { formatSignedDelta as fmtDelta } from '@/components/market-data/queueReadyCheck'
 import { dagsterRunsUrl } from '@/lib/architecture/opsToolRackCatalog'
+import { buildSlotScheduleIndex } from '@/lib/market-data/slotScheduler'
+import statusFixture from './fixtures/research-orchestration-status.json'
+
+// Research's roster as /research/orchestration/status served it (fixture).
+const SLOT_INDEX = buildSlotScheduleIndex(statusFixture.data.schedules)
 
 function dash(
   partial: Partial<IngestQueueDashboardResponse> & {
@@ -46,6 +51,11 @@ describe('buildQueuePulseView active / hide', () => {
     const view = buildQueuePulseView(
       dash({
         husbandry: { verdict: 'healthy' },
+        schedule: {
+          slots: [
+            { slot: 'fundamentals-rotate', cron: '0 3 * * *', evidence_kinds: ['financials'] },
+          ],
+        },
         queue: {
           pending: 4000,
           running: 2,
@@ -57,6 +67,7 @@ describe('buildQueuePulseView active / hide', () => {
         },
         throughput: { jobs_per_min_15m: 16, eta_minutes_at_current_rate: 250 },
       }),
+      SLOT_INDEX,
     )
     expect(view.active).toBe(true)
     expect(view.verdict).toBe('draining')
@@ -122,10 +133,22 @@ describe('buildQueuePulseView active / hide', () => {
 })
 
 describe('kind ignition map', () => {
-  it('maps financials → fundamentals schedule', () => {
-    expect(ignitionScheduleForKind('financials')).toBe(
+  it('maps a kind to its schedule through the plugin slot and the roster', () => {
+    const slots = [
+      { slot: 'fundamentals-rotate', cron: '0 3 * * *', evidence_kinds: ['financials'] },
+      { slot: 'corporate', cron: '0 23 * * *', evidence_kinds: ['splits_market', 'dividends_market'] },
+      { slot: 'trim', cron: '15 2 * * *', evidence_kinds: [] },
+    ]
+    expect(ignitionScheduleForKind('financials', slots, SLOT_INDEX)).toBe(
       'market_fundamentals_rotate_schedule',
     )
+    // Was market_corporate_trades_schedule, a schedule renamed away in September.
+    expect(ignitionScheduleForKind('dividends_market', slots, SLOT_INDEX)).toBe(
+      'market_corporate_schedule',
+    )
+    expect(ignitionScheduleForKind('option_trades', slots, SLOT_INDEX)).toBeNull()
+    // Without the roster there is no hint rather than a guessed one.
+    expect(ignitionScheduleForKind('financials', slots, new Map())).toBeNull()
     expect(shortKindLabel('option_open_interest')).toBe('opt-oi')
   })
 

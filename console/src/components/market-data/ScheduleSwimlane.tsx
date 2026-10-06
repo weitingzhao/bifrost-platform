@@ -14,8 +14,10 @@ import {
 import { formatDurationParts } from '@/lib/patrol/cronSchedule'
 import {
   dagsterScheduleForSlot,
+  EMPTY_SLOT_INDEX,
   slotSchedulerKind,
   slotSchedulerLabel,
+  type SlotScheduleIndex,
 } from '@/lib/market-data/slotScheduler'
 
 function pad2(n: number): string {
@@ -68,6 +70,7 @@ export function ScheduleSwimlane({
   selectedSlot,
   onSelectSlot,
   scheduleByName,
+  slotIndex = EMPTY_SLOT_INDEX,
 }: {
   slots: IngestScheduleSlot[]
   kindCounts: IngestQueueKindCount[]
@@ -77,6 +80,8 @@ export function ScheduleSwimlane({
   onSelectSlot?: (slot: string) => void
   /** Dagster schedule summary keyed by schedule name. */
   scheduleByName?: Map<string, OrchestrationScheduleRow>
+  /** Slot → Dagster schedule, from Research's roster. */
+  slotIndex?: SlotScheduleIndex
 }) {
   const rows = swimlaneSlots(slots)
   const { startMs, endMs } = resolveHorizon(nowMs, horizon)
@@ -114,7 +119,7 @@ export function ScheduleSwimlane({
         <div className="flex w-48 shrink-0 flex-col">
           {rows.map(s => {
             const selected = selectedSlot === s.slot
-            const schedName = dagsterScheduleForSlot(s.slot)
+            const schedName = dagsterScheduleForSlot(s.slot, slotIndex)
             const orch = schedName != null ? scheduleByName?.get(schedName) : undefined
             const lamp = runLampSignal(orch)
             return (
@@ -129,7 +134,7 @@ export function ScheduleSwimlane({
                 )}
                 title={[
                   s.note ?? s.slot,
-                  `scheduler=${slotSchedulerLabel(slotSchedulerKind(s.slot))}`,
+                  `scheduler=${slotSchedulerLabel(slotSchedulerKind(s.slot, slotIndex))}`,
                   schedName != null ? `dagster=${schedName}` : null,
                   orch?.last_run_status != null
                     ? `last_run=${orch.last_run_status}`
@@ -144,7 +149,7 @@ export function ScheduleSwimlane({
                   <StatusLamp value={lamp} />
                 </span>
                 <span className="min-w-0 truncate">{s.slot}</span>
-                {slotSchedulerKind(s.slot) === 'dagster' ? (
+                {slotSchedulerKind(s.slot, slotIndex) === 'dagster' ? (
                   <DenseTag variant="neutral" className="ml-auto shrink-0">
                     Dagster
                   </DenseTag>

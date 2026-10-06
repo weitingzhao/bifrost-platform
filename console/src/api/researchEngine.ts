@@ -162,6 +162,11 @@ export type OrchestrationScheduleRow = {
   name: string
   job_name: string
   status: string
+  cron_schedule?: string | null
+  execution_timezone?: string | null
+  next_tick_at?: string | null
+  /** Massive plugin slots this schedule enqueues (Research's roster). */
+  market_slots?: string[]
   last_run_status?: string | null
   last_run_ended_at?: string | null
   last_run_id?: string | null

@@ -14,6 +14,7 @@ import {
   type PendingDeltaView,
   type QueuePulseView,
 } from '@/lib/market-data/queuePulseModel'
+import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
 
 export const MARKET_INGEST_QUEUE_PULSE_QUERY_KEY = [
   'market-data',
@@ -53,7 +54,14 @@ export function useMarketIngestQueuePulse(): MarketIngestQueuePulseState {
   const dash =
     q.data != null && !isProxyError(q.data) && q.data.ok !== false ? q.data : null
 
-  const view = useMemo(() => buildQueuePulseView(dash), [dash])
+  const baseView = useMemo(() => buildQueuePulseView(dash), [dash])
+  // The ignition hint needs Research's slot → schedule roster; only ask for it
+  // while the chip is showing.
+  const orch = useOrchestrationStatus({ enabled: baseView.active })
+  const view = useMemo(
+    () => (orch.slotIndex.size > 0 ? buildQueuePulseView(dash, orch.slotIndex) : baseView),
+    [dash, orch.slotIndex, baseView],
+  )
 
   useEffect(() => {
     if (dash == null) return

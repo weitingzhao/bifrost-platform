@@ -1,43 +1,37 @@
 /**
- * Massive schedule slot → ignition scheduler after husbandry migrate.
- * All Golden Source Massive SLOT_NAMES are Dagster-owned; Cron suspended.
+ * Massive schedule slot → the Dagster schedule that fires it.
+ *
+ * The mapping comes from Research's roster: each row of
+ * GET /research/orchestration/status carries `market_slots`, the plugin slots
+ * that schedule enqueues. Console used to keep its own slot → schedule table;
+ * it drifted (corporate still pointed at the renamed
+ * market_corporate_trades_schedule and seven newer slots had no row), so there
+ * is no list here any more (TD-108).
  */
 
-const DAGSTER_SLOTS = new Set([
-  'stock-eod',
-  'eod-pipeline',
-  'universe-daily',
-  'corporate',
-  'calendar',
-  'stock-snapshot',
-  'stock-movers',
-  'option-bars',
-  'minute-bars',
-  'option-trades',
-  'option-refresh',
-  'reference',
-  'fundamentals-rotate',
-  'related-rotate',
-  'trim',
-])
+import type { OrchestrationScheduleRow } from '@/api/researchEngine'
 
-/** Slot → Dagster schedule name (UTC market_* + trading_day for EOD). */
-export const SLOT_TO_DAGSTER_SCHEDULE: Readonly<Record<string, string>> = {
-  'stock-eod': 'research_trading_day_schedule',
-  'eod-pipeline': 'research_trading_day_schedule',
-  'stock-snapshot': 'market_snapshot_schedule',
-  'stock-movers': 'market_movers_schedule',
-  reference: 'market_reference_schedule',
-  'universe-daily': 'market_universe_calendar_schedule',
-  calendar: 'market_universe_calendar_schedule',
-  'related-rotate': 'market_related_schedule',
-  'option-bars': 'market_option_bars_schedule',
-  corporate: 'market_corporate_trades_schedule',
-  'option-trades': 'market_corporate_trades_schedule',
-  'minute-bars': 'market_minute_bars_schedule',
-  'fundamentals-rotate': 'market_fundamentals_rotate_schedule',
-  'option-refresh': 'market_option_refresh_schedule',
-  trim: 'market_trim_schedule',
+/** slot → Dagster schedule name. */
+export type SlotScheduleIndex = ReadonlyMap<string, string>
+
+export const EMPTY_SLOT_INDEX: SlotScheduleIndex = new Map()
+
+/**
+ * Build slot → schedule from the status rows. When several schedules fire one
+ * slot (intraday-chain: 10:30 / 13:00 / 15:30), the first row wins; they share
+ * one job, so its last run is the same either way.
+ */
+export function buildSlotScheduleIndex(
+  rows: readonly Pick<OrchestrationScheduleRow, 'name' | 'market_slots'>[] | null | undefined,
+): SlotScheduleIndex {
+  const index = new Map<string, string>()
+  for (const row of rows ?? []) {
+    for (const slot of row.market_slots ?? []) {
+      const key = slot.trim().toLowerCase()
+      if (key !== '' && !index.has(key)) index.set(key, row.name)
+    }
+  }
+  return index
 }
 
 /** Analytics slots moved to Research — not Massive Cron. */
@@ -45,9 +39,9 @@ const RESEARCH_MIGRATED = new Set(['max-pain', 'atm-iv-pcr', 'iv-percentile'])
 
 export type SlotSchedulerKind = 'dagster' | 'research' | 'cron' | 'unknown'
 
-export function slotSchedulerKind(slot: string): SlotSchedulerKind {
+export function slotSchedulerKind(slot: string, index: SlotScheduleIndex): SlotSchedulerKind {
   const s = slot.trim().toLowerCase()
-  if (DAGSTER_SLOTS.has(s)) return 'dagster'
+  if (index.has(s)) return 'dagster'
   if (RESEARCH_MIGRATED.has(s)) return 'research'
   if (s === 'readiness-refresh') return 'research'
   return 'unknown'
@@ -60,7 +54,6 @@ export function slotSchedulerLabel(kind: SlotSchedulerKind): string {
   return '—'
 }
 
-export function dagsterScheduleForSlot(slot: string): string | null {
-  const s = slot.trim().toLowerCase()
-  return SLOT_TO_DAGSTER_SCHEDULE[s] ?? null
+export function dagsterScheduleForSlot(slot: string, index: SlotScheduleIndex): string | null {
+  return index.get(slot.trim().toLowerCase()) ?? null
 }

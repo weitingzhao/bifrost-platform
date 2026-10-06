@@ -2,7 +2,11 @@
  * Shell-level Market ingest queue pulse — derive view + pending Δ history.
  */
 
-import type { IngestQueueDashboardResponse, IngestQueueKindCount } from '@/api/marketDataPlugin'
+import type {
+  IngestQueueDashboardResponse,
+  IngestQueueKindCount,
+  IngestScheduleSlot,
+} from '@/api/marketDataPlugin'
 import {
   formatCheckAge,
   formatSignedDelta,
@@ -12,6 +16,7 @@ import {
   type ReadyCheckSnap,
 } from '@/components/market-data/queueReadyCheck'
 import type { Signal } from '@/lib/control-room/missionSignals'
+import { EMPTY_SLOT_INDEX, type SlotScheduleIndex } from '@/lib/market-data/slotScheduler'
 
 export const QUEUE_PULSE_DELTA_STORE_KEY = 'bifrost.shell.queue-pulse.pending-delta.v1'
 
@@ -23,24 +28,6 @@ export type QueuePulseVerdict =
   | 'healthy'
   | 'idle'
   | 'unknown'
-
-/** ops_jobs kind → Dagster schedule that typically enqueues it (husbandry migrate). */
-export const KIND_TO_DAGSTER_SCHEDULE: Readonly<Record<string, string>> = {
-  financials: 'market_fundamentals_rotate_schedule',
-  related: 'market_related_schedule',
-  option_open_interest: 'market_option_refresh_schedule',
-  option_snapshot: 'market_option_refresh_schedule',
-  option_bars: 'market_option_bars_schedule',
-  option_trades: 'market_corporate_trades_schedule',
-  minute_bars: 'market_minute_bars_schedule',
-  stock_snapshot: 'market_snapshot_schedule',
-  stock_movers: 'market_movers_schedule',
-  reference: 'market_reference_schedule',
-  universe: 'market_universe_calendar_schedule',
-  calendar: 'market_universe_calendar_schedule',
-  corporate: 'market_corporate_trades_schedule',
-  trim: 'market_trim_schedule',
-}
 
 export type DrainMode = 'expected' | 'stalled' | 'none'
 
@@ -80,10 +67,25 @@ export function shortKindLabel(kind: string | null | undefined): string | null {
   return k.replace(/_/g, '-')
 }
 
-export function ignitionScheduleForKind(kind: string | null | undefined): string | null {
+/**
+ * ops_jobs kind → the Dagster schedule that enqueues it: the plugin says which
+ * slot produces the kind (`evidence_kinds` on its schedule slots), Research's
+ * roster says which schedule fires the slot. No table of our own — the old one
+ * keyed kinds the plugin no longer emits (TD-108).
+ */
+export function ignitionScheduleForKind(
+  kind: string | null | undefined,
+  slots: readonly IngestScheduleSlot[] | null | undefined,
+  index: SlotScheduleIndex,
+): string | null {
   if (kind == null || kind.trim() === '') return null
   const key = kind.trim().toLowerCase().replace(/-/g, '_')
-  return KIND_TO_DAGSTER_SCHEDULE[key] ?? null
+  for (const slot of slots ?? []) {
+    if (!(slot.evidence_kinds ?? []).some(k => k.trim().toLowerCase() === key)) continue
+    const schedule = index.get(slot.slot.trim().toLowerCase())
+    if (schedule != null) return schedule
+  }
+  return null
 }
 
 export function classifyDrainMode(opts: {
@@ -179,6 +181,7 @@ export function formatEtaMinutes(eta: number | null): string {
 /** Derive pulse from queue-dashboard. Fail-soft when dash is null. */
 export function buildQueuePulseView(
   dash: IngestQueueDashboardResponse | null | undefined,
+  slotIndex: SlotScheduleIndex = EMPTY_SLOT_INDEX,
 ): QueuePulseView {
   if (dash == null) {
     return {
@@ -222,7 +225,7 @@ export function buildQueuePulseView(
     etaRaw != null && Number.isFinite(etaRaw) && etaRaw >= 0 ? Number(etaRaw) : null
 
   const top = pickTopKind(dash.queue?.kinds)
-  const ignitionHint = ignitionScheduleForKind(top.kind)
+  const ignitionHint = ignitionScheduleForKind(top.kind, dash.schedule?.slots, slotIndex)
   const drainMode = classifyDrainMode({
     verdict,
     ratePerMin,

@@ -499,6 +499,7 @@ export function MarketDataIngestTab() {
                 selectedSlot={selectedSlot}
                 onSelectSlot={slot => selectScheduleSlot(slot, 'lane')}
                 scheduleByName={orchQ.byName}
+                slotIndex={orchQ.slotIndex}
               />
               )}
               {selectedSlotRow != null ? (
@@ -510,7 +511,7 @@ export function MarketDataIngestTab() {
                     {selectedSlotRow.detail ?? selectedSlotRow.note ?? 'Selected slot'}
                   </span>
                   {(() => {
-                    const schedName = dagsterScheduleForSlot(selectedSlotRow.slot)
+                    const schedName = dagsterScheduleForSlot(selectedSlotRow.slot, orchQ.slotIndex)
                     const orch = schedName != null ? orchQ.byName.get(schedName) : undefined
                     if (schedName == null) return null
                     return (
@@ -577,7 +578,7 @@ export function MarketDataIngestTab() {
                     </DenseTableRow>
                   ) : (
                   visibleScheduleSlots.map(s => {
-                    const schedName = dagsterScheduleForSlot(s.slot)
+                    const schedName = dagsterScheduleForSlot(s.slot, orchQ.slotIndex)
                     const orch = schedName != null ? orchQ.byName.get(schedName) : undefined
                     return (
                     <DenseTableRow
@@ -609,7 +610,7 @@ export function MarketDataIngestTab() {
                       </DenseTableCell>
                       <DenseTableCell>
                         <DenseTag variant="neutral">
-                          {slotSchedulerLabel(slotSchedulerKind(s.slot))}
+                          {slotSchedulerLabel(slotSchedulerKind(s.slot, orchQ.slotIndex))}
                         </DenseTag>
                       </DenseTableCell>
                       <DenseTableCell className="text-[var(--text-dense-caption)]">

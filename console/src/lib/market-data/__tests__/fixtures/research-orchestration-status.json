@@ -1,0 +1,362 @@
+{
+  "ok": true,
+  "data": {
+    "schedules": [
+      {
+        "name": "research_trading_day_schedule",
+        "job_name": "research_trading_day",
+        "status": "unknown",
+        "cron_schedule": "30 22 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": []
+      },
+      {
+        "name": "research_flex_morning_schedule",
+        "job_name": "research_flex_morning",
+        "status": "unknown",
+        "cron_schedule": "30 6 * * 1-6",
+        "execution_timezone": "America/New_York",
+        "market_slots": []
+      },
+      {
+        "name": "research_canonical_pnl_schedule",
+        "job_name": "research_canonical_pnl_job",
+        "status": "unknown",
+        "cron_schedule": "40 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "market_snapshot_schedule",
+        "job_name": "market_snapshot_job",
+        "status": "unknown",
+        "cron_schedule": "5 21 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "stock-snapshot"
+        ]
+      },
+      {
+        "name": "market_movers_schedule",
+        "job_name": "market_movers_job",
+        "status": "unknown",
+        "cron_schedule": "10 21 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "stock-movers"
+        ]
+      },
+      {
+        "name": "market_reference_schedule",
+        "job_name": "market_reference_job",
+        "status": "unknown",
+        "cron_schedule": "30 21 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "reference"
+        ]
+      },
+      {
+        "name": "market_universe_calendar_schedule",
+        "job_name": "market_universe_calendar_job",
+        "status": "unknown",
+        "cron_schedule": "0 22 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "universe-daily",
+          "calendar",
+          "stock-eod",
+          "eod-pipeline"
+        ]
+      },
+      {
+        "name": "market_related_schedule",
+        "job_name": "market_related_job",
+        "status": "unknown",
+        "cron_schedule": "30 22 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "related-rotate"
+        ]
+      },
+      {
+        "name": "market_option_bars_schedule",
+        "job_name": "market_option_bars_job",
+        "status": "unknown",
+        "cron_schedule": "45 22 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "option-bars"
+        ]
+      },
+      {
+        "name": "market_corporate_schedule",
+        "job_name": "market_corporate_job",
+        "status": "unknown",
+        "cron_schedule": "0 23 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "corporate"
+        ]
+      },
+      {
+        "name": "market_minute_bars_schedule",
+        "job_name": "market_minute_bars_job",
+        "status": "unknown",
+        "cron_schedule": "15 23 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "minute-bars"
+        ]
+      },
+      {
+        "name": "market_fundamentals_rotate_schedule",
+        "job_name": "market_fundamentals_rotate_job",
+        "status": "unknown",
+        "cron_schedule": "0 3 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "fundamentals-rotate"
+        ]
+      },
+      {
+        "name": "market_fundamentals_market_schedule",
+        "job_name": "market_fundamentals_market_job",
+        "status": "unknown",
+        "cron_schedule": "30 4 * * 2-6",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "fundamentals-market"
+        ]
+      },
+      {
+        "name": "market_ratios_market_schedule",
+        "job_name": "market_ratios_market_job",
+        "status": "unknown",
+        "cron_schedule": "10 5-8,11,14,20 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "ratios-market"
+        ]
+      },
+      {
+        "name": "market_option_depth_schedule",
+        "job_name": "market_option_depth_job",
+        "status": "unknown",
+        "cron_schedule": "30 7 * * 0",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "option-depth"
+        ]
+      },
+      {
+        "name": "market_option_refresh_schedule",
+        "job_name": "market_option_refresh_job",
+        "status": "unknown",
+        "cron_schedule": "20 */6 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "option-refresh"
+        ]
+      },
+      {
+        "name": "market_trim_schedule",
+        "job_name": "market_trim_job",
+        "status": "unknown",
+        "cron_schedule": "15 2 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "trim"
+        ]
+      },
+      {
+        "name": "market_self_heal_schedule",
+        "job_name": "market_self_heal_job",
+        "status": "unknown",
+        "cron_schedule": "45 0 * * 2-6",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "market_self_heal_late_schedule",
+        "job_name": "market_self_heal_job",
+        "status": "unknown",
+        "cron_schedule": "30 5 * * 2-6",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "market_treasury_schedule",
+        "job_name": "market_treasury_job",
+        "status": "unknown",
+        "cron_schedule": "0 12,23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "treasury"
+        ]
+      },
+      {
+        "name": "market_ticker_details_schedule",
+        "job_name": "market_ticker_details_job",
+        "status": "unknown",
+        "cron_schedule": "30 3 * * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "ticker-details"
+        ]
+      },
+      {
+        "name": "market_corporate_backfill_schedule",
+        "job_name": "market_corporate_backfill_job",
+        "status": "unknown",
+        "cron_schedule": "0 7 1 * *",
+        "execution_timezone": "UTC",
+        "market_slots": [
+          "corporate-backfill"
+        ]
+      },
+      {
+        "name": "market_intraday_chain_1030_schedule",
+        "job_name": "market_intraday_chain_job",
+        "status": "unknown",
+        "cron_schedule": "30 10 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": [
+          "intraday-chain"
+        ]
+      },
+      {
+        "name": "market_intraday_chain_1300_schedule",
+        "job_name": "market_intraday_chain_job",
+        "status": "unknown",
+        "cron_schedule": "0 13 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": [
+          "intraday-chain"
+        ]
+      },
+      {
+        "name": "market_intraday_chain_1530_schedule",
+        "job_name": "market_intraday_chain_job",
+        "status": "unknown",
+        "cron_schedule": "30 15 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": [
+          "intraday-chain"
+        ]
+      },
+      {
+        "name": "research_opex_schedule",
+        "job_name": "research_opex_job",
+        "status": "unknown",
+        "cron_schedule": "30 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_vol_surface_svi_schedule",
+        "job_name": "research_vol_surface_svi_job",
+        "status": "unknown",
+        "cron_schedule": "20 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_iv_solver_schedule",
+        "job_name": "research_iv_solver_job",
+        "status": "unknown",
+        "cron_schedule": "25 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_signal_hit_schedule",
+        "job_name": "research_signal_hit_job",
+        "status": "unknown",
+        "cron_schedule": "10 0 * * 1-6",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_settlement_schedule",
+        "job_name": "research_settlement_job",
+        "status": "unknown",
+        "cron_schedule": "45 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_forecast_schedule",
+        "job_name": "research_forecast_job",
+        "status": "unknown",
+        "cron_schedule": "0 23 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": []
+      },
+      {
+        "name": "research_intraday_schedule",
+        "job_name": "research_intraday_job",
+        "status": "unknown",
+        "cron_schedule": "45 10-16 * * 1-5",
+        "execution_timezone": "America/New_York",
+        "market_slots": []
+      },
+      {
+        "name": "research_event_radar_schedule",
+        "job_name": "research_event_radar_job",
+        "status": "unknown",
+        "cron_schedule": "*/30 * * * *",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_daily_digest_schedule",
+        "job_name": "research_daily_digest_job",
+        "status": "unknown",
+        "cron_schedule": "30 11 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_weekly_policy_review_schedule",
+        "job_name": "research_weekly_policy_review_job",
+        "status": "unknown",
+        "cron_schedule": "0 22 * * 0",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_eod_review_schedule",
+        "job_name": "research_eod_review_job",
+        "status": "unknown",
+        "cron_schedule": "30 21 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_memory_distill_schedule",
+        "job_name": "research_memory_distill_job",
+        "status": "unknown",
+        "cron_schedule": "55 23 * * 1-5",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_ensure_partitions_schedule",
+        "job_name": "research_ensure_partitions_job",
+        "status": "unknown",
+        "cron_schedule": "30 0 1 * *",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      },
+      {
+        "name": "research_vol_weekly_backfill_schedule",
+        "job_name": "research_vol_weekly_backfill_job",
+        "status": "unknown",
+        "cron_schedule": "0 22 * * 0",
+        "execution_timezone": "UTC",
+        "market_slots": []
+      }
+    ]
+  }
+}

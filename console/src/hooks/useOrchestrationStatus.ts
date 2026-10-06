@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   fetchOrchestrationStatus,
@@ -5,6 +6,7 @@ import {
   type OrchestrationScheduleRow,
   type OrchestrationStatusData,
 } from '@/api/researchEngine'
+import { buildSlotScheduleIndex } from '@/lib/market-data/slotScheduler'
 
 export const ORCHESTRATION_STATUS_QUERY_KEY = [
   'research',
@@ -31,10 +33,14 @@ export function useOrchestrationStatus(opts?: { enabled?: boolean }) {
   for (const row of data?.schedules ?? []) {
     byName.set(row.name, row)
   }
+  // Massive slot → Dagster schedule, from Research's roster (TD-108).
+  const schedules = data?.schedules
+  const slotIndex = useMemo(() => buildSlotScheduleIndex(schedules), [schedules])
 
   return {
     data,
     byName,
+    slotIndex,
     isLoading: q.isLoading,
     isError: q.isError || (q.data != null && isResearchProxyError(q.data)),
     refetch: () => void q.refetch(),
