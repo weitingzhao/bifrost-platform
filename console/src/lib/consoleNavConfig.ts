@@ -11,6 +11,7 @@ import {
   Database,
   FileCode2,
   FileSearch,
+  GitBranch,
   Gauge,
   HeartPulse,
   History,
@@ -133,6 +134,7 @@ export const ENGINEER_WORKSPACE_SUBGROUPS: ShellNavSubGroup[] = [
       { id: 'operator-plane', label: 'Operator Plane', icon: LifeBuoy },
       { id: 'agent-governance', label: 'Trust & Autonomy', icon: ShieldCheck },
       { id: 'agent-capability', label: 'Agent Capability', icon: Network },
+      { id: 'commit-lineage', label: 'Commit Lineage', icon: GitBranch },
     ],
   },
 ]
@@ -362,6 +364,7 @@ export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
   /** Legacy `#agent-desk` hash alias — plane kept for breadcrumb flash before redirect. */
   'agent-desk': 'Engineer',
   'agent-capability': 'Engineer',
+  'commit-lineage': 'Engineer',
   'dev-sessions': 'Engineer',
   'autonomous-skills': 'Engineer',
   'execution-log': 'Engineer',

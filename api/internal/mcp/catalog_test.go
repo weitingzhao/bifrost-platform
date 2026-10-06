@@ -81,6 +81,7 @@ var stdioMirroredTools = map[string]bool{
 	"get_gate_history":               true,
 	"get_stg_smoke":                  true,
 	"get_delivery_revisions":         true,
+	"get_commit_lineage":             true,
 	"run_release_gate":               true,
 	"ensure_kubeconfig_secret":       true,
 	"get_operate_queue":              true,
@@ -126,8 +127,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 73 {
-		t.Errorf("stdioMirroredTools size=%d want 73 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 74 {
+		t.Errorf("stdioMirroredTools size=%d want 74 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

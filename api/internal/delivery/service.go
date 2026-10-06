@@ -1207,6 +1207,25 @@ func (s *Service) giteaCredentials(ctx context.Context, clientset kubernetes.Int
 	return "", ""
 }
 
+// GiteaAccess is what a read-only consumer of the Gitea REST API needs.
+type GiteaAccess struct {
+	Base string // e.g. http://gitea.cicd.svc.cluster.local:3000 (no /api/v1)
+	Org  string
+	User string
+	Pass string
+}
+
+// GiteaAccess resolves the Gitea base URL, org and basic-auth credentials the
+// delivery service itself uses, so other read-only views share one auth path.
+func (s *Service) GiteaAccess(ctx context.Context) (GiteaAccess, error) {
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return GiteaAccess{}, fmt.Errorf("cluster client: %w", err)
+	}
+	user, pass := s.giteaCredentials(ctx, clientset, s.PipelinesNamespace())
+	return GiteaAccess{Base: giteaBaseURL(), Org: giteaOrg, User: user, Pass: pass}, nil
+}
+
 func (s *Service) fetchGiteaTags(ctx context.Context, repo, user, pass string) ([]GiteaTagView, error) {
 	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/tags?limit=50", giteaBaseURL(), giteaOrg, repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

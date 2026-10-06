@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -24,6 +25,11 @@ type Handler struct {
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	entry := cfg.DefaultCluster()
 	return &Handler{svc: NewService(entry), audit: audit}
+}
+
+// GiteaAccess exposes the delivery service's Gitea base URL and credentials.
+func (h *Handler) GiteaAccess(ctx context.Context) (GiteaAccess, error) {
+	return h.svc.GiteaAccess(ctx)
 }
 
 // BindPipelineStartedHook registers a callback for successful StartPipelineRun.

@@ -46,6 +46,7 @@ import { AnalysisWorkspacePage } from '@/pages/AnalysisWorkspacePage'
 import { InsightLogPage } from '@/pages/InsightLogPage'
 import { HermesStatusPage } from '@/pages/HermesStatusPage'
 import { AgentCapabilityPage } from '@/pages/AgentCapabilityPage'
+import { CommitLineagePage } from '@/pages/CommitLineagePage'
 import { AgentProtocolPage } from '@/pages/AgentProtocolPage'
 import { AgentSystemPage } from '@/pages/AgentSystemPage'
 import { AuditPage } from '@/pages/AuditPage'
@@ -103,6 +104,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'insight-log': 'Insight Log',
   'hermes-status': 'Hermes Status',
   'agent-capability': 'Agent Capability',
+  'commit-lineage': 'Commit Lineage',
   'autonomous-skills': 'Skills & Schedules',
   'execution-log': 'Patrol Log',
   'agent-governance': 'Trust & Autonomy',
@@ -151,6 +153,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Hermes Analysis Desk V1 — status, Chat UI deep link, and First Task. Read-only; D10 blocked.',
   'insight-log': 'Hermes insight history — time, symbol, type, verdict, duration.',
   'hermes-status': 'Nous Hermes gateway lamp, model, version, MCP tools, and Chat UI deep link.',
+  'commit-lineage':
+    'Which agent thread landed which commits, across every repo — read from Claude-Session / Change-Id commit trailers on the Gitea mirror.',
   'agent-capability':
     'Live capability readiness — which agent scopes are ready, running, awaiting approval, or failed.',
   'control-room':
@@ -838,6 +842,8 @@ function ConsolePageInner() {
         {viewTab === 'insight-log' && <InsightLogPage />}
 
         {viewTab === 'hermes-status' && <HermesStatusPage />}
+
+        {viewTab === 'commit-lineage' && <CommitLineagePage />}
 
         {viewTab === 'agent-capability' && (
           <AgentCapabilityPage onOpenAgentDesk={openAgentDesk} />

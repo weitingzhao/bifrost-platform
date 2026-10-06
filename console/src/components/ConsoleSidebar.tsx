@@ -45,6 +45,7 @@ export type ConsoleViewTab =
   | 'insight-log'
   | 'hermes-status'
   | 'agent-capability'
+  | 'commit-lineage'
   | 'autonomous-skills'
   | 'execution-log'
   | 'agent-governance'

@@ -59,6 +59,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_gate_history',
   'get_stg_smoke',
   'get_delivery_revisions',
+  'get_commit_lineage',
   'run_release_gate',
   'ensure_kubeconfig_secret',
   'get_operate_queue',

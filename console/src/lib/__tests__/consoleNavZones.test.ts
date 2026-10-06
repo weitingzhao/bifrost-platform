@@ -64,6 +64,7 @@ describe('Seat / Partner zone builders', () => {
       'operator-plane',
       'agent-governance',
       'agent-capability',
+      'commit-lineage',
     ])
     expect(partner?.workspaceGroups.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
     expect(partner?.workspaceGroups[0]?.items.map(i => i.id)).toEqual(['queue'])
@@ -108,6 +109,7 @@ describe('Seat / Partner zone builders', () => {
       'operator-plane',
       'agent-governance',
       'agent-capability',
+      'commit-lineage',
     ])
     expect(ENGINEER_WORKSPACE_SUBGROUPS.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
     expect(ENGINEER_PROFILE_ITEMS.some(i => i.id === 'queue')).toBe(false)

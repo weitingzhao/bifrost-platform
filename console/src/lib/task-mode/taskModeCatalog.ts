@@ -165,6 +165,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'autonomous-skills',
         'agent-governance',
         'agent-capability',
+        'commit-lineage',
       ],
       phaseRelevantTabs: {
         discover: ['task-cc', 'control-room'],

@@ -466,6 +466,28 @@ reg(
 )
 
 reg(
+  'get_commit_lineage',
+  'Agent threads and the commits they stamped across all repos (Claude-Session / Claude-Transcript / Change-Id trailers). ' +
+    'Filter by session (local_…) to see what a thread landed, or by change_id to check whether a change reached main ' +
+    '(it matches rebased, version-bumped and squashed copies).',
+  {
+    days: z.number().int().min(1).max(90).optional().describe('Window in days (default 14)'),
+    session: z.string().optional().describe('Claude-Session value, e.g. local_…'),
+    change_id: z.string().optional().describe('Change-Id value, e.g. I0123…'),
+    refresh: z.boolean().optional().describe('Bypass the 5-minute cache'),
+  },
+  async ({ days, session, change_id, refresh }) => {
+    const q = new URLSearchParams()
+    if (days != null) q.set('days', String(days))
+    if (session) q.set('session', session)
+    if (change_id) q.set('change_id', change_id)
+    if (refresh) q.set('refresh', 'true')
+    const qs = q.toString()
+    return jsonResult(await platformGet(`/api/v1/lineage${qs ? `?${qs}` : ''}`))
+  },
+)
+
+reg(
   'run_release_gate',
   'Run STG or PROD release gate (admin). Validates deploy health, captures revision, persists result.',
   { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },

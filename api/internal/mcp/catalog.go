@@ -61,7 +61,8 @@ func capabilityFor(name, route string) string {
 		return "cluster"
 	case strings.HasPrefix(route, "/api/v1/gitops"):
 		return "gitops"
-	case strings.HasPrefix(route, "/api/v1/delivery"):
+	case strings.HasPrefix(route, "/api/v1/delivery"),
+		strings.HasPrefix(route, "/api/v1/lineage"):
 		return "delivery"
 	case strings.HasPrefix(route, "/api/v1/stack"):
 		return "stack"
@@ -228,6 +229,7 @@ func Catalog() []ToolView {
 		tool("get_gate_history", "Chronological gate run history for a tier", "read", "GET", "/api/v1/promote/gate-history", "viewer", "P4", true),
 		tool("get_stg_smoke", "STG environment HTTP smoke probes", "read", "GET", "/api/v1/delivery/stg/smoke", "viewer", "P4", true),
 		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
+		tool("get_commit_lineage", "Agent threads and the commits they stamped (Claude-Session / Change-Id trailers); filter by session or change_id to ask whether a change landed", "read", "GET", "/api/v1/lineage", "viewer", "P4", true),
 		tool("run_release_gate", "Run STG or Prod release gate", "confirm", "POST", "/api/v1/promote/release-gate", "admin", "P4", true),
 		tool("sign_tier_b", "Record Tier B Owner sign-off", "confirm", "POST", "/api/v1/promote/tier-b/signoff", "admin", "P4", true),
 		tool("get_operate_queue", "Open + recently closed structured Agent Desk handoffs (D11)", "read", "GET", "/api/v1/operate/queue", "viewer", "Agent", true),

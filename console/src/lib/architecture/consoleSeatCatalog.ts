@@ -184,6 +184,13 @@ export const CONSOLE_SEAT_PAGES: ConsoleSeatPageRow[] = [
     roomPosture: false,
   },
   {
+    id: 'commit-lineage',
+    label: 'Commit Lineage',
+    plane: 'Engineer',
+    home: 'engineer',
+    roomPosture: false,
+  },
+  {
     id: 'analysis-workspace',
     label: 'Analysis Workspace',
     plane: 'Engineer',

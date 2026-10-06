@@ -30,6 +30,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
+	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
 	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
@@ -72,6 +73,7 @@ type Server struct {
 	remediation     *remediation.Handler
 	agentgovernance *agentgovernance.Handler
 	codehealth      *codehealth.Handler
+	lineage         *lineage.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
 	// serves exactly these routes beside the remediation runners, where a bad
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
@@ -212,6 +214,10 @@ func New(cfg *config.Config) (*Server, error) {
 	rsH := srv.research
 	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
 	srv.checklist.BindHusbandry(srv.datahusbandry.Service())
+	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
+		a, err := srv.delivery.GiteaAccess(ctx)
+		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+	}))
 	return srv, nil
 }
 
@@ -318,6 +324,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/compare", s.delivery.HandleCompare)
+		r.Get("/lineage", s.lineage.HandleGet)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
