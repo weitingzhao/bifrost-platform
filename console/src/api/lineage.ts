@@ -2,6 +2,25 @@
 
 export type LineageLandedBy = 'sha' | 'change_id' | 'subject'
 
+/** First recorded release in one lane/env that contained a commit. */
+export type LineageReach = {
+  lane: string
+  env: string
+  run: string
+  at: string
+  /** true: the run rolled out to a running environment; false: an image build deployed later. */
+  deploys: boolean
+}
+
+export type LineageReleaseHead = {
+  lane: string
+  env: string
+  run: string
+  at: string
+  deploys: boolean
+  repos: Record<string, string>
+}
+
 export type LineageCommit = {
   repo: string
   sha: string
@@ -15,6 +34,7 @@ export type LineageCommit = {
   landed: boolean
   landed_sha?: string
   landed_by?: LineageLandedBy
+  reached?: LineageReach[]
 }
 
 export type LineageThread = {
@@ -26,6 +46,8 @@ export type LineageThread = {
   last_at: string
   commit_count: number
   landed: number
+  /** commits per "lane/env" they reached */
+  reached: Record<string, number>
   repos: { repo: string; commits: LineageCommit[] }[]
 }
 
@@ -45,6 +67,9 @@ export type LineageResponse = {
   reachability: 'ok' | 'degraded' | 'fail' | 'unknown'
   threads: LineageThread[]
   coverage: LineageCoverage[]
+  /** latest recorded release per lane/env */
+  releases: LineageReleaseHead[]
+  releases_error?: string
   errors: string[]
 }
 

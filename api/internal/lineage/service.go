@@ -23,9 +23,10 @@ const (
 
 // Service builds lineage from the Gitea mirror.
 type Service struct {
-	access AccessFunc
-	client *http.Client
-	now    func() time.Time
+	access   AccessFunc
+	releases ReleasesFunc
+	client   *http.Client
+	now      func() time.Time
 }
 
 func NewService(access AccessFunc) *Service {
@@ -57,6 +58,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 		Reachability: probe.ReachFail,
 		Threads:      []Thread{},
 		Coverage:     []RepoCoverage{},
+		Releases:     []ReleaseHead{},
 		Errors:       []string{},
 	}
 
@@ -98,6 +100,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 		out.Coverage = append(out.Coverage, collect(sc, threads))
 	}
 	out.Threads = finish(threads)
+	s.annotateReach(ctx, &out, scans)
 
 	switch {
 	case len(out.Errors) == 0:
@@ -155,10 +158,6 @@ func (a *threadAcc) add(c Commit) {
 	}
 	if c.At.After(a.t.LastAt) {
 		a.t.LastAt = c.At
-	}
-	a.t.CommitCount++
-	if c.Landed {
-		a.t.Landed++
 	}
 }
 
@@ -258,6 +257,7 @@ func finish(threads map[string]*threadAcc) []Thread {
 			t.Repos = append(t.Repos, RepoCommits{Repo: repo, Commits: cs})
 		}
 		sort.Slice(t.Repos, func(i, j int) bool { return t.Repos[i].Repo < t.Repos[j].Repo })
+		summarize(&t)
 		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -278,4 +278,29 @@ func clampDays(d int) int {
 		return maxDays
 	}
 	return d
+}
+
+// annotateReach adds Reached to every landed commit and the release heads.
+// Release records are optional: without them lineage still answers v1.
+func (s *Service) annotateReach(ctx context.Context, out *Response, scans []repoScan) {
+	if s.releases == nil {
+		return
+	}
+	rels, err := s.releases(ctx)
+	if err != nil {
+		out.ReleasesError = err.Error()
+		return
+	}
+	out.Releases = heads(rels)
+	ri := newReachIndex(scans, rels)
+	for ti := range out.Threads {
+		t := &out.Threads[ti]
+		for ri2 := range t.Repos {
+			cs := t.Repos[ri2].Commits
+			for ci := range cs {
+				cs[ci].Reached = ri.reached(cs[ci])
+			}
+		}
+		summarize(t)
+	}
 }

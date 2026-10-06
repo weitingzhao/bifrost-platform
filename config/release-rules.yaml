@@ -1,0 +1,62 @@
+# Release records (platform-api internal/releases): which finished delivery
+# PipelineRuns count as a release, and what lane/environment each ships to.
+# The workers recorder writes one ConfigMap per successful matching run in
+# `namespace` (label bifrost.io/release-record), holding the exact commit each
+# clone task built — so "which release first contained commit X" outlives the
+# CI system's own run retention. First matching rule wins.
+#
+#   match.pipeline     tekton.dev/pipeline label (runs that use a pipelineRef)
+#   match.name_prefix  run name prefix (inline pipelineSpec runs, whose
+#                      tekton.dev/pipeline label is the run name itself)
+#   deploys            true: the run rolls what it built into a running env;
+#                      false: an image build that a pin / GitOps sync deploys later
+namespace: cicd
+rules:
+  # Trade
+  - match: { name_prefix: bifrost-deliver-prod-pinned- }
+    lane: trade
+    env: prod
+    deploys: true
+  - match: { pipeline: bifrost-deliver-prod }
+    lane: trade
+    env: prod
+    deploys: true
+  - match: { pipeline: bifrost-deliver-stg }
+    lane: trade
+    env: stg
+    deploys: true
+  # DEV api image builds (ad-hoc inline runs); the rollout to DEV is a separate step
+  - match: { name_prefix: bifrost-build-apis-dev- }
+    lane: trade
+    env: dev-image
+    deploys: false
+  - match: { pipeline: bifrost-build-frontend-stg }
+    lane: trade
+    env: stg-frontend-build
+    deploys: false
+  # Platform (this control plane)
+  - match: { pipeline: bifrost-deliver-platform }
+    lane: platform
+    env: stg
+    deploys: true
+  - match: { pipeline: bifrost-deliver-platform-prod }
+    lane: platform
+    env: prod
+    deploys: true
+  # Research and plugins: image builds; a pin push + GitOps sync deploys them
+  - match: { pipeline: bifrost-deliver-research }
+    lane: research
+    env: image
+    deploys: false
+  - match: { pipeline: bifrost-build-research-dagster }
+    lane: research
+    env: dagster-image
+    deploys: false
+  - match: { pipeline: bifrost-build-research-pine }
+    lane: research
+    env: pine-image
+    deploys: false
+  - match: { pipeline: bifrost-build-market-data }
+    lane: market-data
+    env: image
+    deploys: false

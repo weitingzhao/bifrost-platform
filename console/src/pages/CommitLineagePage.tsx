@@ -17,6 +17,7 @@ import {
 import {
   fetchLineage,
   type LineageCommit,
+  type LineageReach,
   type LineageResponse,
   type LineageThread,
 } from '@/api/lineage'
@@ -67,7 +68,43 @@ function matches(t: LineageThread, needle: string): LineageThread | null {
     .filter(r => r.commits.length > 0)
   if (repos.length === 0) return null
   const commits = repos.flatMap(r => r.commits)
-  return { ...t, repos, commit_count: commits.length, landed: commits.filter(c => c.landed).length }
+  const reached: Record<string, number> = {}
+  for (const c of commits) for (const r of c.reached ?? []) reached[`${r.lane}/${r.env}`] = (reached[`${r.lane}/${r.env}`] ?? 0) + 1
+  return { ...t, repos, commit_count: commits.length, landed: commits.filter(c => c.landed).length, reached }
+}
+
+/** A commit is in production once a deploying release in any lane's "prod" env contained it. */
+function inProd(c: LineageCommit): boolean {
+  return (c.reached ?? []).some(r => r.deploys && r.env === 'prod')
+}
+
+/**
+ * Repos some deploying PROD release builds. Commits elsewhere (repos shipped as
+ * image builds plus a pin) cannot be "in PROD" by a run, so they are left out of
+ * the in-PROD ratio instead of counting as missing.
+ */
+function prodRepos(data: LineageResponse | undefined): Set<string> {
+  const out = new Set<string>()
+  for (const r of data?.releases ?? []) if (r.deploys && r.env === 'prod') for (const repo of Object.keys(r.repos)) out.add(repo)
+  return out
+}
+
+function reachLabel(r: LineageReach): string {
+  return r.deploys ? `${r.lane} ${r.env.toUpperCase()}` : `${r.lane} ${r.env}`
+}
+
+function ReachedTags({ c }: { c: LineageCommit }) {
+  const reached = c.reached ?? []
+  if (reached.length === 0) return <span className={meta}>{c.landed ? 'no release yet' : '—'}</span>
+  return (
+    <span className="flex flex-wrap gap-1">
+      {reached.map(r => (
+        <span key={`${r.lane}/${r.env}`} title={`First in ${r.run} · ${formatTime(r.at)}${r.deploys ? '' : ' · image build, deployed separately'}`}>
+          <DenseTag variant={r.deploys ? (r.env === 'prod' ? 'success' : 'info') : 'neutral'}>{reachLabel(r)}</DenseTag>
+        </span>
+      ))}
+    </span>
+  )
 }
 
 function LandedTag({ c }: { c: LineageCommit }) {
@@ -103,6 +140,7 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
             <DenseTableHead>Subject</DenseTableHead>
             <DenseTableHead>Ref</DenseTableHead>
             <DenseTableHead>Landed</DenseTableHead>
+            <DenseTableHead>Reached</DenseTableHead>
             <DenseTableHead>Change-Id</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
@@ -120,6 +158,9 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
               </DenseTableCell>
               <DenseTableCell>
                 <LandedTag c={c} />
+              </DenseTableCell>
+              <DenseTableCell>
+                <ReachedTags c={c} />
               </DenseTableCell>
               <DenseTableCell className="font-mono-tabular" title={c.change_id}>
                 {c.change_id != null ? c.change_id.slice(0, 10) : '—'}
@@ -164,6 +205,7 @@ export function CommitLineagePage() {
     [data, needle],
   )
   const v = verdict(data, q.isError, q.isLoading)
+  const deployedRepos = useMemo(() => prodRepos(data), [data])
 
   const totals = useMemo(() => {
     const cov = data?.coverage ?? []
@@ -171,7 +213,10 @@ export function CommitLineagePage() {
     const traced = cov.reduce((s, c) => s + c.with_session, 0)
     const untraced = cov.reduce((s, c) => s + c.agent_no_lineage, 0)
     const pending = (data?.threads ?? []).reduce((s, t) => s + (t.commit_count - t.landed), 0)
-    return { main, traced, untraced, pending }
+    const named = (data?.threads ?? []).filter(t => t.session !== '').flatMap(t => t.repos.flatMap(r => r.commits))
+    const deployed = prodRepos(data)
+    const notInProd = named.filter(c => c.landed && deployed.has(c.repo) && !inProd(c)).length
+    return { main, traced, untraced, pending, notInProd }
   }, [data])
 
   const summary =
@@ -179,6 +224,7 @@ export function CommitLineagePage() {
       ? 'Which agent thread landed which commits — read from commit trailers on the Gitea mirror.'
       : `${totals.traced} of ${totals.main} main commits in the last ${data.days} days name their thread` +
         (totals.pending > 0 ? ` · ${totals.pending} thread commit${totals.pending === 1 ? '' : 's'} not on main yet` : '') +
+        (totals.notInProd > 0 ? ` · ${totals.notInProd} landed, not in PROD yet` : '') +
         ' · Gitea mirror, up to 8 h behind GitHub'
 
   const toggle = (id: string) =>
@@ -247,6 +293,9 @@ export function CommitLineagePage() {
                 <DenseTableHead>Repos</DenseTableHead>
                 <DenseTableHead className={denseTableNumCell}>Commits</DenseTableHead>
                 <DenseTableHead className={denseTableNumCell}>Landed</DenseTableHead>
+                <DenseTableHead className={denseTableNumCell} title="Landed commits in repos a PROD deploy builds, and how many a PROD release already contains">
+                  In PROD
+                </DenseTableHead>
                 <DenseTableHead>Last commit</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
@@ -254,6 +303,8 @@ export function CommitLineagePage() {
               {threads.map(t => {
                 const id = t.session || '(none)'
                 const isOpen = open.has(id)
+                const eligible = t.repos.flatMap(r => r.commits).filter(c => c.landed && deployedRepos.has(c.repo))
+                const prodCount = eligible.filter(inProd).length
                 return (
                   <Fragment key={id}>
                     <DenseTableRow
@@ -297,11 +348,22 @@ export function CommitLineagePage() {
                           </span>
                         )}
                       </DenseTableCell>
+                      <DenseTableCell className={denseTableNumCell}>
+                        {eligible.length === 0 ? (
+                          '—'
+                        ) : prodCount === eligible.length ? (
+                          prodCount
+                        ) : (
+                          <span className="text-warning">
+                            {prodCount} / {eligible.length}
+                          </span>
+                        )}
+                      </DenseTableCell>
                       <DenseTableCell className="font-mono-tabular whitespace-nowrap">{formatTime(t.last_at)}</DenseTableCell>
                     </DenseTableRow>
                     {isOpen && (
                       <DenseTableDetailRow>
-                        <DenseTableCell colSpan={5}>
+                        <DenseTableCell colSpan={6}>
                           <ThreadCommits thread={t} />
                         </DenseTableCell>
                       </DenseTableDetailRow>
@@ -313,6 +375,52 @@ export function CommitLineagePage() {
           </DenseDataTable>
         )}
       </OpsSection>
+
+      {data != null && (data.releases.length > 0 || data.releases_error != null) && (
+        <OpsSection
+          title="Releases"
+          description="Latest recorded release per lane and environment — the exact commit each repo was built from, read from the delivery runs and kept past CI retention. Deploying runs roll out; image builds are deployed later by a pin or GitOps sync."
+          overflow="visible"
+        >
+          {data.releases_error != null && data.releases_error !== '' ? (
+            <p className={`py-2 ${meta}`}>Release records unavailable — {data.releases_error}</p>
+          ) : (
+            <DenseDataTable>
+              <DenseTableHeader>
+                <DenseTableHeadRow>
+                  <DenseTableHead>Lane</DenseTableHead>
+                  <DenseTableHead>Env</DenseTableHead>
+                  <DenseTableHead>Kind</DenseTableHead>
+                  <DenseTableHead>Finished</DenseTableHead>
+                  <DenseTableHead>Run</DenseTableHead>
+                  <DenseTableHead>Built from</DenseTableHead>
+                </DenseTableHeadRow>
+              </DenseTableHeader>
+              <DenseTableBody>
+                {data.releases.map(r => (
+                  <DenseTableRow key={`${r.lane}/${r.env}`}>
+                    <DenseTableCell>{r.lane}</DenseTableCell>
+                    <DenseTableCell className="font-semibold">{r.deploys ? r.env.toUpperCase() : r.env}</DenseTableCell>
+                    <DenseTableCell>
+                      <DenseTag variant={r.deploys ? 'info' : 'neutral'}>{r.deploys ? 'deploy' : 'build'}</DenseTag>
+                    </DenseTableCell>
+                    <DenseTableCell className="font-mono-tabular whitespace-nowrap">{formatTime(r.at)}</DenseTableCell>
+                    <DenseTableCell className="max-w-[260px] truncate font-mono-tabular" title={r.run}>
+                      {r.run}
+                    </DenseTableCell>
+                    <DenseTableCell className="w-full max-w-0 truncate font-mono-tabular" title={Object.entries(r.repos).map(([k, v]) => `${k} ${v}`).join('\n')}>
+                      {Object.entries(r.repos)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([k, v]) => `${shortRepo(k)} ${v.slice(0, 7)}`)
+                        .join(' · ') || '—'}
+                    </DenseTableCell>
+                  </DenseTableRow>
+                ))}
+              </DenseTableBody>
+            </DenseDataTable>
+          )}
+        </OpsSection>
+      )}
 
       {data != null && data.coverage.length > 0 && (
         <OpsSection

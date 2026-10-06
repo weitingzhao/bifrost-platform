@@ -34,6 +34,39 @@ type Commit struct {
 	// commit carries its Change-Id, e.g. squashed) or "subject" (no Change-Id; a main
 	// commit has the same subject — the pre-trailer heuristic, weaker).
 	LandedBy string `json:"landed_by,omitempty"`
+	// Reached lists, per lane/env, the first recorded release that contained
+	// this commit (a release built a commit at or after it on the default branch).
+	Reached []Reach `json:"reached,omitempty"`
+}
+
+// Reach is the first release in one lane/env that contained a commit.
+type Reach struct {
+	Lane    string    `json:"lane"`
+	Env     string    `json:"env"`
+	Run     string    `json:"run"`
+	At      time.Time `json:"at"`
+	Deploys bool      `json:"deploys"`
+}
+
+// Release is one recorded delivery run, as lineage needs it.
+type Release struct {
+	Run     string
+	Lane    string
+	Env     string
+	Deploys bool
+	At      time.Time
+	// Repos: repo -> commit it was built from.
+	Repos map[string]string
+}
+
+// ReleaseHead is the latest recorded release of a lane/env.
+type ReleaseHead struct {
+	Lane    string            `json:"lane"`
+	Env     string            `json:"env"`
+	Run     string            `json:"run"`
+	At      time.Time         `json:"at"`
+	Deploys bool              `json:"deploys"`
+	Repos   map[string]string `json:"repos"`
 }
 
 // RepoCommits groups a thread's commits in one repo, newest first.
@@ -46,14 +79,16 @@ type RepoCommits struct {
 // Session is empty for commits that carry a Change-Id but no session trailer
 // (Cursor, or a commit made outside an agent).
 type Thread struct {
-	Session     string        `json:"session"`
-	Transcripts []string      `json:"transcripts"`
-	Link        string        `json:"link,omitempty"`
-	FirstAt     time.Time     `json:"first_at"`
-	LastAt      time.Time     `json:"last_at"`
-	CommitCount int           `json:"commit_count"`
-	Landed      int           `json:"landed"`
-	Repos       []RepoCommits `json:"repos"`
+	Session     string    `json:"session"`
+	Transcripts []string  `json:"transcripts"`
+	Link        string    `json:"link,omitempty"`
+	FirstAt     time.Time `json:"first_at"`
+	LastAt      time.Time `json:"last_at"`
+	CommitCount int       `json:"commit_count"`
+	Landed      int       `json:"landed"`
+	// Reached counts commits per "lane/env" they reached.
+	Reached map[string]int `json:"reached"`
+	Repos   []RepoCommits  `json:"repos"`
 }
 
 // RepoCoverage says how much of a repo's main history in the window carries lineage.
@@ -80,5 +115,9 @@ type Response struct {
 	Reachability probe.Reachability `json:"reachability"`
 	Threads      []Thread           `json:"threads"`
 	Coverage     []RepoCoverage     `json:"coverage"`
-	Errors       []string           `json:"errors"`
+	// Releases is the latest recorded release per lane/env (empty when no
+	// release records exist yet); ReleasesError says why it is empty.
+	Releases      []ReleaseHead `json:"releases"`
+	ReleasesError string        `json:"releases_error,omitempty"`
+	Errors        []string      `json:"errors"`
 }

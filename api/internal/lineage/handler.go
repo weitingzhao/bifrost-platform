@@ -74,22 +74,19 @@ func filter(resp Response, session, changeID string) Response {
 			continue
 		}
 		nt := t
-		nt.Repos, nt.CommitCount, nt.Landed = nil, 0, 0
+		nt.Repos = nil
 		for _, rc := range t.Repos {
 			var keep []Commit
 			for _, c := range rc.Commits {
 				if c.ChangeID == changeID {
 					keep = append(keep, c)
-					nt.CommitCount++
-					if c.Landed {
-						nt.Landed++
-					}
 				}
 			}
 			if len(keep) > 0 {
 				nt.Repos = append(nt.Repos, RepoCommits{Repo: rc.Repo, Commits: keep})
 			}
 		}
+		summarize(&nt)
 		if nt.CommitCount > 0 {
 			threads = append(threads, nt)
 		}

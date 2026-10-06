@@ -14,6 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
@@ -40,6 +42,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
@@ -74,6 +77,7 @@ type Server struct {
 	agentgovernance *agentgovernance.Handler
 	codehealth      *codehealth.Handler
 	lineage         *lineage.Handler
+	releases        *releases.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
 	// serves exactly these routes beside the remediation runners, where a bad
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
@@ -214,9 +218,39 @@ func New(cfg *config.Config) (*Server, error) {
 	rsH := srv.research
 	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
 	srv.checklist.BindHusbandry(srv.datahusbandry.Service())
+	releasesSvc := releases.NewService(cfg.ConfigDir(), func() (kubernetes.Interface, dynamic.Interface, error) {
+		core, _, err := clusterH.Service().KubernetesClient()
+		if err != nil {
+			return nil, nil, err
+		}
+		rc, _, err := clusterH.Service().RestConfig()
+		if err != nil {
+			return nil, nil, err
+		}
+		dyn, err := dynamic.NewForConfig(rc)
+		return core, dyn, err
+	})
+	if role.RunsWorkers() {
+		releasesSvc.Start(context.Background(), 5*time.Minute)
+	}
+	srv.releases = releases.NewHandler(releasesSvc)
 	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
 		a, err := srv.delivery.GiteaAccess(ctx)
 		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+	}).WithReleases(func(ctx context.Context) ([]lineage.Release, error) {
+		recs, err := releasesSvc.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]lineage.Release, 0, len(recs))
+		for _, r := range recs {
+			repos := make(map[string]string, len(r.Repos))
+			for name, b := range r.Repos {
+				repos[name] = b.SHA
+			}
+			out = append(out, lineage.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
+		}
+		return out, nil
 	}))
 	return srv, nil
 }
@@ -325,6 +359,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/compare", s.delivery.HandleCompare)
 		r.Get("/lineage", s.lineage.HandleGet)
+		r.Get("/releases", s.releases.HandleList)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)

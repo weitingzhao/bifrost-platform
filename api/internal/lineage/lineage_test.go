@@ -217,3 +217,67 @@ func TestHandlerServesJSON(t *testing.T) {
 		t.Fatalf("resp = %+v", resp)
 	}
 }
+
+func TestReachFromReleaseRecords(t *testing.T) {
+	s, now := newTestService(t)
+	day := func(d float64) time.Time { return now.Add(-time.Duration(d * 24 * float64(time.Hour))) }
+	// default branch, newest first: aaa(1d) bbb(2d) ccc(3d) ggg(4d)
+	s.WithReleases(func(context.Context) ([]Release, error) {
+		return []Release{
+			{Run: "stg-1", Lane: "app", Env: "stg", Deploys: true, At: day(2.5), Repos: map[string]string{"r1": "ccc"}},
+			{Run: "stg-2", Lane: "app", Env: "stg", Deploys: true, At: day(0.5), Repos: map[string]string{"r1": "aaa"}},
+			{Run: "prod-1", Lane: "app", Env: "prod", Deploys: true, At: day(0.2), Repos: map[string]string{"r1": "aaa"}},
+			{Run: "old", Lane: "app", Env: "prod", Deploys: true, At: day(30), Repos: map[string]string{"r1": "outside-window"}},
+			{Run: "img", Lane: "app", Env: "image", At: day(1.5), Repos: map[string]string{"other": "aaa"}},
+		}, nil
+	})
+	resp := s.Build(context.Background(), 14)
+	if resp.ReleasesError != "" || len(resp.Releases) != 3 {
+		t.Fatalf("heads = %+v err=%q", resp.Releases, resp.ReleasesError)
+	}
+	reach := map[string]string{}
+	var cloud Thread
+	for _, th := range resp.Threads {
+		if th.Session == "https://claude.ai/code/session_x" {
+			cloud = th
+		}
+		for _, rc := range th.Repos {
+			for _, c := range rc.Commits {
+				var parts []string
+				for _, r := range c.Reached {
+					parts = append(parts, r.Env+":"+r.Run)
+				}
+				reach[c.SHA] = strings.Join(parts, ",")
+			}
+		}
+	}
+	// aaa is only in the later releases; eee landed inside squash bbb; hhh (by subject)
+	// sits at ccc, which the first STG release already built; fff never landed.
+	want := map[string]string{
+		"aaa": "stg:stg-2,prod:prod-1",
+		"eee": "stg:stg-2,prod:prod-1",
+		"hhh": "stg:stg-1,prod:prod-1",
+		"fff": "",
+	}
+	for sha, w := range want {
+		if reach[sha] != w {
+			t.Errorf("%s reached %q, want %q", sha, reach[sha], w)
+		}
+	}
+	if cloud.Reached["app/stg"] != 1 || cloud.Reached["app/prod"] != 1 {
+		t.Fatalf("thread counts = %+v", cloud.Reached)
+	}
+	// a filtered thread keeps its counters consistent
+	if f := filter(resp, "", cidZ); len(f.Threads) != 1 || len(f.Threads[0].Reached) != 0 {
+		t.Fatalf("filtered = %+v", f.Threads)
+	}
+}
+
+func TestReachWithoutRecordsStillServesLineage(t *testing.T) {
+	s, _ := newTestService(t)
+	s.WithReleases(func(context.Context) ([]Release, error) { return nil, context.DeadlineExceeded })
+	resp := s.Build(context.Background(), 14)
+	if resp.ReleasesError == "" || len(resp.Threads) != 4 || resp.Reachability != "ok" {
+		t.Fatalf("resp = %+v", resp)
+	}
+}
