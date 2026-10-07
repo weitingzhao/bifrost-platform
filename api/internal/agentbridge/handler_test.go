@@ -252,3 +252,26 @@ func TestProbeGitBridgeSendsOperatorToken(t *testing.T) {
 		t.Fatal("git-bridge probe did not send the operator bearer")
 	}
 }
+
+func TestProbeGitBridgeUsesProdOperatorToken(t *testing.T) {
+	const token = "fixture-prod-operator-token"
+	var got string
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"workspace":"/stocks","repos":[]}`))
+	}))
+	t.Cleanup(gw.Close)
+	t.Setenv("GIT_BRIDGE_URL", gw.URL)
+	t.Setenv("PLATFORM_OPERATOR_TOKEN", "")
+	t.Setenv("PLATFORM_ADMIN_TOKEN", "")
+	t.Setenv("PLATFORM_PROD_OPERATOR_TOKEN", token)
+	t.Setenv("PLATFORM_PROD_ADMIN_TOKEN", "")
+
+	status := probeGitBridge(context.Background(), gw.Client())
+	if status.Status != "ok" {
+		t.Fatalf("probeGitBridge status = %q, want ok", status.Status)
+	}
+	if got != "Bearer "+token {
+		t.Fatal("git-bridge probe did not send the prod operator bearer")
+	}
+}

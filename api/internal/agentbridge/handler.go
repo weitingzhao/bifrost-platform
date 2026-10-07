@@ -228,12 +228,20 @@ func (h *Handler) HandleSmoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func setGitBridgeAuth(req *http.Request) {
-	token := strings.TrimSpace(os.Getenv("PLATFORM_OPERATOR_TOKEN"))
-	if token == "" {
-		token = strings.TrimSpace(os.Getenv("PLATFORM_ADMIN_TOKEN"))
-	}
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+	// STG and the Mac Pro process use PLATFORM_OPERATOR_TOKEN. The PROD
+	// deployment injects PLATFORM_PROD_OPERATOR_TOKEN (same secret, different
+	// env name). Git-bridge accepts either the operator or the admin token.
+	for _, key := range []string{
+		"PLATFORM_OPERATOR_TOKEN",
+		"PLATFORM_ADMIN_TOKEN",
+		"PLATFORM_PROD_OPERATOR_TOKEN",
+		"PLATFORM_PROD_ADMIN_TOKEN",
+	} {
+		token := strings.TrimSpace(os.Getenv(key))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+			return
+		}
 	}
 }
 
