@@ -68,7 +68,7 @@ export function FocusStrip({
 }: FocusStripProps) {
   const [forceExpanded, setForceExpanded] = useState(false)
   const [detailExpanded, setDetailExpanded] = useState(false)
-  const { snapshot, dataUpdatedAt } = useMissionSnapshot()
+  const { snapshot, dataUpdatedAt, staleSources } = useMissionSnapshot()
   const nav = (tab: string) => () => onNavigate?.(tab)
   const openMap = (env: string) => () => {
     if (onOpenRuntimeMap != null) onOpenRuntimeMap({ env })
@@ -274,7 +274,8 @@ export function FocusStrip({
             .
           </p>
           <div className="cockpit-detail-ts">
-            {dataUpdatedAt > 0 ? `Last probe ${formatAge(dataUpdatedAt)}` : 'Probing…'}
+            {dataUpdatedAt > 0 ? `Oldest probe ${formatAge(dataUpdatedAt)}` : 'Probing…'}
+            {dataUpdatedAt > 0 && staleSources.length > 0 ? ` · stale: ${staleSources.join(', ')}` : ''}
           </div>
         </div>
       )}

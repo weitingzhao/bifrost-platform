@@ -189,7 +189,11 @@ export function evaluatePromoteStatus(
 
   const reasons: string[] = []
   if (blockedByDecision) reasons.push(`Milestone blocked: ${cutover?.blocker ?? 'decision'}`)
-  if (prodFails) reasons.push('Prod matrix has failing targets')
+  if (prodFails) {
+    reasons.push(
+      getProdMatrix(matrices) ? 'Prod matrix has failing targets' : 'Prod matrix not measured',
+    )
+  }
   if (!gateDone) reasons.push('Release gate not recorded')
   else if (!gatePass) reasons.push(`Release gate: ${gate.result}`)
 
