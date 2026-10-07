@@ -529,7 +529,7 @@ func (s *Server) Router() http.Handler {
 			// Ingest enqueue (and other Plugin API writes) — operator auth.
 			// Proxy rewrites Authorization to MARKET_DATA_WRITE_TOKEN (not the operator token).
 			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
-			r.Delete("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
+			r.Delete("/plugins/market-data/api/*", s.guard("market_data_delete", s.marketdata.HandleAPIProxy))
 			r.Post("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
 			r.Delete("/delivery/runs/{id}", s.guard("delete_pipeline_run", s.delivery.HandleDeletePipelineRun))
 		})
@@ -588,11 +588,11 @@ func (s *Server) Router() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				// runs the ssh sync script and overwrites the host kubeconfig (TD-220)
-				r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
+				r.Post("/sync-kubeconfig", s.guard("sync_kubeconfig", s.cluster.HandleSyncKubeconfig))
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
 				r.Post("/postgres/backup", s.guard("trigger_cnpg_backup", s.cluster.HandleTriggerPostgresBackup))
 				r.Post("/postgres/wal-store/repair", s.guard("repair_cnpg_wal_store", s.cluster.HandleRepairPostgresWalStore))
-				r.Post("/postgres/backups/sweep-failed", s.cluster.HandleSweepExpiredFailedBackups)
+				r.Post("/postgres/backups/sweep-failed", s.guard("sweep_failed_backups", s.cluster.HandleSweepExpiredFailedBackups))
 				r.Post("/workloads/rollout-restart", s.guard("rollout_restart_deployment", s.cluster.HandleRolloutRestart))
 				r.Post("/workloads/scale", s.guard("scale_deployment", s.cluster.HandleScale))
 				r.Post("/nodes/{name}/wake", s.guard("wake_compute_node", s.cluster.HandleWakeNode))
@@ -602,14 +602,14 @@ func (s *Server) Router() http.Handler {
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
-				r.Post("/kubeconfig-secret/ensure", s.cluster.HandleEnsureKubeconfigSecret)
-				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
-				r.Post("/addons/kube-prometheus-stack/ensure", s.cluster.HandleEnsureKubePrometheusStack)
+				r.Post("/kubeconfig-secret/ensure", s.guard("ensure_kubeconfig_secret", s.cluster.HandleEnsureKubeconfigSecret))
+				r.Post("/addons/metrics-server/ensure", s.guard("ensure_metrics_server", s.cluster.HandleEnsureMetricsServer))
+				r.Post("/addons/kube-prometheus-stack/ensure", s.guard("ensure_kube_prometheus_stack", s.cluster.HandleEnsureKubePrometheusStack))
 				r.Post("/nodes/join", s.guard("join_cluster_node", s.cluster.HandleJoinNode))
 				r.Post("/nodes/{name}/drain", s.guard("drain_node", s.cluster.HandleDrainNode))
 				r.Post("/nodes/{name}/poweroff", s.guard("poweroff_compute_node", s.cluster.HandlePowerOffNode))
 				r.Post("/data-clone", s.guard("trigger_data_clone", s.cluster.HandleDataClone))
-				r.Put("/data-clone/schedule", s.cluster.HandleDataCloneSchedulePut)
+				r.Put("/data-clone/schedule", s.guard("update_data_clone_schedule", s.cluster.HandleDataCloneSchedulePut))
 			})
 		})
 		r.Route("/dev-sessions", func(r chi.Router) {

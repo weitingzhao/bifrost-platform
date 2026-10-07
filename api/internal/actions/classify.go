@@ -62,9 +62,26 @@ func classifyScale(ctx context.Context, params map[string]any) Tier {
 	return ScaleTier(name, requested, current, known)
 }
 
-// ProdPipeline is the LANE-B1 rule: pipeline names matching *-prod are C.
+// prodPipelines are the cicd Pipelines whose final tasks roll out or
+// gitops-sync a production workload. Membership is this set, not a name suffix.
+// Image-build, CI, and staging deliver pipelines are absent (tier B).
+//
+// Read from `kubectl -n cicd get pipelines` on 2026-10-07:
+//   - bifrost-deliver-prod rolls out namespace bifrost-prod and syncs Application bifrost-prod
+//   - bifrost-deliver-platform-prod rolls out namespace bifrost-platform-prod and syncs Application bifrost-platform-prod
+//   - bifrost-deliver-research syncs Application bifrost-research and rolls out namespace research (Research's only environment)
+//   - bifrost-deliver-platform and bifrost-deliver-stg keep the task defaults bifrost-platform-stg and bifrost-stg
+//   - bifrost-build-*, bifrost-ci-*, bifrost-clone-frontend-smoke, and bifrost-smoke do not roll out a workload
+var prodPipelines = map[string]struct{}{
+	"bifrost-deliver-prod":          {},
+	"bifrost-deliver-platform-prod": {},
+	"bifrost-deliver-research":      {},
+}
+
+// ProdPipeline reports whether name changes a production workload.
 func ProdPipeline(name string) bool {
-	return strings.HasSuffix(strings.ToLower(strings.TrimSpace(name)), "-prod")
+	_, ok := prodPipelines[strings.ToLower(strings.TrimSpace(name))]
+	return ok
 }
 
 // ProdApp is the LANE-B1 rule for Argo applications aimed at PROD.

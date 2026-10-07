@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { resolveTokenFrom } from './tokenResolve.js'
+import { defaultMcpTokenFilePath, readMcpTokenFile, resolveTokenFrom } from './tokenResolve.js'
 import { bifrostSessionId } from './sessionId.js'
 import { decideWrite, writesEnabled } from './writeGate.js'
 
@@ -8,9 +8,10 @@ function apiBase(): string {
   return process.env.PLATFORM_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8780'
 }
 
-// Local :8780 tokens live only in bifrost-platform/.env, so MCP configs carry none.
-// The fallback is read for a loopback base only: a local token must never be sent
-// to another host. PROD (the VIP) therefore needs the token in the process environment.
+// Process environment wins. When the pinned key is absent, read
+// ~/.config/bifrost/mcp-tokens.env only if its mode is exactly 0600.
+// A loopback PLATFORM_API_URL may then fall back to bifrost-platform/.env.
+// A local .env token is never sent to a non-loopback host.
 const dotenvPath = fileURLToPath(new URL('../../../.env', import.meta.url))
 
 function isLoopbackBase(): boolean {
@@ -40,7 +41,11 @@ let cachedToken: string | undefined
 
 function resolveToken(): string {
   if (cachedToken !== undefined) return cachedToken
-  cachedToken = resolveTokenFrom(process.env, isLoopbackBase() ? dotenvValue : () => '')
+  cachedToken = resolveTokenFrom(process.env, (key) => {
+    const fromFile = readMcpTokenFile(defaultMcpTokenFilePath(), key)
+    if (fromFile !== '') return fromFile
+    return isLoopbackBase() ? dotenvValue(key) : ''
+  })
   return cachedToken
 }
 

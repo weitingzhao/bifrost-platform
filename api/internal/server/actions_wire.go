@@ -17,9 +17,23 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
 
+// executorContextKey is unexported. An HTTP request cannot construct it, and
+// only invokeAction sets it. C and D direct calls therefore cannot present it.
+type executorContextKey struct{}
+
+func withExecutor(ctx context.Context) context.Context {
+	return context.WithValue(ctx, executorContextKey{}, true)
+}
+
+func fromExecutor(ctx context.Context) bool {
+	ok, _ := ctx.Value(executorContextKey{}).(bool)
+	return ok
+}
+
 // guard lets B and X calls through. X stays on the existing handler so the
-// TD-222 D10 daemon scale-up refusal is unchanged. C and D return 403 until an
-// executed approval carries the same params hash.
+// TD-222 D10 daemon scale-up refusal is unchanged. C and D direct calls always
+// return 403. The approval executor calls the handler with withExecutor; that
+// marker is the only way past this gate.
 func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, err := readAndRestore(r)
@@ -38,19 +52,14 @@ func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		tier := act.TierOf(r.Context(), params)
-		if !tier.NeedsApproval() {
+		if !tier.NeedsApproval() || fromExecutor(r.Context()) {
 			next(w, r)
 			return
 		}
-		hash, err := actions.ParamsHash(params)
-		if err != nil || s.approvals == nil || !s.approvals.HasExecuted(id, hash) {
-			writeJSON(w, http.StatusForbidden, map[string]string{
-				"error":  "approval required",
-				"action": id,
-			})
-			return
-		}
-		next(w, r)
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error":  "approval required",
+			"action": id,
+		})
 	}
 }
 
@@ -90,6 +99,10 @@ func (s *Server) lookupDaemonReplicas(ctx context.Context, namespace string) (in
 
 func (s *Server) bindActionExecutors() {
 	reg := func(id, method string, urlOf func(map[string]any) string, routeOf func(map[string]any) map[string]string, bodyOf func(map[string]any) any, h http.HandlerFunc) {
+		// The executor calls the guarded handler. withExecutor, set inside
+		// invokeAction, is what lets that call through. A direct HTTP request
+		// never carries the marker.
+		guarded := s.guard(id, h)
 		actions.RegisterExecutor(id, func(ctx context.Context, params map[string]any) (any, error) {
 			var route map[string]string
 			if routeOf != nil {
@@ -99,7 +112,7 @@ func (s *Server) bindActionExecutors() {
 			if bodyOf != nil {
 				body = bodyOf(params)
 			}
-			return invokeAction(ctx, h, method, urlOf(params), route, body)
+			return invokeAction(ctx, guarded, method, urlOf(params), route, body)
 		})
 	}
 	path := func(keys ...string) func(map[string]any) map[string]string {
@@ -242,6 +255,35 @@ func (s *Server) bindActionExecutors() {
 			return "/api/v1/stack/addons/" + url.PathEscape(text(p["name"])) + "/upgrade"
 		},
 		path("name"), nil, s.stack.HandleUpgradeAddon)
+	reg("sweep_failed_backups", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/cluster/postgres/backups/sweep-failed" },
+		nil, nil, s.cluster.HandleSweepExpiredFailedBackups)
+	reg("ensure_metrics_server", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/cluster/addons/metrics-server/ensure" },
+		nil, nil, s.cluster.HandleEnsureMetricsServer)
+	reg("ensure_kube_prometheus_stack", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/cluster/addons/kube-prometheus-stack/ensure" },
+		nil, nil, s.cluster.HandleEnsureKubePrometheusStack)
+	reg("sync_kubeconfig", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/cluster/sync-kubeconfig" },
+		nil, nil, s.cluster.HandleSyncKubeconfig)
+	reg("ensure_kubeconfig_secret", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/cluster/kubeconfig-secret/ensure" },
+		nil, fields("namespaces", "sync_first"), s.cluster.HandleEnsureKubeconfigSecret)
+	reg("update_data_clone_schedule", http.MethodPut,
+		func(map[string]any) string { return "/api/v1/cluster/data-clone/schedule" },
+		nil, all, s.cluster.HandleDataCloneSchedulePut)
+	reg("market_data_delete", http.MethodDelete,
+		func(p map[string]any) string {
+			parts := strings.Split(strings.Trim(text(p["path"]), "/"), "/")
+			for i, part := range parts {
+				parts[i] = url.PathEscape(part)
+			}
+			return "/api/v1/plugins/market-data/api/" + strings.Join(parts, "/")
+		},
+		func(p map[string]any) map[string]string {
+			return map[string]string{"*": strings.Trim(text(p["path"]), "/")}
+		}, nil, s.marketdata.HandleAPIProxy)
 }
 
 func invokeAction(ctx context.Context, h http.HandlerFunc, method, urlPath string, routeParams map[string]string, body any) (any, error) {
@@ -253,6 +295,7 @@ func invokeAction(ctx context.Context, h http.HandlerFunc, method, urlPath strin
 		}
 		rdr = bytes.NewReader(raw)
 	}
+	ctx = withExecutor(ctx)
 	req, err := http.NewRequestWithContext(ctx, method, "http://platform.local"+urlPath, rdr)
 	if err != nil {
 		return nil, err

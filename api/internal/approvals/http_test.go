@@ -32,6 +32,15 @@ func TestDirectCDRequiresApproval(t *testing.T) {
 			t.Fatalf("%s %s = %d %s", tc.method, tc.path, rec.Code, rec.Body.String())
 		}
 	}
+	// ib_mode is C. ib_self_heal is B (PROD already runs that loop).
+	mode := call(t, h, http.MethodPost, "/api/v1/plugins/ib-gateway/control/mode", `{"mode":"paper"}`, "operator-test-token")
+	if mode.Code != http.StatusForbidden || !strings.Contains(mode.Body.String(), `"action":"ib_mode"`) {
+		t.Fatalf("ib_mode = %d %s", mode.Code, mode.Body.String())
+	}
+	selfHeal := call(t, h, http.MethodPost, "/api/v1/plugins/ib-gateway/control/self-heal", `{"enabled":false}`, "operator-test-token")
+	if strings.Contains(selfHeal.Body.String(), "approval required") {
+		t.Fatalf("ib_self_heal was approval-gated: %d %s", selfHeal.Code, selfHeal.Body.String())
+	}
 	// B stays on the direct path (the handler may fail closed on the missing cluster).
 	wake := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-a/wake", "", "operator-test-token")
 	if strings.Contains(wake.Body.String(), "approval required") {
@@ -79,14 +88,58 @@ func TestExecutedApprovalUsesStoredParamsOnce(t *testing.T) {
 	if rec.Code != http.StatusConflict || calls != 1 {
 		t.Fatalf("second approve = %d calls=%d %s", rec.Code, calls, rec.Body.String())
 	}
-	// Matching executed approval lets the direct endpoint through; a different node does not.
+	// The executor above is the internal path. The same params stay 403 on the
+	// direct endpoint; one execution does not unlock later calls.
 	same := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-a/cordon", "", "operator-test-token")
-	if strings.Contains(same.Body.String(), "approval required") {
-		t.Fatalf("matching executed approval still gated: %d %s", same.Code, same.Body.String())
+	if same.Code != http.StatusForbidden || !strings.Contains(same.Body.String(), "approval required") || calls != 1 {
+		t.Fatalf("direct call after execution = %d calls=%d %s", same.Code, calls, same.Body.String())
 	}
 	other := call(t, h, http.MethodPost, "/api/v1/cluster/nodes/node-b/cordon", "", "operator-test-token")
 	if other.Code != http.StatusForbidden || !strings.Contains(other.Body.String(), "approval required") {
 		t.Fatalf("other node = %d %s", other.Code, other.Body.String())
+	}
+}
+
+func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
+	h := newPlatform(t)
+	var hits int
+	var got struct {
+		Title    string `json:"title"`
+		Message  string `json:"message"`
+		ClickURL string `json:"click_url"`
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if r.Header.Get("Authorization") == "" {
+			t.Errorf("notify missing authorization")
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Errorf("decode notify: %v", err)
+		}
+		if hits == 1 {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "notify-test-token")
+
+	rec := call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-a"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
+	if rec.Code != http.StatusCreated || hits != 1 {
+		t.Fatalf("create with notify = %d hits=%d %s", rec.Code, hits, rec.Body.String())
+	}
+	if !strings.Contains(got.Message, "cordon_node") || !strings.Contains(got.Message, "cursor-b1") || !strings.Contains(got.ClickURL, "#approvals?id=") {
+		t.Fatalf("notify body = %+v", got)
+	}
+	if strings.Contains(got.Message, "notify-test-token") {
+		t.Fatal("notify message contains the token")
+	}
+
+	rec = call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-b"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
+	if rec.Code != http.StatusCreated || hits != 2 {
+		t.Fatalf("create after relay failure = %d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}
 }
 
@@ -142,6 +195,8 @@ func newPlatform(t *testing.T) http.Handler {
 	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", filepath.Join(dir, "remediation-jobs"))
 	t.Setenv("PLATFORM_AUDIT_LOG", filepath.Join(dir, "audit.json"))
 	t.Setenv("PLATFORM_KUBECONFIG", filepath.Join(dir, "does-not-exist-kubeconfig.yaml"))
+	t.Setenv("APPROVAL_NOTIFY_URL", "")
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "")
 	t.Setenv("PLATFORM_ROLE", "api")
 	t.Setenv("PLATFORM_STATE_BACKEND", "file")
 	t.Setenv("PATROL_DISPATCH", "stub")

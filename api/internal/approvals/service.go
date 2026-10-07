@@ -40,22 +40,6 @@ func (s *Service) SetClock(now func() time.Time) {
 	s.mu.Unlock()
 }
 
-// HasExecuted reports whether an executed approval matches action and params_hash.
-func (s *Service) HasExecuted(action, hash string) bool {
-	if s == nil || hash == "" {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_ = s.store.load()
-	for _, a := range s.store.items {
-		if a.Status == StatusExecuted && a.Action == action && a.ParamsHash == hash {
-			return true
-		}
-	}
-	return false
-}
-
 type createResult struct {
 	Approval Approval
 	Status   int

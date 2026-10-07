@@ -2,8 +2,8 @@
 //
 // The operator-plane alert relay (Mac mini .50) accepts
 // POST /api/v1/alerts/notify. This package is the platform-side client.
-// It does not create approvals — that handler belongs to LANE-B1 and is not
-// on this branch.
+// POST /api/v1/approvals calls NotifyCreated after the pending record is
+// stored and before it writes 201. Approve, reject, and expiry do not.
 //
 // # B1 wiring (one line)
 //

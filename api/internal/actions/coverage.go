@@ -80,9 +80,8 @@ func init() {
 		"POST /api/v1/delivery/supply-chain/mirror-sync",
 		"POST /api/v1/delivery/supply-chain/dockerfile-configmaps/refresh",
 	)
-	exempt("unclassified by LANE-B1: wildcard plugin proxy. market_data_heal (tier B) is the catalogued heal path under this prefix; other plugin writes are not leveled",
+	exempt("unclassified by LANE-B1: wildcard plugin proxy. market_data_heal (tier B) is the catalogued heal path; DELETE is market_data_delete (tier C)",
 		"POST /api/v1/plugins/market-data/api/*",
-		"DELETE /api/v1/plugins/market-data/api/*",
 		"POST /api/v1/plugins/flex-query/api/*",
 	)
 	exempt("unclassified by LANE-B1: release gates, vision, build-phase, and migration sign-off",
@@ -106,14 +105,8 @@ func init() {
 		"POST /api/v1/vision/v5/gate",
 		"POST /api/v1/vision/v5/signoff",
 	)
-	exempt("unclassified by LANE-B1: cluster writes outside the named catalog (kubeconfig, namespace ensure, backup sweep, addon ensure, clone schedule)",
-		"POST /api/v1/cluster/sync-kubeconfig",
+	exempt("unclassified by LANE-B1: namespace ensure stays outside the catalog until phase 3",
 		"POST /api/v1/cluster/namespaces/ensure-bifrost",
-		"POST /api/v1/cluster/postgres/backups/sweep-failed",
-		"POST /api/v1/cluster/kubeconfig-secret/ensure",
-		"POST /api/v1/cluster/addons/metrics-server/ensure",
-		"POST /api/v1/cluster/addons/kube-prometheus-stack/ensure",
-		"PUT /api/v1/cluster/data-clone/schedule",
 	)
 	exempt("unclassified by LANE-B1: dev-session control. D10 still refuses daemon scale-up inside that handler",
 		"POST /api/v1/dev-sessions/{name}/control",

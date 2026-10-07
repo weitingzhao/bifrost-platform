@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 
 // SessionHeader is the caller identity stored as requester.
@@ -52,6 +53,15 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			s.audit.Record(r, "approval.create", res.Approval.ID, StatusPending,
 				fmt.Sprintf("action=%s tier=%s requester=%s", res.Approval.Action, res.Approval.Tier, res.Approval.Requester))
 		}
+		id := res.Approval.ID
+		tier := string(res.Approval.Tier)
+		// A down relay must not fail create. NotifyCreated logs its own error.
+		_ = approvalnotify.NotifyCreated(r.Context(), approvalnotify.Created{
+			ID:        id,
+			Action:    body.Action,
+			Tier:      tier,
+			Requester: r.Header.Get("X-Bifrost-Session"),
+		})
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"id":          res.Approval.ID,
 			"action":      res.Approval.Action,

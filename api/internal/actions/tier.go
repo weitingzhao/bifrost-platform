@@ -23,8 +23,8 @@ func (t Tier) Valid() bool {
 	}
 }
 
-// NeedsApproval is true for levels that must not run on the direct endpoint
-// until an executed approval with the same params exists.
+// NeedsApproval is true for C and D. Direct HTTP calls at those levels always
+// return 403. Approved work runs on the executor's internal path.
 func (t Tier) NeedsApproval() bool {
 	return t == TierC || t == TierD
 }

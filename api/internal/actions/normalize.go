@@ -84,7 +84,12 @@ func (a Action) Extract(r *http.Request, body []byte) (map[string]any, error) {
 		for _, p := range a.Params {
 			switch p.In {
 			case "path":
-				if v := strings.TrimSpace(chi.URLParam(r, p.Name)); v != "" {
+				v := strings.TrimSpace(chi.URLParam(r, p.Name))
+				// Chi names the catch-all on /plugins/market-data/api/* as "*".
+				if v == "" && p.Name == "path" {
+					v = strings.Trim(strings.TrimSpace(chi.URLParam(r, "*")), "/")
+				}
+				if v != "" {
 					merged[p.Name] = v
 				}
 			case "query":

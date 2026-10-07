@@ -58,8 +58,37 @@ func TestScaleTierDoesNotWeakenDaemonScaleUp(t *testing.T) {
 }
 
 func TestPipelineAndAppTiers(t *testing.T) {
-	if !ProdPipeline("bifrost-deliver-prod") || ProdPipeline("bifrost-deliver-platform") {
-		t.Fatal("*-prod pipeline rule")
+	for _, name := range []string{
+		"bifrost-deliver-prod",
+		"bifrost-deliver-platform-prod",
+		"bifrost-deliver-research",
+	} {
+		if !ProdPipeline(name) {
+			t.Fatalf("%s should be a production pipeline", name)
+		}
+	}
+	// Staging deliver and image-build pipelines stay B. A -prod suffix that is
+	// not in the explicit list is not enough.
+	for _, name := range []string{
+		"bifrost-deliver-platform",
+		"bifrost-deliver-stg",
+		"bifrost-build-stg",
+		"bifrost-build-research-dagster",
+		"bifrost-build-research-pine",
+		"bifrost-build-frontend-stg",
+		"bifrost-build-flex-query",
+		"bifrost-build-ib-gateway",
+		"bifrost-build-market-data",
+		"bifrost-ci-frontend",
+		"bifrost-ci-platform",
+		"bifrost-ci-python",
+		"bifrost-clone-frontend-smoke",
+		"bifrost-smoke",
+		"not-a-pipeline-prod",
+	} {
+		if ProdPipeline(name) {
+			t.Fatalf("%s is not a production workload pipeline", name)
+		}
 	}
 	if !ProdApp("trade-prod") || !ProdApp("prod-trade") || ProdApp("trade-stg") {
 		t.Fatal("prod app rule")
@@ -69,6 +98,21 @@ func TestPipelineAndAppTiers(t *testing.T) {
 	}
 	if RestartTier("bifrost-stg") != TierB {
 		t.Fatal("other namespace should be B")
+	}
+}
+
+func TestIBTiersAreAssigned(t *testing.T) {
+	mode, ok := ByID("ib_mode")
+	if !ok || mode.Tier != TierC {
+		t.Fatalf("ib_mode = %s ok=%v", mode.Tier, ok)
+	}
+	maint, ok := ByID("ib_maintenance")
+	if !ok || maint.Tier != TierC {
+		t.Fatalf("ib_maintenance = %s ok=%v", maint.Tier, ok)
+	}
+	heal, ok := ByID("ib_self_heal")
+	if !ok || heal.Tier != TierB {
+		t.Fatalf("ib_self_heal = %s ok=%v, want B", heal.Tier, ok)
 	}
 }
 
@@ -91,7 +135,11 @@ func TestCatalogIDsUniqueAndLeveled(t *testing.T) {
 		"rollout_restart_deployment", "scale_deployment", "delete_pod", "cordon_node", "uncordon_node",
 		"drain_node", "poweroff_compute_node", "wake_compute_node", "join_cluster_node",
 		"trigger_cnpg_backup", "repair_cnpg_wal_store", "trigger_data_clone", "market_data_heal",
-		"ib_reconnect", "unifi_firewall_apply", "stack_install_addon", "stack_upgrade_addon",
+		"ib_reconnect", "ib_mode", "ib_maintenance", "ib_self_heal",
+		"unifi_firewall_apply", "stack_install_addon", "stack_upgrade_addon",
+		"sweep_failed_backups", "ensure_metrics_server", "ensure_kube_prometheus_stack",
+		"sync_kubeconfig", "ensure_kubeconfig_secret", "update_data_clone_schedule",
+		"market_data_delete",
 	} {
 		if !seen[id] {
 			t.Fatalf("catalog missing %s", id)

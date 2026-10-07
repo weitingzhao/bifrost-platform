@@ -244,10 +244,15 @@ func Catalog() []ToolView {
 		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
 
-		// Dev Sessions tools
-		tool("list_dev_sessions", "List sessions for the viewer seat (local bdev in DEV; catalog Deployments in STG/PROD)", "read", "GET", "/api/v1/dev-sessions/", "viewer", "Agent", true),
-		tool("restart_dev_session", "Control a session by name: start/stop/restart/clear-logs (bdev locally; K8s scale/rollout in STG/PROD; D10 blocks daemon scale-up)", "routine", "POST", "/api/v1/dev-sessions/{name}/control", "operator", "Agent", true),
-		tool("get_dev_session_logs", "Get recent log lines from a session (bdev log file or K8s pod logs)", "read", "GET", "/api/v1/dev-sessions/{name}/logs", "viewer", "Agent", true),
+		tool("request_action", "Create an approval request and return its id. Does not run the action.", "routine", "POST", "/api/v1/approvals", "operator", "Agent", true),
+		tool("get_request", "Read one approval request by id", "read", "GET", "/api/v1/approvals/{id}", "viewer", "Agent", true),
+		tool("list_requests", "List approval requests (pending or all)", "read", "GET", "/api/v1/approvals", "viewer", "Agent", true),
+		tool("wait_for_request", "Poll an approval until it is decided or the timeout elapses", "read", "GET", "/api/v1/approvals/{id}", "viewer", "Agent", true),
+
+		// Laptop bdev only. The full stdio server does not register these.
+		tool("list_dev_sessions", "List sessions for the viewer seat (local bdev in DEV; catalog Deployments in STG/PROD)", "read", "GET", "/api/v1/dev-sessions/", "viewer", "Agent", false),
+		tool("restart_dev_session", "Control a session by name: start/stop/restart/clear-logs (bdev locally; K8s scale/rollout in STG/PROD; D10 blocks daemon scale-up)", "routine", "POST", "/api/v1/dev-sessions/{name}/control", "operator", "Agent", false),
+		tool("get_dev_session_logs", "Get recent log lines from a session (bdev log file or K8s pod logs)", "read", "GET", "/api/v1/dev-sessions/{name}/logs", "viewer", "Agent", false),
 	}
 }
 

@@ -17,10 +17,8 @@ type Action struct {
 	Method      string
 	Pattern     string
 	Classify    func(ctx context.Context, params map[string]any) Tier
-	// Passthrough keeps unrecognized body keys in params_hash (plugin heal).
+	// Passthrough keeps unrecognized body keys in params_hash (plugin heal, schedule).
 	Passthrough bool
-	// Provisional marks a level LANE-B1 did not assign. The report lists these.
-	Provisional bool
 }
 
 // TierOf returns the level for these params.
@@ -68,7 +66,7 @@ func ByID(id string) (Action, bool) {
 }
 
 const (
-	prodPipelineNote = "Pipelines whose name ends with -prod are tier C; every other pipeline is tier B (call it directly)."
+	prodPipelineNote = "bifrost-deliver-prod, bifrost-deliver-platform-prod, and bifrost-deliver-research are tier C because they roll out or gitops-sync a production workload. Image-build, CI, and staging deliver pipelines are tier B (call them directly)."
 	prodAppNote      = "Argo applications whose name is prod, starts with prod-, ends with -prod, or contains -prod- are tier C; others are tier B."
 	restartNote      = "Namespaces data, bifrost-prod and bifrost-platform-prod are tier C; other namespaces are tier B."
 )
@@ -233,14 +231,14 @@ var catalog = []Action{
 		Params: []Param{},
 	},
 	{
-		ID: "ib_mode", Tier: TierC, Provisional: true,
-		Description: "Switch the IB gateway mode. Provisional tier C: LANE-B1 names mode switch as a write but assigns a level only to reconnect (B).",
+		ID: "ib_mode", Tier: TierC,
+		Description: "Switch the IB gateway mode. Tier C.",
 		Method:      "POST", Pattern: "/api/v1/plugins/ib-gateway/control/{action}",
 		Params: []Param{{Name: "mode", Type: "string", Required: true, In: "body"}},
 	},
 	{
-		ID: "ib_maintenance", Tier: TierC, Provisional: true,
-		Description: "Set IB gateway maintenance. Provisional tier C: the control route also serves this action, which LANE-B1 does not level.",
+		ID: "ib_maintenance", Tier: TierC,
+		Description: "Set IB gateway maintenance. Tier C.",
 		Method:      "POST", Pattern: "/api/v1/plugins/ib-gateway/control/{action}",
 		Passthrough: true,
 		Params: []Param{
@@ -249,8 +247,8 @@ var catalog = []Action{
 		},
 	},
 	{
-		ID: "ib_self_heal", Tier: TierC, Provisional: true,
-		Description: "Toggle IB gateway self-heal. Provisional tier C: the control route also serves this action, which LANE-B1 does not level.",
+		ID: "ib_self_heal", Tier: TierB,
+		Description: "Toggle IB gateway self-heal. Tier B. PROD already runs this loop; call the endpoint directly.",
 		Method:      "POST", Pattern: "/api/v1/plugins/ib-gateway/control/{action}",
 		Passthrough: true,
 		Params:      []Param{{Name: "enabled", Type: "boolean", In: "body"}},
@@ -272,6 +270,59 @@ var catalog = []Action{
 		Description: "Upgrade or reinstall a CI/CD stack add-on. Tier D.",
 		Method:      "POST", Pattern: "/api/v1/stack/addons/{name}/upgrade",
 		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
+	},
+	{
+		ID: "sweep_failed_backups", Tier: TierC,
+		Description: "Delete expired failed CNPG Backup CRs. Tier C.",
+		Method:      "POST", Pattern: "/api/v1/cluster/postgres/backups/sweep-failed",
+		Params: []Param{},
+	},
+	{
+		ID: "ensure_metrics_server", Tier: TierD,
+		Description: "Install the metrics-server add-on. Tier D.",
+		Method:      "POST", Pattern: "/api/v1/cluster/addons/metrics-server/ensure",
+		Params: []Param{},
+	},
+	{
+		ID: "ensure_kube_prometheus_stack", Tier: TierD,
+		Description: "Install the kube-prometheus-stack add-on. Tier D.",
+		Method:      "POST", Pattern: "/api/v1/cluster/addons/kube-prometheus-stack/ensure",
+		Params: []Param{},
+	},
+	{
+		ID: "sync_kubeconfig", Tier: TierD,
+		Description: "Copy the host kubeconfig onto the platform path. Tier D.",
+		Method:      "POST", Pattern: "/api/v1/cluster/sync-kubeconfig",
+		Params: []Param{},
+	},
+	{
+		ID: "ensure_kubeconfig_secret", Tier: TierD,
+		Description: "Create or update the platform kubeconfig Secret in the given namespaces. Tier D. The response does not include Secret contents.",
+		Method:      "POST", Pattern: "/api/v1/cluster/kubeconfig-secret/ensure",
+		Params: []Param{
+			{Name: "namespaces", Type: "string[]", In: "body"},
+			{Name: "sync_first", Type: "boolean", In: "body"},
+		},
+	},
+	{
+		ID: "update_data_clone_schedule", Tier: TierC,
+		Description: "Update the data-clone schedule. Tier C.",
+		Method:      "PUT", Pattern: "/api/v1/cluster/data-clone/schedule",
+		Passthrough: true,
+		Params: []Param{
+			{Name: "enabled", Type: "boolean", In: "body"},
+			{Name: "interval", Type: "string", In: "body"},
+			{Name: "source", Type: "string", In: "body"},
+			{Name: "targets", Type: "string[]", In: "body"},
+			{Name: "mode", Type: "string", In: "body"},
+			{Name: "tables", Type: "string[]", In: "body"},
+		},
+	},
+	{
+		ID: "market_data_delete", Tier: TierC,
+		Description: "Delete a Market Data plugin API resource. Tier C. path is the suffix after /plugins/market-data/api/.",
+		Method:      "DELETE", Pattern: "/api/v1/plugins/market-data/api/*",
+		Params: []Param{{Name: "path", Type: "string", Required: true, In: "path"}},
 	},
 }
 
