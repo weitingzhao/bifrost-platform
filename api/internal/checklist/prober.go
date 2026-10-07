@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // The checklist prober fills the catalog from the platform's own read API, in
@@ -80,21 +82,22 @@ func envOr(key, def string) string {
 // StartProber probes now and then every interval until ctx ends.
 func (h *Handler) StartProber(ctx context.Context, p *Prober, interval time.Duration) {
 	slog.Info("checklist prober on", "interval", interval.String(), "base", p.Base, "env", p.Env)
-	go func() {
+	safego.Go("checklist.prober", func() {
 		// The prober starts before the listener it reads; a first run against a
 		// closed port reports unknown for everything it asked.
 		p.waitReady(ctx, 2*time.Minute)
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
-			h.probeAndMerge(ctx, p)
+			// A panic in one run is contained and the next tick runs again.
+			safego.Do("checklist.prober.run", func() { h.probeAndMerge(ctx, p) })
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
 			}
 		}
-	}()
+	})
 }
 
 func (h *Handler) probeAndMerge(ctx context.Context, p *Prober) {
