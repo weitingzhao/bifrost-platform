@@ -79,6 +79,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writePluginGauges(&b, healths)
+	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
+	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
+	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
 	s.httpMetrics.write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

@@ -126,7 +126,23 @@ func (h *Handler) HandleSyncKubeconfig(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
 		return
 	}
-	writeJSON(w, http.StatusOK, h.svc.SyncKubeconfig())
+	enabled := syncEnabled()
+	resp := h.svc.SyncKubeconfig()
+	status := "ok"
+	if !resp.OK {
+		status = "failed"
+	}
+	h.recordAudit(r, "sync_kubeconfig", resp.Path, status, resp.Message)
+	switch {
+	case !enabled:
+		// A disabled sync is not a success: callers that only read the status
+		// code must not report a kubeconfig that was never written (TD-220).
+		writeJSON(w, http.StatusConflict, resp)
+	case !resp.OK:
+		writeJSON(w, http.StatusBadGateway, resp)
+	default:
+		writeJSON(w, http.StatusOK, resp)
+	}
 }
 
 func (h *Handler) HandleEnsureKubeconfigSecret(w http.ResponseWriter, r *http.Request) {

@@ -59,8 +59,9 @@ export async function joinClusterNode(profile: string): Promise<ActuationRespons
 }
 
 export async function syncClusterKubeconfig(): Promise<ClusterSyncResponse> {
-  const r = await fetch('/api/v1/cluster/sync-kubeconfig', { method: 'POST' })
-  if (!r.ok) throw new Error(`sync kubeconfig: HTTP ${r.status}`)
+  const r = await authedFetch('sync kubeconfig', '/api/v1/cluster/sync-kubeconfig', {
+    method: 'POST',
+  })
   return r.json() as Promise<ClusterSyncResponse>
 }
 

@@ -103,6 +103,7 @@ type Server struct {
 	telemetry     *telemetry.Handler
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
+	authLoaded    bool
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
 	httpMetrics   *httpMetrics
@@ -110,7 +111,12 @@ type Server struct {
 
 func New(cfg *config.Config) (*Server, error) {
 	auth, err := actuation.LoadAuth(cfg.PlatformAuthPath)
+	authLoaded := err == nil
 	if err != nil {
+		// Fails closed (every gated route answers 401), which reads like a bad
+		// token unless the cause is said here and in /health.
+		slog.Error("platform auth not loaded; every gated route will answer 401",
+			"path", cfg.PlatformAuthPath, "err", err)
 		auth = &actuation.AuthService{}
 	}
 	// Platform state (TD-196). In the cluster every state file under
@@ -233,6 +239,7 @@ func New(cfg *config.Config) (*Server, error) {
 		telemetry:       telemetry.NewHandler(cfg, audit),
 		devSession:      devsession.NewHandler(devsession.NewService(cfg, clusterH.Service())),
 		auth:            auth,
+		authLoaded:      authLoaded,
 		audit:           audit,
 		jobs:            jobs,
 		httpMetrics:     newHTTPMetrics(),
@@ -546,10 +553,11 @@ func (s *Server) Router() http.Handler {
 			r.Get("/namespaces", s.cluster.HandleNamespaces)
 			r.Get("/workloads", s.cluster.HandleWorkloads)
 			r.Get("/events", s.cluster.HandleEvents)
-			r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
 			r.Get("/workloads/pods/{namespace}/{name}/logs", s.cluster.HandlePodLogs)
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
+				// runs the ssh sync script and overwrites the host kubeconfig (TD-220)
+				r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
 				r.Post("/postgres/backup", s.cluster.HandleTriggerPostgresBackup)
 				r.Post("/postgres/wal-store/repair", s.cluster.HandleRepairPostgresWalStore)
@@ -596,6 +604,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"background_loops": role.RunsWorkers(),
 		"contained_panics": safego.Contained(),
 		"operator_plane":   s.operatorPlaneMode(),
+		"auth_loaded":      s.authLoaded,
 	})
 }
 

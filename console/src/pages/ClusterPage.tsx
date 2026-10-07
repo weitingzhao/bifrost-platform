@@ -205,10 +205,14 @@ export function ClusterPage({
         onCopyForLlm={() => void q.handleCopyForLlm()}
         onRefresh={q.refreshCluster}
         syncPending={m.syncMutation.isPending}
-        onSyncKubeconfig={() => {
-          m.setSyncError(null)
-          m.syncMutation.mutate()
-        }}
+        onSyncKubeconfig={
+          canOperate
+            ? () => {
+                m.setSyncError(null)
+                m.syncMutation.mutate()
+              }
+            : undefined
+        }
         syncError={m.syncError}
         syncOkMessage={
           m.syncMutation.data?.ok === true ? m.syncMutation.data.message : undefined

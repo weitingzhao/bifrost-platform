@@ -129,11 +129,11 @@ func routeTable() []route {
 		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }},
 		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }},
 		{"GET", "/hermes/insights", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleList }},
-		{"POST", "/hermes/run-first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }},
 		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }},
 		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }},
 		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }},
 
+		{"POST", "/hermes/run-first-task", true, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }},
 		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }},
 		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }},
 		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }},
