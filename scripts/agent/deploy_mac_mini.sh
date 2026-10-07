@@ -594,22 +594,9 @@ if [[ "${SMOKE_OK}" != "true" ]]; then
 fi
 
 echo "==> Post-deploy tool smoke"
-SMOKE_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/smoke"
-SMOKE_JSON="$(curl -sf --max-time 30 "${SMOKE_URL}" 2>/dev/null || echo '{}')"
-SMOKE_STATUS="$(echo "${SMOKE_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status","unknown"))' 2>/dev/null || echo 'unknown')"
-if [[ "${SMOKE_STATUS}" == "pass" ]]; then
-  echo "  ✓ All tool dry-run checks passed"
-else
-  echo "  ⚠ Some checks failed (non-blocking):"
-  echo "${SMOKE_JSON}" | python3 -c '
-import sys, json
-data = json.load(sys.stdin)
-for c in data.get("checks", []):
-    mark = "✓" if c["status"] == "pass" else "✗"
-    detail = f" — {c.get(\"detail\",\"\")}" if c.get("detail") else ""
-    print(f"    {mark} {c[\"label\"]}{detail}")
-' 2>/dev/null || echo "    (could not parse smoke results)"
-fi
+# shellcheck source=tool_smoke.sh
+source "${SCRIPT_DIR}/tool_smoke.sh"
+tool_smoke_report "http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/smoke" "${PLATFORM_LOCAL}/.env"
 
 echo "==> Post-deploy Nous Hermes Agent health probe"
 # /api/status is public on the Hermes dashboard; the endpoints behind basic auth
