@@ -28,7 +28,7 @@ var policyBlockedTargets = []Target{
 		Reachability:       ReachUnknown,
 		Auth:               AuthBlocked,
 		AuthorizationLevel: "forbidden",
-		Detail:             "ib:operator:cmd write by an agent (platform-api reconnect_all is D-IB-Heal L1)",
+		Detail:             "Agent write to the IB operator command stream (platform-api reconnect_all is D-IB-Heal L1)",
 	},
 	{
 		ID:                 "daemon-control-write",
