@@ -1,17 +1,11 @@
-import { useEffect } from 'react'
 import { Button, DenseTag, type DenseTagVariant } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
-import { syncHusbandryChecklist } from '@/api/checklist'
-import { operatorToken } from '@/api/client'
 import { fetchDataHusbandry, type HusbandryLaneView } from '@/api/dataHusbandry'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
 import { formatSchedulesSummary } from '@/lib/research/researchHealthCopy'
 import { massiveReadinessHref } from '@/lib/research/massiveNav'
-
-const HUSBANDRY_SYNC_KEY = 'bifrost.husbandrySyncAt'
-const HUSBANDRY_SYNC_TTL_MS = 60 * 60 * 1000
 
 function verdictVariant(v: string): DenseTagVariant {
   if (v === 'healthy') return 'success'
@@ -35,20 +29,6 @@ function LaneChip({ lane }: { lane: HusbandryLaneView }) {
   )
 }
 
-function shouldSyncHusbandry(overall: string | undefined): boolean {
-  if (overall !== 'degraded' && overall !== 'caution') return false
-  try {
-    const raw = sessionStorage.getItem(HUSBANDRY_SYNC_KEY)
-    if (raw != null) {
-      const at = Number(raw)
-      if (Number.isFinite(at) && Date.now() - at < HUSBANDRY_SYNC_TTL_MS) return false
-    }
-  } catch {
-    /* ignore */
-  }
-  return true
-}
-
 /** Shared Market / Flex / Research husbandry strip (void ≠ fail; Job Complete ≠ success). */
 export function HusbandryStrip({ className }: { className?: string }) {
   const q = useQuery({
@@ -66,27 +46,10 @@ export function HusbandryStrip({ className }: { className?: string }) {
     recentFailures: orchQ.data?.recent_failures,
   })
 
-  useEffect(() => {
-    // the sync can start remediation, so only a signed-in operator's view sends it (TD-208)
-    if (snap == null || !shouldSyncHusbandry(snap.overall) || operatorToken() === '') return
-    let cancelled = false
-    void syncHusbandryChecklist()
-      .then(() => {
-        if (cancelled) return
-        try {
-          sessionStorage.setItem(HUSBANDRY_SYNC_KEY, String(Date.now()))
-        } catch {
-          /* ignore */
-        }
-      })
-      .catch(() => {
-        /* fail-soft — strip still shows lanes */
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [snap?.overall, snap?.detail])
-
+  // Read-only. Until 2026-10-07 a degraded strip POSTed /checklist/husbandry-sync
+  // from the page, which merged the probe into the checklist and could dispatch
+  // full-auto remediation from whichever Console happened to be open (the Owner's
+  // dev laptop included). Maintenance runs in PROD only, never on a page view.
   return (
     <div
       className={[
