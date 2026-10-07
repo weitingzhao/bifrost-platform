@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const storeVersion = "2026-07-07"
@@ -34,7 +36,7 @@ func (s *Store) LoadDrill() (*DrillRecord, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	data, err := os.ReadFile(s.path)
+	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -61,11 +63,10 @@ func (s *Store) SaveDrill(rec DrillRecord) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(s.path, data, 0o644); err != nil {
 		return fmt.Errorf("write escape hatch drill: %w", err)
 	}
-	return os.Rename(tmp, s.path)
+	return nil
 }
 
 func quarterlyFromRecord(rec *DrillRecord) QuarterlyDrill {

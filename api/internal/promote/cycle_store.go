@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const maxCycleEntries = 50
@@ -41,7 +43,7 @@ func (s *CycleStore) path(lane ReleaseCycleLane) string {
 
 func (s *CycleStore) loadLocked(lane ReleaseCycleLane) ([]ReleaseCycleRecord, error) {
 	path := s.path(lane)
-	data, err := os.ReadFile(path)
+	data, err := statefile.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -68,11 +70,10 @@ func (s *CycleStore) saveLocked(lane ReleaseCycleLane, entries []ReleaseCycleRec
 		return err
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write release cycles: %w", err)
 	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 // List returns cycles newest-first (max 50).

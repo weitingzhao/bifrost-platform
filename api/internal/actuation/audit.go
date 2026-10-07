@@ -4,12 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
-	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 type AuditRecord struct {
@@ -27,6 +30,29 @@ type AuditLog struct {
 	mu      sync.Mutex
 	path    string
 	records []AuditRecord
+	// also lists the records other processes keep (the workers pod's audit,
+	// read by the api pod that serves GET /audit)
+	alsoList []string
+}
+
+const maxAuditRecords = 500
+
+// AlsoList makes HandleList merge the records stored at these paths (written by
+// another process with its own AuditLog) into its answer.
+func (l *AuditLog) AlsoList(paths ...string) {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.alsoList = append(l.alsoList, paths...)
+}
+
+// emit writes one log line per record: the stored audit keeps the last
+// maxAuditRecords, the log pipeline (Loki) keeps the long tail (TD-196).
+func emit(r AuditRecord) {
+	slog.Info("audit", "actor", r.Actor, "role", r.Role, "action", r.Action,
+		"target", r.Target, "status", r.Status, "detail", r.Detail)
 }
 
 func NewAuditLog(path string) *AuditLog {
@@ -53,11 +79,12 @@ func (l *AuditLog) Record(r *http.Request, action, target, status, detail string
 		Status: status,
 		Detail: detail,
 	}
+	emit(record)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.records = append([]AuditRecord{record}, l.records...)
-	if len(l.records) > 500 {
-		l.records = l.records[:500]
+	if len(l.records) > maxAuditRecords {
+		l.records = l.records[:maxAuditRecords]
 	}
 	_ = l.persistLocked()
 }
@@ -76,11 +103,12 @@ func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status,
 		Status: status,
 		Detail: detail,
 	}
+	emit(record)
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.records = append([]AuditRecord{record}, l.records...)
-	if len(l.records) > 500 {
-		l.records = l.records[:500]
+	if len(l.records) > maxAuditRecords {
+		l.records = l.records[:maxAuditRecords]
 	}
 	_ = l.persistLocked()
 }
@@ -140,8 +168,35 @@ func (l *AuditLog) HandleAppend(w http.ResponseWriter, r *http.Request) {
 
 func (l *AuditLog) HandleList(w http.ResponseWriter, _ *http.Request) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	records := append([]AuditRecord(nil), l.records...)
+	others := append([]string(nil), l.alsoList...)
+	l.mu.Unlock()
+	if len(others) > 0 {
+		seen := make(map[string]bool, len(records))
+		for _, r := range records {
+			seen[r.ID+"|"+r.Action] = true
+		}
+		for _, path := range others {
+			data, err := statefile.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			var more []AuditRecord
+			if json.Unmarshal(data, &more) != nil {
+				continue
+			}
+			for _, r := range more {
+				if !seen[r.ID+"|"+r.Action] {
+					seen[r.ID+"|"+r.Action] = true
+					records = append(records, r)
+				}
+			}
+		}
+		sort.SliceStable(records, func(i, j int) bool { return records[i].At.After(records[j].At) })
+		if len(records) > maxAuditRecords {
+			records = records[:maxAuditRecords]
+		}
+	}
 	if records == nil {
 		records = []AuditRecord{}
 	}
@@ -152,7 +207,7 @@ func (l *AuditLog) load() error {
 	if l.path == "" {
 		return nil
 	}
-	data, err := os.ReadFile(l.path)
+	data, err := statefile.ReadFile(l.path)
 	if err != nil {
 		return nil
 	}
@@ -168,12 +223,9 @@ func (l *AuditLog) persistLocked() error {
 	if l.path == "" {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(l.path), 0o755); err != nil {
-		return err
-	}
 	data, err := json.MarshalIndent(l.records, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(l.path, data, 0o600)
+	return statefile.WriteFile(l.path, data, 0o600)
 }

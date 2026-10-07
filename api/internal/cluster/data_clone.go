@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const (
@@ -306,7 +307,7 @@ func defaultDataCloneSchedule() DataCloneSchedule {
 }
 
 func (s *DataCloneScheduleStore) load() {
-	raw, err := os.ReadFile(s.path)
+	raw, err := statefile.ReadFile(s.path)
 	if err != nil {
 		return
 	}
@@ -322,12 +323,17 @@ func (s *DataCloneScheduleStore) persistLocked() {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(s.path, raw, 0o600)
+	_ = statefile.WriteFile(s.path, raw, 0o600)
 }
 
+// Get re-reads the stored schedule: the api pod writes it (PUT) and the
+// workers pod's scheduler reads it, and they share it only through the state
+// backend (TD-196). Until 2026-10-07 the store cached the file it loaded at
+// construction, so a schedule set in the Console never reached the scheduler.
 func (s *DataCloneScheduleStore) Get() DataCloneSchedule {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.load()
 	return s.cfg
 }
 
@@ -399,7 +405,7 @@ func NewDataCloneLastStore() *DataCloneLastStore {
 }
 
 func (s *DataCloneLastStore) load() {
-	raw, err := os.ReadFile(s.path)
+	raw, err := statefile.ReadFile(s.path)
 	if err != nil {
 		return
 	}
@@ -415,7 +421,7 @@ func (s *DataCloneLastStore) persistLocked() {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(s.path, raw, 0o600)
+	_ = statefile.WriteFile(s.path, raw, 0o600)
 }
 
 func (s *DataCloneLastStore) Get() DataCloneLastMeta {

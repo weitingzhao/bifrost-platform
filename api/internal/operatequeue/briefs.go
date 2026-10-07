@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const (
@@ -34,7 +36,7 @@ func NewBriefStore(configDir string) *BriefStore {
 func (s *BriefStore) Path() string { return s.path }
 
 func (s *BriefStore) loadLocked() (*BriefsFileRecord, error) {
-	data, err := os.ReadFile(s.path)
+	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &BriefsFileRecord{Version: briefsStateVersion, Briefs: []DecisionBrief{}}, nil
@@ -64,11 +66,10 @@ func (s *BriefStore) saveLocked(rec *BriefsFileRecord) error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(s.path, data, 0o644); err != nil {
 		return fmt.Errorf("write decision briefs: %w", err)
 	}
-	return os.Rename(tmp, s.path)
+	return nil
 }
 
 // ListPending returns undecided briefs (and active holds that have not expired).

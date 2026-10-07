@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const recentClosedLimit = 20
@@ -34,7 +35,7 @@ func (s *Store) Path() string {
 }
 
 func (s *Store) loadLocked() (*FileRecord, error) {
-	data, err := os.ReadFile(s.path)
+	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &FileRecord{Version: stateVersion, Items: []Item{}}, nil
@@ -63,15 +64,43 @@ func (s *Store) saveLocked(rec *FileRecord) error {
 		return fmt.Errorf("mkdir operate queue: %w", err)
 	}
 	rec.Version = stateVersion
+	rec.Items = trimFinished(rec.Items)
 	data, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(s.path, data, 0o644); err != nil {
 		return fmt.Errorf("write operate queue: %w", err)
 	}
-	return os.Rename(tmp, s.path)
+	return nil
+}
+
+// keptFinished bounds the closed and dismissed items kept: List shows the last
+// recentClosedLimit, and the queue lives in a ConfigMap in the cluster (1 MiB,
+// TD-196). Until 2026-10-07 every finished item stayed forever.
+const keptFinished = 200
+
+// trimFinished keeps every open item and the newest keptFinished others, in order.
+func trimFinished(items []Item) []Item {
+	finished := 0
+	for _, it := range items {
+		if it.Status != StatusOpen {
+			finished++
+		}
+	}
+	drop := finished - keptFinished
+	if drop <= 0 {
+		return items
+	}
+	out := make([]Item, 0, len(items)-drop)
+	for _, it := range items {
+		if it.Status != StatusOpen && drop > 0 {
+			drop--
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
 }
 
 func (s *Store) List() (ListResponse, error) {

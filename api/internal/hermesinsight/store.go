@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 // Store persists a 200-insight ring buffer as JSON (Patrol store pattern).
@@ -46,7 +48,7 @@ func NewStore(dir string) (*Store, error) {
 }
 
 func (s *Store) load() error {
-	data, err := os.ReadFile(s.path)
+	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -75,11 +77,10 @@ func (s *Store) saveLocked() error {
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(s.path, data, 0o644); err != nil {
 		return fmt.Errorf("write hermes-insight state: %w", err)
 	}
-	return os.Rename(tmp, s.path)
+	return nil
 }
 
 func (s *Store) Append(insight HermesInsight) error {

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -50,6 +51,8 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
@@ -110,7 +113,25 @@ func New(cfg *config.Config) (*Server, error) {
 	if err != nil {
 		auth = &actuation.AuthService{}
 	}
-	audit := actuation.NewAuditLog("")
+	// Platform state (TD-196). In the cluster every state file under
+	// PLATFORM_DATA_DIR lives in a ConfigMap of this pod's namespace, so a
+	// rollout keeps it and the api and workers pods share it; until 2026-10-07
+	// it sat on a per-pod emptyDir. Local runs keep plain files.
+	auditPath := ""
+	if dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR")); dataDir != "" && k8sstate.Wanted() {
+		if ns := k8sstate.Namespace(); ns != "" {
+			statefile.Use(k8sstate.New(ns, k8sstate.ClientsFromEnv()), dataDir)
+			auditPath = filepath.Join(dataDir, "audit", "audit-"+config.CurrentRole().String()+".json")
+			slog.Info("platform state in ConfigMaps", "namespace", ns, "data_dir", dataDir, "audit", auditPath)
+		} else {
+			slog.Warn("platform state: no namespace found, keeping files (lost on rollout)")
+		}
+	}
+	audit := actuation.NewAuditLog(auditPath)
+	if active, dataDir := statefile.Active(); active && config.CurrentRole() == config.RoleAPI {
+		// GET /audit is served here; the workers pod records the loops' actions
+		audit.AlsoList(filepath.Join(dataDir, "audit", "audit-workers.json"))
+	}
 	jobs := actuation.NewJobStore()
 	gitopsH := gitops.NewHandler(cfg, audit)
 	remediationH := remediation.NewHandler(audit)

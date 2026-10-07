@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 type Store struct {
@@ -58,7 +60,7 @@ func (s *Store) LoadTier(tier GateTier) (*ReleaseGateRecord, error) {
 
 func (s *Store) loadTierLocked(tier GateTier) (*ReleaseGateRecord, error) {
 	path := s.tierPath(tier)
-	data, err := os.ReadFile(path)
+	data, err := statefile.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -93,11 +95,10 @@ func (s *Store) SaveTier(tier GateTier, rec ReleaseGateRecord) error {
 		return err
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write release gate state: %w", err)
 	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 func (s *Store) Save(rec ReleaseGateRecord) error {
@@ -111,7 +112,7 @@ func (s *Store) LoadTierB() (*TierBSignoffRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	path := s.tierBPath()
-	data, err := os.ReadFile(path)
+	data, err := statefile.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -137,11 +138,10 @@ func (s *Store) SaveTierB(rec TierBSignoffRecord) error {
 		return err
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write tier b signoff: %w", err)
 	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 func (s *Store) historyPath(tier GateTier) string {
@@ -163,10 +163,15 @@ func (s *Store) AppendHistory(tier GateTier, rec ReleaseGateRecord) error {
 	defer s.mu.Unlock()
 	path := s.historyPath(tier)
 	var history []ReleaseGateRecord
-	if data, err := os.ReadFile(path); err == nil {
+	if data, err := statefile.ReadFile(path); err == nil {
 		_ = json.Unmarshal(data, &history)
 	}
 	history = append(history, rec)
+	// Readers show the last maxHistoryEntries; keep a few more, not everything:
+	// the history lives in a ConfigMap in the cluster (TD-196), capped at 1 MiB.
+	if keep := 2 * maxHistoryEntries; len(history) > keep {
+		history = history[len(history)-keep:]
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("mkdir gate history dir: %w", err)
 	}
@@ -175,11 +180,10 @@ func (s *Store) AppendHistory(tier GateTier, rec ReleaseGateRecord) error {
 		return err
 	}
 	data = append(data, '\n')
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := statefile.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("write gate history: %w", err)
 	}
-	return os.Rename(tmp, path)
+	return nil
 }
 
 const maxHistoryEntries = 50
@@ -188,7 +192,7 @@ func (s *Store) LoadHistory(tier GateTier) ([]ReleaseGateRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	path := s.historyPath(tier)
-	data, err := os.ReadFile(path)
+	data, err := statefile.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil

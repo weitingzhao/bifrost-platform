@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 type Job struct {
@@ -55,7 +57,7 @@ func (s *Store) loadLastLocked() *Job {
 	if s.lastPath == "" {
 		return nil
 	}
-	raw, err := os.ReadFile(s.lastPath)
+	raw, err := statefile.ReadFile(s.lastPath)
 	if err != nil {
 		return nil
 	}
@@ -85,7 +87,7 @@ func (s *Store) persistLastLocked(j *Job) {
 	if err != nil {
 		return
 	}
-	_ = os.WriteFile(s.lastPath, raw, 0o644)
+	_ = statefile.WriteFile(s.lastPath, raw, 0o644)
 }
 
 func (s *Store) Current() *Job {
