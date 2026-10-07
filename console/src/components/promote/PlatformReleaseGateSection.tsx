@@ -145,7 +145,9 @@ export function PlatformStageGatePanel({ tier, label, hideActions }: PlatformSta
     ? <DenseTag variant="success">pass</DenseTag>
     : result === 'fail'
       ? <DenseTag variant="danger">fail</DenseTag>
-      : <DenseTag variant="neutral">not yet</DenseTag>
+      : result === 'inconclusive'
+        ? <DenseTag variant="warning">inconclusive</DenseTag>
+        : <DenseTag variant="neutral">not yet</DenseTag>
 
   return (
     <div className="flex flex-col gap-2">

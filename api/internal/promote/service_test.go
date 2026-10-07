@@ -131,7 +131,7 @@ func TestLastGateTable(t *testing.T) {
 			name: "pass-stg",
 			tier: GateTierStg,
 			seed: &ReleaseGateRecord{
-				At: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Result: "pass",
+				At: time.Now().UTC().Add(-time.Hour), Result: "pass",
 				Revision: "v1.2.3", Summary: "stg release gate pass (2 checks)",
 				Checks: []GateCheck{{ID: "c1", Required: true, Reachability: probe.ReachOK}},
 			},
@@ -364,3 +364,118 @@ func TestResolveReleaseActionsTable(t *testing.T) {
 		})
 	}
 }
+
+// TD-230: a required check that could not be measured is not a pass.
+func TestGateResultRequiredUnknown(t *testing.T) {
+	cases := []struct {
+		name   string
+		checks []GateCheck
+		want   string
+	}{
+		{"all-ok", []GateCheck{{ID: "a", Required: true, Reachability: probe.ReachOK}}, "pass"},
+		{"required-unknown", []GateCheck{
+			{ID: "a", Required: true, Reachability: probe.ReachOK},
+			{ID: "smoke", Required: true, Reachability: probe.ReachUnknown},
+		}, GateResultInconclusive},
+		{"optional-unknown", []GateCheck{
+			{ID: "a", Required: true, Reachability: probe.ReachOK},
+			{ID: "opt", Required: false, Reachability: probe.ReachUnknown},
+		}, "pass"},
+		{"fail-beats-unknown", []GateCheck{
+			{ID: "smoke", Required: true, Reachability: probe.ReachUnknown},
+			{ID: "b", Required: true, Reachability: probe.ReachFail},
+		}, "fail"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := gateResult(tc.checks); got != tc.want {
+				t.Fatalf("gateResult = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLastGateRequiredUnknownNotReady(t *testing.T) {
+	svc := newTestPromoteService(t)
+	rec := ReleaseGateRecord{
+		At: time.Now().UTC().Add(-time.Minute), Result: GateResultInconclusive,
+		Checks: []GateCheck{{ID: "smoke", Required: true, Reachability: probe.ReachUnknown}},
+	}
+	if err := svc.store.SaveTier(GateTierPlatformStg, rec); err != nil {
+		t.Fatalf("SaveTier: %v", err)
+	}
+	got := svc.LastGate(context.Background(), GateTierPlatformStg)
+	if got.Ready {
+		t.Fatalf("Ready = true for an inconclusive gate (blockers=%v)", got.Blockers)
+	}
+	if got.Reachability == probe.ReachOK {
+		t.Fatalf("Reachability = ok for an inconclusive gate")
+	}
+	if len(got.Blockers) == 0 || got.Blockers[0] != "Release gate inconclusive: required check(s) not measured: smoke" {
+		t.Fatalf("Blockers = %v", got.Blockers)
+	}
+}
+
+// TD-230: a pass older than the window is no longer ready.
+func TestLastGateStaleRecordNotReady(t *testing.T) {
+	cases := []struct {
+		name  string
+		age   time.Duration
+		ready bool
+	}{
+		{"fresh", time.Hour, true},
+		{"stale", 36 * 24 * time.Hour, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newTestPromoteService(t)
+			svc.gateMaxAge = 24 * time.Hour
+			rec := ReleaseGateRecord{
+				At: time.Now().UTC().Add(-tc.age), Result: "pass",
+				Checks: []GateCheck{{ID: "a", Required: true, Reachability: probe.ReachOK}},
+			}
+			if err := svc.store.SaveTier(GateTierPlatformProd, rec); err != nil {
+				t.Fatalf("SaveTier: %v", err)
+			}
+			got := svc.LastGate(context.Background(), GateTierPlatformProd)
+			if got.Ready != tc.ready {
+				t.Fatalf("Ready = %v, want %v (blockers=%v)", got.Ready, tc.ready, got.Blockers)
+			}
+			if got.Result != "pass" {
+				t.Fatalf("Result = %q: the record still says it passed", got.Result)
+			}
+			if !tc.ready && (len(got.Blockers) != 1 || got.Reachability != probe.ReachDegraded) {
+				t.Fatalf("stale gate: blockers=%v reach=%s", got.Blockers, got.Reachability)
+			}
+		})
+	}
+}
+
+func TestReleaseGateMaxAgeEnv(t *testing.T) {
+	svc := &Service{}
+	t.Setenv("PLATFORM_RELEASE_GATE_MAX_AGE", "")
+	if got := svc.releaseGateMaxAge(); got != DefaultReleaseGateMaxAge {
+		t.Fatalf("default = %s", got)
+	}
+	t.Setenv("PLATFORM_RELEASE_GATE_MAX_AGE", "72h")
+	if got := svc.releaseGateMaxAge(); got != 72*time.Hour {
+		t.Fatalf("env = %s", got)
+	}
+	t.Setenv("PLATFORM_RELEASE_GATE_MAX_AGE", "bogus")
+	if got := svc.releaseGateMaxAge(); got != DefaultReleaseGateMaxAge {
+		t.Fatalf("bad env = %s", got)
+	}
+}
+
+func TestProdMatrixVerdictZeroTargetsRequiredUnknown(t *testing.T) {
+	if reach, _ := prodMatrixVerdict(0, nil, "http://x"); reach != probe.ReachUnknown {
+		t.Fatalf("zero targets = %s, want unknown", reach)
+	}
+	if reach, _ := prodMatrixVerdict(5, nil, "http://x"); reach != probe.ReachOK {
+		t.Fatalf("5 clean targets = %s, want ok", reach)
+	}
+	if reach, _ := prodMatrixVerdict(5, []string{"api"}, "http://x"); reach != probe.ReachFail {
+		t.Fatalf("failing target = %s, want fail", reach)
+	}
+}
+

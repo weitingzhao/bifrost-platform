@@ -218,8 +218,18 @@ export function accountSyncChipFromBus(
 
 export function releaseGateSignal(gate: ReleaseGateResponse | undefined): { signal: Signal; detail: string } {
   if (gate == null) return { signal: 'unknown', detail: 'probing' }
-  if (gate.result === 'pass') return { signal: 'ok', detail: 'Gate passed' }
+  const blocker = gate.blockers?.find(b => b.trim() !== '')
+  // A pass counts only while the API still calls it ready: a pass older than
+  // the gate window (or with blockers) is not green (TD-230).
+  if (gate.result === 'pass') {
+    return gate.ready === false
+      ? { signal: 'degraded', detail: blocker ?? 'Gate passed but not ready' }
+      : { signal: 'ok', detail: 'Gate passed' }
+  }
   if (gate.result === 'fail') return { signal: 'fail', detail: gate.detail?.trim() || 'Gate failed' }
+  if (gate.result === 'inconclusive') {
+    return { signal: 'degraded', detail: blocker ?? 'Gate inconclusive — required checks not measured' }
+  }
   return { signal: 'degraded', detail: 'Gate not run' }
 }
 

@@ -23,6 +23,73 @@ type Service struct {
 	cycles            *CycleStore
 	delivery          *delivery.Service
 	datastoreSnapshot func(context.Context) probe.DatastoreSnapshot
+	// gateMaxAge overrides how long a passing release gate stays ready (tests);
+	// zero means PLATFORM_RELEASE_GATE_MAX_AGE or DefaultReleaseGateMaxAge.
+	gateMaxAge time.Duration
+}
+
+// DefaultReleaseGateMaxAge is how long a passing release gate counts as ready.
+// After that the record still says it passed, but ready is false with a blocker
+// asking for a re-run (TD-230): a pass earned weeks ago is not a green light.
+const DefaultReleaseGateMaxAge = 24 * time.Hour
+
+// GateResultInconclusive is the gate result when no required check failed but at
+// least one required check could not be measured (ReachUnknown). It is not a
+// pass: an unmeasured required check never reads as clear (TD-230).
+const GateResultInconclusive = "inconclusive"
+
+func (s *Service) releaseGateMaxAge() time.Duration {
+	if s.gateMaxAge > 0 {
+		return s.gateMaxAge
+	}
+	if v := strings.TrimSpace(os.Getenv("PLATFORM_RELEASE_GATE_MAX_AGE")); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return DefaultReleaseGateMaxAge
+}
+
+// formatGateAge renders an age as days past 48h, else hours and minutes.
+func formatGateAge(d time.Duration) string {
+	if d >= 48*time.Hour {
+		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	}
+	h := int(d / time.Hour)
+	m := int((d % time.Hour) / time.Minute)
+	if m == 0 {
+		return fmt.Sprintf("%dh", h)
+	}
+	return fmt.Sprintf("%dh%dm", h, m)
+}
+
+// gateResult folds the checks into pass / fail / inconclusive. Only required
+// checks count: any ReachFail fails; otherwise any ReachUnknown is inconclusive.
+func gateResult(checks []GateCheck) string {
+	result := "pass"
+	for _, c := range checks {
+		if !c.Required {
+			continue
+		}
+		switch c.Reachability {
+		case probe.ReachFail:
+			return "fail"
+		case probe.ReachUnknown:
+			result = GateResultInconclusive
+		}
+	}
+	return result
+}
+
+// unmeasuredRequired lists the required checks that reported ReachUnknown.
+func unmeasuredRequired(checks []GateCheck) []string {
+	var ids []string
+	for _, c := range checks {
+		if c.Required && c.Reachability == probe.ReachUnknown {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids
 }
 
 func NewService(cfg *config.Config, cluster *cluster.Handler) *Service {
@@ -94,16 +161,7 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 	default:
 		checks = s.collectProdChecks(ctx)
 	}
-	result := "pass"
-	for _, c := range checks {
-		if !c.Required {
-			continue
-		}
-		if c.Reachability == probe.ReachFail {
-			result = "fail"
-			break
-		}
-	}
+	result := gateResult(checks)
 
 	revision := s.resolveDeployRevision(ctx, tier)
 
@@ -352,10 +410,12 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	failIDs := []string{}
 	redisInCluster := false
 	postgresInCluster := false
+	probed := 0
 	for _, t := range matrix.Targets {
 		if t.Category == "trade_write" {
 			continue
 		}
+		probed++
 		if t.ID == "redis" {
 			if reach, detail := s.delivery.ProdRedisInCluster(ctx); reach == probe.ReachOK {
 				redisInCluster = true
@@ -388,15 +448,22 @@ func (s *Service) checkProdMatrix(ctx context.Context) []GateCheck {
 	if redisInCluster {
 		check.Detail += "; redis via in-cluster data/redis-live-prod"
 	}
-	if len(failIDs) > 0 {
-		check.Reachability = probe.ReachFail
-		check.Detail = fmt.Sprintf("failing: %s", strings.Join(failIDs, ", "))
-	} else {
-		check.Reachability = probe.ReachOK
-		check.Detail = "no failing prod targets"
-	}
+	check.Reachability, check.Detail = prodMatrixVerdict(probed, failIDs, env.NginxBase)
 	out = append(out, check)
 	return out
+}
+
+// prodMatrixVerdict judges the prod matrix check: any failing target fails it;
+// a matrix that probed no target measured nothing, so it is unknown, not OK
+// (TD-230).
+func prodMatrixVerdict(probed int, failIDs []string, base string) (probe.Reachability, string) {
+	if len(failIDs) > 0 {
+		return probe.ReachFail, fmt.Sprintf("failing: %s", strings.Join(failIDs, ", "))
+	}
+	if probed == 0 {
+		return probe.ReachUnknown, fmt.Sprintf("no prod targets probed via %s", base)
+	}
+	return probe.ReachOK, "no failing prod targets"
 }
 
 func (s *Service) collectPlatformStgChecks(ctx context.Context) []GateCheck {
@@ -782,6 +849,14 @@ func appendUnique(ss []string, s string) []string {
 
 func (s *Service) responseFromRecord(ctx context.Context, tier GateTier, rec ReleaseGateRecord, now time.Time) ReleaseGateResponse {
 	blockers := narrativeBlockers(tier, s.cfg, rec)
+	if rec.Result == "pass" && !rec.At.IsZero() {
+		maxAge := s.releaseGateMaxAge()
+		if age := now.Sub(rec.At); age > maxAge {
+			blockers = append(blockers, fmt.Sprintf(
+				"Release gate passed %s ago (older than %s) — re-run the gate",
+				formatGateAge(age), formatGateAge(maxAge)))
+		}
+	}
 	ready := rec.Result == "pass" && len(blockers) == 0
 	reach := probe.ReachOK
 	if rec.Result == "fail" {
@@ -826,7 +901,13 @@ func (s *Service) GateHistory(tier GateTier) ([]ReleaseGateRecord, error) {
 
 func narrativeBlockers(tier GateTier, cfg *config.Config, rec ReleaseGateRecord) []string {
 	var blockers []string
-	if rec.Result != "pass" {
+	switch rec.Result {
+	case "pass":
+	case GateResultInconclusive:
+		blockers = append(blockers, fmt.Sprintf(
+			"Release gate inconclusive: required check(s) not measured: %s",
+			strings.Join(unmeasuredRequired(rec.Checks), ", ")))
+	default:
 		blockers = append(blockers, "Release gate checks failed")
 	}
 	if IsPlatformTier(tier) {
