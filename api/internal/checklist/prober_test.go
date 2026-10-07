@@ -19,7 +19,7 @@ func fakePlatform(t *testing.T, override map[string]string) *httptest.Server {
 		"/console/":       `<html></html>`,
 		"/api/v1/gitops/apps": `{"reachability":"ok","detail":"argocd-server ready","apps":[
 			{"name":"app-a","sync_status":"Synced","health_status":"Healthy"},
-			{"name":"app-b","sync_status":"Synced","health_status":"Healthy"}]}`,
+			{"name":"app-b","sync_status":"Synced","health_status":"Progressing"}]}`,
 		"/api/v1/agent/bridge": `{"runners":[{"url":"http://r1","role":"primary","status":"ok"},{"url":"http://r2","role":"standby","status":"ok"}],
 			"git_bridge":{"status":"ok"},"satellite_probe_bridge":{"status":"not_configured"}}`,
 		"/api/v1/cluster/postgres/backup-status": `{"signal":"ok","detail":"daily · last completed 1h ago"}`,
@@ -176,5 +176,22 @@ func TestProberMergesFreshSignalsWithoutDispatch(t *testing.T) {
 		if s.Stale || s.ObservedAt == "" {
 			t.Errorf("%s: stale=%v observed_at=%q", s.ItemID, s.Stale, s.ObservedAt)
 		}
+	}
+}
+
+func TestProberWaitsForItsOwnListener(t *testing.T) {
+	srv := fakePlatform(t, nil)
+	defer srv.Close()
+	p := testProber(srv)
+	start := time.Now()
+	p.waitReady(context.Background(), 5*time.Second)
+	if time.Since(start) > time.Second {
+		t.Fatalf("waitReady took %s against a ready server", time.Since(start))
+	}
+	p.Base = "http://127.0.0.1:1"
+	start = time.Now()
+	p.waitReady(context.Background(), 3*time.Second)
+	if time.Since(start) < 2*time.Second {
+		t.Fatalf("waitReady returned after %s against a closed port", time.Since(start))
 	}
 }

@@ -81,6 +81,9 @@ func envOr(key, def string) string {
 func (h *Handler) StartProber(ctx context.Context, p *Prober, interval time.Duration) {
 	slog.Info("checklist prober on", "interval", interval.String(), "base", p.Base, "env", p.Env)
 	go func() {
+		// The prober starts before the listener it reads; a first run against a
+		// closed port reports unknown for everything it asked.
+		p.waitReady(ctx, 2*time.Minute)
 		t := time.NewTicker(interval)
 		defer t.Stop()
 		for {
@@ -177,16 +180,25 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 	} else if argo.Reachability != "ok" || len(argo.Apps) == 0 {
 		add("argo-apps", SignalUnknown, "argocd "+argo.Reachability+": "+argo.Detail)
 	} else {
-		off := []string{}
+		// Progressing is a rollout in flight, not a fault: Argo turns a rollout
+		// that misses its deadline into Degraded on its own.
+		off, moving := []string{}, []string{}
 		for _, a := range argo.Apps {
-			if a.Sync != "Synced" || a.Health != "Healthy" {
+			switch {
+			case a.Sync == "Synced" && a.Health == "Healthy":
+			case a.Sync == "Synced" && a.Health == "Progressing":
+				moving = append(moving, a.Name)
+			default:
 				off = append(off, a.Name+" "+a.Sync+"/"+a.Health)
 			}
 		}
-		if len(off) == 0 {
-			add("argo-apps", SignalOK, fmt.Sprintf("%d app(s) Synced/Healthy", len(argo.Apps)))
-		} else {
+		switch {
+		case len(off) > 0:
 			add("argo-apps", SignalDegraded, strings.Join(off, " · "))
+		case len(moving) > 0:
+			add("argo-apps", SignalOK, fmt.Sprintf("%d app(s) Synced; progressing: %s", len(argo.Apps), strings.Join(moving, ", ")))
+		default:
+			add("argo-apps", SignalOK, fmt.Sprintf("%d app(s) Synced/Healthy", len(argo.Apps)))
 		}
 	}
 
@@ -353,6 +365,21 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 	}
 
 	return out
+}
+
+// waitReady polls Base/health until it answers 200 or max passes.
+func (p *Prober) waitReady(ctx context.Context, max time.Duration) {
+	deadline := time.Now().Add(max)
+	for time.Now().Before(deadline) {
+		if sig, _ := p.httpOK(ctx, p.Base+"/health"); sig == SignalOK {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 func (p *Prober) getJSON(ctx context.Context, path string, v any) error {
