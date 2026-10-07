@@ -21,6 +21,7 @@ func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	entry := cfg.DefaultCluster()
 	svc := NewService(entry)
 	svc.SetAppEnvs(cfg.AppEnvs())
+	svc.SetOpsContextPath(cfg.OpsContextPath)
 	return &Handler{svc: svc, audit: audit}
 }
 
@@ -88,6 +89,20 @@ func (h *Handler) HandleRepairPostgresWalStore(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusAccepted, resp)
+}
+
+func (h *Handler) HandleSweepExpiredFailedBackups(w http.ResponseWriter, r *http.Request) {
+	resp, err := h.svc.SweepExpiredFailedBackupCRs(r.Context())
+	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
+	if err != nil {
+		resp.OK = false
+		if resp.Message == "" {
+			resp.Message = err.Error()
+		}
+		writeJSON(w, http.StatusBadGateway, resp)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) HandleRedisStatus(w http.ResponseWriter, r *http.Request) {

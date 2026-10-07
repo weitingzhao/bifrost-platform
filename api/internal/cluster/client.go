@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -24,6 +25,13 @@ type Service struct {
 	primaryOverride string // unit tests only
 	// minioHealthProbe replaces the HTTP check of an external MinIO (unit tests only).
 	minioHealthProbe func(ctx context.Context, endpoint string) (int, error)
+	// dynamicFactory replaces the CRD client (unit tests only).
+	dynamicFactory func() (dynamic.Interface, error)
+	// opsContextPath is the spine file (ops-context.yaml). Empty means D10
+	// stays BLOCKED: the scale guard fails closed.
+	opsContextPath string
+	// d10StatusFn overrides the spine read (unit tests only).
+	d10StatusFn func() string
 	// appEnvs are the application environments from environments.yaml; the
 	// probes iterate their namespaces and databases instead of Go literals.
 	appEnvs []config.AppEnv
@@ -48,6 +56,16 @@ func (s *Service) AppNamespaces() []string {
 // SetClientFactoryForTest injects a fake kubernetes client (unit tests only).
 func (s *Service) SetClientFactoryForTest(factory func() (kubernetes.Interface, string, error)) {
 	s.clientFactory = factory
+}
+
+// SetDynamicFactoryForTest injects a fake dynamic client (unit tests only).
+func (s *Service) SetDynamicFactoryForTest(factory func() (dynamic.Interface, error)) {
+	s.dynamicFactory = factory
+}
+
+// SetOpsContextPath is the spine file the D10 scale guard reads.
+func (s *Service) SetOpsContextPath(path string) {
+	s.opsContextPath = path
 }
 
 func (s *Service) Entry() *config.ClusterEntry {

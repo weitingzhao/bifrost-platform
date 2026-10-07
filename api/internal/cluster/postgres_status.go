@@ -164,6 +164,9 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 }
 
 func (s *Service) buildDynamicClient() (dynamic.Interface, error) {
+	if s.dynamicFactory != nil {
+		return s.dynamicFactory()
+	}
 	cfg, _, err := s.RestConfig()
 	if err != nil {
 		return nil, err

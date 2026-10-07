@@ -145,9 +145,10 @@ func (s *Service) Scale(ctx context.Context, req ScaleRequest) (ActuationRespons
 	if deploy.Spec.Replicas != nil {
 		current = *deploy.Spec.Replicas
 	}
-	// D10 freeze: block Trade daemon scale-up from zero (MCP / Console bypass of GitOps overlays).
-	if req.Name == "daemon" && current == 0 && req.Replicas > 0 {
-		err := fmt.Errorf("Trading execution is BLOCKED (D10). Daemon scale-up requires Owner unlock.")
+	// D10 freeze: any replica increase of the Trade daemon is refused until
+	// spine decisions[id=D10].status is UNLOCKED. Scale-down stays allowed.
+	// Fail closed when the spine cannot be read (same field preflight.js reads).
+	if err := s.refuseDaemonScaleUp(req.Name, current, req.Replicas); err != nil {
 		return ActuationResponse{OK: false, Action: "scale", Target: req.Target(), Message: err.Error(), GeneratedAt: now}, err
 	}
 	changed := current != req.Replicas

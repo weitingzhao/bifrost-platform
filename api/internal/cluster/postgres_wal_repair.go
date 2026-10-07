@@ -3,16 +3,20 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 const (
@@ -27,10 +31,14 @@ var (
 	uncompressedHistoryName = regexp.MustCompile(`(?i)^[0-9a-f]{8}\.history$`)
 	historyGZName           = regexp.MustCompile(`(?i)^[0-9a-f]{8}\.history\.gz$`)
 	safeBackupCRName        = regexp.MustCompile(`^bifrost-postgres-[a-z0-9][-a-z0-9]*$`)
+	// failedBackupMaxAge is how long a failed Backup CR is kept for a postmortem.
+	// The sweep removes only those strictly older than this.
+	failedBackupMaxAge = 30 * 24 * time.Hour
 )
 
 // PostgresWalRepairResponse is the Autopilot / Agent actuation for MinIO WAL
-// object-store repair + stuck Backup CR cleanup + on-demand Backup.
+// object-store repair + an on-demand Backup. It does not delete Backup CRs
+// (TD-131); SweepExpiredFailedBackupCRs removes failed ones older than 30 days.
 type PostgresWalRepairResponse struct {
 	ActuationResponse
 	MinIOReady      bool     `json:"minio_ready"`
@@ -179,16 +187,6 @@ func (s *Service) RepairPostgresWalStore(ctx context.Context) (PostgresWalRepair
 		}
 	}
 
-	deleted, err := s.deleteStuckBackupCRs(ctx)
-	if err != nil {
-		resp.Message = err.Error()
-		return resp, err
-	}
-	resp.DeletedBackups = deleted
-	if len(deleted) > 0 {
-		resp.Changed = true
-	}
-
 	trig, trigErr := s.TriggerPostgresBackup(ctx)
 	if trigErr != nil {
 		resp.Message = "wal store repaired but trigger backup failed: " + trigErr.Error()
@@ -207,9 +205,6 @@ func (s *Service) RepairPostgresWalStore(ctx context.Context) (PostgresWalRepair
 	}
 	if len(resp.ClearedObjects) > 0 {
 		parts = append(parts, fmt.Sprintf("cleared %d object(s)", len(resp.ClearedObjects)))
-	}
-	if len(resp.DeletedBackups) > 0 {
-		parts = append(parts, fmt.Sprintf("deleted stuck Backup %s", strings.Join(resp.DeletedBackups, ",")))
 	}
 	if resp.TriggeredBackup != "" {
 		parts = append(parts, "created "+resp.TriggeredBackup)
@@ -380,24 +375,114 @@ func (s *Service) repairMinioWALObjects(ctx context.Context, resp *PostgresWalRe
 	return nil
 }
 
-func (s *Service) deleteStuckBackupCRs(ctx context.Context) ([]string, error) {
+// FailedBackupSweepResponse is the separate cleanup for failed Backup CRs
+// older than failedBackupMaxAge. Recent failures stay on the cluster.
+type FailedBackupSweepResponse struct {
+	ActuationResponse
+	DeletedBackups []string `json:"deleted_backups,omitempty"`
+}
+
+// pickExpiredFailedBackupNames returns safe bifrost-postgres Backup names in
+// phase failed or walArchivingFailing whose creation time is strictly older
+// than maxAge. A missing creation time is kept (fail closed: do not erase a
+// record we cannot age). Completed and in-progress backups are never selected.
+func pickExpiredFailedBackupNames(items []unstructured.Unstructured, now time.Time, maxAge time.Duration) []string {
+	var out []string
+	for i := range items {
+		name := strings.TrimSpace(items[i].GetName())
+		if !isSafeBackupCRName(name) {
+			continue
+		}
+		phase := strings.ToLower(strings.TrimSpace(stringFromUnstructured(&items[i], "status", "phase")))
+		if !isStuckBackupPhase(phase) {
+			continue
+		}
+		created := items[i].GetCreationTimestamp().Time
+		if created.IsZero() || !now.After(created.Add(maxAge)) {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// SweepExpiredFailedBackupCRs deletes failed Backup CRs older than 30 days.
+// RepairPostgresWalStore does not call this.
+func (s *Service) SweepExpiredFailedBackupCRs(ctx context.Context) (FailedBackupSweepResponse, error) {
+	return s.sweepExpiredFailedBackupCRs(ctx, time.Now().UTC())
+}
+
+func (s *Service) sweepExpiredFailedBackupCRs(ctx context.Context, now time.Time) (FailedBackupSweepResponse, error) {
+	resp := FailedBackupSweepResponse{
+		ActuationResponse: ActuationResponse{
+			Action:      "sweep_expired_failed_backups",
+			Target:      cnpgNamespace + "/backups",
+			GeneratedAt: now,
+		},
+	}
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
-		return nil, err
+		resp.Message = err.Error()
+		return resp, err
 	}
 	list, err := dyn.Resource(cnpgBackupGVR).Namespace(cnpgNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("list backups: %w", err)
+		resp.Message = err.Error()
+		return resp, fmt.Errorf("list backups: %w", err)
 	}
-	names := pickStuckBackupNames(list.Items)
+	names := pickExpiredFailedBackupNames(list.Items, now, failedBackupMaxAge)
 	var deleted []string
 	for _, name := range names {
-		if err := dyn.Resource(cnpgBackupGVR).Namespace(cnpgNamespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-			return deleted, fmt.Errorf("delete Backup %s: %w", name, err)
+		err := dyn.Resource(cnpgBackupGVR).Namespace(cnpgNamespace).Delete(ctx, name, metav1.DeleteOptions{})
+		if apierrors.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			resp.DeletedBackups = deleted
+			resp.Message = err.Error()
+			return resp, fmt.Errorf("delete Backup %s: %w", name, err)
 		}
 		deleted = append(deleted, name)
 	}
-	return deleted, nil
+	resp.DeletedBackups = deleted
+	resp.OK = true
+	resp.Changed = len(deleted) > 0
+	if len(deleted) == 0 {
+		resp.Message = "no failed Backup older than 30 days"
+		return resp, nil
+	}
+	resp.Message = fmt.Sprintf("deleted failed Backup older than 30 days: %s", strings.Join(deleted, ","))
+	return resp, nil
+}
+
+// StartFailedBackupSweep runs the 30-day cleanup once a day when
+// PLATFORM_BACKUP_CR_SWEEP=1 (PROD platform-workers). Other processes,
+// including STG, leave Backup CRs alone.
+func (s *Service) StartFailedBackupSweep(ctx context.Context) {
+	if strings.TrimSpace(os.Getenv("PLATFORM_BACKUP_CR_SWEEP")) != "1" {
+		return
+	}
+	safego.Go("cluster.failedBackupSweep", func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		run := func() {
+			resp, err := s.SweepExpiredFailedBackupCRs(ctx)
+			if err != nil {
+				slog.Warn("failed backup sweep", "err", err, "message", resp.Message)
+				return
+			}
+			slog.Info("failed backup sweep", "deleted", len(resp.DeletedBackups), "message", resp.Message)
+		}
+		run()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	})
 }
 
 func (s *Service) readWalArchivingDetail(ctx context.Context) string {

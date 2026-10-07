@@ -55,9 +55,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
-	"github.com/weitingzhao/bifrost-platform/api/internal/trustoverrides"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/trustoverrides"
 	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
 )
 
@@ -155,6 +155,7 @@ func New(cfg *config.Config) (*Server, error) {
 		"note", "workers must stay a singleton — the loops keep per-process last-run state")
 	if role.RunsWorkers() {
 		clusterH.Service().StartDataCloneScheduler(context.Background())
+		clusterH.Service().StartFailedBackupSweep(context.Background())
 	}
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
@@ -576,6 +577,7 @@ func (s *Server) Router() http.Handler {
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
 				r.Post("/postgres/backup", s.cluster.HandleTriggerPostgresBackup)
 				r.Post("/postgres/wal-store/repair", s.cluster.HandleRepairPostgresWalStore)
+				r.Post("/postgres/backups/sweep-failed", s.cluster.HandleSweepExpiredFailedBackups)
 				r.Post("/workloads/rollout-restart", s.cluster.HandleRolloutRestart)
 				r.Post("/workloads/scale", s.cluster.HandleScale)
 				r.Post("/nodes/{name}/wake", s.cluster.HandleWakeNode)
