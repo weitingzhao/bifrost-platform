@@ -95,11 +95,6 @@ Next steps (Owner):
 5. Verify from Mac Pro:
    curl -s http://${AGENT_IP_HINT}:8781/health
 
-6. Optional — install nightly launchd (after manual test):
-   cp agent/schedules/com.bifrost.nightly-agent.plist ~/Library/LaunchAgents/
-   # Edit plist paths if not using ~/Desktop/stocks
-   launchctl load ~/Library/LaunchAgents/com.bifrost.nightly-agent.plist
-
 EOF
 }
 

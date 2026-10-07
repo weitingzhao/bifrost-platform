@@ -145,6 +145,22 @@ func TestProberRedWhenTheClusterSaysSo(t *testing.T) {
 	}
 }
 
+func TestProberUnsetBridgesAreLocalOnly(t *testing.T) {
+	srv := fakePlatform(t, map[string]string{
+		"/api/v1/agent/bridge": `{"runners":[{"role":"primary","status":"ok"}],"git_bridge":{"status":"not_configured"},"satellite_probe_bridge":{"status":"not_configured"}}`,
+	})
+	defer srv.Close()
+	got := bySignalID(testProber(srv).Probe(context.Background()))
+	for _, id := range []string{"git-bridge", "mac-probe-bridge"} {
+		if got[id].Signal != SignalUnknown {
+			t.Errorf("%s = %s, unset bridge must be unknown", id, got[id].Signal)
+		}
+		if got[id].Detail != localOnlyBridgeDetail {
+			t.Errorf("%s detail = %q, want %q", id, got[id].Detail, localOnlyBridgeDetail)
+		}
+	}
+}
+
 func TestProberUnknownWhenARouteCannotBeRead(t *testing.T) {
 	srv := fakePlatform(t, map[string]string{"/api/v1/cluster": "500", "/api/v1/matrix": "500"})
 	defer srv.Close()

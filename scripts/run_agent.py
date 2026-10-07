@@ -4,14 +4,12 @@
 Subcommands:
   start       remediation runner dev sidecar (default)
   drift       Layer 1–3 scan, no report file
-  nightly     nightly drift report + optional Cursor briefing
-  deploy      deploy runner + nightly to Mac Mini [user@host]
+  deploy      deploy runner to Mac Mini [user@host]
   bootstrap   one-time Mac Mini host bootstrap (run on Mini via Screen Sharing)
 
 Usage:
   python scripts/run_agent.py start
   python scripts/run_agent.py drift
-  python scripts/run_agent.py nightly
   python scripts/run_agent.py deploy vision@192.168.10.50
   python scripts/run_agent.py bootstrap
 
@@ -271,9 +269,6 @@ def main() -> int:
 
     sub.add_parser("drift", help="Layer 1–3 drift scan").set_defaults(
         func=lambda _a: _run_shell("drift_scan.sh")
-    )
-    sub.add_parser("nightly", help="nightly drift report").set_defaults(
-        func=lambda _a: _run_shell("nightly_drift.sh")
     )
 
     deploy_p = sub.add_parser("deploy", help="deploy to Mac Mini agent host")

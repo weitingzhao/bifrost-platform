@@ -67,6 +67,19 @@ test('health turns degraded after N consecutive failures and recovers on a succe
   assert.equal(gatewayHealth(registry, store).status, 'ok')
 })
 
+test('LANE-A5: deploy artifacts do not schedule the retired 03:00 jobs', () => {
+  // Split so the source does not contain the retired labels as one token.
+  const retired = ['nightly-' + 'health-check', 'nightly-' + 'drift', 'nightly_' + 'drift']
+  const deployDir = path.resolve(GATEWAY_DIR, '..', 'deploy')
+  const scheduled = fs.readdirSync(deployDir).filter(n => retired.some(s => n.includes(s)))
+  assert.deepEqual(scheduled, [])
+  const skills = fs.readFileSync(REPO_SKILLS_YAML, 'utf8')
+  assert.equal(retired.some(s => skills.includes(s)), false)
+  const scriptsDir = path.resolve(GATEWAY_DIR, '..', '..', 'scripts', 'agent')
+  const jobScripts = fs.readdirSync(scriptsDir).filter(n => retired.some(s => n.includes(s)))
+  assert.deepEqual(jobScripts, [])
+})
+
 test('TD-251: no enabled skill runs a script a launchd plist already runs', () => {
   const registry = new SkillRegistry(REPO_SKILLS_YAML)
   const deployDir = path.resolve(GATEWAY_DIR, '..', 'deploy')

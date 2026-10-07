@@ -245,11 +245,17 @@ func setGitBridgeAuth(req *http.Request) {
 	}
 }
 
+// localOnlyBridgeText is returned when GIT_BRIDGE_URL or
+// SATELLITE_PROBE_BRIDGE_URL is unset. Those bridges run on a dev
+// workstation; an unset URL is not a failure.
+const localOnlyBridgeText = "local-only (dev workstation)"
+
 func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
 	url := strings.TrimRight(strings.TrimSpace(os.Getenv("GIT_BRIDGE_URL")), "/")
 	if url == "" {
 		return GitBridgeStatus{
 			Status: "not_configured",
+			Error:  localOnlyBridgeText,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/status", nil)
@@ -316,6 +322,7 @@ func probeSatelliteProbeBridge(ctx context.Context, client *http.Client) Satelli
 	if url == "" {
 		return SatelliteProbeBridgeStatus{
 			Status: "not_configured",
+			Error:  localOnlyBridgeText,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/health", nil)

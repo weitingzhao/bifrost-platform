@@ -243,8 +243,8 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 		default:
 			add("runners-ha", SignalFail, strings.Join(parts, " · "))
 		}
-		add("git-bridge", bridgeSignal(br.GitBridge.Status), joinDetail("git_bridge "+br.GitBridge.Status, br.GitBridge.Error))
-		add("mac-probe-bridge", bridgeSignal(br.ProbeBridge.Status), joinDetail("probe_bridge "+br.ProbeBridge.Status, br.ProbeBridge.Error))
+		add("git-bridge", bridgeSignal(br.GitBridge.Status), bridgeDetail(br.GitBridge.Status, "git_bridge", br.GitBridge.Error))
+		add("mac-probe-bridge", bridgeSignal(br.ProbeBridge.Status), bridgeDetail(br.ProbeBridge.Status, "probe_bridge", br.ProbeBridge.Error))
 	}
 
 	// db-backup-fresh
@@ -445,6 +445,11 @@ func reachSignal(r string) string {
 	}
 }
 
+// localOnlyBridgeDetail is the checklist text when a workstation bridge is not
+// configured. Git Bridge and the Mac probe bridge are local tools, not a
+// cluster feature, so an unset URL is unknown rather than a failure.
+const localOnlyBridgeDetail = "local-only (dev workstation)"
+
 // bridgeSignal: a bridge that is not configured for this seat is unknown, not
 // a failure.
 func bridgeSignal(status string) string {
@@ -452,6 +457,13 @@ func bridgeSignal(status string) string {
 		return SignalUnknown
 	}
 	return reachSignal(status)
+}
+
+func bridgeDetail(status, head, err string) string {
+	if strings.EqualFold(strings.TrimSpace(status), "not_configured") {
+		return localOnlyBridgeDetail
+	}
+	return joinDetail(head+" "+status, err)
 }
 
 func joinDetail(head, err string) string {

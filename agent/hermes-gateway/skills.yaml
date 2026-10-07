@@ -15,18 +15,6 @@ skills:
     timeout_ms: 30000
     tags: ["self-healing", "agent-infra"]
 
-  - id: nightly-drift-scan
-    label: "Nightly Drift Scan"
-    description: "Pre-market infrastructure drift scan — checks K3s cluster, services, configs against expected state and generates a report"
-    trigger: cron
-    schedule: "0 6 * * 1-5"
-    actuation_level: L1
-    # TD-251: launchd runs this on the Minis (agent/deploy/*.plist); one runner per job.
-    status: disabled
-    script: "nightly_drift.sh"
-    timeout_ms: 300000
-    tags: ["observability", "drift"]
-
   - id: stale-pipeline-triage
     label: "Stale Pipeline Triage"
     description: "L0 read-only pre-drift check — classify deliver-stg pipeline fail vs STG smoke green (stale-fail track)"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy agent stack (remediation-runner + Nous Hermes MCP + nightly drift) to Mac Mini,
+# Deploy agent stack (remediation-runner + Nous Hermes MCP) to Mac Mini,
 # and on the primary the Nous Hermes dashboard's launchd job (ai.hermes.dashboard).
 # Invoked by: python scripts/run_agent.py deploy · Console Operator Plane → Update primary/standby
 #
@@ -10,7 +10,7 @@ set -euo pipefail
 REMOTE="${1:-vision@192.168.10.50}"
 REMOTE_DIR="/Users/vision/bifrost-agent"
 # Mutual-watchdog / Active-Standby config (env-driven, optional):
-#   AGENT_ROLE  primary | standby   (default primary; standby disables nightly-drift)
+#   AGENT_ROLE  primary | standby   (default primary)
 #   PEER_SSH    vision@192.168.10.52 (peer SSH target for watchdog restart)
 #   PEER_URL    http://192.168.10.52:8781 (peer runner base URL for health probe)
 #   PEER_RELAY_URL http://192.168.10.50:8783/api/v1/alerts/relay — set only when
@@ -232,24 +232,11 @@ if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   rm -f "${TMP_ENV}"
 fi
 
-echo "==> Installing launchd + nightly_drift.sh"
+echo "==> Installing remediation-runner launchd"
 run_scp "${DEPLOY_DIR}/com.bifrost.remediation-runner.plist" "${REMOTE}:~/Library/LaunchAgents/"
-run_scp "${DEPLOY_DIR}/com.bifrost.nightly-drift.plist" "${REMOTE}:~/Library/LaunchAgents/"
-run_scp "${SCRIPT_DIR}/nightly_drift.sh" "${REMOTE}:${REMOTE_DIR}/nightly_drift.sh"
-run_remote "chmod +x ${REMOTE_DIR}/nightly_drift.sh"
 
 run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.remediation-runner 2>/dev/null || true"
 run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.remediation-runner.plist"
-
-# nightly-drift runs on the PRIMARY only; standby keeps it disabled to avoid
-# duplicate scans / NAS write contention.
-if [[ "${AGENT_ROLE}" == "standby" ]]; then
-  echo "==> AGENT_ROLE=standby — disabling nightly-drift on this host"
-  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.nightly-drift 2>/dev/null || true"
-else
-  run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.nightly-drift 2>/dev/null || true"
-  run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.nightly-drift.plist"
-fi
 
 # Mutual watchdog — only install if peer config is provided.
 if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
@@ -423,9 +410,6 @@ fi
 
 echo ""
 echo "==> Done. role=${AGENT_ROLE} version=${RUNNER_VER}"
-if [[ "${AGENT_ROLE}" != "standby" ]]; then
-  echo "    Nightly 3:00 AM → ${REMOTE_DIR}/nightly_drift.sh"
-fi
 if [[ "${HERMES_OK}" == "true" ]]; then
   echo "    Nous Hermes Agent v${HERMES_VER} → http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT} (gateway: ${HERMES_GW})"
 fi

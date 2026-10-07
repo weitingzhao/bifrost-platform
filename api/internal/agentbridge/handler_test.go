@@ -49,8 +49,14 @@ func TestHandleBridgeNotConfiguredProbesReturnStatus(t *testing.T) {
 	if resp.GitBridge.Status != "not_configured" {
 		t.Fatalf("GitBridge.Status = %q, want not_configured", resp.GitBridge.Status)
 	}
+	if resp.GitBridge.Error != localOnlyBridgeText {
+		t.Fatalf("GitBridge.Error = %q, want %q", resp.GitBridge.Error, localOnlyBridgeText)
+	}
 	if resp.SatelliteProbeBridge.Status != "not_configured" {
 		t.Fatalf("SatelliteProbeBridge.Status = %q, want not_configured", resp.SatelliteProbeBridge.Status)
+	}
+	if resp.SatelliteProbeBridge.Error != localOnlyBridgeText {
+		t.Fatalf("SatelliteProbeBridge.Error = %q, want %q", resp.SatelliteProbeBridge.Error, localOnlyBridgeText)
 	}
 	if resp.HermesMcp.Status != "not_configured" {
 		t.Fatalf("HermesMcp.Status = %q, want not_configured", resp.HermesMcp.Status)

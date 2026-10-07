@@ -92,27 +92,6 @@ def project_wave_status(spine_index: int, done: int, ready: int, status: str) ->
     return "pending"
 
 
-def read_yaml_stream(platform: Path, stream_id: str) -> dict[str, Any] | None:
-    """Parse a single automate stream block from ops-context.yaml (lightweight)."""
-    yaml_path = platform / "config/ops-context.yaml"
-    if not yaml_path.is_file():
-        return None
-    text = yaml_path.read_text(encoding="utf-8")
-    pattern = (
-        rf"- id: {re.escape(stream_id)}\n"
-        r"[^\n]*\n"
-        r"[^\n]*\n"
-        r"[^\n]*\n"
-        r"\s+total: (\d+)\n"
-        r"\s+done: (\d+)\n"
-        r"\s+status: (\w+)"
-    )
-    m = re.search(pattern, text)
-    if not m:
-        return None
-    return {"total": int(m.group(1)), "done": int(m.group(2)), "status": m.group(3)}
-
-
 def fetch_context(base_url: str) -> tuple[dict[str, Any] | None, str]:
     url = base_url.rstrip("/") + "/api/v1/context"
     req = urllib.request.Request(url, headers={"Accept": "application/json"})
@@ -124,16 +103,6 @@ def fetch_context(base_url: str) -> tuple[dict[str, Any] | None, str]:
         return None, f"HTTP {exc.code}: {body}"
     except urllib.error.URLError as exc:
         return None, str(exc.reason)
-
-
-def find_automate_stream(context: dict[str, Any], stream_id: str) -> dict[str, Any] | None:
-    tracks = context.get("tracks") or {}
-    automate = tracks.get("automate") or {}
-    streams = automate.get("streams") or []
-    for s in streams:
-        if s.get("id") == stream_id:
-            return s
-    return None
 
 
 def find_migrate_stream(context: dict[str, Any], stream_id: str) -> dict[str, Any] | None:
@@ -510,21 +479,6 @@ def main() -> int:
                         f"visionSpineMap spineMilestoneId `{spine_id}` missing from API milestones",
                     )
                 )
-
-        yaml_stream = read_yaml_stream(platform, "nightly-drift-scan")
-        api_stream = find_automate_stream(context, "nightly-drift-scan")
-        if yaml_stream and api_stream:
-            for field in ("total", "done", "status"):
-                yaml_val = yaml_stream.get(field)
-                api_val = api_stream.get(field)
-                if yaml_val is not None and api_val is not None and yaml_val != api_val:
-                    findings.append(
-                        Finding(
-                            "track_stream",
-                            f"nightly-drift-scan {field}: yaml `{yaml_val}` ≠ API `{api_val}` "
-                            "(platform-api may need restart to reload ops-context.yaml)",
-                        )
-                    )
 
         # Migrate-wave reconcile gate (L3 — catalog waves vs spine progress)
         findings.extend(check_trade_k8s_reconcile(context, platform))

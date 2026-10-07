@@ -36,7 +36,7 @@ export function buildOperatorInitBrief(req: StartRunRequest): string {
     lines.push(`Scope: ${scope}`, '')
   }
 
-  if (req.scope === 'agent-desk' || req.scope === 'nightly-drift-autofix' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'research-deploy' || req.scope === 'plugin-launch' || req.scope === 'plugin-runtime-remediate' || req.scope === 'agent-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover' || req.scope === 'data-layer-backup' || req.scope === 'data-layer-clone') {
+  if (req.scope === 'agent-desk' || req.scope === 'release' || req.scope === 'release-fix' || req.scope === 'operator-plane-remediate' || req.scope === 'git-dirty-remediate' || req.scope === 'deliver-stg-recover' || req.scope === 'trade-release-fix' || req.scope === 'trade-deploy' || req.scope === 'research-deploy' || req.scope === 'plugin-launch' || req.scope === 'plugin-runtime-remediate' || req.scope === 'agent-launch' || req.scope === 'gitops-config-repair' || req.scope === 'defect-pattern-remediate' || req.scope === 'stale-pipeline-triage' || req.scope === 'platform-self-health-recover' || req.scope === 'registry-pull-recover' || req.scope === 'satellite-bus-ingest-triage' || req.scope === 'daily-ops-checklist-run' || req.scope === 'massive-feed-recover' || req.scope === 'data-layer-recover' || req.scope === 'data-layer-backup' || req.scope === 'data-layer-clone') {
     const userPrompt = req.prompt?.trim() ?? ''
     if (userPrompt !== '') lines.push(userPrompt)
     return lines.join('\n').trim()
@@ -86,26 +86,6 @@ function buildAgentDeskPrompt(req: StartRunRequest): string {
   }
 
   lines.push('Begin now. Work autonomously until done or blocked on operator approval.')
-  return lines.join('\n')
-}
-
-function buildNightlyDriftAutofixPrompt(req: StartRunRequest): string {
-  const body = req.prompt?.trim() ?? ''
-  const lines: string[] = [
-    'You are a bifrost-platform engineering agent. The Owner approved this nightly drift auto-fix.',
-    '',
-    '## Rules',
-    '- Edit bifrost-platform only (catalog TS, ops-context.yaml, drift scanners, docs paths).',
-    '- Do NOT apply cluster changes (no delete_pod, rollout, drain).',
-    '- Create git branch `agent/drift-YYYYMMDD`, commit with clear messages.',
-    '- If git remote exists, push and print `gh pr create` command or PR URL.',
-    '- If unsure, document recommended manual fix instead of guessing.',
-    '',
-    '## Approved task',
-    body !== '' ? body : '(missing proposal body)',
-    '',
-    'Complete the fix and report: branch, commits, PR steps.',
-  ]
   return lines.join('\n')
 }
 
@@ -406,9 +386,6 @@ export function buildRemediationPrompt(req: StartRunRequest): string {
   }
   if (req.scope === 'release-fix') {
     return buildReleaseFixPrompt(req)
-  }
-  if (req.scope === 'nightly-drift-autofix') {
-    return buildNightlyDriftAutofixPrompt(req)
   }
   if (req.scope === 'deliver-stg-recover') {
     return buildDeliverStgRecoverRunnerPrompt(req)
