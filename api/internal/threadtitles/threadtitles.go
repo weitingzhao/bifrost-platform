@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -155,6 +156,26 @@ func (s *Store) SetManual(ctx context.Context, session, title string, now time.T
 		t.Manual[session] = Entry{Title: title, At: now}
 		return true
 	})
+}
+
+var transcriptID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// ReportTranscript records the title a session reported for its own transcript
+// (Claude Code Stop hook). It writes the same map the workstation syncer does.
+func (s *Store) ReportTranscript(ctx context.Context, transcript, title string, now time.Time) error {
+	transcript = strings.TrimSpace(transcript)
+	title = strings.TrimSpace(title)
+	if !transcriptID.MatchString(transcript) {
+		return fmt.Errorf("transcript must be a session uuid")
+	}
+	if title == "" {
+		return fmt.Errorf("title is required")
+	}
+	if len([]rune(title)) > maxTitle {
+		return fmt.Errorf("title longer than %d characters", maxTitle)
+	}
+	_, err := s.MergeTranscripts(ctx, map[string]Entry{transcript: {Title: title, At: now}})
+	return err
 }
 
 // MergeTranscripts writes synced titles that are new or changed; it never

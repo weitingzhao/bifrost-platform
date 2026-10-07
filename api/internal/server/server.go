@@ -271,6 +271,8 @@ func New(cfg *config.Config) (*Server, error) {
 		return out, err
 	}, func(ctx context.Context, session, title string) error {
 		return titleStore.SetManual(ctx, session, title, time.Now().UTC())
+	}).WithTitleReports(func(ctx context.Context, transcript, title string) error {
+		return titleStore.ReportTranscript(ctx, transcript, title, time.Now().UTC())
 	})
 	return srv, nil
 }
@@ -383,6 +385,10 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Put("/lineage/thread-title", s.lineage.HandleSetTitle)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.Require(actuation.RoleReporter))
+			r.Put("/lineage/transcript-title", s.lineage.HandleReportTitle)
 		})
 		r.Get("/releases", s.releases.HandleList)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)

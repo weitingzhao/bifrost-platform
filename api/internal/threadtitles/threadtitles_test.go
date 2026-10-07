@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,6 +105,25 @@ func TestSyncWanted(t *testing.T) {
 		t.Setenv("KUBERNETES_SERVICE_HOST", c.k8s)
 		if got := SyncWanted(c.dir); got != c.want {
 			t.Errorf("%+v: got %v", c, got)
+		}
+	}
+}
+
+func TestReportTranscript(t *testing.T) {
+	core := k8sfake.NewSimpleClientset()
+	s := NewStore("cicd", func() (kubernetes.Interface, error) { return core, nil })
+	ctx := context.Background()
+	now := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	const id = "d09a336c-ef6d-4b7c-abc6-d7e907e428f4"
+	if err := s.ReportTranscript(ctx, id, "  Renamed in Desktop ", now); err != nil {
+		t.Fatal(err)
+	}
+	if tt, _ := s.Load(ctx); tt.Transcripts[id].Title != "Renamed in Desktop" || !tt.Transcripts[id].At.Equal(now) {
+		t.Fatalf("load = %+v", tt.Transcripts)
+	}
+	for _, bad := range []struct{ id, title string }{{"not-a-uuid", "x"}, {id, ""}, {id, strings.Repeat("x", 121)}} {
+		if err := s.ReportTranscript(ctx, bad.id, bad.title, now); err == nil {
+			t.Errorf("accepted %q / %d chars", bad.id, len(bad.title))
 		}
 	}
 }

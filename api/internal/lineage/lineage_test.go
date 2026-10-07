@@ -429,3 +429,23 @@ func TestBranchesStatusAheadBehind(t *testing.T) {
 		t.Fatalf("open branches sort first: %+v", resp.Branches[0])
 	}
 }
+
+func TestReportTitleEndpoint(t *testing.T) {
+	s, _ := newTestService(t)
+	var got [2]string
+	h := NewHandler(s).WithTitleReports(func(_ context.Context, transcript, title string) error {
+		got = [2]string{transcript, title}
+		return nil
+	})
+	rec := httptest.NewRecorder()
+	h.HandleReportTitle(rec, httptest.NewRequest(http.MethodPut, "/api/v1/lineage/transcript-title",
+		strings.NewReader(`{"transcript":"t1","title":"Code 代码- Refactor"}`)))
+	if rec.Code != http.StatusOK || got != [2]string{"t1", "Code 代码- Refactor"} {
+		t.Fatalf("put = %d %v", rec.Code, got)
+	}
+	rec = httptest.NewRecorder()
+	NewHandler(s).HandleReportTitle(rec, httptest.NewRequest(http.MethodPut, "/", strings.NewReader(`{}`)))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured = %d", rec.Code)
+	}
+}

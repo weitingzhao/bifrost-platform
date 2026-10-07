@@ -18,12 +18,13 @@ type cached struct {
 
 // Handler serves GET /api/v1/lineage.
 type Handler struct {
-	svc      *Service
-	mu       sync.Mutex
-	cache    map[int]cached
-	titles   TitlesFunc
-	setTitle SetTitleFunc
-	branches branchesCache
+	svc         *Service
+	mu          sync.Mutex
+	cache       map[int]cached
+	titles      TitlesFunc
+	setTitle    SetTitleFunc
+	reportTitle ReportTitleFunc
+	branches    branchesCache
 }
 
 func NewHandler(svc *Service) *Handler {
