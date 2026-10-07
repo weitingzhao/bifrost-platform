@@ -80,11 +80,16 @@ const FOCUS_TOOLS: Record<string, readonly string[]> = {
 export const SUPPORTED_FOCUS = Object.keys(FOCUS_TOOLS)
 
 /**
- * 返回该 focus 的工具白名单；focus 为空或未知时返回 null（= 注册全量工具）。
- * 未知 focus 走全量而非报错，是为了向后兼容既有配置。
+ * 返回该 focus 的工具白名单；只有 focus 为空时返回 null（= 注册全量工具）。
+ * 未知 focus 抛错：只读桥上一个拼写错误不能悄悄变成全量 operator/admin 工具面（TD-225）。
  */
 export function focusAllowList(focus: string): Set<string> | null {
+  if (focus === '') return null
   const list = FOCUS_TOOLS[focus]
-  if (!list) return null
+  if (!list) {
+    throw new Error(
+      `unknown MCP_BRIDGE_FOCUS "${focus}" (expected one of: ${[...SUPPORTED_FOCUS, 'prometheus'].join(', ')}, or empty for the full server)`,
+    )
+  }
   return new Set<string>([...ALWAYS, ...list])
 }

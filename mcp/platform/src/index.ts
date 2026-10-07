@@ -19,9 +19,15 @@ const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
 if (bridgeFocus === 'prometheus') {
   registerPrometheusBridge(server)
 } else {
-// focus 桥：按领域白名单过滤要注册的工具。focus 为空 → allow=null → 注册全量。
+// focus 桥：按领域白名单过滤要注册的工具。focus 为空 → allow=null → 注册全量；未知 focus → 退出。
 // 白名单定义与授权原则见 focusBridges.ts。
-const allow = focusAllowList(bridgeFocus)
+let allow: Set<string> | null
+try {
+  allow = focusAllowList(bridgeFocus)
+} catch (err) {
+  console.error(`${SERVER_NAME}: ${(err as Error).message}`)
+  process.exit(1)
+}
 // 保留 server.tool 的重载签名，否则各 handler 的解构参数无法从 zod schema 推断类型。
 const reg = ((...args: unknown[]) => {
   if (allow && !allow.has(String(args[0]))) return undefined

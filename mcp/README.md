@@ -15,7 +15,12 @@ npm start
 Token: set `PLATFORM_OPERATOR_TOKEN` in the environment, or leave it unset and — when
 `PLATFORM_API_URL` is loopback — the server reads it from `bifrost-platform/.env`
 (`PLATFORM_TOKEN_ENV_KEY` picks another key, e.g. `PLATFORM_VIEWER_TOKEN` for read-only bridges).
+When `PLATFORM_TOKEN_ENV_KEY` is set, only that key is read — from the environment, then `.env` —
+so an exported `PLATFORM_OPERATOR_TOKEN` cannot widen a read-only bridge.
 There are no default tokens; the old `platform-*-dev` values no longer authenticate.
+
+`MCP_BRIDGE_FOCUS` must be empty (full server) or one of `kubernetes`, `redis`, `postgres`,
+`prometheus`; any other value makes the server exit 1 instead of registering every tool.
 
 Cursor config snippet: **Ops Console → Architecture → MCP Contract → Copy Cursor config**
 

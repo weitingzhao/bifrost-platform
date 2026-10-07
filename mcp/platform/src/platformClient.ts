@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { resolveTokenFrom } from './tokenResolve.js'
 
 const base = process.env.PLATFORM_API_URL?.replace(/\/$/, '') ?? 'http://127.0.0.1:8780'
 
@@ -35,12 +36,7 @@ let cachedToken: string | undefined
 
 function resolveToken(): string {
   if (cachedToken !== undefined) return cachedToken
-  // PLATFORM_TOKEN_ENV_KEY pins a bridge to one role (the read-only bridges name the
-  // viewer key), so an inherited admin token must not stand in for it.
-  const pinnedKey = process.env.PLATFORM_TOKEN_ENV_KEY?.trim() || ''
-  const fromEnv =
-    process.env.PLATFORM_OPERATOR_TOKEN?.trim() || (pinnedKey ? '' : process.env.PLATFORM_ADMIN_TOKEN?.trim() || '')
-  cachedToken = fromEnv || (isLoopbackBase() ? dotenvValue(pinnedKey || 'PLATFORM_OPERATOR_TOKEN') : '')
+  cachedToken = resolveTokenFrom(process.env, isLoopbackBase() ? dotenvValue : () => '')
   return cachedToken
 }
 
