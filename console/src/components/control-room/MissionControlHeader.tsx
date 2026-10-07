@@ -32,6 +32,8 @@ interface MissionControlHeaderProps {
   matrices: MatrixResponse[]
   context?: OpsContextResponse
   dataUpdatedAt: number
+  /** Mission probes that are stale (useMissionSnapshot) — shown beside the board timestamp. */
+  staleSources?: readonly string[]
   /** When false, rocket subsystem cards are omitted (shown under Program context). */
   showRocketSubsystems?: boolean
   onOpenRuntimeMap: OpenRuntimeMapFn
@@ -68,6 +70,7 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
     matrices,
     context,
     dataUpdatedAt,
+    staleSources,
     showRocketSubsystems = true,
     onOpenAgentDesk,
     onOpenRuntimeMap,
@@ -94,6 +97,7 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
         matrices={matrices}
         context={context}
         dataUpdatedAt={dataUpdatedAt}
+        staleSources={staleSources}
         diagnosticPrompt={diagnosticPrompt}
         onOpenLaunchView={onOpenLaunchView}
         onOpenAgentDesk={onOpenAgentDesk}

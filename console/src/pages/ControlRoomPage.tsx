@@ -163,7 +163,13 @@ export function ControlRoomPage({
     (typeof window !== 'undefined' && parseControlRoomBayHash(window.location.hash) != null) ||
       loadOpenControlRoomBayIds().length > 0,
   )
-  const { snapshot, matrices: liveMatrices, dataUpdatedAt, isLoading: missionLoading } = useMissionSnapshot()
+  const {
+    snapshot,
+    matrices: liveMatrices,
+    dataUpdatedAt,
+    staleSources,
+    isLoading: missionLoading,
+  } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
   const operateQueueQuery = useOperateQueue()
@@ -388,6 +394,7 @@ export function ControlRoomPage({
         missionSignal={snapshot.missionOverall}
         primaryCause={missionPrimaryCause}
         dataUpdatedAt={dataUpdatedAt}
+        staleSources={staleSources}
         bays={baySignals}
         isLoading={missionLoading}
         onSelectBay={jumpToBay}
@@ -451,6 +458,7 @@ export function ControlRoomPage({
               matrices={matrixList}
               context={context}
               dataUpdatedAt={dataUpdatedAt}
+              staleSources={staleSources}
               showRocketSubsystems={false}
               onOpenRuntimeMap={onOpenRuntimeMap}
               onOpenCluster={onOpenCluster}

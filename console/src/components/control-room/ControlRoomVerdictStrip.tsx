@@ -5,6 +5,7 @@ import {
   controlRoomBayCountsLabel,
   controlRoomVerdictLabel,
   controlRoomVerdictTagVariant,
+  controlRoomStaleSourcesLabel,
   formatControlRoomFreshness,
   type ControlRoomBayId,
   type ControlRoomBaySignal,
@@ -15,6 +16,8 @@ export type ControlRoomVerdictStripProps = {
   missionSignal: Signal
   primaryCause: string
   dataUpdatedAt: number
+  /** Mission probes that are stale (useMissionSnapshot) — named next to freshness. */
+  staleSources?: readonly string[]
   bays: ControlRoomBaySignal[]
   isLoading?: boolean
   /** Optional secondary actions — never page-level Launch/Deploy (those live on TCC). */
@@ -30,6 +33,7 @@ export function ControlRoomVerdictStrip({
   missionSignal,
   primaryCause,
   dataUpdatedAt,
+  staleSources,
   bays,
   isLoading = false,
   actions,
@@ -38,6 +42,7 @@ export function ControlRoomVerdictStrip({
   const label = isLoading ? 'PROBING' : controlRoomVerdictLabel(missionSignal)
   const counts = controlRoomBayCountsLabel(bays)
   const attentionBays = bays.filter(b => b.signal !== 'ok' && b.signal !== 'unknown')
+  const staleLabel = isLoading ? '' : controlRoomStaleSourcesLabel(staleSources, dataUpdatedAt)
 
   return (
     <OpsVerdictStrip
@@ -80,6 +85,14 @@ export function ControlRoomVerdictStrip({
           <span className="font-mono-tabular">
             freshness {formatControlRoomFreshness(dataUpdatedAt)}
           </span>
+          {staleLabel !== '' ? (
+            <span
+              className="font-mono-tabular text-warning"
+              title="These probes failed, answered too long ago, or never answered — their dimensions read unknown."
+            >
+              {staleLabel}
+            </span>
+          ) : null}
         </>
       }
     />

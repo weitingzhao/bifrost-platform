@@ -180,7 +180,7 @@ export function buildDeliveryTools(): Record<string, SDKCustomTool> {
 
     run_release_gate: {
       description:
-        'Execute a release gate check (admin role required). Evaluates health probes, deploy status, and blockers. Returns pass/fail with details.',
+        'Execute a release gate check (admin role required). Evaluates health probes, deploy status, and blockers. Returns result pass, fail, or inconclusive (a required check was not measured; not a pass) with details.',
       inputSchema: {
         type: 'object',
         properties: {

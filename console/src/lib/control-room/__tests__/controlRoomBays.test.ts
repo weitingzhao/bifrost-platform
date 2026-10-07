@@ -7,6 +7,7 @@ import {
   controlRoomBayDomId,
   controlRoomBayHash,
   controlRoomVerdictLabel,
+  controlRoomStaleSourcesLabel,
   formatControlRoomFreshness,
   loadControlRoomExpandMode,
   nextOpenBayIds,
@@ -223,5 +224,16 @@ describe('controlRoomBays', () => {
     expect(attention.some(a => a.bayId === 'mission')).toBe(true)
     expect(attention[0]?.severity).toBe('critical')
     expect(controlRoomBayCountsLabel(bays)).toMatch(/critical|caution|clear/)
+  })
+})
+
+describe('controlRoomStaleSourcesLabel (TD-249)', () => {
+  it('names the stale probes once any probe has answered', () => {
+    expect(controlRoomStaleSourcesLabel(['matrix', 'runner'], Date.now())).toBe('stale: matrix, runner')
+  })
+  it('is empty when nothing is stale or nothing has answered yet', () => {
+    expect(controlRoomStaleSourcesLabel([], Date.now())).toBe('')
+    expect(controlRoomStaleSourcesLabel(undefined, Date.now())).toBe('')
+    expect(controlRoomStaleSourcesLabel(['matrix'], 0)).toBe('')
   })
 })

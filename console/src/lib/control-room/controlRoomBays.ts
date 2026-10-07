@@ -329,6 +329,20 @@ export function controlRoomVerdictTagVariant(
   return 'neutral'
 }
 
+/**
+ * Names the mission probes that are stale — failing, older than the stale
+ * window, or never answered — so the oldest-probe time is not the only clue
+ * (TD-249). Empty while no probe has answered yet (that is "probing", not stale).
+ */
+export function controlRoomStaleSourcesLabel(
+  staleSources: readonly string[] | undefined,
+  dataUpdatedAt: number,
+): string {
+  if (staleSources == null || staleSources.length === 0) return ''
+  if (!Number.isFinite(dataUpdatedAt) || dataUpdatedAt <= 0) return ''
+  return `stale: ${staleSources.join(', ')}`
+}
+
 export function formatControlRoomFreshness(dataUpdatedAt: number, nowMs: number = Date.now()): string {
   if (!Number.isFinite(dataUpdatedAt) || dataUpdatedAt <= 0) return 'unknown'
   const age = Math.max(0, nowMs - dataUpdatedAt)

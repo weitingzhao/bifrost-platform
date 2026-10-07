@@ -18,6 +18,7 @@ import {
   GIT_DIRTY_FIX_SCOPE,
 } from '@/lib/agent/gitDirtyRemediatePrompt'
 import { listFailingMatrixTargets } from '@/lib/control-room/controlRoomOperatePack'
+import { controlRoomStaleSourcesLabel } from '@/lib/control-room/controlRoomBays'
 import {
   collectMissionDegradationItems,
   missionDegradationSummary,
@@ -39,6 +40,8 @@ interface MissionBoardProps {
   matrices: MatrixResponse[]
   context?: OpsContextResponse
   dataUpdatedAt: number
+  /** Mission probes that are stale — named beside the timestamp (TD-249). */
+  staleSources?: readonly string[]
   diagnosticPrompt: string | null
   onOpenLaunchView: (mode: LaunchViewMode) => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
@@ -119,6 +122,7 @@ export function MissionBoard({
   matrices,
   context,
   dataUpdatedAt,
+  staleSources,
   diagnosticPrompt,
   onOpenLaunchView,
   onOpenAgentDesk,
@@ -128,6 +132,7 @@ export function MissionBoard({
   canOperate,
 }: MissionBoardProps) {
   const [detailScope, setDetailScope] = useState<DetailScope | null>(null)
+  const staleLabel = controlRoomStaleSourcesLabel(staleSources, dataUpdatedAt)
 
   const rocketLaunch = useRocketLaunchOverall()
   const satelliteDeploy = useSatelliteDeployOverall()
@@ -415,6 +420,7 @@ export function MissionBoard({
 
         <div className="mission-board-ts">
           {dataUpdatedAt > 0 ? formatAge(dataUpdatedAt) : 'probing…'}
+          {staleLabel !== '' ? ` · ${staleLabel}` : ''}
         </div>
       </section>
 
