@@ -18,8 +18,10 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -104,6 +106,7 @@ type Server struct {
 	telemetry     *telemetry.Handler
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
+	approvals     *approvals.Service
 	authLoaded    bool
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
@@ -318,6 +321,15 @@ func New(cfg *config.Config) (*Server, error) {
 	}).WithTitleReports(func(ctx context.Context, transcript, title string) error {
 		return titleStore.ReportTranscript(ctx, transcript, title, time.Now().UTC())
 	})
+	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
+		return srv.lookupDaemonReplicas(ctx, namespace)
+	})
+	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
+	if dataDir == "" {
+		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
+	}
+	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
+	srv.bindActionExecutors()
 	return srv, nil
 }
 
@@ -334,7 +346,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://127.0.0.1:5180", "http://localhost:5180"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Upgrade", "Connection"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Upgrade", "Connection", "X-Bifrost-Session"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -347,6 +359,7 @@ func (s *Server) Router() http.Handler {
 		// L-1 surface. Served here for convenience while platform-api is healthy;
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)
+		approvals.Mount(r, s.auth, s.approvals)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)
@@ -504,25 +517,25 @@ func (s *Server) Router() http.Handler {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
-			r.Post("/gitops/apps/{name}/sync", s.gitops.HandleSyncApp)
-			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
+			r.Post("/gitops/apps/{name}/sync", s.guard("gitops_sync_app", s.gitops.HandleSyncApp))
+			r.Post("/delivery/pipelines/{name}/runs", s.guard("start_pipeline_run", s.delivery.HandleStartPipelineRun))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
-			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
-			r.Post("/plugins/ib-gateway/control/{action}", s.ibgateway.HandleControl)
+			r.Post("/network/firewall/apply", s.guard("unifi_firewall_apply", s.network.HandleFirewallApply))
+			r.Post("/plugins/ib-gateway/control/{action}", s.guardIB(s.ibgateway.HandleControl))
 			// Ingest enqueue (and other Plugin API writes) — operator auth.
 			// Proxy rewrites Authorization to MARKET_DATA_WRITE_TOKEN (not the operator token).
 			r.Post("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Delete("/plugins/market-data/api/*", s.marketdata.HandleAPIProxy)
 			r.Post("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
-			r.Delete("/delivery/runs/{id}", s.delivery.HandleDeletePipelineRun)
+			r.Delete("/delivery/runs/{id}", s.guard("delete_pipeline_run", s.delivery.HandleDeletePipelineRun))
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
-			r.Post("/gitops/apps/{name}/rollback", s.gitops.HandleRollbackApp)
-			r.Post("/stack/addons/{name}/install", s.stack.HandleInstallAddon)
-			r.Post("/stack/addons/{name}/upgrade", s.stack.HandleUpgradeAddon)
+			r.Post("/gitops/apps/{name}/rollback", s.guard("gitops_rollback_app", s.gitops.HandleRollbackApp))
+			r.Post("/stack/addons/{name}/install", s.guard("stack_install_addon", s.stack.HandleInstallAddon))
+			r.Post("/stack/addons/{name}/upgrade", s.guard("stack_upgrade_addon", s.stack.HandleUpgradeAddon))
 			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
 			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
 			r.Post("/build-phase/{phase}/gate", s.buildgate.HandleRunGate)
@@ -575,25 +588,25 @@ func (s *Server) Router() http.Handler {
 				// runs the ssh sync script and overwrites the host kubeconfig (TD-220)
 				r.Post("/sync-kubeconfig", s.cluster.HandleSyncKubeconfig)
 				r.Post("/namespaces/ensure-bifrost", s.cluster.HandleEnsureBifrost)
-				r.Post("/postgres/backup", s.cluster.HandleTriggerPostgresBackup)
-				r.Post("/postgres/wal-store/repair", s.cluster.HandleRepairPostgresWalStore)
+				r.Post("/postgres/backup", s.guard("trigger_cnpg_backup", s.cluster.HandleTriggerPostgresBackup))
+				r.Post("/postgres/wal-store/repair", s.guard("repair_cnpg_wal_store", s.cluster.HandleRepairPostgresWalStore))
 				r.Post("/postgres/backups/sweep-failed", s.cluster.HandleSweepExpiredFailedBackups)
-				r.Post("/workloads/rollout-restart", s.cluster.HandleRolloutRestart)
-				r.Post("/workloads/scale", s.cluster.HandleScale)
-				r.Post("/nodes/{name}/wake", s.cluster.HandleWakeNode)
-				r.Post("/nodes/{name}/cordon", s.cluster.HandleCordonNode)
-				r.Post("/nodes/{name}/uncordon", s.cluster.HandleUncordonNode)
-				r.Delete("/workloads/pods/{namespace}/{name}", s.cluster.HandleDeletePod)
+				r.Post("/workloads/rollout-restart", s.guard("rollout_restart_deployment", s.cluster.HandleRolloutRestart))
+				r.Post("/workloads/scale", s.guard("scale_deployment", s.cluster.HandleScale))
+				r.Post("/nodes/{name}/wake", s.guard("wake_compute_node", s.cluster.HandleWakeNode))
+				r.Post("/nodes/{name}/cordon", s.guard("cordon_node", s.cluster.HandleCordonNode))
+				r.Post("/nodes/{name}/uncordon", s.guard("uncordon_node", s.cluster.HandleUncordonNode))
+				r.Delete("/workloads/pods/{namespace}/{name}", s.guard("delete_pod", s.cluster.HandleDeletePod))
 			})
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleAdmin))
 				r.Post("/kubeconfig-secret/ensure", s.cluster.HandleEnsureKubeconfigSecret)
 				r.Post("/addons/metrics-server/ensure", s.cluster.HandleEnsureMetricsServer)
 				r.Post("/addons/kube-prometheus-stack/ensure", s.cluster.HandleEnsureKubePrometheusStack)
-				r.Post("/nodes/join", s.cluster.HandleJoinNode)
-				r.Post("/nodes/{name}/drain", s.cluster.HandleDrainNode)
-				r.Post("/nodes/{name}/poweroff", s.cluster.HandlePowerOffNode)
-				r.Post("/data-clone", s.cluster.HandleDataClone)
+				r.Post("/nodes/join", s.guard("join_cluster_node", s.cluster.HandleJoinNode))
+				r.Post("/nodes/{name}/drain", s.guard("drain_node", s.cluster.HandleDrainNode))
+				r.Post("/nodes/{name}/poweroff", s.guard("poweroff_compute_node", s.cluster.HandlePowerOffNode))
+				r.Post("/data-clone", s.guard("trigger_data_clone", s.cluster.HandleDataClone))
 				r.Put("/data-clone/schedule", s.cluster.HandleDataCloneSchedulePut)
 			})
 		})
