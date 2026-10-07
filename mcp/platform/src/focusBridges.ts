@@ -13,6 +13,8 @@
  *   redis      — 只读 L0，仅 matrix / cluster 探针（platform-api 无 Redis 专用端点）
  *   postgres   — 只读 L0，仅 matrix 探针 + 数据新鲜度 / 备份状态（**不含**备份触发与 clone 等写操作）
  *   prometheus — 见 prometheusBridge.ts（独立实现，含主 server 没有的 query_prometheus）
+ *   local / approve 不在这张表里：index.ts 在进入白名单之前单独注册，
+ *   避免 focus 拼错时落到全量，也避免批准工具出现在主 server 上。
  */
 
 /** 任何 focus 桥都保留的自省工具。 */

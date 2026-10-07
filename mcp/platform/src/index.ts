@@ -6,8 +6,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { getRequest, listRequests, requestAction, waitForRequest } from './approvalTools.js'
 import { jsonResult, platformDelete, platformGet, platformPost } from './platformClient.js'
 import { registerPrometheusBridge } from './prometheusBridge.js'
+import { registerApproveBridge } from './registerApprove.js'
+import { registerLocalBridge } from './registerLocal.js'
 import { focusAllowList } from './focusBridges.js'
 
 const SERVER_NAME = 'mcp-server-platform'
@@ -18,6 +21,12 @@ const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
 
 if (bridgeFocus === 'prometheus') {
   registerPrometheusBridge(server)
+} else if (bridgeFocus === 'approve') {
+  // Chat approval only. Not part of the full server, and not a focus allow-list slice.
+  registerApproveBridge(server)
+} else if (bridgeFocus === 'local') {
+  // Laptop bdev + git-bridge. PROD does not serve these.
+  registerLocalBridge(server)
 } else {
 // focus 桥：按领域白名单过滤要注册的工具。focus 为空 → allow=null → 注册全量；未知 focus → 退出。
 // 白名单定义与授权原则见 focusBridges.ts。
@@ -670,37 +679,41 @@ reg(
     jsonResult(await platformPost('/api/v1/promote/tier-b/signoff', { notes: notes ?? '' })),
 )
 
-// --- Dev Sessions tools ---
-
-reg('list_dev_sessions', 'List sessions for the viewer seat (local bdev in DEV; catalog Deployments in STG/PROD)', {}, async () =>
-  jsonResult(await platformGet('/api/v1/dev-sessions/')),
-)
-
 reg(
-  'restart_dev_session',
-  'Restart a session by name (bdev locally; K8s rollout restart in STG/PROD)',
-  { name: z.string().describe('Session name from list_dev_sessions (e.g. platform-api, platform-console, git-bridge; compat: platform → api+console)') },
-  async ({ name }) =>
-    jsonResult(
-      await platformPost(`/api/v1/dev-sessions/${encodeURIComponent(name)}/control`, {
-        action: 'restart',
-      }),
-    ),
-)
-
-reg(
-  'get_dev_session_logs',
-  'Get recent log lines from a session (bdev log file or K8s pod logs)',
+  'request_action',
+  'Create an approval request and return its id. Does not run the action. Requires MCP_WRITES=on.',
   {
-    name: z.string().describe('Session name from list_dev_sessions'),
-    lines: z.number().optional().describe('Number of log lines to return (default 100)'),
+    action: z.string().describe('Action id from the approvals catalog'),
+    params: z.record(z.string(), z.unknown()).optional().describe('Parameters signed into the approval'),
+    reason: z.string().describe('Why this action is requested'),
+    rollback: z.string().describe('How to undo it if the approval is executed'),
   },
-  async ({ name, lines }) => {
-    const n = lines ?? 100
-    return jsonResult(
-      await platformGet(`/api/v1/dev-sessions/${encodeURIComponent(name)}/logs?lines=${n}`),
-    )
+  async ({ action, params, reason, rollback }) =>
+    jsonResult(await requestAction({ action, params, reason, rollback })),
+)
+
+reg(
+  'get_request',
+  'Read one approval request by id',
+  { id: z.string() },
+  async ({ id }) => jsonResult(await getRequest(id)),
+)
+
+reg(
+  'list_requests',
+  'List approval requests. status is pending (default) or all.',
+  { status: z.enum(['pending', 'all']).optional() },
+  async ({ status }) => jsonResult(await listRequests(status ?? 'pending')),
+)
+
+reg(
+  'wait_for_request',
+  'Poll an approval until executed, failed, rejected, expired, or the timeout',
+  {
+    id: z.string(),
+    timeout_seconds: z.number().int().min(1).max(600).optional().describe('Default 120, max 600'),
   },
+  async ({ id, timeout_seconds }) => jsonResult(await waitForRequest(id, timeout_seconds ?? 120)),
 )
 
 } // end platform tools (non-prometheus focus)

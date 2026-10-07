@@ -6,7 +6,8 @@
   "description": "Bifrost Ops Platform MCP server — proxies platform-api with same auth contract",
   "scripts": {
     "start": "tsx src/index.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

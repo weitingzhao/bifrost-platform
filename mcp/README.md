@@ -4,7 +4,13 @@ Model Context Protocol bridge for Cursor / Agent — **same contract as platform
 
 ## mcp-server-platform (P5 — available)
 
-Stdio MCP server that proxies `http://127.0.0.1:8780/api/v1/*` with Bearer token auth.
+Stdio MCP server that proxies platform-api with Bearer token auth.
+The shipped MCP config points platform servers at PROD `http://192.168.10.100:30876`.
+`MCP_WRITES=off` (the default) returns `writes not cut over` and does not call write
+routes. `MCP_WRITES=on` calls B-tier routes directly and turns C/D routes into
+`POST /api/v1/approvals` (the response id is the approval). `MCP_BRIDGE_FOCUS=local`
+is the laptop bdev/git-bridge server. `MCP_BRIDGE_FOCUS=approve` is the chat
+approval server (`channel` is always `chat`).
 
 ```bash
 cd mcp/platform
@@ -33,7 +39,8 @@ Or:
       "command": "npx",
       "args": ["tsx", "/path/to/bifrost-platform/mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780"
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "MCP_WRITES": "off"
       }
     }
   }
