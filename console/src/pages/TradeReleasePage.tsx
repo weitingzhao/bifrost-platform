@@ -76,6 +76,8 @@ import { useConstellationImpact } from '@/hooks/useConstellationImpact'
 import { useConstellationLaunch } from '@/hooks/useConstellationLaunch'
 import {
   buildLaunchCheckpoints,
+  launchVerdictLabel,
+  launchVerdictTagVariant,
   hasDeliverInFlight,
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
@@ -732,19 +734,9 @@ export function TradeReleasePage({
               summaryExtra={
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <DenseTag
-                    variant={
-                      satelliteVerdict.kind === 'GO'
-                        ? 'success'
-                        : satelliteVerdict.kind === 'IN_FLIGHT'
-                          ? 'warning'
-                          : 'danger'
-                    }
+                    variant={launchVerdictTagVariant(satelliteVerdict.kind)}
                   >
-                    {satelliteVerdict.kind === 'GO'
-                      ? 'GO'
-                      : satelliteVerdict.kind === 'IN_FLIGHT'
-                        ? 'IN FLIGHT'
-                        : 'NO-GO'}
+                    {launchVerdictLabel(satelliteVerdict.kind)}
                   </DenseTag>
                   <DenseTag
                     variant={checklistOkCount === checklistTotal ? 'success' : 'warning'}

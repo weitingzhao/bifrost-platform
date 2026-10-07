@@ -10,6 +10,8 @@ function rocketInput(partial: Partial<ResolveLaunchVerdictInput> = {}): ResolveL
     mode: 'rocket',
     canOperate: true,
     prodBlocked: false,
+    tradeProdSignal: 'ok',
+    promoteSignal: 'ok',
     deliverInFlight: false,
     ...partial,
   }
@@ -22,6 +24,9 @@ function satelliteInput(
     mode: 'satellite',
     canOperate: true,
     prodBlocked: false,
+    rocketSignal: 'ok',
+    tradeProdSignal: 'ok',
+    promoteSignal: 'ok',
     deliverInFlight: false,
     ...partial,
   }
@@ -84,5 +89,64 @@ describe('resolveLaunchVerdict', () => {
   it('treats an in-flight pipeline as IN_FLIGHT when prod is not blocked', () => {
     expect(resolveLaunchVerdict(rocketInput({ deliverInFlight: true })).kind).toBe('IN_FLIGHT')
     expect(resolveLaunchVerdict(satelliteInput({ deliverInFlight: true })).kind).toBe('IN_FLIGHT')
+  })
+})
+
+/** TD-226: an unmeasured readiness dimension never reads as clear. */
+describe('unknown readiness is not GO', () => {
+  const satelliteDims = ['rocketSignal', 'tradeProdSignal', 'promoteSignal'] as const
+  const rocketDims = ['tradeProdSignal', 'promoteSignal'] as const
+
+  for (const dim of satelliteDims) {
+    it(`Satellite ${dim} = unknown gives PROBING and no green checkpoint for it`, () => {
+      const input = satelliteInput({ [dim]: 'unknown' })
+      const v = resolveLaunchVerdict(input)
+      expect(v.kind).not.toBe('GO')
+      expect(v.kind).toBe('PROBING')
+      expect(v.disabledReason).toBe('readiness not measured')
+      const cps = buildLaunchCheckpoints(input)
+      const unknownCps = cps.filter(c => c.signal === 'unknown')
+      expect(unknownCps).toHaveLength(1)
+      expect(unknownCps.every(c => !c.ok)).toBe(true)
+      expect(cps.some(c => c.ok && c.signal === 'unknown')).toBe(false)
+    })
+
+    it(`Satellite ${dim} missing gives PROBING`, () => {
+      expect(resolveLaunchVerdict(satelliteInput({ [dim]: undefined })).kind).toBe('PROBING')
+    })
+  }
+
+  for (const dim of rocketDims) {
+    it(`Rocket ${dim} = unknown gives PROBING and no green checkpoint for it`, () => {
+      const input = rocketInput({ [dim]: 'unknown' })
+      expect(resolveLaunchVerdict(input).kind).toBe('PROBING')
+      const cps = buildLaunchCheckpoints(input)
+      expect(cps.some(c => c.ok && c.signal === 'unknown')).toBe(false)
+      expect(cps.filter(c => c.signal === 'unknown').every(c => !c.ok)).toBe(true)
+    })
+  }
+
+  it('a failing dimension still wins over an unknown one (NO_GO, not PROBING)', () => {
+    const v = resolveLaunchVerdict(
+      satelliteInput({
+        prodBlocked: true,
+        blockKind: 'rocket',
+        rocketSignal: 'fail',
+        tradeProdSignal: 'unknown',
+      }),
+    )
+    expect(v.kind).toBe('NO_GO')
+  })
+
+  it('an in-flight deliver stays IN_FLIGHT while readiness is unknown', () => {
+    expect(
+      resolveLaunchVerdict(satelliteInput({ deliverInFlight: true, tradeProdSignal: 'unknown' })).kind,
+    ).toBe('IN_FLIGHT')
+  })
+
+  it('all dimensions measured ok gives GO with every checkpoint green', () => {
+    expect(resolveLaunchVerdict(satelliteInput()).kind).toBe('GO')
+    expect(buildLaunchCheckpoints(satelliteInput()).every(c => c.ok)).toBe(true)
+    expect(buildLaunchCheckpoints(rocketInput()).every(c => c.ok)).toBe(true)
   })
 })

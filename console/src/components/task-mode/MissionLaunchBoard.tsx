@@ -14,7 +14,11 @@ import { useSatelliteProdReadiness } from '@/components/task-mode/readiness/hook
 import { isProdReleaseBlocked } from '@/components/task-mode/readiness/utils'
 import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
-import { launchVerdictToSignal, readinessAnchorDomId } from '@/lib/task-mode/satelliteLaunchVerdict'
+import {
+  launchVerdictLabel,
+  launchVerdictToSignal,
+  readinessAnchorDomId,
+} from '@/lib/task-mode/satelliteLaunchVerdict'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import { setSatelliteBusFocus } from '@/lib/task-mode/readinessChipActions'
 import { evidenceSummaryLine, type PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
@@ -119,9 +123,7 @@ function CommandLaneOptionLabel({
 
 function laneStatusLabel(verdict: LaunchVerdict | undefined): string {
   if (verdict == null) return 'Unknown'
-  if (verdict.kind === 'GO') return 'GO'
-  if (verdict.kind === 'IN_FLIGHT') return 'IN FLIGHT'
-  return 'NO-GO'
+  return launchVerdictLabel(verdict.kind)
 }
 
 function dataFreshnessLaneStatus(data: DataFreshnessResponse | undefined): LaneStatus {

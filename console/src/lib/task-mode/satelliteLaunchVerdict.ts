@@ -2,8 +2,12 @@ import type { DeliveryPipelineRunView } from '@/api/deliveryTypes'
 import { isPipelineRunRunning } from '@/lib/delivery/pipelineRunAskPack'
 import type { Signal } from '@/lib/control-room/missionSignals'
 
-/** Live launch gate for Task CC — not playbook / last-deliver sticky state. */
-export type LaunchVerdictKind = 'GO' | 'NO_GO' | 'IN_FLIGHT'
+/**
+ * Live launch gate for Task CC — not playbook / last-deliver sticky state.
+ * PROBING: a readiness dimension is not measured yet (or its probe returned
+ * nothing) — Launch stays disabled; unknown never reads as clear (TD-226).
+ */
+export type LaunchVerdictKind = 'GO' | 'NO_GO' | 'IN_FLIGHT' | 'PROBING'
 
 export type LaunchBlockKind = 'rocket' | 'prod' | 'both' | 'auth' | null
 
@@ -74,11 +78,57 @@ export function hasDeliverInFlight(runs: DeliveryPipelineRunView[] | undefined):
 export function launchVerdictToSignal(kind: LaunchVerdictKind): Signal {
   if (kind === 'GO') return 'ok'
   if (kind === 'IN_FLIGHT') return 'degraded'
+  if (kind === 'PROBING') return 'unknown'
   return 'fail'
+}
+
+/** Short tag text for a verdict kind (GO / IN FLIGHT / PROBING / NO-GO). */
+export function launchVerdictLabel(kind: LaunchVerdictKind): string {
+  if (kind === 'GO') return 'GO'
+  if (kind === 'IN_FLIGHT') return 'IN FLIGHT'
+  if (kind === 'PROBING') return 'PROBING'
+  return 'NO-GO'
+}
+
+/** DenseTag variant for a verdict kind: PROBING is a warning, not a red NO-GO. */
+export function launchVerdictTagVariant(kind: LaunchVerdictKind): 'success' | 'warning' | 'danger' {
+  if (kind === 'GO') return 'success'
+  if (kind === 'IN_FLIGHT' || kind === 'PROBING') return 'warning'
+  return 'danger'
 }
 
 function signalBlocksLaunch(s: Signal | undefined): boolean {
   return s === 'fail' || s === 'degraded'
+}
+
+/**
+ * A readiness dimension that has not reported 'ok' or a failure. Missing
+ * (undefined) counts as unmeasured too: Launch is clear only on a measured
+ * 'ok' (TD-226).
+ */
+function signalUnmeasured(s: Signal | undefined): boolean {
+  return s == null || s === 'unknown'
+}
+
+const NOT_MEASURED = 'readiness not measured'
+
+/** Checkpoint fields for one readiness dimension: ok only on a measured 'ok'. */
+function readinessCheckpointFields(
+  s: Signal | undefined,
+  blockedDetail: string | undefined,
+): Pick<LaunchCheckpoint, 'ok' | 'signal' | 'detail'> {
+  return {
+    ok: s === 'ok',
+    signal: s ?? 'unknown',
+    detail: signalBlocksLaunch(s) ? blockedDetail : signalUnmeasured(s) ? NOT_MEASURED : undefined,
+  }
+}
+
+/** Readiness dimensions that gate this lane (by mode). */
+function readinessSignals(input: ResolveLaunchVerdictInput): (Signal | undefined)[] {
+  return input.mode === 'satellite'
+    ? [input.rocketSignal, input.tradeProdSignal, input.promoteSignal]
+    : [input.tradeProdSignal, input.promoteSignal]
 }
 
 export function readinessAnchorDomId(anchor: LaunchReadinessAnchor): string {
@@ -91,40 +141,34 @@ export function readinessAnchorDomId(anchor: LaunchReadinessAnchor): string {
  * Rocket: Auth · Platform Prod · Promote / cutover · Pipeline idle
  * Verdict title (e.g. "Fix Prod environment before release") is not a checkpoint —
  * lane pages count these arrays for the `N/M ready` tag.
- * Any `ok: false` ⇒ No-Go (same inputs as resolveLaunchVerdict).
+ * Any `ok: false` ⇒ not GO (same inputs as resolveLaunchVerdict). A readiness
+ * checkpoint is ok only on a measured 'ok' signal — 'unknown' / missing is not
+ * green (TD-226).
  */
 export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): LaunchCheckpoint[] {
   const authOk = input.canOperate
   const pipelineOk = !input.deliverInFlight
-  const promoteBlocked = signalBlocksLaunch(input.promoteSignal)
+  const promote = readinessCheckpointFields(input.promoteSignal, input.promoteDetail)
 
   if (input.mode === 'satellite') {
-    const rocketBlocked = signalBlocksLaunch(input.rocketSignal)
-    const tradeBlocked = signalBlocksLaunch(input.tradeProdSignal)
     return [
       { id: 'auth', label: 'Operator auth', ok: authOk },
       {
         id: 'rocket',
         label: 'Rocket IB bus',
-        ok: !rocketBlocked,
-        signal: input.rocketSignal ?? 'ok',
-        detail: rocketBlocked ? input.rocketLabel : undefined,
+        ...readinessCheckpointFields(input.rocketSignal, input.rocketLabel),
         readinessAnchor: 'rocket',
       },
       {
         id: 'trade-prod',
         label: 'Trade Prod',
-        ok: !tradeBlocked,
-        signal: input.tradeProdSignal ?? 'ok',
-        detail: tradeBlocked ? input.tradeProdLabel : undefined,
+        ...readinessCheckpointFields(input.tradeProdSignal, input.tradeProdLabel),
         readinessAnchor: 'trade-prod',
       },
       {
         id: 'promote',
         label: 'Promote / cutover',
-        ok: !promoteBlocked,
-        signal: input.promoteSignal ?? 'ok',
-        detail: promoteBlocked ? input.promoteDetail : undefined,
+        ...promote,
         readinessAnchor: 'trade-prod',
       },
       {
@@ -142,19 +186,19 @@ export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): Launch
     {
       id: 'platform-prod',
       label: 'Platform Prod',
-      ok: !platformBlocked,
-      signal: platformBlocked
-        ? (input.tradeProdSignal ?? input.rocketSignal ?? 'fail')
-        : 'ok',
-      detail: platformBlocked ? (input.tradeProdLabel ?? input.rocketLabel) : undefined,
+      ...(platformBlocked
+        ? {
+            ok: false,
+            signal: input.tradeProdSignal ?? input.rocketSignal ?? 'fail',
+            detail: input.tradeProdLabel ?? input.rocketLabel,
+          }
+        : readinessCheckpointFields(input.tradeProdSignal, input.tradeProdLabel)),
       readinessAnchor: 'platform-prod',
     },
     {
       id: 'promote',
       label: 'Promote / cutover',
-      ok: !promoteBlocked,
-      signal: input.promoteSignal ?? 'ok',
-      detail: promoteBlocked ? input.promoteDetail : undefined,
+      ...promote,
       readinessAnchor: 'platform-prod',
     },
     {
@@ -167,8 +211,9 @@ export function buildLaunchCheckpoints(input: ResolveLaunchVerdictInput): Launch
 }
 
 /**
- * Resolve live Go / No-Go / In-flight for Satellite or Rocket Task CC.
- * Priority: auth/env NO_GO → IN_FLIGHT → GO.
+ * Resolve live Go / No-Go / In-flight / Probing for Satellite or Rocket Task CC.
+ * Priority: auth/env NO_GO → IN_FLIGHT → PROBING (a readiness signal not
+ * measured) → GO.
  */
 export function resolveLaunchVerdict(input: ResolveLaunchVerdictInput): LaunchVerdict {
   if (!input.canOperate) {
@@ -254,6 +299,16 @@ export function resolveLaunchVerdict(input: ResolveLaunchVerdictInput): LaunchVe
           ? 'A bifrost-deliver-stg PipelineRun is still running — wait for it to finish or open Deploy Satellite for logs.'
           : 'A bifrost-deliver-platform PipelineRun is still running — wait for it to finish or open Launch Rocket for logs.',
       disabledReason: 'Launch already in progress',
+    }
+  }
+
+  if (readinessSignals(input).some(signalUnmeasured)) {
+    return {
+      kind: 'PROBING',
+      title: 'Readiness not measured',
+      detail:
+        'A readiness probe has not answered yet (or returned nothing) — Launch stays disabled until every dimension reports.',
+      disabledReason: 'readiness not measured',
     }
   }
 

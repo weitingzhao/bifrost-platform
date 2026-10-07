@@ -69,6 +69,8 @@ import { stackNeedsOperatePanel } from '@/lib/delivery/stackWizard'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import {
   buildLaunchCheckpoints,
+  launchVerdictLabel,
+  launchVerdictTagVariant,
   hasDeliverInFlight,
   resolveLaunchVerdict,
 } from '@/lib/task-mode/satelliteLaunchVerdict'
@@ -553,19 +555,9 @@ export function PlatformReleasePage({
               summaryExtra={
                 <span className="inline-flex flex-wrap items-center gap-2">
                   <DenseTag
-                    variant={
-                      rocketVerdict.kind === 'GO'
-                        ? 'success'
-                        : rocketVerdict.kind === 'IN_FLIGHT'
-                          ? 'warning'
-                          : 'danger'
-                    }
+                    variant={launchVerdictTagVariant(rocketVerdict.kind)}
                   >
-                    {rocketVerdict.kind === 'GO'
-                      ? 'GO'
-                      : rocketVerdict.kind === 'IN_FLIGHT'
-                        ? 'IN FLIGHT'
-                        : 'NO-GO'}
+                    {launchVerdictLabel(rocketVerdict.kind)}
                   </DenseTag>
                   <DenseTag
                     variant={checklistOkCount === checklistTotal ? 'success' : 'warning'}

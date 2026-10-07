@@ -1,5 +1,7 @@
 import { cn, DenseTag, StatusLamp } from '@bifrost/ui'
 import {
+  launchVerdictLabel,
+  launchVerdictTagVariant,
   launchVerdictToSignal,
   readinessAnchorDomId,
   type LaunchReadinessAnchor,
@@ -28,17 +30,13 @@ type FleetLane = {
 }
 
 function verdictLabel(kind: LaunchVerdictKind): string {
-  if (kind === 'GO') return 'GO'
-  if (kind === 'IN_FLIGHT') return 'IN FLIGHT'
-  return 'NO-GO'
+  return launchVerdictLabel(kind)
 }
 
 function verdictTagVariant(
   kind: LaunchVerdictKind,
 ): 'success' | 'warning' | 'danger' {
-  if (kind === 'GO') return 'success'
-  if (kind === 'IN_FLIGHT') return 'warning'
-  return 'danger'
+  return launchVerdictTagVariant(kind)
 }
 
 function overallTag(lamp: LaunchFleetStripProps['overallLamp']): {

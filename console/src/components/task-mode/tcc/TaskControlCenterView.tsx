@@ -20,7 +20,7 @@ import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
 import { pickFailingFixSignal } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { fixScopeAgentTitle } from '@/lib/agent/readinessFixDispatch'
-import { launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
+import { launchVerdictLabel, launchVerdictToSignal } from '@/lib/task-mode/satelliteLaunchVerdict'
 import type { LaunchCheckpoint, LaunchVerdict } from '@/lib/task-mode/satelliteLaunchVerdict'
 import { missionStatus } from '@/lib/control-room/missionSignals'
 import type { PluginLaunchEvidence } from '@/lib/delivery/pluginLaunchEvidence'
@@ -69,7 +69,7 @@ function checklistTextClass(
 
 function launchVerdictTextClass(kind: LaunchVerdict['kind']): SemanticTextClass {
   if (kind === 'GO') return 'text-success'
-  if (kind === 'IN_FLIGHT') return 'text-warning'
+  if (kind === 'IN_FLIGHT' || kind === 'PROBING') return 'text-warning'
   return 'text-danger'
 }
 
@@ -190,32 +190,17 @@ export function TaskControlCenterView(props: TaskControlCenterViewProps) {
   const selectedCommand = {
     vehicle: {
       label: 'Rocket',
-      verdict:
-        q.rocketVerdict.kind === 'GO'
-          ? 'GO'
-          : q.rocketVerdict.kind === 'IN_FLIGHT'
-            ? 'IN FLIGHT'
-            : 'NO-GO',
+      verdict: launchVerdictLabel(q.rocketVerdict.kind),
       valueClass: launchVerdictTextClass(q.rocketVerdict.kind),
     },
     payload: {
       label: 'Satellite',
-      verdict:
-        q.satelliteVerdict.kind === 'GO'
-          ? 'GO'
-          : q.satelliteVerdict.kind === 'IN_FLIGHT'
-            ? 'IN FLIGHT'
-            : 'NO-GO',
+      verdict: launchVerdictLabel(q.satelliteVerdict.kind),
       valueClass: launchVerdictTextClass(q.satelliteVerdict.kind),
     },
     plugin: {
       label: 'Plugin · IB Gateway',
-      verdict:
-        props.pluginLaunchVerdict.kind === 'GO'
-          ? 'GO'
-          : props.pluginLaunchVerdict.kind === 'IN_FLIGHT'
-            ? 'IN FLIGHT'
-            : 'NO-GO',
+      verdict: launchVerdictLabel(props.pluginLaunchVerdict.kind),
       valueClass: launchVerdictTextClass(props.pluginLaunchVerdict.kind),
     },
     'data-maintenance': {

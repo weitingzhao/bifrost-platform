@@ -81,7 +81,9 @@ function verdictTitle(
       ? 'GO — ready to publish'
       : verdict.kind === 'IN_FLIGHT'
         ? 'IN FLIGHT'
-        : 'NO-GO — checklist blocked'
+        : verdict.kind === 'PROBING'
+          ? 'PROBING — readiness not measured'
+          : 'NO-GO — checklist blocked'
   return `${lane} checklist: ${gate} (${ready}/${total}) · ${verdict.detail}`
 }
 
