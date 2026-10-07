@@ -250,6 +250,11 @@ func New(cfg *config.Config) (*Server, error) {
 	rsH := srv.research
 	srv.datahusbandry = datahusbandry.NewHandler(datahusbandry.NewService(mdH.Service(), fqH.Service(), rsH.Service()))
 	srv.checklist.BindHusbandry(srv.datahusbandry.Service())
+	// One producer of maintenance signals: only the PROD workers overlay sets
+	// CHECKLIST_PROBER=on (TD-253).
+	if role.RunsWorkers() && checklist.ProberWanted() {
+		srv.checklist.StartProber(context.Background(), checklist.NewProberFromEnv(), checklist.ProberInterval())
+	}
 	releasesSvc := releases.NewService(cfg.ConfigDir(), func() (kubernetes.Interface, dynamic.Interface, error) {
 		core, _, err := clusterH.Service().KubernetesClient()
 		if err != nil {
