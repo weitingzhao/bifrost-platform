@@ -42,7 +42,7 @@ export function buildGitTools(): Record<string, SDKCustomTool> {
 
     git_commit: {
       description:
-        'Stage all changes and commit in the specified repos on the developer Mac. The commit message should describe all changes across the listed repos.',
+        'Stage the named files and commit them in the specified repos on the developer Mac. paths[] is required and is the only thing staged — the rest of the worktree is left untouched. The commit message should describe those files.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -51,17 +51,24 @@ export function buildGitTools(): Record<string, SDKCustomTool> {
             items: { type: 'string' },
             description: 'Repo names to commit (e.g. ["bifrost-platform", "bifrost-ui"])',
           },
+          paths: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Repo-relative files to stage. Required. Do not pass "." or an empty list.',
+          },
           message: {
             type: 'string',
             description: 'Commit message (1–3 sentences)',
           },
         },
-        required: ['repos', 'message'],
+        required: ['repos', 'paths', 'message'],
       },
       async execute(args) {
         const repos = Array.isArray(args.repos) ? args.repos.map(String) : []
+        const paths = Array.isArray(args.paths) ? args.paths.map(String) : []
         const message = String(args.message ?? '')
-        const data = await gitBridgePost('/commit', { repos, message })
+        if (paths.length === 0) throw new Error('paths[] required')
+        const data = await gitBridgePost('/commit', { repos, paths, message })
         return textResult(jsonText(data))
       },
     },
@@ -69,7 +76,7 @@ export function buildGitTools(): Record<string, SDKCustomTool> {
 
     git_push: {
       description:
-        'Push committed changes to origin for the specified repos. Call after git_commit succeeds.',
+        'Push the current branch ref (HEAD:refs/heads/<branch>) to origin for the specified repos. Call after git_commit succeeds. Does not push other branches.',
       inputSchema: {
         type: 'object',
         properties: {
