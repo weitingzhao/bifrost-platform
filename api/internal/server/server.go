@@ -561,7 +561,9 @@ func (s *Server) Router() http.Handler {
 			r.Get("/namespaces", s.cluster.HandleNamespaces)
 			r.Get("/workloads", s.cluster.HandleWorkloads)
 			r.Get("/events", s.cluster.HandleEvents)
-			r.Get("/workloads/pods/{namespace}/{name}/logs", s.cluster.HandlePodLogs)
+			// Pod logs can carry SQL, hostnames and request data: never anonymous
+			// (TD-204). In-cluster, RBAC also limits them to the Bifrost namespaces.
+			r.With(s.auth.Require(actuation.RoleViewer)).Get("/workloads/pods/{namespace}/{name}/logs", s.cluster.HandlePodLogs)
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.Require(actuation.RoleOperator))
 				// runs the ssh sync script and overwrites the host kubeconfig (TD-220)

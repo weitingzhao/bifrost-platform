@@ -18,6 +18,7 @@ func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
 		{http.MethodPost, "/api/v1/console/ws-ticket?node=node-a"},
 		{http.MethodPost, "/api/v1/checklist/husbandry-sync"},
 		{http.MethodGet, "/api/v1/console/ws?node=node-a"},
+		{http.MethodGet, "/api/v1/cluster/workloads/pods/data/bifrost-postgres-1/logs"},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(c.method, c.path, nil)

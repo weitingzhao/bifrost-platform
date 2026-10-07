@@ -1,6 +1,6 @@
 import type { ActuationResponse, PodLogsResponse, RolloutRestartRequest, ScaleRequest } from './matrixTypes'
 import type { ClusterSyncResponse, DrainNodeRequest } from './clusterTypes'
-import { authedFetch, parseError } from './client'
+import { authHeaders, authedFetch, parseError } from './client'
 
 export async function wakeComputeNode(nodeName: string): Promise<ActuationResponse> {
   const r = await authedFetch(
@@ -123,8 +123,10 @@ export async function fetchPodLogs(
   tailLines = 200,
 ): Promise<PodLogsResponse> {
   const params = new URLSearchParams({ tailLines: String(tailLines) })
+  // viewer or above: logs are not anonymous (TD-204)
   const r = await fetch(
     `/api/v1/cluster/workloads/pods/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/logs?${params}`,
+    { headers: authHeaders() },
   )
   if (!r.ok) throw await parseError('pod logs', r)
   return r.json() as Promise<PodLogsResponse>
