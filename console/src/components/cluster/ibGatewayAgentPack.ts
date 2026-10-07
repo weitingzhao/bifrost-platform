@@ -430,7 +430,7 @@ export function buildIbGatewayAgentPack(snap: IbGatewayAgentPackSnapshot): strin
     }
 
     const tickAge = unixAgeSec(st.sample_tick_nvda ? tryTickTs(st.sample_tick_nvda) : undefined, nowMs)
-    push('## Sample tick (NVDA)', `tick_age: ${formatAgeSec(tickAge)}`, '')
+    push(`## Sample tick (${st.sample_contract || 'no sample contract'})`, `tick_age: ${formatAgeSec(tickAge)}`, '')
   } else {
     push(`## Deployment & bus`, `unavailable: ${snap.statusError ?? 'no probe'}`, '')
   }

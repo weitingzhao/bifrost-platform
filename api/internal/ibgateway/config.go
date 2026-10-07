@@ -18,8 +18,6 @@ const (
 	consumerGroupName  = "ib-gateway"
 )
 
-var tradeCutoverNamespaces = []string{"bifrost-dev", "bifrost-stg", "bifrost-prod"}
-
 var legacyIBStatefulSets = []string{"ib-market-gateway", "ib-account-agent", "ib-operator"}
 
 type Config struct {

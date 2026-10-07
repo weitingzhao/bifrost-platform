@@ -75,8 +75,10 @@ func (s *Service) Status(ctx context.Context) StatusResponse {
 	resp.AccountHealth, _ = s.redisHGetAll("bifrost:health:ws_ib_account_agent")
 	resp.OperatorHealth, _ = s.redisHGetAll("bifrost:health:ws_ib_operator")
 
-	tick, _ := s.redisGet("ib:ingester:tick:NVDA|STK|||")
-	resp.SampleTick = tick
+	resp.SampleContract = s.sampleContract(ctx)
+	if resp.SampleContract != "" {
+		resp.SampleTick, _ = s.redisGet(tickKeyPrefix + resp.SampleContract)
+	}
 	snapshot, _ := s.redisGet("ib:account:snapshot:v1")
 	resp.AccountSnapshot = snapshot
 	resp.Slots = s.readSlots()
@@ -123,8 +125,14 @@ func (s *Service) readCutoverStatus(ctx context.Context) *CutoverStatus {
 		out.Reach = probe.ReachFail
 		return out
 	}
+	namespaces := s.cluster.AppNamespaces()
+	if len(namespaces) == 0 {
+		// Nothing declared is not "all retired": say so instead of passing.
+		out.Reach = probe.ReachUnknown
+		return out
+	}
 	allRetired := true
-	for _, ns := range tradeCutoverNamespaces {
+	for _, ns := range namespaces {
 		env := TradeCutoverEnv{Namespace: ns, Reach: probe.ReachOK}
 		replicas := 0
 		for _, stsName := range legacyIBStatefulSets {
@@ -571,7 +579,7 @@ func assessSocketFeedQuality(
 	if tick == "" {
 		return feedQuality{
 			Reach:  probe.ReachDegraded,
-			Reason: "no sample tick (NVDA) on redis-ib",
+			Reason: "no sample tick on redis-ib",
 			Hint:   "Deployment may be up but market-data path from TWS is empty",
 		}
 	}

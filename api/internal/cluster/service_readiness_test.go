@@ -1,12 +1,14 @@
 package cluster
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -205,6 +207,7 @@ func applicationsReadySnapshot() readinessSnapshot {
 		}
 	}
 	return readinessSnapshot{
+		appEnvs: testAppEnvs,
 		nodes: []NodeView{
 			{Name: "n1", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
 			{Name: "n2", Architecture: "amd64", Status: "Ready", Reachability: probe.ReachOK},
@@ -286,6 +289,7 @@ func TestAggregateServiceReadinessStandbyOnly(t *testing.T) {
 func TestEvalWorkersDomainDaemonStandby(t *testing.T) {
 	replicas := int32(0)
 	snap := readinessSnapshot{
+		appEnvs: testAppEnvs,
 		pools: map[string]placement.PoolView{
 			"amd64_general": {ID: "amd64_general", NodesReady: 2, NodesTotal: 2, Status: placement.PoolStatusLive},
 		},
@@ -324,5 +328,31 @@ func TestServiceReadinessMissingKubeconfig(t *testing.T) {
 	resp := svc.ServiceReadiness(t.Context())
 	if len(resp.Domains) != 7 {
 		t.Fatalf("domains: %d", len(resp.Domains))
+	}
+}
+
+// testAppEnvs stands in for environments.yaml; the probes have no list of their own.
+var testAppEnvs = []config.AppEnv{
+	{ID: "stg", Namespace: "bifrost-stg", Database: "bifrost_stg"},
+	{ID: "dev", Namespace: "bifrost-dev", Database: "bifrost_dev"},
+	{ID: "prod", Namespace: "bifrost-prod", Database: "bifrost_prod"},
+}
+
+func TestReadinessProbesCoverNoNamespaceWithoutConfig(t *testing.T) {
+	snap := applicationsReadySnapshot()
+	snap.appEnvs = nil
+	for _, dep := range evalApplicationsDomain(snap).Dependencies {
+		if strings.HasPrefix(dep.ID, "ingressroute-") || strings.HasPrefix(dep.ID, "apis-") {
+			t.Fatalf("with no application environments configured, got %s", dep.ID)
+		}
+	}
+}
+
+func TestPostgresDatabasesComeFromEnvironments(t *testing.T) {
+	s := NewService(nil)
+	s.SetAppEnvs([]config.AppEnv{{ID: "qa", Namespace: "shop-qa", Database: "shop_qa"}})
+	resp := s.PostgresStatus(context.Background())
+	if len(resp.Databases) != 1 || resp.Databases[0].Name != "shop_qa" || resp.Databases[0].Environment != "qa" {
+		t.Fatalf("databases = %+v", resp.Databases)
 	}
 }

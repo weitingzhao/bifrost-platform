@@ -104,11 +104,13 @@ func (s *Service) PostgresStatus(ctx context.Context) PostgresStatusResponse {
 		RwService:      fmt.Sprintf("%s-rw.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
 		RoService:      fmt.Sprintf("%s-ro.%s.svc.cluster.local:5432", cnpgClusterName, cnpgNamespace),
 		GeneratedAt:    now,
-		Databases: []PostgresDatabaseView{
-			{Name: "bifrost_dev", Environment: "dev", CrName: "bifrost-dev"},
-			{Name: "bifrost_stg", Environment: "stg", CrName: "bifrost-stg"},
-			{Name: "bifrost_prod", Environment: "prod", CrName: "bifrost-prod"},
-		},
+		Databases:      []PostgresDatabaseView{},
+	}
+	// The CNPG Database CRs are named after the namespace (infra k8s/data/databases.yaml).
+	for _, e := range s.appEnvs {
+		if e.Database != "" {
+			resp.Databases = append(resp.Databases, PostgresDatabaseView{Name: e.Database, Environment: e.ID, CrName: e.Namespace})
+		}
 	}
 
 	clientset, _, err := s.buildClient()
@@ -389,20 +391,13 @@ func backupDep(ctx context.Context, dyn dynamic.Interface, snap readinessSnapsho
 }
 
 func embeddedPostgresProbe(snap readinessSnapshot) []PostgresLegacyView {
-	envs := []struct {
-		ns string
-	}{
-		{"bifrost-stg"},
-		{"bifrost-dev"},
-		{"bifrost-prod"},
-	}
-	out := make([]PostgresLegacyView, 0, len(envs))
-	for _, e := range envs {
-		key := e.ns + "/postgres"
+	out := make([]PostgresLegacyView, 0, len(snap.appEnvs))
+	for _, env := range snap.appEnvs {
+		key := env.Namespace + "/postgres"
 		d, ok := snap.deployments[key]
 		if !ok {
 			out = append(out, PostgresLegacyView{
-				Kind: "embedded", Namespace: e.ns, Reach: probe.ReachOK,
+				Kind: "embedded", Namespace: env.Namespace, Reach: probe.ReachOK,
 				Detail: "removed — cutover complete",
 			})
 			continue
@@ -413,14 +408,14 @@ func embeddedPostgresProbe(snap readinessSnapshot) []PostgresLegacyView {
 		}
 		if desired == 0 {
 			out = append(out, PostgresLegacyView{
-				Kind: "embedded", Namespace: e.ns, Reach: probe.ReachOK,
+				Kind: "embedded", Namespace: env.Namespace, Reach: probe.ReachOK,
 				Detail: "scaled to zero",
 			})
 			continue
 		}
 		reach, detail := deploymentReach(&d)
 		out = append(out, PostgresLegacyView{
-			Kind: "embedded", Namespace: e.ns, Reach: reach,
+			Kind: "embedded", Namespace: env.Namespace, Reach: reach,
 			Detail: detail + " · pending cutover to data NS",
 		})
 	}

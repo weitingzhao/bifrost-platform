@@ -27,6 +27,33 @@ type Environment struct {
 	Postgres       HostPort `yaml:"postgres" json:"postgres"`
 	Redis          HostPort `yaml:"redis" json:"redis"`
 	OpsTokenEnv    string   `yaml:"ops_token_env" json:"ops_token_env,omitempty"`
+	// Namespace and Database name where this environment's application runs.
+	// They are the application's names, so they live here and not in Go.
+	Namespace string `yaml:"namespace" json:"namespace,omitempty"`
+	Database  string `yaml:"database" json:"database,omitempty"`
+}
+
+// AppEnv is one environment's workload namespace and logical database.
+type AppEnv struct {
+	ID        string
+	Namespace string
+	Database  string
+}
+
+// AppEnvs lists the environments that declare a namespace, in file order, one
+// per namespace (a bridge entry such as dev-local shares dev's and declares none).
+func (c *Config) AppEnvs() []AppEnv {
+	out := []AppEnv{}
+	seen := map[string]bool{}
+	for _, e := range c.Environments {
+		ns := strings.TrimSpace(e.Namespace)
+		if ns == "" || seen[ns] {
+			continue
+		}
+		seen[ns] = true
+		out = append(out, AppEnv{ID: e.ID, Namespace: ns, Database: strings.TrimSpace(e.Database)})
+	}
+	return out
 }
 
 type File struct {

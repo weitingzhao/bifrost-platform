@@ -138,7 +138,10 @@ export interface IbGatewayStatusResponse {
   ingestor_health?: Record<string, string>
   account_health?: Record<string, string>
   operator_health?: Record<string, string>
+  /** Tick of `sample_contract` (wire name is historical; not always NVDA). */
   sample_tick_nvda?: string
+  /** Contract the gateway's config names as its sample (e.g. `SPY|STK|||`). */
+  sample_contract?: string
   /** Raw JSON from redis-ib `ib:account:snapshot:v1` — used for ghost-session detection. */
   account_snapshot?: string
   operator_consumer_group?: string

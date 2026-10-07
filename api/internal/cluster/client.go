@@ -24,10 +24,25 @@ type Service struct {
 	primaryOverride string // unit tests only
 	// minioHealthProbe replaces the HTTP check of an external MinIO (unit tests only).
 	minioHealthProbe func(ctx context.Context, endpoint string) (int, error)
+	// appEnvs are the application environments from environments.yaml; the
+	// probes iterate their namespaces and databases instead of Go literals.
+	appEnvs []config.AppEnv
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
 	return &Service{entry: entry}
+}
+
+// SetAppEnvs tells the probes which application namespaces and databases exist.
+func (s *Service) SetAppEnvs(envs []config.AppEnv) { s.appEnvs = envs }
+
+// AppNamespaces lists the application namespaces, in environments.yaml order.
+func (s *Service) AppNamespaces() []string {
+	out := make([]string, 0, len(s.appEnvs))
+	for _, e := range s.appEnvs {
+		out = append(out, e.Namespace)
+	}
+	return out
 }
 
 // SetClientFactoryForTest injects a fake kubernetes client (unit tests only).

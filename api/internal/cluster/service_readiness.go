@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/placement"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 )
@@ -55,6 +56,7 @@ type readinessSnapshot struct {
 	deployments   map[string]appsv1.Deployment
 	ingressRoutes map[string]bool // "namespace/name" → present
 	minio         minioBackend    // where Service data/minio points (in-cluster vs external)
+	appEnvs       []config.AppEnv // application environments (environments.yaml)
 }
 
 func (s *Service) ServiceReadiness(ctx context.Context) ServiceReadinessResponse {
@@ -105,6 +107,7 @@ func (s *Service) buildReadinessSnapshot(ctx context.Context) (readinessSnapshot
 		minio = s.resolveMinioBackend(ctx, clientset)
 	}
 	snap := readinessSnapshot{
+		appEnvs:       s.appEnvs,
 		minio:         minio,
 		nodes:         nodesResp.Nodes,
 		clusterCaps:   capMap,
@@ -127,11 +130,10 @@ func (s *Service) loadReadinessDeployments(ctx context.Context) (map[string]apps
 	if err != nil {
 		return nil, err
 	}
-	namespaces := []string{
-		"bifrost-stg", "bifrost-dev", "bifrost-prod",
+	namespaces := append(s.AppNamespaces(),
 		"cicd", "cnpg-system", "data", "data-warehouse", "ai", "tekton-pipelines",
 		"kube-system", // Traefik ingress controller
-	}
+	)
 	out := make(map[string]appsv1.Deployment)
 	var firstErr error
 	for _, ns := range namespaces {
@@ -154,12 +156,11 @@ func (s *Service) loadTradeGatewayIngressRoutes(ctx context.Context) (map[string
 	if err != nil {
 		return nil, err
 	}
-	return listTradeGatewayIngressRoutes(ctx, dyn)
+	return listTradeGatewayIngressRoutes(ctx, dyn, s.AppNamespaces())
 }
 
-func listTradeGatewayIngressRoutes(ctx context.Context, dyn dynamic.Interface) (map[string]bool, error) {
+func listTradeGatewayIngressRoutes(ctx context.Context, dyn dynamic.Interface, namespaces []string) (map[string]bool, error) {
 	out := make(map[string]bool)
-	namespaces := []string{"bifrost-stg", "bifrost-dev", "bifrost-prod"}
 	var firstErr error
 	for _, ns := range namespaces {
 		obj, getErr := dyn.Resource(traefikIngressRouteGVR).Namespace(ns).Get(ctx, tradeGatewayIngressRoute, metav1.GetOptions{})
@@ -220,11 +221,7 @@ func evalDatabaseDomain(snap readinessSnapshot) ServiceDomainView {
 }
 
 func activeEmbeddedPostgresDep(snap readinessSnapshot) *ServiceDependencyView {
-	refs := []deployRef{
-		{"bifrost-stg", "postgres"},
-		{"bifrost-dev", "postgres"},
-		{"bifrost-prod", "postgres"},
-	}
+	refs := snap.appDeployRefs("postgres")
 	namespaces := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		key := ref.namespace + "/" + ref.name
@@ -261,8 +258,8 @@ func evalRedisDomain(snap readinessSnapshot) ServiceDomainView {
 	for _, spec := range redisTargetCatalog {
 		deps = append(deps, redisTargetDep(snap, spec.name, spec.role, spec.environment))
 	}
-	for _, ns := range []string{"bifrost-stg", "bifrost-dev", "bifrost-prod"} {
-		if dep := embeddedRedisDep(snap, ns); dep != nil {
+	for _, env := range snap.appEnvs {
+		if dep := embeddedRedisDep(snap, env.Namespace); dep != nil {
 			deps = append(deps, *dep)
 		}
 	}
@@ -358,11 +355,7 @@ func evalWorkersDomain(snap readinessSnapshot) ServiceDomainView {
 		poolDep(snap, "amd64_general", "amd64 general pool"),
 		nodeCovDep(snap, "nfs-client", "NFS client nodes"),
 	}
-	wl := firstReadyDeployment(snap, []deployRef{
-		{"bifrost-stg", "daemon"},
-		{"bifrost-dev", "daemon"},
-		{"bifrost-prod", "daemon"},
-	})
+	wl := firstReadyDeployment(snap, snap.appDeployRefs("daemon"))
 	if wl != nil {
 		deps = append(deps, *wl)
 	} else {
@@ -398,16 +391,12 @@ func evalApplicationsDomain(snap readinessSnapshot) ServiceDomainView {
 		deploymentDep(snap, "kube-system", "traefik", "Traefik ingress controller"),
 	}
 	// Edge is Traefik IngressRoute trade-gateway per Trade NS (not per-NS nginx).
-	for _, env := range []struct{ ns, label string }{
-		{"bifrost-stg", "stg"},
-		{"bifrost-dev", "dev"},
-		{"bifrost-prod", "prod"},
-	} {
-		deps = append(deps, ingressRouteDep(snap, env.ns, tradeGatewayIngressRoute, "Trade gateway ("+env.label+")"))
-		deps = append(deps, deploymentDep(snap, env.ns, "frontend", "Trade frontend ("+env.label+")"))
-		apiReady, apiDetail := countReadyDeployments(snap, env.ns, "api-")
+	for _, env := range snap.appEnvs {
+		deps = append(deps, ingressRouteDep(snap, env.Namespace, tradeGatewayIngressRoute, "Trade gateway ("+env.ID+")"))
+		deps = append(deps, deploymentDep(snap, env.Namespace, "frontend", "Trade frontend ("+env.ID+")"))
+		apiReady, apiDetail := countReadyDeployments(snap, env.Namespace, "api-")
 		deps = append(deps, ServiceDependencyView{
-			ID: "apis-" + env.label, Label: "FastAPI services (" + env.label + ")",
+			ID: "apis-" + env.ID, Label: "FastAPI services (" + env.ID + ")",
 			Reachability: apiReadyReach(apiReady),
 			Detail:       apiDetail,
 		})
@@ -914,6 +903,15 @@ func filterNodes(nodes []NodeView, pred func(NodeView) bool) []NodeView {
 		if pred(n) {
 			out = append(out, n)
 		}
+	}
+	return out
+}
+
+// appDeployRefs is one ref to the named Deployment per application namespace.
+func (snap readinessSnapshot) appDeployRefs(name string) []deployRef {
+	out := make([]deployRef, 0, len(snap.appEnvs))
+	for _, e := range snap.appEnvs {
+		out = append(out, deployRef{e.Namespace, name})
 	}
 	return out
 }

@@ -36,7 +36,10 @@ type StatusResponse struct {
 	IngestorHealth  map[string]string `json:"ingestor_health,omitempty"`
 	AccountHealth   map[string]string `json:"account_health,omitempty"`
 	OperatorHealth  map[string]string `json:"operator_health,omitempty"`
+	// SampleTick is the tick of SampleContract. The wire name is historical:
+	// the Console reads it under this key whatever the contract is.
 	SampleTick      string            `json:"sample_tick_nvda,omitempty"`
+	SampleContract  string            `json:"sample_contract,omitempty"`
 	AccountSnapshot string            `json:"account_snapshot,omitempty"`
 	ConsumerGroup   string            `json:"operator_consumer_group,omitempty"`
 	Cutover        *CutoverStatus     `json:"cutover,omitempty"`

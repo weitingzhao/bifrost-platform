@@ -275,9 +275,9 @@ func buildRedisEnvEndpoints(targets []RedisTargetInstanceView) []RedisEnvEndpoin
 }
 
 func embeddedRedisProbe(snap readinessSnapshot) []RedisEmbeddedView {
-	envs := []string{"bifrost-stg", "bifrost-dev", "bifrost-prod"}
-	out := make([]RedisEmbeddedView, 0, len(envs))
-	for _, ns := range envs {
+	out := make([]RedisEmbeddedView, 0, len(snap.appEnvs))
+	for _, env := range snap.appEnvs {
+		ns := env.Namespace
 		key := ns + "/redis"
 		d, ok := snap.deployments[key]
 		if !ok {

@@ -278,7 +278,13 @@ export function assessIbGatewaySocketQuality(
   const tickRaw = ib.sample_tick_nvda
   if (tickRaw == null || String(tickRaw).trim() === '') {
     const sig = worseSignal(normalizeReach(baseReach), 'degraded')
-    return { signal: sig, reason: `${baseReason} · no sample tick (NVDA)` }
+    const contract = ib.sample_contract?.split('|')[0]
+    return {
+      signal: sig,
+      reason: contract
+        ? `${baseReason} · no sample tick (${contract})`
+        : `${baseReason} · no sample contract configured`,
+    }
   }
 
   let bid: number

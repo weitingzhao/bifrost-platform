@@ -19,7 +19,9 @@ type Handler struct {
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
 	entry := cfg.DefaultCluster()
-	return &Handler{svc: NewService(entry), audit: audit}
+	svc := NewService(entry)
+	svc.SetAppEnvs(cfg.AppEnvs())
+	return &Handler{svc: svc, audit: audit}
 }
 
 func (h *Handler) Service() *Service {
