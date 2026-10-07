@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
+  ConfirmDialog,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -194,11 +195,6 @@ export type ClusterOpsIssuesPanelProps = {
     needsFix: boolean
   }) => void
   /**
-   * When true (default), operator sessions auto-start AI Auto-Check once per
-   * issue signature — Agent decides whether kubeconfig sync / playbook repair is needed.
-   */
-  autoAssess?: boolean
-  /**
    * Embed under Cluster Verdict (no second OpsSection) — one health composition.
    */
   embedded?: boolean
@@ -221,7 +217,6 @@ export function ClusterOpsIssuesPanel({
   activeRemediationJob = null,
   onOpenRemediationSession,
   onHealthChange,
-  autoAssess = true,
   embedded = false,
 }: ClusterOpsIssuesPanelProps) {
   const { snapshot, matrices, isLoading: missionLoading } = useMissionSnapshot()
@@ -326,29 +321,10 @@ export function ClusterOpsIssuesPanel({
     })
   }, [onHealthChange, overallReach, healthSummaryLine, allClear])
 
-  const autoAssessKeyRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!autoAssess || !canOperate || onAutoCheck == null) return
-    if (isLoading || allClear || autoCheckPending) return
-    if (activeRemediationJob?.status === 'running') return
-    const key =
-      triageRows.length > 0
-        ? triageRows.map(r => `${r.id}:${r.severity}`).join('|')
-        : `fleet:${fleetIssues.map(i => i.id).join(',')}`
-    if (key === '' || autoAssessKeyRef.current === key) return
-    autoAssessKeyRef.current = key
-    onAutoCheck()
-  }, [
-    autoAssess,
-    canOperate,
-    onAutoCheck,
-    isLoading,
-    allClear,
-    autoCheckPending,
-    activeRemediationJob?.status,
-    triageRows,
-    fleetIssues,
-  ])
+  // TD-224: a page load never dispatches an agent. Auto-Remediate starts a
+  // full-auto run only after the operator clicks it and confirms.
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const requestAutoCheck = () => setConfirmOpen(true)
 
   const sessionActive = activeRemediationJob?.status === 'running'
   const sessionReach = sessionActive ? remediationJobReachability(activeRemediationJob) : 'unknown'
@@ -373,21 +349,32 @@ export function ClusterOpsIssuesPanel({
           <Button variant="default" size="sm" onClick={() => onOpenRemediationSession(activeRemediationJob.id)}>
             Open in dock
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={autoCheckPending}
-            title="Another remediation job is already running"
-            onClick={onAutoCheck}
-          >
-            {autoCheckPending ? 'Starting…' : allClear ? 'New auto-check' : 'New remediate'}
-          </Button>
         </>
       ) : (
-        <Button variant="default" size="sm" disabled={autoCheckPending} onClick={onAutoCheck}>
+        <Button variant="default" size="sm" disabled={autoCheckPending} onClick={requestAutoCheck}>
           {autoCheckPending ? 'Starting…' : allClear ? 'AI Auto-Check' : 'Auto-Remediate'}
         </Button>
       )
+    ) : null
+
+  const confirmDialog =
+    canOperate && onAutoCheck != null ? (
+      <ConfirmDialog
+        open={confirmOpen}
+        title={allClear ? 'Start AI Auto-Check?' : 'Start Auto-Remediate?'}
+        message={
+          allClear
+            ? 'Starts a remediation agent that re-verifies the fleet and ops plane with your operator token. Progress and approvals live in the Operator Dock.'
+            : `Starts a full-auto remediation agent on ${triageRows.length > 0 ? `${triageRows.length} ranked issue(s)` : `${fleetIssues.length} fleet issue(s)`} with your operator token. It may run repair tools; approvals live in the Operator Dock.`
+        }
+        confirmLabel={allClear ? 'Start Auto-Check' : 'Start Auto-Remediate'}
+        confirming={autoCheckPending}
+        onConfirm={() => {
+          setConfirmOpen(false)
+          onAutoCheck()
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
     ) : null
 
   const defectsBtn =
@@ -402,6 +389,7 @@ export function ClusterOpsIssuesPanel({
       <div className="flex flex-wrap items-center justify-end gap-2">
         {autoCheckBtn}
         {defectsBtn}
+        {confirmDialog}
       </div>
     ) : undefined
 
@@ -414,7 +402,7 @@ export function ClusterOpsIssuesPanel({
               ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the Operator Dock.`
               : allClear
                 ? 'Fleet + ops plane clear — re-verify on demand.'
-                : 'Ranked issues — Agent auto-assesses; progress lives in the Operator Dock.'}
+                : 'Ranked issues — run Auto-Remediate to start the Agent; progress lives in the Operator Dock.'}
           </p>
           {actions}
         </div>
@@ -630,9 +618,7 @@ export function ClusterOpsIssuesPanel({
           ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the session — no need to Sync kubeconfig manually.`
           : allClear
             ? 'Same signal as Verdict READY: usable, no repair needed. Agent can still verify on demand.'
-            : autoCheckPending || (autoAssess && canOperate)
-              ? 'Same signal as Verdict — Agent auto-assesses ranked issues (fleet + Control/Agent/release). Kubeconfig sync is an MCP tool when needed.'
-              : 'Same signal as Verdict — ranked issues; run Auto-Remediate so the Agent decides repair (including ensure_kubeconfig_secret).'
+            : 'Same signal as Verdict — ranked issues; run Auto-Remediate so the Agent decides repair (including ensure_kubeconfig_secret).'
       }
       actions={actions}
       bodyPadding={allClear && pods.length === 0 ? 'default' : 'none'}

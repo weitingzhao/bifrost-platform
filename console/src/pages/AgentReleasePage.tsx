@@ -665,6 +665,7 @@ export function AgentReleasePage({
       // "Both" mode: after primary done, auto-trigger standby
       if (bothPhase === 'primary') {
         setBothPhase('standby')
+        // effect-mutation-ok: second leg of an operator-started "Both" deploy, not a page-load dispatch
         deployMutation.mutate('standby')
       } else {
         setBothPhase('idle')

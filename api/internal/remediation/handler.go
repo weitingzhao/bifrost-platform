@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,9 @@ import (
 )
 
 type Handler struct {
+	// startMu serialises the HTTP start path so two concurrent requests for the
+	// same scope cannot both pass the active-job check (TD-224).
+	startMu    sync.Mutex
 	runner     *RunnerClient
 	audit      *actuation.AuditLog
 	store      *JobStore
@@ -69,6 +73,18 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 		Prompt:           req.Prompt,
 	}
 
+	h.startMu.Lock()
+	defer h.startMu.Unlock()
+	if active := h.ActiveJobForScope(r.Context(), req.Scope); active != nil {
+		h.audit.Record(r, "remediation.start", active.ID, "deduped", req.Scope)
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":  "remediation job already running for this scope",
+			"job_id": active.ID,
+			"job":    active,
+		})
+		return
+	}
+
 	job, err := h.StartInternal(r.Context(), runReq)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{
@@ -82,6 +98,32 @@ func (h *Handler) HandleStart(w http.ResponseWriter, r *http.Request) {
 	h.audit.Record(r, "remediation.start", job.ID, "started", req.Scope)
 
 	writeJSON(w, http.StatusAccepted, job)
+}
+
+// ActiveJobForScope returns the archived job with this scope that the runner
+// still reports as running, or nil. An empty scope never matches. Archived
+// "running" rows the runner no longer knows (orphans) or cannot answer for do
+// not block a new start.
+func (h *Handler) ActiveJobForScope(ctx context.Context, scope string) *Job {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return nil
+	}
+	for _, stored := range h.store.List() {
+		if stored.Scope != scope || stored.Status != JobRunning {
+			continue
+		}
+		live, err := h.runner.Get(ctx, stored.ID)
+		if err != nil || live == nil || live.Status != JobRunning {
+			continue
+		}
+		out := stored
+		out.Phase = live.Phase
+		out.Status = live.Status
+		out.Events = nil
+		return &out
+	}
+	return nil
 }
 
 // StartInternal starts a runner job and archives it (used by HTTP + checklist dispatch).

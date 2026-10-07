@@ -256,7 +256,6 @@ export function ClusterPage({
               activeRemediationJob={q.activeRemediationJob}
               onOpenRemediationSession={m.handleOpenRemediationSession}
               onHealthChange={handleOpsHealthChange}
-              autoAssess
               onSelectPodNamespace={ns => {
                 setNsFilter(nsFilterForNamespace(ns))
                 handleSelectNs(ns)
