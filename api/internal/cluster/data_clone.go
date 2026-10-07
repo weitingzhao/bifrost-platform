@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
@@ -481,6 +483,12 @@ func (s *Service) ensureCloneStores() {
 }
 
 func (s *Service) StartDataCloneScheduler(ctx context.Context) {
+	// Default on. The STG overlay sets PLATFORM_DATA_CLONE_SCHEDULER=off:
+	// STG observes, and this loop's default source is bifrost_prod.
+	if !config.LoopEnabled(config.EnvDataCloneScheduler) {
+		slog.Info("data-clone scheduler not started", "env", config.EnvDataCloneScheduler)
+		return
+	}
 	s.ensureCloneStores()
 	safego.Go("cluster.dataCloneScheduler", func() {
 		ticker := time.NewTicker(1 * time.Hour)

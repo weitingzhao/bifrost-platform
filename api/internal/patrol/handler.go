@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -95,6 +96,12 @@ func NewHandlerWithOptions(opts HandlerOptions) (*Handler, error) {
 // Start launches the 30s cron scanner. Cancel ctx (or Stop) to halt.
 func (h *Handler) Start(ctx context.Context) {
 	if h == nil {
+		return
+	}
+	// Default on. The STG overlay sets PLATFORM_PATROL_LOOP=off so the
+	// workers process does not scan (STG has no skills catalog; ADR: observe only).
+	if !config.LoopEnabled(config.EnvPatrolLoop) {
+		slog.Info("patrol loop not started", "env", config.EnvPatrolLoop)
 		return
 	}
 	h.mu.Lock()

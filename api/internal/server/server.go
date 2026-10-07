@@ -500,6 +500,9 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleReporter))
 			r.Post("/agent/governance/skill-runs", s.agentgovernance.HandleRecordSkillRun)
+			// Diagnostics and audit only. Reporter or above: Alertmanager must
+			// not hold the operator token (LANE-B4).
+			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -508,7 +511,6 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/pipelines/{name}/runs", s.delivery.HandleStartPipelineRun)
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
-			r.Post("/ops-agent/alertmanager", s.opsagent.HandleAlertmanager)
 			r.Post("/network/firewall/apply", s.network.HandleFirewallApply)
 			r.Post("/plugins/ib-gateway/control/{action}", s.ibgateway.HandleControl)
 			// Ingest enqueue (and other Plugin API writes) — operator auth.
