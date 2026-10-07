@@ -308,10 +308,10 @@ export const REDIS_ROLES: RedisRoleRow[] = [
     sla: 'ms latency; must not lose commands; AOF',
   },
   {
-    role: 'R3 — Account event stream',
-    instance: 'redis-live',
-    keys: 'ib:account:stream:v1, ib:account:{id}',
-    sla: '100ms; staging before PG persistence',
+    role: 'R3 — Account snapshot',
+    instance: 'redis-ib',
+    keys: 'ib:account:snapshot:v1, ib:account:notify',
+    sla: 'seconds; daemon persists when the snapshot key is present',
   },
   {
     role: 'R4 — Health & observability',
