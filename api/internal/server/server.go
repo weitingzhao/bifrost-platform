@@ -102,6 +102,7 @@ type Server struct {
 	auth          *actuation.AuthService
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
+	httpMetrics   *httpMetrics
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -213,6 +214,7 @@ func New(cfg *config.Config) (*Server, error) {
 		auth:            auth,
 		audit:           audit,
 		jobs:            jobs,
+		httpMetrics:     newHTTPMetrics(),
 	}
 	mdH := srv.marketdata
 	fqH := srv.flexquery
@@ -281,6 +283,9 @@ func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+	// Outside Logger and Recoverer, so a recovered panic is counted as the 500 it
+	// answers (TD-195).
+	r.Use(s.httpMetrics.middleware(r))
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
