@@ -318,6 +318,8 @@ export interface TrustOverrideRequest {
 export interface TrustMatrixResponse {
   entries: TrustMatrixEntry[]
   generated_at: string
+  /** Where this platform instance keeps Owner overrides (ConfigMap or file). */
+  override_store?: string
   data_source?: string
 }
 

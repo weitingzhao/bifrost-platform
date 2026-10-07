@@ -43,11 +43,16 @@ type TrustMatrixResponse struct {
 	GeneratedAt time.Time          `json:"generated_at"`
 	Entries       []TrustMatrixEntry `json:"entries"`
 	DataSource    string             `json:"data_source"`
+	// OverrideStore names where the Owner overrides applied here are kept, so
+	// the Console says which platform instance a level change lands on.
+	OverrideStore string `json:"override_store,omitempty"`
 }
 
 type TrustOverridesResponse struct {
-	GeneratedAt time.Time                  `json:"generated_at"`
-	Overrides   map[string]TrustOverride   `json:"overrides"`
+	GeneratedAt time.Time                `json:"generated_at"`
+	Overrides   map[string]TrustOverride `json:"overrides"`
+	// Store names where this instance keeps the overrides (ConfigMap or file).
+	Store string `json:"store"`
 }
 
 type TrustOverrideRequest struct {

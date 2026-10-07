@@ -2,6 +2,7 @@ package agentgovernance
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -12,13 +13,35 @@ import (
 )
 
 type Handler struct {
-	store    *remediation.JobStore
-	overrides *TrustOverrideStore
+	store     *remediation.JobStore
+	overrides TrustOverrideStore
 }
 
 func NewHandler(store *remediation.JobStore) *Handler {
 	_ = ensureAgentTasks()
 	return &Handler{store: store, overrides: NewTrustOverrideStore()}
+}
+
+// UseTrustOverrideStore swaps the file store for another, e.g. the ConfigMap
+// store when platform-api runs in the cluster.
+func (h *Handler) UseTrustOverrideStore(s TrustOverrideStore) { h.overrides = s }
+
+// TrustOverrideLocation names where this instance keeps the overrides.
+func (h *Handler) TrustOverrideLocation() string { return h.overrides.Location() }
+
+// listOverrides answers 503 itself when the store cannot be read: serving the
+// matrix without the Owner's overrides would show a grant as missing.
+func (h *Handler) listOverrides(w http.ResponseWriter, r *http.Request) (map[string]TrustOverride, bool) {
+	o, err := h.overrides.List(r.Context())
+	if err != nil {
+		slog.Error("trust overrides unreadable", "store", h.overrides.Location(), "err", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "trust overrides unreadable: " + err.Error(),
+			"store": h.overrides.Location(),
+		})
+		return nil, false
+	}
+	return o, true
 }
 
 func (h *Handler) HandlePerformance(w http.ResponseWriter, r *http.Request) {
@@ -38,15 +61,26 @@ func (h *Handler) HandleListTasks(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) HandleTrustMatrix(w http.ResponseWriter, r *http.Request) {
+	overrides, ok := h.listOverrides(w, r)
+	if !ok {
+		return
+	}
 	jobs := h.store.List()
 	raw := computeTrustMatrixRaw(jobs)
-	writeJSON(w, http.StatusOK, ApplyTrustOverrides(raw, h.overrides.List()))
+	resp := ApplyTrustOverrides(raw, overrides)
+	resp.OverrideStore = h.overrides.Location()
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) HandleTrustOverrides(w http.ResponseWriter, r *http.Request) {
+	overrides, ok := h.listOverrides(w, r)
+	if !ok {
+		return
+	}
 	writeJSON(w, http.StatusOK, TrustOverridesResponse{
 		GeneratedAt: time.Now().UTC(),
-		Overrides:   h.overrides.List(),
+		Overrides:   overrides,
+		Store:       h.overrides.Location(),
 	})
 }
 
@@ -61,9 +95,13 @@ func (h *Handler) HandlePutTrustOverride(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
 		return
 	}
+	current, ok := h.listOverrides(w, r)
+	if !ok {
+		return
+	}
 	jobs := h.store.List()
 	raw := computeTrustMatrixRaw(jobs)
-	merged := ApplyTrustOverrides(raw, h.overrides.List())
+	merged := ApplyTrustOverrides(raw, current)
 	var entry *TrustMatrixEntry
 	for i := range merged.Entries {
 		if merged.Entries[i].SkillID == skillID {
@@ -106,14 +144,25 @@ func (h *Handler) HandlePutTrustOverride(w http.ResponseWriter, r *http.Request)
 	if appliedBy == "" {
 		appliedBy = "operator"
 	}
-	h.overrides.Put(TrustOverride{
+	if err := h.overrides.Put(r.Context(), TrustOverride{
 		SkillID:   skillID,
 		Level:     level,
 		Reason:    reason,
 		AppliedBy: appliedBy,
 		AppliedAt: time.Now().UTC(),
-	})
-	final := ApplyTrustOverrides(raw, h.overrides.List())
+	}); err != nil {
+		slog.Error("trust override not saved", "skill_id", skillID, "store", h.overrides.Location(), "err", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{
+			"error": "trust override not saved: " + err.Error(),
+			"store": h.overrides.Location(),
+		})
+		return
+	}
+	after, ok := h.listOverrides(w, r)
+	if !ok {
+		return
+	}
+	final := ApplyTrustOverrides(raw, after)
 	for i := range final.Entries {
 		if final.Entries[i].SkillID == skillID {
 			writeJSON(w, http.StatusOK, final.Entries[i])
@@ -137,10 +186,14 @@ func (h *Handler) HandleCapabilityMap(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) HandleSnapshot(w http.ResponseWriter, r *http.Request) {
+	overrides, ok := h.listOverrides(w, r)
+	if !ok {
+		return
+	}
 	jobs := h.store.List()
 	perf := ComputePerformance(jobs)
 	rawTrust := computeTrustMatrixRaw(jobs)
-	trust := ApplyTrustOverrides(rawTrust, h.overrides.List())
+	trust := ApplyTrustOverrides(rawTrust, overrides)
 	capMap := ComputeCapabilityMap()
 	brief := ComputeBriefing(jobs, trust)
 	hermes := hermesConfigured()

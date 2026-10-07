@@ -19,6 +19,7 @@ import (
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", t.TempDir())
+	t.Setenv("PLATFORM_GOVERNANCE_DIR", t.TempDir())
 	return NewHandler(remediation.NewJobStore())
 }
 

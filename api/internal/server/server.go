@@ -55,6 +55,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
+	"github.com/weitingzhao/bifrost-platform/api/internal/trustoverrides"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
@@ -269,6 +270,13 @@ func New(cfg *config.Config) (*Server, error) {
 		core, _, err := clusterH.Service().KubernetesClient()
 		return core, err
 	})
+	if ns := agentgovernance.TrustOverrideNamespace(); ns != "" {
+		srv.agentgovernance.UseTrustOverrideStore(trustoverrides.NewConfigMapStore(ns, func() (kubernetes.Interface, error) {
+			core, _, err := clusterH.Service().KubernetesClient()
+			return core, err
+		}))
+	}
+	slog.Info("trust overrides store", "location", srv.agentgovernance.TrustOverrideLocation())
 	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
 		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
 	}

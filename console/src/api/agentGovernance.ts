@@ -1,9 +1,9 @@
 import type { CapabilityMapResponse, FlightDirectorSnapshotResponse, TrustMatrixEntry, TrustMatrixResponse, TrustOverrideRequest } from './agentTypes'
-import { authedFetch } from './client'
+import { authedFetch, parseError } from './client'
 
 export async function fetchTrustMatrix(): Promise<TrustMatrixResponse> {
   const r = await fetch('/api/v1/agent/governance/trust-matrix')
-  if (!r.ok) throw new Error(`trust matrix: HTTP ${r.status}`)
+  if (!r.ok) throw await parseError('trust matrix', r)
   return r.json() as Promise<TrustMatrixResponse>
 }
 

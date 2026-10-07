@@ -188,6 +188,11 @@ export function AgentGovernancePage() {
             Data source: {trustQuery.data.data_source}
           </p>
         )}
+        {trustQuery.data?.override_store != null && (
+          <p className="mb-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
+            Overrides stored in: <code className="font-mono">{trustQuery.data.override_store}</code>
+          </p>
+        )}
       </OpsSection>
       <DenseDataTable>
         <DenseTableHeader>
