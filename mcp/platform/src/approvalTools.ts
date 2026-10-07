@@ -15,7 +15,6 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
     return {
       error: 'writes not cut over',
       action: input.action,
-      tier: 'C',
       hint: WRITES_OFF_HINT,
     }
   }

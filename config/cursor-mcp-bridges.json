@@ -1,5 +1,5 @@
 {
-  "comment": "Cursor MCP bridges. Merge mcpServers into ~/.cursor/mcp.json. Chat approval (bifrost-approve) is Claude-only and is not in this file. Tokens are env references, never values. Reads use the PROD VIP. Writes stay off until MCP_WRITES=on.",
+  "comment": "Cursor MCP bridges. Merge mcpServers into ~/.cursor/mcp.json. Chat approval (bifrost-approve) is Claude-only and is not in this file. Tokens are env references, never values. Reads use the PROD VIP. bifrost-platform and bifrost-kubernetes-bridge set MCP_WRITES=on so writes ask the approvals API.",
   "mcpServers": {
     "bifrost-platform": {
       "command": "npx",
@@ -7,18 +7,18 @@
       "env": {
         "PLATFORM_API_URL": "http://192.168.10.100:30876",
         "PLATFORM_OPERATOR_TOKEN": "${PLATFORM_OPERATOR_TOKEN:-}",
-        "MCP_WRITES": "off"
+        "MCP_WRITES": "on"
       }
     },
     "bifrost-kubernetes-bridge": {
-      "comment": "K8s read plus B-tier actuation. C/D routes create an approval once MCP_WRITES=on.",
+      "comment": "K8s read plus actuation. MCP_WRITES=on asks the approvals API before each mapped write.",
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
         "PLATFORM_API_URL": "http://192.168.10.100:30876",
         "PLATFORM_OPERATOR_TOKEN": "${PLATFORM_OPERATOR_TOKEN:-}",
         "MCP_BRIDGE_FOCUS": "kubernetes",
-        "MCP_WRITES": "off"
+        "MCP_WRITES": "on"
       }
     },
     "bifrost-redis-bridge": {

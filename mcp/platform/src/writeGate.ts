@@ -1,64 +1,73 @@
-import { matchWrite, splitPath, asRecord, type WriteTier } from './actionTiers.js'
+import { matchWrite, splitPath } from './actionTiers.js'
 
 export const WRITES_OFF_HINT =
-  'Set MCP_WRITES=on on the bifrost-platform and bifrost-kubernetes MCP servers after the approvals API is live on PROD (GET /api/v1/actions returns 200). Restart those MCP processes. No code change.'
+  'MCP_WRITES=off sends no writes. Leave MCP_WRITES unset to call the original route. Set MCP_WRITES=on to ask POST /api/v1/approvals first.'
 
-export interface ApprovalRequest {
-  action: string
-  params: Record<string, unknown>
-  reason: string
-  rollback: string
+export const UNMAPPED_WRITE_HINT =
+  'This route has no action mapping. The call was not sent, and no unknown action id was posted to the approvals API. Map the tool to a catalog action id before calling it with MCP_WRITES=on.'
+
+export const OWNER_WAIT_NOTE = 'waiting for the Owner to approve'
+
+/** Explicit on is the only mode that creates approvals. Unset stays on the pre-merge direct path. */
+export type WritesMode = 'legacy' | 'on' | 'off'
+
+export function writesMode(env: NodeJS.ProcessEnv = process.env): WritesMode {
+  if (!Object.prototype.hasOwnProperty.call(env, 'MCP_WRITES') || env.MCP_WRITES == null) return 'legacy'
+  const value = env.MCP_WRITES.trim().toLowerCase()
+  if (value === '') return 'legacy'
+  if (value === 'on' || value === '1' || value === 'true' || value === 'yes') return 'on'
+  return 'off'
 }
 
-export type WriteDecision =
-  | { kind: 'direct' }
-  | { kind: 'approval'; request: ApprovalRequest }
-  | {
-      kind: 'blocked'
-      body: { error: 'writes not cut over'; action: string; tier: WriteTier | 'C'; hint: string }
-    }
-
-/** Default off. Flip is the env var only: off | on (also 1/true/yes). */
+/** Approval tools (request_action) run only when MCP_WRITES is explicitly on. */
 export function writesEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const value = (env.MCP_WRITES ?? 'off').trim().toLowerCase()
-  return value === 'on' || value === '1' || value === 'true' || value === 'yes'
+  return writesMode(env) === 'on'
 }
+
+export type WritePlan =
+  | { kind: 'direct' }
+  | { kind: 'blocked'; body: { error: 'writes not cut over'; action?: string; hint: string } }
+  | { kind: 'unmapped'; body: { error: 'unmapped write'; method: string; path: string; hint: string } }
+  | { kind: 'consult'; action: string; params: Record<string, unknown> }
 
 function isApprovalPath(pathname: string): boolean {
   return pathname === '/api/v1/approvals' || pathname.startsWith('/api/v1/approvals/')
 }
 
 /**
- * B → direct call. C/D and any unlisted write → create an approval.
- * While MCP_WRITES is off, no write is sent (including approval creates).
+ * legacy (unset): call the original route, no approval.
+ * off: send nothing.
+ * on: a mapped write consults the API; an unmapped write is refused locally.
  */
-export function decideWrite(method: string, path: string, body: unknown, writesOn: boolean): WriteDecision {
-  const spec = matchWrite(method, path)
-  const action = spec?.action ?? 'unlisted_write'
-  const tier: WriteTier | 'C' = spec?.tier ?? 'C'
-  if (!writesOn) {
+export function planWrite(method: string, path: string, body: unknown, mode: WritesMode): WritePlan {
+  const found = matchWrite(method, path)
+  const { pathname, query } = splitPath(path)
+  if (mode === 'legacy') return { kind: 'direct' }
+  if (mode === 'off') {
     return {
       kind: 'blocked',
-      body: { error: 'writes not cut over', action, tier, hint: WRITES_OFF_HINT },
-    }
-  }
-  const { pathname, query } = splitPath(path)
-  if (isApprovalPath(pathname)) return { kind: 'direct' }
-  if (spec == null || spec.tier !== 'B') {
-    const params = spec
-      ? spec.paramsFrom(pathname.match(spec.pattern) as RegExpMatchArray, body, query)
-      : { method, path, body: asRecord(body) }
-    return {
-      kind: 'approval',
-      request: {
-        action,
-        params,
-        reason: `mcp:${action}`,
-        rollback:
-          spec?.rollback ??
-          'Unlisted write. The platform runs it only after approval; reversing it needs a new approval.',
+      body: {
+        error: 'writes not cut over',
+        ...(found ? { action: found.spec.action } : {}),
+        hint: WRITES_OFF_HINT,
       },
     }
   }
-  return { kind: 'direct' }
+  if (isApprovalPath(pathname)) return { kind: 'direct' }
+  if (found == null) {
+    return {
+      kind: 'unmapped',
+      body: {
+        error: 'unmapped write',
+        method,
+        path: pathname,
+        hint: UNMAPPED_WRITE_HINT,
+      },
+    }
+  }
+  return {
+    kind: 'consult',
+    action: found.spec.action,
+    params: found.spec.paramsFrom(found.match, body, query),
+  }
 }
