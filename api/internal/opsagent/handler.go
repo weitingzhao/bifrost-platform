@@ -74,9 +74,16 @@ func (h *Handler) HandleAlertmanager(w http.ResponseWriter, r *http.Request) {
 		detail += "; L1: " + diag.SuggestedL1[0].Tool
 	}
 	if h.audit != nil {
-		h.audit.RecordDirect("ops-agent", actuation.RoleOperator, "ops-agent.alertmanager", payload.Receiver, "ok", detail)
+		name := "ops-agent"
+		role := principal.Role
+		if principal.Name != "" {
+			name = principal.Name
+		}
+		if role == "" {
+			role = actuation.RoleReporter
+		}
+		h.audit.RecordDirect(name, role, "ops-agent.alertmanager", payload.Receiver, "ok", detail)
 	}
-	_ = principal
 	writeJSON(w, http.StatusOK, diag)
 }
 
