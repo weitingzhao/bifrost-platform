@@ -6,6 +6,7 @@ import {
   Boxes,
   BrainCircuit,
   CalendarClock,
+  ClipboardCheck,
   Container,
   Cpu,
   Database,
@@ -64,8 +65,10 @@ export const TASK_CC_NAV_ITEM: ShellNavItem = {
   shortLabel: 'T',
 }
 
-/** Pinned Mission Control rail — high-frequency “now” surfaces only. */
+/** Pinned Mission Control rail — high-frequency “now” surfaces only.
+ * Approvals sits here until phase 3 places the page. */
 export const MISSION_CONTROL_ITEMS: ShellNavItem[] = [
+  { id: 'approvals', label: 'Approvals', icon: ClipboardCheck },
   { id: 'control-room', label: 'Control Room', icon: Gauge },
   { id: 'observability', label: 'Observability', icon: LineChart },
   { id: 'code-health', label: 'Code Health', icon: HeartPulse },
@@ -332,6 +335,7 @@ export type ConsoleNavPlane =
 
 /** Map view tab id → sidebar plane (for headers, briefing packs, catalog cross-refs). */
 export const CONSOLE_NAV_PLANE_BY_TAB: Record<string, ConsoleNavPlane> = {
+  approvals: 'Mission Control',
   'control-room': 'Mission Control',
   observability: 'Mission Control',
   'task-cc': 'Mission Control',

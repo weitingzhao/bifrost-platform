@@ -51,6 +51,7 @@ export type ConsoleViewTab =
   | 'agent-governance'
   | 'agent-system'
   | 'operator-plane'
+  | 'approvals'
   | 'control-room'
   | 'observability'
   | 'code-health'

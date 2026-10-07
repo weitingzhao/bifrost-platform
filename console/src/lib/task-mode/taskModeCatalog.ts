@@ -147,6 +147,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
       showTaskControlCenter: true,
       includeTabs: [
         'task-cc',
+        'approvals',
         'control-room',
         'observability',
         'defects',
@@ -168,10 +169,11 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'commit-lineage',
       ],
       phaseRelevantTabs: {
-        discover: ['task-cc', 'control-room'],
-        remediate: ['task-cc', 'operator-plane', 'agent-release', 'defects'],
+        discover: ['task-cc', 'approvals', 'control-room'],
+        remediate: ['task-cc', 'approvals', 'operator-plane', 'agent-release', 'defects'],
         deploy: [
           'task-cc',
+          'approvals',
           'platform-release',
           'trade-release',
           'research-release',
@@ -179,8 +181,8 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
           'agent-release',
           'control-room',
         ],
-        patrol: ['task-cc', 'execution-log', 'autonomous-skills', 'agent-governance'],
-        clear: ['task-cc', 'queue'],
+        patrol: ['task-cc', 'approvals', 'execution-log', 'autonomous-skills', 'agent-governance'],
+        clear: ['task-cc', 'approvals', 'queue'],
       },
     },
     ops: {

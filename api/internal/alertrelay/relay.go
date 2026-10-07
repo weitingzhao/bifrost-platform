@@ -12,6 +12,9 @@
 //     arrives for HeartbeatMax, the relay pages that Alertmanager (or the path
 //     to it) is down: a dead-man's switch, since a dead Alertmanager sends
 //     nothing at all.
+//   - POST /alerts/notify takes {title, message, click_url, priority} and
+//     publishes one ntfy message. click_url is sent as the Click header so a
+//     phone tap opens the Console approval. Same bearer as the other posts.
 //
 // It is cluster-free (no client-go) like the rest of the operator plane.
 package alertrelay
@@ -83,6 +86,7 @@ type Message struct {
 	Body     string
 	Priority int // 1..5
 	Tags     []string
+	ClickURL string // ntfy Click header; empty means no header
 }
 
 // Relay receives alerts and publishes them.
@@ -112,6 +116,7 @@ func (r *Relay) Mount(rt chi.Router) {
 	rt.Get("/alerts/relay", r.handleStatus)
 	rt.Post("/alerts/alertmanager", r.authed(r.handleAlerts))
 	rt.Post("/alerts/heartbeat", r.authed(r.handleHeartbeat))
+	rt.Post("/alerts/notify", r.authed(r.handleNotify))
 }
 
 func (r *Relay) authed(next http.HandlerFunc) http.HandlerFunc {
@@ -247,6 +252,46 @@ func (r *Relay) markSent(key string) {
 	r.seen[key] = now
 }
 
+// notifyRequest is the body of POST /alerts/notify.
+type notifyRequest struct {
+	Title    string `json:"title"`
+	Message  string `json:"message"`
+	ClickURL string `json:"click_url"`
+	Priority int    `json:"priority"`
+}
+
+func (r *Relay) handleNotify(w http.ResponseWriter, req *http.Request) {
+	var body notifyRequest
+	if err := json.NewDecoder(io.LimitReader(req.Body, 1<<20)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notify body: " + err.Error()})
+		return
+	}
+	title := strings.TrimSpace(body.Title)
+	message := strings.TrimSpace(body.Message)
+	if title == "" || message == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "title and message are required"})
+		return
+	}
+	priority := body.Priority
+	if priority == 0 {
+		priority = 3
+	}
+	if priority < 1 || priority > 5 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "priority must be 1..5"})
+		return
+	}
+	if err := r.publish(req.Context(), Message{
+		Title:    title,
+		Body:     message,
+		Priority: priority,
+		ClickURL: strings.TrimSpace(body.ClickURL),
+	}); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
 func (r *Relay) handleHeartbeat(w http.ResponseWriter, req *http.Request) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(req.Body, 1<<20))
 	r.mu.Lock()
@@ -333,6 +378,9 @@ func (r *Relay) publish(ctx context.Context, m Message) error {
 	}
 	if len(m.Tags) > 0 {
 		req.Header.Set("Tags", strings.Join(m.Tags, ","))
+	}
+	if m.ClickURL != "" {
+		req.Header.Set("Click", m.ClickURL)
 	}
 	resp, err := r.client.Do(req)
 	if err == nil {
