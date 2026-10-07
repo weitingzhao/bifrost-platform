@@ -27,39 +27,39 @@ func NewHandler() *Handler {
 }
 
 type BridgeResponse struct {
-	GeneratedAt            time.Time                 `json:"generated_at"`
-	RemediationRunner      RunnerStatus              `json:"remediation_runner"`
-	Runners                []RunnerStatus            `json:"runners"`
-	GitBridge              GitBridgeStatus           `json:"git_bridge"`
-	SatelliteProbeBridge   SatelliteProbeBridgeStatus `json:"satellite_probe_bridge"`
-	HermesMcp              OptionalEndpoint          `json:"hermes_mcp"`
-	NousHermes             NousHermesStatus          `json:"nous_hermes"`
-	PlatformMcp            PlatformMcpStatus         `json:"platform_mcp"`
-	NightlyReport          NightlyHint               `json:"nightly_report"`
+	GeneratedAt          time.Time                  `json:"generated_at"`
+	RemediationRunner    RunnerStatus               `json:"remediation_runner"`
+	Runners              []RunnerStatus             `json:"runners"`
+	GitBridge            GitBridgeStatus            `json:"git_bridge"`
+	SatelliteProbeBridge SatelliteProbeBridgeStatus `json:"satellite_probe_bridge"`
+	HermesMcp            OptionalEndpoint           `json:"hermes_mcp"`
+	NousHermes           NousHermesStatus           `json:"nous_hermes"`
+	PlatformMcp          PlatformMcpStatus          `json:"platform_mcp"`
+	NightlyReport        NightlyHint                `json:"nightly_report"`
 }
 
 type NousHermesStatus struct {
-	URL             string `json:"url,omitempty"`
-	Status          string `json:"status"`
-	Version         string `json:"version,omitempty"`
-	ReleaseDate     string `json:"release_date,omitempty"`
-	GatewayRunning  bool   `json:"gateway_running"`
-	GatewayState    string `json:"gateway_state,omitempty"`
-	ActiveAgents    int    `json:"active_agents"`
-	ActiveSessions  int    `json:"active_sessions"`
-	McpToolCount    int    `json:"mcp_tool_count"`
-	DashboardURL    string `json:"dashboard_url,omitempty"`
-	Error           string `json:"error,omitempty"`
+	URL            string `json:"url,omitempty"`
+	Status         string `json:"status"`
+	Version        string `json:"version,omitempty"`
+	ReleaseDate    string `json:"release_date,omitempty"`
+	GatewayRunning bool   `json:"gateway_running"`
+	GatewayState   string `json:"gateway_state,omitempty"`
+	ActiveAgents   int    `json:"active_agents"`
+	ActiveSessions int    `json:"active_sessions"`
+	McpToolCount   int    `json:"mcp_tool_count"`
+	DashboardURL   string `json:"dashboard_url,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 type GitBridgeStatus struct {
-	URL               string              `json:"url,omitempty"`
-	Status            string              `json:"status"` // not_configured | ok | unavailable
-	Workspace         string              `json:"workspace,omitempty"`
-	RepoCount         int                 `json:"repo_count,omitempty"`
-	DirtyRepos        int                 `json:"dirty_repos,omitempty"`
-	DirtyRepoDetails  []GitDirtyRepoDetail `json:"dirty_repo_details,omitempty"`
-	Error             string              `json:"error,omitempty"`
+	URL              string               `json:"url,omitempty"`
+	Status           string               `json:"status"` // not_configured | ok | unavailable
+	Workspace        string               `json:"workspace,omitempty"`
+	RepoCount        int                  `json:"repo_count,omitempty"`
+	DirtyRepos       int                  `json:"dirty_repos,omitempty"`
+	DirtyRepoDetails []GitDirtyRepoDetail `json:"dirty_repo_details,omitempty"`
+	Error            string               `json:"error,omitempty"`
 }
 
 // GitDirtyRepoDetail is a compact dirty summary for Console (repos / files / +N/−M).
@@ -74,10 +74,10 @@ type GitDirtyRepoDetail struct {
 }
 
 type SatelliteProbeBridgeStatus struct {
-	URL             string `json:"url,omitempty"`
-	Status          string `json:"status"` // not_configured | ok | unavailable
-	TradeNginxBase  string `json:"trade_nginx_base,omitempty"`
-	Error           string `json:"error,omitempty"`
+	URL            string `json:"url,omitempty"`
+	Status         string `json:"status"` // not_configured | ok | unavailable
+	TradeNginxBase string `json:"trade_nginx_base,omitempty"`
+	Error          string `json:"error,omitempty"`
 }
 
 type RunnerStatus struct {
@@ -92,10 +92,10 @@ type RunnerStatus struct {
 }
 
 type OptionalEndpoint struct {
-	URL       string `json:"url,omitempty"`
-	Status    string `json:"status"` // not_configured | ok | degraded | unavailable
-	Error     string `json:"error,omitempty"`
-	Note      string `json:"note,omitempty"`
+	URL    string `json:"url,omitempty"`
+	Status string `json:"status"` // not_configured | ok | degraded | unavailable
+	Error  string `json:"error,omitempty"`
+	Note   string `json:"note,omitempty"`
 }
 
 type PlatformMcpStatus struct {
@@ -183,13 +183,13 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 	nightly := probeNightlyReport(ctx, h.httpClient, runnerURL)
 
 	writeJSON(w, http.StatusOK, BridgeResponse{
-		GeneratedAt:       now,
-		RemediationRunner: runner,
-		Runners:           runners,
+		GeneratedAt:          now,
+		RemediationRunner:    runner,
+		Runners:              runners,
 		GitBridge:            gitBridge,
 		SatelliteProbeBridge: satelliteProbeBridge,
-		HermesMcp:         hermes,
-		NousHermes:        nousHermes,
+		HermesMcp:            hermes,
+		NousHermes:           nousHermes,
 		PlatformMcp: PlatformMcpStatus{
 			ServerName:       mcp.ServerName,
 			ServerVersion:    mcp.ServerVersion,
@@ -215,6 +215,7 @@ func (h *Handler) HandleSmoke(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	remediation.SetRunnerAuth(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
@@ -224,6 +225,16 @@ func (h *Handler) HandleSmoke(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func setGitBridgeAuth(req *http.Request) {
+	token := strings.TrimSpace(os.Getenv("PLATFORM_OPERATOR_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("PLATFORM_ADMIN_TOKEN"))
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 }
 
 func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
@@ -237,6 +248,7 @@ func probeGitBridge(ctx context.Context, client *http.Client) GitBridgeStatus {
 	if err != nil {
 		return GitBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
 	}
+	setGitBridgeAuth(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return GitBridgeStatus{URL: url, Status: "unavailable", Error: err.Error()}
@@ -443,6 +455,7 @@ func probeNightlyReport(ctx context.Context, client *http.Client, runnerURL stri
 	if err != nil {
 		return NightlyHint{Available: false, Hint: err.Error()}
 	}
+	remediation.SetRunnerAuth(req)
 	resp, err := client.Do(req)
 	if err != nil {
 		return NightlyHint{Available: false, Hint: "Runner report unreachable"}

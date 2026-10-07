@@ -116,6 +116,7 @@ func (c *RunnerClient) do(ctx context.Context, method, suffix string, body []byt
 			lastErr = err
 			continue
 		}
+		setRouteAuth(req, suffix)
 		if body != nil {
 			req.Header.Set("Content-Type", "application/json")
 		}
@@ -312,6 +313,7 @@ func (c *RunnerClient) Stream(ctx context.Context, id string, onLine func([]byte
 			lastErr = err
 			continue
 		}
+		SetRunnerAuth(req)
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -407,6 +409,36 @@ func (c *RunnerClient) TriggerNightly(ctx context.Context) (*NightlyRunResponse,
 		return nil, err
 	}
 	return &out, nil
+}
+
+// RunnerTokenEnv is the shared bearer the runner (:8781) and Hermes gateway (:8782) require.
+// The value is read from the environment only and is never logged.
+const RunnerTokenEnv = "REMEDIATION_RUNNER_TOKEN"
+
+// OperatorTokenEnv is the only credential accepted by POST /run/:id/respond.
+const OperatorTokenEnv = "PLATFORM_OPERATOR_TOKEN"
+
+// SetRunnerAuth stamps RunnerTokenEnv onto req when the variable is non-empty.
+func SetRunnerAuth(req *http.Request) {
+	token := strings.TrimSpace(os.Getenv(RunnerTokenEnv))
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
+func setOperatorAuth(req *http.Request) {
+	token := strings.TrimSpace(os.Getenv(OperatorTokenEnv))
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+}
+
+func setRouteAuth(req *http.Request, suffix string) {
+	if strings.HasSuffix(suffix, "/respond") {
+		setOperatorAuth(req)
+		return
+	}
+	SetRunnerAuth(req)
 }
 
 func trimRunnerErrorBody(raw []byte, status int) string {

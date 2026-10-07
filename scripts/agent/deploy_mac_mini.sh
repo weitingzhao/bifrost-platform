@@ -43,6 +43,13 @@ else
 fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM_LOCAL="$(cd "${SCRIPT_DIR}/../../" && pwd)"
+# The runner binds 0.0.0.0. Refuse to deploy until the shared bearer key is present.
+# This checks the key name only; the value is not printed.
+if [[ ! -f "${PLATFORM_LOCAL}/.env" ]] || ! grep -qE '^REMEDIATION_RUNNER_TOKEN=.+' "${PLATFORM_LOCAL}/.env"; then
+  echo "ERROR: REMEDIATION_RUNNER_TOKEN is missing or empty in ${PLATFORM_LOCAL}/.env" >&2
+  echo "Add that key (distinct from PLATFORM_OPERATOR_TOKEN) before deploying a non-loopback runner." >&2
+  exit 1
+fi
 AGENT_SRC="${PLATFORM_LOCAL}/agent/remediation"
 DEPLOY_DIR="${PLATFORM_LOCAL}/agent/deploy"
 INFRA_LOCAL="$(cd "${PLATFORM_LOCAL}/../bifrost-trade-infra" 2>/dev/null && pwd || echo "")"
@@ -207,7 +214,7 @@ run_remote "
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   echo "==> Syncing secrets + bridge config to remote .env"
   TMP_ENV="$(mktemp)"
-  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL|NTFY_URL|NTFY_TOPIC|ALERT_RELAY_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
+  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL|NTFY_URL|NTFY_TOPIC|ALERT_RELAY_TOKEN|REMEDIATION_RUNNER_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
   if [[ -s "${TMP_ENV}" ]]; then
     TMP_OUT="$(mktemp)"
     while IFS= read -r line; do

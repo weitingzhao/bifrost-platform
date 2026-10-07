@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import {
   cancelJob,
   createJob,
@@ -14,16 +15,17 @@ import { submitOperatorResponse } from './approvals.js'
 import { buildOperatorInitBrief } from './prompt.js'
 import { runRemediationJob } from './runner.js'
 import type { StartRunRequest } from './types.js'
+import { bindRefusal, OPERATOR_TOKEN_ENV, requireBearer, RUNNER_TOKEN_ENV } from './routeAuth.js'
 
 const require = createRequire(import.meta.url)
 const pkg = require('../package.json') as { version: string }
 const AGENT_VERSION = pkg.version
 
+export function createRemediationApp(auth: { runnerToken: string; operatorToken: string }): express.Express {
 const app = express()
 app.use(express.json({ limit: '2mb' }))
+app.use(requireBearer(auth))
 
-const port = Number(process.env.REMEDIATION_RUNNER_PORT ?? 8781)
-const bindHost = process.env.REMEDIATION_RUNNER_BIND?.trim() || '127.0.0.1'
 const agentRole = process.env.AGENT_ROLE?.trim() || 'primary'
 
 app.get('/health', (_req, res) => {
@@ -280,6 +282,26 @@ app.get('/run/:id/stream', (req, res) => {
   }
 })
 
-app.listen(port, bindHost, () => {
-  console.log(`remediation runner v${AGENT_VERSION} (${agentRole}) listening on http://${bindHost}:${port}`)
-})
+  return app
+}
+
+function main(): void {
+  const port = Number(process.env.REMEDIATION_RUNNER_PORT ?? 8781)
+  const bindHost = process.env.REMEDIATION_RUNNER_BIND?.trim() || '127.0.0.1'
+  const runnerToken = process.env[RUNNER_TOKEN_ENV]?.trim() ?? ''
+  const operatorToken = process.env[OPERATOR_TOKEN_ENV]?.trim() ?? ''
+  const refusal = bindRefusal(bindHost, runnerToken)
+  if (refusal != null) {
+    console.error(`[remediation] ${refusal}`)
+    process.exit(1)
+  }
+  const agentRole = process.env.AGENT_ROLE?.trim() || 'primary'
+  const app = createRemediationApp({ runnerToken, operatorToken })
+  app.listen(port, bindHost, () => {
+    console.log(`remediation runner v${AGENT_VERSION} (${agentRole}) listening on http://${bindHost}:${port}`)
+  })
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+}

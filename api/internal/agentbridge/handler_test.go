@@ -231,3 +231,24 @@ func TestProbeHermesMcpDegradedSkills(t *testing.T) {
 		t.Fatalf("probeHermesMcp = %+v, want degraded naming peer-watchdog", got)
 	}
 }
+
+func TestProbeGitBridgeSendsOperatorToken(t *testing.T) {
+	const token = "fixture-operator-token"
+	var got string
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(`{"workspace":"/stocks","repos":[]}`))
+	}))
+	t.Cleanup(gw.Close)
+	t.Setenv("GIT_BRIDGE_URL", gw.URL)
+	t.Setenv("PLATFORM_OPERATOR_TOKEN", token)
+	t.Setenv("PLATFORM_ADMIN_TOKEN", "")
+
+	status := probeGitBridge(context.Background(), gw.Client())
+	if status.Status != "ok" {
+		t.Fatalf("probeGitBridge status = %q, want ok", status.Status)
+	}
+	if got != "Bearer "+token {
+		t.Fatal("git-bridge probe did not send the operator bearer")
+	}
+}

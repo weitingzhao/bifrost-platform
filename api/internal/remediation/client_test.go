@@ -60,6 +60,8 @@ func newTestRunnerClient(t *testing.T, primaryURL string) *RunnerClient {
 	t.Helper()
 	t.Setenv("REMEDIATION_RUNNER_URL", primaryURL)
 	t.Setenv("REMEDIATION_RUNNER_STANDBY_URL", "")
+	t.Setenv(RunnerTokenEnv, "")
+	t.Setenv(OperatorTokenEnv, "")
 	return NewRunnerClient()
 }
 
@@ -288,5 +290,46 @@ func TestTrimRunnerErrorBodyPassesThroughShortPlainText(t *testing.T) {
 	got := trimRunnerErrorBody([]byte("  short error  "), 400)
 	if got != "short error" {
 		t.Fatalf("trimRunnerErrorBody() = %q", got)
+	}
+}
+
+func TestRunnerClientSendsRunnerAndOperatorTokens(t *testing.T) {
+	const runnerToken = "fixture-runner-token"
+	const operatorToken = "fixture-operator-token"
+	var gotRun, gotRespond string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/run" && r.Method == http.MethodPost:
+			gotRun = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"id":"job-1","status":"running"}`))
+		case r.URL.Path == "/run/job-1/respond":
+			gotRespond = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("REMEDIATION_RUNNER_URL", srv.URL)
+	t.Setenv("REMEDIATION_RUNNER_STANDBY_URL", "")
+	t.Setenv(RunnerTokenEnv, runnerToken)
+	t.Setenv(OperatorTokenEnv, operatorToken)
+	c := NewRunnerClient()
+
+	if _, err := c.Start(context.Background(), StartRunnerRequest{Scope: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotRun != "Bearer "+runnerToken {
+		t.Fatalf("start Authorization header mismatch")
+	}
+	if err := c.Respond(context.Background(), "job-1", RespondRequest{OptionID: "yes"}); err != nil {
+		t.Fatal(err)
+	}
+	if gotRespond != "Bearer "+operatorToken {
+		t.Fatalf("respond Authorization header mismatch")
+	}
+	if gotRespond == "Bearer "+runnerToken {
+		t.Fatal("respond accepted the runner token")
 	}
 }

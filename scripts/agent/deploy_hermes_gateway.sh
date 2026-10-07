@@ -55,6 +55,13 @@ rm -f "${PLIST_TMP}"
 echo "==> Creating log directory"
 ssh "${REMOTE}" "mkdir -p ${REMOTE_HOME}/bifrost-agent/logs ${REMOTE_HOME}/bifrost-agent/hermes"
 
+echo "==> Checking REMEDIATION_RUNNER_TOKEN on target (key presence only)"
+if ! ssh "${REMOTE}" "grep -qE '^(export )?REMEDIATION_RUNNER_TOKEN=.+' \"${REMOTE_HOME}/bifrost-agent/config/.env\""; then
+  echo "ERROR: REMEDIATION_RUNNER_TOKEN is missing or empty in ${REMOTE}:~/bifrost-agent/config/.env" >&2
+  echo "The gateway binds 0.0.0.0. Copy the key with deploy_mac_mini.sh before starting the gateway." >&2
+  exit 1
+fi
+
 echo "==> Reloading launchd service"
 ssh "${REMOTE}" "launchctl bootout gui/\$(id -u) ${REMOTE_HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist 2>/dev/null || true"
 ssh "${REMOTE}" "launchctl bootstrap gui/\$(id -u) ${REMOTE_HOME}/Library/LaunchAgents/${PLIST_LABEL}.plist"

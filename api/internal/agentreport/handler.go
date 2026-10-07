@@ -9,13 +9,15 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 // Handler serves read-only autonomous agent nightly reports.
 type Handler struct {
-	runnerURL   string
-	localPaths  []string
-	httpClient  *http.Client
+	runnerURL  string
+	localPaths []string
+	httpClient *http.Client
 }
 
 func NewHandler() *Handler {
@@ -33,9 +35,9 @@ func NewHandler() *Handler {
 		filepath.Join(os.Getenv("HOME"), "bifrost-agent", "reports", "latest.md"),
 	)
 	return &Handler{
-		runnerURL:   runner,
-		localPaths:  paths,
-		httpClient:  &http.Client{Timeout: 10 * time.Second},
+		runnerURL:  runner,
+		localPaths: paths,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -98,6 +100,7 @@ func (h *Handler) HandleTriggerNightly(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, NightlyTriggerResponse{Status: "error", Error: err.Error()})
 		return
 	}
+	remediation.SetRunnerAuth(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, NightlyTriggerResponse{
@@ -128,6 +131,7 @@ func (h *Handler) fetchFromRunner(ctx context.Context) (string, string, string, 
 	if err != nil {
 		return "", "", "", false
 	}
+	remediation.SetRunnerAuth(req)
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
 		return "", "", "", false
@@ -141,9 +145,9 @@ func (h *Handler) fetchFromRunner(ctx context.Context) (string, string, string, 
 		return "", "", "", false
 	}
 	var out struct {
-		Content    string `json:"content"`
-		Source     string `json:"source"`
-		UpdatedAt  string `json:"updated_at"`
+		Content   string `json:"content"`
+		Source    string `json:"source"`
+		UpdatedAt string `json:"updated_at"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil || out.Content == "" {
 		return "", "", "", false
