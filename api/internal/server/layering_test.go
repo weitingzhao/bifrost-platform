@@ -20,6 +20,7 @@ import (
 // Authority: console/src/lib/architecture/cicdBootstrapCatalog.ts, layer L-1.
 var operatorPlanePackages = []string{
 	"agentbridge",
+	"alertrelay",
 	"agentdeploy",
 	"agentgovernance",
 	"agentreport",

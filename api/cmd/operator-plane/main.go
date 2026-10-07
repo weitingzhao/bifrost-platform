@@ -25,6 +25,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/alertrelay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -60,14 +61,35 @@ func main() {
 
 	autopilot := os.Getenv("OPERATOR_PLANE_AUTOPILOT") == "on"
 
+	// Alert relay (TD-209): pages the Owner through ntfy from outside the
+	// cluster. On for exactly one Mini (ALERT_RELAY=on): Alertmanager sends
+	// its Watchdog only there, so a second relay would page "heartbeat missing"
+	// forever.
+	var relay *alertrelay.Relay
+	if rc := alertrelay.ConfigFromEnv(); rc.Enabled {
+		if p := rc.Problem(); p != "" {
+			slog.Error("alert relay not started", "err", p)
+		} else {
+			relay = alertrelay.New(rc)
+			relay.Start(context.Background())
+			slog.Info("alert relay on", "ntfy", rc.NtfyURL, "heartbeat_max", rc.HeartbeatMax)
+		}
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-operator-plane","autopilot":` +
-			btoa(autopilot) + `,"contained_panics":` + itoa(safego.Contained()) + `}`))
+			btoa(autopilot) + `,"alert_relay":` + btoa(relay != nil) +
+			`,"contained_panics":` + itoa(safego.Contained()) + `}`))
 	})
-	r.Route("/api/v1", plane.Mount)
+	r.Route("/api/v1", func(sub chi.Router) {
+		plane.Mount(sub)
+		if relay != nil {
+			relay.Mount(sub)
+		}
+	})
 
 	if autopilot {
 		plane.StartBackground(context.Background())

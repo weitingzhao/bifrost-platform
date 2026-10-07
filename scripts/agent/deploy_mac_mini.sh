@@ -17,11 +17,16 @@ REMOTE_DIR="/Users/vision/bifrost-agent"
 #   OPERATOR_PLANE_PORT       8783
 #   OPERATOR_PLANE_AUTOPILOT  on | off (default off — platform-workers still owns patrol)
 #   PLATFORM_LAN_HOST         192.168.10.40 (this host, as the Minis address it)
+#   ALERT_RELAY               on | off (default off) — ntfy relay + Alertmanager
+#                             dead-man (TD-209). On for exactly one Mini: the one
+#                             Alertmanager's owner-ntfy receivers point at.
+#                             NTFY_TOPIC / ALERT_RELAY_TOKEN come from this host's .env.
 AGENT_ROLE="${AGENT_ROLE:-primary}"
 PEER_SSH="${PEER_SSH:-}"
 PEER_URL="${PEER_URL:-}"
 OPERATOR_PLANE_PORT="${OPERATOR_PLANE_PORT:-8783}"
 OPERATOR_PLANE_AUTOPILOT="${OPERATOR_PLANE_AUTOPILOT:-off}"
+ALERT_RELAY="${ALERT_RELAY:-off}"
 PLATFORM_LAN_HOST="${PLATFORM_LAN_HOST:-192.168.10.40}"
 HERMES_GATEWAY_REMOTE="${HERMES_GATEWAY_REMOTE:-192.168.10.52}"
 # macOS gates local-network access per executable, and a launchd job does not
@@ -198,7 +203,7 @@ run_remote "
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   echo "==> Syncing secrets + bridge config to remote .env"
   TMP_ENV="$(mktemp)"
-  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
+  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL|NTFY_URL|NTFY_TOPIC|ALERT_RELAY_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
   if [[ -s "${TMP_ENV}" ]]; then
     TMP_OUT="$(mktemp)"
     while IFS= read -r line; do
@@ -269,12 +274,13 @@ export PLATFORM_CONFIG=${REMOTE_DIR}/workspace/bifrost-platform/config/environme
 export PLATFORM_DATA_DIR=${REMOTE_DIR}/operator-plane-data
 export OPERATOR_PLANE_LISTEN=:${OPERATOR_PLANE_PORT}
 export OPERATOR_PLANE_AUTOPILOT=${OPERATOR_PLANE_AUTOPILOT}
+export ALERT_RELAY=${ALERT_RELAY}
 export GIT_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8785
 export SATELLITE_PROBE_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8786
 export HERMES_GATEWAY_URL=${HERMES_GATEWAY_URL_FOR_REMOTE}
 export NOUS_HERMES_URL=http://192.168.10.50:9119
 ENVEOF
-echo '  wrote env.operator-plane.sh (port=${OPERATOR_PLANE_PORT} autopilot=${OPERATOR_PLANE_AUTOPILOT})'"
+echo '  wrote env.operator-plane.sh (port=${OPERATOR_PLANE_PORT} autopilot=${OPERATOR_PLANE_AUTOPILOT} alert_relay=${ALERT_RELAY})'"
   # Stop first: macOS refuses to overwrite a running executable.
   run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.operator-plane 2>/dev/null || true"
   run_scp "${PLATFORM_LOCAL}/api/bin/operator-plane" "${REMOTE}:${REMOTE_DIR}/operator-plane"
