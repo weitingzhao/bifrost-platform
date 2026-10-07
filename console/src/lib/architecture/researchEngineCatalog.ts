@@ -38,16 +38,6 @@ export const RESEARCH_ENGINE_SUMMARY = {
   retiredPluginTab: 'analytics-pipeline',
   elementaryReportProxy: '/api/v1/research/analytics/elementary/files/elementary_report.html',
   elementaryStatus: 'GET /api/v1/research/analytics/elementary',
-  /** Legacy CronJob names — suspended; ignition is Dagster schedule/asset (same logical trigger). */
-  cronjobTriggers: [
-    { trigger_id: 'dbt-sepa', cronjob: 'bifrost-analytics-daily', empty_hint: 'SEPA empty', scheduler: 'dagster' },
-    { trigger_id: 'momentum', cronjob: 'research-engines-momentum', empty_hint: 'Momentum empty', scheduler: 'dagster' },
-    { trigger_id: 'iv-percentile', cronjob: 'research-iv-percentile', empty_hint: 'IV empty', scheduler: 'dagster' },
-    { trigger_id: 'terrain-forecast', cronjob: 'research-engines-forecast', empty_hint: 'Forecast / Terrain empty', scheduler: 'dagster' },
-    { trigger_id: 'terrain-intraday', cronjob: 'research-terrain-intraday', empty_hint: 'Intraday empty', scheduler: 'dagster' },
-    { trigger_id: 'gex-intraday', cronjob: 'research-gex-intraday', empty_hint: 'GEX empty', scheduler: 'dagster' },
-    { trigger_id: 'event-radar', cronjob: 'research-engines-event-radar', empty_hint: 'Events empty', scheduler: 'dagster' },
-  ] as const,
 } as const
 
 export const RESEARCH_GOVERNANCE_SURFACES = [
