@@ -6,6 +6,7 @@ import {
   platformPostAdmin,
 } from '../platformClient.js'
 import { textResult } from './helpers.js'
+import { ibGatewayControlPath } from './ibGatewayControl.js'
 
 export function buildPlatformTools(jobId: string): Record<string, SDKCustomTool> {
   return {
@@ -268,32 +269,22 @@ export function buildPlatformTools(jobId: string): Record<string, SDKCustomTool>
     },
     ib_gateway_control: {
       description:
-        'IB Gateway plugin control (reconnect / mode / maintenance). ' +
+        'IB Gateway plugin control (reconnect or maintenance). ' +
+        'Switching the gateway between live and mock is not available here. ' +
         'IMPORTANT: call request_operator_approval BEFORE using this tool. Repair path — not make install publish.',
       inputSchema: {
         type: 'object',
         properties: {
           action: {
             type: 'string',
-            description: 'Control action: reconnect | mode | maintenance',
-          },
-          mode: {
-            type: 'string',
-            description: 'Required when action=mode: live | mock | maintenance (as API accepts)',
+            description: 'Control action: reconnect | maintenance',
           },
         },
         required: ['action'],
       },
       async execute(args) {
-        const action = String(args.action ?? '').trim()
-        if (action === '') throw new Error('action is required')
-        const body: Record<string, string> = {}
-        const mode = args.mode != null ? String(args.mode).trim() : ''
-        if (mode !== '') body.mode = mode
-        const data = await platformPost(
-          `/api/v1/plugins/ib-gateway/control/${encodeURIComponent(action)}`,
-          body,
-        )
+        const action = String(args.action ?? '')
+        const data = await platformPost(ibGatewayControlPath(action), {})
         return textResult(jsonText(data))
       },
     },
