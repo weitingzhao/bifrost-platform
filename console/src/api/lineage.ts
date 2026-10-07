@@ -63,6 +63,17 @@ export type LineageCoverage = {
   with_change_id: number
   agent_no_lineage: number
   branches: number
+  /** when Gitea last fetched this repo from GitHub (mirrors only) */
+  mirror_updated?: string
+}
+
+/** the mirror fetch a build asked for before scanning (absent when one ran under 2 min ago) */
+export type LineageMirrorSync = {
+  requested_at: string
+  settled: boolean
+  /** still fetching when the scan started: read at their previous state */
+  pending?: string[]
+  errors?: string[]
 }
 
 export type LineageGraphCommit = {
@@ -112,6 +123,7 @@ export type LineageResponse = {
   releases_error?: string
   /** only with graph=true */
   graph?: LineageRepoGraph[]
+  mirror_sync?: LineageMirrorSync
   errors: string[]
 }
 

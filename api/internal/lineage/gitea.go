@@ -27,6 +27,9 @@ type giteaCommit struct {
 
 type giteaRepo struct {
 	Name, Default string
+	// Mirror is a pull mirror; MirrorUpdated is when Gitea last fetched it.
+	Mirror        bool
+	MirrorUpdated time.Time
 }
 
 type giteaBranch struct {
@@ -66,15 +69,39 @@ func (g *gitea) get(ctx context.Context, path string, q url.Values, out any) err
 	return json.NewDecoder(io.LimitReader(resp.Body, 8<<20)).Decode(out)
 }
 
+// mirrorSync asks Gitea to fetch a pull mirror from its upstream now. Gitea
+// queues the fetch and answers at once; MirrorUpdated moves when it is done.
+func (g *gitea) mirrorSync(ctx context.Context, repo string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fmt.Sprintf("%s/api/v1%s/mirror-sync", g.acc.Base, g.repoPath(repo)), nil)
+	if err != nil {
+		return err
+	}
+	if g.acc.User != "" && g.acc.Pass != "" {
+		req.SetBasicAuth(g.acc.User, g.acc.Pass)
+	}
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode/100 != 2 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("mirror-sync %s: status %d: %s", repo, resp.StatusCode, string(body))
+	}
+	return nil
+}
+
 // repos lists the org's non-archived, non-empty repos with their default branch.
 func (g *gitea) repos(ctx context.Context) ([]giteaRepo, error) {
 	var out []giteaRepo
 	for page := 1; page <= 10; page++ {
 		var raw []struct {
-			Name          string `json:"name"`
-			DefaultBranch string `json:"default_branch"`
-			Archived      bool   `json:"archived"`
-			Empty         bool   `json:"empty"`
+			Name          string    `json:"name"`
+			DefaultBranch string    `json:"default_branch"`
+			Archived      bool      `json:"archived"`
+			Empty         bool      `json:"empty"`
+			Mirror        bool      `json:"mirror"`
+			MirrorUpdated time.Time `json:"mirror_updated"`
 		}
 		q := url.Values{"limit": {fmt.Sprint(pageLimit)}, "page": {fmt.Sprint(page)}}
 		if err := g.get(ctx, "/orgs/"+url.PathEscape(g.acc.Org)+"/repos", q, &raw); err != nil {
@@ -86,7 +113,7 @@ func (g *gitea) repos(ctx context.Context) ([]giteaRepo, error) {
 				if def == "" {
 					def = "main"
 				}
-				out = append(out, giteaRepo{Name: r.Name, Default: def})
+				out = append(out, giteaRepo{Name: r.Name, Default: def, Mirror: r.Mirror, MirrorUpdated: r.MirrorUpdated})
 			}
 		}
 		if len(raw) < pageLimit {

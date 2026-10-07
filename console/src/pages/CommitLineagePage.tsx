@@ -60,6 +60,35 @@ function formatTime(iso: string): string {
 }
 
 /** local_9bfc2845-… → local_9bfc2845 · https://claude.ai/code/session_01Du… → cloud session_01Du5yDL */
+/** age of a mirror fetch relative to when the response was built */
+function mirrorAgeMs(iso: string | undefined, ref: string): number | null {
+  if (!iso) return null
+  const ms = Date.parse(ref) - Date.parse(iso)
+  return Number.isFinite(ms) ? Math.max(0, ms) : null
+}
+
+function mirrorAgeLabel(ms: number | null): string {
+  if (ms == null) return '—'
+  const min = Math.round(ms / 60_000)
+  if (min < 1) return 'just now'
+  if (min < 90) return `${min} min ago`
+  return `${(ms / 3_600_000).toFixed(1)} h ago`
+}
+
+function mirrorSummary(data: LineageResponse): string {
+  const ages = data.coverage
+    .map(c => ({ repo: c.repo, ms: mirrorAgeMs(c.mirror_updated, data.generated_at) }))
+    .filter((a): a is { repo: string; ms: number } => a.ms != null)
+  if (ages.length === 0) return ' · Gitea mirror'
+  const oldest = ages.reduce((a, b) => (b.ms > a.ms ? b : a))
+  const pending = data.mirror_sync?.pending?.length ?? 0
+  if (oldest.ms < 5 * 60_000) return ' · mirrors fetched from GitHub just now'
+  return (
+    ` · oldest mirror fetch ${mirrorAgeLabel(oldest.ms)} (${shortRepo(oldest.repo)})` +
+    (pending > 0 ? ` · ${pending} still fetching` : '')
+  )
+}
+
 function threadLabel(session: string): string {
   if (session === '') return 'No session (Cursor / manual)'
   if (session.startsWith('local_')) return session.slice(0, 14)
@@ -324,7 +353,7 @@ export function CommitLineagePage() {
         (waiting.count > 0
           ? ` · ${waiting.count} branch${waiting.count === 1 ? '' : 'es'} with unlanded work${waiting.days != null ? ` (oldest ${waiting.days.toFixed(1)} d)` : ''}`
           : '') +
-        ' · Gitea mirror, up to 8 h behind GitHub'
+        mirrorSummary(data)
 
   const toggle = (id: string) =>
     setOpen(prev => {
@@ -584,7 +613,7 @@ export function CommitLineagePage() {
           title="Coverage"
           description={
             help
-              ? `Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run.`
+              ? `Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run. "Mirror fetched" is when Gitea last pulled the repo from GitHub; each scan asks it to fetch first (at most every 2 min) and waits up to 10 s.`
               : undefined
           }
           collapsible
@@ -600,6 +629,7 @@ export function CommitLineagePage() {
                 <DenseTableHead className={denseTableNumCell}>With Change-Id</DenseTableHead>
                 <DenseTableHead className={denseTableNumCell}>Agent, no thread</DenseTableHead>
                 <DenseTableHead className={denseTableNumCell}>Branches moved</DenseTableHead>
+                <DenseTableHead className={denseTableNumCell}>Mirror fetched</DenseTableHead>
               </DenseTableHeadRow>
             </DenseTableHeader>
             <DenseTableBody>
@@ -611,6 +641,13 @@ export function CommitLineagePage() {
                   <DenseTableCell className={denseTableNumCell}>{c.with_change_id}</DenseTableCell>
                   <DenseTableCell className={denseTableNumCell}>{c.agent_no_lineage}</DenseTableCell>
                   <DenseTableCell className={denseTableNumCell}>{c.branches}</DenseTableCell>
+                  <DenseTableCell
+                    className={`${denseTableNumCell} ${
+                      (mirrorAgeMs(c.mirror_updated, data.generated_at) ?? 0) > 2 * 3_600_000 ? 'text-warning' : ''
+                    }`}
+                  >
+                    {mirrorAgeLabel(mirrorAgeMs(c.mirror_updated, data.generated_at))}
+                  </DenseTableCell>
                 </DenseTableRow>
               ))}
             </DenseTableBody>

@@ -109,6 +109,8 @@ type RepoCoverage struct {
 	AgentNoLineage int `json:"agent_no_lineage"`
 	// Branches scanned besides main.
 	Branches int `json:"branches"`
+	// MirrorUpdated is when Gitea last fetched this repo from GitHub (mirrors only).
+	MirrorUpdated *time.Time `json:"mirror_updated,omitempty"`
 }
 
 // Response is GET /api/v1/lineage.
@@ -124,6 +126,8 @@ type Response struct {
 	Releases      []ReleaseHead `json:"releases"`
 	ReleasesError string        `json:"releases_error,omitempty"`
 	// Graph is every repo's commit graph; only with ?graph=true (it is large).
-	Graph  []RepoGraph `json:"graph,omitempty"`
-	Errors []string    `json:"errors"`
+	Graph []RepoGraph `json:"graph,omitempty"`
+	// MirrorSync is the mirror fetch this build asked for, if any.
+	MirrorSync *MirrorSync `json:"mirror_sync,omitempty"`
+	Errors     []string    `json:"errors"`
 }

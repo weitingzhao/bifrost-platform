@@ -27,6 +27,12 @@ type Service struct {
 	releases ReleasesFunc
 	client   *http.Client
 	now      func() time.Time
+	// clock is wall time for the mirror sync (now may be pinned in tests).
+	clock        func() time.Time
+	mirrors      mirrorThrottle
+	mirrorEvery  time.Duration
+	mirrorSettle time.Duration
+	mirrorPoll   time.Duration
 }
 
 func NewService(access AccessFunc) *Service {
@@ -34,12 +40,18 @@ func NewService(access AccessFunc) *Service {
 		access: access,
 		client: &http.Client{Timeout: 15 * time.Second},
 		now:    func() time.Time { return time.Now().UTC() },
+		clock:  time.Now,
+
+		mirrorEvery:  mirrorEvery,
+		mirrorSettle: mirrorSettle,
+		mirrorPoll:   mirrorPoll,
 	}
 }
 
 type repoScan struct {
 	repo     string
 	def      string
+	mirrored *time.Time
 	main     []giteaCommit
 	branches map[string][]giteaCommit
 	err      error
@@ -76,6 +88,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 		out.Errors = append(out.Errors, "list repos: "+err.Error())
 		return out
 	}
+	repos, out.MirrorSync = s.refreshMirrors(ctx, g, repos)
 
 	scans := make([]repoScan, len(repos))
 	sem := make(chan struct{}, repoConcurrency)
@@ -115,6 +128,10 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 
 func scanRepo(ctx context.Context, g *gitea, r giteaRepo, since time.Time) repoScan {
 	sc := repoScan{repo: r.Name, def: r.Default, branches: map[string][]giteaCommit{}}
+	if r.Mirror && r.MirrorUpdated.Year() > 1970 {
+		at := r.MirrorUpdated.UTC()
+		sc.mirrored = &at
+	}
 	sc.main, sc.err = g.commits(ctx, r.Name, r.Default, since, mainMaxPages, nil)
 	if sc.err != nil {
 		return sc
@@ -164,7 +181,7 @@ func (a *threadAcc) add(c Commit) {
 
 // collect adds one repo's lineage commits to threads and returns its coverage.
 func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
-	cov := RepoCoverage{Repo: sc.repo, MainCommits: len(sc.main), Branches: len(sc.branches)}
+	cov := RepoCoverage{Repo: sc.repo, MainCommits: len(sc.main), Branches: len(sc.branches), MirrorUpdated: sc.mirrored}
 	add := func(c Commit) {
 		a := threads[c.Session]
 		if a == nil {
