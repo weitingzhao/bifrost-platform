@@ -1,22 +1,24 @@
 {
-  "comment": "Vision V3 — Cursor MCP bridges for Ops Agent. Merge mcpServers into ~/.cursor/mcp.json.",
+  "comment": "Cursor MCP bridges. Merge mcpServers into ~/.cursor/mcp.json. Chat approval (bifrost-approve) is Claude-only and is not in this file. Tokens are env references, never values. Reads use the PROD VIP. Writes stay off until MCP_WRITES=on.",
   "mcpServers": {
     "bifrost-platform": {
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_OPERATOR_TOKEN": "<operator-or-admin-token>"
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "PLATFORM_OPERATOR_TOKEN": "${PLATFORM_OPERATOR_TOKEN:-}",
+        "MCP_WRITES": "off"
       }
     },
     "bifrost-kubernetes-bridge": {
-      "comment": "K8s read/actuation via platform-api cluster routes (L0/L1/L2)",
+      "comment": "K8s read plus B-tier actuation. C/D routes create an approval once MCP_WRITES=on.",
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_OPERATOR_TOKEN": "<operator-or-admin-token>",
-        "MCP_BRIDGE_FOCUS": "kubernetes"
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "PLATFORM_OPERATOR_TOKEN": "${PLATFORM_OPERATOR_TOKEN:-}",
+        "MCP_BRIDGE_FOCUS": "kubernetes",
+        "MCP_WRITES": "off"
       }
     },
     "bifrost-redis-bridge": {
@@ -24,8 +26,8 @@
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_VIEWER_TOKEN": "<viewer-token>",
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "PLATFORM_VIEWER_TOKEN": "${PLATFORM_VIEWER_TOKEN:-}",
         "PLATFORM_TOKEN_ENV_KEY": "PLATFORM_VIEWER_TOKEN",
         "MCP_BRIDGE_FOCUS": "redis"
       }
@@ -35,8 +37,8 @@
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_VIEWER_TOKEN": "<viewer-token>",
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "PLATFORM_VIEWER_TOKEN": "${PLATFORM_VIEWER_TOKEN:-}",
         "PLATFORM_TOKEN_ENV_KEY": "PLATFORM_VIEWER_TOKEN",
         "MCP_BRIDGE_FOCUS": "postgres"
       }
@@ -46,10 +48,20 @@
       "command": "npx",
       "args": ["tsx", "mcp/platform/src/index.ts"],
       "env": {
-        "PLATFORM_API_URL": "http://127.0.0.1:8780",
-        "PLATFORM_VIEWER_TOKEN": "<viewer-token>",
+        "PLATFORM_API_URL": "http://192.168.10.100:30876",
+        "PLATFORM_VIEWER_TOKEN": "${PLATFORM_VIEWER_TOKEN:-}",
         "PLATFORM_TOKEN_ENV_KEY": "PLATFORM_VIEWER_TOKEN",
         "MCP_BRIDGE_FOCUS": "prometheus"
+      }
+    },
+    "bifrost-local": {
+      "comment": "Laptop bdev and git-bridge only. The only server that may use 127.0.0.1.",
+      "command": "npx",
+      "args": ["tsx", "mcp/platform/src/index.ts"],
+      "env": {
+        "PLATFORM_API_URL": "http://127.0.0.1:8780",
+        "PLATFORM_OPERATOR_TOKEN": "${PLATFORM_OPERATOR_TOKEN:-}",
+        "MCP_BRIDGE_FOCUS": "local"
       }
     }
   }

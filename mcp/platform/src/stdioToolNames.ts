@@ -1,6 +1,7 @@
 /**
- * Tools registered in mcp/platform/src/index.ts that must match catalog Implemented=true.
- * Keep in sync when adding server.tool(...) entries for platform (non-prometheus) bridge.
+ * Tools registered with reg() in mcp/platform/src/index.ts (the full server).
+ * Laptop tools live in registerLocal.ts. Chat approval tools live in registerApprove.ts
+ * and must not appear in this list.
  */
 export const PLATFORM_STDIO_TOOL_NAMES = [
   'platform_mcp_health',
@@ -74,9 +75,10 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_telemetry_targets',
   'report_checklist_signals',
   'sign_tier_b',
-  'list_dev_sessions',
-  'restart_dev_session',
-  'get_dev_session_logs',
+  'request_action',
+  'get_request',
+  'list_requests',
+  'wait_for_request',
 ] as const
 
 export type PlatformStdioToolName = (typeof PLATFORM_STDIO_TOOL_NAMES)[number]
