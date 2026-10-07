@@ -139,6 +139,13 @@ func (s *Store) Merge(req MergeRequest) (SignalsResponse, error) {
 		sig.Signal = normalizeSignal(sig.Signal)
 		sig.Detail = strings.TrimSpace(sig.Detail)
 		sig.Env = strings.TrimSpace(sig.Env)
+		if strings.TrimSpace(sig.ObservedAt) == "" {
+			sig.ObservedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(sig.Source) == "" {
+			sig.Source = strings.TrimSpace(req.Source)
+		}
+		sig.Stale = false
 		byID[id] = sig
 	}
 	merged := make([]ItemSignal, 0, len(byID))
@@ -216,13 +223,53 @@ func toResponse(rec *FileRecord, newFailures []string) SignalsResponse {
 		UpdatedAt:          rec.UpdatedAt,
 		LastRunID:          rec.LastRunID,
 		Source:             rec.Source,
-		Signals:            rec.Signals,
+		Signals:            withStaleness(rec.Signals, time.Now().UTC(), SignalTTL()),
 		LastDispatch:       rec.LastDispatch,
 		QuietSuccessStreak: rec.QuietSuccessStreak,
 		LastFailAt:         rec.LastFailAt,
 		LastAllOkAt:        rec.LastAllOkAt,
 		NewFailures:        newFailures,
 	}
+}
+
+// SignalTTL is CHECKLIST_SIGNAL_TTL (Go duration), default 2h: how long a
+// reported signal stays true.
+func SignalTTL() time.Duration {
+	if d, err := time.ParseDuration(strings.TrimSpace(os.Getenv("CHECKLIST_SIGNAL_TTL"))); err == nil && d > 0 {
+		return d
+	}
+	return 2 * time.Hour
+}
+
+// withStaleness reports every signal older than ttl, or with no time at all, as
+// unknown, keeping what it said in the detail. Until 2026-10-07 signals had no
+// time: the autopilot acted on weeks-old reports (a July backup, 6/6 nodes Ready
+// while one was off), because nothing marked them stale (TD-253).
+func withStaleness(in []ItemSignal, now time.Time, ttl time.Duration) []ItemSignal {
+	out := make([]ItemSignal, len(in))
+	for i, sig := range in {
+		out[i] = sig
+		if sig.Signal == SignalUnknown {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339, strings.TrimSpace(sig.ObservedAt))
+		age := now.Sub(at)
+		if err == nil && age <= ttl {
+			continue
+		}
+		was := sig.Signal
+		if sig.Detail != "" {
+			was += ": " + sig.Detail
+		}
+		if err != nil {
+			out[i].Detail = "stale: no observation time — said " + was
+		} else {
+			out[i].Detail = "stale: observed " + age.Round(time.Minute).String() + " ago — said " + was
+		}
+		out[i].Signal = SignalUnknown
+		out[i].Stale = true
+	}
+	return out
 }
 
 func normalizeSignal(s string) string {

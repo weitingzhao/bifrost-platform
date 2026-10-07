@@ -698,7 +698,9 @@ func TestAutopilotGitBridgeInClusterUsesRollout(t *testing.T) {
 	}
 }
 
-func TestAutopilotTriggersCnpgBackupWhenStale(t *testing.T) {
+// TD-254: a stale backup is reported and paged, never repaired by the autopilot
+// (CNPG and backup-retry own backups; repair_cnpg_wal_store is manual).
+func TestAutopilotReportsAStaleBackupWithoutRepairing(t *testing.T) {
 	var repairPosts int
 	var backupPosts int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -737,14 +739,11 @@ func TestAutopilotTriggersCnpgBackupWhenStale(t *testing.T) {
 	if out.Result != ResultSuccess {
 		t.Fatalf("expected success: %+v\n%s", out, out.Evidence)
 	}
-	if repairPosts != 1 {
-		t.Fatalf("stale backup should repair WAL store once, got %d\n%s", repairPosts, out.Evidence)
+	if repairPosts != 0 || backupPosts != 0 {
+		t.Fatalf("the autopilot must not repair or start backups (repair %d, backup %d)\n%s", repairPosts, backupPosts, out.Evidence)
 	}
-	if backupPosts != 0 {
-		t.Fatalf("Autopilot should call wal-store/repair (includes trigger), not backup directly, got %d\n%s", backupPosts, out.Evidence)
-	}
-	if !strings.Contains(out.Evidence, "repair_cnpg_wal_store") {
-		t.Fatalf("evidence should mention repair_cnpg_wal_store:\n%s", out.Evidence)
+	if !strings.Contains(out.Evidence, "OBSERVE-ONLY") || !strings.Contains(out.Evidence, "CNPG and backup-retry") {
+		t.Fatalf("evidence should say backups are left to CNPG and backup-retry:\n%s", out.Evidence)
 	}
 }
 
@@ -789,5 +788,40 @@ func TestAutopilotGitBridgeLocalUsesDevSession(t *testing.T) {
 	}
 	if len(devSessionCalls) != 1 || devSessionCalls[0] != "git-bridge" {
 		t.Fatalf("local git-bridge should use dev-session, got %v", devSessionCalls)
+	}
+}
+
+func TestReportOnlyAutopilotActsOnNothing(t *testing.T) {
+	t.Setenv("PATROL_MODE", "report")
+	var writes []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet {
+			writes = append(writes, r.Method+" "+r.URL.Path)
+		}
+		switch r.URL.Path {
+		case "/api/v1/checklist/signals":
+			w.Write(signalsJSON([]checklist.ItemSignal{
+				{ItemID: "redis", Signal: "fail", Detail: "down"},
+				{ItemID: "platform-api", Signal: "fail", Detail: "down"},
+				{ItemID: "postgres", Signal: "fail", Detail: "down"},
+			}))
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	out := newTestAutopilot(t, srv).Dispatch(context.Background(), PatrolSkill{
+		ID: "ops-autopilot", Name: "Ops Autopilot", TrustLevel: TrustL1,
+		CronActuation: CronActuationConfirm, TimeoutSeconds: 15,
+	}, TriggerCron, "", nil)
+	if len(writes) != 0 {
+		t.Fatalf("report-only must not call any write route, got %v\n%s", writes, out.Evidence)
+	}
+	for _, want := range []string{"mode: REPORT-ONLY", "REPORT-ONLY: would rollout restart redis", "REPORT-ONLY: would rollout restart platform-api"} {
+		if !strings.Contains(out.Evidence, want) {
+			t.Fatalf("evidence lacks %q:\n%s", want, out.Evidence)
+		}
 	}
 }

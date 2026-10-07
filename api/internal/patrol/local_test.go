@@ -181,7 +181,8 @@ func TestLocalDispatcherChainCleanupsTerminalPods(t *testing.T) {
 				"failing_pod_details": []any{
 					map[string]any{"namespace": "bifrost-dev", "name": "api-monitor-old-abc12", "phase": "Succeeded", "reason": "Completed"},
 					map[string]any{"namespace": "bifrost-dev", "name": "celery-worker-xyz99", "phase": "Failed", "reason": "OOMKilled"},
-					map[string]any{"namespace": "bifrost-dev", "name": "daemon-fsm-abc", "phase": "Failed", "reason": "Error"},
+					map[string]any{"namespace": "bifrost-dev", "name": "daemon-fsm-abc", "phase": "Failed", "reason": "Evicted"},
+					map[string]any{"namespace": "bifrost-dev", "name": "web-evicted-q1", "phase": "Failed", "reason": "Evicted"},
 				},
 			})
 		case r.URL.Path == "/api/v1/context":
@@ -214,16 +215,20 @@ func TestLocalDispatcherChainCleanupsTerminalPods(t *testing.T) {
 	if !strings.Contains(out.Evidence, "### Chain Cleanup") {
 		t.Fatalf("expected chain cleanup section:\n%s", out.Evidence)
 	}
-	// api-monitor-old-abc12 (Succeeded) → deleted
-	// celery-worker-xyz99 (Failed) → deleted
-	// daemon-fsm-abc (Failed, prefix "daemon") → SKIPPED (guardrail)
-	if len(deleted) != 2 {
-		t.Fatalf("expected 2 deletions, got %d: %v\nevidence:\n%s", len(deleted), deleted, out.Evidence)
+	// api-monitor-old-abc12 (Succeeded) and celery-worker-xyz99 (Failed) → KEPT:
+	//   a finished pod is evidence (TD-255)
+	// daemon-fsm-abc (Evicted, prefix "daemon") → SKIPPED (guardrail)
+	// web-evicted-q1 (Evicted) → deleted
+	if len(deleted) != 1 || deleted[0] != "bifrost-dev/web-evicted-q1" {
+		t.Fatalf("only the evicted pod should go, got %v\nevidence:\n%s", deleted, out.Evidence)
+	}
+	if !strings.Contains(out.Evidence, "KEEP bifrost-dev/celery-worker-xyz99") {
+		t.Fatalf("a failed pod must be kept as evidence:\n%s", out.Evidence)
 	}
 	if !strings.Contains(out.Evidence, "SKIP bifrost-dev/daemon-fsm-abc") {
 		t.Fatalf("daemon pod should be skipped by guardrail:\n%s", out.Evidence)
 	}
-	if !strings.Contains(out.Evidence, "2 pods cleaned") {
+	if !strings.Contains(out.Evidence, "1 pods cleaned") {
 		t.Fatalf("expected cleanup count:\n%s", out.Evidence)
 	}
 }
@@ -279,5 +284,40 @@ func TestLocalDispatcherNoCleanupWhenNominal(t *testing.T) {
 	}
 	if !strings.Contains(out.Evidence, "**NOMINAL**") {
 		t.Fatalf("expected NOMINAL verdict:\n%s", out.Evidence)
+	}
+}
+
+func TestReportOnlyChainCleanupDeletesNothing(t *testing.T) {
+	t.Setenv("PATROL_MODE", "report")
+	var deletes int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodDelete:
+			deletes++
+		case r.URL.Path == "/api/v1/cluster/" || r.URL.Path == "/api/v1/cluster":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"api_reachability": "ok", "reachability": "degraded", "failing_pods": 1,
+				"failing_pod_details": []any{
+					map[string]any{"namespace": "bifrost-dev", "name": "web-evicted-q1", "phase": "Failed", "reason": "Evicted"},
+				},
+			})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "matrices": []any{}})
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	d := &localDispatcher{client: srv.Client(), base: srv.URL}
+	out := d.Dispatch(context.Background(), PatrolSkill{
+		ID: "fleet-drift-scan", Name: "Fleet Drift Scan", TrustLevel: TrustL1,
+		CronActuation: CronActuationConfirm, TimeoutSeconds: 15,
+		MCPTools: []string{"get_cluster_summary", "delete_pod"},
+	}, TriggerCron, "", nil)
+	if deletes != 0 {
+		t.Fatalf("report-only deleted %d pods\n%s", deletes, out.Evidence)
+	}
+	if !strings.Contains(out.Evidence, "REPORT-ONLY: would DELETE bifrost-dev/web-evicted-q1") {
+		t.Fatalf("evidence should name the pod it would delete:\n%s", out.Evidence)
 	}
 }

@@ -44,7 +44,11 @@ func (a *autopilotDispatcher) Dispatch(ctx context.Context, skill PatrolSkill, t
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "## Bifrost Ops Autopilot\n")
-	fmt.Fprintf(&b, "trigger: %s · trust: %s\n\n", trigger, skill.TrustLevel)
+	fmt.Fprintf(&b, "trigger: %s · trust: %s\n", trigger, skill.TrustLevel)
+	if ReportOnly() {
+		b.WriteString("mode: REPORT-ONLY (PATROL_MODE=report) — records what it would fix, acts on nothing\n")
+	}
+	b.WriteString("\n")
 	emitProgress(progress, b.String())
 
 	// Phase 1: Fetch checklist signals via GET /api/v1/checklist/signals
@@ -159,6 +163,16 @@ func (a *autopilotDispatcher) fixItem(ctx context.Context, sig checklist.ItemSig
 	fmt.Fprintf(b, "### %s (%s)\nsignal=%s · cap=%s\n", meta.ID, meta.Label, sig.Signal, meta.FixCapability)
 	emitProgress(progress, b.String())
 
+	if ReportOnly() {
+		plan := plannedFix(meta.ID)
+		if plan == "" {
+			plan = "nothing (observe-only item)"
+		}
+		fmt.Fprintf(b, "REPORT-ONLY: would %s\n\n", plan)
+		emitProgress(progress, b.String())
+		return fixResult{ItemID: meta.ID, Action: "report-only", Skipped: true, Detail: "report-only: would " + plan}
+	}
+
 	action, status, err := a.executeFixRoute(ctx, meta, sig)
 	if action == "observe-only" {
 		detail := "observe-only"
@@ -187,6 +201,40 @@ func (a *autopilotDispatcher) fixItem(ctx context.Context, sig checklist.ItemSig
 	fmt.Fprintf(b, "%s HTTP %d %s\n\n", action, status, marker)
 	emitProgress(progress, b.String())
 	return fixResult{ItemID: meta.ID, Action: action, Status: status, Ok: ok, Detail: fmt.Sprintf("HTTP %d", status)}
+}
+
+// ReportOnly is PATROL_MODE=report: skills evaluate as usual and record what
+// they would do, but act on nothing. The PROD autopilot starts in this mode
+// (Owner 2026-10-07: maintenance only in PROD, report first, then enable fixes
+// item by item).
+func ReportOnly() bool {
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("PATROL_MODE")), "report")
+}
+
+// plannedFix says what executeFixRoute would do for an item, without doing it;
+// "" for items with no automatic fix.
+func plannedFix(itemID string) string {
+	switch itemID {
+	case "failing-pods":
+		return "restart the owners of the failing pods"
+	case "platform-api", "platform-console":
+		return "rollout restart " + itemID + " (last, after the report)"
+	case "git-bridge":
+		return "restart git-bridge"
+	case "nodes-ready":
+		return "uncordon or wake the NotReady nodes"
+	case "argo-apps":
+		return "Argo sync the out-of-sync apps"
+	case "redis":
+		return "rollout restart redis in " + resolveTradeNamespace()
+	case "nginx-edge":
+		return "rollout restart nginx in " + resolveTradeNamespace()
+	case "trade-apis":
+		return "rollout restart the failing Trade APIs in " + resolveTradeNamespace()
+	case "massive-polygon":
+		return "rollout restart polygon-worker-stocks in " + resolveMarketDataNamespace()
+	}
+	return ""
 }
 
 // executeFixRoute picks the right platform-api route for the item.
@@ -218,7 +266,12 @@ func (a *autopilotDispatcher) executeFixRoute(ctx context.Context, meta checklis
 	case "postgres":
 		return "observe-only", 0, fmt.Errorf("postgres is CNPG-managed — rollout-restart is not valid; escalate to operator")
 	case "db-backup-fresh":
-		return a.repairCnpgWalStore(ctx)
+		// Backups belong to CNPG (ScheduledBackup) and the backup-retry CronJob;
+		// alerts page the Owner (TD-209). Until 2026-10-07 the autopilot also
+		// ran repair_cnpg_wal_store every 15 min, which deleted failed Backup
+		// records and started full base backups in market hours (TD-254).
+		// repair_cnpg_wal_store stays an operator tool.
+		return "observe-only", 0, fmt.Errorf("backups are owned by CNPG and backup-retry; repair_cnpg_wal_store is manual")
 	case "deliver-pipeline":
 		return "observe-only", 0, fmt.Errorf("deliver-pipeline fix not automatable in Wave 1")
 	case "stg-smoke":
@@ -340,11 +393,6 @@ func (a *autopilotDispatcher) rolloutRestart(ctx context.Context, namespace, nam
 func (a *autopilotDispatcher) triggerCnpgBackup(ctx context.Context) (string, int, error) {
 	status, err := a.doRequest(ctx, http.MethodPost, "/api/v1/cluster/postgres/backup", []byte(`{}`))
 	return "trigger_cnpg_backup", status, err
-}
-
-func (a *autopilotDispatcher) repairCnpgWalStore(ctx context.Context) (string, int, error) {
-	status, err := a.doRequest(ctx, http.MethodPost, "/api/v1/cluster/postgres/wal-store/repair", []byte(`{}`))
-	return "repair_cnpg_wal_store", status, err
 }
 
 func shouldThrottleFix(itemID string) bool {

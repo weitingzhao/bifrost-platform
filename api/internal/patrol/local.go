@@ -123,7 +123,17 @@ func (d *localDispatcher) Dispatch(ctx context.Context, skill PatrolSkill, trigg
 			for _, p := range pods {
 				if !isSafeToDelete(p) {
 					skippedClean++
-					fmt.Fprintf(&b, "- SKIP %s/%s — guardrail: %s\n", p.Namespace, p.Name, p.Phase)
+					if strings.Contains(strings.ToLower(p.Reason), "evict") {
+						fmt.Fprintf(&b, "- SKIP %s/%s — guardrail: %s\n", p.Namespace, p.Name, p.Phase)
+					} else {
+						fmt.Fprintf(&b, "- KEEP %s/%s (phase=%s) — a finished pod is evidence; its Job's history limit removes it\n", p.Namespace, p.Name, p.Phase)
+					}
+					emitProgress(progress, b.String())
+					continue
+				}
+				if ReportOnly() {
+					skippedClean++
+					fmt.Fprintf(&b, "- REPORT-ONLY: would DELETE %s/%s (phase=%s, %s)\n", p.Namespace, p.Name, p.Phase, p.Reason)
 					emitProgress(progress, b.String())
 					continue
 				}
@@ -277,16 +287,14 @@ var protectedPodPrefixes = []string{
 	"daemon", "gs-trading", "bifrost-daemon",
 }
 
+// isSafeToDelete allows only evicted pods: they are clutter the node left
+// behind. A Failed or Succeeded pod is a Job's record (its log is the evidence
+// of what went wrong), and the Job's history limits and TTL remove it. Until
+// 2026-10-07 the hourly scan deleted failed backup pods in data within the hour,
+// so a failed backup could only be read in Loki (TD-255).
 func isSafeToDelete(p stalePod) bool {
-	phase := strings.ToLower(strings.TrimSpace(p.Phase))
-	reason := strings.ToLower(p.Reason)
-	switch phase {
-	case "succeeded", "failed":
-		// ok
-	default:
-		if !strings.Contains(reason, "evict") {
-			return false
-		}
+	if !strings.Contains(strings.ToLower(p.Reason), "evict") {
+		return false
 	}
 	nameLower := strings.ToLower(p.Name)
 	for _, prefix := range protectedPodPrefixes {

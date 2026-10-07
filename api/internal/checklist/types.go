@@ -16,6 +16,12 @@ type ItemSignal struct {
 	Signal string `json:"signal"`
 	Detail string `json:"detail,omitempty"`
 	Env    string `json:"env,omitempty"`
+	// ObservedAt is when the reporter looked (RFC3339); Merge stamps it when
+	// the reporter did not. Source names the reporter.
+	ObservedAt string `json:"observed_at,omitempty"`
+	Source     string `json:"source,omitempty"`
+	// Stale: read back older than SignalTTL, so reported as unknown (TD-253).
+	Stale bool `json:"stale,omitempty"`
 }
 
 // DispatchAction records what auto-dispatch decided for an item.
