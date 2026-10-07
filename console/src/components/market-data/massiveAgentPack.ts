@@ -332,7 +332,7 @@ export function buildMassiveAgentPack(snap: MassiveAgentPackSnapshot): string {
     '4. If Market batch draining → let workers drain OR triage fail kinds; do not Operate on mere due.',
     '5. If Universe Missing → check Cron/reference ticker_sync last_run_at (UTC day), not ticker count.',
     '6. If freshness not-ok on ratios/short_* → check source_void / vendor void (void ≠ fail) before gap-heal panic.',
-    '7. Research OLAP degraded → Dagster research_trading_day + husbandry_gate (Flex source=secret; Market not missed/degraded).',
+    '7. Research OLAP degraded → Dagster research_trading_day: husbandry_gate (Market EOD only — doctor eod_critical for the current session) gates dbt + engines; flex_gate (Flex source/freshness) gates only engines/option_pinned_contract.',
     '',
     '## Owner ask',
     'Propose the smallest durable fix, verify with the same endpoints this pack used, then report before/after lane verdicts.',

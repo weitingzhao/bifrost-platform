@@ -459,7 +459,7 @@ export function buildResearchEngineAgentPack(snap: ResearchEngineAgentPackSnapsh
 
   push(
     '## Suggested investigation order',
-    '1. If Market/Flex lanes are not healthy → fix feedstock first (Massive / IB Flex Copy for Agent). husbandry_gate will skip OLAP.',
+    '1. If Market/Flex lanes are not healthy → fix feedstock first (Massive / IB Flex Copy for Agent). A Market failure stops the batch at husbandry_gate (dbt + engines); a Flex failure stops only the Flex readers at flex_gate (engines/option_pinned_contract), dbt and the other engines still run.',
     '2. If Batch HEALTHY and only Product stale on Monday after 22:00 UTC (weekday 36h SLA) → wait for tonight 22:30 ET trading_day; do not roll images or unsuspend Cron. Before 22:00 UTC Monday the API uses 72h weekend SLA.',
     '3. If scan stale after a SUCCESS trading_day → inspect Dagster run for engines.scan (table features.stock_signal_scan_daily). Schedule success ≠ every asset wrote.',
     '4. If canonical_pnl stale → check research_canonical_pnl_schedule / research_canonical_pnl_job. It is NOT part of research_trading_day.',

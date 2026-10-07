@@ -246,4 +246,11 @@ describe('self-check section', () => {
   it('says so when the plugin predates the self-check', () => {
     expect(buildFlexAgentPack(baseSnap({ check: null }))).toContain('unavailable: plugin predates 0.6.1')
   })
+
+  it('names flex_gate, not husbandry_gate, as the gate a Flex failure trips (TD-192, TD-245)', () => {
+    const text = buildFlexAgentPack(baseSnap())
+    expect(text).toContain('flex_gate')
+    expect(text).toContain('option_pinned_contract')
+    expect(text).not.toMatch(/husbandry_gate (blocks|will skip)|husbandry_gate \(Flex/)
+  })
 })

@@ -139,4 +139,11 @@ describe('buildMassiveAgentPack', () => {
     expect(text).toContain('missing_sample: MU')
     expect(text).toContain('enqueue option_snapshot')
   })
+
+  it('names flex_gate, not husbandry_gate, as the gate a Flex failure trips (TD-192, TD-245)', () => {
+    const text = buildMassiveAgentPack(baseSnap())
+    expect(text).toContain('flex_gate')
+    expect(text).toContain('option_pinned_contract')
+    expect(text).not.toMatch(/husbandry_gate (blocks|will skip)|husbandry_gate \(Flex/)
+  })
 })

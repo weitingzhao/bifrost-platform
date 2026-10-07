@@ -313,7 +313,7 @@ export function buildFlexAgentPack(snap: FlexAgentPackSnapshot): string {
     '6. check worker not ok → flex-query-worker heartbeat silent: kubectl -n plugin-flex-query logs deploy/flex-query-worker; it reconnects to Postgres on its own.',
     '7. Manual runs (Trade UI Flex Refresh / Console Manual) send one request per account; fallback:true widens and can trip [1018].',
     '8. Confirm ops_jobs.flex_ingest_freshness (last_ok / new_rows) + brokerage table ages after jobs done.',
-    '9. Research OLAP: husbandry_gate blocks dbt when the last Flex attempt failed or no success in 96h.',
+    '9. Research OLAP: flex_gate (not husbandry_gate) blocks only the Flex readers (engines/option_pinned_contract) when the last Flex attempt failed or no success in 96h; dbt, SEPA and the other engines still run.',
     '',
     '## Owner ask',
     'Propose the smallest durable fix, verify with the same endpoints this pack used, then report before/after reachability + freshness verdicts.',

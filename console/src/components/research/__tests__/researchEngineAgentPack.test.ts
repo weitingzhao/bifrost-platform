@@ -149,3 +149,12 @@ describe('buildResearchEngineDiagnosePrefill', () => {
     expect(text).toContain('analytics-docs')
   })
 })
+
+describe('research engine pack gate wording', () => {
+  it('names flex_gate, not husbandry_gate, as the gate a Flex failure trips (TD-192, TD-245)', () => {
+    const text = buildResearchEngineAgentPack(baseSnap())
+    expect(text).toContain('flex_gate')
+    expect(text).toContain('option_pinned_contract')
+    expect(text).not.toMatch(/husbandry_gate (blocks|will skip)|husbandry_gate \(Flex/)
+  })
+})
