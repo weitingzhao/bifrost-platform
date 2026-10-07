@@ -62,6 +62,7 @@ import { ResearchReleasePage } from '@/pages/ResearchReleasePage'
 import { AgentReleasePage } from '@/pages/AgentReleasePage'
 import { PluginReleasePage } from '@/pages/PluginReleasePage'
 import { SatelliteBusPage } from '@/pages/SatelliteBusPage'
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { CodeHealthPage } from '@/pages/CodeHealthPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { RocketHealthPage } from '@/pages/RocketHealthPage'
@@ -113,6 +114,7 @@ const VIEW_TITLES: Record<ConsoleViewTab, string> = {
   'agent-release': 'Launch Agent',
   'control-room': 'Control Room',
   observability: 'Observability',
+  approvals: 'Approvals',
   'code-health': 'Code Health',
   'task-cc': 'Task Control Center',
   audit: 'Audit',
@@ -161,6 +163,8 @@ const VIEW_DESCRIPTIONS: Partial<Record<ConsoleViewTab, string>> = {
     'Situation / bay posture deep-dive — Bay Scan, topology sheet, Operate/Release context. Not the Mission launch home; primary execution is on Task Control Center.',
   observability:
     'Apollo-domain read-only system health hub — domain signals and Attention; Grafana is deep evidence, not a second control plane.',
+  approvals:
+    'Pending approval requests — who asked, the action and parameters, the reason, and how to roll back. Approve or reject with the approval token saved in this browser.',
   'code-health':
     'Code-asset ratchet readings — duplication, oversized files, contract coverage, image spread. Every other signal measures runtime; this one measures whether the code inside it is still maintainable. Never reported reads as NOT OBSERVED, never as healthy.',
   'task-cc':
@@ -1053,6 +1057,8 @@ function ConsolePageInner() {
             onOpenAgentDesk={openAgentDesk}
           />
         )}
+
+        {viewTab === 'approvals' && <ApprovalsPage />}
 
         {viewTab === 'code-health' && <CodeHealthPage />}
 

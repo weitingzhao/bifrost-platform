@@ -36,7 +36,9 @@ func (f *fakeNtfy) server(t *testing.T) *httptest.Server {
 		if v := r.Header.Get("Priority"); v != "" {
 			p = int(v[0] - '0')
 		}
-		f.got = append(f.got, Message{Title: r.Header.Get("Title"), Body: string(body), Priority: p})
+		f.got = append(f.got, Message{
+			Title: r.Header.Get("Title"), Body: string(body), Priority: p, ClickURL: r.Header.Get("Click"),
+		})
 	}))
 	t.Cleanup(s.Close)
 	return s
@@ -181,5 +183,43 @@ func TestConfigProblem(t *testing.T) {
 	}
 	if p := (Config{Enabled: true, Topic: "x"}).Problem(); p == "" {
 		t.Fatal("missing token not reported")
+	}
+}
+
+const notifyBody = `{"title":"Approval needed","message":"sess requested gitops","click_url":"http://ops.bifrost.lan/#approvals?id=ap-1","priority":4}`
+
+func TestNotifyRejectsABadToken(t *testing.T) {
+	_, f, h, _ := setup(t)
+	for _, tok := range []string{"", "wrong"} {
+		if code := post(h, "/alerts/notify", tok, notifyBody); code != http.StatusUnauthorized {
+			t.Fatalf("token %q: %d, want 401", tok, code)
+		}
+	}
+	if n := len(f.messages()); n != 0 {
+		t.Fatalf("%d messages published without a token", n)
+	}
+}
+
+func TestNotifyNtfyFailureIs502(t *testing.T) {
+	_, f, h, _ := setup(t)
+	f.fail = true
+	if code := post(h, "/alerts/notify", "tok", notifyBody); code != http.StatusBadGateway {
+		t.Fatalf("status %d, want 502", code)
+	}
+	if n := len(f.messages()); n != 0 {
+		t.Fatalf("failed ntfy still recorded %d messages", n)
+	}
+}
+
+func TestNotifySetsTheClickHeader(t *testing.T) {
+	_, f, h, _ := setup(t)
+	if code := post(h, "/alerts/notify", "tok", notifyBody); code != http.StatusOK {
+		t.Fatalf("status %d", code)
+	}
+	got := f.messages()
+	const click = "http://ops.bifrost.lan/#approvals?id=ap-1"
+	if len(got) != 1 || got[0].ClickURL != click || got[0].Title != "Approval needed" || got[0].Priority != 4 ||
+		!strings.Contains(got[0].Body, "sess requested gitops") {
+		t.Fatalf("published %+v", got)
 	}
 }
