@@ -102,7 +102,7 @@ export type ForbiddenAction = {
 
 export const FORBIDDEN_ACTIONS: ForbiddenAction[] = [
   { action: 'Redis daemon control write via platform AI (POST /api/monitor/control/*)', scope: 'All modes' },
-  { action: 'ib:operator:cmd RPC', scope: 'All modes' },
+  { action: 'ib:operator:cmd write by an agent (platform-api reconnect_all is D-IB-Heal L1)', scope: 'All modes' },
   {
     action:
       'Live trading enablement — scale daemon for auto-trade, remove STG daemon-scale-zero, enable live hedge/place_order, or Monitor /control/* that arms live trading (spine D10 BLOCKED until Owner explicit unlock)',

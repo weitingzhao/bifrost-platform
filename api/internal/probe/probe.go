@@ -28,7 +28,7 @@ var policyBlockedTargets = []Target{
 		Reachability:       ReachUnknown,
 		Auth:               AuthBlocked,
 		AuthorizationLevel: "forbidden",
-		Detail:             "Platform must not access ib:operator:cmd (R-DV3 / trade write path)",
+		Detail:             "ib:operator:cmd write by an agent (platform-api reconnect_all is D-IB-Heal L1)",
 	},
 	{
 		ID:                 "daemon-control-write",
