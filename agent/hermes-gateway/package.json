@@ -1,13 +1,14 @@
 {
   "name": "bifrost-hermes-gateway",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Hermes Gateway — autonomous skill scheduler and executor for Bifrost Agent",
+  "description": "Hermes Gateway \u2014 autonomous skill scheduler and executor for Bifrost Agent",
   "scripts": {
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "tsx --test src/*.test.ts"
   },
   "dependencies": {
     "express": "^5.1.0",

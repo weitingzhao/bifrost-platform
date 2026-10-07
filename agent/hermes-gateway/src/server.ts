@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { SkillRegistry } from './skills.js'
 import { ExecutionStore } from './executions.js'
 import { Scheduler } from './scheduler.js'
+import { gatewayHealth } from './health.js'
 import type { ScheduleView } from './types.js'
 
 const require = createRequire(import.meta.url)
@@ -35,11 +36,15 @@ scheduler.start()
 // --- Health ---
 
 app.get('/health', (_req, res) => {
+  // HTTP 200 while the process serves (liveness); `status` is the skills verdict.
+  const health = gatewayHealth(registry, execStore)
   res.json({
-    status: 'ok',
+    status: health.status,
+    failing_skills: health.failing_skills,
     service: 'bifrost-hermes-gateway',
     version: VERSION,
     skill_count: registry.count(),
+    scripts_dir: registry.scriptsDir(),
     uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
   })
 })
@@ -49,7 +54,7 @@ app.get('/health', (_req, res) => {
 app.get('/skills', (_req, res) => {
   const skills = registry.toViews(execStore)
   res.json({
-    gateway_status: 'ok',
+    gateway_status: gatewayHealth(registry, execStore).status,
     skills,
     generated_at: new Date().toISOString(),
   })
@@ -108,6 +113,6 @@ app.post('/reload', (_req, res) => {
 
 app.listen(port, bindHost, () => {
   console.log(
-    `hermes gateway v${VERSION} listening on http://${bindHost}:${port} — ${registry.count()} skills loaded`,
+    `hermes gateway v${VERSION} listening on http://${bindHost}:${port} — ${registry.count()} skills loaded, scripts from ${registry.scriptsDir()}`,
   )
 })

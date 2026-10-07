@@ -43,6 +43,7 @@ function levelTagVariant(level: McpToolLevel): 'success' | 'warning' | 'neutral'
 function bridgeStatusVariant(status: string): 'success' | 'warning' | 'neutral' | 'danger' {
   if (status === 'ok') return 'success'
   if (status === 'not_configured') return 'neutral'
+  if (status === 'degraded') return 'warning'
   return 'danger'
 }
 

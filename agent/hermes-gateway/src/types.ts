@@ -25,6 +25,8 @@ export interface SkillView {
   schedule?: string
   actuation_level: ActuationLevel
   status: SkillStatus
+  /** Why an enabled skill cannot run (e.g. its script is missing). */
+  error?: string
   last_run_at?: string
   last_result?: ExecutionResult
   tags?: string[]

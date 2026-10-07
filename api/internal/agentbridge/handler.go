@@ -93,7 +93,7 @@ type RunnerStatus struct {
 
 type OptionalEndpoint struct {
 	URL       string `json:"url,omitempty"`
-	Status    string `json:"status"` // not_configured | ok | unavailable
+	Status    string `json:"status"` // not_configured | ok | degraded | unavailable
 	Error     string `json:"error,omitempty"`
 	Note      string `json:"note,omitempty"`
 }
@@ -352,13 +352,34 @@ func probeHermesMcp(ctx context.Context, client *http.Client) OptionalEndpoint {
 			Error:  "HTTP " + resp.Status,
 		}
 	}
-	var body map[string]any
+	var body struct {
+		Status        string `json:"status"`
+		Version       string `json:"version"`
+		FailingSkills []struct {
+			ID     string `json:"id"`
+			Reason string `json:"reason"`
+		} `json:"failing_skills"`
+	}
+	out := OptionalEndpoint{URL: url, Status: "ok"}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
-		if v, ok := body["version"].(string); ok {
-			return OptionalEndpoint{URL: url, Status: "ok", Note: "v" + v}
+		if body.Version != "" {
+			out.Note = "v" + body.Version
+		}
+		// TD-228: the gateway answers 200 while its scheduled skills fail;
+		// its body status carries the skills verdict.
+		if body.Status == "degraded" {
+			out.Status = "degraded"
+			parts := make([]string, 0, len(body.FailingSkills))
+			for _, f := range body.FailingSkills {
+				parts = append(parts, f.ID+": "+f.Reason)
+			}
+			if len(parts) == 0 {
+				parts = append(parts, "gateway reports degraded")
+			}
+			out.Error = strings.Join(parts, "; ")
 		}
 	}
-	return OptionalEndpoint{URL: url, Status: "ok"}
+	return out
 }
 
 func probeNousHermes(ctx context.Context, client *http.Client) NousHermesStatus {

@@ -60,6 +60,17 @@ export class ExecutionStore {
     return this.records.find(r => r.skill_id === skillId)
   }
 
+  /** The newest `n` executions of a skill, newest first. */
+  recentForSkill(skillId: string, n: number): ExecutionRecord[] {
+    const out: ExecutionRecord[] = []
+    for (const r of this.records) {
+      if (r.skill_id !== skillId) continue
+      out.push(r)
+      if (out.length >= n) break
+    }
+    return out
+  }
+
   private persist() {
     if (this.persistPath == null) return
     try {

@@ -1,9 +1,11 @@
 package agentbridge
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
@@ -212,5 +214,20 @@ func TestHandleSmokeNoRunnerConfigured(t *testing.T) {
 
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TD-228: the Hermes gateway answers 200 while every scheduled skill fails;
+// the bridge must surface its degraded body status, not report ok.
+func TestProbeHermesMcpDegradedSkills(t *testing.T) {
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"degraded","version":"0.2.0","failing_skills":[{"id":"peer-watchdog","reason":"script not found: /x/peer_watchdog.sh"}]}`))
+	}))
+	t.Cleanup(gw.Close)
+	t.Setenv("HERMES_GATEWAY_URL", gw.URL)
+
+	got := probeHermesMcp(context.Background(), gw.Client())
+	if got.Status != "degraded" || !strings.Contains(got.Error, "peer-watchdog: script not found") || got.Note != "v0.2.0" {
+		t.Fatalf("probeHermesMcp = %+v, want degraded naming peer-watchdog", got)
 	}
 }

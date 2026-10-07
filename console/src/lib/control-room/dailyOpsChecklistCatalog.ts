@@ -539,7 +539,8 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         label: 'Hermes AI tooling',
         group: 'tooling',
         idPattern: '^hermes$',
-        healthyCriteria: 'nous_hermes.status=ok OR hermes_mcp.status=ok',
+        healthyCriteria:
+          '(nous_hermes.status=ok OR hermes_mcp.status=ok) AND hermes_mcp.status!=degraded (no enabled gateway skill failing its last 3 runs)',
         fixScope: OPERATOR_PLANE_FIX_SCOPE,
         fixCapability: 'semi_auto',
         manualAction:

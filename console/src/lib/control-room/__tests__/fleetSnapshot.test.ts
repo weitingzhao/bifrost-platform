@@ -579,6 +579,28 @@ describe('buildFleetSnapshot integration', () => {
     expect(resolveCellGate(satProd)).toBe('GO')
   })
 
+  it('degrades the Hermes standard when gateway skills are failing though Nous Hermes is ok (TD-228)', () => {
+    const snap = buildFleetSnapshot({
+      viewerEnv: 'dev',
+      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
+      self: selfHealth(['dev', 'stg', 'prod']),
+      stg: stgSmokeOk,
+      supply: supplyOk,
+      cluster: clusterOk,
+      groundBridgeReady: true,
+      runner: { status: 'ok' },
+      ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
+      postgresBackup: backupOk,
+      bridge: {
+        ...bridgeOk,
+        hermes_mcp: { status: 'degraded', error: 'peer-watchdog: last 3 runs failed' },
+      },
+    })
+    const hermes = getCell(snap, 'vendor', 'span')!.standards.find(s => s.id === 'hermes')!
+    expect(hermes.signal).toBe('degraded')
+    expect(hermes.reason).toContain('peer-watchdog')
+  })
+
   it('is NO-GO on Satellite PROD when CNPG backup is stale (data-layer-backup scope)', () => {
     const snap = buildFleetSnapshot({
       viewerEnv: 'dev',

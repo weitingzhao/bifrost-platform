@@ -27,6 +27,8 @@
     <string>0.0.0.0</string>
     <key>HERMES_SKILLS_YAML</key>
     <string>/Users/vision/bifrost-agent/hermes-gateway/skills.yaml</string>
+    <key>HERMES_SCRIPTS_DIR</key>
+    <string>/Users/vision/bifrost-agent/hermes-scripts</string>
     <key>HERMES_DATA_DIR</key>
     <string>/Users/vision/bifrost-agent/hermes</string>
   </dict>

@@ -24,6 +24,17 @@ rsync -az --delete \
   "${PLATFORM_ROOT}/agent/hermes-gateway/" \
   "${REMOTE}:${AGENT_ROOT}/hermes-gateway/"
 
+# Skill scripts (skills.yaml `script:` names) resolve against HERMES_SCRIPTS_DIR,
+# which the plist points here. Before TD-228 only the gateway dir was synced and
+# every scheduled run failed with "No such file or directory".
+echo "==> Syncing skill scripts (scripts/agent → ${AGENT_ROOT}/hermes-scripts)"
+ssh "${REMOTE}" "mkdir -p ${AGENT_ROOT}/hermes-scripts"
+rsync -az --delete \
+  --include '*.sh' \
+  --exclude '*' \
+  "${PLATFORM_ROOT}/scripts/agent/" \
+  "${REMOTE}:${AGENT_ROOT}/hermes-scripts/"
+
 echo "==> Installing npm dependencies on target"
 ssh "${REMOTE}" "cd ${AGENT_ROOT}/hermes-gateway && npm install --production 2>&1 | tail -3"
 
@@ -57,7 +68,15 @@ for i in 1 2 3 4 5; do
     HEALTH_JSON="$(curl -sf --max-time 5 "${HEALTH_URL}")"
     GW_VER="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
     SKILL_CT="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("skill_count",0))' 2>/dev/null || echo '?')"
-    echo "  ✓ Hermes Gateway healthy (v${GW_VER}, ${SKILL_CT} skills) on attempt ${i}"
+    GW_STATUS="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("status","?"))' 2>/dev/null || echo '?')"
+    echo "  ✓ Hermes Gateway up (v${GW_VER}, ${SKILL_CT} skills, status ${GW_STATUS}) on attempt ${i}"
+    # A skill whose script is missing is a broken deploy, not a slow start.
+    MISSING="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; fs=json.load(sys.stdin).get("failing_skills",[]); print("\n".join("%s: %s" % (f.get("id"), f.get("reason")) for f in fs if "script not found" in f.get("reason","")))' 2>/dev/null || true)"
+    if [[ -n "${MISSING}" ]]; then
+      echo "  ✗ DEPLOY FAILED — enabled skills cannot run:"
+      echo "${MISSING}" | sed 's/^/      /'
+      exit 1
+    fi
     SMOKE_OK=true
     break
   fi

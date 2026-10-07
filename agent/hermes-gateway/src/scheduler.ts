@@ -22,6 +22,12 @@ export class Scheduler {
     for (const skill of this.registry.all()) {
       if (skill.trigger !== 'cron' || skill.schedule == null) continue
       if (skill.status !== 'enabled') continue
+      const problem = this.registry.problem(skill)
+      if (problem != null) {
+        // Not scheduled: /skills shows it as error and /health reports degraded.
+        console.error(`[scheduler] ${skill.id} not scheduled — ${problem}`)
+        continue
+      }
       if (!cron.validate(skill.schedule)) {
         console.warn(`[scheduler] invalid cron for ${skill.id}: ${skill.schedule}`)
         continue
@@ -84,12 +90,15 @@ export class Scheduler {
 
     const timeout = skill.timeout_ms ?? 120_000
     try {
+      const problem = this.registry.problem({ ...skill, status: 'enabled' })
+      if (problem != null) throw new Error(problem)
       const cmd = skill.command ?? 'bash'
-      const args = skill.script != null ? [skill.script] : []
+      const script = this.registry.resolveScript(skill)
+      const args = script != null ? [script] : []
       const { stdout, stderr } = await execAsync(cmd, args, {
         timeout,
         env: { ...process.env },
-        cwd: this.registry.skillsDir(),
+        cwd: this.registry.scriptsDir(),
       })
       const finishedAt = new Date()
       const output = (stdout + stderr).trim()

@@ -93,7 +93,7 @@ export function buildVendorCell(input: {
     }
   }
 
-  const hermesSig: Signal =
+  const baseHermesSig: Signal =
     hermes == null
       ? 'unknown'
       : hermes.status === 'ok'
@@ -101,15 +101,17 @@ export function buildVendorCell(input: {
         : hermes.status === 'degraded'
           ? 'degraded'
           : 'fail'
-  standards.push(
-    std(
-      'hermes',
-      'Hermes ready',
-      hermesSig,
-      hermes == null ? 'Hermes status unknown' : `Hermes ${hermes.status}`,
-      'tooling',
-    ),
-  )
+  // TD-228: the bifrost Hermes gateway's scheduled skills can all be failing
+  // while Nous Hermes is fine. A degraded gateway caps the standard at degraded.
+  const gatewaySkillsFailing = input.bridge?.hermes_mcp?.status === 'degraded'
+  const hermesSig: Signal = gatewaySkillsFailing && baseHermesSig === 'ok' ? 'degraded' : baseHermesSig
+  const hermesDetail =
+    hermes == null
+      ? 'Hermes status unknown'
+      : gatewaySkillsFailing
+        ? `Hermes ${hermes.status} · gateway skills failing: ${input.bridge?.hermes_mcp?.error ?? 'see /health'}`
+        : `Hermes ${hermes.status}`
+  standards.push(std('hermes', 'Hermes ready', hermesSig, hermesDetail, 'tooling'))
 
   // Git bridge is scored on Engineer (automation) — do not mirror on Vendor (closes Board→Checklist gap).
 
