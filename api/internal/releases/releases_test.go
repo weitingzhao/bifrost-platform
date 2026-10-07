@@ -200,6 +200,21 @@ func TestParamSHAAndIncompleteRecordIsCompletedLater(t *testing.T) {
 		t.Fatalf("param record = %+v", rec)
 	}
 
+	// a clone at its own param (bifrost-ui at uiRevision) never takes the run's revision
+	withRev := func(tr *unstructured.Unstructured, rev string) unstructured.Unstructured {
+		params := tr.Object["spec"].(map[string]any)["params"].([]any)
+		tr.Object["spec"].(map[string]any)["params"] = append(params, map[string]any{"name": "revision", "value": rev})
+		return *tr
+	}
+	rec = buildRecord(run, Rule{Lane: "app", Env: "stg"}, []unstructured.Unstructured{
+		withRev(cloneTaskRun("deliver-stg-p", "clone-ui", "ui", ""), shaC),
+		withRev(cloneTaskRun("deliver-stg-p", "clone-web", "web", ""), "main"),
+	}, done)
+	if rec.Repos["ui"] != (RepoBuild{SHA: shaC, Source: "param"}) || rec.Repos["web"] != (RepoBuild{}) ||
+		strings.Join(rec.Missing, ",") != "clone-web" {
+		t.Fatalf("own-param record = %+v", rec)
+	}
+
 	// a run at a moving ref with no result is stored incomplete …
 	s, core := newFakeService(t,
 		pipelineRun("deliver-stg-m", "deliver-stg", true, done, nil, nil),

@@ -13,8 +13,9 @@ import (
 type RepoBuild struct {
 	SHA string `json:"sha"`
 	// Source: "result" (the clone task's commit result), "pinned" (the run's
-	// inline spec pinned that clone to a full SHA) or "param" (the run's
-	// revision parameter is a full SHA, which every clone of a pipelineRef run uses).
+	// inline spec pinned that clone to a full SHA) or "param" (the clone's own
+	// revision parameter is a full SHA; for a TaskRun without one, the run's
+	// revision parameter, which every clone of such a pipelineRef run used).
 	Source string `json:"source"`
 }
 
@@ -107,20 +108,25 @@ func pinnedClones(run *unstructured.Unstructured) map[string]string {
 	return out
 }
 
-// cloneOf reads one TaskRun: the repo it cloned and the commit it produced.
+// cloneOf reads one TaskRun: the repo it cloned, the commit it produced and the
+// resolved revision param it was given (hasRev is false when it had none).
 // ok is false for TaskRuns that are not a clone (no url param).
-func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha string, ok bool) {
+func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha, rev string, hasRev, ok bool) {
 	pipelineTask = tr.GetLabels()["tekton.dev/pipelineTask"]
 	params, _, _ := unstructured.NestedSlice(tr.Object, "spec", "params")
 	var url string
 	for _, p := range params {
 		m, _ := p.(map[string]any)
-		if m["name"] == "url" {
+		switch m["name"] {
+		case "url":
 			url, _ = m["value"].(string)
+		case "revision":
+			rev, _ = m["value"].(string)
+			rev, hasRev = strings.TrimSpace(rev), true
 		}
 	}
 	if url == "" {
-		return pipelineTask, "", "", false
+		return pipelineTask, "", "", "", false, false
 	}
 	if m := repoInURL.FindStringSubmatch(url); m != nil {
 		repo = m[1]
@@ -134,7 +140,7 @@ func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha string, ok 
 			}
 		}
 	}
-	return pipelineTask, repo, sha, repo != ""
+	return pipelineTask, repo, sha, rev, hasRev, repo != ""
 }
 
 // buildRecord assembles a Record from a finished run and its TaskRuns.
@@ -155,12 +161,13 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 	}
 	pinned := pinnedClones(run)
 	paramSHA := ""
-	// a pipelineRef run clones every repo at $(params.revision); an inline spec may not
+	// The run's revision stands in only for a clone TaskRun that carries no revision of its
+	// own: a pipeline may clone some repos at another param (bifrost-ui at uiRevision).
 	if _, inline, _ := unstructured.NestedMap(run.Object, "spec", "pipelineSpec"); !inline && fullSHA.MatchString(rec.Revision) {
 		paramSHA = rec.Revision
 	}
 	for i := range taskRuns {
-		task, repo, sha, ok := cloneOf(&taskRuns[i])
+		task, repo, sha, rev, hasRev, ok := cloneOf(&taskRuns[i])
 		if !ok {
 			continue
 		}
@@ -169,7 +176,9 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 			rec.Repos[repo] = RepoBuild{SHA: sha, Source: "result"}
 		case pinned[task] != "":
 			rec.Repos[repo] = RepoBuild{SHA: pinned[task], Source: "pinned"}
-		case paramSHA != "":
+		case fullSHA.MatchString(rev):
+			rec.Repos[repo] = RepoBuild{SHA: rev, Source: "param"}
+		case !hasRev && paramSHA != "":
 			rec.Repos[repo] = RepoBuild{SHA: paramSHA, Source: "param"}
 		default:
 			rec.Missing = append(rec.Missing, task)

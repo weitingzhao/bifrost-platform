@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -252,33 +253,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		},
 	}
 	if pipelineTakesRevision(pipelineName) {
-		params := []map[string]any{
-			{"name": "revision", "value": rev},
-		}
-		switch pipelineName {
-		case "bifrost-deliver-research":
-			// research builds an explicitly tagged image; the tag must match what
-			// k8s/api/deployment.yaml will point at once the image lands.
-			if t := strings.TrimSpace(tag); t != "" {
-				params = append(params, map[string]any{"name": "tag", "value": t})
-			}
-		case "bifrost-build-market-data":
-			// Like the Dagster line, this pipeline names a full image rather
-			// than a tag; the repository is the plugin's own.
-			if t := strings.TrimSpace(tag); t != "" {
-				params = append(params, map[string]any{"name": "image", "value": marketDataRegistryRepo + ":" + t})
-			}
-		case "bifrost-build-research-dagster":
-			// This pipeline names a full image rather than a tag, and Dagster's
-			// image shares a repository with the runtime one — only the suffix
-			// tells them apart. Asking for "0.94.1" here would build a Dagster
-			// image over the image research-api runs, so the suffix is enforced
-			// rather than trusted.
-			if img := researchDagsterImage(tag); img != "" {
-				params = append(params, map[string]any{"name": "image", "value": img})
-			}
-		}
-		spec["params"] = params
+		spec["params"] = pipelineRunParams(pipelineName, rev, tag)
 	}
 	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
 		spec["workspaces"] = ws
@@ -477,6 +452,43 @@ func amd64CITaskRunTemplate() map[string]any {
 const researchRegistryRepo = "registry.cicd.svc.cluster.local:5000/bifrost-research"
 
 const marketDataRegistryRepo = "registry.cicd.svc.cluster.local:5000/bifrost-market-data"
+
+// pipelineRunParams are the params a run of a revision-taking pipeline is started with.
+// A pipeline that clones bifrost-ui takes the ui ref separately as uiRevision; a run
+// started here clones it at the same ref as everything else, which RefPreflight has
+// checked exists in every repo the pipeline clones.
+func pipelineRunParams(pipelineName, rev, tag string) []map[string]any {
+	params := []map[string]any{
+		{"name": "revision", "value": rev},
+	}
+	switch pipelineName {
+	case "bifrost-deliver-research":
+		// research builds an explicitly tagged image; the tag must match what
+		// k8s/api/deployment.yaml will point at once the image lands.
+		if t := strings.TrimSpace(tag); t != "" {
+			params = append(params, map[string]any{"name": "tag", "value": t})
+		}
+	case "bifrost-build-market-data":
+		// Like the Dagster line, this pipeline names a full image rather
+		// than a tag; the repository is the plugin's own.
+		if t := strings.TrimSpace(tag); t != "" {
+			params = append(params, map[string]any{"name": "image", "value": marketDataRegistryRepo + ":" + t})
+		}
+	case "bifrost-build-research-dagster":
+		// This pipeline names a full image rather than a tag, and Dagster's
+		// image shares a repository with the runtime one — only the suffix
+		// tells them apart. Asking for "0.94.1" here would build a Dagster
+		// image over the image research-api runs, so the suffix is enforced
+		// rather than trusted.
+		if img := researchDagsterImage(tag); img != "" {
+			params = append(params, map[string]any{"name": "image", "value": img})
+		}
+	}
+	if slices.Contains(pipelineMirrorRepos[pipelineName], "bifrost-ui") {
+		params = append(params, map[string]any{"name": "uiRevision", "value": rev})
+	}
+	return params
+}
 
 // Pipelines whose first parameter is the Gitea revision to build.
 func pipelineTakesRevision(name string) bool {
