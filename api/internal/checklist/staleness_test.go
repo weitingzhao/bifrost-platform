@@ -1,9 +1,12 @@
 package checklist
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 )
 
 // TD-253: a signal is true only for SignalTTL after it was observed.
@@ -42,5 +45,25 @@ func TestMergeStampsObservationTimeAndSource(t *testing.T) {
 	}
 	if len(resp.Signals) != 1 || resp.Signals[0].ObservedAt == "" || resp.Signals[0].Source != "checklist-prober" || resp.Signals[0].Signal != SignalOK {
 		t.Fatalf("merged signal: %+v", resp.Signals)
+	}
+}
+
+type emptyHusbandry struct{}
+
+func (emptyHusbandry) Snapshot(context.Context) datahusbandry.Snapshot {
+	return datahusbandry.Snapshot{}
+}
+
+func TestLiveHusbandrySignalsCarryTheirObservation(t *testing.T) {
+	h := NewHandler(t.TempDir(), nil)
+	h.BindHusbandry(emptyHusbandry{})
+	sigs := h.liveHusbandrySignals(context.Background())
+	if len(sigs) != 3 {
+		t.Fatalf("got %d husbandry signals, want 3", len(sigs))
+	}
+	for _, s := range sigs {
+		if s.ObservedAt == "" || s.Source != "data-husbandry" {
+			t.Errorf("%s: observed_at=%q source=%q", s.ItemID, s.ObservedAt, s.Source)
+		}
 	}
 }

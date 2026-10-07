@@ -145,5 +145,12 @@ func (h *Handler) liveHusbandrySignals(ctx context.Context) []ItemSignal {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
 	defer cancel()
-	return ProbeHusbandrySignals(h.husbandry.Snapshot(ctx))
+	sigs := ProbeHusbandrySignals(h.husbandry.Snapshot(ctx))
+	// Read live on every call: observed now, by data-husbandry (TD-253).
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range sigs {
+		sigs[i].ObservedAt = now
+		sigs[i].Source = "data-husbandry"
+	}
+	return sigs
 }
