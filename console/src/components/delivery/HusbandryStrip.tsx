@@ -3,6 +3,7 @@ import { Button, DenseTag, type DenseTagVariant } from '@bifrost/ui'
 import { useQuery } from '@tanstack/react-query'
 import { ExternalLink } from 'lucide-react'
 import { syncHusbandryChecklist } from '@/api/checklist'
+import { operatorToken } from '@/api/client'
 import { fetchDataHusbandry, type HusbandryLaneView } from '@/api/dataHusbandry'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { useOrchestrationStatus } from '@/hooks/useOrchestrationStatus'
@@ -66,7 +67,8 @@ export function HusbandryStrip({ className }: { className?: string }) {
   })
 
   useEffect(() => {
-    if (snap == null || !shouldSyncHusbandry(snap.overall)) return
+    // the sync can start remediation, so only a signed-in operator's view sends it (TD-208)
+    if (snap == null || !shouldSyncHusbandry(snap.overall) || operatorToken() === '') return
     let cancelled = false
     void syncHusbandryChecklist()
       .then(() => {

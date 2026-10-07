@@ -415,12 +415,15 @@ func (s *Server) Router() http.Handler {
 		r.Get("/operate/drain/status", s.operatequeue.HandleDrainStatus)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
-		r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
 		r.Get("/agent-tasks", s.agentgovernance.HandleListTasks)
 		r.Get("/migrate-streams/catalog", s.migratewave.HandleListCatalog)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
+			// starts full-auto remediation for failing items: never anonymous (TD-208)
+			r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
+			// one-use ticket for the SSH console below (TD-203)
+			r.Post("/console/ws-ticket", s.console.HandleTicket)
 			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
 			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
 			r.Post("/operate/queue/{id}/dismiss", s.operatequeue.HandleDismiss)
@@ -499,6 +502,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/vision/v5/signoff", s.vision.HandleSignV5)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
+		// authenticated by the ticket from POST /console/ws-ticket (a browser
+		// WebSocket cannot send a bearer header)
 		r.Get("/console/ws", s.console.HandleWebSocket)
 		r.Route("/cluster", func(r chi.Router) {
 			r.Get("/", s.cluster.HandleSummary)

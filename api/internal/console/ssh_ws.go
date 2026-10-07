@@ -2,7 +2,10 @@ package console
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -17,6 +20,7 @@ import (
 	"github.com/gorilla/websocket"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/knownhosts"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -27,11 +31,10 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
+	// Only the local Console may open a shell. An empty Origin (curl, scripts,
+	// anything that is not a browser) used to pass (TD-203).
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
-		if origin == "" {
-			return true
-		}
 		for _, a := range []string{"http://127.0.0.1:5180", "http://localhost:5180"} {
 			if origin == a {
 				return true
@@ -46,6 +49,9 @@ type SSHSettings struct {
 	KeyPath        string
 	AllowLocalhost bool
 	DialTimeout    time.Duration
+	// KnownHosts is the OpenSSH known_hosts file every host key is checked
+	// against; a host missing from it is refused.
+	KnownHosts string
 }
 
 func SSHSettingsFromEnv() SSHSettings {
@@ -58,7 +64,60 @@ func SSHSettingsFromEnv() SSHSettings {
 		KeyPath:        strings.TrimSpace(os.Getenv("PLATFORM_SSH_KEY_PATH")),
 		AllowLocalhost: os.Getenv("PLATFORM_SSH_ALLOW_LOCALHOST") == "1",
 		DialTimeout:    15 * time.Second,
+		KnownHosts:     knownHostsPath(),
 	}
+}
+
+// knownHostsPath is PLATFORM_SSH_KNOWN_HOSTS or ~/.ssh/known_hosts.
+func knownHostsPath() string {
+	if p := strings.TrimSpace(os.Getenv("PLATFORM_SSH_KNOWN_HOSTS")); p != "" {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".ssh", "known_hosts")
+}
+
+// hostKeyCallback checks host keys against settings.KnownHosts. Until
+// 2026-10-07 every dial used ssh.InsecureIgnoreHostKey (TD-203).
+func hostKeyCallback(settings SSHSettings) (ssh.HostKeyCallback, error) {
+	cb, err := knownhosts.New(settings.KnownHosts)
+	if err != nil {
+		return nil, fmt.Errorf("known_hosts %s: %w (add the host with ssh-keyscan, or set PLATFORM_SSH_KNOWN_HOSTS)", settings.KnownHosts, err)
+	}
+	return cb, nil
+}
+
+// hostKeyAlgorithms lists the key types known_hosts holds for addr, so the
+// handshake asks for one of them. Without it Go may pick a type the file does
+// not have (ecdsa before ed25519) and report a mismatch for a host whose
+// ed25519 key is known. The callback's KeyError names the known keys.
+func hostKeyAlgorithms(cb ssh.HostKeyCallback, addr string) []string {
+	_, probe, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil
+	}
+	signer, err := ssh.NewSignerFromKey(probe)
+	if err != nil {
+		return nil
+	}
+	tcp, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil
+	}
+	var ke *knownhosts.KeyError
+	if !errors.As(cb(addr, tcp, signer.PublicKey()), &ke) {
+		return nil
+	}
+	var algos []string
+	for _, k := range ke.Want {
+		switch t := k.Key.Type(); t {
+		case ssh.KeyAlgoRSA:
+			algos = append(algos, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256, ssh.KeyAlgoRSA)
+		default:
+			algos = append(algos, t)
+		}
+	}
+	return algos
 }
 
 type resizeMsg struct {
@@ -71,6 +130,7 @@ type Handler struct {
 	cfg     *config.Config
 	ssh     SSHSettings
 	cluster ClusterNodesSource
+	tickets *ticketStore
 }
 
 // ClusterNodesSource supplies live K8s node inventory for the Linux SSH row.
@@ -99,7 +159,7 @@ func (a *clusterNodesAdapter) FetchClusterNodes(ctx context.Context) ([]LiveClus
 }
 
 func NewHandler(cfg *config.Config) *Handler {
-	return &Handler{cfg: cfg, ssh: SSHSettingsFromEnv()}
+	return &Handler{cfg: cfg, ssh: SSHSettingsFromEnv(), tickets: newTicketStore()}
 }
 
 func NewHandlerWithCluster(cfg *config.Config, clusterHandler *cluster.Handler) *Handler {
@@ -152,6 +212,12 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "host not in allowlist", http.StatusForbidden)
 		return
 	}
+	who, ok := h.tickets.consume(r.URL.Query().Get("ticket"), target.ID)
+	if !ok {
+		http.Error(w, "operator ticket required (POST /api/v1/console/ws-ticket)", http.StatusUnauthorized)
+		return
+	}
+	log.Printf("console ws: %s opens a shell on %s (%s@%s)", who, target.ID, target.User, target.Host)
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -275,19 +341,24 @@ func pipeShell(ws *websocket.Conn, client *ssh.Client) {
 }
 
 func dialSSH(target Host, settings SSHSettings) (*ssh.Client, *ssh.Client, net.Conn, error) {
+	hostKeys, err := hostKeyCallback(settings)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	auth, agentConn, err := buildSSHAuth(settings.KeyPath)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if target.jump != nil {
-		return dialSSHViaJump(target, *target.jump, auth, settings.DialTimeout, agentConn)
+		return dialSSHViaJump(target, *target.jump, auth, hostKeys, settings.DialTimeout, agentConn)
 	}
 	addr := net.JoinHostPort(target.Host, itoa(target.Port))
 	cfg := &ssh.ClientConfig{
-		User:            target.User,
-		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         settings.DialTimeout,
+		User:              target.User,
+		Auth:              auth,
+		HostKeyCallback:   hostKeys,
+		HostKeyAlgorithms: hostKeyAlgorithms(hostKeys, addr),
+		Timeout:           settings.DialTimeout,
 	}
 	client, err := ssh.Dial("tcp", addr, cfg)
 	if err != nil {
@@ -303,15 +374,17 @@ func dialSSHViaJump(
 	target Host,
 	jump Host,
 	auth []ssh.AuthMethod,
+	hostKeys ssh.HostKeyCallback,
 	timeout time.Duration,
 	agentConn net.Conn,
 ) (*ssh.Client, *ssh.Client, net.Conn, error) {
 	jumpAddr := net.JoinHostPort(jump.Host, itoa(jump.Port))
 	jumpCfg := &ssh.ClientConfig{
-		User:            jump.User,
-		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         timeout,
+		User:              jump.User,
+		Auth:              auth,
+		HostKeyCallback:   hostKeys,
+		HostKeyAlgorithms: hostKeyAlgorithms(hostKeys, jumpAddr),
+		Timeout:           timeout,
 	}
 	jumpClient, err := ssh.Dial("tcp", jumpAddr, jumpCfg)
 	if err != nil {
@@ -332,10 +405,11 @@ func dialSSHViaJump(
 	}
 
 	targetCfg := &ssh.ClientConfig{
-		User:            target.User,
-		Auth:            auth,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         timeout,
+		User:              target.User,
+		Auth:              auth,
+		HostKeyCallback:   hostKeys,
+		HostKeyAlgorithms: hostKeyAlgorithms(hostKeys, targetAddr),
+		Timeout:           timeout,
 	}
 	ncc, chans, reqs, err := ssh.NewClientConn(tunnel, targetAddr, targetCfg)
 	if err != nil {

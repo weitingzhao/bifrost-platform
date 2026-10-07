@@ -119,7 +119,7 @@ func bridgeServer(t *testing.T, sshAddr string) *httptest.Server {
 
 func dialBridge(t *testing.T, ts *httptest.Server) *websocket.Conn {
 	t.Helper()
-	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http"), nil)
+	ws, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(ts.URL, "http"), http.Header{"Origin": {"http://127.0.0.1:5180"}})
 	if err != nil {
 		t.Fatal(err)
 	}

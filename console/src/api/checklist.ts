@@ -1,4 +1,4 @@
-import { parseError } from './client'
+import { authedFetch, parseError } from './client'
 
 export type ChecklistItemSignalDto = {
   item_id: string
@@ -60,8 +60,8 @@ export async function fetchChecklistKPIs(): Promise<ChecklistKPIsResponse> {
 
 /** Probe data-husbandry → merge checklist signals → Operate auto_dispatch. */
 export async function syncHusbandryChecklist(): Promise<ChecklistSignalsResponse> {
-  const r = await fetch('/api/v1/checklist/husbandry-sync', { method: 'POST' })
-  if (!r.ok) throw await parseError('checklist husbandry-sync', r)
+  // operator-only: it can start full-auto remediation (TD-208)
+  const r = await authedFetch('checklist husbandry-sync', '/api/v1/checklist/husbandry-sync', { method: 'POST' })
   return r.json() as Promise<ChecklistSignalsResponse>
 }
 
