@@ -67,7 +67,7 @@ function RedisLanAccessSection({ endpoints }: { endpoints: ClusterRedisStatusRes
   return (
     <OpsSection
       title="LAN access (Redis Insight / redis-cli)"
-      description="NodePort entry points for external clients on the local network — no port-forward needed"
+      description="NodePort entry point for DEV only. STG and PROD have none (TD-205): kubectl -n data port-forward svc/redis-live-prod 16382:6379"
       bodyPadding="compact"
     >
       {list.length === 0 ? (

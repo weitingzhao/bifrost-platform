@@ -342,12 +342,12 @@ type redisLanSpec struct {
 	database   string
 }
 
+// Only DEV Redis has a LAN NodePort. STG and PROD lost theirs on 2026-10-07
+// (TD-205: no password, the PROD daemon's control stream, open to the whole
+// LAN); reach them with kubectl port-forward. The queue instances retired in
+// Wave 5.
 var redisLanCatalog = []redisLanSpec{
 	{lanService: "redis-dev-lan", targetName: "redis-dev", environment: "dev", role: "live+queue", database: "db=0 live · db=1 queue"},
-	{lanService: "redis-live-stg-lan", targetName: "redis-live-stg", environment: "stg", role: "live", database: "db=0"},
-	{lanService: "redis-queue-stg-lan", targetName: "redis-queue-stg", environment: "stg", role: "queue", database: "db=0"},
-	{lanService: "redis-live-prod-lan", targetName: "redis-live-prod", environment: "prod", role: "live", database: "db=0"},
-	{lanService: "redis-queue-prod-lan", targetName: "redis-queue-prod", environment: "prod", role: "queue", database: "db=0"},
 }
 
 func redisLanAccessProbe(ctx context.Context, clientset kubernetes.Interface) []RedisLanEndpointView {
