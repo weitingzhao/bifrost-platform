@@ -48,8 +48,8 @@ test('health turns degraded after N consecutive failures and recovers on a succe
   const store = new ExecutionStore()
   const rec = (result: 'success' | 'failure') =>
     store.record({
-      skillId: 'peer-watchdog',
-      skillLabel: 'Peer Watchdog',
+      skillId: 'stale-pipeline-triage',
+      skillLabel: 'Stale Pipeline Triage',
       trigger: 'cron',
       result,
       startedAt: new Date(),
@@ -62,7 +62,19 @@ test('health turns degraded after N consecutive failures and recovers on a succe
   rec('failure')
   const h = gatewayHealth(registry, store)
   assert.equal(h.status, 'degraded')
-  assert.equal(h.failing_skills[0]?.id, 'peer-watchdog')
+  assert.equal(h.failing_skills[0]?.id, 'stale-pipeline-triage')
   rec('success')
   assert.equal(gatewayHealth(registry, store).status, 'ok')
+})
+
+test('TD-251: no enabled skill runs a script a launchd plist already runs', () => {
+  const registry = new SkillRegistry(REPO_SKILLS_YAML)
+  const deployDir = path.resolve(GATEWAY_DIR, '..', 'deploy')
+  const plists = fs.readdirSync(deployDir).filter(f => f.endsWith('.plist'))
+    .map(f => fs.readFileSync(path.join(deployDir, f), 'utf8'))
+  const twins = registry.all()
+    .filter(s => s.status === 'enabled' && s.script != null)
+    .filter(s => plists.some(p => p.includes(`/${path.basename(s.script as string)}`)))
+    .map(s => s.id)
+  assert.deepEqual(twins, [])
 })
