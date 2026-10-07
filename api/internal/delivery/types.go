@@ -7,19 +7,19 @@ import (
 )
 
 type PipelinesResponse struct {
-	ClusterID     string          `json:"cluster_id"`
-	Namespace     string          `json:"namespace"`
-	Reachability  probe.Reachability `json:"reachability"`
-	Detail        string          `json:"detail"`
-	Pipelines     []PipelineView  `json:"pipelines"`
-	GeneratedAt   time.Time       `json:"generated_at"`
+	ClusterID    string             `json:"cluster_id"`
+	Namespace    string             `json:"namespace"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+	Pipelines    []PipelineView     `json:"pipelines"`
+	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
 type PipelineView struct {
-	Name       string `json:"name"`
-	Namespace  string `json:"namespace"`
-	Detail     string `json:"detail,omitempty"`
-	BuildReady *bool  `json:"build_ready,omitempty"`
+	Name        string `json:"name"`
+	Namespace   string `json:"namespace"`
+	Detail      string `json:"detail,omitempty"`
+	BuildReady  *bool  `json:"build_ready,omitempty"`
 	BlockReason string `json:"block_reason,omitempty"`
 }
 
@@ -33,13 +33,13 @@ type PipelinePreflightResponse struct {
 }
 
 type PipelineRunsResponse struct {
-	ClusterID    string           `json:"cluster_id"`
-	Namespace    string           `json:"namespace"`
-	Pipeline     string           `json:"pipeline"`
-	Reachability probe.Reachability  `json:"reachability"`
-	Detail       string           `json:"detail"`
-	Runs         []PipelineRunView `json:"runs"`
-	GeneratedAt  time.Time        `json:"generated_at"`
+	ClusterID    string             `json:"cluster_id"`
+	Namespace    string             `json:"namespace"`
+	Pipeline     string             `json:"pipeline"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+	Runs         []PipelineRunView  `json:"runs"`
+	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
 type PipelineRunView struct {
@@ -54,11 +54,11 @@ type PipelineRunView struct {
 }
 
 type RunLogsResponse struct {
-	ClusterID   string     `json:"cluster_id"`
-	Namespace   string     `json:"namespace"`
-	RunName     string     `json:"run_name"`
-	Logs        string     `json:"logs"`
-	GeneratedAt time.Time  `json:"generated_at"`
+	ClusterID   string    `json:"cluster_id"`
+	Namespace   string    `json:"namespace"`
+	RunName     string    `json:"run_name"`
+	Logs        string    `json:"logs"`
+	GeneratedAt time.Time `json:"generated_at"`
 	// LastLogAt is the newest kubectl --timestamps stamp across fetched containers (UTC).
 	LastLogAt *time.Time `json:"last_log_at,omitempty"`
 }
@@ -119,7 +119,7 @@ type SupplyChainResponse struct {
 	StgWorkloads                []StgWorkloadImageView    `json:"stg_workloads"`
 	LastDeliverRun              *PipelineRunView          `json:"last_deliver_run,omitempty"`
 	LastDeliverSuccess          *PipelineRunView          `json:"last_deliver_success,omitempty"`
-	LastSupplyChainTask         *SupplyChainTaskRunView    `json:"last_supply_chain_task,omitempty"`
+	LastSupplyChainTask         *SupplyChainTaskRunView   `json:"last_supply_chain_task,omitempty"`
 	GeneratedAt                 time.Time                 `json:"generated_at"`
 }
 
@@ -129,6 +129,10 @@ type StartPipelineRunRequest struct {
 	// today; other pipelines derive their tag inside the pipeline. Optional —
 	// empty falls back to the pipeline's own default.
 	Tag string `json:"tag,omitempty"`
+	// Who must match the release window's who when a window is open (TD-162).
+	// release.sh hold prints the value. Empty is only valid when no window is open
+	// and the pipeline is not a research or plugin build.
+	Who string `json:"who,omitempty"`
 }
 
 type RefreshDockerfileRequest struct {
@@ -148,16 +152,16 @@ type GiteaBranchView struct {
 }
 
 type RevisionsResponse struct {
-	ClusterID    string              `json:"cluster_id"`
-	Repos        []string            `json:"repos"`
-	DefaultRef   string              `json:"default_ref"`
-	Tags         []GiteaTagView      `json:"tags"`
-	Branches   []GiteaBranchView  `json:"branches"`
+	ClusterID  string            `json:"cluster_id"`
+	Repos      []string          `json:"repos"`
+	DefaultRef string            `json:"default_ref"`
+	Tags       []GiteaTagView    `json:"tags"`
+	Branches   []GiteaBranchView `json:"branches"`
 	// CommonRefs are ref names present in every tracked repo (safe for multi-repo deploy).
-	CommonRefs   []string            `json:"common_refs"`
-	Reachability probe.Reachability  `json:"reachability"`
-	Detail       string              `json:"detail"`
-	GeneratedAt  time.Time           `json:"generated_at"`
+	CommonRefs   []string           `json:"common_refs"`
+	Reachability probe.Reachability `json:"reachability"`
+	Detail       string             `json:"detail"`
+	GeneratedAt  time.Time          `json:"generated_at"`
 }
 
 // CompareResponse — changed paths between two refs (Gitea compare). Read-only.

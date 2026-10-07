@@ -195,7 +195,7 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 	}
 }
 
-func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag string) (cluster.ActuationResponse, PipelineRunView, error) {
+func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag, who string) (cluster.ActuationResponse, PipelineRunView, error) {
 	now := time.Now().UTC()
 	ns := s.PipelinesNamespace()
 	target := fmt.Sprintf("PipelineRun/%s/%s", ns, pipelineName)
@@ -215,6 +215,14 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if err := validateRevision(rev); err != nil {
 		resp.Message = err.Error()
 		return resp, empty, fmt.Errorf("%s", resp.Message)
+	}
+	if requiresFullSHA(pipelineName) && !isFullGitSHA(rev) {
+		resp.Message = fmt.Sprintf("revision %q must be a 40-character lowercase git SHA", rev)
+		return resp, empty, fmt.Errorf("%s", resp.Message)
+	}
+	if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
+		resp.Message = msg
+		return resp, empty, fmt.Errorf("%s", msg)
 	}
 
 	// Multi-repo guard: refuse to start if the revision is genuinely missing in
@@ -496,7 +504,8 @@ func pipelineTakesRevision(name string) bool {
 	case "bifrost-deliver-stg", "bifrost-deliver-prod",
 		"bifrost-deliver-platform", "bifrost-deliver-platform-prod",
 		"bifrost-deliver-research", "bifrost-build-research-dagster",
-		"bifrost-build-market-data":
+		"bifrost-build-market-data", "bifrost-build-flex-query",
+		"bifrost-build-ib-gateway":
 		return true
 	}
 	return false
@@ -569,6 +578,14 @@ func pipelineRunWorkspaces(pipelineName string) []map[string]any {
 		}
 	case "bifrost-deliver-research", "bifrost-build-frontend-stg", "bifrost-build-market-data":
 		return []map[string]any{buildContextPVC}
+	case "bifrost-build-ib-gateway", "bifrost-build-flex-query":
+		// These pipelines name the workspace "source", matching flex-query's pipeline.
+		source := map[string]any{}
+		for k, v := range buildContextPVC {
+			source[k] = v
+		}
+		source["name"] = "source"
+		return []map[string]any{source}
 	case "bifrost-build-research-dagster":
 		// The Dagster image carries the full dbt project, so its context needs
 		// more room than the runtime image — 8Gi is what the hand-run template
