@@ -13,6 +13,8 @@ REMOTE_DIR="/Users/vision/bifrost-agent"
 #   AGENT_ROLE  primary | standby   (default primary; standby disables nightly-drift)
 #   PEER_SSH    vision@192.168.10.52 (peer SSH target for watchdog restart)
 #   PEER_URL    http://192.168.10.52:8781 (peer runner base URL for health probe)
+#   PEER_RELAY_URL http://192.168.10.50:8783/api/v1/alerts/relay — set only when
+#               deploying the Mini that does NOT run the alert relay (TD-248)
 # Operator plane (L-1 Go binary, optional — skipped when Go is absent):
 #   OPERATOR_PLANE_PORT       8783
 #   OPERATOR_PLANE_AUTOPILOT  on | off (default off — platform-workers still owns patrol)
@@ -24,6 +26,7 @@ REMOTE_DIR="/Users/vision/bifrost-agent"
 AGENT_ROLE="${AGENT_ROLE:-primary}"
 PEER_SSH="${PEER_SSH:-}"
 PEER_URL="${PEER_URL:-}"
+PEER_RELAY_URL="${PEER_RELAY_URL:-}"
 OPERATOR_PLANE_PORT="${OPERATOR_PLANE_PORT:-8783}"
 OPERATOR_PLANE_AUTOPILOT="${OPERATOR_PLANE_AUTOPILOT:-off}"
 ALERT_RELAY="${ALERT_RELAY:-off}"
@@ -187,6 +190,7 @@ run_remote "cat > ${REMOTE_DIR}/config/env.local.sh << 'ENVEOF'
 export AGENT_ROLE=${AGENT_ROLE}
 export PEER_AGENT_SSH=${PEER_SSH}
 export PEER_AGENT_URL=${PEER_URL}
+export PEER_RELAY_URL=${PEER_RELAY_URL}
 ${_PLATFORM_API_LINE}
 ENVEOF
 echo '  wrote env.local.sh (role=${AGENT_ROLE} peer_ssh=${PEER_SSH} peer_url=${PEER_URL})'"
