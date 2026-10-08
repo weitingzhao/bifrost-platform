@@ -7,18 +7,16 @@ import (
 	"testing"
 )
 
-// TestExecSQLOnPrimaryCallSitesOnlyDataClone is the TD-256 ratchet.
-// Production call sites of ExecSQLOnPrimary outside cluster/data_clone*.go
-// must stay at 0 (baseline was 2: marketdata and flexquery freshness probes).
-// The count may only fall. The data clone calls execOnPrimary, not this helper;
-// a future caller inside data_clone*.go is the only place still allowed.
-func TestExecSQLOnPrimaryCallSitesOnlyDataClone(t *testing.T) {
+// TestExecSQLOnPrimarySymbolRemoved is the TD-268 ratchet.
+// ExecSQLOnPrimary was removed; the symbol must not reappear anywhere in api/ except this file.
+func TestExecSQLOnPrimarySymbolRemoved(t *testing.T) {
 	root, err := filepath.Abs("../..")
 	if err != nil {
 		t.Fatal(err)
 	}
-	const needle = ".ExecSQLOnPrimary("
-	var outside []string
+	const needle = "ExecSQLOnPrimary"
+	const self = "internal/cluster/execsql_callers_test.go"
+	var hits []string
 	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -30,23 +28,24 @@ func TestExecSQLOnPrimaryCallSitesOnlyDataClone(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == self {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(root, path)
-		rel = filepath.ToSlash(rel)
-		base := filepath.Base(path)
-		allowed := strings.HasPrefix(rel, "internal/cluster/") && strings.HasPrefix(base, "data_clone")
-		if allowed {
-			return nil
-		}
 		for i, line := range strings.Split(string(raw), "\n") {
 			if strings.Contains(line, needle) {
-				outside = append(outside, rel+":"+itoa(i+1))
+				hits = append(hits, rel+":"+strconvItoa(i+1))
 			}
 		}
 		return nil
@@ -54,12 +53,12 @@ func TestExecSQLOnPrimaryCallSitesOnlyDataClone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(outside) != 0 {
-		t.Fatalf("ExecSQLOnPrimary call sites outside cluster/data_clone*.go = %d, want 0: %s", len(outside), strings.Join(outside, ", "))
+	if len(hits) != 0 {
+		t.Fatalf("ExecSQLOnPrimary references = %d, want 0: %s", len(hits), strings.Join(hits, ", "))
 	}
 }
 
-func itoa(n int) string {
+func strconvItoa(n int) string {
 	if n == 0 {
 		return "0"
 	}

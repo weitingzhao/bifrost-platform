@@ -59,25 +59,6 @@ func (s *Service) execOnPrimary(ctx context.Context, primary string, command ...
 	return "", err
 }
 
-// ExecSQLOnPrimary runs `psql -tAc <sql>` on the CNPG primary against database.
-// Plugin freshness no longer calls it (those probes GET the plugin APIs).
-// The data clone still execs into the primary through execOnPrimary.
-func (s *Service) ExecSQLOnPrimary(ctx context.Context, database, sql string) (string, error) {
-	if s == nil {
-		return "", fmt.Errorf("cluster service unavailable")
-	}
-	db := strings.TrimSpace(database)
-	if db == "" {
-		return "", fmt.Errorf("database is required")
-	}
-	primary, err := s.resolveCNPGPrimary(ctx)
-	if err != nil {
-		return "", err
-	}
-	// Absolute path: avoids brittle PATH in some CNPG images.
-	return s.execOnPrimary(ctx, primary, "/usr/bin/psql", "-U", "postgres", "-d", db, "-tAc", sql)
-}
-
 func (s *Service) execViaAPI(ctx context.Context, namespace, pod, container string, command ...string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("cluster service unavailable")
