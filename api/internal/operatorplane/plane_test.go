@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 )
 
@@ -208,6 +209,10 @@ func TestLaunchdRequiresViewerToken(t *testing.T) {
 		Auth:      auth,
 		Audit:     actuation.NewAuditLog(""),
 		ConfigDir: filepath.Join(dir, "config"),
+		// CI runs on Linux, where launchctl does not exist.
+		ListLaunchd: func() ([]launchd.Service, error) {
+			return []launchd.Service{{Label: "com.bifrost.operator-plane", PID: 42, Running: true, Plist: true}}, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -229,7 +234,7 @@ func TestLaunchdRequiresViewerToken(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("viewer launchd answered %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `"services"`) {
+	if !strings.Contains(rec.Body.String(), `"label":"com.bifrost.operator-plane"`) {
 		t.Fatalf("body: %s", rec.Body.String())
 	}
 

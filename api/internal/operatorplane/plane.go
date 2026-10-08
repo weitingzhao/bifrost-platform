@@ -39,6 +39,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
+	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
 
@@ -48,6 +49,9 @@ type Deps struct {
 	Auth      *actuation.AuthService
 	Audit     *actuation.AuditLog
 	ConfigDir string
+	// ListLaunchd reads this machine's launchd agents. Nil means launchd.List,
+	// which shells out to launchctl; tests pass a stub so they run on Linux CI.
+	ListLaunchd func() ([]launchd.Service, error)
 }
 
 // Plane owns the L-1 handlers and the patrol autopilot loop.
@@ -60,12 +64,17 @@ type Plane struct {
 	hermesGateway   *hermesgateway.Handler
 	hermesReadiness *hermesreadiness.Handler
 	patrol          *patrol.Handler
+	listLaunchd     func() ([]launchd.Service, error)
 }
 
 func New(d Deps) (*Plane, error) {
 	patrolH, err := patrol.NewHandler(d.ConfigDir)
 	if err != nil {
 		return nil, err
+	}
+	listLaunchd := d.ListLaunchd
+	if listLaunchd == nil {
+		listLaunchd = launchd.List
 	}
 	return &Plane{
 		auth:            d.Auth,
@@ -75,6 +84,7 @@ func New(d Deps) (*Plane, error) {
 		hermesGateway:   hermesgateway.NewHandler(),
 		hermesReadiness: hermesreadiness.NewHandler(),
 		patrol:          patrolH,
+		listLaunchd:     listLaunchd,
 	}, nil
 }
 

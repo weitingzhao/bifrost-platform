@@ -10,7 +10,7 @@ import (
 // HandleLaunchd lists this machine's com.bifrost.* launchd agents.
 // Viewer token required. It does not restart anything.
 func (p *Plane) HandleLaunchd(w http.ResponseWriter, _ *http.Request) {
-	services, err := launchd.List()
+	services, err := p.listLaunchd()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
