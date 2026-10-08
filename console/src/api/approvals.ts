@@ -108,8 +108,8 @@ function closedSortKey(item: ApprovalItem): number {
 }
 
 /** Closed requests, newest decision/expiry first, capped at the history window. */
-export function recentClosed(items: ApprovalItem[], limit = APPROVAL_HISTORY_LIMIT): ApprovalItem[] {
-  return items
+export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMIT): ApprovalItem[] {
+  return rows
     .filter(item => item.status !== 'pending')
     .sort((a, b) => closedSortKey(b) - closedSortKey(a))
     .slice(0, limit)
