@@ -43,6 +43,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -94,6 +95,7 @@ type Server struct {
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
+	releasePolicy *releasepolicy.Engine
 	authLoaded    bool
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
@@ -343,6 +345,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
+	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.bindActionExecutors()
 	return srv, nil
 }
@@ -374,6 +377,7 @@ func (s *Server) Router() http.Handler {
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)
 		approvals.Mount(r, s.auth, s.approvals)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)

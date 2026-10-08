@@ -19,6 +19,25 @@ type Service struct {
 	store *store
 	audit *actuation.AuditLog
 	now   func() time.Time
+	auto  AutoApprover
+}
+
+// AutoApprover returns the id of a signed release policy that already covers
+// a tier C request, or "" when the request must wait for the Owner. The
+// direct call is re-checked by the route guard, which runs and audits it.
+type AutoApprover func(ctx context.Context, action string, tier actions.Tier, params map[string]any) string
+
+// SetAutoApprover installs the release policy check. Tier D never consults it.
+func (s *Service) SetAutoApprover(fn AutoApprover) {
+	s.mu.Lock()
+	s.auto = fn
+	s.mu.Unlock()
+}
+
+// Pending returns the approvals still waiting for a decision.
+func (s *Service) Pending() []Approval {
+	out, _, _ := s.list("pending")
+	return out
 }
 
 // New loads the statefile at path (key "approvals" when path is $PLATFORM_DATA_DIR/approvals).
@@ -82,7 +101,21 @@ func (s *Service) create(ctx context.Context, requester, action, reason, rollbac
 			"action": act.ID,
 			"tier":   string(actions.TierX),
 		})
-	case actions.TierC, actions.TierD:
+	case actions.TierC:
+		s.mu.Lock()
+		auto := s.auto
+		s.mu.Unlock()
+		if auto != nil {
+			if policyID := auto(ctx, act.ID, tier, norm); policyID != "" {
+				return failFields(400, map[string]any{
+					"error":            "call directly",
+					"action":           act.ID,
+					"tier":             string(actions.TierC),
+					"auto_approved_by": policyID,
+				})
+			}
+		}
+	case actions.TierD:
 	default:
 		return fail(400, "action cannot be requested")
 	}
