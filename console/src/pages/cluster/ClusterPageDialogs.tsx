@@ -1,5 +1,6 @@
 import { Button } from '@bifrost/ui'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { RequestScaleDeployment } from '@/components/shell/clusterActionRequests'
 import type { ConfirmState, ScaleState } from './useClusterPageMutations'
 import type { UseMutationResult } from '@tanstack/react-query'
 import type { ActuationResponse, ScaleRequest } from '@/api/matrixTypes'
@@ -10,14 +11,13 @@ export function ClusterPageDialogs({
   actionPending,
   scaleState,
   setScaleState,
-  scaleMutation,
 }: {
   confirmState: ConfirmState | null
   onCancelConfirm: () => void
   actionPending: boolean
   scaleState: ScaleState | null
   setScaleState: (next: ScaleState | null) => void
-  scaleMutation: UseMutationResult<ActuationResponse, Error, ScaleRequest, unknown>
+  scaleMutation?: UseMutationResult<ActuationResponse, Error, ScaleRequest, unknown>
 }) {
   return (
     <>
@@ -61,20 +61,12 @@ export function ClusterPageDialogs({
               <Button variant="outline" size="sm" onClick={() => setScaleState(null)}>
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                disabled={scaleMutation.isPending}
-                onClick={() =>
-                  scaleMutation.mutate({
-                    namespace: scaleState.workload.namespace,
-                    kind: 'Deployment',
-                    name: scaleState.workload.name,
-                    replicas: scaleState.replicas,
-                  })
-                }
-              >
-                {scaleMutation.isPending ? 'Scaling…' : 'Scale deployment'}
-              </Button>
+              <RequestScaleDeployment
+                namespace={scaleState.workload.namespace}
+                name={scaleState.workload.name}
+                replicas={scaleState.replicas}
+                label="Request scale"
+              />
             </div>
           </div>
         </div>

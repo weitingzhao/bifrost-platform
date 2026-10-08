@@ -93,7 +93,13 @@ function reachToVerdict(reach: 'ok' | 'degraded' | 'fail' | 'unknown'): {
  * Subcontractors → Plugin Gallery — registry + bus rollup only.
  * Runtime detail: IB Gateway / Market Data manage pages. Publish: Launch Desk → Plugin.
  */
-export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string) => void } = {}) {
+export function PluginGalleryPage({
+  onNavigate,
+  variant = 'page',
+}: {
+  onNavigate?: (tabId: string) => void
+  variant?: 'page' | 'strip'
+} = {}) {
   const liveProbe = useIbGatewayLiveProbe()
   const marketProbe = useMarketDataLiveProbe()
   const flexProbe = useFlexQueryLiveProbe()
@@ -133,9 +139,11 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
             >
               Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={() => onNavigate?.('plugin-release')}>
-              Need publish?
-            </Button>
+            {variant === 'page' ? (
+              <Button variant="outline" size="sm" onClick={() => onNavigate?.('plugin-release')}>
+                Need publish?
+              </Button>
+            ) : null}
           </>
         }
         meta={
@@ -146,8 +154,12 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
       />
 
       <OpsSection
-        title="Plugin registry"
-        description="Directory only — IB Client / Massive / IB Flex. dbt SEPA catalog is Satellite → Research Engine (Plugin → Analytics retired)."
+        title={variant === 'strip' ? 'Plugins' : 'Plugin registry'}
+        description={
+          variant === 'strip'
+            ? 'IB Client, Massive, and IB Flex reachability.'
+            : 'Directory only — IB Client / Massive / IB Flex. dbt SEPA catalog is Satellite → Research Engine (Plugin → Analytics retired).'
+        }
         bodyPadding="default"
         overflow="visible"
       >
@@ -182,7 +194,7 @@ export function PluginGalleryPage({ onNavigate }: { onNavigate?: (tabId: string)
               <p className="m-0 mt-1 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
                 {plugin.vendor} · {plugin.role}
               </p>
-              {plugin.openTabId != null && plugin.openLabel != null && onNavigate != null ? (
+              {variant === 'page' && plugin.openTabId != null && plugin.openLabel != null && onNavigate != null ? (
                 <div className="mt-2">
                   <Button
                     variant="outline"

@@ -1,14 +1,8 @@
 import { useState } from 'react'
-import {
-  Button,
-  ConfirmDialog,
-  DenseTag,
-  StatusLamp,
-} from '@bifrost/ui'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { postNetworkFirewallApply } from '@/api/network'
+import { DenseTag, StatusLamp } from '@bifrost/ui'
 import type { NetworkAuditResponse } from '@/api/networkTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { RequestFirewallApply } from '@/components/shell/clusterActionRequests'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
@@ -23,27 +17,12 @@ function classificationVariant(
 export function NetworkFirewallPanel() {
   const liveProbe = useNetworkLiveProbe()
   const { canOperate } = usePlatformAuth()
-  const qc = useQueryClient()
-  const [confirmOpen, setConfirmOpen] = useState(false)
   const [includeDefaultDeny, setIncludeDefaultDeny] = useState(false)
-  const [actionMsg, setActionMsg] = useState<string | null>(null)
 
   const audit = liveProbe.audit
   const hasDrift = audit?.classification === 'POLICY_DRIFT'
   const canApply =
     canOperate && liveProbe.probeReach !== 'fail' && liveProbe.probeReach !== 'unknown' && hasDrift
-
-  const applyMutation = useMutation({
-    mutationFn: () => postNetworkFirewallApply({ include_default_deny: includeDefaultDeny }),
-    onMutate: () => setActionMsg(null),
-    onSuccess: resp => {
-      setActionMsg(resp.message ?? 'Firewall apply completed')
-      setConfirmOpen(false)
-      void qc.invalidateQueries({ queryKey: ['network'] })
-      void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
-    },
-    onError: (err: Error) => setActionMsg(err.message),
-  })
 
   const gapCount = audit?.zone_binding_gaps?.length ?? 0
   const missingCount = audit?.missing_policies?.length ?? 0
@@ -53,16 +32,7 @@ export function NetworkFirewallPanel() {
       title="Firewall drift & apply"
       description="L0 audit via GET /api/v1/network/audit — L1 idempotent re-sync via POST /api/v1/network/firewall/apply (operator)."
       actions={
-        canApply ? (
-          <Button
-            size="xs"
-            variant="default"
-            disabled={applyMutation.isPending}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {applyMutation.isPending ? 'Applying…' : 'Apply firewall'}
-          </Button>
-        ) : undefined
+        canApply ? <RequestFirewallApply includeDefaultDeny={includeDefaultDeny} /> : undefined
       }
       bodyPadding="default"
     >
@@ -103,35 +73,16 @@ export function NetworkFirewallPanel() {
         </p>
       )}
 
-      {actionMsg != null && actionMsg !== '' && (
-        <p
-          className={`m-0 mt-2 text-[var(--text-dense-meta)] ${
-            applyMutation.isError ? 'text-[var(--destructive)]' : 'text-[var(--success)]'
-          }`}
-        >
-          {actionMsg}
-        </p>
-      )}
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title="Apply Bifrost firewall policies"
-        message="Idempotent L1 apply — re-sync missing Bifrost zone-based firewall policies on the UCG controller. Does not toggle Default Security Posture or bulk-delete zones."
-        bodyExtra={
-          <label className="flex cursor-pointer items-center gap-2 text-[var(--text-dense-meta)]">
-            <input
-              type="checkbox"
-              checked={includeDefaultDeny}
-              onChange={e => setIncludeDefaultDeny(e.target.checked)}
-            />
-            Include default-deny rule (scripts/unifi_firewall_setup.py --include-default-deny)
-          </label>
-        }
-        confirmLabel="Apply"
-        confirming={applyMutation.isPending}
-        onConfirm={() => applyMutation.mutate()}
-        onCancel={() => setConfirmOpen(false)}
-      />
+      {canApply ? (
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-[var(--text-dense-meta)]">
+          <input
+            type="checkbox"
+            checked={includeDefaultDeny}
+            onChange={e => setIncludeDefaultDeny(e.target.checked)}
+          />
+          Include default-deny rule
+        </label>
+      ) : null}
     </OpsSection>
   )
 }

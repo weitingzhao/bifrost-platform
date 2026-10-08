@@ -7,13 +7,9 @@ function ShellQuestion({ question }: { question: string }) {
 /** Placeholder shells. S3–S5 replace the body of the page they own. */
 export { StatusPage } from './status/StatusPage'
 
-export function DataPage() {
-  return <ShellQuestion question={shellNavEntry('data').question} />
-}
+export { DataPage } from './data/DataPage'
 
-export function IbPage() {
-  return <ShellQuestion question={shellNavEntry('ib').question} />
-}
+export { IbPage } from './ib/IbPage'
 
 export { MaintenancePage } from './maintenance/MaintenancePage'
 
@@ -21,8 +17,6 @@ export function ReleasesPage() {
   return <ShellQuestion question={shellNavEntry('releases').question} />
 }
 
-export function InfrastructurePage() {
-  return <ShellQuestion question={shellNavEntry('infrastructure').question} />
-}
+export { InfrastructurePage } from './infrastructure/InfrastructurePage'
 
 export { ProgressPage } from './progress/ProgressPage'

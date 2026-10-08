@@ -1,4 +1,11 @@
 import { Button, SegmentControl } from '@bifrost/ui'
+import {
+  RequestCordonNode,
+  RequestDrainNode,
+  RequestJoinNode,
+  RequestPowerOffNode,
+  RequestUncordonNode,
+} from '@/components/shell/clusterActionRequests'
 import type { ClusterNode, JoinProfilesResponse, NodePowerResponse } from '@/api/clusterTypes'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
 import { WizardProcedureSteps } from '@/components/cluster/WizardProcedureSteps'
@@ -77,12 +84,34 @@ function actionDisabled(action: WizardAction, canOperate: boolean, canAdmin: boo
   }
 }
 
+function WizardRequest({
+  action,
+  nodeName,
+  profileId,
+  disabled,
+}: {
+  action: WizardAction
+  nodeName: string | null
+  profileId?: string
+  disabled: boolean
+}) {
+  if (action === 'cordon' && nodeName != null) return <RequestCordonNode name={nodeName} disabled={disabled} />
+  if (action === 'uncordon' && nodeName != null) return <RequestUncordonNode name={nodeName} disabled={disabled} />
+  if (action === 'drain' && nodeName != null) return <RequestDrainNode name={nodeName} disabled={disabled} />
+  if (action === 'poweroff' && nodeName != null) return <RequestPowerOffNode name={nodeName} disabled={disabled} />
+  if (action === 'join' && profileId != null && profileId !== '') {
+    return <RequestJoinNode profile={profileId} disabled={disabled} />
+  }
+  return null
+}
+
 function WizardNextActionBar({
   action,
   canOperate,
   canAdmin,
   actionPending,
   profileId,
+  nodeName,
   onWizardAction,
 }: {
   action: WizardAction
@@ -90,23 +119,34 @@ function WizardNextActionBar({
   canAdmin: boolean
   actionPending: boolean
   profileId?: string
+  nodeName: string | null
   onWizardAction: (action: WizardAction, context?: { profileId?: string }) => void
 }) {
   const blockedByAuth = actionDisabled(action, canOperate, canAdmin)
   const needsAdmin = actionRequiresAdmin(action)
+  const request = WizardRequest({
+    action,
+    nodeName,
+    profileId,
+    disabled: actionPending || blockedByAuth,
+  })
 
   return (
     <div className="flex min-w-0 flex-col gap-2 border-t border-[var(--table-rule)] pt-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-dense-meta shrink-0 text-[var(--muted-foreground)]">Next action</span>
-        <Button
-          size="sm"
-          variant={blockedByAuth ? 'outline' : 'default'}
-          disabled={actionPending || blockedByAuth}
-          onClick={() => onWizardAction(action, { profileId })}
-        >
-          {actionPending ? 'Running…' : actionLabel(action)}
-        </Button>
+        {action === 'wake' ? (
+          <Button
+            size="sm"
+            variant={blockedByAuth ? 'outline' : 'default'}
+            disabled={actionPending || blockedByAuth}
+            onClick={() => onWizardAction(action, { profileId })}
+          >
+            {actionPending ? 'Running…' : actionLabel(action)}
+          </Button>
+        ) : (
+          request
+        )}
       </div>
       {blockedByAuth && (
         <OpsFeedback
@@ -252,6 +292,7 @@ export function ClusterNodeWizardPanel({
                     canAdmin={canAdmin}
                     actionPending={actionPending}
                     profileId={joinProfile?.id}
+                    nodeName={selectedNodeName}
                     onWizardAction={onWizardAction}
                   />
                 )}
@@ -274,6 +315,7 @@ export function ClusterNodeWizardPanel({
                   canAdmin={canAdmin}
                   actionPending={actionPending}
                   profileId={joinProfile?.id}
+                  nodeName={selectedNodeName}
                   onWizardAction={onWizardAction}
                 />
               )}

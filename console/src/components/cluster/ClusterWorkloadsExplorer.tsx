@@ -15,6 +15,7 @@ import {
   segmentButtonClass,
   segmentGroupClass,
 } from '@bifrost/ui'
+import { RequestRestartDeployment } from '@/components/shell/clusterActionRequests'
 import {
   BarChart3,
   Cpu,
@@ -24,7 +25,6 @@ import {
   LayoutGrid,
   LayoutPanelLeft,
   Layers,
-  RotateCw,
   Scaling,
   Server,
   Trash2,
@@ -551,7 +551,6 @@ export function ClusterWorkloadsExplorer({
   onSelectNs,
   onSelectStorageService,
   onSelectPod,
-  onRestartDeployment,
   onScaleDeployment,
   onDeletePod,
 }: ClusterWorkloadsExplorerProps) {
@@ -948,16 +947,10 @@ export function ClusterWorkloadsExplorer({
                                 ) : null}
                               </div>
                               <div className="cluster-deployment-row__actions">
-                                <IconActionButton
-                                  title="Rollout restart"
-                                  ariaLabel={`Restart ${deployment.name}`}
-                                  onClick={e => {
-                                    e.stopPropagation()
-                                    onRestartDeployment(deployment)
-                                  }}
-                                >
-                                  <RotateCw className="size-3.5" />
-                                </IconActionButton>
+                                <RequestRestartDeployment
+                                  namespace={deployment.namespace}
+                                  name={deployment.name}
+                                />
                                 <IconActionButton
                                   title="Scale replicas"
                                   ariaLabel={`Scale ${deployment.name}`}
@@ -1125,16 +1118,10 @@ export function ClusterWorkloadsExplorer({
                           )}
                         </div>
                         <div className="cluster-deployment-row__actions">
-                          <IconActionButton
-                            title="Rollout restart"
-                            ariaLabel={`Restart ${deployment.name}`}
-                            onClick={e => {
-                              e.stopPropagation()
-                              onRestartDeployment(deployment)
-                            }}
-                          >
-                            <RotateCw className="size-3.5" />
-                          </IconActionButton>
+                          <RequestRestartDeployment
+                            namespace={deployment.namespace}
+                            name={deployment.name}
+                          />
                           <IconActionButton
                             title="Scale replicas"
                             ariaLabel={`Scale ${deployment.name}`}
