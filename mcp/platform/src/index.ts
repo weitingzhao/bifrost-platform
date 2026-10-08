@@ -503,6 +503,26 @@ reg(
 )
 
 reg(
+  'get_progress',
+  'Computed work-item progress across debt, plans and lanes: status, threads, commit counts, STG/PROD reach, sign-off and stuck.',
+  {
+    stuck_days: z
+      .number()
+      .int()
+      .min(1)
+      .max(30)
+      .optional()
+      .describe('Days without a new commit before an in-progress item is stuck (default 3)'),
+  },
+  async ({ stuck_days }) => {
+    const q = new URLSearchParams()
+    if (stuck_days != null) q.set('stuck_days', String(stuck_days))
+    const qs = q.toString()
+    return jsonResult(await platformGet(`/api/v1/progress${qs ? `?${qs}` : ''}`))
+  },
+)
+
+reg(
   'run_release_gate',
   'Run STG or PROD release gate (admin). Validates deploy health, captures revision, persists result.',
   { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },

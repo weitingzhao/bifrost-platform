@@ -61,6 +61,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_stg_smoke',
   'get_delivery_revisions',
   'get_commit_lineage',
+  'get_progress',
   'run_release_gate',
   'ensure_kubeconfig_secret',
   'get_operate_queue',

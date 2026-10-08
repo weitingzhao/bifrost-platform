@@ -35,6 +35,31 @@ func TestParseMessage(t *testing.T) {
 	if _, tr := parseMessage("subject\n\nCo-Authored-By: Someone <a@b>"); tr.agent {
 		t.Fatal("non-Claude co-author counted as agent")
 	}
+	_, tr = parseMessage("fix TD-1\n\nWork: TD-1, LANE-C\nWork: TD-9\n")
+	if tr.work != "TD-1, LANE-C" {
+		t.Fatalf("work = %q (first value must win)", tr.work)
+	}
+}
+
+func TestCommitsSinceKeepsUnstamped(t *testing.T) {
+	s, now := newTestService(t)
+	cs, errs := s.CommitsSince(context.Background(), now.AddDate(0, 0, -14))
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	found := false
+	for _, c := range cs {
+		if c.SHA != "ccc" {
+			continue
+		}
+		found = true
+		if c.Work != "" || c.Session != "" {
+			t.Fatalf("unstamped = %+v", c)
+		}
+	}
+	if !found {
+		t.Fatal("commit ccc was dropped")
+	}
 }
 
 func TestChangeIDsAnywhere(t *testing.T) {

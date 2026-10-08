@@ -9,6 +9,7 @@ const (
 	keySession    = "Claude-Session"
 	keyTranscript = "Claude-Transcript"
 	keyChangeID   = "Change-Id"
+	keyWork       = "Work"
 )
 
 var (
@@ -19,7 +20,8 @@ var (
 // trailers holds the lineage keys of one commit message.
 type trailers struct {
 	session, transcript, changeID string
-	agent                         bool // a Co-Authored-By line names Claude
+	work                          string // raw Work: value; empty when the key is absent
+	agent                         bool   // a Co-Authored-By line names Claude
 }
 
 // parseMessage reads the trailer block (the last paragraph, as git does) for the
@@ -51,6 +53,8 @@ func parseMessage(msg string) (subject string, t trailers) {
 			t.transcript = val
 		case strings.EqualFold(key, keyChangeID) && t.changeID == "":
 			t.changeID = val
+		case strings.EqualFold(key, keyWork) && t.work == "":
+			t.work = val
 		case strings.EqualFold(key, "Co-Authored-By") && strings.Contains(strings.ToLower(val), "claude"):
 			t.agent = true
 		}

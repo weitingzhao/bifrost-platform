@@ -4,6 +4,7 @@
 //	Claude-Session:    desktop thread id (local_…)
 //	Claude-Transcript: CLI session id
 //	Change-Id:         stable across rebase / cherry-pick / amend / version bump
+//	Work:              TD-n / W-n / LANE-… ids, or "unassigned"
 //
 // It reads git history from the Gitea mirror (read-only) and knows nothing
 // about what the repos contain.
@@ -24,6 +25,9 @@ type Commit struct {
 	Session    string    `json:"session,omitempty"`
 	Transcript string    `json:"transcript,omitempty"`
 	ChangeID   string    `json:"change_id,omitempty"`
+	// Work is the raw Work trailer. Empty means the key is absent.
+	// "unassigned" is an explicit value.
+	Work string `json:"work,omitempty"`
 	// Ref is "main" or the branch the commit was found on.
 	Ref string `json:"ref"`
 	// Landed: the commit is on main, or a main commit carries its Change-Id.

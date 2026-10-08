@@ -44,6 +44,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/progress"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
@@ -84,6 +85,7 @@ type Server struct {
 	agentgovernance *agentgovernance.Handler
 	codehealth      *codehealth.Handler
 	lineage         *lineage.Handler
+	progress        *progress.Handler
 	releases        *releases.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
 	// serves exactly these routes beside the remediation runners, where a bad
@@ -289,7 +291,7 @@ func New(cfg *config.Config) (*Server, error) {
 	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
 		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
 	}
-	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
+	linSvc := lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
 		a, err := srv.delivery.GiteaAccess(ctx)
 		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
 	}).WithReleases(func(ctx context.Context) ([]lineage.Release, error) {
@@ -306,7 +308,8 @@ func New(cfg *config.Config) (*Server, error) {
 			out = append(out, lineage.Release{Run: r.Run, Lane: r.Lane, Env: r.Env, Deploys: r.Deploys, At: r.CompletedAt, Repos: repos})
 		}
 		return out, nil
-	})).WithTitles(func(ctx context.Context) (lineage.ThreadTitles, error) {
+	})
+	srv.lineage = lineage.NewHandler(linSvc).WithTitles(func(ctx context.Context) (lineage.ThreadTitles, error) {
 		tt, err := titleStore.Load(ctx)
 		out := lineage.ThreadTitles{Manual: map[string]lineage.TitleAt{}, Transcript: map[string]lineage.TitleAt{}}
 		for k, v := range tt.Manual {
@@ -321,6 +324,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}).WithTitleReports(func(ctx context.Context, transcript, title string) error {
 		return titleStore.ReportTranscript(ctx, transcript, title, time.Now().UTC())
 	})
+	srv.progress = progress.NewHandler(progress.NewService(linSvc))
 	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
 		return srv.lookupDaemonReplicas(ctx, namespace)
 	})
@@ -441,6 +445,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
 		r.Get("/delivery/compare", s.delivery.HandleCompare)
 		r.Get("/lineage", s.lineage.HandleGet)
+		r.Get("/progress", s.progress.HandleGet)
 		r.Get("/lineage/branches", s.lineage.HandleBranches)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))

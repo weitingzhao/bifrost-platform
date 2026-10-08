@@ -212,7 +212,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			continue
 		}
 		add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-			Transcript: t.transcript, ChangeID: t.changeID, Ref: sc.def, Landed: true, LandedBy: "sha"})
+			Transcript: t.transcript, ChangeID: t.changeID, Work: t.work, Ref: sc.def, Landed: true, LandedBy: "sha"})
 	}
 
 	names := make([]string, 0, len(sc.branches))
@@ -235,7 +235,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 				continue // the same change, already listed from main
 			}
 			add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-				Transcript: t.transcript, ChangeID: t.changeID, Ref: b,
+				Transcript: t.transcript, ChangeID: t.changeID, Work: t.work, Ref: b,
 				Landed: landedBy != "", LandedSHA: landedSHA, LandedBy: landedBy})
 		}
 	}

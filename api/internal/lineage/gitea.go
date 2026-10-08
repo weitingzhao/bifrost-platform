@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -191,4 +192,44 @@ func (g *gitea) commits(ctx context.Context, repo, ref string, since time.Time, 
 
 func (g *gitea) repoPath(repo string) string {
 	return "/repos/" + url.PathEscape(g.acc.Org) + "/" + url.PathEscape(repo)
+}
+
+// raw reads one file from a repo ref. Same client and auth as the JSON calls.
+func (g *gitea) raw(ctx context.Context, repo, ref, filePath string) (string, error) {
+	parts := strings.Split(filePath, "/")
+	esc := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p == "" || p == "." || p == ".." {
+			return "", fmt.Errorf("invalid path")
+		}
+		esc = append(esc, url.PathEscape(p))
+	}
+	u := fmt.Sprintf("%s/api/v1/repos/%s/%s/raw/%s?ref=%s",
+		strings.TrimRight(g.acc.Base, "/"),
+		url.PathEscape(g.acc.Org),
+		url.PathEscape(repo),
+		strings.Join(esc, "/"),
+		url.QueryEscape(ref),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return "", err
+	}
+	if g.acc.User != "" && g.acc.Pass != "" {
+		req.SetBasicAuth(g.acc.User, g.acc.Pass)
+	}
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("http: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return "", fmt.Errorf("%s: status %d: %s", filePath, resp.StatusCode, string(body))
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
