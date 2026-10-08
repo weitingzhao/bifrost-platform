@@ -1,4 +1,4 @@
-import { authedFetch, parseError } from '@/api/client'
+import { authHeaders, authedFetch, parseError } from '@/api/client'
 
 /** Browser-only admin token for approve / reject. Not the console operator token. */
 export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
@@ -129,4 +129,70 @@ export async function postApprovalDecision(
   })
   if (!r.ok) throw await parseError('approvals', r)
   return (await r.json()) as ApprovalDecision
+}
+
+export type ApprovalCreateBody = {
+  action: string
+  params?: Record<string, unknown>
+  reason: string
+  rollback?: string
+}
+
+/** Classified outcome of POST /api/v1/approvals. Tier B is `direct` (call the route). */
+export type ApprovalCreateResult =
+  | { kind: 'direct'; action: string; tier: string }
+  | { kind: 'pending'; id: string; action: string; tier: string; status: string }
+  | { kind: 'error'; status: number; error: string; tier?: string; action?: string }
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value != null && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+/**
+ * Create an approval. A 400 `call directly` means the classified tier is B
+ * and the caller should hit the action's own endpoint. Does not throw on that
+ * response — the tier lives in the body, not in a frontend table.
+ */
+export async function createApprovalRequest(body: ApprovalCreateBody): Promise<ApprovalCreateResult> {
+  const r = await fetch('/api/v1/approvals', {
+    method: 'POST',
+    headers: authHeaders(true),
+    body: JSON.stringify({
+      action: body.action,
+      params: body.params ?? {},
+      reason: body.reason,
+      rollback: body.rollback ?? '',
+    }),
+  })
+  let parsed: Record<string, unknown>
+  try {
+    parsed = asRecord(await r.json())
+  } catch {
+    parsed = {}
+  }
+  const tier = typeof parsed.tier === 'string' ? parsed.tier : undefined
+  const action = typeof parsed.action === 'string' ? parsed.action : body.action
+  const error = typeof parsed.error === 'string' ? parsed.error : ''
+  if (r.status === 400 && error === 'call directly') {
+    return { kind: 'direct', action, tier: tier ?? '' }
+  }
+  if (r.status === 201 && typeof parsed.id === 'string') {
+    return {
+      kind: 'pending',
+      id: parsed.id,
+      action,
+      tier: tier ?? '',
+      status: typeof parsed.status === 'string' ? parsed.status : 'pending',
+    }
+  }
+  return {
+    kind: 'error',
+    status: r.status,
+    error: error !== '' ? error : `HTTP ${r.status}`,
+    tier,
+    action,
+  }
 }

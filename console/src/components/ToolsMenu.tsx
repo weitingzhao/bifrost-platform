@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
@@ -23,17 +24,21 @@ function toolHref(id: OpsToolId, grafanaLive: string | null | undefined): string
 
 /** Header Tools popover — always-on discovery for external UIs (new tab, no iframe). */
 export function ToolsMenu({ className }: { className?: string }) {
+  const [open, setOpen] = useState(false)
+  // Grafana's live URL is only needed while the menu is open. The shell must
+  // not poll cluster observability on every page.
   const obs = useQuery({
     queryKey: ['cluster', 'observability', 'tool-rack'],
     queryFn: fetchClusterObservability,
-    refetchInterval: REFETCH_MS,
+    enabled: open,
+    refetchInterval: open ? REFETCH_MS : false,
     retry: 1,
     staleTime: REFETCH_MS,
   })
   const grafanaLive = obs.data?.grafana_url ?? null
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           type="button"
