@@ -3,6 +3,10 @@ import { Button } from '@bifrost/ui'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { AuthCapabilities, Reachability } from '@/api/matrixTypes'
 import { OpsFeedback } from '@/components/feedback/OpsFeedback'
+import {
+  RequestEnsureMetricsServer,
+  RequestSyncKubeconfig,
+} from '@/components/shell/clusterActionRequests'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { deriveClusterVerdict } from '@/lib/cluster/clusterHealth'
@@ -38,7 +42,6 @@ export function ClusterPageChrome({
   bifrostNsReady,
   metricsServerPending,
   ensurePending,
-  onEnsureMetricsServer,
   onEnsureNamespaces,
   unreachable,
   clusterSummary,
@@ -222,20 +225,7 @@ export function ClusterPageChrome({
           actions={
             <div className="flex flex-wrap items-center gap-2">
               {!metricsOk && (
-                <Button
-                  size="sm"
-                  disabled={!canOperate || metricsServerPending}
-                  title={
-                    !canOperate
-                      ? capsLoading
-                        ? 'Checking auth…'
-                        : 'Authenticate with an operator token to actuate'
-                      : undefined
-                  }
-                  onClick={onEnsureMetricsServer}
-                >
-                  {metricsServerPending ? 'Installing…' : 'Ensure metrics-server'}
-                </Button>
+                <RequestEnsureMetricsServer disabled={!canOperate || metricsServerPending} />
               )}
               {!bifrostNsReady && (
                 <Button
@@ -267,14 +257,7 @@ export function ClusterPageChrome({
                   {onSyncKubeconfig != null && (
                     <>
                       {' '}
-                      <button
-                        type="button"
-                        className="focus-strip-link"
-                        disabled={syncPending}
-                        onClick={onSyncKubeconfig}
-                      >
-                        {syncPending ? 'Syncing…' : 'Sync kubeconfig (fallback)'}
-                      </button>
+                      <RequestSyncKubeconfig disabled={syncPending} />
                     </>
                   )}
                 </OpsFeedback>

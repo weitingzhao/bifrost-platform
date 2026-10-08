@@ -9,13 +9,9 @@ export function StatusPage() {
   return <ShellQuestion question={shellNavEntry('status').question} />
 }
 
-export function DataPage() {
-  return <ShellQuestion question={shellNavEntry('data').question} />
-}
+export { DataPage } from './data/DataPage'
 
-export function IbPage() {
-  return <ShellQuestion question={shellNavEntry('ib').question} />
-}
+export { IbPage } from './ib/IbPage'
 
 export function MaintenancePage() {
   return <ShellQuestion question={shellNavEntry('maintenance').question} />
@@ -25,9 +21,7 @@ export function ReleasesPage() {
   return <ShellQuestion question={shellNavEntry('releases').question} />
 }
 
-export function InfrastructurePage() {
-  return <ShellQuestion question={shellNavEntry('infrastructure').question} />
-}
+export { InfrastructurePage } from './infrastructure/InfrastructurePage'
 
 export function ProgressPage() {
   return <ShellQuestion question={shellNavEntry('progress').question} />

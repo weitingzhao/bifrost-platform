@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
-  Button,
-  ConfirmDialog,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -14,20 +12,15 @@ import {
   SegmentControl,
   cn,
 } from '@bifrost/ui'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import {
-  DataCloneRefusedError,
-  fetchDataCloneSchedule,
-  fetchDataCloneStatus,
-  fetchDataFreshness,
-  triggerDataClone,
-  updateDataCloneSchedule,
-} from '@/api/cluster'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchDataCloneSchedule, fetchDataFreshness } from '@/api/cluster'
 import type { DataCloneGroup, DataFreshnessDatabase } from '@/api/clusterTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
-
-const CLONE_CONFIRM_TOKEN = 'CLONE-FROM-PROD'
+import {
+  RequestDataClone,
+  RequestDataCloneSchedule,
+} from '@/components/shell/clusterActionRequests'
 
 /**
  * Selective sync offers the clone groups the clone source's application publishes in its data
@@ -84,12 +77,8 @@ export function DataFreshnessPanel({
   title?: string
 }) {
   const qc = useQueryClient()
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [activeJobId, setActiveJobId] = useState<string | null>(null)
-  const [actionError, setActionError] = useState<string | null>(null)
   const [syncMode, setSyncMode] = useState<CloneSyncMode>('full')
   const [selectedTables, setSelectedTables] = useState<string[]>([])
-  const [missingTables, setMissingTables] = useState<string[]>([])
 
   const freshnessQuery = useQuery({
     queryKey: ['cluster', 'data-freshness'],
@@ -101,23 +90,6 @@ export function DataFreshnessPanel({
     queryFn: fetchDataCloneSchedule,
     refetchInterval: 60_000,
   })
-  const jobQuery = useQuery({
-    queryKey: ['cluster', 'data-clone', activeJobId],
-    queryFn: () => fetchDataCloneStatus(activeJobId!),
-    enabled: activeJobId != null,
-    refetchInterval: q => {
-      const status = q.state.data?.status
-      if (status === 'done' || status === 'failed') return false
-      return 2000
-    },
-  })
-
-  useEffect(() => {
-    if (jobQuery.data?.status === 'done') {
-      void qc.invalidateQueries({ queryKey: ['cluster', 'data-freshness'] })
-    }
-  }, [jobQuery.data?.status, qc])
-
   const toggleTable = (table: string) => {
     setSelectedTables(prev =>
       prev.includes(table) ? prev.filter(t => t !== table) : [...prev, table],
@@ -135,64 +107,10 @@ export function DataFreshnessPanel({
     )
   }
   const tableChips = [...groupTables, ...selectedTables.filter(t => !groupTables.includes(t))]
-  // Tables outside public come back schema-qualified and cannot be selected (full sync only).
-  const missingSelectable = missingTables.length > 0 && missingTables.every(t => !t.includes('.'))
-  const addMissingTables = () => {
-    setSelectedTables(prev => [...prev, ...missingTables.filter(t => !prev.includes(t))])
-    setMissingTables([])
-    setActionError(null)
-  }
   const selectiveReady = syncMode === 'full' || selectedTables.length > 0
-
-  const cloneMutation = useMutation({
-    mutationFn: () =>
-      triggerDataClone({
-        source: 'bifrost_prod',
-        targets: ['bifrost_dev', 'bifrost_stg'],
-        mode: syncMode,
-        tables: syncMode === 'selective' ? selectedTables : undefined,
-        confirmation_token: CLONE_CONFIRM_TOKEN,
-        confirm: true,
-      }),
-    onSuccess: job => {
-      setActiveJobId(job.id)
-      setActionError(null)
-      setMissingTables([])
-      setConfirmOpen(false)
-    },
-    onError: (err: Error) => {
-      setActionError(err.message)
-      setMissingTables(err instanceof DataCloneRefusedError ? err.missingTables : [])
-      setConfirmOpen(false)
-    },
-  })
-  const scheduleMutation = useMutation({
-    mutationFn: (enabled: boolean) =>
-      updateDataCloneSchedule({
-        enabled,
-        interval: enabled ? 'weekly' : 'disabled',
-        source: 'bifrost_prod',
-        targets: ['bifrost_dev', 'bifrost_stg'],
-        mode: 'full',
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['cluster', 'data-clone-schedule'] })
-    },
-    onError: (err: Error) => setActionError(err.message),
-  })
 
   const databases = freshnessQuery.data?.databases ?? []
   const schedule = scheduleQuery.data
-  const job = jobQuery.data
-  const jobRunning = job != null && job.status !== 'done' && job.status !== 'failed'
-  const confirmTitle =
-    syncMode === 'selective'
-      ? 'Selective sync bifrost_prod → bifrost_dev / bifrost_stg'
-      : 'Sync bifrost_prod → bifrost_dev / bifrost_stg'
-  const confirmMessage =
-    syncMode === 'selective'
-      ? `This TRUNCATEs then restores these tables from bifrost_prod on bifrost_dev and bifrost_stg, in one transaction per database: ${selectedTables.join(', ') || '(none)'}. Refused if another table references one of them and is not selected. Prod is never written.`
-      : 'This overwrites bifrost_dev and bifrost_stg with a full copy of bifrost_prod (DROP SCHEMA public CASCADE). Prod is never written. Continue only if you intend to refresh non-prod data.'
 
   return (
     <>
@@ -219,14 +137,11 @@ export function DataFreshnessPanel({
               }}
             />
             {canAdmin ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={cloneMutation.isPending || jobRunning || !selectiveReady}
-                onClick={() => setConfirmOpen(true)}
-              >
-                Sync from Prod
-              </Button>
+              <RequestDataClone
+                mode={syncMode}
+                tables={selectedTables}
+                disabled={!selectiveReady}
+              />
             ) : null}
           </div>
         }
@@ -380,45 +295,13 @@ export function DataFreshnessPanel({
                 ) : (
                   <span className="text-dense-caption text-[var(--muted-foreground)]">no auto runs yet</span>
                 )}
-                {canAdmin ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={scheduleMutation.isPending}
-                    onClick={() => scheduleMutation.mutate(!schedule.enabled)}
-                  >
-                    {schedule.enabled ? 'Disable weekly' : 'Enable weekly'}
-                  </Button>
-                ) : null}
+                {canAdmin ? <RequestDataCloneSchedule enabled={!schedule.enabled} /> : null}
               </>
             ) : (
               <span className="text-[var(--muted-foreground)]">—</span>
             )}
           </div>
 
-          {job != null ? (
-            <div className="text-dense-meta">
-              <span className="font-medium">Clone job</span>{' '}
-              <span className="font-mono-tabular">{job.id}</span>
-              {' · '}
-              <DenseTag variant={job.status === 'done' ? 'success' : job.status === 'failed' ? 'danger' : 'warning'}>
-                {job.step || job.status}
-              </DenseTag>
-              {job.detail !== '' ? <span className="text-[var(--muted-foreground)]"> — {job.detail}</span> : null}
-              {job.progress > 0 && job.status !== 'done' ? (
-                <span className="ml-1 font-mono-tabular text-dense-caption">{Math.round(job.progress * 100)}%</span>
-              ) : null}
-            </div>
-          ) : null}
-
-          {actionError != null ? <p className="m-0 text-dense-meta text-danger">{actionError}</p> : null}
-          {missingSelectable && canAdmin ? (
-            <div>
-              <Button size="sm" variant="outline" onClick={addMissingTables}>
-                Add {missingTables.length} referencing {missingTables.length === 1 ? 'table' : 'tables'}
-              </Button>
-            </div>
-          ) : null}
           <p className="m-0 text-dense-caption text-[var(--muted-foreground)]">
             Last activity is what each environment&apos;s app reports at /api/monitor/ops/data-probe (unknown when it does
             not answer). Verdict+badge use lag vs prod (fresh &lt;3d · aging 3–7d · stale ≥7d). bifrost_prod is reference. Full =
@@ -428,16 +311,6 @@ export function DataFreshnessPanel({
           </p>
         </div>
       </OpsSection>
-
-      <ConfirmDialog
-        open={confirmOpen}
-        title={confirmTitle}
-        message={confirmMessage}
-        confirmLabel="Confirm sync from prod"
-        confirming={cloneMutation.isPending}
-        onConfirm={() => cloneMutation.mutate()}
-        onCancel={() => setConfirmOpen(false)}
-      />
     </>
   )
 }

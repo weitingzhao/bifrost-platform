@@ -1,4 +1,11 @@
 import { Button } from '@bifrost/ui'
+import {
+  RequestCordonNode,
+  RequestDrainNode,
+  RequestPowerOffNode,
+  RequestScaleDeployment,
+  RequestUncordonNode,
+} from '@/components/shell/clusterActionRequests'
 import type { ClusterNode, ComputeWorkloadStatus, NodePowerResponse } from '@/api/clusterTypes'
 import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
 import { NodeObservedStatePanel } from '@/components/cluster/NodeObservedStatePanel'
@@ -45,9 +52,6 @@ export function ClusterNodeDrawer({
   canAdmin,
   actionPending,
   onClose,
-  onCordon,
-  onUncordon,
-  onDrain,
   onWake,
   onPowerOff,
   onScaleWorkload,
@@ -114,30 +118,15 @@ export function ClusterNodeDrawer({
             Jump to a specific API call — procedure above shows the recommended order.
           </p>
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
+            <RequestCordonNode
+              name={node.name}
               disabled={!canOperate || actionPending || node.unschedulable === true}
-              onClick={onCordon}
-            >
-              Cordon
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
+            />
+            <RequestUncordonNode
+              name={node.name}
               disabled={!canOperate || actionPending || node.unschedulable !== true}
-              onClick={onUncordon}
-            >
-              Uncordon
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!canAdmin || actionPending}
-              onClick={onDrain}
-            >
-              Drain
-            </Button>
+            />
+            <RequestDrainNode name={node.name} disabled={!canAdmin || actionPending} />
           </div>
           {!canOperate && (
             <p className="m-0 mt-2 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
@@ -193,14 +182,10 @@ export function ClusterNodeDrawer({
               >
                 Wake (WOL)
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
+              <RequestPowerOffNode
+                name={node.name}
                 disabled={!canAdmin || actionPending || offline || onPowerOff == null}
-                onClick={onPowerOff}
-              >
-                Power off
-              </Button>
+              />
             </div>
             {!canAdmin && (
               <div className="mt-2">
@@ -236,23 +221,21 @@ export function ClusterNodeDrawer({
                       {w.ready_replicas}/{w.replicas}
                     </code>
                   </p>
-                  <div className="mt-2 flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <RequestScaleDeployment
+                      namespace={w.namespace}
+                      name={w.name}
+                      replicas={1}
+                      label="Request scale up"
                       disabled={!canOperate || actionPending || w.replicas >= 1}
-                      onClick={() => onScaleWorkload(w, 1)}
-                    >
-                      Scale up
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
+                    />
+                    <RequestScaleDeployment
+                      namespace={w.namespace}
+                      name={w.name}
+                      replicas={0}
+                      label="Request scale down"
                       disabled={!canOperate || actionPending || w.replicas === 0}
-                      onClick={() => onScaleWorkload(w, 0)}
-                    >
-                      Scale down
-                    </Button>
+                    />
                   </div>
                 </li>
               ))}

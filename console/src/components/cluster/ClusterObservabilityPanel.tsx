@@ -2,6 +2,7 @@ import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHea
 import type { ClusterObservabilityResponse, LayerBStatus } from '@/api/clusterTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { RequestEnsureKubePrometheus } from '@/components/shell/clusterActionRequests'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
 import { useIsFetching, useQueryClient } from '@tanstack/react-query'
@@ -51,7 +52,6 @@ export function ClusterObservabilityPanel({
   onOpenStandards,
   onOpenRuntimeMap,
   onOpenObservability,
-  onInstallLayerB,
   installLayerBPending = false,
   installLayerBDisabled = false,
 }: ClusterObservabilityPanelProps) {
@@ -97,15 +97,8 @@ export function ClusterObservabilityPanel({
             View Observability
           </Button>
         )}
-        {onInstallLayerB != null && data?.layer_b_status !== 'ready' && (
-          <Button
-            type="button"
-            size="sm"
-            disabled={installLayerBDisabled || installLayerBPending}
-            onClick={onInstallLayerB}
-          >
-            {installLayerBPending ? 'Installing…' : 'Install Layer B'}
-          </Button>
+        {data?.layer_b_status !== 'ready' && (
+          <RequestEnsureKubePrometheus disabled={installLayerBDisabled || installLayerBPending} />
         )}
         {docsUrl != null && docsUrl !== '' && (
           <Button variant="outline" size="sm" className="text-[var(--text-dense-meta)]" asChild>

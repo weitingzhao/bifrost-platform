@@ -2,6 +2,7 @@ import { Button, DenseDataTable, DenseTableHeader, DenseTableBody, DenseTableHea
 import type { ClusterWorkload } from '@/api/clusterTypes'
 import { StatusLamp } from '@/components/StatusLamp'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { RequestRestartDeployment } from '@/components/shell/clusterActionRequests'
 
 interface ClusterWorkloadsTableProps {
   namespace: string | null
@@ -20,7 +21,6 @@ export function ClusterWorkloadsTable({
   isLoading,
   selectedPod,
   onSelectPod,
-  onRestartDeployment,
   onScaleDeployment,
   onDeletePod,
 }: ClusterWorkloadsTableProps) {
@@ -87,16 +87,7 @@ export function ClusterWorkloadsTable({
                   <div className="flex flex-wrap gap-1">
                     {w.kind === 'Deployment' && (
                       <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={event => {
-                            event.stopPropagation()
-                            onRestartDeployment(w)
-                          }}
-                        >
-                          Restart
-                        </Button>
+                        <RequestRestartDeployment namespace={w.namespace} name={w.name} />
                         <Button
                           variant="outline"
                           size="sm"

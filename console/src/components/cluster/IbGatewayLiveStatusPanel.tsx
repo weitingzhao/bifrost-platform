@@ -22,6 +22,7 @@ import {
 } from '@/components/market-data/overviewDash'
 import { toneByLevel } from '@/components/market-data/overviewDashModel'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { RequestActionButton } from '@/components/shell/RequestActionButton'
 import { useIbGatewayLiveProbe } from '@/hooks/useIbGatewayLiveProbe'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
@@ -57,20 +58,34 @@ function slotTone(
   return 'unknown'
 }
 
+function maintenanceRequest(accountId: string, enabled: boolean, disabled: boolean) {
+  const body = { account_id: accountId, enabled }
+  return (
+    <RequestActionButton
+      action="ib_maintenance"
+      params={body}
+      reason={enabled ? `Enter maintenance for ${accountId}` : `Clear maintenance for ${accountId}`}
+      label={enabled ? 'Request enter' : 'Request clear'}
+      disabled={disabled}
+      direct={{
+        method: 'POST',
+        path: '/api/v1/plugins/ib-gateway/control/maintenance',
+        body,
+      }}
+    />
+  )
+}
+
 function SlotCard({
   slot,
   feedStale,
   selfHealCaption,
   canOperate,
-  acting,
-  onMaintenance,
 }: {
   slot: IbGatewaySlotStatus
   feedStale: boolean
   selfHealCaption?: string
   canOperate: boolean
-  acting: boolean
-  onMaintenance: (enabled: boolean, accountId: string) => void
 }) {
   const tone = slotTone(slot, feedStale)
   const connectedLabel =
@@ -89,23 +104,9 @@ function SlotCard({
     >
       <Meter fillPct={slot.connected ? (feedStale ? 55 : 100) : 0} toneClass={toneByLevel(tone)} label={slot.slot} />
       {canOperate ? (
-        <div className="mt-1 flex gap-1">
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={acting}
-            onClick={() => onMaintenance(true, slot.account_id)}
-          >
-            Enter
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={acting}
-            onClick={() => onMaintenance(false, slot.account_id)}
-          >
-            Clear
-          </Button>
+        <div className="mt-1 flex flex-wrap gap-1">
+          {maintenanceRequest(slot.account_id, true, false)}
+          {maintenanceRequest(slot.account_id, false, false)}
         </div>
       ) : null}
     </DashCard>
@@ -127,7 +128,6 @@ export function IbGatewayLiveStatusPanel({
     refetchInterval: 30_000,
   })
   const [reconnectOpen, setReconnectOpen] = useState(false)
-  const [modeConfirm, setModeConfirm] = useState<'live' | 'mock' | null>(null)
   const [acting, setActing] = useState(false)
   const [actionMsg, setActionMsg] = useState<string | null>(null)
 
@@ -165,37 +165,6 @@ export function IbGatewayLiveStatusPanel({
     [selfHealQ],
   )
 
-  const runMaintenance = useCallback(async (enabled: boolean, accountId: string) => {
-    setActing(true)
-    setActionMsg(null)
-    try {
-      const resp = await postIbGatewayControl('maintenance', { account_id: accountId, enabled })
-      setActionMsg(resp.ok ? resp.message : `Failed: ${resp.message}`)
-    } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Maintenance action failed')
-    } finally {
-      setActing(false)
-    }
-  }, [])
-
-  const runModeSwitch = useCallback(
-    async (mode: 'live' | 'mock') => {
-      setActing(true)
-      setActionMsg(null)
-      try {
-        const resp = await postIbGatewayControl('mode', { mode })
-        setActionMsg(resp.ok ? resp.message : `Failed: ${resp.message}`)
-        if (resp.ok) void liveProbe.refetch()
-      } catch (e) {
-        setActionMsg(e instanceof Error ? e.message : 'Mode switch failed')
-      } finally {
-        setActing(false)
-        setModeConfirm(null)
-      }
-    },
-    [liveProbe],
-  )
-
   const status = liveProbe.status
   const selfHeal = selfHealQ.data
   const snapshotAge =
@@ -214,15 +183,21 @@ export function IbGatewayLiveStatusPanel({
   const degraded = slots.filter(s => !s.connected && s.reachability !== 'fail').length
   const failed = slots.length - connected - degraded
 
-  const modeButtons =
-    currentMode === 'mock' ? (
-      <Button variant="default" size="xs" disabled={acting} onClick={() => setModeConfirm('live')}>
-        Switch to live
-      </Button>
-    ) : currentMode === 'live' ? (
-      <Button variant="outline" size="xs" disabled={acting} onClick={() => setModeConfirm('mock')}>
-        Revert to mock
-      </Button>
+  const nextMode = currentMode === 'mock' ? 'live' : currentMode === 'live' ? 'mock' : null
+  const modeRequest =
+    nextMode != null ? (
+      <RequestActionButton
+        action="ib_mode"
+        params={{ mode: nextMode }}
+        reason={`Switch IB gateway mode to ${nextMode}`}
+        label={nextMode === 'live' ? 'Request live mode' : 'Request mock mode'}
+        disabled={acting}
+        direct={{
+          method: 'POST',
+          path: '/api/v1/plugins/ib-gateway/control/mode',
+          body: { mode: nextMode },
+        }}
+      />
     ) : null
 
   const reconnectButton = showPrimaryActions ? (
@@ -244,9 +219,9 @@ export function IbGatewayLiveStatusPanel({
     ) : null
 
   const sectionActions =
-    canOperate && (modeButtons != null || reconnectButton != null || selfHealToggle != null) ? (
+    canOperate && (modeRequest != null || reconnectButton != null || selfHealToggle != null) ? (
       <div className="flex flex-wrap gap-2">
-        {modeButtons}
+        {modeRequest}
         {reconnectButton}
         {selfHealToggle}
       </div>
@@ -296,8 +271,6 @@ export function IbGatewayLiveStatusPanel({
                 feedStale={feedStale && slot.connected}
                 selfHealCaption={selfHealCaption}
                 canOperate={canOperate}
-                acting={acting}
-                onMaintenance={(en, id) => void runMaintenance(en, id)}
               />
             ))}
           </div>
@@ -359,23 +332,9 @@ export function IbGatewayLiveStatusPanel({
                   </DenseTableCell>
                   {canOperate ? (
                     <DenseTableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          disabled={acting}
-                          onClick={() => void runMaintenance(true, slot.account_id)}
-                        >
-                          Enter
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          disabled={acting}
-                          onClick={() => void runMaintenance(false, slot.account_id)}
-                        >
-                          Clear
-                        </Button>
+                      <div className="flex flex-wrap gap-1">
+                        {maintenanceRequest(slot.account_id, true, false)}
+                        {maintenanceRequest(slot.account_id, false, false)}
                       </div>
                     </DenseTableCell>
                   ) : null}
@@ -396,25 +355,6 @@ export function IbGatewayLiveStatusPanel({
         onCancel={() => setReconnectOpen(false)}
       />
 
-      <ConfirmDialog
-        open={modeConfirm === 'live'}
-        title="Switch IB Gateway to live"
-        message="Patch ConfigMap mode=live and rollout restart. ib-gateway will connect to real TWS @ Host (.30) and Secondary (.32). Ensure TWS is running and market access is intended."
-        confirmLabel="Confirm live"
-        confirming={acting}
-        onConfirm={() => void runModeSwitch('live')}
-        onCancel={() => setModeConfirm(null)}
-      />
-
-      <ConfirmDialog
-        open={modeConfirm === 'mock'}
-        title="Revert IB Gateway to mock"
-        message="Patch ConfigMap mode=mock and rollout restart. Live TWS sockets will disconnect; mock tick/account data resumes."
-        confirmLabel="Confirm mock"
-        confirming={acting}
-        onConfirm={() => void runModeSwitch('mock')}
-        onCancel={() => setModeConfirm(null)}
-      />
     </OpsSection>
   )
 }
