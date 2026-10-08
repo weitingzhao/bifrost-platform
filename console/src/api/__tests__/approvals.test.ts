@@ -10,21 +10,12 @@ import {
   isUnsetDecidedAt,
   parseApprovalList,
 } from '@/api/approvals'
+import { approvalJsonTagsFromGo } from '@/api/approvalGoStructParse'
 import { GO_ZERO_DECIDED_AT } from '@/api/approvalsServerContract'
 
 const repoRoot = path.resolve(import.meta.dirname, '../../../..')
 const typesGo = readFileSync(path.join(repoRoot, 'api/internal/approvals/types.go'), 'utf8')
 const handlerGo = readFileSync(path.join(repoRoot, 'api/internal/approvals/handler.go'), 'utf8')
-
-function approvalJsonTagsFromGo(source: string): string[] {
-  const block = source.match(/type Approval struct \{([^}]+)\}/s)?.[1] ?? ''
-  const tags: string[] = []
-  for (const line of block.split('\n')) {
-    const m = line.match(/json:"([^"]+)"/)
-    if (m) tags.push(m[1].replace(/,omitempty$/, ''))
-  }
-  return tags
-}
 
 describe('approvals API contract', () => {
   it('matches Go list envelope (approvals, not items)', () => {
