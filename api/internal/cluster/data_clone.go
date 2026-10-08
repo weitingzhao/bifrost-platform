@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
@@ -506,9 +507,11 @@ func (s *Service) StartDataCloneScheduler(ctx context.Context) {
 }
 
 func (s *Service) maybeAutoClone(ctx context.Context) {
+	id := maintainer.PlatformID(maintainer.LoopDataClone)
 	s.ensureCloneStores()
 	cfg := s.cloneSched.Get()
 	if !cfg.Enabled || cfg.Interval == "disabled" {
+		maintainer.Success(id)
 		return
 	}
 	if cfg.LastAutoRunAt != nil {
@@ -516,13 +519,16 @@ func (s *Service) maybeAutoClone(ctx context.Context) {
 		switch cfg.Interval {
 		case "daily":
 			if elapsed < 23*time.Hour {
+				maintainer.Success(id)
 				return
 			}
 		case "weekly":
 			if elapsed < 6*24*time.Hour {
+				maintainer.Success(id)
 				return
 			}
 		default:
+			maintainer.Success(id)
 			return
 		}
 	}
@@ -536,9 +542,11 @@ func (s *Service) maybeAutoClone(ctx context.Context) {
 	}, "schedule", "scheduler")
 	if err != nil {
 		s.cloneSched.RecordRun("", "failed:"+err.Error())
+		maintainer.Failure(id)
 		return
 	}
 	s.cloneSched.RecordRun(job.ID, "started")
+	maintainer.Success(id)
 }
 
 func (s *Service) startDataClone(ctx context.Context, req DataCloneRequest, trigger, actor string) (*DataCloneJob, error) {

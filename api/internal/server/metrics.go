@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -33,12 +35,38 @@ import (
 const pluginProbeTimeout = 8 * time.Second
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	probes := []func(context.Context) probe.PluginHealth{
+	var b strings.Builder
+	// Workers is scraped for its own process series and the maintainer gauges
+	// (including a later release-policy series once that loop calls
+	// maintainer.Success). Plugin health is already on platform-api's
+	// ServiceMonitor; probing again from workers doubles that cost.
+	if config.CurrentRole() != config.RoleWorkers {
+		s.writePluginMetrics(&b, r)
+	}
+	maintainer.Write(&b)
+	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
+	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
+	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
+	s.httpMetrics.write(&b)
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(b.String()))
+}
+
+func (s *Server) pluginProbeFns() []func(context.Context) probe.PluginHealth {
+	if s.pluginProbes != nil {
+		return s.pluginProbes
+	}
+	return []func(context.Context) probe.PluginHealth{
 		s.marketdata.PluginHealth,
 		s.flexquery.PluginHealth,
 		s.ibgateway.PluginHealth,
 		s.research.PluginHealth,
 	}
+}
+
+func (s *Server) writePluginMetrics(b *strings.Builder, r *http.Request) {
+	probes := s.pluginProbeFns()
 
 	// Concurrent as well as independently bounded, so the scrape costs the
 	// slowest plugin rather than the sum of all four.
@@ -59,11 +87,10 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	var b strings.Builder
 	b.WriteString("# HELP bifrost_plugin_reachable Whether platform-api could reach the plugin (1) or not (0)\n")
 	b.WriteString("# TYPE bifrost_plugin_reachable gauge\n")
 	for _, h := range healths {
-		fmt.Fprintf(&b, "bifrost_plugin_reachable{plugin=%q} %d\n", h.Name, boolValue(h.Reachable))
+		fmt.Fprintf(b, "bifrost_plugin_reachable{plugin=%q} %d\n", h.Name, boolValue(h.Reachable))
 	}
 
 	// One series per state so an alert can say `state="ok"` without string
@@ -73,19 +100,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	states := []probe.Reachability{probe.ReachOK, probe.ReachDegraded, probe.ReachFail, probe.ReachUnknown}
 	for _, h := range healths {
 		for _, st := range states {
-			fmt.Fprintf(&b, "bifrost_plugin_reachability{plugin=%q,state=%q} %d\n",
+			fmt.Fprintf(b, "bifrost_plugin_reachability{plugin=%q,state=%q} %d\n",
 				h.Name, st, boolValue(h.Reachability == st))
 		}
 	}
 
-	writePluginGauges(&b, healths)
-	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
-	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
-	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
-	s.httpMetrics.write(&b)
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(b.String()))
+	writePluginGauges(b, healths)
 }
 
 // writePluginGauges emits the plugin-specific numbers, grouped so each metric

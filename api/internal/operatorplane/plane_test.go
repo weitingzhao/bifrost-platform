@@ -49,6 +49,7 @@ func TestMountServesEveryOperatorPlaneRoute(t *testing.T) {
 		"/api/v1/agent/skills",
 		"/api/v1/agent/schedules",
 		"/api/v1/agent/executions",
+		"/api/v1/agent/launchd",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
 	} {
@@ -186,5 +187,61 @@ func TestProxySaysWhichHalfIsDown(t *testing.T) {
 	}
 	if body := rec.Body.String(); !strings.Contains(body, "operator plane unreachable") {
 		t.Errorf("502 body does not name the operator plane: %s", body)
+	}
+}
+
+func TestLaunchdRequiresViewerToken(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	if err := os.MkdirAll(filepath.Join(dir, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	authPath := filepath.Join(dir, "platform-auth.yaml")
+	if err := os.WriteFile(authPath, []byte("tokens:\n  - name: viewer\n    role: viewer\n    token: viewer-token-e1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	auth, err := actuation.LoadAuth(authPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := operatorplane.New(operatorplane.Deps{
+		Auth:      auth,
+		Audit:     actuation.NewAuditLog(""),
+		ConfigDir: filepath.Join(dir, "config"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(p.StopBackground)
+	r := chi.NewRouter()
+	r.Route("/api/v1", p.Mount)
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agent/launchd", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("launchd without a token answered %d, want 401", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent/launchd", nil)
+	req.Header.Set("Authorization", "Bearer viewer-token-e1")
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("viewer launchd answered %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"services"`) {
+		t.Fatalf("body: %s", rec.Body.String())
+	}
+
+	mount, err := operatorplane.NewProxyMount(auth, "http://127.0.0.1:1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxy := chi.NewRouter()
+	proxy.Route("/api/v1", mount)
+	rec = httptest.NewRecorder()
+	proxy.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agent/launchd", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("proxy launchd without a token answered %d, want 401 before the hop", rec.Code)
 	}
 }

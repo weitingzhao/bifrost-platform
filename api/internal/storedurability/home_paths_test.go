@@ -40,6 +40,7 @@ var homePathFiles = map[string]string{
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",
 	"escapehatch/service.go":           "expands ~ in a kubeconfig path",
 	"ibgateway/config.go":              "default kubeconfig path",
+	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",
 	"threadtitles/threadtitles.go":     "Claude transcripts on the workstation",
 }
 

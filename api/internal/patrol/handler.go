@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -191,6 +192,7 @@ func (h *Handler) scanDue() {
 			_, _ = h.execute(context.Background(), skillID, TriggerCron)
 		}(id)
 	}
+	maintainer.Success(maintainer.PlatformID(maintainer.LoopPatrol))
 }
 
 func (h *Handler) HandleListSkills(w http.ResponseWriter, _ *http.Request) {
@@ -343,6 +345,7 @@ func (h *Handler) execute(ctx context.Context, id string, trigger Trigger) (Trig
 		outcome.Status = StatusCompleted
 	}
 	run = h.completeRecord(run.ID, started, outcome)
+	notePatrolSkill(id, outcome.Result)
 	return TriggerResponse{
 		RunID:  run.ID,
 		Status: outcome.Status,
@@ -368,12 +371,25 @@ func (h *Handler) enqueue(id string, trigger Trigger) (TriggerResponse, int) {
 			outcome.Status = StatusCompleted
 		}
 		h.completeRecord(run.ID, started, outcome)
+		notePatrolSkill(id, outcome.Result)
 	}()
 	return TriggerResponse{
 		RunID:  run.ID,
 		Status: StatusStarted,
 		Result: ResultRunning,
 	}, http.StatusAccepted
+}
+
+func notePatrolSkill(skillID string, result RunResult) {
+	if skillID == "" || result == "" || result == ResultRunning {
+		return
+	}
+	id := maintainer.PlatformID(maintainer.LoopPatrol + "/" + skillID)
+	if result == ResultSuccess {
+		maintainer.Success(id)
+		return
+	}
+	maintainer.Failure(id)
 }
 
 func (h *Handler) begin(id string) bool {

@@ -2,11 +2,13 @@ package ibgateway
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -42,7 +44,12 @@ func (s *Service) autoRepairLoop(ctx context.Context, audit *actuation.AuditLog)
 			return
 		case <-tick.C:
 			safego.Do("ibgateway.maybeAutoRollout", func() {
-				s.maybeAutoRollout(ctx, audit, &lastAutoRollout, maxStreak, cooldown)
+				id := maintainer.PlatformID(maintainer.LoopIBAutoRepair)
+				if err := s.maybeAutoRollout(ctx, audit, &lastAutoRollout, maxStreak, cooldown); err != nil {
+					maintainer.Failure(id)
+					return
+				}
+				maintainer.Success(id)
 			})
 		}
 	}
@@ -54,30 +61,30 @@ func (s *Service) maybeAutoRollout(
 	lastAutoRollout *time.Time,
 	maxStreak int,
 	cooldown time.Duration,
-) {
+) error {
 	if s.cluster == nil || s.cfg.RedisPlatformPass == "" {
-		return
+		return nil
 	}
 	status := s.SelfHealStatus(ctx)
 	if !status.Enabled {
-		return
+		return nil
 	}
 	if status.StaleStreak < maxStreak {
-		return
+		return nil
 	}
 	if !status.RolloutRecommended {
-		return
+		return nil
 	}
 	deployReach, mode, _, _ := s.readDeployment(ctx)
 	if deployReach != probe.ReachOK || mode != "live" {
-		return
+		return nil
 	}
 	account, _ := s.redisHGetAll("bifrost:health:ws_ib_account_agent")
 	if !strings.EqualFold(strings.TrimSpace(account["host_connected"]), "true") {
-		return
+		return nil
 	}
 	if !lastAutoRollout.IsZero() && time.Since(*lastAutoRollout) < cooldown {
-		return
+		return nil
 	}
 	resp, err := s.Reconnect(ctx)
 	*lastAutoRollout = time.Now().UTC()
@@ -90,7 +97,11 @@ func (s *Service) maybeAutoRollout(
 	}
 	if err != nil {
 		log.Printf("ib-gateway auto-repair rollout: %v", err)
-	} else {
-		log.Printf("ib-gateway auto-repair: action_taken=%s ok=%v", resp.ActionTaken, resp.OK)
+		return err
 	}
+	log.Printf("ib-gateway auto-repair: action_taken=%s ok=%v", resp.ActionTaken, resp.OK)
+	if !resp.OK {
+		return fmt.Errorf("auto-repair not ok: %s", resp.Message)
+	}
+	return nil
 }

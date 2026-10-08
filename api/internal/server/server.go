@@ -103,6 +103,9 @@ type Server struct {
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
 	httpMetrics   *httpMetrics
+	// pluginProbes, when set, replaces the four plugin health calls on /metrics.
+	// Tests inject counters. Production leaves it nil.
+	pluginProbes []func(context.Context) probe.PluginHealth
 }
 
 func New(cfg *config.Config) (*Server, error) {
