@@ -72,17 +72,9 @@ func TestCycleStoreRecordDeployAndGate(t *testing.T) {
 		t.Fatal("expected completed_at")
 	}
 
-	list, err := store.List(ReleaseCycleLaneTrade)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
+	list := loadCycles(t, store, ReleaseCycleLaneTrade)
 	if len(list) != 1 || list[0].ID != rec.ID {
 		t.Fatalf("list: %+v", list)
-	}
-
-	got, err := store.Get(rec.ID)
-	if err != nil || got == nil || got.ID != rec.ID {
-		t.Fatalf("Get: %+v %v", got, err)
 	}
 }
 
@@ -117,9 +109,9 @@ func TestCycleStoreSupersedeOnNewRevision(t *testing.T) {
 		t.Fatalf("revision: %s", second.Revision)
 	}
 
-	old, err := store.Get(first.ID)
-	if err != nil || old == nil {
-		t.Fatalf("get old: %v", err)
+	old := cycleByID(t, store, ReleaseCycleLanePlatform, first.ID)
+	if old == nil {
+		t.Fatal("old cycle missing")
 	}
 	if old.Outcome != CycleOutcomeSuperseded {
 		t.Fatalf("expected superseded, got %s", old.Outcome)
@@ -156,68 +148,6 @@ func TestCycleStoreGateFailKeepsOpen(t *testing.T) {
 	}
 }
 
-func TestCycleStoreSyncRunStatusFailed(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("PLATFORM_RELEASE_CYCLES_DIR", dir)
-	store := NewCycleStore(filepath.Join(dir, "config"))
-
-	rec, err := store.RecordDeploy(DeployRecordOpts{
-		Lane:     ReleaseCycleLaneTrade,
-		Step:     CycleStepStgDeploy,
-		Revision: "r-fail",
-		RunName:  "bifrost-deliver-stg-99",
-	})
-	if err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
-	if err := store.SyncRunStatus(ReleaseCycleLaneTrade, []RunStatusInfo{
-		{RunName: "bifrost-deliver-stg-99", Status: "False", Reason: "Failed"},
-	}); err != nil {
-		t.Fatalf("sync: %v", err)
-	}
-	got, err := store.Get(rec.ID)
-	if err != nil || got == nil {
-		t.Fatalf("get: %v", err)
-	}
-	if got.Outcome != CycleOutcomeFailed {
-		t.Fatalf("expected failed outcome, got %s", got.Outcome)
-	}
-	if step := stepByKind(got, CycleStepStgDeploy); step == nil || step.Result != CycleStepResultFailed {
-		t.Fatalf("stg_deploy: %+v", step)
-	}
-}
-
-func TestCycleStoreSyncRunStatusSucceeded(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("PLATFORM_RELEASE_CYCLES_DIR", dir)
-	store := NewCycleStore(filepath.Join(dir, "config"))
-
-	_, err := store.RecordDeploy(DeployRecordOpts{
-		Lane:     ReleaseCycleLanePlatform,
-		Step:     CycleStepStgDeploy,
-		Revision: "r-ok",
-		RunName:  "bifrost-deliver-platform-1",
-	})
-	if err != nil {
-		t.Fatalf("deploy: %v", err)
-	}
-	if err := store.SyncRunStatus(ReleaseCycleLanePlatform, []RunStatusInfo{
-		{RunName: "bifrost-deliver-platform-1", Status: "True", Reason: "Succeeded"},
-	}); err != nil {
-		t.Fatalf("sync: %v", err)
-	}
-	active, err := store.ActiveCycle(ReleaseCycleLanePlatform)
-	if err != nil || active == nil {
-		t.Fatalf("active: %v", err)
-	}
-	if active.Outcome != CycleOutcomeInProgress {
-		t.Fatalf("success should keep cycle in_progress, got %s", active.Outcome)
-	}
-	if step := stepByKind(active, CycleStepStgDeploy); step == nil || step.Result != CycleStepResultSuccess {
-		t.Fatalf("stg_deploy: %+v", step)
-	}
-}
-
 func TestCycleStoreReopenFailedOnRetry(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PLATFORM_RELEASE_CYCLES_DIR", dir)
@@ -232,9 +162,12 @@ func TestCycleStoreReopenFailedOnRetry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first: %v", err)
 	}
-	_ = store.SyncRunStatus(ReleaseCycleLaneTrade, []RunStatusInfo{
-		{RunName: "run-1", Status: "False", Reason: "Failed"},
-	})
+	// A deploy failure recorded before W-32 left the cycle failed on disk.
+	entries := loadCycles(t, store, ReleaseCycleLaneTrade)
+	entries[0].Outcome = CycleOutcomeFailed
+	if err := store.saveLocked(ReleaseCycleLaneTrade, entries); err != nil {
+		t.Fatalf("seed failed cycle: %v", err)
+	}
 
 	second, err := store.RecordDeploy(DeployRecordOpts{
 		Lane:     ReleaseCycleLaneTrade,
@@ -254,6 +187,28 @@ func TestCycleStoreReopenFailedOnRetry(t *testing.T) {
 	if step := stepByKind(second, CycleStepStgDeploy); step == nil || step.RunName != "run-2" || step.Result != CycleStepResultRunning {
 		t.Fatalf("retry step: %+v", step)
 	}
+}
+
+// loadCycles reads a lane's persisted cycles, oldest first.
+func loadCycles(t *testing.T, store *CycleStore, lane ReleaseCycleLane) []ReleaseCycleRecord {
+	t.Helper()
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	entries, err := store.loadLocked(lane)
+	if err != nil {
+		t.Fatalf("load %s cycles: %v", lane, err)
+	}
+	return entries
+}
+
+func cycleByID(t *testing.T, store *CycleStore, lane ReleaseCycleLane, id string) *ReleaseCycleRecord {
+	t.Helper()
+	for _, rec := range loadCycles(t, store, lane) {
+		if rec.ID == id {
+			return &rec
+		}
+	}
+	return nil
 }
 
 func stepByKind(rec *ReleaseCycleRecord, kind CycleStepKind) *CycleStepRecord {

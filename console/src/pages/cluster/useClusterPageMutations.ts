@@ -14,7 +14,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     observability,
     queries,
     onOpenAgentDesk,
-    onStartAgentJob,
     onExpandAgentDock,
     onSelectAgentJob,
     setDrawerOpen,
@@ -64,7 +63,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
   const remediation = useClusterRemediationMutations(actuation, {
     queries,
     onOpenAgentDesk,
-    onStartAgentJob,
     onExpandAgentDock,
     onSelectAgentJob,
   })
@@ -100,7 +98,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     setRemediationPanelOpen: remediation.setRemediationPanelOpen,
     remediationJobId: remediation.remediationJobId,
     remediationJob: remediation.remediationJob,
-    playbookFixMutation: remediation.playbookFixMutation,
     syncMutation: bootstrap.syncMutation,
     ensureMutation: bootstrap.ensureMutation,
     metricsServerMutation: bootstrap.metricsServerMutation,

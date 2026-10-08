@@ -3,15 +3,14 @@
  * One-screen answer: “Is the whole system healthy right now?”
  * Grafana is deep evidence — not a duplicated dashboard gallery.
  *
- * Attention remediation: triage entry only — Agent Fix / Diagnose reuse
- * startRemediation + ambient Operator Dock (no second execution engine).
+ * Attention: triage entry only — Inspect / Mute / Manual next. Agents are not
+ * started from this page.
  */
 
-import { useCallback, useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
-import { startRemediation } from '@/api/remediation'
 import { postAttentionMute } from '@/api/telemetry'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
@@ -21,26 +20,17 @@ import { StatusLamp } from '@/components/StatusLamp'
 import { useObservabilitySnapshot } from '@/hooks/useObservabilitySnapshot'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
-  ambientAgentBlockedReason,
-  type AmbientAgentJob,
-} from '@/lib/agent/ambientAgent'
-import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
-import {
   SYSTEM_DOMAIN_VARIANT,
   type SystemDomainId,
 } from '@/lib/architecture/systemDomainCatalog'
 import type { AttentionItem } from '@/lib/observability'
 import {
   ATTENTION_MUTE_DEFAULT_HOURS,
-  buildAttentionBatchRemediationPrompt,
-  buildAttentionRemediationPrompt,
   buildObservabilityAgentPack,
   buildObservabilityDiagnosePrefill,
   filterMutedAttention,
-  largestAttentionBatchGroup,
   listActiveAttentionMutes,
   muteAttentionIds,
-  scopeForAttentionRemediation,
   signalToGap,
   sumGapSummaries,
   VERDICT_LABELS,
@@ -63,21 +53,15 @@ import {
 
 export function ObservabilityPage({
   onNavigate,
-  ambientJobId,
-  ambientJobStatus,
-  onStartAgentJob,
   onOpenAgentDesk,
   lockToViewer = false,
   hideAgentActions = false,
 }: {
   onNavigate?: (tab: string) => void
-  ambientJobId?: string | null
-  ambientJobStatus?: AmbientAgentJob['status'] | null
-  onStartAgentJob?: (job: AmbientAgentJob) => void
   onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
   /** Status page: scope probes to self-health viewer_env. No environment selector. */
   lockToViewer?: boolean
-  /** Status page: drop Agent Fix / Diagnose. Mute stays. */
+  /** Status page: drop Copy for Agent / Diagnose with Agent. */
   hideAgentActions?: boolean
 }) {
   const [evidenceOn, setEvidenceOn] = useState(!lockToViewer)
@@ -93,70 +77,16 @@ export function ObservabilityPage({
     namespace,
   } = useObservabilitySnapshot({ followViewerOnly: lockToViewer, includeEvidence: evidenceOn })
   const { canOperate } = usePlatformAuth()
-  const qc = useQueryClient()
 
   const [attentionDetail, setAttentionDetail] = useState<AttentionItem | null>(null)
   const [attentionScope, setAttentionScope] = useState<AttentionScopeFilter>('all')
-  const [lastRemediationJobId, setLastRemediationJobId] = useState<string | null>(null)
-  const [remediationError, setRemediationError] = useState<string | null>(null)
   const [muteRevision, setMuteRevision] = useState(0)
   const [muteConfirmItem, setMuteConfirmItem] = useState<AttentionItem | null>(null)
-  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false)
   const [muteMessage, setMuteMessage] = useState<string | null>(null)
   const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
   const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const system = viewModel.system
   const selected = viewModel.selected
-
-  const agentBlockedReason = ambientAgentBlockedReason(
-    canOperate,
-    ambientJobId,
-    onStartAgentJob,
-    ambientJobStatus,
-  )
-
-  const invalidateObservability = useCallback(() => {
-    void qc.invalidateQueries({ queryKey: ['telemetry', 'alerts'] })
-    void qc.invalidateQueries({ queryKey: ['telemetry', 'targets'] })
-    void qc.invalidateQueries({ queryKey: ['telemetry', 'overview'] })
-    void qc.invalidateQueries({ queryKey: ['cluster', 'observability'] })
-    void qc.invalidateQueries({ queryKey: ['cluster'] })
-    void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-  }, [qc])
-
-  const remediationMutation = useMutation({
-    mutationFn: ({
-      item,
-      batchPrompt,
-      batchPlaybookId,
-    }: {
-      item?: AttentionItem
-      batchPrompt?: string
-      batchPlaybookId?: string
-    }) => {
-      if (batchPrompt != null && batchPlaybookId != null) {
-        const scope = scopeForAttentionRemediation(batchPlaybookId)
-        return startRemediation({ scope, prompt: batchPrompt })
-      }
-      if (item == null) throw new Error('missing attention item')
-      const scope = scopeForAttentionRemediation(item.triage.playbookId)
-      const prompt = buildAttentionRemediationPrompt(item)
-      return startRemediation({ scope, prompt })
-    },
-    onSuccess: (job, vars) => {
-      setRemediationError(null)
-      setLastRemediationJobId(job.id)
-      const playbookId = vars.batchPlaybookId ?? vars.item?.triage.playbookId
-      const scope = scopeForAttentionRemediation(playbookId)
-      onStartAgentJob?.({ id: job.id, scope, label: scopeToLabel(scope) })
-      invalidateObservability()
-      setAttentionDetail(null)
-      setBatchConfirmOpen(false)
-    },
-    onError: (err: Error) => {
-      setRemediationError(err.message)
-    },
-  })
 
   const muteMutation = useMutation({
     mutationFn: async (item: AttentionItem) => {
@@ -193,18 +123,6 @@ export function ObservabilityPage({
     },
   })
 
-  const runAttentionRemediation = useCallback(
-    (item: AttentionItem) => {
-      if (agentBlockedReason != null) return
-      if (item.triage.cta === 'manual') {
-        if (item.triage.detailRoute != null) onNavigate?.(item.triage.detailRoute)
-        return
-      }
-      remediationMutation.mutate({ item })
-    },
-    [agentBlockedReason, onNavigate, remediationMutation],
-  )
-
   const runtimeDomains = useMemo(
     () => viewModel.domains.filter(d => d.probeability === 'runtime'),
     [viewModel.domains],
@@ -238,11 +156,6 @@ export function ObservabilityPage({
     const scoped = viewModel.attention.filter(item => attentionMatchesScope(item, attentionScope))
     return filterMutedAttention(scoped)
   }, [viewModel.attention, attentionScope, muteRevision])
-
-  const batchGroup = useMemo(
-    () => largestAttentionBatchGroup(filteredAttention),
-    [filteredAttention],
-  )
 
   const activeMuteCount = useMemo(() => {
     void muteRevision
@@ -517,19 +430,8 @@ export function ObservabilityPage({
         filteredAttention={filteredAttention}
         attentionScope={attentionScope}
         setAttentionScope={setAttentionScope}
-        batchGroup={batchGroup}
-        agentBlockedReason={agentBlockedReason}
-        remediationPending={remediationMutation.isPending}
         mutePending={muteMutation.isPending}
-        onBatchRemediate={group => {
-          remediationMutation.mutate({
-            batchPlaybookId: group.playbookId,
-            batchPrompt: buildAttentionBatchRemediationPrompt(group),
-          })
-        }}
         onMute={item => muteMutation.mutate(item)}
-        remediationError={remediationError}
-        lastRemediationJobId={lastRemediationJobId}
         muteMessage={muteMessage}
         activeMuteCount={activeMuteCount}
         canOperate={canOperate}
@@ -537,11 +439,7 @@ export function ObservabilityPage({
         setAttentionDetail={setAttentionDetail}
         muteConfirmItem={muteConfirmItem}
         setMuteConfirmItem={setMuteConfirmItem}
-        batchConfirmOpen={batchConfirmOpen}
-        setBatchConfirmOpen={setBatchConfirmOpen}
         onNavigate={onNavigate}
-        runAttentionRemediation={runAttentionRemediation}
-        hideAgentActions={hideAgentActions}
       />
 
       <ObservabilitySelectedDomain

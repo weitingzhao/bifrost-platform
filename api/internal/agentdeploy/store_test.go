@@ -4,26 +4,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
 
-func TestStorePersistsLastJob(t *testing.T) {
+func TestStoreLoadsLastJob(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "last.json")
 	t.Setenv("PLATFORM_AGENT_DEPLOY_LAST", path)
-
-	s1 := NewStore()
-	job, ok := s1.Start("job-1", "vision@192.168.10.50", "primary")
-	if !ok || job == nil {
-		t.Fatal("expected start ok")
-	}
-	finished := s1.Finish(0, "")
-	if finished == nil || finished.Status != "done" {
-		t.Fatalf("expected done job, got %+v", finished)
+	raw := `{"id":"job-1","status":"done","remote":"vision@192.168.10.50","role":"primary","started_at":"2026-10-01T00:00:00Z","log":""}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
 	}
 
-	s2 := NewStore()
-	last := s2.Last()
+	last := NewStore().Last()
 	if last == nil {
 		t.Fatal("expected last job loaded from disk")
 	}
@@ -43,12 +35,4 @@ func TestStoreLoadLastIgnoresCorruptFile(t *testing.T) {
 	if s.Last() != nil {
 		t.Fatal("expected nil last for corrupt file")
 	}
-}
-
-func TestStoreFinishWithoutStart(t *testing.T) {
-	s := NewStore()
-	if got := s.Finish(0, ""); got != nil {
-		t.Fatalf("expected nil, got %+v", got)
-	}
-	_ = time.Now() // keep time import used if we add timing tests later
 }

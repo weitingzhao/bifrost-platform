@@ -45,9 +45,6 @@ interface MissionControlHeaderProps {
   /** Trade readiness IB → Daily Ops Fleet Vendor */
   onOpenFleetVendor?: () => void
   onOpenPromote?: () => void
-  onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
-  playbookFixPending?: boolean
-  canOperate?: boolean
 }
 
 function countReach(matrix: MatrixResponse): { ok: number; fail: number; total: number } {
@@ -102,9 +99,6 @@ export function MissionControlHeader(props: MissionControlHeaderProps) {
         onOpenLaunchView={onOpenLaunchView}
         onOpenAgentDesk={onOpenAgentDesk}
         onOpenRuntimeMap={onOpenRuntimeMap}
-        onPlaybookFix={props.onPlaybookFix}
-        playbookFixPending={props.playbookFixPending}
-        canOperate={props.canOperate}
       />
 
       {context?.focus.blocker != null && context.focus.blocker !== '' && (

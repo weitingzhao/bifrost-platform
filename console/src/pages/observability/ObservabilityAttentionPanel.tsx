@@ -1,5 +1,5 @@
 /**
- * Attention table + inspect sheet + mute/batch confirms for ObservabilityPage.
+ * Attention table + inspect sheet + mute confirm for ObservabilityPage.
  */
 import {
   Button,
@@ -19,12 +19,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@bifrost/ui'
-import { Wrench } from 'lucide-react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { StatusLamp } from '@/components/StatusLamp'
 import { SYSTEM_DOMAIN_VARIANT } from '@/lib/architecture/systemDomainCatalog'
-import type { AttentionBatchGroup, AttentionItem } from '@/lib/observability'
-import { attentionCtaActionLabel } from '@/lib/observability'
+import type { AttentionItem } from '@/lib/observability'
 import {
   ATTENTION_SCOPE_OPTIONS,
   severityLamp,
@@ -38,14 +36,8 @@ export function ObservabilityAttentionPanel({
   filteredAttention,
   attentionScope,
   setAttentionScope,
-  batchGroup,
-  agentBlockedReason,
-  remediationPending,
   mutePending,
-  onBatchRemediate,
   onMute,
-  remediationError,
-  lastRemediationJobId,
   muteMessage,
   activeMuteCount,
   canOperate,
@@ -53,11 +45,7 @@ export function ObservabilityAttentionPanel({
   setAttentionDetail,
   muteConfirmItem,
   setMuteConfirmItem,
-  batchConfirmOpen,
-  setBatchConfirmOpen,
   onNavigate,
-  runAttentionRemediation,
-  hideAgentActions = false,
 }: {
   isLoading: boolean
   attentionQuiet: boolean
@@ -65,14 +53,8 @@ export function ObservabilityAttentionPanel({
   filteredAttention: AttentionItem[]
   attentionScope: AttentionScopeFilter
   setAttentionScope: (v: AttentionScopeFilter) => void
-  batchGroup: AttentionBatchGroup | null
-  agentBlockedReason: string | null | undefined
-  remediationPending: boolean
   mutePending: boolean
-  onBatchRemediate: (group: AttentionBatchGroup) => void
   onMute: (item: AttentionItem) => void
-  remediationError: string | null
-  lastRemediationJobId: string | null
   muteMessage: string | null
   activeMuteCount: number
   canOperate: boolean
@@ -80,23 +62,14 @@ export function ObservabilityAttentionPanel({
   setAttentionDetail: (item: AttentionItem | null) => void
   muteConfirmItem: AttentionItem | null
   setMuteConfirmItem: (item: AttentionItem | null) => void
-  batchConfirmOpen: boolean
-  setBatchConfirmOpen: (open: boolean) => void
   onNavigate?: (tab: string) => void
-  runAttentionRemediation: (item: AttentionItem) => void
-  /** Status page keeps Inspect / Mute and drops Agent Fix / Diagnose. */
-  hideAgentActions?: boolean
 }) {
   return (
     <>
     <OpsSection
       id="obs-attention"
       title="Attention"
-      description={
-        hideAgentActions
-          ? 'Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Mute 2h (not a fix)'
-          : 'Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Agent Fix / Mute 2h (not a fix)'
-      }
+      description="Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Mute 2h (not a fix)"
       bodyPadding="none"
       overflow="hidden"
       collapsible={attentionQuiet}
@@ -104,21 +77,6 @@ export function ObservabilityAttentionPanel({
       actions={
         viewModelAttentionLength > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            {!hideAgentActions && batchGroup != null && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={agentBlockedReason != null || remediationPending}
-                title={
-                  agentBlockedReason ??
-                  `Batch Agent Fix for ${batchGroup.items.length}× ${batchGroup.playbookId} (Operator Dock)`
-                }
-                onClick={() => setBatchConfirmOpen(true)}
-              >
-                <Wrench size={14} className="mr-1" aria-hidden />
-                Fix {batchGroup.items.length}× shared
-              </Button>
-            )}
             <SegmentControl
               size="sm"
               value={attentionScope}
@@ -130,31 +88,14 @@ export function ObservabilityAttentionPanel({
         ) : null
       }
       headerExtra={
-        remediationError != null ||
-        lastRemediationJobId != null ||
-        muteMessage != null ||
-        activeMuteCount > 0 ? (
+        muteMessage != null || activeMuteCount > 0 ? (
           <p className="m-0 text-[var(--text-dense-caption)]">
-            {remediationError != null ? (
-              <span className="text-danger">{remediationError}</span>
-            ) : null}
-            {remediationError == null && lastRemediationJobId != null ? (
-              <span className="text-muted-foreground">
-                Agent task started · Expand Operator Dock · job {lastRemediationJobId}
-              </span>
-            ) : null}
             {muteMessage != null ? (
-              <span className="text-muted-foreground">
-                {remediationError != null || lastRemediationJobId != null ? ' · ' : null}
-                {muteMessage}
-              </span>
+              <span className="text-muted-foreground">{muteMessage}</span>
             ) : null}
             {activeMuteCount > 0 ? (
               <span className="text-muted-foreground">
-                {(remediationError != null ||
-                  lastRemediationJobId != null ||
-                  muteMessage != null) &&
-                  ' · '}
+                {muteMessage != null && ' · '}
                 {activeMuteCount} muted (UI{canOperate ? ' ± AM' : ''} · not fixed)
               </span>
             ) : null}
@@ -253,24 +194,7 @@ export function ObservabilityAttentionPanel({
                       >
                         Manual
                       </Button>
-                    ) : hideAgentActions ? null : (
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="h-6 px-1.5"
-                        disabled={
-                          agentBlockedReason != null || remediationPending
-                        }
-                        title={
-                          agentBlockedReason ??
-                          `${attentionCtaActionLabel(item.triage.cta)} · ${item.triage.trackReason}`
-                        }
-                        onClick={() => runAttentionRemediation(item)}
-                      >
-                        <Wrench size={12} className="mr-1" aria-hidden />
-                        {attentionCtaActionLabel(item.triage.cta)}
-                      </Button>
-                    )}
+                    ) : null}
                   </span>
                 </DenseTableCell>
               </DenseTableRow>
@@ -319,37 +243,7 @@ export function ObservabilityAttentionPanel({
                   <p className="m-0 text-[var(--text-dense-meta)]">{value}</p>
                 </div>
               ))}
-              {agentBlockedReason != null && attentionDetail.triage.cta !== 'manual' && (
-                <p className="m-0 text-[var(--text-dense-caption)] text-warning">
-                  {agentBlockedReason}
-                </p>
-              )}
-              {remediationError != null && (
-                <p className="m-0 text-[var(--text-dense-caption)] text-danger">{remediationError}</p>
-              )}
               <div className="flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2">
-                {!hideAgentActions && attentionDetail.triage.cta === 'agent_fix' && (
-                  <Button
-                    size="sm"
-                    disabled={agentBlockedReason != null || remediationPending}
-                    title={agentBlockedReason ?? 'Start assisted Agent Fix in Operator Dock'}
-                    onClick={() => runAttentionRemediation(attentionDetail)}
-                  >
-                    <Wrench size={14} className="mr-1" aria-hidden />
-                    Agent Fix
-                  </Button>
-                )}
-                {!hideAgentActions && attentionDetail.triage.cta === 'diagnose' && (
-                  <Button
-                    size="sm"
-                    disabled={agentBlockedReason != null || remediationPending}
-                    title={agentBlockedReason ?? 'Start assisted diagnose in Operator Dock'}
-                    onClick={() => runAttentionRemediation(attentionDetail)}
-                  >
-                    <Wrench size={14} className="mr-1" aria-hidden />
-                    Diagnose
-                  </Button>
-                )}
                 {attentionDetail.triage.cta === 'manual' && (
                   <Button
                     size="sm"
@@ -409,23 +303,6 @@ export function ObservabilityAttentionPanel({
         if (muteConfirmItem != null) onMute(muteConfirmItem)
       }}
       onCancel={() => setMuteConfirmItem(null)}
-    />
-
-    <ConfirmDialog
-      open={!hideAgentActions && batchConfirmOpen && batchGroup != null}
-      title={
-        batchGroup != null
-          ? `Batch Agent Fix (${batchGroup.items.length}× ${batchGroup.playbookId})?`
-          : 'Batch Agent Fix?'
-      }
-      message="Starts one assisted remediation job in Operator Dock covering all matching Attention rows. Approve actuations in the dock — no auto-remediate."
-      confirmLabel="Start batch Fix"
-      confirming={remediationPending}
-      onConfirm={() => {
-        if (batchGroup == null || agentBlockedReason != null) return
-        onBatchRemediate(batchGroup)
-      }}
-      onCancel={() => setBatchConfirmOpen(false)}
     />
     </>
   )

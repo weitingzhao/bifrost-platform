@@ -12,7 +12,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fleet": "npx tsx scripts/fleet-snapshot-test.ts",
-    "test:governance-pack": "npx tsx scripts/governance-active-pack-test.ts",
     "check:code-health": "bash ../../scripts/code-health/scan.sh --repo bifrost-platform",
     "prepare": "cd .. && husky"
   },

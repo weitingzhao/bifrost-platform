@@ -1,30 +1,5 @@
-import type { RemediationHealthResponse, RemediationJob, RemediationJobsResponse, StartRemediationRequest } from './remediationTypes'
-import { authedFetch, operatorToken, parseError } from './client'
-
-/**
- * Start a remediation job. When platform-api answers 409 because a job with the
- * same scope is already running (TD-224), resolve to that job so the caller
- * attaches to it in the Operator Dock instead of starting a duplicate.
- */
-export async function startRemediation(body: StartRemediationRequest): Promise<RemediationJob> {
-  const token = operatorToken()
-  const headers = new Headers({ 'Content-Type': 'application/json' })
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch('/api/v1/remediation/start', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  })
-  if (r.status === 409) {
-    const conflict = (await r
-      .clone()
-      .json()
-      .catch(() => null)) as { job?: RemediationJob } | null
-    if (conflict?.job?.id != null && conflict.job.id !== '') return conflict.job
-  }
-  if (!r.ok) throw await parseError('remediation start', r)
-  return r.json() as Promise<RemediationJob>
-}
+import type { RemediationHealthResponse, RemediationJob, RemediationJobsResponse } from './remediationTypes'
+import { authedFetch, parseError } from './client'
 
 export async function fetchRemediationJob(id: string): Promise<RemediationJob> {
   const r = await authedFetch('remediation job', `/api/v1/remediation/${encodeURIComponent(id)}`)

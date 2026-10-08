@@ -210,60 +210,6 @@ func (s *Service) RunReleaseGate(ctx context.Context, tier GateTier, triggeredBy
 	}, nil
 }
 
-// ListReleaseCycles returns persisted release cycles for a lane (newest first).
-// Best-effort syncs running deploy steps from live PipelineRun status before listing.
-func (s *Service) ListReleaseCycles(ctx context.Context, lane ReleaseCycleLane) ([]ReleaseCycleRecord, error) {
-	if s.cycles == nil {
-		return nil, nil
-	}
-	_ = s.syncActiveCycleRuns(ctx, lane)
-	return s.cycles.List(lane)
-}
-
-// GetReleaseCycle returns one cycle by id.
-func (s *Service) GetReleaseCycle(id string) (*ReleaseCycleRecord, error) {
-	if s.cycles == nil {
-		return nil, nil
-	}
-	return s.cycles.Get(id)
-}
-
-// syncActiveCycleRuns looks up K8s PipelineRun status for running deploy steps and persists terminal results.
-func (s *Service) syncActiveCycleRuns(ctx context.Context, lane ReleaseCycleLane) error {
-	if s.cycles == nil || s.delivery == nil {
-		return nil
-	}
-	steps, err := s.cycles.RunningDeploySteps(lane)
-	if err != nil || len(steps) == 0 {
-		return err
-	}
-	statuses := make([]RunStatusInfo, 0, len(steps))
-	seenPipelines := map[string][]delivery.PipelineRunView{}
-	for _, step := range steps {
-		pipeline := PipelineForCycleStep(lane, step.Kind)
-		if pipeline == "" {
-			continue
-		}
-		runs, ok := seenPipelines[pipeline]
-		if !ok {
-			resp := s.delivery.PipelineRuns(ctx, pipeline)
-			runs = resp.Runs
-			seenPipelines[pipeline] = runs
-		}
-		for _, r := range runs {
-			if r.Name == step.RunName {
-				statuses = append(statuses, RunStatusInfo{
-					RunName: r.Name,
-					Status:  r.Status,
-					Reason:  r.Reason,
-				})
-				break
-			}
-		}
-	}
-	return s.cycles.SyncRunStatus(lane, statuses)
-}
-
 func (s *Service) collectStgChecks(ctx context.Context) []GateCheck {
 	checks := make([]GateCheck, 0, 16)
 

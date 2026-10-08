@@ -1,5 +1,3 @@
-import type { ClusterSummary, ClusterServiceReadinessResponse, ClusterGovernanceResponse } from './clusterTypes'
-
 export type RemediationPhase =
   | 'starting'
   | 'diagnosing'
@@ -56,15 +54,6 @@ export interface RemediationJobsResponse {
   total?: number
   limit?: number
   source?: string
-}
-
-export interface StartRemediationRequest {
-  scope?: string
-  cluster_summary?: ClusterSummary
-  service_readiness?: ClusterServiceReadinessResponse
-  governance?: ClusterGovernanceResponse
-  issues?: unknown
-  prompt?: string
 }
 
 export interface RemediationHealthResponse {

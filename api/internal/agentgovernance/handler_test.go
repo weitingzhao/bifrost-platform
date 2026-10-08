@@ -14,7 +14,7 @@ func TestComputeTrustMatrix_PromotionEligible(t *testing.T) {
 		{Scope: "nightly-health-check", Status: remediation.JobDone, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
 		{Scope: "nightly-health-check", Status: remediation.JobDone, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 	}
-	resp := ComputeTrustMatrix(jobs)
+	resp := computeTrustMatrixRaw(jobs)
 	var health *TrustMatrixEntry
 	for i := range resp.Entries {
 		if resp.Entries[i].SkillID == "nightly-health" {
@@ -39,7 +39,7 @@ func TestComputeTrustMatrix_DemotionOnFailure(t *testing.T) {
 	jobs := []remediation.Job{
 		{Scope: "release", Status: remediation.JobFailed, CreatedAt: now, UpdatedAt: now},
 	}
-	resp := ComputeTrustMatrix(jobs)
+	resp := computeTrustMatrixRaw(jobs)
 	var release *TrustMatrixEntry
 	for i := range resp.Entries {
 		if resp.Entries[i].SkillID == "release" {
@@ -49,39 +49,6 @@ func TestComputeTrustMatrix_DemotionOnFailure(t *testing.T) {
 	}
 	if release == nil || !release.DemotionTriggered {
 		t.Fatal("expected demotion on latest failure")
-	}
-}
-
-func TestComputeCapabilityMap_NoMissingCoreTools(t *testing.T) {
-	resp := ComputeCapabilityMap()
-	if resp.McpToolCount < 40 {
-		t.Fatalf("mcp tools %d", resp.McpToolCount)
-	}
-	for _, e := range resp.Entries {
-		if e.McpTools == nil {
-			t.Fatalf("%s: mcp_tools must be non-nil empty slice for JSON []", e.TaskScope)
-		}
-		if e.MissionSignals == nil {
-			t.Fatalf("%s: mission_signals must be non-nil empty slice for JSON []", e.TaskScope)
-		}
-		if e.TaskScope == "post-fix-verification" && e.HasGap {
-			t.Fatalf("post-fix gap: %s", e.GapDetail)
-		}
-	}
-}
-
-func TestComputePerformance_Windows(t *testing.T) {
-	now := time.Now().UTC()
-	jobs := []remediation.Job{
-		{Status: remediation.JobDone, CreatedAt: now, UpdatedAt: now.Add(30 * time.Second)},
-		{Status: remediation.JobFailed, CreatedAt: now, UpdatedAt: now.Add(20 * time.Second)},
-	}
-	resp := ComputePerformance(jobs)
-	if len(resp.Windows) != 2 {
-		t.Fatalf("windows %d", len(resp.Windows))
-	}
-	if resp.Windows[0].TotalExecutions != 2 {
-		t.Fatalf("total %d", resp.Windows[0].TotalExecutions)
 	}
 }
 

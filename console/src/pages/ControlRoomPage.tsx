@@ -55,14 +55,9 @@ import {
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
-import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
-import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
-import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
-import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
-import { fetchSupplyChain } from '@/api/delivery'
-import { fetchRemediationJobs, startRemediation } from '@/api/remediation'
+import { fetchRemediationJobs } from '@/api/remediation'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
@@ -103,7 +98,7 @@ type ControlRoomPageProps = {
    * Launch, promote, pipeline, agent dispatch, and the governance bay stay on the full page.
    */
   surface?: 'full' | 'status'
-} & AmbientAgentShellProps
+}
 
 function bayById(
   bays: ReturnType<typeof buildControlRoomBaySignals>,
@@ -137,7 +132,6 @@ export function ControlRoomPage({
   onOpenLaunchView,
   onOpenFleetVendor,
   onModeChange,
-  onStartAgentJob,
   surface = 'full',
 }: ControlRoomPageProps) {
   const statusSurface = surface === 'status'
@@ -190,32 +184,6 @@ export function ControlRoomPage({
     )[0]
     return latest?.status === 'failed' || latest?.phase === 'failed'
   }, [jobsQuery.data?.jobs])
-
-  const qc = useQueryClient()
-  const playbookFixMutation = useMutation({
-    mutationFn: ({ scope, prompt }: { scope: string; prompt: string }) =>
-      startRemediation({ scope, prompt }),
-    onSuccess: (job, vars) => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      onStartAgentJob?.({ id: job.id, scope: vars.scope, label: scopeToLabel(vars.scope) })
-    },
-  })
-
-  const handlePlaybookFix = useCallback(
-    async ({ scope, prompt }: { scope: string; prompt: string }) => {
-      if (!canOperate) return
-      if (scope === DELIVER_STG_RECOVER_SCOPE) {
-        const supply = await fetchSupplyChain()
-        playbookFixMutation.mutate({
-          scope,
-          prompt: buildDeliverStgRecoverPrompt({ supply, stgSmoke }),
-        })
-        return
-      }
-      playbookFixMutation.mutate({ scope, prompt })
-    },
-    [canOperate, playbookFixMutation, stgSmoke],
-  )
 
   const openAgentDeskPrefill = (opts?: { prefill: string }) => {
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
@@ -457,9 +425,6 @@ export function ControlRoomPage({
               onOpenLaunchView={mode => onOpenLaunchView?.(mode)}
               onOpenFleetVendor={onOpenFleetVendor}
               onOpenPromote={handleOpenPromotePreflight}
-              onPlaybookFix={handlePlaybookFix}
-              playbookFixPending={playbookFixMutation.isPending}
-              canOperate={canOperate}
             />
           </ControlRoomBay>
         )}

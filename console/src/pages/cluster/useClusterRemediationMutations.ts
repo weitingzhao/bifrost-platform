@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
-import { startRemediation, cancelRemediationJob } from '@/api/remediation'
+import { cancelRemediationJob } from '@/api/remediation'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { CLUSTER_ISSUES_FULL_AUTO_SCOPE } from '@/lib/agent/agentScopes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
@@ -12,7 +12,6 @@ export function useClusterRemediationMutations(
     ClusterPageMutationsInput,
     | 'queries'
     | 'onOpenAgentDesk'
-    | 'onStartAgentJob'
     | 'onExpandAgentDock'
     | 'onSelectAgentJob'
   >,
@@ -20,38 +19,13 @@ export function useClusterRemediationMutations(
   const {
     queries,
     onOpenAgentDesk,
-    onStartAgentJob,
     onExpandAgentDock,
     onSelectAgentJob,
   } = input
-  const { handleActuationError, qc } = actuation
+  const { qc } = actuation
   const [remediationPanelOpen, setRemediationPanelOpen] = useState(false)
   const [remediationJobId, setRemediationJobId] = useState<string | null>(null)
   const [remediationJob, setRemediationJob] = useState<RemediationJob | null>(null)
-
-  const playbookFixMutation = useMutation({
-    mutationFn: ({ scope, prompt }: { scope: string; prompt: string }) =>
-      startRemediation({ scope, prompt }),
-    onSuccess: (job, vars) => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      actuation.setActionError(null)
-      if (onStartAgentJob != null) {
-        setRemediationPanelOpen(false)
-        setRemediationJobId(job.id)
-        setRemediationJob(job)
-        onStartAgentJob({ id: job.id, scope: vars.scope, label: scopeToLabel(vars.scope) })
-        return
-      }
-      if (onOpenAgentDesk != null) {
-        onOpenAgentDesk(job.id)
-        return
-      }
-      setRemediationJob(job)
-      setRemediationJobId(job.id)
-      setRemediationPanelOpen(true)
-    },
-    onError: handleActuationError,
-  })
 
   const remediationCancelMutation = useMutation({
     mutationFn: cancelRemediationJob,
@@ -143,7 +117,6 @@ export function useClusterRemediationMutations(
     setRemediationPanelOpen,
     remediationJobId,
     remediationJob,
-    playbookFixMutation,
     remediationCancelMutation,
     followAmbientRemediationJob,
     handleOpenRemediationSession,

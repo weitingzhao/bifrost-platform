@@ -61,22 +61,6 @@ type ReleaseCycleRecord struct {
 	TriggeredBy    string            `json:"triggered_by,omitempty"`
 }
 
-// ReleaseCyclesResponse is the list API payload.
-type ReleaseCyclesResponse struct {
-	Lane    ReleaseCycleLane     `json:"lane"`
-	Entries []ReleaseCycleRecord `json:"entries"`
-}
-
-// ParseReleaseCycleLane normalizes the lane query param.
-func ParseReleaseCycleLane(raw string) ReleaseCycleLane {
-	switch raw {
-	case string(ReleaseCycleLanePlatform):
-		return ReleaseCycleLanePlatform
-	default:
-		return ReleaseCycleLaneTrade
-	}
-}
-
 // LaneForGateTier maps a gate tier to its release cycle lane.
 func LaneForGateTier(tier GateTier) ReleaseCycleLane {
 	if IsPlatformTier(tier) {

@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 // clearAgentBridgeEnv resets every optional bridge endpoint env var so tests
@@ -177,49 +175,6 @@ func TestHandleBridgeNousHermesAuthRequired(t *testing.T) {
 	}
 	if resp.NousHermes.Status != "auth_required" {
 		t.Fatalf("NousHermes.Status = %q, want auth_required", resp.NousHermes.Status)
-	}
-}
-
-func TestHandleSmokeProxiesRunnerResponse(t *testing.T) {
-	clearAgentBridgeEnv(t)
-	runner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/smoke" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	t.Cleanup(runner.Close)
-	t.Setenv("REMEDIATION_RUNNER_URL", runner.URL)
-
-	h := NewHandler()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/smoke", nil)
-	rec := httptest.NewRecorder()
-	h.HandleSmoke(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if payload["ok"] != true {
-		t.Fatalf("payload = %+v", payload)
-	}
-}
-
-func TestHandleSmokeNoRunnerConfigured(t *testing.T) {
-	h := &Handler{runner: &remediation.RunnerClient{}, httpClient: &http.Client{}}
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/smoke", nil)
-	rec := httptest.NewRecorder()
-	h.HandleSmoke(rec, req)
-
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503, body=%s", rec.Code, rec.Body.String())
 	}
 }
 

@@ -86,11 +86,6 @@ func TestTrustOverrideMissingOrBadFileIs200(t *testing.T) {
 
 	h.UseTrustOverrideStore(brokenOverrides{readErr: errors.New("permission denied")})
 	assertStoreError200(t, h)
-	rec := httptest.NewRecorder()
-	h.HandleSnapshot(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("snapshot with an unreadable store = %d, want 200", rec.Code)
-	}
 }
 
 func assertStoreError200(t *testing.T, h *Handler) {

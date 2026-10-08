@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, cn, DenseTag } from '@bifrost/ui'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
-import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
 import {
@@ -12,11 +11,6 @@ import {
   useSatelliteDeployOverall,
 } from '@/components/task-mode/readiness/hooks'
 import { buildDeliverStgRecoverPrompt, isDeliverStgStaleFailure } from '@/lib/agent/deliverStgRecoverPrompt'
-import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
-import {
-  buildGitDirtyRemediatePrompt,
-  GIT_DIRTY_FIX_SCOPE,
-} from '@/lib/agent/gitDirtyRemediatePrompt'
 import { listFailingMatrixTargets } from '@/lib/control-room/controlRoomOperatePack'
 import { controlRoomStaleSourcesLabel } from '@/lib/control-room/controlRoomBays'
 import {
@@ -46,9 +40,6 @@ interface MissionBoardProps {
   onOpenLaunchView: (mode: LaunchViewMode) => void
   onOpenAgentDesk: (opts?: { prefill: string }) => void
   onOpenRuntimeMap: OpenRuntimeMapFn
-  onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
-  playbookFixPending?: boolean
-  canOperate?: boolean
 }
 
 function formatAge(epoch: number): string {
@@ -127,9 +118,6 @@ export function MissionBoard({
   onOpenLaunchView,
   onOpenAgentDesk,
   onOpenRuntimeMap,
-  onPlaybookFix,
-  playbookFixPending,
-  canOperate,
 }: MissionBoardProps) {
   const [detailScope, setDetailScope] = useState<DetailScope | null>(null)
   const staleLabel = controlRoomStaleSourcesLabel(staleSources, dataUpdatedAt)
@@ -165,27 +153,10 @@ export function MissionBoard({
 
   const supplyQ = useQuery({ queryKey: ['mission-board', 'supply'], queryFn: fetchSupplyChain, refetchInterval: 20_000 })
   const smokeQ = useQuery({ queryKey: ['mission-board', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: 20_000 })
-  const bridgeQ = useQuery({
-    queryKey: ['cockpit', 'bridge'],
-    queryFn: fetchAgentBridge,
-    refetchInterval: 20_000,
-  })
-
   const releaseFixPrompt = useMemo(
     () => buildDeliverStgRecoverPrompt({ supply: supplyQ.data, stgSmoke: smokeQ.data }),
     [supplyQ.data, smokeQ.data],
   )
-
-  const gitDirtyPrompt = useMemo(() => {
-    const base = buildGitDirtyRemediatePrompt(bridgeQ.data)
-    return [
-      base,
-      '',
-      '## Operator intent: PROPOSE COMMIT',
-      'Draft commit_message → request_operator_approval → git_commit. Stash only if operator rejects commit and asks to stash.',
-      'Source: Control Room Mission Board Agent Fix.',
-    ].join('\n')
-  }, [bridgeQ.data])
 
   const stalePipelineFail = isDeliverStgStaleFailure(supplyQ.data, smokeQ.data)
 
@@ -194,11 +165,7 @@ export function MissionBoard({
     item.detail.toLowerCase().includes('dirty') ||
     item.detail.toLowerCase().includes('git bridge')
 
-  const startGitDirtyRemediate = () => {
-    if (onPlaybookFix != null && canOperate) {
-      onPlaybookFix({ scope: GIT_DIRTY_FIX_SCOPE, prompt: gitDirtyPrompt })
-      return
-    }
+  const openGitDirtyInQueue = () => {
     onOpenAgentDesk({
       prefill:
         'Mission CAUTION from Agent / Git bridge dirty repos. Use git-dirty-remediate (Propose commit or Stash; approval required). Never discard Owner WIP.',
@@ -211,31 +178,13 @@ export function MissionBoard({
       item.id.toLowerCase().includes('supply') ||
       item.detail.toLowerCase().includes('deliver')
     if (isRelease && item.signal !== 'ok') {
-      if (onPlaybookFix != null && canOperate) {
-        return {
-          label: playbookFixPending ? 'Starting…' : 'Deliver-stg Fix',
-          onClick: () =>
-            onPlaybookFix({
-              scope: DELIVER_STG_RECOVER_SCOPE,
-              prompt: releaseFixPrompt,
-            }),
-        }
-      }
       return {
         label: 'Deliver-stg Fix',
         onClick: () => onOpenAgentDesk({ prefill: releaseFixPrompt }),
       }
     }
     if (isAgentDirtyCause(item)) {
-      return {
-        label:
-          playbookFixPending && canOperate
-            ? 'Starting…'
-            : canOperate && onPlaybookFix != null
-              ? 'Propose commit'
-              : 'Queue →',
-        onClick: startGitDirtyRemediate,
-      }
+      return { label: 'Queue →', onClick: openGitDirtyInQueue }
     }
     if (item.segment === 'rocket') {
       return { label: 'Mission Launch →', onClick: () => onOpenLaunchView('ops') }
@@ -391,14 +340,14 @@ export function MissionBoard({
               className="mission-board-fix"
               onClick={() => {
                 if (degradationItems.some(isAgentDirtyCause)) {
-                  startGitDirtyRemediate()
+                  openGitDirtyInQueue()
                   return
                 }
                 onOpenAgentDesk({ prefill: diagnosticPrompt })
               }}
               title={
                 degradationItems.some(isAgentDirtyCause)
-                  ? 'Start git-dirty-remediate — approval required before commit/stash'
+                  ? 'Open Queue with git-dirty-remediate guidance'
                   : 'Open Queue with a pre-filled diagnostic prompt based on current failures'
               }
             >
@@ -443,26 +392,21 @@ export function MissionBoard({
                 <Button
                   variant="outline"
                   size="xs"
-                  disabled={playbookFixPending && canOperate}
                   onClick={() => {
                     if (missionCauseItems.some(isAgentDirtyCause)) {
-                      startGitDirtyRemediate()
+                      openGitDirtyInQueue()
                       return
                     }
                     if (diagnosticPrompt != null) onOpenAgentDesk({ prefill: diagnosticPrompt })
                   }}
                   title={
                     missionCauseItems.some(isAgentDirtyCause)
-                      ? 'Start git-dirty-remediate — approval required before commit/stash'
+                      ? 'Open Queue with git-dirty-remediate guidance'
                       : 'Open Queue with diagnostic prefill'
                   }
                 >
                   <Wrench size={12} className="mr-1" aria-hidden />
-                  {playbookFixPending && missionCauseItems.some(isAgentDirtyCause)
-                    ? 'Starting…'
-                    : missionCauseItems.some(isAgentDirtyCause)
-                      ? 'Propose commit'
-                      : 'Agent Fix'}
+                  {missionCauseItems.some(isAgentDirtyCause) ? 'Propose commit' : 'Agent Fix'}
                 </Button>
               )}
             </div>

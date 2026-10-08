@@ -34,7 +34,6 @@ export function ClusterPage({
   onOpenObservability,
   onOpenDelivery,
   ambientJobId,
-  onStartAgentJob,
   onExpandAgentDock,
   onSelectAgentJob,
 }: {
@@ -47,7 +46,6 @@ export function ClusterPage({
   onOpenObservability?: () => void
   onOpenDelivery?: () => void
   ambientJobId?: string | null
-  onStartAgentJob?: (job: AmbientAgentJob) => void
   onExpandAgentDock?: () => void
   onSelectAgentJob?: (job: AmbientAgentJob) => void
 }) {
@@ -96,7 +94,6 @@ export function ClusterPage({
     queries: q,
     selectedNs,
     onOpenAgentDesk,
-    onStartAgentJob,
     onExpandAgentDock,
     onSelectAgentJob,
     setDrawerOpen,
@@ -244,12 +241,6 @@ export function ClusterPage({
               postgresStatus={q.postgresStatusQuery.data}
               onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
               onOpenDefects={onOpenDefects}
-              onPlaybookFix={({ scope, prompt }) => {
-                if (!canOperate) return
-                m.playbookFixMutation.mutate({ scope, prompt })
-              }}
-              playbookFixPending={m.playbookFixMutation.isPending}
-              canOperate={canOperate}
               activeRemediationJob={q.activeRemediationJob}
               onOpenRemediationSession={m.handleOpenRemediationSession}
               onHealthChange={handleOpsHealthChange}

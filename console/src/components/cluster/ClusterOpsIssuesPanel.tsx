@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
-  ConfirmDialog,
   DenseDataTable,
   DenseTableBody,
   DenseTableCell,
@@ -26,7 +25,6 @@ import type { RemediationJob } from '@/api/remediationTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
-import { buildPlaybookAgentPrompt, scopeForPlaybookId } from '@/lib/agent/playbookAgentPrompts'
 import {
   buildClusterFailureTriage,
   type FailureTriageRow,
@@ -38,7 +36,6 @@ import {
 } from '@/lib/cluster/collectClusterIssues'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
-  formatRemediationJobWhen,
   remediationJobReachability,
   remediationJobStatusLabel,
   remediationScopeShortLabel,
@@ -78,39 +75,13 @@ function TriageRowActions({
   stgSmoke,
   onOpenAgentDesk,
   onOpenDefects,
-  onPlaybookFix,
-  playbookFixPending,
-  canOperate,
 }: {
   row: FailureTriageRow
   supply?: SupplyChainResponse
   stgSmoke?: StgSmokeResponse
   onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
-  onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
-  playbookFixPending?: boolean
-  canOperate?: boolean
 }) {
-  const scope = scopeForPlaybookId(row.playbookId)
-  if (scope != null && onPlaybookFix != null && canOperate) {
-    const prompt =
-      row.playbookId === 'deliver-stg-recover'
-        ? buildDeliverStgRecoverPrompt({ supply, stgSmoke })
-        : buildPlaybookAgentPrompt(row)
-    return (
-      <Button
-        variant="ghost"
-        size="xs"
-        className="shrink-0"
-        disabled={playbookFixPending}
-        onClick={() => onPlaybookFix({ scope, prompt })}
-        title={`Start ${scope} agent task`}
-      >
-        <Wrench size={12} className="mr-1" aria-hidden />
-        Fix
-      </Button>
-    )
-  }
   if (row.playbookId === 'deliver-stg-recover' && onOpenAgentDesk != null) {
     return (
       <Button
@@ -179,11 +150,6 @@ export type ClusterOpsIssuesPanelProps = {
   topN?: number
   onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
-  onPlaybookFix?: (opts: { scope: string; prompt: string }) => void
-  playbookFixPending?: boolean
-  onAutoCheck?: () => void
-  autoCheckPending?: boolean
-  canOperate?: boolean
   onSelectPodNamespace?: (namespace: string) => void
   activeRemediationJob?: RemediationJob | null
   onOpenRemediationSession?: (jobId: string) => void
@@ -199,7 +165,7 @@ export type ClusterOpsIssuesPanelProps = {
   embedded?: boolean
 }
 
-/** Unified Cluster issues: Ops failure triage + fleet detail + one AI Auto-Check. */
+/** Unified Cluster issues: Ops failure triage + fleet detail. */
 export function ClusterOpsIssuesPanel({
   summary,
   serviceReadiness,
@@ -207,11 +173,6 @@ export function ClusterOpsIssuesPanel({
   topN = 8,
   onOpenAgentDesk,
   onOpenDefects,
-  onPlaybookFix,
-  playbookFixPending,
-  onAutoCheck,
-  autoCheckPending = false,
-  canOperate = false,
   onSelectPodNamespace,
   activeRemediationJob = null,
   onOpenRemediationSession,
@@ -313,11 +274,6 @@ export function ClusterOpsIssuesPanel({
     })
   }, [onHealthChange, overallReach, healthSummaryLine, allClear])
 
-  // TD-224: a page load never dispatches an agent. Auto-Remediate starts a
-  // full-auto run only after the operator clicks it and confirms.
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const requestAutoCheck = () => setConfirmOpen(true)
-
   const sessionActive = activeRemediationJob?.status === 'running'
   const sessionReach = sessionActive ? remediationJobReachability(activeRemediationJob) : 'unknown'
   const sessionStatusLabel = sessionActive ? remediationJobStatusLabel(activeRemediationJob) : ''
@@ -325,63 +281,12 @@ export function ClusterOpsIssuesPanel({
     ? remediationScopeShortLabel(activeRemediationJob.scope)
     : ''
 
-  const autoCheckBtn =
-    canOperate && onAutoCheck != null ? (
-      sessionActive && onOpenRemediationSession != null ? (
-        <>
-          <div
-            className="cluster-remediation-session-chip"
-            title={`${sessionScopeLabel} · ${activeRemediationJob.id} · started ${formatRemediationJobWhen(activeRemediationJob.created_at)}`}
-          >
-            <StatusLamp value={sessionReach} kind="reach" />
-            <span className="cluster-remediation-session-chip__title">Debug session</span>
-            <span className="cluster-remediation-session-chip__meta">{sessionStatusLabel}</span>
-            <span className="cluster-remediation-session-chip__scope">{sessionScopeLabel}</span>
-          </div>
-          <Button variant="default" size="sm" onClick={() => onOpenRemediationSession(activeRemediationJob.id)}>
-            Open in dock
-          </Button>
-        </>
-      ) : (
-        <Button variant="default" size="sm" disabled={autoCheckPending} onClick={requestAutoCheck}>
-          {autoCheckPending ? 'Starting…' : allClear ? 'AI Auto-Check' : 'Auto-Remediate'}
-        </Button>
-      )
-    ) : null
-
-  const confirmDialog =
-    canOperate && onAutoCheck != null ? (
-      <ConfirmDialog
-        open={confirmOpen}
-        title={allClear ? 'Start AI Auto-Check?' : 'Start Auto-Remediate?'}
-        message={
-          allClear
-            ? 'Starts a remediation agent that re-verifies the fleet and ops plane with your operator token. Progress and approvals live in the Operator Dock.'
-            : `Starts a full-auto remediation agent on ${triageRows.length > 0 ? `${triageRows.length} ranked issue(s)` : `${fleetIssues.length} fleet issue(s)`} with your operator token. It may run repair tools; approvals live in the Operator Dock.`
-        }
-        confirmLabel={allClear ? 'Start Auto-Check' : 'Start Auto-Remediate'}
-        confirming={autoCheckPending}
-        onConfirm={() => {
-          setConfirmOpen(false)
-          onAutoCheck()
-        }}
-        onCancel={() => setConfirmOpen(false)}
-      />
-    ) : null
-
-  const defectsBtn =
-    onOpenDefects != null ? (
-      <Button variant="outline" size="sm" onClick={onOpenDefects}>
-        Defects →
-      </Button>
-    ) : null
-
   const actions =
-    autoCheckBtn != null || defectsBtn != null ? (
+    onOpenDefects != null ? (
       <div className="flex flex-wrap items-center justify-end gap-2">
-        {autoCheckBtn}
-        {defectsBtn}
-        {confirmDialog}
+        <Button variant="outline" size="sm" onClick={onOpenDefects}>
+          Defects →
+        </Button>
       </div>
     ) : undefined
 
@@ -490,9 +395,6 @@ export function ClusterOpsIssuesPanel({
                     stgSmoke={smokeQ.data}
                     onOpenAgentDesk={onOpenAgentDesk}
                     onOpenDefects={onOpenDefects}
-                    onPlaybookFix={onPlaybookFix}
-                    playbookFixPending={playbookFixPending}
-                    canOperate={canOperate}
                   />
                 </DenseTableCell>
               </DenseTableRow>

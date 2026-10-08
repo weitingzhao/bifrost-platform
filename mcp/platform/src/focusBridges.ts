@@ -39,11 +39,7 @@ const KUBERNETES = [
   'wake_compute_node',
   // L2 需确认
   'drain_node',
-  'join_cluster_node',
   'poweroff_compute_node',
-  'ensure_kubeconfig_secret',
-  'ensure_metrics_server',
-  'ensure_kube_prometheus_stack',
 ] as const
 
 /**

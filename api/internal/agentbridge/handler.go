@@ -3,7 +3,6 @@ package agentbridge
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -201,30 +200,6 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 		},
 		NightlyReport: nightly,
 	})
-}
-
-func (h *Handler) HandleSmoke(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	url := h.runner.ActiveURL()
-	if url == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "no runner configured"})
-		return
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url+"/smoke", nil)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
-	}
-	remediation.SetRunnerAuth(req)
-	resp, err := h.httpClient.Do(req)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, resp.Body)
 }
 
 func setGitBridgeAuth(req *http.Request) {
