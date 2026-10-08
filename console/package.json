@@ -12,9 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fleet": "npx tsx scripts/fleet-snapshot-test.ts",
-    "test:agent-capability": "npx tsx scripts/agent-capability-viewmodel-test.ts",
     "test:governance-pack": "npx tsx scripts/governance-active-pack-test.ts",
-    "test:lane-detail": "npx tsx scripts/lane-detail-context-test.ts",
     "check:code-health": "bash ../../scripts/code-health/scan.sh --repo bifrost-platform",
     "prepare": "cd .. && husky"
   },

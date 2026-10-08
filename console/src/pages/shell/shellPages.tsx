@@ -1,10 +1,3 @@
-import { shellNavEntry } from '@/lib/shell/consoleRoutes'
-
-function ShellQuestion({ question }: { question: string }) {
-  return <p className="m-0 max-w-2xl text-sm text-muted-foreground">{question}</p>
-}
-
-/** Placeholder shells. S3–S5 replace the body of the page they own. */
 export { StatusPage } from './status/StatusPage'
 
 export { DataPage } from './data/DataPage'

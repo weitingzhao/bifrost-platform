@@ -1,25 +1,21 @@
 import { useState } from 'react'
 import { Button, StatusLamp, cn } from '@bifrost/ui'
-import { BookOpen, RefreshCw, User } from 'lucide-react'
+import { RefreshCw, User } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { GUIDES_DEFAULT_TAB } from '@/lib/consoleNavConfig'
 import {
   platformAuthAuthenticatedBadgeClass,
   platformAuthRoleBadgeClass,
 } from '@/lib/platformAuthUi'
 
 export type UserMenuProps = {
-  /** Navigate to a console tab (Guides landing, etc.). */
-  onSelectTab: (tabId: string) => void
   /** Ops platform-api health. */
   opsApiHealthy: boolean | undefined
   /** Refresh matrices / context / health. */
@@ -27,12 +23,8 @@ export type UserMenuProps = {
   className?: string
 }
 
-/**
- * Shell User menu — Session · Guides (single entry) · Shell.
- * Governance doc detail lives in Guides settings nav, not this dropdown.
- */
+/** Shell User menu — session and shell health. */
 export function UserMenu({
-  onSelectTab,
   opsApiHealthy,
   onRefresh,
   className,
@@ -62,11 +54,6 @@ export function UserMenu({
     queueMicrotask(() => refreshCapabilities())
   }
 
-  function handleSelectTab(tabId: string) {
-    onSelectTab(tabId)
-    setOpen(false)
-  }
-
   return (
     <DropdownMenu
       open={open}
@@ -94,7 +81,7 @@ export function UserMenu({
               ? `User menu — ${role} · authenticated`
               : isInvalidToken
                 ? 'User menu — invalid token'
-                : 'User menu — session, guides, shell'
+                : 'User menu — session and shell'
           }
           aria-label="User menu"
         >
@@ -182,16 +169,6 @@ export function UserMenu({
             </div>
           )}
         </DropdownMenuGroup>
-
-        <DropdownMenuSeparator />
-
-        <DropdownMenuItem onSelect={() => handleSelectTab(GUIDES_DEFAULT_TAB)}>
-          <BookOpen aria-hidden />
-          Guides
-          <span className="ml-auto text-[var(--text-dense-meta)] text-muted-foreground">
-            Docs
-          </span>
-        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 

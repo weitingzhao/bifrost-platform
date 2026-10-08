@@ -4,7 +4,12 @@ import {
   resolveSatelliteRocketNavLamp,
   type MissionNavLamp,
 } from '@/lib/control-room/missionNavSignals'
-import type { LaunchDeskLaneId } from '@/hooks/useLaunchDeskChecklistSignals'
+export type LaunchDeskLaneId =
+  | 'platform-release'
+  | 'trade-release'
+  | 'research-release'
+  | 'plugin-release'
+  | 'agent-release'
 
 export type SidebarNavProbeInput = {
   controlRoomBaySignal: Signal

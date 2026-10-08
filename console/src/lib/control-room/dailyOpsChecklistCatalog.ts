@@ -430,7 +430,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         fixCapability: 'semi_auto',
         manualAction:
           'If smoke fails from config drift: fix STG K8s overlay NodePort escape hatches; if pod crash: rollout restart',
-        agentTools: ['get_stg_smoke', 'rollout_restart_deployment', 'run_release_gate'],
+        agentTools: ['get_stg_smoke', 'rollout_restart_deployment'],
       },
     ],
     blocksDownstream: false,

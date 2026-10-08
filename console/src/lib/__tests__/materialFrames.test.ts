@@ -25,13 +25,7 @@ const NEUTRAL_CLASS = new RegExp(
 )
 
 /** Neutral frame classes still allowed, per file, with the count that is there today. */
-const KNOWN_NEUTRAL: ReadonlyMap<string, { count: number; why: string }> = new Map([
-  ['components/delivery/PluginStepCommandCenter.tsx', { count: 1, why: 'pending step ring (24px) — the hollow ring is the reading' }],
-  ['components/delivery/ReleaseStepCommandCenter.tsx', { count: 1, why: 'pending step ring (24px) — the hollow ring is the reading' }],
-  ['components/task-mode/TaskPhaseProgress.tsx', { count: 2, why: 'planned / unknown step rings (24px)' }],
-  ['components/task-mode/DailyOpsProcessStrip.tsx', { count: 1, why: 'planned step ring (24px)' }],
-  ['components/task-mode/operator-plan/ChecklistSection.tsx', { count: 1, why: '16px checkbox box' }],
-])
+const KNOWN_NEUTRAL: ReadonlyMap<string, { count: number; why: string }> = new Map()
 
 /** Rule blocks that may still draw a neutral border: marks, not frames. */
 const KNOWN_NEUTRAL_CSS: ReadonlyMap<string, string> = new Map([

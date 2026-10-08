@@ -32,7 +32,7 @@ export function buildPlatformReleasePrompt(ctx: PlatformReleasePromptContext): s
   const nextHint =
     nextAction != null
       ? `Platform-api next_action: ${nextAction.label} — ${nextAction.description}`
-      : 'Call get_release_state to determine the next phase.'
+      : 'Read the pipeline runs below to determine the next phase.'
 
   return [
     PLATFORM_RELEASE_AGENT_PROMPT,
@@ -47,7 +47,7 @@ export function buildPlatformReleasePrompt(ctx: PlatformReleasePromptContext): s
     '## Guidance from current UI state',
     nextHint,
     ctx.outcomeKind === 'released'
-      ? 'All four stages already show complete — confirm with get_release_state; only redeploy if operator wants a new revision.'
+      ? 'STG and PROD pipeline runs already succeeded — only redeploy if the operator wants a new revision.'
       : ctx.outcomeKind === 'failed'
         ? 'A stage failed — diagnose the failed phase first; use spawn_release_fix only for code/config failures per Release Agent rules.'
         : 'Execute the full STG → PROD release flow from Phase A unless operator chose skip-commit.',
@@ -56,9 +56,9 @@ export function buildPlatformReleasePrompt(ctx: PlatformReleasePromptContext): s
     '- Git Bridge runs on Mac Pro (not K8s). Verify git_workspace_status before commit.',
     '- **bifrost-ui is COPY-baked into platform-console image** — Tekton clones bifrost-platform + bifrost-ui from Gitea **main**. UI on a feature branch will NOT reach PROD until merged to main and redeployed.',
     '- If git_workspace_status shows bifrost-ui `needs_main_for_deploy`, stop and merge to main before Phase B.',
-    '- bifrost-platform-plugin publishing belongs to Mission Launch · Launch Plugin as the primary path; Phase G is only the fallback when a plugin change is discovered mid-release.',
-    '- Request operator approval before each gate and before PROD deploy.',
-    '- Phase F: curl PROD console CSS and verify `scrollbar-thumb` / `--sidebar-border` tokens exist.',
+    '- If bifrost-platform-plugin changed, request approval and use the plugin install steps in the release prompt.',
+    '- Request operator approval before the PROD deploy.',
+    '- After PROD, curl the console CSS and verify `scrollbar-thumb` / `--sidebar-border` tokens exist.',
   ].join('\n')
 }
 

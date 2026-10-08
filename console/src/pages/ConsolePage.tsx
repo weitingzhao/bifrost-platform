@@ -125,7 +125,6 @@ function ConsolePageInner() {
               viewerEnvLoading={status.viewerEnvLoading}
               showDevSessions={local}
               onOpenDevSessions={() => select('dev-sessions')}
-              onSelectTab={select}
             />
           </div>
           <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">

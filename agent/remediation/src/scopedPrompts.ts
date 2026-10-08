@@ -94,7 +94,7 @@ export function buildTradeDeployRunnerPrompt(req: StartRunRequest): string {
     '1. get_supply_chain / get_delivery_revisions — mirrors + Dockerfile CMs ready.',
     '2. start_pipeline_run bifrost-deliver-stg revision=main.',
     '3. Poll get_pipeline_runs until succeeded/failed; on fail use get_delivery_run_logs.',
-    '4. get_stg_smoke + run_release_gate tier=stg before PROD.',
+    '4. get_stg_smoke before PROD.',
     '5. Operator approval before bifrost-deliver-prod (same revision as STG).',
     '6. On code/config failure: spawn_trade_release_fix — one escalation per phase.',
     '',

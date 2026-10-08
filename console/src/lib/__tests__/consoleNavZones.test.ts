@@ -6,14 +6,10 @@ import {
   buildSeatRecordsItems,
   CONSOLE_NAV_GROUPS,
   ENGINEER_LAUNCH_ITEMS,
-  ENGINEER_PROFILE_ITEMS,
-  ENGINEER_WORKSPACE_ITEMS,
-  ENGINEER_WORKSPACE_SUBGROUPS,
   MISSION_CONTROL_ITEMS,
   MISSION_CONTROL_RECORDS_ITEMS,
   MISSION_CONTROL_RECORDS_LABEL,
 } from '@/lib/consoleNavConfig'
-import { resolveAllowedTabIds } from '@/lib/task-mode/navLens'
 import { resolveTaskModeId } from '@/lib/task-mode/taskModeCatalog'
 
 describe('Seat / Partner zone builders', () => {
@@ -36,44 +32,6 @@ describe('Seat / Partner zone builders', () => {
         c => c.id,
       ),
     ).toEqual(['trade-release', 'research-release'])
-  })
-
-  it('ops seat is TCC + control-room + observability; records keep defects', () => {
-    const allowed = resolveAllowedTabIds('ops')
-    const items = buildSeatNavItems(allowed, true)
-    expect(items.map(i => i.id)).toEqual([
-      'task-cc',
-      'approvals',
-      'control-room',
-      'observability',
-    ])
-    expect(buildSeatRecordsItems(allowed).map(i => i.id)).toEqual(['defects'])
-    const partner = buildPartnerNavSections(allowed)
-    expect(partner?.launch.map(i => i.id)).toEqual([
-      'platform-release',
-      'satellite-launch',
-      'plugin-release',
-      'agent-release',
-    ])
-    expect(partner?.launch.find(i => i.id === 'satellite-launch')?.children?.map(c => c.id)).toEqual(
-      ['trade-release', 'research-release'],
-    )
-    expect(partner?.workspace.map(i => i.id)).toEqual([
-      'queue',
-      'autonomous-skills',
-      'execution-log',
-      'operator-plane',
-      'agent-governance',
-      'agent-capability',
-      'commit-lineage',
-    ])
-    expect(partner?.workspaceGroups.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
-    expect(partner?.workspaceGroups[0]?.items.map(i => i.id)).toEqual(['queue'])
-    expect(partner?.workspaceGroups[1]?.items.map(i => i.id)).toEqual([
-      'autonomous-skills',
-      'execution-log',
-    ])
-    expect(partner?.profile).toEqual([])
   })
 
   it('the retired Build lens opens System: no Build Desk tabs anywhere', () => {
@@ -99,38 +57,6 @@ describe('Seat / Partner zone builders', () => {
     expect(ENGINEER_LAUNCH_ITEMS.find(i => i.id === 'satellite-launch')?.children?.map(c => c.label)).toEqual([
       'Trade',
       'Research',
-    ])
-  })
-
-  it('puts queue on Ops Desk (workspace) Partner section', () => {
-    expect(ENGINEER_WORKSPACE_ITEMS.map(i => i.id)).toEqual([
-      'queue',
-      'autonomous-skills',
-      'execution-log',
-      'operator-plane',
-      'agent-governance',
-      'agent-capability',
-      'commit-lineage',
-    ])
-    expect(ENGINEER_WORKSPACE_SUBGROUPS.map(g => g.label)).toEqual(['Operate', 'Patrol', ''])
-    expect(ENGINEER_PROFILE_ITEMS.some(i => i.id === 'queue')).toBe(false)
-    const ops = buildPartnerNavSections(resolveAllowedTabIds('ops'))
-    expect(ops?.workspace.some(i => i.id === 'queue')).toBe(true)
-  })
-
-  it('Analysis Desk has workspace + insight log + hermes status', () => {
-    expect(ENGINEER_PROFILE_ITEMS.map(i => i.id)).toEqual([
-      'analysis-workspace',
-      'insight-log',
-      'hermes-status',
-    ])
-    const analysis = buildPartnerNavSections(resolveAllowedTabIds('analysis'))
-    expect(analysis?.launch).toEqual([])
-    expect(analysis?.workspace).toEqual([])
-    expect(analysis?.profile.map(i => i.id)).toEqual([
-      'analysis-workspace',
-      'insight-log',
-      'hermes-status',
     ])
   })
 

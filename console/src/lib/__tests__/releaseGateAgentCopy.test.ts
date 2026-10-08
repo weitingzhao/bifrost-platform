@@ -10,11 +10,10 @@ const AGENT_FILES = [
 ]
 
 /**
- * TD-230 gave the release gate a third result, 'inconclusive' (a required check
- * was not measured). TD-249: the remediation agent's own copy still said
- * pass/fail, so an agent could read an unmeasured gate as passed. Any line in
- * the agent copy that describes a gate result as pass/fail must also name
- * inconclusive.
+ * TD-230 gave the release gate a third result, 'inconclusive'. TD-249 required
+ * the remediation agent to name that result. Phase 3 removed the release-gate
+ * tool and its copy. Any line that still describes a gate result as pass/fail
+ * must also name inconclusive.
  */
 describe('remediation agent gate copy names inconclusive (TD-249)', () => {
   for (const rel of AGENT_FILES) {
@@ -25,7 +24,6 @@ describe('remediation agent gate copy names inconclusive (TD-249)', () => {
         .filter(({ line }) => /gate/i.test(line) && /pass\s*\/\s*fail/i.test(line) && !/inconclusive/.test(line))
         .map(({ line, n }) => `${rel}:${n} ${line.trim()}`)
       expect(offenders).toEqual([])
-      expect(lines.join('\n')).toMatch(/inconclusive/)
     })
   }
 })

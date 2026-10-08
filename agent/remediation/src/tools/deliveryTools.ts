@@ -1,5 +1,5 @@
 import type { SDKCustomTool } from '@cursor/sdk'
-import { jsonText, platformDelete, platformGet, platformPost, platformPostAdmin } from '../platformClient.js'
+import { jsonText, platformDelete, platformGet, platformPost } from '../platformClient.js'
 import { textResult } from './helpers.js'
 
 export function buildDeliveryTools(): Record<string, SDKCustomTool> {
@@ -106,26 +106,6 @@ export function buildDeliveryTools(): Record<string, SDKCustomTool> {
 
     // ── Delivery / Promote tools (Release Agent — Phase B–F) ──
 
-    get_release_state: {
-      description:
-        'Fetch the four-stage release state machine (stg_deploy → stg_gate → prod_deploy → prod_gate) with next_action guidance. Use this to decide what to do next in a release flow.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tier: {
-            type: 'string',
-            description: '"platform" (default) or omit for unified state',
-          },
-        },
-      },
-      async execute(args) {
-        const tier = args.tier != null ? `?tier=${encodeURIComponent(String(args.tier))}` : ''
-        const data = await platformGet(`/api/v1/promote/release-state${tier}`)
-        return textResult(jsonText(data))
-      },
-    },
-
-
     start_pipeline_run: {
       description:
         'Start a Tekton pipeline run (deploy). Requires operator role. Returns the created PipelineRun name.',
@@ -172,29 +152,6 @@ export function buildDeliveryTools(): Record<string, SDKCustomTool> {
         const pipeline = String(args.pipeline ?? '')
         const data = await platformGet(
           `/api/v1/delivery/pipelines/${encodeURIComponent(pipeline)}/runs`,
-        )
-        return textResult(jsonText(data))
-      },
-    },
-
-
-    run_release_gate: {
-      description:
-        'Execute a release gate check (admin role required). Evaluates health probes, deploy status, and blockers. Returns result pass, fail, or inconclusive (a required check was not measured; not a pass) with details.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tier: {
-            type: 'string',
-            description: '"platform-stg" or "platform-prod"',
-          },
-        },
-        required: ['tier'],
-      },
-      async execute(args) {
-        const tier = String(args.tier ?? 'platform-stg')
-        const data = await platformPostAdmin(
-          `/api/v1/promote/release-gate?tier=${encodeURIComponent(tier)}`,
         )
         return textResult(jsonText(data))
       },

@@ -11,9 +11,6 @@ import type {
   StgSmokeResponse,
   Target,
 } from '../src/api/types'
-import {
-  DELIVER_STG_RECOVER_SCOPE,
-} from '../src/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '../src/lib/agent/prodEnvironmentFixPrompt'
 import { buildFleetSnapshot } from '../src/lib/control-room/buildFleetSnapshot'
 import {
@@ -25,12 +22,6 @@ import {
   viewerEnvBadgeLabel,
   type FleetCell,
 } from '../src/lib/control-room/fleetSnapshot'
-import {
-  cellAllowsAgentFix,
-  lookupFleetFixRoute,
-  pickFleetFixCell,
-  resolveCellFixScope,
-} from '../src/lib/control-room/fleetCellFix'
 
 function target(id: string, ok: boolean): Target {
   return {
@@ -622,44 +613,6 @@ check('fail → NO-GO; degraded → NO-GO (not green)', () => {
     },
   ]
   assert.equal(resolveFleetVerdict(degCells).kind, 'NO-GO')
-})
-
-check('fleetCellFix engineer blocked; satellite scopes do not cross', () => {
-  const route = lookupFleetFixRoute('engineer', 'span')
-  assert.ok(route)
-  assert.equal(route.agentFixAllowed, false)
-  assert.equal(route.navigateTabId, 'operator-plane')
-
-  assert.equal(lookupFleetFixRoute('satellite', 'stg')?.fixScope, DELIVER_STG_RECOVER_SCOPE)
-  assert.equal(lookupFleetFixRoute('satellite', 'dev')?.fixScope, PROD_ENV_FIX_SCOPE)
-  assert.equal(lookupFleetFixRoute('satellite', 'prod')?.fixScope, PROD_ENV_FIX_SCOPE)
-
-  const snap = buildFleetSnapshot({
-    viewerEnv: 'dev',
-    matrices: [matrix('dev', false), matrix('stg'), matrix('prod')],
-    self: selfHealth(['stg', 'prod']),
-    stg: stgSmokeOk,
-    cluster: clusterOk,
-  })
-  const cell = pickFleetFixCell(snap)
-  assert.ok(cell)
-  assert.equal(cell.role, 'satellite')
-  assert.equal(cell.env, 'dev')
-  assert.ok(cellAllowsAgentFix(cell))
-  assert.equal(resolveCellFixScope(cell), PROD_ENV_FIX_SCOPE)
-
-  const stgFail = buildFleetSnapshot({
-    viewerEnv: 'dev',
-    matrices: [matrix('dev'), matrix('stg', false), matrix('prod')],
-    self: selfHealth(['dev', 'stg', 'prod']),
-    stg: stgSmokeOk,
-    cluster: clusterOk,
-  })
-  const stgCell = getCell(stgFail, 'satellite', 'stg')
-  assert.ok(stgCell)
-  assert.equal(stgCell.signal, 'fail')
-  assert.equal(resolveCellFixScope(stgCell), DELIVER_STG_RECOVER_SCOPE)
-  assert.notEqual(resolveCellFixScope(stgCell), PROD_ENV_FIX_SCOPE)
 })
 
 console.log(`\n${passed} checks passed`)

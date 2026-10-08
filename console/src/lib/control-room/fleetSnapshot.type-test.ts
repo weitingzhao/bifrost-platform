@@ -5,7 +5,6 @@
 import type { FleetSnapshot, FleetVerdictKind } from './fleetSnapshot'
 import { operateQueueClearLabel } from './fleetSnapshot'
 import { buildFleetSnapshot } from './buildFleetSnapshot'
-import { lookupFleetFixRoute, pickFleetFixCell } from './fleetCellFix'
 
 const snap = buildFleetSnapshot({
   viewerEnv: 'dev',
@@ -15,5 +14,3 @@ const snap = buildFleetSnapshot({
 const kind: FleetVerdictKind = snap.verdict.kind
 void kind
 void operateQueueClearLabel(0, snap.fleetClear)
-void lookupFleetFixRoute('engineer', 'span')
-void pickFleetFixCell(snap)

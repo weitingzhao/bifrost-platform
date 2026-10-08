@@ -53,7 +53,6 @@ export function ConsoleHeader({
   viewerEnvLoading,
   showDevSessions,
   onOpenDevSessions,
-  onSelectTab,
 }: {
   pageTitle: string
   pageDescription?: string
@@ -64,7 +63,6 @@ export function ConsoleHeader({
   viewerEnvLoading?: boolean
   showDevSessions: boolean
   onOpenDevSessions: () => void
-  onSelectTab: (tabId: string) => void
 }) {
   return (
     <header
@@ -114,7 +112,7 @@ export function ConsoleHeader({
 
       <ToolsMenu />
 
-      <UserMenu onSelectTab={onSelectTab} opsApiHealthy={healthy} onRefresh={onRefresh} />
+      <UserMenu opsApiHealthy={healthy} onRefresh={onRefresh} />
     </header>
   )
 }

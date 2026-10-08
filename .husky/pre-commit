@@ -1,5 +1,11 @@
 #!/usr/bin/env sh
 # Code-health ratchet — refuse commit when value > baseline.
+# scan.sh finds repos as <workspace>/bifrost-platform. That walk always hits the
+# main checkout, so a worktree commit was counted against the wrong tree.
+# Point --root at this checkout instead.
 set -e
 ROOT="$(git rev-parse --show-toplevel)"
-bash "${ROOT}/../scripts/code-health/scan.sh" --repo bifrost-platform
+SCAN_ROOT="$(mktemp -d)"
+trap 'rm -rf "$SCAN_ROOT"' EXIT INT TERM
+ln -s "$ROOT" "$SCAN_ROOT/bifrost-platform"
+bash "${ROOT}/../scripts/code-health/scan.sh" --repo bifrost-platform --root "$SCAN_ROOT"

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse, SelfHealthResponse, Target } from '@/api/matrixTypes'
 import type { StgSmokeResponse } from '@/api/deliveryTypes'
-import { DATA_LAYER_BACKUP_SCOPE, DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
+import { DATA_LAYER_BACKUP_SCOPE } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { buildFleetSnapshot } from '@/lib/control-room/buildFleetSnapshot'
 import {
@@ -33,12 +33,6 @@ import {
   type FleetCell,
   type FleetStandard,
 } from '@/lib/control-room/fleetSnapshot'
-import {
-  cellAllowsAgentFix,
-  lookupFleetFixRoute,
-  pickFleetFixCell,
-  resolveCellFixScope,
-} from '@/lib/control-room/fleetCellFix'
 
 function target(id: string, ok: boolean): Target {
   return {
@@ -874,49 +868,5 @@ describe('fleetEnvColumnPosture', () => {
     expect(posture.dev).toBe('fail')
     expect(posture.stg).toBe('ok')
     expect(posture.prod).toBe('ok')
-  })
-})
-
-describe('fleetCellFix routing', () => {
-  it('allows Engineer Agent Fix via operator-plane-remediate when runners can act', () => {
-    const route = lookupFleetFixRoute('engineer', 'span')
-    expect(route?.agentFixAllowed).toBe(true)
-    expect(route?.fixScope).toBe('operator-plane-remediate')
-    expect(route?.navigateTabId).toBe('operator-plane')
-  })
-
-  it('scopes satellite fix routes per environment without crossing', () => {
-    expect(lookupFleetFixRoute('satellite', 'stg')?.fixScope).toBe(DELIVER_STG_RECOVER_SCOPE)
-    expect(lookupFleetFixRoute('satellite', 'dev')?.fixScope).toBe(PROD_ENV_FIX_SCOPE)
-    expect(lookupFleetFixRoute('satellite', 'prod')?.fixScope).toBe(PROD_ENV_FIX_SCOPE)
-  })
-
-  it('picks the worst fixable cell from a snapshot and resolves its scope', () => {
-    const snap = buildFleetSnapshot({
-      viewerEnv: 'dev',
-      matrices: [matrix('dev', false), matrix('stg'), matrix('prod')],
-      self: selfHealth(['stg', 'prod']),
-      stg: stgSmokeOk,
-      cluster: clusterOk,
-    })
-    const cell = pickFleetFixCell(snap)
-    expect(cell?.role).toBe('satellite')
-    expect(cell?.env).toBe('dev')
-    expect(cellAllowsAgentFix(cell!)).toBe(true)
-    expect(resolveCellFixScope(cell!)).toBe(PROD_ENV_FIX_SCOPE)
-  })
-
-  it('uses the STG-specific recovery scope for a failing STG satellite cell', () => {
-    const stgFail = buildFleetSnapshot({
-      viewerEnv: 'dev',
-      matrices: [matrix('dev'), matrix('stg', false), matrix('prod')],
-      self: selfHealth(['dev', 'stg', 'prod']),
-      stg: stgSmokeOk,
-      cluster: clusterOk,
-    })
-    const stgCell = getCell(stgFail, 'satellite', 'stg')
-    expect(stgCell?.signal).toBe('fail')
-    expect(resolveCellFixScope(stgCell!)).toBe(DELIVER_STG_RECOVER_SCOPE)
-    expect(resolveCellFixScope(stgCell!)).not.toBe(PROD_ENV_FIX_SCOPE)
   })
 })

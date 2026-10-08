@@ -160,14 +160,6 @@ export function buildPlatformTools(jobId: string): Record<string, SDKCustomTool>
         return textResult(jsonText(data))
       },
     },
-    get_hermes_first_task: {
-      description: 'Canonical Hermes First Task prompt (L0 read-only Mission health pass).',
-      inputSchema: { type: 'object', properties: {} },
-      async execute() {
-        const data = await platformGet('/api/v1/agent/hermes/first-task')
-        return textResult(jsonText(data))
-      },
-    },
     get_agent_performance: {
       description: 'Flight Director — agent performance KPIs (7d/30d) from remediation JobStore.',
       inputSchema: { type: 'object', properties: {} },
@@ -330,14 +322,6 @@ export function buildPlatformTools(jobId: string): Record<string, SDKCustomTool>
       inputSchema: { type: 'object', properties: {} },
       async execute() {
         const data = await platformGet('/api/v1/delivery/pipelines')
-        return textResult(jsonText(data))
-      },
-    },
-    get_operate_queue: {
-      description: 'Open + recently closed Operate Queue handoffs (D11 / checklist semi_auto).',
-      inputSchema: { type: 'object', properties: {} },
-      async execute() {
-        const data = await platformGet('/api/v1/operate/queue')
         return textResult(jsonText(data))
       },
     },

@@ -179,8 +179,9 @@ export function ControlRoomPage({
   } = useMissionSnapshot()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
-  const operateQueueQuery = useOperateQueue()
-  const briefsQuery = usePendingDecisionBriefs()
+  // Status does not render the operate bay. Skip retired queue and brief endpoints.
+  const operateQueueQuery = useOperateQueue({ enabled: !statusSurface })
+  const briefsQuery = usePendingDecisionBriefs({ enabled: !statusSurface })
   const networkProbe = useNetworkLiveProbe()
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
 
