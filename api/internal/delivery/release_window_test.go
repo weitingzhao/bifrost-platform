@@ -19,6 +19,14 @@ func TestResearchAllowedForTheHolder(t *testing.T) {
 	}
 }
 
+func TestMissingWhoIsRefusedWhenWindowMatches(t *testing.T) {
+	window := map[string]any{"who": "ada@host", "what": "bifrost-platform,bifrost-ui"}
+	msg := decideReleaseWindow(true, window, "bifrost-deliver-platform", "")
+	if !stringsContains(msg, "missing who") || !stringsContains(msg, "ada@host") {
+		t.Fatalf("got %q", msg)
+	}
+}
+
 func TestSomeoneElseIsRefused(t *testing.T) {
 	window := map[string]any{"who": "ada@host", "what": "bifrost-research"}
 	msg := decideReleaseWindow(true, window, "bifrost-deliver-research", "bob@host")
