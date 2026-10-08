@@ -36,10 +36,9 @@ const pluginProbeTimeout = 8 * time.Second
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	var b strings.Builder
-	// Workers is scraped for its own process series and the maintainer gauges
-	// (including a later release-policy series once that loop calls
-	// maintainer.Success). Plugin health is already on platform-api's
-	// ServiceMonitor; probing again from workers doubles that cost.
+	// Workers is scraped for its own process series and the maintainer gauges.
+	// Plugin health is already on platform-api's ServiceMonitor; probing again
+	// from workers doubles that cost.
 	if config.CurrentRole() != config.RoleWorkers {
 		s.writePluginMetrics(&b, r)
 	}

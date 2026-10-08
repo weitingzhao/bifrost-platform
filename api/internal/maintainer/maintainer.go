@@ -28,11 +28,6 @@ const (
 	LoopPatrol          = "patrol-autopilot"
 	LoopChecklistProber = "checklist-prober"
 	LoopReleaseRecorder = "release-recorder"
-	// LoopReleasePolicy is the suffix for the hourly release-policy expiry
-	// check. That loop is not started in this tree (LANE-RP). When it lands,
-	// a successful pass calls Success with the id its MAINTAINERS.yaml row
-	// uses. This package does not start it and does not list it in Loops.
-	LoopReleasePolicy = "release-policy-expiry"
 
 	ResultSuccess = "success"
 	ResultFailure = "failure"
