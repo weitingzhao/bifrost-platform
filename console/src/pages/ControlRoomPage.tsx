@@ -32,7 +32,6 @@ import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { PLATFORM_RELEASE_AGENT_PROMPT } from '@/lib/control-room/controlRoomOperatePack'
 import {
   buildControlRoomAgentPack,
   buildControlRoomDiagnosePrefill,
@@ -60,7 +59,6 @@ import {
 } from '@/lib/control-room/promoteCutover'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
@@ -68,7 +66,6 @@ import { DELIVER_STG_RECOVER_SCOPE } from '@/lib/agent/agentScopes'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchRemediationJobs, startRemediation } from '@/api/remediation'
-import { PLATFORM_RELEASE_SCOPE } from '@/lib/agent/platformReleaseAgentPrompt'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
@@ -145,7 +142,6 @@ export function ControlRoomPage({
   onOpenLaunchView,
   onOpenFleetVendor,
   onModeChange,
-  ambientJobId,
   onStartAgentJob,
   surface = 'full',
 }: ControlRoomPageProps) {
@@ -199,24 +195,6 @@ export function ControlRoomPage({
     )[0]
     return latest?.status === 'failed' || latest?.phase === 'failed'
   }, [jobsQuery.data?.jobs])
-
-  const aiRelease = useAmbientAgentTask({
-    canOperate,
-    ambientJobId,
-    onStartAgentJob,
-    scope: PLATFORM_RELEASE_SCOPE,
-    label: scopeToLabel(PLATFORM_RELEASE_SCOPE),
-    buildRequest: () => {
-      const spineNote =
-        context?.focus?.headline != null ? `Spine focus: ${context.focus.headline}\n\n` : ''
-      return { prompt: `${spineNote}${PLATFORM_RELEASE_AGENT_PROMPT}` }
-    },
-  })
-
-  const dispatchReleaseAgent = () => {
-    if (!canOperate) return
-    aiRelease.trigger()
-  }
 
   const qc = useQueryClient()
   const playbookFixMutation = useMutation({
@@ -531,7 +509,6 @@ export function ControlRoomPage({
               matrices={matrixList}
               context={context}
               onOpenAgentDesk={openAgentDeskPrefill}
-              onDispatchReleaseAgent={dispatchReleaseAgent}
               onOpenDelivery={onOpenDelivery}
               onOpenPromote={handleOpenPromotePreflight}
             />
@@ -608,9 +585,6 @@ export function ControlRoomPage({
                     onOpenDelivery={onOpenDelivery}
                     onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
                     onOpenAgentDesk={() => onOpenAgentDesk?.()}
-                    onDispatchReleaseAgent={dispatchReleaseAgent}
-                    releaseDispatchPending={aiRelease.isPending}
-                    canDispatchRelease={!aiRelease.disabled}
                   />
                 </div>
 

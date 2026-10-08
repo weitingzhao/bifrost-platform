@@ -12,7 +12,6 @@ import {
 import type { MatrixResponse, Reachability, Target } from '@/api/matrixTypes'
 import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
 import { StatusLamp } from '@/components/StatusLamp'
-import { useAmbientAgentTask } from '@/hooks/useAmbientAgentTask'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { useFleetSnapshot } from '@/hooks/useFleetSnapshot'
 import type { AmbientAgentShellProps } from '@/lib/agent/ambientAgent'
@@ -21,17 +20,10 @@ import {
   peekSatelliteBusTradeEnvFocus,
 } from '@/lib/activity/activityPageFocus'
 import { useInFlightBusWorkload } from '@/components/activity/useInFlightBusWorkload'
-import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
-import {
-  buildSatelliteBusIngestTriagePrompt,
-  SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
-  summarizeIngestServices,
-} from '@/lib/agent/satelliteBusIngestTriagePrompt'
 import { projectPayloadReadinessRows } from '@/lib/control-room/payloadReadiness'
 import {
   buildSocketHealthMatrix,
   formatBusProbeDetail,
-  summarizeSocketHealthAllEnvs,
   type BusEnvId,
 } from '@/lib/satellite/socketHealthSemantics'
 import { filterTradeApiTargets, tradeApiTargetCounts } from '@/lib/satellite/tradeApiTargets'
@@ -88,10 +80,7 @@ function renderText(value: unknown): string {
  * Satellite Bus data layer — matrix / bus-deep / cluster probes + derived view model.
  * Verdict derivation stays in buildSatelliteBusViewModel (do not re-derive here).
  */
-export function useSatelliteBusQueries({
-  ambientJobId,
-  onStartAgentJob,
-}: AmbientAgentShellProps = {}) {
+export function useSatelliteBusQueries(_props: AmbientAgentShellProps = {}) {
   const { canOperate } = usePlatformAuth()
   const [tradeEnv, setTradeEnv] = useState<TradeEnv>(() => {
     const env = peekSatelliteBusTradeEnvFocus()
@@ -236,11 +225,6 @@ export function useSatelliteBusQueries({
     )
   }, [ns, pluginWorkloadsQuery.data?.workloads, workloadsQuery.data?.workloads])
 
-  const ingestSummary = useMemo(
-    () => summarizeIngestServices(busDeep?.ingest.services ?? []),
-    [busDeep?.ingest.services],
-  )
-
   const socketHealthMatrix = useMemo(() => {
     const probeDetailFor = (env: BusEnvId): string | undefined => {
       const bus = busesByEnv[env]
@@ -263,32 +247,10 @@ export function useSatelliteBusQueries({
     return buildSocketHealthMatrix(slices)
   }, [busesByEnv])
 
-  const socketSummary = useMemo(
-    () => summarizeSocketHealthAllEnvs(socketHealthMatrix),
-    [socketHealthMatrix],
-  )
-
   const tradeApiTargetRows = useMemo(
     (): Target[] => (envMatrix != null ? filterTradeApiTargets(envMatrix) : []),
     [envMatrix],
   )
-
-  const aiIngestTriage = useAmbientAgentTask({
-    canOperate,
-    ambientJobId,
-    onStartAgentJob,
-    scope: SATELLITE_BUS_INGEST_TRIAGE_SCOPE,
-    label: scopeToLabel(SATELLITE_BUS_INGEST_TRIAGE_SCOPE),
-    buildRequest: () => ({
-      prompt: buildSatelliteBusIngestTriagePrompt({
-        env: tradeEnv,
-        namespace: ns,
-        ingestHeadline: ingestSummary.headline,
-        socketHeadline: socketSummary.headline,
-        busReachability: busDeep?.reachability,
-      }),
-    }),
-  })
 
   const daemonRows = useMemo((): MonitorKvRow[] => {
     if (busLoading) return []
@@ -383,7 +345,6 @@ export function useSatelliteBusQueries({
     socketHealthMatrix,
     tradeApiTargetRows,
     criticalProcesses,
-    aiIngestTriage,
     canOperate,
     daemonRows,
     accountSyncRows,

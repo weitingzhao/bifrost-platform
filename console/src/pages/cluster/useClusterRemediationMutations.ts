@@ -1,31 +1,16 @@
 import { useMutation } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
-import { fetchAgentBridge } from '@/api/agentOps'
-import { fetchMatrix, fetchSelfHealth, isAllMatrices } from '@/api/core'
-import { fetchSupplyChain } from '@/api/delivery'
-import { fetchStgSmoke } from '@/api/promote'
-import { startRemediation, cancelRemediationJob, fetchRemediationHealth } from '@/api/remediation'
+import { startRemediation, cancelRemediationJob } from '@/api/remediation'
 import type { RemediationJob } from '@/api/remediationTypes'
 import { CLUSTER_ISSUES_FULL_AUTO_SCOPE } from '@/lib/agent/agentScopes'
 import { scopeToLabel } from '@/lib/agent/agentTaskCatalog'
-import { buildClusterAutoCheckBundle } from '@/lib/cluster/buildClusterAutoCheckPrompt'
-import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
 import type { ClusterMutationActuation, ClusterPageMutationsInput } from './clusterMutationTypes'
-
-function settledValue<T>(p: PromiseSettledResult<T>): T | undefined {
-  return p.status === 'fulfilled' ? p.value : undefined
-}
 
 export function useClusterRemediationMutations(
   actuation: ClusterMutationActuation,
   input: Pick<
     ClusterPageMutationsInput,
-    | 'clusterSummary'
-    | 'serviceReadiness'
-    | 'governance'
-    | 'postgresStatus'
     | 'queries'
-    | 'selectedNs'
     | 'onOpenAgentDesk'
     | 'onStartAgentJob'
     | 'onExpandAgentDock'
@@ -33,12 +18,7 @@ export function useClusterRemediationMutations(
   >,
 ) {
   const {
-    clusterSummary,
-    serviceReadiness,
-    governance,
-    postgresStatus,
     queries,
-    selectedNs,
     onOpenAgentDesk,
     onStartAgentJob,
     onExpandAgentDock,
@@ -73,32 +53,6 @@ export function useClusterRemediationMutations(
     onError: handleActuationError,
   })
 
-  const remediationStartMutation = useMutation({
-    mutationFn: startRemediation,
-    onSuccess: job => {
-      void qc.invalidateQueries({ queryKey: ['remediation', 'jobs'] })
-      if (onStartAgentJob != null) {
-        const scope = job.scope ?? CLUSTER_ISSUES_FULL_AUTO_SCOPE
-        setRemediationPanelOpen(false)
-        setRemediationJobId(job.id)
-        setRemediationJob(job)
-        onStartAgentJob({ id: job.id, scope, label: scopeToLabel(scope) })
-        actuation.setActionError(null)
-        return
-      }
-      if (onOpenAgentDesk != null) {
-        onOpenAgentDesk(job.id)
-        actuation.setActionError(null)
-        return
-      }
-      setRemediationJob(job)
-      setRemediationJobId(job.id)
-      setRemediationPanelOpen(true)
-      actuation.setActionError(null)
-    },
-    onError: (err: Error) => actuation.setActionError(err.message),
-  })
-
   const remediationCancelMutation = useMutation({
     mutationFn: cancelRemediationJob,
     onSuccess: job => {
@@ -106,72 +60,6 @@ export function useClusterRemediationMutations(
     },
     onError: (err: Error) => actuation.setActionError(err.message),
   })
-
-  const handleAutoRemediate = useCallback(() => {
-    if (clusterSummary == null) return
-
-    void (async () => {
-      const [supplyR, smokeR, selfR, runnerR, bridgeR, matrixR] = await Promise.allSettled([
-        fetchSupplyChain(),
-        fetchStgSmoke(),
-        fetchSelfHealth(),
-        fetchRemediationHealth(),
-        fetchAgentBridge(),
-        fetchMatrix(),
-      ])
-
-      const matrixData = settledValue(matrixR)
-      const matrices =
-        matrixData == null ? [] : isAllMatrices(matrixData) ? matrixData.matrices : [matrixData]
-
-      const bundle = buildClusterAutoCheckBundle({
-        summary: clusterSummary,
-        serviceReadiness,
-        postgresStatus,
-        governance,
-        supplyChain: settledValue(supplyR),
-        stgSmoke: settledValue(smokeR),
-        selfHealth: settledValue(selfR),
-        runnerHealth: settledValue(runnerR),
-        agentBridge: settledValue(bridgeR),
-        matrices,
-        clusterLlmContext: buildClusterLlmContext({
-          summary: clusterSummary,
-          nodes: queries.nodesQuery.data?.nodes,
-          governance,
-          serviceReadiness,
-          metrics: queries.metricsQuery.data,
-          namespaces: queries.namespacesQuery.data?.namespaces,
-          placement: queries.placementQuery.data,
-          observability: queries.observabilityQuery.data,
-          selectedNamespace: selectedNs,
-          workloads: queries.workloadsQuery.data?.workloads,
-        }),
-      })
-
-      remediationStartMutation.mutate({
-        scope: CLUSTER_ISSUES_FULL_AUTO_SCOPE,
-        cluster_summary: clusterSummary,
-        service_readiness: serviceReadiness,
-        governance,
-        issues: bundle.fleetIssues,
-        prompt: bundle.prompt,
-      })
-    })()
-  }, [
-    clusterSummary,
-    governance,
-    postgresStatus,
-    queries.metricsQuery.data,
-    queries.namespacesQuery.data?.namespaces,
-    queries.nodesQuery.data?.nodes,
-    queries.observabilityQuery.data,
-    queries.placementQuery.data,
-    queries.workloadsQuery.data?.workloads,
-    remediationStartMutation,
-    selectedNs,
-    serviceReadiness,
-  ])
 
   /** Track ambient dock job on this page — do not open the page RemediationPanel (dock owns UI). */
   const followAmbientRemediationJob = useCallback(
@@ -256,9 +144,7 @@ export function useClusterRemediationMutations(
     remediationJobId,
     remediationJob,
     playbookFixMutation,
-    remediationStartMutation,
     remediationCancelMutation,
-    handleAutoRemediate,
     followAmbientRemediationJob,
     handleOpenRemediationSession,
     handleRemediationComplete,

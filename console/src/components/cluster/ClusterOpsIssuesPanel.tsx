@@ -402,7 +402,7 @@ export function ClusterOpsIssuesPanel({
               ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the Operator Dock.`
               : allClear
                 ? 'Fleet + ops plane clear — re-verify on demand.'
-                : 'Ranked issues — run Auto-Remediate to start the Agent; progress lives in the Operator Dock.'}
+                : 'Ranked issues. Repair is not started from this page.'}
           </p>
           {actions}
         </div>
@@ -452,9 +452,7 @@ export function ClusterOpsIssuesPanel({
         </p>
       ) : allClear ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-[var(--muted-foreground)]">
-          No ranked issues. Use{' '}
-          <strong className="font-medium text-[var(--foreground)]">AI Auto-Check</strong> to re-verify
-          fleet and Control/Agent/release probes autonomously.
+          No ranked issues. Fleet and Control/Agent/release probes are clear.
         </p>
       ) : (
         <DenseDataTable>
@@ -617,8 +615,8 @@ export function ClusterOpsIssuesPanel({
         sessionActive
           ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the session — no need to Sync kubeconfig manually.`
           : allClear
-            ? 'Same signal as Verdict READY: usable, no repair needed. Agent can still verify on demand.'
-            : 'Same signal as Verdict — ranked issues; run Auto-Remediate so the Agent decides repair (including ensure_kubeconfig_secret).'
+            ? 'Same signal as Verdict READY: usable, no repair needed.'
+            : 'Same signal as Verdict — ranked issues. Repair is not started from this page.'
       }
       actions={actions}
       bodyPadding={allClear && pods.length === 0 ? 'default' : 'none'}

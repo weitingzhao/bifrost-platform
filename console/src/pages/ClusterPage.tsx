@@ -249,8 +249,6 @@ export function ClusterPage({
                 m.playbookFixMutation.mutate({ scope, prompt })
               }}
               playbookFixPending={m.playbookFixMutation.isPending}
-              onAutoCheck={m.handleAutoRemediate}
-              autoCheckPending={m.remediationStartMutation.isPending}
               canOperate={canOperate}
               activeRemediationJob={q.activeRemediationJob}
               onOpenRemediationSession={m.handleOpenRemediationSession}
