@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -107,6 +108,7 @@ func (h *Handler) probeAndMerge(ctx context.Context, p *Prober) {
 	runID := "prober-" + time.Now().UTC().Format("20060102T150405Z")
 	if _, err := h.store.Merge(MergeRequest{RunID: runID, Source: proberSource, Signals: sigs}); err != nil {
 		slog.Warn("checklist prober merge failed", "err", err)
+		maintainer.Failure(maintainer.PlatformID(maintainer.LoopChecklistProber))
 		return
 	}
 	bad := []string{}
@@ -116,6 +118,7 @@ func (h *Handler) probeAndMerge(ctx context.Context, p *Prober) {
 		}
 	}
 	slog.Info("checklist prober run", "run_id", runID, "items", len(sigs), "red", strings.Join(bad, ","))
+	maintainer.Success(maintainer.PlatformID(maintainer.LoopChecklistProber))
 }
 
 // Probe returns one signal per catalog item it covers. The data-husbandry items

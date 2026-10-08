@@ -28,6 +28,7 @@ var operatorPlanePackages = []string{
 	"hermesgateway",
 	"hermesinsight",
 	"hermesreadiness",
+	"launchd",
 	"patrol",
 	"remediation",
 }

@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -466,12 +467,15 @@ func (s *Service) StartFailedBackupSweep(ctx context.Context) {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 		run := func() {
+			id := maintainer.PlatformID(maintainer.LoopBackupSweep)
 			resp, err := s.SweepExpiredFailedBackupCRs(ctx)
 			if err != nil {
 				slog.Warn("failed backup sweep", "err", err, "message", resp.Message)
+				maintainer.Failure(id)
 				return
 			}
 			slog.Info("failed backup sweep", "deleted", len(resp.DeletedBackups), "message", resp.Message)
+			maintainer.Success(id)
 		}
 		run()
 		for {

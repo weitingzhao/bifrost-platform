@@ -18,6 +18,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -90,6 +91,12 @@ func (s *Service) Start(ctx context.Context, interval time.Duration) {
 		first := true
 		tick := func() {
 			r := s.Tick(ctx)
+			id := maintainer.PlatformID(maintainer.LoopReleaseRecorder)
+			if len(r.Errors) > 0 {
+				maintainer.Failure(id)
+			} else {
+				maintainer.Success(id)
+			}
 			// the first pass always logs, so a silent recorder is visibly alive
 			if first || r.Recorded > 0 || len(r.Errors) > 0 {
 				slog.Info("release recorder", "first", first, "runs", r.Runs, "matched", r.Matched, "recorded", r.Recorded,

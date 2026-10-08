@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -79,6 +80,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writePluginGauges(&b, healths)
+	maintainer.Write(&b)
 	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
 	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
 	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))

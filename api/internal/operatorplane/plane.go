@@ -111,6 +111,7 @@ type route struct {
 	pattern  string
 	operator bool
 	pick     func(*Plane) http.HandlerFunc
+	viewer   bool // token of viewer or above; operator still uses the operator flag
 }
 
 // routeTable is the L-1 surface. Read paths are viewer level; anything that
@@ -118,45 +119,50 @@ type route struct {
 // platform-api served before the plane was extracted.
 func routeTable() []route {
 	return []route{
-		{"GET", "/agent/nightly-report", false, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleNightlyReport }},
-		{"GET", "/agent/bridge", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleBridge }},
-		{"GET", "/agent/smoke", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleSmoke }},
-		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }},
-		{"GET", "/agent/hermes/readiness", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleReadiness }},
-		{"GET", "/agent/hermes/first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleFirstTask }},
-		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }},
-		{"GET", "/agent/skills", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkills }},
-		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }},
-		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }},
-		{"GET", "/hermes/insights", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleList }},
-		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }},
-		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }},
-		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }},
+		{"GET", "/agent/nightly-report", false, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleNightlyReport }, false},
+		{"GET", "/agent/bridge", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleBridge }, false},
+		{"GET", "/agent/smoke", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleSmoke }, false},
+		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }, false},
+		{"GET", "/agent/hermes/readiness", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleReadiness }, false},
+		{"GET", "/agent/hermes/first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleFirstTask }, false},
+		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }, false},
+		{"GET", "/agent/skills", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkills }, false},
+		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }, false},
+		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }, false},
+		{method: "GET", pattern: "/agent/launchd", pick: func(p *Plane) http.HandlerFunc { return p.HandleLaunchd }, viewer: true},
+		{"GET", "/hermes/insights", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleList }, false},
+		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }, false},
+		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }, false},
+		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }, false},
 
-		{"POST", "/hermes/run-first-task", true, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }},
-		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }},
-		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }},
-		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }},
-		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }},
-		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }},
-		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }},
+		{"POST", "/hermes/run-first-task", true, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }, false},
+		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }, false},
+		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }, false},
+		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }, false},
+		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }, false},
+		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }, false},
+		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }, false},
 
 		// The collection is registered both with and without the trailing slash.
 		// chi's nested Route used to answer both; the Console calls the bare form
 		// and the tests the slashed one, and neither should start 404-ing.
-		{"GET", "/agent/drift-proposals", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
-		{"GET", "/agent/drift-proposals/", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
-		{"GET", "/agent/drift-proposals/{id}", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleGet }},
-		{"POST", "/agent/drift-proposals", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
-		{"POST", "/agent/drift-proposals/", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
-		{"POST", "/agent/drift-proposals/{id}/approve", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleApprove }},
-		{"POST", "/agent/drift-proposals/{id}/reject", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleReject }},
+		{"GET", "/agent/drift-proposals", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }, false},
+		{"GET", "/agent/drift-proposals/", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }, false},
+		{"GET", "/agent/drift-proposals/{id}", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleGet }, false},
+		{"POST", "/agent/drift-proposals", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }, false},
+		{"POST", "/agent/drift-proposals/", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }, false},
+		{"POST", "/agent/drift-proposals/{id}/approve", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleApprove }, false},
+		{"POST", "/agent/drift-proposals/{id}/reject", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleReject }, false},
 	}
 }
 
 func register(r chi.Router, rt route, auth *actuation.AuthService, h http.HandlerFunc) {
 	if rt.operator {
 		r.With(auth.Require(actuation.RoleOperator)).Method(rt.method, rt.pattern, h)
+		return
+	}
+	if rt.viewer {
+		r.With(auth.Require(actuation.RoleViewer)).Method(rt.method, rt.pattern, h)
 		return
 	}
 	r.Method(rt.method, rt.pattern, h)
