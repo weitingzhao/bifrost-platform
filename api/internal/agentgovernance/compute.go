@@ -130,8 +130,8 @@ func ApplyTrustOverrides(resp TrustMatrixResponse, overrides map[string]TrustOve
 		if o.Level == "L0" || o.Level == "L1" || o.Level == "L2" {
 			out.Entries[i].CurrentLevel = o.Level
 		}
-		if !o.AppliedAt.IsZero() {
-			out.Entries[i].LastOverrideAt = o.AppliedAt.UTC().Format(time.RFC3339)
+		if o.AppliedAt != "" {
+			out.Entries[i].LastOverrideAt = o.AppliedAt
 		}
 		out.Entries[i].LastOverrideBy = o.AppliedBy
 		// Recompute promotion eligibility against effective level.

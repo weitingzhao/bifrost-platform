@@ -21,10 +21,8 @@ const (
 	// It exists because the alternative was worse. A workload that needs to
 	// record its own outcomes — the Research Loop's CronJob reporting to the
 	// trust matrix — would otherwise need an operator token, and operator also
-	// carries `POST /cluster/workloads/scale` and
-	// `PUT /agent/governance/trust-overrides/{skill_id}`. That would let the
-	// Loop scale the trade `daemon`, which D10 forbids outright, and grant
-	// itself the very autonomy the trust gate is there to withhold.
+	// carries `POST /cluster/workloads/scale`. That would let the
+	// Loop scale the trade `daemon`, which D10 forbids outright.
 	RoleReporter Role = "reporter"
 	RoleOperator Role = "operator"
 	RoleAdmin    Role = "admin"

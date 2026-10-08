@@ -54,7 +54,6 @@ func init() {
 	)
 	exempt("unclassified by LANE-B1: evidence, queue, checklist, or console session — not a cluster write",
 		"POST /api/v1/audit/append",
-		"PUT /api/v1/agent/governance/trust-overrides/{skill_id}",
 		"POST /api/v1/code-health/report",
 		"POST /api/v1/code-health/rescan",
 		"PUT /api/v1/lineage/thread-title",

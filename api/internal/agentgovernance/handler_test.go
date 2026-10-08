@@ -90,7 +90,7 @@ func TestApplyTrustOverrides_Level(t *testing.T) {
 	overrides := map[string]TrustOverride{
 		"release": {
 			SkillID: "release", Level: "L0", AppliedBy: "owner",
-			AppliedAt: time.Now().UTC(),
+			AppliedAt: "2026-10-07",
 		},
 	}
 	merged := ApplyTrustOverrides(raw, overrides)

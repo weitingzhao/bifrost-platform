@@ -1,20 +1,17 @@
 package agentgovernance
 
 import (
-	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/go-chi/chi/v5"
 )
 
-type brokenOverrides struct{ readErr, writeErr error }
+type brokenOverrides struct{ readErr error }
 
 func (b brokenOverrides) List(context.Context) (map[string]TrustOverride, error) {
 	if b.readErr != nil {
@@ -22,67 +19,101 @@ func (b brokenOverrides) List(context.Context) (map[string]TrustOverride, error)
 	}
 	return map[string]TrustOverride{}, nil
 }
-func (b brokenOverrides) Put(context.Context, TrustOverride) error { return b.writeErr }
-func (b brokenOverrides) Location() string                         { return "test" }
+func (b brokenOverrides) Location() string { return "test" }
 
-func putOverride(h *Handler, skillID, body string) *httptest.ResponseRecorder {
-	r := chi.NewRouter()
-	r.Put("/trust-overrides/{skill_id}", h.HandlePutTrustOverride)
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPut, "/trust-overrides/"+skillID, bytes.NewBufferString(body)))
-	return rec
+func repoTrustOverrides(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join("..", "..", "..", "config", "trust-overrides.yaml")
+	if _, err := os.Stat(p); err != nil {
+		t.Fatalf("trust overrides file: %v", err)
+	}
+	return p
 }
 
-func TestTrustOverridePutWriteFailIsServerError(t *testing.T) {
+func TestYAMLTrustOverrideAppliesResearchLoopBatch(t *testing.T) {
 	h := newTestHandler(t)
-	h.UseTrustOverrideStore(brokenOverrides{writeErr: errors.New("disk full")})
-	rec := putOverride(h, "research-loop-batch", `{"level":"L0","reason":"test"}`)
-	if rec.Code < 500 {
-		t.Fatalf("PUT with a failing store = %d, want 5xx; body = %s", rec.Code, rec.Body.String())
+	path := repoTrustOverrides(t)
+	h.UseTrustOverrideStore(NewYAMLTrustOverrideStore(path))
+	rec := httptest.NewRecorder()
+	h.HandleTrustMatrix(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("trust-matrix = %d, body %s", rec.Code, rec.Body.String())
+	}
+	var resp TrustMatrixResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StoreError != "" {
+		t.Fatalf("store_error = %q", resp.StoreError)
+	}
+	if resp.OverrideStore != path {
+		t.Fatalf("override_store = %q, want %s", resp.OverrideStore, path)
+	}
+	var entry *TrustMatrixEntry
+	for i := range resp.Entries {
+		if resp.Entries[i].SkillID == "research-loop-batch" {
+			entry = &resp.Entries[i]
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatal("research-loop-batch missing from trust matrix")
+	}
+	if entry.CurrentLevel != "L0" {
+		t.Fatalf("research-loop-batch level = %s, want L0", entry.CurrentLevel)
+	}
+	if entry.LastOverrideBy != "owner" {
+		t.Fatalf("last_override_by = %q", entry.LastOverrideBy)
 	}
 }
 
-func TestTrustOverrideListReadFailIsServiceUnavailable(t *testing.T) {
+func TestTrustOverrideMissingOrBadFileIs200(t *testing.T) {
 	h := newTestHandler(t)
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "trust-overrides.yaml")
+	h.UseTrustOverrideStore(NewYAMLTrustOverrideStore(missing))
+	assertStoreError200(t, h)
+
+	bad := filepath.Join(dir, "bad.yaml")
+	if err := os.WriteFile(bad, []byte("overrides: [\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewYAMLTrustOverrideStore(bad).List(context.Background()); err == nil {
+		t.Fatal("List on a truncated file returned no error")
+	}
+	h.UseTrustOverrideStore(NewYAMLTrustOverrideStore(bad))
+	assertStoreError200(t, h)
+
 	h.UseTrustOverrideStore(brokenOverrides{readErr: errors.New("permission denied")})
+	assertStoreError200(t, h)
+	rec := httptest.NewRecorder()
+	h.HandleSnapshot(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("snapshot with an unreadable store = %d, want 200", rec.Code)
+	}
+}
+
+func assertStoreError200(t *testing.T, h *Handler) {
+	t.Helper()
 	for name, handle := range map[string]http.HandlerFunc{
 		"trust-overrides": h.HandleTrustOverrides,
 		"trust-matrix":    h.HandleTrustMatrix,
-		"snapshot":        h.HandleSnapshot,
 	} {
 		rec := httptest.NewRecorder()
 		handle(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Errorf("%s with an unreadable store = %d, want 503", name, rec.Code)
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s = %d, want 200; body %s", name, rec.Code, rec.Body.String())
+			continue
 		}
-	}
-	if rec := putOverride(h, "research-loop-batch", `{"level":"L0"}`); rec.Code < 500 {
-		t.Errorf("PUT with an unreadable store = %d, want 5xx", rec.Code)
-	}
-}
-
-func TestTrustOverrideFileReadFailSurfaces(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("PLATFORM_GOVERNANCE_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "trust_overrides.json"), []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := NewTrustOverrideStore()
-	if _, err := s.List(context.Background()); err == nil {
-		t.Fatal("List on a corrupt file returned no error")
-	}
-	if err := s.Put(context.Background(), TrustOverride{SkillID: "x", Level: "L0"}); err == nil {
-		t.Fatal("Put over a corrupt file returned no error (it would have dropped every other grant)")
-	}
-}
-
-func TestTrustOverrideFileStoreNeverUsesHome(t *testing.T) {
-	t.Setenv("PLATFORM_GOVERNANCE_DIR", "")
-	t.Setenv("PLATFORM_PROJECT_ROOT", "")
-	t.Setenv("PLATFORM_DATA_DIR", "")
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if loc := NewTrustOverrideStore().Location(); strings.Contains(loc, home) {
-		t.Fatalf("file store resolved under $HOME: %s", loc)
+		var body struct {
+			StoreError string `json:"store_error"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Errorf("%s decode: %v", name, err)
+			continue
+		}
+		if body.StoreError == "" {
+			t.Errorf("%s store_error is empty; body %s", name, rec.Body.String())
+		}
 	}
 }

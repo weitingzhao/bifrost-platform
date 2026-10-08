@@ -1,0 +1,7 @@
+# Owner trust overrides. A level change is a platform release, not a live PUT.
+overrides:
+  - skill_id: research-loop-batch
+    level: L0
+    reason: Owner manual actuation level
+    applied_by: owner
+    applied_at: "2026-10-07"

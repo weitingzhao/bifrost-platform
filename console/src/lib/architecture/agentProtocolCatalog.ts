@@ -582,9 +582,9 @@ export const FLIGHT_DIRECTOR_OPS_STEPS: FlightDirectorStep[] = [
   },
   {
     step: '2. Trust override',
-    tool: 'PUT /api/v1/agent/governance/trust-overrides/{skill_id}',
+    tool: 'config/trust-overrides.yaml',
     required: true,
-    detail: 'Owner sets L0/L1/L2 per skill; accept_promotion / apply_demotion actions apply earned autonomy suggestions.',
+    detail: 'Owner sets L0/L1/L2 per skill in the versioned file. A level change is a platform release.',
   },
   {
     step: '3. Verify matrix',

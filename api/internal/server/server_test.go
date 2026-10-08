@@ -229,6 +229,7 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodGet, "/api/v1/stack/addons"},
 		{http.MethodPost, "/api/v1/stack/addons/gitea/install"},
 		{http.MethodPost, "/api/v1/stack/addons/gitea/upgrade"},
+		{http.MethodPut, "/api/v1/agent/governance/trust-overrides/research-loop-batch"},
 	}
 	// The path still serves another method, so chi answers 405 rather than 404.
 	methodGone := []struct{ method, path string }{
@@ -247,6 +248,35 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		router.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
 		if rec.Code != http.StatusMethodNotAllowed {
 			t.Errorf("%s %s = %d, want 405", c.method, c.path, rec.Code)
+		}
+	}
+}
+
+func TestTrustMatrixMissingFileIs200(t *testing.T) {
+	cfg := newTestConfig(t)
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	router := srv.Router()
+	for _, path := range []string{
+		"/api/v1/agent/governance/trust-matrix",
+		"/api/v1/agent/governance/trust-overrides",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s = %d, want 200; body %s", path, rec.Code, rec.Body.String())
+			continue
+		}
+		var body map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Errorf("%s decode: %v", path, err)
+			continue
+		}
+		errText, _ := body["store_error"].(string)
+		if errText == "" {
+			t.Errorf("%s store_error is empty; body %s", path, rec.Body.String())
 		}
 	}
 }

@@ -53,7 +53,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
-	"github.com/weitingzhao/bifrost-platform/api/internal/trustoverrides"
 )
 
 type Server struct {
@@ -240,12 +239,9 @@ func New(cfg *config.Config) (*Server, error) {
 		core, _, err := clusterH.Service().KubernetesClient()
 		return core, err
 	})
-	if ns := agentgovernance.TrustOverrideNamespace(); ns != "" {
-		srv.agentgovernance.UseTrustOverrideStore(trustoverrides.NewConfigMapStore(ns, func() (kubernetes.Interface, error) {
-			core, _, err := clusterH.Service().KubernetesClient()
-			return core, err
-		}))
-	}
+	srv.agentgovernance.UseTrustOverrideStore(agentgovernance.NewYAMLTrustOverrideStore(
+		filepath.Join(cfg.ConfigDir(), "trust-overrides.yaml"),
+	))
 	slog.Info("trust overrides store", "location", srv.agentgovernance.TrustOverrideLocation())
 	if dir := threadtitles.TranscriptDir(); role.RunsWorkers() && threadtitles.SyncWanted(dir) {
 		threadtitles.StartSync(context.Background(), titleStore, threadtitles.NewScanner(dir, 30*24*time.Hour), 3*time.Minute)
@@ -374,7 +370,6 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/audit/append", s.audit.HandleAppend)
-			r.Put("/agent/governance/trust-overrides/{skill_id}", s.agentgovernance.HandlePutTrustOverride)
 		})
 		// Code-health ratchet readings (agent-config/scripts/code-health/scan.sh).
 		// Read is viewer-level; writing is operator-gated so a reading cannot be

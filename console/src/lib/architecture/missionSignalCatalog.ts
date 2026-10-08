@@ -89,7 +89,7 @@ export const MISSION_SIGNAL_PHASES: MissionSignalPhaseDef[] = [
     dependsOn: ['P5'],
     acceptance: [
       'Flight Director 24h digest panel (Ops Desk → Queue → Review)',
-      'PUT trust-overrides/{skill_id} documented and reachable (admin)',
+      'config/trust-overrides.yaml is the Owner actuation level',
       'Trust matrix reflects owner_overrides after actuation',
     ],
   },

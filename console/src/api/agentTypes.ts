@@ -308,13 +308,6 @@ export interface TrustMatrixEntry {
   suggested_level_reason?: string
 }
 
-export interface TrustOverrideRequest {
-  level?: HermesActuationLevel
-  action?: 'accept_promotion' | 'apply_demotion'
-  reason?: string
-  applied_by?: string
-}
-
 export interface TrustMatrixResponse {
   entries: TrustMatrixEntry[]
   generated_at: string

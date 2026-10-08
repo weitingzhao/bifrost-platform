@@ -27,56 +27,53 @@ type PerformanceResponse struct {
 }
 
 type TrustMatrixEntry struct {
-	SkillID               string `json:"skill_id"`
-	SkillLabel            string `json:"skill_label"`
-	CurrentLevel          string `json:"current_level"`
-	ConsecutiveSuccesses  int    `json:"consecutive_successes"`
-	PromotionEligible     bool   `json:"promotion_eligible"`
-	DemotionTriggered     bool   `json:"demotion_triggered"`
-	LastOverrideAt        string `json:"last_override_at,omitempty"`
-	LastOverrideBy        string `json:"last_override_by,omitempty"`
-	SuggestedLevel        string `json:"suggested_level,omitempty"`
-	SuggestedLevelReason  string `json:"suggested_level_reason,omitempty"`
+	SkillID              string `json:"skill_id"`
+	SkillLabel           string `json:"skill_label"`
+	CurrentLevel         string `json:"current_level"`
+	ConsecutiveSuccesses int    `json:"consecutive_successes"`
+	PromotionEligible    bool   `json:"promotion_eligible"`
+	DemotionTriggered    bool   `json:"demotion_triggered"`
+	LastOverrideAt       string `json:"last_override_at,omitempty"`
+	LastOverrideBy       string `json:"last_override_by,omitempty"`
+	SuggestedLevel       string `json:"suggested_level,omitempty"`
+	SuggestedLevelReason string `json:"suggested_level_reason,omitempty"`
 }
 
 type TrustMatrixResponse struct {
 	GeneratedAt time.Time          `json:"generated_at"`
-	Entries       []TrustMatrixEntry `json:"entries"`
-	DataSource    string             `json:"data_source"`
-	// OverrideStore names where the Owner overrides applied here are kept, so
-	// the Console says which platform instance a level change lands on.
+	Entries     []TrustMatrixEntry `json:"entries"`
+	DataSource  string             `json:"data_source"`
+	// OverrideStore is the trust-overrides file path.
 	OverrideStore string `json:"override_store,omitempty"`
+	// StoreError is set when that file is missing or unreadable. The matrix
+	// is still returned, without overrides.
+	StoreError string `json:"store_error,omitempty"`
 }
 
 type TrustOverridesResponse struct {
 	GeneratedAt time.Time                `json:"generated_at"`
 	Overrides   map[string]TrustOverride `json:"overrides"`
-	// Store names where this instance keeps the overrides (ConfigMap or file).
+	// Store is the trust-overrides file path.
 	Store string `json:"store"`
-}
-
-type TrustOverrideRequest struct {
-	Level     string `json:"level,omitempty"`
-	Action    string `json:"action,omitempty"`
-	Reason    string `json:"reason,omitempty"`
-	AppliedBy string `json:"applied_by,omitempty"`
+	// StoreError is set when that file is missing or unreadable.
+	StoreError string `json:"store_error,omitempty"`
 }
 
 type CapabilityMapEntry struct {
-	TaskScope        string   `json:"task_scope"`
-	TaskLabel        string   `json:"task_label"`
-	Autonomy         string   `json:"autonomy"`
-	McpTools         []string `json:"mcp_tools"`
-	MissionSignals   []string `json:"mission_signals"`
-	HasGap           bool     `json:"has_gap"`
-	GapDetail        string   `json:"gap_detail,omitempty"`
+	TaskScope      string   `json:"task_scope"`
+	TaskLabel      string   `json:"task_label"`
+	Autonomy       string   `json:"autonomy"`
+	McpTools       []string `json:"mcp_tools"`
+	MissionSignals []string `json:"mission_signals"`
+	HasGap         bool     `json:"has_gap"`
+	GapDetail      string   `json:"gap_detail,omitempty"`
 }
 
 type CapabilityMapResponse struct {
-	GeneratedAt time.Time            `json:"generated_at"`
-	Entries       []CapabilityMapEntry `json:"entries"`
-	GapCount      int                  `json:"gap_count"`
-	McpToolCount  int                  `json:"mcp_tool_count"`
+	GeneratedAt  time.Time            `json:"generated_at"`
+	Entries      []CapabilityMapEntry `json:"entries"`
+	GapCount     int                  `json:"gap_count"`
+	McpToolCount int                  `json:"mcp_tool_count"`
 }
 
 type BriefingDigest struct {
@@ -90,13 +87,13 @@ type BriefingDigest struct {
 }
 
 type SnapshotResponse struct {
-	GeneratedAt    time.Time            `json:"generated_at"`
-	HermesAvailable  bool                 `json:"hermes_available"`
-	DataSources      []string             `json:"data_sources"`
-	Performance      PerformanceResponse  `json:"performance"`
-	TrustMatrix      TrustMatrixResponse  `json:"trust_matrix"`
-	CapabilityMap    CapabilityMapResponse `json:"capability_map"`
-	Briefing         BriefingDigest       `json:"briefing"`
-	ProgramComplete  bool                 `json:"program_complete"`
-	Note             string               `json:"note,omitempty"`
+	GeneratedAt     time.Time             `json:"generated_at"`
+	HermesAvailable bool                  `json:"hermes_available"`
+	DataSources     []string              `json:"data_sources"`
+	Performance     PerformanceResponse   `json:"performance"`
+	TrustMatrix     TrustMatrixResponse   `json:"trust_matrix"`
+	CapabilityMap   CapabilityMapResponse `json:"capability_map"`
+	Briefing        BriefingDigest        `json:"briefing"`
+	ProgramComplete bool                  `json:"program_complete"`
+	Note            string                `json:"note,omitempty"`
 }
