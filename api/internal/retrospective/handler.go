@@ -31,30 +31,6 @@ func (h *Handler) HandleReport(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, report)
 }
 
-// HandlePatterns returns just the pattern clusters.
-// GET /api/v1/agent/retrospective/patterns
-func (h *Handler) HandlePatterns(w http.ResponseWriter, r *http.Request) {
-	report := h.getOrRefresh(false)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"patterns":     report.Patterns,
-		"total":        len(report.Patterns),
-		"health_score": report.HealthScore,
-		"generated_at": report.GeneratedAt.Format(time.RFC3339),
-	})
-}
-
-// HandleInsights returns the generated insights.
-// GET /api/v1/agent/retrospective/insights
-func (h *Handler) HandleInsights(w http.ResponseWriter, r *http.Request) {
-	report := h.getOrRefresh(false)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"insights":     report.Insights,
-		"health_score": report.HealthScore,
-		"total_jobs":   report.TotalJobs,
-		"generated_at": report.GeneratedAt.Format(time.RFC3339),
-	})
-}
-
 // HandleDefects returns platform defect reports with code-level attribution.
 // GET /api/v1/agent/retrospective/defects
 func (h *Handler) HandleDefects(w http.ResponseWriter, r *http.Request) {

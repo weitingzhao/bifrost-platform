@@ -22,7 +22,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
-	"github.com/weitingzhao/bifrost-platform/api/internal/buildgate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
@@ -38,9 +37,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/lineage"
 	"github.com/weitingzhao/bifrost-platform/api/internal/marketdata"
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
-	"github.com/weitingzhao/bifrost-platform/api/internal/migratewave"
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
-	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -60,7 +57,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
 	"github.com/weitingzhao/bifrost-platform/api/internal/trustoverrides"
-	"github.com/weitingzhao/bifrost-platform/api/internal/vision"
 )
 
 type Server struct {
@@ -73,11 +69,7 @@ type Server struct {
 	stack           *stack.Handler
 	delivery        *delivery.Handler
 	promote         *promote.Handler
-	vision          *vision.Handler
-	buildgate       *buildgate.Handler
-	migratewave     *migratewave.Handler
 	tradeagent      *tradeagent.Handler
-	operatequeue    *operatequeue.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
 	remediation     *remediation.Handler
@@ -162,13 +154,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
-	operatequeueH := operatequeue.NewHandler(cfg.ConfigDir(), audit)
-	operatequeueH.BindRemediationJobs(remediationH.Store())
-	operatequeueH.BindRemediationStarter(remediationH)
-	remediationH.BindTerminalObserver(operatequeueH)
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
-	checklistH.BindRemediation(remediationH)
-	checklistH.BindOperateQueue(operatequeueH)
 	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward the routes
 	// rather than serving them, and do not build the handlers at all. Building
 	// them would start a second patrol autopilot's worth of state for nobody.
@@ -195,20 +181,6 @@ func New(cfg *config.Config) (*Server, error) {
 		}
 		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; no local patrol autopilot")
 	}
-	operatequeueH.BindEvidenceSource(operatequeue.EvidenceFunc(func() (operatequeue.EvidenceBundle, error) {
-		resp, err := checklistH.Store().Get()
-		if err != nil {
-			return operatequeue.EvidenceBundle{}, err
-		}
-		sigs := make([]operatequeue.EvidenceSignal, 0, len(resp.Signals))
-		for _, s := range resp.Signals {
-			sigs = append(sigs, operatequeue.EvidenceSignal{
-				ItemID: s.ItemID, Signal: s.Signal, Detail: s.Detail,
-			})
-		}
-		return operatequeue.BundleFromSignals(sigs, time.Now().UTC()), nil
-	}))
-	visionH := vision.NewHandler(cfg, audit)
 	srv := &Server{
 		cfg:             cfg,
 		prober:          prober,
@@ -219,11 +191,7 @@ func New(cfg *config.Config) (*Server, error) {
 		stack:           stack.NewHandler(cfg, audit),
 		delivery:        bindDeliveryCycleHook(delivery.NewHandler(cfg, audit), promoteH),
 		promote:         promoteH,
-		vision:          visionH,
-		buildgate:       buildgate.NewHandler(cfg, audit),
-		migratewave:     migratewave.NewHandler(cfg, audit),
 		tradeagent:      tradeagent.NewHandler(),
-		operatequeue:    operatequeueH,
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
 		remediation:     remediationH,
@@ -415,8 +383,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/agent/governance/snapshot", s.agentgovernance.HandleSnapshot)
 		r.Get("/agent/governance/trust-overrides", s.agentgovernance.HandleTrustOverrides)
 		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
-		r.Get("/agent/retrospective/patterns", s.retrospective.HandlePatterns)
-		r.Get("/agent/retrospective/insights", s.retrospective.HandleInsights)
 		r.Get("/agent/retrospective/defects", s.retrospective.HandleDefects)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
@@ -455,43 +421,21 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
 		r.Get("/delivery/dev/smoke", s.delivery.HandleDevSmoke)
-		r.Get("/build-phase", s.buildgate.HandleListPhases)
-		r.Get("/build-phase/{phase}/gate", s.buildgate.HandleGetGate)
-		r.Get("/vision/v1/gate", s.vision.HandleGetV1Gate)
-		r.Get("/vision/s3/gate", s.vision.HandleGetS3Gate)
-		r.Get("/vision/v2/gate", s.vision.HandleGetV2Gate)
-		r.Get("/vision/v3/gate", s.vision.HandleGetV3Gate)
-		r.Get("/vision/v4/gate", s.vision.HandleGetV4Gate)
-		r.Get("/vision/v5/gate", s.vision.HandleGetV5Gate)
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
-		r.Get("/operate/queue", s.operatequeue.HandleGetQueue)
-		r.Get("/operate/briefs", s.operatequeue.HandleListBriefs)
-		r.Get("/operate/drain/status", s.operatequeue.HandleDrainStatus)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
 		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
 		r.Get("/agent-tasks", s.agentgovernance.HandleListTasks)
-		r.Get("/migrate-streams/catalog", s.migratewave.HandleListCatalog)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
-			r.Post("/operate/queue", s.operatequeue.HandleEnqueue)
-			// starts full-auto remediation for failing items: never anonymous (TD-208)
+			// merges husbandry signals only; does not start remediation (TD-208)
 			r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
 			// one-use ticket for the SSH console below (TD-203)
 			r.Post("/console/ws-ticket", s.console.HandleTicket)
-			r.Post("/operate/queue/{id}/execution", s.operatequeue.HandleRecordExecution)
-			r.Post("/operate/queue/{id}/close", s.operatequeue.HandleClose)
-			r.Post("/operate/queue/{id}/dismiss", s.operatequeue.HandleDismiss)
-			r.Post("/operate/sweep", s.operatequeue.HandleSweep)
-			r.Post("/operate/briefs/{id}/decide", s.operatequeue.HandleDecideBrief)
 			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 		})
-		r.Get("/promote/release-gate", s.promote.HandleGetReleaseGate)
-		r.Get("/promote/release-state", s.promote.HandleGetReleaseState)
-		r.Get("/promote/gate-history", s.promote.HandleGetGateHistory)
 		r.Get("/promote/release-cycles", s.promote.HandleListReleaseCycles)
 		r.Get("/promote/release-cycles/{id}", s.promote.HandleGetReleaseCycle)
-		r.Get("/promote/tier-b", s.promote.HandleGetTierB)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
@@ -538,25 +482,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/gitops/apps/{name}/rollback", s.guard("gitops_rollback_app", s.gitops.HandleRollbackApp))
 			r.Post("/stack/addons/{name}/install", s.guard("stack_install_addon", s.stack.HandleInstallAddon))
 			r.Post("/stack/addons/{name}/upgrade", s.guard("stack_upgrade_addon", s.stack.HandleUpgradeAddon))
-			r.Post("/promote/release-gate", s.promote.HandleRunReleaseGate)
-			r.Post("/promote/tier-b/signoff", s.promote.HandleSignTierB)
-			r.Post("/build-phase/{phase}/gate", s.buildgate.HandleRunGate)
-			r.Post("/build-phase/{phase}/signoff", s.buildgate.HandleSignoff)
 			r.Post("/platform/escape-hatch/drill", s.escapehatch.HandleRecordDrill)
-			r.Post("/migrate-streams/{streamId}/waves/{waveId}/deliver", s.migratewave.HandleDeliver)
-			r.Post("/migrate-streams/{streamId}/waves/{waveId}/signoff", s.migratewave.HandleSignoff)
-			r.Post("/vision/v1/gate", s.vision.HandleRunV1Gate)
-			r.Post("/vision/v1/signoff", s.vision.HandleSignV1)
-			r.Post("/vision/s3/gate", s.vision.HandleRunS3Gate)
-			r.Post("/vision/s3/signoff", s.vision.HandleSignS3)
-			r.Post("/vision/v2/gate", s.vision.HandleRunV2Gate)
-			r.Post("/vision/v2/signoff", s.vision.HandleSignV2)
-			r.Post("/vision/v3/gate", s.vision.HandleRunV3Gate)
-			r.Post("/vision/v3/signoff", s.vision.HandleSignV3)
-			r.Post("/vision/v4/gate", s.vision.HandleRunV4Gate)
-			r.Post("/vision/v4/signoff", s.vision.HandleSignV4)
-			r.Post("/vision/v5/gate", s.vision.HandleRunV5Gate)
-			r.Post("/vision/v5/signoff", s.vision.HandleSignV5)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		// authenticated by the ticket from POST /console/ws-ticket (a browser

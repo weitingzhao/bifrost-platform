@@ -193,6 +193,22 @@ func TestApplicationFromUnstructured(t *testing.T) {
 	}
 }
 
+func TestApplicationResourcesAreExposed(t *testing.T) {
+	app := &unstructured.Unstructured{}
+	app.SetName("bifrost-prod")
+	_ = unstructured.SetNestedSlice(app.Object, []any{
+		map[string]any{"kind": "Job", "name": "db-init-trade", "status": "OutOfSync"},
+		map[string]any{"kind": "Deployment", "name": "trade-api", "status": "Synced"},
+	}, "status", "resources")
+	view := applicationFromUnstructured(*app)
+	if len(view.Resources) != 2 || view.Resources[0].Kind != "Job" || view.Resources[0].Name != "db-init-trade" || view.Resources[0].Status != "OutOfSync" {
+		t.Fatalf("resources: %+v", view.Resources)
+	}
+	if view.Resources[1].Kind != "Deployment" || view.Resources[1].Status != "Synced" {
+		t.Fatalf("resources: %+v", view.Resources)
+	}
+}
+
 func testApplicationWithHistory(revisions ...string) *unstructured.Unstructured {
 	app := &unstructured.Unstructured{}
 	app.SetGroupVersionKind(schema.GroupVersionKind{

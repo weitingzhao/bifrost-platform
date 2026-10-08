@@ -155,17 +155,14 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/api/v1/environments",
 		"/api/v1/context",
 		"/api/v1/agent/retrospective/report",
-		"/api/v1/agent/retrospective/patterns",
-		"/api/v1/agent/retrospective/insights",
 		"/api/v1/agent/retrospective/defects",
-		"/api/v1/vision/v1/gate",
 		"/api/v1/audit",
 		"/api/v1/jobs",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
-		"/api/v1/hermes/insights",
 		"/api/v1/agent/hermes/readiness",
-		"/api/v1/agent/hermes/first-task",
+		"/api/v1/agent/hermes/health",
+		"/api/v1/promote/release-cycles",
 	}
 	for _, path := range getRoutes {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -173,6 +170,50 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		router.ServeHTTP(rec, req)
 		if rec.Code == http.StatusNotFound {
 			t.Fatalf("route %s not registered (404)", path)
+		}
+	}
+}
+
+func TestRetiredRoutesAre404(t *testing.T) {
+	cfg := newTestConfig(t)
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	router := srv.Router()
+	retired := []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/operate/queue"},
+		{http.MethodPost, "/api/v1/operate/queue"},
+		{http.MethodGet, "/api/v1/operate/briefs"},
+		{http.MethodGet, "/api/v1/operate/drain/status"},
+		{http.MethodPost, "/api/v1/operate/sweep"},
+		{http.MethodGet, "/api/v1/vision/v1/gate"},
+		{http.MethodPost, "/api/v1/vision/v1/signoff"},
+		{http.MethodGet, "/api/v1/vision/s3/gate"},
+		{http.MethodGet, "/api/v1/vision/v5/gate"},
+		{http.MethodGet, "/api/v1/build-phase"},
+		{http.MethodPost, "/api/v1/build-phase/p1/gate"},
+		{http.MethodGet, "/api/v1/migrate-streams/catalog"},
+		{http.MethodPost, "/api/v1/migrate-streams/s/waves/w/deliver"},
+		{http.MethodGet, "/api/v1/promote/release-gate"},
+		{http.MethodPost, "/api/v1/promote/release-gate"},
+		{http.MethodGet, "/api/v1/promote/release-state"},
+		{http.MethodGet, "/api/v1/promote/gate-history"},
+		{http.MethodGet, "/api/v1/promote/tier-b"},
+		{http.MethodPost, "/api/v1/promote/tier-b/signoff"},
+		{http.MethodGet, "/api/v1/hermes/insights"},
+		{http.MethodPost, "/api/v1/hermes/run-first-task"},
+		{http.MethodGet, "/api/v1/agent/hermes/first-task"},
+		{http.MethodGet, "/api/v1/agent/drift-proposals"},
+		{http.MethodPost, "/api/v1/agent/drift-proposals"},
+		{http.MethodGet, "/api/v1/agent/retrospective/patterns"},
+		{http.MethodGet, "/api/v1/agent/retrospective/insights"},
+	}
+	for _, c := range retired {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s = %d, want 404", c.method, c.path, rec.Code)
 		}
 	}
 }

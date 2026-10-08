@@ -47,7 +47,7 @@ func New(namespace string, clients func() (kubernetes.Interface, error)) *Backen
 
 var unsafe = regexp.MustCompile(`[^a-z0-9-]+`)
 
-// Name is the ConfigMap that holds key: platform-state-operate-queue-json.
+// Name is the ConfigMap that holds key: platform-state-checklist-signals-json.
 func Name(key string) string {
 	n := unsafe.ReplaceAllString(strings.ToLower(key), "-")
 	n = strings.Trim(n, "-")

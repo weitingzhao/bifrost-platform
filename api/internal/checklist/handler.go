@@ -5,16 +5,12 @@ import (
 	"net/http"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/operatequeue"
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 type Handler struct {
-	store       *Store
-	audit       *actuation.AuditLog
-	remediation *remediation.Handler
-	operate     *operatequeue.Handler
-	husbandry   HusbandrySource
+	store     *Store
+	audit     *actuation.AuditLog
+	husbandry HusbandrySource
 }
 
 func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {
@@ -24,10 +20,7 @@ func NewHandler(configDir string, audit *actuation.AuditLog) *Handler {
 	}
 }
 
-func (h *Handler) BindRemediation(r *remediation.Handler)   { h.remediation = r }
-func (h *Handler) BindOperateQueue(o *operatequeue.Handler) { h.operate = o }
-
-// Store exposes the checklist signal cache for read-only consumers (e.g. queue sweep).
+// Store exposes the checklist signal cache for read-only consumers.
 func (h *Handler) Store() *Store { return h.store }
 
 func (h *Handler) HandleGetSignals(w http.ResponseWriter, r *http.Request) {
@@ -70,17 +63,12 @@ func (h *Handler) HandlePostSignals(w http.ResponseWriter, r *http.Request) {
 
 	h.audit.Record(r, "checklist.signals.merge", req.RunID, "ok",
 		"count="+itoa(len(req.Signals)))
-
-	if req.AutoDispatch && h.remediation != nil && h.operate != nil {
-		actions := h.executeDispatch(r.Context(), resp.Signals)
-		_ = h.store.SetDispatch(actions)
-		resp.LastDispatch = actions
-	}
-
+	// auto_dispatch is accepted so older callers still merge, and ignored:
+	// checklist no longer starts remediation or an operate handoff (TD-208).
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// HandleHusbandrySync probes data-husbandry, merges checklist signals, and auto-dispatches Operate.
+// HandleHusbandrySync probes data-husbandry and merges checklist signals.
 func (h *Handler) HandleHusbandrySync(w http.ResponseWriter, r *http.Request) {
 	if h.husbandry == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
@@ -106,21 +94,7 @@ func (h *Handler) HandleHusbandrySync(w http.ResponseWriter, r *http.Request) {
 	}
 	h.audit.Record(r, "checklist.husbandry.sync", "husbandry-sync", "ok",
 		"count="+itoa(len(signals)))
-
-	if h.remediation != nil && h.operate != nil {
-		actions := h.executeDispatch(r.Context(), resp.Signals)
-		_ = h.store.SetDispatch(actions)
-		resp.LastDispatch = actions
-	}
 	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) lastDispatchSnapshot() []DispatchAction {
-	resp, err := h.store.Get()
-	if err != nil {
-		return nil
-	}
-	return resp.LastDispatch
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

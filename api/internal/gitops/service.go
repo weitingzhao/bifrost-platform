@@ -27,9 +27,9 @@ var applicationGVR = schema.GroupVersionResource{
 }
 
 type Service struct {
-	entry           *config.ClusterEntry
-	cluster         *cluster.Service
-	dynamicFactory  func() (dynamic.Interface, error)
+	entry          *config.ClusterEntry
+	cluster        *cluster.Service
+	dynamicFactory func() (dynamic.Interface, error)
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
@@ -302,6 +302,7 @@ func applicationFromUnstructured(obj unstructured.Unstructured) ApplicationView 
 	if history, found, _ := unstructured.NestedSlice(obj.Object, "status", "history"); found {
 		view.HistoryCount = len(history)
 	}
+	view.Resources = parseApplicationResources(obj)
 	view.Conditions = parseApplicationConditions(obj)
 	view.PrimaryCondition = primaryConditionSummary(view.Conditions, view.SyncStatus)
 	if phase, ok, _ := unstructured.NestedString(obj.Object, "status", "operationState", "phase"); ok {
@@ -311,6 +312,40 @@ func applicationFromUnstructured(obj unstructured.Unstructured) ApplicationView 
 		view.OperationMessage = msg
 	}
 	return view
+}
+
+func parseApplicationResources(obj unstructured.Unstructured) []ApplicationResourceView {
+	raw, found, err := unstructured.NestedSlice(obj.Object, "status", "resources")
+	if err != nil || !found {
+		return nil
+	}
+	out := make([]ApplicationResourceView, 0, len(raw))
+	for _, item := range raw {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		res := ApplicationResourceView{}
+		if g, ok, _ := unstructured.NestedString(m, "group"); ok {
+			res.Group = g
+		}
+		if k, ok, _ := unstructured.NestedString(m, "kind"); ok {
+			res.Kind = k
+		}
+		if ns, ok, _ := unstructured.NestedString(m, "namespace"); ok {
+			res.Namespace = ns
+		}
+		if n, ok, _ := unstructured.NestedString(m, "name"); ok {
+			res.Name = n
+		}
+		if st, ok, _ := unstructured.NestedString(m, "status"); ok {
+			res.Status = st
+		}
+		if res.Kind != "" || res.Name != "" {
+			out = append(out, res)
+		}
+	}
+	return out
 }
 
 func parseApplicationConditions(obj unstructured.Unstructured) []ApplicationConditionView {
@@ -400,12 +435,12 @@ func (s *Service) SyncApplication(ctx context.Context, name string) (cluster.Act
 	ns := s.entry.ResolvedApplicationsNamespace()
 	target := fmt.Sprintf("Application/%s/%s", ns, name)
 	resp := cluster.ActuationResponse{
-		OK:           false,
-		Action:       "gitops.sync",
-		Target:       target,
-		Changed:      false,
-		Message:      "",
-		GeneratedAt:  now,
+		OK:          false,
+		Action:      "gitops.sync",
+		Target:      target,
+		Changed:     false,
+		Message:     "",
+		GeneratedAt: now,
 	}
 
 	dyn, err := s.buildDynamicClient()

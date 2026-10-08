@@ -25,8 +25,6 @@ var homePathFiles = map[string]string{
 	"agentdeploy/store.go":    "store; TD-196 moves it to a ConfigMap",
 	"cluster/data_clone.go":   "store; TD-196 moves it to a ConfigMap",
 	"codehealth/store.go":     "store; TD-196 moves it to a ConfigMap",
-	"driftproposal/store.go":  "store; TD-196 moves it to a ConfigMap",
-	"hermesinsight/store.go":  "store; TD-196 moves it to a ConfigMap",
 	"patrol/store.go":         "store; TD-196 moves it to a ConfigMap",
 	"remediation/jobstore.go": "store; TD-196 moves it to a ConfigMap",
 	// operator credentials and workstation files, not platform state

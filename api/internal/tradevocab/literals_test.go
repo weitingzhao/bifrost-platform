@@ -36,7 +36,6 @@ var budget = map[string]int{
 	"satellite/service.go":         1,
 	"satellite/types.go":           1,
 	"telemetry/queries.go":         4,
-	"vision/service.go":            1,
 }
 
 func TestTradeVocabularyOnlyShrinks(t *testing.T) {

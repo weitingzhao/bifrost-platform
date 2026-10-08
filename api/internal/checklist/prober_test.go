@@ -145,6 +145,54 @@ func TestProberRedWhenTheClusterSaysSo(t *testing.T) {
 	}
 }
 
+func TestProberIgnoresReclaimedDbInitJobDrift(t *testing.T) {
+	srv := fakePlatform(t, map[string]string{
+		"/api/v1/gitops/apps": `{
+			"reachability":"ok",
+			"apps":[
+				{"name":"bifrost-prod","sync_status":"OutOfSync","health_status":"Healthy","resources":[
+					{"kind":"Job","name":"db-init-trade","status":"OutOfSync"},
+					{"kind":"Deployment","name":"trade-api","status":"Synced"}
+				]},
+				{"name":"bifrost-dev","sync_status":"OutOfSync","health_status":"Healthy","resources":[
+					{"kind":"Job","name":"db-init-research","status":"OutOfSync"},
+					{"kind":"Deployment","name":"research-api","status":"OutOfSync"}
+				]}
+			]}`,
+	})
+	defer srv.Close()
+	got := bySignalID(testProber(srv).Probe(context.Background()))
+	if got["argo-apps"].Signal != SignalDegraded {
+		t.Fatalf("argo-apps = %s (%s), want degraded for the real OutOfSync", got["argo-apps"].Signal, got["argo-apps"].Detail)
+	}
+	if strings.Contains(got["argo-apps"].Detail, "bifrost-prod") {
+		t.Fatalf("db-init-only drift was reported: %s", got["argo-apps"].Detail)
+	}
+	if !strings.Contains(got["argo-apps"].Detail, "bifrost-dev") {
+		t.Fatalf("other OutOfSync was dropped: %s", got["argo-apps"].Detail)
+	}
+}
+
+func TestProberDbInitOnlyDriftIsOK(t *testing.T) {
+	srv := fakePlatform(t, map[string]string{
+		"/api/v1/gitops/apps": `{
+			"reachability":"ok",
+			"apps":[
+				{"name":"bifrost-prod","sync_status":"OutOfSync","health_status":"Healthy","resources":[
+					{"kind":"Job","name":"db-init-trade","status":"OutOfSync"}
+				]}
+			]}`,
+	})
+	defer srv.Close()
+	got := bySignalID(testProber(srv).Probe(context.Background()))
+	if got["argo-apps"].Signal != SignalOK {
+		t.Fatalf("argo-apps = %s (%s), want ok", got["argo-apps"].Signal, got["argo-apps"].Detail)
+	}
+	if !strings.Contains(got["argo-apps"].Detail, "db-init") && !strings.Contains(got["argo-apps"].Detail, "bifrost-prod") {
+		t.Fatalf("detail should name the ignored drift: %s", got["argo-apps"].Detail)
+	}
+}
+
 func TestProberUnsetBridgesAreLocalOnly(t *testing.T) {
 	srv := fakePlatform(t, map[string]string{
 		"/api/v1/agent/bridge": `{"runners":[{"role":"primary","status":"ok"}],"git_bridge":{"status":"not_configured"},"satellite_probe_bridge":{"status":"not_configured"}}`,

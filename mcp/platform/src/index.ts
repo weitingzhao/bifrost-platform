@@ -382,23 +382,9 @@ reg('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
 
 reg(
   'get_hermes_readiness',
-  'Hermes gateway + LLM key + platform MCP readiness for first L0 task',
+  'Hermes gateway + LLM key + platform MCP readiness probe',
   {},
   async () => jsonResult(await platformGet('/api/v1/agent/hermes/readiness')),
-)
-
-reg(
-  'get_hermes_first_task',
-  'Canonical Hermes First Task prompt (L0 read-only Mission health pass)',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/agent/hermes/first-task')),
-)
-
-reg(
-  'get_hermes_insights',
-  'Analysis Desk Hermes insight history (newest first, L0 read-only)',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/hermes/insights')),
 )
 
 reg(
@@ -432,38 +418,6 @@ reg('get_remediation_health', 'Remediation runner health', {}, async () =>
 
 reg('list_remediation_jobs', 'List remediation / agent tasks (operator)', {}, async () =>
   jsonResult(await platformGet('/api/v1/remediation/')),
-)
-
-// --- Promote / Release tools (P4) ---
-
-reg(
-  'get_release_state',
-  'Aggregated release state across STG/PROD with next-action guidance for agent-driven releases',
-  { tier: z.string().optional().describe('platform (default) or trade') },
-  async ({ tier }) => {
-    const t = tier ?? 'platform'
-    return jsonResult(await platformGet(`/api/v1/promote/release-state?tier=${encodeURIComponent(t)}`))
-  },
-)
-
-reg(
-  'get_release_gate',
-  'Current release gate result, checks, blockers, and linked revision',
-  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
-  async ({ tier }) => {
-    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
-    return jsonResult(await platformGet(`/api/v1/promote/release-gate${qs}`))
-  },
-)
-
-reg(
-  'get_gate_history',
-  'Chronological gate run history for a tier',
-  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
-  async ({ tier }) => {
-    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
-    return jsonResult(await platformGet(`/api/v1/promote/gate-history${qs}`))
-  },
 )
 
 reg('get_stg_smoke', 'STG environment HTTP smoke probes', {}, async () =>
@@ -503,16 +457,6 @@ reg(
 )
 
 reg(
-  'run_release_gate',
-  'Run STG or PROD release gate (admin). Validates deploy health, captures revision, persists result.',
-  { tier: z.string().optional().describe('stg | prod | platform-stg | platform-prod') },
-  async ({ tier }) => {
-    const qs = tier != null && tier !== '' ? `?tier=${encodeURIComponent(tier)}` : ''
-    return jsonResult(await platformPost(`/api/v1/promote/release-gate${qs}`))
-  },
-)
-
-reg(
   'ensure_kubeconfig_secret',
   'Sync kubeconfig and ensure bifrost-platform-kubeconfig Secret in platform STG/PROD namespaces (admin). ' +
     'Use when cluster reachability is "fail" due to missing kubeconfig secret.',
@@ -534,59 +478,6 @@ reg(
       await platformPost('/api/v1/cluster/kubeconfig-secret/ensure', body),
     )
   },
-)
-
-reg(
-  'get_operate_queue',
-  'Open operate queue items (Projection layer · D11)',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/operate/queue')),
-)
-
-reg(
-  'record_operate_queue_execution',
-  'Attach a real remediation job to an open Operate Queue handoff (operator)',
-  { item_id: z.string(), execution_job_id: z.string() },
-  async ({ item_id, execution_job_id }) =>
-    jsonResult(
-      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/execution`, {
-        execution_job_id,
-      }),
-    ),
-)
-
-reg(
-  'close_operate_queue_item',
-  'Close only with persisted completion evidence; linked jobs must be done and post-fix verification passed (operator)',
-  {
-    item_id: z.string(),
-    completion_evidence: z.array(z.string()).min(1),
-    post_fix_verification_passed: z.boolean().optional(),
-  },
-  async ({ item_id, completion_evidence, post_fix_verification_passed }) =>
-    jsonResult(
-      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/close`, {
-        completion_evidence,
-        post_fix_verification_passed: post_fix_verification_passed ?? false,
-      }),
-    ),
-)
-
-reg(
-  'dismiss_operate_queue_item',
-  'Dismiss stale/resolved Operate Queue handoff with evidence (skips job/post-fix gates)',
-  {
-    item_id: z.string(),
-    completion_evidence: z.array(z.string()).min(1),
-    reason: z.enum(['stale', 'resolved', 'other']).optional(),
-  },
-  async ({ item_id, completion_evidence, reason }) =>
-    jsonResult(
-      await platformPost(`/api/v1/operate/queue/${encodeURIComponent(item_id)}/dismiss`, {
-        completion_evidence,
-        reason: reason ?? 'stale',
-      }),
-    ),
 )
 
 reg(
@@ -644,7 +535,7 @@ reg(
 
 reg(
   'report_checklist_signals',
-  'Merge Daily Ops Checklist probe signals (runner daily-ops-checklist-run)',
+  'Merge Daily Ops Checklist probe signals. auto_dispatch is accepted and ignored; the checklist no longer starts remediation.',
   {
     run_id: z.string().optional(),
     source: z.string().optional(),
@@ -669,14 +560,6 @@ reg(
         auto_dispatch: auto_dispatch ?? false,
       }),
     ),
-)
-
-reg(
-  'sign_tier_b',
-  'Record Tier B Owner sign-off (admin)',
-  { notes: z.string().optional() },
-  async ({ notes }) =>
-    jsonResult(await platformPost('/api/v1/promote/tier-b/signoff', { notes: notes ?? '' })),
 )
 
 reg(

@@ -34,12 +34,23 @@ type ApplicationConditionView struct {
 	LastTransitionTime string `json:"last_transition_time,omitempty"`
 }
 
+// ApplicationResourceView is one live object Argo compared. Status is that
+// object's sync status (Synced, OutOfSync, …).
+type ApplicationResourceView struct {
+	Group     string `json:"group,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Status    string `json:"status,omitempty"`
+}
+
 type ApplicationView struct {
 	Name                 string                     `json:"name"`
 	Namespace            string                     `json:"namespace"`
 	Project              string                     `json:"project,omitempty"`
 	SyncStatus           string                     `json:"sync_status"`
 	HealthStatus         string                     `json:"health_status"`
+	Resources            []ApplicationResourceView  `json:"resources,omitempty"`
 	Destination          string                     `json:"destination,omitempty"`
 	DestinationNamespace string                     `json:"destination_namespace,omitempty"`
 	Revision             string                     `json:"revision,omitempty"`

@@ -45,15 +45,12 @@ func TestMountServesEveryOperatorPlaneRoute(t *testing.T) {
 		"/api/v1/agent/smoke",
 		"/api/v1/agent/deploy",
 		"/api/v1/agent/hermes/readiness",
-		"/api/v1/agent/hermes/first-task",
 		"/api/v1/agent/hermes/health",
 		"/api/v1/agent/skills",
 		"/api/v1/agent/schedules",
 		"/api/v1/agent/executions",
-		"/api/v1/hermes/insights",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
-		"/api/v1/agent/drift-proposals/",
 	} {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -74,8 +71,6 @@ func TestActuationRoutesStayOperatorGated(t *testing.T) {
 		{http.MethodPost, "/api/v1/agent/deploy"},
 		{http.MethodPut, "/api/v1/patrol/skills/x/enable"},
 		{http.MethodPost, "/api/v1/patrol/trigger/x"},
-		{http.MethodPost, "/api/v1/agent/drift-proposals/"},
-		{http.MethodPost, "/api/v1/agent/drift-proposals/x/approve"},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}"))
@@ -166,7 +161,6 @@ func TestProxyKeepsActuationOperatorGated(t *testing.T) {
 	for _, tc := range []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/agent/deploy"},
 		{http.MethodPost, "/api/v1/patrol/trigger/x"},
-		{http.MethodPost, "/api/v1/agent/drift-proposals/x/approve"},
 	} {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}")))

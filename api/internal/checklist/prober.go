@@ -170,13 +170,9 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 
 	// argo-apps
 	var argo struct {
-		Reachability string `json:"reachability"`
-		Detail       string `json:"detail"`
-		Apps         []struct {
-			Name   string `json:"name"`
-			Sync   string `json:"sync_status"`
-			Health string `json:"health_status"`
-		} `json:"apps"`
+		Reachability string        `json:"reachability"`
+		Detail       string        `json:"detail"`
+		Apps         []argoAppView `json:"apps"`
 	}
 	if err := p.getJSON(ctx, "/api/v1/gitops/apps", &argo); err != nil {
 		add("argo-apps", SignalUnknown, "GET /api/v1/gitops/apps: "+err.Error())
@@ -185,12 +181,19 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 	} else {
 		// Progressing is a rollout in flight, not a fault: Argo turns a rollout
 		// that misses its deadline into Degraded on its own.
-		off, moving := []string{}, []string{}
+		// OutOfSync that is only a finished one-shot Job (db-init-*) reclaimed
+		// by TTL is not a fault either; any other OutOfSync still is.
+		off, moving, ignored := []string{}, []string{}, []string{}
 		for _, a := range argo.Apps {
 			switch {
 			case a.Sync == "Synced" && a.Health == "Healthy":
 			case a.Sync == "Synced" && a.Health == "Progressing":
 				moving = append(moving, a.Name)
+			case a.Sync == "OutOfSync" && (a.Health == "Healthy" || a.Health == "Progressing" || a.Health == "") && onlyReclaimedJobDrift(a.Resources):
+				ignored = append(ignored, a.Name)
+				if a.Health == "Progressing" {
+					moving = append(moving, a.Name)
+				}
 			default:
 				off = append(off, a.Name+" "+a.Sync+"/"+a.Health)
 			}
@@ -199,9 +202,17 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 		case len(off) > 0:
 			add("argo-apps", SignalDegraded, strings.Join(off, " · "))
 		case len(moving) > 0:
-			add("argo-apps", SignalOK, fmt.Sprintf("%d app(s) Synced; progressing: %s", len(argo.Apps), strings.Join(moving, ", ")))
+			detail := fmt.Sprintf("%d app(s) Synced; progressing: %s", len(argo.Apps), strings.Join(moving, ", "))
+			if len(ignored) > 0 {
+				detail += "; ignored reclaimed one-shot job drift: " + strings.Join(ignored, ", ")
+			}
+			add("argo-apps", SignalOK, detail)
 		default:
-			add("argo-apps", SignalOK, fmt.Sprintf("%d app(s) Synced/Healthy", len(argo.Apps)))
+			detail := fmt.Sprintf("%d app(s) Synced/Healthy", len(argo.Apps))
+			if len(ignored) > 0 {
+				detail += "; ignored reclaimed one-shot job drift: " + strings.Join(ignored, ", ")
+			}
+			add("argo-apps", SignalOK, detail)
 		}
 	}
 
@@ -466,9 +477,51 @@ func bridgeDetail(status, head, err string) string {
 	return joinDetail(head+" "+status, err)
 }
 
+func truncate(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
+
 func joinDetail(head, err string) string {
 	if strings.TrimSpace(err) == "" {
 		return head
 	}
 	return head + ": " + err
+}
+
+type argoAppView struct {
+	Name      string             `json:"name"`
+	Sync      string             `json:"sync_status"`
+	Health    string             `json:"health_status"`
+	Resources []argoResourceView `json:"resources"`
+}
+
+type argoResourceView struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// onlyReclaimedJobDrift is true when every non-Synced resource is a one-shot
+// Job whose name is db-init-* (it runs, then TTL deletes it, and Argo reports
+// the Application OutOfSync). An empty resource list is not enough to ignore
+// an app-level OutOfSync.
+func onlyReclaimedJobDrift(resources []argoResourceView) bool {
+	if len(resources) == 0 {
+		return false
+	}
+	nonSynced := 0
+	for _, r := range resources {
+		if r.Status == "" || r.Status == "Synced" {
+			continue
+		}
+		nonSynced++
+		if r.Kind != "Job" || !strings.HasPrefix(r.Name, "db-init-") {
+			return false
+		}
+	}
+	return nonSynced > 0
 }

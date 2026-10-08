@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// TD-203 / TD-208: the SSH console and the husbandry sync (which starts
-// full-auto remediation) answered anyone who could reach the port.
+// TD-203 / TD-208: the SSH console and husbandry sync answered anyone who
+// could reach the port. Husbandry sync only merges signals.
 func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
 	srv, err := New(newTestConfig(t))
 	if err != nil {

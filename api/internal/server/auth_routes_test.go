@@ -42,8 +42,8 @@ func isMutating(method string) bool {
 }
 
 // Every route that changes state must carry auth.Require. Spot checks let
-// /cluster/sync-kubeconfig, /checklist/husbandry-sync and the plane's
-// /hermes/run-first-task ship anonymous; this walk catches the next one.
+// /cluster/sync-kubeconfig and /checklist/husbandry-sync ship anonymous;
+// this walk catches the next one.
 func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 	srv, err := New(newTestConfig(t))
 	if err != nil {

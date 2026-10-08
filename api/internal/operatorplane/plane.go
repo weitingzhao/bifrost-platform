@@ -37,9 +37,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
-	"github.com/weitingzhao/bifrost-platform/api/internal/driftproposal"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesinsight"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
@@ -59,9 +57,7 @@ type Plane struct {
 	agentBridge     *agentbridge.Handler
 	agentDeploy     *agentdeploy.Handler
 	agentReport     *agentreport.Handler
-	driftProposal   *driftproposal.Handler
 	hermesGateway   *hermesgateway.Handler
-	hermesInsight   *hermesinsight.Handler
 	hermesReadiness *hermesreadiness.Handler
 	patrol          *patrol.Handler
 }
@@ -71,22 +67,13 @@ func New(d Deps) (*Plane, error) {
 	if err != nil {
 		return nil, err
 	}
-	readiness := hermesreadiness.NewHandler()
-	insight, err := hermesinsight.NewHandlerWithOptions(hermesinsight.HandlerOptions{
-		Readiness: readiness,
-	})
-	if err != nil {
-		return nil, err
-	}
 	return &Plane{
 		auth:            d.Auth,
 		agentBridge:     agentbridge.NewHandler(),
 		agentDeploy:     agentdeploy.NewHandler(d.Audit),
 		agentReport:     agentreport.NewHandler(),
-		driftProposal:   driftproposal.NewHandler(d.Audit),
 		hermesGateway:   hermesgateway.NewHandler(),
-		hermesInsight:   insight,
-		hermesReadiness: readiness,
+		hermesReadiness: hermesreadiness.NewHandler(),
 		patrol:          patrolH,
 	}, nil
 }
@@ -123,34 +110,20 @@ func routeTable() []route {
 		{"GET", "/agent/smoke", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleSmoke }},
 		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }},
 		{"GET", "/agent/hermes/readiness", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleReadiness }},
-		{"GET", "/agent/hermes/first-task", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleFirstTask }},
 		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }},
 		{"GET", "/agent/skills", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkills }},
 		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }},
 		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }},
-		{"GET", "/hermes/insights", false, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleList }},
 		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }},
 		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }},
 		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }},
 
-		{"POST", "/hermes/run-first-task", true, func(p *Plane) http.HandlerFunc { return p.hermesInsight.HandleRunFirstTask }},
 		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }},
 		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }},
 		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }},
 		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }},
 		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }},
 		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }},
-
-		// The collection is registered both with and without the trailing slash.
-		// chi's nested Route used to answer both; the Console calls the bare form
-		// and the tests the slashed one, and neither should start 404-ing.
-		{"GET", "/agent/drift-proposals", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
-		{"GET", "/agent/drift-proposals/", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleList }},
-		{"GET", "/agent/drift-proposals/{id}", false, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleGet }},
-		{"POST", "/agent/drift-proposals", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
-		{"POST", "/agent/drift-proposals/", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleCreate }},
-		{"POST", "/agent/drift-proposals/{id}/approve", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleApprove }},
-		{"POST", "/agent/drift-proposals/{id}/reject", true, func(p *Plane) http.HandlerFunc { return p.driftProposal.HandleReject }},
 	}
 }
 
