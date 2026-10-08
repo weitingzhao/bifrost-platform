@@ -299,10 +299,12 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	if strings.TrimSpace(s.cfg.APIBaseURL) == "" && s.cluster == nil {
 		return nil, probe.ReachUnknown, "cluster service unavailable"
 	}
-	// GET /market/coverage/db-summary → freshness[]. Same columns as the old
+	// GET /market/coverage/freshness → freshness[]. Same columns as the old
 	// ingest_freshness SELECT (dimension, last_run_at, rows_written, status),
-	// ordered by dimension. No query string: ProxyGet would escape "?".
-	body, err := s.fetchPluginJSON(ctx, "/market/coverage/db-summary")
+	// ordered by dimension. Not db-summary: that one also counts the whole
+	// database (~4.6 s) on every 30 s Console poll. No query string: ProxyGet
+	// would escape "?".
+	body, err := s.fetchPluginJSON(ctx, "/market/coverage/freshness")
 	if err != nil {
 		return nil, probe.ReachFail, err.Error()
 	}
@@ -470,7 +472,8 @@ func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
 	return rows
 }
 
-// parseFreshnessJSON reads the freshness array of GET /market/coverage/db-summary.
+// parseFreshnessJSON reads the freshness array of GET /market/coverage/freshness
+// (the same array db-summary carries).
 // Null last_run_at / rows_written / status match the old COALESCE defaults
 // (empty timestamp, 0, "unknown").
 func parseFreshnessJSON(body []byte, now time.Time) ([]FreshnessInfo, error) {

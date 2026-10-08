@@ -36,20 +36,29 @@ func TestParseFreshnessJSONMatchesPipeRules(t *testing.T) {
 	}
 }
 
+// The probe reads the freshness-only endpoint. db-summary carries the same
+// array but also counts the whole database (~4.6 s, TD-259), and the Console
+// polls plugin status every 30 s.
 func TestProbeFreshnessHTTP(t *testing.T) {
-	var gotPath, gotQuery string
+	var paths []string
+	var gotQuery string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery
+		paths = append(paths, r.URL.Path)
+		gotQuery = r.URL.RawQuery
+		if r.URL.Path != "/market/coverage/freshness" {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		recent := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
-		_, _ = w.Write([]byte(`{"ok":true,"freshness":[{"dimension":"stock_daily","last_run_at":"` + recent + `","rows_written":42,"status":"ok"}]}`))
+		_, _ = w.Write([]byte(`{"ok":true,"source":"db","freshness":[{"dimension":"stock_daily","last_run_at":"` + recent + `","rows_written":42,"status":"ok"}]}`))
 	}))
 	defer srv.Close()
 
 	svc := &Service{cfg: Config{APIBaseURL: srv.URL}}
 	rows, reach, errMsg := svc.probeFreshness(context.Background())
-	if gotPath != "/market/coverage/db-summary" || gotQuery != "" {
-		t.Fatalf("path=%q query=%q", gotPath, gotQuery)
+	if len(paths) != 1 || paths[0] != "/market/coverage/freshness" || gotQuery != "" {
+		t.Fatalf("paths=%q query=%q", paths, gotQuery)
 	}
 	if reach != probe.ReachOK || errMsg != "" || len(rows) != 1 || rows[0].Verdict != "ok" {
 		t.Fatalf("reach=%s err=%q rows=%+v", reach, errMsg, rows)
