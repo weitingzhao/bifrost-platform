@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -82,6 +83,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	b.WriteString("# HELP bifrost_platform_auth_loaded Whether platform-auth.yaml loaded (1) or every gated route answers 401 (0)\n")
 	b.WriteString("# TYPE bifrost_platform_auth_loaded gauge\n")
 	fmt.Fprintf(&b, "bifrost_platform_auth_loaded %d\n", boolValue(s.authLoaded))
+	if s.releasePolicy != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), pluginProbeTimeout)
+		s.releasePolicy.Status(ctx)
+		cancel()
+	}
+	releasepolicy.WriteMetrics(&b)
 	s.httpMetrics.write(&b)
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
