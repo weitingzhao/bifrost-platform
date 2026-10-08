@@ -13,9 +13,7 @@ export { IbPage } from './ib/IbPage'
 
 export { MaintenancePage } from './maintenance/MaintenancePage'
 
-export function ReleasesPage() {
-  return <ShellQuestion question={shellNavEntry('releases').question} />
-}
+export { ReleasesPage } from './releases/ReleasesPage'
 
 export { InfrastructurePage } from './infrastructure/InfrastructurePage'
 
