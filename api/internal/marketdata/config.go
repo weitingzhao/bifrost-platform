@@ -25,6 +25,8 @@ const (
 type Config struct {
 	StocksHealthURL  string
 	OptionsHealthURL string
+	// FreshnessDB is kept so MARKET_DATA_FRESHNESS_DB still parses. The freshness
+	// probe reads the plugin HTTP API and does not open this database.
 	FreshnessDB string
 	// APIBaseURL overrides Plugin API (:8790) for Console proxy (local port-forward).
 	// Example: http://127.0.0.1:8790 — paths are appended as /market/...
