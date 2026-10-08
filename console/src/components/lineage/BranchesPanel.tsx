@@ -17,14 +17,22 @@ import type { BranchHealth } from '@/api/lineage'
 const WARN_DAYS = 3
 const STALE_DAYS = 7
 
-type Filter = 'open' | 'landed' | 'even' | 'all'
+type Filter = 'all' | 'open' | 'stale' | 'landed' | 'even'
 
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
+  { id: 'all', label: 'All', hint: 'Every non-default branch on GitHub, unlanded work first' },
   { id: 'open', label: 'Unlanded work', hint: 'Branches with changes that are not on main in any form' },
+  { id: 'stale', label: 'Stale', hint: 'Head older than the 60-day read and not on main inside it — not measured' },
   { id: 'landed', label: 'Leftovers', hint: 'Every change already landed on main another way (rebased, re-versioned, squashed) — safe to clean up' },
   { id: 'even', label: 'Merged', hint: 'Nothing ahead of main — the branch name is all that is left' },
-  { id: 'all', label: 'All', hint: 'Every non-default branch' },
 ]
+
+const STATUS_TAG: Record<BranchHealth['status'], { variant: 'warning' | 'danger' | 'info' | 'neutral'; label: string }> = {
+  open: { variant: 'warning', label: 'unlanded' },
+  stale: { variant: 'danger', label: 'stale' },
+  landed: { variant: 'info', label: 'leftover' },
+  even: { variant: 'neutral', label: 'merged' },
+}
 
 function shortRepo(repo: string): string {
   return repo.replace(/^bifrost-/, '')
@@ -57,10 +65,10 @@ function threadName(t: { session: string; title?: string }): string {
 }
 
 export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]; showHelp: boolean }) {
-  const [filter, setFilter] = useState<Filter>('open')
+  const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<Set<string>>(new Set())
   const counts = useMemo(() => {
-    const c: Record<Filter, number> = { open: 0, landed: 0, even: 0, all: branches.length }
+    const c: Record<Filter, number> = { all: branches.length, open: 0, stale: 0, landed: 0, even: 0 }
     for (const b of branches) c[b.status]++
     return c
   }, [branches])
@@ -69,7 +77,7 @@ export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-1">
-        {FILTERS.map(f => (
+        {FILTERS.filter(f => f.id !== 'stale' || counts.stale > 0).map(f => (
           <button
             key={f.id}
             type="button"
@@ -85,11 +93,13 @@ export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]
       </div>
       {showHelp && (
         <p className="text-[var(--text-dense-meta)] text-muted-foreground">
-          Every branch except each repo&apos;s main, read 60 days back. Ahead = commits main does not have; Open = those whose
+          Every branch except each repo&apos;s main, as the Gitea mirror of GitHub has it — a branch that was never pushed is
+          not here, and archiving a session does not hide its branch. Read 60 days back. Ahead = commits main does not have; Open = those whose
           change is not on main in any form (Change-Id, else subject) — real unlanded work. Behind = main commits since the
           branch forked (&quot;+&quot; = forked before what was read). Waiting = age of the oldest open change: yellow after{' '}
           {WARN_DAYS} days, red after {STALE_DAYS}. Branches made before the commit hooks have no Change-Id, so a lane re-landed
-          under a new version number can still show as open — check its commits.
+          under a new version number can still show as open — check its commits. Stale = the head is older than 60 days and
+          not on main within them: abandoned work or an old merge, not measured.
         </p>
       )}
       {rows.length === 0 ? (
@@ -118,7 +128,9 @@ export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]
             {rows.map(b => {
               const id = `${b.repo}/${b.branch}`
               const isOpen = open.has(id)
-              const wait = days(b.oldest_open_at)
+              const stale = b.status === 'stale'
+              // stale: any open change is at least as old as the head
+              const wait = stale ? days(b.head_at) : days(b.oldest_open_at)
               return (
                 <Fragment key={id}>
                   <DenseTableRow
@@ -141,18 +153,19 @@ export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]
                       {b.branch}
                     </DenseTableCell>
                     <DenseTableCell>
-                      <DenseTag variant={b.status === 'open' ? 'warning' : b.status === 'landed' ? 'info' : 'neutral'}>
-                        {b.status === 'open' ? 'unlanded' : b.status === 'landed' ? 'leftover' : 'merged'}
-                      </DenseTag>
+                      <DenseTag variant={STATUS_TAG[b.status].variant}>{STATUS_TAG[b.status].label}</DenseTag>
                     </DenseTableCell>
                     <DenseTableCell className={denseTableNumCell}>
-                      {b.open} / {b.ahead}
+                      {stale ? <span className="text-muted-foreground">—</span> : `${b.open} / ${b.ahead}`}
                     </DenseTableCell>
                     <DenseTableCell className={denseTableNumCell}>
                       {b.behind}
                       {b.behind_is_floor ? '+' : ''}
                     </DenseTableCell>
-                    <DenseTableCell className={`${denseTableNumCell} ${ageClass(wait)}`}>{ageLabel(wait)}</DenseTableCell>
+                    <DenseTableCell className={`${denseTableNumCell} ${ageClass(wait)}`}>
+                      {stale ? '≥ ' : ''}
+                      {ageLabel(wait)}
+                    </DenseTableCell>
                     <DenseTableCell className={`${denseTableNumCell} text-muted-foreground`}>{ageLabel(days(b.head_at))} ago</DenseTableCell>
                     <DenseTableCell className="max-w-[320px] truncate" title={b.threads.map(t => `${threadName(t)} (${t.session})`).join('\n')}>
                       {b.threads.length === 0 ? <span className="text-muted-foreground">—</span> : b.threads.map(threadName).join(' · ')}
@@ -164,7 +177,9 @@ export function BranchesPanel({ branches, showHelp }: { branches: BranchHealth[]
                         <div className="flex flex-col gap-0.5 py-1">
                           {b.commits.length === 0 && (
                             <span className="text-[var(--text-dense-meta)] text-muted-foreground">
-                              Nothing ahead of main: head {b.head_sha.slice(0, 9)} is on main.
+                              {stale
+                                ? `Head ${b.head_sha.slice(0, 9)} is older than the 60-day read and not on main within it — not measured. Check the branch on GitHub.`
+                                : `Nothing ahead of main: head ${b.head_sha.slice(0, 9)} is on main.`}
                             </span>
                           )}
                           {b.commits.map(c => (

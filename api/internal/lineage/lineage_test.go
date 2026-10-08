@@ -66,16 +66,18 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	C := fakeCommit{"ccc", "chore: c\n\nCo-Authored-By: Claude Opus 5.5 <x>", day(3)}
 	G := fakeCommit{"ggg", "cursor: g\n\nChange-Id: " + cidG, day(4)}
 	Old := fakeCommit{"old", "old\n\nClaude-Session: local_s9", day(40)}
+	Anc := fakeCommit{"anc", "wip: abandoned\n\nClaude-Session: local_s7", day(80)}
 	D := fakeCommit{"ddd", "feat: a (0.48.0)\n\nClaude-Session: local_s1\nChange-Id: " + cidX, day(5)}
 	E := fakeCommit{"eee", "fix: e\n\nClaude-Session: local_s1\nClaude-Transcript: t2\nChange-Id: " + cidY, day(6)}
 	F := fakeCommit{"fff", "feat: f\n\nClaude-Session: local_s2\nChange-Id: " + cidZ, day(2)}
 	H := fakeCommit{"hhh", "chore: c\n\nClaude-Session: https://claude.ai/code/session_x", day(3)}
 	history := map[string][]fakeCommit{
-		"main":   {A, B, C, G, Old},
-		"lane-1": {D, E, A, B, C, G, Old},
-		"lane-2": {F, A, B, C, G, Old},
-		"lane-3": {H, A, B, C, G, Old},
-		"stale":  {Old},
+		"main":    {A, B, C, G, Old},
+		"lane-1":  {D, E, A, B, C, G, Old},
+		"lane-2":  {F, A, B, C, G, Old},
+		"lane-3":  {H, A, B, C, G, Old},
+		"stale":   {Old},
+		"ancient": {Anc},
 	}
 	mux := http.NewServeMux()
 	write := func(w http.ResponseWriter, v any) { _ = json.NewEncoder(w).Encode(v) }
@@ -91,7 +93,7 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	})
 	mux.HandleFunc("/api/v1/repos/bifrost/r1/branches", func(w http.ResponseWriter, r *http.Request) {
 		var out []map[string]any
-		for _, b := range []string{"main", "lane-1", "lane-2", "lane-3", "stale"} {
+		for _, b := range []string{"main", "lane-1", "lane-2", "lane-3", "stale", "ancient"} {
 			out = append(out, map[string]any{"name": b, "commit": map[string]any{"id": history[b][0].sha, "timestamp": history[b][0].at}})
 		}
 		write(w, out)
@@ -425,8 +427,16 @@ func TestBranchesStatusAheadBehind(t *testing.T) {
 	if b := by["stale"]; b.Status != "even" || b.Ahead != 0 || b.Behind != 4 || b.BehindIsFloor {
 		t.Fatalf("stale = %+v", b)
 	}
-	if resp.Branches[0].Status != "open" {
-		t.Fatalf("open branches sort first: %+v", resp.Branches[0])
+	// ancient: its head is older than the 60-day read and not on main — not measured, not "merged"
+	if b := by["ancient"]; b.Status != "stale" || b.Ahead != 0 || b.Behind != 5 || !b.BehindIsFloor || len(b.Commits) != 0 {
+		t.Fatalf("ancient = %+v", b)
+	}
+	var order []string
+	for _, b := range resp.Branches {
+		order = append(order, b.Status)
+	}
+	if got := strings.Join(order, ","); got != "open,stale,landed,landed,even" {
+		t.Fatalf("status order = %s", got)
 	}
 }
 

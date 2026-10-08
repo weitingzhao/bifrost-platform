@@ -325,6 +325,7 @@ export function CommitLineagePage() {
   }
 
   const data = q.data
+  const lanes = useMemo(() => (data?.graph ?? []).reduce((n, g) => n + g.branches.length, 0), [data])
   const threads = useMemo(
     () => (data?.threads ?? []).map(t => matches(t, needle.trim())).filter((t): t is LineageThread => t != null),
     [data, needle],
@@ -410,6 +411,12 @@ export function CommitLineagePage() {
           title="Graph"
           overflow="visible"
         >
+          {bq.data != null && bq.data.branches.length > lanes && (
+            <p className={`pb-2 ${meta}`}>
+              {lanes} of {bq.data.branches.length} branches have a lane here: a branch gets one while it has a change not on
+              main and its last commit is inside the {data.days}-day window. Every branch is listed under Branches.
+            </p>
+          )}
           <LineageGraph graph={data.graph} threads={data.threads} showHelp={help} />
         </OpsSection>
       )}

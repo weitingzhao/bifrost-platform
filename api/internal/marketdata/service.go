@@ -294,19 +294,24 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 	if s.freshnessProbe != nil {
 		return s.freshnessProbe(ctx)
 	}
-	if s.cluster == nil {
+	// No API URL and no cluster means the plugin cannot be reached at all.
+	// That is unknown (nothing to ask), not an empty freshness table.
+	if strings.TrimSpace(s.cfg.APIBaseURL) == "" && s.cluster == nil {
 		return nil, probe.ReachUnknown, "cluster service unavailable"
 	}
-	db := s.cfg.FreshnessDB
-	if db == "" {
-		db = defaultFreshnessDB
-	}
-	sql := "SELECT dimension, COALESCE(last_run_at::text,''), COALESCE(rows_written,0), COALESCE(status,'unknown') FROM ops_jobs.ingest_freshness ORDER BY dimension"
-	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
+	// GET /market/coverage/freshness → freshness[]. Same columns as the old
+	// ingest_freshness SELECT (dimension, last_run_at, rows_written, status),
+	// ordered by dimension. Not db-summary: that one also counts the whole
+	// database (~4.6 s) on every 30 s Console poll. No query string: ProxyGet
+	// would escape "?".
+	body, err := s.fetchPluginJSON(ctx, "/market/coverage/freshness")
 	if err != nil {
 		return nil, probe.ReachFail, err.Error()
 	}
-	rows := parseFreshnessOutput(out, time.Now().UTC())
+	rows, err := parseFreshnessJSON(body, time.Now().UTC())
+	if err != nil {
+		return nil, probe.ReachDegraded, "freshness JSON unparseable"
+	}
 	if len(rows) == 0 {
 		return rows, probe.ReachUnknown, "no ingest_freshness rows"
 	}
@@ -336,11 +341,11 @@ func (s *Service) probeReadinessRollup(ctx context.Context) *ReadinessRollup {
 		return nil
 	}
 	var cov struct {
-		OK                bool   `json:"ok"`
-		RowCount          int    `json:"row_count"`
-		SessionDate       string `json:"session_date"`
-		LastFetchedAt     string `json:"last_fetched_at"`
-		ByInstrumentType  []struct {
+		OK               bool   `json:"ok"`
+		RowCount         int    `json:"row_count"`
+		SessionDate      string `json:"session_date"`
+		LastFetchedAt    string `json:"last_fetched_at"`
+		ByInstrumentType []struct {
 			Code                string `json:"code"`
 			SnapshotRowCount    int    `json:"snapshot_row_count"`
 			UniverseTickerCount int    `json:"universe_ticker_count"`
@@ -462,34 +467,77 @@ func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
 		lastRaw := strings.TrimSpace(parts[1])
 		rowsWritten, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
 		status := strings.TrimSpace(parts[3])
-		info := FreshnessInfo{
-			Dimension:   dim,
-			RowsWritten: rowsWritten,
-			Status:      status,
-			Verdict:     "unknown",
-		}
-		if lastRaw != "" && !strings.EqualFold(lastRaw, "null") {
-			if ts, err := parseFreshnessTimestamp(lastRaw); err == nil {
-				info.LastRunAt = ts.UTC().Format(time.RFC3339)
-				age := now.Sub(ts.UTC()).Hours()
-				if age < 0 {
-					age = 0
-				}
-				info.AgeHours = age
-				limit := freshnessAgeLimitHours(dim, now)
-				if strings.EqualFold(status, "ok") && age < limit {
-					info.Verdict = "ok"
-				} else if strings.EqualFold(status, "ok") && !freshnessAffectsReach(dim) {
-					// Slow-rotate / source_void dims: age must not degrade probe (void ≠ fail).
-					info.Verdict = "ok"
-				} else {
-					info.Verdict = "stale"
-				}
-			}
-		}
-		rows = append(rows, info)
+		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, status, now))
 	}
 	return rows
+}
+
+// parseFreshnessJSON reads the freshness array of GET /market/coverage/freshness
+// (the same array db-summary carries).
+// Null last_run_at / rows_written / status match the old COALESCE defaults
+// (empty timestamp, 0, "unknown").
+func parseFreshnessJSON(body []byte, now time.Time) ([]FreshnessInfo, error) {
+	var payload struct {
+		Freshness []struct {
+			Dimension   string   `json:"dimension"`
+			LastRunAt   *string  `json:"last_run_at"`
+			RowsWritten *float64 `json:"rows_written"`
+			Status      *string  `json:"status"`
+		} `json:"freshness"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	rows := make([]FreshnessInfo, 0, len(payload.Freshness))
+	for _, row := range payload.Freshness {
+		dim := strings.TrimSpace(row.Dimension)
+		if dim == "" {
+			continue
+		}
+		lastRaw := ""
+		if row.LastRunAt != nil {
+			lastRaw = strings.TrimSpace(*row.LastRunAt)
+		}
+		rowsWritten := 0
+		if row.RowsWritten != nil {
+			rowsWritten = int(*row.RowsWritten)
+		}
+		status := "unknown"
+		if row.Status != nil && strings.TrimSpace(*row.Status) != "" {
+			status = strings.TrimSpace(*row.Status)
+		}
+		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, status, now))
+	}
+	return rows, nil
+}
+
+func freshnessInfoFromParts(dim, lastRaw string, rowsWritten int, status string, now time.Time) FreshnessInfo {
+	info := FreshnessInfo{
+		Dimension:   dim,
+		RowsWritten: rowsWritten,
+		Status:      status,
+		Verdict:     "unknown",
+	}
+	if lastRaw != "" && !strings.EqualFold(lastRaw, "null") {
+		if ts, err := parseFreshnessTimestamp(lastRaw); err == nil {
+			info.LastRunAt = ts.UTC().Format(time.RFC3339)
+			age := now.Sub(ts.UTC()).Hours()
+			if age < 0 {
+				age = 0
+			}
+			info.AgeHours = age
+			limit := freshnessAgeLimitHours(dim, now)
+			if strings.EqualFold(status, "ok") && age < limit {
+				info.Verdict = "ok"
+			} else if strings.EqualFold(status, "ok") && !freshnessAffectsReach(dim) {
+				// Slow-rotate / source_void dims: age must not degrade probe (void ≠ fail).
+				info.Verdict = "ok"
+			} else {
+				info.Verdict = "stale"
+			}
+		}
+	}
+	return info
 }
 
 // Session-bound dims that gate plugin freshness_reachability (matches Plugin quality.py).

@@ -234,19 +234,21 @@ func parseHealthBody(body []byte) (*WorkerInfo, probe.Reachability, string) {
 }
 
 func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Reachability, string) {
-	if s.cluster == nil {
+	if strings.TrimSpace(s.cfg.APIBaseURL) == "" && s.cluster == nil {
 		return nil, probe.ReachUnknown, "cluster service unavailable"
 	}
-	db := s.cfg.FreshnessDB
-	if db == "" {
-		db = defaultFreshnessDB
-	}
-	sql := "SELECT dimension, COALESCE(latest_ts::text,''), COALESCE(row_count,0), 'ok' FROM ops_jobs.flex_ingest_freshness ORDER BY dimension"
-	out, err := s.cluster.ExecSQLOnPrimary(ctx, db, sql)
+	// GET /flex/coverage/freshness → dimensions[]. Columns match the old
+	// flex_ingest_freshness SELECT (dimension, latest_ts, row_count). The SQL
+	// probe injected status 'ok'; this endpoint has no status column, so the
+	// parser keeps that literal. No query string: ProxyGet would escape "?".
+	body, err := s.fetchPluginJSON(ctx, "/flex/coverage/freshness")
 	if err != nil {
 		return nil, probe.ReachFail, err.Error()
 	}
-	rows := parseFreshnessOutput(out, time.Now().UTC())
+	rows, err := parseFreshnessJSON(body, time.Now().UTC())
+	if err != nil {
+		return nil, probe.ReachDegraded, "freshness JSON unparseable"
+	}
 	if len(rows) == 0 {
 		return rows, probe.ReachUnknown, "no ingest_freshness rows"
 	}
@@ -260,6 +262,40 @@ func (s *Service) probeFreshness(ctx context.Context) ([]FreshnessInfo, probe.Re
 		}
 	}
 	return rows, reach, ""
+}
+
+// fetchPluginJSON GETs a Plugin API path via FLEX_QUERY_API_URL or K8s service proxy.
+func (s *Service) fetchPluginJSON(ctx context.Context, pluginPath string) ([]byte, error) {
+	pluginPath = "/" + strings.TrimPrefix(pluginPath, "/")
+	if base := strings.TrimRight(strings.TrimSpace(s.cfg.APIBaseURL), "/"); base != "" {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+pluginPath, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		client := &http.Client{Timeout: proxyTimeout}
+		res, err := client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+		if res.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("plugin HTTP %d", res.StatusCode)
+		}
+		return body, nil
+	}
+	if s.cluster == nil {
+		return nil, fmt.Errorf("cluster service unavailable")
+	}
+	clientset, _, err := s.cluster.KubernetesClient()
+	if err != nil {
+		return nil, err
+	}
+	rawPath := strings.TrimPrefix(pluginPath, "/")
+	return clientset.CoreV1().Services(pluginNamespace).ProxyGet(
+		"http", apiServiceName, apiServicePort, rawPath, nil,
+	).DoRaw(ctx)
 }
 
 func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
@@ -277,30 +313,67 @@ func parseFreshnessOutput(out string, now time.Time) []FreshnessInfo {
 		lastRaw := strings.TrimSpace(parts[1])
 		rowsWritten, _ := strconv.Atoi(strings.TrimSpace(parts[2]))
 		status := strings.TrimSpace(parts[3])
-		info := FreshnessInfo{
-			Dimension:   dim,
-			RowsWritten: rowsWritten,
-			Status:      status,
-			Verdict:     "unknown",
-		}
-		if lastRaw != "" && !strings.EqualFold(lastRaw, "null") {
-			if ts, err := parseFreshnessTimestamp(lastRaw); err == nil {
-				info.LastRunAt = ts.UTC().Format(time.RFC3339)
-				age := now.Sub(ts.UTC()).Hours()
-				if age < 0 {
-					age = 0
-				}
-				info.AgeHours = age
-				if strings.EqualFold(status, "ok") && age < freshnessMaxAgeH {
-					info.Verdict = "ok"
-				} else {
-					info.Verdict = "stale"
-				}
-			}
-		}
-		rows = append(rows, info)
+		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, status, now))
 	}
 	return rows
+}
+
+// parseFreshnessJSON reads dimensions[] from GET /flex/coverage/freshness.
+// latest_ts maps to LastRunAt and row_count to RowsWritten. Status stays the
+// literal "ok" the SQL probe selected, including when latest_ts is null.
+func parseFreshnessJSON(body []byte, now time.Time) ([]FreshnessInfo, error) {
+	var payload struct {
+		Dimensions []struct {
+			Dimension string   `json:"dimension"`
+			LatestTS  *string  `json:"latest_ts"`
+			RowCount  *float64 `json:"row_count"`
+		} `json:"dimensions"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, err
+	}
+	rows := make([]FreshnessInfo, 0, len(payload.Dimensions))
+	for _, row := range payload.Dimensions {
+		dim := strings.TrimSpace(row.Dimension)
+		if dim == "" {
+			continue
+		}
+		lastRaw := ""
+		if row.LatestTS != nil {
+			lastRaw = strings.TrimSpace(*row.LatestTS)
+		}
+		rowsWritten := 0
+		if row.RowCount != nil {
+			rowsWritten = int(*row.RowCount)
+		}
+		rows = append(rows, freshnessInfoFromParts(dim, lastRaw, rowsWritten, "ok", now))
+	}
+	return rows, nil
+}
+
+func freshnessInfoFromParts(dim, lastRaw string, rowsWritten int, status string, now time.Time) FreshnessInfo {
+	info := FreshnessInfo{
+		Dimension:   dim,
+		RowsWritten: rowsWritten,
+		Status:      status,
+		Verdict:     "unknown",
+	}
+	if lastRaw != "" && !strings.EqualFold(lastRaw, "null") {
+		if ts, err := parseFreshnessTimestamp(lastRaw); err == nil {
+			info.LastRunAt = ts.UTC().Format(time.RFC3339)
+			age := now.Sub(ts.UTC()).Hours()
+			if age < 0 {
+				age = 0
+			}
+			info.AgeHours = age
+			if strings.EqualFold(status, "ok") && age < freshnessMaxAgeH {
+				info.Verdict = "ok"
+			} else {
+				info.Verdict = "stale"
+			}
+		}
+	}
+	return info
 }
 
 func parseFreshnessTimestamp(raw string) (time.Time, error) {

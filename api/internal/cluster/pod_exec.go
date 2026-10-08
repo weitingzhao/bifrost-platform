@@ -59,8 +59,9 @@ func (s *Service) execOnPrimary(ctx context.Context, primary string, command ...
 	return "", err
 }
 
-// ExecSQLOnPrimary runs `psql -tAc <sql>` on the CNPG primary against ``database``.
-// Used by plugin probes (e.g. market-data ingest_freshness).
+// ExecSQLOnPrimary runs `psql -tAc <sql>` on the CNPG primary against database.
+// Plugin freshness no longer calls it (those probes GET the plugin APIs).
+// The data clone still execs into the primary through execOnPrimary.
 func (s *Service) ExecSQLOnPrimary(ctx context.Context, database, sql string) (string, error) {
 	if s == nil {
 		return "", fmt.Errorf("cluster service unavailable")

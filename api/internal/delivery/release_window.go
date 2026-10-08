@@ -147,6 +147,11 @@ func decideReleaseWindow(found bool, window map[string]any, pipeline, callerWho 
 			"REFUSED: release window held by someone else (who=%s what=%s); %s needs one of %s",
 			holder, whatStr, pipeline, sortedKeys(repos))
 	}
+	if strings.TrimSpace(callerWho) == "" {
+		return fmt.Sprintf(
+			"REFUSED: missing who; pass who matching the release window holder (who=%s what=%s)",
+			holder, whatStr)
+	}
 	if strings.TrimSpace(callerWho) != holder {
 		return fmt.Sprintf(
 			"REFUSED: release window held by someone else (who=%s what=%s)",

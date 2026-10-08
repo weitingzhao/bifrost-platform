@@ -18,7 +18,9 @@ const (
 )
 
 type Config struct {
-	HealthURL   string
+	HealthURL string
+	// FreshnessDB is kept so FLEX_QUERY_FRESHNESS_DB still parses. The freshness
+	// probe reads the plugin HTTP API and does not open this database.
 	FreshnessDB string
 	APIBaseURL  string
 	WriteToken  string

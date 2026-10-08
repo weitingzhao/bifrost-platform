@@ -46,7 +46,9 @@ type BranchHealth struct {
 	BehindIsFloor bool   `json:"behind_is_floor,omitempty"`
 	ForkSHA       string `json:"fork_sha,omitempty"`
 	// Status: "open" (unlanded changes), "landed" (every change is on the default
-	// branch in another form — a leftover), "even" (nothing ahead — merged).
+	// branch in another form — a leftover), "even" (nothing ahead — merged),
+	// "stale" (the head is older than what was read and not on the default branch
+	// in that span: not measured, so Ahead and Open are 0 and Behind is a floor).
 	Status  string         `json:"status"`
 	Threads []BranchThread `json:"threads"`
 	// Commits: the branch's own commits, newest first (capped).
@@ -99,8 +101,8 @@ func (s *Service) Branches(ctx context.Context) BranchesResponse {
 	}
 	sort.SliceStable(out.Branches, func(i, j int) bool {
 		a, b := out.Branches[i], out.Branches[j]
-		if (a.Status == "open") != (b.Status == "open") {
-			return a.Status == "open"
+		if ra, rb := statusRank[a.Status], statusRank[b.Status]; ra != rb {
+			return ra < rb
 		}
 		if a.OldestOpenAt != nil && b.OldestOpenAt != nil && !a.OldestOpenAt.Equal(*b.OldestOpenAt) {
 			return a.OldestOpenAt.Before(*b.OldestOpenAt) // the longest-waiting work first
@@ -115,6 +117,10 @@ func (s *Service) Branches(ctx context.Context) BranchesResponse {
 	}
 	return out
 }
+
+// statusRank orders the branch list: unlanded work first, then branches that
+// could not be measured, then leftovers, then merged names.
+var statusRank = map[string]int{"open": 0, "stale": 1, "landed": 2, "even": 3}
 
 func measureRepo(ctx context.Context, g *gitea, r giteaRepo, now time.Time) ([]BranchHealth, []string) {
 	brs, err := g.branches(ctx, r.Name)
@@ -148,6 +154,15 @@ func measureRepo(ctx context.Context, g *gitea, r giteaRepo, now time.Time) ([]B
 	out := make([]BranchHealth, 0, len(others))
 	for _, b := range others {
 		h := BranchHealth{Repo: r.Name, Branch: b.Name, HeadSHA: b.SHA, HeadAt: b.At, Threads: []BranchThread{}, Commits: []GraphCommit{}}
+		if !onMain(b.SHA) && b.At.Before(since) {
+			// The head predates the horizon and is not on the default branch inside
+			// it: the walk would stop at once and read as "nothing ahead". It may be
+			// abandoned work or a merge older than the read; say so instead of "even".
+			h.Status = "stale"
+			h.Behind, h.BehindIsFloor = len(main), true
+			out = append(out, h)
+			continue
+		}
 		var ahead []giteaCommit
 		if !onMain(b.SHA) {
 			// walk the branch back until it meets the default branch: those are its own commits
