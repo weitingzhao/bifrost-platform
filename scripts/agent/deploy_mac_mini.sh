@@ -169,6 +169,55 @@ resolve_relay_config() {
 if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
   return 0
 fi
+# prod_viewer_export prints the line that gives the Mini's operator plane the
+# PROD viewer token: "export PLATFORM_VIEWER_TOKEN=<value>", read from
+# PLATFORM_PROD_VIEWER_TOKEN in the infra .env. config/platform-auth.yaml maps
+# PLATFORM_VIEWER_TOKEN to the viewer role, so PROD callers can read viewer
+# routes there: the nightly maintainer reconcile (GET /agent/launchd) and
+# viewer requests PROD platform-api proxies to the plane. The Mac Pro's own
+# PLATFORM_VIEWER_TOKEN is never sent (ops-arch 2026-10-08, option A).
+#
+#   prod_viewer_export <infra-env> [<other-tokens-file>]
+#
+# Prints nothing when the key is absent or empty. Exits 3, printing nothing on
+# stdout, when the value equals any *_TOKEN already in <other-tokens-file>:
+# LoadAuth rejects two roles with one token, and the plane would then deny every
+# authenticated route. The value never goes to stderr.
+# Test entry (exits before any deploy): deploy_mac_mini.sh --prod-viewer-export ...
+_env_value() {
+  local val="$1"
+  val="${val%$'\r'}"
+  case "${val}" in
+    '"'*'"') val="${val#\"}"; val="${val%\"}" ;;
+    "'"*"'") val="${val#\'}"; val="${val%\'}" ;;
+  esac
+  printf '%s' "${val}"
+}
+
+prod_viewer_export() {
+  local infra_env="$1" others="${2:-}" line val other
+  line="$(grep -E '^(export )?PLATFORM_PROD_VIEWER_TOKEN=' "${infra_env}" 2>/dev/null | tail -n 1 || true)"
+  [[ -n "${line}" ]] || return 0
+  val="$(_env_value "${line#*=}")"
+  [[ -n "${val}" ]] || return 0
+  if [[ -n "${others}" && -f "${others}" ]]; then
+    while IFS= read -r other; do
+      [[ -n "${other}" ]] || continue
+      if [[ "$(_env_value "${other#*=}")" == "${val}" ]]; then
+        echo "ERROR: PLATFORM_PROD_VIEWER_TOKEN equals ${other%%=*} on the Mini; the plane would refuse its auth file" >&2
+        return 3
+      fi
+    done < <(grep -E '^(export )?[A-Z0-9_]*_TOKEN=' "${others}" || true)
+  fi
+  printf 'export PLATFORM_VIEWER_TOKEN=%s\n' "${val}"
+}
+
+if [[ "${1:-}" == "--prod-viewer-export" ]]; then
+  shift
+  prod_viewer_export "$@"
+  exit $?
+fi
+
 if [[ "${1:-}" == "--resolve-relay-config" ]]; then
   shift
   resolve_relay_config "$@"
@@ -450,6 +499,22 @@ if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
         echo "export ${line}" >> "${TMP_OUT}"
       fi
     done < "${TMP_ENV}"
+    _viewer_rc=0
+    _viewer_line=""
+    if [[ -n "${INFRA_LOCAL}" && -f "${INFRA_LOCAL}/.env" ]]; then
+      _viewer_line="$(prod_viewer_export "${INFRA_LOCAL}/.env" "${TMP_OUT}")" || _viewer_rc=$?
+    fi
+    if [[ "${_viewer_rc}" -ne 0 ]]; then
+      rm -f "${TMP_OUT}" "${TMP_ENV}"
+      exit "${_viewer_rc}"
+    fi
+    if [[ -n "${_viewer_line}" ]]; then
+      printf '%s\n' "${_viewer_line}" >> "${TMP_OUT}"
+      echo "  PROD viewer token added as PLATFORM_VIEWER_TOKEN"
+    else
+      echo "  WARNING: no PLATFORM_PROD_VIEWER_TOKEN in ${INFRA_LOCAL:-<no infra checkout>}/.env — PROD callers cannot read viewer routes on this plane" >&2
+    fi
+    unset _viewer_line _viewer_rc
     run_scp -q "${TMP_OUT}" "${REMOTE}:${REMOTE_DIR}/config/.env"
     run_remote "chmod 600 ${REMOTE_DIR}/config/.env"
     echo "  remote .env updated"
