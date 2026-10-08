@@ -217,7 +217,7 @@ export function accountSyncChipFromBus(
 }
 
 export function releaseGateSignal(gate: ReleaseGateResponse | undefined): { signal: Signal; detail: string } {
-  if (gate == null) return { signal: 'unknown', detail: 'probing' }
+  if (gate == null) return { signal: 'unknown', detail: 'Release gate retired' }
   const blocker = gate.blockers?.find(b => b.trim() !== '')
   // A pass counts only while the API still calls it ready: a pass older than
   // the gate window (or with blockers) is not green (TD-230).

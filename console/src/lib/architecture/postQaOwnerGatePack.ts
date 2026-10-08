@@ -42,7 +42,7 @@ export const POST_QA_OWNER_GATES: PostQaOwnerGate[] = [
     ownerAction:
       'On Mac Mini .50 configure LLM key in ~/.hermes/ or ANTHROPIC_API_KEY / OPENROUTER_API_KEY; confirm GET /api/v1/agent/hermes/readiness ready:true and nous_hermes.mcp_tool_count > 0',
     agentPrep:
-      'Last probe: ready=false · LLM_KEY_MISSING · gateway v0.17.0 OK · L0 dry-run in hermesL0FirstTaskEvidence.ts. Re-probe after Owner configures key.',
+      'Last probe: ready=false · LLM_KEY_MISSING · gateway v0.17.0 OK. Re-probe after Owner configures key.',
     unlocks: 'Wave G Phase G3 (Hermes real L0 first-task → stream ⑥)',
     status: 'blocked_external',
   },

@@ -15,7 +15,6 @@ import {
 } from '@bifrost/ui'
 import { ChevronDown, ChevronRight, Wrench } from 'lucide-react'
 import { fetchMatrix, isAllMatrices } from '@/api/core'
-import { fetchRetrospectiveReport } from '@/api/agentOps'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
 import type {
@@ -240,12 +239,6 @@ export function ClusterOpsIssuesPanel({
     refetchInterval: REFETCH_MS,
     enabled: matrices.length === 0,
   })
-  const retroQ = useQuery({
-    queryKey: ['cluster-ops-issues', 'retrospective'],
-    queryFn: () => fetchRetrospectiveReport(false),
-    refetchInterval: 60_000,
-  })
-
   const triageRows = useMemo(
     () =>
       buildClusterFailureTriage({
@@ -256,7 +249,7 @@ export function ClusterOpsIssuesPanel({
         supplyChain: supplyQ.data,
         stgSmoke: smokeQ.data,
         matrices: matricesQ.data ?? matrices,
-        retrospectivePatterns: retroQ.data?.patterns ?? [],
+        retrospectivePatterns: [],
         topN,
       }),
     [
@@ -268,7 +261,6 @@ export function ClusterOpsIssuesPanel({
       smokeQ.data,
       matricesQ.data,
       matrices,
-      retroQ.data?.patterns,
       topN,
     ],
   )

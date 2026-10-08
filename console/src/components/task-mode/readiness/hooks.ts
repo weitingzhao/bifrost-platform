@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCluster, fetchClusterServiceReadiness } from '@/api/cluster'
 import { fetchContext, fetchSatelliteBusDeep, fetchSelfHealth } from '@/api/core'
-import { fetchReleaseGate, fetchStgSmoke, fetchTierBStatus } from '@/api/promote'
+import { fetchStgSmoke } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import {
@@ -67,19 +67,9 @@ export function usePromoteVerifyReadiness(enabled = true) {
     enabled,
   })
 
-  const stgGateQ = useQuery({
-    queryKey: ['promote', 'release-gate', 'stg'],
-    queryFn: () => fetchReleaseGate('stg'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const stgGateQ = { data: undefined, isLoading: false }
 
-  const tierBQ = useQuery({
-    queryKey: ['promote', 'tier-b'],
-    queryFn: fetchTierBStatus,
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const tierBQ = { data: undefined, isLoading: false }
 
   const supplyQ = useQuery({
     queryKey: ['cockpit', 'supply-chain'],
@@ -152,12 +142,7 @@ export function useSatelliteProdReadiness(enabled = true) {
     enabled,
   })
 
-  const prodGateQ = useQuery({
-    queryKey: ['task-cc', 'trade-prod-gate'],
-    queryFn: () => fetchReleaseGate('prod'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const prodGateQ = { data: undefined, isLoading: false }
 
   const prodMatrix = useMemo(() => matrices.find(m => m.environment === 'prod'), [matrices])
   const cluster = clusterQ.data
@@ -287,12 +272,7 @@ export function useRocketProdReadiness(enabled = true) {
     enabled,
   })
 
-  const prodGateQ = useQuery({
-    queryKey: ['task-cc', 'platform-prod-gate'],
-    queryFn: () => fetchReleaseGate('platform-prod'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const prodGateQ = { data: undefined, isLoading: false }
 
   const cluster = clusterQ.data
   const k8sProd = useMemo(() => namespacePods(cluster, PLATFORM_PROD), [cluster])
@@ -378,19 +358,9 @@ export function useRocketLaunchOverall(enabled = true): LaunchViewOverall {
     enabled,
   })
 
-  const stgGateQ = useQuery({
-    queryKey: ['task-cc', 'platform-stg-gate'],
-    queryFn: () => fetchReleaseGate('platform-stg'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const stgGateQ = { data: undefined, isLoading: false }
 
-  const prodGateQ = useQuery({
-    queryKey: ['task-cc', 'platform-prod-gate'],
-    queryFn: () => fetchReleaseGate('platform-prod'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const prodGateQ = { data: undefined, isLoading: false }
 
   const cicdDomain = serviceQ.data?.domains.find(d => d.id === 'cicd')
   const cicdSignal = (cicdDomain?.reachability ?? 'unknown') as Signal
@@ -482,12 +452,7 @@ export function useSatelliteDeployOverall(enabled = true): LaunchViewOverall {
     enabled,
   })
 
-  const prodGateQ = useQuery({
-    queryKey: ['task-cc', 'trade-prod-gate'],
-    queryFn: () => fetchReleaseGate('prod'),
-    refetchInterval: REFETCH_MS,
-    enabled,
-  })
+  const prodGateQ = { data: undefined, isLoading: false }
 
   const clusterQ = useQuery({
     queryKey: ['task-cc', 'cluster'],

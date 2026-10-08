@@ -1,7 +1,5 @@
-import { useQuery } from '@tanstack/react-query'
 import { StatusLamp, cn, type Reachability } from '@bifrost/ui'
 import { BrainCircuit, Gauge } from 'lucide-react'
-import { fetchHermesInsights, fetchHermesReadiness } from '@/api/hermes'
 import { taskModeById } from '@/lib/task-mode/taskModeCatalog'
 import type { TaskModeId } from '@/lib/task-mode/types'
 import { useTaskMode } from '@/lib/task-mode/useTaskMode'
@@ -55,19 +53,9 @@ function opsCell(
   }
 }
 
-function analysisCell(
-  hermesReachable: boolean | null,
-  lastInsight: string | null,
-): TriadCell {
-  let lamp: Reachability = 'unknown'
-  if (hermesReachable === false) lamp = 'degraded'
-  else if (hermesReachable === true) lamp = 'ok'
-  const summary =
-    hermesReachable === false
-      ? 'Hermes unreachable'
-      : lastInsight != null && lastInsight !== ''
-        ? lastInsight
-        : 'No insights yet'
+function analysisCell(): TriadCell {
+  const lamp: Reachability = 'unknown'
+  const summary = 'Insights retired'
   return {
     id: 'analysis',
     modeId: 'analysis',
@@ -94,37 +82,9 @@ export function AgentTriadStrip({
     latest != null
       ? formatPatrolRelativeTime(latest.finished_at ?? latest.started_at)
       : 'no runs'
-  const readinessQ = useQuery({
-    queryKey: ['hermes', 'readiness'],
-    queryFn: fetchHermesReadiness,
-    refetchInterval: 30_000,
-    retry: false,
-  })
-  const insightsQ = useQuery({
-    queryKey: ['hermes', 'insights', 1],
-    queryFn: () => fetchHermesInsights(1),
-    refetchInterval: 30_000,
-    retry: false,
-  })
-  const hermesReachable =
-    readinessQ.isError
-      ? false
-      : readinessQ.data == null
-        ? null
-        : readinessQ.data.nous_hermes.gateway_running !== false &&
-          !['fail', 'error', 'down', 'unreachable'].includes(
-            (readinessQ.data.nous_hermes.status ?? '').toLowerCase(),
-          )
-  const lastInsight = insightsQ.data?.items[0]
-  const lastInsightLine =
-    lastInsight == null
-      ? null
-      : lastInsight.summary?.trim() ||
-        [lastInsight.symbol, lastInsight.type, lastInsight.verdict].filter(s => s !== '').join(' · ')
-
   const cells: TriadCell[] = [
     opsCell(operateQueueOpen, recentRemediationFail, `${posture.label} · ${when}`, posture.lamp),
-    analysisCell(hermesReachable, lastInsightLine),
+    analysisCell(),
   ]
 
   const pick = (next: TaskModeId) => {

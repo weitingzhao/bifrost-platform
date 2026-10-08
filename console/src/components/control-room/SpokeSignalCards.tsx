@@ -5,7 +5,6 @@ import { fetchClusterNodes } from '@/api/cluster'
 import { fetchMatrix, fetchSatelliteBusDeep, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
 import { fetchNetworkAudit, fetchNetworkStatus } from '@/api/network'
 import { fetchRemediationJobs } from '@/api/remediation'
-import { fetchRetrospectiveReport } from '@/api/agentOps'
 import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
 import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 import { signalColor, worst, type Signal } from '@/lib/control-room/missionSignals'
@@ -160,13 +159,6 @@ export function SpokeSignalCards({
     refetchInterval: REFETCH_MS,
   })
 
-  const defectsQuery = useQuery({
-    queryKey: ['spoke', 'retrospective', 'report'],
-    queryFn: () => fetchRetrospectiveReport(),
-    refetchInterval: REFETCH_MS,
-    retry: 1,
-  })
-
   const matrices = (() => {
     const data = matrixQuery.data
     if (data == null) return [] as MatrixResponse[]
@@ -212,13 +204,11 @@ export function SpokeSignalCards({
       : `${networkHost} · ${readyNodes}/${nodes.length} nodes`
 
   const activeJobs = findActiveRemediationJobs(jobsQuery.data?.jobs ?? [])
-  const healthScore = defectsQuery.data?.health_score
-  const engineerSignal = healthScoreSignal(healthScore)
+  const engineerSignal = healthScoreSignal(undefined)
 
-  const engineerSummary =
-    jobsQuery.isLoading || defectsQuery.isLoading
-      ? 'Probing…'
-      : `${activeJobs.length} active · score ${healthScore != null ? healthScore.toFixed(0) : '—'}`
+  const engineerSummary = jobsQuery.isLoading
+    ? 'Probing…'
+    : `${activeJobs.length} active · score —`
 
   return (
     <div className="mission-rocket-grid">

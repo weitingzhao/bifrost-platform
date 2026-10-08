@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronRight, Clock, History, RotateCcw } from 'lucide-react'
-import { fetchAgentNightlyReport } from '@/api/agentOps'
 import { fetchAudit } from '@/api/cluster'
 import { fetchRemediationJobs } from '@/api/remediation'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
@@ -85,22 +84,16 @@ export function MissionTimelinePanel({
     queryFn: fetchAudit,
     refetchInterval: 30_000,
   })
-  const nightlyQuery = useQuery({
-    queryKey: ['agent', 'nightly-report'],
-    queryFn: fetchAgentNightlyReport,
-    refetchInterval: 60_000,
-  })
-
   const model = useMemo(
     () =>
       buildMissionTimelineModel({
         jobs: jobsQuery.data?.jobs ?? [],
         auditRecords: auditQuery.data?.records ?? [],
-        nightlyReport: nightlyQuery.data,
+        nightlyReport: undefined,
         snapshot,
         probeObservedAt,
       }),
-    [jobsQuery.data, auditQuery.data, nightlyQuery.data, snapshot, probeObservedAt],
+    [jobsQuery.data, auditQuery.data, snapshot, probeObservedAt],
   )
 
   const loading = jobsQuery.isLoading || auditQuery.isLoading

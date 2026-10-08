@@ -10,7 +10,6 @@ import { fetchSupplyChain } from '@/api/delivery'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchRemediationHealth, fetchRemediationJobs } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
-import { fetchOperateQueue } from '@/api/operateQueue'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { fetchDecisionBriefs } from '@/api/operateBriefs'
 import { fetchIbGatewayStatus } from '@/api/network'
@@ -103,9 +102,8 @@ async function gatherMissionSnapshot(): Promise<{
 export async function gatherControlRoomAgentSnapshot(): Promise<ControlRoomAgentPackSnapshot> {
   const generatedAt = new Date().toISOString()
 
-  const [missionRes, queueRes, briefsRes, jobsRes, contextRes, ibRes] = await Promise.allSettled([
+  const [missionRes, briefsRes, jobsRes, contextRes, ibRes] = await Promise.allSettled([
     gatherMissionSnapshot(),
-    fetchOperateQueue(),
     fetchDecisionBriefs(),
     fetchRemediationJobs(),
     fetchContext(),
@@ -122,8 +120,7 @@ export async function gatherControlRoomAgentSnapshot(): Promise<ControlRoomAgent
     missionError = rejectMsg(missionRes.reason)
   }
 
-  const operateOpen =
-    queueRes.status === 'fulfilled' ? queueRes.value.open ?? [] : ([] as OperateQueueItem[])
+  const operateOpen: OperateQueueItem[] = []
   const pendingBriefCount =
     briefsRes.status === 'fulfilled'
       ? (briefsRes.value ?? []).filter(isPendingDecisionBrief).length

@@ -17,10 +17,8 @@ import { PromoteCutoverStrip } from '@/components/control-room/PromoteCutoverStr
 import { MissionControlHeader } from '@/components/control-room/MissionControlHeader'
 import { MissionVerifyBanner } from '@/components/control-room/MissionVerifyBanner'
 import { ProgramContextSection } from '@/components/control-room/ProgramContextSection'
-import { LaunchPad } from '@/components/control-room/LaunchPad'
 import { SpokeSignalCards } from '@/components/control-room/SpokeSignalCards'
 import { RocketSubsystemsGrid } from '@/components/control-room/RocketSubsystemsGrid'
-import { OperateQueueStrip } from '@/components/control-room/OperateQueueStrip'
 import {
   DualFlywheelPanel,
   type ControlRoomSelection,
@@ -29,7 +27,6 @@ import { PipelineFlow } from '@/components/control-room/PipelineFlow'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
-import { useOperateQueue } from '@/hooks/useOperateQueue'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
@@ -131,8 +128,6 @@ export function ControlRoomPage({
   onOpenAudit,
   onOpenAgentDesk,
   onOpenPlatformRelease,
-  onOpenTradeDeploy,
-  onOpenPluginRelease,
   onOpenPromote,
   onOpenAgentProtocol,
   onOpenNetwork,
@@ -176,7 +171,6 @@ export function ControlRoomPage({
   const { canOperate } = usePlatformAuth()
   const { banner, dismissBanner, pendingVerify } = useMissionVerification(canOperate && !statusSurface)
   // Status does not render the operate bay. Skip retired queue and brief endpoints.
-  const operateQueueQuery = useOperateQueue({ enabled: !statusSurface })
   const briefsQuery = usePendingDecisionBriefs({ enabled: !statusSurface })
   const networkProbe = useNetworkLiveProbe()
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
@@ -259,7 +253,7 @@ export function ControlRoomPage({
     () =>
       buildControlRoomBaySignals({
         snapshot,
-        operateOpenCount: operateQueueQuery.data?.open.length ?? 0,
+        operateOpenCount: 0,
         pendingBriefCount: briefsQuery.pendingCount,
         activeAgentJobCount,
         networkProbe: showHealth ? networkProbe.probeReach : undefined,
@@ -268,7 +262,6 @@ export function ControlRoomPage({
       }),
     [
       snapshot,
-      operateQueueQuery.data?.open.length,
       briefsQuery.pendingCount,
       activeAgentJobCount,
       showHealth,
@@ -377,7 +370,6 @@ export function ControlRoomPage({
   }
 
   const missionBay = bayById(baySignals, 'mission')
-  const launchBay = bayById(baySignals, 'launch')
   const operateBay = bayById(baySignals, 'operate')
   const releaseBay = bayById(baySignals, 'release')
   const healthBay = bayById(baySignals, 'health')
@@ -398,7 +390,7 @@ export function ControlRoomPage({
       {!statusSurface && onModeChange != null && (
         <AgentTriadStrip
           onModeChange={onModeChange}
-          operateQueueOpen={operateQueueQuery.data?.open.length ?? 0}
+          operateQueueOpen={0}
           recentRemediationFail={recentRemediationFail}
         />
       )}
@@ -472,25 +464,6 @@ export function ControlRoomPage({
           </ControlRoomBay>
         )}
 
-        {!statusSurface && launchBay != null && openBayIds.has('launch') && (
-          <ControlRoomBay
-            bayId="launch"
-            title="Launch"
-            signal={launchBay.signal}
-            reason={launchBay.reason}
-            open
-            onOpenChange={open => setBayOpen('launch', open)}
-          >
-            <LaunchPad
-              role="posture"
-              onOpenTaskControlCenter={() => onOpenLaunchView?.('ops')}
-              onOpenPlatformRelease={onOpenPlatformRelease ?? onOpenDelivery}
-              onOpenTradeDeploy={onOpenTradeDeploy ?? onOpenDelivery}
-              onOpenPluginRelease={onOpenPluginRelease ?? onOpenLaunchView?.bind(null, 'ops')}
-            />
-          </ControlRoomBay>
-        )}
-
         {!statusSurface && operateBay != null && openBayIds.has('operate') && (
           <ControlRoomBay
             bayId="operate"
@@ -514,7 +487,6 @@ export function ControlRoomPage({
               onOpenPromote={handleOpenPromotePreflight}
             />
 
-            <OperateQueueStrip onOpenAgentDesk={onOpenAgentDesk} />
           </ControlRoomBay>
         )}
 
