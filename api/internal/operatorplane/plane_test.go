@@ -41,15 +41,9 @@ func TestMountServesEveryOperatorPlaneRoute(t *testing.T) {
 	r.Route("/api/v1", newPlane(t).Mount)
 
 	for _, path := range []string{
-		"/api/v1/agent/nightly-report",
 		"/api/v1/agent/bridge",
-		"/api/v1/agent/smoke",
 		"/api/v1/agent/deploy",
-		"/api/v1/agent/hermes/readiness",
 		"/api/v1/agent/hermes/health",
-		"/api/v1/agent/skills",
-		"/api/v1/agent/schedules",
-		"/api/v1/agent/executions",
 		"/api/v1/agent/launchd",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
@@ -69,8 +63,6 @@ func TestActuationRoutesStayOperatorGated(t *testing.T) {
 	r.Route("/api/v1", newPlane(t).Mount)
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/api/v1/agent/nightly-run"},
-		{http.MethodPost, "/api/v1/agent/deploy"},
 		{http.MethodPut, "/api/v1/patrol/skills/x/enable"},
 		{http.MethodPost, "/api/v1/patrol/trigger/x"},
 	} {
@@ -161,7 +153,6 @@ func TestProxyKeepsActuationOperatorGated(t *testing.T) {
 	r.Route("/api/v1", mount)
 
 	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/api/v1/agent/deploy"},
 		{http.MethodPost, "/api/v1/patrol/trigger/x"},
 	} {
 		rec := httptest.NewRecorder()

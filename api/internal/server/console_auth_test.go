@@ -16,7 +16,6 @@ func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
 	router := srv.Router()
 	for _, c := range []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/console/ws-ticket?node=node-a"},
-		{http.MethodPost, "/api/v1/checklist/husbandry-sync"},
 		{http.MethodGet, "/api/v1/console/ws?node=node-a"},
 		{http.MethodGet, "/api/v1/cluster/workloads/pods/data/bifrost-postgres-1/logs"},
 	} {

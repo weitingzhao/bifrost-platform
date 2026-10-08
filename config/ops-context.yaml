@@ -122,7 +122,7 @@ milestones:
       signed_at: "2026-06-19"
       pipeline_lane: parallel
       pipeline_after: vision-v3-ops-agent
-      authority: console/src/lib/architecture/businessAgentLoopCatalog.ts
+      authority: config/trade-api-domains.yaml
     - id: vision-v5-convergence
       label: Vision V5 — Full convergence
       status: SIGNED

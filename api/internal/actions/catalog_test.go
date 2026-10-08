@@ -136,7 +136,7 @@ func TestCatalogIDsUniqueAndLeveled(t *testing.T) {
 		"drain_node", "poweroff_compute_node", "wake_compute_node",
 		"trigger_cnpg_backup", "repair_cnpg_wal_store", "trigger_data_clone", "market_data_heal",
 		"ib_reconnect", "ib_mode", "ib_maintenance", "ib_self_heal",
-		"unifi_firewall_apply", "stack_install_addon", "stack_upgrade_addon",
+		"unifi_firewall_apply",
 		"sweep_failed_backups", "ensure_metrics_server", "ensure_kube_prometheus_stack",
 		"sync_kubeconfig", "ensure_kubeconfig_secret", "update_data_clone_schedule",
 		"market_data_delete",

@@ -52,26 +52,12 @@ check(
 )
 check("legacy alias build → system", taskMode.includes("build: 'system'"))
 
-const nav = read('src/lib/consoleNavConfig.ts')
-check('consoleNav queue tab', nav.includes("id: 'queue'"))
-check('consoleNav Analysis Workspace', nav.includes("id: 'analysis-workspace'"))
-check('consoleNav Insight Log', nav.includes("id: 'insight-log'"))
-check('consoleNav Hermes Status', nav.includes("id: 'hermes-status'"))
-check('consoleNav Ops Desk has 6 workspace items', ENGINEER_WORKSPACE_COUNT(nav) === 6)
-check('consoleNav Analysis Desk has 3 profile items', ENGINEER_PROFILE_COUNT(nav) === 3)
+const nav = read('src/lib/architecture/consoleSeatCatalog.ts')
+check('seat catalog queue tab', nav.includes("id: 'queue'"))
+check('seat catalog Analysis Workspace', nav.includes("id: 'analysis-workspace'"))
+check('seat catalog Insight Log', nav.includes("id: 'insight-log'"))
+check('seat catalog Hermes Status', nav.includes("id: 'hermes-status'"))
 check('autonomous-skills label is Patrol', /id:\s*'autonomous-skills',\s*label:\s*'Patrol'/.test(nav))
-
-function ENGINEER_WORKSPACE_COUNT(src) {
-  const m = src.match(/export const ENGINEER_WORKSPACE_ITEMS[\s\S]*?^]/m)
-  if (m == null) return -1
-  return (m[0].match(/id:/g) ?? []).length
-}
-
-function ENGINEER_PROFILE_COUNT(src) {
-  const m = src.match(/export const ENGINEER_PROFILE_ITEMS[\s\S]*?^]/m)
-  if (m == null) return -1
-  return (m[0].match(/id:/g) ?? []).length
-}
 
 const partner = read('src/components/shell/PartnerStrip.tsx')
 check('PartnerStrip has no Build Desk (retired 2026-10-06)', !partner.includes('Build Desk'))

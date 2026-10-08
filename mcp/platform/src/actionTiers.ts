@@ -145,30 +145,6 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (_m, body) => asRecord(body),
   },
   {
-    action: 'stack_install_addon',
-    method: 'POST',
-    pattern: /^\/api\/v1\/stack\/addons\/([^/]+)\/install$/,
-    paramsFrom: (m) => ({ name: dec(m[1]) }),
-  },
-  {
-    action: 'stack_upgrade_addon',
-    method: 'POST',
-    pattern: /^\/api\/v1\/stack\/addons\/([^/]+)\/upgrade$/,
-    paramsFrom: (m) => ({ name: dec(m[1]) }),
-  },
-  {
-    action: 'ensure_metrics_server',
-    method: 'POST',
-    pattern: /^\/api\/v1\/cluster\/addons\/metrics-server\/ensure$/,
-    paramsFrom: () => ({}),
-  },
-  {
-    action: 'ensure_kube_prometheus_stack',
-    method: 'POST',
-    pattern: /^\/api\/v1\/cluster\/addons\/kube-prometheus-stack\/ensure$/,
-    paramsFrom: () => ({}),
-  },
-  {
     action: 'drain_node',
     method: 'POST',
     pattern: /^\/api\/v1\/cluster\/nodes\/([^/]+)\/drain$/,
@@ -179,12 +155,6 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     method: 'POST',
     pattern: /^\/api\/v1\/cluster\/nodes\/([^/]+)\/poweroff$/,
     paramsFrom: (m) => ({ name: dec(m[1]) }),
-  },
-  {
-    action: 'ensure_kubeconfig_secret',
-    method: 'POST',
-    pattern: /^\/api\/v1\/cluster\/kubeconfig-secret\/ensure$/,
-    paramsFrom: (_m, body) => asRecord(body),
   },
 ]
 

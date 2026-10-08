@@ -9,8 +9,8 @@ import (
 )
 
 type Meta struct {
-	Version         string `yaml:"version" json:"version"`
-	CatalogVersion  string `yaml:"catalog_version" json:"catalog_version"`
+	Version        string `yaml:"version" json:"version"`
+	CatalogVersion string `yaml:"catalog_version" json:"catalog_version"`
 }
 
 type Deployment struct {
@@ -25,14 +25,14 @@ type Focus struct {
 }
 
 type Milestone struct {
-	ID             string `yaml:"id" json:"id"`
-	Label          string `yaml:"label,omitempty" json:"label,omitempty"`
-	Status         string `yaml:"status" json:"status"`
-	Blocker        string `yaml:"blocker,omitempty" json:"blocker,omitempty"`
-	SignedAt       string `yaml:"signed_at,omitempty" json:"signed_at,omitempty"`
-	Authority      string `yaml:"authority,omitempty" json:"authority,omitempty"`
-	PipelineLane   string `yaml:"pipeline_lane,omitempty" json:"pipeline_lane,omitempty"`
-	PipelineAfter  string `yaml:"pipeline_after,omitempty" json:"pipeline_after,omitempty"`
+	ID            string `yaml:"id" json:"id"`
+	Label         string `yaml:"label,omitempty" json:"label,omitempty"`
+	Status        string `yaml:"status" json:"status"`
+	Blocker       string `yaml:"blocker,omitempty" json:"blocker,omitempty"`
+	SignedAt      string `yaml:"signed_at,omitempty" json:"signed_at,omitempty"`
+	Authority     string `yaml:"authority,omitempty" json:"authority,omitempty"`
+	PipelineLane  string `yaml:"pipeline_lane,omitempty" json:"pipeline_lane,omitempty"`
+	PipelineAfter string `yaml:"pipeline_after,omitempty" json:"pipeline_after,omitempty"`
 }
 
 type Decision struct {
@@ -45,20 +45,20 @@ type Decision struct {
 }
 
 type PlatformPhase struct {
-	ID            string `yaml:"id" json:"id"`
-	Label         string `yaml:"label" json:"label"`
-	Timeframe     string `yaml:"timeframe" json:"timeframe"`
-	Deliverables  string `yaml:"deliverables" json:"deliverables"`
+	ID           string `yaml:"id" json:"id"`
+	Label        string `yaml:"label" json:"label"`
+	Timeframe    string `yaml:"timeframe" json:"timeframe"`
+	Deliverables string `yaml:"deliverables" json:"deliverables"`
 }
 
 type LastGate struct {
-	At       *string `yaml:"at" json:"at"`
-	Result   *string `yaml:"result" json:"result"`
-	LogPath  string  `yaml:"log_path" json:"log_path"`
+	At      *string `yaml:"at" json:"-"`
+	Result  *string `yaml:"result" json:"-"`
+	LogPath string  `yaml:"log_path" json:"-"`
 }
 
 type Promotion struct {
-	LastGate LastGate `yaml:"last_gate" json:"last_gate"`
+	LastGate LastGate `yaml:"last_gate" json:"-"`
 }
 
 type EnvironmentExtended struct {
@@ -95,15 +95,15 @@ type BuildTrack struct {
 }
 
 type MigrateStream struct {
-	ID            string   `yaml:"id" json:"id"`
-	Label         string   `yaml:"label" json:"label"`
-	Total         int      `yaml:"total" json:"total"`
-	Done          int      `yaml:"done" json:"done"`
-	ReadyForSignoff int    `yaml:"ready_for_signoff,omitempty" json:"ready_for_signoff,omitempty"`
-	Status        string   `yaml:"status" json:"status"`
-	NextTask      *string  `yaml:"next_task,omitempty" json:"next_task,omitempty"`
-	Note          string   `yaml:"note,omitempty" json:"note,omitempty"`
-	Prerequisites []string `yaml:"prerequisites,omitempty" json:"prerequisites,omitempty"`
+	ID              string   `yaml:"id" json:"id"`
+	Label           string   `yaml:"label" json:"label"`
+	Total           int      `yaml:"total" json:"total"`
+	Done            int      `yaml:"done" json:"done"`
+	ReadyForSignoff int      `yaml:"ready_for_signoff,omitempty" json:"ready_for_signoff,omitempty"`
+	Status          string   `yaml:"status" json:"status"`
+	NextTask        *string  `yaml:"next_task,omitempty" json:"next_task,omitempty"`
+	Note            string   `yaml:"note,omitempty" json:"note,omitempty"`
+	Prerequisites   []string `yaml:"prerequisites,omitempty" json:"prerequisites,omitempty"`
 }
 
 type MigrateTrack struct {
@@ -135,18 +135,18 @@ type Tracks struct {
 }
 
 type File struct {
-	Meta                 Meta                            `yaml:"meta" json:"meta"`
-	NorthStar            *NorthStar                      `yaml:"north_star,omitempty" json:"north_star,omitempty"`
-	Deployment           Deployment                      `yaml:"deployment" json:"deployment"`
-	Focus                Focus                           `yaml:"focus" json:"focus"`
-	Milestones           []Milestone                     `yaml:"milestones" json:"milestones"`
-	Decisions            []Decision                      `yaml:"decisions" json:"decisions"`
-	PlatformPhases       []PlatformPhase                 `yaml:"platform_phases" json:"platform_phases"`
-	CouplingSurfaces     []string                        `yaml:"coupling_surfaces" json:"coupling_surfaces"`
-	Promotion            Promotion                       `yaml:"promotion" json:"promotion"`
-	EnvironmentsExtended map[string]EnvironmentExtended  `yaml:"environments_extended" json:"environments_extended"`
-	ProbeHints           []ProbeHint                     `yaml:"probe_hints" json:"probe_hints"`
-	Tracks               *Tracks                         `yaml:"tracks,omitempty" json:"tracks,omitempty"`
+	Meta                 Meta                           `yaml:"meta" json:"meta"`
+	NorthStar            *NorthStar                     `yaml:"north_star,omitempty" json:"north_star,omitempty"`
+	Deployment           Deployment                     `yaml:"deployment" json:"deployment"`
+	Focus                Focus                          `yaml:"focus" json:"focus"`
+	Milestones           []Milestone                    `yaml:"milestones" json:"milestones"`
+	Decisions            []Decision                     `yaml:"decisions" json:"decisions"`
+	PlatformPhases       []PlatformPhase                `yaml:"platform_phases" json:"platform_phases"`
+	CouplingSurfaces     []string                       `yaml:"coupling_surfaces" json:"coupling_surfaces"`
+	Promotion            Promotion                      `yaml:"promotion" json:"promotion"`
+	EnvironmentsExtended map[string]EnvironmentExtended `yaml:"environments_extended" json:"environments_extended"`
+	ProbeHints           []ProbeHint                    `yaml:"probe_hints" json:"probe_hints"`
+	Tracks               *Tracks                        `yaml:"tracks,omitempty" json:"tracks,omitempty"`
 }
 
 func ContextPathFromConfigDir(configDir string) string {

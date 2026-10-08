@@ -938,13 +938,8 @@ func OverlayContext(base *opscontext.File, store *Store) *opscontext.File {
 		return base
 	}
 	out := *base
-	at := rec.At.UTC().Format(time.RFC3339)
-	result := rec.Result
-	out.Promotion.LastGate.At = &at
-	out.Promotion.LastGate.Result = &result
-	if rec.LogPath != "" {
-		out.Promotion.LastGate.LogPath = rec.LogPath
-	}
+	// last_gate is stale release-gate state. /context no longer publishes it (LANE-W32).
+	out.Promotion.LastGate = opscontext.LastGate{}
 	// Shallow-copy File would share EnvironmentsExtended with base — concurrent
 	// GET /context writes caused "fatal error: concurrent map writes".
 	ext := make(map[string]opscontext.EnvironmentExtended, len(base.EnvironmentsExtended)+1)

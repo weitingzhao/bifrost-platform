@@ -41,9 +41,8 @@ func isMutating(method string) bool {
 	return false
 }
 
-// Every route that changes state must carry auth.Require. Spot checks let
-// /cluster/sync-kubeconfig and /checklist/husbandry-sync ship anonymous;
-// this walk catches the next one.
+// Every route that changes state must carry auth.Require. A spot check once
+// let /cluster/sync-kubeconfig ship anonymous; this walk catches the next one.
 func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 	srv, err := New(newTestConfig(t))
 	if err != nil {
@@ -82,7 +81,8 @@ func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 	if err != nil {
 		t.Fatalf("chi.Walk: %v", err)
 	}
-	if walked < 50 {
+	// Floor is a broken-walk detector. LANE-W32 deleted several mutating routes; 40 still fails a walk that misses the router.
+	if walked < 40 {
 		t.Fatalf("walked only %d mutating routes — the walk is not seeing the router", walked)
 	}
 	for key := range ticketAuthenticated {

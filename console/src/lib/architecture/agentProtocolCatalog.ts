@@ -786,7 +786,7 @@ export const BUSINESS_AGENT_CLOSED_LOOP = {
   briefSchedule: 'config/business-agent-brief-schedule.yaml',
   cursorMcp: 'config/cursor-mcp-trade.json',
   mcpServer: 'mcp/trade/src/index.ts',
-  catalog: 'console/src/lib/architecture/businessAgentLoopCatalog.ts',
+  catalog: 'config/trade-api-domains.yaml',
 } as const
 
 /** Vision V5 — Full convergence (Dev + Ops + Business unified). */

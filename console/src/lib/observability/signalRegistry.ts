@@ -29,7 +29,7 @@ export const TRADE_NS: Record<'dev' | 'stg' | 'prod', string> = {
 
 /**
  * Fixed Apollo seven-domain order for the hub grid.
- * Keep labels identical to systemDomainCatalog / consoleNavConfig.
+ * Keep labels identical to systemDomainCatalog ConsoleNavPlane.
  */
 export const OBSERVABILITY_DOMAIN_ORDER: SystemDomainId[] = SYSTEM_DOMAINS.map(d => d.id)
 

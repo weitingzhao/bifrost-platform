@@ -30,7 +30,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
-	"github.com/weitingzhao/bifrost-platform/api/internal/escapehatch"
 	"github.com/weitingzhao/bifrost-platform/api/internal/flexquery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/gitops"
 	"github.com/weitingzhao/bifrost-platform/api/internal/ibgateway"
@@ -45,11 +44,9 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
-	"github.com/weitingzhao/bifrost-platform/api/internal/retrospective"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
 	"github.com/weitingzhao/bifrost-platform/api/internal/selfhealth"
-	"github.com/weitingzhao/bifrost-platform/api/internal/stack"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile/k8sstate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/telemetry"
@@ -66,7 +63,6 @@ type Server struct {
 	cluster         *cluster.Handler
 	gitops          *gitops.Handler
 	mcp             *mcp.Handler
-	stack           *stack.Handler
 	delivery        *delivery.Handler
 	promote         *promote.Handler
 	tradeagent      *tradeagent.Handler
@@ -85,10 +81,8 @@ type Server struct {
 	plane         *operatorplane.Plane
 	planeURL      string
 	mountPlane    func(chi.Router)
-	retrospective *retrospective.Handler
 	satellite     *satellite.Handler
 	selfhealth    *selfhealth.Handler
-	escapehatch   *escapehatch.Handler
 	network       *network.Handler
 	ibgateway     *ibgateway.Handler
 	marketdata    *marketdata.Handler
@@ -140,7 +134,6 @@ func New(cfg *config.Config) (*Server, error) {
 	jobs := actuation.NewJobStore()
 	gitopsH := gitops.NewHandler(cfg, audit)
 	remediationH := remediation.NewHandler(audit)
-	retroAnalyzer := retrospective.NewAnalyzer(remediationH.Store())
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
@@ -191,8 +184,7 @@ func New(cfg *config.Config) (*Server, error) {
 		cluster:         clusterH,
 		gitops:          gitopsH,
 		mcp:             mcp.NewHandler(),
-		stack:           stack.NewHandler(cfg, audit),
-		delivery:        bindDeliveryCycleHook(delivery.NewHandler(cfg, audit), promoteH),
+		delivery:        delivery.NewHandler(cfg, audit),
 		promote:         promoteH,
 		tradeagent:      tradeagent.NewHandler(),
 		checklist:       checklistH,
@@ -203,10 +195,8 @@ func New(cfg *config.Config) (*Server, error) {
 		mountPlane:      mountPlane,
 		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
 		codehealth:      codehealth.NewHandler(audit),
-		retrospective:   retrospective.NewHandler(retroAnalyzer),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
-		escapehatch:     escapehatch.NewHandler(cfg, audit),
 		network:         network.NewHandler(audit),
 		ibgateway:       ibgatewayH,
 		marketdata:      marketdata.NewHandler(clusterH.Service()),
@@ -346,7 +336,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/mission/verify-payload", s.handleVerifyPayload)
 		r.Get("/mission/verify-snapshot", s.handleVerifyMissionSnapshot)
 		r.Get("/self-health", s.selfhealth.HandleSelfHealth)
-		r.Get("/platform/escape-hatch", s.escapehatch.HandleGet)
 		r.Get("/topology", s.handleTopology)
 		r.Get("/context", s.handleContext)
 		r.Get("/auth/capabilities", s.auth.Capabilities)
@@ -380,13 +369,8 @@ func (s *Server) Router() http.Handler {
 		// Research API (:8795) — preferred /research/* + plugin-style alias.
 		r.Get("/research/*", s.research.HandleAPIProxy)
 		r.Get("/plugins/research/api/*", s.research.HandleAPIProxy)
-		r.Get("/agent/governance/performance", s.agentgovernance.HandlePerformance)
 		r.Get("/agent/governance/trust-matrix", s.agentgovernance.HandleTrustMatrix)
-		r.Get("/agent/governance/capability-map", s.agentgovernance.HandleCapabilityMap)
-		r.Get("/agent/governance/snapshot", s.agentgovernance.HandleSnapshot)
 		r.Get("/agent/governance/trust-overrides", s.agentgovernance.HandleTrustOverrides)
-		r.Get("/agent/retrospective/report", s.retrospective.HandleReport)
-		r.Get("/agent/retrospective/defects", s.retrospective.HandleDefects)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/audit/append", s.audit.HandleAppend)
@@ -404,7 +388,6 @@ func (s *Server) Router() http.Handler {
 			})
 		})
 		r.Get("/gitops/apps", s.gitops.HandleApps)
-		r.Get("/stack/addons", s.stack.HandleAddons)
 		r.Get("/delivery/pipelines", s.delivery.HandlePipelines)
 		r.Get("/delivery/supply-chain", s.delivery.HandleSupplyChain)
 		r.Get("/delivery/revisions", s.delivery.HandleRevisions)
@@ -427,18 +410,11 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
-		r.Get("/checklist/kpis", s.checklist.HandleGetKPIs)
-		r.Get("/agent-tasks", s.agentgovernance.HandleListTasks)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleOperator))
-			// merges husbandry signals only; does not start remediation (TD-208)
-			r.Post("/checklist/husbandry-sync", s.checklist.HandleHusbandrySync)
 			// one-use ticket for the SSH console below (TD-203)
 			r.Post("/console/ws-ticket", s.console.HandleTicket)
-			r.Post("/checklist/signals", s.checklist.HandlePostSignals)
 		})
-		r.Get("/promote/release-cycles", s.promote.HandleListReleaseCycles)
-		r.Get("/promote/release-cycles/{id}", s.promote.HandleGetReleaseCycle)
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
@@ -483,9 +459,6 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
 			r.Post("/gitops/apps/{name}/rollback", s.guard("gitops_rollback_app", s.gitops.HandleRollbackApp))
-			r.Post("/stack/addons/{name}/install", s.guard("stack_install_addon", s.stack.HandleInstallAddon))
-			r.Post("/stack/addons/{name}/upgrade", s.guard("stack_upgrade_addon", s.stack.HandleUpgradeAddon))
-			r.Post("/platform/escape-hatch/drill", s.escapehatch.HandleRecordDrill)
 		})
 		r.Get("/console/hosts", s.console.HandleHosts)
 		// authenticated by the ticket from POST /console/ws-ticket (a browser
@@ -689,17 +662,6 @@ func (s *Server) handleContext(w http.ResponseWriter, _ *http.Request) {
 	}
 	ctx := promote.OverlayContext(s.cfg.OpsContext, s.promote.Store())
 	writeJSON(w, http.StatusOK, ctx)
-}
-
-func bindDeliveryCycleHook(deliveryH *delivery.Handler, promoteH *promote.Handler) *delivery.Handler {
-	if deliveryH == nil || promoteH == nil || promoteH.Service() == nil || promoteH.Service().CycleStore() == nil {
-		return deliveryH
-	}
-	cycles := promoteH.Service().CycleStore()
-	deliveryH.BindPipelineStartedHook(func(pipelineName, revision, runName, triggeredBy, agentSessionID string) {
-		_, _ = cycles.RecordDeployFromPipeline(pipelineName, revision, runName, triggeredBy, agentSessionID)
-	})
-	return deliveryH
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

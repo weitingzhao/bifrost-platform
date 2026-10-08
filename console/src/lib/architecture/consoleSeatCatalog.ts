@@ -10,7 +10,7 @@
  * - missionSignals.agentSignal — must match Fleet (dirty does not degrade ROOM POSTURE)
  */
 
-import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
+import type { ConsoleNavPlane } from '@/lib/architecture/systemDomainCatalog'
 
 export const CONSOLE_SEAT_VERSION = '2026-08-31'
 export const CONSOLE_SEAT_SOURCE = 'console/src/lib/architecture/consoleSeatCatalog.ts'

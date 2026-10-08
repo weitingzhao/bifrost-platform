@@ -154,15 +154,11 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/health",
 		"/api/v1/environments",
 		"/api/v1/context",
-		"/api/v1/agent/retrospective/report",
-		"/api/v1/agent/retrospective/defects",
 		"/api/v1/audit",
 		"/api/v1/jobs",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
-		"/api/v1/agent/hermes/readiness",
 		"/api/v1/agent/hermes/health",
-		"/api/v1/promote/release-cycles",
 	}
 	for _, path := range getRoutes {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -208,14 +204,49 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodPost, "/api/v1/agent/drift-proposals"},
 		{http.MethodGet, "/api/v1/agent/retrospective/patterns"},
 		{http.MethodGet, "/api/v1/agent/retrospective/insights"},
+		{http.MethodGet, "/api/v1/agent/retrospective/report"},
+		{http.MethodGet, "/api/v1/agent/retrospective/defects"},
 		{http.MethodGet, "/api/v1/cluster/join-profiles"},
 		{http.MethodPost, "/api/v1/cluster/nodes/join"},
+		{http.MethodPost, "/api/v1/checklist/husbandry-sync"},
+		{http.MethodGet, "/api/v1/checklist/kpis"},
+		{http.MethodGet, "/api/v1/agent-tasks"},
+		{http.MethodGet, "/api/v1/agent/governance/performance"},
+		{http.MethodGet, "/api/v1/agent/governance/capability-map"},
+		{http.MethodGet, "/api/v1/agent/governance/snapshot"},
+		{http.MethodGet, "/api/v1/agent/smoke"},
+		{http.MethodGet, "/api/v1/agent/hermes/readiness"},
+		{http.MethodGet, "/api/v1/agent/skills"},
+		{http.MethodGet, "/api/v1/agent/schedules"},
+		{http.MethodGet, "/api/v1/agent/executions"},
+		{http.MethodPut, "/api/v1/agent/skills/x/actuation-level"},
+		{http.MethodGet, "/api/v1/agent/nightly-report"},
+		{http.MethodPost, "/api/v1/agent/nightly-run"},
+		{http.MethodGet, "/api/v1/promote/release-cycles"},
+		{http.MethodGet, "/api/v1/promote/release-cycles/x"},
+		{http.MethodGet, "/api/v1/platform/escape-hatch"},
+		{http.MethodPost, "/api/v1/platform/escape-hatch/drill"},
+		{http.MethodGet, "/api/v1/stack/addons"},
+		{http.MethodPost, "/api/v1/stack/addons/gitea/install"},
+		{http.MethodPost, "/api/v1/stack/addons/gitea/upgrade"},
+	}
+	// The path still serves another method, so chi answers 405 rather than 404.
+	methodGone := []struct{ method, path string }{
+		{http.MethodPost, "/api/v1/checklist/signals"},
+		{http.MethodPost, "/api/v1/agent/deploy"},
 	}
 	for _, c := range retired {
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s %s = %d, want 404", c.method, c.path, rec.Code)
+		}
+	}
+	for _, c := range methodGone {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, nil))
+		if rec.Code != http.StatusMethodNotAllowed {
+			t.Errorf("%s %s = %d, want 405", c.method, c.path, rec.Code)
 		}
 	}
 }

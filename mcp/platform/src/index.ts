@@ -54,10 +54,6 @@ reg('platform_mcp_health', 'MCP server health + version', {}, async () =>
   }),
 )
 
-reg('platform_mcp_capabilities', 'List MCP tools from platform-api catalog', {}, async () =>
-  jsonResult(await platformGet('/api/v1/mcp/tools')),
-)
-
 reg('get_connectivity_matrix', 'Environment connectivity matrix', {}, async () =>
   jsonResult(await platformGet('/api/v1/matrix')),
 )
@@ -187,10 +183,6 @@ reg('get_gitops_apps', 'Argo CD applications', {}, async () =>
   jsonResult(await platformGet('/api/v1/gitops/apps')),
 )
 
-reg('get_stack_addons', 'CI/CD stack add-on status', {}, async () =>
-  jsonResult(await platformGet('/api/v1/stack/addons')),
-)
-
 reg('get_delivery_pipelines', 'Tekton pipeline catalog', {}, async () =>
   jsonResult(await platformGet('/api/v1/delivery/pipelines')),
 )
@@ -249,22 +241,6 @@ reg(
       await platformDelete(`/api/v1/delivery/runs/${encodeURIComponent(id)}${qs}`),
     )
   },
-)
-
-reg(
-  'stack_install_addon',
-  'Install CI/CD stack add-on (admin)',
-  { name: z.string() },
-  async ({ name }) =>
-    jsonResult(await platformPost(`/api/v1/stack/addons/${encodeURIComponent(name)}/install`)),
-)
-
-reg(
-  'stack_upgrade_addon',
-  'Upgrade stack add-on (admin)',
-  { name: z.string() },
-  async ({ name }) =>
-    jsonResult(await platformPost(`/api/v1/stack/addons/${encodeURIComponent(name)}/upgrade`)),
 )
 
 reg(
@@ -357,34 +333,8 @@ reg(
     jsonResult(await platformPost(`/api/v1/cluster/nodes/${encodeURIComponent(name)}/poweroff`)),
 )
 
-reg('ensure_metrics_server', 'Install metrics-server add-on (admin)', {}, async () =>
-  jsonResult(await platformPost('/api/v1/cluster/addons/metrics-server/ensure')),
-)
-
-reg(
-  'ensure_kube_prometheus_stack',
-  'Install kube-prometheus-stack add-on (admin)',
-  {},
-  async () =>
-    jsonResult(await platformPost('/api/v1/cluster/addons/kube-prometheus-stack/ensure')),
-)
-
 reg('get_agent_bridge', 'Agent host + MCP bridge status', {}, async () =>
   jsonResult(await platformGet('/api/v1/agent/bridge')),
-)
-
-reg(
-  'get_hermes_readiness',
-  'Hermes gateway + LLM key + platform MCP readiness probe',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/agent/hermes/readiness')),
-)
-
-reg(
-  'get_agent_performance',
-  'Flight Director — agent performance KPIs (7d/30d windows)',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/agent/governance/performance')),
 )
 
 reg(
@@ -392,17 +342,6 @@ reg(
   'Flight Director — trust & autonomy matrix with earned autonomy hints',
   {},
   async () => jsonResult(await platformGet('/api/v1/agent/governance/trust-matrix')),
-)
-
-reg(
-  'get_flight_director_snapshot',
-  'Flight Director snapshot — performance + trust + capability + briefing digest',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/agent/governance/snapshot')),
-)
-
-reg('get_agent_nightly_report', 'Nightly drift report from agent host', {}, async () =>
-  jsonResult(await platformGet('/api/v1/agent/nightly-report')),
 )
 
 reg('get_remediation_health', 'Remediation runner health', {}, async () =>
@@ -450,41 +389,10 @@ reg(
 )
 
 reg(
-  'ensure_kubeconfig_secret',
-  'Sync kubeconfig and ensure bifrost-platform-kubeconfig Secret in platform STG/PROD namespaces (admin). ' +
-    'Use when cluster reachability is "fail" due to missing kubeconfig secret.',
-  {
-    namespaces: z
-      .array(z.string())
-      .optional()
-      .describe('Target namespaces (default: bifrost-platform-stg, bifrost-platform-prod)'),
-    sync_first: z
-      .boolean()
-      .optional()
-      .describe('Fetch kubeconfig from K3s server before creating secret'),
-  },
-  async ({ namespaces, sync_first }) => {
-    const body: Record<string, unknown> = {}
-    if (namespaces != null) body.namespaces = namespaces
-    if (sync_first != null) body.sync_first = sync_first
-    return jsonResult(
-      await platformPost('/api/v1/cluster/kubeconfig-secret/ensure', body),
-    )
-  },
-)
-
-reg(
   'get_checklist_signals',
   'Latest Daily Ops Checklist per-item signals + KPIs',
   {},
   async () => jsonResult(await platformGet('/api/v1/checklist/signals')),
-)
-
-reg(
-  'get_checklist_kpis',
-  'Checklist quiet-success streak + last-run summary',
-  {},
-  async () => jsonResult(await platformGet('/api/v1/checklist/kpis')),
 )
 
 reg(
@@ -524,35 +432,6 @@ reg(
     const qs = state != null && state !== 'any' ? `?state=${encodeURIComponent(state)}` : ''
     return jsonResult(await platformGet(`/api/v1/telemetry/targets${qs}`))
   },
-)
-
-reg(
-  'report_checklist_signals',
-  'Merge Daily Ops Checklist probe signals. auto_dispatch is accepted and ignored; the checklist no longer starts remediation.',
-  {
-    run_id: z.string().optional(),
-    source: z.string().optional(),
-    signals: z
-      .array(
-        z.object({
-          item_id: z.string(),
-          signal: z.enum(['ok', 'degraded', 'fail', 'unknown']),
-          detail: z.string().optional(),
-          env: z.string().optional(),
-        }),
-      )
-      .min(1),
-    auto_dispatch: z.boolean().optional(),
-  },
-  async ({ run_id, source, signals, auto_dispatch }) =>
-    jsonResult(
-      await platformPost('/api/v1/checklist/signals', {
-        run_id: run_id ?? '',
-        source: source ?? 'mcp',
-        signals,
-        auto_dispatch: auto_dispatch ?? false,
-      }),
-    ),
 )
 
 reg(

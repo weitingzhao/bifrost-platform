@@ -59,8 +59,6 @@ func init() {
 		"POST /api/v1/code-health/rescan",
 		"PUT /api/v1/lineage/thread-title",
 		"PUT /api/v1/lineage/transcript-title",
-		"POST /api/v1/checklist/signals",
-		"POST /api/v1/checklist/husbandry-sync",
 		"POST /api/v1/console/ws-ticket",
 		"POST /api/v1/agent/governance/skill-runs",
 		"POST /api/v1/telemetry/attention-mute",
@@ -78,9 +76,6 @@ func init() {
 		"POST /api/v1/plugins/market-data/api/*",
 		"POST /api/v1/plugins/flex-query/api/*",
 	)
-	exempt("unclassified by LANE-B1: escape-hatch drill record",
-		"POST /api/v1/platform/escape-hatch/drill",
-	)
 	exempt("unclassified by LANE-B1: namespace ensure stays outside the catalog until phase 3",
 		"POST /api/v1/cluster/namespaces/ensure-bifrost",
 	)
@@ -90,10 +85,7 @@ func init() {
 	exempt("unclassified by LANE-B1: ops-agent alertmanager receiver",
 		"POST /api/v1/ops-agent/alertmanager",
 	)
-	exempt("unclassified by LANE-B1: operator-plane L-1 writes (patrol, hermes skill level, agent deploy)",
-		"POST /api/v1/agent/nightly-run",
-		"POST /api/v1/agent/deploy",
-		"PUT /api/v1/agent/skills/{id}/actuation-level",
+	exempt("unclassified by LANE-B1: operator-plane patrol writes",
 		"PUT /api/v1/patrol/skills/{id}/enable",
 		"POST /api/v1/patrol/trigger/{id}",
 		"POST /api/v1/patrol/webhook/{event}",

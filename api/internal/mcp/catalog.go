@@ -86,8 +86,6 @@ func capabilityFor(name, route string) string {
 // functionFor classifies what the tool does, independently of where it operates.
 func functionFor(name, method string) string {
 	switch {
-	case name == "platform_mcp_capabilities":
-		return "discover"
 	case strings.HasPrefix(name, "verify_"):
 		return "verify"
 	case strings.HasPrefix(name, "get_"),
@@ -173,7 +171,6 @@ func tool(name, desc, level, method, route, role, phase string, implemented bool
 func Catalog() []ToolView {
 	return []ToolView{
 		tool("platform_mcp_health", "MCP server health + version", "read", "", "", "viewer", "P5", true),
-		tool("platform_mcp_capabilities", "List MCP tools with permission levels", "read", "GET", "/api/v1/mcp/tools", "viewer", "P5", true),
 		tool("get_connectivity_matrix", "Environment connectivity matrix probes", "read", "GET", "/api/v1/matrix", "viewer", "P0", true),
 		tool("verify_payload", "Matrix vs cluster datastore classification (NOMINAL/PROBE_DRIFT/DATA_LAYER/HTTP_FAIL)", "read", "GET", "/api/v1/mission/verify-payload", "viewer", "Agent", true),
 		tool("verify_mission_snapshot", "Fresh matrix reprobe (trade_dev/stg/prod) + verify_payload + post_fix_verification (call before closing remediation)", "read", "GET", "/api/v1/mission/verify-snapshot", "viewer", "Agent", true),
@@ -192,7 +189,6 @@ func Catalog() []ToolView {
 		tool("market_data_doctor", "Market Data Plugin doctor: session completeness, staleness, failed jobs, workers, vendor — each finding with a prescription", "read", "GET", "/api/v1/plugins/market-data/api/market/doctor", "viewer", "Data", true),
 		tool("market_data_heal", "Execute Market Data doctor prescriptions (enqueue-slot / retry-jobs); dry_run + finding_ids", "routine", "POST", "/api/v1/plugins/market-data/api/market/doctor/heal", "operator", "Data", true),
 		tool("get_gitops_apps", "Argo CD applications health/sync", "read", "GET", "/api/v1/gitops/apps", "viewer", "P3", true),
-		tool("get_stack_addons", "CI/CD stack add-on status", "read", "GET", "/api/v1/stack/addons", "viewer", "P4", true),
 		tool("get_delivery_pipelines", "Tekton pipeline catalog", "read", "GET", "/api/v1/delivery/pipelines", "viewer", "P3", true),
 		tool("get_delivery_run_logs", "PipelineRun log tail", "read", "GET", "/api/v1/delivery/runs/{id}/logs", "viewer", "P3", true),
 		tool("delete_pipeline_run", "Delete terminal Tekton PipelineRun CR + pods (operator; cleans failing_pods leftovers)", "routine", "DELETE", "/api/v1/delivery/runs/{id}", "operator", "P3", true),
@@ -207,26 +203,15 @@ func Catalog() []ToolView {
 		tool("start_pipeline_run", "Start Tekton PipelineRun", "routine", "POST", "/api/v1/delivery/pipelines/{name}/runs", "operator", "P3", true),
 		tool("drain_node", "Drain node workloads", "confirm", "POST", "/api/v1/cluster/nodes/{name}/drain", "admin", "P2", true),
 		tool("poweroff_compute_node", "Drain + power off compute node", "confirm", "POST", "/api/v1/cluster/nodes/{name}/poweroff", "admin", "P1", true),
-		tool("ensure_kubeconfig_secret", "Sync kubeconfig and ensure platform-kubeconfig Secret in STG/PROD namespaces", "confirm", "POST", "/api/v1/cluster/kubeconfig-secret/ensure", "admin", "P6", true),
-		tool("ensure_metrics_server", "Install metrics-server add-on", "confirm", "POST", "/api/v1/cluster/addons/metrics-server/ensure", "admin", "P1", true),
-		tool("ensure_kube_prometheus_stack", "Install kube-prometheus-stack add-on", "confirm", "POST", "/api/v1/cluster/addons/kube-prometheus-stack/ensure", "admin", "P3", true),
 		tool("gitops_rollback_app", "Rollback Argo CD app to previous revision", "confirm", "POST", "/api/v1/gitops/apps/{name}/rollback", "admin", "P3", true),
-		tool("stack_install_addon", "Install CI/CD stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/install", "admin", "P4", true),
-		tool("stack_upgrade_addon", "Upgrade/reinstall stack add-on", "confirm", "POST", "/api/v1/stack/addons/{name}/upgrade", "admin", "P4", true),
 		tool("get_agent_bridge", "Agent host + MCP bridge status (runner, Hermes slot, platform MCP)", "read", "GET", "/api/v1/agent/bridge", "viewer", "Agent", true),
-		tool("get_hermes_readiness", "Hermes gateway + LLM key + platform MCP readiness probe", "read", "GET", "/api/v1/agent/hermes/readiness", "viewer", "Agent", true),
-		tool("get_agent_performance", "Flight Director — agent performance KPIs (7d/30d) from remediation JobStore", "read", "GET", "/api/v1/agent/governance/performance", "viewer", "Agent", true),
 		tool("get_trust_matrix", "Flight Director — per-task trust & autonomy matrix with earned autonomy hints", "read", "GET", "/api/v1/agent/governance/trust-matrix", "viewer", "Agent", true),
-		tool("get_flight_director_snapshot", "Flight Director snapshot — performance + trust + capability map + 24h briefing", "read", "GET", "/api/v1/agent/governance/snapshot", "viewer", "Agent", true),
-		tool("get_agent_nightly_report", "Nightly drift scan report from agent host", "read", "GET", "/api/v1/agent/nightly-report", "viewer", "Agent", true),
 		tool("get_remediation_health", "Remediation runner health on agent host", "read", "GET", "/api/v1/remediation/health", "viewer", "Agent", true),
 		tool("list_remediation_jobs", "Recent agent remediation tasks", "read", "GET", "/api/v1/remediation/", "operator", "Agent", true),
 		tool("get_stg_smoke", "STG environment HTTP smoke probes", "read", "GET", "/api/v1/delivery/stg/smoke", "viewer", "P4", true),
 		tool("get_delivery_revisions", "Available Gitea tags for deploy revision selection", "read", "GET", "/api/v1/delivery/revisions", "viewer", "P4", true),
 		tool("get_commit_lineage", "Agent threads and the commits they stamped (Claude-Session / Change-Id trailers); filter by session or change_id to ask whether a change landed", "read", "GET", "/api/v1/lineage", "viewer", "P4", true),
 		tool("get_checklist_signals", "Latest Daily Ops Checklist per-item signals + KPIs", "read", "GET", "/api/v1/checklist/signals", "viewer", "Agent", true),
-		tool("report_checklist_signals", "Merge Daily Ops Checklist probe signals. auto_dispatch is accepted and ignored; the checklist no longer starts remediation.", "routine", "POST", "/api/v1/checklist/signals", "operator", "Agent", true),
-		tool("get_checklist_kpis", "Checklist quiet-success streak + last-run summary", "read", "GET", "/api/v1/checklist/kpis", "viewer", "Agent", true),
 		tool("get_code_health", "Code-health ratchet readings (duplication, oversized files, contract coverage, image spread); reported=false means NOT OBSERVED; freshness.stale_vs_head means Live Re-scan before Agent cut planning", "read", "GET", "/api/v1/code-health", "viewer", "Agent", true),
 		tool("get_telemetry_overview", "Prometheus telemetry overview snapshot (preset metrics)", "read", "GET", "/api/v1/telemetry/overview", "viewer", "P4", true),
 		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),

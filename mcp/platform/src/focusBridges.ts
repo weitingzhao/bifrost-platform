@@ -18,7 +18,7 @@
  */
 
 /** 任何 focus 桥都保留的自省工具。 */
-const ALWAYS = ['platform_mcp_health', 'platform_mcp_capabilities'] as const
+const ALWAYS = ['platform_mcp_health'] as const
 
 /**
  * K8s 读 + 执行面。对应 platform-api `/api/v1/cluster/*` 的集群与工作负载路由。

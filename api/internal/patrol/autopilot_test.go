@@ -471,7 +471,6 @@ func TestAutopilotObserveOnlyIsSkippedNotFailed(t *testing.T) {
 				{ItemID: "deliver-pipeline", Signal: "fail", Detail: "stale"},
 				{ItemID: "stg-smoke", Signal: "degraded", Detail: "1 target"},
 				{ItemID: "runners-ha", Signal: "fail", Detail: "1/2"},
-				{ItemID: "hermes-tooling", Signal: "fail", Detail: "down"},
 			}))
 			return
 		}
@@ -493,14 +492,14 @@ func TestAutopilotObserveOnlyIsSkippedNotFailed(t *testing.T) {
 	if out.Error != "" {
 		t.Fatalf("no real fix failures expected, got err=%q\n%s", out.Error, out.Evidence)
 	}
-	if !strings.Contains(out.Evidence, "5 skipped") {
-		t.Fatalf("all 5 observe-only items should be skipped:\n%s", out.Evidence)
+	if !strings.Contains(out.Evidence, "4 skipped") {
+		t.Fatalf("all 4 observe-only items should be skipped:\n%s", out.Evidence)
 	}
 	if strings.Contains(out.Evidence, "FIX ERROR") {
 		t.Fatalf("observe-only must not log FIX ERROR:\n%s", out.Evidence)
 	}
-	if strings.Count(out.Evidence, "OBSERVE-ONLY") != 5 {
-		t.Fatalf("expected 5 OBSERVE-ONLY markers:\n%s", out.Evidence)
+	if strings.Count(out.Evidence, "OBSERVE-ONLY") != 4 {
+		t.Fatalf("expected 4 OBSERVE-ONLY markers:\n%s", out.Evidence)
 	}
 }
 

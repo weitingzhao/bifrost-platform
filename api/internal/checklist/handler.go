@@ -35,84 +35,8 @@ func (h *Handler) HandleGetSignals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (h *Handler) HandleGetKPIs(w http.ResponseWriter, _ *http.Request) {
-	resp, err := h.store.KPIs()
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-func (h *Handler) HandlePostSignals(w http.ResponseWriter, r *http.Request) {
-	var req MergeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
-		return
-	}
-	if len(req.Signals) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "signals required"})
-		return
-	}
-
-	resp, err := h.store.Merge(req)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	h.audit.Record(r, "checklist.signals.merge", req.RunID, "ok",
-		"count="+itoa(len(req.Signals)))
-	// auto_dispatch is accepted so older callers still merge, and ignored:
-	// checklist no longer starts remediation or an operate handoff (TD-208).
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// HandleHusbandrySync probes data-husbandry and merges checklist signals.
-func (h *Handler) HandleHusbandrySync(w http.ResponseWriter, r *http.Request) {
-	if h.husbandry == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "husbandry probe not bound",
-		})
-		return
-	}
-	signals := h.liveHusbandrySignals(r.Context())
-	if len(signals) == 0 {
-		writeJSON(w, http.StatusBadGateway, map[string]string{
-			"error": "husbandry probe returned no signals",
-		})
-		return
-	}
-	resp, err := h.store.Merge(MergeRequest{
-		RunID:   "husbandry-sync",
-		Source:  "data-husbandry",
-		Signals: signals,
-	})
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	h.audit.Record(r, "checklist.husbandry.sync", "husbandry-sync", "ok",
-		"count="+itoa(len(signals)))
-	writeJSON(w, http.StatusOK, resp)
-}
-
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [16]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
 }

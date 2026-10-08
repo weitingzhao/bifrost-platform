@@ -368,19 +368,6 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 	// ib-feed is observe-only under D10: say so rather than guess.
 	add("ib-feed", SignalUnknown, "observe-only (D10); not probed")
 
-	// hermes-tooling
-	var hr struct {
-		Ready    bool     `json:"ready"`
-		Blockers []string `json:"blockers"`
-	}
-	if err := p.getJSON(ctx, "/api/v1/agent/hermes/readiness", &hr); err != nil {
-		add("hermes-tooling", SignalUnknown, "GET hermes readiness: "+err.Error())
-	} else if hr.Ready {
-		add("hermes-tooling", SignalOK, "ready")
-	} else {
-		add("hermes-tooling", SignalDegraded, "not ready: "+strings.Join(hr.Blockers, " · "))
-	}
-
 	return out
 }
 

@@ -26,7 +26,6 @@ import {
   Rocket,
   Satellite,
 } from 'lucide-react'
-import type { ConsoleNavPlane } from '@/lib/consoleNavConfig'
 
 export const SYSTEM_DOMAIN_VERSION = '2026-08-28'
 export const SYSTEM_DOMAIN_SOURCE = 'console/src/lib/architecture/systemDomainCatalog.ts'
@@ -42,6 +41,18 @@ export type SystemDomainId =
   | 'engineer'
   | 'governance'
 
+/** Sidebar plane labels. The old consoleNavConfig module is gone; these strings are the catalog. */
+export type ConsoleNavPlane =
+  | 'Mission Control'
+  | 'Rocket'
+  | 'Ground Systems'
+  | 'Satellite'
+  | 'Research'
+  | 'Subcontractors'
+  | 'Plugin'
+  | 'Engineer'
+  | 'Governance'
+
 export type SystemDomainRow = {
   id: SystemDomainId
   /** Display label — equals ConsoleNavPlane / sidebar group label. */
@@ -50,8 +61,8 @@ export type SystemDomainRow = {
 }
 
 /**
- * Apollo eight domains — keep label strings identical to ConsoleNavPlane
- * in consoleNavConfig.ts. Seven domains appear in the sidebar rail; Governance
+ * Apollo eight domains — label strings are ConsoleNavPlane.
+ * Seven domains appear in the sidebar rail; Governance
  * is reached via the shell User menu (still a first-class plane for catalogs).
  */
 export const SYSTEM_DOMAINS: SystemDomainRow[] = [

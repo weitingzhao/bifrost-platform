@@ -2,14 +2,13 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { TRADE_API_DOMAINS, TRADE_API_RETIRED_PREFIXES } from '../businessAgentLoopCatalog'
 import { HTTP_PROBES } from '../standardsCatalog'
 
 /**
  * TD-55: four catalogs listed the Trade gateway prefixes and disagreed (ports of retired
  * processes, /api/ops/health — api-monitor's generic /health — as the ops probe). The registry
- * config/trade-api-domains.yaml is matched by the Go catalog in a Go test; these two console
- * mirrors and the Trade MCP are matched against it here.
+ * config/trade-api-domains.yaml is matched by the Go catalog in a Go test; HTTP_PROBES
+ * and the Trade MCP are matched against it here.
  */
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..')
@@ -53,13 +52,6 @@ describe('Trade gateway prefixes — one registry, every mirror agrees', () => {
     expect(retired).toEqual(['docs', 'ops', 'trading', 'strategy', 'portfolio'])
     expect(registryList('aliases')).toEqual([])
     for (const d of reg) expect(retired.includes(d.prefix)).toBe(false)
-    expect(TRADE_API_RETIRED_PREFIXES).toEqual(retired)
-  })
-
-  it('TRADE_API_DOMAINS matches the registry', () => {
-    expect(TRADE_API_DOMAINS.map(d => [d.id, d.prefix, d.process, d.port, d.probePath])).toEqual(
-      reg.map(d => [d.id, d.prefix, d.process, d.port, d.probe_path]),
-    )
   })
 
   it('HTTP_PROBES matches the registry', () => {

@@ -98,7 +98,6 @@ func TestProberCoversTheCatalogExceptHusbandry(t *testing.T) {
 		"db-backup-fresh": SignalOK, "postgres": SignalOK, "redis": SignalOK,
 		"nginx-edge": SignalOK, "trade-apis": SignalOK, "deliver-pipeline": SignalOK,
 		"stg-smoke": SignalOK, "massive-polygon": SignalOK, "ib-feed": SignalUnknown,
-		"hermes-tooling": SignalDegraded,
 	}
 	for id, sig := range want {
 		if got[id].Signal != sig {

@@ -19,8 +19,6 @@
     "repair_cnpg_wal_store",
     "rollout_restart_deployment",
     "scale_deployment",
-    "stack_install_addon",
-    "stack_upgrade_addon",
     "start_pipeline_run",
     "sweep_failed_backups",
     "sync_kubeconfig",

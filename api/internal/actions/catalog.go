@@ -254,18 +254,6 @@ var catalog = []Action{
 		Params: []Param{{Name: "include_default_deny", Type: "boolean", In: "body"}},
 	},
 	{
-		ID: "stack_install_addon", Tier: TierD,
-		Description: "Install a CI/CD stack add-on. Tier D.",
-		Method:      "POST", Pattern: "/api/v1/stack/addons/{name}/install",
-		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
-	},
-	{
-		ID: "stack_upgrade_addon", Tier: TierD,
-		Description: "Upgrade or reinstall a CI/CD stack add-on. Tier D.",
-		Method:      "POST", Pattern: "/api/v1/stack/addons/{name}/upgrade",
-		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
-	},
-	{
 		ID: "sweep_failed_backups", Tier: TierC,
 		Description: "Delete expired failed CNPG Backup CRs. Tier C.",
 		Method:      "POST", Pattern: "/api/v1/cluster/postgres/backups/sweep-failed",

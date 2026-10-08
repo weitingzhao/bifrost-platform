@@ -28,7 +28,6 @@ var homePathFiles = map[string]string{
 	"patrol/store.go":         "store; TD-196 moves it to a ConfigMap",
 	"remediation/jobstore.go": "store; TD-196 moves it to a ConfigMap",
 	// operator credentials and workstation files, not platform state
-	"agentreport/handler.go":           "reads the agent host's ~/bifrost-agent report",
 	"cluster/metrics_server.go":        "default kubeconfig path",
 	"cluster/observability_install.go": "default kubeconfig path",
 	"cluster/pod_exec.go":              "default kubeconfig path",
@@ -37,7 +36,6 @@ var homePathFiles = map[string]string{
 	"config/clusters.go":               "default kubeconfig path",
 	"console/ssh_ws.go":                "ssh keys and known_hosts for the operator console",
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",
-	"escapehatch/service.go":           "expands ~ in a kubeconfig path",
 	"ibgateway/config.go":              "default kubeconfig path",
 	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",
 	"threadtitles/threadtitles.go":     "Claude transcripts on the workstation",

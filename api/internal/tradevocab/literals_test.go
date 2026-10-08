@@ -31,8 +31,6 @@ var budget = map[string]int{
 	"ibgateway/service.go":         7,
 	"patrol/autopilot.go":          3,
 	"placement/evaluate.go":        1,
-	"retrospective/analyzer.go":    1,
-	"retrospective/defects.go":     1,
 	"satellite/service.go":         1,
 	"satellite/types.go":           1,
 	"telemetry/queries.go":         4,

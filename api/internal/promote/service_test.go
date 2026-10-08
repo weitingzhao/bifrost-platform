@@ -38,9 +38,9 @@ func TestOverlayContext(t *testing.T) {
 		},
 	})
 	base := &opscontext.File{
-		Meta: opscontext.Meta{Version: "1", CatalogVersion: "1"},
+		Meta:       opscontext.Meta{Version: "1", CatalogVersion: "1"},
 		Deployment: opscontext.Deployment{Phase: "P4", ActiveTrack: "gitops"},
-		Focus: opscontext.Focus{Headline: "test", FlywheelPrimary: "B"},
+		Focus:      opscontext.Focus{Headline: "test", FlywheelPrimary: "B"},
 		Milestones: []opscontext.Milestone{{ID: "m1", Status: "OPEN"}},
 		Promotion: opscontext.Promotion{
 			LastGate: opscontext.LastGate{LogPath: "default.log"},
@@ -50,8 +50,8 @@ func TestOverlayContext(t *testing.T) {
 		},
 	}
 	out := OverlayContext(base, store)
-	if out.Promotion.LastGate.At == nil || *out.Promotion.LastGate.Result != "pass" {
-		t.Fatalf("expected overlaid gate pass, got %+v", out.Promotion.LastGate)
+	if out.Promotion.LastGate.At != nil || out.Promotion.LastGate.Result != nil || out.Promotion.LastGate.LogPath != "" {
+		t.Fatalf("last_gate must not be published on /context, got %+v", out.Promotion.LastGate)
 	}
 	if out.EnvironmentsExtended["staging"].Status != "IN_PROGRESS" {
 		t.Fatalf("expected staging IN_PROGRESS, got %s", out.EnvironmentsExtended["staging"].Status)
@@ -236,7 +236,7 @@ func TestReleaseStateGateStatusTable(t *testing.T) {
 			name: "trade-stg-gate-recorded",
 			tier: "trade",
 			stgGate: &ReleaseGateRecord{
-				At: time.Date(2026, 7, 3, 0, 0, 0, 0, time.UTC),
+				At:     time.Date(2026, 7, 3, 0, 0, 0, 0, time.UTC),
 				Result: "pass", Revision: "v9", Summary: "stg pass",
 			},
 			wantStg:  "pass",
@@ -255,7 +255,7 @@ func TestReleaseStateGateStatusTable(t *testing.T) {
 			name: "platform-stg-fail",
 			tier: "platform",
 			stgGate: &ReleaseGateRecord{
-				At: time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC),
+				At:     time.Date(2026, 7, 4, 0, 0, 0, 0, time.UTC),
 				Result: "fail", Summary: "platform stg fail",
 			},
 			wantStg:  "fail",
@@ -478,4 +478,3 @@ func TestProdMatrixVerdictZeroTargetsRequiredUnknown(t *testing.T) {
 		t.Fatalf("failing target = %s, want fail", reach)
 	}
 }
-

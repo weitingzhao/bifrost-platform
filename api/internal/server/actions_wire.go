@@ -242,16 +242,6 @@ func (s *Server) bindActionExecutors() {
 	reg("unifi_firewall_apply", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/network/firewall/apply" },
 		nil, fields("include_default_deny"), s.network.HandleFirewallApply)
-	reg("stack_install_addon", http.MethodPost,
-		func(p map[string]any) string {
-			return "/api/v1/stack/addons/" + url.PathEscape(text(p["name"])) + "/install"
-		},
-		path("name"), nil, s.stack.HandleInstallAddon)
-	reg("stack_upgrade_addon", http.MethodPost,
-		func(p map[string]any) string {
-			return "/api/v1/stack/addons/" + url.PathEscape(text(p["name"])) + "/upgrade"
-		},
-		path("name"), nil, s.stack.HandleUpgradeAddon)
 	reg("sweep_failed_backups", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/cluster/postgres/backups/sweep-failed" },
 		nil, nil, s.cluster.HandleSweepExpiredFailedBackups)

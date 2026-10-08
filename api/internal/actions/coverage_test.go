@@ -40,7 +40,7 @@ func TestWriteRoutesAreCataloguedOrExempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if walked < 50 {
+	if walked < 40 {
 		t.Fatalf("walked only %d mutating routes — the walk is not seeing the router", walked)
 	}
 	for key := range actions.Exemptions() {

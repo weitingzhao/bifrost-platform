@@ -36,9 +36,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentreport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesreadiness"
 	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
@@ -58,13 +56,11 @@ type Deps struct {
 type Plane struct {
 	auth *actuation.AuthService
 
-	agentBridge     *agentbridge.Handler
-	agentDeploy     *agentdeploy.Handler
-	agentReport     *agentreport.Handler
-	hermesGateway   *hermesgateway.Handler
-	hermesReadiness *hermesreadiness.Handler
-	patrol          *patrol.Handler
-	listLaunchd     func() ([]launchd.Service, error)
+	agentBridge   *agentbridge.Handler
+	agentDeploy   *agentdeploy.Handler
+	hermesGateway *hermesgateway.Handler
+	patrol        *patrol.Handler
+	listLaunchd   func() ([]launchd.Service, error)
 }
 
 func New(d Deps) (*Plane, error) {
@@ -77,14 +73,12 @@ func New(d Deps) (*Plane, error) {
 		listLaunchd = launchd.List
 	}
 	return &Plane{
-		auth:            d.Auth,
-		agentBridge:     agentbridge.NewHandler(),
-		agentDeploy:     agentdeploy.NewHandler(d.Audit),
-		agentReport:     agentreport.NewHandler(),
-		hermesGateway:   hermesgateway.NewHandler(),
-		hermesReadiness: hermesreadiness.NewHandler(),
-		patrol:          patrolH,
-		listLaunchd:     listLaunchd,
+		auth:          d.Auth,
+		agentBridge:   agentbridge.NewHandler(),
+		agentDeploy:   agentdeploy.NewHandler(d.Audit),
+		hermesGateway: hermesgateway.NewHandler(),
+		patrol:        patrolH,
+		listLaunchd:   listLaunchd,
 	}, nil
 }
 
@@ -116,23 +110,14 @@ type route struct {
 // platform-api served before the plane was extracted.
 func routeTable() []route {
 	return []route{
-		{"GET", "/agent/nightly-report", false, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleNightlyReport }, false},
 		{"GET", "/agent/bridge", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleBridge }, false},
-		{"GET", "/agent/smoke", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleSmoke }, false},
 		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }, false},
-		{"GET", "/agent/hermes/readiness", false, func(p *Plane) http.HandlerFunc { return p.hermesReadiness.HandleReadiness }, false},
 		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }, false},
-		{"GET", "/agent/skills", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkills }, false},
-		{"GET", "/agent/schedules", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSchedules }, false},
-		{"GET", "/agent/executions", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleExecutions }, false},
 		{method: "GET", pattern: "/agent/launchd", pick: func(p *Plane) http.HandlerFunc { return p.HandleLaunchd }, viewer: true},
 		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }, false},
 		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }, false},
 		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }, false},
 
-		{"POST", "/agent/nightly-run", true, func(p *Plane) http.HandlerFunc { return p.agentReport.HandleTriggerNightly }, false},
-		{"POST", "/agent/deploy", true, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStart }, false},
-		{"PUT", "/agent/skills/{id}/actuation-level", true, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleSkillActuationLevel }, false},
 		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }, false},
 		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }, false},
 		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }, false},

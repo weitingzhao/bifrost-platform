@@ -42,7 +42,6 @@ var CatalogItems = []ItemMeta{
 	{ID: "flex-tokens-secret", Label: "Flex tokens Secret", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
 	{ID: "research-batch-sla", Label: "Research batch SLA", FixScope: "cluster_issues_full_auto", FixCapability: FixSemiAuto},
 	{ID: "ib-feed", Label: "IB data feed", FixScope: "", FixCapability: FixObserve},
-	{ID: "hermes-tooling", Label: "Hermes AI tooling", FixScope: "operator-plane-remediate", FixCapability: FixSemiAuto},
 }
 
 func ItemByID(id string) (ItemMeta, bool) {

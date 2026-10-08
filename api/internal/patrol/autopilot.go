@@ -280,8 +280,6 @@ func (a *autopilotDispatcher) executeFixRoute(ctx context.Context, meta checklis
 		return a.rolloutRestart(ctx, resolveMarketDataNamespace(), "polygon-worker-stocks")
 	case "runners-ha":
 		return "observe-only", 0, fmt.Errorf("runners-ha fix requires manual runner restart")
-	case "hermes-tooling":
-		return "observe-only", 0, fmt.Errorf("hermes-tooling fix requires manual investigation")
 	default:
 		return "skip", 0, fmt.Errorf("no autopilot fix mapped for %s", meta.ID)
 	}
