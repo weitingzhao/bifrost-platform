@@ -13,7 +13,6 @@
     "ib_mode",
     "ib_reconnect",
     "ib_self_heal",
-    "join_cluster_node",
     "market_data_delete",
     "market_data_heal",
     "poweroff_compute_node",

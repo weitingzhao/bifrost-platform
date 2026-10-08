@@ -17,7 +17,6 @@ import type {
   DataCloneJob,
   DataCloneSchedule,
   DataFreshnessResponse,
-  JoinProfilesResponse,
   NodePowerResponse,
 } from './clusterTypes'
 import { authHeaders, authedFetch, operatorToken, parseError } from './client'
@@ -141,12 +140,6 @@ export async function fetchNodePower(nodeName: string): Promise<NodePowerRespons
   const r = await fetch(`/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/power`)
   if (!r.ok) throw new Error(`node power: HTTP ${r.status}`)
   return r.json() as Promise<NodePowerResponse>
-}
-
-export async function fetchJoinProfiles(): Promise<JoinProfilesResponse> {
-  const r = await fetch('/api/v1/cluster/join-profiles')
-  if (!r.ok) throw new Error(`join profiles: HTTP ${r.status}`)
-  return r.json() as Promise<JoinProfilesResponse>
 }
 
 export async function fetchClusterPlacement(): Promise<ClusterPlacementResponse> {

@@ -169,12 +169,6 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: () => ({}),
   },
   {
-    action: 'join_cluster_node',
-    method: 'POST',
-    pattern: /^\/api\/v1\/cluster\/nodes\/join$/,
-    paramsFrom: (_m, body) => asRecord(body),
-  },
-  {
     action: 'drain_node',
     method: 'POST',
     pattern: /^\/api\/v1\/cluster\/nodes\/([^/]+)\/drain$/,

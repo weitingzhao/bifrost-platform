@@ -64,29 +64,3 @@ func TestUncordonNode(t *testing.T) {
 		t.Fatal("expected node uncordoned")
 	}
 }
-
-func TestJoinProfilesDefault(t *testing.T) {
-	svc := NewService(nil)
-	resp := svc.JoinProfiles()
-	if len(resp.Profiles) == 0 {
-		t.Fatal("expected default join profiles")
-	}
-	if resp.Profiles[0].ID != "gpu-server" {
-		t.Fatalf("got %q", resp.Profiles[0].ID)
-	}
-}
-
-func TestResolveJoinProfile(t *testing.T) {
-	svc := NewService(nil)
-	p, err := svc.resolveJoinProfile("gpu-server")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Script != "join-gpu-server.sh" {
-		t.Fatalf("script: %q", p.Script)
-	}
-	_, err = svc.resolveJoinProfile("missing")
-	if err == nil {
-		t.Fatal("expected error for unknown profile")
-	}
-}

@@ -13,7 +13,6 @@ import {
   fetchClusterPlacement,
   fetchClusterObservability,
   fetchClusterWorkloads,
-  fetchJoinProfiles,
   fetchNodePower,
 } from '@/api/cluster'
 import { fetchPodLogs } from '@/api/clusterActuation'
@@ -31,7 +30,6 @@ import {
 } from '@/lib/cluster/clusterCategories'
 import { buildClusterCategoryLlmContext } from '@/lib/cluster/buildClusterCategoryLlmContext'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
-import type { NodeWizardFlow } from '@/lib/cluster/nodeWizard'
 import { findActiveRemediationJob } from '@/lib/remediation/remediationJobDisplay'
 
 export type CopyState = 'idle' | 'copied' | 'error'
@@ -41,8 +39,6 @@ export interface ClusterPageQueriesInput {
   selectedPod: string | null
   drawerOpen: boolean
   selectedNode: ClusterNode | null
-  nodeDrawerOpen: boolean
-  wizardFlow: NodeWizardFlow
   pinnedWorkload: ClusterWorkload | null
   selectedCategory: ClusterCategory | null
 }
@@ -62,8 +58,6 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     selectedPod,
     drawerOpen,
     selectedNode,
-    nodeDrawerOpen,
-    wizardFlow,
     pinnedWorkload,
     selectedCategory,
   } = input
@@ -184,19 +178,10 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     refetchInterval: 30_000,
   })
 
-  const joinProfilesQuery = useQuery({
-    queryKey: ['cluster', 'join-profiles'],
-    queryFn: fetchJoinProfiles,
-    refetchInterval: 60_000,
-  })
-
   const nodePowerQuery = useQuery({
     queryKey: ['cluster', 'node-power', selectedNodeLive?.name],
     queryFn: () => fetchNodePower(selectedNodeLive?.name ?? ''),
-    enabled:
-      selectedNodeLive?.compute_managed === true &&
-      selectedNodeLive.name != null &&
-      (nodeDrawerOpen || wizardFlow !== 'join'),
+    enabled: selectedNodeLive?.compute_managed === true && selectedNodeLive.name != null,
     refetchInterval: 15_000,
   })
 
@@ -387,7 +372,6 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     workloadsQuery,
     eventsQuery,
     logsQuery,
-    joinProfilesQuery,
     nodePowerQuery,
     clusterNodes,
     selectedNodeLive,

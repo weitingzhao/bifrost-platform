@@ -30,7 +30,6 @@ var homePathFiles = map[string]string{
 	// operator credentials and workstation files, not platform state
 	"agentreport/handler.go":           "reads the agent host's ~/bifrost-agent report",
 	"cluster/metrics_server.go":        "default kubeconfig path",
-	"cluster/node_join.go":             "default kubeconfig / ssh path",
 	"cluster/observability_install.go": "default kubeconfig path",
 	"cluster/pod_exec.go":              "default kubeconfig path",
 	"cluster/script_runner.go":         "default kubeconfig path",

@@ -36,11 +36,6 @@ clusters:
           - namespace: data-warehouse
             deployment: minio
             label: MinIO
-    join_profiles:
-      - id: gpu-server
-        label: K3s agent join — gpu-server (P5a)
-        script: join-gpu-server.sh
-        expected_node: gpu-server
     monitoring_namespace: monitoring
     # Optional deep links for Rocket -> Observability (browser must reach these URLs).
     # Leave empty until NodePort/ingress is confirmed post-install, or override via:

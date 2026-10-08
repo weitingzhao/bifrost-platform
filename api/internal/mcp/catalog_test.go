@@ -62,7 +62,6 @@ var stdioMirroredTools = map[string]bool{
 	"scale_deployment":             true,
 	"delete_pod":                   true,
 	"wake_compute_node":            true,
-	"join_cluster_node":            true,
 	"poweroff_compute_node":        true,
 	"ensure_metrics_server":        true,
 	"ensure_kube_prometheus_stack": true,
@@ -117,8 +116,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 64 {
-		t.Errorf("stdioMirroredTools size=%d want 64 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 63 {
+		t.Errorf("stdioMirroredTools size=%d want 63 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

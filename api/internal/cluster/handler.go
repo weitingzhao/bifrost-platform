@@ -296,21 +296,6 @@ func (h *Handler) HandleDrainNode(w http.ResponseWriter, r *http.Request) {
 	writeActuationResponse(w, resp, err)
 }
 
-func (h *Handler) HandleJoinProfiles(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, h.svc.JoinProfiles())
-}
-
-func (h *Handler) HandleJoinNode(w http.ResponseWriter, r *http.Request) {
-	var req JoinNodeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
-	}
-	resp, err := h.svc.JoinNode(r.Context(), req)
-	h.recordAudit(r, resp.Action, resp.Target, auditStatus(err), resp.Message)
-	writeActuationResponse(w, resp, err)
-}
-
 func (h *Handler) recordAudit(r *http.Request, action, target, status, detail string) {
 	if h.audit != nil {
 		h.audit.Record(r, action, target, status, detail)

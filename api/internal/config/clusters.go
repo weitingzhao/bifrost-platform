@@ -57,14 +57,6 @@ type ComputeWorkloadSpec struct {
 	Label      string `yaml:"label" json:"label"`
 }
 
-// JoinProfileSpec — K3s agent join script profile (P2 actuation).
-type JoinProfileSpec struct {
-	ID           string `yaml:"id" json:"id"`
-	Label        string `yaml:"label" json:"label"`
-	Script       string `yaml:"script" json:"script"`
-	ExpectedNode string `yaml:"expected_node" json:"expected_node,omitempty"`
-}
-
 // ComputeNodeSpec — on-demand compute node (WOL + poweroff actuation).
 type ComputeNodeSpec struct {
 	Name             string                `yaml:"name" json:"name"`
@@ -86,25 +78,24 @@ func DefaultStgAPIDomains() []string {
 }
 
 type ClusterEntry struct {
-	ID                  string             `yaml:"id" json:"id"`
-	Label               string             `yaml:"label" json:"label"`
-	Distribution        string             `yaml:"distribution" json:"distribution"`
-	APIServer           string             `yaml:"api_server" json:"api_server"`
-	KubeconfigEnv       string             `yaml:"kubeconfig_env" json:"kubeconfig_env"`
+	ID            string `yaml:"id" json:"id"`
+	Label         string `yaml:"label" json:"label"`
+	Distribution  string `yaml:"distribution" json:"distribution"`
+	APIServer     string `yaml:"api_server" json:"api_server"`
+	KubeconfigEnv string `yaml:"kubeconfig_env" json:"kubeconfig_env"`
 	// ViewerEnv — optional Daily Ops seat (dev|stg|prod|dev-local); overridden by OPS_VIEWER_ENV.
-	ViewerEnv           string             `yaml:"viewer_env" json:"viewer_env,omitempty"`
-	SSHHost             string             `yaml:"ssh_host" json:"ssh_host"`
-	NodeIP              string             `yaml:"node_ip" json:"node_ip"`
-	BifrostNamespaces   []string           `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
-	ComputeNodes        []ComputeNodeSpec  `yaml:"compute_nodes" json:"compute_nodes"`
-	JoinProfiles        []JoinProfileSpec  `yaml:"join_profiles" json:"join_profiles"`
-	MonitoringNS        string             `yaml:"monitoring_namespace" json:"monitoring_namespace"`
-	ObservabilityURLs   ObservabilityURLs  `yaml:"observability_urls" json:"observability_urls"`
-	GitOps              GitOpsConfig       `yaml:"gitops" json:"gitops"`
-	Stack               StackConfig        `yaml:"stack" json:"stack"`
-	StgSmoke            StgSmokeConfig     `yaml:"stg_smoke" json:"stg_smoke"`
-	ProdSmoke           StgSmokeConfig     `yaml:"prod_smoke" json:"prod_smoke"`
-	DevSmoke            StgSmokeConfig     `yaml:"dev_smoke" json:"dev_smoke"`
+	ViewerEnv         string            `yaml:"viewer_env" json:"viewer_env,omitempty"`
+	SSHHost           string            `yaml:"ssh_host" json:"ssh_host"`
+	NodeIP            string            `yaml:"node_ip" json:"node_ip"`
+	BifrostNamespaces []string          `yaml:"bifrost_namespaces" json:"bifrost_namespaces"`
+	ComputeNodes      []ComputeNodeSpec `yaml:"compute_nodes" json:"compute_nodes"`
+	MonitoringNS      string            `yaml:"monitoring_namespace" json:"monitoring_namespace"`
+	ObservabilityURLs ObservabilityURLs `yaml:"observability_urls" json:"observability_urls"`
+	GitOps            GitOpsConfig      `yaml:"gitops" json:"gitops"`
+	Stack             StackConfig       `yaml:"stack" json:"stack"`
+	StgSmoke          StgSmokeConfig    `yaml:"stg_smoke" json:"stg_smoke"`
+	ProdSmoke         StgSmokeConfig    `yaml:"prod_smoke" json:"prod_smoke"`
+	DevSmoke          StgSmokeConfig    `yaml:"dev_smoke" json:"dev_smoke"`
 }
 
 type ClustersFile struct {

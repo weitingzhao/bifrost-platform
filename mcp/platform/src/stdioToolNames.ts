@@ -41,7 +41,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'scale_deployment',
   'delete_pod',
   'wake_compute_node',
-  'join_cluster_node',
   'poweroff_compute_node',
   'ensure_metrics_server',
   'ensure_kube_prometheus_stack',

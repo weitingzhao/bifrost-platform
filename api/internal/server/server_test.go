@@ -208,6 +208,8 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodPost, "/api/v1/agent/drift-proposals"},
 		{http.MethodGet, "/api/v1/agent/retrospective/patterns"},
 		{http.MethodGet, "/api/v1/agent/retrospective/insights"},
+		{http.MethodGet, "/api/v1/cluster/join-profiles"},
+		{http.MethodPost, "/api/v1/cluster/nodes/join"},
 	}
 	for _, c := range retired {
 		rec := httptest.NewRecorder()

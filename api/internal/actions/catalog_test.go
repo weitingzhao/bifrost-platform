@@ -133,7 +133,7 @@ func TestCatalogIDsUniqueAndLeveled(t *testing.T) {
 	for _, id := range []string{
 		"start_pipeline_run", "delete_pipeline_run", "gitops_sync_app", "gitops_rollback_app",
 		"rollout_restart_deployment", "scale_deployment", "delete_pod", "cordon_node", "uncordon_node",
-		"drain_node", "poweroff_compute_node", "wake_compute_node", "join_cluster_node",
+		"drain_node", "poweroff_compute_node", "wake_compute_node",
 		"trigger_cnpg_backup", "repair_cnpg_wal_store", "trigger_data_clone", "market_data_heal",
 		"ib_reconnect", "ib_mode", "ib_maintenance", "ib_self_heal",
 		"unifi_firewall_apply", "stack_install_addon", "stack_upgrade_addon",

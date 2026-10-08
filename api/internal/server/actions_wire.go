@@ -215,9 +215,6 @@ func (s *Server) bindActionExecutors() {
 			return "/api/v1/cluster/nodes/" + url.PathEscape(text(p["name"])) + "/wake"
 		},
 		path("name"), nil, s.cluster.HandleWakeNode)
-	reg("join_cluster_node", http.MethodPost,
-		func(map[string]any) string { return "/api/v1/cluster/nodes/join" },
-		nil, fields("profile"), s.cluster.HandleJoinNode)
 	reg("trigger_cnpg_backup", http.MethodPost,
 		func(map[string]any) string { return "/api/v1/cluster/postgres/backup" },
 		nil, nil, s.cluster.HandleTriggerPostgresBackup)

@@ -2,20 +2,17 @@ import { useMutation } from '@tanstack/react-query'
 import {
   cordonNode,
   drainNode,
-  joinClusterNode,
   powerOffComputeNode,
   uncordonNode,
   wakeComputeNode,
 } from '@/api/clusterActuation'
-import type { ClusterNode, JoinProfilesResponse } from '@/api/clusterTypes'
+import type { ClusterNode } from '@/api/clusterTypes'
 import type { WizardAction } from '@/lib/cluster/nodeWizard'
 import type { ClusterMutationActuation } from './clusterMutationTypes'
 
 export function useClusterNodeMutations(
   actuation: ClusterMutationActuation,
   selectedNode: ClusterNode | null,
-  wizardJoinProfileId: string | null,
-  joinProfiles: JoinProfilesResponse | undefined,
 ) {
   const { handleActuationSuccess, handleActuationError, requireConfirm } = actuation
 
@@ -45,12 +42,6 @@ export function useClusterNodeMutations(
 
   const drainNodeMutation = useMutation({
     mutationFn: (nodeName: string) => drainNode(nodeName),
-    onSuccess: data => handleActuationSuccess(data.message),
-    onError: handleActuationError,
-  })
-
-  const joinNodeMutation = useMutation({
-    mutationFn: (profile: string) => joinClusterNode(profile),
     onSuccess: data => handleActuationSuccess(data.message),
     onError: handleActuationError,
   })
@@ -105,16 +96,7 @@ export function useClusterNodeMutations(
     })
   }
 
-  function handleJoinNode(profileId: string, label: string) {
-    requireConfirm({
-      title: 'Join K3s node',
-      message: `Run join profile "${label}" via infra script. Requires K3S_TOKEN or ~/.bifrost-k3s-node-token and PLATFORM_NODE_JOIN_ENABLED=1 on platform-api.`,
-      confirmLabel: 'Run join',
-      action: () => joinNodeMutation.mutate(profileId),
-    })
-  }
-
-  function handleWizardAction(action: WizardAction, context?: { profileId?: string }) {
+  function handleWizardAction(action: WizardAction) {
     switch (action) {
       case 'cordon':
         handleCordonNode()
@@ -131,14 +113,6 @@ export function useClusterNodeMutations(
       case 'poweroff':
         handlePowerOffComputeNode()
         break
-      case 'join': {
-        const profileId = context?.profileId ?? wizardJoinProfileId ?? joinProfiles?.profiles[0]?.id
-        const profile = joinProfiles?.profiles.find(p => p.id === profileId)
-        if (profile != null) {
-          handleJoinNode(profile.id, profile.label)
-        }
-        break
-      }
       default:
         break
     }
@@ -150,7 +124,6 @@ export function useClusterNodeMutations(
     cordonNodeMutation,
     uncordonNodeMutation,
     drainNodeMutation,
-    joinNodeMutation,
     handleWakeComputeNode,
     handlePowerOffComputeNode,
     handleCordonNode,

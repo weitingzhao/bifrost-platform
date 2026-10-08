@@ -10,8 +10,6 @@ import { useClusterWorkloadMutations } from './useClusterWorkloadMutations'
 export function useClusterPageMutations(input: ClusterPageMutationsInput) {
   const {
     selectedNode,
-    wizardJoinProfileId,
-    joinProfiles,
     canAdmin,
     observability,
     clusterSummary,
@@ -67,7 +65,7 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
 
   const bootstrap = useClusterBootstrapMutations(actuation, canAdmin, observability, setSyncError)
   const workloads = useClusterWorkloadMutations(actuation, setDrawerOpen, setSelectedPod)
-  const nodes = useClusterNodeMutations(actuation, selectedNode, wizardJoinProfileId, joinProfiles)
+  const nodes = useClusterNodeMutations(actuation, selectedNode)
   const remediation = useClusterRemediationMutations(actuation, {
     clusterSummary,
     serviceReadiness,
@@ -93,8 +91,7 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
       nodes.powerOffNodeMutation.isPending ||
       nodes.cordonNodeMutation.isPending ||
       nodes.uncordonNodeMutation.isPending ||
-      nodes.drainNodeMutation.isPending ||
-      nodes.joinNodeMutation.isPending
+      nodes.drainNodeMutation.isPending
     )
   }
 

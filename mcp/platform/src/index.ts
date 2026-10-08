@@ -350,14 +350,6 @@ reg(
 )
 
 reg(
-  'join_cluster_node',
-  'K3s agent join job (admin)',
-  { profile: z.string() },
-  async ({ profile }) =>
-    jsonResult(await platformPost('/api/v1/cluster/nodes/join', { profile })),
-)
-
-reg(
   'poweroff_compute_node',
   'Drain + power off compute node (admin)',
   { name: z.string() },

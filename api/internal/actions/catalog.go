@@ -185,12 +185,6 @@ var catalog = []Action{
 		Params: []Param{{Name: "name", Type: "string", Required: true, In: "path"}},
 	},
 	{
-		ID: "join_cluster_node", Tier: TierD,
-		Description: "Join a node to the cluster. Tier D.",
-		Method:      "POST", Pattern: "/api/v1/cluster/nodes/join",
-		Params: []Param{{Name: "profile", Type: "string", Required: true, In: "body"}},
-	},
-	{
 		ID: "trigger_cnpg_backup", Tier: TierC,
 		Description: "Create an on-demand CNPG backup. Tier C.",
 		Method:      "POST", Pattern: "/api/v1/cluster/postgres/backup",

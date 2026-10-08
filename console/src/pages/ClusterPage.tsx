@@ -61,7 +61,6 @@ export function ClusterPage({
   const [selectedNode, setSelectedNode] = useState<ClusterNode | null>(null)
   const [nodeDrawerOpen, setNodeDrawerOpen] = useState(false)
   const [wizardFlow, setWizardFlow] = useState<NodeWizardFlow>('maintenance')
-  const [wizardJoinProfileId, setWizardJoinProfileId] = useState<string | null>(null)
   const [opsHealth, setOpsHealth] = useState<{
     reach: Reachability
     summaryLine: string
@@ -82,16 +81,12 @@ export function ClusterPage({
     selectedPod,
     drawerOpen,
     selectedNode,
-    nodeDrawerOpen,
-    wizardFlow,
     pinnedWorkload,
     selectedCategory,
   })
 
   const m = useClusterPageMutations({
     selectedNode,
-    wizardJoinProfileId,
-    joinProfiles: q.joinProfilesQuery.data,
     canAdmin,
     observability: q.observabilityQuery.data,
     clusterSummary: q.clusterSummary,
@@ -339,8 +334,6 @@ export function ClusterPage({
         setNodeDrawerOpen={setNodeDrawerOpen}
         wizardFlow={wizardFlow}
         setWizardFlow={setWizardFlow}
-        wizardJoinProfileId={wizardJoinProfileId}
-        setWizardJoinProfileId={setWizardJoinProfileId}
         canOperate={canOperate}
         canAdmin={canAdmin}
         onOpenStandards={onOpenStandards}

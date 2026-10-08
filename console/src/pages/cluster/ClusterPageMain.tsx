@@ -47,8 +47,6 @@ export function ClusterPageMain({
   setNodeDrawerOpen,
   wizardFlow,
   setWizardFlow,
-  wizardJoinProfileId,
-  setWizardJoinProfileId,
   canOperate,
   canAdmin,
   onOpenStandards,
@@ -83,8 +81,6 @@ export function ClusterPageMain({
   setNodeDrawerOpen: Dispatch<SetStateAction<boolean>>
   wizardFlow: NodeWizardFlow
   setWizardFlow: Dispatch<SetStateAction<NodeWizardFlow>>
-  wizardJoinProfileId: string | null
-  setWizardJoinProfileId: Dispatch<SetStateAction<string | null>>
   canOperate: boolean
   canAdmin: boolean
   onOpenStandards?: () => void
@@ -165,11 +161,6 @@ export function ClusterPageMain({
               onSelectNodeName={handleWizardSelectNodeName}
               selectedNode={q.selectedNodeLive}
               power={q.nodePowerQuery.data}
-              joinProfiles={q.joinProfilesQuery.data}
-              selectedJoinProfileId={
-                wizardJoinProfileId ?? q.joinProfilesQuery.data?.profiles[0]?.id ?? null
-              }
-              onSelectJoinProfileId={setWizardJoinProfileId}
               canOperate={canOperate}
               canAdmin={canAdmin}
               actionPending={m.actionPending()}

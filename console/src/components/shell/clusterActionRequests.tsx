@@ -59,20 +59,6 @@ export function RequestPowerOffNode({ name, disabled }: { name: string; disabled
   )
 }
 
-export function RequestJoinNode({ profile, disabled }: { profile: string; disabled?: boolean }) {
-  const body = { profile }
-  return (
-    <RequestActionButton
-      action="join_cluster_node"
-      params={body}
-      reason={`Join profile ${profile}`}
-      label="Request join"
-      disabled={disabled}
-      direct={{ method: 'POST', path: '/api/v1/cluster/nodes/join', body }}
-    />
-  )
-}
-
 export function RequestScaleDeployment({
   namespace,
   name,

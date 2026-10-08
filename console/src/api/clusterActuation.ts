@@ -50,14 +50,6 @@ export async function drainNode(
   return r.json() as Promise<ActuationResponse>
 }
 
-export async function joinClusterNode(profile: string): Promise<ActuationResponse> {
-  const r = await authedFetch('join cluster node', '/api/v1/cluster/nodes/join', {
-    method: 'POST',
-    body: JSON.stringify({ profile }),
-  })
-  return r.json() as Promise<ActuationResponse>
-}
-
 export async function syncClusterKubeconfig(): Promise<ClusterSyncResponse> {
   const r = await authedFetch('sync kubeconfig', '/api/v1/cluster/sync-kubeconfig', {
     method: 'POST',

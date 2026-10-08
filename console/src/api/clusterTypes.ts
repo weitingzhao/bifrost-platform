@@ -393,29 +393,10 @@ export interface NodePowerResponse {
   generated_at: string
 }
 
-export interface JoinProfile {
-  id: string
-  label: string
-  expected_node?: string
-  script: string
-}
-
-export interface JoinProfilesResponse {
-  cluster_id: string
-  profiles: JoinProfile[]
-  enabled: boolean
-  detail?: string
-  generated_at: string
-}
-
 export interface DrainNodeRequest {
   force?: boolean
   delete_local_data?: boolean
   grace_period_seconds?: number
-}
-
-export interface JoinNodeRequest {
-  profile: string
 }
 
 export interface ClusterPlacementPool {

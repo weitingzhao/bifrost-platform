@@ -1,6 +1,6 @@
-import type { ClusterNode, JoinProfile, NodePowerResponse } from '@/api/clusterTypes'
+import type { ClusterNode, NodePowerResponse } from '@/api/clusterTypes'
 
-export type NodeWizardFlow = 'join' | 'maintenance' | 'compute_shutdown'
+export type NodeWizardFlow = 'maintenance' | 'compute_shutdown'
 
 export type WizardStepStatus = 'done' | 'current' | 'pending' | 'blocked'
 
@@ -10,9 +10,7 @@ export type WizardAction =
   | 'uncordon'
   | 'wake'
   | 'poweroff'
-  | 'join'
   | 'select_node'
-  | 'select_profile'
 
 export interface NodeWizardStep {
   id: string
@@ -182,91 +180,10 @@ export function computeShutdownWizardSteps(
   ]
 }
 
-export function joinWizardSteps(
-  profile: JoinProfile | null,
-  joinEnabled: boolean,
-  nodeNames: string[],
-): NodeWizardStep[] {
-  const expected = profile?.expected_node?.trim() ?? ''
-  const nodeJoined = expected !== '' && nodeNames.includes(expected)
-
-  let prereqStatus: WizardStepStatus
-  let prereqDescription: string
-  if (nodeJoined) {
-    prereqStatus = 'done'
-    prereqDescription =
-      expected !== ''
-        ? `Node "${expected}" already in cluster — join prerequisites not required.`
-        : 'Expected node already in cluster — join prerequisites not required.'
-  } else if (!joinEnabled) {
-    prereqStatus = 'blocked'
-    prereqDescription = 'Set PLATFORM_NODE_JOIN_ENABLED=1 on platform-api and restart.'
-  } else if (profile != null) {
-    prereqStatus = 'done'
-    prereqDescription =
-      'K3S_TOKEN or ~/.bifrost-k3s-node-token on platform-api host; PLATFORM_NODE_JOIN_ENABLED=1.'
-  } else {
-    prereqStatus = 'pending'
-    prereqDescription =
-      'K3S_TOKEN or ~/.bifrost-k3s-node-token on platform-api host; PLATFORM_NODE_JOIN_ENABLED=1.'
-  }
-
-  let runStatus: WizardStepStatus
-  let runDescription: string
-  if (profile == null) {
-    runStatus = 'pending'
-    runDescription = 'Pick a profile first.'
-  } else if (nodeJoined) {
-    runStatus = 'done'
-    runDescription = `Node "${profile.expected_node || profile.id}" already present — no join job needed.`
-  } else if (!joinEnabled) {
-    runStatus = 'pending'
-    runDescription = `Execute join for profile "${profile.id}" (enable join first).`
-  } else {
-    runStatus = 'current'
-    runDescription = `Execute join for profile "${profile.id}".`
-  }
-
-  return [
-    {
-      id: 'profile',
-      label: 'Select join profile',
-      description: 'Configured in clusters.yaml — runs bifrost-trade-infra k3s join script.',
-      status: profile != null ? 'done' : 'current',
-      action: profile == null ? 'select_profile' : undefined,
-    },
-    {
-      id: 'prereq',
-      label: 'Prerequisites',
-      description: prereqDescription,
-      status: prereqStatus,
-    },
-    {
-      id: 'run',
-      label: 'Run join job',
-      description: runDescription,
-      status: runStatus,
-      action: joinEnabled && profile != null && !nodeJoined ? 'join' : undefined,
-    },
-    {
-      id: 'verify',
-      label: 'Verify node Ready',
-      description:
-        expected !== ''
-          ? `Confirm node "${expected}" appears Ready in the nodes table.`
-          : 'Confirm the new node appears in the cluster.',
-      status: nodeJoined ? 'done' : profile != null && joinEnabled ? 'current' : 'pending',
-    },
-  ]
-}
-
 export function wizardStepsForFlow(
   flow: NodeWizardFlow,
   node: ClusterNode | null,
   power: NodePowerResponse | undefined,
-  profile: JoinProfile | null,
-  joinEnabled: boolean,
-  nodeNames: string[],
   computeOffCycleHint: ComputeOffCycleHint = 'pre_poweroff',
 ): NodeWizardStep[] {
   switch (flow) {
@@ -274,8 +191,6 @@ export function wizardStepsForFlow(
       return maintenanceWizardSteps(node, power)
     case 'compute_shutdown':
       return computeShutdownWizardSteps(node, power, computeOffCycleHint)
-    case 'join':
-      return joinWizardSteps(profile, joinEnabled, nodeNames)
   }
 }
 

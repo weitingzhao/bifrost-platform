@@ -6,7 +6,6 @@ import type {
   ClusterServiceReadinessResponse,
   ClusterSummary,
   ClusterWorkload,
-  JoinProfilesResponse,
 } from '@/api/clusterTypes'
 import type { QueryClient } from '@tanstack/react-query'
 import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
@@ -27,8 +26,6 @@ export interface ScaleState {
 
 export interface ClusterPageMutationsInput {
   selectedNode: ClusterNode | null
-  wizardJoinProfileId: string | null
-  joinProfiles: JoinProfilesResponse | undefined
   canAdmin: boolean
   observability: ClusterObservabilityResponse | undefined
   clusterSummary: ClusterSummary | undefined

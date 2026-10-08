@@ -206,7 +206,6 @@ func Catalog() []ToolView {
 		tool("gitops_sync_app", "Trigger Argo CD sync to HEAD", "routine", "POST", "/api/v1/gitops/apps/{name}/sync", "operator", "P3", true),
 		tool("start_pipeline_run", "Start Tekton PipelineRun", "routine", "POST", "/api/v1/delivery/pipelines/{name}/runs", "operator", "P3", true),
 		tool("drain_node", "Drain node workloads", "confirm", "POST", "/api/v1/cluster/nodes/{name}/drain", "admin", "P2", true),
-		tool("join_cluster_node", "K3s agent join job", "confirm", "POST", "/api/v1/cluster/nodes/join", "admin", "P2", true),
 		tool("poweroff_compute_node", "Drain + power off compute node", "confirm", "POST", "/api/v1/cluster/nodes/{name}/poweroff", "admin", "P1", true),
 		tool("ensure_kubeconfig_secret", "Sync kubeconfig and ensure platform-kubeconfig Secret in STG/PROD namespaces", "confirm", "POST", "/api/v1/cluster/kubeconfig-secret/ensure", "admin", "P6", true),
 		tool("ensure_metrics_server", "Install metrics-server add-on", "confirm", "POST", "/api/v1/cluster/addons/metrics-server/ensure", "admin", "P1", true),
