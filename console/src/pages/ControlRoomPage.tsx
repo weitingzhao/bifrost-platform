@@ -104,6 +104,11 @@ type ControlRoomPageProps = {
   /** Trade readiness IB Fleet CTA → Daily Ops TCC */
   onOpenFleetVendor?: () => void
   onModeChange?: (landingTab: string, modeId: TaskModeId) => void
+  /**
+   * Status keeps the posture strip, red items, and mission/health cards.
+   * Launch, promote, pipeline, agent dispatch, and the governance bay stay on the full page.
+   */
+  surface?: 'full' | 'status'
 } & AmbientAgentShellProps
 
 function bayById(
@@ -142,7 +147,9 @@ export function ControlRoomPage({
   onModeChange,
   ambientJobId,
   onStartAgentJob,
+  surface = 'full',
 }: ControlRoomPageProps) {
+  const statusSurface = surface === 'status'
   const [selection, setSelection] = useState<ControlRoomSelection>(null)
   const [activeBay, setActiveBay] = useState<ControlRoomBayId | null>(() =>
     parseControlRoomBayHash(typeof window !== 'undefined' ? window.location.hash : ''),
@@ -255,7 +262,7 @@ export function ControlRoomPage({
     onOpenPromote?.()
   }, [context, matrixList, stgSmoke, lastDeliverSucceeded, tierB, onOpenPromote])
 
-  const showHealth = onOpenAgentProtocol != null
+  const showHealth = statusSurface || onOpenAgentProtocol != null
   const promoteLamp = useMemo(() => {
     if (context == null) return undefined
     return buildPromoteCutoverModel({
@@ -290,9 +297,17 @@ export function ControlRoomPage({
     ],
   )
 
+  const shownBays = useMemo(
+    () =>
+      statusSurface
+        ? baySignals.filter(b => b.id === 'mission' || b.id === 'health')
+        : baySignals,
+    [baySignals, statusSurface],
+  )
+
   const attentionItems = useMemo(
-    () => buildControlRoomAttentionItems(baySignals),
-    [baySignals],
+    () => buildControlRoomAttentionItems(shownBays),
+    [shownBays],
   )
 
   useEffect(() => {
@@ -395,12 +410,12 @@ export function ControlRoomPage({
         primaryCause={missionPrimaryCause}
         dataUpdatedAt={dataUpdatedAt}
         staleSources={staleSources}
-        bays={baySignals}
+        bays={shownBays}
         isLoading={missionLoading}
         onSelectBay={jumpToBay}
       />
 
-      {onModeChange != null && (
+      {!statusSurface && onModeChange != null && (
         <AgentTriadStrip
           onModeChange={onModeChange}
           operateQueueOpen={operateQueueQuery.data?.open.length ?? 0}
@@ -411,13 +426,15 @@ export function ControlRoomPage({
       <ControlRoomAttentionStrip
         items={attentionItems}
         onSelectBay={jumpToBay}
-        onCopyForAgent={handleAttentionCopyForAgent}
-        onDiagnoseWithAgent={onOpenAgentDesk != null ? handleAttentionAskForAgent : undefined}
+        onCopyForAgent={statusSurface ? undefined : handleAttentionCopyForAgent}
+        onDiagnoseWithAgent={
+          statusSurface || onOpenAgentDesk == null ? undefined : handleAttentionAskForAgent
+        }
         diagnoseBusy={attentionDiagnoseBusy}
       />
 
       <ControlRoomBayCards
-        bays={baySignals}
+        bays={shownBays}
         activeBay={activeBay}
         openBayIds={openBayIds}
         onSelectBay={jumpToBay}
@@ -430,7 +447,7 @@ export function ControlRoomPage({
           </p>
         )}
 
-        {missionBay != null && openBayIds.has('mission') && (
+        {!statusSurface && missionBay != null && openBayIds.has('mission') && (
           <ControlRoomBay
             bayId="mission"
             title="Mission"
@@ -475,7 +492,7 @@ export function ControlRoomPage({
           </ControlRoomBay>
         )}
 
-        {launchBay != null && openBayIds.has('launch') && (
+        {!statusSurface && launchBay != null && openBayIds.has('launch') && (
           <ControlRoomBay
             bayId="launch"
             title="Launch"
@@ -494,7 +511,7 @@ export function ControlRoomPage({
           </ControlRoomBay>
         )}
 
-        {operateBay != null && openBayIds.has('operate') && (
+        {!statusSurface && operateBay != null && openBayIds.has('operate') && (
           <ControlRoomBay
             bayId="operate"
             title="Operate"
@@ -522,7 +539,7 @@ export function ControlRoomPage({
           </ControlRoomBay>
         )}
 
-        {releaseBay != null && openBayIds.has('release') && (
+        {!statusSurface && releaseBay != null && openBayIds.has('release') && (
           <ControlRoomBay
             bayId="release"
             title="Release"
@@ -562,13 +579,14 @@ export function ControlRoomPage({
           >
             <NetworkHealthPanel
               context={context}
-              onOpenAgentProtocol={onOpenAgentProtocol!}
+              onOpenAgentProtocol={onOpenAgentProtocol ?? (() => undefined)}
               onOpenNetwork={onOpenNetwork}
+              showPrimaryAgentAction={!statusSurface && onOpenAgentProtocol != null}
             />
           </ControlRoomBay>
         )}
 
-        {governanceBay != null && openBayIds.has('governance') && (
+        {!statusSurface && governanceBay != null && openBayIds.has('governance') && (
           <ControlRoomBay
             bayId="governance"
             title="Governance"

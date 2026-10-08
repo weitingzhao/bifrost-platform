@@ -8,6 +8,8 @@
 
 import { useMemo, useState } from 'react'
 import { Button, SegmentControl } from '@bifrost/ui'
+import { probesForViewer } from '@/lib/shell/shellStatusLine'
+import { normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { SelfHealthPanel } from '@/components/architecture/SelfHealthPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
@@ -49,12 +51,15 @@ interface RocketHealthPageProps {
   onOpenCluster?: () => void
   onOpenObservability?: () => void
   onOpenLaunchRocket?: () => void
+  /** Status card: no All/Stg/Prod selector. Probes follow self-health viewer_env. */
+  lockToViewer?: boolean
 }
 
 export function RocketHealthPage({
   onOpenCluster,
   onOpenObservability,
   onOpenLaunchRocket,
+  lockToViewer = false,
 }: RocketHealthPageProps) {
   const [env, setEnv] = useState<EnvFilter>('all')
 
@@ -69,10 +74,20 @@ export function RocketHealthPage({
     () => selfHealthQuery.data?.probes ?? [],
     [selfHealthQuery.data?.probes],
   )
+  const viewerProbes = useMemo(
+    () => (selfHealthQuery.data != null ? probesForViewer(selfHealthQuery.data) : []),
+    [selfHealthQuery.data],
+  )
+  const shownProbes = lockToViewer ? viewerProbes : probes
+  const viewerLabel =
+    selfHealthQuery.data?.viewer_env != null && selfHealthQuery.data.viewer_env !== ''
+      ? normalizeViewerEnv(selfHealthQuery.data.viewer_env).toUpperCase()
+      : '…'
   const filteredCount = useMemo(() => {
+    if (lockToViewer) return shownProbes.length
     if (env === 'all') return probes.length
     return probes.filter(p => p.env === env).length
-  }, [env, probes])
+  }, [env, lockToViewer, probes, shownProbes.length])
 
   let verdictLamp: OpsVerdictLamp
   let verdictTag: string
@@ -99,8 +114,9 @@ export function RocketHealthPage({
     verdictTagVariant = v.tagVariant
     const stgN = probes.filter(p => p.env === 'stg').length
     const prodN = probes.filter(p => p.env === 'prod').length
-    verdictSummary =
-      env === 'all'
+    verdictSummary = lockToViewer
+      ? `${filteredCount} ${viewerLabel} probe${filteredCount === 1 ? '' : 's'} · platform-api · console · Argo`
+      : env === 'all'
         ? `${probes.length} probes · STG ${stgN} · PROD ${prodN} · overall ${overall}`
         : `${filteredCount} ${env.toUpperCase()} probe${filteredCount === 1 ? '' : 's'} · overall ${overall}`
   }
@@ -109,7 +125,7 @@ export function RocketHealthPage({
     <div className="flex w-full min-w-0 flex-col gap-4">
       <OpsVerdictStrip
         ariaLabel="Rocket health probe freshness"
-        title={`ROCKET HEALTH · ${env === 'all' ? 'ALL ENVS' : env.toUpperCase()}`}
+        title={`ROCKET HEALTH · ${lockToViewer ? viewerLabel : env === 'all' ? 'ALL ENVS' : env.toUpperCase()}`}
         lamp={verdictLamp}
         tagLabel={verdictTag}
         tagVariant={verdictTagVariant}
@@ -120,7 +136,7 @@ export function RocketHealthPage({
           ) : undefined
         }
         actions={
-          onOpenLaunchRocket != null ? (
+          !lockToViewer && onOpenLaunchRocket != null ? (
             <Button size="sm" variant="outline" onClick={onOpenLaunchRocket}>
               Launch Rocket
             </Button>
@@ -128,6 +144,7 @@ export function RocketHealthPage({
         }
       />
 
+      {!lockToViewer && (
       <PageToolbar align="between">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Environment:</span>
@@ -161,9 +178,14 @@ export function RocketHealthPage({
           )}
         </div>
       </PageToolbar>
+      )}
 
-      <SelfHealthPanel envFilter={env === 'all' ? undefined : env} />
+      <SelfHealthPanel
+        envFilter={lockToViewer || env === 'all' ? undefined : env}
+        viewerOnly={lockToViewer}
+      />
 
+      {!lockToViewer && (
       <OpsSection
         variant="flat"
         title="Runtime (planned)"
@@ -175,6 +197,7 @@ export function RocketHealthPage({
           Observability owns system-wide rollup.
         </p>
       </OpsSection>
+      )}
     </div>
   )
 }

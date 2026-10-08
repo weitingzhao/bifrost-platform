@@ -50,7 +50,9 @@ export function approvalIdFromHash(hash: string): string | null {
   const raw = hash.replace(/^#/, '')
   const q = raw.indexOf('?')
   if (q < 0) return null
-  if (raw.slice(0, q) !== 'approvals') return null
+  const page = raw.slice(0, q)
+  // S2 redirects #approvals?id= to #maintenance?id=. Both open the same request.
+  if (page !== 'approvals' && page !== 'maintenance') return null
   const id = new URLSearchParams(raw.slice(q + 1)).get('id')?.trim() ?? ''
   return id === '' ? null : id
 }
