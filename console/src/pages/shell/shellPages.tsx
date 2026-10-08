@@ -21,9 +21,7 @@ export function MaintenancePage() {
   return <ShellQuestion question={shellNavEntry('maintenance').question} />
 }
 
-export function ReleasesPage() {
-  return <ShellQuestion question={shellNavEntry('releases').question} />
-}
+export { ReleasesPage } from './releases/ReleasesPage'
 
 export function InfrastructurePage() {
   return <ShellQuestion question={shellNavEntry('infrastructure').question} />
