@@ -43,7 +43,7 @@ function errMessage(err: unknown): string | null {
   return String(err)
 }
 
-export function useObservabilitySnapshot(): {
+export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean }): {
   viewModel: ObservabilityViewModel
   tradeEnv: TradeEnv
   setTradeEnv: (env: TradeEnv) => void
@@ -54,18 +54,33 @@ export function useObservabilitySnapshot(): {
   refetchAll: () => void
   namespace: string
 } {
+  const followViewerOnly = options?.followViewerOnly === true
   // Seed from VITE_OPS_VIEWER_ENV; hydrate from selfHealth.viewer_env once (unless user overrides).
+  // followViewerOnly never applies that seed to a request: env-scoped queries wait for viewer_env.
   const [tradeEnv, setTradeEnvState] = useState<TradeEnv>(() =>
     tradeEnvFromViewer(import.meta.env.VITE_OPS_VIEWER_ENV),
   )
   const tradeEnvTouchedRef = useRef(false)
   const setTradeEnv = (env: TradeEnv) => {
+    if (followViewerOnly) return
     tradeEnvTouchedRef.current = true
     setTradeEnvState(env)
   }
 
   const [selectedDomain, setSelectedDomain] = useState<SystemDomainId>('satellite')
-  const ns = TRADE_NS[tradeEnv]
+
+  const selfQ = useQuery({
+    queryKey: ['platform', 'self-health'],
+    queryFn: fetchSelfHealth,
+    refetchInterval: REFETCH,
+    retry: false,
+  })
+
+  const viewerKnown = selfQ.data?.viewer_env != null && selfQ.data.viewer_env !== ''
+  const viewerTradeEnv = tradeEnvFromViewer(selfQ.data?.viewer_env)
+  const effectiveEnv: TradeEnv = followViewerOnly ? viewerTradeEnv : tradeEnv
+  const envScopedEnabled = !followViewerOnly || viewerKnown
+  const ns = TRADE_NS[effectiveEnv]
 
   const observabilityQ = useQuery({
     queryKey: ['cluster', 'observability'],
@@ -89,6 +104,7 @@ export function useObservabilitySnapshot(): {
   const telemetryQ = useQuery({
     queryKey: ['telemetry', 'overview', ns],
     queryFn: () => fetchTelemetryOverview(ns),
+    enabled: envScopedEnabled,
     refetchInterval: REFETCH,
     retry: false,
   })
@@ -107,8 +123,9 @@ export function useObservabilitySnapshot(): {
   // Scope to selected Trade NS — all-env bus-deep storms Traefik NodePorts and
   // falsely marks IB consumers down (context deadline exceeded).
   const busQ = useQuery({
-    queryKey: ['satellite', 'bus-deep', tradeEnv],
-    queryFn: () => fetchSatelliteBusDeep(tradeEnv),
+    queryKey: ['satellite', 'bus-deep', effectiveEnv],
+    queryFn: () => fetchSatelliteBusDeep(effectiveEnv),
+    enabled: envScopedEnabled,
     refetchInterval: REFETCH,
     retry: false,
   })
@@ -151,13 +168,6 @@ export function useObservabilitySnapshot(): {
     refetchInterval: REFETCH,
     retry: false,
   })
-  const selfQ = useQuery({
-    queryKey: ['platform', 'self-health'],
-    queryFn: fetchSelfHealth,
-    refetchInterval: REFETCH,
-    retry: false,
-  })
-
   // First hydrate from self-health viewer_env; never overwrite after manual Trade NS change.
   useEffect(() => {
     if (tradeEnvTouchedRef.current) return
@@ -177,9 +187,9 @@ export function useObservabilitySnapshot(): {
     if (matrixData != null) {
       matrices = isAllMatrices(matrixData) ? matrixData.matrices : [matrixData]
     }
-    const envMatrix = matrices.find(m => m.environment === tradeEnv)
+    const envMatrix = matrices.find(m => m.environment === effectiveEnv)
     const vm = buildSatelliteBusViewModel({
-      selectedEnv: tradeEnv,
+      selectedEnv: effectiveEnv,
       buses,
       tradeApi: tradeApiTargetCounts(envMatrix),
     })
@@ -201,7 +211,7 @@ export function useObservabilitySnapshot(): {
       }
     }
     return { health: vm.health, topReason: vm.topReason }
-  }, [busQ.data, matrixQ.data, tradeEnv, ibQ.data])
+  }, [busQ.data, matrixQ.data, effectiveEnv, ibQ.data])
 
   const standbyNodes = useMemo(
     () =>
@@ -214,7 +224,7 @@ export function useObservabilitySnapshot(): {
   const viewModel = useMemo(
     () =>
       buildObservabilityViewModel({
-        selectedEnv: tradeEnv,
+        selectedEnv: effectiveEnv,
         selectedDomain,
         observability: observabilityQ.data,
         metrics: metricsQ.data,
@@ -234,7 +244,7 @@ export function useObservabilitySnapshot(): {
         standbyNodes,
       }),
     [
-      tradeEnv,
+      effectiveEnv,
       selectedDomain,
       observabilityQ.data,
       metricsQ.data,
@@ -291,7 +301,7 @@ export function useObservabilitySnapshot(): {
 
   return {
     viewModel,
-    tradeEnv,
+    tradeEnv: effectiveEnv,
     setTradeEnv,
     selectedDomain,
     setSelectedDomain,

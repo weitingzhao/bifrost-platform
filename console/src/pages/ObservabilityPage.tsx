@@ -67,12 +67,18 @@ export function ObservabilityPage({
   ambientJobStatus,
   onStartAgentJob,
   onOpenAgentDesk,
+  lockToViewer = false,
+  hideAgentActions = false,
 }: {
   onNavigate?: (tab: string) => void
   ambientJobId?: string | null
   ambientJobStatus?: AmbientAgentJob['status'] | null
   onStartAgentJob?: (job: AmbientAgentJob) => void
   onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
+  /** Status page: scope probes to self-health viewer_env. No environment selector. */
+  lockToViewer?: boolean
+  /** Status page: drop Agent Fix / Diagnose. Mute stays. */
+  hideAgentActions?: boolean
 }) {
   const {
     viewModel,
@@ -84,7 +90,7 @@ export function ObservabilityPage({
     isFetching,
     refetchAll,
     namespace,
-  } = useObservabilitySnapshot()
+  } = useObservabilitySnapshot({ followViewerOnly: lockToViewer })
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
 
@@ -355,6 +361,7 @@ export function ObservabilityPage({
           </span>
         }
         actions={
+          hideAgentActions ? undefined : (
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant="outline"
@@ -382,6 +389,7 @@ export function ObservabilityPage({
               />
             ) : null}
           </div>
+          )
         }
         meta={
           <>
@@ -470,8 +478,8 @@ export function ObservabilityPage({
                   domain={d}
                   selected={selectedDomain === d.domain}
                   onSelect={() => setSelectedDomain(d.domain)}
-                  tradeEnv={d.envScope === 'env' ? tradeEnv : undefined}
-                  onTradeEnvChange={d.envScope === 'env' ? setTradeEnv : undefined}
+                  tradeEnv={d.envScope === 'env' && !lockToViewer ? tradeEnv : undefined}
+                  onTradeEnvChange={d.envScope === 'env' && !lockToViewer ? setTradeEnv : undefined}
                   namespace={d.envScope === 'env' ? namespace : undefined}
                   grafana={primaryGrafanaForDomain(d.domain, viewModel.dashboards)}
                 />
@@ -528,6 +536,7 @@ export function ObservabilityPage({
         setBatchConfirmOpen={setBatchConfirmOpen}
         onNavigate={onNavigate}
         runAttentionRemediation={runAttentionRemediation}
+        hideAgentActions={hideAgentActions}
       />
 
       <ObservabilitySelectedDomain

@@ -57,6 +57,7 @@ export function ObservabilityAttentionPanel({
   setBatchConfirmOpen,
   onNavigate,
   runAttentionRemediation,
+  hideAgentActions = false,
 }: {
   isLoading: boolean
   attentionQuiet: boolean
@@ -83,13 +84,19 @@ export function ObservabilityAttentionPanel({
   setBatchConfirmOpen: (open: boolean) => void
   onNavigate?: (tab: string) => void
   runAttentionRemediation: (item: AttentionItem) => void
+  /** Status page keeps Inspect / Mute and drops Agent Fix / Diagnose. */
+  hideAgentActions?: boolean
 }) {
   return (
     <>
     <OpsSection
       id="obs-attention"
       title="Attention"
-      description="Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Agent Fix / Mute 2h (not a fix)"
+      description={
+        hideAgentActions
+          ? 'Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Mute 2h (not a fix)'
+          : 'Severity · Domain · Environment · Signal · Since · Owner · Action — Inspect / Agent Fix / Mute 2h (not a fix)'
+      }
       bodyPadding="none"
       overflow="hidden"
       collapsible={attentionQuiet}
@@ -97,7 +104,7 @@ export function ObservabilityAttentionPanel({
       actions={
         viewModelAttentionLength > 0 ? (
           <div className="flex flex-wrap items-center gap-2">
-            {batchGroup != null && (
+            {!hideAgentActions && batchGroup != null && (
               <Button
                 size="sm"
                 variant="outline"
@@ -246,7 +253,7 @@ export function ObservabilityAttentionPanel({
                       >
                         Manual
                       </Button>
-                    ) : (
+                    ) : hideAgentActions ? null : (
                       <Button
                         variant="ghost"
                         size="xs"
@@ -321,7 +328,7 @@ export function ObservabilityAttentionPanel({
                 <p className="m-0 text-[var(--text-dense-caption)] text-danger">{remediationError}</p>
               )}
               <div className="flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2">
-                {attentionDetail.triage.cta === 'agent_fix' && (
+                {!hideAgentActions && attentionDetail.triage.cta === 'agent_fix' && (
                   <Button
                     size="sm"
                     disabled={agentBlockedReason != null || remediationPending}
@@ -332,7 +339,7 @@ export function ObservabilityAttentionPanel({
                     Agent Fix
                   </Button>
                 )}
-                {attentionDetail.triage.cta === 'diagnose' && (
+                {!hideAgentActions && attentionDetail.triage.cta === 'diagnose' && (
                   <Button
                     size="sm"
                     disabled={agentBlockedReason != null || remediationPending}
@@ -405,7 +412,7 @@ export function ObservabilityAttentionPanel({
     />
 
     <ConfirmDialog
-      open={batchConfirmOpen && batchGroup != null}
+      open={!hideAgentActions && batchConfirmOpen && batchGroup != null}
       title={
         batchGroup != null
           ? `Batch Agent Fix (${batchGroup.items.length}× ${batchGroup.playbookId})?`

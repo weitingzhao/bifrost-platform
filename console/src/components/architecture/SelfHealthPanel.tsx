@@ -13,6 +13,7 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchSelfHealth } from '@/api/core'
 import type { SelfHealthProbeStatus } from '@/api/matrixTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { probesForViewer } from '@/lib/shell/shellStatusLine'
 
 const STATUS_TAG: Record<SelfHealthProbeStatus, { variant: 'success' | 'warning' | 'danger' | 'category'; label: string }> = {
   ok: { variant: 'success', label: 'ok' },
@@ -38,11 +39,14 @@ export function SelfHealthPanel({
   collapsible = false,
   defaultCollapsed = false,
   envFilter,
+  viewerOnly = false,
 }: {
   collapsible?: boolean
   defaultCollapsed?: boolean
   /** When set, only show probes for that env (overall lamp still reflects full payload). */
   envFilter?: 'stg' | 'prod'
+  /** Status card: probes for self-health viewer_env. The request itself has no env query. */
+  viewerOnly?: boolean
 } = {}) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['platform', 'self-health'],
@@ -51,18 +55,22 @@ export function SelfHealthPanel({
   })
 
   const overall = data?.overall ?? 'unknown'
-  const probes = (data?.probes ?? []).filter(p =>
-    envFilter == null ? true : p.env === envFilter,
-  )
+  const probes = viewerOnly
+    ? data != null
+      ? probesForViewer(data)
+      : []
+    : (data?.probes ?? []).filter(p => (envFilter == null ? true : p.env === envFilter))
 
   return (
     <OpsSection
       title="L1 control plane self-health"
       leading={<StatusLamp value={STATUS_LAMP[overall]} kind="reach" />}
       description={
-        envFilter == null
-          ? 'Platform probes its own API, Console, and Argo Application status across STG and PROD.'
-          : `Platform probes for ${envFilter.toUpperCase()} — API, Console, and Argo Application status.`
+        viewerOnly
+          ? 'Platform API, Console, and Argo for this console environment.'
+          : envFilter == null
+            ? 'Platform probes its own API, Console, and Argo Application status across STG and PROD.'
+            : `Platform probes for ${envFilter.toUpperCase()} — API, Console, and Argo Application status.`
       }
       actions={
         isLoading ? (
@@ -129,9 +137,11 @@ export function SelfHealthPanel({
       )}
       {!isLoading && !error && probes.length === 0 && (
         <p className="m-0 text-dense-meta text-muted-foreground">
-          {envFilter != null
-            ? `No self-health probes for ${envFilter.toUpperCase()}.`
-            : 'No self-health probes returned.'}
+          {viewerOnly
+            ? 'No self-health probes for this console environment.'
+            : envFilter != null
+              ? `No self-health probes for ${envFilter.toUpperCase()}.`
+              : 'No self-health probes returned.'}
         </p>
       )}
       {data?.generated_at && (
