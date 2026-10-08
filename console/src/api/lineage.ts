@@ -162,8 +162,11 @@ export type BranchHealth = {
   behind: number
   behind_is_floor?: boolean
   fork_sha?: string
-  /** open: unlanded work · landed: every change is on main in another form (leftover) · even: merged */
-  status: 'open' | 'landed' | 'even'
+  /**
+   * open: unlanded work · landed: every change is on main in another form (leftover) · even: merged ·
+   * stale: head older than the 60-day read and not on main inside it — not measured (ahead/open 0, behind a floor)
+   */
+  status: 'open' | 'stale' | 'landed' | 'even'
   threads: BranchThread[]
   commits: LineageGraphCommit[]
 }
