@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { fetchContext, fetchMatrix, isAllMatrices } from '@/api/core'
+import { fetchMatrix, isAllMatrices } from '@/api/core'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import { ControlRoomPage } from '@/pages/ControlRoomPage'
 import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { RocketHealthPage } from '@/pages/RocketHealthPage'
 import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
+import { ChecklistSignalsSummary } from '@/pages/shell/status/ChecklistSignalsSummary'
 
 function openHash(hash: string) {
   if (window.location.hash !== hash) window.location.hash = hash
@@ -17,12 +18,6 @@ function asMatrices(data: Awaited<ReturnType<typeof fetchMatrix>> | undefined): 
 
 /** Status: control-room posture, observability, platform card, Trade card. */
 export function StatusPage() {
-  const contextQ = useQuery({
-    queryKey: ['ops', 'context', 'status'],
-    queryFn: fetchContext,
-    refetchInterval: 30_000,
-    retry: false,
-  })
   const matrixQ = useQuery({
     queryKey: ['matrix', 'all'],
     queryFn: () => fetchMatrix(),
@@ -34,10 +29,11 @@ export function StatusPage() {
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
       <section aria-label="Control room" className="flex w-full min-w-0 flex-col">
+        <ChecklistSignalsSummary />
         <ControlRoomPage
           surface="status"
-          context={contextQ.data}
-          contextLoading={contextQ.isLoading}
+          context={undefined}
+          contextLoading={false}
           matrices={asMatrices(matrixQ.data)}
           matrixLoading={matrixQ.isLoading}
           matrixError={matrixError}

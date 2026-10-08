@@ -175,5 +175,11 @@ describe('StatusPage health requests', () => {
     }
 
     expect(urls.some(url => /[?&]env=(dev|stg)(?:&|$)/.test(url))).toBe(false)
+    expect(urls.some(url => url.includes('/api/v1/checklist/signals'))).toBe(true)
+    expect(urls.some(url => url.includes('/api/v1/remediation/?'))).toBe(false)
+    expect(urls.some(url => url.includes('/api/v1/context'))).toBe(false)
+    expect(urls.some(url => url.includes('/api/v1/cluster/metrics'))).toBe(false)
+    expect(urls.some(url => url.includes('/api/v1/code-health'))).toBe(false)
+    expect(view.getByRole('region', { name: 'Checklist signals' })).toBeTruthy()
   }, 20_000)
 })

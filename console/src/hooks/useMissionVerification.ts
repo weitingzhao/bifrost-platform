@@ -25,7 +25,7 @@ const DISMISS_MS = 90_000
  * Watches remediation jobs; when one transitions running → done/failed,
  * refreshes cockpit probes, runs verify_mission_snapshot reprobe, and exposes a verify banner.
  */
-export function useMissionVerification(): {
+export function useMissionVerification(enabled = true): {
   banner: MissionVerifyBannerState | null
   dismissBanner: () => void
   pendingVerify: boolean
@@ -35,6 +35,7 @@ export function useMissionVerification(): {
   const jobsQuery = useQuery({
     queryKey: ['remediation', 'jobs'],
     queryFn: fetchRemediationJobs,
+    enabled,
     refetchInterval: 5_000,
   })
 

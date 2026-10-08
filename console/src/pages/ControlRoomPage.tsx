@@ -173,8 +173,8 @@ export function ControlRoomPage({
     staleSources,
     isLoading: missionLoading,
   } = useMissionSnapshot()
-  const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   const { canOperate } = usePlatformAuth()
+  const { banner, dismissBanner, pendingVerify } = useMissionVerification(canOperate && !statusSurface)
   // Status does not render the operate bay. Skip retired queue and brief endpoints.
   const operateQueueQuery = useOperateQueue({ enabled: !statusSurface })
   const briefsQuery = usePendingDecisionBriefs({ enabled: !statusSurface })
@@ -184,6 +184,7 @@ export function ControlRoomPage({
   const jobsQuery = useQuery({
     queryKey: ['remediation', 'jobs'],
     queryFn: fetchRemediationJobs,
+    enabled: canOperate && !statusSurface,
     refetchInterval: 10_000,
   })
   const activeAgentJobCount = findActiveRemediationJobs(jobsQuery.data?.jobs ?? []).length

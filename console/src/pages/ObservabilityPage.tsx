@@ -80,6 +80,7 @@ export function ObservabilityPage({
   /** Status page: drop Agent Fix / Diagnose. Mute stays. */
   hideAgentActions?: boolean
 }) {
+  const [evidenceOn, setEvidenceOn] = useState(!lockToViewer)
   const {
     viewModel,
     tradeEnv,
@@ -90,7 +91,7 @@ export function ObservabilityPage({
     isFetching,
     refetchAll,
     namespace,
-  } = useObservabilitySnapshot({ followViewerOnly: lockToViewer })
+  } = useObservabilitySnapshot({ followViewerOnly: lockToViewer, includeEvidence: evidenceOn })
   const { canOperate } = usePlatformAuth()
   const qc = useQueryClient()
 
@@ -361,7 +362,11 @@ export function ObservabilityPage({
           </span>
         }
         actions={
-          hideAgentActions ? undefined : (
+          lockToViewer && !evidenceOn ? (
+            <Button variant="outline" size="sm" onClick={() => setEvidenceOn(true)}>
+              Load evidence
+            </Button>
+          ) : hideAgentActions ? undefined : (
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant="outline"

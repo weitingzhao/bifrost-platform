@@ -43,7 +43,11 @@ function errMessage(err: unknown): string | null {
   return String(err)
 }
 
-export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean }): {
+export function useObservabilitySnapshot(options?: {
+  followViewerOnly?: boolean
+  /** Status keeps the health verdict. Cluster metrics and code-health are evidence and stay off until asked. */
+  includeEvidence?: boolean
+}): {
   viewModel: ObservabilityViewModel
   tradeEnv: TradeEnv
   setTradeEnv: (env: TradeEnv) => void
@@ -55,6 +59,7 @@ export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean 
   namespace: string
 } {
   const followViewerOnly = options?.followViewerOnly === true
+  const includeEvidence = options?.includeEvidence !== false
   // Seed from VITE_OPS_VIEWER_ENV; hydrate from selfHealth.viewer_env once (unless user overrides).
   // followViewerOnly never applies that seed to a request: env-scoped queries wait for viewer_env.
   const [tradeEnv, setTradeEnvState] = useState<TradeEnv>(() =>
@@ -91,6 +96,7 @@ export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean 
   const metricsQ = useQuery({
     queryKey: ['cluster', 'metrics'],
     queryFn: () => fetchClusterMetrics(8),
+    enabled: includeEvidence,
     refetchInterval: REFETCH,
     retry: false,
   })
@@ -153,6 +159,7 @@ export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean 
   const codeHealthQ = useQuery({
     queryKey: ['code-health', 'observability'],
     queryFn: () => fetchCodeHealth(1),
+    enabled: includeEvidence,
     refetchInterval: 5 * 60_000,
     retry: false,
   })
@@ -286,7 +293,7 @@ export function useObservabilitySnapshot(options?: { followViewerOnly?: boolean 
 
   const refetchAll = () => {
     void observabilityQ.refetch()
-    void metricsQ.refetch()
+    if (includeEvidence) void metricsQ.refetch()
     void nodesQ.refetch()
     void telemetryQ.refetch()
     void alertsQ.refetch()
