@@ -6,23 +6,12 @@ import {
   APPROVAL_HISTORY_LIMIT,
   APPROVAL_TOKEN_STORAGE_KEY,
   recentClosed,
-  type ApprovalItem,
 } from '@/api/approvals'
+import {
+  buildApprovalListResponse,
+  buildPlatformApproval,
+} from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
-
-function item(partial: Partial<ApprovalItem> & Pick<ApprovalItem, 'id'>): ApprovalItem {
-  return {
-    action: 'gitops_sync_app',
-    tier: 'C',
-    params: { app: 'rocket' },
-    reason: 'prod drift',
-    rollback: 'argocd rollback',
-    requester: 'sess-owner',
-    status: 'pending',
-    expires_at: new Date(Date.now() + (2 * 60 + 5) * 60_000).toISOString(),
-    ...partial,
-  }
-}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -76,11 +65,11 @@ describe('ApprovalsPage', () => {
   })
 
   it('renders a pending request and disables decisions without a token', async () => {
-    const pending = item({ id: 'ap-1' })
+    const pending = buildPlatformApproval({ id: 'ap-1' })
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('status=pending')) return json({ items: [pending] })
-      if (url.includes('status=all')) return json({ items: [] })
+      if (url.includes('status=pending')) return json(buildApprovalListResponse([pending]))
+      if (url.includes('status=all')) return json(buildApprovalListResponse([]))
       return json({ error: url }, 500)
     })
 
@@ -92,6 +81,7 @@ describe('ApprovalsPage', () => {
     expect(screen.getByText('prod drift')).toBeTruthy()
     expect(screen.getByText('argocd rollback')).toBeTruthy()
     expect(screen.getByText(/\d+h( \d+m)? left/)).toBeTruthy()
+    expect(screen.queryByText('Decided at')).toBeNull()
     expect(screen.getByText(/"app": "rocket"/)).toBeTruthy()
     expect(
       screen.getByText(/Approve and Reject stay disabled until an approval token is saved/),
@@ -107,7 +97,7 @@ describe('ApprovalsPage', () => {
 
   it('opens the request named by #approvals?id=', async () => {
     window.location.hash = '#approvals?id=ap-9'
-    const opened = item({
+    const opened = buildPlatformApproval({
       id: 'ap-9',
       action: 'drain_node',
       requester: 'sess-phone',
@@ -119,8 +109,8 @@ describe('ApprovalsPage', () => {
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/approvals/ap-9')) return json(opened)
-      if (url.includes('status=pending')) return json({ items: [] })
-      if (url.includes('status=all')) return json({ items: [] })
+      if (url.includes('status=pending')) return json(buildApprovalListResponse([]))
+      if (url.includes('status=all')) return json(buildApprovalListResponse([]))
       return json({ error: url }, 500)
     })
 
@@ -137,10 +127,11 @@ describe('ApprovalsPage', () => {
 
   it('keeps the last 50 closed requests', () => {
     const rows = Array.from({ length: 60 }, (_, i) =>
-      item({
+      buildPlatformApproval({
         id: `c-${i}`,
         status: 'rejected',
         expires_at: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+        decided_at: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
       }),
     )
     const closed = recentClosed(rows)

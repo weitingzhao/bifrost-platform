@@ -5,6 +5,7 @@ import {
   approvalIdFromHash,
   fetchApproval,
   fetchApprovalList,
+  formatDecidedAt,
   formatParams,
   formatTimeRemaining,
   postApprovalDecision,
@@ -100,8 +101,10 @@ function ApprovalCard({
         <Field label="Status" value={item.status} />
         {pending ? (
           <Field label="Time remaining" value={formatTimeRemaining(item.expires_at)} />
-        ) : null}
-        <Field label="Rollback" value={item.rollback} />
+        ) : (
+          <Field label="Decided at" value={formatDecidedAt(item)} />
+        )}
+        <Field label="Rollback" value={item.rollback ?? ''} />
       </div>
       <Field label="Reason" value={item.reason} />
       <details open={open ? true : undefined} className="min-w-0">

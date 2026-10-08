@@ -1,23 +1,15 @@
 import { authedFetch, parseError } from '@/api/client'
+import {
+  GO_ZERO_DECIDED_AT,
+  type PlatformApprovalRecord,
+} from '@/api/approvalsServerContract'
 
 /** Browser-only admin token for approve / reject. Not the console operator token. */
 export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
 
 export const APPROVAL_HISTORY_LIMIT = 50
 
-export type ApprovalItem = {
-  id: string
-  action: string
-  tier: string
-  params: unknown
-  reason: string
-  rollback: string
-  requester: string
-  status: string
-  expires_at: string
-  result?: unknown
-  error?: string
-}
+export type ApprovalItem = PlatformApprovalRecord
 
 export type ApprovalDecision = {
   status?: string
@@ -55,6 +47,21 @@ export function approvalIdFromHash(hash: string): string | null {
   return id === '' ? null : id
 }
 
+export function isUnsetDecidedAt(value: string | undefined): boolean {
+  if (value == null || value === '') return true
+  if (value === GO_ZERO_DECIDED_AT) return true
+  const ms = Date.parse(value)
+  return !Number.isFinite(ms) || ms <= 0
+}
+
+/** Human label for decided_at; pending / Go zero time must not show year 0001. */
+export function formatDecidedAt(item: Pick<ApprovalItem, 'status' | 'decided_at'>): string {
+  if (item.status === 'pending' || isUnsetDecidedAt(item.decided_at)) return 'Pending'
+  const ms = Date.parse(item.decided_at!)
+  if (!Number.isFinite(ms)) return '—'
+  return new Date(ms).toLocaleString()
+}
+
 export function formatTimeRemaining(expiresAt: string, now = Date.now()): string {
   const end = Date.parse(expiresAt)
   if (!Number.isFinite(end)) return 'unknown expiry'
@@ -82,22 +89,29 @@ function isItem(value: unknown): value is ApprovalItem {
   return value != null && typeof value === 'object' && typeof (value as ApprovalItem).id === 'string'
 }
 
-/** Accepts `{ items: [...] }` or a bare array. */
+/** Accepts `{ approvals: [...] }` (platform-api) or a bare array. */
 export function parseApprovalList(body: unknown): ApprovalItem[] {
   const raw = Array.isArray(body)
     ? body
-    : body != null && typeof body === 'object' && Array.isArray((body as { items?: unknown }).items)
-      ? (body as { items: unknown[] }).items
+    : body != null &&
+        typeof body === 'object' &&
+        Array.isArray((body as { approvals?: unknown }).approvals)
+      ? (body as { approvals: unknown[] }).approvals
       : null
   if (raw == null) throw new Error('approvals: unexpected list shape')
   return raw.filter(isItem)
 }
 
-/** Closed requests, newest expiry first, capped at the history window. */
+function closedSortKey(item: ApprovalItem): number {
+  if (!isUnsetDecidedAt(item.decided_at)) return Date.parse(item.decided_at!)
+  return Date.parse(item.expires_at)
+}
+
+/** Closed requests, newest decision/expiry first, capped at the history window. */
 export function recentClosed(items: ApprovalItem[], limit = APPROVAL_HISTORY_LIMIT): ApprovalItem[] {
   return items
     .filter(item => item.status !== 'pending')
-    .sort((a, b) => Date.parse(b.expires_at) - Date.parse(a.expires_at))
+    .sort((a, b) => closedSortKey(b) - closedSortKey(a))
     .slice(0, limit)
 }
 
