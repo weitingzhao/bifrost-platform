@@ -1,6 +1,9 @@
 package delivery
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestResearchRefusedWithoutAWindow(t *testing.T) {
 	msg := decideReleaseWindow(false, nil, "bifrost-deliver-research", "")
@@ -53,6 +56,25 @@ func TestPluginBuildsAreGuarded(t *testing.T) {
 	held := map[string]any{"who": "ada@host", "what": "bifrost-platform-plugin"}
 	if msg := decideReleaseWindow(true, held, "bifrost-build-ib-gateway", "ada@host"); msg != "" {
 		t.Fatalf("ib gateway holder refused: %s", msg)
+	}
+}
+
+func TestExpiredWindowIsEmpty(t *testing.T) {
+	window := map[string]any{
+		"who":        "ada@host",
+		"what":       "bifrost-research",
+		"expires_at": time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+	}
+	if msg := decideReleaseWindow(true, window, "bifrost-deliver-research", ""); !stringsContains(msg, "no release window") {
+		t.Fatalf("expired window was still open: %q", msg)
+	}
+	future := map[string]any{
+		"who":        "ada@host",
+		"what":       "bifrost-research",
+		"expires_at": time.Now().UTC().Add(time.Minute).Format(time.RFC3339),
+	}
+	if msg := decideReleaseWindow(true, future, "bifrost-deliver-research", "ada@host"); msg != "" {
+		t.Fatalf("live window refused the holder: %q", msg)
 	}
 }
 

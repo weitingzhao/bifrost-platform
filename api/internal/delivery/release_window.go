@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +16,7 @@ import (
 // who is not the holder is refused.
 
 const releaseWindowConfigMap = "bifrost-release-window"
+const releaseWindowDataKey = "window.json"
 
 // Pipelines that refuse to start unless the window is already open for their repo.
 var guardedPipelineRepos = map[string]map[string]bool{
@@ -120,7 +122,27 @@ func sortedKeys(set map[string]bool) string {
 // decideReleaseWindow returns "" to allow, or a REFUSED message.
 // found is false when the ConfigMap is absent. callerWho must equal the
 // holder's who whenever a window is open.
+func releaseWindowExpired(window map[string]any, now time.Time) bool {
+	if window == nil {
+		return false
+	}
+	raw, _ := window["expires_at"].(string)
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	exp, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return false
+	}
+	return !now.Before(exp)
+}
+
 func decideReleaseWindow(found bool, window map[string]any, pipeline, callerWho string) string {
+	if found && releaseWindowExpired(window, time.Now().UTC()) {
+		found = false
+		window = nil
+	}
 	if !found || window == nil {
 		if mustHoldWindow(pipeline) {
 			repos, _ := requiredRepos(pipeline)
@@ -174,7 +196,7 @@ func (s *Service) readReleaseWindow(ctx context.Context) (bool, map[string]any, 
 	}
 	raw := ""
 	if cm.Data != nil {
-		raw = cm.Data["window.json"]
+		raw = cm.Data[releaseWindowDataKey]
 	}
 	if strings.TrimSpace(raw) == "" {
 		return false, nil, nil
@@ -187,12 +209,23 @@ func (s *Service) readReleaseWindow(ctx context.Context) (bool, map[string]any, 
 }
 
 func (s *Service) releaseWindowMessage(ctx context.Context, pipeline, callerWho string) string {
-	found, window, err := s.readReleaseWindow(ctx)
+	cs, _, err := s.cluster.KubernetesClient()
 	if err != nil {
 		if mustHoldWindow(pipeline) {
 			return fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)
 		}
 		return ""
+	}
+	rec, found, err := getReleaseWindow(ctx, cs, s.PipelinesNamespace(), time.Now().UTC())
+	if err != nil {
+		if mustHoldWindow(pipeline) {
+			return fmt.Sprintf("REFUSED: cannot read the release window (%v)", err)
+		}
+		return ""
+	}
+	var window map[string]any
+	if found {
+		window = rec.asMap()
 	}
 	return decideReleaseWindow(found, window, pipeline, callerWho)
 }

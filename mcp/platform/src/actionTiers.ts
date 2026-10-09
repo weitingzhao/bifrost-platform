@@ -169,6 +169,24 @@ export const WRITE_SPECS: readonly WriteMapping[] = [
     paramsFrom: (m, body) => ({ name: dec(m[1]), ...asRecord(body) }),
   },
   {
+    action: 'release_window_hold',
+    method: 'PUT',
+    pattern: /^\/api\/v1\/delivery\/release-window$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'release_window_release',
+    method: 'DELETE',
+    pattern: /^\/api\/v1\/delivery\/release-window$/,
+    paramsFrom: (_m, body, query) => withQuery(asRecord(body), query, ['force']),
+  },
+  {
+    action: 'sync_mirrors',
+    method: 'POST',
+    pattern: /^\/api\/v1\/delivery\/mirrors\/sync$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'scale_deployment',
     method: 'POST',
     pattern: /^\/api\/v1\/cluster\/workloads\/scale$/,

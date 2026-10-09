@@ -133,6 +133,9 @@ type StartPipelineRunRequest struct {
 	// release.sh hold prints the value. Empty is only valid when no window is open
 	// and the pipeline is not a research or plugin build.
 	Who string `json:"who,omitempty"`
+	// Params are pipeline parameters declared on the live Pipeline. When a name
+	// is also set by Revision or Tag, Params wins.
+	Params map[string]string `json:"params,omitempty"`
 }
 
 type RefreshDockerfileRequest struct {

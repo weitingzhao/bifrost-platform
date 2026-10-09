@@ -81,12 +81,49 @@ var catalog = []Action{
 			{Name: "revision", Type: "string", In: "body"},
 			{Name: "tag", Type: "string", In: "body"},
 			{Name: "who", Type: "string", In: "body"},
+			{Name: "params", Type: "object", In: "body"},
 		},
 		Classify: func(_ context.Context, params map[string]any) Tier {
 			if ProdPipeline(str(params["name"])) {
 				return TierC
 			}
 			return TierB
+		},
+	},
+	{
+		ID: "release_window_hold", Tier: TierB,
+		Description: "Hold or renew the release window. The same who renews; a different who is refused while the window is live. Tier B.",
+		Method:      "PUT", Pattern: "/api/v1/delivery/release-window",
+		Params: []Param{
+			{Name: "what", Type: "string", Required: true, In: "body"},
+			{Name: "who", Type: "string", Required: true, In: "body"},
+			{Name: "reason", Type: "string", In: "body"},
+			{Name: "ttl_minutes", Type: "integer", In: "body"},
+			{Name: "env", Type: "string", In: "body"},
+		},
+	},
+	{
+		ID: "release_window_release", Tier: TierB,
+		Description: "Release the window. The holder calls it directly. force=1 is tier C and clears a window held by someone else.",
+		Method:      "DELETE", Pattern: "/api/v1/delivery/release-window",
+		Params: []Param{
+			{Name: "who", Type: "string", Required: true, In: "body"},
+			{Name: "force", Type: "boolean", In: "query"},
+		},
+		Classify: func(_ context.Context, params map[string]any) Tier {
+			if b, ok := asBool(params["force"]); ok && b {
+				return TierC
+			}
+			return TierB
+		},
+	},
+	{
+		ID: "sync_mirrors", Tier: TierB,
+		Description: "Ask Gitea to fetch allow-listed repositories and wait until the named commits are present. Tier B.",
+		Method:      "POST", Pattern: "/api/v1/delivery/mirrors/sync",
+		Params: []Param{
+			{Name: "repos", Type: "string[]", Required: true, In: "body"},
+			{Name: "commits", Type: "object", In: "body"},
 		},
 	},
 	{

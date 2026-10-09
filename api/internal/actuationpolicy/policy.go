@@ -21,6 +21,12 @@ type Policy struct {
 	Probe     Probe     `yaml:"probe"`
 	Cleanup   Cleanup   `yaml:"cleanup"`
 	Admission Admission `yaml:"admission"`
+	Mirrors   Mirrors   `yaml:"mirrors"`
+}
+
+// Mirrors is the set of repositories the platform may ask Gitea to fetch.
+type Mirrors struct {
+	Repos []string `yaml:"repos"`
 }
 
 // Delivery is where apply_manifest runs. The platform starts this pipeline;
@@ -118,6 +124,9 @@ func (p *Policy) Validate() error {
 	}
 	if strings.TrimSpace(p.Apply.DaemonDeployment) == "" {
 		return fmt.Errorf("actuation policy: daemon_deployment is required")
+	}
+	if len(p.Mirrors.Repos) == 0 {
+		return fmt.Errorf("actuation policy: mirrors.repos is required")
 	}
 	for _, ns := range p.Jobs.Deny {
 		if _, ok := p.Jobs.Namespaces[ns]; ok {
@@ -245,6 +254,18 @@ func (p *Policy) ProbeTier(namespace, image string, envFrom bool) (string, error
 		return "", fmt.Errorf("env_from is not allowed in this namespace")
 	}
 	return tier, nil
+}
+
+// MirrorAllowed reports whether the platform may sync this repository.
+func (p *Policy) MirrorAllowed(repo string) error {
+	repo = strings.TrimSpace(repo)
+	if !repoPattern.MatchString(repo) {
+		return fmt.Errorf("repo has characters outside the allow-list")
+	}
+	if p == nil || !contains(p.Mirrors.Repos, repo) {
+		return fmt.Errorf("repo is not in the mirror allow-list")
+	}
+	return nil
 }
 
 // CleanupAllowed reports whether finished jobs may be deleted in namespace.

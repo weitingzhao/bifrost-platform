@@ -91,6 +91,19 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
     },
   })
   if (command !== '') return <Field label="Command" value={command} />
+  const pipelineParams =
+    item.action === 'start_pipeline_run' && item.params.params != null && typeof item.params.params === 'object'
+      ? (item.params.params as Record<string, unknown>)
+      : null
+  if (pipelineParams != null) {
+    return (
+      <>
+        {Object.entries(pipelineParams).map(([key, value]) => (
+          <Field key={key} label={key} value={value == null ? '' : String(value)} />
+        ))}
+      </>
+    )
+  }
   if (planId === '') return null
   const summary = plan.data
   const status =

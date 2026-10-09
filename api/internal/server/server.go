@@ -299,8 +299,22 @@ func New(cfg *config.Config) (*Server, error) {
 		slog.Error("actuation policy not loaded; generic write actions refuse", "err", err)
 	} else {
 		actions.SetActuationPolicy(pol)
+		srv.delivery.SetPolicy(pol)
 		workSvc := &workactions.Service{
 			Policy: pol,
+			Sync: func(ctx context.Context, repo, commit string) error {
+				res, err := srv.delivery.SyncOne(ctx, repo, commit)
+				if err != nil {
+					return err
+				}
+				if !res.Present {
+					if res.Error != "" {
+						return fmt.Errorf("%s", res.Error)
+					}
+					return fmt.Errorf("mirror commit is not present")
+				}
+				return nil
+			},
 			Clients: workactions.Clients{
 				Kube: func() (kubernetes.Interface, error) {
 					cs, _, err := clusterH.Service().KubernetesClient()
@@ -455,6 +469,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/console/ws-ticket", s.console.HandleTicket)
 		})
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/release-window", s.delivery.HandleGetReleaseWindow)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/actuation/manifests/plans/{id}", s.handlePlanGet)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
@@ -473,6 +488,9 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.Require(actuation.RoleOperator))
 			r.Post("/gitops/apps/{name}/sync", s.guard("gitops_sync_app", s.gitops.HandleSyncApp))
 			r.Post("/delivery/pipelines/{name}/runs", s.guard("start_pipeline_run", s.delivery.HandleStartPipelineRun))
+			r.Put("/delivery/release-window", s.guard("release_window_hold", s.delivery.HandlePutReleaseWindow))
+			r.Delete("/delivery/release-window", s.guard("release_window_release", s.delivery.HandleDeleteReleaseWindow))
+			r.Post("/delivery/mirrors/sync", s.guard("sync_mirrors", s.delivery.HandleSyncMirrors))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
 			r.Post("/network/firewall/apply", s.guard("unifi_firewall_apply", s.network.HandleFirewallApply))

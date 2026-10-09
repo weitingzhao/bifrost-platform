@@ -37,6 +37,9 @@ type Clients struct {
 type Service struct {
 	Policy  *actuationpolicy.Policy
 	Clients Clients
+	// Sync fetches the repo mirror and waits for commit before a plan run.
+	// Production wires it to the delivery mirror API. Nil refuses to plan.
+	Sync func(ctx context.Context, repo, commit string) error
 	// Now is injectable in tests.
 	Now func() time.Time
 }
@@ -55,6 +58,12 @@ func (s *Service) Plan(ctx context.Context, repo, path, commit string) (string, 
 	}
 	if !fullSHA(commit) {
 		return "", fmt.Errorf("commit must be a 40-character hex sha")
+	}
+	if s.Sync == nil {
+		return "", fmt.Errorf("mirror sync is not configured")
+	}
+	if err := s.Sync(ctx, repo, commit); err != nil {
+		return "", err
 	}
 	name := fmt.Sprintf("plan-%s-%d", commit[:8], s.now().Unix())
 	if err := s.startRun(ctx, name, "plan", repo, path, commit, false); err != nil {

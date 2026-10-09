@@ -189,6 +189,7 @@ func TestGoSourcesDoNotNameAllowList(t *testing.T) {
 		filepath.Join(root, "..", "workactions", "service.go"),
 		filepath.Join(root, "..", "workactions", "handler.go"),
 		filepath.Join(root, "..", "actions", "actuation.go"),
+		filepath.Join(root, "..", "delivery", "mirrors.go"),
 	}
 	var names []string
 	for ns := range p.Apply.Namespaces {
@@ -197,6 +198,7 @@ func TestGoSourcesDoNotNameAllowList(t *testing.T) {
 	for _, repo := range p.Apply.Repos {
 		names = append(names, repo.Name)
 	}
+	names = append(names, p.Mirrors.Repos...)
 	for _, image := range p.Probe.Images {
 		names = append(names, image)
 	}
@@ -213,6 +215,22 @@ func TestGoSourcesDoNotNameAllowList(t *testing.T) {
 				t.Errorf("%s quotes allow-list name %q", path, name)
 			}
 		}
+	}
+}
+
+func TestMirrorAllowList(t *testing.T) {
+	p := loadReal(t)
+	if len(p.Mirrors.Repos) == 0 {
+		t.Fatal("mirrors.repos is empty")
+	}
+	if err := p.MirrorAllowed(p.Mirrors.Repos[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.MirrorAllowed("not-a-configured-mirror"); err == nil {
+		t.Fatal("a repo outside mirrors.repos was accepted")
+	}
+	if err := p.MirrorAllowed("bad repo"); err == nil {
+		t.Fatal("a repo with a space was accepted")
 	}
 }
 

@@ -224,7 +224,25 @@ func (s *Server) bindActionExecutors() {
 		func(p map[string]any) string {
 			return "/api/v1/delivery/pipelines/" + url.PathEscape(text(p["name"])) + "/runs"
 		},
-		path("name"), fields("revision", "tag", "who"), s.delivery.HandleStartPipelineRun)
+		path("name"), fields("revision", "tag", "who", "params"), s.delivery.HandleStartPipelineRun)
+
+	reg("release_window_hold", http.MethodPut,
+		func(map[string]any) string { return "/api/v1/delivery/release-window" },
+		nil, fields("what", "who", "reason", "ttl_minutes", "env"), s.delivery.HandlePutReleaseWindow)
+
+	reg("release_window_release", http.MethodDelete,
+		func(p map[string]any) string {
+			u := "/api/v1/delivery/release-window"
+			if b, ok := p["force"].(bool); ok && b {
+				u += "?force=1"
+			}
+			return u
+		},
+		nil, fields("who"), s.delivery.HandleDeleteReleaseWindow)
+
+	reg("sync_mirrors", http.MethodPost,
+		func(map[string]any) string { return "/api/v1/delivery/mirrors/sync" },
+		nil, fields("repos", "commits"), s.delivery.HandleSyncMirrors)
 
 	reg("delete_pipeline_run", http.MethodDelete,
 		func(p map[string]any) string {

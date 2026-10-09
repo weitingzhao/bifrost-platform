@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -57,6 +58,10 @@ type Service struct {
 	cluster        *cluster.Service
 	dynamicFactory func() (dynamic.Interface, error)
 	httpClient     *http.Client
+	policy         *actuationpolicy.Policy
+	// giteaBase and mirrorCreds are test hooks. Production leaves them empty.
+	giteaBase   string
+	mirrorCreds func(ctx context.Context) (string, string, error)
 }
 
 func NewService(entry *config.ClusterEntry) *Service {
@@ -195,7 +200,7 @@ func (s *Service) PipelineRuns(ctx context.Context, pipelineName string) Pipelin
 	}
 }
 
-func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag, who string) (cluster.ActuationResponse, PipelineRunView, error) {
+func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, tag, who string, extra map[string]string) (cluster.ActuationResponse, PipelineRunView, error) {
 	now := time.Now().UTC()
 	ns := s.PipelinesNamespace()
 	target := fmt.Sprintf("PipelineRun/%s/%s", ns, pipelineName)
@@ -242,7 +247,8 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, err
 	}
 
-	if _, getErr := dyn.Resource(pipelineGVR).Namespace(ns).Get(ctx, pipelineName, metav1.GetOptions{}); getErr != nil {
+	pipe, getErr := dyn.Resource(pipelineGVR).Namespace(ns).Get(ctx, pipelineName, metav1.GetOptions{})
+	if getErr != nil {
 		resp.Message = fmt.Sprintf("pipeline %s not found in %s: %v", pipelineName, ns, getErr)
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
@@ -260,14 +266,36 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			"name": pipelineName,
 		},
 	}
+	var legacy []map[string]any
 	if pipelineTakesRevision(pipelineName) {
-		spec["params"] = pipelineRunParams(pipelineName, rev, tag)
+		legacy = pipelineRunParams(pipelineName, rev, tag)
+	}
+	if len(legacy) > 0 || len(extra) > 0 {
+		merged, mergeErr := mergePipelineParams(declaredPipelineParams(pipe), legacy, extra)
+		if mergeErr != nil {
+			resp.Message = mergeErr.Error()
+			return resp, empty, fmt.Errorf("%s", resp.Message)
+		}
+		if len(merged) > 0 {
+			spec["params"] = merged
+			for _, p := range merged {
+				if p["name"] == "revision" {
+					if v, ok := p["value"].(string); ok && v != "" {
+						rev = v
+					}
+				}
+			}
+		}
 	}
 	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
 		spec["workspaces"] = ws
 	}
 	if isKanikoPipeline(pipelineName) {
 		spec["taskRunTemplate"] = amd64CITaskRunTemplate()
+	}
+	if err := applyDeclaredRunExtras(spec, pipe.GetAnnotations()); err != nil {
+		resp.Message = err.Error()
+		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
 	if pipelineName == "bifrost-deliver-stg" {
 		spec["taskRunSpecs"] = []map[string]any{
@@ -475,6 +503,13 @@ func pipelineRunParams(pipelineName, rev, tag string) []map[string]any {
 		// k8s/api/deployment.yaml will point at once the image lands.
 		if t := strings.TrimSpace(tag); t != "" {
 			params = append(params, map[string]any{"name": "tag", "value": t})
+		}
+	case "bifrost-deliver-prod":
+		// Compatibility for callers that still pass one revision: each clone
+		// param receives that same ref. A caller params map overrides per repo.
+		// mergePipelineParams drops any of these the live Pipeline does not declare.
+		for _, name := range []string{"coreRevision", "workerRevision", "apiRevision", "frontendRevision", "infraRevision"} {
+			params = append(params, map[string]any{"name": name, "value": rev})
 		}
 	case "bifrost-build-market-data":
 		// Like the Dagster line, this pipeline names a full image rather

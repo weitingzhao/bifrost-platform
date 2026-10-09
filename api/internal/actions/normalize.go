@@ -125,6 +125,15 @@ func coerce(p Param, v any) (any, bool, error) {
 			return "", false, nil
 		}
 		return s, true, nil
+	case "object":
+		obj, ok := asStringMap(v)
+		if !ok {
+			return nil, false, fmt.Errorf("param %s must be an object of strings", p.Name)
+		}
+		if len(obj) == 0 {
+			return nil, false, nil
+		}
+		return obj, true, nil
 	case "string[]":
 		ss, ok := asStrings(v)
 		if !ok {
@@ -145,13 +154,45 @@ func asBool(v any) (bool, bool) {
 		return t, true
 	case string:
 		switch strings.ToLower(strings.TrimSpace(t)) {
-		case "true":
+		case "true", "1":
 			return true, true
-		case "false":
+		case "false", "0":
 			return false, true
 		}
 	}
 	return false, false
+}
+
+func asStringMap(v any) (map[string]string, bool) {
+	switch t := v.(type) {
+	case map[string]string:
+		out := make(map[string]string, len(t))
+		for k, val := range t {
+			k = strings.TrimSpace(k)
+			val = strings.TrimSpace(val)
+			if k == "" {
+				return nil, false
+			}
+			out[k] = val
+		}
+		return out, true
+	case map[string]any:
+		out := make(map[string]string, len(t))
+		for k, val := range t {
+			s, ok := val.(string)
+			if !ok {
+				return nil, false
+			}
+			k = strings.TrimSpace(k)
+			if k == "" {
+				return nil, false
+			}
+			out[k] = strings.TrimSpace(s)
+		}
+		return out, true
+	default:
+		return nil, false
+	}
 }
 
 func asStrings(v any) ([]string, bool) {

@@ -203,3 +203,18 @@ admission:
       - default
     research:
       - default
+# Repos the platform may ask Gitea to mirror-sync. Same list the bootstrap
+# script used to sync. Code checks membership; it does not name these repos.
+mirrors:
+  repos:
+    - bifrost-trade-core
+    - bifrost-trade-worker
+    - bifrost-trade-api
+    - bifrost-trade-frontend
+    - bifrost-trade-infra
+    - bifrost-ui
+    - bifrost-platform
+    - bifrost-research
+    - bifrost-platform-plugin
+    - bifrost-platform-plugin-market-data
+    - bifrost-platform-plugin-flex-query

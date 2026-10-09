@@ -8,6 +8,7 @@ describe('start_pipeline_run who', () => {
     const src = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const block = src.slice(src.indexOf("'start_pipeline_run'"))
     assert.ok(block.includes('who: z.string()'), 'start_pipeline_run must accept who')
+    assert.ok(block.includes('params: z.record(z.string(), z.string())'), 'start_pipeline_run must accept params')
   })
 
   it('write gate forwards who in approval params', () => {
