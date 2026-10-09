@@ -17,6 +17,7 @@
     "market_data_heal",
     "poweroff_compute_node",
     "repair_cnpg_wal_store",
+    "rolling_reboot",
     "rollout_restart_deployment",
     "scale_deployment",
     "start_pipeline_run",

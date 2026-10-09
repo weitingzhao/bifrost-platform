@@ -39,7 +39,7 @@ export const OPS_TOOLS: readonly OpsTool[] = [
     id: 'grafana',
     label: 'Grafana',
     purpose: 'Metrics evidence and dashboards',
-    lanUrl: 'http://192.168.10.73:30883',
+    lanUrl: 'https://ops.bifrost.lan/grafana',
     kind: 'external_ui',
   },
   {

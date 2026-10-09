@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
-# Deploy agent stack (remediation-runner + Nous Hermes MCP) to Mac Mini,
-# and on the primary the Nous Hermes dashboard's launchd job (ai.hermes.dashboard).
+# Deploy the Mac mini out-of-band stack: operator-plane, peer-watchdog, and the
+# notification tokens those two need (NTFY_URL, NTFY_TOPIC, ALERT_RELAY_TOKEN,
+# plus the PROD viewer token).
 # Invoked by: python scripts/run_agent.py deploy · Console Operator Plane → Update primary/standby
+#
+# Does not install a remediation runner, a Hermes gateway, Nous Hermes, or a
+# cluster kubeconfig. Each deploy removes those leftovers if a previous deploy
+# left them. ~/.hermes is not deleted (Owner decides what to do with its keys).
 #
 # Non-interactive only: Console cannot type SSH passwords. Uses BatchMode + publickey.
 # Optional: AGENT_DEPLOY_SSH_IDENTITY=/path/to/key (default: ~/.ssh/id_ed25519 then id_rsa)
@@ -212,10 +217,32 @@ prod_viewer_export() {
   printf 'export PLATFORM_VIEWER_TOKEN=%s\n' "${val}"
 }
 
+# strip_admin_kubeconfig DIR
+# Deletes DIR/kube/bifrost-k3s.yaml and drops every `export KUBECONFIG=` line
+# from DIR/env.sh. Missing files are fine. A second run leaves the same tree.
+# Test entry (exits before any deploy): deploy_mac_mini.sh --strip-kubeconfig DIR
+strip_admin_kubeconfig() {
+  local dir="$1"
+  rm -f "${dir}/kube/bifrost-k3s.yaml"
+  local envf="${dir}/env.sh"
+  if [[ -f "${envf}" ]] && grep -q '^export KUBECONFIG=' "${envf}"; then
+    local tmp
+    tmp="$(mktemp)"
+    grep -v '^export KUBECONFIG=' "${envf}" > "${tmp}"
+    mv "${tmp}" "${envf}"
+  fi
+}
+
 if [[ "${1:-}" == "--prod-viewer-export" ]]; then
   shift
   prod_viewer_export "$@"
   exit $?
+fi
+
+if [[ "${1:-}" == "--strip-kubeconfig" ]]; then
+  shift
+  strip_admin_kubeconfig "${1:?DIR required}"
+  exit 0
 fi
 
 if [[ "${1:-}" == "--resolve-relay-config" ]]; then
@@ -251,7 +278,9 @@ REMOTE_DIR="/Users/vision/bifrost-agent"
 # Mutual-watchdog / Active-Standby config (env-driven, optional):
 #   AGENT_ROLE  primary | standby   (default primary)
 #   PEER_SSH    vision@192.168.10.52 (peer SSH target for watchdog restart)
-#   PEER_URL    http://192.168.10.52:8781 (peer runner base URL for health probe)
+#   PEER_URL    http://192.168.10.52:8783 (peer operator-plane base URL; the
+#               watchdog probes ${PEER_URL}/health and kickstarts
+#               com.bifrost.operator-plane. The name stays PEER_URL.)
 #   PEER_RELAY_URL http://192.168.10.50:8783/api/v1/alerts/relay — set only when
 #               deploying the Mini that does NOT run the alert relay (TD-248).
 #               When unset (or set empty), the remote env.local.sh value is kept.
@@ -271,26 +300,8 @@ PEER_URL="${PEER_URL:-}"
 OPERATOR_PLANE_PORT="${OPERATOR_PLANE_PORT:-8783}"
 OPERATOR_PLANE_AUTOPILOT="${OPERATOR_PLANE_AUTOPILOT:-off}"
 PLATFORM_LAN_HOST="${PLATFORM_LAN_HOST:-192.168.10.40}"
-HERMES_GATEWAY_REMOTE="${HERMES_GATEWAY_REMOTE:-192.168.10.52}"
-# macOS gates local-network access per executable, and a launchd job does not
-# inherit it: a LAN address that works from a shell answers "no route to host"
-# in the plane. Loopback and the host's own address are exempt, so never send a
-# host across the LAN to reach a service it is already running.
-if [[ "$(echo "${REMOTE}" | cut -d@ -f2)" == "${HERMES_GATEWAY_REMOTE}" ]]; then
-  HERMES_GATEWAY_URL_FOR_REMOTE="http://127.0.0.1:8782"
-else
-  HERMES_GATEWAY_URL_FOR_REMOTE="http://${HERMES_GATEWAY_REMOTE}:8782"
-fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLATFORM_LOCAL="$(cd "${SCRIPT_DIR}/../../" && pwd)"
-# The runner binds 0.0.0.0. Refuse to deploy until the shared bearer key is present.
-# This checks the key name only; the value is not printed.
-if [[ ! -f "${PLATFORM_LOCAL}/.env" ]] || ! grep -qE '^REMEDIATION_RUNNER_TOKEN=.+' "${PLATFORM_LOCAL}/.env"; then
-  echo "ERROR: REMEDIATION_RUNNER_TOKEN is missing or empty in ${PLATFORM_LOCAL}/.env" >&2
-  echo "Add that key (distinct from PLATFORM_OPERATOR_TOKEN) before deploying a non-loopback runner." >&2
-  exit 1
-fi
-AGENT_SRC="${PLATFORM_LOCAL}/agent/remediation"
 DEPLOY_DIR="${PLATFORM_LOCAL}/agent/deploy"
 INFRA_LOCAL="$(cd "${PLATFORM_LOCAL}/../bifrost-trade-infra" 2>/dev/null && pwd || echo "")"
 WORKSPACE_REMOTE="${REMOTE_DIR}/workspace"
@@ -382,37 +393,28 @@ if [[ -n "${INFRA_LOCAL}" && -d "${INFRA_LOCAL}/k8s" ]]; then
   rsync -az -e "${RSYNC_SSH}" "${INFRA_LOCAL}/k8s/" "${REMOTE}:${WORKSPACE_REMOTE}/bifrost-trade-infra/k8s/"
 fi
 
-rsync -az --delete -e "${RSYNC_SSH}" \
-  --exclude='node_modules' \
-  --exclude='.env' \
-  "${AGENT_SRC}/" "${REMOTE}:${REMOTE_DIR}/src/"
+echo "==> Removing cluster-admin kubeconfig (idempotent)"
+# Delete the admin kubeconfig and drop export KUBECONFIG= from env.sh.
+# A second deploy finds neither and skips. ~/.kube is left in place if other
+# files live there; only bifrost-k3s.yaml is removed.
+run_remote "rm -f ~/.kube/bifrost-k3s.yaml"
+run_remote "
+  f=${REMOTE_DIR}/config/env.sh
+  if [ -f \"\$f\" ] && grep -q '^export KUBECONFIG=' \"\$f\"; then
+    tmp=\$(mktemp)
+    grep -v '^export KUBECONFIG=' \"\$f\" > \"\$tmp\"
+    mv \"\$tmp\" \"\$f\"
+    echo '  removed export KUBECONFIG= from env.sh'
+  else
+    echo '  env.sh has no export KUBECONFIG= (skip)'
+  fi
+"
 
-KUBECONFIG_LOCAL="${KUBECONFIG:-$HOME/.kube/bifrost-k3s.yaml}"
-if [[ -f "${KUBECONFIG_LOCAL}" ]]; then
-  run_remote "mkdir -p ~/.kube"
-  run_scp "${KUBECONFIG_LOCAL}" "${REMOTE}:~/.kube/bifrost-k3s.yaml"
-  run_remote "chmod 600 ~/.kube/bifrost-k3s.yaml"
-  echo "  kubeconfig synced"
-else
-  echo "  WARNING: kubeconfig not found at ${KUBECONFIG_LOCAL}"
-fi
-
-echo "==> Installing npm dependencies"
-run_remote "cd ${REMOTE_DIR}/src && npm install --no-audit --no-fund"
-
-echo "==> config/env.sh (install template only if missing)"
+echo "==> config/env.sh (install template only if missing; no KUBECONFIG)"
 run_remote "
   if [ ! -f ${REMOTE_DIR}/config/env.sh ]; then
     cat > ${REMOTE_DIR}/config/env.sh << 'ENVEOF'
-export KUBECONFIG=\$HOME/.kube/bifrost-k3s.yaml
-export REMEDIATION_RUNNER_PORT=8781
-export REMEDIATION_RUNNER_BIND=0.0.0.0
-export PLATFORM_API_URL=http://192.168.10.73:30878
-export REMEDIATION_RUNNER_URL=http://127.0.0.1:8781
 export BIFROST_AGENT_ROOT=\$HOME/bifrost-agent
-export REMEDIATION_CWD=\$HOME/bifrost-agent/workspace/bifrost-trade-infra
-export REMEDIATION_JOBS_DIR=\$HOME/bifrost-agent/jobs
-# If jobs -> NAS is unmounted, runner auto-falls back to ~/bifrost-agent/jobs-local
 [ -f \"\$HOME/bifrost-agent/config/env.local.sh\" ] && source \"\$HOME/bifrost-agent/config/env.local.sh\"
 ENVEOF
     echo '  wrote env.sh'
@@ -458,9 +460,9 @@ echo "  effective for ${REMOTE}: ALERT_RELAY=${ALERT_RELAY} PEER_RELAY_URL=${PEE
 
 echo "==> config/env.local.sh (role + peer watchdog config, always rewritten)"
 # Optional AGENT_PLATFORM_API_URL → PLATFORM_API_URL on the Mini:
-# Point remediation runners at Mac Pro :8780 (or any platform-api that serves
-# /checklist/signals) when cluster NodePort lags behind. Preserves env.local
-# sourcing from env.sh — do not remove AGENT_ROLE / peer watchdog lines.
+# checklist AI Check needs a platform-api that serves /checklist/signals
+# when the cluster NodePort lags behind. Preserves env.local sourcing from
+# env.sh — do not remove AGENT_ROLE / peer watchdog lines.
 _PLATFORM_API_LINE=""
 if [[ -n "${AGENT_PLATFORM_API_URL:-}" ]]; then
   _PLATFORM_API_LINE="export PLATFORM_API_URL=${AGENT_PLATFORM_API_URL}"
@@ -489,7 +491,7 @@ run_remote "
 if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   echo "==> Syncing secrets + bridge config to remote .env"
   TMP_ENV="$(mktemp)"
-  grep -E '^(CURSOR_API_KEY|PLATFORM_OPERATOR_TOKEN|PLATFORM_ADMIN_TOKEN|GIT_BRIDGE_URL|NTFY_URL|NTFY_TOPIC|ALERT_RELAY_TOKEN|REMEDIATION_RUNNER_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
+  grep -E '^(NTFY_URL|NTFY_TOPIC|ALERT_RELAY_TOKEN)=' "${PLATFORM_LOCAL}/.env" > "${TMP_ENV}" || true
   if [[ -s "${TMP_ENV}" ]]; then
     TMP_OUT="$(mktemp)"
     while IFS= read -r line; do
@@ -523,11 +525,17 @@ if [[ -f "${PLATFORM_LOCAL}/.env" ]]; then
   rm -f "${TMP_ENV}"
 fi
 
-echo "==> Installing remediation-runner launchd"
-run_scp "${DEPLOY_DIR}/com.bifrost.remediation-runner.plist" "${REMOTE}:~/Library/LaunchAgents/"
-
-run_remote "launchctl bootout gui/\$(id -u)/com.bifrost.remediation-runner 2>/dev/null || true"
-run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.bifrost.remediation-runner.plist"
+echo "==> Removing retired launchd jobs (runner, hermes gateway, Nous Hermes)"
+# bootout is a no-op when the job is already gone. Plists are deleted so a
+# reboot cannot bring them back. ~/.hermes is left untouched.
+run_remote "
+  uid=\$(id -u)
+  for label in com.bifrost.remediation-runner com.bifrost.hermes-gateway ai.hermes.gateway ai.hermes.dashboard; do
+    launchctl bootout gui/\$uid/\$label 2>/dev/null || true
+    rm -f ~/Library/LaunchAgents/\$label.plist
+  done
+  echo '  retired launchd jobs removed'
+"
 
 # Mutual watchdog — only install if peer config is provided.
 if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
@@ -550,7 +558,7 @@ if command -v go >/dev/null 2>&1; then
     x86_64) PLANE_GOARCH=amd64 ;;
     *) echo "  ERROR: unknown remote arch '${PLANE_ARCH}'" >&2; exit 1 ;;
   esac
-  echo "  building darwin/${PLANE_GOARCH}"
+  echo "  building darwin/${PLANE_GOARCH} ($(git -C "${PLATFORM_LOCAL}" rev-parse --short=12 HEAD))"
   make -C "${PLATFORM_LOCAL}" build-operator-plane GOOS=darwin GOARCH="${PLANE_GOARCH}" >/dev/null
   run_remote "mkdir -p ${REMOTE_DIR}/operator-plane-data"
   # Plane-only env: kept out of env.local.sh so the Node runner's environment
@@ -566,8 +574,7 @@ export OPERATOR_PLANE_AUTOPILOT=${OPERATOR_PLANE_AUTOPILOT}
 export ALERT_RELAY=${ALERT_RELAY}
 export GIT_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8785
 export SATELLITE_PROBE_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8786
-export HERMES_GATEWAY_URL=${HERMES_GATEWAY_URL_FOR_REMOTE}
-export NOUS_HERMES_URL=http://192.168.10.50:9119
+export PLANE_HEALTH_URLS=http://192.168.10.50:${OPERATOR_PLANE_PORT},http://192.168.10.52:${OPERATOR_PLANE_PORT}
 ENVEOF
 echo '  wrote env.operator-plane.sh (port=${OPERATOR_PLANE_PORT} autopilot=${OPERATOR_PLANE_AUTOPILOT} alert_relay=${ALERT_RELAY})'"
   # Stop first: macOS refuses to overwrite a running executable.
@@ -597,100 +604,10 @@ else
   echo "  skip — no Go toolchain on this host; the Node agent stack above is unaffected"
 fi
 
-echo "==> Syncing Bifrost MCP server (for Nous Hermes Agent)"
-MCP_SRC="${PLATFORM_LOCAL}/mcp/platform"
-run_remote "mkdir -p ${REMOTE_DIR}/mcp-platform"
-rsync -az --delete -e "${RSYNC_SSH}" \
-  --exclude='node_modules' \
-  "${MCP_SRC}/" "${REMOTE}:${REMOTE_DIR}/mcp-platform/"
-run_remote "cd ${REMOTE_DIR}/mcp-platform && npm install --no-audit --no-fund"
-
-echo "==> Pin Hermes tool_search=off (keep L0 MCP tools eager: verify_mission_snapshot / verify_payload)"
-run_remote 'export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"; if command -v hermes >/dev/null 2>&1; then hermes config set tools.tool_search.enabled off; else echo "  skip — hermes CLI not on PATH"; fi'
-
-echo "==> Nous Hermes dashboard (launchd ai.hermes.dashboard — primary only)"
-# :9119 lives beside the gateway it reports on: the primary, and only where Nous
-# Hermes is installed (the standby has none). Its gateway already has a launchd
-# job of its own (ai.hermes.gateway, from `hermes gateway install`).
-if [[ "${AGENT_ROLE}" != "standby" ]] && run_remote 'test -x "$HOME/.hermes/hermes-agent/venv/bin/python"'; then
-  run_scp "${DEPLOY_DIR}/ai.hermes.dashboard.plist" "${REMOTE}:~/Library/LaunchAgents/"
-  run_remote "launchctl bootout gui/\$(id -u)/ai.hermes.dashboard 2>/dev/null || true"
-  # A dashboard started by hand (from an SSH session) holds :9119 and would
-  # leave the launchd job crash-looping on the port: stop it — only if it is
-  # one. Anything else on the port is reported, and the job is not loaded.
-  DASH_PORT_STATE="$(run_remote '
-    for i in 1 2 3 4 5 6 7 8 9 10; do
-      pid=$(/usr/sbin/lsof -t -i :9119 -sTCP:LISTEN 2>/dev/null | head -1)
-      [ -z "$pid" ] && { echo free; exit 0; }
-      case "$(ps -o command= -p "$pid")" in
-        *"hermes dashboard"*|*"hermes_cli.main dashboard"*) kill "$pid"; sleep 1 ;;
-        *) echo "held:$pid"; exit 0 ;;
-      esac
-    done
-    echo "held:$(/usr/sbin/lsof -t -i :9119 -sTCP:LISTEN 2>/dev/null | head -1)"')"
-  if [[ "${DASH_PORT_STATE}" == "free" ]]; then
-    run_remote "launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/ai.hermes.dashboard.plist"
-    echo "  loaded ai.hermes.dashboard"
-  else
-    echo "  ⚠ :9119 is held by something other than the Hermes dashboard (${DASH_PORT_STATE}) — ai.hermes.dashboard not loaded" >&2
-  fi
-else
-  echo "  skip — standby, or Nous Hermes is not installed on ${REMOTE}"
-fi
-
-echo "==> Post-deploy health smoke"
-RUNNER_PORT="${RUNNER_PORT:-8781}"
-HEALTH_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/health"
-SMOKE_OK=false
-for i in 1 2 3 4 5; do
-  sleep 2
-  if curl -sf --max-time 5 "${HEALTH_URL}" > /dev/null 2>&1; then
-    HEALTH_JSON="$(curl -sf --max-time 5 "${HEALTH_URL}")"
-    RUNNER_VER="$(echo "${HEALTH_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
-    echo "  ✓ Runner healthy (v${RUNNER_VER}) on attempt ${i}"
-    SMOKE_OK=true
-    break
-  fi
-  echo "  attempt ${i}/5 — waiting for runner on ${HEALTH_URL}…"
-done
-if [[ "${SMOKE_OK}" != "true" ]]; then
-  echo "  ✗ SMOKE FAILED — runner did not respond to ${HEALTH_URL} after 5 attempts"
-  exit 1
-fi
-
-echo "==> Post-deploy tool smoke"
-# shellcheck source=tool_smoke.sh
-source "${SCRIPT_DIR}/tool_smoke.sh"
-tool_smoke_report "http://$(echo "${REMOTE}" | cut -d@ -f2):${RUNNER_PORT}/smoke" "${PLATFORM_LOCAL}/.env"
-
-echo "==> Post-deploy Nous Hermes Agent health probe"
-# /api/status is public on the Hermes dashboard; the endpoints behind basic auth
-# (/api/env, /api/config, /api/sessions …) are not needed here, so the probe sends
-# no credentials. Never put a default password here — this repo is public.
-HERMES_DASHBOARD_PORT="${HERMES_DASHBOARD_PORT:-9119}"
-HERMES_DASHBOARD_URL="http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT}/api/status"
-HERMES_OK=false
-for i in 1 2 3; do
-  sleep 2
-  HERMES_JSON="$(curl -sf --max-time 5 "${HERMES_DASHBOARD_URL}" 2>/dev/null || echo '')"
-  if [[ -n "${HERMES_JSON}" ]]; then
-    HERMES_VER="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version","?"))' 2>/dev/null || echo '?')"
-    HERMES_GW="$(echo "${HERMES_JSON}" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("gateway_state","?"))' 2>/dev/null || echo '?')"
-    echo "  ✓ Nous Hermes Agent v${HERMES_VER} (gateway: ${HERMES_GW}) on attempt ${i}"
-    HERMES_OK=true
-    break
-  fi
-  echo "  attempt ${i}/3 — waiting for Hermes dashboard on port ${HERMES_DASHBOARD_PORT}…"
-done
-if [[ "${HERMES_OK}" != "true" ]]; then
-  echo "  ⚠ Nous Hermes Agent dashboard not reachable (non-blocking)"
-fi
+echo "==> Post-deploy smoke is operator-plane /health (above) and the .50 alert relay (below)"
 
 echo ""
-echo "==> Done. role=${AGENT_ROLE} version=${RUNNER_VER}"
-if [[ "${HERMES_OK}" == "true" ]]; then
-  echo "    Nous Hermes Agent v${HERMES_VER} → http://$(echo "${REMOTE}" | cut -d@ -f2):${HERMES_DASHBOARD_PORT} (gateway: ${HERMES_GW})"
-fi
+echo "==> Done. role=${AGENT_ROLE}"
 if [[ -n "${PEER_SSH}" && -n "${PEER_URL}" ]]; then
   echo "    Peer watchdog every 60s → ${PEER_URL} (restart via ${PEER_SSH})"
 fi

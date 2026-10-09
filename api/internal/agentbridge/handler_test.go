@@ -17,7 +17,8 @@ func clearAgentBridgeEnv(t *testing.T) {
 		"GIT_BRIDGE_URL", "SATELLITE_PROBE_BRIDGE_URL",
 		"HERMES_GATEWAY_URL", "HERMES_MCP_URL",
 		"NOUS_HERMES_URL", "NOUS_HERMES_USER", "NOUS_HERMES_PASS",
-		"REMEDIATION_RUNNER_STANDBY_URL", "PLATFORM_PROJECT_ROOT",
+		"REMEDIATION_RUNNER_URL", "REMEDIATION_RUNNER_STANDBY_URL",
+		"PLANE_HEALTH_URLS", "PLATFORM_PROJECT_ROOT",
 	} {
 		t.Setenv(k, "")
 	}
@@ -30,7 +31,7 @@ func TestHandleBridgeNotConfiguredProbesReturnStatus(t *testing.T) {
 		_, _ = w.Write([]byte(`{"status":"ok","version":"1.0"}`))
 	}))
 	t.Cleanup(runner.Close)
-	t.Setenv("REMEDIATION_RUNNER_URL", runner.URL)
+	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
 
 	h := NewHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/bridge", nil)
@@ -112,7 +113,7 @@ func TestHandleBridgeAggregatesConfiguredProbes(t *testing.T) {
 	}))
 	t.Cleanup(nousHermes.Close)
 
-	t.Setenv("REMEDIATION_RUNNER_URL", runner.URL)
+	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
 	t.Setenv("GIT_BRIDGE_URL", gitBridge.URL)
 	t.Setenv("SATELLITE_PROBE_BRIDGE_URL", satelliteBridge.URL)
 	t.Setenv("HERMES_GATEWAY_URL", hermesMcp.URL)
@@ -145,8 +146,12 @@ func TestHandleBridgeAggregatesConfiguredProbes(t *testing.T) {
 	if resp.NousHermes.Status != "ok" || resp.NousHermes.Version != "1.1" || !resp.NousHermes.GatewayRunning || resp.NousHermes.ActiveAgents != 2 {
 		t.Fatalf("NousHermes = %+v", resp.NousHermes)
 	}
-	if !resp.NightlyReport.Available || resp.NightlyReport.Source != "nightly.sh" {
-		t.Fatalf("NightlyReport = %+v", resp.NightlyReport)
+	if !resp.NightlyReport.Available {
+		if resp.NightlyReport.Hint == "" {
+			t.Fatalf("NightlyReport = %+v, want a hint now that the runner is gone", resp.NightlyReport)
+		}
+	} else {
+		t.Fatalf("NightlyReport = %+v, want unavailable", resp.NightlyReport)
 	}
 }
 
@@ -161,7 +166,7 @@ func TestHandleBridgeNousHermesAuthRequired(t *testing.T) {
 	}))
 	t.Cleanup(nousHermes.Close)
 
-	t.Setenv("REMEDIATION_RUNNER_URL", runner.URL)
+	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
 	t.Setenv("NOUS_HERMES_URL", nousHermes.URL)
 
 	h := NewHandler()

@@ -3,16 +3,14 @@ package agentgovernance
 import (
 	"testing"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 func TestComputeTrustMatrix_PromotionEligible(t *testing.T) {
 	now := time.Now().UTC()
-	jobs := []remediation.Job{
-		{Scope: "nightly-health-check", Status: remediation.JobDone, CreatedAt: now, UpdatedAt: now},
-		{Scope: "nightly-health-check", Status: remediation.JobDone, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
-		{Scope: "nightly-health-check", Status: remediation.JobDone, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
+	jobs := []Outcome{
+		{Scope: "nightly-health-check", Status: OutcomeDone, CreatedAt: now, UpdatedAt: now},
+		{Scope: "nightly-health-check", Status: OutcomeDone, CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
+		{Scope: "nightly-health-check", Status: OutcomeDone, CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: now.Add(-2 * time.Hour)},
 	}
 	resp := computeTrustMatrixRaw(jobs)
 	var health *TrustMatrixEntry
@@ -36,8 +34,8 @@ func TestComputeTrustMatrix_PromotionEligible(t *testing.T) {
 
 func TestComputeTrustMatrix_DemotionOnFailure(t *testing.T) {
 	now := time.Now().UTC()
-	jobs := []remediation.Job{
-		{Scope: "release", Status: remediation.JobFailed, CreatedAt: now, UpdatedAt: now},
+	jobs := []Outcome{
+		{Scope: "release", Status: OutcomeFailed, CreatedAt: now, UpdatedAt: now},
 	}
 	resp := computeTrustMatrixRaw(jobs)
 	var release *TrustMatrixEntry

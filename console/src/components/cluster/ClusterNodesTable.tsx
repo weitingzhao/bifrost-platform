@@ -8,8 +8,11 @@ import {
   DenseTableCell,
   DenseTag,
 } from '@bifrost/ui'
-import { useIsFetching, useQueryClient } from '@tanstack/react-query'
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import type { ClusterNode } from '@/api/clusterTypes'
+import { fetchPromQL } from '@/api/telemetry'
+import { rebootPendingLabel } from '@/components/cluster/rebootPending'
 import { ConsoleHostIpLabel } from '@/components/ConsoleHostIpLabel'
 import { NodeArchLabel } from '@/components/cluster/NodeArchLabel'
 import { NodeCapabilitiesCell } from '@/components/cluster/NodeCapabilitiesCell'
@@ -40,6 +43,23 @@ export function ClusterNodesTable({
 }: ClusterNodesTableProps) {
   const qc = useQueryClient()
   const nodesFetching = useIsFetching({ queryKey: ['cluster', 'nodes'] }) > 0
+  const rebootRequiredQ = useQuery({
+    queryKey: ['telemetry', 'promql', 'bifrost_node_reboot_required'],
+    queryFn: () => fetchPromQL('bifrost_node_reboot_required == 1'),
+    refetchInterval: 60_000,
+    retry: false,
+  })
+  const rebootSinceQ = useQuery({
+    queryKey: ['telemetry', 'promql', 'bifrost_node_reboot_required_since_seconds'],
+    queryFn: () => fetchPromQL('bifrost_node_reboot_required_since_seconds'),
+    refetchInterval: 60_000,
+    retry: false,
+  })
+  const rebootSamples = useMemo(() => {
+    if (rebootRequiredQ.isError || rebootSinceQ.isError) return null
+    if (rebootRequiredQ.data == null || rebootSinceQ.data == null) return null
+    return { required: rebootRequiredQ.data.points, since: rebootSinceQ.data.points }
+  }, [rebootRequiredQ.isError, rebootRequiredQ.data, rebootSinceQ.isError, rebootSinceQ.data])
 
   const refreshNodes = () => {
     void qc.invalidateQueries({ queryKey: ['cluster', 'nodes'] })
@@ -104,7 +124,12 @@ export function ClusterNodesTable({
               </DenseTableCell>
             </DenseTableRow>
           ) : (
-            nodes.map(node => (
+            nodes.map(node => {
+              const reboot =
+                rebootSamples == null
+                  ? null
+                  : rebootPendingLabel(node.name, rebootSamples.required, rebootSamples.since)
+              return (
               <DenseTableRow
                 key={node.name}
                 className="cursor-pointer hover:bg-[var(--secondary)]/60"
@@ -151,6 +176,9 @@ export function ClusterNodesTable({
                     {node.elastic_mode === 'degraded' ? (
                       <DenseTag variant="warning">wake failed</DenseTag>
                     ) : null}
+                    {reboot != null ? (
+                      <span className="text-dense-caption text-[var(--muted-foreground)]">{reboot}</span>
+                    ) : null}
                   </span>
                 </DenseTableCell>
                 <DenseTableCell>
@@ -187,7 +215,8 @@ export function ClusterNodesTable({
                   )}
                 </DenseTableCell>
               </DenseTableRow>
-            ))
+              )
+            })
           )}
         </DenseTableBody>
       </DenseDataTable>

@@ -26,6 +26,10 @@ describe('opsToolRackCatalog', () => {
     expect(resolveOpsToolUrl('grafana', 'http://live.example:30883/')).toBe(
       'http://live.example:30883',
     )
+    expect(resolveOpsToolUrl('grafana', 'https://ops.bifrost.lan/grafana/')).toBe(
+      'https://ops.bifrost.lan/grafana',
+    )
+    expect(resolveOpsToolUrl('grafana', null)).toBe('https://ops.bifrost.lan/grafana')
     expect(resolveOpsToolUrl('grafana', null)).toBe(opsToolById('grafana').lanUrl)
     expect(resolveOpsToolUrl('dagster')).toBe('http://192.168.10.73:30301')
   })

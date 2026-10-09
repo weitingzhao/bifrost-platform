@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
 import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
 import type { AgentBridgeResponse, AgentDeployTarget, RunnerStatus } from '@/api/agentTypes'
-import { fetchHermesGatewayHealth } from '@/api/hermes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { findRunnerForDeployTarget, runnerStatusReach } from '@/lib/agent/macHostRole'
 
@@ -41,13 +40,19 @@ function runnerCards(
   }
   return runners.map((runner, index) => ({
     key: runner.url || runner.role || String(index),
-    role: runner.role ?? 'runner',
+    role: runner.role ?? 'operator-plane',
     runner,
     peer: undefined,
   }))
 }
 
-/** Two Mac mini seats: operator-plane mode, mutual watch, runner heartbeat. Hermes is one line. */
+function seatLabel(role: string): string {
+  if (role === 'primary') return 'primary (.50)'
+  if (role === 'standby') return 'standby (.52)'
+  return role
+}
+
+/** Two Mac mini seats: operator-plane status and version, plus mutual watch. */
 export function MiniCards() {
   const healthQ = useQuery({
     queryKey: ['platform', 'health', 'operator-plane'],
@@ -64,12 +69,6 @@ export function MiniCards() {
     queryFn: fetchAgentDeployStatus,
     refetchInterval: 60_000,
   })
-  const hermesQ = useQuery({
-    queryKey: ['hermes', 'gateway-health', 'mini-cards'],
-    queryFn: fetchHermesGatewayHealth,
-    refetchInterval: 60_000,
-  })
-
   const bridge = bridgeQ.data
   const runners =
     bridge?.runners != null && bridge.runners.length > 0
@@ -79,13 +78,12 @@ export function MiniCards() {
         : []
   const targets = deployQ.data?.targets ?? []
   const cards = runnerCards(bridge, runners, targets)
-  const hermes = hermesQ.data
   const plane = healthQ.data?.operator_plane
 
   return (
     <OpsSection
       title="Mac mini"
-      description="Operator plane, mutual watch, and runner heartbeat. Release actions live on Releases."
+      description="Operator plane status and version for primary (.50) and standby (.52), plus mutual watch. Release actions live on Releases."
       bodyPadding="default"
       overflow="visible"
     >
@@ -96,7 +94,7 @@ export function MiniCards() {
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {cards.length === 0 ? (
           <p className="m-0 text-sm text-muted-foreground">
-            {bridgeQ.isLoading ? 'Loading runner heartbeats…' : 'No runner heartbeat'}
+            {bridgeQ.isLoading ? 'Loading operator-plane…' : 'No operator-plane status'}
           </p>
         ) : (
           cards.map(card => {
@@ -108,18 +106,18 @@ export function MiniCards() {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusLamp value={reach} kind="reach" />
-                  <span className="text-sm font-semibold">{card.role}</span>
+                  <span className="text-sm font-semibold">{seatLabel(card.role)}</span>
                   <DenseTag variant={reach === 'ok' ? 'success' : reach === 'fail' ? 'danger' : 'neutral'}>
                     {card.runner.status || 'unknown'}
                   </DenseTag>
                   {card.runner.active === true ? <DenseTag variant="success">active</DenseTag> : null}
                 </div>
                 <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
+                  operator-plane · {card.runner.status || 'unknown'}
+                  {' · '}
                   {card.runner.version != null && card.runner.version !== ''
-                    ? `v${card.runner.version}`
+                    ? card.runner.version
                     : 'version unknown'}
-                  {' · heartbeat '}
-                  {card.runner.status || 'unknown'}
                 </p>
                 <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
                   {card.peer != null && card.peer !== '' ? `Mutual watch → ${card.peer}` : 'Mutual watch not reported'}
@@ -129,11 +127,6 @@ export function MiniCards() {
           })
         )}
       </div>
-      <p className="m-0 mt-2 text-sm">
-        <span className="text-muted-foreground">Hermes </span>
-        {hermesQ.isLoading ? '…' : hermes?.error != null && hermes.error !== '' ? hermes.error : hermes?.status ?? 'unknown'}
-        {hermes?.version != null && hermes.version !== '' ? ` · v${hermes.version}` : ''}
-      </p>
     </OpsSection>
   )
 }

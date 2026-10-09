@@ -10,7 +10,6 @@ import { fetchClusterMetrics, fetchClusterNodes, fetchClusterObservability } fro
 import { fetchCodeHealth } from '@/api/codeHealth'
 import { fetchIbGatewayStatus, fetchNetworkSla } from '@/api/network'
 import { fetchMatrix, fetchSatelliteBusDeep, fetchSelfHealth, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
-import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchTelemetryAlerts, fetchTelemetryOverview, fetchTelemetryTargets } from '@/api/telemetry'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
@@ -163,12 +162,6 @@ export function useObservabilitySnapshot(options?: {
     refetchInterval: 5 * 60_000,
     retry: false,
   })
-  const remediationQ = useQuery({
-    queryKey: ['remediation', 'health'],
-    queryFn: fetchRemediationHealth,
-    refetchInterval: REFETCH,
-    retry: false,
-  })
   const bridgeQ = useQuery({
     queryKey: ['agent', 'bridge'],
     queryFn: fetchAgentBridge,
@@ -244,7 +237,6 @@ export function useObservabilitySnapshot(options?: {
         bus: busHealth,
         ibGateway: ibQ.data,
         networkSla: networkSlaQ.data,
-        remediation: remediationQ.data,
         agentBridge: bridgeQ.data,
         selfHealth: selfQ.data,
         codeHealth: codeHealthQ.data,
@@ -264,7 +256,6 @@ export function useObservabilitySnapshot(options?: {
       busHealth,
       ibQ.data,
       networkSlaQ.data,
-      remediationQ.data,
       codeHealthQ.data,
       bridgeQ.data,
       selfQ.data,
@@ -287,7 +278,6 @@ export function useObservabilitySnapshot(options?: {
     busQ.isFetching ||
     matrixQ.isFetching ||
     ibQ.isFetching ||
-    remediationQ.isFetching ||
     bridgeQ.isFetching ||
     selfQ.isFetching
 
@@ -301,7 +291,6 @@ export function useObservabilitySnapshot(options?: {
     void busQ.refetch()
     void matrixQ.refetch()
     void ibQ.refetch()
-    void remediationQ.refetch()
     void bridgeQ.refetch()
     void selfQ.refetch()
   }

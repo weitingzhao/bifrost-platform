@@ -36,7 +36,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentbridge"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentdeploy"
-	"github.com/weitingzhao/bifrost-platform/api/internal/hermesgateway"
 	"github.com/weitingzhao/bifrost-platform/api/internal/launchd"
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 )
@@ -56,11 +55,10 @@ type Deps struct {
 type Plane struct {
 	auth *actuation.AuthService
 
-	agentBridge   *agentbridge.Handler
-	agentDeploy   *agentdeploy.Handler
-	hermesGateway *hermesgateway.Handler
-	patrol        *patrol.Handler
-	listLaunchd   func() ([]launchd.Service, error)
+	agentBridge *agentbridge.Handler
+	agentDeploy *agentdeploy.Handler
+	patrol      *patrol.Handler
+	listLaunchd func() ([]launchd.Service, error)
 }
 
 func New(d Deps) (*Plane, error) {
@@ -73,12 +71,11 @@ func New(d Deps) (*Plane, error) {
 		listLaunchd = launchd.List
 	}
 	return &Plane{
-		auth:          d.Auth,
-		agentBridge:   agentbridge.NewHandler(),
-		agentDeploy:   agentdeploy.NewHandler(d.Audit),
-		hermesGateway: hermesgateway.NewHandler(),
-		patrol:        patrolH,
-		listLaunchd:   listLaunchd,
+		auth:        d.Auth,
+		agentBridge: agentbridge.NewHandler(),
+		agentDeploy: agentdeploy.NewHandler(d.Audit),
+		patrol:      patrolH,
+		listLaunchd: listLaunchd,
 	}, nil
 }
 
@@ -105,19 +102,25 @@ type route struct {
 	viewer   bool // token of viewer or above; operator still uses the operator flag
 }
 
-// routeTable is the L-1 surface. Read paths are viewer level; anything that
-// actuates a runner, a deploy or a skill is operator gated, matching what
-// platform-api served before the plane was extracted.
-func routeTable() []route {
+// planeRoutes is what the out-of-band process serves and what a proxying
+// platform-api forwards. Patrol is not here: PROD api serves /patrol/* from
+// the shared statefile and does not forward it. Operator-gated routes are
+// not here either — the three patrol writes moved with the rest of /patrol/*.
+func planeRoutes() []route {
 	return []route{
 		{"GET", "/agent/bridge", false, func(p *Plane) http.HandlerFunc { return p.agentBridge.HandleBridge }, false},
 		{"GET", "/agent/deploy", false, func(p *Plane) http.HandlerFunc { return p.agentDeploy.HandleStatus }, false},
-		{"GET", "/agent/hermes/health", false, func(p *Plane) http.HandlerFunc { return p.hermesGateway.HandleHealth }, false},
 		{method: "GET", pattern: "/agent/launchd", pick: func(p *Plane) http.HandlerFunc { return p.HandleLaunchd }, viewer: true},
+	}
+}
+
+// patrolRoutes are served by platform-api itself, including when
+// OPERATOR_PLANE_URL is set. The autopilot loop stays on workers.
+func patrolRoutes() []route {
+	return []route{
 		{"GET", "/patrol/skills", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListSkills }, false},
 		{"GET", "/patrol/skills/{id}", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleGetSkill }, false},
 		{"GET", "/patrol/runs", false, func(p *Plane) http.HandlerFunc { return p.patrol.HandleListRuns }, false},
-
 		{"PUT", "/patrol/skills/{id}/enable", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleEnable }, false},
 		{"POST", "/patrol/trigger/{id}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleTrigger }, false},
 		{"POST", "/patrol/webhook/{event}", true, func(p *Plane) http.HandlerFunc { return p.patrol.HandleWebhook }, false},
@@ -138,8 +141,17 @@ func register(r chi.Router, rt route, auth *actuation.AuthService, h http.Handle
 
 // Mount registers the L-1 routes on an /api/v1 router, served in this process.
 func (p *Plane) Mount(r chi.Router) {
-	for _, rt := range routeTable() {
+	for _, rt := range planeRoutes() {
 		register(r, rt, p.auth, rt.pick(p))
+	}
+}
+
+// MountPatrol registers /patrol/* on the caller. platform-api uses this even
+// when the rest of the plane is proxied, and it does not start the autopilot.
+func MountPatrol(auth *actuation.AuthService, h *patrol.Handler, r chi.Router) {
+	stub := &Plane{auth: auth, patrol: h}
+	for _, rt := range patrolRoutes() {
+		register(r, rt, auth, rt.pick(stub))
 	}
 }
 
@@ -161,7 +173,7 @@ func NewProxyMount(auth *actuation.AuthService, target string) (func(chi.Router)
 	}
 	proxy := newProxy(base)
 	return func(r chi.Router) {
-		for _, rt := range routeTable() {
+		for _, rt := range planeRoutes() {
 			register(r, rt, auth, proxy.ServeHTTP)
 		}
 	}, nil
@@ -184,7 +196,7 @@ func newProxy(base *url.URL) *httputil.ReverseProxy {
 			"error":  "operator plane unreachable",
 			"plane":  base.String(),
 			"detail": err.Error(),
-			"hint":   "the L-1 plane runs beside the remediation runners; platform-api itself is up",
+			"hint":   "the L-1 plane runs on the Mac minis; platform-api itself is up",
 		})
 	}
 	return proxy

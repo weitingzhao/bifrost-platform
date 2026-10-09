@@ -194,11 +194,11 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
   /* ── Engineer (Agent plane) ── */
   {
     id: 'engineer.remediation-runner',
-    label: 'Remediation runner',
+    label: 'operator-plane',
     domain: 'engineer',
     scope: 'shared',
     role: 'required',
-    source: 'remediation',
+    source: 'agent_bridge',
     detailRoute: 'queue',
     grafanaDashboardId: 'agent-operations',
   },

@@ -8,18 +8,14 @@
  */
 import { buildClusterFailureTriage, formatClusterFailureTriageMarkdown } from '../src/lib/cluster/clusterFailureTriage'
 import { buildMissionSnapshot } from '../src/lib/control-room/missionSignals'
+import type { AgentBridgeResponse, RetrospectiveReport } from '../src/api/agentTypes'
 import type {
-  AllMatricesResponse,
-  AgentBridgeResponse,
   ClusterPostgresStatusResponse,
   ClusterServiceReadinessResponse,
   ClusterSummary,
-  RemediationHealthResponse,
-  RetrospectiveReport,
-  SelfHealthResponse,
-  StgSmokeResponse,
-  SupplyChainResponse,
-} from '../src/api/types'
+} from '../src/api/clusterTypes'
+import type { StgSmokeResponse, SupplyChainResponse } from '../src/api/deliveryTypes'
+import type { AllMatricesResponse, SelfHealthResponse } from '../src/api/matrixTypes'
 
 const API_BASE = (process.env.PLATFORM_API ?? 'http://127.0.0.1:8780').replace(/\/$/, '')
 const jsonOut = process.argv.includes('--json')
@@ -48,7 +44,6 @@ async function main() {
     stgSmoke,
     selfHealth,
     bridge,
-    runnerHealth,
     retro,
   ] = await Promise.all([
     fetchJson<ClusterSummary>('/cluster'),
@@ -59,7 +54,6 @@ async function main() {
     fetchJson<StgSmokeResponse>('/delivery/stg/smoke'),
     fetchJson<SelfHealthResponse>('/self-health'),
     fetchJson<AgentBridgeResponse>('/agent/bridge'),
-    fetchJson<RemediationHealthResponse>('/remediation/health'),
     fetchJson<RetrospectiveReport>('/agent/retrospective/report'),
   ])
 
@@ -76,7 +70,6 @@ async function main() {
           supply: supply ?? undefined,
           stg: stgSmoke ?? undefined,
           self: selfHealth ?? undefined,
-          runner: runnerHealth ?? undefined,
           bridge: bridge ?? undefined,
           matrices,
         })

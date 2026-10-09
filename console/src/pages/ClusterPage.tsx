@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { Reachability } from '@/api/matrixTypes'
 import type { ClusterNode, ClusterWorkload } from '@/api/clusterTypes'
 import { ClusterCategoryGrid } from '@/components/cluster/ClusterCategoryGrid'
@@ -6,7 +6,6 @@ import { ClusterOpsIssuesPanel } from '@/components/cluster/ClusterOpsIssuesPane
 import { ClusterOverviewKpi } from '@/components/cluster/ClusterOverviewKpi'
 import { ClusterTopPodsTable } from '@/components/cluster/ClusterTopPodsTable'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
 import type { NodeWizardFlow } from '@/lib/cluster/nodeWizard'
 import { useClusterCategory } from '@/hooks/useClusterCategory'
 import {
@@ -28,26 +27,22 @@ export function ClusterPage({
   onOpenStandards,
   onOpenRuntimeMap,
   onOpenAudit,
-  onOpenServerConsole,
   onOpenAgentDesk,
   onOpenDefects,
   onOpenObservability,
   onOpenDelivery,
   ambientJobId,
   onExpandAgentDock,
-  onSelectAgentJob,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
   onOpenAudit?: () => void
-  onOpenServerConsole?: () => void
   onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenDefects?: () => void
   onOpenObservability?: () => void
   onOpenDelivery?: () => void
   ambientJobId?: string | null
   onExpandAgentDock?: () => void
-  onSelectAgentJob?: (job: AmbientAgentJob) => void
 }) {
   const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
@@ -91,22 +86,10 @@ export function ClusterPage({
     serviceReadiness: q.serviceReadinessQuery.data,
     governance: q.governanceQuery.data,
     postgresStatus: q.postgresStatusQuery.data,
-    queries: q,
     selectedNs,
-    onOpenAgentDesk,
-    onExpandAgentDock,
-    onSelectAgentJob,
     setDrawerOpen,
     setSelectedPod,
   })
-
-  // Follow ambient Agent job on this page (do not discard the shell prop).
-  // Dock owns the session UI — only track job id locally; never open RemediationPanel.
-  useEffect(() => {
-    if (ambientJobId == null || ambientJobId === '') return
-    m.followAmbientRemediationJob(ambientJobId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- follow once per ambient id
-  }, [ambientJobId])
 
   const clusterAuthLabel = q.showBootstrapActions
     ? null
@@ -181,11 +164,11 @@ export function ClusterPage({
     setSelectedNs(pool[0]?.name ?? null)
   }
 
-  const sidePanelOpen = nodeDrawerOpen || m.remediationPanelOpen
+  const sidePanelOpen = nodeDrawerOpen
 
   return (
     <div
-      className={`cluster-page-shell flex w-full min-w-0 flex-col gap-2${sidePanelOpen ? ' cluster-page-shell--node-drawer' : ''}${m.remediationPanelOpen ? ' cluster-page-shell--remediation-drawer' : ''}`}
+      className={`cluster-page-shell flex w-full min-w-0 flex-col gap-2${sidePanelOpen ? ' cluster-page-shell--node-drawer' : ''}`}
     >
       <ClusterPageChrome
         clusterStatusLabel={q.clusterStatusLabel}
@@ -241,8 +224,6 @@ export function ClusterPage({
               postgresStatus={q.postgresStatusQuery.data}
               onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
               onOpenDefects={onOpenDefects}
-              activeRemediationJob={q.activeRemediationJob}
-              onOpenRemediationSession={m.handleOpenRemediationSession}
               onHealthChange={handleOpsHealthChange}
               onSelectPodNamespace={ns => {
                 setNsFilter(nsFilterForNamespace(ns))
@@ -329,7 +310,6 @@ export function ClusterPage({
         onOpenRuntimeMap={onOpenRuntimeMap}
         onOpenObservability={onOpenObservability}
         onOpenDelivery={onOpenDelivery}
-        onOpenServerConsole={onOpenServerConsole}
         handleSelectNs={handleSelectNs}
         handleSelectPod={handleSelectPod}
         handleSelectNode={handleSelectNode}

@@ -4,7 +4,6 @@ import type { ConfirmState, ClusterMutationActuation, ClusterPageMutationsInput,
 export type { ConfirmState, ScaleState, ClusterPageMutationsInput } from './clusterMutationTypes'
 import { useClusterBootstrapMutations } from './useClusterBootstrapMutations'
 import { useClusterNodeMutations } from './useClusterNodeMutations'
-import { useClusterRemediationMutations } from './useClusterRemediationMutations'
 import { useClusterWorkloadMutations } from './useClusterWorkloadMutations'
 
 export function useClusterPageMutations(input: ClusterPageMutationsInput) {
@@ -12,10 +11,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     selectedNode,
     canAdmin,
     observability,
-    queries,
-    onOpenAgentDesk,
-    onExpandAgentDock,
-    onSelectAgentJob,
     setDrawerOpen,
     setSelectedPod,
   } = input
@@ -60,12 +55,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
   const bootstrap = useClusterBootstrapMutations(actuation, canAdmin, observability, setSyncError)
   const workloads = useClusterWorkloadMutations(actuation, setDrawerOpen, setSelectedPod)
   const nodes = useClusterNodeMutations(actuation, selectedNode)
-  const remediation = useClusterRemediationMutations(actuation, {
-    queries,
-    onOpenAgentDesk,
-    onExpandAgentDock,
-    onSelectAgentJob,
-  })
 
   function actionPending() {
     return (
@@ -94,17 +83,12 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     setConfirmState,
     scaleState,
     setScaleState,
-    remediationPanelOpen: remediation.remediationPanelOpen,
-    setRemediationPanelOpen: remediation.setRemediationPanelOpen,
-    remediationJobId: remediation.remediationJobId,
-    remediationJob: remediation.remediationJob,
     syncMutation: bootstrap.syncMutation,
     ensureMutation: bootstrap.ensureMutation,
     metricsServerMutation: bootstrap.metricsServerMutation,
     layerBInstallMutation: bootstrap.layerBInstallMutation,
     restartMutation: workloads.restartMutation,
     scaleMutation: workloads.scaleMutation,
-    remediationCancelMutation: remediation.remediationCancelMutation,
     layerBInstallBlockedReason: bootstrap.layerBInstallBlockedReason,
     handleWakeComputeNode: nodes.handleWakeComputeNode,
     handlePowerOffComputeNode: nodes.handlePowerOffComputeNode,
@@ -119,9 +103,6 @@ export function useClusterPageMutations(input: ClusterPageMutationsInput) {
     handleDeletePod: workloads.handleDeletePod,
     handleWizardAction: nodes.handleWizardAction,
     actionPending,
-    followAmbientRemediationJob: remediation.followAmbientRemediationJob,
-    handleOpenRemediationSession: remediation.handleOpenRemediationSession,
-    handleRemediationComplete: remediation.handleRemediationComplete,
   }
 }
 

@@ -48,7 +48,6 @@ export type SignalSourceKind =
   | 'ib_gateway'
   | 'agent_bridge'
   | 'self_health'
-  | 'remediation'
   | 'network_probe'
   | 'code_health'
   | 'none'

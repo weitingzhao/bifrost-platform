@@ -109,6 +109,18 @@ describe('versionCell', () => {
     expect(versionCell({ records, lane: 'market-data', env: 'prod', apps: [] }).text).toBe('—')
   })
 
+  it('renders live image text, including an absent research cell', () => {
+    const runningImages = [
+      { lane: 'research', env: 'stg', absent: true, text: 'No STG', title: '' },
+      { lane: 'research', env: 'prod', text: 'research-api 0.205.0', title: 'research/research-api research-api:0.205.0' },
+    ]
+    expect(versionCell({ records: [], lane: 'research', env: 'stg', apps: [], runningImages }).text).toBe('No STG')
+    const prod = versionCell({ records: [], lane: 'research', env: 'prod', apps: [], runningImages })
+    expect(prod.text).toBe('research-api 0.205.0')
+    expect(prod.title).toContain('research-api')
+    expect(versionCell({ records: [], lane: 'platform', env: 'stg', apps: [], runningImages }).text).toBe('—')
+  })
+
   it('falls back to the Argo revision for Platform and Trade namespaces', () => {
     const namespace = namespaceForLaneEnv('platform', 'prod')
     expect(namespace).toBe(deliveryTargetById('platform-prod').namespace)

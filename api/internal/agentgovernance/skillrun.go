@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 // Recording an outcome for a skill that runs outside the remediation runner.
@@ -59,9 +58,8 @@ func (h *Handler) HandleRecordSkillRun(w http.ResponseWriter, r *http.Request) {
 
 	principal := actuation.PrincipalFromContext(r.Context())
 	now := time.Now().UTC()
-	job := remediation.Job{
+	job := Outcome{
 		ID:        fmt.Sprintf("skillrun-%s-%d", strings.ReplaceAll(scope, "/", "-"), now.UnixNano()),
-		Phase:     remediation.Phase(status),
 		Status:    status,
 		Summary:   strings.TrimSpace(req.Summary),
 		Error:     strings.TrimSpace(req.Error),
@@ -79,12 +77,12 @@ func (h *Handler) HandleRecordSkillRun(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func jobStatusFor(raw string) (remediation.JobStatus, bool) {
+func jobStatusFor(raw string) (OutcomeStatus, bool) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "done", "success", "succeeded":
-		return remediation.JobDone, true
+		return OutcomeDone, true
 	case "failed", "failure", "error":
-		return remediation.JobFailed, true
+		return OutcomeFailed, true
 	}
 	return "", false
 }

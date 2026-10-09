@@ -79,12 +79,12 @@ describe('mission snapshot stale', () => {
       [
         { id: 'cluster', q: { data: {}, isError: false, dataUpdatedAt: now - 1_000 } },
         { id: 'matrix', q: { data: {}, isError: false, dataUpdatedAt: now - MISSION_STALE_AFTER_MS - 1 } },
-        { id: 'runner', q: { data: undefined, isError: true, dataUpdatedAt: 0 } },
+        { id: 'bridge', q: { data: undefined, isError: true, dataUpdatedAt: 0 } },
       ],
       now,
     )
     expect(f.dataUpdatedAt).toBe(now - MISSION_STALE_AFTER_MS - 1)
-    expect(f.staleSources).toEqual(['matrix', 'runner'])
+    expect(f.staleSources).toEqual(['matrix', 'bridge'])
   })
 
   it('freshQueryData drops errored or aged-out data and keeps a fresh answer', () => {

@@ -79,7 +79,7 @@ build-api:
 # architecture rather than whatever this machine happens to be:
 #   make build-operator-plane GOOS=darwin GOARCH=arm64
 build-operator-plane:
-	cd api && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -o bin/operator-plane ./cmd/operator-plane
+	cd api && GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "-X main.version=$(shell git rev-parse --short=12 HEAD)" -o bin/operator-plane ./cmd/operator-plane
 	@# Go's linker signs darwin binaries ad-hoc but names them all "a.out". macOS
 	@# keys local-network access per executable, so the plane needs an identity of
 	@# its own to be grantable at all. Re-sign only when this host can.

@@ -98,6 +98,7 @@ func (s *Server) lookupDaemonReplicas(ctx context.Context, namespace string) (in
 }
 
 func (s *Server) bindActionExecutors() {
+	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	reg := func(id, method string, urlOf func(map[string]any) string, routeOf func(map[string]any) map[string]string, bodyOf func(map[string]any) any, h http.HandlerFunc) {
 		// The executor calls the guarded handler. withExecutor, set inside
 		// invokeAction, is what lets that call through. A direct HTTP request

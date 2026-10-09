@@ -5,7 +5,6 @@ import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { ClusterPostgresBackupStatusResponse, ClusterSummary } from '@/api/clusterTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { MatrixResponse, SelfHealthResponse } from '@/api/matrixTypes'
-import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import {
   FLEET_COLUMNS,
@@ -32,7 +31,6 @@ export type BuildFleetSnapshotInput = {
   matrices: MatrixResponse[]
   supply?: SupplyChainResponse
   stg?: StgSmokeResponse
-  runner?: RemediationHealthResponse
   bridge?: AgentBridgeResponse
   /** True when Ground Systems seat (probe-bridge) is reachable — Engineer Mac seat can be N/A. */
   groundBridgeReady?: boolean
@@ -79,7 +77,6 @@ export function buildFleetSnapshotCore(input: BuildFleetSnapshotInput): FleetSna
 
   cells.push(
     buildEngineerCell({
-      runner: input.runner,
       bridge: input.bridge,
       viewerEnv,
       groundBridgeReady: input.groundBridgeReady,

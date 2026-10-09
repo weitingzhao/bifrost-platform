@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -158,7 +159,6 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 		"/api/v1/jobs",
 		"/api/v1/patrol/skills",
 		"/api/v1/patrol/runs",
-		"/api/v1/agent/hermes/health",
 	}
 	for _, path := range getRoutes {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
@@ -230,6 +230,14 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodPost, "/api/v1/stack/addons/gitea/install"},
 		{http.MethodPost, "/api/v1/stack/addons/gitea/upgrade"},
 		{http.MethodPut, "/api/v1/agent/governance/trust-overrides/research-loop-batch"},
+		{http.MethodGet, "/api/v1/remediation/health"},
+		{http.MethodGet, "/api/v1/remediation/"},
+		{http.MethodPost, "/api/v1/remediation/start"},
+		{http.MethodGet, "/api/v1/remediation/job-1"},
+		{http.MethodGet, "/api/v1/remediation/job-1/stream"},
+		{http.MethodPost, "/api/v1/remediation/job-1/cancel"},
+		{http.MethodPost, "/api/v1/remediation/job-1/respond"},
+		{http.MethodGet, "/api/v1/agent/hermes/health"},
 	}
 	// The path still serves another method, so chi answers 405 rather than 404.
 	methodGone := []struct{ method, path string }{
@@ -394,5 +402,49 @@ func TestRoleDecidesWhoRunsTheBackgroundLoops(t *testing.T) {
 				t.Fatalf("health role = %q, want %q", payload.Role, wantRole)
 			}
 		})
+	}
+}
+
+func TestPatrolReadsSharedStateInsteadOfProxy(t *testing.T) {
+	var hits []string
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.URL.Path)
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(proxy.Close)
+	t.Setenv("OPERATOR_PLANE_URL", proxy.URL)
+
+	cfg := newTestConfig(t)
+	stateDir := os.Getenv("PATROL_STATE_DIR")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte(`{"enabled":{},"runs":[{"id":"run-local","skill_id":"disk","result":"ok"}],"updated_at":"2026-10-08T00:00:00Z"}`)
+	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(cfg)
+	if err != nil {
+		t.Fatalf("server.New: %v", err)
+	}
+	if srv.plane != nil {
+		t.Fatal("proxying host constructed a local plane")
+	}
+	router := srv.Router()
+
+	skills := httptest.NewRecorder()
+	router.ServeHTTP(skills, httptest.NewRequest(http.MethodGet, "/api/v1/patrol/skills", nil))
+	if skills.Code != http.StatusOK {
+		t.Fatalf("GET /patrol/skills = %d, body %s", skills.Code, skills.Body.String())
+	}
+	runs := httptest.NewRecorder()
+	router.ServeHTTP(runs, httptest.NewRequest(http.MethodGet, "/api/v1/patrol/runs", nil))
+	if runs.Code != http.StatusOK || !strings.Contains(runs.Body.String(), "run-local") {
+		t.Fatalf("GET /patrol/runs = %d, body %s", runs.Code, runs.Body.String())
+	}
+	for _, path := range hits {
+		if strings.Contains(path, "/patrol/") {
+			t.Fatalf("patrol request was proxied: %s", path)
+		}
 	}
 }

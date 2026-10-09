@@ -43,10 +43,7 @@ func TestMountServesEveryOperatorPlaneRoute(t *testing.T) {
 	for _, path := range []string{
 		"/api/v1/agent/bridge",
 		"/api/v1/agent/deploy",
-		"/api/v1/agent/hermes/health",
 		"/api/v1/agent/launchd",
-		"/api/v1/patrol/skills",
-		"/api/v1/patrol/runs",
 	} {
 		rec := httptest.NewRecorder()
 		r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
@@ -56,21 +53,21 @@ func TestMountServesEveryOperatorPlaneRoute(t *testing.T) {
 	}
 }
 
-// Reading is viewer level; anything that actuates a runner, a deploy or a skill
-// stays operator gated after the move.
-func TestActuationRoutesStayOperatorGated(t *testing.T) {
+// Patrol writes moved to platform-api. The plane must not serve them.
+func TestPlaneDoesNotServePatrol(t *testing.T) {
 	r := chi.NewRouter()
 	r.Route("/api/v1", newPlane(t).Mount)
 
 	for _, tc := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/patrol/skills"},
 		{http.MethodPut, "/api/v1/patrol/skills/x/enable"},
 		{http.MethodPost, "/api/v1/patrol/trigger/x"},
 	} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}"))
 		r.ServeHTTP(rec, req)
-		if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
-			t.Errorf("%s %s answered %d without operator auth, want 401/403", tc.method, tc.path, rec.Code)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s %s answered %d, want 404 from the plane", tc.method, tc.path, rec.Code)
 		}
 	}
 }
@@ -142,9 +139,9 @@ func TestProxyMountRejectsAnUnusableURL(t *testing.T) {
 	}
 }
 
-// Auth is enforced before the hop, not only at the far end: a call that will be
-// refused should not travel to the Mac mini first.
-func TestProxyKeepsActuationOperatorGated(t *testing.T) {
+// Patrol is not forwarded. A route the plane still serves fails closed at the
+// proxy when the plane is down, instead of looking like platform-api is down.
+func TestProxyDoesNotForwardPatrol(t *testing.T) {
 	mount, err := operatorplane.NewProxyMount(&actuation.AuthService{}, "http://127.0.0.1:1")
 	if err != nil {
 		t.Fatalf("NewProxyMount: %v", err)
@@ -152,14 +149,10 @@ func TestProxyKeepsActuationOperatorGated(t *testing.T) {
 	r := chi.NewRouter()
 	r.Route("/api/v1", mount)
 
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodPost, "/api/v1/patrol/trigger/x"},
-	} {
-		rec := httptest.NewRecorder()
-		r.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}")))
-		if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
-			t.Errorf("%s %s answered %d unauthenticated, want 401/403 before the hop", tc.method, tc.path, rec.Code)
-		}
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/patrol/trigger/x", strings.NewReader("{}")))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST /patrol/trigger/x answered %d, want 404 (not proxied)", rec.Code)
 	}
 }
 
@@ -173,7 +166,7 @@ func TestProxySaysWhichHalfIsDown(t *testing.T) {
 	r.Route("/api/v1", mount)
 
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/patrol/runs", nil))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/agent/bridge", nil))
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("unreachable plane answered %d, want 502", rec.Code)
 	}

@@ -39,10 +39,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/network"
 	"github.com/weitingzhao/bifrost-platform/api/internal/operatorplane"
 	"github.com/weitingzhao/bifrost-platform/api/internal/opsagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/satellite"
@@ -67,7 +67,6 @@ type Server struct {
 	tradeagent      *tradeagent.Handler
 	checklist       *checklist.Handler
 	opsagent        *opsagent.Handler
-	remediation     *remediation.Handler
 	agentgovernance *agentgovernance.Handler
 	codehealth      *codehealth.Handler
 	lineage         *lineage.Handler
@@ -132,7 +131,6 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	jobs := actuation.NewJobStore()
 	gitopsH := gitops.NewHandler(cfg, audit)
-	remediationH := remediation.NewHandler(audit)
 	role := config.CurrentRole()
 	clusterH := cluster.NewHandler(cfg, audit)
 	ibgatewayH := ibgateway.NewHandler(clusterH.Service(), audit)
@@ -150,12 +148,13 @@ func New(cfg *config.Config) (*Server, error) {
 	promoteH := promote.NewHandler(cfg, audit, clusterH)
 	prober := probe.NewProber()
 	checklistH := checklist.NewHandler(cfg.ConfigDir(), audit)
-	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward the routes
-	// rather than serving them, and do not build the handlers at all. Building
-	// them would start a second patrol autopilot's worth of state for nobody.
+	// L-1 lives out of band once OPERATOR_PLANE_URL is set: forward those routes.
+	// /patrol/* is never forwarded. This process serves it from the shared
+	// statefile and does not start the autopilot — that loop runs on workers.
 	planeURL := strings.TrimSpace(os.Getenv("OPERATOR_PLANE_URL"))
 	var plane *operatorplane.Plane
 	var mountPlane func(chi.Router)
+	var patrolH *patrol.Handler
 	if planeURL == "" {
 		plane, err = operatorplane.New(operatorplane.Deps{
 			Auth:      auth,
@@ -168,13 +167,26 @@ func New(cfg *config.Config) (*Server, error) {
 		if role.RunsWorkers() {
 			plane.StartBackground(context.Background())
 		}
-		mountPlane = plane.Mount
+		patrolH = plane.Patrol()
+		mountPlane = func(r chi.Router) {
+			plane.Mount(r)
+			operatorplane.MountPatrol(auth, patrolH, r)
+		}
 	} else {
 		mountPlane, err = operatorplane.NewProxyMount(auth, planeURL)
 		if err != nil {
 			return nil, fmt.Errorf("operator plane proxy: %w", err)
 		}
-		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; no local patrol autopilot")
+		patrolH, err = patrol.NewHandler(cfg.ConfigDir())
+		if err != nil {
+			return nil, fmt.Errorf("patrol: %w", err)
+		}
+		proxy := mountPlane
+		mountPlane = func(r chi.Router) {
+			proxy(r)
+			operatorplane.MountPatrol(auth, patrolH, r)
+		}
+		slog.Info("operator plane is out of band", "url", planeURL, "note", "L-1 routes proxied; patrol stays local; no patrol autopilot in this process")
 	}
 	srv := &Server{
 		cfg:             cfg,
@@ -188,11 +200,10 @@ func New(cfg *config.Config) (*Server, error) {
 		tradeagent:      tradeagent.NewHandler(),
 		checklist:       checklistH,
 		opsagent:        opsagent.NewHandler(audit),
-		remediation:     remediationH,
 		plane:           plane,
 		planeURL:        planeURL,
 		mountPlane:      mountPlane,
-		agentgovernance: agentgovernance.NewHandler(remediationH.Store()),
+		agentgovernance: agentgovernance.NewHandler(),
 		codehealth:      codehealth.NewHandler(audit),
 		satellite:       satellite.NewHandler(cfg),
 		selfhealth:      selfhealth.NewHandler(cfg, gitopsH.Service()),
@@ -398,6 +409,7 @@ func (s *Server) Router() http.Handler {
 			r.Put("/lineage/transcript-title", s.lineage.HandleReportTitle)
 		})
 		r.Get("/releases", s.releases.HandleList)
+		r.Get("/releases/running-images", s.releases.HandleRunningImages)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
 		r.Get("/delivery/pipelines/{name}/ref-preflight", s.delivery.HandleRefPreflight)
 		r.Get("/delivery/stg/smoke", s.delivery.HandleStgSmoke)
@@ -413,18 +425,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
-		r.Route("/remediation", func(r chi.Router) {
-			r.Get("/health", s.remediation.HandleHealth)
-			r.Group(func(r chi.Router) {
-				r.Use(s.auth.Require(actuation.RoleOperator))
-				r.Get("/", s.remediation.HandleList)
-				r.Post("/start", s.remediation.HandleStart)
-				r.Get("/{id}", s.remediation.HandleGet)
-				r.Get("/{id}/stream", s.remediation.HandleStream)
-				r.Post("/{id}/cancel", s.remediation.HandleCancel)
-				r.Post("/{id}/respond", s.remediation.HandleRespond)
-			})
-		})
 		// Recording a skill's own outcome is evidence, not actuation. It sits
 		// below operator on purpose: the workload that reports must not also be
 		// able to scale deployments or write its own trust override.

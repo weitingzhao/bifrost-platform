@@ -62,11 +62,6 @@ func init() {
 		"POST /api/v1/agent/governance/skill-runs",
 		"POST /api/v1/telemetry/attention-mute",
 	)
-	exempt("unclassified by LANE-B1: remediation runner control",
-		"POST /api/v1/remediation/start",
-		"POST /api/v1/remediation/{id}/cancel",
-		"POST /api/v1/remediation/{id}/respond",
-	)
 	exempt("unclassified by LANE-B1: delivery supply-chain writes that are not pipeline start/delete",
 		"POST /api/v1/delivery/supply-chain/mirror-sync",
 		"POST /api/v1/delivery/supply-chain/dockerfile-configmaps/refresh",

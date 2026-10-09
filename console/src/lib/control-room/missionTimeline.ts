@@ -5,12 +5,7 @@
 
 import type { AgentNightlyReportResponse } from '@/api/agentTypes'
 import type { AuditRecord } from '@/api/auditTypes'
-import type { RemediationJob } from '@/api/remediationTypes'
 import { parseNightlyLayerResults } from '@/lib/agent/nightlyReportLayers'
-import {
-  formatRemediationJobWhen,
-  remediationScopeShortLabel,
-} from '@/lib/remediation/remediationJobDisplay'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 
 export type MissionTimelineEventKind =
@@ -42,7 +37,20 @@ export interface MissionTimelineTrajectory {
   eventIds: string[]
   startedAt: string
   finishedAt?: string
-  status: RemediationJob['status']
+  status: string
+}
+
+export function formatTimelineWhen(at: string): string {
+  try {
+    return new Date(at).toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return at
+  }
 }
 
 export interface MissionTimelineModel {
@@ -93,73 +101,8 @@ function auditTone(status: string, action: string): MissionTimelineTone {
   return 'neutral'
 }
 
-function jobFinishTone(job: RemediationJob): MissionTimelineTone {
-  if (job.status === 'done') return 'ok'
-  if (job.status === 'failed') return 'fail'
-  if (job.status === 'cancelled') return 'warning'
-  return 'neutral'
-}
-
-function eventsFromJob(job: RemediationJob): MissionTimelineEvent[] {
-  const scopeLabel = remediationScopeShortLabel(job.scope)
-  const out: MissionTimelineEvent[] = []
-
-  out.push({
-    id: `job-start-${job.id}`,
-    at: job.created_at,
-    kind: 'agent_started',
-    title: `Agent started · ${scopeLabel}`,
-    detail: job.actor != null && job.actor !== '' ? `Actor ${job.actor}` : 'Runner accepted scope',
-    tone: 'neutral',
-    jobId: job.id,
-    scope: job.scope,
-  })
-
-  const approvalEvent = job.events?.find(e => e.type === 'approval_request')
-  if (job.phase === 'awaiting_approval' || approvalEvent != null) {
-    out.push({
-      id: `job-approval-${job.id}`,
-      at: approvalEvent?.at ?? job.updated_at,
-      kind: 'agent_approval',
-      title: `Awaiting approval · ${scopeLabel}`,
-      detail: approvalEvent?.text ?? 'Operator decision required before remediation continues',
-      tone: 'warning',
-      jobId: job.id,
-      scope: job.scope,
-    })
-  }
-
-  if (job.status === 'done' || job.status === 'failed' || job.status === 'cancelled') {
-    const summary =
-      job.summary != null && job.summary !== ''
-        ? job.summary
-        : job.error != null && job.error !== ''
-          ? job.error
-          : job.status
-    out.push({
-      id: `job-finish-${job.id}`,
-      at: job.updated_at,
-      kind: 'agent_finished',
-      title: `Agent ${job.status} · ${scopeLabel}`,
-      detail: summary,
-      tone: jobFinishTone(job),
-      jobId: job.id,
-      scope: job.scope,
-    })
-  }
-
-  return out
-}
-
-function eventsFromAudit(record: AuditRecord, jobIds: Set<string>): MissionTimelineEvent | null {
+function eventsFromAudit(record: AuditRecord): MissionTimelineEvent | null {
   if (!AUDIT_ACTION_PREFIXES.some(p => record.action.startsWith(p))) return null
-  if (record.action === 'remediation.start' && jobIds.has(record.target)) return null
-  if (
-    (record.action === 'remediation.done' || record.action === 'remediation.failed') &&
-    jobIds.has(record.target)
-  ) {
-    return null
-  }
 
   return {
     id: `audit-${record.id}`,
@@ -169,13 +112,11 @@ function eventsFromAudit(record: AuditRecord, jobIds: Set<string>): MissionTimel
     detail: [record.target, record.detail].filter(Boolean).join(' · '),
     tone: auditTone(record.status, record.action),
     auditId: record.id,
-    jobId: jobIds.has(record.target) ? record.target : undefined,
   }
 }
 
 export function buildNightlyDriftSummary(
   nightlyReport?: AgentNightlyReportResponse,
-  jobs: RemediationJob[] = [],
 ): string | null {
   if (nightlyReport == null) return null
 
@@ -185,55 +126,19 @@ export function buildNightlyDriftSummary(
 
   const layers = parseNightlyLayerResults(nightlyReport.content)
   const fails = [layers.l1, layers.l2, layers.l3].filter(s => s === 'fail').length
-  const briefJob = jobs.find(j => j.scope === 'nightly-drift-briefing')
   const when =
     nightlyReport.generated_at != null
-      ? formatRemediationJobWhen(nightlyReport.generated_at)
+      ? formatTimelineWhen(nightlyReport.generated_at)
       : 'recent'
 
   if (fails > 0) {
-    return `Nightly drift ${when}: L1=${layers.l1} · L2=${layers.l2} · L3=${layers.l3} — review Ops Desk → Queue → Review${briefJob != null ? ` · brief job ${briefJob.status}` : ''}.`
+    return `Nightly drift ${when}: L1=${layers.l1} · L2=${layers.l2} · L3=${layers.l3} — review Ops Desk → Queue → Review.`
   }
 
-  return `Nightly drift ${when}: Layer 1–3 passed — engineer scan clean${briefJob != null ? ` · brief job ${briefJob.status}` : ''}.`
-}
-
-function buildTrajectories(
-  jobs: RemediationJob[],
-  events: MissionTimelineEvent[],
-): MissionTimelineTrajectory[] {
-  const byJob = new Map<string, MissionTimelineEvent[]>()
-  for (const ev of events) {
-    if (ev.jobId == null) continue
-    const list = byJob.get(ev.jobId)
-    if (list == null) byJob.set(ev.jobId, [ev])
-    else list.push(ev)
-  }
-
-  const trajectories: MissionTimelineTrajectory[] = []
-  for (const job of jobs) {
-    const jobEvents = byJob.get(job.id)
-    if (jobEvents == null || jobEvents.length < 2) continue
-    const sorted = [...jobEvents].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
-    trajectories.push({
-      jobId: job.id,
-      scope: job.scope ?? 'agent-desk',
-      label: remediationScopeShortLabel(job.scope),
-      eventIds: sorted.map(e => e.id),
-      startedAt: sorted[0].at,
-      finishedAt:
-        job.status === 'done' || job.status === 'failed' || job.status === 'cancelled'
-          ? job.updated_at
-          : undefined,
-      status: job.status,
-    })
-  }
-
-  return trajectories.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+  return `Nightly drift ${when}: Layer 1–3 passed — engineer scan clean.`
 }
 
 export function buildMissionTimelineModel(input: {
-  jobs: RemediationJob[]
   auditRecords: AuditRecord[]
   nightlyReport?: AgentNightlyReportResponse
   snapshot?: MissionSnapshot
@@ -242,11 +147,6 @@ export function buildMissionTimelineModel(input: {
 }): MissionTimelineModel {
   const withinMs = input.withinMs ?? DEFAULT_WITHIN_MS
   const cutoffMs = Date.now() - withinMs
-
-  const recentJobs = input.jobs.filter(
-    j => withinWindow(j.created_at, cutoffMs) || withinWindow(j.updated_at, cutoffMs),
-  )
-  const jobIds = new Set(recentJobs.map(j => j.id))
 
   const events: MissionTimelineEvent[] = []
 
@@ -277,17 +177,13 @@ export function buildMissionTimelineModel(input: {
     }
   }
 
-  for (const job of recentJobs) {
-    events.push(...eventsFromJob(job))
-  }
-
   for (const record of input.auditRecords) {
     if (!withinWindow(record.at, cutoffMs)) continue
-    const ev = eventsFromAudit(record, jobIds)
+    const ev = eventsFromAudit(record)
     if (ev != null) events.push(ev)
   }
 
-  const nightlySummary = buildNightlyDriftSummary(input.nightlyReport, input.jobs)
+  const nightlySummary = buildNightlyDriftSummary(input.nightlyReport)
   if (nightlySummary != null && input.nightlyReport?.generated_at != null) {
     events.push({
       id: 'nightly-drift-summary',
@@ -301,7 +197,7 @@ export function buildMissionTimelineModel(input: {
 
   events.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
 
-  const trajectories = buildTrajectories(recentJobs, events)
+  const trajectories: MissionTimelineTrajectory[] = []
 
   return {
     events: events.slice(0, 48),

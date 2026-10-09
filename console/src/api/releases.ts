@@ -34,6 +34,30 @@ export type ReleaseListResponse = {
   error?: string
 }
 
+export type RunningImageCell = {
+  lane: string
+  env: string
+  absent?: boolean
+  text: string
+  title?: string
+  error?: string
+}
+
+export type RunningImagesResponse = {
+  cells: RunningImageCell[]
+  error?: string
+}
+
+export async function fetchRunningImages(): Promise<RunningImagesResponse> {
+  const r = await fetch('/api/v1/releases/running-images')
+  if (!r.ok) throw new Error(`running images: HTTP ${r.status}`)
+  const body = (await r.json()) as Partial<RunningImagesResponse>
+  return {
+    cells: Array.isArray(body.cells) ? body.cells : [],
+    error: body.error,
+  }
+}
+
 export async function fetchReleaseRecords(limit = 100): Promise<ReleaseListResponse> {
   const r = await fetch(`/api/v1/releases?limit=${limit}`)
   if (!r.ok) throw new Error(`releases: HTTP ${r.status}`)

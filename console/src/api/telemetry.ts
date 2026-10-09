@@ -49,6 +49,34 @@ export async function fetchTelemetryAlerts(): Promise<TelemetryAlertsResponse> {
   return r.json() as Promise<TelemetryAlertsResponse>
 }
 
+export type PromSamplePoint = {
+  labels?: Record<string, string>
+  value: number
+  timestamp?: number
+}
+
+export type PromQLResponse = {
+  query: string
+  points: PromSamplePoint[]
+  result_type?: string
+}
+
+/** Instant query. Param name matches platform-api HandlePromQL (`q`). */
+export async function fetchPromQL(query: string): Promise<PromQLResponse> {
+  const params = new URLSearchParams({ q: query })
+  const r = await fetch(`/api/v1/telemetry/promql?${params.toString()}`)
+  if (!r.ok) {
+    const detail = await r.text()
+    throw new Error(`telemetry promql: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
+  }
+  const body = (await r.json()) as Partial<PromQLResponse>
+  return {
+    query: body.query ?? query,
+    points: Array.isArray(body.points) ? body.points : [],
+    result_type: body.result_type,
+  }
+}
+
 export async function fetchTelemetryTargets(state?: string): Promise<TelemetryTargetsResponse> {
   const query = state != null && state !== '' ? `?state=${encodeURIComponent(state)}` : ''
   const r = await fetch(`/api/v1/telemetry/targets${query}`)

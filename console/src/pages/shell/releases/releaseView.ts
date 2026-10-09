@@ -1,5 +1,5 @@
 import type { DeliveryPipelineRunView, GitOpsApplicationView } from '@/api/deliveryTypes'
-import type { ReleaseRecord } from '@/api/releases'
+import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import {
   formatPipelineRunStatus,
@@ -23,6 +23,9 @@ export const VERSION_ROWS = [
 ] as const
 
 export type VersionLane = (typeof VERSION_ROWS)[number]['lane']
+
+/** Lanes whose STG/PROD cells come from GET /api/v1/releases/running-images. */
+export const LIVE_IMAGE_LANES = new Set<VersionLane>(['research', 'market-data', 'agent'])
 
 export type VersionCell = {
   text: string
@@ -148,7 +151,15 @@ export function versionCell(input: {
   lane: string
   env: 'stg' | 'prod'
   apps: VersionApp[]
+  runningImages?: RunningImageCell[]
 }): VersionCell {
+  if (LIVE_IMAGE_LANES.has(input.lane as VersionLane)) {
+    const cell = input.runningImages?.find(item => item.lane === input.lane && item.env === input.env)
+    if (cell != null && cell.text !== '') {
+      return { text: cell.text, title: cell.title ?? '' }
+    }
+    return { text: '—', title: '' }
+  }
   const record = newestDeploy(input.records, input.lane, input.env)
   if (record != null) {
     const text = formatReleaseVersion(record)

@@ -14,6 +14,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"log/slog"
 	"net/http"
@@ -31,7 +32,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// 8781 is the remediation runner and 8782 the Hermes gateway on the same hosts.
+// version is the git SHA injected at build (-X main.version). Dev builds say "dev".
+var version = "dev"
+
+// 8783 is the operator plane. The remediation runner and Hermes gateway are retired.
 const defaultListen = ":8783"
 
 func main() {
@@ -80,9 +84,14 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok","service":"bifrost-operator-plane","autopilot":` +
-			btoa(autopilot) + `,"alert_relay":` + btoa(relay != nil) +
-			`,"contained_panics":` + itoa(safego.Contained()) + `}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status":           "ok",
+			"service":          "bifrost-operator-plane",
+			"version":          version,
+			"autopilot":        autopilot,
+			"alert_relay":      relay != nil,
+			"contained_panics": safego.Contained(),
+		})
 	})
 	r.Route("/api/v1", func(sub chi.Router) {
 		plane.Mount(sub)
@@ -107,35 +116,6 @@ func main() {
 	if err := http.ListenAndServe(listen, r); err != nil {
 		log.Fatalf("operator plane: %v", err)
 	}
-}
-
-func btoa(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
-func itoa(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var b [24]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		b[i] = '-'
-	}
-	return string(b[i:])
 }
 
 func loadDotEnv() {

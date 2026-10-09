@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Mutual watchdog (dual Mac Mini self-healing).
 #
-# Probes the peer agent runner over the LAN; if it is unreachable after a few
-# attempts, restarts the peer runner via passwordless SSH (launchctl kickstart).
-# Installed by deploy_mac_mini.sh, invoked every 60s by the
-# com.bifrost.peer-watchdog launchd agent.
+# Probes the peer operator-plane over the LAN; if it is unreachable after a few
+# attempts, restarts com.bifrost.operator-plane via passwordless SSH
+# (launchctl kickstart). Installed by deploy_mac_mini.sh, invoked every 60s by
+# the com.bifrost.peer-watchdog launchd agent. The alert-relay watch below is
+# unchanged.
 #
 # Required env (from config/env.sh + config/env.local.sh):
-#   PEER_AGENT_URL   e.g. http://192.168.10.52:8781   (peer runner base URL)
+#   PEER_AGENT_URL   e.g. http://192.168.10.52:8783   (peer operator-plane base URL)
 #   PEER_AGENT_SSH   e.g. vision@192.168.10.52        (peer SSH target)
 # Optional:
 #   BIFROST_AGENT_ROOT (default: $HOME/bifrost-agent)
@@ -105,7 +106,7 @@ done
 log "PEER DOWN: ${PEER_URL} unreachable after 3 attempts — restarting via ${PEER_SSH}"
 OUT="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=8 \
   "${PEER_SSH}" \
-  'launchctl kickstart -k "gui/$(id -u)/com.bifrost.remediation-runner"' 2>&1)"
+  'launchctl kickstart -k "gui/$(id -u)/com.bifrost.operator-plane"' 2>&1)"
 RC=$?
 log "restart rc=${RC} out=${OUT}"
 

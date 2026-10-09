@@ -25,8 +25,8 @@ var homePathFiles = map[string]string{
 	"agentdeploy/store.go":    "store; TD-196 moves it to a ConfigMap",
 	"cluster/data_clone.go":   "store; TD-196 moves it to a ConfigMap",
 	"codehealth/store.go":     "store; TD-196 moves it to a ConfigMap",
-	"patrol/store.go":         "store; TD-196 moves it to a ConfigMap",
-	"remediation/jobstore.go": "store; TD-196 moves it to a ConfigMap",
+	"patrol/store.go":             "store; TD-196 moves it to a ConfigMap",
+	"agentgovernance/outcome.go":  "skill-outcome archive; same $HOME fallback the retired runner job store used",
 	// operator credentials and workstation files, not platform state
 	"cluster/metrics_server.go":        "default kubeconfig path",
 	"cluster/observability_install.go": "default kubeconfig path",

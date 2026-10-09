@@ -9,7 +9,6 @@ import { formatPatrolRelativeTime, latestPatrolRun, patrolPosture } from '@/lib/
 export type AgentTriadStripProps = {
   onModeChange: (landingTab: string, modeId: TaskModeId) => void
   operateQueueOpen?: number
-  recentRemediationFail?: boolean
 }
 
 type TriadCell = {
@@ -23,22 +22,15 @@ type TriadCell = {
 
 function opsCell(
   operateQueueOpen: number,
-  recentRemediationFail: boolean,
   patrolSummary: string,
   patrolLamp: Reachability,
 ): TriadCell {
   let lamp: Reachability = patrolLamp
-  let summary =
+  const summary =
     operateQueueOpen > 0
       ? `${operateQueueOpen} open · ${patrolSummary}`
       : `Queue clear · ${patrolSummary}`
-  if (recentRemediationFail) {
-    lamp = 'fail'
-    summary =
-      operateQueueOpen > 0
-        ? `${operateQueueOpen} open · recent fail`
-        : `Recent fail · ${patrolSummary}`
-  } else if (operateQueueOpen > 0) {
+  if (operateQueueOpen > 0) {
     lamp = lamp === 'fail' ? 'fail' : 'degraded'
   } else if (lamp === 'unknown') {
     lamp = 'ok'
@@ -72,7 +64,6 @@ function analysisCell(): TriadCell {
 export function AgentTriadStrip({
   onModeChange,
   operateQueueOpen = 0,
-  recentRemediationFail = false,
 }: AgentTriadStripProps) {
   const { modeId, setModeId } = useTaskMode()
   const patrol = usePatrolSnapshot()
@@ -83,7 +74,7 @@ export function AgentTriadStrip({
       ? formatPatrolRelativeTime(latest.finished_at ?? latest.started_at)
       : 'no runs'
   const cells: TriadCell[] = [
-    opsCell(operateQueueOpen, recentRemediationFail, `${posture.label} · ${when}`, posture.lamp),
+    opsCell(operateQueueOpen, `${posture.label} · ${when}`, posture.lamp),
     analysisCell(),
   ]
 

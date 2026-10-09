@@ -8,7 +8,6 @@ import { fetchContext, fetchMatrix, fetchSelfHealth, isAllMatrices } from '@/api
 import { fetchCluster } from '@/api/cluster'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchStgSmoke } from '@/api/promote'
-import { fetchRemediationHealth, fetchRemediationJobs } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
 import type { OperateQueueItem } from '@/api/operateQueueTypes'
 import { fetchDecisionBriefs } from '@/api/operateBriefs'
@@ -17,7 +16,6 @@ import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { isPendingDecisionBrief } from '@/hooks/useDecisionBriefs'
-import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 import {
   buildControlRoomAttentionItems,
   buildControlRoomBaySignals,
@@ -77,12 +75,11 @@ async function gatherMissionSnapshot(): Promise<{
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
 }> {
-  const [cluster, supply, stg, self, runner, bridge, matrixRaw] = await Promise.all([
+  const [cluster, supply, stg, self, bridge, matrixRaw] = await Promise.all([
     fetchCluster(),
     fetchSupplyChain(),
     fetchStgSmoke(),
     fetchSelfHealth(),
-    fetchRemediationHealth(),
     fetchAgentBridge(),
     fetchMatrix(),
   ])
@@ -92,7 +89,6 @@ async function gatherMissionSnapshot(): Promise<{
     supply,
     stg,
     self,
-    runner,
     bridge,
     matrices,
   })
@@ -102,10 +98,9 @@ async function gatherMissionSnapshot(): Promise<{
 export async function gatherControlRoomAgentSnapshot(): Promise<ControlRoomAgentPackSnapshot> {
   const generatedAt = new Date().toISOString()
 
-  const [missionRes, briefsRes, jobsRes, contextRes, ibRes] = await Promise.allSettled([
+  const [missionRes, briefsRes, contextRes, ibRes] = await Promise.allSettled([
     gatherMissionSnapshot(),
     fetchDecisionBriefs(),
-    fetchRemediationJobs(),
     fetchContext(),
     fetchIbGatewayStatus(),
   ])
@@ -125,10 +120,7 @@ export async function gatherControlRoomAgentSnapshot(): Promise<ControlRoomAgent
     briefsRes.status === 'fulfilled'
       ? (briefsRes.value ?? []).filter(isPendingDecisionBrief).length
       : 0
-  const activeAgentJobCount =
-    jobsRes.status === 'fulfilled'
-      ? findActiveRemediationJobs(jobsRes.value?.jobs ?? []).length
-      : 0
+  const activeAgentJobCount = 0
 
   const context: OpsContextResponse | null =
     contextRes.status === 'fulfilled' ? contextRes.value : null
@@ -148,7 +140,6 @@ export async function gatherControlRoomAgentSnapshot(): Promise<ControlRoomAgent
     supply: undefined,
     stg: undefined,
     self: undefined,
-    runner: undefined,
     bridge: undefined,
     matrices: [],
   })

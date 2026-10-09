@@ -12,7 +12,6 @@ import {
   isAllSatelliteBusDeep,
 } from '@/api/core'
 import type { SatelliteBusDeepResponse } from '@/api/satelliteBusTypes'
-import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
 import { fetchIbGatewayStatus } from '@/api/network'
 import type { MatrixResponse } from '@/api/matrixTypes'
@@ -72,7 +71,6 @@ export function useFleetSnapshot(): {
   const supplyQ = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain, refetchInterval: REFETCH })
   const stgQ = useQuery({ queryKey: ['cockpit', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: REFETCH })
   const selfQ = useQuery({ queryKey: ['cockpit', 'self-health'], queryFn: fetchSelfHealth, refetchInterval: REFETCH })
-  const runnerQ = useQuery({ queryKey: ['cockpit', 'runner'], queryFn: fetchRemediationHealth, refetchInterval: REFETCH })
   const bridgeQ = useQuery({ queryKey: ['cockpit', 'bridge'], queryFn: fetchAgentBridge, refetchInterval: REFETCH })
   const matrixQ = useQuery({ queryKey: ['cockpit', 'matrix'], queryFn: () => fetchMatrix(), refetchInterval: REFETCH })
   const ibGatewayQ = useQuery({
@@ -128,7 +126,6 @@ export function useFleetSnapshot(): {
         supply: supplyQ.data,
         stg: stgQ.data,
         self: selfQ.data,
-        runner: runnerQ.data,
         bridge: bridgeQ.data,
         matrices,
         groundBridgeReady,
@@ -143,7 +140,6 @@ export function useFleetSnapshot(): {
       supplyQ.data,
       stgQ.data,
       selfQ.data,
-      runnerQ.data,
       bridgeQ.data,
       matrices,
       groundBridgeReady,
@@ -161,11 +157,10 @@ export function useFleetSnapshot(): {
         supply: supplyQ.data,
         stg: stgQ.data,
         self: selfQ.data,
-        runner: runnerQ.data,
         bridge: bridgeQ.data,
         matrices,
       }),
-    [clusterQ.data, supplyQ.data, stgQ.data, selfQ.data, runnerQ.data, bridgeQ.data, matrices],
+    [clusterQ.data, supplyQ.data, stgQ.data, selfQ.data, bridgeQ.data, matrices],
   )
 
   const isLoading =
@@ -173,7 +168,6 @@ export function useFleetSnapshot(): {
     supplyQ.isLoading ||
     stgQ.isLoading ||
     selfQ.isLoading ||
-    runnerQ.isLoading ||
     bridgeQ.isLoading ||
     matrixQ.isLoading ||
     ibGatewayQ.isLoading
@@ -183,7 +177,6 @@ export function useFleetSnapshot(): {
     supplyQ.dataUpdatedAt,
     stgQ.dataUpdatedAt,
     selfQ.dataUpdatedAt,
-    runnerQ.dataUpdatedAt,
     bridgeQ.dataUpdatedAt,
     matrixQ.dataUpdatedAt,
     ibGatewayQ.dataUpdatedAt,

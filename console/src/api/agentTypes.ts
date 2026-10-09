@@ -266,14 +266,6 @@ export interface RunnerSmokeResponse {
   checks: RunnerSmokeCheck[]
 }
 
-export interface HermesGatewayHealth {
-  status: string
-  version?: string
-  skill_count?: number
-  uptime_seconds?: number
-  error?: string
-}
-
 // Agent Governance — Flight Director types
 
 export interface AgentPerformanceWindow {

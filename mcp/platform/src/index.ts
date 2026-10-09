@@ -344,14 +344,6 @@ reg(
   async () => jsonResult(await platformGet('/api/v1/agent/governance/trust-matrix')),
 )
 
-reg('get_remediation_health', 'Remediation runner health', {}, async () =>
-  jsonResult(await platformGet('/api/v1/remediation/health')),
-)
-
-reg('list_remediation_jobs', 'List remediation / agent tasks (operator)', {}, async () =>
-  jsonResult(await platformGet('/api/v1/remediation/')),
-)
-
 reg('get_stg_smoke', 'STG environment HTTP smoke probes', {}, async () =>
   jsonResult(await platformGet('/api/v1/delivery/stg/smoke')),
 )

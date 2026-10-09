@@ -21,7 +21,6 @@ import type {
   ClusterServiceReadinessResponse,
   ClusterSummary,
 } from '@/api/clusterTypes'
-import type { RemediationJob } from '@/api/remediationTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
@@ -35,11 +34,6 @@ import {
   clusterIssuesReachability,
 } from '@/lib/cluster/collectClusterIssues'
 import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
-import {
-  remediationJobReachability,
-  remediationJobStatusLabel,
-  remediationScopeShortLabel,
-} from '@/lib/remediation/remediationJobDisplay'
 import type { Reachability } from '@/api/matrixTypes'
 
 const REFETCH_MS = 25_000
@@ -151,8 +145,6 @@ export type ClusterOpsIssuesPanelProps = {
   onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
   onSelectPodNamespace?: (namespace: string) => void
-  activeRemediationJob?: RemediationJob | null
-  onOpenRemediationSession?: (jobId: string) => void
   /** Notify parent so Cluster Verdict uses the same health grade. */
   onHealthChange?: (health: {
     reach: Reachability
@@ -174,8 +166,6 @@ export function ClusterOpsIssuesPanel({
   onOpenAgentDesk,
   onOpenDefects,
   onSelectPodNamespace,
-  activeRemediationJob = null,
-  onOpenRemediationSession,
   onHealthChange,
   embedded = false,
 }: ClusterOpsIssuesPanelProps) {
@@ -274,13 +264,6 @@ export function ClusterOpsIssuesPanel({
     })
   }, [onHealthChange, overallReach, healthSummaryLine, allClear])
 
-  const sessionActive = activeRemediationJob?.status === 'running'
-  const sessionReach = sessionActive ? remediationJobReachability(activeRemediationJob) : 'unknown'
-  const sessionStatusLabel = sessionActive ? remediationJobStatusLabel(activeRemediationJob) : ''
-  const sessionScopeLabel = sessionActive
-    ? remediationScopeShortLabel(activeRemediationJob.scope)
-    : ''
-
   const actions =
     onOpenDefects != null ? (
       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -295,53 +278,13 @@ export function ClusterOpsIssuesPanel({
       {embedded && actions != null ? (
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <p className="m-0 text-[var(--text-dense-caption)] text-muted-foreground">
-            {sessionActive
-              ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the Operator Dock.`
-              : allClear
-                ? 'Fleet + ops plane clear — re-verify on demand.'
-                : 'Ranked issues. Repair is not started from this page.'}
+            {allClear
+              ? 'Fleet + ops plane clear — re-verify on demand.'
+              : 'Ranked issues. Repair is not started from this page.'}
           </p>
           {actions}
         </div>
       ) : null}
-
-      {!embedded && sessionActive && onOpenRemediationSession != null && (
-        <button
-          type="button"
-          className={
-            allClear
-              ? 'cluster-remediation-session-banner cluster-remediation-session-banner--inset'
-              : 'cluster-remediation-session-banner'
-          }
-          onClick={() => onOpenRemediationSession(activeRemediationJob.id)}
-        >
-          <StatusLamp value={sessionReach} kind="reach" />
-          <span className="cluster-remediation-session-banner__text">
-            <strong>Agent debug session active</strong>
-            <span className="cluster-remediation-session-banner__detail">
-              {sessionScopeLabel} · {sessionStatusLabel} · {activeRemediationJob.id.slice(0, 8)}
-            </span>
-          </span>
-          <span className="cluster-remediation-session-banner__cta">Open in dock →</span>
-        </button>
-      )}
-
-      {embedded && sessionActive && onOpenRemediationSession != null && (
-        <button
-          type="button"
-          className="cluster-remediation-session-banner cluster-remediation-session-banner--inset mb-2"
-          onClick={() => onOpenRemediationSession(activeRemediationJob.id)}
-        >
-          <StatusLamp value={sessionReach} kind="reach" />
-          <span className="cluster-remediation-session-banner__text">
-            <strong>Agent debug session active</strong>
-            <span className="cluster-remediation-session-banner__detail">
-              {sessionScopeLabel} · {sessionStatusLabel} · {activeRemediationJob.id.slice(0, 8)}
-            </span>
-          </span>
-          <span className="cluster-remediation-session-banner__cta">Open in dock →</span>
-        </button>
-      )}
 
       {isLoading && triageRows.length === 0 && allClear ? (
         <p className="m-0 text-[var(--text-dense-meta)] text-muted-foreground">
@@ -506,11 +449,9 @@ export function ClusterOpsIssuesPanel({
       title="Cluster issues"
       leading={<StatusLamp value={overallReach} kind="reach" />}
       description={
-        sessionActive
-          ? `Agent assessing / remediating (${sessionStatusLabel.toLowerCase()}). Approve steps in the session — no need to Sync kubeconfig manually.`
-          : allClear
-            ? 'Same signal as Verdict READY: usable, no repair needed.'
-            : 'Same signal as Verdict — ranked issues. Repair is not started from this page.'
+        allClear
+          ? 'Same signal as Verdict READY: usable, no repair needed.'
+          : 'Same signal as Verdict — ranked issues. Repair is not started from this page.'
       }
       actions={actions}
       bodyPadding={allClear && pods.length === 0 ? 'default' : 'none'}

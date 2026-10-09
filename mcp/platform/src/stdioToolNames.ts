@@ -40,8 +40,6 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'poweroff_compute_node',
   'get_agent_bridge',
   'get_trust_matrix',
-  'get_remediation_health',
-  'list_remediation_jobs',
   'get_stg_smoke',
   'get_delivery_revisions',
   'get_commit_lineage',

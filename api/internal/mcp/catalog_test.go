@@ -61,8 +61,6 @@ var stdioMirroredTools = map[string]bool{
 	"poweroff_compute_node":      true,
 	"get_agent_bridge":           true,
 	"get_trust_matrix":           true,
-	"get_remediation_health":     true,
-	"list_remediation_jobs":      true,
 	"get_stg_smoke":              true,
 	"get_delivery_revisions":     true,
 	"get_commit_lineage":         true,
@@ -103,7 +101,7 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 50 {
+	if len(stdioMirroredTools) != 48 {
 		t.Errorf("stdioMirroredTools size=%d want 50 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }

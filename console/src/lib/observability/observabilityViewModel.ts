@@ -8,7 +8,7 @@ import type { ClusterMetricsResponse, ClusterObservabilityResponse, TelemetryMet
 import type { CodeHealthResponse } from '@/api/codeHealth'
 import type { SelfHealthResponse } from '@/api/matrixTypes'
 import type { NetworkSlaResponse } from '@/api/networkTypes'
-import type { RemediationHealthResponse } from '@/api/remediationTypes'
+import { bridgeRunners } from '@/lib/agent/macHostRole'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import { resolveOpsToolUrl } from '@/lib/architecture/opsToolRackCatalog'
@@ -82,7 +82,6 @@ export type ObservabilityViewModelInput = {
   bus?: BusHealthInput | null
   ibGateway?: IbGatewayStatusResponse | null
   networkSla?: NetworkSlaResponse | null
-  remediation?: RemediationHealthResponse | null
   agentBridge?: AgentBridgeResponse | null
   selfHealth?: SelfHealthResponse | null
   codeHealth?: CodeHealthResponse | null
@@ -627,39 +626,32 @@ function evaluateIbGateway(
   return result
 }
 
-function evaluateRemediation(
-  rem: RemediationHealthResponse | null | undefined,
+function evaluateOperatorPlane(
+  bridge: AgentBridgeResponse | null | undefined,
 ): EvaluatedSignal {
   const def = getSignalDef('engineer.remediation-runner')!
-  if (rem == null) {
-    return { def, state: 'unknown', summary: 'Remediation health missing', env: 'shared' }
+  if (bridge == null) {
+    return { def, state: 'unknown', summary: 'operator-plane status missing', env: 'shared' }
   }
-  const status =
-    (rem as { status?: string }).status ??
-    (rem as { reachability?: string }).reachability ??
-    (rem as { healthy?: boolean }).healthy
-  if (typeof status === 'boolean') {
-    return {
-      def,
-      state: status ? 'healthy' : 'degraded',
-      summary: status ? 'Remediation runner healthy' : 'Remediation runner unhealthy',
-      env: 'shared',
-    }
+  const probes = bridgeRunners(bridge)
+  if (probes.length === 0) {
+    return { def, state: 'unknown', summary: 'operator-plane status missing', env: 'shared' }
   }
-  if (status == null) {
-    return { def, state: 'unknown', summary: 'Remediation status unrecognized', env: 'shared' }
+  const up = probes.filter(p => p.status === 'ok').length
+  if (up === probes.length) {
+    const versions = probes.map(p => p.version).filter((v): v is string => v != null && v !== '')
+    const version = versions.length > 0 ? ` ${versions.join(', ')}` : ''
+    return { def, state: 'healthy', summary: `operator-plane ok${version}`, env: 'shared' }
   }
-  const r = String(status).toLowerCase()
-  if (r === 'ok' || r === 'healthy' || r === 'ready') {
-    return { def, state: 'healthy', summary: `Remediation ${status}`, env: 'shared' }
+  if (up === 0) {
+    return { def, state: 'critical', summary: 'operator-plane down', env: 'shared' }
   }
-  if (r === 'degraded' || r === 'busy') {
-    return { def, state: 'degraded', summary: `Remediation ${status}`, env: 'shared' }
+  return {
+    def,
+    state: 'degraded',
+    summary: `operator-plane ${up}/${probes.length} up`,
+    env: 'shared',
   }
-  if (r === 'fail' || r === 'down' || r === 'unavailable') {
-    return { def, state: 'critical', summary: `Remediation ${status}`, env: 'shared' }
-  }
-  return { def, state: 'unknown', summary: `Remediation ${status}`, env: 'shared' }
 }
 
 function evaluateAgentBridge(
@@ -935,7 +927,7 @@ export function buildObservabilityViewModel(
   signals.push(evaluateIbGateway(input.ibGateway, input.telemetryMetrics))
 
   // Engineer
-  signals.push(evaluateRemediation(input.remediation))
+  signals.push(evaluateOperatorPlane(input.agentBridge))
   signals.push(evaluateAgentBridge(input.agentBridge, input.selfHealth))
 
   // Code health — code assets, not runtime. NOT OBSERVED until scanned.

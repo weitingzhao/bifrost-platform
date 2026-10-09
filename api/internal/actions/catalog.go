@@ -306,6 +306,11 @@ var catalog = []Action{
 		Method:      "DELETE", Pattern: "/api/v1/plugins/market-data/api/*",
 		Params: []Param{{Name: "path", Type: "string", Required: true, In: "path"}},
 	},
+	{
+		ID: "rolling_reboot", Tier: TierD,
+		Description: "Record approval for a weekend node rolling reboot. Tier D. The platform does not reboot nodes; after approval, run scripts/k3s/rolling-reboot.sh --execute --approval <id>.",
+		Params:      []Param{},
+	},
 }
 
 func classifyApp(_ context.Context, params map[string]any) Tier {

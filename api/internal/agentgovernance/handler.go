@@ -6,17 +6,16 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 type Handler struct {
-	store     *remediation.JobStore
+	store     *OutcomeStore
 	overrides TrustOverrideStore
 }
 
-func NewHandler(store *remediation.JobStore) *Handler {
+func NewHandler() *Handler {
 	_ = ensureAgentTasks()
-	return &Handler{store: store, overrides: NewYAMLTrustOverrideStore("config/trust-overrides.yaml")}
+	return &Handler{store: NewOutcomeStore(), overrides: NewYAMLTrustOverrideStore("config/trust-overrides.yaml")}
 }
 
 // UseTrustOverrideStore points this handler at the release file.

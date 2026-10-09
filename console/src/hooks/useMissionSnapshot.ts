@@ -4,7 +4,6 @@ import { fetchCluster } from '@/api/cluster'
 import { fetchSupplyChain } from '@/api/delivery'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchSelfHealth, fetchMatrix, isAllMatrices } from '@/api/core'
-import { fetchRemediationHealth } from '@/api/remediation'
 import { fetchAgentBridge } from '@/api/agentOps'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import { useNowMs } from '@/hooks/useNowMs'
@@ -20,7 +19,6 @@ export type MissionSourceId =
   | 'supply-chain'
   | 'stg-smoke'
   | 'self-health'
-  | 'runner'
   | 'bridge'
   | 'matrix'
 
@@ -56,7 +54,7 @@ export function missionFreshness(
 export function useMissionSnapshot(): {
   snapshot: MissionSnapshot
   matrices: MatrixResponse[]
-  /** Oldest probe answer across the seven sources (0 = none yet). */
+  /** Oldest probe answer across the six sources (0 = none yet). */
   dataUpdatedAt: number
   /** Probes judged as unknown because they failed, aged out, or never answered. */
   staleSources: MissionSourceId[]
@@ -66,7 +64,6 @@ export function useMissionSnapshot(): {
   const supplyQ = useQuery({ queryKey: ['cockpit', 'supply-chain'], queryFn: fetchSupplyChain, refetchInterval: REFETCH })
   const stgQ = useQuery({ queryKey: ['cockpit', 'stg-smoke'], queryFn: fetchStgSmoke, refetchInterval: REFETCH })
   const selfQ = useQuery({ queryKey: ['cockpit', 'self-health'], queryFn: fetchSelfHealth, refetchInterval: REFETCH })
-  const runnerQ = useQuery({ queryKey: ['cockpit', 'runner'], queryFn: fetchRemediationHealth, refetchInterval: REFETCH })
   const bridgeQ = useQuery({ queryKey: ['cockpit', 'bridge'], queryFn: fetchAgentBridge, refetchInterval: REFETCH })
   const matrixQ = useQuery({ queryKey: ['cockpit', 'matrix'], queryFn: () => fetchMatrix(), refetchInterval: REFETCH })
 
@@ -77,7 +74,6 @@ export function useMissionSnapshot(): {
   const supply = freshQueryData(supplyQ, nowMs)
   const stg = freshQueryData(stgQ, nowMs)
   const self = freshQueryData(selfQ, nowMs)
-  const runner = freshQueryData(runnerQ, nowMs)
   const bridge = freshQueryData(bridgeQ, nowMs)
   const matrixData = freshQueryData(matrixQ, nowMs)
 
@@ -87,12 +83,12 @@ export function useMissionSnapshot(): {
   }, [matrixData])
 
   const snapshot = useMemo(
-    () => buildMissionSnapshot({ cluster, supply, stg, self, runner, bridge, matrices }),
-    [cluster, supply, stg, self, runner, bridge, matrices],
+    () => buildMissionSnapshot({ cluster, supply, stg, self, bridge, matrices }),
+    [cluster, supply, stg, self, bridge, matrices],
   )
 
   const isLoading =
-    clusterQ.isLoading || supplyQ.isLoading || stgQ.isLoading || selfQ.isLoading || runnerQ.isLoading || bridgeQ.isLoading || matrixQ.isLoading
+    clusterQ.isLoading || supplyQ.isLoading || stgQ.isLoading || selfQ.isLoading || bridgeQ.isLoading || matrixQ.isLoading
 
   const { dataUpdatedAt, staleSources } = missionFreshness(
     [
@@ -100,7 +96,6 @@ export function useMissionSnapshot(): {
       { id: 'supply-chain', q: supplyQ },
       { id: 'stg-smoke', q: stgQ },
       { id: 'self-health', q: selfQ },
-      { id: 'runner', q: runnerQ },
       { id: 'bridge', q: bridgeQ },
       { id: 'matrix', q: matrixQ },
     ],

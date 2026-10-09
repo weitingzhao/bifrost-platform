@@ -8,8 +8,6 @@ import type {
   ClusterWorkload,
 } from '@/api/clusterTypes'
 import type { QueryClient } from '@tanstack/react-query'
-import type { AmbientAgentJob } from '@/lib/agent/ambientAgent'
-import type { ClusterPageQueries } from './useClusterPageQueries'
 
 export interface ConfirmState {
   open: boolean
@@ -32,22 +30,7 @@ export interface ClusterPageMutationsInput {
   serviceReadiness: ClusterServiceReadinessResponse | undefined
   governance: ClusterGovernanceResponse | undefined
   postgresStatus: ClusterPostgresStatusResponse | undefined
-  queries: Pick<
-    ClusterPageQueries,
-    | 'nodesQuery'
-    | 'metricsQuery'
-    | 'namespacesQuery'
-    | 'placementQuery'
-    | 'observabilityQuery'
-    | 'workloadsQuery'
-    | 'remediationJobsQuery'
-  >
   selectedNs: string | null
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
-  /** Expand Operator Dock Agent tab — preferred over page RemediationPanel. */
-  onExpandAgentDock?: () => void
-  /** Select / observe a job in the ambient dock without re-bumping Activity. */
-  onSelectAgentJob?: (job: AmbientAgentJob) => void
   setDrawerOpen: (open: boolean) => void
   setSelectedPod: (name: string | null) => void
 }

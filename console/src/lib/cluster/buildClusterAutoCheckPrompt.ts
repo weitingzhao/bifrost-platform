@@ -7,7 +7,6 @@ import type {
 import type { MatrixResponse, SelfHealthResponse } from '@/api/matrixTypes'
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
-import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import { scopeForPlaybookId } from '@/lib/agent/playbookAgentPrompts'
 import {
   buildClusterFailureTriage,
@@ -28,7 +27,6 @@ export type ClusterAutoCheckEvidence = {
   supplyChain?: SupplyChainResponse
   stgSmoke?: StgSmokeResponse
   selfHealth?: SelfHealthResponse
-  runnerHealth?: RemediationHealthResponse
   agentBridge?: AgentBridgeResponse
   matrices?: MatrixResponse[]
   missionSnapshot?: MissionSnapshot
@@ -101,7 +99,6 @@ export function buildClusterAutoCheckBundle(input: ClusterAutoCheckEvidence): Cl
       supply: input.supplyChain,
       stg: input.stgSmoke,
       self: input.selfHealth,
-      runner: input.runnerHealth,
       bridge: input.agentBridge,
       matrices: input.matrices ?? [],
     })

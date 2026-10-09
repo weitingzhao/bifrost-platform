@@ -77,8 +77,8 @@ export function useAgentHostPulse(): AgentHostPulse {
     let hostMetaTitle = bridgeQuery.isError
       ? 'Agent bridge unavailable'
       : bridgeQuery.isLoading
-        ? 'Loading runner heartbeats…'
-        : 'No runners configured'
+        ? 'Loading operator-plane…'
+        : 'No operator-plane configured'
 
     if (bridgeReady && runners.length > 0) {
       const pMark = primary != null ? mark(primaryOk) : null

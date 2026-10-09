@@ -6,21 +6,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 // research-loop-batch sat at L1 with 0 consecutive successes across 694 recorded
 // jobs — not because it kept failing, but because nothing ever recorded a run
 // for it. Three successes are needed; the counter could not move at all.
-// The job store writes to disk, and with no override that disk is the
-// developer's real store — three fake successes for research-loop-batch landed
-// in it and would have shown up in the live trust matrix. Each test gets its
-// own directory.
+// The outcome store writes to disk. Each test gets its own directory.
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 	t.Setenv("PLATFORM_REMEDIATION_JOBS_DIR", t.TempDir())
 	t.Setenv("PLATFORM_GOVERNANCE_DIR", t.TempDir())
-	return NewHandler(remediation.NewJobStore())
+	return NewHandler()
 }
 
 func post(t *testing.T, h *Handler, body string) *httptest.ResponseRecorder {

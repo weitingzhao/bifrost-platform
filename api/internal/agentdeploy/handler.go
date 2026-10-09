@@ -108,15 +108,17 @@ func remoteHostPart(remote string) string {
 	return s
 }
 
-// remoteToRunnerURL maps an SSH target to its runner base URL for peer wiring.
-func remoteToRunnerURL(remote string) string {
+// remoteToPlaneURL maps an SSH target to its operator-plane base URL.
+// PEER_URL keeps its name; the value is the plane (:8783), which the
+// peer watchdog probes.
+func remoteToPlaneURL(remote string) string {
 	host := remoteHostPart(remote)
 	if host == "" {
 		return ""
 	}
-	port := strings.TrimSpace(os.Getenv("REMEDIATION_RUNNER_PORT"))
+	port := strings.TrimSpace(os.Getenv("OPERATOR_PLANE_PORT"))
 	if port == "" {
-		port = "8781"
+		port = "8783"
 	}
 	return fmt.Sprintf("http://%s:%s", host, port)
 }
@@ -131,7 +133,7 @@ func deployTargets() []DeployTarget {
 	p := DeployTarget{ID: "primary", Role: "primary", Remote: primary}
 	if standby != "" && standby != primary {
 		p.PeerSSH = standby
-		p.PeerURL = remoteToRunnerURL(standby)
+		p.PeerURL = remoteToPlaneURL(standby)
 	}
 	targets = append(targets, p)
 
@@ -141,7 +143,7 @@ func deployTargets() []DeployTarget {
 			Role:    "standby",
 			Remote:  standby,
 			PeerSSH: primary,
-			PeerURL: remoteToRunnerURL(primary),
+			PeerURL: remoteToPlaneURL(primary),
 		})
 	}
 	return targets

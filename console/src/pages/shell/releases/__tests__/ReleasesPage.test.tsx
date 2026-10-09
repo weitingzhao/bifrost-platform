@@ -51,6 +51,14 @@ function installFetch() {
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
+      if (url.includes('/api/v1/releases/running-images')) {
+        return json({
+          cells: [
+            { lane: 'research', env: 'stg', absent: true, text: 'No STG' },
+            { lane: 'research', env: 'prod', text: 'research-api 0.205.0', title: 'research-api 0.205.0' },
+          ],
+        })
+      }
       if (url.includes('/api/v1/releases')) {
         return json({
           status: {},
@@ -202,7 +210,8 @@ describe('ReleasesPage', () => {
     })
 
     const research = screen.getByText('Research').closest('tr')
-    expect(research?.textContent).toContain('—')
+    expect(research?.textContent).toContain('No STG')
+    expect(research?.textContent).toContain('research-api 0.205.0')
     expect(research?.textContent).not.toContain('2026.10.07')
 
     const agent = screen.getByText('Mac mini agent').closest('tr')

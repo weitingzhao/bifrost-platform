@@ -2,7 +2,7 @@
  * Engineer Fleet cell (Mac seat / automation).
  */
 import type { AgentBridgeResponse } from '@/api/agentTypes'
-import type { RemediationHealthResponse } from '@/api/remediationTypes'
+import { bridgeRunners } from '@/lib/agent/macHostRole'
 import { agentSignal, type Signal } from '@/lib/control-room/missionSignals'
 import {
   type FleetCell,
@@ -13,39 +13,37 @@ import { signalFromStandards, std } from '@/lib/control-room/fleetSnapshot/stand
 import { cellKey, normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot/nav'
 
 export function buildEngineerCell(input: {
-  runner?: RemediationHealthResponse
   bridge?: AgentBridgeResponse
   viewerEnv?: FleetViewerEnv
   groundBridgeReady?: boolean
 }): FleetCell {
-  const state = agentSignal(input.runner, input.bridge)
+  const state = agentSignal(input.bridge)
   const viewerEnv = normalizeViewerEnv(input.viewerEnv)
   const viewerRemote = viewerEnv === 'prod' || viewerEnv === 'stg'
   const probeBridge = input.bridge?.satellite_probe_bridge
   const bridge = input.bridge
-  const runners = bridge?.runners ?? []
+  const probes = bridgeRunners(bridge)
 
-  let runnerSig: Signal
-  let runnerReason: string
-  if (runners.length >= 2) {
-    const upCount = runners.filter(r => r.status === 'ok').length
-    if (upCount === runners.length) {
-      runnerSig = 'ok'
-      runnerReason = `Runners ${upCount}/${runners.length} (HA)`
+  let planeSig: Signal
+  let planeReason: string
+  if (probes.length >= 2) {
+    const upCount = probes.filter(r => r.status === 'ok').length
+    if (upCount === probes.length) {
+      planeSig = 'ok'
+      planeReason = `operator-plane ${upCount}/${probes.length}`
     } else if (upCount === 0) {
-      runnerSig = 'fail'
-      runnerReason = 'All runners down'
+      planeSig = 'fail'
+      planeReason = 'operator-plane down'
     } else {
-      runnerSig = 'degraded'
-      runnerReason = `Runner failover active (${upCount}/${runners.length} up)`
+      planeSig = 'degraded'
+      planeReason = `operator-plane ${upCount}/${probes.length} up`
     }
-  } else if (runners.length === 1) {
-    runnerSig = runners[0].status === 'ok' ? 'ok' : 'fail'
-    runnerReason = runnerSig === 'ok' ? 'Runner up (no standby)' : 'Runner down'
+  } else if (probes.length === 1) {
+    planeSig = probes[0].status === 'ok' ? 'ok' : 'fail'
+    planeReason = planeSig === 'ok' ? 'operator-plane up' : 'operator-plane down'
   } else {
-    runnerSig = input.runner == null ? 'unknown' : input.runner.status === 'ok' ? 'ok' : 'fail'
-    runnerReason =
-      runnerSig === 'ok' ? 'Runner up' : runnerSig === 'unknown' ? 'Runner status unknown' : 'Runner down'
+    planeSig = 'unknown'
+    planeReason = 'operator-plane status unknown'
   }
 
   const gb = bridge?.git_bridge
@@ -93,7 +91,7 @@ export function buildEngineerCell(input: {
   }
 
   const standards: FleetStandard[] = [
-    std('runners', 'Agent runners (HA)', runnerSig, runnerReason, 'automation'),
+    std('runners', 'operator-plane', planeSig, planeReason, 'automation'),
     std('git-bridge', 'Git bridge clean', gitSig, gitReason, 'automation'),
     std('mac-seat', 'Mac seat · probe-bridge', macSig, macReason, 'seat', !viewerRemote),
   ]
@@ -108,9 +106,8 @@ export function buildEngineerCell(input: {
           ? 'drift'
           : state.value
 
-  // Agent Fix only when at least one runner can execute (bridge-down is auto-fixable via bdev).
-  const runnersCanAct = runnerSig === 'ok' || runnerSig === 'degraded'
-  const canAgentFix = runnersCanAct && signal !== 'ok' && signal !== 'unknown'
+  const planeCanAct = planeSig === 'ok' || planeSig === 'degraded'
+  const canAgentFix = planeCanAct && signal !== 'ok' && signal !== 'unknown'
 
   return {
     key: cellKey('engineer', 'span'),
@@ -124,8 +121,8 @@ export function buildEngineerCell(input: {
     standards,
     fixScope: canAgentFix ? 'operator-plane-remediate' : null,
     agentFixEnabled: canAgentFix,
-    agentFixDisabledReason: !runnersCanAct
-      ? 'Runners down — recover remediation runners on Operator Plane before Agent Fix'
+    agentFixDisabledReason: !planeCanAct
+      ? 'operator-plane down — recover operator-plane before Agent Fix'
       : signal === 'ok'
         ? undefined
         : signal === 'unknown'

@@ -1,0 +1,29 @@
+# Which live workloads the Releases page reads for a version.
+# Platform does not know these applications; this file is the list.
+# An env that is absent here is "No STG" (or "No PROD") on the page,
+# not a missing-data dash.
+lanes:
+  - lane: research
+    envs:
+      - env: prod
+        deployments:
+          - namespace: research
+            name: research-api
+  - lane: market-data
+    envs:
+      - env: prod
+        deployments:
+          - namespace: plugin-market-data
+            name: market-data-api
+          - namespace: plugin-flex-query
+            name: flex-query-api
+          - namespace: data
+            name: ib-gateway
+  - lane: agent
+    envs:
+      - env: prod
+        planes:
+          - name: primary
+            url: http://192.168.10.50:8783
+          - name: standby
+            url: http://192.168.10.52:8783

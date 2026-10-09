@@ -1,8 +1,8 @@
 import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { ClusterSummary } from '@/api/clusterTypes'
 import type { MatrixResponse, Reachability, SelfHealthResponse, VerifyPayloadResponse } from '@/api/matrixTypes'
-import type { RemediationHealthResponse } from '@/api/remediationTypes'
 import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
+import { bridgeRunners } from '@/lib/agent/macHostRole'
 import { formatVerifyPayloadGuidance } from '@/lib/control-room/payloadVerification'
 import { tradeReadinessTargets } from '@/lib/control-room/matrixSummary'
 import { formatPipelineRunStatus, isPipelineRunFailed } from '@/lib/delivery/pipelineRunAskPack'
@@ -145,34 +145,32 @@ export function controlSignal(d?: SelfHealthResponse): ModuleState {
   }
 }
 
-export function agentSignal(runner?: RemediationHealthResponse, bridge?: AgentBridgeResponse): ModuleState {
-  // Prefer dual-runner heartbeat from the bridge (Active-Standby HA) when available.
-  const runners = bridge?.runners ?? []
-  let runnerSig: Signal
-  let runnerLabel: string
-  if (runners.length >= 2) {
-    const upCount = runners.filter(r => r.status === 'ok').length
-    if (upCount === runners.length) {
-      runnerSig = 'ok'
-      runnerLabel = `Runners ${upCount}/${runners.length} (HA)`
+export function agentSignal(bridge?: AgentBridgeResponse): ModuleState {
+  const probes = bridgeRunners(bridge)
+  let planeSig: Signal
+  let planeLabel: string
+  if (probes.length >= 2) {
+    const upCount = probes.filter(r => r.status === 'ok').length
+    if (upCount === probes.length) {
+      planeSig = 'ok'
+      planeLabel = `operator-plane ${upCount}/${probes.length}`
     } else if (upCount === 0) {
-      runnerSig = 'fail'
-      runnerLabel = 'Runners down'
+      planeSig = 'fail'
+      planeLabel = 'operator-plane down'
     } else {
-      // one down — failover keeps service, but redundancy is lost
-      runnerSig = 'degraded'
-      const down = runners
+      planeSig = 'degraded'
+      const down = probes
         .filter(r => r.status !== 'ok')
         .map(r => r.role ?? r.url)
         .join(', ')
-      runnerLabel = `Runner ${down} down — failover active`
+      planeLabel = `operator-plane ${down} down`
     }
-  } else if (runners.length === 1) {
-    runnerSig = runners[0].status === 'ok' ? 'ok' : 'fail'
-    runnerLabel = runnerSig === 'ok' ? 'Runner up (no standby)' : 'Runner down'
+  } else if (probes.length === 1) {
+    planeSig = probes[0].status === 'ok' ? 'ok' : 'fail'
+    planeLabel = planeSig === 'ok' ? 'operator-plane up' : 'operator-plane down'
   } else {
-    runnerSig = runner == null ? 'unknown' : runner.status === 'ok' ? 'ok' : 'fail'
-    runnerLabel = runnerSig === 'ok' ? 'Runner up' : runnerSig === 'unknown' ? 'Runner ?' : 'Runner down'
+    planeSig = 'unknown'
+    planeLabel = 'operator-plane ?'
   }
 
   const gb = bridge?.git_bridge
@@ -182,7 +180,7 @@ export function agentSignal(runner?: RemediationHealthResponse, bridge?: AgentBr
   // must not degrade ROOM POSTURE / Mission CAUTION (consoleSeatCatalog).
   const bridgeSig: Signal =
     gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : 'ok'
-  const parts: string[] = [runnerLabel]
+  const parts: string[] = [planeLabel]
   parts.push(
     bridgeSig === 'unknown'
       ? 'Bridge ?'
@@ -192,13 +190,13 @@ export function agentSignal(runner?: RemediationHealthResponse, bridge?: AgentBr
           ? `Bridge ${dirty} dirty`
           : 'Bridge clean',
   )
-  const signal = worst(runnerSig, bridgeSig)
-  const runnersUp = runners.filter(r => r.status === 'ok').length
+  const signal = worst(planeSig, bridgeSig)
+  const planesUp = probes.filter(r => r.status === 'ok').length
   const value =
-    runnerSig === 'fail'
+    planeSig === 'fail'
       ? 'down'
-      : runners.length >= 2
-        ? `${runnersUp}/${runners.length} up`
+      : probes.length >= 2
+        ? `${planesUp}/${probes.length} up`
         : dirty > 0
           ? `${dirty} dirty`
           : signal === 'unknown'
@@ -383,7 +381,6 @@ export function buildMissionSnapshot(input: {
   supply?: SupplyChainResponse
   stg?: StgSmokeResponse
   self?: SelfHealthResponse
-  runner?: RemediationHealthResponse
   bridge?: AgentBridgeResponse
   matrices: MatrixResponse[]
 }): MissionSnapshot {
@@ -393,7 +390,7 @@ export function buildMissionSnapshot(input: {
   const infra = infraSignal(input.cluster)
   const release = releaseSignal(input.supply, input.stg)
   const control = controlSignal(input.self)
-  const agent = agentSignal(input.runner, input.bridge)
+  const agent = agentSignal(input.bridge)
   const tradeDev = tradeEnvSignal(dev)
   const tradeStg = stgMatrix
     ? tradeEnvSignal(stgMatrix)

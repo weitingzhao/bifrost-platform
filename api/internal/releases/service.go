@@ -43,6 +43,7 @@ type TickResult struct {
 type Service struct {
 	rules     Rules
 	rulesPath string
+	configDir string
 	rulesErr  error
 	clients   Clients
 	now       func() time.Time
@@ -59,7 +60,7 @@ func NewService(configDir string, clients Clients) *Service {
 	if rules.Namespace == "" {
 		rules.Namespace = "cicd"
 	}
-	return &Service{rules: rules, rulesPath: path, rulesErr: err, clients: clients,
+	return &Service{rules: rules, rulesPath: path, configDir: configDir, rulesErr: err, clients: clients,
 		now: func() time.Time { return time.Now().UTC() }}
 }
 

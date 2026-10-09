@@ -2,15 +2,29 @@ package operatorplane
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
-// The plane is mounted both in platform-api and off-cluster, so its route table
-// is the only place its auth is decided. Every non-GET entry actuates something
-// (a runner, a deploy, a skill, an insight record) and must be operator gated.
-func TestPlaneWritesRequireOperator(t *testing.T) {
+// The out-of-band plane no longer actuates. Operator-gated patrol writes are
+// served by platform-api, not forwarded here.
+func TestPlaneRouteTableHasNoOperatorRoutes(t *testing.T) {
+	if len(planeRoutes()) == 0 {
+		t.Fatal("plane route table is empty")
+	}
+	for _, rt := range planeRoutes() {
+		if rt.operator {
+			t.Errorf("%s %s is operator gated; the plane must not serve operator routes", rt.method, rt.pattern)
+		}
+		if strings.HasPrefix(rt.pattern, "/patrol") {
+			t.Errorf("%s %s is a patrol route; platform-api serves those locally", rt.method, rt.pattern)
+		}
+	}
+}
+
+func TestPatrolWritesRequireOperator(t *testing.T) {
 	var writes int
-	for _, rt := range routeTable() {
+	for _, rt := range patrolRoutes() {
 		if rt.method == http.MethodGet {
 			continue
 		}
@@ -19,7 +33,7 @@ func TestPlaneWritesRequireOperator(t *testing.T) {
 			t.Errorf("%s %s is not operator gated", rt.method, rt.pattern)
 		}
 	}
-	if writes == 0 {
-		t.Fatal("route table has no write routes — the check is not seeing it")
+	if writes != 3 {
+		t.Fatalf("patrol write routes = %d, want 3", writes)
 	}
 }

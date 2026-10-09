@@ -3,11 +3,9 @@ package agentgovernance
 import (
 	"sort"
 	"time"
-
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
-func computeTrustMatrixRaw(jobs []remediation.Job) TrustMatrixResponse {
+func computeTrustMatrixRaw(jobs []Outcome) TrustMatrixResponse {
 	now := time.Now().UTC()
 	byScope := groupJobsByScope(jobs)
 	entries := make([]TrustMatrixEntry, 0, len(TaskCatalog()))
@@ -19,7 +17,7 @@ func computeTrustMatrixRaw(jobs []remediation.Job) TrustMatrixResponse {
 	return TrustMatrixResponse{
 		GeneratedAt: now,
 		Entries:     entries,
-		DataSource:  "remediation_jobs+catalog",
+		DataSource:  "skill_outcomes+catalog",
 	}
 }
 
@@ -63,8 +61,8 @@ func ApplyTrustOverrides(resp TrustMatrixResponse, overrides map[string]TrustOve
 	return out
 }
 
-func groupJobsByScope(jobs []remediation.Job) map[string][]remediation.Job {
-	m := make(map[string][]remediation.Job)
+func groupJobsByScope(jobs []Outcome) map[string][]Outcome {
+	m := make(map[string][]Outcome)
 	for _, j := range jobs {
 		scope := normalizeScope(j.Scope)
 		m[scope] = append(m[scope], j)
@@ -77,7 +75,7 @@ func groupJobsByScope(jobs []remediation.Job) map[string][]remediation.Job {
 	return m
 }
 
-func trustEntryForTask(task TaskDef, jobs []remediation.Job) TrustMatrixEntry {
+func trustEntryForTask(task TaskDef, jobs []Outcome) TrustMatrixEntry {
 	level := task.DefaultLevel
 	consecutive := consecutiveSuccesses(jobs)
 	demotion := demotionTriggered(jobs)
@@ -101,25 +99,25 @@ func trustEntryForTask(task TaskDef, jobs []remediation.Job) TrustMatrixEntry {
 	return entry
 }
 
-func consecutiveSuccesses(jobs []remediation.Job) int {
+func consecutiveSuccesses(jobs []Outcome) int {
 	n := 0
 	for _, j := range jobs {
-		if j.Status == remediation.JobDone {
+		if j.Status == OutcomeDone {
 			n++
 			continue
 		}
-		if j.Status == remediation.JobFailed {
+		if j.Status == OutcomeFailed {
 			break
 		}
 	}
 	return n
 }
 
-func demotionTriggered(jobs []remediation.Job) bool {
+func demotionTriggered(jobs []Outcome) bool {
 	if len(jobs) == 0 {
 		return false
 	}
-	if jobs[0].Status == remediation.JobFailed {
+	if jobs[0].Status == OutcomeFailed {
 		return true
 	}
 	fail := 0
@@ -128,7 +126,7 @@ func demotionTriggered(jobs []remediation.Job) bool {
 		limit = len(jobs)
 	}
 	for i := 0; i < limit; i++ {
-		if jobs[i].Status == remediation.JobFailed {
+		if jobs[i].Status == OutcomeFailed {
 			fail++
 		}
 	}

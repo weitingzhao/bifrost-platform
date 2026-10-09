@@ -1,7 +1,6 @@
 import type { MatrixResponse } from '@/api/matrixTypes'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import { AuditPageLink } from '@/components/AuditPageLink'
-import { ActiveAgentJobsStrip } from '@/components/control-room/ActiveAgentJobsStrip'
 import { AgentFocusDock } from '@/components/control-room/AgentFocusDock'
 import { BayDetailDrawer } from '@/components/control-room/BayDetailDrawer'
 import { CommandIntentStrip } from '@/components/control-room/CommandIntentStrip'
@@ -28,7 +27,6 @@ import { useMissionSnapshot } from '@/hooks/useMissionSnapshot'
 import { useMissionVerification } from '@/hooks/useMissionVerification'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
-import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import {
   buildControlRoomAgentPack,
   buildControlRoomDiagnosePrefill,
@@ -55,10 +53,7 @@ import {
   stashPromotePreflightPack,
 } from '@/lib/control-room/promoteCutover'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
-import { fetchRemediationJobs } from '@/api/remediation'
-import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 
 import type { ReleaseGateResponse, StgSmokeResponse, TierBStatusResponse } from '@/api/deliveryTypes'
 
@@ -162,28 +157,11 @@ export function ControlRoomPage({
     staleSources,
     isLoading: missionLoading,
   } = useMissionSnapshot()
-  const { canOperate } = usePlatformAuth()
-  const { banner, dismissBanner, pendingVerify } = useMissionVerification(canOperate && !statusSurface)
+  const { banner, dismissBanner, pendingVerify } = useMissionVerification()
   // Status does not render the operate bay. Skip retired queue and brief endpoints.
   const briefsQuery = usePendingDecisionBriefs({ enabled: !statusSurface })
   const networkProbe = useNetworkLiveProbe()
   const matrixList = liveMatrices.length > 0 ? liveMatrices : matrices
-
-  const jobsQuery = useQuery({
-    queryKey: ['remediation', 'jobs'],
-    queryFn: fetchRemediationJobs,
-    enabled: canOperate && !statusSurface,
-    refetchInterval: 10_000,
-  })
-  const activeAgentJobCount = findActiveRemediationJobs(jobsQuery.data?.jobs ?? []).length
-  const recentRemediationFail = useMemo(() => {
-    const jobs = jobsQuery.data?.jobs ?? []
-    if (jobs.length === 0) return false
-    const latest = [...jobs].sort(
-      (a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at),
-    )[0]
-    return latest?.status === 'failed' || latest?.phase === 'failed'
-  }, [jobsQuery.data?.jobs])
 
   const openAgentDeskPrefill = (opts?: { prefill: string }) => {
     if (opts?.prefill != null) onOpenAgentDesk?.({ prefill: opts.prefill })
@@ -223,7 +201,7 @@ export function ControlRoomPage({
         snapshot,
         operateOpenCount: 0,
         pendingBriefCount: briefsQuery.pendingCount,
-        activeAgentJobCount,
+        activeAgentJobCount: 0,
         networkProbe: showHealth ? networkProbe.probeReach : undefined,
         promoteLamp,
         showHealth,
@@ -231,7 +209,6 @@ export function ControlRoomPage({
     [
       snapshot,
       briefsQuery.pendingCount,
-      activeAgentJobCount,
       showHealth,
       networkProbe.probeReach,
       promoteLamp,
@@ -359,7 +336,6 @@ export function ControlRoomPage({
         <AgentTriadStrip
           onModeChange={onModeChange}
           operateQueueOpen={0}
-          recentRemediationFail={recentRemediationFail}
         />
       )}
 
@@ -438,11 +414,6 @@ export function ControlRoomPage({
             open
             onOpenChange={open => setBayOpen('operate', open)}
           >
-            <ActiveAgentJobsStrip
-              onOpenAgentDesk={jobId => onOpenAgentDesk?.(jobId)}
-              onOpenAudit={onOpenAudit}
-            />
-
             <CommandIntentStrip
               snapshot={snapshot}
               matrices={matrixList}

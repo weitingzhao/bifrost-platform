@@ -4,9 +4,7 @@ import { StatusLamp } from '@/components/StatusLamp'
 import { fetchClusterNodes } from '@/api/cluster'
 import { fetchMatrix, fetchSatelliteBusDeep, isAllMatrices, isAllSatelliteBusDeep } from '@/api/core'
 import { fetchNetworkAudit, fetchNetworkStatus } from '@/api/network'
-import { fetchRemediationJobs } from '@/api/remediation'
 import type { MatrixResponse, Reachability } from '@/api/matrixTypes'
-import { findActiveRemediationJobs } from '@/lib/remediation/remediationJobDisplay'
 import { signalColor, worst, type Signal } from '@/lib/control-room/missionSignals'
 
 const REFETCH_MS = 30_000
@@ -153,12 +151,6 @@ export function SpokeSignalCards({
     refetchInterval: REFETCH_MS,
   })
 
-  const jobsQuery = useQuery({
-    queryKey: ['spoke', 'remediation', 'jobs'],
-    queryFn: fetchRemediationJobs,
-    refetchInterval: REFETCH_MS,
-  })
-
   const matrices = (() => {
     const data = matrixQuery.data
     if (data == null) return [] as MatrixResponse[]
@@ -203,12 +195,8 @@ export function SpokeSignalCards({
       ? 'Probing…'
       : `${networkHost} · ${readyNodes}/${nodes.length} nodes`
 
-  const activeJobs = findActiveRemediationJobs(jobsQuery.data?.jobs ?? [])
   const engineerSignal = healthScoreSignal(undefined)
-
-  const engineerSummary = jobsQuery.isLoading
-    ? 'Probing…'
-    : `${activeJobs.length} active · score —`
+  const engineerSummary = 'Defects'
 
   return (
     <div className="mission-rocket-grid">
@@ -236,14 +224,10 @@ export function SpokeSignalCards({
         title="Engineer"
         signal={engineerSignal}
         summary={engineerSummary}
-        detail="Remediation jobs + cross-job defect health"
-        onOpen={activeJobs.length > 0 ? onOpenAgentDesk : onOpenDefects}
-        linkLabel={activeJobs.length > 0 ? 'Engineer → Agent Desk' : 'Engineer → Defects'}
-        secondaryLink={
-          activeJobs.length > 0
-            ? { label: 'Engineer → Defects', onOpen: onOpenDefects }
-            : { label: 'Engineer → Agent Desk', onOpen: onOpenAgentDesk }
-        }
+        detail="Cross-job defect health"
+        onOpen={onOpenDefects}
+        linkLabel="Engineer → Defects"
+        secondaryLink={{ label: 'Engineer → Agent Desk', onOpen: onOpenAgentDesk }}
       />
     </div>
   )

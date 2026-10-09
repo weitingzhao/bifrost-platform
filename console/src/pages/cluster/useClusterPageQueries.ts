@@ -17,7 +17,6 @@ import {
 } from '@/api/cluster'
 import { fetchPodLogs } from '@/api/clusterActuation'
 import { fetchContext } from '@/api/core'
-import { fetchRemediationJobs } from '@/api/remediation'
 import type { ClusterNode, ClusterWorkload } from '@/api/clusterTypes'
 import { DEPRECATED_NAMESPACES } from '@/components/cluster/ClusterWorkloadsExplorer'
 import { bifrostNamespacesReady, clusterBootstrapNeedsActions } from '@/lib/cluster/clusterBootstrap'
@@ -30,7 +29,6 @@ import {
 } from '@/lib/cluster/clusterCategories'
 import { buildClusterCategoryLlmContext } from '@/lib/cluster/buildClusterCategoryLlmContext'
 import { buildClusterLlmContext } from '@/lib/cluster/buildClusterLlmContext'
-import { findActiveRemediationJob } from '@/lib/remediation/remediationJobDisplay'
 
 export type CopyState = 'idle' | 'copied' | 'error'
 
@@ -127,17 +125,6 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     refetchInterval: 30_000,
     retry: false,
   })
-
-  const remediationJobsQuery = useQuery({
-    queryKey: ['remediation', 'jobs'],
-    queryFn: fetchRemediationJobs,
-    refetchInterval: 15_000,
-  })
-
-  const activeRemediationJob = useMemo(
-    () => findActiveRemediationJob(remediationJobsQuery.data?.jobs ?? []),
-    [remediationJobsQuery.data?.jobs],
-  )
 
   const clusterFetching =
     summaryQuery.isFetching ||
@@ -366,7 +353,6 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     serviceReadinessQuery,
     postgresStatusQuery,
     redisStatusQuery,
-    remediationJobsQuery,
     namespacesQuery,
     placementQuery,
     workloadsQuery,
@@ -377,7 +363,6 @@ export function useClusterPageQueries(input: ClusterPageQueriesInput) {
     selectedNodeLive,
     selectedWorkload,
     podEvents,
-    activeRemediationJob,
     clusterFetching,
     unreachable,
     metricsOk,

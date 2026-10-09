@@ -9,18 +9,15 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/mcp"
-	"github.com/weitingzhao/bifrost-platform/api/internal/remediation"
 )
 
 // Handler aggregates autonomous agent host + MCP bridge status for Console.
 type Handler struct {
-	runner     *remediation.RunnerClient
 	httpClient *http.Client
 }
 
 func NewHandler() *Handler {
 	return &Handler{
-		runner:     remediation.NewRunnerClient(),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
@@ -118,46 +115,18 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now().UTC()
 
-	healths := h.runner.HealthAll(ctx)
+	healths := probePlanes(ctx, h.httpClient)
 	runners := make([]RunnerStatus, 0, len(healths))
 	var primary RunnerStatus
-	var active RunnerStatus
 	for _, hh := range healths {
-		rs := RunnerStatus{
-			URL:          hh.URL,
-			Role:         hh.Role,
-			Status:       hh.Status,
-			Version:      hh.Version,
-			Active:       hh.Active,
-			CursorAPIKey: hh.CursorAPIKey,
-			Service:      hh.Service,
-			Error:        hh.Error,
-		}
-		runners = append(runners, rs)
+		runners = append(runners, hh)
 		if hh.Role == "primary" {
-			primary = rs
-		}
-		if hh.Active {
-			active = rs
+			primary = hh
 		}
 	}
-	// remediation_runner (back-compat) reflects the active endpoint, falling
-	// back to primary or the first entry.
-	runner := active
-	if runner.URL == "" {
-		runner = primary
-	}
+	runner := primary
 	if runner.URL == "" && len(runners) > 0 {
 		runner = runners[0]
-	}
-
-	// nightly drift only runs on the primary host
-	runnerURL := h.runner.PrimaryURL()
-	if runnerURL == "" {
-		runnerURL = strings.TrimRight(os.Getenv("REMEDIATION_RUNNER_URL"), "/")
-	}
-	if runnerURL == "" {
-		runnerURL = "http://127.0.0.1:8781"
 	}
 
 	hermes := probeHermesMcp(ctx, h.httpClient)
@@ -179,8 +148,6 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 
 	scriptPath := resolveMcpScriptPath()
 
-	nightly := probeNightlyReport(ctx, h.httpClient, runnerURL)
-
 	writeJSON(w, http.StatusOK, BridgeResponse{
 		GeneratedAt:          now,
 		RemediationRunner:    runner,
@@ -198,8 +165,68 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 			Transport:        "stdio",
 			ScriptPath:       scriptPath,
 		},
-		NightlyReport: nightly,
+		NightlyReport: NightlyHint{
+			Available: false,
+			Hint:      "remediation runner retired",
+		},
 	})
+}
+
+// probePlanes reads PLANE_HEALTH_URLS (comma-separated operator-plane bases).
+// The first URL is primary, the rest are standby. Each GET {url}/health
+// should return {"status":"ok","version":"<git sha>"}.
+func probePlanes(ctx context.Context, client *http.Client) []RunnerStatus {
+	raw := strings.TrimSpace(os.Getenv("PLANE_HEALTH_URLS"))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]RunnerStatus, 0, len(parts))
+	for i, part := range parts {
+		u := strings.TrimRight(strings.TrimSpace(part), "/")
+		if u == "" {
+			continue
+		}
+		role := "standby"
+		if i == 0 {
+			role = "primary"
+		}
+		seat := RunnerStatus{URL: u, Role: role, Service: "operator-plane"}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u+"/health", nil)
+		if err != nil {
+			seat.Status = "unavailable"
+			seat.Error = err.Error()
+			out = append(out, seat)
+			continue
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			seat.Status = "unavailable"
+			seat.Error = err.Error()
+			out = append(out, seat)
+			continue
+		}
+		var body struct {
+			Status  string `json:"status"`
+			Version string `json:"version"`
+		}
+		decErr := json.NewDecoder(resp.Body).Decode(&body)
+		_ = resp.Body.Close()
+		if resp.StatusCode >= 400 || decErr != nil || body.Status == "" {
+			seat.Status = "unavailable"
+			if decErr != nil {
+				seat.Error = decErr.Error()
+			} else {
+				seat.Error = resp.Status
+			}
+			out = append(out, seat)
+			continue
+		}
+		seat.Status = body.Status
+		seat.Version = body.Version
+		out = append(out, seat)
+	}
+	return out
 }
 
 func setGitBridgeAuth(req *http.Request) {
@@ -431,40 +458,6 @@ func probeNousHermes(ctx context.Context, client *http.Client) NousHermesStatus 
 		ActiveAgents:   body.ActiveAgents,
 		ActiveSessions: body.ActiveSessions,
 		DashboardURL:   url,
-	}
-}
-
-func probeNightlyReport(ctx context.Context, client *http.Client, runnerURL string) NightlyHint {
-	if runnerURL == "" {
-		return NightlyHint{
-			Available: false,
-			Hint:      "REMEDIATION_RUNNER_URL not set",
-		}
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, runnerURL+"/reports/latest", nil)
-	if err != nil {
-		return NightlyHint{Available: false, Hint: err.Error()}
-	}
-	remediation.SetRunnerAuth(req)
-	resp, err := client.Do(req)
-	if err != nil {
-		return NightlyHint{Available: false, Hint: "Runner report unreachable"}
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return NightlyHint{Available: false, Hint: "No nightly report on runner yet"}
-	}
-	var out struct {
-		Source    string `json:"source"`
-		UpdatedAt string `json:"updated_at"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return NightlyHint{Available: false, Hint: "Invalid report payload"}
-	}
-	return NightlyHint{
-		Available:   true,
-		GeneratedAt: out.UpdatedAt,
-		Source:      out.Source,
 	}
 }
 

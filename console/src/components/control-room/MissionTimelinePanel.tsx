@@ -3,14 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
 import { Bot, ChevronDown, ChevronRight, Clock, History, RotateCcw } from 'lucide-react'
 import { fetchAudit } from '@/api/cluster'
-import { fetchRemediationJobs } from '@/api/remediation'
 import type { MissionSnapshot } from '@/lib/control-room/missionSignals'
 import {
   buildMissionTimelineModel,
+  formatTimelineWhen,
   missionTimelineToneToLamp,
   type MissionTimelineEvent,
 } from '@/lib/control-room/missionTimeline'
-import { formatRemediationJobWhen } from '@/lib/remediation/remediationJobDisplay'
 
 interface MissionTimelinePanelProps {
   snapshot: MissionSnapshot
@@ -39,7 +38,7 @@ function TimelineEventRow({
         <div className="mission-timeline__event-head">
           <span className="mission-timeline__event-title">{event.title}</span>
           <time className="mission-timeline__event-time" dateTime={event.at}>
-            {formatRemediationJobWhen(event.at)}
+            {formatTimelineWhen(event.at)}
           </time>
         </div>
         <p className="mission-timeline__event-detail">{event.detail}</p>
@@ -74,11 +73,6 @@ export function MissionTimelinePanel({
 }: MissionTimelinePanelProps) {
   const [expanded, setExpanded] = useState(false)
 
-  const jobsQuery = useQuery({
-    queryKey: ['remediation', 'jobs'],
-    queryFn: fetchRemediationJobs,
-    refetchInterval: 15_000,
-  })
   const auditQuery = useQuery({
     queryKey: ['platform', 'audit'],
     queryFn: fetchAudit,
@@ -87,16 +81,15 @@ export function MissionTimelinePanel({
   const model = useMemo(
     () =>
       buildMissionTimelineModel({
-        jobs: jobsQuery.data?.jobs ?? [],
         auditRecords: auditQuery.data?.records ?? [],
         nightlyReport: undefined,
         snapshot,
         probeObservedAt,
       }),
-    [jobsQuery.data, auditQuery.data, snapshot, probeObservedAt],
+    [auditQuery.data, snapshot, probeObservedAt],
   )
 
-  const loading = jobsQuery.isLoading || auditQuery.isLoading
+  const loading = auditQuery.isLoading
 
   return (
     <section className="mission-timeline" aria-label="Mission timeline">
@@ -156,7 +149,7 @@ export function MissionTimelinePanel({
                     type="button"
                     className="mission-timeline__trajectory"
                     onClick={() => onOpenAgentDesk?.(traj.jobId)}
-                    title={`${traj.label} · ${traj.status} · started ${formatRemediationJobWhen(traj.startedAt)}`}
+                    title={`${traj.label} · ${traj.status} · started ${formatTimelineWhen(traj.startedAt)}`}
                   >
                     <RotateCcw size={12} />
                     <span className="mission-timeline__trajectory-label">Replay trajectory</span>

@@ -15,7 +15,6 @@ import { ClusterRedisDetailPanel } from '@/components/cluster/ClusterRedisDetail
 import { ClusterServiceReadinessPanel } from '@/components/cluster/ClusterServiceReadinessPanel'
 import { ClusterCategoryDetail } from '@/components/cluster/ClusterCategoryDetail'
 import { ClusterGovernancePanel } from '@/components/cluster/ClusterGovernancePanel'
-import { RemediationPanel } from '@/components/cluster/RemediationPanel'
 import { ClusterNodesTable } from '@/components/cluster/ClusterNodesTable'
 import { ClusterObservabilityPanel } from '@/components/cluster/ClusterObservabilityPanel'
 import { ClusterFacilityDetailBody } from '@/components/cluster/ClusterFacilityPanels'
@@ -53,7 +52,6 @@ export function ClusterPageMain({
   onOpenRuntimeMap,
   onOpenObservability,
   onOpenDelivery,
-  onOpenServerConsole,
   handleSelectNs,
   handleSelectPod,
   handleSelectNode,
@@ -87,7 +85,6 @@ export function ClusterPageMain({
   onOpenRuntimeMap?: () => void
   onOpenObservability?: () => void
   onOpenDelivery?: () => void
-  onOpenServerConsole?: () => void
   handleSelectNs: (name: string) => void
   handleSelectPod: (workload: ClusterWorkload) => void
   handleSelectNode: (node: ClusterNode) => void
@@ -276,19 +273,6 @@ export function ClusterPageMain({
         onScaleWorkload={
           selectedNode?.compute_managed ? m.handleScaleComputeWorkload : undefined
         }
-      />
-
-      <RemediationPanel
-        open={m.remediationPanelOpen}
-        jobId={m.remediationJobId}
-        initialJob={m.remediationJob}
-        stopping={m.remediationCancelMutation.isPending}
-        onStop={id => m.remediationCancelMutation.mutate(id)}
-        onComplete={m.handleRemediationComplete}
-        onOpenServerConsole={onOpenServerConsole}
-        onClose={() => {
-          m.setRemediationPanelOpen(false)
-        }}
       />
 
       <ClusterPageDialogs

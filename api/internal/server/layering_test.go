@@ -23,10 +23,8 @@ var operatorPlanePackages = []string{
 	"alertrelay",
 	"agentdeploy",
 	"agentgovernance",
-	"hermesgateway",
 	"launchd",
 	"patrol",
-	"remediation",
 }
 
 var clusterBoundImports = []string{

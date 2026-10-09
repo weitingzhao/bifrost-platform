@@ -43,3 +43,17 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)
 }
+
+// HandleRunningImages returns configured live image tags. See config/running-images.yaml.
+func (h *Handler) HandleRunningImages(w http.ResponseWriter, r *http.Request) {
+	cells, err := h.svc.RunningImages(r.Context())
+	body := map[string]any{"cells": cells}
+	if err != nil {
+		body["error"] = err.Error()
+		if cells == nil {
+			body["cells"] = []ImageCell{}
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(body)
+}
