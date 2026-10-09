@@ -211,9 +211,9 @@ export type ConsoleViewRow = {
 
 export const CONSOLE_VIEWS: ConsoleViewRow[] = [
   { view: 'Queue', plane: 'Engineer', purpose: 'Ops Desk queue — operate, remediate, work the operate queue (legacy Agent Desk)' },
-  { view: 'Analysis Workspace', plane: 'Engineer', purpose: 'Analysis Desk V1 — Hermes status, Chat UI, First Task (D10 read-only)' },
-  { view: 'Insight Log', plane: 'Engineer', purpose: 'Hermes insight history' },
-  { view: 'Hermes Status', plane: 'Engineer', purpose: 'Nous Hermes gateway lamp, model, version, MCP tools' },
+  { view: 'Analysis Workspace', plane: 'Engineer', purpose: 'Analysis Desk V1 — operator plane, Chat UI, First Task (D10 read-only)' },
+  { view: 'Insight Log', plane: 'Engineer', purpose: 'Insight history' },
+  { view: 'Operator plane', plane: 'Engineer', purpose: 'Mac mini operator-plane and peer-watchdog; .50 relays alerts' },
   { view: 'Agent Protocol', plane: 'Governance', purpose: 'Agent doctrine — modes, architecture, forbidden actions' },
   { view: 'MCP Contract', plane: 'Governance', purpose: 'Agent tool contract — read / routine / confirm / forbidden' },
   { view: 'Skills & Schedules', plane: 'Engineer', purpose: 'Autonomous skill registry and triggers' },
@@ -289,8 +289,8 @@ export const TASK_MODE_BLUEPRINT = {
     'Ops / Dev Mode: Launch and primary Mission actions live on TCC Ops Desk Board + release tabs — Control Room is posture deep-dive (ROOM POSTURE + bays), not a second Mission home. ' +
     'Ops uses Fleet + Queue + Patrol on one board (Discover → Remediate → Deploy → Patrol → Clear). ' +
     'unavailable cells are display-only (Excluded from GO); Prod pins clusters.yaml viewer_env=prod (OPS_VIEWER_ENV overrides). ' +
-    'Analysis Desk V1 is Hermes status + Chat UI + First Task (read-only, D10 blocked; no stock-analysis engine). ' +
-    'Patrol skills stay on Ops Desk (Cursor SDK nightshift via GET /api/v1/patrol/*) — distinct from Hermes Analysis. ' +
+    'Analysis Desk V1 is operator plane + Chat UI + First Task (read-only, D10 blocked; no stock-analysis engine). ' +
+    'Patrol skills stay on Ops Desk (Cursor SDK nightshift via GET /api/v1/patrol/*) — distinct from Analysis. ' +
     'Nav lens is focused-only (no More domains); phase-aware dimming highlights phase-relevant tabs. ' +
     'System Mode may land Control Room for panoramic posture; Observability remains read-only health.',
   modes: [
@@ -436,7 +436,7 @@ export const AI_PLATFORM_CAPABILITIES: AiCapability[] = [
       'Config drift detection via ArgoCD diff + periodic make prod-health',
       'Migrate-wave reconcile — nightly drift L3 (agent/drift/scan_layer3.py) checks catalog waves ≟ spine progress',
       'Firewall policy drift — audit Bifrost zones/policies against networkUpgradeCatalog.ts FIREWALL_RULES',
-      'Desk landing — Ops (queue + Patrol Cursor SDK) / Analysis (Hermes premium, D10 blocked)',
+      'Desk landing — Ops (queue + Patrol Cursor SDK) / Analysis (operator plane, D10 blocked)',
     ],
   },
   {
@@ -494,7 +494,7 @@ export const AI_PLATFORM_SUCCESS: AiSuccessCriterion[] = [
   {
     area: 'Three Desks',
     criterion:
-      'Build / Ops / Analysis share Console Task Mode; Patrol = Cursor SDK nightshift on Ops Desk; Hermes = Analysis Desk premium analysis (Trade later); D10 blocked',
+      'Build / Ops / Analysis share Console Task Mode; Patrol = Cursor SDK nightshift on Ops Desk; Analysis Desk is read-only (Trade later); D10 blocked',
   },
 ]
 

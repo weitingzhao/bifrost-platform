@@ -58,7 +58,7 @@ const ALERT_RULES: AlertRule[] = [
   { nameMatch: /Redis|CNPG|Postgres|PostgreSQL|DiskSpace/i, domain: 'ground-systems', severity: 'critical' },
   { nameMatch: /Http5xx|ApiError|ApiLatency|TradeApi/i, domain: 'satellite', severity: 'critical' },
   { nameMatch: /IbGateway|IBGateway|TwsDisconnect/i, domain: 'subcontractors', severity: 'critical' },
-  { nameMatch: /AgentBridge|RemediationRunner|Hermes/i, domain: 'engineer', severity: 'warning' },
+  { nameMatch: /AgentBridge|OperatorPlane/i, domain: 'engineer', severity: 'warning' },
 ]
 
 function severityFromLabels(labels: Record<string, string>): AlertSeverity | null {

@@ -206,7 +206,7 @@ export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   'nightly-health': 'mission-control',
   'defect-pattern-remediate': 'mission-control',
   'post-fix-verification': 'mission-control',
-  'hermes-first-task': 'mission-control',
+  'operator-plane-brief': 'mission-control',
 }
 
 /** AgentTaskDomain (task subject) → System Domain fallback — not a substitute for SCOPE map. */

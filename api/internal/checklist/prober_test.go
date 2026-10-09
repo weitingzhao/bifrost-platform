@@ -33,7 +33,6 @@ func fakePlatform(t *testing.T, override map[string]string) *httptest.Server {
 		"/api/v1/delivery/pipelines":         `{"reachability":"ok","detail":"16 pipeline(s) in cicd"}`,
 		"/api/v1/delivery/stg/smoke":         `{"reachability":"ok","detail":"stg 6/6 API domains reachable"}`,
 		"/api/v1/plugins/market-data/status": `{"reachability":"ok","summary":"2/2 deployments ready"}`,
-		"/api/v1/agent/hermes/readiness":     `{"ready":false,"blockers":["Hermes gateway not running"]}`,
 	}
 	for k, v := range override {
 		bodies[k] = v

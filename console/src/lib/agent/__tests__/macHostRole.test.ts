@@ -13,17 +13,9 @@ import {
 function stubBridge(partial: Partial<AgentBridgeResponse>): AgentBridgeResponse {
   return {
     generated_at: '2026-07-24T00:00:00Z',
-    remediation_runner: { url: 'http://192.168.10.50:8781', role: 'primary', status: 'ok' },
+    remediation_runner: { url: 'http://192.168.10.50:8790', role: 'primary', status: 'ok' },
     git_bridge: { status: 'ok' },
     satellite_probe_bridge: { status: 'not_configured' },
-    hermes_mcp: { status: 'not_configured' },
-    nous_hermes: {
-      status: 'not_configured',
-      gateway_running: false,
-      active_agents: 0,
-      active_sessions: 0,
-      mcp_tool_count: 0,
-    },
     platform_mcp: {
       server_name: 'test',
       server_version: '0',
@@ -40,7 +32,7 @@ function stubBridge(partial: Partial<AgentBridgeResponse>): AgentBridgeResponse 
 
 describe('macHostRole', () => {
   it('parses runner URL and SSH remote host keys', () => {
-    expect(hostKeyFromEndpoint('http://192.168.10.50:8781')).toBe('192.168.10.50')
+    expect(hostKeyFromEndpoint('http://192.168.10.50:8790')).toBe('192.168.10.50')
     expect(hostKeyFromEndpoint('vision@192.168.10.52')).toBe('192.168.10.52')
     expect(hostKeyFromEndpoint('')).toBeNull()
   })
@@ -48,8 +40,8 @@ describe('macHostRole', () => {
   it('maps only bridge runners with roles (no blind LAN tag)', () => {
     const bridge = stubBridge({
       runners: [
-        { url: 'http://192.168.10.50:8781', role: 'primary', status: 'ok' },
-        { url: 'http://192.168.10.52:8781', role: 'standby', status: 'unavailable' },
+        { url: 'http://192.168.10.50:8790', role: 'primary', status: 'ok' },
+        { url: 'http://192.168.10.52:8790', role: 'standby', status: 'unavailable' },
       ],
     })
     const map = buildMacAgentRoleByHost(bridge)
@@ -68,8 +60,8 @@ describe('macHostRole', () => {
   it('finds runner for deploy target by role then host', () => {
     const bridge = stubBridge({
       runners: [
-        { url: 'http://192.168.10.50:8781', role: 'primary', status: 'ok' },
-        { url: 'http://192.168.10.52:8781', role: 'standby', status: 'unavailable' },
+        { url: 'http://192.168.10.50:8790', role: 'primary', status: 'ok' },
+        { url: 'http://192.168.10.52:8790', role: 'standby', status: 'unavailable' },
       ],
     })
     expect(

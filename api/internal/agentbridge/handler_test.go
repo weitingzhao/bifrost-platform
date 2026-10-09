@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -15,8 +14,6 @@ func clearAgentBridgeEnv(t *testing.T) {
 	t.Helper()
 	for _, k := range []string{
 		"GIT_BRIDGE_URL", "SATELLITE_PROBE_BRIDGE_URL",
-		"HERMES_GATEWAY_URL", "HERMES_MCP_URL",
-		"NOUS_HERMES_URL", "NOUS_HERMES_USER", "NOUS_HERMES_PASS",
 		"REMEDIATION_RUNNER_URL", "REMEDIATION_RUNNER_STANDBY_URL",
 		"PLANE_HEALTH_URLS", "PLATFORM_PROJECT_ROOT",
 	} {
@@ -56,12 +53,6 @@ func TestHandleBridgeNotConfiguredProbesReturnStatus(t *testing.T) {
 	}
 	if resp.SatelliteProbeBridge.Error != localOnlyBridgeText {
 		t.Fatalf("SatelliteProbeBridge.Error = %q, want %q", resp.SatelliteProbeBridge.Error, localOnlyBridgeText)
-	}
-	if resp.HermesMcp.Status != "not_configured" {
-		t.Fatalf("HermesMcp.Status = %q, want not_configured", resp.HermesMcp.Status)
-	}
-	if resp.NousHermes.Status != "not_configured" {
-		t.Fatalf("NousHermes.Status = %q, want not_configured", resp.NousHermes.Status)
 	}
 	if resp.PlatformMcp.ServerName == "" || resp.PlatformMcp.ToolCount == 0 {
 		t.Fatalf("PlatformMcp = %+v, want populated catalog stats", resp.PlatformMcp)
@@ -103,21 +94,9 @@ func TestHandleBridgeAggregatesConfiguredProbes(t *testing.T) {
 	}))
 	t.Cleanup(satelliteBridge.Close)
 
-	hermesMcp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"version":"3.4"}`))
-	}))
-	t.Cleanup(hermesMcp.Close)
-
-	nousHermes := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"version":"1.1","gateway_running":true,"active_agents":2}`))
-	}))
-	t.Cleanup(nousHermes.Close)
-
 	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
 	t.Setenv("GIT_BRIDGE_URL", gitBridge.URL)
 	t.Setenv("SATELLITE_PROBE_BRIDGE_URL", satelliteBridge.URL)
-	t.Setenv("HERMES_GATEWAY_URL", hermesMcp.URL)
-	t.Setenv("NOUS_HERMES_URL", nousHermes.URL)
 
 	h := NewHandler()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/bridge", nil)
@@ -140,61 +119,12 @@ func TestHandleBridgeAggregatesConfiguredProbes(t *testing.T) {
 	if resp.SatelliteProbeBridge.Status != "ok" || resp.SatelliteProbeBridge.TradeNginxBase != "http://trade.local" {
 		t.Fatalf("SatelliteProbeBridge = %+v", resp.SatelliteProbeBridge)
 	}
-	if resp.HermesMcp.Status != "ok" {
-		t.Fatalf("HermesMcp = %+v", resp.HermesMcp)
-	}
-	if resp.NousHermes.Status != "ok" || resp.NousHermes.Version != "1.1" || !resp.NousHermes.GatewayRunning || resp.NousHermes.ActiveAgents != 2 {
-		t.Fatalf("NousHermes = %+v", resp.NousHermes)
-	}
 	if !resp.NightlyReport.Available {
 		if resp.NightlyReport.Hint == "" {
 			t.Fatalf("NightlyReport = %+v, want a hint now that the runner is gone", resp.NightlyReport)
 		}
 	} else {
 		t.Fatalf("NightlyReport = %+v, want unavailable", resp.NightlyReport)
-	}
-}
-
-func TestHandleBridgeNousHermesAuthRequired(t *testing.T) {
-	clearAgentBridgeEnv(t)
-	runner := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	}))
-	t.Cleanup(runner.Close)
-	nousHermes := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	t.Cleanup(nousHermes.Close)
-
-	t.Setenv("PLANE_HEALTH_URLS", runner.URL)
-	t.Setenv("NOUS_HERMES_URL", nousHermes.URL)
-
-	h := NewHandler()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/agent-bridge/bridge", nil)
-	rec := httptest.NewRecorder()
-	h.HandleBridge(rec, req)
-
-	var resp BridgeResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.NousHermes.Status != "auth_required" {
-		t.Fatalf("NousHermes.Status = %q, want auth_required", resp.NousHermes.Status)
-	}
-}
-
-// TD-228: the Hermes gateway answers 200 while every scheduled skill fails;
-// the bridge must surface its degraded body status, not report ok.
-func TestProbeHermesMcpDegradedSkills(t *testing.T) {
-	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"status":"degraded","version":"0.2.0","failing_skills":[{"id":"peer-watchdog","reason":"script not found: /x/peer_watchdog.sh"}]}`))
-	}))
-	t.Cleanup(gw.Close)
-	t.Setenv("HERMES_GATEWAY_URL", gw.URL)
-
-	got := probeHermesMcp(context.Background(), gw.Client())
-	if got.Status != "degraded" || !strings.Contains(got.Error, "peer-watchdog: script not found") || got.Note != "v0.2.0" {
-		t.Fatalf("probeHermesMcp = %+v, want degraded naming peer-watchdog", got)
 	}
 }
 

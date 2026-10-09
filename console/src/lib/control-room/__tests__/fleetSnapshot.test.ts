@@ -127,17 +127,9 @@ const supplyOk = {
 
 const bridgeOk = {
   generated_at: 't',
-  remediation_runner: { url: 'http://127.0.0.1:8781', status: 'ok' },
+  remediation_runner: { url: 'http://127.0.0.1:8790', status: 'ok' },
   git_bridge: { status: 'ok', dirty_repos: 0 },
   satellite_probe_bridge: { status: 'ok' },
-  hermes_mcp: { status: 'ok' },
-  nous_hermes: {
-    status: 'ok',
-    gateway_running: true,
-    active_agents: 0,
-    active_sessions: 0,
-    mcp_tool_count: 0,
-  },
   platform_mcp: {
     server_name: 'p',
     server_version: '1',
@@ -571,28 +563,6 @@ describe('buildFleetSnapshot integration', () => {
     const satProd = getCell(snap, 'satellite', 'prod')!
     expect(satProd.standards.find(s => s.id === 'db-backup-fresh')?.signal).toBe('ok')
     expect(resolveCellGate(satProd)).toBe('GO')
-  })
-
-  it('degrades the Hermes standard when gateway skills are failing though Nous Hermes is ok (TD-228)', () => {
-    const snap = buildFleetSnapshot({
-      viewerEnv: 'dev',
-      matrices: [matrix('dev'), matrix('stg'), matrix('prod')],
-      self: selfHealth(['dev', 'stg', 'prod']),
-      stg: stgSmokeOk,
-      supply: supplyOk,
-      cluster: clusterOk,
-      groundBridgeReady: true,
-      runner: { status: 'ok' },
-      ibGateway: { reachability: 'ok', reachable: true, summary: 'IB Gateway ready' },
-      postgresBackup: backupOk,
-      bridge: {
-        ...bridgeOk,
-        hermes_mcp: { status: 'degraded', error: 'peer-watchdog: last 3 runs failed' },
-      },
-    })
-    const hermes = getCell(snap, 'vendor', 'span')!.standards.find(s => s.id === 'hermes')!
-    expect(hermes.signal).toBe('degraded')
-    expect(hermes.reason).toContain('peer-watchdog')
   })
 
   it('is NO-GO on Satellite PROD when CNPG backup is stale (data-layer-backup scope)', () => {

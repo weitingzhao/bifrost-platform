@@ -9,7 +9,7 @@ func TestParseKeepsOnlyBifrostLabels(t *testing.T) {
 		"-\t0\tcom.bifrost.peer-watchdog\n" +
 		"7\t0\tcom.apple.something\n" +
 		"not-a-row\n"
-	plists := "/Users/vision/Library/LaunchAgents/com.bifrost.remediation-runner.plist\n" +
+	plists := "/Users/vision/Library/LaunchAgents/com.bifrost.remediation-runner.plist\n" + // 已退役 fixture
 		"/Users/vision/Library/LaunchAgents/com.bifrost.operator-plane.plist\n"
 	got := Parse(list, plists)
 	if len(got) != 3 {
@@ -21,7 +21,7 @@ func TestParseKeepsOnlyBifrostLabels(t *testing.T) {
 	if got[1].Label != "com.bifrost.peer-watchdog" || got[1].Running || got[1].PID != 0 || got[1].Plist {
 		t.Fatalf("peer-watchdog: %+v", got[1])
 	}
-	if got[2].Label != "com.bifrost.remediation-runner" || got[2].Running || !got[2].Plist || got[2].LastExit != -1 {
+	if got[2].Label != "com.bifrost.remediation-runner" || got[2].Running || !got[2].Plist || got[2].LastExit != -1 { // 已退役 fixture
 		t.Fatalf("plist-only: %+v", got[2])
 	}
 }

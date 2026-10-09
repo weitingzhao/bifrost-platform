@@ -69,7 +69,6 @@ func capabilityFor(name, route string) string {
 	case strings.HasPrefix(route, "/api/v1/promote"):
 		return "release"
 	case strings.HasPrefix(route, "/api/v1/agent"),
-		strings.HasPrefix(route, "/api/v1/hermes"),
 		strings.HasPrefix(route, "/api/v1/remediation"),
 		strings.HasPrefix(route, "/api/v1/operate"),
 		strings.HasPrefix(route, "/api/v1/checklist"),

@@ -68,8 +68,8 @@ export function buildPlaybookAgentPrompt(row: FailureTriageRow): string {
         header,
         '',
         '## Operator plane workflow',
-        '1. get_agent_bridge / remediation health — Active-Standby runners.',
-        '2. Restore bridge or restart crashed remediation runner (approval if destructive).',
+        '1. get_agent_bridge — operator-plane on the Mac minis, peer-watchdog, .50 alert relay.',
+        '2. Restore the bridge or restart a crashed operator-plane (approval if destructive).',
         '3. verify_mission_snapshot — Agent signal should leave unknown/fail.',
       ].join('\n')
     case 'cluster-issues-full-auto':

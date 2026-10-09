@@ -10,7 +10,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
-// Recording an outcome for a skill that runs outside the remediation runner.
+// Recording an outcome for a skill that runs outside the operator plane.
 //
 // The trust matrix earns autonomy from recorded outcomes: PromotionThreshold
 // consecutive successes at L1 make a skill eligible for L0. Every scope it could

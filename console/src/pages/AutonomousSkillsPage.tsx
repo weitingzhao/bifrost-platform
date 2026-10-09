@@ -152,8 +152,7 @@ export function AutonomousSkillsPage() {
             L0 skills probe platform-api in-process (same GET routes as Platform MCP) and stream
             evidence into the run log. L1+ may use Cursor Cloud. Trust: <strong>L0</strong> read-only
             auto, <strong>L1</strong> write needs Owner confirm, <strong>L2</strong> always escalate.
-            Distinct from Agent Desk token streams and Hermes{' '}
-            <code className="font-mono text-[var(--text-dense-caption)]">/agent/hermes/*</code>.
+            Distinct from Agent Desk token streams. The operator plane and peer-watchdog run on the Mac minis; .50 relays alerts.
           </>
         }
         overflow="visible"

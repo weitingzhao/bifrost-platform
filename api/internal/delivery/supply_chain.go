@@ -22,7 +22,7 @@ var dockerfileConfigMapNames = []string{
 	"bifrost-socket-stg-dockerfile",
 	"bifrost-platform-api-stg-dockerfile",
 	"bifrost-platform-console-stg-dockerfile",
-	"bifrost-remediation-runner-stg-dockerfile",
+	"bifrost-remediation-runner-stg-dockerfile", // 已退役: historical ConfigMap name the supply check still lists
 }
 
 var trackedGiteaRepos = []string{

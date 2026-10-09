@@ -156,25 +156,6 @@ export interface AgentBridgeResponse {
     trade_nginx_base?: string
     error?: string
   }
-  hermes_mcp: {
-    url?: string
-    status: string
-    error?: string
-    note?: string
-  }
-  nous_hermes: {
-    url?: string
-    status: string
-    version?: string
-    release_date?: string
-    gateway_running: boolean
-    gateway_state?: string
-    active_agents: number
-    active_sessions: number
-    mcp_tool_count: number
-    dashboard_url?: string
-    error?: string
-  }
   platform_mcp: {
     server_name: string
     server_version: string
@@ -192,65 +173,7 @@ export interface AgentBridgeResponse {
   }
 }
 
-export type HermesSkillTrigger = 'cron' | 'webhook' | 'manual'
-
-export type HermesSkillStatus = 'enabled' | 'disabled' | 'error'
-
-export type HermesActuationLevel = 'L0' | 'L1' | 'L2'
-
-export interface HermesSkill {
-  id: string
-  label: string
-  description: string
-  trigger: HermesSkillTrigger
-  schedule?: string
-  actuation_level: HermesActuationLevel
-  status: HermesSkillStatus
-  last_run_at?: string
-  last_result?: 'success' | 'failure' | 'skipped'
-  tags?: string[]
-}
-
-export interface HermesSchedule {
-  skill_id: string
-  cron: string
-  enabled: boolean
-  next_run_at?: string
-  timezone?: string
-}
-
-export type HermesExecutionResult = 'success' | 'failure' | 'escalated' | 'skipped'
-
-export interface HermesExecution {
-  id: string
-  skill_id: string
-  skill_label: string
-  trigger: HermesSkillTrigger
-  result: HermesExecutionResult
-  started_at: string
-  finished_at?: string
-  duration_ms?: number
-  summary?: string
-  error?: string
-  escalated_to?: string
-}
-
-export interface HermesSkillsResponse {
-  gateway_status: string
-  skills: HermesSkill[]
-  generated_at: string
-}
-
-export interface HermesSchedulesResponse {
-  schedules: HermesSchedule[]
-  generated_at: string
-}
-
-export interface HermesExecutionsResponse {
-  executions: HermesExecution[]
-  total: number
-  generated_at: string
-}
+export type ActuationLevel = 'L0' | 'L1' | 'L2'
 
 export interface RunnerSmokeCheck {
   id: string
@@ -290,13 +213,13 @@ export interface AgentPerformanceResponse {
 export interface TrustMatrixEntry {
   skill_id: string
   skill_label: string
-  current_level: HermesActuationLevel
+  current_level: ActuationLevel
   consecutive_successes: number
   promotion_eligible: boolean
   demotion_triggered: boolean
   last_override_at?: string
   last_override_by?: string
-  suggested_level?: HermesActuationLevel
+  suggested_level?: ActuationLevel
   suggested_level_reason?: string
 }
 
@@ -338,7 +261,6 @@ export interface FlightDirectorBriefing {
 
 export interface FlightDirectorSnapshotResponse {
   generated_at: string
-  hermes_available: boolean
   data_sources: string[]
   performance: AgentPerformanceResponse & { data_source?: string; job_count?: number }
   trust_matrix: TrustMatrixResponse
@@ -356,53 +278,6 @@ export type RetrospectiveRootCause =
   | 'resource_limit'
   | 'external'
   | 'unknown'
-
-export interface HermesLlmKeyStatus {
-  configured: boolean
-  source: string
-  provider_hint?: string
-  note?: string
-}
-
-export interface HermesFirstTaskDefinition {
-  id: string
-  title: string
-  autonomy: string
-  prompt: string
-  required_mcp_tools: string[]
-  success_criteria: string[]
-}
-
-export interface HermesNousProbe {
-  url?: string
-  status: string
-  version?: string
-  gateway_running: boolean
-  gateway_state?: string
-  mcp_tool_count: number
-  llm_key_configured: boolean
-  dashboard_url?: string
-  error?: string
-}
-
-export interface HermesReadinessBlockerDetail {
-  code: string
-  message: string
-  remediation?: string
-  owner_action?: boolean
-}
-
-export interface HermesReadinessResponse {
-  generated_at: string
-  ready: boolean
-  blockers: string[]
-  blocker_details?: HermesReadinessBlockerDetail[]
-  llm_key: HermesLlmKeyStatus
-  nous_hermes: HermesNousProbe
-  platform_mcp_tools: number
-  platform_mcp_agent_tools: number
-  first_task: HermesFirstTaskDefinition
-}
 
 // Retrospective Agent — cross-job pattern analysis
 

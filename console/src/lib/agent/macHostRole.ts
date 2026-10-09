@@ -3,7 +3,7 @@ import type { AgentBridgeResponse, RunnerStatus } from '@/api/agentTypes'
 export type MacAgentHostRole = 'primary' | 'standby'
 
 /**
- * Extract host/IP from a runner URL (`http://192.168.10.50:8781`)
+ * Extract host/IP from a runner URL (`http://192.168.10.50:8790`)
  * or SSH remote (`vision@192.168.10.50`).
  */
 export function hostKeyFromEndpoint(urlOrRemote: string): string | null {

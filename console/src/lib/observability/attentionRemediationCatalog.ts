@@ -195,7 +195,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
       track: 'infra',
       cta: 'manual',
       trackReason: 'Agent plane self-health — fix runner/bridge first',
-      suggestedAction: 'Open Agent Desk / Operator Plane; restore remediation runner',
+      suggestedAction: 'Open Agent Desk / Operator Plane; restore operator-plane and peer-watchdog',
     }
   }
 

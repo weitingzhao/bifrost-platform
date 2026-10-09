@@ -35,7 +35,7 @@ export const FORMER_CONSOLE_TABS = [
   'queue',
   'analysis-workspace',
   'insight-log',
-  'hermes-status',
+  'hermes-status', // 已退役 former tab hash
   'agent-capability',
   'commit-lineage',
   'autonomous-skills',
@@ -90,7 +90,7 @@ export type ConsoleLocation =
  * - queue → maintenance (operator inbox, not a health reading)
  * - agent-capability → infrastructure (runner readiness sits with the mini card)
  * - agent-governance → maintenance (trust policy for patrol, which lives here)
- * - analysis-workspace / hermes-status → infrastructure (kept bit is Hermes health)
+ * - analysis-workspace / hermes-status → infrastructure (已退役 former tab)
  * - insight-log → maintenance (history, same shelf as Audit)
  * - nine Guides + agent-system → progress (project direction, not a live system)
  * - console → infrastructure (the old hash opened Network)
@@ -131,7 +131,7 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'agent-governance': 'maintenance',
   'analysis-workspace': 'infrastructure',
   'insight-log': 'maintenance',
-  'hermes-status': 'infrastructure',
+  'hermes-status': 'infrastructure', // 已退役 former tab hash
   'flywheel-vision': 'progress',
   blueprint: 'progress',
   roadmap: 'progress',

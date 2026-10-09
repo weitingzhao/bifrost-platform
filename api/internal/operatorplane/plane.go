@@ -5,15 +5,15 @@
 // L-1 is defined in console/src/lib/architecture/cicdBootstrapCatalog.ts as the
 // engineer standing on the ground next to the rocket — it boards and repairs the
 // Ops Platform and Trade, and never shares fate with either. Its executors have
-// always lived outside the cluster (the remediation runners on the Mac minis,
-// the Hermes gateway, the Git Bridge), but the surface that drives them was
+// always lived outside the cluster (the operator plane and peer-watchdog on the
+// Mac minis, with .50 relaying alerts, plus the Git Bridge), but the surface that drives them was
 // compiled into platform-api, so a bad platform-api release took out the tool
 // you would use to roll that release back.
 //
 // Every package mounted here is cluster-free — no client-go, no kubeconfig, no
 // internal/cluster — which is asserted by TestOperatorPlaneStaysClusterFree.
 // What they do touch of the wider platform is deliberately state-free: the
-// remediation *client* that calls the runners over HTTP, and the checklist
+// HTTP client that calls the operator plane, and the checklist
 // *types* the autopilot reads its signals into. Neither reaches into
 // platform-api's own stores, so this plane can be served from a second process
 // without splitting any state.

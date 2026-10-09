@@ -28,24 +28,8 @@ type BridgeResponse struct {
 	Runners              []RunnerStatus             `json:"runners"`
 	GitBridge            GitBridgeStatus            `json:"git_bridge"`
 	SatelliteProbeBridge SatelliteProbeBridgeStatus `json:"satellite_probe_bridge"`
-	HermesMcp            OptionalEndpoint           `json:"hermes_mcp"`
-	NousHermes           NousHermesStatus           `json:"nous_hermes"`
 	PlatformMcp          PlatformMcpStatus          `json:"platform_mcp"`
 	NightlyReport        NightlyHint                `json:"nightly_report"`
-}
-
-type NousHermesStatus struct {
-	URL            string `json:"url,omitempty"`
-	Status         string `json:"status"`
-	Version        string `json:"version,omitempty"`
-	ReleaseDate    string `json:"release_date,omitempty"`
-	GatewayRunning bool   `json:"gateway_running"`
-	GatewayState   string `json:"gateway_state,omitempty"`
-	ActiveAgents   int    `json:"active_agents"`
-	ActiveSessions int    `json:"active_sessions"`
-	McpToolCount   int    `json:"mcp_tool_count"`
-	DashboardURL   string `json:"dashboard_url,omitempty"`
-	Error          string `json:"error,omitempty"`
 }
 
 type GitBridgeStatus struct {
@@ -87,13 +71,6 @@ type RunnerStatus struct {
 	Error        string `json:"error,omitempty"`
 }
 
-type OptionalEndpoint struct {
-	URL    string `json:"url,omitempty"`
-	Status string `json:"status"` // not_configured | ok | degraded | unavailable
-	Error  string `json:"error,omitempty"`
-	Note   string `json:"note,omitempty"`
-}
-
 type PlatformMcpStatus struct {
 	ServerName       string `json:"server_name"`
 	ServerVersion    string `json:"server_version"`
@@ -129,8 +106,6 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 		runner = runners[0]
 	}
 
-	hermes := probeHermesMcp(ctx, h.httpClient)
-	nousHermes := probeNousHermes(ctx, h.httpClient)
 	gitBridge := probeGitBridge(ctx, h.httpClient)
 	satelliteProbeBridge := probeSatelliteProbeBridge(ctx, h.httpClient)
 
@@ -154,8 +129,6 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 		Runners:              runners,
 		GitBridge:            gitBridge,
 		SatelliteProbeBridge: satelliteProbeBridge,
-		HermesMcp:            hermes,
-		NousHermes:           nousHermes,
 		PlatformMcp: PlatformMcpStatus{
 			ServerName:       mcp.ServerName,
 			ServerVersion:    mcp.ServerVersion,
@@ -167,7 +140,7 @@ func (h *Handler) HandleBridge(w http.ResponseWriter, r *http.Request) {
 		},
 		NightlyReport: NightlyHint{
 			Available: false,
-			Hint:      "remediation runner retired",
+			Hint:      "已退役: nightly report is not served by the operator plane",
 		},
 	})
 }
@@ -349,115 +322,6 @@ func probeSatelliteProbeBridge(ctx context.Context, client *http.Client) Satelli
 		URL:            url,
 		Status:         "ok",
 		TradeNginxBase: body.TradeNginxBase,
-	}
-}
-
-func probeHermesMcp(ctx context.Context, client *http.Client) OptionalEndpoint {
-	// Try HERMES_GATEWAY_URL first (the actual gateway), fall back to HERMES_MCP_URL
-	url := strings.TrimRight(strings.TrimSpace(os.Getenv("HERMES_GATEWAY_URL")), "/")
-	if url == "" {
-		url = strings.TrimSpace(os.Getenv("HERMES_MCP_URL"))
-	}
-	if url == "" {
-		return OptionalEndpoint{
-			Status: "not_configured",
-			Note:   "Set HERMES_GATEWAY_URL to enable Hermes Gateway health probing",
-		}
-	}
-	healthURL := url + "/health"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
-	if err != nil {
-		return OptionalEndpoint{URL: url, Status: "unavailable", Error: err.Error()}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return OptionalEndpoint{URL: url, Status: "unavailable", Error: err.Error()}
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode >= 400 {
-		return OptionalEndpoint{
-			URL:    url,
-			Status: "unavailable",
-			Error:  "HTTP " + resp.Status,
-		}
-	}
-	var body struct {
-		Status        string `json:"status"`
-		Version       string `json:"version"`
-		FailingSkills []struct {
-			ID     string `json:"id"`
-			Reason string `json:"reason"`
-		} `json:"failing_skills"`
-	}
-	out := OptionalEndpoint{URL: url, Status: "ok"}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
-		if body.Version != "" {
-			out.Note = "v" + body.Version
-		}
-		// TD-228: the gateway answers 200 while its scheduled skills fail;
-		// its body status carries the skills verdict.
-		if body.Status == "degraded" {
-			out.Status = "degraded"
-			parts := make([]string, 0, len(body.FailingSkills))
-			for _, f := range body.FailingSkills {
-				parts = append(parts, f.ID+": "+f.Reason)
-			}
-			if len(parts) == 0 {
-				parts = append(parts, "gateway reports degraded")
-			}
-			out.Error = strings.Join(parts, "; ")
-		}
-	}
-	return out
-}
-
-func probeNousHermes(ctx context.Context, client *http.Client) NousHermesStatus {
-	url := strings.TrimRight(strings.TrimSpace(os.Getenv("NOUS_HERMES_URL")), "/")
-	if url == "" {
-		return NousHermesStatus{Status: "not_configured"}
-	}
-	apiURL := url + "/api/status"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return NousHermesStatus{URL: url, Status: "unavailable", Error: err.Error()}
-	}
-	user := strings.TrimSpace(os.Getenv("NOUS_HERMES_USER"))
-	pass := strings.TrimSpace(os.Getenv("NOUS_HERMES_PASS"))
-	if user != "" && pass != "" {
-		req.SetBasicAuth(user, pass)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return NousHermesStatus{URL: url, Status: "unavailable", Error: err.Error()}
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		return NousHermesStatus{URL: url, Status: "auth_required", Error: "dashboard requires authentication"}
-	}
-	if resp.StatusCode >= 400 {
-		return NousHermesStatus{URL: url, Status: "unavailable", Error: "HTTP " + resp.Status}
-	}
-	var body struct {
-		Version        string `json:"version"`
-		ReleaseDate    string `json:"release_date"`
-		GatewayRunning bool   `json:"gateway_running"`
-		GatewayState   string `json:"gateway_state"`
-		ActiveAgents   int    `json:"active_agents"`
-		ActiveSessions int    `json:"active_sessions"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return NousHermesStatus{URL: url, Status: "ok"}
-	}
-	return NousHermesStatus{
-		URL:            url,
-		Status:         "ok",
-		Version:        body.Version,
-		ReleaseDate:    body.ReleaseDate,
-		GatewayRunning: body.GatewayRunning,
-		GatewayState:   body.GatewayState,
-		ActiveAgents:   body.ActiveAgents,
-		ActiveSessions: body.ActiveSessions,
-		DashboardURL:   url,
 	}
 }
 

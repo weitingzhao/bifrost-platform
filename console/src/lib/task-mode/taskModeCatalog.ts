@@ -93,7 +93,7 @@ const ANALYSIS_PHASES: TaskModeDef['phases'] = [
     id: 'review-insights',
     seq: 1,
     title: 'Review Insights',
-    summary: 'Read the latest Hermes insights before triggering a new analysis.',
+    summary: 'Read the latest insight log before triggering a new analysis.',
     navigateTab: 'analysis-workspace',
     actions: [
       { label: 'Analysis Workspace', tabId: 'analysis-workspace' },
@@ -109,19 +109,19 @@ const ANALYSIS_PHASES: TaskModeDef['phases'] = [
     navigateTab: 'analysis-workspace',
     actions: [
       { label: 'Analysis Workspace', tabId: 'analysis-workspace' },
-      { label: 'Hermes Status', tabId: 'hermes-status' },
+      { label: 'Operator plane', tabId: 'operator-plane' },
     ],
   },
   {
     id: 'verify',
     seq: 3,
     title: 'Verify',
-    summary: 'Confirm the insight log recorded the run and Hermes remains reachable.',
+    summary: 'Confirm the insight log recorded the run and the operator plane remains reachable.',
     dependsOn: ['trigger-analysis'],
     navigateTab: 'insight-log',
     actions: [
       { label: 'Insight Log', tabId: 'insight-log' },
-      { label: 'Hermes Status', tabId: 'hermes-status' },
+      { label: 'Operator plane', tabId: 'operator-plane' },
     ],
   },
 ]
@@ -195,7 +195,7 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
     id: 'analysis',
     label: 'Analysis',
     description:
-      'Analysis Desk V1 — Hermes status, Chat UI, and First Task. Read-only; no stock-analysis engine; D10 blocked.',
+      'Analysis Desk V1 — operator plane, Chat UI, and First Task. Read-only; no stock-analysis engine; D10 blocked.',
     loopArchetype: 'analysis',
     landingTab: 'analysis-workspace',
     phases: ANALYSIS_PHASES,
@@ -205,13 +205,13 @@ export const TASK_MODE_DEFINITIONS: TaskModeDef[] = [
         'task-cc',
         'analysis-workspace',
         'insight-log',
-        'hermes-status',
+        'operator-plane',
         'control-room',
       ],
       phaseRelevantTabs: {
         'review-insights': ['task-cc', 'analysis-workspace', 'insight-log'],
-        'trigger-analysis': ['task-cc', 'analysis-workspace', 'hermes-status'],
-        verify: ['task-cc', 'insight-log', 'hermes-status'],
+        'trigger-analysis': ['task-cc', 'analysis-workspace', 'operator-plane'],
+        verify: ['task-cc', 'insight-log', 'operator-plane'],
       },
     },
     ops: {

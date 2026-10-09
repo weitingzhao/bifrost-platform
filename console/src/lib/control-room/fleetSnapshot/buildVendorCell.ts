@@ -5,7 +5,6 @@ import type { AgentBridgeResponse } from '@/api/agentTypes'
 import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 import type { MatrixResponse } from '@/api/matrixTypes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
-import type { Signal } from '@/lib/control-room/missionSignals'
 import {
   type FleetCell,
   type FleetCellSignal,
@@ -49,7 +48,6 @@ export function buildVendorCell(input: {
    */
   daemonIbObserve?: boolean
 }): FleetCell {
-  const hermes = input.bridge?.nous_hermes ?? input.bridge?.hermes_mcp
   const targets = vendorTargets(input.matrices ?? [])
   const massiveTargets = targets.filter(t => isMassiveVendorTarget(t))
   const ibTargets = targets.filter(t => isIbVendorTarget(t))
@@ -93,26 +91,6 @@ export function buildVendorCell(input: {
     }
   }
 
-  const baseHermesSig: Signal =
-    hermes == null
-      ? 'unknown'
-      : hermes.status === 'ok'
-        ? 'ok'
-        : hermes.status === 'degraded'
-          ? 'degraded'
-          : 'fail'
-  // TD-228: the bifrost Hermes gateway's scheduled skills can all be failing
-  // while Nous Hermes is fine. A degraded gateway caps the standard at degraded.
-  const gatewaySkillsFailing = input.bridge?.hermes_mcp?.status === 'degraded'
-  const hermesSig: Signal = gatewaySkillsFailing && baseHermesSig === 'ok' ? 'degraded' : baseHermesSig
-  const hermesDetail =
-    hermes == null
-      ? 'Hermes status unknown'
-      : gatewaySkillsFailing
-        ? `Hermes ${hermes.status} · gateway skills failing: ${input.bridge?.hermes_mcp?.error ?? 'see /health'}`
-        : `Hermes ${hermes.status}`
-  standards.push(std('hermes', 'Hermes ready', hermesSig, hermesDetail, 'tooling'))
-
   // Git bridge is scored on Engineer (automation) — do not mirror on Vendor (closes Board→Checklist gap).
 
   const signal = signalFromStandards(standards)
@@ -138,7 +116,7 @@ export function buildVendorCell(input: {
       s.signal !== 'ok' &&
       s.signal !== 'unknown',
   )
-  // Massive/Hermes may use Agent Fix; IB Client stays D10 observe (Plugin Gallery / TWS).
+  // Massive feed may use Agent Fix; IB Client stays D10 observe (Plugin Gallery / TWS).
   const agentFixEnabled =
     !ibBlocking && (signal === 'fail' || signal === 'degraded') && otherFeedFail
 

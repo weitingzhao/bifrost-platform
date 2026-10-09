@@ -11,7 +11,7 @@ import (
 )
 
 // Outcome is one finished skill run. The trust matrix reads these; nothing
-// here starts an agent. Files written by the retired remediation runner still
+// here starts an agent. Files written by the retired runner (已退役) still
 // decode: extra JSON fields are ignored, and status values match.
 type OutcomeStatus string
 

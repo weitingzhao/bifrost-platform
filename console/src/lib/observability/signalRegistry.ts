@@ -193,7 +193,7 @@ export const SIGNAL_REGISTRY: SignalDef[] = [
 
   /* ── Engineer (Agent plane) ── */
   {
-    id: 'engineer.remediation-runner',
+    id: 'engineer.operator-plane',
     label: 'operator-plane',
     domain: 'engineer',
     scope: 'shared',

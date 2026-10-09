@@ -324,7 +324,7 @@ export const MANDATORY_MAPPING: MandatoryMappingRow[] = [
   {
     interaction: 'Three Desks (Build / Ops / Analysis)',
     use: 'AgentTriadStrip on TCC System + Control Room; TaskModeIconRail System+Ops+Analysis (Ops expanded = DEV/STG/PROD Fleet column lamps; collapsed = icon + badge); Engineer PartnerStrip labels Launch Desk / Ops Desk / Analysis Desk',
-    never: 'Standalone daily-ops / mission-launch / patrol pills; fourth page-chrome mode banner; fake Hermes insights when API is empty',
+    never: 'Standalone daily-ops / mission-launch / patrol pills; fourth page-chrome mode banner; fake insight cards when API is empty',
   },
 ]
 
@@ -345,7 +345,7 @@ export const SIDEBAR_ZONES: SidebarZoneRow[] = [
   {
     zone: 'Partner',
     surface: 'ShellNavSidebar.partnerContent → PartnerStrip (persona block, not a nav group)',
-    intent: 'Engineer desks: Dev Sessions is framework chrome (header indicator / Operator Dock), not a desk rail item. Launch Desk always visible when allowed (Rocket → Satellite(Trade, Research instruments) → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Hermes Status. Payload constellation (Plan C): Satellite = vehicle; Trade = display-host; Research = instrument. Launch Desk nests Research under Satellite. New payloads = catalog row + Launch child + edges. Formation = two independent pipelines + ConfirmDialog.',
+    intent: 'Engineer desks: Dev Sessions is framework chrome (header indicator / Operator Dock), not a desk rail item. Launch Desk always visible when allowed (Rocket → Satellite(Trade, Research instruments) → Plugin → Agent); Ops Desk + Analysis Desk in one secondary collapsible (trigger Ops & Analysis). Ops Desk subgroups: Operate (Queue) · Patrol (Patrol + Patrol Log) · trail (Operator Plane / Trust / Capability). Launch Agent = L-1 Mac Mini host publish; Operator Plane = heartbeats/MCP/AI Fix. Analysis Desk = Workspace + Insight Log + Operator plane. Payload constellation (Plan C): Satellite = vehicle; Trade = display-host; Research = instrument. Launch Desk nests Research under Satellite. New payloads = catalog row + Launch child + edges. Formation = two independent pipelines + ConfirmDialog.',
   },
   {
     zone: 'Mission',

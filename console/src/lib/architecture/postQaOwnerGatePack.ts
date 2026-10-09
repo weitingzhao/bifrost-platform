@@ -1,9 +1,9 @@
 /**
  * Post-QA Wave F4 — Owner gate pack (materials only).
- * Agent must NOT mark spine CLOSED / W1–W3 / Hermes ⑥ / Mission Signal P3 without Owner action.
+ * Agent must NOT mark spine CLOSED / W1–W3 / Mission Signal P3 without Owner action.
  */
 
-export type PostQaOwnerGateId = 'w1-signoff' | 'a3-closed' | 'hermes-llm' | 'w2-gateway' | 'w3-readpath'
+export type PostQaOwnerGateId = 'w1-signoff' | 'a3-closed' | 'alert-relay' | 'w2-gateway' | 'w3-readpath'
 
 export type PostQaOwnerGate = {
   id: PostQaOwnerGateId
@@ -37,14 +37,14 @@ export const POST_QA_OWNER_GATES: PostQaOwnerGate[] = [
     status: 'done',
   },
   {
-    id: 'hermes-llm',
-    title: 'Hermes readiness green (LLM key)',
+    id: 'alert-relay',
+    title: 'Alert relay on .50',
     ownerAction:
-      'On Mac Mini .50 configure LLM key in ~/.hermes/ or ANTHROPIC_API_KEY / OPENROUTER_API_KEY; confirm GET /api/v1/agent/hermes/readiness ready:true and nous_hermes.mcp_tool_count > 0',
+      '已退役: the old LLM gateway is gone. Mac minis run operator-plane and peer-watchdog; .50 relays alerts.',
     agentPrep:
-      'Last probe: ready=false · LLM_KEY_MISSING · gateway v0.17.0 OK. Re-probe after Owner configures key.',
-    unlocks: 'Wave G Phase G3 (Hermes real L0 first-task → stream ⑥)',
-    status: 'blocked_external',
+      'Confirm operator-plane health on both minis and that .50 is the alert relay. No gateway readiness probe.',
+    unlocks: 'Nothing further — the old first-task gate is closed with the retired gateway.',
+    status: 'done',
   },
   {
     id: 'w2-gateway',
@@ -63,7 +63,7 @@ export const POST_QA_OWNER_GATES: PostQaOwnerGate[] = [
       'Completed 2026-07-22 — Owner continued W3; verify-trade-ib-w3-stg PASS; spine done:3 closed',
     agentPrep:
       'TIBM_W3_STG_EVIDENCE · bifrost-core 0.3.3 · quotes NVDA OK · redis_ib E2E · daemon replicas=0 · D10 BLOCKED',
-    unlocks: 'Optional STG soak / Hermes LLM gate / future D10 unlock program',
+    unlocks: 'Optional STG soak / future D10 unlock program',
     status: 'done',
   },
 ]
@@ -72,7 +72,7 @@ export function buildPostQaOwnerGateMarkdown(): string {
   const lines = [
     `# Post-QA Owner gate pack (${POST_QA_OWNER_GATE_PACK_VERSION})`,
     '',
-    'Agent completed Wave F + TIBM W1–W3. **a3-closed + w2-gateway + w3-readpath done 2026-07-22** — remaining Owner gate: hermes-llm (optional). D10 BLOCKED.',
+    'Agent completed Wave F + TIBM W1–W3. **a3-closed + w2-gateway + w3-readpath + alert-relay done** — D10 BLOCKED.',
     '',
     '| Gate | Owner action | Unlocks |',
     '|------|--------------|---------|',

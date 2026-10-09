@@ -13,7 +13,7 @@ import (
 // kubeconfig, no internal/cluster.
 //
 // That is true today — every package below imports none of them — and it is the
-// precondition for ever running this tier beside the remediation runners on the
+// precondition for ever running this tier beside the operator plane on the
 // Mac minis instead of inside the thing it is meant to rescue. One import is
 // enough to lose it silently, so it is asserted rather than remembered.
 //

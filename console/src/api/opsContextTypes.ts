@@ -168,5 +168,3 @@ export interface BuildPhaseGateResponse {
 export interface RunBuildPhaseGateResponse extends ActuationResponse {
   gate: BuildPhaseGateResponse
 }
-
-// Hermes Gateway — Autonomous Agent types

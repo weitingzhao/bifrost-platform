@@ -224,7 +224,7 @@ function classifyMissionItem(
   if (id.includes('Agent')) {
     return {
       track: 'playbook',
-      trackReason: 'Agent bridge / remediation runner plane — not a K8s node issue',
+      trackReason: 'Agent bridge / operator plane — not a K8s node issue',
       suggestedAction: 'Operator Plane — verify bridge + Active-Standby runners; restart if needed',
       playbookId: 'operator-plane-remediate',
     }

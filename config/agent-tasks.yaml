@@ -179,9 +179,9 @@ tasks:
     domain: Health
     action: "Check"
 
-  - id: hermes-first-task
-    scope: "hermes-first-task"
-    label: "Hermes · First task"
+  - id: operator-plane-brief
+    scope: "operator-plane-brief"
+    label: "Operator plane · Brief"
     tier: manual
     default_level: L0
     domain: Platform

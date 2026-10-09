@@ -51,7 +51,7 @@ export const BOOTSTRAP_LAYERS: BootstrapLayerDef[] = [
       'AI Agent that recovers L0–L2 — lives OUTSIDE the K8s cluster on dedicated Mac hosts. ' +
       'The "engineer standing on the ground next to the rocket": boards and repairs the rocket (Ops Platform) ' +
       'and payload (Trade), but never shares fate with what it services. Resolves "who restarts the rocket when the rocket is down".',
-    ownership: 'Dual Mac Mini Remediation Runners (primary .50 + standby .52) + launchd peer watchdog + Owner last-resort SSH',
+    ownership: 'Mac minis run operator-plane and peer-watchdog; .50 relays alerts. Owner last-resort SSH',
     cicdRule:
       'Agent release discipline (monorepo-first): versioned, standby-first canary, post-deploy self-smoke; ' +
       'deployed via deploy_mac_mini.sh (rsync + npm) — NEVER scheduled into K8s, NEVER an in-cluster Pod',
@@ -59,8 +59,8 @@ export const BOOTSTRAP_LAYERS: BootstrapLayerDef[] = [
       'Mutual watchdog: each Mini launchctl-kickstarts its peer; platform-api primary/standby failover (REMEDIATION_RUNNER_*_URL); Owner SSH as final fallback',
     components: [
       { name: 'operator-plane (26 L-1 routes, both Minis :8783, no kubeconfig)', status: 'deployed' },
-      { name: 'Remediation Runner primary (mac-mini-1 .50)', status: 'deployed' },
-      { name: 'Remediation Runner standby (mac-mini-2 .52)', status: 'deployed' },
+      { name: 'operator-plane on mac-mini-1 .50 (also relays alerts)', status: 'deployed' },
+      { name: 'operator-plane on mac-mini-2 .52', status: 'deployed' },
       { name: 'launchd peer watchdog (com.bifrost.peer-watchdog, 60s interval)', status: 'deployed' },
       { name: 'platform-api primary/standby failover (RunnerClient HealthAll)', status: 'deployed' },
       { name: 'Git Bridge (Dev-only, Mac Pro)', status: 'deployed' },

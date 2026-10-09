@@ -26,7 +26,7 @@ export type FleetCellSignal = Signal | 'unavailable'
  * | seat         | Engineer — Mac probe-bridge   |
  * | cluster      | Ground — API / nodes / pods   |
  * | feed         | Vendor — Massive / IB         |
- * | tooling      | Vendor — Hermes               |
+ * | tooling      | Vendor — operator tooling     |
  * | path         | Structural unavailable        |
  */
 export type FleetStandardGroup =

@@ -14,7 +14,7 @@ export type TaskModeVisual = {
  * Icon semantics (Apollo facade — no labels needed):
  *   System    Layers2     — full stack overview
  *   Ops       Gauge       — live dials (Launch + Daily Ops + Patrol merged)
- *   Analysis  BrainCircuit — Hermes insight desk
+ *   Analysis  BrainCircuit — insight desk
  */
 export const TASK_MODE_VISUAL: Record<TaskModeId, TaskModeVisual> = {
   system: {

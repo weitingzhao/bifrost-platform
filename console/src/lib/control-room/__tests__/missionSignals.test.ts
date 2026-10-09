@@ -17,13 +17,13 @@ function bridge(partial: {
 }): AgentBridgeResponse {
   const runnersOk = partial.runnersOk !== false
   const runner = {
-    url: 'http://192.168.10.50:8781',
+    url: 'http://192.168.10.50:8790',
     role: 'primary' as const,
     status: runnersOk ? 'ok' : 'fail',
     version: '0.1.0',
     active: true,
     cursor_api_key: true,
-    service: 'bifrost-remediation-runner',
+    service: 'operator-plane',
   }
   return {
     generated_at: '2026-08-29T00:00:00Z',
@@ -32,7 +32,7 @@ function bridge(partial: {
       runner,
       {
         ...runner,
-        url: 'http://192.168.10.52:8781',
+        url: 'http://192.168.10.52:8790',
         role: 'standby',
         active: false,
       },
@@ -43,14 +43,6 @@ function bridge(partial: {
       dirty_repos: partial.dirty ?? 0,
     },
     satellite_probe_bridge: { status: 'ok' },
-    hermes_mcp: { status: 'unavailable' },
-    nous_hermes: {
-      status: 'ok',
-      gateway_running: true,
-      active_agents: 0,
-      active_sessions: 0,
-      mcp_tool_count: 0,
-    },
     platform_mcp: {
       server_name: 'mcp-server-platform',
       server_version: '0.1.0',

@@ -75,7 +75,7 @@ type Server struct {
 	releases        *releases.Handler
 	work            *workactions.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
-	// serves exactly these routes beside the remediation runners, where a bad
+	// serves exactly these routes beside the operator plane, where a bad
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
 	// points at such a process — then mountPlane forwards instead of serving, and
 	// nothing here constructs a second patrol autopilot.

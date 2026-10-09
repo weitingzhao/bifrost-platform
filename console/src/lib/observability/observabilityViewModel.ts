@@ -629,7 +629,7 @@ function evaluateIbGateway(
 function evaluateOperatorPlane(
   bridge: AgentBridgeResponse | null | undefined,
 ): EvaluatedSignal {
-  const def = getSignalDef('engineer.remediation-runner')!
+  const def = getSignalDef('engineer.operator-plane')!
   if (bridge == null) {
     return { def, state: 'unknown', summary: 'operator-plane status missing', env: 'shared' }
   }

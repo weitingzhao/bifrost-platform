@@ -11,7 +11,6 @@ export function buildOperatorPlaneFixPrompt(bridge: AgentBridgeResponse | undefi
           {
             git_bridge: bridge.git_bridge,
             satellite_probe_bridge: bridge.satellite_probe_bridge,
-            hermes_mcp: bridge.hermes_mcp,
             remediation_runner: bridge.remediation_runner,
             runners: bridge.runners,
           },
@@ -46,8 +45,8 @@ export function buildOperatorPlaneFixPrompt(bridge: AgentBridgeResponse | undefi
     '- Set `AGENT_DEPLOY_ENABLED=1` in bifrost-platform `.env` on platform-api host; restart platform-api.',
     '- Requires SSH from platform-api host to Mac Mini (AGENT_DEPLOY_REMOTE=vision@192.168.10.50).',
     '',
-    '### 3. Hermes MCP / legacy scheduler unavailable',
-    '- Optional for Release. Legacy Hermes Gateway at 127.0.0.1:8782 on agent host — ignore if Nous Hermes Agent is ok.',
+    '### 3. Operator plane or peer-watchdog down',
+    '- Mac minis run operator-plane and peer-watchdog. .50 relays alerts. Restore those, not a retired gateway.',
     '',
     '## Agent workflow',
     '1. get_agent_bridge + list_dev_sessions.',

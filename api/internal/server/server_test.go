@@ -197,9 +197,9 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodGet, "/api/v1/promote/gate-history"},
 		{http.MethodGet, "/api/v1/promote/tier-b"},
 		{http.MethodPost, "/api/v1/promote/tier-b/signoff"},
-		{http.MethodGet, "/api/v1/hermes/insights"},
-		{http.MethodPost, "/api/v1/hermes/run-first-task"},
-		{http.MethodGet, "/api/v1/agent/hermes/first-task"},
+		{http.MethodGet, "/api/v1/hermes/insights"},         // 已退役
+		{http.MethodPost, "/api/v1/hermes/run-first-task"},  // 已退役
+		{http.MethodGet, "/api/v1/agent/hermes/first-task"}, // 已退役
 		{http.MethodGet, "/api/v1/agent/drift-proposals"},
 		{http.MethodPost, "/api/v1/agent/drift-proposals"},
 		{http.MethodGet, "/api/v1/agent/retrospective/patterns"},
@@ -215,7 +215,7 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodGet, "/api/v1/agent/governance/capability-map"},
 		{http.MethodGet, "/api/v1/agent/governance/snapshot"},
 		{http.MethodGet, "/api/v1/agent/smoke"},
-		{http.MethodGet, "/api/v1/agent/hermes/readiness"},
+		{http.MethodGet, "/api/v1/agent/hermes/readiness"}, // 已退役
 		{http.MethodGet, "/api/v1/agent/skills"},
 		{http.MethodGet, "/api/v1/agent/schedules"},
 		{http.MethodGet, "/api/v1/agent/executions"},
@@ -237,7 +237,7 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodGet, "/api/v1/remediation/job-1/stream"},
 		{http.MethodPost, "/api/v1/remediation/job-1/cancel"},
 		{http.MethodPost, "/api/v1/remediation/job-1/respond"},
-		{http.MethodGet, "/api/v1/agent/hermes/health"},
+		{http.MethodGet, "/api/v1/agent/hermes/health"}, // 已退役
 	}
 	// The path still serves another method, so chi answers 405 rather than 404.
 	methodGone := []struct{ method, path string }{

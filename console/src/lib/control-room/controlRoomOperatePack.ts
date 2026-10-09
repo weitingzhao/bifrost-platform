@@ -1,5 +1,5 @@
 /**
- * Control Room Operate Loop — dispatch packs for Agent Desk / remediation runner.
+ * Control Room Operate Loop — dispatch packs for Agent Desk / operator plane.
  */
 
 import type { MatrixResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from '@/api/matrixTypes'

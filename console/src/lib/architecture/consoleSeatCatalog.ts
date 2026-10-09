@@ -204,13 +204,6 @@ export const CONSOLE_SEAT_PAGES: ConsoleSeatPageRow[] = [
     home: 'engineer',
     roomPosture: false,
   },
-  {
-    id: 'hermes-status',
-    label: 'Hermes Status',
-    plane: 'Engineer',
-    home: 'engineer',
-    roomPosture: false,
-  },
 
   // Mission groups
   {

@@ -167,7 +167,7 @@ export const AGENT_LAYERS: AgentLayerRow[] = [
 export const AGENT_PLANE_STATEMENT =
   'The three Agent layers describe WHAT the Agent does (code / ops / business). This section describes ' +
   'WHERE the Agent stands. The Agent is not a passenger inside the rocket — it is the engineer crew on the ground. ' +
-  'Its execution substrate (Remediation Runners) lives OUTSIDE the K8s cluster, on dedicated Mac hosts, so it can ' +
+  'Its execution substrate (operator-plane and peer-watchdog) lives OUTSIDE the K8s cluster, on dedicated Mac hosts, so it can ' +
   'recover the cluster, the control plane, and the workloads even when they are down. This is the L-1 ' +
   'Out-of-Band Operator Plane in the bootstrap model — fate-isolated from everything it services.'
 
@@ -179,7 +179,7 @@ export type AgentPlaneRow = {
 export const AGENT_PLANE: AgentPlaneRow[] = [
   {
     dimension: 'Where it runs',
-    reality: 'Dual Mac Mini Remediation Runners — primary .50 + standby .52; Git Bridge on Mac Pro (Dev-only). Never an in-cluster Pod.',
+    reality: 'Mac minis run operator-plane and peer-watchdog; .50 relays alerts. Git Bridge on Mac Pro (Dev-only). Never an in-cluster Pod.',
   },
   {
     dimension: 'Why outside K8s',
@@ -203,7 +203,7 @@ export const AGENT_PLANE: AgentPlaneRow[] = [
   },
   {
     dimension: 'Dispatch → Autonomous',
-    reality: 'Runner = on-call engineer you page (Dispatch mode, ad-hoc). Hermes Gateway = full-time engineer with a shift roster (Autonomous mode, cron/webhook/manual Skills). Both share the L-1 substrate and MCP tools.',
+    reality: 'Operator-plane is the on-call engineer you page (Dispatch mode, ad-hoc). Autonomous skills share the same L-1 substrate and MCP tools. .50 relays alerts.',
   },
   {
     dimension: 'Flight Director governance',

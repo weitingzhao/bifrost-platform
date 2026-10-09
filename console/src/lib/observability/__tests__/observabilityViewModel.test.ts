@@ -45,14 +45,6 @@ function agentBridgeOk(): AgentBridgeResponse {
     remediation_runner: { url: 'http://runner', status: 'ok' },
     git_bridge: { status: 'ok' },
     satellite_probe_bridge: { status: 'ok' },
-    hermes_mcp: { status: 'ok' },
-    nous_hermes: {
-      status: 'ok',
-      gateway_running: true,
-      active_agents: 0,
-      active_sessions: 0,
-      mcp_tool_count: 0,
-    },
     platform_mcp: {
       server_name: 'bifrost-platform',
       server_version: '0.0.0',
@@ -222,7 +214,7 @@ describe('observability signal registry + verdict aggregation', () => {
 
     // Engineer on prod/stg seat: agent-bridge NOT OBSERVED (optionalContract).
     const engineer = [
-      sig('engineer.remediation-runner', 'healthy'),
+      sig('engineer.operator-plane', 'healthy'),
       sig('engineer.agent-bridge', 'not_observed'),
     ]
     expect(domainVerdictFromSignals(engineer, []).verdict).toBe('healthy')
