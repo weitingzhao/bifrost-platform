@@ -2,6 +2,11 @@
 # Audit UniFi networks + switch ports (read-only).
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Owner only. An Agent must not run this script.
+# shellcheck source=unifi_owner_env.sh
+source "$SCRIPT_DIR/unifi_owner_env.sh"
+unifi_owner_fill UNIFI_HOST UNIFI_USER UNIFI_PASS UNIFI_API_KEY
 HOST="${UNIFI_HOST:-192.168.1.1}"
 USER="${UNIFI_USER:?UNIFI_USER not set}"
 PASS="${UNIFI_PASS:?UNIFI_PASS not set}"

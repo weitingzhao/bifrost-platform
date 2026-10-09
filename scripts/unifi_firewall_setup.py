@@ -28,7 +28,15 @@ import urllib.error
 import urllib.request
 import ssl
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+
+_scripts = Path(__file__).resolve().parent
+if str(_scripts) not in sys.path:
+    sys.path.insert(0, str(_scripts))
+from unifi_owner_env import load as _load_unifi_owner_env
+
+_load_unifi_owner_env()
 
 HOST = os.environ.get("UNIFI_HOST", "192.168.1.1")
 USER = os.environ.get("UNIFI_USER", "")

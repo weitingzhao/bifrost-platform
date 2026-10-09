@@ -11,6 +11,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Owner only. An Agent must not run this script.
+# shellcheck source=unifi_owner_env.sh
+source "$SCRIPT_DIR/unifi_owner_env.sh"
+unifi_owner_fill UNIFI_HOST UNIFI_USER UNIFI_PASS UNIFI_API_KEY
 UNIFI_HOST="${UNIFI_HOST:-192.168.1.1}"
 UNIFI_USER="${UNIFI_USER:?UNIFI_USER}"
 UNIFI_PASS="${UNIFI_PASS:?UNIFI_PASS}"
