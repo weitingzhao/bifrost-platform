@@ -20,6 +20,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
@@ -53,6 +54,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/threadtitles"
 	"github.com/weitingzhao/bifrost-platform/api/internal/topology"
 	"github.com/weitingzhao/bifrost-platform/api/internal/tradeagent"
+	"github.com/weitingzhao/bifrost-platform/api/internal/workactions"
 )
 
 type Server struct {
@@ -71,6 +73,7 @@ type Server struct {
 	codehealth      *codehealth.Handler
 	lineage         *lineage.Handler
 	releases        *releases.Handler
+	work            *workactions.Handler
 	// The out-of-band operator plane (L-1). It is one deployable: cmd/operator-plane
 	// serves exactly these routes beside the remediation runners, where a bad
 	// platform-api release cannot reach it. plane is nil when OPERATOR_PLANE_URL
@@ -292,6 +295,35 @@ func New(cfg *config.Config) (*Server, error) {
 	actions.SetDaemonReplicas(func(ctx context.Context, namespace string) (int32, bool) {
 		return srv.lookupDaemonReplicas(ctx, namespace)
 	})
+	if pol, err := actuationpolicy.LoadFromConfigDir(cfg.ConfigDir()); err != nil {
+		slog.Error("actuation policy not loaded; generic write actions refuse", "err", err)
+	} else {
+		actions.SetActuationPolicy(pol)
+		workSvc := &workactions.Service{
+			Policy: pol,
+			Clients: workactions.Clients{
+				Kube: func() (kubernetes.Interface, error) {
+					cs, _, err := clusterH.Service().KubernetesClient()
+					return cs, err
+				},
+				Dynamic: func() (dynamic.Interface, error) {
+					rc, _, err := clusterH.Service().RestConfig()
+					if err != nil {
+						return nil, err
+					}
+					return dynamic.NewForConfig(rc)
+				},
+			},
+		}
+		srv.work = &workactions.Handler{Svc: workSvc}
+		actions.SetPlanLookup(func(ctx context.Context, planID string) (actions.PlanSummary, error) {
+			sum, err := workSvc.Summarize(ctx, planID)
+			if err != nil {
+				return actions.PlanSummary{}, err
+			}
+			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon}, nil
+		})
+	}
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
 	if dataDir == "" {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
@@ -424,6 +456,7 @@ func (s *Server) Router() http.Handler {
 		})
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
+		r.Get("/actuation/manifests/plans/{id}", s.handlePlanGet)
 		r.Get("/delivery/runs/{id}/steps", s.delivery.HandleRunSteps)
 		// Recording a skill's own outcome is evidence, not actuation. It sits
 		// below operator on purpose: the workload that reports must not also be
@@ -450,6 +483,11 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/plugins/market-data/api/*", s.guard("market_data_delete", s.marketdata.HandleAPIProxy))
 			r.Post("/plugins/flex-query/api/*", s.flexquery.HandleAPIProxy)
 			r.Delete("/delivery/runs/{id}", s.guard("delete_pipeline_run", s.delivery.HandleDeletePipelineRun))
+			r.Post("/actuation/manifests/plan", s.guard("plan_manifest", s.handlePlan))
+			r.Post("/actuation/manifests/apply", s.guard("apply_manifest", s.handleApply))
+			r.Post("/actuation/jobs/from-cronjob", s.guard("create_job_from_cronjob", s.handleCreateJob))
+			r.Post("/actuation/jobs/delete-finished", s.guard("delete_finished_jobs", s.handleDeleteFinished))
+			r.Post("/actuation/probes", s.guard("run_probe_pod", s.handleProbe))
 		})
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleAdmin))

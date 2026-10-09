@@ -311,6 +311,68 @@ var catalog = []Action{
 		Description: "Record approval for a weekend node rolling reboot. Tier D. The platform does not reboot nodes; after approval, run scripts/k3s/rolling-reboot.sh --execute --approval <id>.",
 		Params:      []Param{},
 	},
+	{
+		ID: "plan_manifest", Tier: TierB,
+		Description: "Render a git path and return a plan id. Tier B. The plan runs as the fixed apply pipeline in plan mode.",
+		Method:      "POST", Pattern: "/api/v1/actuation/manifests/plan",
+		Params: []Param{
+			{Name: "repo", Type: "string", Required: true, In: "body"},
+			{Name: "path", Type: "string", Required: true, In: "body"},
+			{Name: "commit", Type: "string", Required: true, In: "body"},
+		},
+		Classify: classifyPlanManifest,
+	},
+	{
+		ID: "apply_manifest", Tier: TierC,
+		Description: "Apply a completed manifest plan. Tier is the highest namespace in the plan. A rendered daemon Deployment is tier X and cannot be requested. Does not prune.",
+		Method:      "POST", Pattern: "/api/v1/actuation/manifests/apply",
+		Params: []Param{
+			{Name: "plan_id", Type: "string", Required: true, In: "body"},
+		},
+		Classify: classifyApply,
+	},
+	{
+		ID: "create_job_from_cronjob", Tier: TierB,
+		Description: "Create one Job from a CronJob, the same shape as kubectl create job --from. Denied namespaces are refused. PROD business namespaces and data are tier C.",
+		Method:      "POST", Pattern: "/api/v1/actuation/jobs/from-cronjob",
+		Params: []Param{
+			{Name: "namespace", Type: "string", Required: true, In: "body"},
+			{Name: "cronjob", Type: "string", Required: true, In: "body"},
+		},
+		Classify: classifyJob,
+	},
+	{
+		ID: "delete_finished_jobs", Tier: TierB,
+		Description: "Delete Jobs that are Complete or Failed, and finished probe Pods. Tier B. Provide names or label_selector.",
+		Method:      "POST", Pattern: "/api/v1/actuation/jobs/delete-finished",
+		Params: []Param{
+			{Name: "namespace", Type: "string", Required: true, In: "body"},
+			{Name: "names", Type: "string[]", In: "body"},
+			{Name: "label_selector", Type: "string", In: "body"},
+		},
+	},
+	{
+		ID: "run_probe_pod", Tier: TierB,
+		Description: "Run a short-lived probe Job from an allow-listed image. The data namespace is tier C. env_from is limited to the namespaces in the actuation policy.",
+		Method:      "POST", Pattern: "/api/v1/actuation/probes",
+		Params: []Param{
+			{Name: "namespace", Type: "string", Required: true, In: "body"},
+			{Name: "image", Type: "string", Required: true, In: "body"},
+			{Name: "command", Type: "string[]", Required: true, In: "body"},
+			{Name: "args", Type: "string[]", In: "body"},
+			{Name: "env_from", Type: "string", In: "body"},
+			{Name: "timeout_seconds", Type: "integer", In: "body"},
+		},
+		Classify: classifyProbe,
+	},
+	{
+		ID: "owner_run_command", Tier: TierD,
+		Description: "Record an exact shell command for the Owner to run. Tier D. The platform does not execute it; after approval, run scripts/owner/owner-run.sh <id>.",
+		Params: []Param{
+			{Name: "command", Type: "string", Required: true, In: "body"},
+			{Name: "reason", Type: "string", Required: true, In: "body"},
+		},
+	},
 }
 
 func classifyApp(_ context.Context, params map[string]any) Tier {

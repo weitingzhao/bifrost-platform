@@ -1,4 +1,4 @@
-/** Remediation runner scope ids — keep in sync with agentTaskCatalog.ts and agent/remediation prompt routing. */
+/** Operator-plane scope ids. 已退役: the old runner catalog. */
 
 export const DELIVER_STG_RECOVER_SCOPE = 'deliver-stg-recover'
 export const TRADE_RELEASE_FIX_SCOPE = 'trade-release-fix'
@@ -17,7 +17,7 @@ export const DATA_LAYER_BACKUP_SCOPE = 'data-layer-backup'
 export const DATA_LAYER_CLONE_SCOPE = 'data-layer-clone'
 /** Cluster page AI Auto-Check — fleet + ops triage (default K8s SRE prompt + enriched context). */
 export const CLUSTER_ISSUES_FULL_AUTO_SCOPE = 'cluster_issues_full_auto'
-/** Engineer Operator Plane — agent bridge / remediation runners. */
+/** Engineer Operator Plane — agent bridge on the Mac minis. */
 export const OPERATOR_PLANE_REMEDIATE_SCOPE = 'operator-plane-remediate'
 
 /** Maps cluster triage playbookId → remediation scope for one-click Fix. */

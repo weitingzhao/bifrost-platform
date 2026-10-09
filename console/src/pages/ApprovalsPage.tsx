@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Button } from '@bifrost/ui'
+import { authedFetch } from '@/api/client'
 import {
   approvalIdFromHash,
   fetchApproval,
@@ -68,6 +69,45 @@ function Field({ label, value }: { label: string; value: string }) {
   )
 }
 
+function ActuationDetail({ item }: { item: ApprovalItem }) {
+  const planId =
+    item.action === 'apply_manifest' && typeof item.params.plan_id === 'string' ? item.params.plan_id : ''
+  const command =
+    item.action === 'owner_run_command' && typeof item.params.command === 'string' ? item.params.command : ''
+  const plan = useQuery({
+    queryKey: ['actuation-plan', planId],
+    enabled: planId !== '',
+    queryFn: async () => {
+      const response = await authedFetch(
+        'Plan',
+        `/api/v1/actuation/manifests/plans/${encodeURIComponent(planId)}`,
+      )
+      return (await response.json()) as {
+        objects?: unknown
+        policy?: string
+        ready?: boolean
+        logs?: string
+      }
+    },
+  })
+  if (command !== '') return <Field label="Command" value={command} />
+  if (planId === '') return null
+  const summary = plan.data
+  const status =
+    summary == null
+      ? planId
+      : `${planId} · ${summary.policy ?? 'pending'} · ${summary.ready ? 'ready' : 'not ready'}`
+  return (
+    <>
+      <Field label="Plan" value={status} />
+      {summary?.logs ? <Field label="Plan logs" value={summary.logs} /> : null}
+      {summary?.objects != null ? (
+        <pre className="overflow-x-auto text-xs">{JSON.stringify(summary.objects, null, 2)}</pre>
+      ) : null}
+    </>
+  )
+}
+
 function ApprovalCard({
   item,
   hasToken,
@@ -107,6 +147,7 @@ function ApprovalCard({
         <Field label="Rollback" value={item.rollback ?? ''} />
       </div>
       <Field label="Reason" value={item.reason} />
+      <ActuationDetail item={item} />
       <details open={open ? true : undefined} className="min-w-0">
         <summary className="cursor-pointer text-sm">Params</summary>
         <pre className="mt-1 max-w-full whitespace-pre-wrap break-all text-xs">

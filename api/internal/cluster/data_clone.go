@@ -277,9 +277,7 @@ type DataCloneSchedule struct {
 }
 
 type DataCloneScheduleStore struct {
-	mu   sync.Mutex
 	path string
-	cfg  DataCloneSchedule
 }
 
 func NewDataCloneScheduleStore() *DataCloneScheduleStore {
@@ -292,10 +290,7 @@ func NewDataCloneScheduleStore() *DataCloneScheduleStore {
 		}
 	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	s := &DataCloneScheduleStore{path: path}
-	s.cfg = defaultDataCloneSchedule()
-	s.load()
-	return s
+	return &DataCloneScheduleStore{path: path}
 }
 
 func defaultDataCloneSchedule() DataCloneSchedule {
@@ -309,40 +304,31 @@ func defaultDataCloneSchedule() DataCloneSchedule {
 	}
 }
 
-func (s *DataCloneScheduleStore) load() {
+func decodeSchedule(raw []byte) DataCloneSchedule {
+	cfg := defaultDataCloneSchedule()
+	if len(raw) == 0 {
+		return cfg
+	}
+	if json.Unmarshal(raw, &cfg) != nil {
+		return defaultDataCloneSchedule()
+	}
+	return cfg
+}
+
+func encodeSchedule(cfg DataCloneSchedule) ([]byte, error) {
+	return json.MarshalIndent(cfg, "", "  ")
+}
+
+// Get reads the schedule from the state backend on every call.
+func (s *DataCloneScheduleStore) Get() DataCloneSchedule {
 	raw, err := statefile.ReadFile(s.path)
 	if err != nil {
-		return
+		return defaultDataCloneSchedule()
 	}
-	var cfg DataCloneSchedule
-	if json.Unmarshal(raw, &cfg) != nil {
-		return
-	}
-	s.cfg = cfg
+	return decodeSchedule(raw)
 }
 
-func (s *DataCloneScheduleStore) persistLocked() {
-	raw, err := json.MarshalIndent(s.cfg, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = statefile.WriteFile(s.path, raw, 0o600)
-}
-
-// Get re-reads the stored schedule: the api pod writes it (PUT) and the
-// workers pod's scheduler reads it, and they share it only through the state
-// backend (TD-196). Until 2026-10-07 the store cached the file it loaded at
-// construction, so a schedule set in the Console never reached the scheduler.
-func (s *DataCloneScheduleStore) Get() DataCloneSchedule {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.load()
-	return s.cfg
-}
-
-func (s *DataCloneScheduleStore) Put(cfg DataCloneSchedule) DataCloneSchedule {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func normalizeSchedule(cfg DataCloneSchedule) DataCloneSchedule {
 	if cfg.Source == "" {
 		cfg.Source = "bifrost_prod"
 	}
@@ -359,20 +345,43 @@ func (s *DataCloneScheduleStore) Put(cfg DataCloneSchedule) DataCloneSchedule {
 		cfg.Enabled = false
 	}
 	cfg.UpdatedAt = time.Now().UTC()
-	s.cfg = cfg
-	s.persistLocked()
-	return s.cfg
+	return cfg
+}
+
+// Put writes the schedule fields onto the latest document. A concurrent
+// RecordRun's last-run fields stay, because the write goes through
+// statefile.Update instead of replacing a cached copy.
+func (s *DataCloneScheduleStore) Put(cfg DataCloneSchedule) DataCloneSchedule {
+	cfg = normalizeSchedule(cfg)
+	saved := cfg
+	err := statefile.Update(s.path, func(old []byte) ([]byte, error) {
+		base := decodeSchedule(old)
+		base.Enabled = cfg.Enabled
+		base.Interval = cfg.Interval
+		base.Source = cfg.Source
+		base.Targets = cfg.Targets
+		base.Mode = cfg.Mode
+		base.Tables = cfg.Tables
+		base.UpdatedAt = cfg.UpdatedAt
+		saved = base
+		return encodeSchedule(base)
+	})
+	if err != nil {
+		return cfg
+	}
+	return saved
 }
 
 func (s *DataCloneScheduleStore) RecordRun(jobID, status string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := time.Now().UTC()
-	s.cfg.LastAutoRunAt = &now
-	s.cfg.LastAutoRunID = jobID
-	s.cfg.LastStatus = status
-	s.cfg.UpdatedAt = now
-	s.persistLocked()
+	_ = statefile.Update(s.path, func(old []byte) ([]byte, error) {
+		cfg := decodeSchedule(old)
+		now := time.Now().UTC()
+		cfg.LastAutoRunAt = &now
+		cfg.LastAutoRunID = jobID
+		cfg.LastStatus = status
+		cfg.UpdatedAt = now
+		return encodeSchedule(cfg)
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -387,9 +396,7 @@ type DataCloneLastMeta struct {
 }
 
 type DataCloneLastStore struct {
-	mu   sync.Mutex
 	path string
-	meta DataCloneLastMeta
 }
 
 func NewDataCloneLastStore() *DataCloneLastStore {
@@ -402,46 +409,38 @@ func NewDataCloneLastStore() *DataCloneLastStore {
 		}
 	}
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	s := &DataCloneLastStore{path: path}
-	s.load()
-	return s
+	return &DataCloneLastStore{path: path}
 }
 
-func (s *DataCloneLastStore) load() {
-	raw, err := statefile.ReadFile(s.path)
-	if err != nil {
-		return
+func decodeLast(raw []byte) DataCloneLastMeta {
+	if len(raw) == 0 {
+		return DataCloneLastMeta{}
 	}
 	var meta DataCloneLastMeta
 	if json.Unmarshal(raw, &meta) != nil {
-		return
+		return DataCloneLastMeta{}
 	}
-	s.meta = meta
-}
-
-func (s *DataCloneLastStore) persistLocked() {
-	raw, err := json.MarshalIndent(s.meta, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = statefile.WriteFile(s.path, raw, 0o600)
+	return meta
 }
 
 func (s *DataCloneLastStore) Get() DataCloneLastMeta {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.meta
+	raw, err := statefile.ReadFile(s.path)
+	if err != nil {
+		return DataCloneLastMeta{}
+	}
+	return decodeLast(raw)
 }
 
 func (s *DataCloneLastStore) Record(jobID string, targets []string, at time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	at = at.UTC()
-	s.meta.LastCloneAt = &at
-	s.meta.LastCloneJobID = jobID
-	s.meta.Targets = append([]string{}, targets...)
-	s.meta.UpdatedAt = at
-	s.persistLocked()
+	_ = statefile.Update(s.path, func(old []byte) ([]byte, error) {
+		meta := decodeLast(old)
+		meta.LastCloneAt = &at
+		meta.LastCloneJobID = jobID
+		meta.Targets = append([]string{}, targets...)
+		meta.UpdatedAt = at
+		return json.MarshalIndent(meta, "", "  ")
+	})
 }
 
 // ---------------------------------------------------------------------------

@@ -197,7 +197,7 @@ export const SCOPE_ROWS: ScopeRow[] = [
   {
     tag: 'AGENT',
     component: 'Out-of-Band Operator Plane (L-1)',
-    technology: 'Dual Mac Mini Remediation Runners (primary .50 + standby .52) · launchd peer watchdog · Git Bridge (Mac Pro, Dev-only)',
+    technology: 'Mac minis run the operator plane out of band and peer-watchdog; .50 relays alerts · Git Bridge (Mac Pro, Dev-only)',
     notes:
       'The engineer on the ground — recovers Ops Platform (rocket) + Trade (payload) from OUTSIDE K8s; never an in-cluster Pod. Mutual watchdog + platform-api failover. See cicdBootstrapCatalog.ts L-1 · k3sBootstrapCatalog.ts · Flywheel Vision.',
   },

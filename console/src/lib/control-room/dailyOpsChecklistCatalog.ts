@@ -223,7 +223,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
     order: 3,
     label: 'Engineer · Operator Plane',
     purpose:
-      'AI Remediation Runners + Git Bridge are the system\'s "hands". If both runners are down, AI-driven fix is impossible and workflow degrades to manual.',
+      'The operator plane on the Mac minis and Git Bridge are the system\'s "hands". If both minis are down, AI-driven fix is impossible and workflow degrades to manual.',
     fleetMapping: [{ role: 'engineer', env: 'span' }],
     groups: ['automation', 'seat'],
     items: [
@@ -444,7 +444,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
     order: 7,
     label: 'Vendor · External Feeds',
     purpose:
-      'Polygon (Massive) data feeds, IB gateway, and Hermes AI tooling — external dependencies we observe and partially control.',
+      'Polygon (Massive) data feeds and the IB gateway — external dependencies we observe and partially control.',
     fleetMapping: [{ role: 'vendor', env: 'span' }],
     groups: ['feed', 'tooling'],
     items: [
@@ -535,17 +535,15 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
         },
       },
       {
-        id: 'hermes-tooling',
-        label: 'Hermes AI tooling',
+        id: 'operator-plane',
+        label: 'Operator plane',
         group: 'tooling',
-        idPattern: '^hermes$',
-        healthyCriteria:
-          '(nous_hermes.status=ok OR hermes_mcp.status=ok) AND hermes_mcp.status!=degraded (no enabled gateway skill failing its last 3 runs)',
+        idPattern: '^operator-plane$',
+        healthyCriteria: 'Mac minis answer the operator plane, and .50 relays alerts',
         fixScope: OPERATOR_PLANE_FIX_SCOPE,
         fixCapability: 'semi_auto',
-        manualAction:
-          'Restart Hermes agent on Mac Mini; verify model endpoint + API key configuration',
-        agentTools: ['get_agent_bridge', 'get_hermes_readiness'],
+        manualAction: 'Check the operator plane on the Mac minis and the alert relay on .50',
+        agentTools: ['get_agent_bridge'],
       },
     ],
     blocksDownstream: false,

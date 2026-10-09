@@ -147,7 +147,7 @@ export function systemDomainLabel(id: SystemDomainId): string {
 
 /**
  * Explicit remediation scope → System Domain.
- * Keep in sync with agentScopes.ts / agentTaskCatalog display scopes.
+ * Keep in sync with agentScopes.ts display scopes.
  */
 export const SCOPE_TO_SYSTEM_DOMAIN: Record<string, SystemDomainId> = {
   // Rocket — platform / cluster / CI

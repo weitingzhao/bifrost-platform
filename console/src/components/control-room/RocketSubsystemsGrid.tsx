@@ -32,7 +32,7 @@ const ROCKET_MODULES: Array<{
     key: 'agent',
     icon: Bot,
     name: 'Agent',
-    role: 'Autopilot — remediation runner, git bridge, drift repair',
+    role: 'Autopilot — operator plane, git bridge, drift repair',
   },
 ]
 

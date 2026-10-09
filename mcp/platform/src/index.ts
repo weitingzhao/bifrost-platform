@@ -427,6 +427,71 @@ reg(
 )
 
 reg(
+  'plan_manifest',
+  'Render a git path at a full commit and return a plan id. Tier B.',
+  {
+    repo: z.string().describe('Repository name from the actuation policy'),
+    path: z.string().describe('Path inside the repository'),
+    commit: z.string().describe('Full 40-character git SHA'),
+  },
+  async ({ repo, path, commit }) =>
+    jsonResult(await platformPost('/api/v1/actuation/manifests/plan', { repo, path, commit })),
+)
+
+reg(
+  'create_job_from_cronjob',
+  'Create one Job from a CronJob. Tier follows the actuation policy; denied namespaces are refused.',
+  {
+    namespace: z.string(),
+    cronjob: z.string(),
+  },
+  async ({ namespace, cronjob }) =>
+    jsonResult(await platformPost('/api/v1/actuation/jobs/from-cronjob', { namespace, cronjob })),
+)
+
+reg(
+  'delete_finished_jobs',
+  'Delete Jobs that are Complete or Failed, and finished probe Pods. Provide names or label_selector.',
+  {
+    namespace: z.string(),
+    names: z.array(z.string()).optional(),
+    label_selector: z.string().optional(),
+  },
+  async ({ namespace, names, label_selector }) =>
+    jsonResult(
+      await platformPost('/api/v1/actuation/jobs/delete-finished', {
+        namespace,
+        ...(names != null ? { names } : {}),
+        ...(label_selector != null && label_selector !== '' ? { label_selector } : {}),
+      }),
+    ),
+)
+
+reg(
+  'run_probe_pod',
+  'Run a short-lived probe Job from an allow-listed image. env_from is a Deployment name in the same namespace.',
+  {
+    namespace: z.string(),
+    image: z.string(),
+    command: z.array(z.string()),
+    args: z.array(z.string()).optional(),
+    env_from: z.string().optional(),
+    timeout_seconds: z.number().int().min(1).max(900).optional(),
+  },
+  async ({ namespace, image, command, args, env_from, timeout_seconds }) =>
+    jsonResult(
+      await platformPost('/api/v1/actuation/probes', {
+        namespace,
+        image,
+        command,
+        ...(args != null ? { args } : {}),
+        ...(env_from != null && env_from !== '' ? { env_from } : {}),
+        ...(timeout_seconds != null ? { timeout_seconds } : {}),
+      }),
+    ),
+)
+
+reg(
   'request_action',
   'Create an approval request and return its id. Does not run the action. Requires MCP_WRITES=on.',
   {

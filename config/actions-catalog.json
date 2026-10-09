@@ -1,6 +1,9 @@
 {
   "actions": [
+    "apply_manifest",
     "cordon_node",
+    "create_job_from_cronjob",
+    "delete_finished_jobs",
     "delete_pipeline_run",
     "delete_pod",
     "drain_node",
@@ -15,10 +18,13 @@
     "ib_self_heal",
     "market_data_delete",
     "market_data_heal",
+    "owner_run_command",
+    "plan_manifest",
     "poweroff_compute_node",
     "repair_cnpg_wal_store",
     "rolling_reboot",
     "rollout_restart_deployment",
+    "run_probe_pod",
     "scale_deployment",
     "start_pipeline_run",
     "sweep_failed_backups",

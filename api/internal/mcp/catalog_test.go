@@ -69,6 +69,10 @@ var stdioMirroredTools = map[string]bool{
 	"get_telemetry_overview":     true,
 	"get_telemetry_alerts":       true,
 	"get_telemetry_targets":      true,
+	"plan_manifest":              true,
+	"create_job_from_cronjob":    true,
+	"delete_finished_jobs":       true,
+	"run_probe_pod":              true,
 	"request_action":             true,
 	"get_request":                true,
 	"list_requests":              true,
@@ -101,8 +105,8 @@ func TestCatalogImplementedAllHaveStdioMirror(t *testing.T) {
 			t.Errorf("%s: catalog Implemented=true but missing from stdioMirroredTools (wire mcp/platform or drop Implemented)", tool.Name)
 		}
 	}
-	if len(stdioMirroredTools) != 48 {
-		t.Errorf("stdioMirroredTools size=%d want 50 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
+	if len(stdioMirroredTools) != 52 {
+		t.Errorf("stdioMirroredTools size=%d want 52 (sync with stdioToolNames.ts)", len(stdioMirroredTools))
 	}
 }
 

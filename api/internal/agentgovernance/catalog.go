@@ -1,6 +1,6 @@
 package agentgovernance
 
-// TaskDef mirrors console agentTaskCatalog scopes for Flight Director trust matrix.
+// TaskDef mirrors console operator-plane scopes for the Flight Director trust matrix.
 type TaskDef struct {
 	ID             string   `json:"id"`
 	Scope          string   `json:"scope"`

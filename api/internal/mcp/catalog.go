@@ -215,6 +215,10 @@ func Catalog() []ToolView {
 		tool("get_telemetry_alerts", "Prometheus firing and pending alerts", "read", "GET", "/api/v1/telemetry/alerts", "viewer", "P4", true),
 		tool("get_telemetry_targets", "Prometheus scrape target health", "read", "GET", "/api/v1/telemetry/targets", "viewer", "P4", true),
 
+		tool("plan_manifest", "Render a git path and return a plan id (tier B)", "routine", "POST", "/api/v1/actuation/manifests/plan", "operator", "Agent", true),
+		tool("create_job_from_cronjob", "Create one Job from a CronJob (tier follows the actuation policy)", "routine", "POST", "/api/v1/actuation/jobs/from-cronjob", "operator", "Agent", true),
+		tool("delete_finished_jobs", "Delete finished Jobs and probe Pods (tier B)", "routine", "POST", "/api/v1/actuation/jobs/delete-finished", "operator", "Agent", true),
+		tool("run_probe_pod", "Run a short-lived probe Job from an allow-listed image", "routine", "POST", "/api/v1/actuation/probes", "operator", "Agent", true),
 		tool("request_action", "Create an approval request and return its id. Does not run the action.", "routine", "POST", "/api/v1/approvals", "operator", "Agent", true),
 		tool("get_request", "Read one approval request by id", "read", "GET", "/api/v1/approvals/{id}", "viewer", "Agent", true),
 		tool("list_requests", "List approval requests (pending or all)", "read", "GET", "/api/v1/approvals", "viewer", "Agent", true),

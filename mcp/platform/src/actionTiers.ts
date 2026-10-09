@@ -37,6 +37,36 @@ function withQuery(base: Record<string, unknown>, query: URLSearchParams, keys: 
 
 export const WRITE_SPECS: readonly WriteMapping[] = [
   {
+    action: 'plan_manifest',
+    method: 'POST',
+    pattern: /^\/api\/v1\/actuation\/manifests\/plan$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'apply_manifest',
+    method: 'POST',
+    pattern: /^\/api\/v1\/actuation\/manifests\/apply$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'create_job_from_cronjob',
+    method: 'POST',
+    pattern: /^\/api\/v1\/actuation\/jobs\/from-cronjob$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'delete_finished_jobs',
+    method: 'POST',
+    pattern: /^\/api\/v1\/actuation\/jobs\/delete-finished$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
+    action: 'run_probe_pod',
+    method: 'POST',
+    pattern: /^\/api\/v1\/actuation\/probes$/,
+    paramsFrom: (_m, body) => asRecord(body),
+  },
+  {
     action: 'trigger_cnpg_backup',
     method: 'POST',
     pattern: /^\/api\/v1\/cluster\/postgres\/backup$/,

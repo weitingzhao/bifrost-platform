@@ -1,0 +1,191 @@
+# Actuation allow-lists for LANE-W33B. Platform code reads this file and does not
+# name namespaces, repositories, or images itself. Copies in the platform
+# overlays and the Tekton ConfigMap must stay byte-identical
+# (check_ops_context_parity.py, check_actuation_policy.py).
+delivery:
+  namespace: cicd
+  pipeline: bifrost-apply-manifest
+  service_account: bifrost-applier
+  gitea_base: http://gitea.cicd.svc.cluster.local:3000/bifrost
+  gitea_org: bifrost
+apply:
+  repos:
+    - name: bifrost-trade-infra
+      prefixes:
+        - k8s/overlays/dev
+        - k8s/overlays/stg
+        - k8s/overlays/prod
+        - k8s/overlays/platform-stg
+        - k8s/overlays/platform-prod
+        - k8s/monitoring
+        - k8s/cicd/tekton
+        - k8s/cicd/gitea
+        - k8s/data/logical-backup
+        - k8s/platform-rbac
+        - k8s/ib-gateway
+    - name: bifrost-research
+      prefixes:
+        - k8s
+    - name: bifrost-platform-plugin
+      prefixes:
+        - k8s
+    - name: bifrost-platform-plugin-market-data
+      prefixes:
+        - k8s
+    - name: bifrost-platform-plugin-flex-query
+      prefixes:
+        - k8s
+  # B is dev/stg. Every other allowed namespace is C.
+  namespaces:
+    bifrost-dev: B
+    bifrost-stg: B
+    bifrost-platform-stg: B
+    bifrost-prod: C
+    bifrost-platform-prod: C
+    research: C
+    plugin-market-data: C
+    plugin-flex-query: C
+    data: C
+    monitoring: C
+    cicd: C
+  # Namespaced kinds the applier may write. No Secrets, no RBAC, no cluster scope.
+  resources:
+    - group: ""
+      resource: configmaps
+      kind: ConfigMap
+    - group: ""
+      resource: services
+      kind: Service
+    - group: ""
+      resource: serviceaccounts
+      kind: ServiceAccount
+    - group: ""
+      resource: persistentvolumeclaims
+      kind: PersistentVolumeClaim
+    - group: apps
+      resource: deployments
+      kind: Deployment
+    - group: apps
+      resource: statefulsets
+      kind: StatefulSet
+    - group: apps
+      resource: daemonsets
+      kind: DaemonSet
+    - group: batch
+      resource: jobs
+      kind: Job
+    - group: batch
+      resource: cronjobs
+      kind: CronJob
+    - group: networking.k8s.io
+      resource: networkpolicies
+      kind: NetworkPolicy
+    - group: networking.k8s.io
+      resource: ingresses
+      kind: Ingress
+    - group: traefik.io
+      resource: ingressroutes
+      kind: IngressRoute
+    - group: traefik.io
+      resource: middlewares
+      kind: Middleware
+    - group: monitoring.coreos.com
+      resource: servicemonitors
+      kind: ServiceMonitor
+    - group: monitoring.coreos.com
+      resource: podmonitors
+      kind: PodMonitor
+    - group: monitoring.coreos.com
+      resource: prometheusrules
+      kind: PrometheusRule
+  # In the delivery namespace only Tekton definition objects are allowed.
+  cicd_resources:
+    - group: tekton.dev
+      resource: pipelines
+      kind: Pipeline
+    - group: tekton.dev
+      resource: tasks
+      kind: Task
+    - group: triggers.tekton.dev
+      resource: triggertemplates
+      kind: TriggerTemplate
+    - group: triggers.tekton.dev
+      resource: triggerbindings
+      kind: TriggerBinding
+    - group: triggers.tekton.dev
+      resource: eventlisteners
+      kind: EventListener
+  # A rendered Deployment with this name is tier X (D10). Same name the scale gate uses.
+  daemon_deployment: daemon
+jobs:
+  # kube-system and cicd cannot start Jobs. cluster-state-backup is owner_run_command.
+  deny:
+    - kube-system
+    - cicd
+  # PROD business namespaces and data are C. The rest that are allowed are B.
+  namespaces:
+    bifrost-dev: B
+    bifrost-stg: B
+    bifrost-platform-stg: B
+    monitoring: B
+    bifrost-prod: C
+    bifrost-platform-prod: C
+    research: C
+    plugin-market-data: C
+    plugin-flex-query: C
+    data: C
+probe:
+  deny:
+    - kube-system
+    - cicd
+  # Tag prefixes. An image is allowed when one of these sits at the start or after '/'.
+  images:
+    - "bifrost-research:"
+    - "bifrost-market-data:"
+    - "bifrost-flex-query:"
+    - "minio/minio:"
+    - "curlimages/curl:"
+  # B, except data which is C (TD-205: Redis there has no password; D10's operator stream is there).
+  namespaces:
+    bifrost-dev: B
+    bifrost-stg: B
+    bifrost-platform-stg: B
+    monitoring: B
+    research: B
+    plugin-market-data: B
+    plugin-flex-query: B
+    bifrost-prod: B
+    bifrost-platform-prod: B
+    data: C
+  # env_from is allowed only in these namespaces (step 3 keeps pods/exec here).
+  env_from:
+    - research
+    - plugin-market-data
+    - plugin-flex-query
+  max_timeout_seconds: 900
+cleanup:
+  namespaces:
+    - bifrost-dev
+    - bifrost-stg
+    - bifrost-platform-stg
+    - bifrost-prod
+    - bifrost-platform-prod
+    - research
+    - plugin-market-data
+    - plugin-flex-query
+    - data
+    - monitoring
+admission:
+  # PipelineRun / TaskRun service accounts the platform identity may name.
+  # argocd-* is never included. Measured from live PipelineRuns: default, tekton-deliver.
+  pipeline_service_accounts:
+    - default
+    - tekton-deliver
+    - bifrost-applier
+  # Job / Pod service accounts. Measured CronJob templates, excluding the two
+  # deny namespaces (tekton-pipelinerun-ttl in cicd, cluster-state-backup in kube-system).
+  job_service_accounts:
+    - default
+    - backup-retry
+    - maintainer-reconcile
+  applier_pipeline: bifrost-apply-manifest

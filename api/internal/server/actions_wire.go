@@ -97,8 +97,79 @@ func (s *Server) lookupDaemonReplicas(ctx context.Context, namespace string) (in
 	return 0, false
 }
 
+func (s *Server) handlePlan(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandlePlan(w, r)
+}
+
+func (s *Server) handlePlanGet(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandleGetPlan(w, r)
+}
+
+func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandleApply(w, r)
+}
+
+func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandleCreateJob(w, r)
+}
+
+func (s *Server) handleDeleteFinished(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandleDeleteFinished(w, r)
+}
+
+func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
+	if s.work == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "actuation policy is not loaded"})
+		return
+	}
+	s.work.HandleProbe(w, r)
+}
+
 func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
+	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
+	if s.work != nil {
+		svc := s.work.Svc
+		actions.RegisterExecutor("apply_manifest", func(ctx context.Context, params map[string]any) (any, error) {
+			return svc.Apply(ctx, text(params["plan_id"]))
+		})
+		actions.RegisterExecutor("create_job_from_cronjob", func(ctx context.Context, params map[string]any) (any, error) {
+			return svc.CreateJobFromCronJob(ctx, text(params["namespace"]), text(params["cronjob"]), "approval")
+		})
+		actions.RegisterExecutor("delete_finished_jobs", func(ctx context.Context, params map[string]any) (any, error) {
+			return svc.DeleteFinished(ctx, text(params["namespace"]), stringList(params["names"]), text(params["label_selector"]))
+		})
+		actions.RegisterExecutor("run_probe_pod", func(ctx context.Context, params map[string]any) (any, error) {
+			return svc.Probe(ctx, text(params["namespace"]), text(params["image"]), stringList(params["command"]), stringList(params["args"]), text(params["env_from"]), intParam(params["timeout_seconds"]), "approval")
+		})
+		actions.RegisterExecutor("plan_manifest", func(ctx context.Context, params map[string]any) (any, error) {
+			id, err := svc.Plan(ctx, text(params["repo"]), text(params["path"]), text(params["commit"]))
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"plan_id": id}, nil
+		})
+	}
 	reg := func(id, method string, urlOf func(map[string]any) string, routeOf func(map[string]any) map[string]string, bodyOf func(map[string]any) any, h http.HandlerFunc) {
 		// The executor calls the guarded handler. withExecutor, set inside
 		// invokeAction, is what lets that call through. A direct HTTP request
@@ -344,4 +415,36 @@ func readAndRestore(r *http.Request) ([]byte, error) {
 func text(v any) string {
 	s, _ := v.(string)
 	return strings.TrimSpace(s)
+}
+
+func stringList(v any) []string {
+	switch t := v.(type) {
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, el := range t {
+			if s, ok := el.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func intParam(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int32:
+		return int(n)
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	default:
+		return 0
+	}
 }
