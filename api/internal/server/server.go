@@ -329,7 +329,7 @@ func New(cfg *config.Config) (*Server, error) {
 				},
 			},
 		}
-		srv.work = &workactions.Handler{Svc: workSvc}
+		srv.work = &workactions.Handler{Svc: workSvc, Audit: srv.audit}
 		actions.SetPlanLookup(func(ctx context.Context, planID string) (actions.PlanSummary, error) {
 			sum, err := workSvc.Summarize(ctx, planID)
 			if err != nil {
