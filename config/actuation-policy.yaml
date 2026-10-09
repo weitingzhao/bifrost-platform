@@ -43,6 +43,8 @@ apply:
     monitoring: C
     cicd: C
   # Namespaced kinds the applier may write. No Secrets, no RBAC, no cluster scope.
+  # A rendered Namespace is never applied: the check drops it when it already
+  # exists with the same labels and refuses it otherwise (TD-275).
   resources:
     - group: ""
       resource: configmaps
@@ -92,6 +94,14 @@ apply:
     - group: monitoring.coreos.com
       resource: prometheusrules
       kind: PrometheusRule
+    # TD-275: plugins render PodDisruptionBudgets, k8s/monitoring a ScrapeConfig.
+    # Neither has a pod template, so the admission policies need nothing new.
+    - group: policy
+      resource: poddisruptionbudgets
+      kind: PodDisruptionBudget
+    - group: monitoring.coreos.com
+      resource: scrapeconfigs
+      kind: ScrapeConfig
   # In the delivery namespace only Tekton definition objects are allowed.
   cicd_resources:
     - group: tekton.dev
