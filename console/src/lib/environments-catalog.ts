@@ -292,14 +292,14 @@ export const HARDWARE_ROWS: HardwareRow[] = [
   {
     id: 'mac-mini-1',
     host: '192.168.10.50 (macOS · Agent)',
-    roleCompose: '24/7 Dev stack · Remediation Runner PRIMARY (L-1) · peer watchdog → .52',
-    roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready) · runner stays OUTSIDE cluster',
+    roleCompose: 'Out-of-band operator-plane · mutual watch of .52 · alert relay on .50',
+    roleK3s: 'UTM Agent ops-vm-ubt-01 · frontend dev (Ready) · operator-plane stays OUTSIDE cluster',
   },
   {
     id: 'mac-mini-2',
     host: '192.168.10.52 (macOS · Agent)',
-    roleCompose: 'Git runner · prod-health gate · Remediation Runner STANDBY (L-1) · peer watchdog → .50',
-    roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready) · runner stays OUTSIDE cluster',
+    roleCompose: 'Out-of-band operator-plane · mutual watch of .50',
+    roleK3s: 'UTM Agent ops-vm-ubt-02 · CI · external watchdog (Ready) · operator-plane stays OUTSIDE cluster',
   },
   {
     id: 'gpu-server',
@@ -502,7 +502,7 @@ export function buildStaticCatalogContext(): string {
     '## Key repos',
     '- bifrost-platform — Bifrost Ops control plane (this console)',
     '- bifrost-trade-infra — compose, nginx, Goal, migration sign-off docs',
-    '- Platform Roadmap (roadmapCatalog.ts) · k3sArchitectureCatalog.ts (target topology)',
+    '- k3sArchitectureCatalog.ts (target topology)',
     '- bifrost-trade-{api,worker,socket,frontend,core} — data plane',
     '- bifrost-trader-engine — READ-ONLY reference (do not edit)',
     '',

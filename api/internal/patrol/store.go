@@ -6,18 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
-// Store persists enable overlays + a 200-run ring buffer as JSON.
+// Store persists enable overlays and a 200-run ring buffer as JSON.
+//
+// Reads go back to the statefile every call. Writes use statefile.Update, so
+// two processes (platform-api and platform-workers) apply their change to the
+// latest copy instead of overwriting each other's whole document.
 type Store struct {
-	mu      sync.Mutex
-	path    string
-	enabled map[string]bool
-	runs    []PatrolRun
+	path string
 }
 
 func DefaultStateDir() string {
@@ -41,116 +41,122 @@ func NewStore(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("mkdir patrol state: %w", err)
 	}
-	s := &Store{
-		path:    filepath.Join(dir, "state.json"),
-		enabled: map[string]bool{},
-	}
-	if err := s.load(); err != nil {
+	s := &Store{path: filepath.Join(dir, "state.json")}
+	if _, err := s.read(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (s *Store) load() error {
+func decode(data []byte) (persistState, error) {
+	rec := persistState{Enabled: map[string]bool{}}
+	if len(data) == 0 {
+		return rec, nil
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return persistState{}, fmt.Errorf("parse patrol state: %w", err)
+	}
+	if rec.Enabled == nil {
+		rec.Enabled = map[string]bool{}
+	}
+	if len(rec.Runs) > MaxRuns {
+		rec.Runs = rec.Runs[:MaxRuns]
+	}
+	return rec, nil
+}
+
+func encode(rec persistState) ([]byte, error) {
+	rec.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	return json.MarshalIndent(rec, "", "  ")
+}
+
+func (s *Store) read() (persistState, error) {
 	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return persistState{Enabled: map[string]bool{}}, nil
 		}
-		return fmt.Errorf("read patrol state: %w", err)
+		return persistState{}, fmt.Errorf("read patrol state: %w", err)
 	}
-	var rec persistState
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return fmt.Errorf("parse patrol state: %w", err)
-	}
-	if rec.Enabled != nil {
-		s.enabled = rec.Enabled
-	}
-	if rec.Runs != nil {
-		s.runs = rec.Runs
-		if len(s.runs) > MaxRuns {
-			s.runs = s.runs[:MaxRuns]
-		}
-	}
-	return nil
+	return decode(data)
 }
 
-func (s *Store) saveLocked() error {
-	rec := persistState{
-		Enabled:   s.enabled,
-		Runs:      s.runs,
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	data, err := json.MarshalIndent(rec, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := statefile.WriteFile(s.path, data, 0o644); err != nil {
-		return fmt.Errorf("write patrol state: %w", err)
-	}
-	return nil
+func (s *Store) edit(fn func(*persistState) error) error {
+	return statefile.Update(s.path, func(old []byte) ([]byte, error) {
+		rec, err := decode(old)
+		if err != nil {
+			return nil, err
+		}
+		if err := fn(&rec); err != nil {
+			return nil, err
+		}
+		if len(rec.Runs) > MaxRuns {
+			rec.Runs = rec.Runs[:MaxRuns]
+		}
+		return encode(rec)
+	})
 }
 
 func (s *Store) Enabled(id string, yamlDefault bool) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if v, ok := s.enabled[id]; ok {
+	rec, err := s.read()
+	if err != nil {
+		return yamlDefault
+	}
+	if v, ok := rec.Enabled[id]; ok {
 		return v
 	}
 	return yamlDefault
 }
 
 func (s *Store) SetEnabled(id string, enabled bool) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.enabled == nil {
-		s.enabled = map[string]bool{}
-	}
-	s.enabled[id] = enabled
-	return s.saveLocked()
+	return s.edit(func(rec *persistState) error {
+		rec.Enabled[id] = enabled
+		return nil
+	})
 }
 
 func (s *Store) AppendRun(run PatrolRun) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.runs = append([]PatrolRun{run}, s.runs...)
-	if len(s.runs) > MaxRuns {
-		s.runs = s.runs[:MaxRuns]
-	}
-	return s.saveLocked()
+	return s.edit(func(rec *persistState) error {
+		rec.Runs = append([]PatrolRun{run}, rec.Runs...)
+		return nil
+	})
 }
 
 func (s *Store) UpdateRun(id string, mutate func(*PatrolRun)) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range s.runs {
-		if s.runs[i].ID != id {
-			continue
+	return s.edit(func(rec *persistState) error {
+		for i := range rec.Runs {
+			if rec.Runs[i].ID != id {
+				continue
+			}
+			mutate(&rec.Runs[i])
+			return nil
 		}
-		mutate(&s.runs[i])
-		return s.saveLocked()
-	}
-	return fmt.Errorf("patrol run %s not found", id)
+		return fmt.Errorf("patrol run %s not found", id)
+	})
 }
 
 func (s *Store) ListRuns(limit int) ([]PatrolRun, int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	total := len(s.runs)
+	rec, err := s.read()
+	if err != nil {
+		return nil, 0
+	}
+	total := len(rec.Runs)
 	if limit <= 0 || limit > total {
 		limit = total
 	}
 	out := make([]PatrolRun, limit)
-	copy(out, s.runs[:limit])
+	copy(out, rec.Runs[:limit])
 	return out, total
 }
 
 func (s *Store) LastRun(skillID string) *PatrolRun {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for i := range s.runs {
-		if s.runs[i].SkillID == skillID {
-			cp := s.runs[i]
+	rec, err := s.read()
+	if err != nil {
+		return nil
+	}
+	for i := range rec.Runs {
+		if rec.Runs[i].SkillID == skillID {
+			cp := rec.Runs[i]
 			return &cp
 		}
 	}

@@ -3,10 +3,9 @@
 // never share state, a rollout keeps it, and the api and workers pods read the
 // same copy (TD-196).
 //
-// Writes are last-writer-wins: a store reads, changes and writes under its own
-// mutex, and two pods writing the same key at the same moment can lose one
-// change. Platform state is written rarely (an operator action, a patrol run,
-// an audit record), so this trade buys a simple store.
+// Write is last-writer-wins: on a conflict it retries with the same bytes the
+// caller already built. Update re-reads and re-runs the caller's mutate on the
+// latest contents, which is what a store must use when two processes share a key.
 package k8sstate
 
 import (
@@ -116,6 +115,79 @@ func (b *Backend) Write(ctx context.Context, key string, data []byte) error {
 		return err
 	}
 	return fmt.Errorf("state %s: still conflicting after 3 attempts", key)
+}
+
+// Update applies mutate to the current value and writes it with the
+// resourceVersion from that Get. A conflict or an AlreadyExists on create
+// reads again and runs mutate on the new bytes.
+func (b *Backend) Update(ctx context.Context, key string, mutate func(old []byte) ([]byte, error)) error {
+	core, err := b.clients()
+	if err != nil {
+		return err
+	}
+	cms := core.CoreV1().ConfigMaps(b.ns)
+	name := Name(key)
+	for attempt := 0; attempt < 5; attempt++ {
+		cm, err := cms.Get(ctx, name, metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			next, err := mutate(nil)
+			if err != nil {
+				return err
+			}
+			if err := tooBig(key, next); err != nil {
+				return err
+			}
+			_, err = cms.Create(ctx, newConfigMap(b.ns, name, key, next), metav1.CreateOptions{})
+			if apierrors.IsAlreadyExists(err) {
+				continue
+			}
+			return err
+		}
+		if err != nil {
+			return err
+		}
+		var old []byte
+		if cm.Data != nil {
+			if s, ok := cm.Data[dataKey]; ok {
+				old = append([]byte(nil), s...)
+			}
+		}
+		next, err := mutate(old)
+		if err != nil {
+			return err
+		}
+		if err := tooBig(key, next); err != nil {
+			return err
+		}
+		if cm.Data == nil {
+			cm.Data = map[string]string{}
+		}
+		cm.Data[dataKey] = string(next)
+		_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
+		if apierrors.IsConflict(err) {
+			continue
+		}
+		return err
+	}
+	return fmt.Errorf("state %s: still conflicting after 5 attempts", key)
+}
+
+func tooBig(key string, data []byte) error {
+	if len(data) > MaxBytes {
+		return fmt.Errorf("state %s is %d bytes, over the %d-byte ConfigMap budget", key, len(data), MaxBytes)
+	}
+	return nil
+}
+
+func newConfigMap(ns, name, key string, data []byte) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: ns,
+			Labels:      map[string]string{labelKey: "true", "app.kubernetes.io/managed-by": "bifrost-platform"},
+			Annotations: map[string]string{keyAnnot: key},
+		},
+		Data: map[string]string{dataKey: string(data)},
+	}
 }
 
 // Namespace is PLATFORM_STATE_NAMESPACE, else the pod's own namespace.

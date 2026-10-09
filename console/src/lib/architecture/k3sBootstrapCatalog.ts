@@ -215,7 +215,7 @@ export const SPINE_REFERENCE =
 export const BOOTSTRAP_RELATED_AUTHORITIES = [
   'Live cluster: Rocket → Cluster (nodes, join wizard, metrics, observability)',
   'Target topology: k3sArchitectureCatalog.ts',
-  'Execution timeline: roadmapCatalog.ts (Platform Roadmap UI)',
+  'Mac mini seats: environments catalog (operator-plane, mutual watch, alert relay on .50)',
   'L-1 operator plane: Operator Plane UI + cicdBootstrapCatalog.ts (L-1)',
   'Spine: config/ops-context.yaml · GET /api/v1/context',
 ]

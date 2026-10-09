@@ -11,9 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -104,5 +109,57 @@ func TestAuditSurvivesRestartAndMergesTheWorkersRecords(t *testing.T) {
 	}
 	if !actions["delivery.pipeline.run"] || !actions["ib-gateway.auto_reconnect"] {
 		t.Fatalf("audit after rollout lists %v, want the api record and the workers record", actions)
+	}
+}
+
+func TestUpdateReappliesMutateAfterConflict(t *testing.T) {
+	key := "patrol/state.json"
+	name := k8sstate.Name(key)
+	seed := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, ResourceVersion: "1"},
+		Data:       map[string]string{"state.json": `{"n":1}`},
+	}
+	cs := fake.NewSimpleClientset(seed)
+	var conflicts int
+	cs.PrependReactor("update", "configmaps", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		if conflicts > 0 {
+			return false, nil, nil
+		}
+		conflicts++
+		fresh := seed.DeepCopy()
+		fresh.ResourceVersion = "9"
+		fresh.Data["state.json"] = `{"n":10}`
+		if err := cs.Tracker().Update(action.GetResource(), fresh, ns); err != nil {
+			t.Errorf("plant newer state: %v", err)
+		}
+		return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "configmaps"}, name, errors.New("conflict"))
+	})
+	b := k8sstate.New(ns, func() (kubernetes.Interface, error) { return cs, nil })
+	var calls int
+	err := b.Update(context.Background(), key, func(old []byte) ([]byte, error) {
+		calls++
+		var rec struct {
+			N int `json:"n"`
+		}
+		if len(old) > 0 {
+			if err := json.Unmarshal(old, &rec); err != nil {
+				return nil, err
+			}
+		}
+		rec.N++
+		return json.Marshal(rec)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 2 {
+		t.Fatalf("mutate ran %d times, want 2 (once on the conflicted value, once on the newer one)", calls)
+	}
+	got, err := b.Read(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != `{"n":11}` {
+		t.Fatalf("stored %s, want {\"n\":11} from the second mutate", got)
 	}
 }

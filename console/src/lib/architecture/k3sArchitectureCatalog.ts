@@ -325,7 +325,7 @@ export const STATUS_CHECKPOINTS: StatusCheckpointRow[] = [
 ]
 
 export const RELATED_AUTHORITIES = [
-  'Execution order + hardware map: roadmapCatalog.ts (Platform Roadmap UI)',
+  'Mac mini seats: environments catalog (operator-plane, mutual watch, alert relay on .50)',
   'Bootstrap runbook: k3sBootstrapCatalog.ts',
   'North star: blueprintCatalog.ts · Blueprint § AI Native Platform',
   'Live cluster: Rocket → Cluster · Placement · Control Room topology sheet',

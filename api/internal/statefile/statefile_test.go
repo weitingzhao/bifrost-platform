@@ -2,6 +2,7 @@ package statefile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -32,6 +33,17 @@ func (m *memBackend) Write(_ context.Context, key string, data []byte) error {
 	return nil
 }
 
+func (m *memBackend) Update(_ context.Context, key string, mutate func(old []byte) ([]byte, error)) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	next, err := mutate(append([]byte(nil), m.data[key]...))
+	if err != nil {
+		return err
+	}
+	m.data[key] = append([]byte(nil), next...)
+	return nil
+}
+
 func TestPlainFilesByDefault(t *testing.T) {
 	Use(nil, "")
 	path := filepath.Join(t.TempDir(), "a", "b.json")
@@ -47,6 +59,63 @@ func TestPlainFilesByDefault(t *testing.T) {
 	}
 	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
 		t.Fatal("temp file left behind")
+	}
+}
+
+func TestFileUpdateKeepsBothEdits(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	bump := func(old []byte) ([]byte, error) {
+		var rec struct {
+			N int `json:"n"`
+		}
+		if len(old) > 0 {
+			if err := json.Unmarshal(old, &rec); err != nil {
+				return nil, err
+			}
+		}
+		rec.N++
+		return json.Marshal(rec)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := Update(path, bump); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec struct {
+		N int `json:"n"`
+	}
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.N != 8 {
+		t.Fatalf("n=%d, want 8 (each locked update applied)", rec.N)
+	}
+}
+
+func TestUpdateDoesNotWriteWhenMutateFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(path, []byte("keep"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Update(path, func([]byte) ([]byte, error) {
+		return nil, errors.New("no")
+	})
+	if err == nil {
+		t.Fatal("mutate error must surface")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "keep" {
+		t.Fatalf("file is %q (%v), want the original bytes", got, err)
 	}
 }
 

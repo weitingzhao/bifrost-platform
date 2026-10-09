@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -30,7 +31,12 @@ import (
 type Backend interface {
 	// Read returns fs.ErrNotExist (wrapped or bare) when the key has no state.
 	Read(ctx context.Context, key string) ([]byte, error)
+	// Write replaces the key. It does not re-apply a caller's edit on conflict.
 	Write(ctx context.Context, key string, data []byte) error
+	// Update reads the current value, calls mutate, and writes the result.
+	// old is nil when the key is missing. On a conflict the implementation
+	// reads again and calls mutate on that newer value.
+	Update(ctx context.Context, key string, mutate func(old []byte) ([]byte, error)) error
 }
 
 const timeout = 10 * time.Second
@@ -108,6 +114,57 @@ func WriteFile(path string, data []byte, perm os.FileMode) error {
 		return &fs.PathError{Op: "write", Path: path, Err: err}
 	}
 	return nil
+}
+
+// Update reads path, applies mutate to that bytes, and writes the result back.
+// A missing file is mutate(nil). mutate's error is returned without writing.
+// The file backend holds an exclusive lock for the read-modify-write. A
+// backend retries mutate on the latest contents when the write conflicts.
+func Update(path string, mutate func(old []byte) ([]byte, error)) error {
+	b, key := route(path)
+	if b == nil {
+		if err := updateFile(path, mutate); err != nil {
+			return &fs.PathError{Op: "update", Path: path, Err: err}
+		}
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := b.Update(ctx, key, mutate); err != nil {
+		return &fs.PathError{Op: "update", Path: path, Err: err}
+	}
+	return nil
+}
+
+func updateFile(path string, mutate func(old []byte) ([]byte, error)) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	lock, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
+	old, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if os.IsNotExist(err) {
+		old = nil
+	}
+	next, err := mutate(old)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, next, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 func isNotExist(err error) bool {
