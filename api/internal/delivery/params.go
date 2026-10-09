@@ -9,10 +9,17 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
-// pipelineParamValue is the character set for a caller-supplied pipeline param.
-// It is the actuation-policy path set plus ':' and '+', so a git ref or an
-// image tag fits. The length cap is the same one validateRevision uses.
-var pipelineParamValue = regexp.MustCompile(`^[A-Za-z0-9._:@/+-]{1,256}$`)
+// callerParamSHA is the only value a caller may give a pipeline param.
+var callerParamSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// callerMayOverride reports whether a caller may set this pipeline param.
+// Only git revisions (revision, *Revision) may come from the caller, and only
+// as full SHAs. Source URLs, registries, image names and tags stay with the
+// platform's own mapping: a tier B build or STG deliver must not be pointed at
+// another git server or pushed to another image tag (W-33 review, 2026-10-09).
+func callerMayOverride(name string) bool {
+	return name == "revision" || strings.HasSuffix(name, "Revision")
+}
 
 // runTimeoutPattern is a Tekton duration such as 1h0m0s. The pipeline declares
 // it; this only rejects a value that is not a duration.
@@ -40,7 +47,8 @@ func declaredPipelineParams(obj *unstructured.Unstructured) map[string]bool {
 }
 
 // mergePipelineParams overlays caller params on the legacy revision/tag set.
-// A caller param must be declared on the Pipeline. When both name the same
+// A caller param must be declared on the Pipeline, be a revision param and be
+// a full SHA. When both name the same
 // param, the caller value wins. Legacy keys the live Pipeline does not declare
 // are dropped, so an older Pipeline is not sent a param it cannot accept.
 // An empty caller map leaves the legacy set, filtered the same way.
@@ -53,8 +61,11 @@ func mergePipelineParams(declared map[string]bool, legacy []map[string]any, extr
 		if !declared[name] {
 			return nil, fmt.Errorf("param %q is not declared by this pipeline", name)
 		}
-		if !pipelineParamValue.MatchString(strings.TrimSpace(value)) {
-			return nil, fmt.Errorf("param %s has characters outside the allow-list or is empty or longer than 256", name)
+		if !callerMayOverride(name) {
+			return nil, fmt.Errorf("param %q cannot be set by the caller: only revision params can; source, registry and image stay with the platform", name)
+		}
+		if !callerParamSHA.MatchString(strings.TrimSpace(value)) {
+			return nil, fmt.Errorf("param %s must be a 40-character lowercase git SHA", name)
 		}
 	}
 	merged := map[string]string{}

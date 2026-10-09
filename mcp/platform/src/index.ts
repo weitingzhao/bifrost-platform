@@ -225,7 +225,7 @@ reg(
     revision: z.string().optional(),
     tag: z.string().optional(),
     who: z.string().optional(),
-    params: z.record(z.string(), z.string()).optional(),
+    params: z.record(z.string(), z.string()).optional().describe('Pinned git revisions only: revision or *Revision params the Pipeline declares, each a 40-character lowercase SHA. Source, registry, image and tag are not settable.'),
   },
   async ({ name, revision, tag, who, params }) =>
     jsonResult(

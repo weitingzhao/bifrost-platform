@@ -22,6 +22,35 @@ func TestMergeParamsRejectsUndeclaredAndBadValues(t *testing.T) {
 	}
 }
 
+// A tier B build or STG deliver must not take its source, registry, image or
+// tag from the caller, and a pinned revision must be a full SHA.
+func TestMergeParamsCallerSetsOnlyRevisionSHAs(t *testing.T) {
+	declared := map[string]bool{
+		"revision": true, "coreRevision": true, "uiRevision": true,
+		"giteaBase": true, "registry": true, "image": true, "tag": true,
+		"platformApiImage": true, "frontendImage": true,
+	}
+	legacy := []map[string]any{{"name": "revision", "value": "main"}}
+	sha := strings.Repeat("a1", 20)
+	for _, name := range []string{"giteaBase", "registry", "image", "tag", "platformApiImage", "frontendImage"} {
+		if _, err := mergePipelineParams(declared, legacy, map[string]string{name: "evil.example/x"}); err == nil {
+			t.Fatalf("caller set %s", name)
+		}
+	}
+	for _, v := range []string{"main", "feature/x", strings.Repeat("A1", 20), sha[:39]} {
+		if _, err := mergePipelineParams(declared, legacy, map[string]string{"coreRevision": v}); err == nil {
+			t.Fatalf("coreRevision %q was accepted", v)
+		}
+	}
+	got, err := mergePipelineParams(declared, legacy, map[string]string{"coreRevision": sha, "uiRevision": sha, "revision": sha})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := paramMap(got); m["coreRevision"] != sha || m["uiRevision"] != sha || m["revision"] != sha {
+		t.Fatalf("merged = %v", m)
+	}
+}
+
 func TestMergeParamsCallerWinsAndLegacyUndeclaredDrops(t *testing.T) {
 	declared := map[string]bool{"revision": true, "coreRevision": true}
 	legacy := []map[string]any{
@@ -29,12 +58,13 @@ func TestMergeParamsCallerWinsAndLegacyUndeclaredDrops(t *testing.T) {
 		{"name": "coreRevision", "value": "main"},
 		{"name": "not-yet", "value": "main"},
 	}
-	got, err := mergePipelineParams(declared, legacy, map[string]string{"coreRevision": "abc"})
+	sha := strings.Repeat("ab", 20)
+	got, err := mergePipelineParams(declared, legacy, map[string]string{"coreRevision": sha})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := paramMap(got)
-	if m["revision"] != "main" || m["coreRevision"] != "abc" {
+	if m["revision"] != "main" || m["coreRevision"] != sha {
 		t.Fatalf("merged = %v", m)
 	}
 	if _, ok := m["not-yet"]; ok {
