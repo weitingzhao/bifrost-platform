@@ -51,7 +51,7 @@ func TestPolicyTiersFollowTheFile(t *testing.T) {
 
 func TestProbeAndJobDenies(t *testing.T) {
 	p := loadReal(t)
-	image := "registry.example/" + p.Probe.Images[0] + "1"
+	image := p.Probe.Images[0] + "1"
 	if len(p.Jobs.Deny) == 0 || len(p.Probe.Deny) == 0 {
 		t.Fatal("job and probe deny lists are empty")
 	}
@@ -119,6 +119,61 @@ func TestUnknownNamespaceRejected(t *testing.T) {
 	}
 	if err := p.RepoAllowed("not-a-repo", "k8s"); err == nil {
 		t.Fatal("unknown repo was accepted")
+	}
+}
+
+func TestRepoAndPathRejectShellMetacharacters(t *testing.T) {
+	p := loadReal(t)
+	repo := p.Apply.Repos[0].Name
+	path := p.Apply.Repos[0].Prefixes[0]
+	bad := []string{"$", "`", "'", `"`, " ", ";", "\n", "&", "|", "\\"}
+	for _, ch := range bad {
+		if err := p.RepoAllowed(repo+ch+"x", path); err == nil {
+			t.Fatalf("repo containing %q was accepted", ch)
+		}
+		if err := p.RepoAllowed(repo, path+ch+"x"); err == nil {
+			t.Fatalf("path containing %q was accepted", ch)
+		}
+	}
+	for _, path := range []string{"/tmp/x", "k8s//dev", "k8s/./dev", "k8s/../dev", "k8s/dev/.."} {
+		if err := p.RepoAllowed(repo, path); err == nil {
+			t.Fatalf("path %q was accepted", path)
+		}
+	}
+	if err := p.RepoAllowed(repo, path); err != nil {
+		t.Fatalf("allow-listed path rejected: %v", err)
+	}
+}
+
+func TestImagePrefixMatchesOnlyAtTheStart(t *testing.T) {
+	p := loadReal(t)
+	if len(p.Probe.Images) == 0 {
+		t.Fatal("no image prefixes")
+	}
+	prefix := p.Probe.Images[0]
+	ns := ""
+	for name := range p.Probe.Namespaces {
+		ns = name
+		break
+	}
+	if _, err := p.ProbeTier(ns, prefix+"1", false); err != nil {
+		t.Fatalf("prefix at the start was rejected: %v", err)
+	}
+	if _, err := p.ProbeTier(ns, "evil.example/x/"+prefix+"1", false); err == nil {
+		t.Fatal("a prefix after another registry was accepted")
+	}
+	short := ""
+	for _, image := range p.Probe.Images {
+		if strings.HasPrefix(image, "docker.io/") {
+			short = strings.TrimPrefix(image, "docker.io/") + "1"
+			break
+		}
+	}
+	if short == "" {
+		t.Fatal("policy has no docker.io prefix to expand")
+	}
+	if _, err := p.ProbeTier(ns, short, false); err != nil {
+		t.Fatalf("docker hub short name was rejected: %v", err)
 	}
 }
 

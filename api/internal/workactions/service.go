@@ -129,7 +129,8 @@ func (s *Service) Summarize(ctx context.Context, planID string) (Summary, error)
 	if err != nil {
 		return out, err
 	}
-	out.Repo, out.Path, out.Commit = paramsOf(obj)
+	var mode string
+	out.Repo, out.Path, out.Commit, mode = paramsOf(obj)
 	out.Logs = fmt.Sprintf("/api/v1/delivery/runs/%s/logs", planID)
 	succeeded := condition(obj, "Succeeded")
 	out.Policy, _ = resultOf(obj, "policy")
@@ -147,8 +148,34 @@ func (s *Service) Summarize(ctx context.Context, planID string) (Summary, error)
 			out.Daemon = true
 		}
 	}
-	out.Ready = succeeded && out.Policy == "pass"
+	out.Ready = succeeded && out.Policy == "pass" && planRunOK(obj, s.Policy.Delivery.Pipeline, mode)
 	return out, nil
+}
+
+// planRunOK is the identity of a plan this service started.
+// Anything else is not ready, even when a result says pass.
+func planRunOK(obj *unstructured.Unstructured, pipeline, mode string) bool {
+	labels := obj.GetLabels()
+	if labels["bifrost.io/trigger"] != "platform-api" || labels["bifrost.io/mode"] != "plan" {
+		return false
+	}
+	if mode != "plan" {
+		return false
+	}
+	name, found, _ := unstructured.NestedString(obj.Object, "spec", "pipelineRef", "name")
+	if !found || name != pipeline || name == "" {
+		return false
+	}
+	if _, found, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineRef", "resolver"); found {
+		return false
+	}
+	if _, found, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineRef", "params"); found {
+		return false
+	}
+	if _, found, _ := unstructured.NestedFieldNoCopy(obj.Object, "spec", "pipelineRef", "bundle"); found {
+		return false
+	}
+	return true
 }
 
 func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit string, requireMain bool) error {
@@ -431,7 +458,7 @@ func sanitizeLabel(v string) string {
 	return s
 }
 
-func paramsOf(obj *unstructured.Unstructured) (repo, path, commit string) {
+func paramsOf(obj *unstructured.Unstructured) (repo, path, commit, mode string) {
 	raw, _, _ := unstructured.NestedSlice(obj.Object, "spec", "params")
 	for _, item := range raw {
 		m, _ := item.(map[string]any)
@@ -444,9 +471,11 @@ func paramsOf(obj *unstructured.Unstructured) (repo, path, commit string) {
 			path = value
 		case "commit":
 			commit = value
+		case "mode":
+			mode = value
 		}
 	}
-	return repo, path, commit
+	return repo, path, commit, mode
 }
 
 func resultOf(obj *unstructured.Unstructured, name string) (string, bool) {

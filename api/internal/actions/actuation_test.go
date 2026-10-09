@@ -79,7 +79,7 @@ func TestProbeAndJobClassify(t *testing.T) {
 	if len(p.Jobs.Deny) > 0 {
 		denied = p.Jobs.Deny[0]
 	}
-	image := "registry.example/" + p.Probe.Images[0] + "1"
+	image := p.Probe.Images[0] + "1"
 	probe, _ := ByID("run_probe_pod")
 	if got := probe.TierOf(context.Background(), map[string]any{"namespace": dataNS, "image": image}); got != TierC {
 		t.Fatalf("data probe tier %s, want C", got)

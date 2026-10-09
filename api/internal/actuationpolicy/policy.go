@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -77,9 +78,10 @@ type Cleanup struct {
 // Admission is the ValidatingAdmissionPolicy allow-list, kept next to the
 // rest so the infra check can compare one file.
 type Admission struct {
-	PipelineServiceAccounts []string `yaml:"pipeline_service_accounts"`
-	JobServiceAccounts      []string `yaml:"job_service_accounts"`
-	ApplierPipeline         string   `yaml:"applier_pipeline"`
+	PipelineServiceAccounts   []string            `yaml:"pipeline_service_accounts"`
+	JobServiceAccounts        []string            `yaml:"job_service_accounts"`
+	ApplierPipeline           string              `yaml:"applier_pipeline"`
+	ApplierPodServiceAccounts map[string][]string `yaml:"applier_pod_service_accounts"`
 }
 
 // Load reads a policy file.
@@ -137,18 +139,24 @@ func (p *Policy) firstImage() string {
 	if len(p.Probe.Images) == 0 {
 		return ""
 	}
-	return "registry.example/" + p.Probe.Images[0] + "tag"
+	return p.Probe.Images[0] + "tag"
 }
 
+var (
+	repoPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	pathPattern = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+)
+
 // RepoAllowed reports whether repo/path may be rendered.
+// The shell that renders the commit uses the same character set.
 func (p *Policy) RepoAllowed(repo, path string) error {
 	repo = strings.TrimSpace(repo)
-	path = strings.Trim(strings.TrimSpace(path), "/")
-	if repo == "" || path == "" {
-		return fmt.Errorf("repo and path are required")
+	path = strings.TrimSpace(path)
+	if !repoPattern.MatchString(repo) {
+		return fmt.Errorf("repo has characters outside the allow-list")
 	}
-	if strings.Contains(path, "..") {
-		return fmt.Errorf("path must not contain ..")
+	if err := validateManifestPath(path); err != nil {
+		return err
 	}
 	for _, r := range p.Apply.Repos {
 		if r.Name != repo {
@@ -262,21 +270,41 @@ func (p *Policy) Timeout(seconds int) (int, error) {
 	return seconds, nil
 }
 
-func imageAllowed(prefixes []string, image string) bool {
+func validateManifestPath(path string) error {
+	if path == "" || strings.HasPrefix(path, "/") || !pathPattern.MatchString(path) {
+		return fmt.Errorf("path has characters outside the allow-list")
+	}
+	for _, seg := range strings.Split(path, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return fmt.Errorf("path has an empty, dot, or dot-dot segment")
+		}
+	}
+	return nil
+}
+
+// canonicalImage expands a Docker Hub short name to docker.io/.
+// A reference whose first segment contains '.' or ':' or is localhost already names a registry.
+func canonicalImage(image string) string {
 	image = strings.TrimSpace(image)
-	if image == "" || strings.Contains(image, " ") {
+	slash := strings.Index(image, "/")
+	first := image
+	if slash >= 0 {
+		first = image[:slash]
+	}
+	if slash < 0 || (!strings.Contains(first, ".") && !strings.Contains(first, ":") && first != "localhost") {
+		return "docker.io/" + image
+	}
+	return image
+}
+
+func imageAllowed(prefixes []string, image string) bool {
+	image = canonicalImage(image)
+	if image == "" || strings.ContainsAny(image, " \t\r\n") {
 		return false
 	}
 	for _, prefix := range prefixes {
 		prefix = strings.TrimSpace(prefix)
-		if prefix == "" {
-			continue
-		}
-		idx := strings.Index(image, prefix)
-		if idx < 0 {
-			continue
-		}
-		if idx == 0 || image[idx-1] == '/' {
+		if prefix != "" && strings.HasPrefix(image, prefix) {
 			return true
 		}
 	}

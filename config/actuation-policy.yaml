@@ -13,19 +13,13 @@ apply:
     - name: bifrost-trade-infra
       prefixes:
         - k8s/overlays/dev
-        - k8s/overlays/stg
-        - k8s/overlays/prod
-        - k8s/overlays/platform-stg
-        - k8s/overlays/platform-prod
         - k8s/monitoring
         - k8s/cicd/tekton
         - k8s/cicd/gitea
         - k8s/data/logical-backup
-        - k8s/platform-rbac
-        - k8s/ib-gateway
     - name: bifrost-research
       prefixes:
-        - k8s
+        - k8s/orchestration
     - name: bifrost-platform-plugin
       prefixes:
         - k8s
@@ -138,23 +132,25 @@ probe:
   deny:
     - kube-system
     - cicd
-  # Tag prefixes. An image is allowed when one of these sits at the start or after '/'.
+  # Full prefixes. A match has to be at the start of the reference.
+  # Docker Hub short names are expanded to docker.io/ before this comparison.
   images:
-    - "bifrost-research:"
-    - "bifrost-market-data:"
-    - "bifrost-flex-query:"
-    - "minio/minio:"
-    - "curlimages/curl:"
-  # B, except data which is C (TD-205: Redis there has no password; D10's operator stream is there).
+    - "192.168.10.73:30500/bifrost-research:"
+    - "192.168.10.73:30500/bifrost-market-data:"
+    - "192.168.10.73:30500/bifrost-flex-query:"
+    - "docker.io/minio/minio:"
+    - "docker.io/curlimages/curl:"
+  # B, except data, bifrost-stg, and bifrost-prod which are C.
+  # bifrost-stg and bifrost-prod can reach Monitor /control/*; a B probe would skip approval.
   namespaces:
     bifrost-dev: B
-    bifrost-stg: B
+    bifrost-stg: C
     bifrost-platform-stg: B
     monitoring: B
     research: B
     plugin-market-data: B
     plugin-flex-query: B
-    bifrost-prod: B
+    bifrost-prod: C
     bifrost-platform-prod: B
     data: C
   # env_from is allowed only in these namespaces (step 3 keeps pods/exec here).
@@ -189,3 +185,21 @@ admission:
     - backup-retry
     - maintainer-reconcile
   applier_pipeline: bifrost-apply-manifest
+  # Service accounts the applier may put on a Pod template, measured from the
+  # allow-listed paths. Accounts that can read Secrets are not listed.
+  # Every other namespace may only use default.
+  applier_pod_service_accounts:
+    bifrost-dev:
+      - default
+      - api-ops
+      - daemon-worker
+    monitoring:
+      - default
+      - maintainer-reconcile
+    cicd:
+      - default
+      - tekton-pipelinerun-ttl
+    data:
+      - default
+    research:
+      - default
