@@ -18,6 +18,7 @@ import (
 const SessionHeader = "X-Bifrost-Session"
 
 // Mount registers the catalog and approval routes on an /api/v1 router.
+// {id} is an approval id or its number ("57", "#57").
 func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 	r.Get("/actions", actions.HandleList)
 	r.Group(func(r chi.Router) {
@@ -34,42 +35,61 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 		r.Post("/approvals/{id}/approve", svc.HandleApprove)
 		r.Post("/approvals/{id}/reject", svc.HandleReject)
 	})
+	r.Group(func(r chi.Router) {
+		r.Use(auth.RequireAny(actuation.RoleExecutor, actuation.RoleAdmin))
+		r.Post("/approvals/claim", svc.HandleClaim)
+		r.Post("/approvals/{id}/heartbeat", svc.HandleHeartbeat)
+		r.Post("/approvals/{id}/result", svc.HandleResult)
+	})
 }
 
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Action   string         `json:"action"`
-		Params   map[string]any `json:"params"`
-		Reason   string         `json:"reason"`
-		Rollback string         `json:"rollback"`
+		Action          string         `json:"action"`
+		Params          map[string]any `json:"params"`
+		Reason          string         `json:"reason"`
+		Rollback        string         `json:"rollback"`
+		RequesterThread string         `json:"requester_thread"`
+		WorkID          string         `json:"work_id"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	res := s.create(r.Context(), requester(r), body.Action, body.Reason, body.Rollback, body.Params)
+	res := s.createWith(r.Context(), createInput{
+		Requester: requester(r),
+		Action:    body.Action,
+		Reason:    body.Reason,
+		Rollback:  body.Rollback,
+		Params:    body.Params,
+		Thread:    body.RequesterThread,
+		WorkID:    body.WorkID,
+	})
 	if res.Status == http.StatusCreated {
+		a := res.Approval
 		if s.audit != nil {
-			s.audit.Record(r, "approval.create", res.Approval.ID, StatusPending,
-				fmt.Sprintf("action=%s tier=%s requester=%s", res.Approval.Action, res.Approval.Tier, res.Approval.Requester))
+			s.audit.Record(r, "approval.create", a.ID, StatusPending,
+				fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s", a.Number, a.Action, a.Tier, a.Runner, a.Requester))
 		}
-		id := res.Approval.ID
-		tier := string(res.Approval.Tier)
 		// A down relay must not fail create. NotifyCreated logs its own error.
 		_ = approvalnotify.NotifyCreated(r.Context(), approvalnotify.Created{
-			ID:        id,
+			ID:        a.ID,
 			Action:    body.Action,
-			Tier:      tier,
+			Tier:      a.Tier,
 			Requester: r.Header.Get("X-Bifrost-Session"),
 		})
 		writeJSON(w, http.StatusCreated, map[string]any{
-			"id":          res.Approval.ID,
-			"action":      res.Approval.Action,
-			"tier":        res.Approval.Tier,
-			"params_hash": res.Approval.ParamsHash,
-			"status":      res.Approval.Status,
-			"requester":   res.Approval.Requester,
-			"expires_at":  res.Approval.ExpiresAt,
+			"id":          a.ID,
+			"number":      a.Number,
+			"action":      a.Action,
+			"tier":        a.Tier,
+			"params_hash": a.ParamsHash,
+			"status":      a.Status,
+			"requester":   a.Requester,
+			"expires_at":  a.ExpiresAt,
+			"env":         a.Env,
+			"summary":     a.Summary,
+			"runner":      a.Runner,
 		})
 		return
 	}
@@ -79,17 +99,18 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Service) HandleList(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	if status == "" {
-		status = "pending"
+		status = StatusPending
 	}
 	list, code, body := s.list(status)
 	if code != http.StatusOK {
 		writeJSON(w, code, body)
 		return
 	}
-	if list == nil {
-		list = []Approval{}
+	out := make([]Approval, 0, len(list))
+	for _, a := range list {
+		out = append(out, a.public())
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"approvals": list})
+	writeJSON(w, http.StatusOK, map[string]any{"approvals": out})
 }
 
 func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -98,29 +119,63 @@ func (s *Service) HandleGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, rec)
+	writeJSON(w, http.StatusOK, rec.public())
 }
 
 func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Channel string `json:"channel"`
+		Channel       string          `json:"channel"`
+		ConfirmNumber json.RawMessage `json:"confirm_number"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	id := chi.URLParam(r, "id")
-	out := s.approve(r.Context(), id, body.Channel)
-	if out.Status == http.StatusOK && s.audit != nil {
-		s.audit.Record(r, "approval.approve", id, "approved", "channel="+strings.TrimSpace(body.Channel))
+	confirm, err := confirmNumber(body.ConfirmNumber)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	ref := chi.URLParam(r, "id")
+	out := s.approveWith(r.Context(), ref, approveInput{Channel: body.Channel, Confirm: confirm})
+	if (out.Status == http.StatusOK || out.Status == http.StatusAccepted) && s.audit != nil {
+		id, _ := out.Body["id"].(string)
+		s.audit.Record(r, "approval.approve", id, StatusApproved, "channel="+strings.TrimSpace(body.Channel))
 		status, _ := out.Body["status"].(string)
-		detail := status
-		if errText, _ := out.Body["error"].(string); errText != "" {
-			detail = errText
+		switch status {
+		case StatusExecuted, StatusFailed:
+			detail := status
+			if errText, _ := out.Body["error"].(string); errText != "" {
+				detail = errText
+			}
+			s.audit.Record(r, "approval.execute", id, status, detail)
+		case StatusApproved:
+			runner, _ := out.Body["runner"].(string)
+			detail := "runner=" + runner
+			if refusal, _ := out.Body["last_refusal"].(string); refusal != "" {
+				detail += " refusal=" + refusal
+			}
+			s.audit.Record(r, "approval.queue", id, StatusApproved, detail)
 		}
-		s.audit.Record(r, "approval.execute", id, status, detail)
 	}
 	writeJSON(w, out.Status, out.Body)
+}
+
+// confirmNumber accepts 57, "57" and "#57"; nil when absent.
+func confirmNumber(raw json.RawMessage) (*int, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" || text == "null" {
+		return nil, nil
+	}
+	var s string
+	if json.Unmarshal(raw, &s) != nil {
+		s = text
+	}
+	n, ok := parseNumber(s)
+	if !ok {
+		return nil, fmt.Errorf("confirm_number must be the approval number")
+	}
+	return &n, nil
 }
 
 func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
@@ -131,11 +186,52 @@ func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	id := chi.URLParam(r, "id")
-	out := s.reject(id, body.Reason)
+	out := s.reject(chi.URLParam(r, "id"), body.Reason)
 	if out.Status == http.StatusOK && s.audit != nil {
+		id, _ := out.Body["id"].(string)
 		s.audit.Record(r, "approval.reject", id, StatusRejected, strings.TrimSpace(body.Reason))
 	}
+	writeJSON(w, out.Status, out.Body)
+}
+
+// HandleClaim leases the oldest approved record this token may run (or the
+// one named by id). 204 when there is none after wait_seconds (at most 25).
+func (s *Service) HandleClaim(w http.ResponseWriter, r *http.Request) {
+	var body claimInput
+	if err := decode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	role := actuation.PrincipalFromContext(r.Context()).Role
+	out := s.claim(r.Context(), role, body)
+	s.record(r, out.events)
+	if out.Status == http.StatusNoContent {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writeJSON(w, out.Status, out.Body)
+}
+
+func (s *Service) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		LeaseID string `json:"lease_id"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	out := s.heartbeat(chi.URLParam(r, "id"), body.LeaseID)
+	writeJSON(w, out.Status, out.Body)
+}
+
+func (s *Service) HandleResult(w http.ResponseWriter, r *http.Request) {
+	var body resultInput
+	if err := decode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	out := s.result(chi.URLParam(r, "id"), body)
+	s.record(r, out.events)
 	writeJSON(w, out.Status, out.Body)
 }
 
@@ -150,7 +246,7 @@ func decode(r *http.Request, dest any) error {
 	if r.Body == nil {
 		return fmt.Errorf("empty body")
 	}
-	dec := json.NewDecoder(r.Body)
+	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	if err := dec.Decode(dest); err != nil {
 		if err == io.EOF {
 			return fmt.Errorf("empty body")

@@ -5,6 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,13 +17,20 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 )
 
-// Service stores approvals and runs them on approve.
+// Service stores approvals, runs platform actions on approve, and hands the
+// rest to an executor that claims them.
 type Service struct {
 	mu    sync.Mutex
 	store *store
 	audit *actuation.AuditLog
 	now   func() time.Time
 	auto  AutoApprover
+	// runnerID names this platform-api process as the executor of platform runs.
+	runnerID string
+	// requireConfirm makes confirm_number mandatory for tier D approvals from
+	// phone and console. Off until the Console sends it; a value that is sent
+	// is always checked.
+	requireConfirm bool
 }
 
 // AutoApprover returns the id of a signed release policy that already covers
@@ -36,16 +47,22 @@ func (s *Service) SetAutoApprover(fn AutoApprover) {
 
 // Pending returns the approvals still waiting for a decision.
 func (s *Service) Pending() []Approval {
-	out, _, _ := s.list("pending")
+	out, _, _ := s.list(StatusPending)
 	return out
 }
 
 // New loads the statefile at path (key "approvals" when path is $PLATFORM_DATA_DIR/approvals).
 func New(path string, audit *actuation.AuditLog) *Service {
+	host, _ := os.Hostname()
+	if host == "" {
+		host = "local"
+	}
 	return &Service{
-		store: newStore(path),
-		audit: audit,
-		now:   func() time.Time { return time.Now().UTC() },
+		store:          newStore(path),
+		audit:          audit,
+		now:            func() time.Time { return time.Now().UTC() },
+		runnerID:       "platform:" + host,
+		requireConfirm: truthy(os.Getenv("APPROVAL_CONFIRM_NUMBER_REQUIRED")),
 	}
 }
 
@@ -59,29 +76,64 @@ func (s *Service) SetClock(now func() time.Time) {
 	s.mu.Unlock()
 }
 
+func (s *Service) clock() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.now()
+}
+
 type createResult struct {
 	Approval Approval
 	Status   int
 	Body     map[string]any
 }
 
+// createInput is POST /approvals. Thread and work id are labels; they are not
+// params and are not in params_hash.
+type createInput struct {
+	Requester string
+	Action    string
+	Reason    string
+	Rollback  string
+	Params    map[string]any
+	Thread    string
+	WorkID    string
+}
+
+var workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
+
 func (s *Service) create(ctx context.Context, requester, action, reason, rollback string, params map[string]any) createResult {
-	action = strings.TrimSpace(action)
-	reason = strings.TrimSpace(reason)
-	rollback = strings.TrimSpace(rollback)
-	requester = strings.TrimSpace(requester)
+	return s.createWith(ctx, createInput{Requester: requester, Action: action, Reason: reason, Rollback: rollback, Params: params})
+}
+
+func (s *Service) createWith(ctx context.Context, in createInput) createResult {
+	action := strings.TrimSpace(in.Action)
+	reason := strings.TrimSpace(in.Reason)
+	rollback := strings.TrimSpace(in.Rollback)
+	requester := strings.TrimSpace(in.Requester)
+	thread := strings.TrimSpace(in.Thread)
+	work := strings.TrimSpace(in.WorkID)
 	if action == "" {
 		return fail(400, "action is required")
 	}
 	if reason == "" {
 		return fail(400, "reason is required")
 	}
+	if strings.ContainsAny(thread, "\r\n") || len(thread) > 120 {
+		return fail(400, "requester_thread must be one line of at most 120 bytes")
+	}
+	if work != "" && (len(work) > 40 || !workIDPattern.MatchString(work)) {
+		return fail(400, "work_id must look like W-n, TD-n or LANE-name")
+	}
 	act, ok := actions.ByID(action)
 	if !ok {
 		return fail(404, "unknown action")
 	}
-	norm, err := act.Normalize(params)
+	norm, err := act.Normalize(in.Params)
 	if err != nil {
+		return fail(400, err.Error())
+	}
+	if err := actions.NormalizeRunner(act.ID, norm); err != nil {
 		return fail(400, err.Error())
 	}
 	if missing := act.Missing(norm); missing != "" {
@@ -123,45 +175,66 @@ func (s *Service) create(ctx context.Context, requester, action, reason, rollbac
 	if err != nil {
 		return fail(400, err.Error())
 	}
-	now := s.now()
+	desc := act.Describe(ctx, norm, reason)
+	now := s.clock()
 	rec := Approval{
-		ID:         newID(),
-		Action:     act.ID,
-		Tier:       string(tier),
-		Params:     norm,
-		ParamsHash: hash,
-		Status:     StatusPending,
-		Reason:     reason,
-		Rollback:   rollback,
-		Requester:  requester,
-		CreatedAt:  now,
-		ExpiresAt:  now.Add(ttl),
+		ID:              newID(),
+		Action:          act.ID,
+		Tier:            string(tier),
+		Params:          norm,
+		ParamsHash:      hash,
+		Status:          StatusPending,
+		Reason:          reason,
+		Rollback:        rollback,
+		Requester:       requester,
+		CreatedAt:       now,
+		ExpiresAt:       now.Add(ttl),
+		Env:             desc.Env,
+		Summary:         desc.Summary,
+		KeyParams:       desc.KeyParams,
+		Runner:          act.RunnerOf(norm),
+		RequesterThread: thread,
+		WorkID:          work,
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.store.load(); err != nil {
-		return fail(500, "load approvals: "+err.Error())
-	}
-	s.store.put(rec)
-	if err := s.store.save(); err != nil {
+	err = s.store.update(func(doc *file) error {
+		rec.Number = doc.nextNumber()
+		doc.put(rec)
+		return nil
+	})
+	if err != nil {
 		return fail(500, "store approvals: "+err.Error())
 	}
 	return createResult{Approval: rec, Status: 201}
 }
 
-func (s *Service) list(status string) ([]Approval, int, map[string]any) {
+// listFilter: "" and pending (default), open (pending, approved, running,
+// unknown), all, or one exact status.
+func listFilter(status string) (func(Approval) bool, bool) {
 	switch status {
-	case "", "pending", "all":
-	default:
-		return nil, 400, map[string]any{"error": "status must be pending or all"}
+	case "", StatusPending:
+		return func(a Approval) bool { return a.Status == StatusPending }, true
+	case "open":
+		return Approval.open, true
+	case "all":
+		return func(Approval) bool { return true }, true
+	case StatusApproved, StatusRunning, StatusExecuted, StatusFailed, StatusRejected, StatusExpired, StatusUnknown:
+		return func(a Approval) bool { return a.Status == status }, true
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_ = s.store.load()
-	s.expireLocked(nil)
+	return nil, false
+}
+
+func (s *Service) list(status string) ([]Approval, int, map[string]any) {
+	keep, ok := listFilter(status)
+	if !ok {
+		return nil, 400, map[string]any{"error": "status must be pending, open, all, or one status"}
+	}
+	doc, err := s.sweptDoc()
+	if err != nil {
+		return nil, 500, map[string]any{"error": "load approvals: " + err.Error()}
+	}
 	out := make([]Approval, 0)
-	for _, a := range s.store.items {
-		if status == "all" || a.Status == StatusPending {
+	for _, a := range doc.Approvals {
+		if keep(a) {
 			out = append(out, a)
 		}
 	}
@@ -169,126 +242,311 @@ func (s *Service) list(status string) ([]Approval, int, map[string]any) {
 	return out, 200, nil
 }
 
-func (s *Service) get(id string) (Approval, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_ = s.store.load()
-	s.expireLocked(nil)
-	return s.store.get(id)
+func (s *Service) get(ref string) (Approval, bool) {
+	doc, err := s.sweptDoc()
+	if err != nil {
+		return Approval{}, false
+	}
+	return doc.find(strings.TrimSpace(ref))
+}
+
+// sweptDoc reads the document and, when a deadline has passed, writes the
+// transitions first (pending → expired, approved → expired, running → unknown).
+func (s *Service) sweptDoc() (file, error) {
+	doc, err := s.store.read()
+	if err != nil {
+		return doc, err
+	}
+	now := s.clock()
+	probe := doc
+	probe.Approvals = append([]Approval(nil), doc.Approvals...)
+	if len(sweep(&probe, now)) == 0 {
+		return doc, nil
+	}
+	var evs []event
+	var out file
+	err = s.store.update(func(d *file) error {
+		evs = sweep(d, now)
+		out = *d
+		if len(evs) == 0 {
+			return errNoChange
+		}
+		return nil
+	})
+	if err != nil {
+		return doc, err
+	}
+	s.record(nil, evs)
+	if len(evs) == 0 {
+		return s.store.read()
+	}
+	return out, nil
+}
+
+// sweep applies the time-based transitions in place and returns their audit lines.
+func sweep(doc *file, now time.Time) []event {
+	var evs []event
+	for i := range doc.Approvals {
+		a := &doc.Approvals[i]
+		switch a.Status {
+		case StatusPending:
+			if now.After(a.ExpiresAt) {
+				a.Status = StatusExpired
+				a.DecidedAt = now
+				evs = append(evs, event{"approval.expire", a.ID, StatusExpired, "ttl 24h"})
+			}
+		case StatusApproved:
+			if e := a.Execution; e != nil && !e.Deadline.IsZero() && now.After(e.Deadline) {
+				a.Status = StatusExpired
+				a.Error = "not executed before the execution deadline"
+				if e.LastRefusal != "" {
+					a.Error += "; last refusal: " + e.LastRefusal
+				}
+				evs = append(evs, event{"approval.expire", a.ID, StatusExpired, "execution deadline " + e.Deadline.Format(time.RFC3339)})
+			}
+		case StatusRunning:
+			if e := a.Execution; e != nil && !e.LeaseExpiresAt.IsZero() && now.After(e.LeaseExpiresAt.Add(unknownGrace)) {
+				a.Status = StatusUnknown
+				a.Error = "executor lost: lease lapsed with no result"
+				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
+			}
+		}
+	}
+	return evs
 }
 
 type decided struct {
 	Status int
 	Body   map[string]any
+	// events are audit lines for the handler to record with the caller.
+	events []event
+}
+
+// approveInput is POST /approvals/{id}/approve.
+type approveInput struct {
+	Channel string
+	// Confirm is confirm_number as sent; nil when absent.
+	Confirm *int
 }
 
 func (s *Service) approve(ctx context.Context, id, channel string) decided {
-	channel = strings.TrimSpace(channel)
+	return s.approveWith(ctx, id, approveInput{Channel: channel})
+}
+
+func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) decided {
+	channel := strings.TrimSpace(in.Channel)
 	switch channel {
 	case "chat", "phone", "console":
 	default:
 		return decided{Status: 400, Body: map[string]any{"error": "channel must be chat, phone, or console"}}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.store.load(); err != nil {
-		return decided{Status: 500, Body: map[string]any{"error": "load approvals: " + err.Error()}}
-	}
-	s.expireLocked(nil)
-	rec, ok := s.store.get(id)
-	if !ok {
-		return decided{Status: 404, Body: map[string]any{"error": "not found"}}
-	}
-	if rec.Status == StatusExpired {
-		return decided{Status: 409, Body: map[string]any{"error": "expired", "status": StatusExpired}}
-	}
-	if rec.Status != StatusPending {
-		return decided{Status: 409, Body: map[string]any{"error": "already decided", "status": rec.Status}}
-	}
-	hash, err := actions.ParamsHash(rec.Params)
-	if err != nil || hash != rec.ParamsHash {
-		return decided{Status: 409, Body: map[string]any{"error": "params hash mismatch"}}
-	}
-	// The approve body cannot change params. Execution uses the stored map.
-	result, execErr := actions.Execute(ctx, rec.Action, rec.Params)
-	now := s.now()
-	rec.DecidedAt = now
-	rec.Channel = channel
-	if execErr != nil {
-		rec.Status = StatusFailed
-		rec.Error = execErr.Error()
-		rec.Result = nil
-	} else {
-		rec.Status = StatusExecuted
-		rec.Result = result
-		rec.Error = ""
-	}
-	s.store.put(rec)
-	if err := s.store.save(); err != nil {
+	now := s.clock()
+	var rec Approval
+	var refusal *decided
+	var evs []event
+	err := s.store.update(func(doc *file) error {
+		refusal = nil
+		evs = sweep(doc, now)
+		found, ok := doc.find(strings.TrimSpace(ref))
+		if !ok {
+			refusal = &decided{Status: 404, Body: map[string]any{"error": "not found"}}
+			return keepSwept(evs)
+		}
+		if found.Status == StatusExpired {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "expired", "status": StatusExpired}}
+			return keepSwept(evs)
+		}
+		if found.Status != StatusPending {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "already decided", "status": found.Status}}
+			return keepSwept(evs)
+		}
+		hash, err := actions.ParamsHash(found.Params)
+		if err != nil || hash != found.ParamsHash {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "params hash mismatch"}}
+			return keepSwept(evs)
+		}
+		if d := s.checkConfirm(found, channel, in.Confirm); d != nil {
+			refusal = d
+			return keepSwept(evs)
+		}
+		found.DecidedAt = now
+		found.Channel = channel
+		found.Status = StatusApproved
+		found.Result = nil
+		found.Error = ""
+		runner := found.Runner
+		if runner == "" {
+			runner = actions.RunnerPlatform
+			found.Runner = runner
+		}
+		found.Execution = &Execution{Deadline: now.Add(deadlineFor(runner))}
+		if runner == actions.RunnerPlatform {
+			s.claimLocked(&found, s.runnerID, now)
+		} else {
+			found.Result = actions.Handoff(found.Action, found.ID, found.Params)
+		}
+		doc.put(found)
+		rec = found
+		return nil
+	})
+	if err != nil {
 		return decided{Status: 500, Body: map[string]any{"error": "store approvals: " + err.Error()}}
 	}
-	body := map[string]any{"status": rec.Status}
-	if rec.Status == StatusExecuted {
-		body["result"] = rec.Result
-	} else {
-		body["error"] = rec.Error
+	s.record(nil, evs)
+	if refusal != nil {
+		return *refusal
 	}
-	return decided{Status: 200, Body: body}
+	if rec.Status == StatusRunning {
+		rec, _ = s.runPlatform(ctx, rec)
+	}
+	return decided{Status: decisionCode(rec), Body: decisionBody(rec)}
 }
 
-func (s *Service) reject(id, reason string) decided {
+// keepSwept writes sweep transitions found on the way to a refusal.
+func keepSwept(evs []event) error {
+	if len(evs) == 0 {
+		return errNoChange
+	}
+	return nil
+}
+
+// checkConfirm: tier D from phone or console must repeat the number. chat
+// relies on the Claude permission prompt.
+func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *decided {
+	if rec.Tier != string(actions.TierD) || channel == "chat" || rec.Number == 0 {
+		return nil
+	}
+	if confirm == nil {
+		if s.requireConfirm {
+			return &decided{Status: 400, Body: map[string]any{"error": "confirm_number required", "number": rec.Number}}
+		}
+		return nil
+	}
+	if *confirm != rec.Number {
+		return &decided{Status: 409, Body: map[string]any{"error": "confirm_number does not match", "number": rec.Number}}
+	}
+	return nil
+}
+
+func decisionCode(rec Approval) int {
+	if rec.Status == StatusApproved || rec.Status == StatusRunning {
+		return http.StatusAccepted
+	}
+	return http.StatusOK
+}
+
+func decisionBody(rec Approval) map[string]any {
+	body := map[string]any{"status": rec.Status, "id": rec.ID, "runner": rec.Runner}
+	if rec.Number != 0 {
+		body["number"] = rec.Number
+	}
+	switch rec.Status {
+	case StatusExecuted:
+		body["result"] = rec.Result
+	case StatusApproved:
+		if rec.Result != nil {
+			body["result"] = rec.Result
+		}
+		if e := rec.Execution; e != nil {
+			body["deadline"] = e.Deadline
+			if e.LastRefusal != "" {
+				body["last_refusal"] = e.LastRefusal
+				body["next_attempt_at"] = e.NextAttemptAt
+			}
+		}
+	default:
+		body["error"] = rec.Error
+	}
+	return body
+}
+
+func (s *Service) reject(ref, reason string) decided {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		return decided{Status: 400, Body: map[string]any{"error": "reason is required"}}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.store.load(); err != nil {
-		return decided{Status: 500, Body: map[string]any{"error": "load approvals: " + err.Error()}}
-	}
-	s.expireLocked(nil)
-	rec, ok := s.store.get(id)
-	if !ok {
-		return decided{Status: 404, Body: map[string]any{"error": "not found"}}
-	}
-	if rec.Status == StatusExpired {
-		return decided{Status: 409, Body: map[string]any{"error": "expired", "status": StatusExpired}}
-	}
-	if rec.Status != StatusPending {
-		return decided{Status: 409, Body: map[string]any{"error": "already decided", "status": rec.Status}}
-	}
-	rec.Status = StatusRejected
-	rec.RejectReason = reason
-	rec.DecidedAt = s.now()
-	s.store.put(rec)
-	if err := s.store.save(); err != nil {
+	now := s.clock()
+	var rec Approval
+	var refusal *decided
+	var evs []event
+	err := s.store.update(func(doc *file) error {
+		refusal = nil
+		evs = sweep(doc, now)
+		found, ok := doc.find(strings.TrimSpace(ref))
+		if !ok {
+			refusal = &decided{Status: 404, Body: map[string]any{"error": "not found"}}
+			return keepSwept(evs)
+		}
+		if found.Status == StatusExpired {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "expired", "status": StatusExpired}}
+			return keepSwept(evs)
+		}
+		if found.Status != StatusPending {
+			refusal = &decided{Status: 409, Body: map[string]any{"error": "already decided", "status": found.Status}}
+			return keepSwept(evs)
+		}
+		found.Status = StatusRejected
+		found.RejectReason = reason
+		found.DecidedAt = now
+		doc.put(found)
+		rec = found
+		return nil
+	})
+	if err != nil {
 		return decided{Status: 500, Body: map[string]any{"error": "store approvals: " + err.Error()}}
+	}
+	s.record(nil, evs)
+	if refusal != nil {
+		return *refusal
 	}
 	return decided{Status: 200, Body: map[string]any{"id": rec.ID, "status": rec.Status}}
 }
 
-// expireLocked marks pending approvals past their deadline. audit may be nil
-// when the caller records the lines itself; pass the request-less audit func.
-func (s *Service) expireLocked(audit func(id string)) {
-	now := s.now()
-	changed := false
-	for i := range s.store.items {
-		a := &s.store.items[i]
-		if a.Status != StatusPending || !now.After(a.ExpiresAt) {
+// RecordDeliveries appends notification results to an approval (S0-0b).
+func (s *Service) RecordDeliveries(ref string, ds []Delivery) error {
+	if len(ds) == 0 {
+		return nil
+	}
+	return s.store.update(func(doc *file) error {
+		found, ok := doc.find(strings.TrimSpace(ref))
+		if !ok {
+			return fmt.Errorf("approval %s not found", ref)
+		}
+		found.Deliveries = append(found.Deliveries, ds...)
+		doc.put(found)
+		return nil
+	})
+}
+
+// event is one audit line, written after the state change it describes is stored.
+type event struct {
+	action, target, status, detail string
+}
+
+func (s *Service) record(r *http.Request, evs []event) {
+	if s.audit == nil {
+		return
+	}
+	for _, e := range evs {
+		if r != nil {
+			s.audit.Record(r, e.action, e.target, e.status, e.detail)
 			continue
 		}
-		a.Status = StatusExpired
-		a.DecidedAt = now
-		changed = true
-		if audit != nil {
-			audit(a.ID)
-		} else if s.audit != nil {
-			s.audit.RecordDirect("platform", actuation.RoleAdmin, "approval.expire", a.ID, StatusExpired, "ttl 24h")
-		}
+		s.audit.RecordDirect("platform", actuation.RoleAdmin, e.action, e.target, e.status, e.detail)
 	}
-	if changed {
-		_ = s.store.save()
+}
+
+// parseNumber accepts "57" and "#57".
+func parseNumber(ref string) (int, bool) {
+	ref = strings.TrimPrefix(strings.TrimSpace(ref), "#")
+	if ref == "" || len(ref) > 9 {
+		return 0, false
 	}
+	n, err := strconv.Atoi(ref)
+	if err != nil || n <= 0 || strconv.Itoa(n) != ref {
+		return 0, false
+	}
+	return n, true
 }
 
 func sortNewest(list []Approval) {
@@ -303,11 +561,23 @@ func sortNewest(list []Approval) {
 }
 
 func newID() string {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("appr_%d", time.Now().UnixNano())
+	return "appr_" + randomHex(8)
+}
+
+func randomHex(n int) string {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
 	}
-	return "appr_" + hex.EncodeToString(b[:])
+	return hex.EncodeToString(b)
+}
+
+func truthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
 }
 
 func fail(status int, msg string) createResult {

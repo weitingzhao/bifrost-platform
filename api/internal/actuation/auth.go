@@ -26,6 +26,11 @@ const (
 	RoleReporter Role = "reporter"
 	RoleOperator Role = "operator"
 	RoleAdmin    Role = "admin"
+	// RoleExecutor is the out-of-band executor. It may claim approved work,
+	// renew its lease and post the result, and nothing else: it sits below
+	// viewer, so no Require(min) route accepts it, and only RequireAny routes
+	// that name it do.
+	RoleExecutor Role = "executor"
 )
 
 type Principal struct {
@@ -140,6 +145,30 @@ func (a *AuthService) Require(min Role) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAny accepts exactly the listed roles; the ladder does not apply.
+func (a *AuthService) RequireAny(roles ...Role) func(http.Handler) http.Handler {
+	names := make([]string, 0, len(roles))
+	for _, r := range roles {
+		names = append(names, string(r))
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			principal, ok := a.Authenticate(r)
+			if ok {
+				for _, want := range roles {
+					if principal.Role == want {
+						next.ServeHTTP(w, r.WithContext(WithPrincipal(r.Context(), principal)))
+						return
+					}
+				}
+			}
+			writeJSON(w, http.StatusUnauthorized, map[string]string{
+				"error": strings.Join(names, " or ") + " token required",
+			})
+		})
+	}
+}
+
 func (a *AuthService) Authenticate(r *http.Request) (Principal, bool) {
 	if a == nil {
 		return Principal{}, false
@@ -165,6 +194,8 @@ func roleLevel(role Role) int {
 		return 3
 	case RoleReporter:
 		return 2
+	case RoleExecutor:
+		return 0
 	default:
 		return 1
 	}

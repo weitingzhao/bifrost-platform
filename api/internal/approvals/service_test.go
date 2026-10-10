@@ -199,21 +199,21 @@ tokens:
 }
 
 func TestPruneKeepsOpenAndRecentClosed(t *testing.T) {
-	s := &store{}
+	s := &file{}
 	now := time.Now().UTC()
 	for i := 0; i < 2; i++ {
-		s.items = append(s.items, Approval{ID: "open", Status: StatusPending, CreatedAt: now})
+		s.Approvals = append(s.Approvals, Approval{ID: "open", Status: StatusPending, CreatedAt: now})
 	}
-	s.items[1].ID = "open-2"
+	s.Approvals[1].ID = "open-2"
 	for i := 0; i < keepClosed+10; i++ {
-		s.items = append(s.items, Approval{
+		s.Approvals = append(s.Approvals, Approval{
 			ID: "c", Status: StatusExecuted, DecidedAt: now.Add(time.Duration(i) * time.Second),
 		})
 	}
 	s.prune()
 	open, closed := 0, 0
 	var oldest, newest time.Time
-	for _, a := range s.items {
+	for _, a := range s.Approvals {
 		if a.open() {
 			open++
 			continue

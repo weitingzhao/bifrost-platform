@@ -19,6 +19,8 @@ type Action struct {
 	Classify    func(ctx context.Context, params map[string]any) Tier
 	// Passthrough keeps unrecognized body keys in params_hash (plugin heal, schedule).
 	Passthrough bool
+	// Runner is who executes after approval (RunnerPlatform when empty).
+	Runner string
 }
 
 // TierOf returns the level for these params.
@@ -37,6 +39,7 @@ type View struct {
 	Tier        Tier    `json:"tier"`
 	Description string  `json:"description"`
 	Params      []Param `json:"params"`
+	Runner      string  `json:"runner"`
 }
 
 func (a Action) View() View {
@@ -44,7 +47,11 @@ func (a Action) View() View {
 	if params == nil {
 		params = []Param{}
 	}
-	return View{ID: a.ID, Tier: a.Tier, Description: a.Description, Params: params}
+	runner := a.Runner
+	if runner == "" {
+		runner = RunnerPlatform
+	}
+	return View{ID: a.ID, Tier: a.Tier, Description: a.Description, Params: params, Runner: runner}
 }
 
 // Catalog is the action directory in stable id order.
@@ -371,8 +378,8 @@ var catalog = []Action{
 		Params: []Param{{Name: "path", Type: "string", Required: true, In: "path"}},
 	},
 	{
-		ID: "rolling_reboot", Tier: TierD,
-		Description: "Record approval for a weekend node rolling reboot. Tier D. The platform does not reboot nodes; after approval, run scripts/k3s/rolling-reboot.sh --execute --approval <id>.",
+		ID: "rolling_reboot", Tier: TierD, Runner: RunnerOwner,
+		Description: "Approve a weekend node rolling reboot. Tier D. The platform does not reboot nodes: the approval stays approved until scripts/k3s/rolling-reboot.sh --execute --approval <id> claims it and posts the result.",
 		Params:      []Param{},
 	},
 	{
@@ -430,11 +437,12 @@ var catalog = []Action{
 		Classify: classifyProbe,
 	},
 	{
-		ID: "owner_run_command", Tier: TierD,
-		Description: "Record an exact shell command for the Owner to run. Tier D. The platform does not execute it; after approval, run scripts/owner/owner-run.sh <id>.",
+		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
+		Description: "Approve an exact shell command. Tier D. The platform does not execute it. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it.",
 		Params: []Param{
 			{Name: "command", Type: "string", Required: true, In: "body"},
 			{Name: "reason", Type: "string", Required: true, In: "body"},
+			{Name: "runner", Type: "string", In: "body"},
 		},
 	},
 }
