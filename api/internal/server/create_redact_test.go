@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
