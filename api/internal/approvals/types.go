@@ -93,6 +93,9 @@ type Execution struct {
 	OutputTail string `json:"output_tail,omitempty"`
 	Error      string `json:"error,omitempty"`
 	LateResult bool   `json:"late_result,omitempty"`
+	// extra is the JSON object keys this binary does not know. The store
+	// writes them back. They are not part of the API.
+	extra map[string]json.RawMessage
 }
 
 // Delivery is one notification attempt to one target (filled by S0-0b).
@@ -110,6 +113,9 @@ type Delivery struct {
 	// can be taken again. Finish and release match ClaimID.
 	ClaimID        string    `json:"claim_id,omitempty"`
 	ClaimExpiresAt time.Time `json:"claim_expires_at,omitempty"`
+	// extra is the JSON object keys this binary does not know. The store
+	// writes them back. They are not part of the API.
+	extra map[string]json.RawMessage
 }
 
 // open is true while the record may still change without a new request.

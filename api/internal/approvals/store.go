@@ -1,5 +1,5 @@
 // Package approvals stores approval records in one JSON state file.
-// A release that changes this file's shape must not run two versions of the writer at the same time: stop the old writer and wait until it has finished before starting the new one. Keeping unknown fields does not make overlapping writers safe.
+// A release that changes this file's shape must not run two versions of the writer at the same time: stop the old writer and wait until it has finished before starting the new one. Unknown keys on the document, on each approval, inside execution, and inside each deliveries entry are written back as they were read. Keeping those fields does not make overlapping writers safe.
 package approvals
 
 import (
@@ -115,10 +115,55 @@ func parseApproval(raw json.RawMessage) (Approval, error) {
 	if len(extra) > 0 {
 		a.extra = extra
 	}
+	if rawExec, ok := obj["execution"]; ok && a.Execution != nil {
+		if err := attachUnknown(&a.Execution.extra, rawExec, executionJSONKeys); err != nil {
+			return Approval{}, err
+		}
+	}
+	if rawDels, ok := obj["deliveries"]; ok && len(a.Deliveries) > 0 {
+		var rows []json.RawMessage
+		if err := json.Unmarshal(rawDels, &rows); err != nil {
+			return Approval{}, err
+		}
+		if len(rows) != len(a.Deliveries) {
+			return Approval{}, errors.New("approvals: deliveries do not match")
+		}
+		for i := range rows {
+			if err := attachUnknown(&a.Deliveries[i].extra, rows[i], deliveryJSONKeys); err != nil {
+				return Approval{}, err
+			}
+		}
+	}
 	return a, nil
 }
 
-var approvalJSONKeys = jsonFieldNames(Approval{})
+// attachUnknown keeps object keys this binary does not know, byte for byte.
+func attachUnknown(dst *map[string]json.RawMessage, raw json.RawMessage, known map[string]bool) error {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return err
+	}
+	extra := map[string]json.RawMessage{}
+	for k, v := range obj {
+		if known[k] {
+			continue
+		}
+		extra[k] = append(json.RawMessage(nil), v...)
+	}
+	if len(extra) > 0 {
+		*dst = extra
+	}
+	return nil
+}
+
+var (
+	approvalJSONKeys  = jsonFieldNames(Approval{})
+	executionJSONKeys = jsonFieldNames(Execution{})
+	deliveryJSONKeys  = jsonFieldNames(Delivery{})
+)
 
 func jsonFieldNames(v any) map[string]bool {
 	t := reflect.TypeOf(v)
@@ -224,15 +269,80 @@ func marshalApproval(a Approval) (json.RawMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(a.extra) == 0 {
+	if len(a.extra) == 0 && !hasNestedExtra(a) {
 		return raw, nil
 	}
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
 		return nil, err
 	}
+	if a.Execution != nil && len(a.Execution.extra) > 0 {
+		merged, err := mergeUnknown(obj["execution"], a.Execution.extra)
+		if err != nil {
+			return nil, err
+		}
+		obj["execution"] = merged
+	}
+	if deliveryExtras(a.Deliveries) {
+		rawDels, ok := obj["deliveries"]
+		if !ok {
+			return nil, errors.New("approvals: deliveries missing while preserving unknown fields")
+		}
+		var rows []json.RawMessage
+		if err := json.Unmarshal(rawDels, &rows); err != nil {
+			return nil, err
+		}
+		if len(rows) != len(a.Deliveries) {
+			return nil, errors.New("approvals: deliveries length changed while preserving unknown fields")
+		}
+		for i := range a.Deliveries {
+			merged, err := mergeUnknown(rows[i], a.Deliveries[i].extra)
+			if err != nil {
+				return nil, err
+			}
+			rows[i] = merged
+		}
+		obj["deliveries"] = writeRawArray(rows)
+	}
 	for k, v := range a.extra {
 		if _, known := obj[k]; known {
+			continue
+		}
+		obj[k] = append(json.RawMessage(nil), v...)
+	}
+	return writeRawObject(obj)
+}
+
+func hasNestedExtra(a Approval) bool {
+	if a.Execution != nil && len(a.Execution.extra) > 0 {
+		return true
+	}
+	return deliveryExtras(a.Deliveries)
+}
+
+func deliveryExtras(ds []Delivery) bool {
+	for i := range ds {
+		if len(ds[i].extra) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeUnknown splices unknown keys back onto a marshaled object. A known
+// key already in raw wins; an unknown value is copied as it was read.
+func mergeUnknown(raw json.RawMessage, extra map[string]json.RawMessage) (json.RawMessage, error) {
+	if len(extra) == 0 {
+		return raw, nil
+	}
+	obj := map[string]json.RawMessage{}
+	if len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &obj); err != nil {
+			return nil, err
+		}
+	}
+	for k, v := range extra {
+		if _, exists := obj[k]; exists {
 			continue
 		}
 		obj[k] = append(json.RawMessage(nil), v...)
