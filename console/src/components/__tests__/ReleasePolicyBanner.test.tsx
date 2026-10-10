@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { releasePolicyBannerState, type ReleasePolicyStatus } from '@/api/releasePolicy'
+import { releasePolicyBannerState, reminderHours, type ReleasePolicyStatus } from '@/api/releasePolicy'
 import { ReleasePolicyBanner } from '@/components/ReleasePolicyBanner'
 
 const SIGN = 'bifrost-trade-infra/scripts/release/release.sh policy sign'
@@ -80,6 +80,7 @@ describe('ReleasePolicyBanner', () => {
     render(wrapper(<ReleasePolicyBanner />))
     const banner = await screen.findByTestId('release-policy-banner')
     expect(banner.textContent).toContain('Release policy rp-20261008-1100 expires in 13d')
+    expect(banner.textContent).toContain('14d reminder')
   })
 
   it('turns red once the policy has expired', async () => {
@@ -117,5 +118,21 @@ describe('releasePolicyBannerState', () => {
     expect(releasePolicyBannerState(status({ remaining_seconds: 14 * 24 * 3600 })).kind).toBe('expiring')
     expect(releasePolicyBannerState(status({ remaining_seconds: 14 * 24 * 3600 + 1 })).kind).toBe('hidden')
     expect(releasePolicyBannerState(undefined).kind).toBe('hidden')
+  })
+
+  it('names the reminder window it is in: 14, 3 and 1 days', () => {
+    const at = (hours: number) => releasePolicyBannerState(status({ remaining_seconds: hours * 3600 }))
+    expect(at(10 * 24)).toMatchObject({ kind: 'expiring', reminder: '14d' })
+    expect(at(3 * 24)).toMatchObject({ kind: 'expiring', reminder: '3d' })
+    expect(at(30)).toMatchObject({ kind: 'expiring', reminder: '3d' })
+    expect(at(20)).toMatchObject({ kind: 'expiring', reminder: '1d' })
+  })
+
+  it('follows the schedule the policy names, and falls back to 14 / 3 / 1 days', () => {
+    expect(reminderHours(['36h', '7d'])).toEqual([168, 36])
+    expect(reminderHours([])).toEqual([336, 72, 24])
+    expect(reminderHours(['soon'])).toEqual([336, 72, 24])
+    const custom = status({ remaining_seconds: 10 * 24 * 3600, reminder_windows: ['7d', '36h'] })
+    expect(releasePolicyBannerState(custom).kind).toBe('hidden')
   })
 })

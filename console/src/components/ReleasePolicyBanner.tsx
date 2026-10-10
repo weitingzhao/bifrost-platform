@@ -2,7 +2,8 @@ import { releasePolicyBannerState } from '@/api/releasePolicy'
 import { useReleasePolicy } from '@/hooks/useReleasePolicy'
 
 /**
- * Yellow when the signed release policy has 14 days or less left; red when it
+ * Yellow inside the policy's reminder windows (14, 3 and 1 days by default),
+ * naming the window it is in; red when it
  * has expired, is missing or invalid, or releases are frozen. Renders nothing
  * otherwise, and nothing while the status cannot be read.
  */
@@ -24,6 +25,7 @@ export function ReleasePolicyBanner() {
         <span className="font-medium">
           Release policy {state.status.policy_id} expires in {left}
         </span>
+        <span>{state.reminder} reminder</span>
         <span>Sign a new one:</span>
         <code className="font-mono">{state.status.sign_command}</code>
       </div>

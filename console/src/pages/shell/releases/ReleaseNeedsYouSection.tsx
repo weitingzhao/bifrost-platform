@@ -1,7 +1,9 @@
 import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
 import { formatTimeRemaining, type ApprovalItem } from '@/api/approvals'
+import { releasePolicyBannerState } from '@/api/releasePolicy'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { ReleasePolicySlot } from '@/pages/shell/releases/ReleasePolicySlot'
+import { ReleasePolicyBanner } from '@/components/ReleasePolicyBanner'
+import { useReleasePolicy } from '@/hooks/useReleasePolicy'
 import {
   NO_VIEWER_TOKEN,
   approvalHref,
@@ -19,10 +21,23 @@ export type ReleaseNeedsYouProps = {
   now: number
 }
 
-function needsYouCount({ hasToken, isLoading, error, pending }: ReleaseNeedsYouProps): string {
-  if (!hasToken || error != null) return 'Unknown'
-  if (isLoading) return '…'
-  return String(pending.length)
+/** The policy row: unknown when it cannot be read, else the banner's state. */
+type PolicyRow = 'unknown' | 'loading' | ReturnType<typeof releasePolicyBannerState>['kind']
+
+/** An expiring policy is one more thing to sign; an unreadable one makes the count Unknown. */
+function needsYouCount({ hasToken, isLoading, error, pending }: ReleaseNeedsYouProps, policy: PolicyRow): string {
+  if (!hasToken || error != null || policy === 'unknown') return 'Unknown'
+  if (isLoading || policy === 'loading') return '…'
+  return String(pending.length + (policy === 'expiring' ? 1 : 0))
+}
+
+function PolicyUnknownRow({ reason }: { reason: string }) {
+  return (
+    <div data-testid="release-policy-unknown" className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-xs">
+      <span className="font-medium">Release policy: Unknown</span>
+      <span className="text-[var(--muted-foreground)]">{reason}</span>
+    </div>
+  )
 }
 
 function messageRow(text: string, tone: 'muted' | 'error' = 'muted') {
@@ -40,6 +55,12 @@ function messageRow(text: string, tone: 'muted' | 'error' = 'muted') {
 
 export function ReleaseNeedsYouSection(props: ReleaseNeedsYouProps) {
   const { hasToken, isLoading, error, pending, now } = props
+  const policyQuery = useReleasePolicy(undefined, hasToken)
+  let policy: PolicyRow
+  if (!hasToken || policyQuery.isError) policy = 'unknown'
+  else if (policyQuery.data == null) policy = 'loading'
+  else policy = releasePolicyBannerState(policyQuery.data).kind
+
   let body
   if (!hasToken) body = messageRow(NO_VIEWER_TOKEN)
   else if (error != null) body = messageRow(error, 'error')
@@ -78,13 +99,19 @@ export function ReleaseNeedsYouSection(props: ReleaseNeedsYouProps) {
 
   return (
     <OpsSection
-      title={`Needs you · ${needsYouCount(props)}`}
-      description="Release requests waiting for your approval. Open one to approve or reject it."
+      title={`Needs you · ${needsYouCount(props, policy)}`}
+      description="Release requests waiting for your approval, and the release policy when it needs signing. Open a request to approve or reject it."
       bodyPadding="none"
       overflow="visible"
       bodyClassName="ops-section-body--table"
     >
-      <ReleasePolicySlot />
+      {policy === 'unknown' ? (
+        <PolicyUnknownRow reason={hasToken ? 'Cannot read /api/v1/release-policy.' : NO_VIEWER_TOKEN} />
+      ) : policy === 'expiring' || policy === 'blocked' ? (
+        <div className="px-3 py-2">
+          <ReleasePolicyBanner />
+        </div>
+      ) : null}
       <DenseDataTable>
         <DenseTableHeader>
           <DenseTableHeadRow>

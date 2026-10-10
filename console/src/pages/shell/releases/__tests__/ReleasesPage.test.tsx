@@ -47,12 +47,31 @@ function wrapper(children: ReactNode) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
+function policyStatus(partial: Record<string, unknown> = {}) {
+  return {
+    valid: true,
+    policy_id: 'rp-20261010-0900',
+    remaining_seconds: 30 * 24 * 3600,
+    expired: false,
+    reasons: [],
+    allow: ['bifrost-deliver-platform-prod'],
+    frozen: false,
+    reminder_windows: ['14d', '3d', '1d'],
+    sign_command: 'release.sh policy sign',
+    unfreeze_command: 'release.sh unfreeze',
+    ...partial,
+  }
+}
+
+let policyResponse: () => Response = () => json(policyStatus())
+
 function installFetch() {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       const method = init?.method ?? 'GET'
+      if (url.endsWith('/api/v1/release-policy')) return policyResponse()
       if (url.includes('/api/v1/releases/running-images')) {
         return json({
           cells: [
@@ -248,6 +267,7 @@ function installFetch() {
 describe('ReleasesPage', () => {
   beforeEach(() => {
     installStorage()
+    policyResponse = () => json(policyStatus())
     installFetch()
   })
 
@@ -286,7 +306,7 @@ describe('ReleasesPage', () => {
     expect(screen.getAllByText('run-ok')).toHaveLength(1)
 
     expect(screen.getByText('Needs you · Unknown')).toBeTruthy()
-    expect(screen.getByText('No signed release policy')).toBeTruthy()
+    expect(screen.getByTestId('release-policy-unknown').textContent).toContain('Release policy: Unknown')
     expect(screen.getByTestId('release-window').textContent).toContain('Unknown')
     expect(screen.getByText('smoke ok')).toBeTruthy()
 
@@ -308,6 +328,7 @@ describe('ReleasesPage', () => {
 
     const urls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
     expect(urls.some(url => url.includes('/release-window'))).toBe(false)
+    expect(urls.some(url => url.includes('/release-policy'))).toBe(false)
     expect(urls.some(url => url.includes('/api/v1/approvals?'))).toBe(false)
     expect(urls.some(url => url.includes('bifrost-ci-platform'))).toBe(false)
     expect(urls.some(url => url.includes('bifrost-smoke'))).toBe(false)
@@ -357,5 +378,48 @@ describe('ReleasesPage', () => {
 
     const windowCall = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/release-window'))
     expect(new Headers(windowCall?.[1]?.headers).get('Authorization')).toBe('Bearer viewer-token')
+    expect(screen.queryByTestId('release-policy-banner')).toBeNull()
+  })
+
+  it('counts an expiring release policy as one more thing that needs you', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    policyResponse = () => json(policyStatus({ remaining_seconds: 2 * 24 * 3600 + 3600 }))
+    render(wrapper(<ReleasesPage />))
+
+    await waitFor(() => {
+      expect(screen.getByText('Needs you · 2')).toBeTruthy()
+    })
+    const banner = screen.getByTestId('release-policy-banner')
+    expect(banner.getAttribute('data-tone')).toBe('warn')
+    expect(banner.textContent).toContain('expires in 2d')
+    expect(banner.textContent).toContain('3d reminder')
+  })
+
+  it('shows an unsigned policy without counting it', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    policyResponse = () => json(policyStatus({ valid: false, policy_id: undefined, remaining_seconds: 0 }))
+    render(wrapper(<ReleasesPage />))
+
+    await waitFor(() => {
+      expect(screen.getByText('Needs you · 1')).toBeTruthy()
+    })
+    const banner = screen.getByTestId('release-policy-banner')
+    expect(banner.getAttribute('data-tone')).toBe('danger')
+    expect(banner.textContent).toContain('No valid release policy')
+  })
+
+  it('says Unknown when the release policy cannot be read', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    policyResponse = () => json({ error: 'boom' }, 500)
+    render(wrapper(<ReleasesPage />))
+
+    await waitFor(
+      () => {
+        expect(screen.getByText('Needs you · Unknown')).toBeTruthy()
+      },
+      { timeout: 4000 },
+    )
+    expect(screen.getByTestId('release-policy-unknown').textContent).toContain('Cannot read /api/v1/release-policy.')
+    expect(screen.queryByTestId('release-policy-banner')).toBeNull()
   })
 })
