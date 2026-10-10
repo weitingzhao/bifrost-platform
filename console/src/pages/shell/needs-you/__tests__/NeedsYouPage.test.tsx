@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentThread } from '@/api/agentThreads'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
@@ -70,7 +71,34 @@ function healthResponse(url: string): Response | null {
   return null
 }
 
-function stubFetch(approvals: (headers: Headers) => Response) {
+function threadsResponse(threads: AgentThread[]): Response {
+  return json({ generated_at: '2026-10-10T07:25:00Z', silent_after_seconds: 600, tool_grace_seconds: 120, threads })
+}
+
+function silentThread(over: Partial<AgentThread> = {}): AgentThread {
+  return {
+    thread: '0b8e2f4a-1111-2222-3333-444455556666',
+    vendor: 'claude',
+    host: 'vision-mac',
+    work: 'W-54',
+    title: 'W-54 thread heartbeat',
+    event: 'before_tool',
+    tool: 'Bash',
+    tool_timeout_s: 120,
+    at: '2026-10-10T07:10:00Z',
+    turn_started_at: '2026-10-10T06:50:00Z',
+    status: 'silent',
+    quiet_seconds: 900,
+    in_turn_seconds: 2100,
+    threshold_seconds: 600,
+    ...over,
+  }
+}
+
+function stubFetch(
+  approvals: (headers: Headers) => Response,
+  threads: () => Response = () => threadsResponse([]),
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,6 +106,7 @@ function stubFetch(approvals: (headers: Headers) => Response) {
       const health = healthResponse(url)
       if (health != null) return health
       if (url.includes('/api/v1/approvals?status=pending')) return approvals(new Headers(init?.headers))
+      if (url.includes('/api/v1/agent/threads')) return threads()
       return json({ error: `unexpected ${url}` }, 500)
     }),
   )
@@ -154,5 +183,40 @@ describe('NeedsYouPage', () => {
     )
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+  })
+
+  it('counts silent agent threads toward the total and lists them, but not threads in turn', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
+      () =>
+        threadsResponse([
+          silentThread(),
+          silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn', quiet_seconds: 30 }),
+          silentThread({ thread: 'done', title: 'Done thread', status: 'idle', event: 'turn_end' }),
+        ]),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('2 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('W-54 thread heartbeat')).toBeTruthy()
+    expect(within(group).getByText('Silent 15m')).toBeTruthy()
+    expect(within(group).getByText('in turn 35m · last before_tool Bash (timeout 120s) 15m ago')).toBeTruthy()
+    expect(within(group).queryByText('Busy thread')).toBeNull()
+    expect(within(group).queryByText('Done thread')).toBeNull()
+  })
+
+  it('shows Unknown when the agent threads cannot be read, and still lists approvals', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
+      () => json({ error: 'boom' }, 500),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Approve' })).getAllByRole('link')).toHaveLength(1)
+    expect(
+      within(screen.getByRole('region', { name: 'Silent threads' })).getByText(/Could not read agent threads/),
+    ).toBeTruthy()
   })
 })

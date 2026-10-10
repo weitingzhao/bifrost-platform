@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { readApprovalToken } from '@/api/approvals'
 import { operatorToken } from '@/api/client'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { AgentThreadRow } from '@/components/shell/AgentThreadRow'
 import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
@@ -31,24 +32,24 @@ function Note({ children }: { children: ReactNode }) {
 }
 
 /**
- * Home. Lists what waits for the Owner — approve, decide, sign off — and links each
- * request to its page. No approve or reject here.
+ * Home. Lists what waits for the Owner — approve, silent agent threads, decide, sign
+ * off — and links each request to its page. No approve or reject here.
  */
 export function NeedsYouPage() {
-  const { count, toApprove, query } = useNeedsYou()
+  const { count, approveCount, silentCount, toApprove, silent, query } = useNeedsYou()
   const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
   const hasReadToken = operatorToken() !== '' || approvalToken !== ''
   const now = Date.now()
 
   let approve: ReactNode
-  if (count.state === 'loading') {
+  if (approveCount.state === 'loading') {
     approve = <Note>Loading…</Note>
-  } else if (count.state === 'unknown') {
+  } else if (approveCount.state === 'unknown') {
     approve = (
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
           {hasReadToken
-            ? `Could not read approvals: ${count.reason}`
+            ? `Could not read approvals: ${approveCount.reason}`
             : 'This device has no approval token. Save it once to see what waits for you here.'}
         </Note>
         <ApprovalTokenField
@@ -72,6 +73,23 @@ export function NeedsYouPage() {
     )
   }
 
+  let stalled: ReactNode
+  if (silentCount.state === 'loading') {
+    stalled = <Note>Loading…</Note>
+  } else if (silentCount.state === 'unknown') {
+    stalled = <Note>{`Could not read agent threads: ${silentCount.reason}`}</Note>
+  } else if (silent.length === 0) {
+    stalled = <Note>No agent thread has gone silent mid-turn.</Note>
+  } else {
+    stalled = (
+      <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">
+        {silent.map(t => (
+          <AgentThreadRow key={`${t.vendor}/${t.thread}`} thread={t} />
+        ))}
+      </ul>
+    )
+  }
+
   return (
     <div data-testid="needs-you-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4">
       <SystemVerdictLine link />
@@ -84,8 +102,11 @@ export function NeedsYouPage() {
               ? 'Needs you: Unknown'
               : 'Checking what needs you…'}
       </p>
-      <Group label="Approve" count={needsYouCountText(count)}>
+      <Group label="Approve" count={needsYouCountText(approveCount)}>
         {approve}
+      </Group>
+      <Group label="Silent threads" count={needsYouCountText(silentCount)}>
+        {stalled}
       </Group>
       <Group label="Decide" count="—">
         <Note>Not connected yet.</Note>

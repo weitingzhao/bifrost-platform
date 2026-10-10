@@ -1,10 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
+import { silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList, isAwaitingDecision } from '@/api/approvals'
+import { useAgentThreads } from '@/hooks/useAgentThreads'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 
 export const NEEDS_YOU_REFRESH_MS = 30_000
 
-/** Pending approvals, shared by the sidebar count and the Needs you page. */
+function reasonOf(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
+/**
+ * Pending approvals and silent agent threads (W-54), shared by the sidebar count
+ * and the Needs you page. The total is Unknown when either source cannot be read.
+ */
 export function useNeedsYou() {
   const q = useQuery({
     queryKey: ['approvals', 'pending'],
@@ -12,17 +21,33 @@ export function useNeedsYou() {
     refetchInterval: NEEDS_YOU_REFRESH_MS,
     retry: false,
   })
+  const threadsQuery = useAgentThreads()
   const toApprove = (q.data ?? []).filter(item => isAwaitingDecision(item))
-  let count: NeedsYouCount
+  const silent = silentThreads(threadsQuery.data?.threads ?? [])
+
+  let approveCount: NeedsYouCount
   if (q.isError) {
-    count = {
-      state: 'unknown',
-      reason: q.error instanceof Error ? q.error.message : 'approvals request failed',
-    }
+    approveCount = { state: 'unknown', reason: reasonOf(q.error, 'approvals request failed') }
   } else if (q.data == null) {
-    count = { state: 'loading' }
+    approveCount = { state: 'loading' }
   } else {
-    count = { state: 'known', count: toApprove.length }
+    approveCount = { state: 'known', count: toApprove.length }
   }
-  return { count, toApprove, query: q }
+
+  let silentCount: NeedsYouCount
+  if (threadsQuery.isError) {
+    silentCount = { state: 'unknown', reason: reasonOf(threadsQuery.error, 'agent threads request failed') }
+  } else if (threadsQuery.data == null) {
+    silentCount = { state: 'loading' }
+  } else {
+    silentCount = { state: 'known', count: silent.length }
+  }
+
+  let count: NeedsYouCount
+  if (approveCount.state === 'unknown') count = approveCount
+  else if (silentCount.state === 'unknown') count = silentCount
+  else if (approveCount.state === 'loading' || silentCount.state === 'loading') count = { state: 'loading' }
+  else count = { state: 'known', count: approveCount.count + silentCount.count }
+
+  return { count, approveCount, silentCount, toApprove, silent, query: q, threadsQuery }
 }
