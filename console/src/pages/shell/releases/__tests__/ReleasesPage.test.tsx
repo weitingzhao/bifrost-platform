@@ -4,6 +4,8 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { REQUEST_SUBMITTED_WAITING } from '@/components/shell/RequestActionButton'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+import { NOTHING_NEEDS_YOU } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import { ReleasesPage } from '@/pages/shell/releases/ReleasesPage'
 
 function installStorage(): void {
@@ -162,7 +164,59 @@ function installFetch() {
                   reason: 'Failed',
                   start_time: '2026-10-07T01:00:00Z',
                 },
+                {
+                  name: 'run-old-bad',
+                  namespace: 'cicd',
+                  pipeline: 'bifrost-deliver-stg',
+                  status: 'False',
+                  reason: 'Cancelled',
+                  start_time: '2026-10-03T19:16:00Z',
+                },
               ],
+        })
+      }
+      if (url.endsWith('/api/v1/delivery/release-window')) {
+        return json({
+          open: true,
+          window: {
+            who: 'ada@host',
+            what: 'bifrost-platform',
+            env: 'prod',
+            pid: 1,
+            host: 'host',
+            started_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+            expires_at: new Date(Date.now() + 4 * 60_000 + 30_000).toISOString(),
+          },
+        })
+      }
+      if (url.endsWith('/api/v1/approvals?status=pending')) {
+        return json({
+          approvals: [
+            {
+              id: 'ap-release-1234',
+              action: 'start_pipeline_run',
+              tier: 'C',
+              params: { name: 'bifrost-deliver-platform-prod', revision: SHA },
+              params_hash: 'h',
+              status: 'pending',
+              reason: 'ship platform',
+              requester: 'agent',
+              created_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+              expires_at: new Date(Date.now() + 21 * 3_600_000).toISOString(),
+            },
+            {
+              id: 'ap-drain',
+              action: 'drain_node',
+              tier: 'D',
+              params: { name: 'node-1' },
+              params_hash: 'h2',
+              status: 'pending',
+              reason: 'patch',
+              requester: 'agent',
+              created_at: new Date(Date.now() - 3_600_000).toISOString(),
+              expires_at: new Date(Date.now() + 23 * 3_600_000).toISOString(),
+            },
+          ],
         })
       }
       if (url.endsWith('/api/v1/delivery/stg/smoke')) {
@@ -199,6 +253,7 @@ describe('ReleasesPage', () => {
 
   afterEach(() => {
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     vi.unstubAllGlobals()
   })
 
@@ -219,8 +274,20 @@ describe('ReleasesPage', () => {
 
     expect(screen.getByText('run-live')).toBeTruthy()
     expect(screen.getByText('run-bad')).toBeTruthy()
-    expect(screen.queryByText('run-ok')).toBeNull()
     expect(screen.getByText('research-image-1')).toBeTruthy()
+
+    const inProgress = screen.getByText(/^In progress · /).closest('section')
+    expect(inProgress?.textContent).toContain('run-bad')
+    expect(inProgress?.textContent).not.toContain('run-old-bad')
+    const history = screen.getByText(/^History · /).closest('details')
+    expect(history?.open).toBe(false)
+    expect(history?.textContent).toContain('run-old-bad')
+    expect(history?.textContent).toContain('superseded')
+    expect(screen.getAllByText('run-ok')).toHaveLength(1)
+
+    expect(screen.getByText('Needs you · Unknown')).toBeTruthy()
+    expect(screen.getByText('No signed release policy')).toBeTruthy()
+    expect(screen.getByTestId('release-window').textContent).toContain('Unknown')
     expect(screen.getByText('smoke ok')).toBeTruthy()
 
     expect(screen.getAllByRole('button', { name: 'Request rollback' })).toHaveLength(1)
@@ -240,6 +307,8 @@ describe('ReleasesPage', () => {
     expect(screen.queryByRole('combobox')).toBeNull()
 
     const urls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
+    expect(urls.some(url => url.includes('/release-window'))).toBe(false)
+    expect(urls.some(url => url.includes('/api/v1/approvals?'))).toBe(false)
     expect(urls.some(url => url.includes('bifrost-ci-platform'))).toBe(false)
     expect(urls.some(url => url.includes('bifrost-smoke'))).toBe(false)
     expect(urls.some(url => url.includes('/rollback'))).toBe(false)
@@ -263,5 +332,30 @@ describe('ReleasesPage', () => {
     expect(body.reason).toContain('bifrost-prod')
     const after = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
     expect(after.some(url => url.includes('/rollback'))).toBe(false)
+  })
+
+  it('with a viewer token, shows pending release requests and the window holder', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    render(wrapper(<ReleasesPage />))
+
+    await waitFor(() => {
+      expect(screen.getByText('Needs you · 1')).toBeTruthy()
+    })
+    const row = screen.getByText('ap-relea').closest('tr')
+    expect(row?.textContent).toContain('start_pipeline_run')
+    expect(row?.textContent).toContain('bifrost-deliver-platform-prod · abcd123')
+    expect(row?.textContent).toContain('3h')
+    expect(screen.getByText('ap-relea').getAttribute('href')).toBe('#approvals?id=ap-release-1234')
+    expect(screen.queryByText('ap-drain')).toBeNull()
+    expect(screen.queryByText(NOTHING_NEEDS_YOU)).toBeNull()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('release-window').textContent).toContain('Held by ada@host')
+    })
+    const windowText = screen.getByTestId('release-window').textContent ?? ''
+    expect(windowText).toContain('bifrost-platform · prod · 4m left · held 2m')
+
+    const windowCall = vi.mocked(fetch).mock.calls.find(call => String(call[0]).endsWith('/release-window'))
+    expect(new Headers(windowCall?.[1]?.headers).get('Authorization')).toBe('Bearer viewer-token')
   })
 })

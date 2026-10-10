@@ -1,6 +1,12 @@
 import type { ActuationResponse } from './matrixTypes'
-import type { CompareResponse, DeliveryPipelinePreflightResponse, DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, DeliveryRunLogsResponse, DeliveryStartRunResponse, PipelineRunStepsResponse, RefPreflightResponse, RevisionsResponse, SupplyChainActuationResponse, SupplyChainResponse } from './deliveryTypes'
+import type { CompareResponse, DeliveryPipelinePreflightResponse, DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, DeliveryRunLogsResponse, DeliveryStartRunResponse, PipelineRunStepsResponse, RefPreflightResponse, ReleaseWindowResponse, RevisionsResponse, SupplyChainActuationResponse, SupplyChainResponse } from './deliveryTypes'
 import { authedFetch } from './client'
+
+/** Needs a viewer token; the other delivery reads are anonymous. */
+export async function fetchReleaseWindow(): Promise<ReleaseWindowResponse> {
+  const r = await authedFetch('release window', '/api/v1/delivery/release-window')
+  return r.json() as Promise<ReleaseWindowResponse>
+}
 
 export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesResponse> {
   const r = await fetch('/api/v1/delivery/pipelines')

@@ -110,6 +110,24 @@ export interface DeliveryPipelineRunView {
   completion_time?: string
 }
 
+/** ConfigMap cicd/bifrost-release-window (api/internal/delivery windowRecord). */
+export interface ReleaseWindowRecord {
+  who: string
+  what: string
+  env: string
+  pid: number
+  host: string
+  started_at: string
+  expires_at?: string
+  reason?: string
+}
+
+/** GET /api/v1/delivery/release-window (viewer token). */
+export interface ReleaseWindowResponse {
+  open: boolean
+  window?: ReleaseWindowRecord
+}
+
 export interface DeliveryPipelineRunsResponse {
   cluster_id: string
   namespace: string
