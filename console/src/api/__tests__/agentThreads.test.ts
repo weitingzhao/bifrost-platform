@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   agentThreadName,
   capacityRefusalActive,
+  capacityRefusalHistoricalText,
+  capacityRefusalStatusText,
   capacityRefusalText,
   formatSeconds,
   lastEventText,
@@ -132,5 +134,23 @@ describe('agentThreads', () => {
       false,
     )
     expect(capacityRefusalActive(undefined)).toBe(false)
+    const old = {
+      generated_at: '2026-10-10T08:00:00Z',
+      threads_refused: 4,
+      last_thread_refusal: '2026-10-10T06:30:00Z',
+    }
+    expect(capacityRefusalStatusText(young)).toBe('monitoring is full: 4 threads refused, last at 2026-10-10T07:00:01Z')
+    expect(capacityRefusalStatusText(old)).toBe('monitoring refused 4 threads earlier, last at 2026-10-10T06:30:00Z')
+    expect(capacityRefusalHistoricalText(4, old.last_thread_refusal)).toBe(
+      'monitoring refused 4 threads earlier, last at 2026-10-10T06:30:00Z',
+    )
+    expect(
+      capacityRefusalStatusText({
+        generated_at: '2026-10-10T08:00:00Z',
+        threads_refused: 4,
+        last_thread_refusal: '2026-10-10T07:00:00Z',
+      }),
+    ).toBe('monitoring refused 4 threads earlier, last at 2026-10-10T07:00:00Z')
+    expect(capacityRefusalStatusText(undefined)).toBe('')
   })
 })

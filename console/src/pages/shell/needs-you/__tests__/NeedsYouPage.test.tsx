@@ -278,6 +278,7 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
     expect(screen.queryByText(/monitoring is full/)).toBeNull()
+    expect(screen.queryByText(/monitoring refused/)).toBeNull()
   })
 
   it('counts an expected host that has never reported', async () => {

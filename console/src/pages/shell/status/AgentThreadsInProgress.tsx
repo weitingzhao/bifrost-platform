@@ -1,4 +1,4 @@
-import { capacityRefusalText, threadsMidTurn } from '@/api/agentThreads'
+import { capacityRefusalStatusText, threadsMidTurn } from '@/api/agentThreads'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentThreadRow } from '@/components/shell/AgentThreadRow'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
@@ -9,9 +9,7 @@ export function AgentThreadsInProgress() {
   const q = useAgentThreads()
   const mid = threadsMidTurn(q.data?.threads ?? [])
   const hosts = q.data?.hosts ?? []
-  const refused = q.data?.threads_refused ?? 0
-  const refusedAt = q.data?.last_thread_refusal ?? ''
-  const fullText = q.data != null && refused > 0 && refusedAt !== '' ? capacityRefusalText(refused, refusedAt) : ''
+  const fullText = capacityRefusalStatusText(q.data)
   const fullLine =
     fullText === '' ? null : (
       <p className="m-0 text-sm text-foreground" data-monitoring-full>

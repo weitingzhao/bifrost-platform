@@ -56,9 +56,30 @@ export type AgentThreadsResponse = {
 /** A capacity refusal counts toward Needs You only while it is younger than one hour. */
 export const CAPACITY_REFUSAL_WINDOW_MS = 60 * 60 * 1000
 
-/** The sentence the Owner sees. The count is the stored counter, not a thread row. */
+/** Present tense while the last refusal is still inside the hour. The count is the stored counter, not a thread row. */
 export function capacityRefusalText(count: number, at: string): string {
   return `monitoring is full: ${count} threads refused, last at ${at}`
+}
+
+/** Past tense once that refusal is an hour old or older. The counter is not cleared. */
+export function capacityRefusalHistoricalText(count: number, at: string): string {
+  return `monitoring refused ${count} threads earlier, last at ${at}`
+}
+
+/**
+ * Status keeps the cumulative refusal. Inside the hour the sentence is present
+ * tense; after that it is history. Needs You uses only the present sentence,
+ * and only while `capacityRefusalActive` is true.
+ */
+export function capacityRefusalStatusText(
+  res: Pick<AgentThreadsResponse, 'threads_refused' | 'last_thread_refusal' | 'generated_at'> | null | undefined,
+): string {
+  if (!res) return ''
+  const count = res.threads_refused ?? 0
+  const at = res.last_thread_refusal ?? ''
+  if (count < 1 || at === '') return ''
+  if (capacityRefusalActive(res)) return capacityRefusalText(count, at)
+  return capacityRefusalHistoricalText(count, at)
 }
 
 /**
