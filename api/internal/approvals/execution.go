@@ -91,7 +91,7 @@ func precheck(ctx context.Context, a Approval) string {
 
 // runPlatform executes a record this process claimed and stores the outcome.
 // The approve handler audits its own call; the retry loop records the events.
-func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []event) {
+func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []event, error) {
 	lease := rec.Execution.LeaseID
 	started := s.clock()
 	var result any
@@ -128,7 +128,67 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 	return s.finishPlatform(rec.ID, lease, started, result, execErr)
 }
 
-func (s *Service) finishPlatform(id, lease string, started time.Time, result any, execErr error) (Approval, []event) {
+// heldFinish is a result whose final write did not land. The action is not
+// run again; flushHeld retries this write while the same lease is still valid.
+type heldFinish struct {
+	lease   string
+	started time.Time
+	result  any
+	execErr error
+}
+
+func (s *Service) rememberFinish(id, lease string, started time.Time, result any, execErr error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.held == nil {
+		s.held = map[string]heldFinish{}
+	}
+	s.held[id] = heldFinish{lease: lease, started: started, result: result, execErr: execErr}
+}
+
+func (s *Service) forgetFinish(id, lease string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	h, ok := s.held[id]
+	if !ok {
+		return
+	}
+	if lease != "" && h.lease != lease {
+		return
+	}
+	delete(s.held, id)
+}
+
+// flushHeld retries a finish whose write failed. It does not run the action.
+// Once the lease is past unknownGrace the held result is dropped and the
+// record becomes unknown by the normal lapse rule.
+func (s *Service) flushHeld() {
+	s.mu.Lock()
+	if len(s.held) == 0 {
+		s.mu.Unlock()
+		return
+	}
+	pending := make(map[string]heldFinish, len(s.held))
+	for id, h := range s.held {
+		pending[id] = h
+	}
+	s.mu.Unlock()
+	now := s.clock()
+	for id, h := range pending {
+		rec, ok := s.find(id)
+		if !ok || rec.Execution == nil || rec.Execution.LeaseID != h.lease || rec.Status != StatusRunning || lapseRunning(&rec, now) {
+			s.forgetFinish(id, h.lease)
+			continue
+		}
+		_, evs, err := s.finishPlatform(id, h.lease, h.started, h.result, h.execErr)
+		if err != nil {
+			continue
+		}
+		s.record(nil, evs)
+	}
+}
+
+func (s *Service) finishPlatform(id, lease string, started time.Time, result any, execErr error) (Approval, []event, error) {
 	now := s.clock()
 	var out Approval
 	var evs []event
@@ -146,6 +206,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		// Same clock and the same transition renew and result apply: once the
 		// lease is past unknownGrace the record is unknown inside this write,
 		// whether or not sweep has run. A transient refusal then cannot requeue.
+		wasUnknown := a.Status == StatusUnknown
 		lapsed := lapseRunning(&a, now)
 		if lapsed {
 			markLeaseUnknown(&a)
@@ -153,7 +214,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		switch a.Status {
 		case StatusRunning:
 			if execErr != nil && actions.IsUncertain(execErr) {
-				// A timeout on create does not prove the object is absent.
+				// The create response does not prove the object is absent.
 				// Leave the record unknown; do not requeue under a new name.
 				e.Error = oneLine(Redact(execErr.Error()))
 				a.Status = StatusUnknown
@@ -178,21 +239,26 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 				if !lapsed {
 					return errNoChange
 				}
-				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
+				if !wasUnknown {
+					evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, a.Error})
+				}
 				doc.put(a)
 				out = a
 				return nil
 			}
 			if execErr != nil && actions.IsUncertain(execErr) {
+				// Already unknown: keep the newer reason, do not notify again.
 				e.Error = oneLine(Redact(execErr.Error()))
 				a.Error = e.Error
 				e.LeaseExpiresAt = time.Time{}
-				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, a.Error})
+				if !wasUnknown {
+					evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, a.Error})
+				}
 				doc.put(a)
 				out = a
 				return nil
 			}
-			if lapsed {
+			if lapsed && !wasUnknown {
 				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
 			}
 			e.LateResult = true
@@ -206,9 +272,18 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		return nil
 	})
 	if err != nil {
-		out.Error = "store approvals: " + err.Error()
+		// The transition was not stored. Keep the result for this lease and
+		// return no events, so a caller cannot announce a status that is not
+		// on disk. The action is not run again.
+		s.rememberFinish(id, lease, started, result, execErr)
+		stored, ok := s.find(id)
+		if !ok {
+			stored = Approval{ID: id}
+		}
+		return stored, nil, fmt.Errorf("store approvals: %s", err.Error())
 	}
-	return out, evs
+	s.forgetFinish(id, lease)
+	return out, evs, nil
 }
 
 func requeue(a *Approval, refusal string, now time.Time) {
@@ -341,6 +416,9 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 }
 
 func (s *Service) retryDue(ctx context.Context) {
+	// Retry a finish that was computed but not stored before sweep can turn
+	// a lapsed lease into unknown. A lapsed lease drops the held result.
+	s.flushHeld()
 	doc, err := s.sweptDoc()
 	if err != nil {
 		return
@@ -354,7 +432,10 @@ func (s *Service) retryDue(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		_, evs := s.runPlatform(ctx, rec)
+		_, evs, err := s.runPlatform(ctx, rec)
+		if err != nil {
+			continue
+		}
 		s.record(nil, evs)
 	}
 }

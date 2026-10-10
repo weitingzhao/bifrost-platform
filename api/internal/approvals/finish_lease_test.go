@@ -21,7 +21,10 @@ func TestFinishPlatformDoesNotRequeuePastGrace(t *testing.T) {
 
 	inside := base.Add(leaseFor + time.Minute)
 	svc.SetClock(func() time.Time { return inside })
-	out, _ := svc.finishPlatform(rec.ID, lease, base, nil, actions.Transient("kube API unreachable"))
+	out, _, err := svc.finishPlatform(rec.ID, lease, base, nil, actions.Transient("kube API unreachable"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.Status != StatusApproved {
 		t.Fatalf("transient inside grace = %s (%s), want requeue", out.Status, out.Error)
 	}
@@ -35,7 +38,10 @@ func TestFinishPlatformDoesNotRequeuePastGrace(t *testing.T) {
 	stored, _ := svc.find(rec.ID)
 	past := stored.Execution.LeaseExpiresAt.Add(unknownGrace + time.Second)
 	svc.SetClock(func() time.Time { return past })
-	out, evs := svc.finishPlatform(rec.ID, lease2, past, nil, actions.Transient("kube API unreachable"))
+	out, evs, err := svc.finishPlatform(rec.ID, lease2, past, nil, actions.Transient("kube API unreachable"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	if out.Status != StatusUnknown {
 		t.Fatalf("transient past grace = %s, want unknown", out.Status)
 	}

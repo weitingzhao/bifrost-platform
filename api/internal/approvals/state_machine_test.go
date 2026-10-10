@@ -26,11 +26,12 @@ import (
 // casBackend behaves like the ConfigMap backend: Update reads a version,
 // runs mutate without holding the lock, and retries on a version change.
 type casBackend struct {
-	mu         sync.Mutex
-	data       map[string][]byte
-	ver        map[string]int
-	conflicts  int
-	failUpdate error
+	mu              sync.Mutex
+	data            map[string][]byte
+	ver             map[string]int
+	conflicts       int
+	failUpdate      error
+	allowBeforeFail int
 }
 
 func newCAS() *casBackend {
@@ -56,8 +57,18 @@ func (b *casBackend) Write(_ context.Context, key string, data []byte) error {
 }
 
 func (b *casBackend) Update(_ context.Context, key string, mutate func(old []byte) ([]byte, error)) error {
+	b.mu.Lock()
 	if b.failUpdate != nil {
-		return b.failUpdate
+		if b.allowBeforeFail > 0 {
+			b.allowBeforeFail--
+			b.mu.Unlock()
+		} else {
+			err := b.failUpdate
+			b.mu.Unlock()
+			return err
+		}
+	} else {
+		b.mu.Unlock()
 	}
 	for attempt := 0; attempt < 200; attempt++ {
 		b.mu.Lock()

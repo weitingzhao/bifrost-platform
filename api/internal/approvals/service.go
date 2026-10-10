@@ -34,6 +34,9 @@ type Service struct {
 	requireConfirm bool
 	// notices counts Owner notices still being sent in the background.
 	notices sync.WaitGroup
+	// held is a finish whose write failed, keyed by approval id. The action
+	// already ran; only the write is retried.
+	held map[string]heldFinish
 }
 
 // AutoApprover returns the id of a signed release policy that already covers
@@ -430,7 +433,17 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 	}
 	if rec.Status == StatusRunning {
 		var runEvs []event
-		rec, runEvs = s.runPlatform(ctx, rec)
+		var runErr error
+		rec, runEvs, runErr = s.runPlatform(ctx, rec)
+		if runErr != nil {
+			// The action may have finished, but the status was not stored.
+			// Do not report executed and do not emit events for that transition.
+			return decided{Status: http.StatusInternalServerError, Body: map[string]any{
+				"error":  runErr.Error(),
+				"id":     rec.ID,
+				"status": rec.Status,
+			}}
+		}
 		// One consumer for the first platform execution, including unknown
 		// after a create timeout. The handler does not re-send a single status.
 		s.record(nil, runEvs)
