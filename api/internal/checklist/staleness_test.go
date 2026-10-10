@@ -48,6 +48,39 @@ func TestMergeStampsObservationTimeAndSource(t *testing.T) {
 	}
 }
 
+func TestStoreDropsItemsNoLongerInTheCatalog(t *testing.T) {
+	t.Setenv("PLATFORM_DATA_DIR", t.TempDir())
+	s := NewStore(t.TempDir())
+	// Shaped like the PROD state file on 2026-10-10.
+	rec := FileRecord{Version: stateVersion, Signals: []ItemSignal{
+		{ItemID: "redis", Signal: SignalOK, ObservedAt: time.Now().UTC().Format(time.RFC3339)},
+		{ItemID: "runners-ha", Signal: SignalUnknown, Detail: "no runners configured"},
+		{ItemID: "git-bridge", Signal: SignalUnknown, Detail: "local-only (dev workstation)"},
+		{ItemID: "mac-probe-bridge", Signal: SignalUnknown, Detail: "local-only (dev workstation)"},
+		{ItemID: "hermes-tooling", Signal: SignalDegraded, Detail: "not ready", ObservedAt: "2026-10-09T00:39:39Z"},
+	}}
+	if err := s.saveLocked(&rec); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Signals) != 1 || got.Signals[0].ItemID != "redis" {
+		t.Fatalf("Get kept retired items: %+v", got.Signals)
+	}
+	merged, err := s.Merge(MergeRequest{Source: "checklist-prober", Signals: []ItemSignal{{ItemID: "nodes-ready", Signal: "ok"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(merged.Signals) != 2 {
+		t.Fatalf("Merge carried retired items forward: %+v", merged.Signals)
+	}
+	if len(merged.NewFailures) != 0 {
+		t.Fatalf("a retired item counted as a new failure: %v", merged.NewFailures)
+	}
+}
+
 type emptyHusbandry struct{}
 
 func (emptyHusbandry) Snapshot(context.Context) datahusbandry.Snapshot {

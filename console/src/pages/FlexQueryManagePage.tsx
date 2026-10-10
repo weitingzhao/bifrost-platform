@@ -5,15 +5,10 @@ import { FlexCoverageTab } from '@/components/flex-query/FlexCoverageTab'
 import { FlexIngestTab, type FlexIngestSubTab } from '@/components/flex-query/FlexIngestTab'
 import { FlexOverviewTab } from '@/components/flex-query/FlexOverviewTab'
 import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
-import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 type ManageTab = 'overview' | 'ingest' | 'coverage' | 'config'
 
-export function FlexQueryManagePage({
-  onOpenAgentDesk,
-}: {
-  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
-}) {
+export function FlexQueryManagePage() {
   const [tab, setTab] = useState<ManageTab>('overview')
   const [ingestSub, setIngestSub] = useState<FlexIngestSubTab>('schedule')
 
@@ -41,10 +36,7 @@ export function FlexQueryManagePage({
       </div>
 
       {tab === 'overview' ? (
-        <FlexOverviewTab
-          onOpenIngest={sub => openIngest(sub)}
-          onOpenAgentDesk={onOpenAgentDesk}
-        />
+        <FlexOverviewTab onOpenIngest={sub => openIngest(sub)} />
       ) : null}
       {tab === 'ingest' ? <FlexIngestTab initialSub={ingestSub} /> : null}
       {tab === 'coverage' ? <FlexCoverageTab /> : null}

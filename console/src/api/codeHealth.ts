@@ -34,7 +34,7 @@ export type CodeHealthReportDto = {
 
 /**
  * Live workspace freshness for whether Suggested-task planning should trust
- * the stored reading (prefer Live Re-scan / Generate Agent Pack when stale).
+ * the stored reading (prefer Live Re-scan when stale).
  * RescanAvailable is typically true only on local DEV platform-api.
  */
 export type CodeHealthFreshnessDto = {
@@ -78,8 +78,8 @@ export async function fetchCodeHealth(history = 10): Promise<CodeHealthResponse>
 
 /**
  * Operator-gated Live Re-scan: platform-api runs scan.sh against the workspace
- * and stores the reading. Prefer this (or Generate Agent Pack) over Refresh when
- * Agent cut planning must describe current workspace code.
+ * and stores the reading. Prefer this over Refresh when cut planning must
+ * describe current workspace code.
  */
 export async function rescanCodeHealth(): Promise<CodeHealthRescanResult> {
   const r = await authedFetch('code-health rescan', '/api/v1/code-health/rescan', {

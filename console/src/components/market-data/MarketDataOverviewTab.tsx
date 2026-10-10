@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button, DenseTag } from '@bifrost/ui'
 import { fetchQualityScore, isProxyError } from '@/api/marketDataPlugin'
@@ -6,17 +6,12 @@ import type { MarketDataWorkerInfo } from '@/api/satelliteBusTypes'
 import { AnalyticsDemandPanel } from '@/components/market-data/AnalyticsDemandPanel'
 import { ApiReachabilityPanel } from '@/components/market-data/ApiReachabilityPanel'
 import { DataVitalsStrip } from '@/components/market-data/DataVitalsStrip'
-import {
-  buildMassiveAgentPack,
-  gatherMassiveAgentSnapshot,
-} from '@/components/market-data/massiveAgentPack'
 import { WorkersFreshnessPanel } from '@/components/market-data/WorkersFreshnessPanel'
 import { sortFreshness } from '@/components/market-data/marketDataProbeUtils'
 import { FlashValue } from '@/components/market-data/overviewDash'
 import { fmtCount, parseReadyRatio } from '@/components/market-data/overviewDashModel'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { HusbandryStrip } from '@/components/delivery/HusbandryStrip'
-import { writeClipboard } from '@/lib/clipboardWrite'
 import type { MarketDataLiveProbeState } from '@/hooks/useMarketDataLiveProbe'
 
 function poolOf(workers: MarketDataWorkerInfo[], pool: string): MarketDataWorkerInfo | undefined {
@@ -75,40 +70,6 @@ export function MarketDataOverviewTab({
     qualityQ.data != null && !isProxyError(qualityQ.data) ? qualityQ.data : null
   const qualitySummary =
     quality?.summary ?? (quality?.ok === true ? 'PASS' : quality != null ? 'FAIL' : null)
-
-  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
-  const [copyFallback, setCopyFallback] = useState<string | null>(null)
-  const [copyError, setCopyError] = useState<string | null>(null)
-
-  async function handleCopyForAgent() {
-    if (copyState === 'busy') return
-    setCopyState('busy')
-    setCopyFallback(null)
-    setCopyError(null)
-    try {
-      const snap = await gatherMassiveAgentSnapshot()
-      const text = buildMassiveAgentPack(snap)
-      try {
-        await writeClipboard(text)
-        setCopyState('copied')
-        window.setTimeout(() => setCopyState('idle'), 2000)
-      } catch (clipErr) {
-        // Clipboard often blocked in Cursor/embedded browsers — keep pack visible.
-        setCopyFallback(text)
-        setCopyError(
-          clipErr instanceof Error ? clipErr.message : 'Clipboard blocked — pack below',
-        )
-        setCopyState('error')
-      }
-    } catch (err) {
-      setCopyError(err instanceof Error ? err.message : String(err))
-      setCopyState('error')
-      window.setTimeout(() => {
-        setCopyState('idle')
-        setCopyError(null)
-      }, 4000)
-    }
-  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -193,23 +154,6 @@ export function MarketDataOverviewTab({
             <Button
               variant="outline"
               size="sm"
-              disabled={copyState === 'busy'}
-              title="Copy a repair pack (husbandry + queue + vitals + analytics demand) for an AI agent"
-              onClick={() => void handleCopyForAgent()}
-            >
-              {copyState === 'busy'
-                ? 'Exporting…'
-                : copyState === 'copied'
-                  ? 'Copied!'
-                  : copyState === 'error'
-                    ? copyFallback
-                      ? 'Select pack below'
-                      : 'Copy failed'
-                    : 'Copy for Agent'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
               disabled={marketProbe.isLoading}
               onClick={() => marketProbe.refetch()}
             >
@@ -218,23 +162,6 @@ export function MarketDataOverviewTab({
           </div>
         }
       />
-
-      {copyError ? (
-        <p className="m-0 text-dense-caption text-destructive">{copyError}</p>
-      ) : null}
-      {copyFallback ? (
-        <label className="flex flex-col gap-1">
-          <span className="text-dense-caption text-muted-foreground">
-            Clipboard blocked — select all and copy manually (Cmd/Ctrl+C):
-          </span>
-          <textarea
-            readOnly
-            className="min-h-[8rem] w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 font-mono text-dense-caption outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
-            value={copyFallback}
-            onFocus={e => e.currentTarget.select()}
-          />
-        </label>
-      ) : null}
 
       <DataVitalsStrip onOpenCoverage={onOpenCoverage} />
 

@@ -43,13 +43,11 @@ export function StatusPage() {
           onOpenCluster={() => openHash('#infrastructure')}
           onOpenAudit={() => openHash('#maintenance')}
           onOpenNetwork={() => openHash('#infrastructure')}
-          onOpenAgentProtocol={() => openHash('#progress')}
         />
       </section>
       <section aria-label="Observability" className="flex w-full min-w-0 flex-col">
         <ObservabilityPage
           lockToViewer
-          hideAgentActions
           onNavigate={tab => openHash(tab.startsWith('#') ? tab : `#${tab}`)}
         />
       </section>

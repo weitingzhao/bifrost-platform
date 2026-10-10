@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   analyzeResearchEngine,
-  buildResearchEngineAgentPack,
-  buildResearchEngineDiagnosePrefill,
   type ResearchEngineAgentPackSnapshot,
 } from '@/components/research/researchEngineAgentPack'
 
@@ -115,46 +113,10 @@ describe('analyzeResearchEngine', () => {
       'research_trading_day_schedule',
     )
   })
-})
-
-describe('buildResearchEngineAgentPack', () => {
-  it('includes Copy for Agent, D10, and forbids leftover analytics-docs', () => {
-    const text = buildResearchEngineAgentPack(baseSnap())
-    expect(text).toContain('Copy for Agent')
-    expect(text).toContain('D10 BLOCKED')
-    expect(text).toContain('research_olap: degraded')
-    expect(text).toContain('Product DEGRADED')
-    expect(text).toContain('analytics-docs')
-    expect(text).not.toContain('Apply bifrost-analytics CronJob')
-    expect(text).toContain('Do not re-apply bifrost-analytics CronJob')
-    expect(text).toContain('research_canonical_pnl_schedule')
-    expect(text).toContain('Suggested investigation order')
-    expect(text).toContain('36h SLA vs Mon–Fri batch')
-    expect(text).toContain('version: 0.50.2')
-  })
 
   it('surfaces Elementary pending without treating it as the primary cause', () => {
     const a = analyzeResearchEngine(baseSnap())
     expect(a.findings.some(f => f.id === 'elementary-pending')).toBe(true)
     expect(a.primaryCause).not.toMatch(/Elementary/i)
-  })
-})
-
-describe('buildResearchEngineDiagnosePrefill', () => {
-  it('stays short and names the primary cause', () => {
-    const text = buildResearchEngineDiagnosePrefill(baseSnap())
-    expect(text).toContain('D10 BLOCKED')
-    expect(text).toContain('Primary cause:')
-    expect(text).toContain('canonical_pnl')
-    expect(text).toContain('analytics-docs')
-  })
-})
-
-describe('research engine pack gate wording', () => {
-  it('names flex_gate, not husbandry_gate, as the gate a Flex failure trips (TD-192, TD-245)', () => {
-    const text = buildResearchEngineAgentPack(baseSnap())
-    expect(text).toContain('flex_gate')
-    expect(text).toContain('option_pinned_contract')
-    expect(text).not.toMatch(/husbandry_gate (blocks|will skip)|husbandry_gate \(Flex/)
   })
 })

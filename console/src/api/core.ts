@@ -1,7 +1,6 @@
-import type { AllMatricesResponse, EnvironmentSummary, EscapeHatchDrillResponse, EscapeHatchResponse, MatrixResponse, SelfHealthResponse, TopologyResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from './matrixTypes'
+import type { AllMatricesResponse, EnvironmentSummary, MatrixResponse, SelfHealthResponse, TopologyResponse, VerifyMissionSnapshotResponse, VerifyPayloadResponse } from './matrixTypes'
 import type { AllSatelliteBusDeepResponse, SatelliteBusDeepResponse } from './satelliteBusTypes'
 import type { OpsContextResponse } from './opsContextTypes'
-import { authedFetch } from './client'
 
 export async function fetchEnvironments(): Promise<EnvironmentSummary[]> {
   const r = await fetch('/api/v1/environments')
@@ -76,21 +75,3 @@ export async function fetchSelfHealth(): Promise<SelfHealthResponse> {
   if (!r.ok) throw new Error(`self-health: HTTP ${r.status}`)
   return r.json() as Promise<SelfHealthResponse>
 }
-
-export async function fetchEscapeHatch(): Promise<EscapeHatchResponse> {
-  const r = await fetch('/api/v1/platform/escape-hatch')
-  if (!r.ok) throw new Error(`escape-hatch: HTTP ${r.status}`)
-  return r.json() as Promise<EscapeHatchResponse>
-}
-
-export async function recordEscapeHatchDrill(body?: {
-  notes?: string
-  route_ids?: string[]
-}): Promise<EscapeHatchDrillResponse> {
-  const r = await authedFetch('escape hatch drill', '/api/v1/platform/escape-hatch/drill', {
-    method: 'POST',
-    body: JSON.stringify(body ?? {}),
-  })
-  return r.json() as Promise<EscapeHatchDrillResponse>
-}
-

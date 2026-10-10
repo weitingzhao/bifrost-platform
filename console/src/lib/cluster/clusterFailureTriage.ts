@@ -100,14 +100,14 @@ function classifyPodGroup(group: PodGroup): Pick<FailureTriageRow, 'track' | 'tr
     return chronic
       ? {
           track: 'product',
-          trackReason: 'Repeated CrashLoop — likely config/code bug, Agent Fix alone will recur',
+          trackReason: 'Repeated CrashLoop — likely config/code bug, a restart alone will recur',
           suggestedAction: 'Fix Deployment env/config or GitOps source; add Defects entry; playbook only for logs/events triage',
           playbookId: 'crashloop-triage',
         }
       : {
           track: 'agent-adhoc',
           trackReason: 'Transient or first-seen crash — Agent can collect logs and restart',
-          suggestedAction: 'Agent Fix: describe pod events, check logs, rollout restart if dependency recovered',
+          suggestedAction: 'Describe pod events, check logs, rollout restart if dependency recovered',
           playbookId: 'crashloop-triage',
         }
   }
@@ -130,7 +130,7 @@ function classifyPodGroup(group: PodGroup): Pick<FailureTriageRow, 'track' | 'tr
   return {
     track: 'agent-adhoc',
     trackReason: 'Generic pod failure — needs case-by-case diagnosis',
-    suggestedAction: 'Agent Fix with namespace/workload scope; escalate to product if same pod >24h',
+    suggestedAction: 'Collect events/logs for the namespace/workload; escalate to product if same pod >24h',
     playbookId: 'pod-failure-triage',
   }
 }
@@ -186,7 +186,7 @@ function classifyClusterIssue(issue: ClusterIssueRow): Pick<FailureTriageRow, 't
       return {
         track: 'agent-adhoc',
         trackReason: 'Uncategorized cluster issue',
-        suggestedAction: 'Agent Fix with cluster_issues_full_auto scope',
+        suggestedAction: 'Inspect on the Cluster page; fix the root cause',
         playbookId: 'cluster-issues-full-auto',
       }
   }
@@ -224,8 +224,8 @@ function classifyMissionItem(
   if (id.includes('Agent')) {
     return {
       track: 'playbook',
-      trackReason: 'Agent bridge / operator plane — not a K8s node issue',
-      suggestedAction: 'Operator Plane — verify bridge + Active-Standby runners; restart if needed',
+      trackReason: 'Operator plane — not a K8s node issue',
+      suggestedAction: 'Operator plane — check the Active-Standby services on the Mac minis; restart the one that is down',
       playbookId: 'operator-plane-remediate',
     }
   }

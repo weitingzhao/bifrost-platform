@@ -37,7 +37,6 @@ import {
   type AxisCell,
   type Grain,
 } from "@/components/market-data/coverageMatrixModel";
-import { buildCoverageMatrixPack } from "@/components/market-data/coverageMatrixPack";
 import { OpsSection } from "@/components/layout/OpsSection";
 
 /**
@@ -300,22 +299,7 @@ export function CoverageMatrixPanel() {
   const shown: Grain[] = grains.length > 0 ? grains : GRAIN_ORDER;
   const sum = matrixSummary(matrix);
   const den = data?.denominators;
-  const [copied, setCopied] = useState(false);
   const [picked, setPicked] = useState<{ dataset: string; axis: string } | null>(null);
-  const notClean = sum.total - sum.clean;
-
-  const copyForAgent = async () => {
-    const text = buildCoverageMatrixPack(data);
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard can be denied in an embed. The brief is still derivable from
-      // the grid on screen, so a failed copy is not worth an error banner.
-      setCopied(false);
-    }
-  };
 
   const definitions = (den as { definitions?: Record<string, TierDefinition> } | undefined)
     ?.definitions;
@@ -345,24 +329,6 @@ export function CoverageMatrixPanel() {
         <div className="flex flex-wrap items-center gap-1.5">
           {data?.computing ? (
             <DenseTag variant="info">computing…</DenseTag>
-          ) : null}
-          {sum.total > 0 ? (
-            <button
-              type="button"
-              onClick={copyForAgent}
-              title={
-                notClean > 0
-                  ? `Copy ${notClean} unhealthy dataset(s), with the enqueue that refills each`
-                  : "Copy the estate as an agent brief"
-              }
-              className="rounded-[var(--control-radius)] border border-transparent px-1.5 py-0.5 font-mono text-[var(--text-dense-caption)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] bg-[var(--control-fill)] hover:bg-[var(--control-fill-hover)]"
-            >
-              {copied
-                ? "Copied"
-                : notClean > 0
-                  ? `Ask agent — ${notClean} to fix`
-                  : "Copy for agent"}
-            </button>
           ) : null}
           {sum.total > 0 ? (
             <DenseTag variant={sum.clean === sum.total ? "success" : "warning"}>

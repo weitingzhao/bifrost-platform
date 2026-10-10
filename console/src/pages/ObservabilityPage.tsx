@@ -10,9 +10,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { Button, DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { postAttentionMute } from '@/api/telemetry'
-import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import { OpsSection, OpsSubsectionTitle } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { SectionRefreshButton } from '@/components/layout/SectionRefreshButton'
@@ -26,8 +24,6 @@ import {
 import type { AttentionItem } from '@/lib/observability'
 import {
   ATTENTION_MUTE_DEFAULT_HOURS,
-  buildObservabilityAgentPack,
-  buildObservabilityDiagnosePrefill,
   filterMutedAttention,
   listActiveAttentionMutes,
   muteAttentionIds,
@@ -53,16 +49,11 @@ import {
 
 export function ObservabilityPage({
   onNavigate,
-  onOpenAgentDesk,
   lockToViewer = false,
-  hideAgentActions = false,
 }: {
   onNavigate?: (tab: string) => void
-  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
   /** Status page: scope probes to self-health viewer_env. No environment selector. */
   lockToViewer?: boolean
-  /** Status page: drop Copy for Agent / Diagnose with Agent. */
-  hideAgentActions?: boolean
 }) {
   const [evidenceOn, setEvidenceOn] = useState(!lockToViewer)
   const {
@@ -83,8 +74,6 @@ export function ObservabilityPage({
   const [muteRevision, setMuteRevision] = useState(0)
   const [muteConfirmItem, setMuteConfirmItem] = useState<AttentionItem | null>(null)
   const [muteMessage, setMuteMessage] = useState<string | null>(null)
-  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
-  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const system = viewModel.system
   const selected = viewModel.selected
 
@@ -223,37 +212,6 @@ export function ObservabilityPage({
     document.getElementById('obs-attention')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  const packCtx = useMemo(
-    () => ({
-      generatedAt: new Date().toISOString(),
-      tradeEnv,
-      namespace,
-      selectedDomain,
-      viewModel,
-    }),
-    [namespace, selectedDomain, tradeEnv, viewModel],
-  )
-
-  async function handleCopyForAgent() {
-    if (copyState === 'busy') return
-    setCopyState('busy')
-    try {
-      await navigator.clipboard.writeText(buildObservabilityAgentPack(packCtx))
-      setCopyState('copied')
-      window.setTimeout(() => setCopyState('idle'), 2000)
-    } catch {
-      setCopyState('error')
-      window.setTimeout(() => setCopyState('idle'), 3000)
-    }
-  }
-
-  function handleDiagnoseWithAgent() {
-    if (diagnoseBusy || onOpenAgentDesk == null) return
-    setDiagnoseBusy(true)
-    onOpenAgentDesk({ prefill: buildObservabilityDiagnosePrefill(packCtx) })
-    window.setTimeout(() => setDiagnoseBusy(false), 400)
-  }
-
   return (
     <div className="flex flex-col gap-3">
       <OpsVerdictStrip
@@ -279,35 +237,7 @@ export function ObservabilityPage({
             <Button variant="outline" size="sm" onClick={() => setEvidenceOn(true)}>
               Load evidence
             </Button>
-          ) : hideAgentActions ? undefined : (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={copyState === 'busy' || isLoading}
-              title="Copy a repair pack (verdict + domains + Attention + Alerts) for an AI agent"
-              onClick={() => void handleCopyForAgent()}
-            >
-              {copyState === 'busy'
-                ? 'Exporting…'
-                : copyState === 'copied'
-                  ? 'Copied!'
-                  : copyState === 'error'
-                    ? 'Copy failed'
-                    : 'Copy for Agent'}
-            </Button>
-            {onOpenAgentDesk != null ? (
-              <AgentTriggerButton
-                label="Diagnose with Agent"
-                size="sm"
-                pending={diagnoseBusy}
-                disabled={isLoading}
-                title="Open Agent Desk with Observability diagnose prefill (includes firing alerts)"
-                onClick={handleDiagnoseWithAgent}
-              />
-            ) : null}
-          </div>
-          )
+          ) : undefined
         }
         meta={
           <>

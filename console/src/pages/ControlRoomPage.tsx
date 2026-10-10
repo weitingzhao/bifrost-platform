@@ -28,11 +28,6 @@ import { useMissionVerification } from '@/hooks/useMissionVerification'
 import { useNetworkLiveProbe } from '@/hooks/useNetworkLiveProbe'
 import { usePendingDecisionBriefs } from '@/hooks/useDecisionBriefs'
 import {
-  buildControlRoomAgentPack,
-  buildControlRoomDiagnosePrefill,
-  gatherControlRoomAgentSnapshot,
-} from '@/lib/control-room/controlRoomAgentPack'
-import {
   buildControlRoomAttentionItems,
   buildControlRoomBaySignals,
   loadOpenControlRoomBayIds,
@@ -79,7 +74,6 @@ type ControlRoomPageProps = {
   onOpenTradeDeploy?: () => void
   onOpenPluginRelease?: () => void
   onOpenPromote?: () => void
-  onOpenAgentProtocol?: () => void
   onOpenNetwork?: () => void
   onOpenSatelliteBus?: () => void
   onOpenDefects?: () => void
@@ -119,7 +113,6 @@ export function ControlRoomPage({
   onOpenAgentDesk,
   onOpenPlatformRelease,
   onOpenPromote,
-  onOpenAgentProtocol,
   onOpenNetwork,
   onOpenSatelliteBus,
   onOpenDefects,
@@ -182,7 +175,7 @@ export function ControlRoomPage({
     onOpenPromote?.()
   }, [context, matrixList, stgSmoke, lastDeliverSucceeded, tierB, onOpenPromote])
 
-  const showHealth = statusSurface || onOpenAgentProtocol != null
+  const showHealth = statusSurface
   const promoteLamp = useMemo(() => {
     if (context == null) return undefined
     return buildPromoteCutoverModel({
@@ -246,25 +239,6 @@ export function ControlRoomPage({
     if (snapshot.missionOverall === 'ok') return 'Mission probes nominal'
     return missionDegradationSummary(collectMissionDegradationItems(snapshot))
   }, [snapshot])
-
-  const [attentionDiagnoseBusy, setAttentionDiagnoseBusy] = useState(false)
-
-  const handleAttentionCopyForAgent = useCallback(async () => {
-    const snap = await gatherControlRoomAgentSnapshot()
-    await navigator.clipboard.writeText(buildControlRoomAgentPack(snap))
-  }, [])
-
-  const handleAttentionAskForAgent = useCallback(() => {
-    if (attentionDiagnoseBusy || onOpenAgentDesk == null) return
-    setAttentionDiagnoseBusy(true)
-    void gatherControlRoomAgentSnapshot()
-      .then(snap => {
-        onOpenAgentDesk({ prefill: buildControlRoomDiagnosePrefill(snap) })
-      })
-      .finally(() => {
-        window.setTimeout(() => setAttentionDiagnoseBusy(false), 400)
-      })
-  }, [attentionDiagnoseBusy, onOpenAgentDesk])
 
   const jumpToBay = useCallback((id: ControlRoomBayId) => {
     setActiveBay(id)
@@ -339,15 +313,7 @@ export function ControlRoomPage({
         />
       )}
 
-      <ControlRoomAttentionStrip
-        items={attentionItems}
-        onSelectBay={jumpToBay}
-        onCopyForAgent={statusSurface ? undefined : handleAttentionCopyForAgent}
-        onDiagnoseWithAgent={
-          statusSurface || onOpenAgentDesk == null ? undefined : handleAttentionAskForAgent
-        }
-        diagnoseBusy={attentionDiagnoseBusy}
-      />
+      <ControlRoomAttentionStrip items={attentionItems} onSelectBay={jumpToBay} />
 
       <ControlRoomBayCards
         bays={shownBays}
@@ -466,9 +432,8 @@ export function ControlRoomPage({
           >
             <NetworkHealthPanel
               context={context}
-              onOpenAgentProtocol={onOpenAgentProtocol ?? (() => undefined)}
               onOpenNetwork={onOpenNetwork}
-              showPrimaryAgentAction={!statusSurface && onOpenAgentProtocol != null}
+              showUpgradeRecord={!statusSurface}
             />
           </ControlRoomBay>
         )}

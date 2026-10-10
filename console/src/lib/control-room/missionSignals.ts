@@ -173,36 +173,19 @@ export function agentSignal(bridge?: AgentBridgeResponse): ModuleState {
     planeLabel = 'operator-plane ?'
   }
 
-  const gb = bridge?.git_bridge
-  const dirty = gb?.dirty_repos ?? 0
-  // Align with fleetSnapshot.buildEngineerCell: dirty repos are Owner WIP
-  // (informational). Only Bridge unreachable/down is a real failure — dirty
-  // must not degrade ROOM POSTURE / Mission CAUTION (consoleSeatCatalog).
-  const bridgeSig: Signal =
-    gb == null ? 'unknown' : gb.status !== 'ok' ? 'fail' : 'ok'
-  const parts: string[] = [planeLabel]
-  parts.push(
-    bridgeSig === 'unknown'
-      ? 'Bridge ?'
-      : gb?.status !== 'ok'
-        ? 'Bridge down'
-        : dirty > 0
-          ? `Bridge ${dirty} dirty`
-          : 'Bridge clean',
-  )
-  const signal = worst(planeSig, bridgeSig)
+  // git-bridge is a laptop tool (ADR §4): PROD reaching it, or not, says nothing
+  // about the operator plane, so it does not feed this signal.
+  const signal = planeSig
   const planesUp = probes.filter(r => r.status === 'ok').length
   const value =
     planeSig === 'fail'
       ? 'down'
       : probes.length >= 2
         ? `${planesUp}/${probes.length} up`
-        : dirty > 0
-          ? `${dirty} dirty`
-          : signal === 'unknown'
-            ? '…'
-            : 'ready'
-  return { signal, value, detail: `Automation — ${parts.join(' · ')}` }
+        : signal === 'unknown'
+          ? '…'
+          : 'ready'
+  return { signal, value, detail: `Automation — ${planeLabel}` }
 }
 
 /* ── Payload (Trade satellite) signals ── */

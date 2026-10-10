@@ -20,12 +20,7 @@ export function InfrastructurePage() {
       </section>
       <section className="flex flex-col gap-2">
         <h2 className="m-0 text-sm font-semibold">Network</h2>
-        <NetworkPage
-          context={contextQ.data}
-          onOpenAgentProtocol={() => {
-            window.location.hash = '#agent-protocol'
-          }}
-        />
+        <NetworkPage context={contextQ.data} />
       </section>
       <RuntimeMapSection />
       <MiniCards />

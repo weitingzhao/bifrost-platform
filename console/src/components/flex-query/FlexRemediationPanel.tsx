@@ -8,28 +8,21 @@ import {
   isProxyError,
 } from '@/api/flexQueryPlugin'
 import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { flexEnqueueBlockReason } from '@/lib/flex-query/flexEnqueueGuards'
-import {
-  analyzeFlexProbe,
-  buildFlexDiagnosePrefill,
-} from '@/lib/flex-query/flexQueryRemediation'
-import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
+import { analyzeFlexProbe } from '@/lib/flex-query/flexQueryRemediation'
 
 type FlexRemediationPanelProps = {
   status: MarketDataStatusResponse | undefined
   probeReach: 'ok' | 'degraded' | 'fail' | 'unknown'
   onOpenIngest?: (sub: 'enqueue' | 'manual') => void
-  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
 }
 
 export function FlexRemediationPanel({
   status,
   probeReach,
   onOpenIngest,
-  onOpenAgentDesk,
 }: FlexRemediationPanelProps) {
   const { canOperate } = usePlatformAuth()
   const queryClient = useQueryClient()
@@ -109,7 +102,6 @@ export function FlexRemediationPanel({
     }
   }
 
-  const diagnosePrefill = buildFlexDiagnosePrefill(status, analysis)
   const enqueueDisabled = !canOperate || acting || enqueueBlock != null
 
   return (
@@ -170,14 +162,6 @@ export function FlexRemediationPanel({
         <Button size="sm" variant="outline" onClick={() => onOpenIngest?.('enqueue')}>
           Open Ingest
         </Button>
-        {onOpenAgentDesk != null ? (
-          <AgentTriggerButton
-            label="Diagnose with Agent"
-            size="sm"
-            title="Open Agent Desk with IB Flex diagnose prefill (read-first plan)"
-            onClick={() => onOpenAgentDesk({ prefill: diagnosePrefill })}
-          />
-        ) : null}
       </div>
 
       {enqueueBlock != null ? (
