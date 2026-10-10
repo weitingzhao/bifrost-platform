@@ -195,7 +195,7 @@ func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
 	out := s.reject(chi.URLParam(r, "id"), body.Reason)
 	if out.Status == http.StatusOK && s.audit != nil {
 		id, _ := out.Body["id"].(string)
-		s.audit.Record(r, "approval.reject", id, StatusRejected, strings.TrimSpace(body.Reason))
+		s.audit.Record(r, "approval.reject", id, StatusRejected, oneLine(Redact(strings.TrimSpace(body.Reason))))
 	}
 	writeJSON(w, out.Status, out.Body)
 }

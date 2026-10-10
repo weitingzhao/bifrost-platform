@@ -516,7 +516,7 @@ func decisionBody(rec Approval) map[string]any {
 }
 
 func (s *Service) reject(ref, reason string) decided {
-	reason = strings.TrimSpace(reason)
+	reason = oneLine(Redact(strings.TrimSpace(reason)))
 	if reason == "" {
 		return decided{Status: 400, Body: map[string]any{"error": "reason is required"}}
 	}

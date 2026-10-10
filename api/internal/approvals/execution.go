@@ -145,7 +145,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 			if execErr != nil && actions.IsUncertain(execErr) {
 				// A timeout on create does not prove the object is absent.
 				// Leave the record unknown; do not requeue under a new name.
-				e.Error = oneLine(execErr.Error())
+				e.Error = oneLine(Redact(execErr.Error()))
 				a.Status = StatusUnknown
 				a.Error = e.Error
 				e.LeaseExpiresAt = time.Time{}
@@ -182,7 +182,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 
 func requeue(a *Approval, refusal string, now time.Time) {
 	e := a.Execution
-	e.LastRefusal = refusal
+	e.LastRefusal = oneLine(Redact(refusal))
 	e.NextAttemptAt = now.Add(backoff(e.Attempts))
 	e.ExecutorID = ""
 	e.LeaseID = ""
@@ -201,9 +201,9 @@ func finishWith(a *Approval, started, now time.Time, result any, execErr error) 
 	e.LeaseExpiresAt = time.Time{}
 	if execErr != nil {
 		a.Status = StatusFailed
-		a.Error = execErr.Error()
+		a.Error = oneLine(Redact(execErr.Error()))
 		a.Result = nil
-		e.Error = oneLine(a.Error)
+		e.Error = a.Error
 		return
 	}
 	a.Status = StatusExecuted
@@ -530,7 +530,7 @@ func (s *Service) result(ref string, in resultInput) decided {
 		return decided{Status: 400, Body: map[string]any{"error": "lease_id is required"}}
 	}
 	started := in.Started == nil || *in.Started
-	refusal := oneLine(in.Refusal)
+	refusal := oneLine(Redact(in.Refusal))
 	if started && in.ExitCode == nil && strings.TrimSpace(in.Error) == "" {
 		return decided{Status: 400, Body: map[string]any{"error": "exit_code or error is required"}}
 	}
@@ -597,8 +597,8 @@ func (s *Service) result(ref string, in resultInput) decided {
 		}
 		e.ExitCode = in.ExitCode
 		e.OutputSHA256 = sum
-		e.OutputTail = Redact(tail(in.OutputTail, maxTail))
-		e.Error = oneLine(in.Error)
+		e.OutputTail = tail(Redact(in.OutputTail), maxTail)
+		e.Error = oneLine(Redact(in.Error))
 		e.LeaseExpiresAt = time.Time{}
 		e.LateResult = late
 		if in.ExitCode != nil && *in.ExitCode == 0 && e.Error == "" {
