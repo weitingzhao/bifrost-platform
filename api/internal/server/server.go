@@ -463,7 +463,8 @@ func (s *Server) Router() http.Handler {
 			// A session's own turn and tool events (W-54); same token as its title.
 			r.Post("/agent/threads/heartbeat", s.agentThreads.HandleBeat)
 		})
-		r.Get("/agent/threads", s.agentThreads.HandleList)
+		// Titles and host names: viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/threads", s.agentThreads.HandleList)
 		r.Get("/releases", s.releases.HandleList)
 		r.Get("/releases/running-images", s.releases.HandleRunningImages)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
