@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { lostHosts, silentThreads } from '@/api/agentThreads'
+import { hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList, isAwaitingDecision } from '@/api/approvals'
 import { useAgentThreads } from '@/hooks/useAgentThreads'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
@@ -24,7 +24,7 @@ export function useNeedsYou() {
   const threadsQuery = useAgentThreads()
   const toApprove = (q.data ?? []).filter(item => isAwaitingDecision(item))
   const silent = silentThreads(threadsQuery.data?.threads ?? [])
-  const lost = lostHosts(threadsQuery.data?.hosts)
+  const lost = hostsNeedingYou(threadsQuery.data?.hosts)
 
   let approveCount: NeedsYouCount
   if (q.isError) {

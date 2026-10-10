@@ -3,6 +3,7 @@ import {
   agentThreadName,
   formatSeconds,
   lastEventText,
+  hostsNeedingYou,
   lostHosts,
   notMonitoredVendors,
   silentThreads,
@@ -86,5 +87,25 @@ describe('agentThreads', () => {
     expect(lostHosts([alive, host]).map(h => h.host)).toEqual(['mbp'])
     expect(notMonitoredVendors(host)).toEqual(['cursor', 'codex'])
     expect(lostHosts(undefined)).toEqual([])
+  })
+
+  it('counts a host that has never reported toward Needs You, and not an alive host', () => {
+    const never: AgentHost = {
+      host: 'mini',
+      at: '0001-01-01T00:00:00Z',
+      age_seconds: 0,
+      status: 'never_reported',
+      vendors: [{ vendor: 'claude', wired: false, token: false, monitored: false }],
+    }
+    const lost: AgentHost = {
+      host: 'mbp',
+      at: '2026-10-10T07:00:00Z',
+      age_seconds: 200,
+      status: 'lost',
+      vendors: [],
+    }
+    const alive: AgentHost = { ...lost, host: 'air', status: 'alive', age_seconds: 10 }
+    expect(hostsNeedingYou([alive, lost, never]).map(h => h.host)).toEqual(['mini', 'mbp'])
+    expect(hostsNeedingYou(undefined)).toEqual([])
   })
 })

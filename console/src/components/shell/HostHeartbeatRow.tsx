@@ -5,6 +5,7 @@ import { formatSeconds, notMonitoredVendors, type AgentHost } from '@/api/agentT
 export function HostHeartbeatRow({ host }: { host: AgentHost }) {
   const dark = notMonitoredVendors(host)
   const lost = host.status === 'lost'
+  const never = host.status === 'never_reported'
   return (
     <li
       className="flex w-full min-w-0 list-none flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5"
@@ -12,9 +13,15 @@ export function HostHeartbeatRow({ host }: { host: AgentHost }) {
       data-agent-host-status={host.status}
     >
       <span className="truncate font-mono text-sm text-foreground">{host.host}</span>
-      {lost ? <DenseTag variant="danger">Lost</DenseTag> : <DenseTag variant="neutral">Alive</DenseTag>}
+      {never ? (
+        <DenseTag variant="danger">Never reported</DenseTag>
+      ) : lost ? (
+        <DenseTag variant="danger">Lost</DenseTag>
+      ) : (
+        <DenseTag variant="neutral">Alive</DenseTag>
+      )}
       <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-        {`heartbeat ${formatSeconds(host.age_seconds)} ago`}
+        {never ? 'no heartbeat yet' : `heartbeat ${formatSeconds(host.age_seconds)} ago`}
       </span>
       {dark.length > 0 ? <DenseTag variant="warning">{`not monitored: ${dark.join(', ')}`}</DenseTag> : null}
     </li>

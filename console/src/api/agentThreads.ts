@@ -30,7 +30,7 @@ export type AgentVendorReport = {
   monitored: boolean
 }
 
-export type AgentHostStatus = 'alive' | 'lost'
+export type AgentHostStatus = 'alive' | 'lost' | 'never_reported'
 
 export type AgentHost = {
   host: string
@@ -109,6 +109,19 @@ export function silentThreads(threads: readonly AgentThread[]): AgentThread[] {
 
 export function lostHosts(hosts: readonly AgentHost[] | undefined): AgentHost[] {
   return (hosts ?? []).filter(h => h.status === 'lost').sort((a, b) => b.age_seconds - a.age_seconds)
+}
+
+/** Lost hosts and expected hosts that have never reported. Both count toward Needs You. */
+export function hostsNeedingYou(hosts: readonly AgentHost[] | undefined): AgentHost[] {
+  const rank = (h: AgentHost) => (h.status === 'never_reported' ? 0 : 1)
+  return (hosts ?? [])
+    .filter(h => h.status === 'lost' || h.status === 'never_reported')
+    .sort((a, b) => {
+      const byRank = rank(a) - rank(b)
+      if (byRank !== 0) return byRank
+      if (b.age_seconds !== a.age_seconds) return b.age_seconds - a.age_seconds
+      return a.host < b.host ? -1 : a.host > b.host ? 1 : 0
+    })
 }
 
 /** Vendors that are not wired or have no readable reporter token. They are not healthy. */

@@ -249,6 +249,32 @@ describe('NeedsYouPage', () => {
     expect(within(group).queryByText('Busy thread')).toBeNull()
   })
 
+  it('counts an expected host that has never reported', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse(
+          [],
+          [
+            {
+              host: 'mini',
+              at: '0001-01-01T00:00:00Z',
+              age_seconds: 0,
+              status: 'never_reported',
+              vendors: [{ vendor: 'codex', wired: false, token: false, monitored: false }],
+            },
+          ],
+        ),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('Never reported')).toBeTruthy()
+    expect(within(group).getByText('no heartbeat yet')).toBeTruthy()
+    expect(within(group).queryByText('heartbeat 0s ago')).toBeNull()
+  })
+
   it('shows Unknown when the agent threads cannot be read, and still lists approvals', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(

@@ -138,7 +138,8 @@ describe('AgentThreadsInProgress', () => {
     )
     render(wrapper(<AgentThreadsInProgress />))
     const region = await screen.findByRole('region', { name: 'In progress' })
-    expect(within(region).getByText('In progress · Agent threads · 2')).toBeTruthy()
+    expect(await within(region).findByText('In progress · Agent threads · 2')).toBeTruthy()
+    expect(within(region).queryByText('Loading…')).toBeNull()
     const host = region.querySelector('[data-agent-host="mbp"]')
     expect(host?.getAttribute('data-agent-host-status')).toBe('lost')
     expect(within(region).getByText('Lost')).toBeTruthy()
@@ -149,6 +150,38 @@ describe('AgentThreadsInProgress', () => {
     expect(within(region).getByText('Host lost')).toBeTruthy()
     expect(within(region).getByText('Waiting for you')).toBeTruthy()
     expect(within(region).getByText('waited 1m · permission_prompt')).toBeTruthy()
+  })
+
+  it('shows an expected host that has never reported', async () => {
+    stubThreads(() =>
+      json({
+        generated_at: '2026-10-10T07:05:00Z',
+        silent_after_seconds: 600,
+        tool_grace_seconds: 120,
+        hosts: [
+          {
+            host: 'mini',
+            at: '0001-01-01T00:00:00Z',
+            age_seconds: 0,
+            status: 'never_reported',
+            vendors: [
+              { vendor: 'claude', wired: false, token: false, monitored: false },
+              { vendor: 'cursor', wired: false, token: false, monitored: false },
+              { vendor: 'codex', wired: false, token: false, monitored: false },
+            ],
+          },
+        ],
+        threads: [],
+      }),
+    )
+    render(wrapper(<AgentThreadsInProgress />))
+    const region = await screen.findByRole('region', { name: 'In progress' })
+    expect(await within(region).findByText('Never reported')).toBeTruthy()
+    expect(within(region).getByText('no heartbeat yet')).toBeTruthy()
+    expect(within(region).queryByText('heartbeat 0s ago')).toBeNull()
+    expect(within(region).queryByText('Alive')).toBeNull()
+    const host = region.querySelector('[data-agent-host="mini"]')
+    expect(host?.getAttribute('data-agent-host-status')).toBe('never_reported')
   })
 
   it('says so when no thread is mid-turn', async () => {
