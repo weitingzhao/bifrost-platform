@@ -133,7 +133,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	if err != nil {
 		return fail(400, err.Error())
 	}
-	if err := actions.NormalizeRunner(act.ID, norm); err != nil {
+	if err = actions.NormalizeRunner(act.ID, norm); err != nil {
 		return fail(400, err.Error())
 	}
 	if missing := act.Missing(norm); missing != "" {
