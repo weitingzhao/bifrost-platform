@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import { GO_ZERO_DECIDED_AT } from '@/api/approvalsServerContract'
 import {
+  approvalRowTitle,
   commandText,
   decisionBanner,
   decisionTitle,
+  executionOutcome,
+  formatTook,
   ownerTerminal,
+  runFromTradeInfra,
   splitReason,
   technicalParams,
+  technicalResult,
+  unknownFollowup,
   visibleTimestamp,
   workItems,
 } from '@/pages/approvalDecision'
@@ -23,6 +29,19 @@ describe('decisionBanner', () => {
     expect(decisionBanner({ status: 'approved', runner: 'host' })).toBe('Approved. Waiting for it to run.')
     expect(decisionBanner({ status: 'executed', runner: 'platform' })).toBe('This has run.')
     expect(decisionBanner({ status: 'failed', runner: 'owner' })).toBe('This failed.')
+    expect(
+      decisionBanner({
+        status: 'executed',
+        runner: 'owner',
+        execution: { exit_code: 0, duration_ms: 1688 },
+      }),
+    ).toBe('It ran and finished.')
+    expect(decisionBanner({ status: 'executed', runner: 'owner', execution: { exit_code: 3 } })).toBe(
+      'It ran and failed (exit code 3).',
+    )
+    expect(decisionBanner({ status: 'failed', runner: 'platform', execution: { exit_code: 1 } })).toBe(
+      'It ran and failed (exit code 1).',
+    )
     expect(decisionBanner({ status: 'rejected', runner: 'platform' })).toBe('This was rejected.')
     expect(decisionBanner({ status: 'expired', runner: 'platform' })).toBe('This has expired.')
     expect(decisionBanner({ status: 'unknown', runner: 'platform' })).toBe(
@@ -31,6 +50,67 @@ describe('decisionBanner', () => {
     expect(decisionBanner({ status: 'mystery', runner: '' })).toBe(
       'The result could not be confirmed and must be checked before anything is retried.',
     )
+  })
+})
+
+describe('approvalRowTitle', () => {
+  it('uses #n and the first paragraph, then the summary, then the action, and omits # without a number', () => {
+    expect(
+      approvalRowTitle({
+        number: 5,
+        reason: 'Publish the ConfigMap.\n\nThe flags are stale.',
+        summary: 'Add two rules',
+        action: 'owner_run_command',
+      }),
+    ).toBe('#5 · Publish the ConfigMap.')
+    expect(
+      approvalRowTitle({
+        number: undefined,
+        reason: 'Publish the ConfigMap.\n\nThe flags are stale.',
+        summary: 'Add two rules',
+        action: 'owner_run_command',
+      }),
+    ).toBe('Publish the ConfigMap.')
+    expect(
+      approvalRowTitle({ number: 4, reason: '', summary: 'Sync rocket', action: 'start_pipeline_run' }),
+    ).toBe('#4 · Sync rocket')
+    expect(
+      approvalRowTitle({ number: 0, reason: '  ', summary: '  ', action: 'drain_node' }),
+    ).toBe('drain_node')
+  })
+})
+
+describe('execution outcome', () => {
+  it('says how a run ended, and leaves the old sentence when there is no exit code', () => {
+    const finished = '2026-10-10T19:22:16.534016597Z'
+    expect(formatTook(1688)).toBe('1.7 s')
+    expect(formatTook(2000)).toBe('2 s')
+    expect(
+      executionOutcome({
+        status: 'executed',
+        execution: { exit_code: 0, duration_ms: 1688, finished_at: finished },
+      }),
+    ).toBe(`Exit code 0 · took 1.7 s · finished ${new Date(finished).toLocaleString()}`)
+    expect(
+      executionOutcome({
+        status: 'failed',
+        execution: { exit_code: 2, duration_ms: 500, finished_at: GO_ZERO_DECIDED_AT },
+      }),
+    ).toBe('Exit code 2 · took 0.5 s')
+    expect(executionOutcome({ status: 'executed', execution: { duration_ms: 34 } })).toBeNull()
+    expect(executionOutcome({ status: 'pending', execution: { exit_code: 0 } })).toBeNull()
+  })
+
+  it('tells the Owner what an unknown request recorded', () => {
+    expect(unknownFollowup({ status: 'unknown', error: 'executor lost: lease lapsed with no result' })).toEqual({
+      knows: 'What the platform knows: executor lost: lease lapsed with no result.',
+      cannotClose: 'This page cannot close it yet. Check whether it ran before asking again.',
+    })
+    expect(unknownFollowup({ status: 'unknown', error: '' }).knows).toBeNull()
+    expect(unknownFollowup({ status: 'failed', error: 'plan expired' })).toEqual({
+      knows: null,
+      cannotClose: null,
+    })
   })
 })
 
@@ -88,6 +168,19 @@ describe('technical params and command', () => {
     expect(left).not.toContain('already shown')
     expect(technicalParams({ command: 'true', reason: 'x' })).toBeNull()
   })
+
+  it('drops result.command when it repeats params.command and keeps the other keys', () => {
+    const command = 'set -uo pipefail\necho hello'
+    const text = technicalResult(
+      { command, command_sha256: 'abc', message: 'Run: bash scripts/owner/owner-run.sh ap-1', recorded: true },
+      { command },
+    )
+    expect(text).toContain('abc')
+    expect(text).toContain('recorded')
+    expect(text).not.toContain('pipefail')
+    expect(technicalResult({ command, note: 'kept' }, { command: 'different' })).toContain('pipefail')
+    expect(technicalResult({ command }, { command })).toBeNull()
+  })
 })
 
 describe('ownerTerminal', () => {
@@ -104,6 +197,19 @@ describe('ownerTerminal', () => {
         result: { message: 'Run: bash scripts/owner/owner-run.sh ap-1' },
       }),
     ).toEqual({ line: 'bash scripts/owner/owner-run.sh ap-1', fallback: false })
+    const relative = ownerTerminal({
+      id: 'ap-1',
+      runner: 'owner',
+      result: { message: 'Run: bash scripts/owner/owner-run.sh ap-1' },
+    })
+    expect(runFromTradeInfra(relative)).toBe(true)
+    const absolute = ownerTerminal({
+      id: 'ap-1',
+      runner: 'owner',
+      result: { message: 'Run: /Users/me/bifrost-trade-infra/scripts/owner/owner-run.sh ap-1' },
+    })
+    expect(runFromTradeInfra(absolute)).toBe(false)
+    expect(runFromTradeInfra(fallback)).toBe(false)
   })
 })
 

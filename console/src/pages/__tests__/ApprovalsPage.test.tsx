@@ -355,6 +355,7 @@ describe('ApprovalsPage (request page)', () => {
     expect(document.querySelector('[data-owner-line]')?.textContent).toBe(id)
     expect(container.innerHTML).not.toContain('owner-run.sh')
     expect(container.innerHTML).not.toContain('scripts/')
+    expect(screen.queryByText('Run it from the bifrost-trade-infra folder.')).toBeNull()
     expect(document.querySelector('[data-approval-command]')?.textContent).toBe('kubectl get ns\nkubectl get pods')
   })
 
@@ -379,5 +380,157 @@ describe('ApprovalsPage (request page)', () => {
     expect(await screen.findByText('After approving, run in a terminal:')).toBeTruthy()
     expect(document.querySelector('[data-owner-line]')?.textContent).toBe(`bash scripts/owner/owner-run.sh ${id}`)
     expect(screen.queryByText('run the owner-run script with this id')).toBeNull()
+    expect(screen.getByText('Run it from the bifrost-trade-infra folder.')).toBeTruthy()
+  })
+
+  it('does not ask for the trade-infra folder when the command line is absolute', async () => {
+    const id = 'appr-owner-abs'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: 'approved',
+            runner: 'owner',
+            result: { message: `Run: /Users/me/bifrost-trade-infra/scripts/owner/owner-run.sh ${id}` },
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    expect(await screen.findByText('After approving, run in a terminal:')).toBeTruthy()
+    expect(document.querySelector('[data-owner-line]')?.textContent?.startsWith('/')).toBe(true)
+    expect(screen.queryByText('Run it from the bifrost-trade-infra folder.')).toBeNull()
+  })
+
+  it('says a run finished, with exit code, duration, and local time', async () => {
+    const id = 'appr-ran'
+    const finished = '2026-10-10T19:22:16.534016597Z'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: 'executed',
+            runner: 'owner',
+            execution: {
+              exit_code: 0,
+              duration_ms: 1688,
+              finished_at: finished,
+              output_tail: 'rule added\nstill watching',
+              attempts: 1,
+              executor_id: 'owner-run:Visions-MBP',
+            },
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    expect(await screen.findByText('It ran and finished.')).toBeTruthy()
+    expect(
+      screen.getByText(`Exit code 0 · took 1.7 s · finished ${new Date(finished).toLocaleString()}`),
+    ).toBeTruthy()
+    const tail = document.querySelector('[data-output-tail]')
+    expect(tail?.tagName).toBe('PRE')
+    expect(tail?.textContent).toBe('rule added\nstill watching')
+    expect(tail?.className).toContain('whitespace-pre')
+    expect(tail?.className).toContain('max-h-48')
+    expect(screen.getByText('Output (last lines)')).toBeTruthy()
+    expect(screen.getByText('1')).toBeTruthy()
+    expect(screen.getByText('Attempts')).toBeTruthy()
+    expect(screen.getByText('owner-run:Visions-MBP')).toBeTruthy()
+  })
+
+  it('says a non-zero exit failed, and keeps the old sentence when the exit code is missing', async () => {
+    const id = 'appr-bad-exit'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: 'executed',
+            execution: { exit_code: 3, duration_ms: 2000 },
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    expect(await screen.findByText('It ran and failed (exit code 3).')).toBeTruthy()
+    expect(screen.getByText('Exit code 3 · took 2 s')).toBeTruthy()
+  })
+
+  it('says what the platform recorded when the result is unknown', async () => {
+    const id = 'appr-unknown'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: 'unknown',
+            error: 'executor lost: lease lapsed with no result',
+            execution: { attempts: 1, executor_id: 'owner-run:Visions-MBP' },
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    expect(
+      await screen.findByText(
+        'The result could not be confirmed and must be checked before anything is retried.',
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('What the platform knows: executor lost: lease lapsed with no result.'),
+    ).toBeTruthy()
+    expect(
+      screen.getByText('This page cannot close it yet. Check whether it ran before asking again.'),
+    ).toBeTruthy()
+    expect(screen.getByText('owner-run:Visions-MBP')).toBeTruthy()
+  })
+
+  it('prints the command once when the result repeats params.command', async () => {
+    const id = 'appr-once'
+    const command = 'set -uo pipefail\necho once-only-command'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: 'executed',
+            runner: 'owner',
+            params: { command, namespace: 'monitoring' },
+            result: {
+              command,
+              command_sha256: 'abc123',
+              message: `Run: bash scripts/owner/owner-run.sh ${id}`,
+              recorded: true,
+            },
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    const { container } = render(wrapper(<ApprovalsPage />))
+    expect(await screen.findByText('Technical details')).toBeTruthy()
+    expect(document.querySelector('[data-approval-command]')?.textContent).toBe(command)
+    const result = document.querySelector('[data-approval-result]')
+    expect(result?.textContent).toContain('abc123')
+    expect(result?.textContent).toContain('recorded')
+    expect(result?.textContent).not.toContain('once-only-command')
+    expect(container.textContent?.split('once-only-command').length).toBe(2)
   })
 })

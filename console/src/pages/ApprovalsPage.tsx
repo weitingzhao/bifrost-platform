@@ -5,7 +5,6 @@ import { authedFetch } from '@/api/client'
 import {
   approvalIdFromHash,
   fetchApproval,
-  formatParams,
   formatTimeRemaining,
   formatWaited,
   isUnsetDecidedAt,
@@ -18,10 +17,17 @@ import {
   decisionBanner,
   decisionEnv,
   decisionTitle,
+  executionAttempts,
+  executionExecutor,
+  executionOutcome,
+  executionOutputTail,
   ownerTerminal,
+  runFromTradeInfra,
   splitReason,
   technicalParams,
+  technicalResult,
   tierWords,
+  unknownFollowup,
   visibleTimestamp,
   workItems,
 } from '@/pages/approvalDecision'
@@ -187,6 +193,13 @@ function ApprovalCard({
   const command = commandText(item.params)
   const paramsLeft = technicalParams(item.params)
   const terminal = ownerTerminal(item)
+  const fromTradeInfra = runFromTradeInfra(terminal)
+  const outcome = executionOutcome(item)
+  const unknown = unknownFollowup(item)
+  const outputTail = executionOutputTail(item.execution)
+  const attempts = executionAttempts(item.execution)
+  const executor = executionExecutor(item.execution)
+  const resultText = item.error ? null : technicalResult(item.result, item.params)
   const created = visibleTimestamp(item.created_at)
   const expires = visibleTimestamp(item.expires_at)
   const decided = visibleTimestamp(item.decided_at)
@@ -216,6 +229,21 @@ function ApprovalCard({
         >
           {decisionBanner(item)}
         </p>
+        {outcome != null ? (
+          <p data-execution-outcome className="m-0 max-w-full break-words text-sm">
+            {outcome}
+          </p>
+        ) : null}
+        {unknown.knows != null ? (
+          <p data-platform-knows className="m-0 max-w-full break-words text-sm">
+            {unknown.knows}
+          </p>
+        ) : null}
+        {unknown.cannotClose != null ? (
+          <p data-cannot-close className="m-0 max-w-full break-words text-sm">
+            {unknown.cannotClose}
+          </p>
+        ) : null}
         <Prose label="If you approve" value={lead} />
         {rest !== '' ? <Prose label="Why" value={rest} /> : null}
         <Prose label="If it goes wrong" value={item.rollback ?? ''} />
@@ -240,6 +268,11 @@ function ApprovalCard({
             </div>
             {terminal.fallback ? (
               <p className="m-0 mt-1 break-words text-sm">run the owner-run script with this id</p>
+            ) : null}
+            {fromTradeInfra ? (
+              <p data-run-folder className="m-0 mt-1 break-words text-sm">
+                Run it from the bifrost-trade-infra folder.
+              </p>
             ) : null}
           </div>
         ) : null}
@@ -301,14 +334,30 @@ function ApprovalCard({
             </div>
           ) : null}
           {item.error ? <Field label="Error" value={item.error} /> : null}
-          {!item.error && item.result != null ? (
+          {resultText != null ? (
             <div className="min-w-0 max-w-full">
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Result</div>
-              <pre className="m-0 mt-1 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
-                {formatParams(item.result)}
+              <pre
+                data-approval-result
+                className="m-0 mt-1 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words font-mono text-xs"
+              >
+                {resultText}
               </pre>
             </div>
           ) : null}
+          {outputTail != null ? (
+            <div className="min-w-0 max-w-full">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Output (last lines)</div>
+              <pre
+                data-output-tail
+                className="m-0 mt-1 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre font-mono text-xs"
+              >
+                {outputTail}
+              </pre>
+            </div>
+          ) : null}
+          {attempts != null ? <Field label="Attempts" value={String(attempts)} /> : null}
+          {executor != null ? <Field label="Executor" value={executor} /> : null}
           {item.reject_reason ? <Field label="Reject reason" value={item.reject_reason} /> : null}
           <Field label="Action" value={item.action} />
           <Field label="Request id" value={item.id} />
