@@ -17,22 +17,27 @@ import (
 //
 // The check is an allow-list of statements, not a scan for forbidden words.
 // A statement from before is still present only when it is textually the
-// same after comments are removed and each run of whitespace outside quotes
-// is collapsed to one space. Whitespace that was present between two tokens
-// stays present; whitespace that was absent stays absent. Nothing is
+// same after each comment is replaced by one space and each run of
+// whitespace outside quotes is collapsed to one space. A comment is a
+// separator, the way PostgreSQL treats it: removing the comment must not
+// join the tokens on either side. Whitespace that was present between two
+// tokens stays present; whitespace that was absent stays absent. Nothing is
 // case-folded. Whitespace inside quotes is kept as written.
 //
 // The lexer refuses input that PostgreSQL sessions do not all read the same
 // way: a U& unicode string or identifier (a lone U or u, an ampersand and a
 // quote, even when whitespace or comments sit between those pieces), a
-// backslash in an ordinary non-E string, any non-ASCII byte outside a quoted
-// string, a quoted identifier or a comment, and a NUL byte anywhere. Keyword
-// matching for the allow-list is ASCII-only.
+// backslash in an ordinary non-E string, a backslash-quote in an escape
+// string, an escape that decodes to a zero byte, any non-ASCII byte outside
+// a quoted string, a quoted identifier or a comment, and a NUL byte anywhere.
+// Keyword matching for the allow-list is ASCII-only.
 //
-// Added columns accept only an explicit list of built-in types. Only a path
-// ending in ".sql" is classified, and a migrations/ directory or a db_init*
-// name is never classified. The policy's DDL paths also match *.py, db_init*,
-// YAML jobs and migrations/**; those always wait for the Owner.
+// Added columns accept only a type the grammar binds to a built-in without
+// a catalog lookup, or pg_catalog.<name> for a built-in that would otherwise
+// be resolved through the search path. Only a path ending in ".sql" is
+// classified, and a migrations/ directory or a db_init* name is never
+// classified. The policy's DDL paths also match *.py, db_init*, YAML jobs
+// and migrations/**; those always wait for the Owner.
 //
 // ClassifyDDL compares a DDL file before and after a release. ok is true when
 // the change is allow-listed. A file that did not exist before is compared
@@ -115,8 +120,8 @@ type statement struct {
 	semi int // index of ';' in the source, or -1
 }
 
-// stmtEqual is textual. Comments are already gone from norm, whitespace
-// outside quotes is already collapsed, and case is not folded.
+// stmtEqual is textual. Each comment is already one space in norm,
+// whitespace outside quotes is already collapsed, and case is not folded.
 func stmtEqual(a, b statement) bool {
 	return a.norm == b.norm
 }
@@ -137,17 +142,21 @@ func clip(s string) string {
 }
 
 var (
-	errUntermString  = errors.New("unterminated string")
-	errUntermIdent   = errors.New("unterminated quoted identifier")
-	errUntermComment = errors.New("unterminated block comment")
-	errUntermDollar  = errors.New("unterminated dollar quote")
-	errBadDollar     = errors.New("invalid dollar quote")
-	errUntermStmt    = errors.New("unterminated statement")
-	errUnicode       = errors.New("unicode escape string or identifier")
-	errBackslash     = errors.New("backslash in an ordinary string")
-	errNonASCII      = errors.New("non-ASCII outside a quoted string, quoted identifier, or comment")
-	errNUL           = errors.New("NUL byte")
-	errBadUTF8       = errors.New("invalid UTF-8")
+	errUntermString   = errors.New("unterminated string")
+	errUntermIdent    = errors.New("unterminated quoted identifier")
+	errUntermComment  = errors.New("unterminated block comment")
+	errUntermDollar   = errors.New("unterminated dollar quote")
+	errBadDollar      = errors.New("invalid dollar quote")
+	errUntermStmt     = errors.New("unterminated statement")
+	errUnicode        = errors.New("unicode escape string or identifier")
+	errBackslash      = errors.New("backslash in an ordinary string")
+	errBackslashQuote = errors.New("backslash quote in an escape string")
+	errEscapedNUL     = errors.New("escape string decodes to a zero byte")
+	errUnicodeEscape  = errors.New("invalid Unicode escape")
+	errSessionEscape  = errors.New("escape string is not session-independent")
+	errNonASCII       = errors.New("non-ASCII outside a quoted string, quoted identifier, or comment")
+	errNUL            = errors.New("NUL byte")
+	errBadUTF8        = errors.New("invalid UTF-8")
 )
 
 // normText collapses whitespace outside quotes and remembers whether any
@@ -232,6 +241,8 @@ func splitSQL(text string) ([]statement, error) {
 			if err != nil {
 				return nil, err
 			}
+			// A comment is whitespace. Dropping it must not join tokens.
+			norm.space()
 			i = j
 			continue
 		}
@@ -240,6 +251,7 @@ func splitSQL(text string) ([]statement, error) {
 			if err != nil {
 				return nil, err
 			}
+			norm.space()
 			i = j
 			continue
 		}
@@ -424,6 +436,16 @@ func scanQuoted(s string, i int, quote byte, unterm error, ordinary bool) (strin
 	return "", i, unterm
 }
 
+// scanEString reads an E'...' literal. The body kept for the token is the
+// source text inside the quotes; escapes are decoded only far enough to
+// refuse the ones PostgreSQL sessions do not all accept.
+//
+// \' depends on backslash_quote. Octal (1–3 digits) and hex (1–2 digits)
+// are byte values; PostgreSQL stores the low 8 bits, so \400 is a zero
+// byte as well as \0, \00, \000, \x0 and \x00. \uXXXX and \UXXXXXXXX that
+// decode to U+0000 are the same refusal. A short \u or \U sequence is an
+// invalid Unicode escape. A decoded byte or code point above ASCII is
+// refused too: it depends on the server encoding.
 func scanEString(s string, i int) (string, int, error) {
 	var b strings.Builder
 	i++
@@ -432,15 +454,11 @@ func scanEString(s string, i int) (string, int, error) {
 			return "", i, errNUL
 		}
 		if s[i] == '\\' {
-			if i+1 >= len(s) {
-				return "", i, errUntermString
+			n, err := scanEEscape(s, i, &b)
+			if err != nil {
+				return "", n, err
 			}
-			if s[i+1] == 0 {
-				return "", i + 1, errNUL
-			}
-			b.WriteByte('\\')
-			b.WriteByte(s[i+1])
-			i += 2
+			i = n
 			continue
 		}
 		if s[i] == '\'' {
@@ -459,6 +477,120 @@ func scanEString(s string, i int) (string, int, error) {
 		i++
 	}
 	return "", i, errUntermString
+}
+
+func scanEEscape(s string, i int, b *strings.Builder) (int, error) {
+	if i+1 >= len(s) {
+		return i, errUntermString
+	}
+	if s[i+1] == 0 {
+		return i + 1, errNUL
+	}
+	c := s[i+1]
+	switch {
+	case c >= '0' && c <= '7':
+		return scanOctalEscape(s, i, b)
+	case c == 'x':
+		return scanHexEscape(s, i, b)
+	case c == 'u' || c == 'U':
+		return scanUnicodeEscape(s, i, b)
+	case c == '\'':
+		return i + 1, errBackslashQuote
+	default:
+		b.WriteByte('\\')
+		b.WriteByte(c)
+		return i + 2, nil
+	}
+}
+
+func scanOctalEscape(s string, i int, b *strings.Builder) (int, error) {
+	j := i + 1
+	val := 0
+	for n := 0; n < 3 && j < len(s) && s[j] >= '0' && s[j] <= '7'; n++ {
+		val = val*8 + int(s[j]-'0')
+		j++
+	}
+	if err := refuseEscapeByte(val); err != nil {
+		return j, err
+	}
+	b.WriteString(s[i:j])
+	return j, nil
+}
+
+func scanHexEscape(s string, i int, b *strings.Builder) (int, error) {
+	if i+2 >= len(s) || !isHex(s[i+2]) {
+		b.WriteByte('\\')
+		b.WriteByte('x')
+		return i + 2, nil
+	}
+	j := i + 2
+	val := hexVal(s[j])
+	j++
+	if j < len(s) && isHex(s[j]) {
+		val = val*16 + hexVal(s[j])
+		j++
+	}
+	if err := refuseEscapeByte(val); err != nil {
+		return j, err
+	}
+	b.WriteString(s[i:j])
+	return j, nil
+}
+
+func scanUnicodeEscape(s string, i int, b *strings.Builder) (int, error) {
+	need := 4
+	if s[i+1] == 'U' {
+		need = 8
+	}
+	j := i + 2
+	if j+need > len(s) {
+		return i, errUnicodeEscape
+	}
+	val := 0
+	for k := 0; k < need; k++ {
+		if !isHex(s[j+k]) {
+			return i, errUnicodeEscape
+		}
+		val = val*16 + hexVal(s[j+k])
+	}
+	j += need
+	if val == 0 {
+		return j, errEscapedNUL
+	}
+	if val > 0x7F {
+		return j, errSessionEscape
+	}
+	b.WriteString(s[i:j])
+	return j, nil
+}
+
+// refuseEscapeByte applies PostgreSQL's unsigned-char truncation. \400 is
+// 256 and becomes a zero byte. Bytes at or above 0x80 are not the same
+// character in every server encoding.
+func refuseEscapeByte(val int) error {
+	b := val & 0xFF
+	if b == 0 {
+		return errEscapedNUL
+	}
+	if b >= 0x80 {
+		return errSessionEscape
+	}
+	return nil
+}
+
+func isHex(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+func hexVal(b byte) int {
+	switch {
+	case b >= '0' && b <= '9':
+		return int(b - '0')
+	case b >= 'a' && b <= 'f':
+		return int(b-'a') + 10
+	default:
+		return int(b-'A') + 10
+	}
 }
 
 func scanDollar(s string, i int) (prefix, body string, next int, err error) {
@@ -592,6 +724,29 @@ func mutationPoints(sql string) (gaps, letters []int, err error) {
 		}
 	}
 	return gaps, letters, nil
+}
+
+// separatorSpans lists source ranges between two tokens, and between the
+// last token and the semicolon, that are only whitespace and comments.
+// Replacing one of these ranges with a comment does not change the statement.
+func separatorSpans(sql string) ([][2]int, error) {
+	stmts, err := splitSQL(sql)
+	if err != nil {
+		return nil, err
+	}
+	var spans [][2]int
+	for _, st := range stmts {
+		for i := 0; i+1 < len(st.toks); i++ {
+			a, b := st.toks[i].end, st.toks[i+1].start
+			if a < b {
+				spans = append(spans, [2]int{a, b})
+			}
+		}
+		if n := len(st.toks); n > 0 && st.toks[n-1].end < st.semi {
+			spans = append(spans, [2]int{st.toks[n-1].end, st.semi})
+		}
+	}
+	return spans, nil
 }
 
 func readNumber(s string, i int) int {
@@ -924,15 +1079,85 @@ func (p *parser) eatColConstraint() int {
 	}
 }
 
-// eatType accepts only an unqualified built-in from the allow-list, with the
-// modifiers that type is documented to take, and at most one [] suffix.
+// Column types an ADD COLUMN or CREATE TABLE column may use.
+//
+// PostgreSQL's grammar rewrites the names in grammarPlainTypes, plus the
+// multi-word and typmod forms eaten below, to a built-in type before any
+// catalog lookup. A domain, the temp schema, or search_path order cannot
+// shadow them, so an unqualified name is accepted only from that set:
+//
+//	smallint, int, integer, bigint, real
+//	double precision
+//	float, with optional (n)
+//	numeric, decimal, dec, with optional (p) or (p,s)
+//	boolean
+//	character, char, with optional (n)
+//	character varying, varchar, with optional (n)
+//	timestamp, time, with optional (p) and then optional
+//	WITH TIME ZONE or WITHOUT TIME ZONE
+//	bit, bit varying, with optional (n)
+//
+// Every other built-in (text, uuid, date, json, jsonb, bytea, bool,
+// timestamptz, timetz, int2, int4, int8, float4, float8, …) is a generic
+// type name. PostgreSQL resolves an unqualified one through the search
+// path, so a domain of the same name can hide the built-in and attach a
+// default or a check this classifier never sees. Those names are accepted
+// only as the unquoted words pg_catalog.<name>, which look up that schema
+// and no other. Any other schema, a quoted qualifier, a bare name from
+// catalogTypes, or a typmod on the pg_catalog form is refused. Precision
+// belongs on the grammar spellings above (timestamp(p) with time zone,
+// not pg_catalog.timestamptz(p)).
+//
+// One [] suffix is accepted on the same terms as the element type.
+var grammarPlainTypes = []string{
+	"smallint", "int", "integer", "bigint", "real", "boolean",
+}
+
+var catalogTypes = []string{
+	"text", "uuid", "date", "json", "jsonb", "bytea", "bool",
+	"timestamptz", "timetz", "int2", "int4", "int8", "float4", "float8",
+}
+
 func (p *parser) eatType() bool {
-	switch {
-	case p.peekWord("double"):
-		if !p.eatWord("double") || !p.eatWord("precision") || p.peekOp("(") {
+	if p.peekCatalogQual() {
+		if !p.eatCatalogType() {
 			return false
 		}
 		return p.eatOneArray()
+	}
+	if !p.eatGrammarType() {
+		return false
+	}
+	return p.eatOneArray()
+}
+
+func (p *parser) peekCatalogQual() bool {
+	if !p.peekWord("pg_catalog") || p.i+1 >= len(p.toks) {
+		return false
+	}
+	dot := p.toks[p.i+1]
+	return dot.kind == kindOp && dot.text == "."
+}
+
+func (p *parser) eatCatalogType() bool {
+	if !p.eatWord("pg_catalog") || !p.eatOp(".") {
+		return false
+	}
+	t, ok := p.peek()
+	if !ok || t.kind != kindWord || !listedType(t.text, catalogTypes) {
+		return false
+	}
+	p.i++
+	if p.peekOp("(") || p.peekOp(".") {
+		return false
+	}
+	return true
+}
+
+func (p *parser) eatGrammarType() bool {
+	switch {
+	case p.peekWord("double"):
+		return p.eatWord("double") && p.eatWord("precision") && !p.peekOp("(")
 	case p.peekWord("character"):
 		if !p.eatWord("character") {
 			return false
@@ -943,59 +1168,72 @@ func (p *parser) eatType() bool {
 		if p.peekOp("(") && !p.eatParenUint() {
 			return false
 		}
-		return p.eatOneArray()
+		return true
 	case p.peekWord("varchar"), p.peekWord("char"):
 		p.i++
 		if p.peekOp("(") && !p.eatParenUint() {
 			return false
 		}
-		return p.eatOneArray()
-	case p.peekWord("numeric"), p.peekWord("decimal"):
+		return true
+	case p.peekWord("numeric"), p.peekWord("decimal"), p.peekWord("dec"):
 		p.i++
 		if p.peekOp("(") && !p.eatNumericMod() {
 			return false
 		}
-		return p.eatOneArray()
-	case p.peekWord("timestamp"), p.peekWord("time"):
+		return true
+	case p.peekWord("float"):
 		p.i++
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return true
+	case p.peekWord("bit"):
+		p.i++
+		if p.peekWord("varying") {
+			p.i++
+		}
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return true
+	case p.peekWord("timestamp"), p.peekWord("time"):
+		word := "timestamp"
+		if p.peekWord("time") {
+			word = "time"
+		}
+		if !p.eatWord(word) {
+			return false
+		}
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
 		if p.peekWord("with") || p.peekWord("without") {
 			which := "with"
 			if p.peekWord("without") {
 				which = "without"
 			}
-			if !p.eatWord(which) || !p.eatWord("time") || !p.eatWord("zone") || p.peekOp("(") {
+			if !p.eatWord(which) || !p.eatWord("time") || !p.eatWord("zone") {
 				return false
 			}
-			return p.eatOneArray()
 		}
-		if p.peekOp("(") && !p.eatParenUint() {
-			return false
-		}
-		return p.eatOneArray()
-	case p.peekWord("timestamptz"), p.peekWord("timetz"):
-		p.i++
-		if p.peekOp("(") && !p.eatParenUint() {
-			return false
-		}
-		return p.eatOneArray()
+		return true
 	default:
-		if !p.peekPlainType() {
+		if !listedTypeWord(p, grammarPlainTypes) {
 			return false
 		}
 		p.i++
-		if p.peekOp("(") {
-			return false
-		}
-		return p.eatOneArray()
+		return !p.peekOp("(")
 	}
 }
 
-func (p *parser) peekPlainType() bool {
-	for _, w := range []string{
-		"smallint", "integer", "int", "bigint", "boolean", "bool", "text",
-		"uuid", "date", "json", "jsonb", "bytea", "real",
-	} {
-		if p.peekWord(w) {
+func listedTypeWord(p *parser, names []string) bool {
+	t, ok := p.peek()
+	return ok && t.kind == kindWord && listedType(t.text, names)
+}
+
+func listedType(got string, names []string) bool {
+	for _, w := range names {
+		if asciiFoldEq(got, w) {
 			return true
 		}
 	}
