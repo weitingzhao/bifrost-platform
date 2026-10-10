@@ -105,14 +105,15 @@ func TestCreateTimeoutDoesNotRequeue(t *testing.T) {
 		t.Fatalf("creates = %d, want 1", creates.Load())
 	}
 
-	// The same attempt adopts the run the timed-out create already stored.
-	// Adoption requires the params hash as well as the approval id and attempt.
+	// The same attempt sees the run the timed-out create already stored.
+	// Matching annotations are not adoption: the call stays unknown and does
+	// not create a second run.
 	ctx := actions.WithParamsHash(actions.WithCreateAttempt(context.Background(), c.Approval.ID, got.Execution.Attempts), c.Approval.ParamsHash)
-	if _, err := work.Apply(ctx, planID); err != nil {
-		t.Fatalf("adopt = %v", err)
+	if _, err := work.Apply(ctx, planID); err == nil || !actions.IsUncertain(err) || !strings.Contains(err.Error(), "checked by hand") {
+		t.Fatalf("existing run was adopted: %v", err)
 	}
 	if creates.Load() != 1 {
-		t.Fatalf("adopt created again: creates=%d", creates.Load())
+		t.Fatalf("second apply created again: creates=%d", creates.Load())
 	}
 
 	// Unknown is not claimable, including after a requeue backoff would have elapsed.

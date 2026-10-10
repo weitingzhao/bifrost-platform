@@ -126,8 +126,13 @@ func TestAdoptRequiresApprovalIdentity(t *testing.T) {
 	if err := dyn.Tracker().Update(pipelineRunGVR, foreign, "cicd"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Apply(ctx, planID); err != nil {
-		t.Fatalf("matching identity was not adopted: %v", err)
+	before := creates.Load()
+	_, err = svc.Apply(ctx, planID)
+	if !actions.IsUncertain(err) || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "checked by hand") {
+		t.Fatalf("matching annotations were adopted: %v", err)
+	}
+	if creates.Load() != before {
+		t.Fatalf("matching annotations created a run: %d", creates.Load())
 	}
 }
 

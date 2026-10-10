@@ -22,6 +22,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
@@ -53,7 +54,7 @@ func pipelineDyn(t *testing.T, extra ...runtime.Object) *dynamicfake.FakeDynamic
 		}, objs...)
 }
 
-func wireStartPipeline(t *testing.T, dyn dynamic.Interface) *approvals.Service {
+func wireStartPipeline(t *testing.T, dyn dynamic.Interface, audit *actuation.AuditLog) *approvals.Service {
 	t.Helper()
 	// Kaniko preflight needs one Ready amd64 node. Ref probes must not leave
 	// the machine: point Gitea at a server that answers immediately.
@@ -72,9 +73,9 @@ func wireStartPipeline(t *testing.T, dyn dynamic.Interface) *approvals.Service {
 	del := delivery.NewService(&config.ClusterEntry{})
 	del.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	del.SetClientsetForTest(fake.NewSimpleClientset(node))
-	s := &Server{delivery: delivery.NewHandlerForTest(del, nil)}
+	s := &Server{delivery: delivery.NewHandlerForTest(del, audit)}
 	s.bindActionExecutors()
-	return approvals.New(filepath.Join(t.TempDir(), "approvals"), nil)
+	return approvals.New(filepath.Join(t.TempDir(), "approvals"), audit)
 }
 
 func serveApprovals(svc *approvals.Service) http.Handler {
@@ -113,7 +114,7 @@ func TestRegisteredStartPipelineRunTimeoutIsUnknown(t *testing.T) {
 		}
 		return true, nil, apierrors.NewTimeoutError("timeout", 1)
 	})
-	svc := wireStartPipeline(t, dyn)
+	svc := wireStartPipeline(t, dyn, nil)
 	h := serveApprovals(svc)
 	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"start_pipeline_run","reason":"ship","params":{"name":"`+prodPipeline+`","revision":"main","who":"owner"}}`)
 	if created.Code != http.StatusCreated {
@@ -163,7 +164,7 @@ func TestRegisteredStartPipelineRunTimeoutIsUnknown(t *testing.T) {
 
 func TestRegisteredStartPipelineRunRejectsForeignObject(t *testing.T) {
 	dyn := pipelineDyn(t)
-	svc := wireStartPipeline(t, dyn)
+	svc := wireStartPipeline(t, dyn, nil)
 	h := serveApprovals(svc)
 	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"start_pipeline_run","reason":"ship","params":{"name":"`+prodPipeline+`","revision":"main","who":"owner"}}`)
 	if created.Code != http.StatusCreated {
@@ -204,6 +205,55 @@ func TestRegisteredStartPipelineRunRejectsForeignObject(t *testing.T) {
 	})
 	approved := doApproval(h, http.MethodPost, "/approvals/"+row.ID+"/approve", string(body))
 	if !strings.Contains(approved.Body.String(), `"status":"unknown"`) || !strings.Contains(approved.Body.String(), name) || strings.Contains(approved.Body.String(), `"status":"executed"`) {
+		t.Fatalf("approve = %d %s", approved.Code, approved.Body.String())
+	}
+}
+
+// Matching annotations are still not adoption. The object has to be checked
+// by hand and the approval is unknown.
+func TestRegisteredStartPipelineRunMatchingAnnotationsAreUnknown(t *testing.T) {
+	dyn := pipelineDyn(t)
+	svc := wireStartPipeline(t, dyn, nil)
+	h := serveApprovals(svc)
+	created := doApproval(h, http.MethodPost, "/approvals", `{"action":"start_pipeline_run","reason":"ship","params":{"name":"`+prodPipeline+`","revision":"main","who":"owner"}}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", created.Code, created.Body.String())
+	}
+	var row struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &row); err != nil {
+		t.Fatal(err)
+	}
+	opened := doApproval(h, http.MethodGet, "/approvals/"+row.ID, "")
+	var openedRow struct {
+		ApprovalLine string `json:"approval_line"`
+		ParamsHash   string `json:"params_hash"`
+	}
+	if err := json.Unmarshal(opened.Body.Bytes(), &openedRow); err != nil {
+		t.Fatal(err)
+	}
+	name := actions.ObjectName(prodPipeline, actions.CreateAttempt{ApprovalID: row.ID, Attempt: 1})
+	own := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata": map[string]any{
+			"name": name, "namespace": "cicd",
+			"annotations": map[string]any{
+				actions.AnnApprovalID: row.ID,
+				actions.AnnAttempt:    "1",
+				actions.AnnParamsHash: openedRow.ParamsHash,
+			},
+		},
+	}}
+	if _, err := dyn.Resource(testRunGVR).Namespace("cicd").Create(context.Background(), own, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := json.Marshal(map[string]any{
+		"channel": "console", "approval_line": openedRow.ApprovalLine, "params_hash": openedRow.ParamsHash,
+	})
+	approved := doApproval(h, http.MethodPost, "/approvals/"+row.ID+"/approve", string(body))
+	if !strings.Contains(approved.Body.String(), `"status":"unknown"`) || !strings.Contains(approved.Body.String(), name) || !strings.Contains(approved.Body.String(), "checked by hand") || strings.Contains(approved.Body.String(), `"status":"executed"`) {
 		t.Fatalf("approve = %d %s", approved.Code, approved.Body.String())
 	}
 }

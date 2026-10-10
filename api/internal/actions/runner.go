@@ -72,8 +72,9 @@ func IsTransient(err error) bool {
 }
 
 // UncertainError is a create whose response does not prove the object is
-// absent: a timeout, a server timeout, or a cancelled context. The approval
-// goes to unknown. It is not retried under a new name.
+// absent: a timeout, EOF, a connection reset, a 5xx, an object that already
+// exists, or any error that was not a definite refusal. The approval goes to
+// unknown. It is not retried under a new name.
 type UncertainError struct{ Reason string }
 
 func (e *UncertainError) Error() string { return e.Reason }

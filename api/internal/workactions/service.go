@@ -212,9 +212,9 @@ func nameForAttempt(base string, att actions.CreateAttempt) string {
 	return actions.ObjectName(base, att)
 }
 
-// uncertainCall is a timeout, server timeout, or cancelled context. On a
-// create it does not prove the object is absent.
-func uncertainCall(err error) bool {
+// uncertainRead is a timeout, server timeout, or cancelled context on a GET.
+// The create has not been attempted, so the approval may be retried.
+func uncertainRead(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -226,18 +226,8 @@ func classifyRead(err error) error {
 	if err == nil || apierrors.IsNotFound(err) {
 		return nil
 	}
-	if uncertainCall(err) {
+	if uncertainRead(err) {
 		return actions.Transient(err.Error())
-	}
-	return err
-}
-
-func classifyCreate(err error) error {
-	if err == nil || apierrors.IsAlreadyExists(err) {
-		return nil
-	}
-	if uncertainCall(err) {
-		return actions.Uncertain("create timed out; outcome needs checking")
 	}
 	return err
 }
@@ -302,20 +292,16 @@ func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit s
 		},
 	}}
 	res := dyn.Resource(pipelineRunGVR).Namespace(d.Namespace)
-	if existing, err := res.Get(ctx, name, metav1.GetOptions{}); err == nil {
-		return actions.Adopt(ctx, d.Namespace, name, existing.GetAnnotations())
+	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return actions.ObjectExists(ctx, d.Namespace, name)
 	} else if !apierrors.IsNotFound(err) {
 		return classifyRead(err)
 	}
 	_, err = res.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		existing, gerr := res.Get(ctx, name, metav1.GetOptions{})
-		if gerr != nil {
-			return adoptReadError(ctx, d.Namespace, name, gerr)
-		}
-		return actions.Adopt(ctx, d.Namespace, name, existing.GetAnnotations())
+		return actions.ObjectExists(ctx, d.Namespace, name)
 	}
-	return classifyCreate(err)
+	return actions.ClassifyCreate(err)
 }
 
 func annotationAny(ann map[string]string) map[string]any {
@@ -327,15 +313,6 @@ func annotationAny(ann map[string]string) map[string]any {
 		out[k] = v
 	}
 	return out
-}
-
-// adoptReadError is the GET after AlreadyExists. An approval execution cannot
-// tell whether the object is its own, so the outcome is unknown.
-func adoptReadError(ctx context.Context, namespace, name string, err error) error {
-	if _, ok := actions.CreateAttemptFrom(ctx); ok {
-		return actions.Uncertain(fmt.Sprintf("conflicting object %s/%s; outcome needs checking", namespace, name))
-	}
-	return classifyRead(err)
 }
 
 func mergeAnnotations(base map[string]string, extra map[string]string) map[string]string {
@@ -371,11 +348,8 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 	name := s.objectName(ctx, cronjob+"-manual", func() string {
 		return trimName(fmt.Sprintf("%s-manual-%s", cronjob, s.now().UTC().Format("20060102150405")))
 	})
-	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
-			return nil, aerr
-		}
-		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
+	if _, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return nil, actions.ObjectExists(ctx, namespace, name)
 	} else if !apierrors.IsNotFound(err) {
 		return nil, classifyRead(err)
 	}
@@ -394,17 +368,10 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 	}
 	created, err := cs.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		existing, gerr := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
-		if gerr != nil {
-			return nil, adoptReadError(ctx, namespace, name, gerr)
-		}
-		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
-			return nil, aerr
-		}
-		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
+		return nil, actions.ObjectExists(ctx, namespace, name)
 	}
 	if err != nil {
-		return nil, classifyCreate(err)
+		return nil, actions.ClassifyCreate(err)
 	}
 	return map[string]any{"namespace": created.Namespace, "job": created.Name}, nil
 }
@@ -500,11 +467,8 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 	name := s.objectName(ctx, "probe", func() string {
 		return trimName("probe-" + s.now().UTC().Format("20060102150405"))
 	})
-	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
-			return nil, aerr
-		}
-		return adoptedProbe(namespace, existing.Name), nil
+	if _, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return nil, actions.ObjectExists(ctx, namespace, name)
 	} else if !apierrors.IsNotFound(err) {
 		return nil, classifyRead(err)
 	}
@@ -562,28 +526,12 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 	}
 	created, err := cs.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		existing, gerr := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
-		if gerr != nil {
-			return nil, adoptReadError(ctx, namespace, name, gerr)
-		}
-		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
-			return nil, aerr
-		}
-		return adoptedProbe(namespace, name), nil
+		return nil, actions.ObjectExists(ctx, namespace, name)
 	}
 	if err != nil {
-		return nil, classifyCreate(err)
+		return nil, actions.ClassifyCreate(err)
 	}
 	return map[string]any{"namespace": created.Namespace, "job": created.Name, "logs": fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, created.Name)}, nil
-}
-
-func adoptedProbe(namespace, name string) map[string]any {
-	return map[string]any{
-		"namespace": namespace,
-		"job":       name,
-		"adopted":   true,
-		"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, name),
-	}
 }
 
 func finished(job batchv1.Job) bool {

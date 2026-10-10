@@ -3,7 +3,6 @@ package delivery
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -361,21 +360,17 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
-	if existing, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
-		if aerr := actions.Adopt(ctx, ns, runName, existing.GetAnnotations()); aerr != nil {
-			resp.Message = aerr.Error()
-			return resp, empty, aerr
-		}
-		view := pipelineRunFromUnstructured(*existing, pipelineName)
-		resp.OK = true
-		resp.Target = fmt.Sprintf("PipelineRun/%s/%s", ns, runName)
-		resp.Message = fmt.Sprintf("PipelineRun %s adopted for pipeline %s", runName, pipelineName)
-		return resp, view, nil
+	if _, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
+		uerr := actions.ObjectExists(ctx, ns, runName)
+		resp.Message = uerr.Error()
+		return resp, empty, uerr
 	} else if !apierrors.IsNotFound(gerr) {
-		if uncertainCreate(gerr) {
-			uerr := actions.Uncertain("create timed out; outcome needs checking")
-			resp.Message = uerr.Error()
-			return resp, empty, uerr
+		// The create has not been sent. A lost read still must not be followed
+		// by a second create, so anything but a proven absence is unknown.
+		classified := actions.ClassifyCreate(gerr)
+		if actions.IsUncertain(classified) {
+			resp.Message = classified.Error()
+			return resp, empty, classified
 		}
 		resp.Message = gerr.Error()
 		return resp, empty, gerr
@@ -383,28 +378,16 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 
 	created, err := res.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		existing, gerr := res.Get(ctx, runName, metav1.GetOptions{})
-		if gerr != nil {
-			uerr := actions.Uncertain(fmt.Sprintf("conflicting object %s/%s; outcome needs checking", ns, runName))
-			resp.Message = uerr.Error()
-			return resp, empty, uerr
-		}
-		if aerr := actions.Adopt(ctx, ns, runName, existing.GetAnnotations()); aerr != nil {
-			resp.Message = aerr.Error()
-			return resp, empty, aerr
-		}
-		view := pipelineRunFromUnstructured(*existing, pipelineName)
-		resp.OK = true
-		resp.Target = fmt.Sprintf("PipelineRun/%s/%s", ns, runName)
-		resp.Message = fmt.Sprintf("PipelineRun %s adopted for pipeline %s", runName, pipelineName)
-		return resp, view, nil
-	}
-	if uncertainCreate(err) {
-		uerr := actions.Uncertain("create timed out; outcome needs checking")
+		uerr := actions.ObjectExists(ctx, ns, runName)
 		resp.Message = uerr.Error()
 		return resp, empty, uerr
 	}
 	if err != nil {
+		classified := actions.ClassifyCreate(err)
+		if actions.IsUncertain(classified) {
+			resp.Message = classified.Error()
+			return resp, empty, classified
+		}
 		resp.Message = fmt.Sprintf("create PipelineRun: %v", err)
 		return resp, empty, err
 	}
@@ -1074,16 +1057,6 @@ func unstructuredFrom(obj map[string]any) (*unstructured.Unstructured, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// uncertainCreate is a timeout, server timeout, or cancelled context on the
-// call that creates a PipelineRun. It does not prove the object is absent.
-func uncertainCreate(err error) bool {
-	if err == nil {
-		return false
-	}
-	return apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func (s *Service) buildDynamicClient() (dynamic.Interface, error) {

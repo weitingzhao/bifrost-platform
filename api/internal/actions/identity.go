@@ -2,6 +2,7 @@ package actions
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,8 +19,8 @@ const (
 
 type paramsHashKey struct{}
 
-// WithParamsHash attaches the approval's full params hash. Adoption checks it
-// against the object; a missing hash is not a match.
+// WithParamsHash attaches the approval's full params hash so it can be
+// stamped on the object this process creates. A missing hash is not stamped.
 func WithParamsHash(ctx context.Context, hash string) context.Context {
 	hash = strings.TrimSpace(hash)
 	if hash == "" {
@@ -35,7 +36,9 @@ func ParamsHashFrom(ctx context.Context) (string, bool) {
 }
 
 // IdentityAnnotations is the full approval id, the attempt, and the params
-// hash. Nil when this call is not an approval execution.
+// hash, stamped on an object this process creates. Nil when this call is not
+// an approval execution. They are how a person checks an object; they are
+// not used to adopt one.
 func IdentityAnnotations(ctx context.Context) map[string]string {
 	att, ok := CreateAttemptFrom(ctx)
 	if !ok {
@@ -55,27 +58,15 @@ func IdentityAnnotations(ctx context.Context) map[string]string {
 	return out
 }
 
-// Adopt reports whether an existing object belongs to this approval attempt.
-// A direct call (no approval on the context) is refused: there is no identity
-// to verify, so the object is not claimed. An approval execution must match
-// the full approval id, the attempt, and the params hash; anything else is
-// uncertain and must not be reported as executed.
-func Adopt(ctx context.Context, namespace, name string, anns map[string]string) error {
-	ref := namespace + "/" + name
-	att, ok := CreateAttemptFrom(ctx)
-	if !ok {
-		return fmt.Errorf("conflicting object %s", ref)
+// ObjectExists is the outcome when the deterministic name is already taken,
+// on the read before create and on AlreadyExists alike. The object is never
+// adopted, including when its annotations match this approval. An approval
+// execution becomes unknown; a direct call is a plain error. The message
+// names the object and says a person must check it.
+func ObjectExists(ctx context.Context, namespace, name string) error {
+	msg := fmt.Sprintf("object %s/%s already exists; it must be checked by hand", namespace, name)
+	if _, ok := CreateAttemptFrom(ctx); ok {
+		return Uncertain(msg)
 	}
-	hash, hashOK := ParamsHashFrom(ctx)
-	attempt := att.Attempt
-	if attempt < 1 {
-		attempt = 1
-	}
-	if anns == nil {
-		anns = map[string]string{}
-	}
-	if !hashOK || anns[AnnApprovalID] != att.ApprovalID || anns[AnnAttempt] != strconv.Itoa(attempt) || anns[AnnParamsHash] != hash {
-		return Uncertain(fmt.Sprintf("conflicting object %s does not match this approval; outcome needs checking", ref))
-	}
-	return nil
+	return errors.New(msg)
 }
