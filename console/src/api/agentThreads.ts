@@ -1,7 +1,7 @@
 import { viewerRead } from '@/api/approvals'
 
-/** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended. */
-export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle'
+/** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended; waiting_owner: waiting for the person; host_lost: the host's heartbeat is too old. */
+export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle' | 'waiting_owner' | 'host_lost'
 
 /** One row of GET /api/v1/agent/threads (platform api/internal/agentthreads View). */
 export type AgentThread = {
@@ -10,9 +10,10 @@ export type AgentThread = {
   host: string
   work?: string
   title?: string
-  event: 'turn_start' | 'before_tool' | 'after_tool' | 'turn_end'
+  event: 'turn_start' | 'before_tool' | 'after_tool' | 'turn_end' | 'waiting_owner'
   tool?: string
   tool_timeout_s?: number
+  reason?: string
   at: string
   turn_started_at: string
   notified_at?: string
@@ -22,11 +23,30 @@ export type AgentThread = {
   threshold_seconds: number
 }
 
+export type AgentVendorReport = {
+  vendor: string
+  wired: boolean
+  token: boolean
+  monitored: boolean
+}
+
+export type AgentHostStatus = 'alive' | 'lost'
+
+export type AgentHost = {
+  host: string
+  at: string
+  age_seconds: number
+  status: AgentHostStatus
+  vendors: AgentVendorReport[]
+}
+
 export type AgentThreadsResponse = {
   generated_at: string
   silent_after_seconds: number
   tool_grace_seconds: number
+  host_lost_after_seconds?: number
   threads: AgentThread[]
+  hosts?: AgentHost[]
 }
 
 export const AGENT_THREADS_REFRESH_MS = 30_000
@@ -35,7 +55,7 @@ export const AGENT_THREADS_REFRESH_MS = 30_000
 export async function fetchAgentThreads(): Promise<AgentThreadsResponse> {
   const r = await viewerRead('Agent threads', '/api/v1/agent/threads')
   const body = (await r.json()) as AgentThreadsResponse
-  return { ...body, threads: body.threads ?? [] }
+  return { ...body, threads: body.threads ?? [], hosts: body.hosts ?? [] }
 }
 
 /** Title, else vendor and a short id. */
@@ -64,16 +84,34 @@ export function lastEventText(t: Pick<AgentThread, 'event' | 'tool' | 'tool_time
   return out
 }
 
-/** Threads mid-turn (in turn or silent): silent first, then longest in turn. */
+const MID_TURN_RANK: Record<AgentThreadStatus, number> = {
+  host_lost: 0,
+  silent: 1,
+  in_turn: 2,
+  waiting_owner: 3,
+  idle: 9,
+}
+
+/** Threads still open: host lost, then silent, then in turn, then waiting. Idle is left out. */
 export function threadsMidTurn(threads: readonly AgentThread[]): AgentThread[] {
   return threads
     .filter(t => t.status !== 'idle')
     .sort((a, b) => {
-      if (a.status !== b.status) return a.status === 'silent' ? -1 : 1
+      const rank = MID_TURN_RANK[a.status] - MID_TURN_RANK[b.status]
+      if (rank !== 0) return rank
       return b.in_turn_seconds - a.in_turn_seconds
     })
 }
 
 export function silentThreads(threads: readonly AgentThread[]): AgentThread[] {
-  return threadsMidTurn(threads).filter(t => t.status === 'silent')
+  return threads.filter(t => t.status === 'silent')
+}
+
+export function lostHosts(hosts: readonly AgentHost[] | undefined): AgentHost[] {
+  return (hosts ?? []).filter(h => h.status === 'lost').sort((a, b) => b.age_seconds - a.age_seconds)
+}
+
+/** Vendors that are not wired or have no readable reporter token. They are not healthy. */
+export function notMonitoredVendors(host: AgentHost): string[] {
+  return host.vendors.filter(v => !v.monitored).map(v => v.vendor)
 }

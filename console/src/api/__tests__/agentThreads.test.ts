@@ -3,8 +3,11 @@ import {
   agentThreadName,
   formatSeconds,
   lastEventText,
+  lostHosts,
+  notMonitoredVendors,
   silentThreads,
   threadsMidTurn,
+  type AgentHost,
   type AgentThread,
 } from '@/api/agentThreads'
 
@@ -55,5 +58,33 @@ describe('agentThreads', () => {
     ]
     expect(threadsMidTurn(rows).map(t => t.thread)).toEqual(['s', 'b', 'a'])
     expect(silentThreads(rows).map(t => t.thread)).toEqual(['s'])
+  })
+
+  it('keeps waiting and host-lost threads in progress, and does not call a waiting thread silent', () => {
+    const rows = [
+      thread({ thread: 'wait', status: 'waiting_owner', reason: 'permission_prompt', in_turn_seconds: 10 }),
+      thread({ thread: 'lost', status: 'host_lost', in_turn_seconds: 20 }),
+      thread({ thread: 'run', in_turn_seconds: 5 }),
+    ]
+    expect(threadsMidTurn(rows).map(t => t.thread)).toEqual(['lost', 'run', 'wait'])
+    expect(silentThreads(rows)).toEqual([])
+  })
+
+  it('counts only lost hosts, and names vendors that are not monitored', () => {
+    const host: AgentHost = {
+      host: 'mbp',
+      at: '2026-10-10T07:00:00Z',
+      age_seconds: 200,
+      status: 'lost',
+      vendors: [
+        { vendor: 'claude', wired: true, token: true, monitored: true },
+        { vendor: 'cursor', wired: true, token: false, monitored: false },
+        { vendor: 'codex', wired: false, token: false, monitored: false },
+      ],
+    }
+    const alive: AgentHost = { ...host, host: 'mini', status: 'alive', age_seconds: 10 }
+    expect(lostHosts([alive, host]).map(h => h.host)).toEqual(['mbp'])
+    expect(notMonitoredVendors(host)).toEqual(['cursor', 'codex'])
+    expect(lostHosts(undefined)).toEqual([])
   })
 })

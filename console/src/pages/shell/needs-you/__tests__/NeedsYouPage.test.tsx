@@ -71,8 +71,14 @@ function healthResponse(url: string): Response | null {
   return null
 }
 
-function threadsResponse(threads: AgentThread[]): Response {
-  return json({ generated_at: '2026-10-10T07:25:00Z', silent_after_seconds: 600, tool_grace_seconds: 120, threads })
+function threadsResponse(threads: AgentThread[], hosts: unknown[] = []): Response {
+  return json({
+    generated_at: '2026-10-10T07:25:00Z',
+    silent_after_seconds: 600,
+    tool_grace_seconds: 120,
+    threads,
+    hosts,
+  })
 }
 
 function silentThread(over: Partial<AgentThread> = {}): AgentThread {
@@ -211,6 +217,36 @@ describe('NeedsYouPage', () => {
     expect(within(group).getByText('in turn 35m · last before_tool Bash (timeout 120s) 15m ago')).toBeTruthy()
     expect(within(group).queryByText('Busy thread')).toBeNull()
     expect(within(group).queryByText('Done thread')).toBeNull()
+  })
+
+  it('counts a lost host toward the total and does not count a thread that is waiting', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse(
+          [
+            silentThread({ thread: 'wait', title: 'Waiting on you', status: 'waiting_owner', reason: 'idle_prompt' }),
+            silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn' }),
+          ],
+          [
+            {
+              host: 'mbp',
+              at: '2026-10-10T07:00:00Z',
+              age_seconds: 240,
+              status: 'lost',
+              vendors: [{ vendor: 'codex', wired: false, token: false, monitored: false }],
+            },
+          ],
+        ),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('mbp')).toBeTruthy()
+    expect(within(group).getByText('not monitored: codex')).toBeTruthy()
+    expect(within(group).queryByText('Waiting on you')).toBeNull()
+    expect(within(group).queryByText('Busy thread')).toBeNull()
   })
 
   it('shows Unknown when the agent threads cannot be read, and still lists approvals', async () => {

@@ -112,6 +112,45 @@ describe('AgentThreadsInProgress', () => {
     expect(within(region).queryByText('Finished')).toBeNull()
   })
 
+  it('shows each host and a waiting thread, and leaves the waiting thread out of silence', async () => {
+    stubThreads(() =>
+      json({
+        generated_at: '2026-10-10T07:05:00Z',
+        silent_after_seconds: 600,
+        tool_grace_seconds: 120,
+        hosts: [
+          {
+            host: 'mbp',
+            at: '2026-10-10T07:00:00Z',
+            age_seconds: 200,
+            status: 'lost',
+            vendors: [
+              { vendor: 'claude', wired: true, token: true, monitored: true },
+              { vendor: 'cursor', wired: false, token: false, monitored: false },
+            ],
+          },
+        ],
+        threads: [
+          thread({ thread: 'wait', title: 'Need a decision', status: 'waiting_owner', reason: 'permission_prompt', quiet_seconds: 90, in_turn_seconds: 400 }),
+          thread({ thread: 'down', title: 'Asleep', status: 'host_lost', quiet_seconds: 200, in_turn_seconds: 800 }),
+        ],
+      }),
+    )
+    render(wrapper(<AgentThreadsInProgress />))
+    const region = await screen.findByRole('region', { name: 'In progress' })
+    expect(within(region).getByText('In progress · Agent threads · 2')).toBeTruthy()
+    const host = region.querySelector('[data-agent-host="mbp"]')
+    expect(host?.getAttribute('data-agent-host-status')).toBe('lost')
+    expect(within(region).getByText('Lost')).toBeTruthy()
+    expect(within(region).getByText('heartbeat 3m ago')).toBeTruthy()
+    expect(within(region).getByText('not monitored: cursor')).toBeTruthy()
+    const rows = region.querySelectorAll('[data-agent-thread]')
+    expect([...rows].map(row => row.getAttribute('data-agent-thread'))).toEqual(['down', 'wait'])
+    expect(within(region).getByText('Host lost')).toBeTruthy()
+    expect(within(region).getByText('Waiting for you')).toBeTruthy()
+    expect(within(region).getByText('waited 1m · permission_prompt')).toBeTruthy()
+  })
+
   it('says so when no thread is mid-turn', async () => {
     stubThreads(() =>
       json({ generated_at: '2026-10-10T07:05:00Z', silent_after_seconds: 600, tool_grace_seconds: 120, threads: [] }),
