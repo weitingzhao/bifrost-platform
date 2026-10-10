@@ -1,3 +1,4 @@
+import { withApproveHint } from './approveHint.js'
 import { platformGet, platformSend } from './platformClient.js'
 import { pollRequest } from './pollRequest.js'
 import { WRITES_OFF_HINT, writesEnabled } from './writeGate.js'
@@ -27,7 +28,7 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
       hint: WRITES_OFF_HINT,
     }
   }
-  return platformSend('POST', '/api/v1/approvals', {
+  const created = await platformSend('POST', '/api/v1/approvals', {
     action: input.action,
     params: input.params ?? {},
     reason: input.reason,
@@ -35,6 +36,7 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
     ...(input.work_id ? { work_id: input.work_id } : {}),
     ...(input.requester_thread ? { requester_thread: input.requester_thread } : {}),
   })
+  return withApproveHint(created)
 }
 
 export async function getRequest(id: string): Promise<unknown> {

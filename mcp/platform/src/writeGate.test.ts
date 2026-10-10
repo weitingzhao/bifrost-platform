@@ -155,9 +155,14 @@ describe('platformClient write gate', () => {
   })
 
   it('on plus 201 returns the approval id and never calls the original route', async () => {
-    const created = (await platformPost('/api/v1/gitops/apps/demo/sync')) as { id: string; note: string }
+    const created = (await platformPost('/api/v1/gitops/apps/demo/sync')) as {
+      id: string
+      note: string
+      approve_hint: string
+    }
     assert.equal(created.id, 'apr-test')
     assert.equal(created.note, OWNER_WAIT_NOTE)
+    assert.match(created.approve_hint, /#approvals\?id=apr-test/)
     assert.equal(calls.length, 1)
     assert.ok(calls[0].url.endsWith('/api/v1/approvals'))
     assert.equal(calls[0].url.includes('/sync'), false)
@@ -221,10 +226,20 @@ describe('platformClient write gate', () => {
   })
 
   it('approve_request posts channel chat and is not a full-server tool', async () => {
-    await approveRequest('apr-9')
-    assert.equal(calls.length, 1)
-    assert.ok(calls[0].url.endsWith('/api/v1/approvals/apr-9/approve'))
-    assert.deepEqual(calls[0].body, { channel: 'chat' })
+    const mocked = globalThis.fetch
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if ((init?.method ?? 'GET') === 'GET' && String(url).endsWith('/api/v1/approvals/9')) {
+        calls.push({ url: String(url), method: 'GET', body: undefined })
+        const rec = { id: 'apr-9', number: 9, tier: 'C', action: 'gitops_sync_app', status: 'pending' }
+        return new Response(JSON.stringify(rec), { status: 200 })
+      }
+      return mocked(url, init)
+    }) as typeof fetch
+    await approveRequest('#9', '#9 · tier C · gitops_sync_app')
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].method, 'GET')
+    assert.ok(calls[1].url.endsWith('/api/v1/approvals/apr-9/approve'))
+    assert.deepEqual(calls[1].body, { channel: 'chat' })
 
     const platform = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
     const local = new Set<string>(LOCAL_TOOL_NAMES)
