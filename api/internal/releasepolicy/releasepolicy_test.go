@@ -170,7 +170,7 @@ func TestConditionFailuresWait(t *testing.T) {
 		params map[string]any
 		want   string
 	}{
-		"ddl deleted": {func(f *fixture) { f.facts.Files["repo-app"] = []string{"src/app/ddl_orders.py"} }, nil, "is deleted"},
+		"ddl deleted": {func(f *fixture) { f.facts.Files["repo-app"] = []string{"src/app/ddl_orders.py"} }, nil, "is not a .sql file"},
 		"sql drop": {func(f *fixture) {
 			f.facts.Files["repo-app"] = []string{"db/seed.sql"}
 			f.facts.Text = map[string]string{"repo-app@" + rptest.SHA("new") + ":db/seed.sql": "DROP TABLE orders;\n"}

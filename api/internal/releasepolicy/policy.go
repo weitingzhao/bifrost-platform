@@ -7,6 +7,9 @@
 // cicd/bifrost-release-freeze overrides it; an unreadable freeze counts as
 // frozen. Tier D is never auto-approved. When anything fails the caller keeps
 // the manual approval path.
+//
+// Additive DDL is an allow-list of statements, not a textual line scan.
+// *.py, db_init*, YAML jobs and migrations/** always wait for the Owner.
 package releasepolicy
 
 import (
@@ -87,8 +90,10 @@ type DBSteps struct {
 	Pipelines map[string]string `yaml:"pipelines"`
 }
 
-// AdditiveDDL reports whether a no_ddl hit may pass when every hit file only
-// adds (ADR §5, 2026-10-08 revision). It is off unless the policy says true.
+// AdditiveDDL reports whether a no_ddl hit may pass when every hit is an
+// allow-listed .sql change (ADR §5, 2026-10-08 revision). It is off unless
+// the policy says true. *.py, db_init*, YAML jobs and migrations/** wait
+// for the Owner.
 func (p *Policy) AdditiveDDL() bool {
 	v, ok := p.Conditions["additive_ddl"].(bool)
 	return ok && v

@@ -617,14 +617,18 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 // maxDDLFiles bounds the per-file reads one decision makes.
 const maxDDLFiles = 20
 
-// additiveDDL classifies each DDL hit by comparing its text at old and next.
-// why is empty when every file only adds; the list names those files.
+// additiveDDL classifies each DDL hit. A path that is not a classifiable
+// .sql file waits for the Owner. why is empty when every file only adds
+// allow-listed statements; the list names those files.
 func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits []string) ([]string, string) {
 	if len(hits) > maxDDLFiles {
 		return nil, fmt.Sprintf("%d DDL files changed, more than the %d this check reads", len(hits), maxDDLFiles)
 	}
 	out := make([]string, 0, len(hits))
 	for _, path := range hits {
+		if why := ddlPathReason(path); why != "" {
+			return nil, why
+		}
 		before, _, err := e.d.Git.FileAt(ctx, repo, old, path)
 		if err != nil {
 			return nil, path + ": cannot read at " + short(old) + ": " + err.Error()
