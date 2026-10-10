@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { approvalRef } from './approvalTools.js'
+import { consoleApprovalUrl } from './approveHint.js'
 import { jsonResult, platformGet, platformSend } from './platformClient.js'
 
 /**
@@ -12,6 +13,10 @@ import { jsonResult, platformGet, platformSend } from './platformClient.js'
  * approve_request and reject_request take the approval line as an argument
  * and send nothing unless it equals the line built from the stored request:
  * what the Owner clicks "allow" on is what gets decided.
+ *
+ * Tier D is decided on Console only (ADR §5, Owner 2026-10-10): a prompt
+ * cannot show the full command, and once the out-of-band executor runs the
+ * approval is the only gate. The tier is the one the API stored.
  */
 export const APPROVE_TOOL_NAMES = ['approve_request', 'reject_request', 'list_pending'] as const
 
@@ -43,7 +48,7 @@ function asRecord(value: unknown): ApprovalRecord {
 
 /**
  * One line naming the request: number, tier, action, env, summary, key params.
- * Example: "#57 · tier D · owner_run_command · env host · Delete ConfigMap x · name=x"
+ * Example: "#57 · tier C · rollout_restart_deployment · env bifrost-prod · Restart Deployment bifrost-prod/api · name=api"
  */
 export function approvalLine(rec: ApprovalRecord): string {
   const parts = [
@@ -65,6 +70,20 @@ function sameLine(a: string, b: string): boolean {
 
 type Checked = { ok: true; rec: ApprovalRecord; line: string } | { ok: false; refusal: Record<string, unknown> }
 
+/** The answer for a tier D request: nothing sent, decide on Console. */
+function consoleOnly(rec: ApprovalRecord): Record<string, unknown> {
+  const ref = rec.number ? `#${rec.number}` : rec.id
+  return {
+    error: 'tier D is approved on Console only',
+    sent: false,
+    id: rec.id,
+    ...(rec.number ? { number: rec.number } : {}),
+    tier: 'D',
+    console_url: consoleApprovalUrl(rec.id!),
+    hint: `Tell the Owner to approve or reject ${ref} on Console. Chat does not decide tier D (ADR §5).`,
+  }
+}
+
 /** Read the request and refuse unless id and approval line match it. Sends nothing on refusal. */
 async function checkDecision(id: string, approval: string, client: ApproveClient): Promise<Checked> {
   const ref = approvalRef(id)
@@ -73,6 +92,7 @@ async function checkDecision(id: string, approval: string, client: ApproveClient
   const refuse = (error: string, extra: Record<string, unknown> = {}) =>
     ({ ok: false, refusal: { error, sent: false, approval_line: line, ...extra } }) as const
   if (!rec.id) return refuse('not found', { id: ref })
+  if (rec.tier === 'D') return { ok: false, refusal: consoleOnly(rec) }
   if (rec.status !== 'pending') return refuse('not pending', { status: rec.status })
   if (rec.number && ref !== String(rec.number)) {
     return refuse(`pass id "#${rec.number}" so the permission prompt shows the number`)
@@ -83,11 +103,7 @@ async function checkDecision(id: string, approval: string, client: ApproveClient
   return { ok: true, rec, line }
 }
 
-/**
- * Tier D from chat sends no confirm_number: the API exempts channel chat,
- * because the permission prompt showing "#n · tier D" is the second step.
- * The tool never fills confirm_number on the Owner's behalf.
- */
+/** Tiers below D only; tier D answers with its Console link and sends nothing. */
 export async function approveRequest(id: string, approval: string, client: ApproveClient = liveClient): Promise<unknown> {
   const checked = await checkDecision(id, approval, client)
   if (!checked.ok) return checked.refusal
@@ -111,31 +127,41 @@ export async function rejectRequest(
   return { ...body, approval_line: checked.line }
 }
 
-/** Pending requests, each with the approval_line that approve_request and reject_request expect. */
+/**
+ * Pending requests. Below tier D each carries the approval_line that
+ * approve_request and reject_request expect; tier D carries console_url
+ * instead, so there is no line to call the tools with.
+ */
 export async function listPending(client: ApproveClient = liveClient): Promise<unknown> {
   const body = await client.get('/api/v1/approvals?status=pending')
   const list = (asRecord(body) as { approvals?: unknown }).approvals
   if (!Array.isArray(list)) return body
   return {
-    approvals: list.map((a) => ({ approval_line: approvalLine(asRecord(a)), ...asRecord(a) })),
+    approvals: list.map((a) => {
+      const rec = asRecord(a)
+      if (rec.tier === 'D' && rec.id) return { console_only: true, console_url: consoleApprovalUrl(rec.id), ...rec }
+      return { approval_line: approvalLine(rec), ...rec }
+    }),
   }
 }
 
 const ID_DESC = 'The number as "#57" (approval ids appr_… only for requests without a number)'
 const LINE_DESC =
-  'approval_line of this request, copied exactly from list_pending, e.g. "#57 · tier D · owner_run_command · env host · …". Shown in the permission prompt.'
+  'approval_line of this request, copied exactly from list_pending, e.g. "#57 · tier C · start_pipeline_run · env prod · …". Shown in the permission prompt.'
+const TIER_D_NOTE =
+  'Tier D is decided on Console only: do not call this tool for it; give the Owner console_url from list_pending. A tier D call sends nothing.'
 
 export function registerApproveBridge(server: McpServer): void {
   server.tool(
     'approve_request',
-    'Approve a pending request when the Owner says 批 #n. Call list_pending first and pass its approval_line; nothing is sent if id or the line do not match the stored request. The permission prompt is the approval. channel is always "chat"; tier D needs no confirm_number from chat. The answer is executed or failed for a platform action, or approved when it waits for an executor or a transient refusal to clear.',
+    `Approve a pending request below tier D when the Owner says 批 #n. Call list_pending first and pass its approval_line; nothing is sent if id or the line do not match the stored request. The permission prompt is the approval. channel is always "chat". ${TIER_D_NOTE} The answer is executed or failed for a platform action, or approved when it waits for an executor or a transient refusal to clear.`,
     { id: z.string().describe(ID_DESC), approval: z.string().describe(LINE_DESC) },
     async ({ id, approval }) => jsonResult(await approveRequest(id, approval)),
   )
 
   server.tool(
     'reject_request',
-    'Reject a pending request when the Owner says 驳 #n <reason>. Call list_pending first and pass its approval_line; nothing is sent if id or the line do not match. The permission prompt is the rejection.',
+    `Reject a pending request below tier D when the Owner says 驳 #n <reason>. Call list_pending first and pass its approval_line; nothing is sent if id or the line do not match. The permission prompt is the rejection. ${TIER_D_NOTE}`,
     {
       id: z.string().describe(ID_DESC),
       approval: z.string().describe(LINE_DESC),
@@ -146,7 +172,7 @@ export function registerApproveBridge(server: McpServer): void {
 
   server.tool(
     'list_pending',
-    'List approval requests with status pending. Each carries approval_line for approve_request / reject_request.',
+    'List approval requests with status pending. Below tier D each carries approval_line for approve_request / reject_request; tier D carries console_only and console_url (decided on Console only).',
     {},
     async () => jsonResult(await listPending()),
   )
