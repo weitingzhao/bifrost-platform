@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 )
 
@@ -65,7 +67,9 @@ func (s *Service) Plan(ctx context.Context, repo, path, commit string) (string, 
 	if err := s.Sync(ctx, repo, commit); err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("plan-%s-%d", commit[:8], s.now().Unix())
+	name := s.objectName(ctx, "plan-"+commit[:8], func() string {
+		return fmt.Sprintf("plan-%s-%d", commit[:8], s.now().Unix())
+	})
 	if err := s.startRun(ctx, name, "plan", repo, path, commit, false, ""); err != nil {
 		return "", err
 	}
@@ -93,7 +97,7 @@ func (s *Service) Apply(ctx context.Context, planID string) (map[string]any, err
 			return nil, err
 		}
 	}
-	name := applyRunName(planID, s.now())
+	name := s.objectName(ctx, "apply-"+planID, func() string { return applyRunName(planID, s.now()) })
 	if err := s.startRun(ctx, name, "apply", summary.Repo, summary.Path, summary.Commit, tier == "C" || tier == "D", planID); err != nil {
 		return nil, err
 	}
@@ -187,8 +191,81 @@ func planRunOK(obj *unstructured.Unstructured, pipeline, mode string) bool {
 	return true
 }
 
-// applyRunName is unique per attempt, so a plan whose apply failed can be
-// applied again under a new approval (TD-276). The plan id is also a label.
+// objectName is the approval id and attempt when the call is an approval
+// execution. A direct call has no approval, so it keeps a clock suffix.
+func (s *Service) objectName(ctx context.Context, base string, clockName func() string) string {
+	if att, ok := actions.CreateAttemptFrom(ctx); ok {
+		return nameForAttempt(base, att)
+	}
+	return clockName()
+}
+
+// NameForAttempt is the object name an approval execution uses.
+func NameForAttempt(base string, att actions.CreateAttempt) string {
+	return nameForAttempt(base, att)
+}
+
+// nameForAttempt is a DNS-1123 name of at most 63 characters. The suffix is
+// the approval id and the attempt, so a retry of the same attempt reads the
+// same object instead of minting another one.
+func nameForAttempt(base string, att actions.CreateAttempt) string {
+	id := strings.TrimPrefix(att.ApprovalID, "appr_")
+	id = sanitizeLabel(id)
+	if len(id) > 16 {
+		id = id[:16]
+	}
+	if id == "" {
+		id = "approval"
+	}
+	attempt := att.Attempt
+	if attempt < 1 {
+		attempt = 1
+	}
+	suffix := fmt.Sprintf("-%s-%d", id, attempt)
+	b := trimName(base)
+	if len(b)+len(suffix) > 63 {
+		b = strings.Trim(b[:63-len(suffix)], "-.")
+	}
+	if b == "" {
+		b = "run"
+	}
+	return b + suffix
+}
+
+// uncertainCall is a timeout, server timeout, or cancelled context. On a
+// create it does not prove the object is absent.
+func uncertainCall(err error) bool {
+	if err == nil {
+		return false
+	}
+	return apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func classifyRead(err error) error {
+	if err == nil || apierrors.IsNotFound(err) {
+		return nil
+	}
+	if uncertainCall(err) {
+		return actions.Transient(err.Error())
+	}
+	return err
+}
+
+func classifyCreate(err error) error {
+	if err == nil || apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	if uncertainCall(err) {
+		return actions.Uncertain("create timed out; outcome needs checking")
+	}
+	return err
+}
+
+// applyRunName is the direct-call name (no approval attempt on the context).
+// A plan whose apply failed can be applied again under a new approval
+// (TD-276). The plan id is also a label. Approval executions use
+// nameForAttempt instead of this clock suffix.
 func applyRunName(planID string, now time.Time) string {
 	suffix := fmt.Sprintf("-%d", now.Unix())
 	base := trimName("apply-" + planID)
@@ -240,8 +317,17 @@ func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit s
 			},
 		},
 	}}
-	_, err = dyn.Resource(pipelineRunGVR).Namespace(d.Namespace).Create(ctx, obj, metav1.CreateOptions{})
-	return err
+	res := dyn.Resource(pipelineRunGVR).Namespace(d.Namespace)
+	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return nil
+	} else if !apierrors.IsNotFound(err) {
+		return classifyRead(err)
+	}
+	_, err = res.Create(ctx, obj, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		return nil
+	}
+	return classifyCreate(err)
 }
 
 func param(name, value string) map[string]any {
@@ -261,7 +347,14 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 	if err != nil {
 		return nil, err
 	}
-	name := trimName(fmt.Sprintf("%s-manual-%s", cronjob, s.now().UTC().Format("20060102150405")))
+	name := s.objectName(ctx, cronjob+"-manual", func() string {
+		return trimName(fmt.Sprintf("%s-manual-%s", cronjob, s.now().UTC().Format("20060102150405")))
+	})
+	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, classifyRead(err)
+	}
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -276,8 +369,15 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 		Spec: cj.Spec.JobTemplate.Spec,
 	}
 	created, err := cs.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		existing, gerr := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return nil, classifyRead(gerr)
+		}
+		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, classifyCreate(err)
 	}
 	return map[string]any{"namespace": created.Namespace, "job": created.Name}, nil
 }
@@ -370,7 +470,19 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 		env = append([]corev1.EnvVar{}, src.Env...)
 		envFromSrc = append([]corev1.EnvFromSource{}, src.EnvFrom...)
 	}
-	name := trimName("probe-" + s.now().UTC().Format("20060102150405"))
+	name := s.objectName(ctx, "probe", func() string {
+		return trimName("probe-" + s.now().UTC().Format("20060102150405"))
+	})
+	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return map[string]any{
+			"namespace": existing.Namespace,
+			"job":       existing.Name,
+			"adopted":   true,
+			"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, existing.Name),
+		}, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, classifyRead(err)
+	}
 	deadline := int64(seconds)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -423,8 +535,16 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 		},
 	}
 	created, err := cs.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		return map[string]any{
+			"namespace": namespace,
+			"job":       name,
+			"adopted":   true,
+			"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, name),
+		}, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, classifyCreate(err)
 	}
 	return map[string]any{"namespace": created.Namespace, "job": created.Name, "logs": fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, created.Name)}, nil
 }

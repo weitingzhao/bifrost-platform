@@ -113,7 +113,12 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 				}
 			}
 		})
-		result, execErr = actions.Execute(ctx, rec.Action, rec.Params)
+		attempt := 1
+		if rec.Execution != nil && rec.Execution.Attempts > 0 {
+			attempt = rec.Execution.Attempts
+		}
+		runCtx := actions.WithCreateAttempt(ctx, rec.ID, attempt)
+		result, execErr = actions.Execute(runCtx, rec.Action, rec.Params)
 		close(stop)
 		<-done
 	}
@@ -137,6 +142,16 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		}
 		switch a.Status {
 		case StatusRunning:
+			if execErr != nil && actions.IsUncertain(execErr) {
+				// A timeout on create does not prove the object is absent.
+				// Leave the record unknown; do not requeue under a new name.
+				e.Error = oneLine(execErr.Error())
+				a.Status = StatusUnknown
+				a.Error = e.Error
+				e.LeaseExpiresAt = time.Time{}
+				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, a.Error})
+				break
+			}
 			if execErr != nil && actions.IsTransient(execErr) {
 				requeue(&a, oneLine(execErr.Error()), now)
 				evs = append(evs, event{"approval.queue", a.ID, StatusApproved,

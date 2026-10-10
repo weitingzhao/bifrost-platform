@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -450,13 +451,18 @@ func transientRefusal(code int, msg string) bool {
 	return false
 }
 
-// transientKube marks Kubernetes API errors that mean "try again later"
-// (timeouts, throttling, the API server unavailable) as transient.
+// transientKube classifies a Kubernetes error from an action executor.
+// A timeout, server timeout, or cancelled context on a create does not prove
+// the object is absent, so those are uncertain and are not retried. Throttling
+// and an unavailable API server still mean "try again later".
 func transientKube(err error) error {
-	if err == nil {
-		return nil
+	if err == nil || actions.IsTransient(err) || actions.IsUncertain(err) {
+		return err
 	}
-	if apierrors.IsServerTimeout(err) || apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) || apierrors.IsServiceUnavailable(err) {
+	if apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return actions.Uncertain("create timed out; outcome needs checking")
+	}
+	if apierrors.IsTooManyRequests(err) || apierrors.IsServiceUnavailable(err) {
 		return actions.Transient(err.Error())
 	}
 	return err

@@ -1,6 +1,7 @@
 package actions
 
 import (
+	"context"
 	"errors"
 	"strings"
 )
@@ -68,4 +69,49 @@ func Transient(reason string) error { return &TransientError{Reason: reason} }
 func IsTransient(err error) bool {
 	var t *TransientError
 	return errors.As(err, &t)
+}
+
+// UncertainError is a create whose response does not prove the object is
+// absent: a timeout, a server timeout, or a cancelled context. The approval
+// goes to unknown. It is not retried under a new name.
+type UncertainError struct{ Reason string }
+
+func (e *UncertainError) Error() string { return e.Reason }
+
+// Uncertain marks a create whose outcome has to be checked by hand.
+func Uncertain(reason string) error { return &UncertainError{Reason: reason} }
+
+// IsUncertain reports whether err (or anything it wraps) is an UncertainError.
+func IsUncertain(err error) bool {
+	var u *UncertainError
+	return errors.As(err, &u)
+}
+
+// CreateAttempt names one approval's execution attempt. Object names are a
+// function of these two fields, not the wall clock.
+type CreateAttempt struct {
+	ApprovalID string
+	Attempt    int
+}
+
+type createAttemptKey struct{}
+
+// WithCreateAttempt attaches the approval attempt executors use to name objects.
+func WithCreateAttempt(ctx context.Context, id string, attempt int) context.Context {
+	if attempt < 1 {
+		attempt = 1
+	}
+	return context.WithValue(ctx, createAttemptKey{}, CreateAttempt{ApprovalID: id, Attempt: attempt})
+}
+
+// CreateAttemptFrom returns the attempt stored by WithCreateAttempt.
+func CreateAttemptFrom(ctx context.Context) (CreateAttempt, bool) {
+	v, ok := ctx.Value(createAttemptKey{}).(CreateAttempt)
+	if !ok || v.ApprovalID == "" {
+		return CreateAttempt{}, false
+	}
+	if v.Attempt < 1 {
+		v.Attempt = 1
+	}
+	return v, true
 }
