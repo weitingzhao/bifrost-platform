@@ -1,21 +1,29 @@
+// Package approvals stores approval records in one JSON state file.
+// A release that changes this file's shape must not run two versions of the writer at the same time: stop the old writer and wait until it has finished before starting the new one. Keeping unknown fields does not make overlapping writers safe.
 package approvals
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 // file is the on-disk document. The statefile key is the path relative to
 // PLATFORM_DATA_DIR, which is "approvals" (PROD: ConfigMap platform-state-approvals).
+// extra keeps top-level JSON keys this binary does not know so a rewrite
+// does not drop them.
 type file struct {
 	// LastNumber is the #n counter. It survives pruning and only grows.
 	LastNumber int        `json:"last_number,omitempty"`
 	Approvals  []Approval `json:"approvals"`
+	extra      map[string]json.RawMessage
 }
 
 // maxDocBytes stays under the ConfigMap budget (k8sstate.MaxBytes, 900 KiB):
@@ -49,10 +57,91 @@ func parse(data []byte) (file, error) {
 	if len(data) == 0 {
 		return doc, nil
 	}
-	if err := json.Unmarshal(data, &doc); err != nil {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
 		return file{}, err
 	}
+	if raw, ok := top["last_number"]; ok && len(raw) > 0 && string(raw) != "null" {
+		if err := json.Unmarshal(raw, &doc.LastNumber); err != nil {
+			return file{}, err
+		}
+	}
+	if raw, ok := top["approvals"]; ok && len(raw) > 0 && string(raw) != "null" {
+		var rows []json.RawMessage
+		if err := json.Unmarshal(raw, &rows); err != nil {
+			return file{}, err
+		}
+		doc.Approvals = make([]Approval, 0, len(rows))
+		for _, row := range rows {
+			a, err := parseApproval(row)
+			if err != nil {
+				return file{}, err
+			}
+			doc.Approvals = append(doc.Approvals, a)
+		}
+	}
+	extra := map[string]json.RawMessage{}
+	for k, v := range top {
+		if k == "last_number" || k == "approvals" {
+			continue
+		}
+		extra[k] = append(json.RawMessage(nil), v...)
+	}
+	if len(extra) > 0 {
+		doc.extra = extra
+	}
 	return doc, nil
+}
+
+func parseApproval(raw json.RawMessage) (Approval, error) {
+	var a Approval
+	if len(raw) == 0 || string(raw) == "null" {
+		return a, nil
+	}
+	if err := json.Unmarshal(raw, &a); err != nil {
+		return Approval{}, err
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return Approval{}, err
+	}
+	extra := map[string]json.RawMessage{}
+	for k, v := range obj {
+		if approvalJSONKeys[k] {
+			continue
+		}
+		extra[k] = append(json.RawMessage(nil), v...)
+	}
+	if len(extra) > 0 {
+		a.extra = extra
+	}
+	return a, nil
+}
+
+var approvalJSONKeys = jsonFieldNames(Approval{})
+
+func jsonFieldNames(v any) map[string]bool {
+	t := reflect.TypeOf(v)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	out := map[string]bool{}
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		if f.PkgPath != "" {
+			continue
+		}
+		tag := f.Tag.Get("json")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		name, _, _ := strings.Cut(tag, ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		out[name] = true
+	}
+	return out
 }
 
 // errNoChange makes update skip the write.
@@ -92,7 +181,7 @@ func (doc *file) marshal() ([]byte, error) {
 		doc.Approvals = []Approval{}
 	}
 	for {
-		raw, err := json.Marshal(doc)
+		raw, err := doc.marshalOnce()
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +189,104 @@ func (doc *file) marshal() ([]byte, error) {
 			return raw, nil
 		}
 	}
+}
+
+// marshalOnce writes known fields and copies unknown ones back as raw JSON,
+// so a value this binary does not understand is byte-for-value the same.
+func (doc *file) marshalOnce() ([]byte, error) {
+	rows := make([]json.RawMessage, len(doc.Approvals))
+	for i := range doc.Approvals {
+		raw, err := marshalApproval(doc.Approvals[i])
+		if err != nil {
+			return nil, err
+		}
+		rows[i] = raw
+	}
+	body := map[string]json.RawMessage{}
+	for k, v := range doc.extra {
+		body[k] = append(json.RawMessage(nil), v...)
+	}
+	delete(body, "last_number")
+	delete(body, "approvals")
+	if doc.LastNumber != 0 {
+		raw, err := json.Marshal(doc.LastNumber)
+		if err != nil {
+			return nil, err
+		}
+		body["last_number"] = raw
+	}
+	body["approvals"] = writeRawArray(rows)
+	return writeRawObject(body)
+}
+
+func marshalApproval(a Approval) (json.RawMessage, error) {
+	raw, err := json.Marshal(a)
+	if err != nil {
+		return nil, err
+	}
+	if len(a.extra) == 0 {
+		return raw, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return nil, err
+	}
+	for k, v := range a.extra {
+		if _, known := obj[k]; known {
+			continue
+		}
+		obj[k] = append(json.RawMessage(nil), v...)
+	}
+	return writeRawObject(obj)
+}
+
+// writeRawObject splices values as they were read. encoding/json compacts a
+// RawMessage, which would change insignificant space inside a field this
+// binary does not understand.
+func writeRawObject(fields map[string]json.RawMessage) ([]byte, error) {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, k := range keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		kb, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(kb)
+		buf.WriteByte(':')
+		v := fields[k]
+		if len(v) == 0 {
+			buf.WriteString("null")
+			continue
+		}
+		buf.Write(v)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+func writeRawArray(rows []json.RawMessage) json.RawMessage {
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, row := range rows {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		if len(row) == 0 {
+			buf.WriteString("null")
+			continue
+		}
+		buf.Write(row)
+	}
+	buf.WriteByte(']')
+	return buf.Bytes()
 }
 
 // prune keeps every open approval and the most recent keepClosed terminal

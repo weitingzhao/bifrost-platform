@@ -1,6 +1,9 @@
 package approvals
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 const (
 	StatusPending = "pending"
@@ -62,6 +65,9 @@ type Approval struct {
 	WorkID          string     `json:"work_id,omitempty"`
 	Execution       *Execution `json:"execution,omitempty"`
 	Deliveries      []Delivery `json:"deliveries,omitempty"`
+	// extra is the JSON object keys this binary does not know. The store
+	// writes them back. They are not part of the API.
+	extra map[string]json.RawMessage `json:"-"`
 }
 
 // Execution is everything after the decision. It is one block so it can move
