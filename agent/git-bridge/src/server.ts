@@ -4,11 +4,32 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
 import fs from 'node:fs'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { bearerMatches, loadGitBridgeTokens, resolveGitBridgeBind } from './auth.js'
 
 const PORT = parseInt(process.env.GIT_BRIDGE_PORT ?? '8785', 10)
-const WORKSPACE = process.env.GIT_WORKSPACE_ROOT ?? '/Users/vision-mac-trader/Desktop/stocks'
+const WORKSPACE_MARKER = path.join('bifrost-platform', 'config', 'ops-context.yaml')
+
+/**
+ * The multi-repo workspace: BIFROST_WORKSPACE, then the older GIT_WORKSPACE_ROOT, then the
+ * first directory above this file that holds bifrost-platform/config/ops-context.yaml.
+ * Null when none of them is a workspace; start() refuses to run without one.
+ */
+export function resolveWorkspace(
+  env: Record<string, string | undefined> = process.env,
+  fromDir: string = path.dirname(fileURLToPath(import.meta.url)),
+): string | null {
+  for (const key of ['BIFROST_WORKSPACE', 'GIT_WORKSPACE_ROOT']) {
+    const value = env[key]?.trim()
+    if (value) return fs.existsSync(path.join(value, WORKSPACE_MARKER)) ? path.resolve(value) : null
+  }
+  for (let dir = path.resolve(fromDir); ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, WORKSPACE_MARKER))) return dir
+    if (path.dirname(dir) === dir) return null
+  }
+}
+
+const WORKSPACE = resolveWorkspace() ?? ''
 
 const DEPLOY_BRANCH = 'main'
 
@@ -446,6 +467,12 @@ export function createGitBridgeApp(options: GitBridgeAppOptions): express.Expres
 }
 
 function start(): void {
+  if (!WORKSPACE) {
+    console.error(
+      `[git-bridge] workspace not found: set BIFROST_WORKSPACE to the directory holding ${WORKSPACE_MARKER}`,
+    )
+    process.exit(1)
+  }
   const loaded = loadGitBridgeTokens(WORKSPACE)
   const bindHost = resolveGitBridgeBind(loaded.tokens.length, process.env.GIT_BRIDGE_BIND)
   if (loaded.tokens.length === 0) {

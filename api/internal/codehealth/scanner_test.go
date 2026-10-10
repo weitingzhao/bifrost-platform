@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -72,6 +73,7 @@ exit ` + strconv.Itoa(exitCode) + `
 
 func setupMiniWorkspace(t *testing.T) string {
 	t.Helper()
+	t.Setenv("BIFROST_WORKSPACE", "")
 	ws := t.TempDir()
 	scriptDir := filepath.Join(ws, "bifrost-trade-infra", "agent-config", "scripts", "code-health")
 	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
@@ -84,6 +86,27 @@ func setupMiniWorkspace(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return ws
+}
+
+func TestResolveWorkspaceRootPrefersBifrostWorkspace(t *testing.T) {
+	ws := setupMiniWorkspace(t)
+	t.Setenv("BIFROST_WORKSPACE", ws)
+	t.Setenv("BIFROST_WORKSPACE_ROOT", "/nonexistent-workspace-xyz")
+	got, err := resolveWorkspaceRoot()
+	if err != nil || got != filepath.Clean(ws) {
+		t.Fatalf("got %q, %v; want %q", got, err, ws)
+	}
+
+	t.Setenv("BIFROST_WORKSPACE", "/nonexistent-workspace-xyz")
+	if _, err := resolveWorkspaceRoot(); err == nil || !strings.Contains(err.Error(), "BIFROST_WORKSPACE=") {
+		t.Fatalf("want an error naming BIFROST_WORKSPACE, got %v", err)
+	}
+
+	t.Setenv("BIFROST_WORKSPACE", "")
+	t.Setenv("BIFROST_WORKSPACE_ROOT", ws)
+	if got, err := resolveWorkspaceRoot(); err != nil || got != filepath.Clean(ws) {
+		t.Fatalf("legacy name: got %q, %v; want %q", got, err, ws)
+	}
 }
 
 func TestRunLiveScanAcceptsExit1Over(t *testing.T) {
@@ -147,6 +170,7 @@ func TestHandleRescanStoresReading(t *testing.T) {
 
 func TestGetIncludesFreshness(t *testing.T) {
 	t.Setenv("PLATFORM_CODE_HEALTH_DIR", t.TempDir())
+	t.Setenv("BIFROST_WORKSPACE", "")
 	t.Setenv("BIFROST_WORKSPACE_ROOT", "/nonexistent-workspace-xyz")
 	h := NewHandler(nil)
 	raw, _ := json.Marshal(sampleReport("oldcommit", 12))

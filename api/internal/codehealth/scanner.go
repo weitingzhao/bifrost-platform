@@ -16,12 +16,17 @@ const defaultScanTimeout = 3 * time.Minute
 
 // resolveWorkspaceRoot finds the Bifrost multi-repo workspace (sibling of
 // bifrost-platform) so live rescan can see the same trees scan.sh measures.
+// BIFROST_WORKSPACE is the workspace-wide name; BIFROST_WORKSPACE_ROOT is the older one.
 func resolveWorkspaceRoot() (string, error) {
-	if v := strings.TrimSpace(os.Getenv("BIFROST_WORKSPACE_ROOT")); v != "" {
+	for _, key := range []string{"BIFROST_WORKSPACE", "BIFROST_WORKSPACE_ROOT"} {
+		v := strings.TrimSpace(os.Getenv(key))
+		if v == "" {
+			continue
+		}
 		if looksLikeWorkspace(v) {
 			return filepath.Clean(v), nil
 		}
-		return "", fmt.Errorf("BIFROST_WORKSPACE_ROOT=%s is not a Bifrost workspace (missing scan.sh siblings)", v)
+		return "", fmt.Errorf("%s=%s is not a Bifrost workspace (missing scan.sh siblings)", key, v)
 	}
 	if root := strings.TrimSpace(os.Getenv("PLATFORM_PROJECT_ROOT")); root != "" {
 		parent := filepath.Dir(filepath.Clean(root))
@@ -47,7 +52,7 @@ func resolveWorkspaceRoot() (string, error) {
 			return abs, nil
 		}
 	}
-	return "", fmt.Errorf("workspace root not found — set BIFROST_WORKSPACE_ROOT to the stocks/ directory containing bifrost-trade-infra")
+	return "", fmt.Errorf("workspace root not found — set BIFROST_WORKSPACE to the directory containing bifrost-trade-infra")
 }
 
 func looksLikeWorkspace(dir string) bool {

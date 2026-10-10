@@ -9,6 +9,7 @@ import {
   branchRefspec,
   createGitBridgeApp,
   normalizeCommitPaths,
+  resolveWorkspace,
   type GitRunner,
 } from './server.js'
 import { resolveGitBridgeBind, tokenEnvNames } from './auth.js'
@@ -248,5 +249,39 @@ tokens:
     assert.equal(src.includes(dot), false)
     assert.equal(src.includes(commitAll), false)
     assert.equal(src.includes('execSync('), false)
+  })
+})
+
+describe('resolveWorkspace', () => {
+  let ws = ''
+
+  before(async () => {
+    ws = await fs.mkdtemp(path.join(os.tmpdir(), 'git-bridge-ws-'))
+    await fs.mkdir(path.join(ws, 'bifrost-platform', 'config'), { recursive: true })
+    await fs.writeFile(path.join(ws, 'bifrost-platform', 'config', 'ops-context.yaml'), '')
+    await fs.mkdir(path.join(ws, 'bifrost-platform', 'agent', 'git-bridge', 'src'), { recursive: true })
+  })
+
+  after(async () => {
+    await fs.rm(ws, { recursive: true, force: true })
+  })
+
+  it('takes BIFROST_WORKSPACE first, then GIT_WORKSPACE_ROOT', () => {
+    assert.equal(resolveWorkspace({ BIFROST_WORKSPACE: ws, GIT_WORKSPACE_ROOT: '/nonexistent' }, '/'), ws)
+    assert.equal(resolveWorkspace({ GIT_WORKSPACE_ROOT: ws }, '/'), ws)
+  })
+
+  it('rejects an env value that is not a workspace instead of walking up', () => {
+    const below = path.join(ws, 'bifrost-platform', 'agent', 'git-bridge', 'src')
+    assert.equal(resolveWorkspace({ BIFROST_WORKSPACE: os.tmpdir() }, below), null)
+  })
+
+  it('walks up from its own directory to the marker', () => {
+    const below = path.join(ws, 'bifrost-platform', 'agent', 'git-bridge', 'src')
+    assert.equal(resolveWorkspace({}, below), ws)
+  })
+
+  it('returns null when nothing above is a workspace', () => {
+    assert.equal(resolveWorkspace({}, os.tmpdir()), null)
   })
 })

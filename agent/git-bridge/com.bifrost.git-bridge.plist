@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template: render before installing (bdev's git-bridge session is the usual way to run it).
+    sed -e "s|__WORKSPACE__|${BIFROST_WORKSPACE:-$HOME/Desktop/stocks}|g" -e "s|__HOME__|$HOME|g" \
+      com.bifrost.git-bridge.plist > ~/Library/LaunchAgents/com.bifrost.git-bridge.plist
+-->
 <plist version="1.0">
 <dict>
   <key>Label</key>
@@ -8,17 +13,17 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/vision-mac-trader/Desktop/stocks/bifrost-platform/agent/git-bridge/run.sh</string>
+    <string>__WORKSPACE__/bifrost-platform/agent/git-bridge/run.sh</string>
   </array>
 
   <key>EnvironmentVariables</key>
   <dict>
     <key>HOME</key>
-    <string>/Users/vision-mac-trader</string>
+    <string>__HOME__</string>
     <key>GIT_BRIDGE_PORT</key>
     <string>8785</string>
-    <key>GIT_WORKSPACE_ROOT</key>
-    <string>/Users/vision-mac-trader/Desktop/stocks</string>
+    <key>BIFROST_WORKSPACE</key>
+    <string>__WORKSPACE__</string>
   </dict>
 
   <key>RunAtLoad</key>
@@ -31,9 +36,9 @@
   </dict>
 
   <key>StandardOutPath</key>
-  <string>/Users/vision-mac-trader/Desktop/stocks/bifrost-platform/agent/git-bridge/logs/git-bridge.log</string>
+  <string>__WORKSPACE__/bifrost-platform/agent/git-bridge/logs/git-bridge.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/vision-mac-trader/Desktop/stocks/bifrost-platform/agent/git-bridge/logs/git-bridge.err</string>
+  <string>__WORKSPACE__/bifrost-platform/agent/git-bridge/logs/git-bridge.err</string>
 
   <key>ThrottleInterval</key>
   <integer>10</integer>
