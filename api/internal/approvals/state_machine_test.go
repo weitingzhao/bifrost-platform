@@ -161,7 +161,7 @@ func approveOwnerRun(t *testing.T, svc *Service) Approval {
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
-	out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "chat"})
+	out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "console"})
 	if out.Status != http.StatusAccepted || out.Body["status"] != StatusApproved {
 		t.Fatalf("approve owner_run_command = %d %v", out.Status, out.Body)
 	}
@@ -441,9 +441,50 @@ func TestConfirmNumberForTierD(t *testing.T) {
 	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "phone", Confirm: &right}); out.Body["status"] != StatusExecuted {
 		t.Fatalf("right confirm_number = %d %v", out.Status, out.Body)
 	}
-	c2 := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
-	if out := svc.approveWith(context.Background(), c2.Approval.ID, approveInput{Channel: "chat"}); out.Body["status"] != StatusExecuted {
-		t.Fatalf("chat needs no confirm_number: %d %v", out.Status, out.Body)
+}
+
+// Owner 2026-10-10 (ADR §5): tier D is approved on Console only. A chat
+// approval is refused and leaves the request pending; phone and console are
+// unchanged, and chat still approves below tier D.
+func TestTierDChatApprovalIsRefused(t *testing.T) {
+	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
+	ok := func(context.Context, map[string]any) (any, error) { return map[string]any{"ok": true}, nil }
+	actions.RegisterExecutor("repair_cnpg_wal_store", ok)
+	actions.RegisterExecutor("trigger_cnpg_backup", ok)
+
+	d := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
+	out := svc.approveWith(context.Background(), d.Approval.ID, approveInput{Channel: "chat"})
+	if out.Status != http.StatusForbidden {
+		t.Fatalf("tier D over chat = %d %v", out.Status, out.Body)
+	}
+	msg, _ := out.Body["error"].(string)
+	want := fmt.Sprintf("#%d", d.Approval.Number)
+	if !strings.Contains(msg, "tier D is approved on Console only") || !strings.Contains(msg, want) || !strings.Contains(msg, d.Approval.ID) {
+		t.Fatalf("refusal message = %q", msg)
+	}
+	if out.Body["console_url"] != "http://ops.bifrost.lan/#approvals?id="+d.Approval.ID || out.Body["number"] != d.Approval.Number {
+		t.Fatalf("refusal body = %v", out.Body)
+	}
+	if got, _ := svc.get(d.Approval.ID); got.Status != StatusPending || got.Channel != "" || !got.DecidedAt.IsZero() {
+		t.Fatalf("after the refusal = %s channel=%q", got.Status, got.Channel)
+	}
+	if out := svc.approveWith(context.Background(), d.Approval.ID, approveInput{Channel: "console"}); out.Body["status"] != StatusExecuted {
+		t.Fatalf("tier D over console = %d %v", out.Status, out.Body)
+	}
+
+	p := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
+	if out := svc.approveWith(context.Background(), p.Approval.ID, approveInput{Channel: "phone"}); out.Body["status"] != StatusExecuted {
+		t.Fatalf("tier D over phone = %d %v", out.Status, out.Body)
+	}
+
+	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
+	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "chat"}); out.Body["status"] != StatusExecuted {
+		t.Fatalf("tier C over chat = %d %v", out.Status, out.Body)
+	}
+
+	r := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
+	if out := svc.reject(r.Approval.ID, "not now"); out.Status != http.StatusOK || out.Body["status"] != StatusRejected {
+		t.Fatalf("tier D reject = %d %v", out.Status, out.Body)
 	}
 }
 

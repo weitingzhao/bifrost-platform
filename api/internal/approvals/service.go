@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 
 // Service stores approvals, runs platform actions on approve, and hands the
@@ -365,6 +366,10 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 			refusal = &decided{Status: 409, Body: map[string]any{"error": "params hash mismatch"}}
 			return keepSwept(evs)
 		}
+		if d := consoleOnly(found, channel); d != nil {
+			refusal = d
+			return keepSwept(evs)
+		}
 		if d := s.checkConfirm(found, channel, in.Confirm); d != nil {
 			refusal = d
 			return keepSwept(evs)
@@ -410,8 +415,31 @@ func keepSwept(evs []event) error {
 	return nil
 }
 
-// checkConfirm: tier D from phone or console must repeat the number. chat
-// relies on the Claude permission prompt.
+// consoleOnly refuses a chat approval of tier D (ADR §5, Owner 2026-10-10):
+// a token holder could otherwise skip the MCP client's own refusal.
+// Rejection carries no channel and stays open on every route.
+func consoleOnly(rec Approval, channel string) *decided {
+	if rec.Tier != string(actions.TierD) || channel != "chat" {
+		return nil
+	}
+	ref := rec.ID
+	if rec.Number != 0 {
+		ref = fmt.Sprintf("#%d (%s)", rec.Number, rec.ID)
+	}
+	body := map[string]any{
+		"error":       "tier D is approved on Console only: " + ref,
+		"id":          rec.ID,
+		"tier":        rec.Tier,
+		"console_url": approvalnotify.ConsoleClickPrefix + rec.ID,
+	}
+	if rec.Number != 0 {
+		body["number"] = rec.Number
+	}
+	return &decided{Status: http.StatusForbidden, Body: body}
+}
+
+// checkConfirm: tier D (phone or console; chat is refused above) must repeat
+// the number.
 func (s *Service) checkConfirm(rec Approval, channel string, confirm *int) *decided {
 	if rec.Tier != string(actions.TierD) || channel == "chat" || rec.Number == 0 {
 		return nil
