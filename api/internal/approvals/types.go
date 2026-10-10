@@ -67,7 +67,7 @@ type Approval struct {
 	Deliveries      []Delivery `json:"deliveries,omitempty"`
 	// extra is the JSON object keys this binary does not know. The store
 	// writes them back. They are not part of the API.
-	extra map[string]json.RawMessage `json:"-"`
+	extra map[string]json.RawMessage
 }
 
 // Execution is everything after the decision. It is one block so it can move
