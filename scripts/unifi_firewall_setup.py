@@ -48,6 +48,10 @@ NAS_IP = os.environ.get("NAS_IP", "192.168.10.20")
 # kube-vip Traefik entry (Satellite/Rocket Hostnames on :80).
 TRADE_VIP = os.environ.get("TRADE_VIP", "192.168.10.100")
 TRADE_VIP_PORTS = "80,443"
+# Ops Console over the WireGuard remote-user VPN: HTTPS only, no :80 redirect.
+OPS_VIP_PORTS = "443"
+# Client subnet of the WireGuard server `bifrost-wg` (UniFi predefined VPN zone).
+WG_CLIENT_SUBNET = os.environ.get("WG_CLIENT_SUBNET", "192.168.2.0/24")
 PLEX_PORTS = "32400"
 SMB_PORTS = "445,139"
 WRITE_DELAY_S = 0.35
@@ -132,6 +136,18 @@ POLICY_SPECS: list[dict[str, Any]] = [
         "src": "Family",
         "dst": "Home",
         "note": "Family cannot lateral-scan IoT",
+    },
+    {
+        "name": "Bifrost | ALLOW VPN → Ops VIP",
+        "action": "ALLOW",
+        # A predefined UniFi zone (by zone_key), not a Bifrost zone from ZONE_SPECS:
+        # apply looks it up and never creates or rebinds it.
+        "src_zone_key": "vpn",
+        "src_ips": [WG_CLIENT_SUBNET],
+        "dst_ip": TRADE_VIP,
+        "dst_ports": OPS_VIP_PORTS,
+        "protocol": "tcp",
+        "note": "WireGuard remote users → kube-vip Traefik :443 only (ops.bifrost.lan); Bifrost Server blocks the VPN zone by default",
     },
 ]
 
@@ -368,10 +384,30 @@ def endpoint_any(zone_id: str) -> dict[str, Any]:
     }
 
 
+def predefined_zone_ref(zone_key: str) -> str:
+    """Key under which apply stores a predefined UniFi zone (vpn, gateway, …) in zone_ids."""
+    return f"key:{zone_key}"
+
+
 def build_v2_policy(spec: dict, zone_ids: dict[str, str]) -> dict[str, Any]:
-    src_zone = zone_ids[zone_name_for_network(spec["src"])]
+    if "src_zone_key" in spec:
+        src_zone = zone_ids[predefined_zone_ref(spec["src_zone_key"])]
+    else:
+        src_zone = zone_ids[zone_name_for_network(spec["src"])]
     action = v2_action(spec["action"])
     allow = action == "ALLOW"
+
+    source: dict[str, Any] = endpoint_any(src_zone)
+    if spec.get("src_ips"):
+        source = {
+            "zone_id": src_zone,
+            "matching_target": "IP",
+            "matching_target_type": "SPECIFIC",
+            "ips": list(spec["src_ips"]),
+            "port_matching_type": "ANY",
+            "match_opposite_ports": False,
+            "match_opposite_ips": False,
+        }
 
     if "dst" in spec:
         dst_zone = zone_ids[zone_name_for_network(spec["dst"])]
@@ -397,8 +433,8 @@ def build_v2_policy(spec: dict, zone_ids: dict[str, str]) -> dict[str, Any]:
         "enabled": True,
         "action": action,
         "ip_version": "IPV4",
-        "protocol": "all",
-        "source": endpoint_any(src_zone),
+        "protocol": spec.get("protocol", "all"),
+        "source": source,
         "destination": destination,
         "schedule": {"mode": "ALWAYS"},
         "logging": False,
@@ -464,8 +500,9 @@ def audit(api: UniFiSession) -> None:
 
     print("\nPlanned policies (apply order):")
     for i, spec in enumerate(POLICY_SPECS, 1):
+        src = spec.get("src") or f"zone:{spec.get('src_zone_key', '?')}"
         dst = spec.get("dst") or spec.get("dst_ip", "?")
-        print(f"  {i:2}. [{spec['action']:6}] {spec['src']} → {dst}  — {spec.get('note','')}")
+        print(f"  {i:2}. [{spec['action']:6}] {src} → {dst}  — {spec.get('note','')}")
     print("  opt. [REJECT] Default → Server  (--include-default-deny)")
 
 
@@ -481,10 +518,18 @@ def apply(api: UniFiSession, *, include_default_deny: bool) -> None:
     for zone_name, net_name in ZONE_SPECS:
         zone_ids[zone_name] = ensure_v2_zone(api, zones, zone_name, networks[net_name])
         zones = list_v2_zones(api)
+    # Predefined zones are only looked up, never created or rebound.
+    for z in zones:
+        if z.get("zone_key"):
+            zone_ids[predefined_zone_ref(z["zone_key"])] = z["_id"]
 
     specs = list(POLICY_SPECS)
     if include_default_deny:
         specs.append(DEFAULT_DENY_POLICY)
+    for spec in specs:
+        key = spec.get("src_zone_key")
+        if key and predefined_zone_ref(key) not in zone_ids:
+            raise SystemExit(f"Missing predefined zone: {key} (policy {spec['name']})")
 
     existing = {p.get("name") for p in list_v2_policies(api)}
     print("\nCreating firewall policies…")
