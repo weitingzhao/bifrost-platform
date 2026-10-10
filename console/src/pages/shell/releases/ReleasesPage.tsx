@@ -1,6 +1,8 @@
 import { useQuery, useQueries } from '@tanstack/react-query'
-import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow, DenseTag } from '@bifrost/ui'
-import { fetchDeliveryPipelines, fetchPipelineRuns } from '@/api/delivery'
+import { DenseDataTable, DenseTableBody, DenseTableCell, DenseTableHead, DenseTableHeadRow, DenseTableHeader, DenseTableRow } from '@bifrost/ui'
+import { fetchApprovalList } from '@/api/approvals'
+import { operatorToken } from '@/api/client'
+import { fetchDeliveryPipelines, fetchPipelineRuns, fetchReleaseWindow } from '@/api/delivery'
 import { fetchGitOpsApps } from '@/api/gitOps'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchReleaseRecords, fetchRunningImages } from '@/api/releases'
@@ -8,21 +10,23 @@ import { RequestActionButton } from '@/components/shell/RequestActionButton'
 import { StgSmokePanel } from '@/components/delivery/StgSmokePanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { shellNavEntry } from '@/lib/shell/consoleRoutes'
+import { ReleaseHistorySection } from '@/pages/shell/releases/ReleaseHistorySection'
+import { ReleaseInProgressSection } from '@/pages/shell/releases/ReleaseInProgressSection'
+import { ReleaseNeedsYouSection } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import {
   RELEASE_RECORD_LIMIT,
   RELEASE_ROLLBACK_ACTION,
   REQUEST_ROLLBACK_LABEL,
   LIVE_IMAGE_LANES,
   VERSION_ROWS,
-  attentionRuns,
-  formatBuiltFrom,
-  formatBuiltFromTitle,
-  formatInstant,
   isReleasePipeline,
+  pendingReleaseApprovals,
   prodRollbackApps,
+  releaseWindowView,
   rollbackReason,
   rollbackUndo,
   shortSha,
+  splitReleaseRuns,
   versionCell,
 } from '@/pages/shell/releases/releaseView'
 
@@ -56,6 +60,19 @@ export function ReleasesPage() {
     queryFn: fetchStgSmoke,
     refetchInterval: 30_000,
   })
+  const hasToken = operatorToken() !== ''
+  const releaseWindow = useQuery({
+    queryKey: ['delivery', 'release-window'],
+    queryFn: fetchReleaseWindow,
+    enabled: hasToken,
+    refetchInterval: 15_000,
+  })
+  const approvals = useQuery({
+    queryKey: ['approvals', 'pending'],
+    queryFn: () => fetchApprovalList('pending'),
+    enabled: hasToken,
+    refetchInterval: 30_000,
+  })
 
   const pipelineNames = (pipelines.data?.pipelines ?? [])
     .map(pipeline => pipeline.name)
@@ -73,15 +90,25 @@ export function ReleasesPage() {
   const records = releases.data?.records ?? []
   const apps = gitops.data?.apps ?? []
   const prodApps = prodRollbackApps(apps)
-  const runs = attentionRuns(
+  const { inProgress, superseded } = splitReleaseRuns(
     pipelineNames.map((pipeline, index) => ({
       pipeline,
       runs: runQueries[index]?.data?.runs ?? [],
     })),
+    records,
   )
+  const now = Date.now()
+  const windowView = releaseWindowView({
+    hasToken,
+    isLoading: releaseWindow.isLoading,
+    error: errorText(releaseWindow.error),
+    data: releaseWindow.data,
+    now,
+  })
   const runError = runQueries.map(query => errorText(query.error)).find(message => message != null) ?? null
   const runsLoading = pipelines.isLoading || runQueries.some(query => query.isLoading)
   const releaseError = errorText(releases.error) ?? releases.data?.error ?? releases.data?.status.rules_error ?? null
+  const runErrors = [errorText(pipelines.error), runError].filter((message): message is string => message != null)
 
   return (
     <div className="flex flex-col gap-3">
@@ -133,60 +160,22 @@ export function ReleasesPage() {
         </DenseDataTable>
       </OpsSection>
 
-      <OpsSection
-        title="In-flight and failed runs"
-        description="Running and failed deliver and image-build pipelines."
-        bodyPadding="none"
-        overflow="visible"
-        bodyClassName="ops-section-body--table"
-      >
-        {errorText(pipelines.error) != null && (
-          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{errorText(pipelines.error)}</p>
-        )}
-        {runError != null && (
-          <p className="m-0 px-3 py-2 text-[var(--text-dense-meta)] text-[var(--destructive)]">{runError}</p>
-        )}
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Pipeline</DenseTableHead>
-              <DenseTableHead>Run</DenseTableHead>
-              <DenseTableHead>Status</DenseTableHead>
-              <DenseTableHead>Started</DenseTableHead>
-              <DenseTableHead>Revision</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {runsLoading && runs.length === 0 ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                  Loading…
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : runs.length === 0 ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={5} className="text-[var(--muted-foreground)]">
-                  No in-flight or failed release runs.
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : (
-              runs.map(run => (
-                <DenseTableRow key={`${run.pipeline}/${run.name}`}>
-                  <DenseTableCell className="font-mono-tabular">{run.pipeline}</DenseTableCell>
-                  <DenseTableCell className="max-w-[260px] truncate font-mono-tabular" title={run.name}>
-                    {run.name}
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={run.kind === 'failed' ? 'danger' : 'warning'}>{run.status}</DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="whitespace-nowrap font-mono-tabular">{run.started}</DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular">{shortSha(run.revision) || run.revision}</DenseTableCell>
-                </DenseTableRow>
-              ))
-            )}
-          </DenseTableBody>
-        </DenseDataTable>
-      </OpsSection>
+      <ReleaseNeedsYouSection
+        hasToken={hasToken}
+        isLoading={approvals.isLoading}
+        error={errorText(approvals.error)}
+        pending={pendingReleaseApprovals(approvals.data ?? [])}
+        now={now}
+      />
+
+      <ReleaseInProgressSection window={windowView} runs={inProgress} runsLoading={runsLoading} errors={runErrors} />
+
+      <ReleaseHistorySection
+        records={records}
+        recordsLoading={releases.isLoading}
+        recordsError={errorText(releases.error)}
+        superseded={superseded}
+      />
 
       <StgSmokePanel
         data={smoke.data}
@@ -197,70 +186,6 @@ export function ReleasesPage() {
         title="STG smoke"
         description="HTTP probes for bifrost-stg via the trade gateway."
       />
-
-      <OpsSection
-        title="Recent releases"
-        description="Newest release records. Deploying runs roll out; image builds are deployed later by a pin or GitOps sync."
-        bodyPadding="none"
-        overflow="visible"
-        bodyClassName="ops-section-body--table"
-      >
-        <DenseDataTable>
-          <DenseTableHeader>
-            <DenseTableHeadRow>
-              <DenseTableHead>Lane</DenseTableHead>
-              <DenseTableHead>Env</DenseTableHead>
-              <DenseTableHead>Kind</DenseTableHead>
-              <DenseTableHead>Finished</DenseTableHead>
-              <DenseTableHead>Run</DenseTableHead>
-              <DenseTableHead>Tag</DenseTableHead>
-              <DenseTableHead>Built from</DenseTableHead>
-            </DenseTableHeadRow>
-          </DenseTableHeader>
-          <DenseTableBody>
-            {releases.isLoading ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
-                  Loading…
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : records.length === 0 ? (
-              <DenseTableRow>
-                <DenseTableCell colSpan={7} className="text-[var(--muted-foreground)]">
-                  No release records.
-                </DenseTableCell>
-              </DenseTableRow>
-            ) : (
-              records.map(record => (
-                <DenseTableRow key={record.run}>
-                  <DenseTableCell>{record.lane}</DenseTableCell>
-                  <DenseTableCell className="font-semibold">
-                    {record.deploys ? record.env.toUpperCase() : record.env}
-                  </DenseTableCell>
-                  <DenseTableCell>
-                    <DenseTag variant={record.deploys ? 'info' : 'neutral'}>
-                      {record.deploys ? 'deploy' : 'build'}
-                    </DenseTag>
-                  </DenseTableCell>
-                  <DenseTableCell className="whitespace-nowrap font-mono-tabular">
-                    {formatInstant(record.completed_at)}
-                  </DenseTableCell>
-                  <DenseTableCell className="max-w-[260px] truncate font-mono-tabular" title={record.run}>
-                    {record.run}
-                  </DenseTableCell>
-                  <DenseTableCell className="font-mono-tabular">{record.tag?.trim() || '—'}</DenseTableCell>
-                  <DenseTableCell
-                    className="max-w-[320px] truncate font-mono-tabular"
-                    title={formatBuiltFromTitle(record)}
-                  >
-                    {formatBuiltFrom(record)}
-                  </DenseTableCell>
-                </DenseTableRow>
-              ))
-            )}
-          </DenseTableBody>
-        </DenseDataTable>
-      </OpsSection>
 
       <OpsSection
         title="Request rollback"

@@ -1,13 +1,20 @@
+import type { ApprovalItem } from '@/api/approvals'
 import type { DeliveryPipelineRunView, GitOpsApplicationView } from '@/api/deliveryTypes'
 import type { ReleaseRecord } from '@/api/releases'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import { describe, expect, it } from 'vitest'
 import {
-  attentionRuns,
+  RELEASE_WINDOW_FREE,
+  approvalHref,
+  approvalSubject,
   catalogProdApp,
+  formatDuration,
   isReleasePipeline,
   namespaceForLaneEnv,
+  pendingReleaseApprovals,
   prodRollbackApps,
+  releaseWindowView,
+  splitReleaseRuns,
   versionCell,
 } from '@/pages/shell/releases/releaseView'
 
@@ -147,17 +154,17 @@ describe('prodRollbackApps', () => {
   })
 })
 
-describe('attentionRuns', () => {
+describe('splitReleaseRuns', () => {
   it('keeps running and failed release runs and drops succeeded ones', () => {
     expect(isReleasePipeline('bifrost-deliver-stg')).toBe(true)
     expect(isReleasePipeline('bifrost-build-market-data')).toBe(true)
     expect(isReleasePipeline('bifrost-ci-platform')).toBe(false)
     expect(isReleasePipeline('bifrost-smoke')).toBe(false)
-    const rows = attentionRuns([
+    const { inProgress, superseded } = splitReleaseRuns([
       {
         pipeline: 'bifrost-deliver-stg',
         runs: [
-          run({ name: 'ok', status: 'True', reason: 'Succeeded', completion_time: '2026-10-07T00:00:00Z' }),
+          run({ name: 'ok', status: 'True', reason: 'Succeeded', start_time: '2026-10-05T00:00:00Z' }),
           run({ name: 'bad', status: 'False', reason: 'Failed', start_time: '2026-10-06T00:00:00Z' }),
         ],
       },
@@ -166,8 +173,166 @@ describe('attentionRuns', () => {
         runs: [run({ name: 'live', status: 'Unknown', reason: 'Running', start_time: '2026-10-07T03:00:00Z' })],
       },
     ])
-    expect(rows.map(row => row.name)).toEqual(['live', 'bad'])
-    expect(rows[0]?.kind).toBe('running')
-    expect(rows[1]?.kind).toBe('failed')
+    expect(inProgress.map(row => row.name)).toEqual(['live', 'bad'])
+    expect(inProgress[0]?.kind).toBe('running')
+    expect(inProgress[1]?.kind).toBe('failed')
+    expect(superseded).toEqual([])
+  })
+
+  it('moves a failed run to history once a later run of the same pipeline succeeded', () => {
+    const { inProgress, superseded } = splitReleaseRuns([
+      {
+        pipeline: 'bifrost-deliver-research',
+        runs: [
+          run({ name: 'old-cancelled', status: 'False', reason: 'Cancelled', start_time: '2026-10-03T19:16:00Z' }),
+          run({ name: 'fixed', status: 'True', reason: 'Succeeded', start_time: '2026-10-10T03:30:00Z' }),
+        ],
+      },
+      {
+        pipeline: 'bifrost-build-flex-query',
+        runs: [
+          run({ name: 'flex-ok', status: 'True', reason: 'Succeeded', start_time: '2026-10-07T00:00:00Z' }),
+          run({ name: 'flex-bad', status: 'False', reason: 'Failed', start_time: '2026-10-10T03:51:00Z' }),
+        ],
+      },
+    ])
+    expect(inProgress.map(row => row.name)).toEqual(['flex-bad'])
+    expect(superseded).toHaveLength(1)
+    expect(superseded[0]?.name).toBe('old-cancelled')
+    expect(superseded[0]?.supersededBy).toBe('fixed')
+  })
+
+  it('counts a release record of the same pipeline as a later success', () => {
+    const { inProgress, superseded } = splitReleaseRuns(
+      [
+        {
+          pipeline: 'bifrost-deliver-platform',
+          runs: [run({ name: 'plat-bad', status: 'False', reason: 'Failed', start_time: '2026-10-08T02:47:00Z' })],
+        },
+      ],
+      [
+        record({
+          run: 'plat-later',
+          pipeline: 'bifrost-deliver-platform',
+          lane: 'platform',
+          env: 'stg',
+          started_at: '2026-10-08T02:59:00Z',
+        }),
+        record({
+          run: 'other-pipeline',
+          pipeline: 'bifrost-deliver-platform-prod',
+          lane: 'platform',
+          env: 'prod',
+          started_at: '2026-10-09T00:00:00Z',
+        }),
+      ],
+    )
+    expect(inProgress).toEqual([])
+    expect(superseded[0]?.supersededBy).toBe('plat-later')
+  })
+
+  it('keeps a failure when the only success is from another pipeline or earlier', () => {
+    const { inProgress } = splitReleaseRuns(
+      [
+        {
+          pipeline: 'bifrost-deliver-platform',
+          runs: [
+            run({ name: 'earlier-ok', status: 'True', reason: 'Succeeded', start_time: '2026-10-01T00:00:00Z' }),
+            run({ name: 'bad', status: 'False', reason: 'Failed', start_time: '2026-10-02T00:00:00Z' }),
+          ],
+        },
+      ],
+      [record({ run: 'prod-ok', pipeline: 'bifrost-deliver-platform-prod', lane: 'platform', env: 'prod', started_at: '2026-10-03T00:00:00Z' })],
+    )
+    expect(inProgress.map(row => row.name)).toEqual(['bad'])
+  })
+})
+
+describe('releaseWindowView', () => {
+  const now = Date.parse('2026-10-10T07:00:00Z')
+
+  it('says Unknown without a viewer token', () => {
+    const view = releaseWindowView({ hasToken: false, isLoading: false, error: null, data: undefined, now })
+    expect(view.state).toBe('no-token')
+    expect(view.text).toBe('Unknown')
+  })
+
+  it('shows the read error as Unknown with the error text', () => {
+    const view = releaseWindowView({ hasToken: true, isLoading: false, error: 'release window: HTTP 502', data: undefined, now })
+    expect(view.text).toBe('Unknown')
+    expect(view.detail).toBe('release window: HTTP 502')
+  })
+
+  it('says free when no one holds the window', () => {
+    const view = releaseWindowView({ hasToken: true, isLoading: false, error: null, data: { open: false }, now })
+    expect(view.text).toBe(RELEASE_WINDOW_FREE)
+  })
+
+  it('shows the holder and the time left', () => {
+    const view = releaseWindowView({
+      hasToken: true,
+      isLoading: false,
+      error: null,
+      data: {
+        open: true,
+        window: {
+          who: 'ada@host',
+          what: 'bifrost-platform',
+          env: 'prod',
+          pid: 1,
+          host: 'host',
+          started_at: '2026-10-10T06:48:00Z',
+          expires_at: '2026-10-10T07:04:00Z',
+          reason: 'release 0.9',
+        },
+      },
+      now,
+    })
+    expect(view.state).toBe('held')
+    expect(view.text).toBe('Held by ada@host')
+    expect(view.detail).toBe('bifrost-platform · prod · 4m left · held 12m · release 0.9')
+  })
+})
+
+describe('pending release approvals', () => {
+  function approval(partial: Partial<ApprovalItem> & Pick<ApprovalItem, 'id' | 'action'>): ApprovalItem {
+    return {
+      tier: 'C',
+      params: {},
+      params_hash: 'h',
+      status: 'pending',
+      reason: 'r',
+      requester: 'agent',
+      created_at: '2026-10-10T06:00:00Z',
+      expires_at: '2026-10-11T06:00:00Z',
+      ...partial,
+    }
+  }
+
+  it('keeps pending release actions, longest waiting first', () => {
+    const rows = pendingReleaseApprovals([
+      approval({ id: 'a', action: 'start_pipeline_run', created_at: '2026-10-10T05:00:00Z' }),
+      approval({ id: 'b', action: 'drain_node' }),
+      approval({ id: 'c', action: 'gitops_rollback_app', created_at: '2026-10-10T01:00:00Z' }),
+      approval({ id: 'd', action: 'start_pipeline_run', status: 'approved' }),
+    ])
+    expect(rows.map(row => row.id)).toEqual(['c', 'a'])
+  })
+
+  it('describes what the request ships and links to its detail page', () => {
+    expect(
+      approvalSubject(
+        approval({ id: 'x', action: 'start_pipeline_run', params: { name: 'bifrost-deliver-platform-prod', revision: SHA } }),
+      ),
+    ).toBe('bifrost-deliver-platform-prod · abcd123')
+    expect(approvalSubject(approval({ id: 'y', action: 'gitops_sync_app' }))).toBe('—')
+    expect(approvalHref('ap 1')).toBe('#approvals?id=ap%201')
+  })
+
+  it('formats waits compactly', () => {
+    expect(formatDuration(45 * 60_000)).toBe('45m')
+    expect(formatDuration(3 * 3_600_000)).toBe('3h')
+    expect(formatDuration(52 * 3_600_000)).toBe('2d 4h')
+    expect(formatDuration(Number.NaN)).toBe('—')
   })
 })

@@ -1,10 +1,12 @@
-import type { DeliveryPipelineRunView, GitOpsApplicationView } from '@/api/deliveryTypes'
+import { formatTimeRemaining, type ApprovalItem } from '@/api/approvals'
+import type { DeliveryPipelineRunView, GitOpsApplicationView, ReleaseWindowResponse } from '@/api/deliveryTypes'
 import type { ReleaseRecord, RunningImageCell } from '@/api/releases'
 import { deliveryTargetById } from '@/lib/delivery/deliveryTargets'
 import {
   formatPipelineRunStatus,
   isPipelineRunFailed,
   isPipelineRunRunning,
+  isPipelineRunSucceeded,
 } from '@/lib/delivery/pipelineRunAskPack'
 
 /** Catalog id for Argo rollback. PROD application names classify as C on create. */
@@ -183,30 +185,159 @@ export function prodRollbackApps(apps: GitOpsApplicationView[]): GitOpsApplicati
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
-export function attentionRuns(
+export type SupersededRun = AttentionRun & {
+  /** The later successful run of the same pipeline. */
+  supersededBy: string
+}
+
+export type ReleaseRunSplit = {
+  /** Running runs, then failed runs no later success has covered. */
+  inProgress: AttentionRun[]
+  /** Failed runs a later success of the same pipeline covered. History only. */
+  superseded: SupersededRun[]
+}
+
+function instantMs(iso: string | undefined): number {
+  if (iso == null || iso === '' || iso.startsWith('0001-')) return Number.NaN
+  return Date.parse(iso)
+}
+
+function newestFirst(a: AttentionRun, b: AttentionRun): number {
+  if (a.started === b.started) return a.name.localeCompare(b.name)
+  return a.started < b.started ? 1 : -1
+}
+
+/**
+ * A failed run moves to history once a later run of the same pipeline
+ * succeeded. Each release pipeline ships to one environment
+ * (release-rules.yaml), so the pipeline name is the pipeline-and-environment
+ * key. Successes come from the run list and from release records, which
+ * outlive the CI system's run retention.
+ */
+export function splitReleaseRuns(
   groups: Array<{ pipeline: string; runs: DeliveryPipelineRunView[] }>,
-): AttentionRun[] {
-  const rows: AttentionRun[] = []
+  records: ReleaseRecord[] = [],
+): ReleaseRunSplit {
+  const inProgress: AttentionRun[] = []
+  const superseded: SupersededRun[] = []
   for (const group of groups) {
+    const successes = [
+      ...group.runs
+        .filter(isPipelineRunSucceeded)
+        .map(run => ({ name: run.name, at: instantMs(run.start_time) })),
+      ...records
+        .filter(record => record.pipeline === group.pipeline)
+        .map(record => ({ name: record.run, at: instantMs(record.started_at) })),
+    ]
+      .filter(success => Number.isFinite(success.at))
+      .sort((a, b) => a.at - b.at)
+
     for (const run of group.runs) {
       let kind: AttentionRun['kind'] | null = null
       if (isPipelineRunRunning(run)) kind = 'running'
       else if (isPipelineRunFailed(run)) kind = 'failed'
       if (kind == null) continue
-      rows.push({
+      const row: AttentionRun = {
         pipeline: group.pipeline,
         name: run.name,
         status: formatPipelineRunStatus(run),
         kind,
         started: formatInstant(run.start_time),
         revision: run.revision?.trim() || '—',
-      })
+      }
+      const startedAt = instantMs(run.start_time)
+      const later =
+        kind === 'failed' && Number.isFinite(startedAt)
+          ? successes.find(success => success.at > startedAt && success.name !== run.name)
+          : undefined
+      if (later != null) superseded.push({ ...row, supersededBy: later.name })
+      else inProgress.push(row)
     }
   }
-  rows.sort((a, b) => {
+  inProgress.sort((a, b) => {
     if (a.kind !== b.kind) return a.kind === 'running' ? -1 : 1
-    if (a.started === b.started) return a.name.localeCompare(b.name)
-    return a.started < b.started ? 1 : -1
+    return newestFirst(a, b)
   })
-  return rows
+  superseded.sort(newestFirst)
+  return { inProgress, superseded }
+}
+
+/** Compact elapsed time: `45m`, `3h`, `2d 4h`. */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '—'
+  const totalMin = Math.floor(ms / 60_000)
+  if (totalMin < 60) return `${totalMin}m`
+  const hours = Math.floor(totalMin / 60)
+  if (hours < 48) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  const rest = hours % 24
+  return rest === 0 ? `${days}d` : `${days}d ${rest}h`
+}
+
+export type ReleaseWindowView = {
+  state: 'no-token' | 'loading' | 'error' | 'free' | 'held'
+  text: string
+  detail: string
+}
+
+export const RELEASE_WINDOW_FREE = 'Release window free'
+
+export const NO_VIEWER_TOKEN = 'This device has no viewer token'
+
+export function releaseWindowView(input: {
+  hasToken: boolean
+  isLoading: boolean
+  error: string | null
+  data: ReleaseWindowResponse | undefined
+  now?: number
+}): ReleaseWindowView {
+  if (!input.hasToken) return { state: 'no-token', text: 'Unknown', detail: NO_VIEWER_TOKEN }
+  if (input.error != null) return { state: 'error', text: 'Unknown', detail: input.error }
+  if (input.isLoading || input.data == null) return { state: 'loading', text: 'Loading…', detail: '' }
+  const held = input.data.window
+  if (!input.data.open || held == null) return { state: 'free', text: RELEASE_WINDOW_FREE, detail: '' }
+  const now = input.now ?? Date.now()
+  const parts = [
+    held.what.trim() !== '' ? held.what : '',
+    held.env.trim() !== '' ? held.env : '',
+    held.expires_at != null && held.expires_at !== '' ? formatTimeRemaining(held.expires_at, now) : '',
+    `held ${formatDuration(now - instantMs(held.started_at))}`,
+    held.reason?.trim() ?? '',
+  ].filter(part => part !== '')
+  return { state: 'held', text: `Held by ${held.who}`, detail: parts.join(' · ') }
+}
+
+/** Approval actions that ship or roll back a release. */
+export const RELEASE_APPROVAL_ACTIONS: ReadonlySet<string> = new Set([
+  'start_pipeline_run',
+  'gitops_sync_app',
+  'gitops_rollback_app',
+])
+
+/** Pending release requests, longest waiting first. */
+export function pendingReleaseApprovals(items: ApprovalItem[]): ApprovalItem[] {
+  return items
+    .filter(item => item.status === 'pending' && RELEASE_APPROVAL_ACTIONS.has(item.action))
+    .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+}
+
+function paramText(params: Record<string, unknown>, key: string): string {
+  const value = params[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** What the request ships: pipeline or application, revision, tag. */
+export function approvalSubject(item: ApprovalItem): string {
+  const params = item.params ?? {}
+  const revision = paramText(params, 'revision')
+  const parts = [
+    paramText(params, 'name'),
+    revision === '' ? '' : shortSha(revision) || revision,
+    paramText(params, 'tag'),
+  ].filter(part => part !== '')
+  return parts.length > 0 ? parts.join(' · ') : '—'
+}
+
+export function approvalHref(id: string): string {
+  return `#approvals?id=${encodeURIComponent(id)}`
 }
