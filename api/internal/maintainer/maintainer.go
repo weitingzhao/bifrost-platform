@@ -29,6 +29,7 @@ const (
 	LoopChecklistProber = "checklist-prober"
 	LoopReleaseRecorder = "release-recorder"
 	LoopReleasePolicy   = "release-policy-expiry"
+	LoopAgentThreads    = "agent-thread-watch"
 
 	ResultSuccess = "success"
 	ResultFailure = "failure"
@@ -52,6 +53,7 @@ func Loops() []Loop {
 		{Name: LoopChecklistProber, Symbol: "LoopChecklistProber", File: "internal/checklist/prober.go"},
 		{Name: LoopReleaseRecorder, Symbol: "LoopReleaseRecorder", File: "internal/releases/service.go"},
 		{Name: LoopReleasePolicy, Symbol: "LoopReleasePolicy", File: "internal/releasepolicy/expiry.go"},
+		{Name: LoopAgentThreads, Symbol: "LoopAgentThreads", File: "internal/agentthreads/watch.go"},
 	}
 }
 
