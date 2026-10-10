@@ -121,6 +121,8 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Channel       string          `json:"channel"`
 		ConfirmNumber json.RawMessage `json:"confirm_number"`
+		ApprovalLine  string          `json:"approval_line"`
+		ParamsHash    string          `json:"params_hash"`
 	}
 	if err := decode(r, &body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -132,7 +134,12 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ref := chi.URLParam(r, "id")
-	out := s.approveWith(r.Context(), ref, approveInput{Channel: body.Channel, Confirm: confirm})
+	out := s.approveWith(r.Context(), ref, approveInput{
+		Channel:      body.Channel,
+		Confirm:      confirm,
+		ApprovalLine: body.ApprovalLine,
+		ParamsHash:   body.ParamsHash,
+	})
 	if (out.Status == http.StatusOK || out.Status == http.StatusAccepted) && s.audit != nil {
 		id, _ := out.Body["id"].(string)
 		s.audit.Record(r, "approval.approve", id, StatusApproved, "channel="+strings.TrimSpace(body.Channel))

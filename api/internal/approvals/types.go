@@ -31,22 +31,27 @@ type Approval struct {
 	ID string `json:"id"`
 	// Number is the short global #n (execution card 4). 0 on records created
 	// before numbering.
-	Number       int            `json:"number,omitempty"`
-	Action       string         `json:"action"`
-	Tier         string         `json:"tier"`
-	Params       map[string]any `json:"params"`
-	ParamsHash   string         `json:"params_hash"`
-	Status       string         `json:"status"`
-	Reason       string         `json:"reason"`
-	Rollback     string         `json:"rollback,omitempty"`
-	Requester    string         `json:"requester"`
-	CreatedAt    time.Time      `json:"created_at"`
-	ExpiresAt    time.Time      `json:"expires_at"`
-	DecidedAt    time.Time      `json:"decided_at,omitempty"`
-	Channel      string         `json:"channel,omitempty"`
-	RejectReason string         `json:"reject_reason,omitempty"`
-	Result       any            `json:"result,omitempty"`
-	Error        string         `json:"error,omitempty"`
+	Number     int            `json:"number,omitempty"`
+	Action     string         `json:"action"`
+	Tier       string         `json:"tier"`
+	Params     map[string]any `json:"params"`
+	ParamsHash string         `json:"params_hash"`
+	// ApprovedLine is the canonical line the caller echoed when this request
+	// was approved. Empty until then.
+	ApprovedLine string `json:"approved_line,omitempty"`
+	// ApprovalLine is filled by public() for readers. It is not stored.
+	ApprovalLine string    `json:"approval_line,omitempty"`
+	Status       string    `json:"status"`
+	Reason       string    `json:"reason"`
+	Rollback     string    `json:"rollback,omitempty"`
+	Requester    string    `json:"requester"`
+	CreatedAt    time.Time `json:"created_at"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	DecidedAt    time.Time `json:"decided_at,omitempty"`
+	Channel      string    `json:"channel,omitempty"`
+	RejectReason string    `json:"reject_reason,omitempty"`
+	Result       any       `json:"result,omitempty"`
+	Error        string    `json:"error,omitempty"`
 
 	Env       string            `json:"env,omitempty"`
 	Summary   string            `json:"summary,omitempty"`
@@ -117,12 +122,13 @@ func (a Approval) closedAt() time.Time {
 }
 
 // public is the API view: the lease id is the executor's capability and is
-// not shown to readers.
+// not shown to readers. approval_line is the canonical line for this record.
 func (a Approval) public() Approval {
 	if a.Execution != nil {
 		e := *a.Execution
 		e.LeaseID = ""
 		a.Execution = &e
 	}
+	a.ApprovalLine = CanonicalApprovalLine(a)
 	return a
 }

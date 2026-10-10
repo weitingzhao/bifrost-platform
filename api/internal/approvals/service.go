@@ -330,10 +330,19 @@ type approveInput struct {
 	Channel string
 	// Confirm is confirm_number as sent; nil when absent.
 	Confirm *int
+	// ApprovalLine and ParamsHash are the caller's echo of the canonical line
+	// and the stored params hash. Both are required and compared strictly.
+	ApprovalLine string
+	ParamsHash   string
 }
 
 func (s *Service) approve(ctx context.Context, id, channel string) decided {
-	return s.approveWith(ctx, id, approveInput{Channel: channel})
+	in := approveInput{Channel: channel}
+	if rec, ok := s.find(id); ok {
+		in.ApprovalLine = CanonicalApprovalLine(rec)
+		in.ParamsHash = rec.ParamsHash
+	}
+	return s.approveWith(ctx, id, in)
 }
 
 func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) decided {
@@ -372,12 +381,28 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 			refusal = d
 			return keepSwept(evs)
 		}
+		line := CanonicalApprovalLine(found)
+		if in.ApprovalLine != line || in.ParamsHash != found.ParamsHash {
+			msg := "approval_line does not match"
+			if in.ApprovalLine == line {
+				msg = "params_hash does not match"
+			} else if in.ParamsHash != found.ParamsHash {
+				msg = "approval_line and params_hash do not match"
+			}
+			refusal = &decided{Status: http.StatusConflict, Body: map[string]any{
+				"error":         msg,
+				"approval_line": line,
+				"params_hash":   found.ParamsHash,
+			}}
+			return keepSwept(evs)
+		}
 		if d := s.checkConfirm(found, channel, in.Confirm); d != nil {
 			refusal = d
 			return keepSwept(evs)
 		}
 		found.DecidedAt = now
 		found.Channel = channel
+		found.ApprovedLine = line
 		found.Status = StatusApproved
 		found.Result = nil
 		found.Error = ""

@@ -32,6 +32,9 @@ export interface ApprovalRecord {
   env?: string
   summary?: string
   key_params?: Record<string, string>
+  /** Canonical line produced by the server. Shown and compared exactly. */
+  approval_line?: string
+  params_hash?: string
 }
 
 export interface ApproveClient {
@@ -50,25 +53,15 @@ function asRecord(value: unknown): ApprovalRecord {
 }
 
 /**
- * One line naming the request: number, tier, action, env, summary, key params.
- * Example: "#57 · tier C · rollout_restart_deployment · env bifrost-prod · Restart Deployment bifrost-prod/api · name=api"
+ * The approval line is the string the server produced. This does not rebuild
+ * it, and comparison is strict equality: whitespace is significant.
  */
 export function approvalLine(rec: ApprovalRecord): string {
-  const parts = [
-    rec.number ? `#${rec.number}` : (rec.id ?? ''),
-    `tier ${rec.tier ?? '?'}`,
-    rec.action ?? '',
-  ]
-  if (rec.env) parts.push(`env ${rec.env}`)
-  if (rec.summary) parts.push(rec.summary)
-  const keys = Object.keys(rec.key_params ?? {}).sort()
-  if (keys.length > 0) parts.push(keys.map((k) => `${k}=${rec.key_params![k]}`).join(', '))
-  return parts.filter((p) => p !== '').join(' · ')
+  return rec.approval_line ?? ''
 }
 
 function sameLine(a: string, b: string): boolean {
-  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
-  return norm(a) === norm(b)
+  return a === b
 }
 
 type Checked = { ok: true; rec: ApprovalRecord; line: string } | { ok: false; refusal: Record<string, unknown> }
@@ -96,6 +89,7 @@ async function checkDecision(id: string, approval: string, client: ApproveClient
     ({ ok: false, refusal: { error, sent: false, approval_line: line, ...extra } }) as const
   if (!rec.id) return refuse('not found', { id: ref })
   if (rec.tier === 'D') return { ok: false, refusal: consoleOnly(rec) }
+  if (!rec.approval_line || !rec.params_hash) return refuse('approval line is not available from the server')
   if (rec.status !== 'pending') return refuse('not pending', { status: rec.status })
   if (rec.number && ref !== String(rec.number)) {
     return refuse(`pass id "#${rec.number}" so the permission prompt shows the number`)
@@ -111,7 +105,11 @@ export async function approveRequest(id: string, approval: string, client: Appro
   const checked = await checkDecision(id, approval, client)
   if (!checked.ok) return checked.refusal
   const body = asRecord(
-    await client.send(`/api/v1/approvals/${encodeURIComponent(checked.rec.id!)}/approve`, { channel: 'chat' }),
+    await client.send(`/api/v1/approvals/${encodeURIComponent(checked.rec.id!)}/approve`, {
+      channel: 'chat',
+      approval_line: checked.line,
+      params_hash: checked.rec.params_hash,
+    }),
   )
   return { ...body, approval_line: checked.line }
 }

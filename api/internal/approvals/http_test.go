@@ -77,7 +77,19 @@ func TestExecutedApprovalUsesStoredParamsOnce(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("operator approve = %d %s", rec.Code, rec.Body.String())
 	}
-	rec = call(t, h, http.MethodPost, "/api/v1/approvals/"+created.ID+"/approve", `{"channel":"console","params":{"name":"node-b"}}`, "admin-test-token")
+	opened := call(t, h, http.MethodGet, "/api/v1/approvals/"+created.ID, "", "viewer-test-token")
+	var openedRow struct {
+		ApprovalLine string `json:"approval_line"`
+		ParamsHash   string `json:"params_hash"`
+	}
+	if err := json.Unmarshal(opened.Body.Bytes(), &openedRow); err != nil || openedRow.ApprovalLine == "" {
+		t.Fatalf("get approval = %d %s", opened.Code, opened.Body.String())
+	}
+	approveBody, _ := json.Marshal(map[string]any{
+		"channel": "console", "approval_line": openedRow.ApprovalLine, "params_hash": openedRow.ParamsHash,
+		"params": map[string]any{"name": "node-b"},
+	})
+	rec = call(t, h, http.MethodPost, "/api/v1/approvals/"+created.ID+"/approve", string(approveBody), "admin-test-token")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"executed"`) {
 		t.Fatalf("approve = %d %s", rec.Code, rec.Body.String())
 	}

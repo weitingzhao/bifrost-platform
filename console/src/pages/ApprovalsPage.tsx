@@ -212,7 +212,13 @@ export function ApprovalsPage() {
         requestId,
         token,
         path,
-        path === 'approve' ? { channel: 'console' } : { reason: reason ?? '' },
+        path === 'approve'
+          ? {
+              channel: 'console',
+              approval_line: opened?.approval_line ?? '',
+              params_hash: opened?.params_hash ?? '',
+            }
+          : { reason: reason ?? '' },
       )
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {

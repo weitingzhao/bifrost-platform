@@ -76,7 +76,7 @@ func TestFailedRunPushesAndRecordsTheDelivery(t *testing.T) {
 	r := chi.NewRouter()
 	r.Post("/approvals/{id}/approve", svc.HandleApprove)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/approvals/"+c.Approval.ID+"/approve", bytes.NewBufferString(`{"channel":"chat"}`)))
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/approvals/"+c.Approval.ID+"/approve", bytes.NewReader(echoApproveBody(c.Approval, "chat", nil))))
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"failed"`) {
 		t.Fatalf("approve = %d %s", rec.Code, rec.Body.String())
 	}

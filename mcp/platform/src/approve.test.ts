@@ -16,6 +16,10 @@ beforeEach(() => {
   delete process.env.PLATFORM_CONSOLE_URL
 })
 
+const LINE_C =
+  '#57 · tier C · rollout_restart_deployment · env bifrost-prod · Restart Deployment bifrost-prod/api · name=api, namespace=bifrost-prod · 0123456789ab'
+const HASH_C = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
 const tierC: ApprovalRecord = {
   id: 'appr_0123456789abcdef',
   number: 57,
@@ -25,9 +29,9 @@ const tierC: ApprovalRecord = {
   env: 'bifrost-prod',
   summary: 'Restart Deployment bifrost-prod/api',
   key_params: { namespace: 'bifrost-prod', name: 'api' },
+  approval_line: LINE_C,
+  params_hash: HASH_C,
 }
-const LINE_C =
-  '#57 · tier C · rollout_restart_deployment · env bifrost-prod · Restart Deployment bifrost-prod/api · name=api, namespace=bifrost-prod'
 
 const tierD: ApprovalRecord = {
   id: 'appr_fedcba9876543210',
@@ -57,12 +61,9 @@ function fakeClient(rec: unknown, answer: unknown = { status: 'executed', id: ti
   return { client, gets, sends }
 }
 
-test('approval line: number, tier, action, env, summary, sorted key params', () => {
+test('approval line is the server string and is not rebuilt locally', () => {
   assert.equal(approvalLine(tierC), LINE_C)
-  assert.equal(
-    approvalLine({ id: 'appr_old', tier: 'C', action: 'trigger_cnpg_backup' }),
-    'appr_old · tier C · trigger_cnpg_backup',
-  )
+  assert.equal(approvalLine({ id: 'appr_old', tier: 'C', action: 'trigger_cnpg_backup' }), '')
 })
 
 test('批 #57 on tier C: one POST to the stored id, channel chat only', async () => {
@@ -71,7 +72,7 @@ test('批 #57 on tier C: one POST to the stored id, channel chat only', async ()
   assert.deepEqual(gets, ['/api/v1/approvals/57'])
   assert.equal(sends.length, 1)
   assert.equal(sends[0].path, '/api/v1/approvals/appr_0123456789abcdef/approve')
-  assert.deepEqual(sends[0].body, { channel: 'chat' })
+  assert.deepEqual(sends[0].body, { channel: 'chat', approval_line: LINE_C, params_hash: HASH_C })
   assert.equal(got.status, 'executed')
   assert.equal(got.approval_line, LINE_C)
 })
@@ -116,10 +117,18 @@ test('驳 #58 on tier D is refused the same way', async () => {
   assert.equal(got.console_url, CONSOLE_D)
 })
 
-test('the line is compared with whitespace collapsed', async () => {
+test('the line is compared with strict equality', async () => {
   const { client, sends } = fakeClient(tierC)
-  await approveRequest('57', `  ${LINE_C.replace(/ · /g, '  ·  ')} `, client)
-  assert.equal(sends.length, 1)
+  const spaced = (await approveRequest('57', `  ${LINE_C.replace(/ · /g, '  ·  ')} `, client)) as Record<string, unknown>
+  assert.equal(sends.length, 0)
+  assert.equal(spaced.sent, false)
+  const newline = fakeClient(tierC)
+  const got = (await approveRequest('#57', LINE_C.replace('name=api', 'name=api\n'), newline.client)) as Record<
+    string,
+    unknown
+  >
+  assert.equal(newline.sends.length, 0)
+  assert.equal(got.sent, false)
 })
 
 test('a line that differs from the stored request sends nothing', async () => {
@@ -142,10 +151,18 @@ test('a numbered request must be named by #n so the prompt shows it', async () =
 })
 
 test('a request created before numbering is approved by its id', async () => {
-  const old = { id: 'appr_old', tier: 'C', action: 'trigger_cnpg_backup', status: 'pending' }
+  const old = {
+    id: 'appr_old',
+    tier: 'C',
+    action: 'trigger_cnpg_backup',
+    status: 'pending',
+    approval_line: 'appr_old · tier C · trigger_cnpg_backup · abcdef012345',
+    params_hash: 'abcdef012345000000000000000000000000000000000000000000000000',
+  }
   const { client, sends } = fakeClient(old)
-  await approveRequest('appr_old', 'appr_old · tier C · trigger_cnpg_backup', client)
+  await approveRequest('appr_old', old.approval_line, client)
   assert.equal(sends[0].path, '/api/v1/approvals/appr_old/approve')
+  assert.deepEqual(sends[0].body, { channel: 'chat', approval_line: old.approval_line, params_hash: old.params_hash })
 })
 
 test('a request that is not pending is not sent', async () => {

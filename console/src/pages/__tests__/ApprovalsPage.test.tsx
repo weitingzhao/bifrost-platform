@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -151,6 +151,37 @@ describe('ApprovalsPage (request page)', () => {
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(
       false,
     )
+  })
+
+  it('approves with the server line and params hash', async () => {
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.location.hash = '#approvals?id=ap-1'
+    const opened = buildPlatformApproval({
+      id: 'ap-1',
+      approval_line: '#1 · tier C · gitops_sync_app · fixture-params',
+      params_hash: 'fixture-params-hash',
+    })
+    const posts: unknown[] = []
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/approve') && init?.method === 'POST') {
+        posts.push(JSON.parse(String(init.body)))
+        return json({ id: 'ap-1', status: 'executed' })
+      }
+      if (url.endsWith('/api/v1/approvals/ap-1')) return json(opened)
+      return json(buildApprovalListResponse([]))
+    })
+    render(wrapper(<ApprovalsPage />))
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve gitops_sync_app' }))
+    await waitFor(() => {
+      expect(posts).toEqual([
+        {
+          channel: 'console',
+          approval_line: '#1 · tier C · gitops_sync_app · fixture-params',
+          params_hash: 'fixture-params-hash',
+        },
+      ])
+    })
   })
 
   it('shows a closed request read-only with its result', async () => {

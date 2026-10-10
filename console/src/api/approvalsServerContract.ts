@@ -10,6 +10,19 @@ export type PlatformApprovalRecord = {
   tier: string
   params: Record<string, unknown>
   params_hash: string
+  /** Canonical line from the server. Approve echoes it unchanged. */
+  approval_line?: string
+  /** The line stored when the request was approved. */
+  approved_line?: string
+  number?: number
+  env?: string
+  summary?: string
+  key_params?: Record<string, string>
+  runner?: string
+  requester_thread?: string
+  work_id?: string
+  execution?: unknown
+  deliveries?: unknown
   status: string
   reason: string
   rollback?: string

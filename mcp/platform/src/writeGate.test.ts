@@ -230,7 +230,15 @@ describe('platformClient write gate', () => {
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       if ((init?.method ?? 'GET') === 'GET' && String(url).endsWith('/api/v1/approvals/9')) {
         calls.push({ url: String(url), method: 'GET', body: undefined })
-        const rec = { id: 'apr-9', number: 9, tier: 'C', action: 'gitops_sync_app', status: 'pending' }
+        const rec = {
+          id: 'apr-9',
+          number: 9,
+          tier: 'C',
+          action: 'gitops_sync_app',
+          status: 'pending',
+          approval_line: '#9 · tier C · gitops_sync_app',
+          params_hash: 'hashhashhash',
+        }
         return new Response(JSON.stringify(rec), { status: 200 })
       }
       return mocked(url, init)
@@ -239,7 +247,11 @@ describe('platformClient write gate', () => {
     assert.equal(calls.length, 2)
     assert.equal(calls[0].method, 'GET')
     assert.ok(calls[1].url.endsWith('/api/v1/approvals/apr-9/approve'))
-    assert.deepEqual(calls[1].body, { channel: 'chat' })
+    assert.deepEqual(calls[1].body, {
+      channel: 'chat',
+      approval_line: '#9 · tier C · gitops_sync_app',
+      params_hash: 'hashhashhash',
+    })
 
     const platform = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
     const local = new Set<string>(LOCAL_TOOL_NAMES)

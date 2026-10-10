@@ -165,7 +165,7 @@ func approveOwnerRun(t *testing.T, svc *Service) Approval {
 	if c.Status != http.StatusCreated {
 		t.Fatalf("create = %d %v", c.Status, c.Body)
 	}
-	out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "console"})
+	out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "console"}))
 	if out.Status != http.StatusAccepted || out.Body["status"] != StatusApproved {
 		t.Fatalf("approve owner_run_command = %d %v", out.Status, out.Body)
 	}
@@ -434,15 +434,15 @@ func TestConfirmNumberForTierD(t *testing.T) {
 	})
 	c := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
 	wrong := c.Approval.Number + 1
-	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "console", Confirm: &wrong}); out.Status != http.StatusConflict {
+	if out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "console", Confirm: &wrong})); out.Status != http.StatusConflict {
 		t.Fatalf("wrong confirm_number = %d %v", out.Status, out.Body)
 	}
 	svc.requireConfirm = true
-	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "phone"}); out.Status != http.StatusBadRequest {
+	if out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "phone"})); out.Status != http.StatusBadRequest {
 		t.Fatalf("missing confirm_number when required = %d", out.Status)
 	}
 	right := c.Approval.Number
-	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "phone", Confirm: &right}); out.Body["status"] != StatusExecuted {
+	if out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "phone", Confirm: &right})); out.Body["status"] != StatusExecuted {
 		t.Fatalf("right confirm_number = %d %v", out.Status, out.Body)
 	}
 }
@@ -457,7 +457,7 @@ func TestTierDChatApprovalIsRefused(t *testing.T) {
 	actions.RegisterExecutor("trigger_cnpg_backup", ok)
 
 	d := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
-	out := svc.approveWith(context.Background(), d.Approval.ID, approveInput{Channel: "chat"})
+	out := svc.approveWith(context.Background(), d.Approval.ID, withLine(d.Approval, approveInput{Channel: "chat"}))
 	if out.Status != http.StatusForbidden {
 		t.Fatalf("tier D over chat = %d %v", out.Status, out.Body)
 	}
@@ -472,17 +472,17 @@ func TestTierDChatApprovalIsRefused(t *testing.T) {
 	if got, _ := svc.get(d.Approval.ID); got.Status != StatusPending || got.Channel != "" || !got.DecidedAt.IsZero() {
 		t.Fatalf("after the refusal = %s channel=%q", got.Status, got.Channel)
 	}
-	if out := svc.approveWith(context.Background(), d.Approval.ID, approveInput{Channel: "console"}); out.Body["status"] != StatusExecuted {
+	if out := svc.approveWith(context.Background(), d.Approval.ID, withLine(d.Approval, approveInput{Channel: "console"})); out.Body["status"] != StatusExecuted {
 		t.Fatalf("tier D over console = %d %v", out.Status, out.Body)
 	}
 
 	p := svc.create(context.Background(), "s", "repair_cnpg_wal_store", "repair", "", nil)
-	if out := svc.approveWith(context.Background(), p.Approval.ID, approveInput{Channel: "phone"}); out.Body["status"] != StatusExecuted {
+	if out := svc.approveWith(context.Background(), p.Approval.ID, withLine(p.Approval, approveInput{Channel: "phone"})); out.Body["status"] != StatusExecuted {
 		t.Fatalf("tier D over phone = %d %v", out.Status, out.Body)
 	}
 
 	c := svc.create(context.Background(), "s", "trigger_cnpg_backup", "backup", "", nil)
-	if out := svc.approveWith(context.Background(), c.Approval.ID, approveInput{Channel: "chat"}); out.Body["status"] != StatusExecuted {
+	if out := svc.approveWith(context.Background(), c.Approval.ID, withLine(c.Approval, approveInput{Channel: "chat"})); out.Body["status"] != StatusExecuted {
 		t.Fatalf("tier C over chat = %d %v", out.Status, out.Body)
 	}
 
@@ -632,7 +632,19 @@ tokens:
 			t.Fatalf("%s claim = %d", tok, rec.Code)
 		}
 	}
-	approved := do(http.MethodPost, "/approvals/%231/approve", `{"channel":"console","confirm_number":"#1"}`, "admin-test-token")
+	opened := do(http.MethodGet, "/approvals/1", "", "viewer-test-token")
+	var openedRow struct {
+		ApprovalLine string `json:"approval_line"`
+		ParamsHash   string `json:"params_hash"`
+	}
+	if err := json.Unmarshal(opened.Body.Bytes(), &openedRow); err != nil || openedRow.ApprovalLine == "" || openedRow.ParamsHash == "" {
+		t.Fatalf("open #1 = %d %s", opened.Code, opened.Body.String())
+	}
+	approveBody, _ := json.Marshal(map[string]any{
+		"channel": "console", "confirm_number": "#1",
+		"approval_line": openedRow.ApprovalLine, "params_hash": openedRow.ParamsHash,
+	})
+	approved := do(http.MethodPost, "/approvals/%231/approve", string(approveBody), "admin-test-token")
 	if approved.Code != http.StatusAccepted || !strings.Contains(approved.Body.String(), `"status":"approved"`) {
 		t.Fatalf("approve #1 = %d %s", approved.Code, approved.Body.String())
 	}

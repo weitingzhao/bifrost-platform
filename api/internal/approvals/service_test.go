@@ -178,14 +178,15 @@ tokens:
 		t.Fatalf("operator approve = %d %s", rec.Code, rec.Body.String())
 	}
 
+	stored, _ := svc.find(created.ID)
 	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodPost, "/approvals/"+created.ID+"/approve", bytes.NewReader([]byte(`{"channel":"phone","params":{"name":"other"}}`)))
+	req = httptest.NewRequest(http.MethodPost, "/approvals/"+created.ID+"/approve", bytes.NewReader(echoApproveBody(stored, "phone", map[string]any{"params": map[string]any{"name": "other"}})))
 	req.Header.Set("Authorization", "Bearer admin-test-token")
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK || !bytes.Contains(rec.Body.Bytes(), []byte(`"status":"executed"`)) {
 		t.Fatalf("admin approve = %d %s", rec.Code, rec.Body.String())
 	}
-	stored, _ := svc.get(created.ID)
+	stored, _ = svc.get(created.ID)
 	if stored.Params["name"] != "n1" || stored.Channel != "phone" {
 		t.Fatalf("stored = %#v", stored)
 	}
