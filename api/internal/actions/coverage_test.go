@@ -12,6 +12,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/server"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 // TestWriteRoutesAreCataloguedOrExempt walks the live router. A new write
@@ -101,6 +102,10 @@ func newRouteServer(t *testing.T) *server.Server {
 	t.Setenv("PLATFORM_KUBECONFIG", filepath.Join(dir, "does-not-exist-kubeconfig.yaml"))
 	t.Setenv("PLATFORM_ROLE", "api")
 	t.Setenv("PLATFORM_STATE_BACKEND", "file")
+	// statefile.Use is process-wide. Clear a backend left by another test
+	// in this package, and do not leave one behind.
+	statefile.Use(nil, "")
+	t.Cleanup(func() { statefile.Use(nil, "") })
 	t.Setenv("PATROL_DISPATCH", "stub")
 	t.Setenv("PATROL_STATE_DIR", filepath.Join(dir, "patrol-state"))
 	t.Setenv("PATROL_SKILLS_DIR", filepath.Join(configDir, "patrol-skills"))

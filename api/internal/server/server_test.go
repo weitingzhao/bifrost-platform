@@ -11,6 +11,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 const fixtureEnvironmentsYAML = `
@@ -89,6 +90,14 @@ phases:
 
 	t.Setenv("PLATFORM_CONFIG", filepath.Join(configDir, "environments.yaml"))
 	t.Setenv("PLATFORM_DATA_DIR", filepath.Join(dir, "data"))
+	// A pod sets KUBERNETES_SERVICE_HOST, so k8sstate.Wanted() is true unless
+	// PLATFORM_STATE_BACKEND=file. server.New would then call statefile.Use,
+	// and that ConfigMap backend is process-wide: the next test in this
+	// package would inherit it. Pin files, and drop a backend a previous
+	// test left installed.
+	t.Setenv("PLATFORM_STATE_BACKEND", "file")
+	statefile.Use(nil, "")
+	t.Cleanup(func() { statefile.Use(nil, "") })
 	t.Setenv("PLATFORM_AUTH_CONFIG", filepath.Join(dir, "does-not-exist-platform-auth.yaml"))
 	// Keep the test hermetic — without these, several stores/clients fall back
 	// to the operator's real $HOME paths (remediation jobs, audit log, kubeconfig)

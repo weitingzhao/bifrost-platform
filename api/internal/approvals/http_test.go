@@ -14,6 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/server"
+	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 func TestDirectCDRequiresApproval(t *testing.T) {
@@ -232,6 +233,11 @@ func newPlatform(t *testing.T) http.Handler {
 	t.Setenv("APPROVAL_NOTIFY_TOKEN", "")
 	t.Setenv("PLATFORM_ROLE", "api")
 	t.Setenv("PLATFORM_STATE_BACKEND", "file")
+	// statefile.Use is process-wide. A sibling test that installed a backend
+	// must not still be installed when this server is built, and this test
+	// must not leave one behind.
+	statefile.Use(nil, "")
+	t.Cleanup(func() { statefile.Use(nil, "") })
 	t.Setenv("PATROL_DISPATCH", "stub")
 	t.Setenv("PATROL_STATE_DIR", filepath.Join(dir, "patrol-state"))
 	t.Setenv("PATROL_SKILLS_DIR", filepath.Join(configDir, "patrol-skills"))
