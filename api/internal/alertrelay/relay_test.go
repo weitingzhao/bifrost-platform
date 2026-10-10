@@ -2,6 +2,7 @@ package alertrelay
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -208,6 +209,71 @@ func TestNotifyNtfyFailureIs502(t *testing.T) {
 	}
 	if n := len(f.messages()); n != 0 {
 		t.Fatalf("failed ntfy still recorded %d messages", n)
+	}
+}
+
+func postBody(h http.Handler, path, token, body string) (int, string) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	h.ServeHTTP(rec, req)
+	return rec.Code, rec.Body.String()
+}
+
+func notifyDeliveries(t *testing.T, raw string) []Delivery {
+	t.Helper()
+	var out struct {
+		Deliveries []Delivery `json:"deliveries"`
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		t.Fatalf("decode %s: %v", raw, err)
+	}
+	return out.Deliveries
+}
+
+func TestNotifyAnswersOneDeliveryPerTarget(t *testing.T) {
+	_, _, h, _ := setup(t)
+	code, raw := postBody(h, "/alerts/notify", "tok", notifyBody)
+	ds := notifyDeliveries(t, raw)
+	if code != http.StatusOK || !strings.Contains(raw, `"status":"sent"`) || len(ds) != 1 {
+		t.Fatalf("status %d %s", code, raw)
+	}
+	d := ds[0]
+	if d.Channel != "ntfy" || d.Result != DeliveryAccepted || d.Error != "" || !strings.HasPrefix(d.Target, "ntfy:") || len(d.Target) != len("ntfy:")+12 {
+		t.Fatalf("delivery %+v", d)
+	}
+	if strings.Contains(raw, "topic-x") {
+		t.Fatalf("the topic leaked into the answer: %s", raw)
+	}
+}
+
+func TestNotifyFailureNamesTheReasonWithoutTheTopic(t *testing.T) {
+	_, f, h, _ := setup(t)
+	f.fail = true
+	code, raw := postBody(h, "/alerts/notify", "tok", notifyBody)
+	ds := notifyDeliveries(t, raw)
+	if code != http.StatusBadGateway || len(ds) != 1 || ds[0].Result != DeliveryFailed || !strings.Contains(ds[0].Error, "status 500") {
+		t.Fatalf("status %d %s", code, raw)
+	}
+
+	// A transport error quotes the URL; the topic must not come back.
+	dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	dead.Close()
+	r := New(Config{Enabled: true, NtfyURL: dead.URL, Topic: "secret-topic-123", Token: "tok"})
+	router := chi.NewRouter()
+	r.Mount(router)
+	code, raw = postBody(router, "/alerts/notify", "tok", notifyBody)
+	ds = notifyDeliveries(t, raw)
+	if code != http.StatusBadGateway || len(ds) != 1 || ds[0].Result != DeliveryFailed || ds[0].Error == "" {
+		t.Fatalf("status %d %s", code, raw)
+	}
+	if strings.Contains(raw, "secret-topic-123") {
+		t.Fatalf("the topic leaked into the answer: %s", raw)
+	}
+	status := httptest.NewRecorder()
+	router.ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/alerts/relay", nil))
+	if strings.Contains(status.Body.String(), "secret-topic-123") {
+		t.Fatalf("the topic leaked into the status: %s", status.Body.String())
 	}
 }
 

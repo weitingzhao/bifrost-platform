@@ -32,6 +32,8 @@ type Service struct {
 	// phone and console. Off until the Console sends it; a value that is sent
 	// is always checked.
 	requireConfirm bool
+	// notices counts Owner notices still being sent in the background.
+	notices sync.WaitGroup
 }
 
 // AutoApprover returns the id of a signed release policy that already covers
@@ -551,7 +553,13 @@ type event struct {
 	action, target, status, detail string
 }
 
+// record audits evs and pushes the ones that need the Owner.
 func (s *Service) record(r *http.Request, evs []event) {
+	s.writeAudit(r, evs)
+	s.noticeEvents(evs)
+}
+
+func (s *Service) writeAudit(r *http.Request, evs []event) {
 	if s.audit == nil {
 		return
 	}

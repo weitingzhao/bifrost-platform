@@ -229,7 +229,8 @@ func (s *Service) renew(id, lease string) (Approval, bool) {
 }
 
 // RunRetries retries platform approvals left approved by a transient refusal,
-// and applies the time-based transitions, every interval until ctx ends.
+// applies the time-based transitions and sends the pending reminders, every
+// interval until ctx ends.
 func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -239,6 +240,7 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 			return
 		case <-t.C:
 			s.retryDue(ctx)
+			s.remindDue(ctx)
 		}
 	}
 }
