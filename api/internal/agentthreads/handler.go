@@ -46,11 +46,18 @@ func (h *Handler) HandleBeat(w http.ResponseWriter, r *http.Request) {
 	}
 	dec, err := h.rec.Admit(b)
 	if err != nil {
-		if errors.Is(err, ErrKeyRejected) {
+		switch {
+		case errors.Is(err, ErrUnknownKey):
 			if h.audit != nil {
-				h.audit.Record(r, "agent_thread.key_rejected", Key(b.Vendor, b.Thread), "denied", "missing or mismatched thread key")
+				h.audit.Record(r, "agent_thread.key_rejected", Key(b.Vendor, b.Thread), "denied", "unknown key")
 			}
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "thread key rejected"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "unknown key"})
+			return
+		case errors.Is(err, ErrOlderTurn):
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "older turn refused"})
+			return
+		case errors.Is(err, ErrThreadFull):
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": ErrThreadFull.Error()})
 			return
 		}
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
@@ -78,7 +85,14 @@ func (h *Handler) HandleHost(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	h.rec.RecordHost(b)
+	if err := h.rec.RecordHost(b); err != nil {
+		if errors.Is(err, ErrHostFull) {
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": ErrHostFull.Error()})
+			return
+		}
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 }
 

@@ -2,6 +2,7 @@ package agentthreads
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -60,43 +61,46 @@ func (r *Recorder) Record(b Beat) {
 }
 
 // Admit buffers b when the caller holds the thread key, or issues a key when
-// the thread is new and the caller presented none. The first event is written
-// before the key is returned, so a second process cannot start the same thread.
-// A wrong or missing key on an existing thread, including one that has no hash
-// yet, is ErrKeyRejected. An older sequence is ignored.
+// the thread is new. The first event is written before the key is returned.
+// A lost first response retries with the same registration nonce and receives
+// the same key for registerWindow. A thread with no key yet is migrated by
+// issuing one. A pruned thread presented with a stale key is re-registered
+// under a new key; the stale key is retired. A live thread whose key the
+// caller does not hold is ErrUnknownKey and is not changed. An older turn is
+// ErrOlderTurn even when its sequence is newer. An older sequence is ignored.
+// A new thread that does not fit among the live ones is ErrThreadFull.
 func (r *Recorder) Admit(b Beat) (Decision, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	now := r.now().UTC()
 	st, err := r.snapshotLocked()
 	if err != nil {
 		return Decision{}, err
 	}
-	k := Key(b.Vendor, b.Thread)
-	t, seen := st.Threads[k]
-	if !seen {
-		if b.ThreadKey != "" {
-			return Decision{}, ErrKeyRejected
-		}
-		plain, hash, err := NewThreadKey()
-		if err != nil {
-			return Decision{}, err
-		}
-		b.ThreadKey = ""
-		b.keyHash = hash
-		now := r.now().UTC()
+	if expiredRegisterKey(st, now) {
 		if err := r.store.Update(func(st *State) error {
-			if _, ok := st.Threads[k]; ok {
-				return ErrKeyRejected
-			}
-			st.Apply(b, now)
+			wipeKeys(st, now)
 			return nil
 		}); err != nil {
 			return Decision{}, err
 		}
-		return Decision{Key: plain}, nil
+		st, err = r.snapshotLocked()
+		if err != nil {
+			return Decision{}, err
+		}
 	}
-	if t.KeyHash == "" || !KeyMatches(t.KeyHash, b.ThreadKey) {
-		return Decision{}, ErrKeyRejected
+	k := Key(b.Vendor, b.Thread)
+	t, seen := st.Threads[k]
+	// A retry of a lost first response has the nonce and no key. A caller that
+	// already holds the key takes the buffered path, including during the window.
+	if !seen || t.KeyHash == "" || (b.ThreadKey == "" && nonceLive(t, b.RegisterNonce, now)) {
+		return r.admitSync(b, now)
+	}
+	if !KeyMatches(t.KeyHash, b.ThreadKey) || supersededKey(t, b.ThreadKey) {
+		return Decision{}, ErrUnknownKey
+	}
+	if olderTurn(t, b) {
+		return Decision{}, ErrOlderTurn
 	}
 	if b.Seq <= t.Seq {
 		return Decision{Ignored: true}, nil
@@ -107,14 +111,189 @@ func (r *Recorder) Admit(b Beat) (Decision, error) {
 	return Decision{}, nil
 }
 
-// RecordHost buffers one host heartbeat. b must be valid.
-func (r *Recorder) RecordHost(b HostBeat) {
+// admitSync writes a registration, a migration, or a nonce replay. The
+// plaintext key is returned only to this caller.
+func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
+	var decision Decision
+	var refused bool
+	err := r.store.Update(func(st *State) error {
+		decision = Decision{}
+		refused = false
+		wipeKeys(st, now)
+		k := Key(b.Vendor, b.Thread)
+		t, seen := st.Threads[k]
+		if seen && nonceLive(t, b.RegisterNonce, now) {
+			decision.Key = t.RegisterKey
+			if b.Seq > t.Seq && !olderTurn(t, b) {
+				b.keyHash = t.KeyHash
+				b.ThreadKey = ""
+				st.Apply(b, now)
+			} else {
+				decision.Ignored = b.Seq <= t.Seq
+			}
+			return nil
+		}
+		if seen && t.KeyHash != "" {
+			return ErrUnknownKey
+		}
+		if seen && t.KeyHash == "" {
+			return r.migrate(st, b, now, &decision)
+		}
+		return r.register(st, b, now, &decision, &refused)
+	})
+	if refused {
+		noteThreadRefused()
+	}
+	if err != nil {
+		return Decision{}, err
+	}
+	return decision, nil
+}
+
+func (r *Recorder) register(st *State, b Beat, now time.Time, d *Decision, refused *bool) error {
+	k := Key(b.Vendor, b.Thread)
+	if cur, ok := st.Threads[k]; ok {
+		if nonceLive(cur, b.RegisterNonce, now) {
+			d.Key = cur.RegisterKey
+			return nil
+		}
+		return ErrUnknownKey
+	}
+	plain, hash, err := NewThreadKey()
+	if err != nil {
+		return err
+	}
+	stale := b.ThreadKey
+	b.ThreadKey = ""
+	b.keyHash = hash
+	if !st.Apply(b, now) {
+		return errors.New("thread was not stored")
+	}
+	cur := st.Threads[k]
+	cur.RegisterNonce = b.RegisterNonce
+	cur.RegisterKey = plain
+	cur.RegisteredAt = now
+	if stale != "" {
+		sum := HashKey(stale)
+		if sum != hash {
+			cur.SupersededKeys = append(cur.SupersededKeys, sum)
+		}
+	}
+	st.Threads[k] = cur
+	if err := st.fitNewThread(k); err != nil {
+		*refused = true
+		return err
+	}
+	d.Key = plain
+	return nil
+}
+
+func (r *Recorder) migrate(st *State, b Beat, now time.Time, d *Decision) error {
+	k := Key(b.Vendor, b.Thread)
+	cur, ok := st.Threads[k]
+	if !ok || cur.KeyHash != "" {
+		return ErrUnknownKey
+	}
+	plain, hash, err := NewThreadKey()
+	if err != nil {
+		return err
+	}
+	// A client-supplied key is not adopted. The server issues the key.
+	b.ThreadKey = ""
+	b.keyHash = hash
+	if cur.Seq > 0 && (olderTurn(cur, b) || b.Seq <= cur.Seq) {
+		cur.KeyHash = hash
+		cur.RegisterNonce = b.RegisterNonce
+		cur.RegisterKey = plain
+		cur.RegisteredAt = now
+		st.Threads[k] = cur
+		d.Key = plain
+		d.Ignored = true
+		return nil
+	}
+	if !st.Apply(b, now) {
+		return errors.New("thread was not stored")
+	}
+	cur = st.Threads[k]
+	cur.RegisterNonce = b.RegisterNonce
+	cur.RegisterKey = plain
+	cur.RegisteredAt = now
+	st.Threads[k] = cur
+	d.Key = plain
+	return nil
+}
+
+func nonceLive(t Thread, nonce string, now time.Time) bool {
+	if nonce == "" || nonce != t.RegisterNonce || t.RegisterKey == "" {
+		return false
+	}
+	if t.RegisteredAt.IsZero() || now.Sub(t.RegisteredAt) > registerWindow {
+		return false
+	}
+	return true
+}
+
+func supersededKey(t Thread, presented string) bool {
+	if presented == "" {
+		return false
+	}
+	for _, h := range t.SupersededKeys {
+		if KeyMatches(h, presented) {
+			return true
+		}
+	}
+	return false
+}
+
+func expiredRegisterKey(st State, now time.Time) bool {
+	for _, t := range st.Threads {
+		if t.RegisterKey == "" {
+			continue
+		}
+		if t.RegisteredAt.IsZero() || now.Sub(t.RegisteredAt) > registerWindow {
+			return true
+		}
+	}
+	return false
+}
+
+func wipeKeys(st *State, now time.Time) {
+	for k, t := range st.Threads {
+		if t.RegisterKey == "" {
+			continue
+		}
+		if t.RegisteredAt.IsZero() || now.Sub(t.RegisteredAt) > registerWindow {
+			t.RegisterKey = ""
+			st.Threads[k] = t
+		}
+	}
+}
+
+// RecordHost buffers one host heartbeat when it fits. A new host is refused
+// with ErrHostFull when every slot is already taken. b must be valid.
+func (r *Recorder) RecordHost(b HostBeat) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	st, err := r.snapshotLocked()
+	if err != nil {
+		return err
+	}
+	known := map[string]struct{}{}
+	for name := range st.Hosts {
+		known[name] = struct{}{}
+	}
+	for _, h := range r.hosts {
+		known[h.beat.Host] = struct{}{}
+	}
+	if _, ok := known[b.Host]; !ok && len(known) >= maxHosts {
+		noteHostRefused()
+		return ErrHostFull
+	}
 	if len(r.hosts) >= maxPending {
 		r.hosts = r.hosts[1:]
 	}
 	r.hosts = append(r.hosts, hostStamped{beat: b, at: r.now().UTC()})
+	return nil
 }
 
 func (r *Recorder) enqueue(b Beat) {
@@ -135,17 +314,43 @@ func (r *Recorder) Flush() error {
 	if len(batch) == 0 && len(hosts) == 0 {
 		return nil
 	}
-	cutoff := r.now().Add(-r.cfg.Retain)
+	now := r.now().UTC()
+	cutoff := now.Add(-r.cfg.Retain)
+	var refusedThreads, refusedHosts int
 	err := r.store.Update(func(st *State) error {
+		refusedThreads, refusedHosts = 0, 0
+		wipeKeys(st, now)
 		for _, e := range batch {
-			st.Apply(e.beat, e.at)
+			k := Key(e.beat.Vendor, e.beat.Thread)
+			_, seen := st.Threads[k]
+			if !st.Apply(e.beat, e.at) {
+				continue
+			}
+			if !seen {
+				if ferr := st.fitNewThread(k); ferr != nil {
+					delete(st.Threads, k)
+					refusedThreads++
+				}
+			}
 		}
 		for _, e := range hosts {
+			if ferr := st.fitNewHost(e.beat.Host); ferr != nil {
+				refusedHosts++
+				continue
+			}
 			st.ApplyHost(e.beat, e.at)
 		}
-		st.Prune(cutoff)
+		st.Prune(cutoff, r.cfg, now)
 		return nil
 	})
+	if err == nil {
+		for i := 0; i < refusedThreads; i++ {
+			noteThreadRefused()
+		}
+		for i := 0; i < refusedHosts; i++ {
+			noteHostRefused()
+		}
+	}
 	if err != nil {
 		r.mu.Lock()
 		r.pending = append(batch, r.pending...)

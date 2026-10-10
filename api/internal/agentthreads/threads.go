@@ -1,20 +1,48 @@
 // Package agentthreads notices an agent session that stopped in the middle of
 // a turn (host asleep, process hung, network gone) and pages the Owner once.
 //
-// Host lost within 3 minutes; session silence after max(10 minutes, declared tool timeout + 2 minutes).
+// A host is shown as lost about 3 to 4 minutes after its last heartbeat: the
+// threshold itself is 3 minutes, and the API may still take one flush interval
+// (10 seconds) plus one watch interval (30 seconds) to notice. That is not a
+// hard "within 3 minutes". Session silence is max(10 minutes, declared tool
+// timeout + 2 minutes), measured on the server clock.
 //
 // The first event of a thread is issued a random thread key. Only the hash is
-// stored, and every later event for that vendor and thread must present the
-// key. Each event carries a per-thread turn id and a sequence that only grows;
-// a sequence that is not newer is ignored. Silence and host loss are timed
-// from the server clock. A waiting_owner thread stays in progress and is not
-// paged. A lost host is paged once, and its mid-turn threads are shown as host
-// lost; the heartbeat that marks the host back is not paged.
+// stored. The client also sends a registration nonce it generated; the same
+// nonce returns the same key for registerWindow (2 minutes), which is how a
+// lost first response is retried. After that window the plaintext key is
+// wiped. A later event must present the key. A record created before keys
+// existed is migrated by issuing a key on its next event. A thread the server
+// has already pruned accepts a stale key only as a tombstone: it re-registers
+// with a new key and never accepts the stale one again. A live thread whose
+// key the caller does not hold answers 409 "unknown key" and is left in
+// place. The client then opens a new thread record and keeps the old key as
+// superseded; it does not reuse that key, and this server does not let the
+// reporter token delete or replace the old record.
+//
+// Each event carries a per-thread turn id and a sequence that only grows. A
+// sequence that is not newer is ignored. An event from an older turn is
+// refused even when its sequence is newer: a new turn is accepted only as
+// turn_start, and a turn id that has already been left is refused. Silence
+// and host loss are timed from the server clock. A waiting_owner thread stays
+// in progress and is not paged. A lost host is paged once, and its mid-turn
+// threads are shown as host lost; the heartbeat that marks the host back is
+// not paged. Sending is claimed with an id and an expiry, and marked sent
+// only after the push returns; a claim whose worker died is retried once it
+// expires.
+//
+// Trust boundary: there is one shared reporter token, not a credential per
+// host. Every holder of that token can report a heartbeat for any host and
+// can register any new thread. They can mark a host alive, or a vendor wired
+// or token-ready, and so hide a lost host or an unwired vendor. They can also
+// open a new thread id when they do not hold an existing thread's key. They
+// cannot update a thread whose key they do not hold, and they cannot reuse a
+// key this server has retired. Binding a reporter to a host is a separate lane.
 //
 // Detection and notice only: nothing here restarts, reassigns or touches a
 // session. State is one statefile key. The API pod buffers events and folds
 // them in every few seconds; the workers pod reads that key and writes back
-// only which silence or host loss it already pushed.
+// only which silence or host loss it has claimed or already pushed.
 package agentthreads
 
 import (
@@ -62,10 +90,35 @@ const (
 	maxToolTimeout = 24 * 60 * 60
 	maxThreads     = 300
 	maxHosts       = 50
-	// HostAlive and HostLostState are the host list's status strings.
-	HostAlive     = "alive"
-	HostLostState = "lost"
+	// registerWindow is how long a lost first response can be retried with
+	// the same nonce and receive the same key. The plaintext key is kept
+	// only for this long. Two minutes is the stricter bound: long enough
+	// for the next hook event, short enough that the key does not sit in
+	// the statefile.
+	registerWindow = 2 * time.Minute
+	maxPriorTurns  = 32
+	// HostAlive, HostLostState and HostNeverReported are the host list's status strings.
+	HostAlive         = "alive"
+	HostLostState     = "lost"
+	HostNeverReported = "never_reported"
 )
+
+// ErrUnknownKey means this caller does not hold the live key. The thread is
+// unchanged. The client may open a different thread record; it must not reuse
+// the key it presented.
+var ErrUnknownKey = fmt.Errorf("unknown key")
+
+// ErrOlderTurn means the event belongs to a turn this thread has already left,
+// or to a turn that was never started, even if the sequence is newer.
+var ErrOlderTurn = fmt.Errorf("older turn refused")
+
+// ErrThreadFull means every thread slot is a live (not finished) thread.
+// The new registration was not stored.
+var ErrThreadFull = fmt.Errorf("thread capacity full")
+
+// ErrHostFull means every host slot is taken. Lost hosts and hosts that are
+// still alive are both kept. The new host was not stored.
+var ErrHostFull = fmt.Errorf("host capacity full")
 
 // Vendors is the set a host heartbeat must describe.
 var Vendors = []string{"claude", "cursor", "codex"}
@@ -89,9 +142,12 @@ type Beat struct {
 	ToolTimeoutS int    `json:"tool_timeout_s,omitempty"`
 	// ThreadKey is presented by the holder. It is never stored and never listed.
 	ThreadKey string `json:"thread_key,omitempty"`
-	TurnID    string `json:"turn_id"`
-	Seq       uint64 `json:"seq"`
-	Reason    string `json:"reason,omitempty"`
+	// RegisterNonce is the client's registration id. The same nonce returns
+	// the same key for registerWindow. It is never listed.
+	RegisterNonce string `json:"register_nonce,omitempty"`
+	TurnID        string `json:"turn_id"`
+	Seq           uint64 `json:"seq"`
+	Reason        string `json:"reason,omitempty"`
 	// keyHash is the server-side sha256 of ThreadKey. The client cannot set it.
 	keyHash string
 }
@@ -114,10 +170,26 @@ type Thread struct {
 	KeyHash string `json:"key_hash,omitempty"`
 	TurnID  string `json:"turn_id,omitempty"`
 	Seq     uint64 `json:"seq,omitempty"`
-	// NotifiedFor is At of the event whose silence was pushed. A new event
-	// moves At, so the next silence is a new one.
+	// RegisterNonce and RegisterKey let a lost first response retry. The
+	// plaintext key is wiped after registerWindow and is never listed.
+	RegisterNonce string    `json:"register_nonce,omitempty"`
+	RegisterKey   string    `json:"register_key,omitempty"`
+	RegisteredAt  time.Time `json:"registered_at,omitempty"`
+	// SupersededKeys are hashes that must never be accepted again, including
+	// a stale key presented after the server had pruned the thread.
+	SupersededKeys []string `json:"superseded_keys,omitempty"`
+	// PriorTurns are turn ids this thread has left. An event for one of them
+	// is refused even when its sequence is newer.
+	PriorTurns []string `json:"prior_turns,omitempty"`
+	// NotifiedFor is At of the event whose silence was pushed. It is set
+	// only after the push returns. A new event moves At, so the next silence
+	// is a new one.
 	NotifiedFor time.Time `json:"notified_for,omitempty"`
 	NotifiedAt  time.Time `json:"notified_at,omitempty"`
+	// SilenceClaimID is a send that has been claimed and not yet marked sent.
+	// SilenceClaimExpires is when a dead worker's claim may be taken again.
+	SilenceClaimID      string    `json:"silence_claim_id,omitempty"`
+	SilenceClaimExpires time.Time `json:"silence_claim_expires,omitempty"`
 }
 
 // VendorReport is one vendor on a host heartbeat.
@@ -141,9 +213,14 @@ type Host struct {
 	At      time.Time               `json:"at"`
 	Vendors map[string]VendorReport `json:"vendors"`
 	// LostNotifiedFor is At of the heartbeat whose later silence was pushed.
-	// A newer heartbeat does not push; the next time that newer one ages out does.
+	// It is set only after the push returns. A newer heartbeat does not push;
+	// the next time that newer one ages out does.
 	LostNotifiedFor time.Time `json:"lost_notified_for,omitempty"`
 	LostNotifiedAt  time.Time `json:"lost_notified_at,omitempty"`
+	// LossClaimID is a host-loss send that has been claimed and not yet marked
+	// sent. LossClaimExpires is when a dead worker's claim may be taken again.
+	LossClaimID      string    `json:"loss_claim_id,omitempty"`
+	LossClaimExpires time.Time `json:"loss_claim_expires,omitempty"`
 }
 
 // State is the statefile document.
@@ -166,9 +243,6 @@ var (
 	maxText = 160
 )
 
-// ErrKeyRejected means the caller did not present the key that started the thread.
-var ErrKeyRejected = fmt.Errorf("thread key rejected")
-
 // Validate checks a beat before it is stored.
 func (b *Beat) Validate() error {
 	b.Thread = strings.TrimSpace(b.Thread)
@@ -180,6 +254,7 @@ func (b *Beat) Validate() error {
 	b.TurnID = strings.TrimSpace(b.TurnID)
 	b.Reason = strings.TrimSpace(b.Reason)
 	b.ThreadKey = strings.TrimSpace(b.ThreadKey)
+	b.RegisterNonce = strings.TrimSpace(b.RegisterNonce)
 	switch {
 	case !idRe.MatchString(b.Thread):
 		return fmt.Errorf("thread: want 1-128 of [A-Za-z0-9._:-]")
@@ -199,6 +274,8 @@ func (b *Beat) Validate() error {
 		return fmt.Errorf("seq: want a sequence that starts at 1")
 	case b.ThreadKey != "" && !keyRe.MatchString(b.ThreadKey):
 		return fmt.Errorf("thread_key: want 64 hex characters")
+	case b.RegisterNonce != "" && !keyRe.MatchString(b.RegisterNonce):
+		return fmt.Errorf("register_nonce: want 64 hex characters")
 	}
 	switch b.Event {
 	case TurnStart, BeforeTool, AfterTool, TurnEnd, WaitingOwner:
@@ -222,7 +299,8 @@ func (b *Beat) Validate() error {
 }
 
 // Apply folds one beat received at `at` into st. A sequence that is not strictly
-// newer than the one already stored is ignored. The receive time is not an
+// newer than the one already stored is ignored. An event from an older turn is
+// not stored even when its sequence is newer. The receive time is not an
 // order key; it is what silence is measured from. Apply reports whether the
 // beat was stored.
 func (st *State) Apply(b Beat, at time.Time) bool {
@@ -231,11 +309,17 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	}
 	k := Key(b.Vendor, b.Thread)
 	t, seen := st.Threads[k]
+	if seen && olderTurn(t, b) {
+		return false
+	}
 	if seen && b.Seq <= t.Seq {
 		return false
 	}
 	if b.keyHash != "" && t.KeyHash != "" && b.keyHash != t.KeyHash {
 		return false
+	}
+	if seen && t.TurnID != "" && b.TurnID != t.TurnID {
+		t.PriorTurns = rememberTurn(t.PriorTurns, t.TurnID)
 	}
 	if !seen || t.Event == TurnEnd || b.Event == TurnStart {
 		t.TurnStartedAt = at
@@ -258,8 +342,42 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	}
 	t.TurnID, t.Seq = b.TurnID, b.Seq
 	t.At = at
+	// A new event is a different silence. A claim for the previous one must
+	// not block it, and must not be completed against the new timestamp.
+	t.SilenceClaimID = ""
+	t.SilenceClaimExpires = time.Time{}
 	st.Threads[k] = t
 	return true
+}
+
+// olderTurn reports that b is not the current turn and is not a turn_start
+// that opens a turn this thread has not left.
+func olderTurn(t Thread, b Beat) bool {
+	if t.TurnID == "" || b.TurnID == t.TurnID {
+		return false
+	}
+	for _, id := range t.PriorTurns {
+		if id == b.TurnID {
+			return true
+		}
+	}
+	return b.Event != TurnStart
+}
+
+func rememberTurn(prior []string, id string) []string {
+	if id == "" {
+		return prior
+	}
+	for _, p := range prior {
+		if p == id {
+			return prior
+		}
+	}
+	prior = append(prior, id)
+	if len(prior) > maxPriorTurns {
+		prior = append([]string(nil), prior[len(prior)-maxPriorTurns:]...)
+	}
+	return prior
 }
 
 // ApplyHost folds one host heartbeat. An older receive time does not move the
@@ -275,47 +393,87 @@ func (st *State) ApplyHost(b HostBeat, at time.Time) {
 	h.Host = b.Host
 	h.At = at
 	h.Vendors = cloneVendors(fillVendors(b.Vendors))
+	// A new heartbeat retires a claim for the previous loss. The sent mark
+	// stays, so the return itself is not a new loss.
+	h.LossClaimID = ""
+	h.LossClaimExpires = time.Time{}
 	st.Hosts[b.Host] = h
-	st.boundHosts()
 }
 
-// Prune drops threads and hosts last heard before cutoff, then enforces the caps.
-func (st *State) Prune(cutoff time.Time) {
+// Prune drops threads last heard before cutoff. That retention bound includes
+// a thread still mid-turn; a client that still holds the key re-registers
+// when it next reports (see Admit). It then drops finished threads until the
+// thread cap fits. A mid-turn thread is never removed to make room. A lost
+// host is never removed, by retention or by the cap. An alive host is a live
+// entry and is not removed either; a new host that does not fit is refused
+// by fitNewHost.
+func (st *State) Prune(cutoff time.Time, cfg Config, now time.Time) {
 	for k, t := range st.Threads {
 		if t.At.Before(cutoff) {
 			delete(st.Threads, k)
 		}
 	}
-	if len(st.Threads) > maxThreads {
-		keys := make([]string, 0, len(st.Threads))
-		for k := range st.Threads {
-			keys = append(keys, k)
-		}
-		sort.Slice(keys, func(i, j int) bool { return st.Threads[keys[i]].At.After(st.Threads[keys[j]].At) })
-		for _, k := range keys[maxThreads:] {
-			delete(st.Threads, k)
-		}
-	}
+	st.evictFinishedThreads()
 	for k, h := range st.Hosts {
-		if h.At.Before(cutoff) {
+		if h.At.Before(cutoff) && !cfg.hostIsLost(h, now) {
 			delete(st.Hosts, k)
 		}
 	}
-	st.boundHosts()
 }
 
-func (st *State) boundHosts() {
-	if len(st.Hosts) <= maxHosts {
-		return
+// evictFinishedThreads removes the oldest finished threads until the cap
+// fits. It never removes a thread that has not ended.
+func (st *State) evictFinishedThreads() {
+	for len(st.Threads) > maxThreads {
+		victim := ""
+		var oldest time.Time
+		for k, t := range st.Threads {
+			if t.Event != TurnEnd {
+				continue
+			}
+			if victim == "" || t.At.Before(oldest) {
+				victim, oldest = k, t.At
+			}
+		}
+		if victim == "" {
+			return
+		}
+		delete(st.Threads, victim)
 	}
-	keys := make([]string, 0, len(st.Hosts))
-	for k := range st.Hosts {
-		keys = append(keys, k)
+}
+
+// fitNewThread evicts finished threads to make room for newKey. The new
+// thread stays. When every other slot is mid-turn, it returns ErrThreadFull
+// and leaves the map unchanged apart from any finished threads it removed.
+func (st *State) fitNewThread(newKey string) error {
+	st.evictFinishedThreads()
+	if len(st.Threads) <= maxThreads {
+		return nil
 	}
-	sort.Slice(keys, func(i, j int) bool { return st.Hosts[keys[i]].At.After(st.Hosts[keys[j]].At) })
-	for _, k := range keys[maxHosts:] {
-		delete(st.Hosts, k)
+	if _, ok := st.Threads[newKey]; ok && len(st.Threads) > maxThreads {
+		return ErrThreadFull
 	}
+	return nil
+}
+
+// fitNewHost reports whether name can be added. An existing host always
+// fits. A new host is refused when the cap is already full: lost hosts and
+// alive hosts are both kept.
+func (st *State) fitNewHost(name string) error {
+	if _, ok := st.Hosts[name]; ok {
+		return nil
+	}
+	if len(st.Hosts) >= maxHosts {
+		return ErrHostFull
+	}
+	return nil
+}
+
+func (c Config) hostIsLost(h Host, now time.Time) bool {
+	if h.At.IsZero() {
+		return false
+	}
+	return now.Sub(h.At) > c.HostLostAfter
 }
 
 // Config holds the thresholds. They move into the rule set when it exists.
@@ -327,10 +485,15 @@ type Config struct {
 	// PushWithin: a silence that began longer ago than this is marked, not
 	// pushed (a thread left mid-turn days ago must not page on a restart).
 	PushWithin time.Duration
-	// Retain drops threads and hosts not heard from for this long.
+	// Retain drops threads not heard from for this long, including one still
+	// mid-turn. A lost host is not dropped by retain.
 	Retain time.Duration
 	// HostLostAfter is how long a host may go without a heartbeat.
 	HostLostAfter time.Duration
+	// ExpectedHosts are machines that should report. One that never has is
+	// listed as never reported. Names come from the environment; invalid
+	// names are dropped.
+	ExpectedHosts []string
 }
 
 // DefaultConfig is what the environment overrides.
@@ -345,7 +508,9 @@ func DefaultConfig() Config {
 }
 
 // ConfigFromEnv reads PLATFORM_AGENT_THREAD_{SILENT_AFTER,TOOL_GRACE,PUSH_WITHIN,RETAIN,HOST_LOST}
-// (Go durations); unset or invalid keeps the default.
+// (Go durations); unset or invalid keeps the default. It also reads
+// PLATFORM_AGENT_THREAD_EXPECTED_HOSTS, a comma-separated host list. A blank
+// entry, a duplicate, or a name that is not a host name is dropped.
 func ConfigFromEnv() Config {
 	c := DefaultConfig()
 	read := func(name string, into *time.Duration) {
@@ -358,7 +523,26 @@ func ConfigFromEnv() Config {
 	read("PLATFORM_AGENT_THREAD_PUSH_WITHIN", &c.PushWithin)
 	read("PLATFORM_AGENT_THREAD_RETAIN", &c.Retain)
 	read("PLATFORM_AGENT_THREAD_HOST_LOST", &c.HostLostAfter)
+	c.ExpectedHosts = expectedHostsFromEnv()
 	return c
+}
+
+func expectedHostsFromEnv() []string {
+	raw := strings.TrimSpace(os.Getenv("PLATFORM_AGENT_THREAD_EXPECTED_HOSTS"))
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, part := range strings.Split(raw, ",") {
+		name := strings.TrimSpace(part)
+		if name == "" || !hostRe.MatchString(name) || seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out
 }
 
 // Threshold is how long t may stay quiet before it is silent.
@@ -390,13 +574,17 @@ func (c Config) StatusOf(t Thread, hostLost bool, now time.Time) Status {
 }
 
 // silenceCovered reports that this quiet stretch was already announced by a
-// host-loss push. A later event, with At after that heartbeat, can page again.
-func (c Config) silenceCovered(st State, t Thread) bool {
+// host-loss push, or that a live claim is about to announce it. A later
+// event, with At after that heartbeat, can page again.
+func (c Config) silenceCovered(st State, t Thread, now time.Time) bool {
 	h, ok := st.Hosts[t.Host]
-	if !ok || h.LostNotifiedFor.IsZero() {
+	if !ok {
 		return false
 	}
-	return !t.At.After(h.LostNotifiedFor)
+	if !h.LostNotifiedFor.IsZero() && !t.At.After(h.LostNotifiedFor) {
+		return true
+	}
+	return claimPending(h.LossClaimID, h.LossClaimExpires, now) && !t.At.After(h.At)
 }
 
 // HostDown reports whether host has a heartbeat older than the host threshold.
@@ -410,13 +598,24 @@ func (c Config) HostDown(st State, host string, now time.Time) bool {
 }
 
 // Pushed reports whether this silence of t was already pushed (or marked).
+// A claim that has not completed is not pushed.
 func (t Thread) Pushed() bool { return !t.NotifiedFor.IsZero() && t.NotifiedFor.Equal(t.At) }
 
+func (t Thread) silenceClaimed(now time.Time) bool {
+	return claimPending(t.SilenceClaimID, t.SilenceClaimExpires, now)
+}
+
+// claimPending reports a send that was claimed and has not expired.
+func claimPending(id string, exp, now time.Time) bool {
+	return id != "" && !exp.IsZero() && now.Before(exp)
+}
+
 // Due lists the keys of silent threads whose silence has not been pushed, and
-// whether each is fresh enough to push (false = mark only).
+// whether each is fresh enough to push (false = mark only). A live claim is
+// left to the worker that holds it.
 func (c Config) Due(st State, now time.Time) (push, mark []string) {
 	for k, t := range st.Threads {
-		if c.StatusOf(t, c.HostDown(st, t.Host, now), now) != Silent || t.Pushed() || c.silenceCovered(st, t) {
+		if c.StatusOf(t, c.HostDown(st, t.Host, now), now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
 			continue
 		}
 		if now.Sub(t.At.Add(c.Threshold(t))) > c.PushWithin {
@@ -431,10 +630,11 @@ func (c Config) Due(st State, now time.Time) (push, mark []string) {
 }
 
 // HostsDue lists hosts whose heartbeat has aged out and whose loss has not been
-// pushed, and whether each is fresh enough to push (false = mark only).
+// pushed, and whether each is fresh enough to push (false = mark only). A live
+// claim is left to the worker that holds it.
 func (c Config) HostsDue(st State, now time.Time) (push, mark []string) {
 	for name, h := range st.Hosts {
-		if !c.HostDown(st, name, now) || h.LostNotifiedFor.Equal(h.At) {
+		if !c.HostDown(st, name, now) || h.LostNotifiedFor.Equal(h.At) || claimPending(h.LossClaimID, h.LossClaimExpires, now) {
 			continue
 		}
 		if now.Sub(h.At.Add(c.HostLostAfter)) > c.PushWithin {
@@ -537,25 +737,30 @@ type HostView struct {
 	Vendors    []VendorView `json:"vendors"`
 }
 
-// HostViews lists hosts, lost first, then the ones quiet the longest.
+// HostViews lists hosts that have reported and expected hosts that never have.
+// Never-reported comes first, then lost, then alive. A never-reported host has
+// no heartbeat time and every vendor is not monitored.
 func (c Config) HostViews(st State, now time.Time) []HostView {
-	out := make([]HostView, 0, len(st.Hosts))
+	out := make([]HostView, 0, len(st.Hosts)+len(c.ExpectedHosts))
+	seen := map[string]bool{}
 	for _, h := range st.Hosts {
 		status := HostAlive
 		if c.HostDown(st, h.Host, now) {
 			status = HostLostState
 		}
-		vendors := make([]VendorView, 0, len(Vendors))
-		filled := fillVendors(h.Vendors)
-		for _, name := range Vendors {
-			r := filled[name]
-			vendors = append(vendors, VendorView{Vendor: name, Wired: r.Wired, Token: r.Token, Monitored: r.Monitored()})
+		seen[h.Host] = true
+		out = append(out, HostView{Host: h.Host, At: h.At, AgeSeconds: secs(now.Sub(h.At)), Status: status, Vendors: vendorViews(h.Vendors)})
+	}
+	for _, name := range c.ExpectedHosts {
+		if seen[name] {
+			continue
 		}
-		out = append(out, HostView{Host: h.Host, At: h.At, AgeSeconds: secs(now.Sub(h.At)), Status: status, Vendors: vendors})
+		seen[name] = true
+		out = append(out, HostView{Host: name, Status: HostNeverReported, Vendors: vendorViews(nil)})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if (out[i].Status == HostLostState) != (out[j].Status == HostLostState) {
-			return out[i].Status == HostLostState
+		if hostRank(out[i].Status) != hostRank(out[j].Status) {
+			return hostRank(out[i].Status) < hostRank(out[j].Status)
 		}
 		if out[i].AgeSeconds != out[j].AgeSeconds {
 			return out[i].AgeSeconds > out[j].AgeSeconds
@@ -563,6 +768,27 @@ func (c Config) HostViews(st State, now time.Time) []HostView {
 		return out[i].Host < out[j].Host
 	})
 	return out
+}
+
+func hostRank(status string) int {
+	switch status {
+	case HostNeverReported:
+		return 0
+	case HostLostState:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func vendorViews(in map[string]VendorReport) []VendorView {
+	vendors := make([]VendorView, 0, len(Vendors))
+	filled := fillVendors(in)
+	for _, name := range Vendors {
+		r := filled[name]
+		vendors = append(vendors, VendorView{Vendor: name, Wired: r.Wired, Token: r.Token, Monitored: r.Monitored()})
+	}
+	return vendors
 }
 
 func secs(d time.Duration) int64 {

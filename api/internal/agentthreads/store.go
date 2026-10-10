@@ -43,6 +43,12 @@ func clone(st State) State {
 		Hosts:   make(map[string]Host, len(st.Hosts)),
 	}
 	for k, t := range st.Threads {
+		if t.PriorTurns != nil {
+			t.PriorTurns = append([]string(nil), t.PriorTurns...)
+		}
+		if t.SupersededKeys != nil {
+			t.SupersededKeys = append([]string(nil), t.SupersededKeys...)
+		}
 		out.Threads[k] = t
 	}
 	for k, h := range st.Hosts {

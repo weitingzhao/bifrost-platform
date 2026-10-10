@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -94,7 +95,9 @@ func (r *rig) host(t *testing.T, name string, vendors map[string]VendorReport) {
 	if err := b.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	r.rec.RecordHost(b)
+	if err := r.rec.RecordHost(b); err != nil {
+		t.Fatal(err)
+	}
 	if err := r.rec.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +454,7 @@ func TestHandlers(t *testing.T) {
 			t.Errorf("GET body lacks %s: %s", want, body)
 		}
 	}
-	if strings.Contains(body, "key_hash") || strings.Contains(body, "thread_key") || strings.Contains(body, `"turn_id"`) || strings.Contains(body, `"seq"`) {
+	if strings.Contains(body, "key_hash") || strings.Contains(body, "thread_key") || strings.Contains(body, "register_key") || strings.Contains(body, "register_nonce") || strings.Contains(body, `"turn_id"`) || strings.Contains(body, `"seq"`) {
 		t.Fatalf("list returned a key, hash, turn id or sequence: %s", body)
 	}
 }
@@ -526,10 +529,31 @@ func TestSecondReporterCannotEndOrRevive(t *testing.T) {
 			t.Fatalf("audit leaked a key: %s", row)
 		}
 	}
-	// A presented key cannot start a thread the server has not issued.
+	// A presented key is not adopted as the thread's key. Registration issues a
+	// different one and retires the presented key.
 	fresh := postBeat(h, `{"thread":"t2","vendor":"codex","host":"mbp","turn_id":"turn-b","event":"turn_start","seq":1,"thread_key":"`+issued.Key+`"}`)
-	if fresh.Code != http.StatusConflict {
-		t.Fatalf("client-chosen key on a new thread: %d %s", fresh.Code, fresh.Body.String())
+	if fresh.Code != http.StatusAccepted {
+		t.Fatalf("stale key re-register: %d %s", fresh.Code, fresh.Body.String())
+	}
+	var again struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(fresh.Body.Bytes(), &again); err != nil || again.Key == "" || again.Key == issued.Key {
+		t.Fatalf("stale key was reused: %s", fresh.Body.String())
+	}
+	st, _ = rec.State()
+	got := st.Threads[Key("codex", "t2")]
+	if got.KeyHash != HashKey(again.Key) {
+		t.Fatalf("stored hash is not the issued key: %s", got.KeyHash)
+	}
+	retired := false
+	for _, h := range got.SupersededKeys {
+		if h == HashKey(issued.Key) {
+			retired = true
+		}
+	}
+	if !retired {
+		t.Fatal("presented key was not retired")
 	}
 }
 
@@ -686,6 +710,349 @@ func TestHostLostAfterComesFromEnv(t *testing.T) {
 	t.Setenv("PLATFORM_AGENT_THREAD_HOST_LOST", "90s")
 	if got := ConfigFromEnv().HostLostAfter; got != 90*time.Second {
 		t.Fatalf("host threshold: %s", got)
+	}
+}
+
+func TestLostFirstResponseReplaysNonce(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	h.now = rec.now
+	const nonce = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	const head = `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1,"register_nonce":"` + nonce + `"}`
+	first := postBeat(h, head)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted || len(issued.Key) != 64 {
+		t.Fatalf("register: %d %s", first.Code, first.Body.String())
+	}
+	// The client never saw the key. The same nonce, still inside the window, returns it.
+	retry := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"before_tool","tool":"Bash","seq":2,"register_nonce":"`+nonce+`"}`)
+	var again struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(retry.Body.Bytes(), &again); err != nil || retry.Code != http.StatusAccepted || again.Key != issued.Key {
+		t.Fatalf("replay: %d %s", retry.Code, retry.Body.String())
+	}
+	st, _ := rec.State()
+	if st.Threads[Key("codex", "t1")].Event != BeforeTool || st.Threads[Key("codex", "t1")].Seq != 2 {
+		t.Fatalf("replay did not store the newer event: %+v", st.Threads[Key("codex", "t1")])
+	}
+	rec.now = func() time.Time { return t0.Add(registerWindow + time.Second) }
+	h.now = rec.now
+	late := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"after_tool","tool":"Bash","seq":3,"register_nonce":"`+nonce+`"}`)
+	if late.Code != http.StatusConflict || !strings.Contains(late.Body.String(), "unknown key") {
+		t.Fatalf("expired nonce: %d %s", late.Code, late.Body.String())
+	}
+	st, _ = rec.State()
+	if st.Threads[Key("codex", "t1")].RegisterKey != "" {
+		t.Fatal("plaintext key lived past the window")
+	}
+	if st.Threads[Key("codex", "t1")].Seq != 2 {
+		t.Fatal("expired retry changed the thread")
+	}
+}
+
+func TestUnknownKeyLeavesTheThread(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	first := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted {
+		t.Fatal(first.Body.String())
+	}
+	missing := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_end","seq":2}`)
+	if missing.Code != http.StatusConflict || !strings.Contains(missing.Body.String(), `"error":"unknown key"`) {
+		t.Fatalf("missing key: %d %s", missing.Code, missing.Body.String())
+	}
+	st, _ := rec.State()
+	if st.Threads[Key("codex", "t1")].Event != TurnStart || st.Threads[Key("codex", "t1")].KeyHash != HashKey(issued.Key) {
+		t.Fatal("unknown key replaced the thread")
+	}
+}
+
+func TestLegacyRecordMigratesOnNextEvent(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	if err := rec.store.Update(func(st *State) error {
+		st.Threads[Key("codex", "old")] = Thread{
+			Thread: "old", Vendor: "codex", Host: "mbp", Event: TurnStart,
+			TurnID: "turn-a", Seq: 1, At: t0, TurnStartedAt: t0,
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	const presented = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	res := postBeat(h, `{"thread":"old","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"before_tool","tool":"Bash","seq":2,"thread_key":"`+presented+`"}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &issued); err != nil || res.Code != http.StatusAccepted || issued.Key == "" || issued.Key == presented {
+		t.Fatalf("migrate: %d %s", res.Code, res.Body.String())
+	}
+	st, _ := rec.State()
+	got := st.Threads[Key("codex", "old")]
+	if got.Event != BeforeTool || got.KeyHash != HashKey(issued.Key) || got.KeyHash == HashKey(presented) {
+		t.Fatalf("legacy record was not migrated: %+v", got)
+	}
+	denied := postBeat(h, `{"thread":"old","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_end","seq":3}`)
+	if denied.Code != http.StatusConflict {
+		t.Fatalf("migrated thread accepted a missing key: %d", denied.Code)
+	}
+}
+
+func TestPrunedThreadReregistersWithoutReusingKey(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	first := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted {
+		t.Fatal(first.Body.String())
+	}
+	if err := rec.store.Update(func(st *State) error {
+		delete(st.Threads, Key("codex", "t1"))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	again := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-b","event":"turn_start","seq":1,"thread_key":"`+issued.Key+`"}`)
+	var next struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(again.Body.Bytes(), &next); err != nil || again.Code != http.StatusAccepted || next.Key == "" || next.Key == issued.Key {
+		t.Fatalf("re-register: %d %s", again.Code, again.Body.String())
+	}
+	stale := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-b","event":"turn_end","seq":2,"thread_key":"`+issued.Key+`"}`)
+	if stale.Code != http.StatusConflict || !strings.Contains(stale.Body.String(), "unknown key") {
+		t.Fatalf("stale key still worked: %d %s", stale.Code, stale.Body.String())
+	}
+	ok := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-b","event":"turn_end","seq":2,"thread_key":"`+next.Key+`"}`)
+	if ok.Code != http.StatusAccepted {
+		t.Fatalf("new key: %d %s", ok.Code, ok.Body.String())
+	}
+}
+
+func TestOlderTurnRefusedEvenWithNewerSeq(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	first := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted {
+		t.Fatal(first.Body.String())
+	}
+	next := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-b","event":"turn_start","seq":2,"thread_key":"`+issued.Key+`"}`)
+	if next.Code != http.StatusAccepted {
+		t.Fatal(next.Body.String())
+	}
+	older := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"before_tool","tool":"Bash","seq":9,"thread_key":"`+issued.Key+`"}`)
+	if older.Code != http.StatusConflict || !strings.Contains(older.Body.String(), "older turn refused") {
+		t.Fatalf("older turn: %d %s", older.Code, older.Body.String())
+	}
+	st, _ := rec.State()
+	got := st.Threads[Key("claude", "t1")]
+	if got.TurnID != "turn-b" || got.Seq != 2 || got.Event != TurnStart {
+		t.Fatalf("older turn was stored: %+v", got)
+	}
+	reopen := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":10,"thread_key":"`+issued.Key+`"}`)
+	if reopen.Code != http.StatusConflict {
+		t.Fatalf("closed turn reopened: %d %s", reopen.Code, reopen.Body.String())
+	}
+}
+
+func TestExpiredSilenceClaimIsRetried(t *testing.T) {
+	r := newRig(t, "")
+	r.beat(t, AfterTool, "Edit", 0)
+	r.at(11 * time.Minute)
+	k := Key("claude", "7e939cd5-b3b1-4705-96e4-0a3b9e61648d")
+	th := mustState(t, r).Threads[k]
+	id, ok, err := r.w.claim(k, th.At, r.clk.at)
+	if err != nil || !ok || id == "" {
+		t.Fatalf("claim: %v %v %s", ok, err, id)
+	}
+	if mustState(t, r).Threads[k].Pushed() {
+		t.Fatal("claim marked the silence sent")
+	}
+	r.tick(t)
+	if r.page.count() != 0 {
+		t.Fatal("a live claim was pushed")
+	}
+	r.at(11*time.Minute + claimTTL + time.Second)
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("expired claim was not retried: %d", r.page.count())
+	}
+	if !mustState(t, r).Threads[k].Pushed() {
+		t.Fatal("retry did not mark the silence sent")
+	}
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("sent twice: %d", r.page.count())
+	}
+}
+
+func TestExpiredHostClaimIsRetried(t *testing.T) {
+	r := newRig(t, "")
+	r.host(t, "mbp", map[string]VendorReport{"claude": {Wired: true, Token: true}})
+	r.at(3*time.Minute + time.Second)
+	h := mustState(t, r).Hosts["mbp"]
+	id, ok, err := r.w.claimHost("mbp", h.At, r.clk.at)
+	if err != nil || !ok || id == "" {
+		t.Fatalf("claim: %v %v", ok, err)
+	}
+	r.tick(t)
+	if r.page.count() != 0 {
+		t.Fatal("a live host claim was pushed")
+	}
+	r.at(3*time.Minute + time.Second + claimTTL + time.Second)
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("expired host claim was not retried: %d", r.page.count())
+	}
+	if !mustState(t, r).Hosts["mbp"].LostNotifiedFor.Equal(h.At) {
+		t.Fatal("retry did not mark the loss sent")
+	}
+}
+
+func TestLiveThreadsFillTheCap(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	before, _ := RegistrationRefusals()
+	keys := make([]string, maxThreads)
+	for i := 0; i < maxThreads; i++ {
+		res := postBeat(h, fmt.Sprintf(`{"thread":"t%d","vendor":"codex","host":"mbp","turn_id":"turn","event":"turn_start","seq":1}`, i))
+		var issued struct {
+			Key string `json:"thread_key"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &issued); err != nil || res.Code != http.StatusAccepted || issued.Key == "" {
+			t.Fatalf("seed %d: %d %s", i, res.Code, res.Body.String())
+		}
+		keys[i] = issued.Key
+	}
+	refused := postBeat(h, `{"thread":"overflow","vendor":"codex","host":"mbp","turn_id":"turn","event":"turn_start","seq":1}`)
+	if refused.Code != http.StatusTooManyRequests || !strings.Contains(refused.Body.String(), "thread capacity full") {
+		t.Fatalf("full: %d %s", refused.Code, refused.Body.String())
+	}
+	threads, _ := RegistrationRefusals()
+	if threads != before+1 {
+		t.Fatalf("refusal count %d, before %d", threads, before)
+	}
+	st, _ := rec.State()
+	if _, ok := st.Threads[Key("codex", "overflow")]; ok || len(st.Threads) != maxThreads {
+		t.Fatalf("overflow stored, len %d", len(st.Threads))
+	}
+	// A finished thread is the one that makes room. The oldest mid-turn stays.
+	end := postBeat(h, `{"thread":"t0","vendor":"codex","host":"mbp","turn_id":"turn","event":"turn_end","seq":2,"thread_key":"`+keys[0]+`"}`)
+	if end.Code != http.StatusAccepted {
+		t.Fatal(end.Body.String())
+	}
+	if err := rec.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	ok := postBeat(h, `{"thread":"overflow","vendor":"codex","host":"mbp","turn_id":"turn","event":"turn_start","seq":1}`)
+	if ok.Code != http.StatusAccepted {
+		t.Fatalf("after eviction: %d %s", ok.Code, ok.Body.String())
+	}
+	st, _ = rec.State()
+	if _, kept := st.Threads[Key("codex", "t0")]; kept {
+		t.Fatal("finished thread was kept past the cap")
+	}
+	if _, kept := st.Threads[Key("codex", "t1")]; !kept {
+		t.Fatal("a mid-turn thread was evicted")
+	}
+	if _, kept := st.Threads[Key("codex", "overflow")]; !kept || len(st.Threads) != maxThreads {
+		t.Fatalf("new thread not kept, len %d", len(st.Threads))
+	}
+}
+
+func TestFullHostListRefusesAndKeepsLost(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	clk := &clock{at: t0}
+	rec.now = clk.now
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	postHost := func(name string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		body := `{"host":"` + name + `","vendors":{"claude":{"wired":true,"token":true}}}`
+		h.HandleHost(w, httptest.NewRequest(http.MethodPost, "/api/v1/agent/hosts/heartbeat", strings.NewReader(body)))
+		return w
+	}
+	for i := 0; i < maxHosts; i++ {
+		res := postHost(fmt.Sprintf("h%d", i))
+		if res.Code != http.StatusAccepted {
+			t.Fatalf("seed %d: %d %s", i, res.Code, res.Body.String())
+		}
+	}
+	if err := rec.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	_, before := RegistrationRefusals()
+	extra := postHost("overflow")
+	if extra.Code != http.StatusTooManyRequests || !strings.Contains(extra.Body.String(), "host capacity full") {
+		t.Fatalf("full: %d %s", extra.Code, extra.Body.String())
+	}
+	_, hosts := RegistrationRefusals()
+	if hosts != before+1 {
+		t.Fatalf("host refusal count %d, before %d", hosts, before)
+	}
+	clk.at = t0.Add(4 * time.Minute)
+	extra = postHost("overflow")
+	if extra.Code != http.StatusTooManyRequests {
+		t.Fatalf("lost hosts were evicted: %d %s", extra.Code, extra.Body.String())
+	}
+	st, _ := rec.State()
+	if len(st.Hosts) != maxHosts {
+		t.Fatalf("host len %d", len(st.Hosts))
+	}
+	if _, ok := st.Hosts["h0"]; !ok {
+		t.Fatal("a lost host was removed")
+	}
+	if _, ok := st.Hosts["overflow"]; ok {
+		t.Fatal("refused host was stored")
+	}
+}
+
+func TestExpectedHostNeverReported(t *testing.T) {
+	t.Setenv("PLATFORM_AGENT_THREAD_EXPECTED_HOSTS", "mini, mbp, mini, bad name,")
+	cfg := ConfigFromEnv()
+	if len(cfg.ExpectedHosts) != 2 || cfg.ExpectedHosts[0] != "mini" || cfg.ExpectedHosts[1] != "mbp" {
+		t.Fatalf("expected hosts: %#v", cfg.ExpectedHosts)
+	}
+	st := State{Hosts: map[string]Host{
+		"mbp": {Host: "mbp", At: t0.Add(-time.Hour), Vendors: map[string]VendorReport{"claude": {Wired: true, Token: true}}},
+	}}
+	views := cfg.HostViews(st, t0)
+	if len(views) != 2 {
+		t.Fatalf("views: %+v", views)
+	}
+	if views[0].Host != "mini" || views[0].Status != HostNeverReported || !views[0].At.IsZero() {
+		t.Fatalf("never reported: %+v", views[0])
+	}
+	for _, v := range views[0].Vendors {
+		if v.Monitored {
+			t.Fatalf("never reported vendor looks monitored: %+v", v)
+		}
+	}
+	if views[1].Host != "mbp" || views[1].Status != HostLostState {
+		t.Fatalf("reported host: %+v", views[1])
+	}
+}
+
+func TestHostLostNoticeIsThreeToFourMinutes(t *testing.T) {
+	notice := DefaultConfig().HostLostAfter + FlushInterval + WatchInterval
+	if notice < 3*time.Minute || notice > 4*time.Minute {
+		t.Fatalf("host lost notice %s, want 3 to 4 minutes", notice)
 	}
 }
 

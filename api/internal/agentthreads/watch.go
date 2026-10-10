@@ -2,6 +2,8 @@ package agentthreads
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -16,6 +18,12 @@ import (
 
 // WatchInterval is how often the workers loop judges.
 const WatchInterval = 30 * time.Second
+
+// claimTTL is how long a send stays claimed before a dead worker's claim can
+// be taken. Two minutes is long enough to finish a push and short enough that
+// a crash is retried on a later pass. The stricter choice is this short lease
+// rather than a claim that never expires.
+const claimTTL = 2 * time.Minute
 
 // Push results, the label values of the pushes counter.
 const (
@@ -95,10 +103,10 @@ func (w *Watcher) tick(ctx context.Context) bool {
 	push, mark := w.cfg.Due(st, now)
 	ok := true
 	for _, k := range mark {
-		if claimed, err := w.claim(k, st.Threads[k].At, now); err != nil {
+		if marked, err := w.mark(k, st.Threads[k].At, now); err != nil {
 			slog.Warn("agent_threads_watch", "mark", k, "err", err)
 			ok = false
-		} else if claimed {
+		} else if marked {
 			countPush(PushStale)
 		}
 	}
@@ -108,16 +116,16 @@ func (w *Watcher) tick(ctx context.Context) bool {
 	}
 	hPush, hMark := w.cfg.HostsDue(st, now)
 	for _, name := range hMark {
-		if claimed, err := w.claimHost(name, st.Hosts[name].At, now); err != nil {
+		if marked, err := w.markHost(name, st.Hosts[name].At, now); err != nil {
 			slog.Warn("agent_threads_watch", "host_mark", name, "err", err)
 			ok = false
-		} else if claimed {
+		} else if marked {
 			countHostPush(PushStale)
 		}
 	}
 	for _, name := range hPush {
 		h := st.Hosts[name]
-		claimed, err := w.claimHost(name, h.At, now)
+		id, claimed, err := w.claimHost(name, h.At, now)
 		if err != nil {
 			slog.Warn("agent_threads_watch", "host_claim", name, "err", err)
 			ok = false
@@ -127,16 +135,25 @@ func (w *Watcher) tick(ctx context.Context) bool {
 			continue
 		}
 		subject, body := w.cfg.HostMessage(h, w.cfg.MidTurn(st, name), now)
-		slog.Info("agent_host_lost", "host", name, "quiet", now.Sub(h.At).String())
+		slog.Info("agent_host_lost", "host", name, "quiet", now.Sub(h.At).String(), "claim", id)
 		if w.notify == nil {
+			if cerr := w.completeHost(name, id, h.At, now); cerr != nil {
+				slog.Warn("agent_threads_watch", "host_complete", name, "err", cerr)
+				ok = false
+			}
 			continue
 		}
 		if err := w.notify(ctx, subject, body); err != nil {
 			slog.Warn("agent_threads_watch", "host_push", name, "err", err)
 			countHostPush(PushFailed)
-			if uerr := w.unclaimHost(name, h.At); uerr != nil {
-				slog.Warn("agent_threads_watch", "host_unclaim", name, "err", uerr)
+			if uerr := w.releaseHost(name, id); uerr != nil {
+				slog.Warn("agent_threads_watch", "host_release", name, "err", uerr)
 			}
+			ok = false
+			continue
+		}
+		if cerr := w.completeHost(name, id, h.At, now); cerr != nil {
+			slog.Warn("agent_threads_watch", "host_complete", name, "err", cerr)
 			ok = false
 			continue
 		}
@@ -149,7 +166,7 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 	ok := true
 	for _, k := range push {
 		t := st.Threads[k]
-		claimed, err := w.claim(k, t.At, now)
+		id, claimed, err := w.claim(k, t.At, now)
 		if err != nil {
 			slog.Warn("agent_threads_watch", "claim", k, "err", err)
 			ok = false
@@ -162,16 +179,25 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 			t.Title = title
 		}
 		subject, body := w.cfg.Message(t, now)
-		slog.Info("agent_thread_silent", "thread", k, "host", t.Host, "last_event", t.Event, "quiet", now.Sub(t.At).String())
+		slog.Info("agent_thread_silent", "thread", k, "host", t.Host, "last_event", t.Event, "quiet", now.Sub(t.At).String(), "claim", id)
 		if w.notify == nil {
+			if cerr := w.complete(k, id, t.At, now); cerr != nil {
+				slog.Warn("agent_threads_watch", "complete", k, "err", cerr)
+				ok = false
+			}
 			continue
 		}
 		if err := w.notify(ctx, subject, body); err != nil {
 			slog.Warn("agent_threads_watch", "push", k, "err", err)
 			countPush(PushFailed)
-			if uerr := w.unclaim(k, t.At); uerr != nil {
-				slog.Warn("agent_threads_watch", "unclaim", k, "err", uerr)
+			if uerr := w.release(k, id); uerr != nil {
+				slog.Warn("agent_threads_watch", "release", k, "err", uerr)
 			}
+			ok = false
+			continue
+		}
+		if cerr := w.complete(k, id, t.At, now); cerr != nil {
+			slog.Warn("agent_threads_watch", "complete", k, "err", cerr)
 			ok = false
 			continue
 		}
@@ -180,64 +206,147 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 	return ok
 }
 
-// claim marks the silence that started with the event at `at` as pushed,
-// unless a newer event arrived or someone already marked it. Marking before
-// pushing keeps two overlapping workers pods (a rollout) from both pushing.
-func (w *Watcher) claim(key string, at, now time.Time) (bool, error) {
+// claim records a send attempt for the silence at `at`. It does not mark the
+// silence sent. A live claim blocks a second worker; an expired claim can be
+// taken. The returned id must be presented to complete or release.
+func (w *Watcher) claim(key string, at, now time.Time) (string, bool, error) {
+	id := newClaimID()
 	claimed := false
 	err := w.store.Update(func(st *State) error {
 		claimed = false
 		t, found := st.Threads[key]
-		if !found || !t.At.Equal(at) || t.Pushed() {
+		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) {
+			return nil
+		}
+		t.SilenceClaimID = id
+		t.SilenceClaimExpires = now.Add(claimTTL)
+		st.Threads[key] = t
+		claimed = true
+		return nil
+	})
+	return id, claimed, err
+}
+
+// complete marks the silence sent. The claim id must still be the one this
+// worker holds, and the event time must be unchanged.
+func (w *Watcher) complete(key, id string, at, now time.Time) error {
+	return w.store.Update(func(st *State) error {
+		t, found := st.Threads[key]
+		if !found || t.SilenceClaimID != id || !t.At.Equal(at) {
 			return nil
 		}
 		t.NotifiedFor, t.NotifiedAt = at, now
+		t.SilenceClaimID = ""
+		t.SilenceClaimExpires = time.Time{}
 		st.Threads[key] = t
-		claimed = true
 		return nil
 	})
-	return claimed, err
 }
 
-// unclaim undoes claim after a failed push, so the next pass retries.
-func (w *Watcher) unclaim(key string, at time.Time) error {
+// release drops a claim after a failed push so the next pass can retry.
+// A different claim id is left alone.
+func (w *Watcher) release(key, id string) error {
 	return w.store.Update(func(st *State) error {
 		t, found := st.Threads[key]
-		if !found || !t.NotifiedFor.Equal(at) {
+		if !found || t.SilenceClaimID != id {
 			return nil
 		}
-		t.NotifiedFor, t.NotifiedAt = time.Time{}, time.Time{}
+		t.SilenceClaimID = ""
+		t.SilenceClaimExpires = time.Time{}
 		st.Threads[key] = t
 		return nil
 	})
 }
 
-func (w *Watcher) claimHost(name string, at, now time.Time) (bool, error) {
+// mark records a silence that is too old to page. There is no send, so this
+// is the sent mark in one write. A live claim is left to its holder.
+func (w *Watcher) mark(key string, at, now time.Time) (bool, error) {
+	marked := false
+	err := w.store.Update(func(st *State) error {
+		marked = false
+		t, found := st.Threads[key]
+		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) {
+			return nil
+		}
+		t.NotifiedFor, t.NotifiedAt = at, now
+		t.SilenceClaimID = ""
+		t.SilenceClaimExpires = time.Time{}
+		st.Threads[key] = t
+		marked = true
+		return nil
+	})
+	return marked, err
+}
+
+func (w *Watcher) claimHost(name string, at, now time.Time) (string, bool, error) {
+	id := newClaimID()
 	claimed := false
 	err := w.store.Update(func(st *State) error {
 		claimed = false
 		h, found := st.Hosts[name]
-		if !found || !h.At.Equal(at) || h.LostNotifiedFor.Equal(at) {
+		if !found || !h.At.Equal(at) || h.LostNotifiedFor.Equal(at) || claimPending(h.LossClaimID, h.LossClaimExpires, now) {
 			return nil
 		}
-		h.LostNotifiedFor, h.LostNotifiedAt = at, now
+		h.LossClaimID = id
+		h.LossClaimExpires = now.Add(claimTTL)
 		st.Hosts[name] = h
 		claimed = true
 		return nil
 	})
-	return claimed, err
+	return id, claimed, err
 }
 
-func (w *Watcher) unclaimHost(name string, at time.Time) error {
+func (w *Watcher) completeHost(name, id string, at, now time.Time) error {
 	return w.store.Update(func(st *State) error {
 		h, found := st.Hosts[name]
-		if !found || !h.LostNotifiedFor.Equal(at) {
+		if !found || h.LossClaimID != id || !h.At.Equal(at) {
 			return nil
 		}
-		h.LostNotifiedFor, h.LostNotifiedAt = time.Time{}, time.Time{}
+		h.LostNotifiedFor, h.LostNotifiedAt = at, now
+		h.LossClaimID = ""
+		h.LossClaimExpires = time.Time{}
 		st.Hosts[name] = h
 		return nil
 	})
+}
+
+func (w *Watcher) releaseHost(name, id string) error {
+	return w.store.Update(func(st *State) error {
+		h, found := st.Hosts[name]
+		if !found || h.LossClaimID != id {
+			return nil
+		}
+		h.LossClaimID = ""
+		h.LossClaimExpires = time.Time{}
+		st.Hosts[name] = h
+		return nil
+	})
+}
+
+func (w *Watcher) markHost(name string, at, now time.Time) (bool, error) {
+	marked := false
+	err := w.store.Update(func(st *State) error {
+		marked = false
+		h, found := st.Hosts[name]
+		if !found || !h.At.Equal(at) || h.LostNotifiedFor.Equal(at) || claimPending(h.LossClaimID, h.LossClaimExpires, now) {
+			return nil
+		}
+		h.LostNotifiedFor, h.LostNotifiedAt = at, now
+		h.LossClaimID = ""
+		h.LossClaimExpires = time.Time{}
+		st.Hosts[name] = h
+		marked = true
+		return nil
+	})
+	return marked, err
+}
+
+func newClaimID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return hex.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
+	}
+	return hex.EncodeToString(buf[:])
 }
 
 func (w *Watcher) lineageTitles(ctx context.Context) map[string]string {
@@ -253,12 +362,34 @@ func (w *Watcher) lineageTitles(ctx context.Context) map[string]string {
 }
 
 var (
-	metricsMu   sync.Mutex
-	byStatus    = map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
-	pushes      = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
-	hostPushes  = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
-	gaugeStatus = []Status{InTurn, StatusWaiting, Silent, HostLost}
+	metricsMu      sync.Mutex
+	byStatus       = map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
+	pushes         = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
+	hostPushes     = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
+	refusedThreads int64
+	refusedHosts   int64
+	gaugeStatus    = []Status{InTurn, StatusWaiting, Silent, HostLost}
 )
+
+func noteThreadRefused() {
+	metricsMu.Lock()
+	refusedThreads++
+	metricsMu.Unlock()
+}
+
+func noteHostRefused() {
+	metricsMu.Lock()
+	refusedHosts++
+	metricsMu.Unlock()
+}
+
+// RegistrationRefusals is how many new threads and hosts were refused because
+// the live cap was full. It is process-local, like the push counters.
+func RegistrationRefusals() (threads, hosts int64) {
+	metricsMu.Lock()
+	defer metricsMu.Unlock()
+	return refusedThreads, refusedHosts
+}
 
 func setGauges(cfg Config, st State, now time.Time) {
 	counts := map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
@@ -300,6 +431,10 @@ func WriteMetrics(b *strings.Builder) {
 	b.WriteString("# HELP bifrost_agent_host_lost_pushes_total Host losses handled, by result (sent, failed, stale = too old to page)\n")
 	b.WriteString("# TYPE bifrost_agent_host_lost_pushes_total counter\n")
 	writePushCounter(b, "bifrost_agent_host_lost_pushes_total", hostPushes)
+	b.WriteString("# HELP bifrost_agent_thread_registrations_refused_total New thread or host registrations refused because the live cap was full\n")
+	b.WriteString("# TYPE bifrost_agent_thread_registrations_refused_total counter\n")
+	fmt.Fprintf(b, "bifrost_agent_thread_registrations_refused_total{kind=%q} %d\n", "thread", refusedThreads)
+	fmt.Fprintf(b, "bifrost_agent_thread_registrations_refused_total{kind=%q} %d\n", "host", refusedHosts)
 }
 
 func writePushCounter(b *strings.Builder, name string, counts map[string]int64) {
