@@ -87,6 +87,7 @@ export const FIREWALL_APPLIED = {
     { name: 'Bifrost | ALLOW Work → Server', catalogRule: 'VLAN 20 → VLAN 10 allow (kube-vip + NAS)' },
     { name: 'Bifrost | ALLOW Family → NAS', catalogRule: 'VLAN 30 → UGREEN-NAS 192.168.10.20 allow (all)' },
     { name: 'Bifrost | ALLOW Family → Trade VIP', catalogRule: 'VLAN 30 → kube-vip 192.168.10.100 :80/:443 (trader/ops Hostnames)' },
+    { name: 'Bifrost | ALLOW VPN → Ops VIP', catalogRule: 'WireGuard VPN 192.168.2.0/24 → kube-vip 192.168.10.100 TCP :443 (ops Hostname)' },
     { name: 'Bifrost | ALLOW IoT → NAS Plex', catalogRule: 'VLAN 50 → NAS Plex :32400 allow' },
     { name: 'Bifrost | ALLOW Server → IoT', catalogRule: 'VLAN 10 → VLAN 50 allow (automation hub)' },
     {
