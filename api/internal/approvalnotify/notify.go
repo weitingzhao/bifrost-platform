@@ -1,4 +1,5 @@
 // Package approvalnotify pages the Owner's phone when an approval is created.
+// Notify sends other Owner notices (release policy reminders) the same way.
 //
 // The operator-plane alert relay (Mac mini .50) accepts
 // POST /api/v1/alerts/notify. This package is the platform-side client.
@@ -56,25 +57,57 @@ const ConsoleClickPrefix = "http://ops.bifrost.lan/#approvals?id="
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// ConsoleApprovals is the Console approvals page without a selected item.
+const ConsoleApprovals = "http://ops.bifrost.lan/#approvals"
+
+// Message is one push through the same relay, for notices that are not a
+// single approval (release policy reminders).
+type Message struct {
+	Title    string
+	Message  string
+	ClickURL string
+	Priority int
+}
+
 // NotifyCreated posts one ntfy notification via the alert relay.
 // Missing URL or token is a skip, not an error.
 func NotifyCreated(ctx context.Context, item Created) error {
-	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
-	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
-	if endpoint == "" || token == "" {
-		slog.Info("approval notify skipped", "id", item.ID, "reason", "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset")
-		return nil
-	}
 	id := strings.TrimSpace(item.ID)
 	if id == "" {
 		return fmt.Errorf("approval notify: id is empty")
 	}
-	click := ConsoleClickPrefix + url.QueryEscape(id)
+	return send(ctx, id, Message{
+		Title:    "Approval needed",
+		Message:  messageFor(item),
+		ClickURL: ConsoleClickPrefix + url.QueryEscape(id),
+		Priority: 4,
+	})
+}
+
+// Notify posts msg through the relay NotifyCreated uses. Missing URL or token
+// is a skip, not an error.
+func Notify(ctx context.Context, msg Message) error {
+	if msg.ClickURL == "" {
+		msg.ClickURL = ConsoleApprovals
+	}
+	if msg.Priority == 0 {
+		msg.Priority = 4
+	}
+	return send(ctx, msg.Title, msg)
+}
+
+func send(ctx context.Context, id string, msg Message) error {
+	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
+	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
+	if endpoint == "" || token == "" {
+		slog.Info("approval notify skipped", "id", id, "reason", "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset")
+		return nil
+	}
 	raw, err := json.Marshal(map[string]any{
-		"title":     "Approval needed",
-		"message":   messageFor(item),
-		"click_url": click,
-		"priority":  4,
+		"title":     msg.Title,
+		"message":   msg.Message,
+		"click_url": msg.ClickURL,
+		"priority":  msg.Priority,
 	})
 	if err != nil {
 		return err
@@ -90,7 +123,7 @@ func NotifyCreated(ctx context.Context, item Created) error {
 		slog.Warn("approval notify failed", "id", id, "err", err)
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	if resp.StatusCode/100 != 2 {
 		err = fmt.Errorf("approval notify: status %d", resp.StatusCode)

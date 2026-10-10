@@ -36,6 +36,17 @@ class DeploySecretsTests(unittest.TestCase):
         self.assertIn("NTFY_TOPIC", found)
         self.assertIn("ALERT_RELAY_TOKEN", found)
 
+    def test_plane_env_does_not_point_at_git_bridge(self):
+        # TD-291: the bridge on the Owner's laptop answers 401 to the Minis.
+        body = re.search(
+            r"env\.operator-plane\.sh << 'ENVEOF'\n(.*?)\nENVEOF",
+            self.text(),
+            re.S,
+        )
+        self.assertIsNotNone(body, "the plane env heredoc moved; update this test")
+        self.assertNotIn("GIT_BRIDGE_URL", body.group(1))
+        self.assertNotIn(":8785", self.text())
+
     def test_script_does_not_scp_kubeconfig(self):
         scp_lines = [
             line for line in self.text().splitlines()

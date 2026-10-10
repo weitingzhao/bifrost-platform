@@ -565,14 +565,14 @@ if command -v go >/dev/null 2>&1; then
   # does not change when the plane's does.
   run_remote "cat > ${REMOTE_DIR}/config/env.operator-plane.sh << 'ENVEOF'
 # Managed by deploy_mac_mini.sh — operator plane (L-1) only.
-# git-bridge and the satellite probe bridge run on the platform host, so the
-# Minis address it by LAN IP; the 127.0.0.1 in that host's .env means itself.
+# The satellite probe bridge runs on the platform host, so the Minis address it
+# by LAN IP; the 127.0.0.1 in that host's .env means itself. git-bridge is a
+# dev-workstation tool and stays unset here: the plane reports it local-only.
 export PLATFORM_CONFIG=${REMOTE_DIR}/workspace/bifrost-platform/config/environments.yaml
 export PLATFORM_DATA_DIR=${REMOTE_DIR}/operator-plane-data
 export OPERATOR_PLANE_LISTEN=:${OPERATOR_PLANE_PORT}
 export OPERATOR_PLANE_AUTOPILOT=${OPERATOR_PLANE_AUTOPILOT}
 export ALERT_RELAY=${ALERT_RELAY}
-export GIT_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8785
 export SATELLITE_PROBE_BRIDGE_URL=http://${PLATFORM_LAN_HOST}:8786
 export PLANE_HEALTH_URLS=http://192.168.10.50:${OPERATOR_PLANE_PORT},http://192.168.10.52:${OPERATOR_PLANE_PORT}
 ENVEOF

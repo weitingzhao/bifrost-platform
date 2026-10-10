@@ -78,3 +78,30 @@ func TestNotifyCreatedRelayFailure(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestNotifySendsMessageThroughTheSameRelay(t *testing.T) {
+	var body struct {
+		Title    string `json:"title"`
+		Message  string `json:"message"`
+		ClickURL string `json:"click_url"`
+		Priority int    `json:"priority"`
+	}
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "relay-token-value")
+	if err := Notify(context.Background(), Message{Title: "Release policy expires in 23h", Message: "sign: release.sh policy sign"}); err != nil {
+		t.Fatal(err)
+	}
+	if auth != "Bearer relay-token-value" || body.Title != "Release policy expires in 23h" ||
+		body.ClickURL != ConsoleApprovals || body.Priority != 4 || !strings.Contains(body.Message, "policy sign") {
+		t.Fatalf("auth=%q body=%+v", auth, body)
+	}
+}

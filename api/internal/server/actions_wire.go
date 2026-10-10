@@ -31,9 +31,10 @@ func fromExecutor(ctx context.Context) bool {
 }
 
 // guard lets B and X calls through. X stays on the existing handler so the
-// TD-222 D10 daemon scale-up refusal is unchanged. C and D direct calls always
-// return 403. The approval executor calls the handler with withExecutor; that
-// marker is the only way past this gate.
+// TD-222 D10 daemon scale-up refusal is unchanged. C and D direct calls return
+// 403. The approval executor calls the handler with withExecutor; apart from
+// that marker, only a tier C release covered by the Owner's signed release
+// policy (and no freeze) gets past this gate, and that is audited.
 func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		raw, err := readAndRestore(r)
@@ -52,14 +53,30 @@ func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		tier := act.TierOf(r.Context(), params)
-		if !tier.NeedsApproval() || fromExecutor(r.Context()) {
+		if fromExecutor(r.Context()) {
 			next(w, r)
 			return
 		}
-		writeJSON(w, http.StatusForbidden, map[string]string{
+		if !tier.NeedsApproval() {
+			if tier == actions.TierB && s.checkTierBRelease(w, r, id, params) {
+				return
+			}
+			next(w, r)
+			return
+		}
+		auto, reasons := s.autoApprove(r, id, tier, params)
+		if auto {
+			next(w, r)
+			return
+		}
+		body := map[string]any{
 			"error":  "approval required",
 			"action": id,
-		})
+		}
+		if len(reasons) > 0 {
+			body["release_policy"] = reasons
+		}
+		writeJSON(w, http.StatusForbidden, body)
 	}
 }
 

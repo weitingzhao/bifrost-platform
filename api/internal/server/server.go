@@ -42,6 +42,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/patrol"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 	"github.com/weitingzhao/bifrost-platform/api/internal/promote"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/research"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -92,6 +93,7 @@ type Server struct {
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
+	releasePolicy *releasepolicy.Engine
 	authLoaded    bool
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
@@ -340,6 +342,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
+	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.bindActionExecutors()
 	return srv, nil
 }
@@ -371,6 +374,7 @@ func (s *Server) Router() http.Handler {
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)
 		approvals.Mount(r, s.auth, s.approvals)
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)
 		r.Get("/satellite/bus-deep", s.satellite.HandleBusDeep)
@@ -482,6 +486,9 @@ func (s *Server) Router() http.Handler {
 			r.Post("/delivery/pipelines/{name}/runs", s.guard("start_pipeline_run", s.delivery.HandleStartPipelineRun))
 			r.Put("/delivery/release-window", s.guard("release_window_hold", s.delivery.HandlePutReleaseWindow))
 			r.Delete("/delivery/release-window", s.guard("release_window_release", s.delivery.HandleDeleteReleaseWindow))
+			r.Put("/release-policy", s.guard("release_policy_install", s.handleReleasePolicyInstall))
+			r.Post("/release-policy/freeze", s.guard("release_freeze", s.handleReleaseFreeze))
+			r.Post("/release-policy/unfreeze", s.guard("release_unfreeze", s.handleReleaseUnfreeze))
 			r.Post("/delivery/mirrors/sync", s.guard("sync_mirrors", s.delivery.HandleSyncMirrors))
 			r.Post("/delivery/supply-chain/mirror-sync", s.delivery.HandleMirrorSync)
 			r.Post("/delivery/supply-chain/dockerfile-configmaps/refresh", s.delivery.HandleRefreshDockerfileCMs)
