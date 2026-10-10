@@ -30,7 +30,7 @@ func (s *Server) wireAgentThreads(dataDir string, role config.Role, titleStore *
 	if role.RunsAPI() {
 		rec.Start(context.Background(), agentthreads.FlushInterval)
 	}
-	s.agentThreads = agentthreads.NewHandler(rec, cfg, titles)
+	s.agentThreads = agentthreads.NewHandler(rec, cfg, titles, s.audit)
 	if role.RunsWorkers() && agentthreads.WatchWanted() {
 		agentthreads.NewWatcher(store, cfg, func(ctx context.Context, title, body string) error {
 			return approvalnotify.Notify(ctx, approvalnotify.Message{Title: title, Message: body, ClickURL: ConsoleNeedsYou})

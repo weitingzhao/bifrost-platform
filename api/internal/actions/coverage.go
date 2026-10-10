@@ -59,6 +59,7 @@ func init() {
 		"PUT /api/v1/lineage/thread-title",
 		"PUT /api/v1/lineage/transcript-title",
 		"POST /api/v1/agent/threads/heartbeat",
+		"POST /api/v1/agent/hosts/heartbeat",
 		"POST /api/v1/console/ws-ticket",
 		"POST /api/v1/agent/governance/skill-runs",
 		"POST /api/v1/telemetry/attention-mute",

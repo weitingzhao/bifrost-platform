@@ -2,6 +2,7 @@ package agentthreads
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -47,6 +48,7 @@ type rig struct {
 	rec   *Recorder
 	w     *Watcher
 	page  *pager
+	seq   uint64
 }
 
 func newRig(t *testing.T, path string) *rig {
@@ -64,11 +66,35 @@ func newRig(t *testing.T, path string) *rig {
 
 func (r *rig) beat(t *testing.T, ev Event, tool string, timeout int) {
 	t.Helper()
-	b := Beat{Thread: "7e939cd5-b3b1-4705-96e4-0a3b9e61648d", Vendor: "claude", Host: "mbp", Work: "W-54", Event: ev, Tool: tool, ToolTimeoutS: timeout}
+	r.beatOn(t, "7e939cd5-b3b1-4705-96e4-0a3b9e61648d", "mbp", ev, tool, timeout)
+}
+
+func (r *rig) beatOn(t *testing.T, thread, host string, ev Event, tool string, timeout int) {
+	t.Helper()
+	r.seq++
+	b := Beat{
+		Thread: thread, Vendor: "claude", Host: host, Work: "W-54",
+		Event: ev, Tool: tool, ToolTimeoutS: timeout, TurnID: "turn-1", Seq: r.seq,
+	}
+	if ev == WaitingOwner {
+		b.Reason = "permission_prompt"
+	}
 	if err := b.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	r.rec.Record(b)
+	if err := r.rec.Flush(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (r *rig) host(t *testing.T, name string, vendors map[string]VendorReport) {
+	t.Helper()
+	b := HostBeat{Host: name, Vendors: vendors}
+	if err := b.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	r.rec.RecordHost(b)
 	if err := r.rec.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -107,14 +133,20 @@ func TestThresholdIsTenMinutesOrDeclaredTimeoutPlusTwo(t *testing.T) {
 func TestStatusOf(t *testing.T) {
 	c := DefaultConfig()
 	mid := Thread{Event: AfterTool, At: t0}
-	if s := c.StatusOf(mid, t0.Add(10*time.Minute)); s != InTurn {
+	if s := c.StatusOf(mid, false, t0.Add(10*time.Minute)); s != InTurn {
 		t.Fatalf("at exactly 10m: %s", s)
 	}
-	if s := c.StatusOf(mid, t0.Add(10*time.Minute+time.Second)); s != Silent {
+	if s := c.StatusOf(mid, false, t0.Add(10*time.Minute+time.Second)); s != Silent {
 		t.Fatalf("past 10m: %s", s)
 	}
-	if s := c.StatusOf(Thread{Event: TurnEnd, At: t0}, t0.Add(48*time.Hour)); s != Idle {
+	if s := c.StatusOf(Thread{Event: TurnEnd, At: t0}, true, t0.Add(48*time.Hour)); s != Idle {
 		t.Fatalf("turn ended: %s", s)
+	}
+	if s := c.StatusOf(mid, true, t0); s != HostLost {
+		t.Fatalf("host lost: %s", s)
+	}
+	if s := c.StatusOf(Thread{Event: WaitingOwner, At: t0}, false, t0.Add(2*time.Hour)); s != StatusWaiting {
+		t.Fatalf("waiting: %s", s)
 	}
 }
 
@@ -314,7 +346,7 @@ func TestRecorderShowsBufferedEventsAndPersists(t *testing.T) {
 	clk := &clock{at: t0}
 	rec := NewRecorder(NewStore(path), DefaultConfig())
 	rec.now = clk.now
-	rec.Record(Beat{Thread: "a1", Vendor: "cursor", Host: "mbp", Event: TurnStart})
+	rec.Record(Beat{Thread: "a1", Vendor: "cursor", Host: "mbp", Event: TurnStart, TurnID: "t", Seq: 1})
 	st, err := rec.State()
 	if err != nil || len(st.Threads) != 1 {
 		t.Fatalf("buffered event not visible: %v %+v", err, st)
@@ -329,7 +361,7 @@ func TestRecorderShowsBufferedEventsAndPersists(t *testing.T) {
 		t.Fatalf("not persisted: %+v", got)
 	}
 	clk.at = t0.Add(73 * time.Hour)
-	rec.Record(Beat{Thread: "b2", Vendor: "codex", Host: "mbp", Event: TurnStart})
+	rec.Record(Beat{Thread: "b2", Vendor: "codex", Host: "mbp", Event: TurnStart, TurnID: "t", Seq: 1})
 	if err := rec.Flush(); err != nil {
 		t.Fatal(err)
 	}
@@ -341,24 +373,30 @@ func TestRecorderShowsBufferedEventsAndPersists(t *testing.T) {
 
 func TestApplyTracksTurnStart(t *testing.T) {
 	var st State
-	st.Apply(Beat{Thread: "x", Vendor: "codex", Host: "h", Event: AfterTool}, t0)
-	st.Apply(Beat{Thread: "x", Vendor: "codex", Host: "h", Event: BeforeTool}, t0.Add(time.Minute))
+	b := func(ev Event, seq uint64) Beat {
+		return Beat{Thread: "x", Vendor: "codex", Host: "h", Event: ev, TurnID: "t", Seq: seq}
+	}
+	st.Apply(b(AfterTool, 1), t0)
+	st.Apply(b(BeforeTool, 2), t0.Add(time.Minute))
 	if got := st.Threads[Key("codex", "x")].TurnStartedAt; !got.Equal(t0) {
 		t.Fatalf("first event starts the turn: %s", got)
 	}
-	st.Apply(Beat{Thread: "x", Vendor: "codex", Host: "h", Event: TurnEnd}, t0.Add(2*time.Minute))
-	st.Apply(Beat{Thread: "x", Vendor: "codex", Host: "h", Event: BeforeTool}, t0.Add(3*time.Minute))
+	st.Apply(b(TurnEnd, 3), t0.Add(2*time.Minute))
+	st.Apply(b(BeforeTool, 4), t0.Add(3*time.Minute))
 	if got := st.Threads[Key("codex", "x")].TurnStartedAt; !got.Equal(t0.Add(3 * time.Minute)) {
 		t.Fatalf("event after turn end starts a new turn: %s", got)
 	}
-	st.Apply(Beat{Thread: "x", Vendor: "codex", Host: "h", Event: TurnEnd}, t0.Add(time.Minute))
+	// A delayed older sequence arrives after the newer one. Receive time is later; it must not win.
+	if st.Apply(b(TurnEnd, 2), t0.Add(4*time.Minute)) {
+		t.Fatal("an older sequence was stored")
+	}
 	if st.Threads[Key("codex", "x")].Event != BeforeTool {
 		t.Fatal("an older event overwrote a newer one")
 	}
 }
 
 func TestValidate(t *testing.T) {
-	ok := Beat{Thread: "0f549e24-a80b-48a6-9799-f23e4c2926e8", Vendor: "cursor", Host: "Vision-MacBook-Pro.local", Event: AfterTool, ToolTimeoutS: 30}
+	ok := Beat{Thread: "0f549e24-a80b-48a6-9799-f23e4c2926e8", Vendor: "cursor", Host: "Vision-MacBook-Pro.local", Event: AfterTool, ToolTimeoutS: 30, TurnID: "t1", Seq: 1}
 	if err := ok.Validate(); err != nil {
 		t.Fatal(err)
 	}
@@ -366,13 +404,15 @@ func TestValidate(t *testing.T) {
 		t.Fatal("a timeout on a non-before event was kept")
 	}
 	bad := []Beat{
-		{Thread: "", Vendor: "cursor", Host: "h", Event: TurnStart},
-		{Thread: "a b", Vendor: "cursor", Host: "h", Event: TurnStart},
-		{Thread: "a", Vendor: "Cursor!", Host: "h", Event: TurnStart},
-		{Thread: "a", Vendor: "cursor", Host: "", Event: TurnStart},
-		{Thread: "a", Vendor: "cursor", Host: "h", Event: "stop"},
-		{Thread: "a", Vendor: "cursor", Host: "h", Event: BeforeTool, ToolTimeoutS: -1},
-		{Thread: "a", Vendor: "cursor", Host: "h", Event: TurnStart, Work: "fix things"},
+		{Thread: "", Vendor: "cursor", Host: "h", Event: TurnStart, TurnID: "t1", Seq: 1},
+		{Thread: "a b", Vendor: "cursor", Host: "h", Event: TurnStart, TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "Cursor!", Host: "h", Event: TurnStart, TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "cursor", Host: "", Event: TurnStart, TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "cursor", Host: "h", Event: "stop", TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "cursor", Host: "h", Event: BeforeTool, ToolTimeoutS: -1, TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "cursor", Host: "h", Event: TurnStart, Work: "fix things", TurnID: "t1", Seq: 1},
+		{Thread: "a", Vendor: "cursor", Host: "h", Event: TurnStart, TurnID: "t1"},
+		{Thread: "a", Vendor: "cursor", Host: "h", Event: WaitingOwner, Reason: "auth_success", TurnID: "t1", Seq: 1},
 	}
 	for _, b := range bad {
 		if err := b.Validate(); err == nil {
@@ -385,7 +425,7 @@ func TestHandlers(t *testing.T) {
 	clk := &clock{at: t0}
 	rec := NewRecorder(NewStore(""), DefaultConfig())
 	rec.now = clk.now
-	h := NewHandler(rec, DefaultConfig(), nil)
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
 	h.now = clk.now
 
 	post := func(body string) int {
@@ -393,7 +433,7 @@ func TestHandlers(t *testing.T) {
 		h.HandleBeat(w, httptest.NewRequest(http.MethodPost, "/api/v1/agent/threads/heartbeat", strings.NewReader(body)))
 		return w.Code
 	}
-	if code := post(`{"thread":"t1","vendor":"codex","host":"mbp","event":"before_tool","tool":"Bash","tool_timeout_s":600}`); code != http.StatusAccepted {
+	if code := post(`{"thread":"t1","vendor":"codex","host":"mbp","event":"before_tool","tool":"Bash","tool_timeout_s":600,"turn_id":"t1","seq":1}`); code != http.StatusAccepted {
 		t.Fatalf("POST valid: %d", code)
 	}
 	if code := post(`{"thread":"t1","vendor":"codex","host":"mbp","event":"nap"}`); code != http.StatusBadRequest {
@@ -406,9 +446,254 @@ func TestHandlers(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.HandleList(w, httptest.NewRequest(http.MethodGet, "/api/v1/agent/threads", nil))
 	body := w.Body.String()
-	for _, want := range []string{`"status":"silent"`, `"quiet_seconds":780`, `"threshold_seconds":720`, `"silent_after_seconds":600`} {
+	for _, want := range []string{`"status":"silent"`, `"quiet_seconds":780`, `"threshold_seconds":720`, `"silent_after_seconds":600`, `"host_lost_after_seconds":180`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("GET body lacks %s: %s", want, body)
 		}
 	}
+	if strings.Contains(body, "key_hash") || strings.Contains(body, "thread_key") || strings.Contains(body, `"turn_id"`) || strings.Contains(body, `"seq"`) {
+		t.Fatalf("list returned a key, hash, turn id or sequence: %s", body)
+	}
+}
+
+type memAudit struct {
+	rows []string
+}
+
+func (m *memAudit) Record(_ *http.Request, action, target, status, detail string) {
+	m.rows = append(m.rows, action+" "+target+" "+status+" "+detail)
+}
+
+func postBeat(h *Handler, body string) *httptest.ResponseRecorder {
+	w := httptest.NewRecorder()
+	h.HandleBeat(w, httptest.NewRequest(http.MethodPost, "/api/v1/agent/threads/heartbeat", strings.NewReader(body)))
+	return w
+}
+
+func TestSecondReporterCannotEndOrRevive(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	audit := &memAudit{}
+	h := NewHandler(rec, DefaultConfig(), nil, audit)
+	h.now = rec.now
+	const thread = `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a"`
+	first := postBeat(h, thread+`,"event":"turn_start","seq":1}`)
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("start: %d %s", first.Code, first.Body.String())
+	}
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || len(issued.Key) != 64 {
+		t.Fatalf("key: %s", first.Body.String())
+	}
+	end := postBeat(h, thread+`,"event":"turn_end","seq":2}`)
+	if end.Code != http.StatusConflict {
+		t.Fatalf("end without key: %d %s", end.Code, end.Body.String())
+	}
+	wrong := postBeat(h, thread+`,"event":"turn_end","seq":2,"thread_key":"`+strings.Repeat("ab", 32)+`"}`)
+	if wrong.Code != http.StatusConflict {
+		t.Fatalf("end with a foreign key: %d %s", wrong.Code, wrong.Body.String())
+	}
+	st, err := rec.State()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Threads[Key("codex", "t1")]; got.Event != TurnStart {
+		t.Fatalf("thread changed without the key: %+v", got)
+	}
+	ok := postBeat(h, thread+`,"event":"turn_end","seq":2,"thread_key":"`+issued.Key+`"}`)
+	if ok.Code != http.StatusAccepted {
+		t.Fatalf("holder end: %d %s", ok.Code, ok.Body.String())
+	}
+	st, _ = rec.State()
+	if st.Threads[Key("codex", "t1")].Event != TurnEnd {
+		t.Fatal("holder could not end the thread")
+	}
+	revive := postBeat(h, thread+`,"event":"before_tool","tool":"Bash","seq":3}`)
+	if revive.Code != http.StatusConflict {
+		t.Fatalf("revive without key: %d %s", revive.Code, revive.Body.String())
+	}
+	st, _ = rec.State()
+	if st.Threads[Key("codex", "t1")].Event != TurnEnd {
+		t.Fatal("a second reporter revived the thread")
+	}
+	if len(audit.rows) != 3 {
+		t.Fatalf("audit rows: %v", audit.rows)
+	}
+	for _, row := range audit.rows {
+		if strings.Contains(row, issued.Key) || strings.Contains(row, "key_hash") {
+			t.Fatalf("audit leaked a key: %s", row)
+		}
+	}
+	// A presented key cannot start a thread the server has not issued.
+	fresh := postBeat(h, `{"thread":"t2","vendor":"codex","host":"mbp","turn_id":"turn-b","event":"turn_start","seq":1,"thread_key":"`+issued.Key+`"}`)
+	if fresh.Code != http.StatusConflict {
+		t.Fatalf("client-chosen key on a new thread: %d %s", fresh.Code, fresh.Body.String())
+	}
+}
+
+func TestOutOfOrderEventIsIgnored(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	h.now = rec.now
+	const head = `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","thread_key":"`
+	first := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted {
+		t.Fatal(first.Body.String())
+	}
+	// seq 3 ends the turn. A delayed seq 2 must not reopen it, even though it arrives later.
+	rec.now = func() time.Time { return t0.Add(2 * time.Minute) }
+	end := postBeat(h, head+issued.Key+`","event":"turn_end","seq":3}`)
+	if end.Code != http.StatusAccepted {
+		t.Fatal(end.Body.String())
+	}
+	rec.now = func() time.Time { return t0.Add(3 * time.Minute) }
+	late := postBeat(h, head+issued.Key+`","event":"before_tool","tool":"Bash","tool_timeout_s":3600,"seq":2}`)
+	if late.Code != http.StatusAccepted || !strings.Contains(late.Body.String(), `"ignored":true`) {
+		t.Fatalf("late event: %d %s", late.Code, late.Body.String())
+	}
+	st, _ := rec.State()
+	got := st.Threads[Key("claude", "t1")]
+	if got.Event != TurnEnd || got.Seq != 3 || got.ToolTimeoutS != 0 {
+		t.Fatalf("older event applied: %+v", got)
+	}
+}
+
+func TestAfterToolClearsDeclaredTimeout(t *testing.T) {
+	r := newRig(t, "")
+	r.beat(t, BeforeTool, "Bash", 3600)
+	r.at(time.Second)
+	r.beat(t, AfterTool, "Bash", 3600)
+	st, _ := r.store.Load()
+	got := st.Threads[Key("claude", "7e939cd5-b3b1-4705-96e4-0a3b9e61648d")]
+	if got.Event != AfterTool || got.ToolTimeoutS != 0 {
+		t.Fatalf("timeout not cleared: %+v", got)
+	}
+	if d := DefaultConfig().Threshold(got); d != 10*time.Minute {
+		t.Fatalf("threshold after the tool ended: %s", d)
+	}
+}
+
+func TestAuthSuccessDoesNotChangeThreadState(t *testing.T) {
+	r := newRig(t, "")
+	r.beat(t, TurnStart, "", 0)
+	b := Beat{
+		Thread: "7e939cd5-b3b1-4705-96e4-0a3b9e61648d", Vendor: "claude", Host: "mbp",
+		Event: WaitingOwner, Reason: "auth_success", TurnID: "turn-1", Seq: r.seq + 1,
+	}
+	if err := b.Validate(); err == nil {
+		t.Fatal("auth_success was accepted as waiting")
+	}
+	st, _ := r.store.Load()
+	if st.Threads[Key("claude", "7e939cd5-b3b1-4705-96e4-0a3b9e61648d")].Event != TurnStart {
+		t.Fatal("auth_success changed the thread")
+	}
+}
+
+func TestWaitingThreadIsNotPushed(t *testing.T) {
+	r := newRig(t, "")
+	r.beat(t, TurnStart, "", 0)
+	r.at(time.Minute)
+	r.beat(t, WaitingOwner, "", 0)
+	r.at(2 * time.Hour)
+	r.tick(t)
+	if r.page.count() != 0 {
+		t.Fatalf("waiting thread pushed: %v", r.page.sent)
+	}
+	views := DefaultConfig().Views(mustState(t, r), r.clk.at)
+	if len(views) != 1 || views[0].Status != StatusWaiting || views[0].Reason != "permission_prompt" {
+		t.Fatalf("view: %+v", views)
+	}
+	if views[0].QuietSeconds < 3600 {
+		t.Fatalf("wait age: %d", views[0].QuietSeconds)
+	}
+}
+
+func TestHostLostPushesOnceAndReturnPushesNone(t *testing.T) {
+	r := newRig(t, "")
+	r.beatOn(t, "thread-a", "mbp", TurnStart, "", 0)
+	r.beatOn(t, "thread-b", "mbp", BeforeTool, "Bash", 30)
+	r.beatOn(t, "thread-c", "mbp", TurnEnd, "", 0)
+	wired := map[string]VendorReport{
+		"claude": {Wired: true, Token: true},
+		"cursor": {Wired: true, Token: false},
+		"codex":  {Wired: false, Token: true},
+	}
+	r.host(t, "mbp", wired)
+	r.at(3 * time.Minute)
+	r.tick(t)
+	if r.page.count() != 0 {
+		t.Fatal("pushed at exactly the host threshold")
+	}
+	r.at(3*time.Minute + time.Second)
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("want one host push, got %d (%v)", r.page.count(), r.page.sent)
+	}
+	if !strings.Contains(r.page.sent[0], "Host lost") || !strings.Contains(r.page.sent[0], "mbp") {
+		t.Fatalf("push: %s", r.page.sent[0])
+	}
+	views := DefaultConfig().Views(mustState(t, r), r.clk.at)
+	byID := map[string]Status{}
+	for _, v := range views {
+		byID[v.Thread.Thread] = v.Status
+	}
+	if byID["thread-a"] != HostLost || byID["thread-b"] != HostLost || byID["thread-c"] != Idle {
+		t.Fatalf("statuses: %v", byID)
+	}
+	hosts := DefaultConfig().HostViews(mustState(t, r), r.clk.at)
+	if len(hosts) != 1 || hosts[0].Status != HostLostState {
+		t.Fatalf("host view: %+v", hosts)
+	}
+	monitored := map[string]bool{}
+	for _, v := range hosts[0].Vendors {
+		monitored[v.Vendor] = v.Monitored
+	}
+	if monitored["claude"] != true || monitored["cursor"] || monitored["codex"] {
+		t.Fatalf("monitored: %v", monitored)
+	}
+	r.tick(t)
+	r.at(15 * time.Minute)
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("lost host pushed again, or its threads paged as silent: %v", r.page.sent)
+	}
+	r.at(16 * time.Minute)
+	r.host(t, "mbp", wired)
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("returning host pushed: %v", r.page.sent)
+	}
+	back := DefaultConfig().Views(mustState(t, r), r.clk.at)
+	for _, v := range back {
+		if v.Thread.Thread == "thread-a" && v.Status != Silent {
+			t.Fatalf("returned thread is quiet and listed silent: %+v", v)
+		}
+	}
+	r.at(16*time.Minute + 3*time.Minute + time.Second)
+	r.tick(t)
+	if r.page.count() != 2 {
+		t.Fatalf("a later loss should page once more, got %d", r.page.count())
+	}
+}
+
+func TestHostLostAfterComesFromEnv(t *testing.T) {
+	t.Setenv("PLATFORM_AGENT_THREAD_HOST_LOST", "90s")
+	if got := ConfigFromEnv().HostLostAfter; got != 90*time.Second {
+		t.Fatalf("host threshold: %s", got)
+	}
+}
+
+func mustState(t *testing.T, r *rig) State {
+	t.Helper()
+	st, err := r.store.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return st
 }

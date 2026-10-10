@@ -21,7 +21,7 @@ type Store struct {
 func NewStore(path string) *Store { return &Store{path: path} }
 
 func decodeState(raw []byte) (State, error) {
-	st := State{Threads: map[string]Thread{}}
+	st := State{Threads: map[string]Thread{}, Hosts: map[string]Host{}}
 	if len(raw) == 0 {
 		return st, nil
 	}
@@ -31,13 +31,23 @@ func decodeState(raw []byte) (State, error) {
 	if st.Threads == nil {
 		st.Threads = map[string]Thread{}
 	}
+	if st.Hosts == nil {
+		st.Hosts = map[string]Host{}
+	}
 	return st, nil
 }
 
 func clone(st State) State {
-	out := State{Threads: make(map[string]Thread, len(st.Threads))}
+	out := State{
+		Threads: make(map[string]Thread, len(st.Threads)),
+		Hosts:   make(map[string]Host, len(st.Hosts)),
+	}
 	for k, t := range st.Threads {
 		out.Threads[k] = t
+	}
+	for k, h := range st.Hosts {
+		h.Vendors = cloneVendors(h.Vendors)
+		out.Hosts[k] = h
 	}
 	return out
 }
@@ -52,7 +62,7 @@ func (s *Store) Load() (State, error) {
 	raw, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return State{Threads: map[string]Thread{}}, nil
+			return State{Threads: map[string]Thread{}, Hosts: map[string]Host{}}, nil
 		}
 		return State{}, err
 	}

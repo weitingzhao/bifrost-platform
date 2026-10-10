@@ -462,6 +462,8 @@ func (s *Server) Router() http.Handler {
 			r.Put("/lineage/transcript-title", s.lineage.HandleReportTitle)
 			// A session's own turn and tool events (W-54); same token as its title.
 			r.Post("/agent/threads/heartbeat", s.agentThreads.HandleBeat)
+			// One machine's hook wiring and token readability (W-57).
+			r.Post("/agent/hosts/heartbeat", s.agentThreads.HandleHost)
 		})
 		// Titles and host names: viewer and above.
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/threads", s.agentThreads.HandleList)

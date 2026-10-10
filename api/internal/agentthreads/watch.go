@@ -14,8 +14,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
-// WatchInterval is how often the workers loop judges. With SilentAfter 10m the
-// push leaves within 10m30s of the last event; the Owner's bound is 12m.
+// WatchInterval is how often the workers loop judges.
 const WatchInterval = 30 * time.Second
 
 // Push results, the label values of the pushes counter.
@@ -103,10 +102,51 @@ func (w *Watcher) tick(ctx context.Context) bool {
 			countPush(PushStale)
 		}
 	}
-	if len(push) == 0 {
-		return ok
+	if len(push) > 0 {
+		titles := w.lineageTitles(ctx)
+		ok = w.pushThreads(ctx, st, push, titles, now) && ok
 	}
-	titles := w.lineageTitles(ctx)
+	hPush, hMark := w.cfg.HostsDue(st, now)
+	for _, name := range hMark {
+		if claimed, err := w.claimHost(name, st.Hosts[name].At, now); err != nil {
+			slog.Warn("agent_threads_watch", "host_mark", name, "err", err)
+			ok = false
+		} else if claimed {
+			countHostPush(PushStale)
+		}
+	}
+	for _, name := range hPush {
+		h := st.Hosts[name]
+		claimed, err := w.claimHost(name, h.At, now)
+		if err != nil {
+			slog.Warn("agent_threads_watch", "host_claim", name, "err", err)
+			ok = false
+			continue
+		}
+		if !claimed {
+			continue
+		}
+		subject, body := w.cfg.HostMessage(h, w.cfg.MidTurn(st, name), now)
+		slog.Info("agent_host_lost", "host", name, "quiet", now.Sub(h.At).String())
+		if w.notify == nil {
+			continue
+		}
+		if err := w.notify(ctx, subject, body); err != nil {
+			slog.Warn("agent_threads_watch", "host_push", name, "err", err)
+			countHostPush(PushFailed)
+			if uerr := w.unclaimHost(name, h.At); uerr != nil {
+				slog.Warn("agent_threads_watch", "host_unclaim", name, "err", uerr)
+			}
+			ok = false
+			continue
+		}
+		countHostPush(PushSent)
+	}
+	return ok
+}
+
+func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titles map[string]string, now time.Time) bool {
+	ok := true
 	for _, k := range push {
 		t := st.Threads[k]
 		claimed, err := w.claim(k, t.At, now)
@@ -172,6 +212,34 @@ func (w *Watcher) unclaim(key string, at time.Time) error {
 	})
 }
 
+func (w *Watcher) claimHost(name string, at, now time.Time) (bool, error) {
+	claimed := false
+	err := w.store.Update(func(st *State) error {
+		claimed = false
+		h, found := st.Hosts[name]
+		if !found || !h.At.Equal(at) || h.LostNotifiedFor.Equal(at) {
+			return nil
+		}
+		h.LostNotifiedFor, h.LostNotifiedAt = at, now
+		st.Hosts[name] = h
+		claimed = true
+		return nil
+	})
+	return claimed, err
+}
+
+func (w *Watcher) unclaimHost(name string, at time.Time) error {
+	return w.store.Update(func(st *State) error {
+		h, found := st.Hosts[name]
+		if !found || !h.LostNotifiedFor.Equal(at) {
+			return nil
+		}
+		h.LostNotifiedFor, h.LostNotifiedAt = time.Time{}, time.Time{}
+		st.Hosts[name] = h
+		return nil
+	})
+}
+
 func (w *Watcher) lineageTitles(ctx context.Context) map[string]string {
 	if w.titles == nil {
 		return nil
@@ -185,15 +253,17 @@ func (w *Watcher) lineageTitles(ctx context.Context) map[string]string {
 }
 
 var (
-	metricsMu sync.Mutex
-	byStatus  = map[Status]int{InTurn: 0, Silent: 0}
-	pushes    = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
+	metricsMu   sync.Mutex
+	byStatus    = map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
+	pushes      = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
+	hostPushes  = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
+	gaugeStatus = []Status{InTurn, StatusWaiting, Silent, HostLost}
 )
 
 func setGauges(cfg Config, st State, now time.Time) {
-	counts := map[Status]int{InTurn: 0, Silent: 0}
+	counts := map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
 	for _, t := range st.Threads {
-		if s := cfg.StatusOf(t, now); s != Idle {
+		if s := cfg.StatusOf(t, cfg.HostDown(st, t.Host, now), now); s != Idle {
 			counts[s]++
 		}
 	}
@@ -208,24 +278,37 @@ func countPush(result string) {
 	metricsMu.Unlock()
 }
 
+func countHostPush(result string) {
+	metricsMu.Lock()
+	hostPushes[result]++
+	metricsMu.Unlock()
+}
+
 // WriteMetrics appends the agent thread series to a /metrics body. Only the
 // process that runs the watcher has non-zero values.
 func WriteMetrics(b *strings.Builder) {
 	metricsMu.Lock()
 	defer metricsMu.Unlock()
-	b.WriteString("# HELP bifrost_agent_threads Agent threads mid-turn, by status (in_turn, silent), as of the last watch pass\n")
+	b.WriteString("# HELP bifrost_agent_threads Agent threads mid-turn, by status, as of the last watch pass\n")
 	b.WriteString("# TYPE bifrost_agent_threads gauge\n")
-	for _, s := range []Status{InTurn, Silent} {
+	for _, s := range gaugeStatus {
 		fmt.Fprintf(b, "bifrost_agent_threads{status=%q} %d\n", s, byStatus[s])
 	}
 	b.WriteString("# HELP bifrost_agent_thread_silence_pushes_total Silent agent threads handled, by result (sent, failed, stale = too old to page)\n")
 	b.WriteString("# TYPE bifrost_agent_thread_silence_pushes_total counter\n")
-	results := make([]string, 0, len(pushes))
-	for r := range pushes {
+	writePushCounter(b, "bifrost_agent_thread_silence_pushes_total", pushes)
+	b.WriteString("# HELP bifrost_agent_host_lost_pushes_total Host losses handled, by result (sent, failed, stale = too old to page)\n")
+	b.WriteString("# TYPE bifrost_agent_host_lost_pushes_total counter\n")
+	writePushCounter(b, "bifrost_agent_host_lost_pushes_total", hostPushes)
+}
+
+func writePushCounter(b *strings.Builder, name string, counts map[string]int64) {
+	results := make([]string, 0, len(counts))
+	for r := range counts {
 		results = append(results, r)
 	}
 	sort.Strings(results)
 	for _, r := range results {
-		fmt.Fprintf(b, "bifrost_agent_thread_silence_pushes_total{result=%q} %d\n", r, pushes[r])
+		fmt.Fprintf(b, "%s{result=%q} %d\n", name, r, counts[r])
 	}
 }
