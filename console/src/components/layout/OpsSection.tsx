@@ -26,7 +26,7 @@ export interface OpsSectionProps {
   id?: string
   /**
    * When true, section body is collapsible via native `<details>`.
-   * Use with `defaultCollapsed` for COLLAPSE_STRATEGY (healthy → collapsed).
+   * Use with `defaultCollapsed` so healthy sections start collapsed.
    */
   collapsible?: boolean
   /** Initial collapsed state when `collapsible` is true. */
