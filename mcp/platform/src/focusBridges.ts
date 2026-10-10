@@ -1,14 +1,14 @@
 /**
  * MCP focus bridges — 把完整的 platform 工具面按领域切片。
  *
- * 背景：`config/cursor-mcp-bridges.json` 早就声明了 kubernetes / redis / postgres 三个桥，
+ * 背景：Cursor / Claude 的 MCP 配置早就声明了 kubernetes / redis / postgres 三个桥，
  * 但此前 `index.ts` 只对 `prometheus` 分支做了实现，其余 focus 值会落到 else 分支、
  * 注册与主 server **完全相同**的全量工具 —— 等于三份重复，没有任何切片效果。
  * 本文件补上真正的实现。
  *
  * 分域依据：`api/internal/mcp/catalog.go` 的权威工具目录（route + level + role）。
  *
- * 授权原则（与 cursor-mcp-bridges.json 的注释一致）：
+ * 授权原则（与 bifrost-trade-infra/agent-config 的 `.mcp.json` 和 `cursor/mcp.servers.json` 一致）：
  *   kubernetes — read + actuation（L0/L1/L2），走 platform-api cluster 路由，审计照常
  *   redis      — 只读 L0，仅 matrix / cluster 探针（platform-api 无 Redis 专用端点）
  *   postgres   — 只读 L0，仅 matrix 探针 + 数据新鲜度 / 备份状态（**不含**备份触发与 clone 等写操作）
