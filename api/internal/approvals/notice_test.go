@@ -229,3 +229,45 @@ func TestNoticeAuditLines(t *testing.T) {
 		t.Fatalf("no approval.notify audit line: %s", rec.Body.String())
 	}
 }
+
+func TestPassthroughSecretsStayOutOfThePush(t *testing.T) {
+	f := relay(t)
+	dir := t.TempDir()
+	audit := actuation.NewAuditLog(filepath.Join(dir, "audit.json"))
+	svc := New(filepath.Join(dir, "approvals"), audit)
+	const leaked = "sk-LEAKEDAPIKEY999"
+	const tokenValue = "abc123tokenvalue"
+	c := svc.create(context.Background(), "s", "ib_maintenance", "set maintenance", "", map[string]any{
+		"account_id": "token=" + tokenValue,
+		"enabled":    true,
+		"api_key":    leaked,
+	})
+	if c.Status != http.StatusCreated {
+		t.Fatalf("create = %d %v", c.Status, c.Body)
+	}
+	if c.Approval.Params["api_key"] != leaked {
+		t.Fatal("passthrough dropped api_key from the stored params")
+	}
+	if _, shown := c.Approval.KeyParams["api_key"]; shown || c.Approval.KeyParams["account_id"] != "token="+tokenValue {
+		t.Fatalf("key params = %#v", c.Approval.KeyParams)
+	}
+	svc.deliver(context.Background(), "created", c.Approval)
+	pushes := f.got()
+	if len(pushes) != 1 {
+		t.Fatalf("pushes = %+v", pushes)
+	}
+	text := pushes[0].Title + "\n" + pushes[0].Message
+	if strings.Contains(text, leaked) || strings.Contains(text, tokenValue) || !strings.Contains(text, "account_id=token=[redacted]") {
+		t.Fatalf("push = %q", text)
+	}
+	raw, err := json.Marshal(deliveriesOf(t, svc, c.Approval.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	audit.HandleList(rec, httptest.NewRequest(http.MethodGet, "/audit", nil))
+	blob := string(raw) + rec.Body.String()
+	if strings.Contains(blob, leaked) || strings.Contains(blob, tokenValue) {
+		t.Fatalf("delivery or audit leaked the secret: %s", blob)
+	}
+}

@@ -3,7 +3,6 @@ package actions
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -176,17 +175,14 @@ func highestNamespace(namespaces []string) string {
 	return best
 }
 
+// keyParams lists only the action's declared parameters. Keys that arrived
+// through Passthrough stay on the record for execution and the params hash,
+// and are never shown in a summary or a notification.
 func keyParams(a Action, params map[string]any) map[string]string {
 	out := map[string]string{}
 	names := make([]string, 0, len(a.Params))
 	for _, p := range a.Params {
 		names = append(names, p.Name)
-	}
-	if a.Passthrough {
-		for k := range params {
-			names = append(names, k)
-		}
-		sort.Strings(names)
 	}
 	for _, name := range names {
 		if len(out) >= keyParamMax {
