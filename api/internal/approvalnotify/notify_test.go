@@ -1,9 +1,11 @@
 package approvalnotify
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,7 +73,8 @@ func TestComposeSnapshots(t *testing.T) {
 		{KindUnknown, ownerRun(),
 			"#57 unknown · owner_run_command · host",
 			"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
-				"Executor lost: no result after its lease lapsed. Check before running it again.\n" +
+				"executor lost: lease lapsed with no result\n" +
+				"Check before running it again.\n" +
 				"from W-37 · S0-0 plan (claude) · runs on: system", 5},
 		{KindNotExecuted, notRun,
 			"#58 not executed · gitops_sync_app · prod",
@@ -276,5 +279,43 @@ func TestProbeArgsStayOutOfThePush(t *testing.T) {
 	}
 	if !strings.Contains(text, "namespace=data") {
 		t.Fatalf("safe key missing: %q", text)
+	}
+}
+
+func TestUnknownPushShowsTheReason(t *testing.T) {
+	for _, reason := range []string{
+		"create outcome unknown; outcome needs checking",
+		"object cicd/run already exists; it must be checked by hand",
+		"executor lost: lease lapsed with no result",
+	} {
+		it := gitopsSync()
+		it.Error = reason
+		m := Compose(KindUnknown, it, now)
+		if !strings.Contains(m.Message, reason) {
+			t.Fatalf("message %q does not contain %q", m.Message, reason)
+		}
+		if strings.Contains(m.Message, "Executor lost: no result after its lease lapsed") {
+			t.Fatalf("fixed lease sentence replaced the reason: %q", m.Message)
+		}
+	}
+	it := gitopsSync()
+	it.Error = "create outcome unknown token=SYNTHETIC_SECRET"
+	m := Compose(KindUnknown, it, now)
+	if strings.Contains(m.Title+m.Message, "SYNTHETIC_SECRET") || !strings.Contains(m.Message, "token=[redacted]") {
+		t.Fatalf("push = %q", m.Message)
+	}
+}
+
+func TestNotifySlogRedactsTheTransportError(t *testing.T) {
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Setenv("APPROVAL_NOTIFY_URL", "http://user:token=SYNTHETIC_SECRET@127.0.0.1:1/notify")
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "tok")
+	ds := Send(context.Background(), KindUnknown, gitopsSync(), now)
+	blob := logs.String() + ds[0].Error
+	if strings.Contains(blob, "SYNTHETIC_SECRET") || !strings.Contains(logs.String(), "[redacted]") {
+		t.Fatalf("log=%s delivery=%+v", logs.String(), ds)
 	}
 }

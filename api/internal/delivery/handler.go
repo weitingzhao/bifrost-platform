@@ -10,6 +10,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -84,7 +85,7 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 		status = "failed"
 	}
 	if h.audit != nil {
-		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+		h.audit.Record(r, resp.Action, resp.Target, status, approvalnotify.Redact(resp.Message))
 	}
 	if err != nil {
 		code := http.StatusBadGateway
@@ -163,7 +164,7 @@ func (h *Handler) HandleDeletePipelineRun(w http.ResponseWriter, r *http.Request
 		status = "failed"
 	}
 	if h.audit != nil {
-		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+		h.audit.Record(r, resp.Action, resp.Target, status, approvalnotify.Redact(resp.Message))
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{
@@ -217,7 +218,7 @@ func (h *Handler) HandleMirrorSync(w http.ResponseWriter, r *http.Request) {
 		status = "failed"
 	}
 	if h.audit != nil {
-		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+		h.audit.Record(r, resp.Action, resp.Target, status, approvalnotify.Redact(resp.Message))
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{
@@ -241,7 +242,7 @@ func (h *Handler) HandleRefreshDockerfileCMs(w http.ResponseWriter, r *http.Requ
 		status = "failed"
 	}
 	if h.audit != nil {
-		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
+		h.audit.Record(r, resp.Action, resp.Target, status, approvalnotify.Redact(resp.Message))
 	}
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]any{

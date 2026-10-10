@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
@@ -68,6 +69,7 @@ func (l *AuditLog) Record(r *http.Request, action, target, status, detail string
 	if l == nil {
 		return
 	}
+	detail = approvalnotify.Redact(detail)
 	principal := PrincipalFromContext(r.Context())
 	record := AuditRecord{
 		ID:     fmt.Sprintf("%d", time.Now().UTC().UnixNano()),
@@ -93,6 +95,7 @@ func (l *AuditLog) RecordDirect(actor string, role Role, action, target, status,
 	if l == nil {
 		return
 	}
+	detail = approvalnotify.Redact(detail)
 	record := AuditRecord{
 		ID:     fmt.Sprintf("%d", time.Now().UTC().UnixNano()),
 		At:     time.Now().UTC(),

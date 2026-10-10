@@ -33,8 +33,11 @@ func TestCreateTimeoutNotifiesUnknown(t *testing.T) {
 	}
 	ds := deliveriesOf(t, svc, c.Approval.ID)
 	got := f.got()
-	if len(got) != 1 || !strings.Contains(got[0].Title, "unknown") {
+	if len(got) != 1 || !strings.Contains(got[0].Title, "unknown") || !strings.Contains(got[0].Message, "needs checking") {
 		t.Fatalf("pushes = %+v", got)
+	}
+	if strings.Contains(got[0].Message, "Executor lost: no result after its lease lapsed") {
+		t.Fatalf("push hid the create reason: %+v", got)
 	}
 	if len(ds) != 1 || ds[0].Kind != "unknown" {
 		t.Fatalf("deliveries = %+v", ds)

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 )
 
 // Handler is the HTTP surface. C and D calls are stopped by the action guard
@@ -27,13 +28,17 @@ func (h *Handler) record(r *http.Request, action, target string, err error, deta
 	if h.Audit == nil {
 		return
 	}
+	status := "ok"
+	// Redact the caller text before the length clip so a cut cannot leave a
+	// secret that the marker no longer matches. The error and the requester
+	// are appended after that clip; they are redacted too.
+	detail = approvalnotify.Redact(detail)
 	if len(detail) > maxAuditDetail {
 		detail = detail[:maxAuditDetail]
 	}
-	status := "ok"
 	if err != nil {
 		status = "failed"
-		detail = strings.TrimSpace(detail + " error=" + err.Error())
+		detail = strings.TrimSpace(detail + " error=" + approvalnotify.Redact(err.Error()))
 	}
 	detail = strings.TrimSpace(detail + " requester=" + requester(r))
 	h.Audit.Record(r, action, target, status, detail)

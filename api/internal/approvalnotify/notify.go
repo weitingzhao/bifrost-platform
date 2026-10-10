@@ -52,7 +52,9 @@ const (
 	KindCreated = "created"
 	// KindFailed: the run failed (including a late result that failed).
 	KindFailed = "failed"
-	// KindUnknown: the executor's lease lapsed with no result.
+	// KindUnknown: the run ended unknown. The push shows Item.Error, the
+	// redacted reason (create outcome unknown, the object already exists, or
+	// the lease was lost).
 	KindUnknown = "unknown"
 	// KindNotExecuted: approved, but not executed before the execution deadline.
 	KindNotExecuted = "not_executed"
@@ -62,7 +64,8 @@ const (
 	KindExpiring = "reminder_expiring"
 )
 
-// Reminder thresholds (S0-0 plan §2.7): one reminder each, no repeats.
+// Reminder thresholds (S0-0 plan §2.7). A reminder is retried after a failed
+// send or an expired claim, so the same reminder may arrive twice.
 const (
 	RemindAfter        = 4 * time.Hour
 	RemindBeforeExpiry = 2 * time.Hour
@@ -172,7 +175,11 @@ func Compose(kind string, it Item, now time.Time) Message {
 		m.Message = lines(summary, "error: "+orDefault(clip(oneLine(it.Error), 160), "unknown"), from)
 	case KindUnknown:
 		m.Title = ref + " unknown · " + short
-		m.Message = lines(summary, "Executor lost: no result after its lease lapsed. Check before running it again.", from)
+		reason := clip(oneLine(it.Error), 160)
+		if reason == "" {
+			reason = "executor lost: lease lapsed with no result"
+		}
+		m.Message = lines(summary, reason, "Check before running it again.", from)
 		m.Priority = 5
 	case KindNotExecuted:
 		m.Title = ref + " not executed · " + short
@@ -285,8 +292,9 @@ func send(ctx context.Context, msg Message) ([]Delivery, error) {
 			Error: "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"}}, nil
 	}
 	failed := func(err error) ([]Delivery, error) {
-		slog.Warn("approval notify failed", "title", msg.Title, "err", err)
-		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: clipErr(err.Error())}}, err
+		redacted := Redact(err.Error())
+		slog.Warn("approval notify failed", "title", msg.Title, "err", redacted)
+		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: clipErr(redacted)}}, err
 	}
 	raw, err := json.Marshal(map[string]any{
 		"title":     msg.Title,
@@ -323,7 +331,7 @@ func send(ctx context.Context, msg Message) ([]Delivery, error) {
 		if len(out) == 0 {
 			return failed(err)
 		}
-		slog.Warn("approval notify failed", "title", msg.Title, "err", err)
+		slog.Warn("approval notify failed", "title", msg.Title, "err", Redact(err.Error()))
 		return out, err
 	}
 	if len(out) == 0 {
