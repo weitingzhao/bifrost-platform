@@ -39,7 +39,7 @@ export function buildOperatorPlaneFixPrompt(bridge: AgentBridgeResponse | undefi
     '- Fallback only if Dev Sessions / restart_dev_session fail:',
     '  - Mac Pro shell: `bdev start git-bridge` / `bdev start probe-bridge`',
     '  - Legacy: `cd bifrost-platform/agent/git-bridge && ./start.sh daemon`',
-    '- Stale GIT_BRIDGE_URL (e.g. `192.168.50.10`) will fail — expect `http://192.168.10.40:8785`.',
+    '- PROD and the Mac minis leave GIT_BRIDGE_URL unset (git-bridge is local-only); only a platform-api on the dev workstation sets it.',
     '',
     '### 2. Agent deploy disabled on Console',
     '- Set `AGENT_DEPLOY_ENABLED=1` in bifrost-platform `.env` on platform-api host; restart platform-api.',
