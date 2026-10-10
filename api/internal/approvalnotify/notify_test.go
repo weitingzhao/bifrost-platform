@@ -242,3 +242,39 @@ func TestNotifyReturnsTheRelayFailure(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+func TestDeliveryErrorIsRedactedBeforeClipping(t *testing.T) {
+	const secret = "SUPERSECRETVALUE"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"error":"token=` + secret + `","deliveries":[{"channel":"ntfy","target":"ntfy:abc","result":"failed","error":"token=` + secret + `"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "tok")
+	ds := Send(context.Background(), KindFailed, gitopsSync(), now)
+	blob, _ := json.Marshal(ds)
+	if strings.Contains(string(blob), secret) || !strings.Contains(string(blob), "[redacted]") {
+		t.Fatalf("deliveries = %s", blob)
+	}
+}
+
+func TestProbeArgsStayOutOfThePush(t *testing.T) {
+	it := Item{
+		ID: "appr_probe", Number: 9, Action: "run_probe_pod", Tier: "B", Env: "data",
+		Summary: "probe",
+		KeyParams: map[string]string{
+			"namespace": "data",
+			"args":      "--password,SYNTHETIC_SECRET",
+			"api_key":   "sk-LEAKEDAPIKEY999",
+		},
+	}
+	m := Compose(KindCreated, it, now)
+	text := m.Title + "\n" + m.Message
+	if strings.Contains(text, "SYNTHETIC_SECRET") || strings.Contains(text, "sk-LEAKEDAPIKEY999") || strings.Contains(text, "args=") {
+		t.Fatalf("push showed an unsafe key: %q", text)
+	}
+	if !strings.Contains(text, "namespace=data") {
+		t.Fatalf("safe key missing: %q", text)
+	}
+}

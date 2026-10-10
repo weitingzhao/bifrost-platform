@@ -67,10 +67,8 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	})
 	if res.Status == http.StatusCreated {
 		a := res.Approval
-		if s.audit != nil {
-			s.audit.Record(r, "approval.create", a.ID, StatusPending,
-				fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s", a.Number, a.Action, a.Tier, a.Runner, a.Requester))
-		}
+		s.writeAudit(r, []event{{"approval.create", a.ID, StatusPending,
+			fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s", a.Number, a.Action, a.Tier, a.Runner, a.Requester)}})
 		// A down relay must not fail create; the failed delivery is on the record.
 		s.deliver(r.Context(), approvalnotify.KindCreated, a)
 		writeJSON(w, http.StatusCreated, map[string]any{
@@ -140,9 +138,9 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 		ApprovalLine: body.ApprovalLine,
 		ParamsHash:   body.ParamsHash,
 	})
-	if (out.Status == http.StatusOK || out.Status == http.StatusAccepted) && s.audit != nil {
+	if out.Status == http.StatusOK || out.Status == http.StatusAccepted {
 		id, _ := out.Body["id"].(string)
-		s.audit.Record(r, "approval.approve", id, StatusApproved, "channel="+strings.TrimSpace(body.Channel))
+		s.writeAudit(r, []event{{"approval.approve", id, StatusApproved, "channel=" + strings.TrimSpace(body.Channel)}})
 		status, _ := out.Body["status"].(string)
 		switch status {
 		case StatusExecuted, StatusFailed:
@@ -150,19 +148,21 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 			if errText, _ := out.Body["error"].(string); errText != "" {
 				detail = errText
 			}
-			s.audit.Record(r, "approval.execute", id, status, detail)
+			s.writeAudit(r, []event{{"approval.execute", id, status, detail}})
 		case StatusApproved:
 			runner, _ := out.Body["runner"].(string)
 			detail := "runner=" + runner
 			if refusal, _ := out.Body["last_refusal"].(string); refusal != "" {
 				detail += " refusal=" + refusal
 			}
-			s.audit.Record(r, "approval.queue", id, StatusApproved, detail)
+			s.writeAudit(r, []event{{"approval.queue", id, StatusApproved, detail}})
+		case StatusUnknown:
+			detail, _ := out.Body["error"].(string)
+			if detail == "" {
+				detail = StatusUnknown
+			}
+			s.writeAudit(r, []event{{"approval.unknown", id, StatusUnknown, detail}})
 		}
-	}
-	if status, _ := out.Body["status"].(string); status == StatusFailed && out.Status == http.StatusOK {
-		id, _ := out.Body["id"].(string)
-		s.noticeEvents([]event{{action: "approval.execute", target: id, status: StatusFailed}})
 	}
 	writeJSON(w, out.Status, out.Body)
 }
@@ -195,7 +195,7 @@ func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {
 	out := s.reject(chi.URLParam(r, "id"), body.Reason)
 	if out.Status == http.StatusOK && s.audit != nil {
 		id, _ := out.Body["id"].(string)
-		s.audit.Record(r, "approval.reject", id, StatusRejected, oneLine(Redact(strings.TrimSpace(body.Reason))))
+		s.writeAudit(r, []event{{"approval.reject", id, StatusRejected, oneLine(Redact(strings.TrimSpace(body.Reason)))}})
 	}
 	writeJSON(w, out.Status, out.Body)
 }

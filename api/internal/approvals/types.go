@@ -100,6 +100,10 @@ type Delivery struct {
 	At      time.Time `json:"at"`
 	Result  string    `json:"result"`
 	Error   string    `json:"error,omitempty"`
+	// ClaimID and ClaimExpiresAt belong to a reminder claim. An expired claim
+	// can be taken again. Finish and release match ClaimID.
+	ClaimID        string    `json:"claim_id,omitempty"`
+	ClaimExpiresAt time.Time `json:"claim_expires_at,omitempty"`
 }
 
 // open is true while the record may still change without a new request.

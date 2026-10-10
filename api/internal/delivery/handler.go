@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
@@ -20,6 +21,11 @@ type Handler struct {
 	svc               *Service
 	audit             *actuation.AuditLog
 	onPipelineStarted PipelineStartedHook
+}
+
+// NewHandlerForTest builds a handler around an existing service.
+func NewHandlerForTest(svc *Service, audit *actuation.AuditLog) *Handler {
+	return &Handler{svc: svc, audit: audit}
 }
 
 func NewHandler(cfg *config.Config, audit *actuation.AuditLog) *Handler {
@@ -81,7 +87,11 @@ func (h *Handler) HandleStartPipelineRun(w http.ResponseWriter, r *http.Request)
 		h.audit.Record(r, resp.Action, resp.Target, status, resp.Message)
 	}
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{
+		code := http.StatusBadGateway
+		if actions.IsUncertain(err) {
+			code = http.StatusGatewayTimeout
+		}
+		writeJSON(w, code, map[string]any{
 			"ok":      false,
 			"action":  resp.Action,
 			"target":  resp.Target,

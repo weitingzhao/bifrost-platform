@@ -209,27 +209,7 @@ func NameForAttempt(base string, att actions.CreateAttempt) string {
 // the approval id and the attempt, so a retry of the same attempt reads the
 // same object instead of minting another one.
 func nameForAttempt(base string, att actions.CreateAttempt) string {
-	id := strings.TrimPrefix(att.ApprovalID, "appr_")
-	id = sanitizeLabel(id)
-	if len(id) > 16 {
-		id = id[:16]
-	}
-	if id == "" {
-		id = "approval"
-	}
-	attempt := att.Attempt
-	if attempt < 1 {
-		attempt = 1
-	}
-	suffix := fmt.Sprintf("-%s-%d", id, attempt)
-	b := trimName(base)
-	if len(b)+len(suffix) > 63 {
-		b = strings.Trim(b[:63-len(suffix)], "-.")
-	}
-	if b == "" {
-		b = "run"
-	}
-	return b + suffix
+	return actions.ObjectName(base, att)
 }
 
 // uncertainCall is a timeout, server timeout, or cancelled context. On a
@@ -293,14 +273,18 @@ func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit s
 	if planID != "" {
 		labels["bifrost.io/plan"] = trimName(planID)
 	}
+	meta := map[string]any{
+		"name":      name,
+		"namespace": d.Namespace,
+		"labels":    labels,
+	}
+	if ann := annotationAny(actions.IdentityAnnotations(ctx)); len(ann) > 0 {
+		meta["annotations"] = ann
+	}
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "tekton.dev/v1",
 		"kind":       "PipelineRun",
-		"metadata": map[string]any{
-			"name":      name,
-			"namespace": d.Namespace,
-			"labels":    labels,
-		},
+		"metadata":   meta,
 		"spec": map[string]any{
 			"pipelineRef": map[string]any{"name": d.Pipeline},
 			"taskRunTemplate": map[string]any{
@@ -318,16 +302,53 @@ func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit s
 		},
 	}}
 	res := dyn.Resource(pipelineRunGVR).Namespace(d.Namespace)
-	if _, err := res.Get(ctx, name, metav1.GetOptions{}); err == nil {
-		return nil
+	if existing, err := res.Get(ctx, name, metav1.GetOptions{}); err == nil {
+		return actions.Adopt(ctx, d.Namespace, name, existing.GetAnnotations())
 	} else if !apierrors.IsNotFound(err) {
 		return classifyRead(err)
 	}
 	_, err = res.Create(ctx, obj, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		return nil
+		existing, gerr := res.Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return adoptReadError(ctx, d.Namespace, name, gerr)
+		}
+		return actions.Adopt(ctx, d.Namespace, name, existing.GetAnnotations())
 	}
 	return classifyCreate(err)
+}
+
+func annotationAny(ann map[string]string) map[string]any {
+	if len(ann) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(ann))
+	for k, v := range ann {
+		out[k] = v
+	}
+	return out
+}
+
+// adoptReadError is the GET after AlreadyExists. An approval execution cannot
+// tell whether the object is its own, so the outcome is unknown.
+func adoptReadError(ctx context.Context, namespace, name string, err error) error {
+	if _, ok := actions.CreateAttemptFrom(ctx); ok {
+		return actions.Uncertain(fmt.Sprintf("conflicting object %s/%s; outcome needs checking", namespace, name))
+	}
+	return classifyRead(err)
+}
+
+func mergeAnnotations(base map[string]string, extra map[string]string) map[string]string {
+	if len(extra) == 0 {
+		return base
+	}
+	if base == nil {
+		base = map[string]string{}
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
 }
 
 func param(name, value string) map[string]any {
@@ -351,6 +372,9 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 		return trimName(fmt.Sprintf("%s-manual-%s", cronjob, s.now().UTC().Format("20060102150405")))
 	})
 	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
+		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
+			return nil, aerr
+		}
 		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
 	} else if !apierrors.IsNotFound(err) {
 		return nil, classifyRead(err)
@@ -359,9 +383,9 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
-			Annotations: map[string]string{
+			Annotations: mergeAnnotations(map[string]string{
 				"cronjob.kubernetes.io/instantiate": "manual",
-			},
+			}, actions.IdentityAnnotations(ctx)),
 			Labels: map[string]string{
 				"bifrost.io/requested-by": sanitizeLabel(requester),
 			},
@@ -372,7 +396,10 @@ func (s *Service) CreateJobFromCronJob(ctx context.Context, namespace, cronjob, 
 	if apierrors.IsAlreadyExists(err) {
 		existing, gerr := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
 		if gerr != nil {
-			return nil, classifyRead(gerr)
+			return nil, adoptReadError(ctx, namespace, name, gerr)
+		}
+		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
+			return nil, aerr
 		}
 		return map[string]any{"namespace": existing.Namespace, "job": existing.Name, "adopted": true}, nil
 	}
@@ -474,20 +501,19 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 		return trimName("probe-" + s.now().UTC().Format("20060102150405"))
 	})
 	if existing, err := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{}); err == nil {
-		return map[string]any{
-			"namespace": existing.Namespace,
-			"job":       existing.Name,
-			"adopted":   true,
-			"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, existing.Name),
-		}, nil
+		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
+			return nil, aerr
+		}
+		return adoptedProbe(namespace, existing.Name), nil
 	} else if !apierrors.IsNotFound(err) {
 		return nil, classifyRead(err)
 	}
 	deadline := int64(seconds)
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
+			Name:        name,
+			Namespace:   namespace,
+			Annotations: actions.IdentityAnnotations(ctx),
 			Labels: map[string]string{
 				"bifrost.io/probe":        "true",
 				"bifrost.io/requested-by": sanitizeLabel(requester),
@@ -536,17 +562,28 @@ func (s *Service) Probe(ctx context.Context, namespace, image string, command, a
 	}
 	created, err := cs.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 	if apierrors.IsAlreadyExists(err) {
-		return map[string]any{
-			"namespace": namespace,
-			"job":       name,
-			"adopted":   true,
-			"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, name),
-		}, nil
+		existing, gerr := cs.BatchV1().Jobs(namespace).Get(ctx, name, metav1.GetOptions{})
+		if gerr != nil {
+			return nil, adoptReadError(ctx, namespace, name, gerr)
+		}
+		if aerr := actions.Adopt(ctx, namespace, name, existing.Annotations); aerr != nil {
+			return nil, aerr
+		}
+		return adoptedProbe(namespace, name), nil
 	}
 	if err != nil {
 		return nil, classifyCreate(err)
 	}
 	return map[string]any{"namespace": created.Namespace, "job": created.Name, "logs": fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, created.Name)}, nil
+}
+
+func adoptedProbe(namespace, name string) map[string]any {
+	return map[string]any{
+		"namespace": namespace,
+		"job":       name,
+		"adopted":   true,
+		"logs":      fmt.Sprintf("/api/v1/cluster/workloads/pods/%s/%s/logs", namespace, name),
+	}
 }
 
 func finished(job batchv1.Job) bool {

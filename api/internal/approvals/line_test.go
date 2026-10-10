@@ -3,6 +3,7 @@ package approvals
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -58,6 +59,17 @@ func TestCanonicalLineEscapesControlsAndBindsTheHash(t *testing.T) {
 	shown := CanonicalApprovalLine(rtl)
 	if strings.ContainsRune(shown, '\u202e') || !strings.Contains(shown, `\u202e`) {
 		t.Fatalf("U+202E line = %q", shown)
+	}
+	for _, sep := range []rune{'\u2028', '\u2029'} {
+		lineSep := base
+		lineSep.Summary = "before" + string(sep) + "after"
+		got := CanonicalApprovalLine(lineSep)
+		if strings.ContainsRune(got, sep) || !strings.Contains(got, fmt.Sprintf(`\u%04x`, sep)) {
+			t.Fatalf("U+%04X line = %q", sep, got)
+		}
+		if strings.Count(got, "\n") != 0 {
+			t.Fatalf("line separator broke the line: %q", got)
+		}
 	}
 }
 

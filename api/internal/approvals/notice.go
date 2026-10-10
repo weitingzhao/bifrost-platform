@@ -55,6 +55,9 @@ const (
 	relayClaimTarget = "relay"
 	deliveryClaimed  = "claimed"
 	maxDeliveries    = 20
+	// reminderClaimFor is how long a claim blocks another worker. It outlives
+	// one send. After it, a crashed worker's claim can be taken again.
+	reminderClaimFor = 2 * noticeTimeout
 )
 
 // deliverReminder claims (approval, kind, target "relay") inside the state
@@ -63,27 +66,29 @@ const (
 // a missing relay does not spin. Two workers racing on one store send once.
 func (s *Service) deliverReminder(ctx context.Context, kind string, rec Approval) {
 	now := s.clock()
-	ok, err := s.claimReminder(rec.ID, kind, now)
+	claimID, ok, err := s.claimReminder(rec.ID, kind, now)
 	if err != nil || !ok {
 		return
 	}
 	ds := noticeDeliveries(approvalnotify.Send(ctx, kind, noticeItem(rec), now))
 	evs := noticeAudit(rec.ID, ds)
 	if allFailed(ds) {
-		if err := s.releaseReminder(rec.ID, kind); err != nil {
+		if err := s.releaseReminder(rec.ID, kind, claimID); err != nil {
 			evs = append(evs, event{"approval.notify", rec.ID, approvalnotify.ResultFailed, "release reminder: " + err.Error()})
 		}
 		s.record(nil, evs)
 		return
 	}
-	if err := s.finishReminder(rec.ID, kind, ds); err != nil {
+	if err := s.finishReminder(rec.ID, kind, claimID, ds); err != nil {
 		s.record(nil, []event{{"approval.notify", rec.ID, approvalnotify.ResultFailed, "store deliveries: " + err.Error()}})
 		return
 	}
 	s.record(nil, evs)
 }
 
-func (s *Service) claimReminder(id, kind string, now time.Time) (bool, error) {
+func (s *Service) claimReminder(id, kind string, now time.Time) (string, bool, error) {
+	claimID := "claim_" + randomHex(8)
+	expires := now.Add(reminderClaimFor)
 	claimed := false
 	err := s.store.update(func(doc *file) error {
 		claimed = false
@@ -91,39 +96,54 @@ func (s *Service) claimReminder(id, kind string, now time.Time) (bool, error) {
 		if !ok || reminderDue(a, now) != kind {
 			return errNoChange
 		}
-		a.Deliveries = capDeliveries(append(a.Deliveries, Delivery{
+		if liveClaim(a, kind, now) {
+			return errNoChange
+		}
+		a.Deliveries = capDeliveries(append(dropExpiredClaims(a.Deliveries, kind, now), Delivery{
 			Kind: kind, Channel: "ntfy", Target: relayClaimTarget, At: now, Result: deliveryClaimed,
+			ClaimID: claimID, ClaimExpiresAt: expires,
 		}))
 		doc.put(a)
 		claimed = true
 		return nil
 	})
-	return claimed, err
+	if err != nil || !claimed {
+		return "", false, err
+	}
+	return claimID, true, nil
 }
 
-func (s *Service) releaseReminder(id, kind string) error {
+func (s *Service) releaseReminder(id, kind, claimID string) error {
+	if claimID == "" {
+		return fmt.Errorf("reminder claim id is required")
+	}
 	return s.store.update(func(doc *file) error {
 		a, ok := doc.find(id)
 		if !ok {
 			return fmt.Errorf("approval %s not found", id)
 		}
-		next := withoutClaim(a.Deliveries, kind)
-		if len(next) == len(a.Deliveries) {
+		if !hasClaim(a.Deliveries, kind, claimID) {
 			return errNoChange
 		}
-		a.Deliveries = next
+		a.Deliveries = withoutClaim(a.Deliveries, kind, claimID)
 		doc.put(a)
 		return nil
 	})
 }
 
-func (s *Service) finishReminder(id, kind string, ds []Delivery) error {
+func (s *Service) finishReminder(id, kind, claimID string, ds []Delivery) error {
+	if claimID == "" {
+		return fmt.Errorf("reminder claim id is required")
+	}
 	return s.store.update(func(doc *file) error {
 		a, ok := doc.find(id)
 		if !ok {
 			return fmt.Errorf("approval %s not found", id)
 		}
-		a.Deliveries = capDeliveries(append(withoutClaim(a.Deliveries, kind), ds...))
+		if !hasClaim(a.Deliveries, kind, claimID) {
+			return fmt.Errorf("reminder claim %s does not match", claimID)
+		}
+		a.Deliveries = capDeliveries(append(withoutClaim(a.Deliveries, kind, claimID), ds...))
 		doc.put(a)
 		return nil
 	})
@@ -161,10 +181,39 @@ func allFailed(ds []Delivery) bool {
 	return true
 }
 
-func withoutClaim(ds []Delivery, kind string) []Delivery {
-	out := ds[:0:0]
+func withoutClaim(ds []Delivery, kind, claimID string) []Delivery {
+	out := make([]Delivery, 0, len(ds))
 	for _, d := range ds {
-		if d.Kind == kind && d.Result == deliveryClaimed && d.Target == relayClaimTarget {
+		if d.Kind == kind && d.Result == deliveryClaimed && d.Target == relayClaimTarget && d.ClaimID == claimID {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+func hasClaim(ds []Delivery, kind, claimID string) bool {
+	for _, d := range ds {
+		if d.Kind == kind && d.Result == deliveryClaimed && d.ClaimID == claimID {
+			return true
+		}
+	}
+	return false
+}
+
+func liveClaim(a Approval, kind string, now time.Time) bool {
+	for _, d := range a.Deliveries {
+		if d.Kind == kind && d.Result == deliveryClaimed && d.ClaimExpiresAt.After(now) {
+			return true
+		}
+	}
+	return false
+}
+
+func dropExpiredClaims(ds []Delivery, kind string, now time.Time) []Delivery {
+	out := make([]Delivery, 0, len(ds))
+	for _, d := range ds {
+		if d.Kind == kind && d.Result == deliveryClaimed && !d.ClaimExpiresAt.After(now) {
 			continue
 		}
 		out = append(out, d)
@@ -285,22 +334,31 @@ func reminderDue(a Approval, now time.Time) string {
 	left := a.ExpiresAt.Sub(now)
 	switch {
 	case left <= approvalnotify.RemindBeforeExpiry:
-		if !a.notified(approvalnotify.KindExpiring) {
+		if !reminderHeld(a, approvalnotify.KindExpiring, now) {
 			return approvalnotify.KindExpiring
 		}
 	case now.Sub(a.CreatedAt) >= approvalnotify.RemindAfter:
-		if !a.notified(approvalnotify.KindWaiting) {
+		if !reminderHeld(a, approvalnotify.KindWaiting, now) {
 			return approvalnotify.KindWaiting
 		}
 	}
 	return ""
 }
 
-func (a Approval) notified(kind string) bool {
+// reminderHeld is true when this kind was already sent, or a claim that has
+// not expired still owns it. An expired claim does not hold the reminder.
+func reminderHeld(a Approval, kind string, now time.Time) bool {
 	for _, d := range a.Deliveries {
-		if d.Kind == kind {
-			return true
+		if d.Kind != kind {
+			continue
 		}
+		if d.Result == deliveryClaimed {
+			if d.ClaimExpiresAt.After(now) {
+				return true
+			}
+			continue
+		}
+		return true
 	}
 	return false
 }

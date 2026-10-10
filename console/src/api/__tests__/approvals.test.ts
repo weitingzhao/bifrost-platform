@@ -19,8 +19,10 @@ const handlerGo = readFileSync(path.join(repoRoot, 'api/internal/approvals/handl
 
 describe('approvals API contract', () => {
   it('matches Go list envelope (approvals, not items)', () => {
-    expect(handlerGo).toMatch(/"approvals":\s*list/)
-    expect(handlerGo).not.toMatch(/"items":\s*list/)
+    expect(handlerGo).toMatch(
+      /writeJSON\(w, http\.StatusOK, map\[string\]any\{"approvals": out\}\)/,
+    )
+    expect(handlerGo).not.toMatch(/"items":\s*(?:list|out)\b/)
   })
 
   it('fixture includes every Go Approval json field', () => {

@@ -422,6 +422,12 @@ func interpretAction(code int, raw []byte) (any, error) {
 		return parsed, nil
 	}
 	msg := actionErrText(parsed, raw, code)
+	if code == http.StatusGatewayTimeout {
+		if msg == "" {
+			msg = "create timed out; outcome needs checking"
+		}
+		return nil, actions.Uncertain(msg)
+	}
 	if transientRefusal(code, msg) {
 		return nil, actions.Transient(msg)
 	}

@@ -8,9 +8,12 @@ import (
 )
 
 // CanonicalApprovalLine is the one line the server shows for a request.
-// Control characters and bidirectional controls are escaped, and the line
-// ends with the first 12 hex characters of the params hash. Callers compare
-// it with strict equality.
+// Control characters, Unicode line separators (U+2028, U+2029) and
+// bidirectional controls are escaped, and the line ends with the first 12
+// hex characters of the params hash. Those 12 characters are a display
+// digest (48 bits), not a uniqueness proof: two param sets can share a
+// prefix. The server compares the full params hash. Callers compare the
+// line with strict equality.
 func CanonicalApprovalLine(a Approval) string {
 	ref := a.ID
 	if a.Number != 0 {
@@ -69,7 +72,7 @@ func escapeVisible(s string) string {
 		case '\t':
 			b.WriteString(`\t`)
 		default:
-			if isBidi(r) || unicode.IsControl(r) {
+			if r == '\u2028' || r == '\u2029' || isBidi(r) || unicode.IsControl(r) {
 				fmt.Fprintf(&b, `\u%04x`, r)
 				continue
 			}

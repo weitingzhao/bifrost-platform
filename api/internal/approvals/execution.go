@@ -10,6 +10,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -109,7 +110,9 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 				case <-stop:
 					return
 				case <-t.C:
-					_, _, _ = s.renew(rec.ID, lease)
+					if !s.backgroundRenew(rec.ID, lease) {
+						return
+					}
 				}
 			}
 		})
@@ -117,7 +120,7 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 		if rec.Execution != nil && rec.Execution.Attempts > 0 {
 			attempt = rec.Execution.Attempts
 		}
-		runCtx := actions.WithCreateAttempt(ctx, rec.ID, attempt)
+		runCtx := actions.WithParamsHash(actions.WithCreateAttempt(ctx, rec.ID, attempt), rec.ParamsHash)
 		result, execErr = actions.Execute(runCtx, rec.Action, rec.Params)
 		close(stop)
 		<-done
@@ -139,6 +142,13 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		e := a.Execution
 		if e == nil || e.LeaseID != lease {
 			return errNoChange
+		}
+		// Same clock and the same transition renew and result apply: once the
+		// lease is past unknownGrace the record is unknown inside this write,
+		// whether or not sweep has run. A transient refusal then cannot requeue.
+		lapsed := lapseRunning(&a, now)
+		if lapsed {
+			markLeaseUnknown(&a)
 		}
 		switch a.Status {
 		case StatusRunning:
@@ -163,6 +173,27 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 		case StatusUnknown:
 			if e.LateResult {
 				return errNoChange
+			}
+			if execErr != nil && actions.IsTransient(execErr) {
+				if !lapsed {
+					return errNoChange
+				}
+				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
+				doc.put(a)
+				out = a
+				return nil
+			}
+			if execErr != nil && actions.IsUncertain(execErr) {
+				e.Error = oneLine(Redact(execErr.Error()))
+				a.Error = e.Error
+				e.LeaseExpiresAt = time.Time{}
+				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, a.Error})
+				doc.put(a)
+				out = a
+				return nil
+			}
+			if lapsed {
+				evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
 			}
 			e.LateResult = true
 			finishWith(&a, started, now, result, execErr)
@@ -272,6 +303,24 @@ func (s *Service) renew(id, lease string) (Approval, bool, error) {
 	}
 	s.record(nil, evs)
 	return out, renewed, nil
+}
+
+// backgroundRenew is the in-process heartbeat. A store error is recorded
+// instead of being dropped. A lost lease is recorded by renew; this returns
+// false so the heartbeat stops instead of treating that refusal as success.
+func (s *Service) backgroundRenew(id, lease string) bool {
+	out, renewed, err := s.renew(id, lease)
+	if err != nil {
+		s.record(nil, []event{{"approval.renew", id, "error", oneLine(Redact(err.Error()))}})
+		return true
+	}
+	if !renewed && out.Status == StatusUnknown {
+		return false
+	}
+	if !renewed {
+		return false
+	}
+	return true
 }
 
 // RunRetries retries platform approvals left approved by a transient refusal,
@@ -668,24 +717,6 @@ func oneLine(s string) string {
 	return s
 }
 
-var redactions = []struct {
-	re   *regexp.Regexp
-	repl string
-}{
-	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)`), "[redacted private key]"},
-	{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}`), "$1 [redacted]"},
-	{regexp.MustCompile(`(?i)\b([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*["']?)[^\s"',;]+`), "$1$2[redacted]"},
-	{regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "[redacted jwt]"},
-	{regexp.MustCompile(`\b(AKIA|ASIA)[0-9A-Z]{16}\b`), "[redacted aws key]"},
-	{regexp.MustCompile(`\b(gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,})`), "[redacted token]"},
-	{regexp.MustCompile(`://([^/\s:@]+):([^@\s/]+)@`), "://$1:[redacted]@"},
-}
-
-// Redact masks common secret shapes in executor output. It is a backstop:
-// the command itself should not print secrets.
-func Redact(s string) string {
-	for _, r := range redactions {
-		s = r.re.ReplaceAllString(s, r.repl)
-	}
-	return s
-}
+// Redact masks common secret shapes. The patterns live in approvalnotify so
+// delivery errors can be redacted before they are clipped.
+func Redact(s string) string { return approvalnotify.Redact(s) }

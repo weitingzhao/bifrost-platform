@@ -106,7 +106,8 @@ func TestCreateTimeoutDoesNotRequeue(t *testing.T) {
 	}
 
 	// The same attempt adopts the run the timed-out create already stored.
-	ctx := actions.WithCreateAttempt(context.Background(), c.Approval.ID, got.Execution.Attempts)
+	// Adoption requires the params hash as well as the approval id and attempt.
+	ctx := actions.WithParamsHash(actions.WithCreateAttempt(context.Background(), c.Approval.ID, got.Execution.Attempts), c.Approval.ParamsHash)
 	if _, err := work.Apply(ctx, planID); err != nil {
 		t.Fatalf("adopt = %v", err)
 	}
@@ -134,5 +135,9 @@ func TestCreateTimeoutDoesNotRequeue(t *testing.T) {
 	}
 	if strings.Contains(list.Items[0].GetName(), "1800000000") {
 		t.Fatalf("run name %q still uses the wall clock", list.Items[0].GetName())
+	}
+	ann := list.Items[0].GetAnnotations()
+	if ann[actions.AnnApprovalID] != c.Approval.ID || ann[actions.AnnAttempt] != "1" || ann[actions.AnnParamsHash] != c.Approval.ParamsHash {
+		t.Fatalf("identity annotations = %#v", ann)
 	}
 }

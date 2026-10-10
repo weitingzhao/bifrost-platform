@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,12 +15,14 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
@@ -261,6 +264,9 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 
 	runName := fmt.Sprintf("%s-%d", pipelineName, now.Unix())
+	if att, ok := actions.CreateAttemptFrom(ctx); ok {
+		runName = actions.ObjectName(pipelineName, att)
+	}
 	spec := map[string]any{
 		"pipelineRef": map[string]any{
 			"name": pipelineName,
@@ -327,24 +333,77 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
 		}
 	}
-	obj := unstructured.Unstructured{
-		Object: map[string]any{
-			"apiVersion": "tekton.dev/v1",
-			"kind":       "PipelineRun",
-			"metadata": map[string]any{
-				"name":      runName,
-				"namespace": ns,
-				"labels": map[string]any{
-					"tekton.dev/pipeline": pipelineName,
-					"bifrost.io/trigger":  "platform-api",
-					"bifrost.io/revision": sanitizeLabelValue(rev),
-				},
-			},
-			"spec": spec,
+	meta := map[string]any{
+		"name":      runName,
+		"namespace": ns,
+		"labels": map[string]any{
+			"tekton.dev/pipeline": pipelineName,
+			"bifrost.io/trigger":  "platform-api",
+			"bifrost.io/revision": sanitizeLabelValue(rev),
 		},
 	}
+	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 {
+		raw := make(map[string]any, len(ann))
+		for k, v := range ann {
+			raw[k] = v
+		}
+		meta["annotations"] = raw
+	}
+	obj, objErr := unstructuredFrom(map[string]any{
+		"apiVersion": "tekton.dev/v1",
+		"kind":       "PipelineRun",
+		"metadata":   meta,
+		"spec":       spec,
+	})
+	if objErr != nil {
+		resp.Message = objErr.Error()
+		return resp, empty, objErr
+	}
 
-	created, err := dyn.Resource(pipelineRunGVR).Namespace(ns).Create(ctx, &obj, metav1.CreateOptions{})
+	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
+	if existing, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
+		if aerr := actions.Adopt(ctx, ns, runName, existing.GetAnnotations()); aerr != nil {
+			resp.Message = aerr.Error()
+			return resp, empty, aerr
+		}
+		view := pipelineRunFromUnstructured(*existing, pipelineName)
+		resp.OK = true
+		resp.Target = fmt.Sprintf("PipelineRun/%s/%s", ns, runName)
+		resp.Message = fmt.Sprintf("PipelineRun %s adopted for pipeline %s", runName, pipelineName)
+		return resp, view, nil
+	} else if !apierrors.IsNotFound(gerr) {
+		if uncertainCreate(gerr) {
+			uerr := actions.Uncertain("create timed out; outcome needs checking")
+			resp.Message = uerr.Error()
+			return resp, empty, uerr
+		}
+		resp.Message = gerr.Error()
+		return resp, empty, gerr
+	}
+
+	created, err := res.Create(ctx, obj, metav1.CreateOptions{})
+	if apierrors.IsAlreadyExists(err) {
+		existing, gerr := res.Get(ctx, runName, metav1.GetOptions{})
+		if gerr != nil {
+			uerr := actions.Uncertain(fmt.Sprintf("conflicting object %s/%s; outcome needs checking", ns, runName))
+			resp.Message = uerr.Error()
+			return resp, empty, uerr
+		}
+		if aerr := actions.Adopt(ctx, ns, runName, existing.GetAnnotations()); aerr != nil {
+			resp.Message = aerr.Error()
+			return resp, empty, aerr
+		}
+		view := pipelineRunFromUnstructured(*existing, pipelineName)
+		resp.OK = true
+		resp.Target = fmt.Sprintf("PipelineRun/%s/%s", ns, runName)
+		resp.Message = fmt.Sprintf("PipelineRun %s adopted for pipeline %s", runName, pipelineName)
+		return resp, view, nil
+	}
+	if uncertainCreate(err) {
+		uerr := actions.Uncertain("create timed out; outcome needs checking")
+		resp.Message = uerr.Error()
+		return resp, empty, uerr
+	}
 	if err != nil {
 		resp.Message = fmt.Sprintf("create PipelineRun: %v", err)
 		return resp, empty, err
@@ -1002,6 +1061,31 @@ func isTaskRunSucceededView(v SupplyChainTaskRunView) bool {
 	return st == "true" || st == "succeeded" || re == "succeeded" || re == "completed"
 }
 
+// unstructuredFrom JSON-round-trips obj so nested slices are []any.
+// Unstructured.DeepCopy panics on []map[string]any, which the create path
+// builds for params and taskRunSpecs.
+func unstructuredFrom(obj map[string]any) (*unstructured.Unstructured, error) {
+	raw, err := json.Marshal(obj)
+	if err != nil {
+		return nil, err
+	}
+	out := &unstructured.Unstructured{}
+	if err := json.Unmarshal(raw, &out.Object); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// uncertainCreate is a timeout, server timeout, or cancelled context on the
+// call that creates a PipelineRun. It does not prove the object is absent.
+func uncertainCreate(err error) bool {
+	if err == nil {
+		return false
+	}
+	return apierrors.IsTimeout(err) || apierrors.IsServerTimeout(err) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
 func (s *Service) buildDynamicClient() (dynamic.Interface, error) {
 	if s.dynamicFactory != nil {
 		return s.dynamicFactory()
@@ -1093,6 +1177,16 @@ func (s *Service) SetDynamicFactoryForTest(factory func() (dynamic.Interface, er
 
 // SetClusterForTest replaces the cluster service (for log tests).
 func (s *Service) SetClusterForTest(cs *cluster.Service) {
+	s.cluster = cs
+}
+
+// SetKubernetesUnavailableForTest makes cluster reads fail closed so a unit
+// test cannot reach a real apiserver.
+func (s *Service) SetKubernetesUnavailableForTest() {
+	cs := cluster.NewService(s.entry)
+	cs.SetClientFactoryForTest(func() (kubernetes.Interface, string, error) {
+		return nil, "", fmt.Errorf("no cluster in unit test")
+	})
 	s.cluster = cs
 }
 

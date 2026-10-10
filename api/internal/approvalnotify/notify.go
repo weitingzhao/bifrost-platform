@@ -34,6 +34,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 )
 
 // ConsoleClickPrefix is the Console deep link the notification opens.
@@ -144,6 +146,13 @@ func Notify(ctx context.Context, msg Message) error {
 // Compose is the push text for one notice. English (UI string rule), one
 // phone screen.
 func Compose(kind string, it Item, now time.Time) Message {
+	it.Env = Redact(it.Env)
+	it.Summary = Redact(it.Summary)
+	it.Error = Redact(it.Error)
+	it.Requester = Redact(it.Requester)
+	it.Thread = Redact(it.Thread)
+	it.WorkID = Redact(it.WorkID)
+	it.KeyParams = redactKeyParams(actions.FilterNotifyParams(it.Action, it.KeyParams))
 	ref := "#" + fmt.Sprint(it.Number)
 	if it.Number == 0 {
 		ref = it.ID
@@ -207,6 +216,17 @@ func runnerLabel(r string) string {
 	return r
 }
 
+func redactKeyParams(kp map[string]string) map[string]string {
+	if len(kp) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(kp))
+	for k, v := range kp {
+		out[k] = Redact(v)
+	}
+	return out
+}
+
 // keyParamsLine never shows command: owner_run_command's text stays in the app.
 func keyParamsLine(kp map[string]string) string {
 	keys := make([]string, 0, len(kp))
@@ -266,7 +286,7 @@ func send(ctx context.Context, msg Message) ([]Delivery, error) {
 	}
 	failed := func(err error) ([]Delivery, error) {
 		slog.Warn("approval notify failed", "title", msg.Title, "err", err)
-		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: clip(oneLine(err.Error()), 300)}}, err
+		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: clipErr(err.Error())}}, err
 	}
 	raw, err := json.Marshal(map[string]any{
 		"title":     msg.Title,
@@ -293,12 +313,12 @@ func send(ctx context.Context, msg Message) ([]Delivery, error) {
 	_ = json.Unmarshal(body, &ans)
 	var out []Delivery
 	for _, d := range ans.Deliveries {
-		out = append(out, Delivery{Channel: d.Channel, Target: d.Target, Result: d.Result, Error: clip(oneLine(d.Error), 300)})
+		out = append(out, Delivery{Channel: d.Channel, Target: d.Target, Result: d.Result, Error: clipErr(d.Error)})
 	}
 	if resp.StatusCode/100 != 2 {
 		err = fmt.Errorf("approval notify: relay status %d", resp.StatusCode)
 		if ans.Error != "" {
-			err = fmt.Errorf("%w: %s", err, ans.Error)
+			err = fmt.Errorf("%w: %s", err, Redact(ans.Error))
 		}
 		if len(out) == 0 {
 			return failed(err)
@@ -333,6 +353,10 @@ func oneLine(s string) string {
 		s = strings.TrimSpace(s[:i])
 	}
 	return s
+}
+
+func clipErr(s string) string {
+	return clip(oneLine(Redact(s)), 300)
 }
 
 func clip(s string, n int) string {

@@ -41,6 +41,8 @@ const tierD: ApprovalRecord = {
   status: 'pending',
   env: 'host',
   summary: 'Delete ConfigMap stale-flags',
+  approval_line: '#58 · tier D · owner_run_command · env host · Delete ConfigMap stale-flags',
+  params_hash: 'fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210',
 }
 const LINE_D = '#58 · tier D · owner_run_command · env host · Delete ConfigMap stale-flags'
 const CONSOLE_D = 'http://ops.bifrost.lan/#approvals?id=appr_fedcba9876543210'

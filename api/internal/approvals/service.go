@@ -429,7 +429,11 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 		return *refusal
 	}
 	if rec.Status == StatusRunning {
-		rec, _ = s.runPlatform(ctx, rec)
+		var runEvs []event
+		rec, runEvs = s.runPlatform(ctx, rec)
+		// One consumer for the first platform execution, including unknown
+		// after a create timeout. The handler does not re-send a single status.
+		s.record(nil, runEvs)
 	}
 	return decided{Status: decisionCode(rec), Body: decisionBody(rec)}
 }
@@ -592,11 +596,12 @@ func (s *Service) writeAudit(r *http.Request, evs []event) {
 		return
 	}
 	for _, e := range evs {
+		detail := Redact(e.detail)
 		if r != nil {
-			s.audit.Record(r, e.action, e.target, e.status, e.detail)
+			s.audit.Record(r, e.action, e.target, e.status, detail)
 			continue
 		}
-		s.audit.RecordDirect("platform", actuation.RoleAdmin, e.action, e.target, e.status, e.detail)
+		s.audit.RecordDirect("platform", actuation.RoleAdmin, e.action, e.target, e.status, detail)
 	}
 }
 

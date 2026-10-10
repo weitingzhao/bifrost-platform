@@ -140,7 +140,12 @@ export async function listPending(client: ApproveClient = liveClient): Promise<u
   return {
     approvals: list.map((a) => {
       const rec = asRecord(a)
-      if (rec.tier === 'D' && rec.id) return { console_only: true, console_url: consoleApprovalUrl(rec.id), ...rec }
+      if (rec.tier === 'D') {
+        const rest: ApprovalRecord = { ...rec }
+        delete rest.approval_line
+        if (rec.id) return { ...rest, console_only: true, console_url: consoleApprovalUrl(rec.id) }
+        return rest
+      }
       return { approval_line: approvalLine(rec), ...rec }
     }),
   }
