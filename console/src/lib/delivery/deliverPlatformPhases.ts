@@ -2,7 +2,6 @@
 export const PLATFORM_DOCKERFILE_CONFIGMAPS = [
   { name: 'bifrost-platform-api-stg-dockerfile', short: 'platform-api' },
   { name: 'bifrost-platform-console-stg-dockerfile', short: 'platform-console' },
-  { name: 'bifrost-remediation-runner-stg-dockerfile', short: 'retired-dockerfile' }, // 已退役 historical ConfigMap name
 ] as const
 
 export const DELIVER_PLATFORM_PIPELINE = 'bifrost-deliver-platform'
@@ -20,7 +19,7 @@ export const PLATFORM_PROD_URLS = {
 
 export const PLATFORM_GITOPS_PHASE1_ITEMS = [
   'Gitea mirror includes bifrost-platform',
-  'Dockerfile.platform-api-stg + platform-console-stg + retired runner dockerfile (已退役)',
+  'Dockerfile.platform-api-stg + platform-console-stg',
   'k8s/base-platform + overlays/platform-stg + overlays/platform-prod',
   'Argo Application bifrost-platform-stg + bifrost-platform-prod',
   'Tekton pipeline bifrost-deliver-platform + bifrost-deliver-platform-prod',
