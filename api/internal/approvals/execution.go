@@ -109,7 +109,7 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 				case <-stop:
 					return
 				case <-t.C:
-					_, _ = s.renew(rec.ID, lease)
+					_, _, _ = s.renew(rec.ID, lease)
 				}
 			}
 		})
@@ -218,20 +218,47 @@ func executeDetail(a Approval) string {
 	return a.Error
 }
 
-// renew extends a lease. ok is false when the record is no longer running
-// under that lease.
-func (s *Service) renew(id, lease string) (Approval, bool) {
+// lapseRunning reports that a running lease is past LeaseExpiresAt + unknownGrace.
+// The check uses the caller's clock and does not depend on sweep having run.
+func lapseRunning(a *Approval, now time.Time) bool {
+	e := a.Execution
+	return a.Status == StatusRunning && e != nil && !e.LeaseExpiresAt.IsZero() && now.After(e.LeaseExpiresAt.Add(unknownGrace))
+}
+
+func markLeaseUnknown(a *Approval) {
+	a.Status = StatusUnknown
+	a.Error = "executor lost: lease lapsed with no result"
+}
+
+// renew extends a lease that is still running under lease.
+// A lease that has expired but is still inside unknownGrace may renew.
+// Once now is past LeaseExpiresAt + unknownGrace the record becomes unknown
+// in this write, whether or not sweep has run, and renew does not extend it.
+// A store error is returned to the caller; it is not treated as success.
+func (s *Service) renew(id, lease string) (Approval, bool, error) {
 	now := s.clock()
 	var out Approval
+	var evs []event
 	renewed := false
-	_ = s.store.update(func(doc *file) error {
+	err := s.store.update(func(doc *file) error {
 		renewed = false
+		evs = nil
 		a, ok := doc.find(id)
 		if !ok {
 			return errNoChange
 		}
 		out = a
-		if a.Status != StatusRunning || a.Execution == nil || a.Execution.LeaseID != lease {
+		if a.Execution == nil || a.Execution.LeaseID != lease {
+			return errNoChange
+		}
+		if lapseRunning(&a, now) {
+			markLeaseUnknown(&a)
+			evs = []event{{"approval.unknown", a.ID, StatusUnknown, "executor=" + a.Execution.ExecutorID}}
+			doc.put(a)
+			out = a
+			return nil
+		}
+		if a.Status != StatusRunning {
 			return errNoChange
 		}
 		a.Execution.LeaseExpiresAt = now.Add(leaseFor)
@@ -240,7 +267,11 @@ func (s *Service) renew(id, lease string) (Approval, bool) {
 		renewed = true
 		return nil
 	})
-	return out, renewed
+	if err != nil {
+		return out, false, err
+	}
+	s.record(nil, evs)
+	return out, renewed, nil
 }
 
 // RunRetries retries platform approvals left approved by a transient refusal,
@@ -464,7 +495,10 @@ func (s *Service) heartbeat(ref, lease string) decided {
 	if !ok {
 		return decided{Status: 404, Body: map[string]any{"error": "not found"}}
 	}
-	rec, renewed := s.renew(found.ID, lease)
+	rec, renewed, err := s.renew(found.ID, lease)
+	if err != nil {
+		return decided{Status: 500, Body: map[string]any{"error": "store approvals: " + err.Error()}}
+	}
 	if !renewed {
 		msg := "lease mismatch"
 		if rec.Status == StatusUnknown {
@@ -526,6 +560,10 @@ func (s *Service) result(ref string, in resultInput) decided {
 			bad = &decided{Status: 409, Body: map[string]any{"error": "lease mismatch", "status": a.Status}}
 			return errNoChange
 		}
+		if lapseRunning(&a, now) {
+			markLeaseUnknown(&a)
+			evs = append(evs, event{"approval.unknown", a.ID, StatusUnknown, "executor=" + e.ExecutorID})
+		}
 		late := false
 		switch a.Status {
 		case StatusRunning:
@@ -542,7 +580,9 @@ func (s *Service) result(ref string, in resultInput) decided {
 		if !started {
 			if late {
 				bad = &decided{Status: 409, Body: map[string]any{"error": "lease lapsed; a refusal cannot requeue an unknown run", "status": a.Status}}
-				return errNoChange
+				doc.put(a)
+				rec = a
+				return nil
 			}
 			requeue(&a, refusal, now)
 			evs = append(evs, event{"approval.queue", a.ID, StatusApproved, fmt.Sprintf("attempt=%d refusal=%s", e.Attempts, refusal)})
