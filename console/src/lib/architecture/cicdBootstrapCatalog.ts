@@ -361,7 +361,7 @@ export const CICD_GAPS: CicdGap[] = [
   {
     id: 'escape-runbook',
     layer: 'L0',
-    gap: 'Implemented — GET /api/v1/platform/escape-hatch probes local + NodePort routes; EscapeHatchPanel on Launch Rocket; quarterly drill via POST /platform/escape-hatch/drill',
+    gap: 'Retired — GET /api/v1/platform/escape-hatch, POST /platform/escape-hatch/drill and EscapeHatchPanel were removed (W-32); the routes now answer 404',
     target: 'Documented runbook; Console shows escape route status; quarterly test schedule',
     spineTask: 'p6-escape-hatch',
   },

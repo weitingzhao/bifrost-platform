@@ -36,7 +36,6 @@ describe('proposeLowerBaseline', () => {
     expect(p!.baselineVar).toBe('DUP_FUNCS_FRONTEND_BASELINE')
     expect(p!.patch).toContain('-DUP_FUNCS_FRONTEND_BASELINE=12')
     expect(p!.patch).toContain('+DUP_FUNCS_FRONTEND_BASELINE=10')
-    expect(p!.agentBrief).toContain('exactly 10')
   })
 
   it('rejects over / at_baseline / unknown var', () => {

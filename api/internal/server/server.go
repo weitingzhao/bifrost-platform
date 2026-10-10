@@ -27,7 +27,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
 	"github.com/weitingzhao/bifrost-platform/api/internal/codehealth"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
-	"github.com/weitingzhao/bifrost-platform/api/internal/console"
 	"github.com/weitingzhao/bifrost-platform/api/internal/datahusbandry"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/devsession"
@@ -60,7 +59,6 @@ import (
 type Server struct {
 	cfg             *config.Config
 	prober          *probe.Prober
-	console         *console.Handler
 	cluster         *cluster.Handler
 	gitops          *gitops.Handler
 	mcp             *mcp.Handler
@@ -194,7 +192,6 @@ func New(cfg *config.Config) (*Server, error) {
 	srv := &Server{
 		cfg:             cfg,
 		prober:          prober,
-		console:         console.NewHandlerWithCluster(cfg, clusterH),
 		cluster:         clusterH,
 		gitops:          gitopsH,
 		mcp:             mcp.NewHandler(),
@@ -463,11 +460,6 @@ func (s *Server) Router() http.Handler {
 		r.Get("/trade-agent/domains", s.tradeagent.HandleDomains)
 		r.Get("/trade-agent/catalog", s.tradeagent.HandleCatalog)
 		r.Get("/checklist/signals", s.checklist.HandleGetSignals)
-		r.Group(func(r chi.Router) {
-			r.Use(s.auth.Require(actuation.RoleOperator))
-			// one-use ticket for the SSH console below (TD-203)
-			r.Post("/console/ws-ticket", s.console.HandleTicket)
-		})
 		r.Get("/delivery/pipelines/{name}/runs", s.delivery.HandlePipelineRuns)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/delivery/release-window", s.delivery.HandleGetReleaseWindow)
 		r.Get("/delivery/runs/{id}/logs", s.delivery.HandleRunLogs)
@@ -511,10 +503,6 @@ func (s *Server) Router() http.Handler {
 			r.Use(s.auth.Require(actuation.RoleAdmin))
 			r.Post("/gitops/apps/{name}/rollback", s.guard("gitops_rollback_app", s.gitops.HandleRollbackApp))
 		})
-		r.Get("/console/hosts", s.console.HandleHosts)
-		// authenticated by the ticket from POST /console/ws-ticket (a browser
-		// WebSocket cannot send a bearer header)
-		r.Get("/console/ws", s.console.HandleWebSocket)
 		r.Route("/cluster", func(r chi.Router) {
 			r.Get("/", s.cluster.HandleSummary)
 			r.Get("/nodes", s.cluster.HandleNodes)

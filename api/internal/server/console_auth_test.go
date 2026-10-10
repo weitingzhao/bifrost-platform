@@ -6,8 +6,7 @@ import (
 	"testing"
 )
 
-// TD-203 / TD-208: the SSH console and husbandry sync answered anyone who
-// could reach the port. Husbandry sync only merges signals.
+// TD-203 / TD-208: these routes answered anyone who could reach the port.
 func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
 	srv, err := New(newTestConfig(t))
 	if err != nil {
@@ -15,8 +14,6 @@ func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
 	}
 	router := srv.Router()
 	for _, c := range []struct{ method, path string }{
-		{http.MethodPost, "/api/v1/console/ws-ticket?node=node-a"},
-		{http.MethodGet, "/api/v1/console/ws?node=node-a"},
 		{http.MethodGet, "/api/v1/cluster/workloads/pods/data/bifrost-postgres-1/logs"},
 	} {
 		rec := httptest.NewRecorder()

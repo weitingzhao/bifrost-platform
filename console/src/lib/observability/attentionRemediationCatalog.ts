@@ -10,7 +10,6 @@
 
 import type { SystemDomainId } from '@/lib/architecture/systemDomainCatalog'
 import type { RemediationTrack } from '@/lib/cluster/clusterFailureTriage'
-import { scopeForPlaybookId } from '@/lib/agent/playbookAgentPrompts'
 import type {
   AttentionItem,
   AttentionRemediationCta,
@@ -27,9 +26,6 @@ export type AttentionRemediationClass = {
   trackReason: string
   suggestedAction: string
 }
-
-/** Fallback remediation scope when playbook has no dedicated runner scope. */
-export const ATTENTION_DEFAULT_REMEDIATION_SCOPE = 'cluster_issues_full_auto'
 
 type ClassifyInput = {
   /** Attention id prefix hint: `alert:…` vs `signal:…` */
@@ -239,44 +235,6 @@ export function classifyAttentionSignal(opts: {
     summary: opts.summary,
     detailRoute: opts.detailRoute,
   })
-}
-
-/** Remediationscope for Attention Agent Fix / Diagnose — prefer playbook scope map. */
-export function scopeForAttentionRemediation(playbookId: string | undefined): string {
-  return scopeForPlaybookId(playbookId) ?? ATTENTION_DEFAULT_REMEDIATION_SCOPE
-}
-
-/** Prompt body for ambient startRemediation from an Attention item. */
-export function buildAttentionRemediationPrompt(item: AttentionItem): string {
-  const t = item.triage
-  const mode = t.cta === 'diagnose' ? 'Diagnose (assisted — do not auto-fix)' : 'Agent Fix (assisted)'
-  return [
-    `Observability Attention · ${mode}`,
-    t.playbookId != null ? `Playbook: ${t.playbookId}` : 'Playbook: (adhoc)',
-    '',
-    `Signal: ${item.signalLabel}`,
-    `Domain: ${item.domain} · Env: ${item.env}`,
-    `Severity: ${item.severity}`,
-    `Track: ${t.track} — ${t.trackReason}`,
-    '',
-    'Suggested action:',
-    t.suggestedAction,
-    '',
-    'What happened:',
-    t.whatHappened,
-    '',
-    'Why verdict changed:',
-    t.whyVerdictChanged,
-    '',
-    'Evidence:',
-    t.evidence,
-    '',
-    'Constraints:',
-    '- Assisted only — propose steps; request operator approval for actuation',
-    '- Do not silence/ack Prometheus alerts as "fixed"',
-    '- D10: never place_order / arm daemon / enable live trading',
-    '- Prefer Cluster / Satellite detail routes for manual follow-up',
-  ].join('\n')
 }
 
 /** Short Action column label from CTA. */

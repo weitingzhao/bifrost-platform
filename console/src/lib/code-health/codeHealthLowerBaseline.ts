@@ -45,7 +45,6 @@ export type LowerBaselineProposal = {
   to: number
   path: string
   patch: string
-  agentBrief: string
 }
 
 export function resolveBaselineVar(m: CodeHealthMetricDto): string | null {
@@ -75,18 +74,6 @@ export function proposeLowerBaseline(m: CodeHealthMetricDto): LowerBaselinePropo
     `+${baselineVar}=${to}`,
   ].join('\n')
 
-  const agentBrief = [
-    `## Lower baseline (ratchet lock-in)`,
-    ``,
-    `- Metric: ${m.label} (\`${m.id}\`)`,
-    `- Repo: ${m.repo}`,
-    `- Change: \`${baselineVar}\` ${from} → **${to}** in \`${path}\``,
-    `- Rule: set the constant to **exactly ${to}** (the scan value). Do not invent another number.`,
-    `- Do not raise any baseline.`,
-    `- After edit: \`make check-code-health\` in bifrost-trade-infra (or \`scan.sh --repo ${m.repo}\`).`,
-    `- Then commit in bifrost-trade-infra and re-report: \`bash scripts/code-health/scan.sh --report\`.`,
-  ].join('\n')
-
   return {
     metricId: m.id,
     label: m.label,
@@ -96,7 +83,6 @@ export function proposeLowerBaseline(m: CodeHealthMetricDto): LowerBaselinePropo
     to,
     path,
     patch,
-    agentBrief,
   }
 }
 

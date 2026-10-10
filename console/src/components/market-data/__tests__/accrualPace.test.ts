@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { accrualPace, accrualStalled } from '@/components/market-data/dimensionsModel'
 import { accrualSummary } from '@/components/market-data/coverageMatrixModel'
-import { buildCoverageMatrixPack } from '@/components/market-data/coverageMatrixPack'
 import type { DatasetDimensions } from '@/api/marketDataDimensions'
 
 const ds = (accrual: unknown, dataset = 'raw_market.option_snapshot') =>
@@ -60,26 +59,5 @@ describe('the summary above the grid', () => {
   it('ignores datasets that are not accruing toward anything', () => {
     const notAccruing = ds(undefined, 'raw_market.ticker')
     expect(accrualSummary([notAccruing])).toMatchObject({ accruing: 0, stalled: 0 })
-  })
-})
-
-describe('the agent brief', () => {
-  it('tells a stalled accrual apart from a gap it could backfill', () => {
-    const text = buildCoverageMatrixPack(
-      { datasets: [ds(stopped)], memory: { recorded: true, changes: [], previous_at: '2026-09-09T00:00:00Z' } },
-      '2026-09-11T00:00:00Z',
-    )
-    expect(text).toContain('## Accruing boundaries — 1, 1 stalled')
-    expect(text).toContain('cannot be backfilled')
-    expect(text).toContain('54/90 sessions · stalled')
-  })
-
-  it('says so plainly when they are all still gaining', () => {
-    const text = buildCoverageMatrixPack(
-      { datasets: [ds(climbing)], memory: { recorded: true, changes: [], previous_at: '2026-09-09T00:00:00Z' } },
-      '2026-09-11T00:00:00Z',
-    )
-    expect(text).toContain('0 stalled')
-    expect(text).toContain('All of them gained ground')
   })
 })

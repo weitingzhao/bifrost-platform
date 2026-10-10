@@ -238,6 +238,9 @@ func TestRetiredRoutesAre404(t *testing.T) {
 		{http.MethodPost, "/api/v1/remediation/job-1/cancel"},
 		{http.MethodPost, "/api/v1/remediation/job-1/respond"},
 		{http.MethodGet, "/api/v1/agent/hermes/health"}, // 已退役
+		{http.MethodGet, "/api/v1/console/hosts"},
+		{http.MethodPost, "/api/v1/console/ws-ticket"},
+		{http.MethodGet, "/api/v1/console/ws"},
 	}
 	// The path still serves another method, so chi answers 405 rather than 404.
 	methodGone := []struct{ method, path string }{

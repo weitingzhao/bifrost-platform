@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  ATTENTION_DEFAULT_REMEDIATION_SCOPE,
   attentionCtaActionLabel,
-  buildAttentionRemediationPrompt,
   classifyAttentionAlert,
   classifyAttentionItem,
   classifyAttentionSignal,
-  scopeForAttentionRemediation,
 } from '../attentionRemediationCatalog'
 import { annotateStandbyAlerts, mapAlert, verdictAffectingAlerts } from '../alertMapping'
 import { buildAttentionItems, buildDomainHealth } from '../verdictAggregation'
-import type { AttentionItem, EvaluatedSignal } from '../types'
+import type { EvaluatedSignal } from '../types'
 import { getSignalDef } from '../signalRegistry'
 
 function sig(id: string, state: EvaluatedSignal['state']): EvaluatedSignal {
@@ -140,19 +137,6 @@ describe('classifyAttentionItem', () => {
   })
 })
 
-describe('scopeForAttentionRemediation', () => {
-  it('falls back to cluster_issues_full_auto for adhoc playbooks', () => {
-    expect(scopeForAttentionRemediation('pod-failure-triage')).toBe(
-      ATTENTION_DEFAULT_REMEDIATION_SCOPE,
-    )
-    expect(scopeForAttentionRemediation(undefined)).toBe(ATTENTION_DEFAULT_REMEDIATION_SCOPE)
-  })
-
-  it('uses dedicated scope when playbook is mapped', () => {
-    expect(scopeForAttentionRemediation('deliver-stg-recover')).toBe('deliver-stg-recover')
-  })
-})
-
 describe('attentionCtaActionLabel', () => {
   it('labels CTAs for Action column', () => {
     expect(attentionCtaActionLabel('agent_fix')).toBe('Agent Fix')
@@ -214,38 +198,5 @@ describe('buildAttentionItems remediation wiring', () => {
     expect(bus).toBeDefined()
     expect(bus!.triage.cta).toBe('manual')
     expect(bus!.action).toBe('Manual next')
-  })
-})
-
-describe('buildAttentionRemediationPrompt', () => {
-  it('includes D10 and assisted constraints', () => {
-    const item: AttentionItem = {
-      id: 'alert:x',
-      severity: 'warning',
-      domain: 'rocket',
-      env: 'shared',
-      signalId: 'alert.KubePodNotReady',
-      signalLabel: 'KubePodNotReady',
-      owner: 'Rocket / Cluster',
-      action: 'Agent Fix',
-      summary: 'pod not ready',
-      triage: {
-        whatHappened: 'pod not ready',
-        whyVerdictChanged: 'warning alert',
-        affectedDomains: ['rocket'],
-        evidence: 'state=firing',
-        recommendedDestination: 'cluster',
-        track: 'agent-adhoc',
-        playbookId: 'pod-failure-triage',
-        cta: 'agent_fix',
-        trackReason: 'case-by-case',
-        suggestedAction: 'collect logs',
-      },
-    }
-    const prompt = buildAttentionRemediationPrompt(item)
-    expect(prompt).toContain('Playbook: pod-failure-triage')
-    expect(prompt).toContain('D10')
-    expect(prompt).toContain('Assisted only')
-    expect(prompt).toContain('never place_order')
   })
 })

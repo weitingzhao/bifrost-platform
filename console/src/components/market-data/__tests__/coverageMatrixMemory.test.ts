@@ -6,7 +6,6 @@ import {
   entryOf,
 } from '@/components/market-data/coverageMatrixModel'
 import { breadthVerdict, depthVerdict } from '@/components/market-data/dimensionsModel'
-import { buildCoverageMatrixPack } from '@/components/market-data/coverageMatrixPack'
 import type { CoverageMemory, DatasetDimensions } from '@/api/marketDataDimensions'
 
 const ds = (over: Partial<DatasetDimensions> = {}) =>
@@ -100,60 +99,5 @@ describe('three states a single count would flatten', () => {
     const s = changeSummary({ recorded: false, why: 'no such table', changes: [] })
     expect(s.total).toBe(0)
     expect(s.firstReading).toBe(false)
-  })
-})
-
-describe('the agent brief says what moved', () => {
-  it('leads with the regression rather than the standing gap', () => {
-    const text = buildCoverageMatrixPack(
-      {
-        datasets: [ds()],
-        memory: memory({
-          changes: [
-            {
-              dataset: 'raw_market.option_daily',
-              axis: 'breadth',
-              from: 'ok',
-              to: 'thin',
-              direction: 'regressed',
-            },
-          ],
-        }),
-      },
-      '2026-09-12T00:00:00Z',
-    )
-    expect(text).toContain('## Since last reading — 1 verdict(s) moved')
-    expect(text).toContain('WORSE · raw_market.option_daily breadth: ok → thin')
-    expect(text).toContain('a regression has a cause')
-  })
-
-  it('says so when there is nothing to compare against', () => {
-    const text = buildCoverageMatrixPack(
-      { datasets: [ds()], memory: memory({ previous_at: null }) },
-      '2026-09-12T00:00:00Z',
-    )
-    expect(text).toContain('first recorded reading')
-    expect(text).not.toContain('No verdict changed')
-  })
-
-  it('names the datasets whose numbers are last-known rather than just-measured', () => {
-    const text = buildCoverageMatrixPack(
-      {
-        datasets: [ds()],
-        memory: memory({ carried_forward: ['raw_market.short_volume'] }),
-      },
-      '2026-09-12T00:00:00Z',
-    )
-    expect(text).toContain('Not read this time')
-    expect(text).toContain('raw_market.short_volume')
-  })
-
-  it('never claims calm when the record failed to write', () => {
-    const text = buildCoverageMatrixPack(
-      { datasets: [ds()], memory: { recorded: false, why: 'no such table', changes: [] } },
-      '2026-09-12T00:00:00Z',
-    )
-    expect(text).toContain('Not known')
-    expect(text).toContain('no such table')
   })
 })

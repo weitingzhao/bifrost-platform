@@ -52,13 +52,12 @@ func init() {
 		"POST /api/v1/approvals/{id}/approve",
 		"POST /api/v1/approvals/{id}/reject",
 	)
-	exempt("unclassified by LANE-B1: evidence, queue, checklist, or console session — not a cluster write",
+	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",
 		"POST /api/v1/code-health/rescan",
 		"PUT /api/v1/lineage/thread-title",
 		"PUT /api/v1/lineage/transcript-title",
-		"POST /api/v1/console/ws-ticket",
 		"POST /api/v1/agent/governance/skill-runs",
 		"POST /api/v1/telemetry/attention-mute",
 	)

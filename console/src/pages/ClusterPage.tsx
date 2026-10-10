@@ -27,22 +27,16 @@ export function ClusterPage({
   onOpenStandards,
   onOpenRuntimeMap,
   onOpenAudit,
-  onOpenAgentDesk,
   onOpenDefects,
   onOpenObservability,
   onOpenDelivery,
-  ambientJobId,
-  onExpandAgentDock,
 }: {
   onOpenStandards?: () => void
   onOpenRuntimeMap?: () => void
   onOpenAudit?: () => void
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
   onOpenDefects?: () => void
   onOpenObservability?: () => void
   onOpenDelivery?: () => void
-  ambientJobId?: string | null
-  onExpandAgentDock?: () => void
 }) {
   const [nsFilter, setNsFilter] = useState<NsFilterType>('trade')
   const [selectedNs, setSelectedNs] = useState<string | null>('bifrost-stg')
@@ -197,9 +191,6 @@ export function ClusterPage({
         summaryError={q.clusterSummaryError}
         opsReach={opsHealth?.reach}
         opsSummaryLine={opsHealth?.summaryLine}
-        ambientJobId={ambientJobId}
-        onOpenAgentDesk={onOpenAgentDesk}
-        onExpandAgentDock={onExpandAgentDock}
         showBootstrapActions={q.showBootstrapActions}
         canOperate={canOperate}
         canAdmin={canAdmin}

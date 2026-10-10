@@ -30,9 +30,6 @@ export function ClusterPageChrome({
   summaryError,
   opsReach,
   opsSummaryLine,
-  ambientJobId,
-  onOpenAgentDesk,
-  onExpandAgentDock,
   showBootstrapActions,
   canOperate,
   canAdmin,
@@ -69,10 +66,6 @@ export function ClusterPageChrome({
   /** Same Ops plane as Cluster Issues — drives unified Verdict grade. */
   opsReach?: Reachability
   opsSummaryLine?: string | null
-  ambientJobId?: string | null
-  onOpenAgentDesk?: (arg?: string | { prefill: string }) => void
-  /** Prefer Operator Dock over Agent Desk when viewing ambient session. */
-  onExpandAgentDock?: () => void
   showBootstrapActions: boolean
   canOperate: boolean
   canAdmin: boolean
@@ -163,25 +156,6 @@ export function ClusterPageChrome({
               <button type="button" className="focus-strip-link shrink-0" onClick={onOpenAudit}>
                 Audit
               </button>
-            ) : null}
-            {ambientJobId != null && ambientJobId !== '' ? (
-              onExpandAgentDock != null ? (
-                <button
-                  type="button"
-                  className="focus-strip-link shrink-0"
-                  onClick={onExpandAgentDock}
-                >
-                  View agent
-                </button>
-              ) : onOpenAgentDesk != null ? (
-                <button
-                  type="button"
-                  className="focus-strip-link shrink-0"
-                  onClick={() => onOpenAgentDesk(ambientJobId)}
-                >
-                  View agent
-                </button>
-              ) : null
             ) : null}
           </>
         }

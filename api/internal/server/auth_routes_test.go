@@ -16,9 +16,7 @@ var anonymousWrites = map[string]string{}
 
 // ticketAuthenticated are reads that open a privileged session and therefore
 // authenticate in the handler instead of through auth.Require.
-var ticketAuthenticated = map[string]string{
-	"GET /api/v1/console/ws": "a browser WebSocket cannot send a bearer header; the handler consumes a one-use ticket from POST /console/ws-ticket (TD-203)",
-}
+var ticketAuthenticated = map[string]string{}
 
 // reachesHandlerAnonymously runs a route's middleware chain around a sentinel
 // endpoint and sends it a request without a token. Matching middleware by
@@ -91,18 +89,6 @@ func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 		}
 	}
 	t.Logf("%d mutating routes, %d behind auth.Require", walked, gated)
-}
-
-func TestConsoleWebSocketRefusesWithoutTicket(t *testing.T) {
-	srv, err := New(newTestConfig(t))
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
-	rec := httptest.NewRecorder()
-	srv.Router().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/console/ws?node=node-a", nil))
-	if rec.Code != http.StatusUnauthorized && rec.Code != http.StatusForbidden {
-		t.Fatalf("GET /console/ws without a ticket = %d, want 401 or 403", rec.Code)
-	}
 }
 
 func TestHealthReportsAuthNotLoaded(t *testing.T) {

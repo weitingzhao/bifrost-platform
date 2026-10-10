@@ -1,48 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  ATTENTION_BATCH_MIN,
-  buildAttentionBatchRemediationPrompt,
-  largestAttentionBatchGroup,
-} from '@/lib/observability/attentionBatch'
-import {
   filterMutedAttention,
   isAttentionMuted,
   listActiveAttentionMutes,
   muteAttentionIds,
   unmuteAttentionId,
 } from '@/lib/observability/attentionMute'
-import type { AttentionItem } from '@/lib/observability/types'
 
 const STORAGE_KEY = 'bifrost.observability.attentionMute.v1'
-
-function item(
-  id: string,
-  opts: { cta?: AttentionItem['triage']['cta']; playbookId?: string } = {},
-): AttentionItem {
-  return {
-    id,
-    severity: 'warning',
-    domain: 'rocket',
-    env: 'shared',
-    signalId: `alert.${id}`,
-    signalLabel: 'KubeDaemonSetRolloutStuck',
-    owner: 'Rocket / Cluster',
-    action: 'Agent Fix',
-    summary: 'stuck',
-    triage: {
-      whatHappened: 'stuck',
-      whyVerdictChanged: 'degraded',
-      affectedDomains: ['rocket'],
-      evidence: 'alert',
-      recommendedDestination: 'cluster',
-      track: 'agent-adhoc',
-      playbookId: opts.playbookId ?? 'pod-failure-triage',
-      cta: opts.cta ?? 'agent_fix',
-      trackReason: 'ds',
-      suggestedAction: 'fix',
-    },
-  }
-}
 
 function installMemoryLocalStorage(): void {
   const map = new Map<string, string>()
@@ -89,25 +54,5 @@ describe('attentionMute', () => {
     muteAttentionIds([{ attentionId: 'a', signalLabel: 'x' }], 2)
     unmuteAttentionId('a')
     expect(isAttentionMuted('a')).toBe(false)
-  })
-})
-
-describe('attentionBatch', () => {
-  it('requires min agent_fix rows with same playbook', () => {
-    const items = [
-      item('1'),
-      item('2'),
-      item('3'),
-      item('4', { cta: 'diagnose' }),
-      item('5', { playbookId: 'other' }),
-    ]
-    const g = largestAttentionBatchGroup(items, ATTENTION_BATCH_MIN)
-    expect(g?.playbookId).toBe('pod-failure-triage')
-    expect(g?.items).toHaveLength(3)
-    expect(buildAttentionBatchRemediationPrompt(g!).includes('Batch Agent Fix')).toBe(true)
-  })
-
-  it('returns null below threshold', () => {
-    expect(largestAttentionBatchGroup([item('1'), item('2')], 3)).toBeNull()
   })
 })

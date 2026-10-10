@@ -34,7 +34,6 @@ var homePathFiles = map[string]string{
 	"cluster/script_runner.go":         "default kubeconfig path",
 	"cluster/sync.go":                  "kubeconfig the sync script writes on the workstation",
 	"config/clusters.go":               "default kubeconfig path",
-	"console/ssh_ws.go":                "ssh keys and known_hosts for the operator console",
 	"devsession/provider_bdev.go":      "~/.bifrost-dev of the bdev workstation",
 	"ibgateway/config.go":              "default kubeconfig path",
 	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",

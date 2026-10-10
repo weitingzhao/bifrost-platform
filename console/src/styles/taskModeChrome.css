@@ -38,25 +38,6 @@
   --task-mode-accent-border: color-mix(in oklab, var(--muted-foreground) 35%, transparent);
 }
 
-/* Picker — each row carries its own data-task-mode accent */
-.task-mode-picker-option .task-mode-picker-option__icon,
-.task-mode-picker-option .task-mode-picker-option__label {
-  color: var(--task-mode-accent);
-}
-
-.task-mode-picker-option:hover {
-  background: var(--task-mode-accent-subtle);
-}
-
-.task-mode-picker-option[data-active='true'] {
-  background: var(--task-mode-accent-subtle);
-  box-shadow: inset 2px 0 0 var(--task-mode-accent);
-}
-
-.task-mode-picker-option[data-active='true'] .task-mode-picker-option__check {
-  color: var(--task-mode-accent);
-}
-
 /* Sidebar — left accent rail only (no mode wash / gradient — keeps nav readable) */
 .task-mode-chrome-root[data-task-mode]:not([data-task-mode='system']) [data-sidebar='sidebar'] {
   border-left: 3px solid var(--task-mode-accent);
