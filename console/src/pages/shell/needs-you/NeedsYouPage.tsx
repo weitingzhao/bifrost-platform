@@ -37,7 +37,7 @@ function Note({ children }: { children: ReactNode }) {
  * off — and links each request to its page. No approve or reject here.
  */
 export function NeedsYouPage() {
-  const { count, approveCount, silentCount, toApprove, silent, lost, query } = useNeedsYou()
+  const { count, approveCount, silentCount, toApprove, silent, lost, capacityText, query } = useNeedsYou()
   const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
   const hasReadToken = operatorToken() !== '' || approvalToken !== ''
   const now = Date.now()
@@ -79,11 +79,16 @@ export function NeedsYouPage() {
     stalled = <Note>Loading…</Note>
   } else if (silentCount.state === 'unknown') {
     stalled = <Note>{`Could not read agent threads: ${silentCount.reason}`}</Note>
-  } else if (silent.length === 0 && lost.length === 0) {
+  } else if (silent.length === 0 && lost.length === 0 && capacityText === '') {
     stalled = <Note>No agent thread has gone silent mid-turn.</Note>
   } else {
     stalled = (
       <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">
+        {capacityText !== '' ? (
+          <li className="text-sm text-foreground" data-monitoring-full>
+            {capacityText}
+          </li>
+        ) : null}
         {lost.map(host => (
           <HostHeartbeatRow key={host.host} host={host} />
         ))}

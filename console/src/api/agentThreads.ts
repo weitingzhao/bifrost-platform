@@ -47,6 +47,35 @@ export type AgentThreadsResponse = {
   host_lost_after_seconds?: number
   threads: AgentThread[]
   hosts?: AgentHost[]
+  /** Cumulative new-thread registrations refused because the live cap was full. */
+  threads_refused?: number
+  /** When the last capacity refusal happened. Empty when none has. */
+  last_thread_refusal?: string
+}
+
+/** A capacity refusal counts toward Needs You only while it is younger than one hour. */
+export const CAPACITY_REFUSAL_WINDOW_MS = 60 * 60 * 1000
+
+/** The sentence the Owner sees. The count is the stored counter, not a thread row. */
+export function capacityRefusalText(count: number, at: string): string {
+  return `monitoring is full: ${count} threads refused, last at ${at}`
+}
+
+/**
+ * True when the last refusal is strictly younger than one hour, measured on
+ * the server clock (`generated_at`). An age of exactly one hour does not count.
+ * The badge adds one for the condition, not one per refused thread.
+ */
+export function capacityRefusalActive(
+  res: Pick<AgentThreadsResponse, 'threads_refused' | 'last_thread_refusal' | 'generated_at'> | null | undefined,
+  nowMs?: number,
+): boolean {
+  if (!res || (res.threads_refused ?? 0) < 1 || !res.last_thread_refusal) return false
+  const at = Date.parse(res.last_thread_refusal)
+  if (!Number.isFinite(at)) return false
+  const now = nowMs ?? (res.generated_at ? Date.parse(res.generated_at) : Date.now())
+  if (!Number.isFinite(now)) return false
+  return now - at < CAPACITY_REFUSAL_WINDOW_MS
 }
 
 export const AGENT_THREADS_REFRESH_MS = 30_000

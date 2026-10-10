@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   agentThreadName,
+  capacityRefusalActive,
+  capacityRefusalText,
   formatSeconds,
   lastEventText,
   hostsNeedingYou,
@@ -107,5 +109,28 @@ describe('agentThreads', () => {
     const alive: AgentHost = { ...lost, host: 'air', status: 'alive', age_seconds: 10 }
     expect(hostsNeedingYou([alive, lost, never]).map(h => h.host)).toEqual(['mini', 'mbp'])
     expect(hostsNeedingYou(undefined)).toEqual([])
+  })
+
+  it('counts a capacity refusal only while it is younger than one hour on the server clock', () => {
+    const young = {
+      generated_at: '2026-10-10T08:00:00Z',
+      threads_refused: 4,
+      last_thread_refusal: '2026-10-10T07:00:01Z',
+    }
+    expect(capacityRefusalActive(young)).toBe(true)
+    expect(capacityRefusalText(4, young.last_thread_refusal)).toBe(
+      'monitoring is full: 4 threads refused, last at 2026-10-10T07:00:01Z',
+    )
+    expect(
+      capacityRefusalActive({
+        generated_at: '2026-10-10T08:00:00Z',
+        threads_refused: 4,
+        last_thread_refusal: '2026-10-10T07:00:00Z',
+      }),
+    ).toBe(false)
+    expect(capacityRefusalActive({ generated_at: '2026-10-10T08:00:00Z', threads_refused: 0, last_thread_refusal: '2026-10-10T07:59:00Z' })).toBe(
+      false,
+    )
+    expect(capacityRefusalActive(undefined)).toBe(false)
   })
 })

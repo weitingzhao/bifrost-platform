@@ -1,4 +1,4 @@
-import { threadsMidTurn } from '@/api/agentThreads'
+import { capacityRefusalText, threadsMidTurn } from '@/api/agentThreads'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { AgentThreadRow } from '@/components/shell/AgentThreadRow'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
@@ -9,6 +9,15 @@ export function AgentThreadsInProgress() {
   const q = useAgentThreads()
   const mid = threadsMidTurn(q.data?.threads ?? [])
   const hosts = q.data?.hosts ?? []
+  const refused = q.data?.threads_refused ?? 0
+  const refusedAt = q.data?.last_thread_refusal ?? ''
+  const fullText = q.data != null && refused > 0 && refusedAt !== '' ? capacityRefusalText(refused, refusedAt) : ''
+  const fullLine =
+    fullText === '' ? null : (
+      <p className="m-0 text-sm text-foreground" data-monitoring-full>
+        {fullText}
+      </p>
+    )
   let body
   if (q.isError) {
     body = (
@@ -19,10 +28,16 @@ export function AgentThreadsInProgress() {
   } else if (q.data == null) {
     body = <p className="m-0 text-sm text-muted-foreground">Loading…</p>
   } else if (mid.length === 0 && hosts.length === 0) {
-    body = <p className="m-0 text-sm text-muted-foreground">No agent thread is mid-turn.</p>
+    body = (
+      <div className="flex w-full min-w-0 flex-col gap-3">
+        {fullLine}
+        <p className="m-0 text-sm text-muted-foreground">No agent thread is mid-turn.</p>
+      </div>
+    )
   } else {
     body = (
       <div className="flex w-full min-w-0 flex-col gap-3">
+        {fullLine}
         {hosts.length > 0 ? (
           <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0" aria-label="Hosts">
             {hosts.map(host => (

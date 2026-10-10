@@ -71,13 +71,14 @@ function healthResponse(url: string): Response | null {
   return null
 }
 
-function threadsResponse(threads: AgentThread[], hosts: unknown[] = []): Response {
+function threadsResponse(threads: AgentThread[], hosts: unknown[] = [], extra: Record<string, unknown> = {}): Response {
   return json({
     generated_at: '2026-10-10T07:25:00Z',
     silent_after_seconds: 600,
     tool_grace_seconds: 120,
     threads,
     hosts,
+    ...extra,
   })
 }
 
@@ -247,6 +248,36 @@ describe('NeedsYouPage', () => {
     expect(within(group).getByText('not monitored: codex')).toBeTruthy()
     expect(within(group).queryByText('Waiting on you')).toBeNull()
     expect(within(group).queryByText('Busy thread')).toBeNull()
+  })
+
+  it('counts a capacity refusal younger than one hour, and not one that is exactly an hour old', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse([], [], {
+          threads_refused: 2,
+          last_thread_refusal: '2026-10-10T07:00:00Z',
+        }),
+    )
+    const { unmount } = render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('monitoring is full: 2 threads refused, last at 2026-10-10T07:00:00Z')).toBeTruthy()
+    unmount()
+
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse([], [], {
+          generated_at: '2026-10-10T08:00:00Z',
+          threads_refused: 2,
+          last_thread_refusal: '2026-10-10T07:00:00Z',
+        }),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(screen.queryByText(/monitoring is full/)).toBeNull()
   })
 
   it('counts an expected host that has never reported', async () => {

@@ -152,6 +152,25 @@ describe('AgentThreadsInProgress', () => {
     expect(within(region).getByText('waited 1m · permission_prompt')).toBeTruthy()
   })
 
+  it('shows a capacity refusal even when no thread is mid-turn', async () => {
+    stubThreads(() =>
+      json({
+        generated_at: '2026-10-10T08:00:00Z',
+        silent_after_seconds: 600,
+        tool_grace_seconds: 120,
+        threads: [],
+        hosts: [],
+        threads_refused: 3,
+        last_thread_refusal: '2026-10-10T06:30:00Z',
+      }),
+    )
+    render(wrapper(<AgentThreadsInProgress />))
+    const region = await screen.findByRole('region', { name: 'In progress' })
+    expect(await within(region).findByText('In progress · Agent threads · 0')).toBeTruthy()
+    expect(within(region).getByText('monitoring is full: 3 threads refused, last at 2026-10-10T06:30:00Z')).toBeTruthy()
+    expect(within(region).getByText('No agent thread is mid-turn.')).toBeTruthy()
+  })
+
   it('shows an expected host that has never reported', async () => {
     stubThreads(() =>
       json({
