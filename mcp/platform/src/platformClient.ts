@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { withApproveHint } from './approveHint.js'
 import { defaultMcpTokenFilePath, readMcpTokenFile, resolveTokenFrom } from './tokenResolve.js'
 import { bifrostSessionId } from './sessionId.js'
 import { OWNER_WAIT_NOTE, planWrite, writesMode } from './writeGate.js'
@@ -110,7 +111,7 @@ async function consultApproval(action: string, params: Record<string, unknown>):
   }
   if (r.status === 400 && parsed.error === 'call directly') return { kind: 'direct' }
   if (r.status === 201) {
-    return { kind: 'stop', body: { ...parsed, note: OWNER_WAIT_NOTE } }
+    return { kind: 'stop', body: { ...asObject(withApproveHint(parsed)), note: OWNER_WAIT_NOTE } }
   }
   if (r.status === 403) {
     const error = typeof parsed.error === 'string' && parsed.error !== '' ? parsed.error : 'forbidden'
