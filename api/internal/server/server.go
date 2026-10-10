@@ -22,6 +22,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuationpolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentgovernance"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentthreads"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
 	"github.com/weitingzhao/bifrost-platform/api/internal/checklist"
 	"github.com/weitingzhao/bifrost-platform/api/internal/cluster"
@@ -94,6 +95,7 @@ type Server struct {
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
 	releasePolicy *releasepolicy.Engine
+	agentThreads  *agentthreads.Handler
 	authLoaded    bool
 	audit         *actuation.AuditLog
 	jobs          *actuation.JobStore
@@ -343,6 +345,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
+	srv.wireAgentThreads(dataDir, role, titleStore)
 	srv.bindActionExecutors()
 	if role.RunsWorkers() {
 		approvalsSvc := srv.approvals
@@ -464,7 +467,13 @@ func (s *Server) Router() http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.Require(actuation.RoleReporter))
 			r.Put("/lineage/transcript-title", s.lineage.HandleReportTitle)
+			// A session's own turn and tool events (W-54); same token as its title.
+			r.Post("/agent/threads/heartbeat", s.agentThreads.HandleBeat)
+			// One machine's hook wiring and token readability (W-57).
+			r.Post("/agent/hosts/heartbeat", s.agentThreads.HandleHost)
 		})
+		// Titles and host names: viewer and above.
+		r.With(s.auth.Require(actuation.RoleViewer)).Get("/agent/threads", s.agentThreads.HandleList)
 		r.Get("/releases", s.releases.HandleList)
 		r.Get("/releases/running-images", s.releases.HandleRunningImages)
 		r.Get("/delivery/pipelines/{name}/preflight", s.delivery.HandlePipelinePreflight)
