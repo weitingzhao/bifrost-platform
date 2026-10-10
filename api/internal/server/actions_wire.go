@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
@@ -168,7 +169,8 @@ func (s *Server) bindActionExecutors() {
 	if s.work != nil {
 		svc := s.work.Svc
 		actions.RegisterExecutor("apply_manifest", func(ctx context.Context, params map[string]any) (any, error) {
-			return svc.Apply(ctx, text(params["plan_id"]))
+			out, err := svc.Apply(ctx, text(params["plan_id"]))
+			return out, transientKube(err)
 		})
 		actions.RegisterExecutor("create_job_from_cronjob", func(ctx context.Context, params map[string]any) (any, error) {
 			return svc.CreateJobFromCronJob(ctx, text(params["namespace"]), text(params["cronjob"]), "approval")
@@ -418,7 +420,46 @@ func interpretAction(code int, raw []byte) (any, error) {
 	if code >= 200 && code < 300 {
 		return parsed, nil
 	}
-	return nil, fmt.Errorf("%s", actionErrText(parsed, raw, code))
+	msg := actionErrText(parsed, raw, code)
+	if transientRefusal(code, msg) {
+		return nil, actions.Transient(msg)
+	}
+	return nil, fmt.Errorf("%s", msg)
+}
+
+// transientRefusalPrefixes are refusals returned before anything is created
+// that clear without a new decision: another release holds the window, no
+// window is open yet, or the window could not be read (TD-267). "REFUSED:
+// missing who" is not here: the stored params can never satisfy it.
+var transientRefusalPrefixes = []string{
+	"REFUSED: release window held by",
+	"REFUSED: no release window for",
+	"REFUSED: cannot read the release window",
+}
+
+// transientRefusal: 429 / 503 from a handler, or a known release-window refusal.
+func transientRefusal(code int, msg string) bool {
+	if code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable {
+		return true
+	}
+	for _, p := range transientRefusalPrefixes {
+		if strings.HasPrefix(msg, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// transientKube marks Kubernetes API errors that mean "try again later"
+// (timeouts, throttling, the API server unavailable) as transient.
+func transientKube(err error) error {
+	if err == nil {
+		return nil
+	}
+	if apierrors.IsServerTimeout(err) || apierrors.IsTimeout(err) || apierrors.IsTooManyRequests(err) || apierrors.IsServiceUnavailable(err) {
+		return actions.Transient(err.Error())
+	}
+	return err
 }
 
 func actionErrText(parsed any, raw []byte, code int) string {

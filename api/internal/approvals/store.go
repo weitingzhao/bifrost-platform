@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
@@ -14,74 +13,101 @@ import (
 // file is the on-disk document. The statefile key is the path relative to
 // PLATFORM_DATA_DIR, which is "approvals" (PROD: ConfigMap platform-state-approvals).
 type file struct {
-	Approvals []Approval `json:"approvals"`
+	// LastNumber is the #n counter. It survives pruning and only grows.
+	LastNumber int        `json:"last_number,omitempty"`
+	Approvals  []Approval `json:"approvals"`
 }
 
+// maxDocBytes stays under the ConfigMap budget (k8sstate.MaxBytes, 900 KiB):
+// past it the oldest terminal records are dropped rather than failing a write.
+const maxDocBytes = 800 * 1024
+
 type store struct {
-	path  string
-	items []Approval
+	path string
 }
 
 func newStore(path string) *store {
-	s := &store{path: path}
-	_ = s.load()
-	return s
+	return &store{path: path}
 }
 
-func (s *store) load() error {
+func (s *store) read() (file, error) {
 	if s.path == "" {
-		s.items = nil
-		return nil
+		return file{}, nil
 	}
 	data, err := statefile.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) || os.IsNotExist(err) {
-			s.items = nil
+			return file{}, nil
+		}
+		return file{}, err
+	}
+	return parse(data)
+}
+
+func parse(data []byte) (file, error) {
+	var doc file
+	if len(data) == 0 {
+		return doc, nil
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return file{}, err
+	}
+	return doc, nil
+}
+
+// errNoChange makes update skip the write.
+var errNoChange = errors.New("no change")
+
+// update is the only write path. statefile.Update re-runs mutate on the newer
+// document when the ConfigMap write conflicts (two platform-api pods during a
+// rollout), so a counter bump or a status transition decided in mutate holds.
+func (s *store) update(mutate func(doc *file) error) error {
+	if s.path == "" {
+		var doc file
+		err := mutate(&doc)
+		if errors.Is(err, errNoChange) {
 			return nil
 		}
 		return err
 	}
-	if len(data) == 0 {
-		s.items = nil
+	err := statefile.Update(s.path, func(old []byte) ([]byte, error) {
+		doc, err := parse(old)
+		if err != nil {
+			return nil, err
+		}
+		if err := mutate(&doc); err != nil {
+			return nil, err
+		}
+		doc.prune()
+		return doc.marshal()
+	})
+	if errors.Is(err, errNoChange) {
 		return nil
 	}
-	var doc file
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return err
-	}
-	s.items = doc.Approvals
-	return nil
+	return err
 }
 
-func (s *store) save() error {
-	if s.path == "" {
-		return nil
-	}
-	s.prune()
-	doc := file{Approvals: s.items}
+func (doc *file) marshal() ([]byte, error) {
 	if doc.Approvals == nil {
 		doc.Approvals = []Approval{}
 	}
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		return err
+	for {
+		raw, err := json.Marshal(doc)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) <= maxDocBytes || !doc.dropOldestClosed() {
+			return raw, nil
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil && !statefileActive() {
-		return err
-	}
-	return statefile.WriteFile(s.path, raw, 0o644)
 }
 
-func statefileActive() bool {
-	on, _ := statefile.Active()
-	return on
-}
-
-// prune keeps every open approval and the most recent keepClosed terminal ones.
-func (s *store) prune() {
+// prune keeps every open approval and the most recent keepClosed terminal
+// ones; only the newest keepTails terminal ones keep their output tail.
+func (doc *file) prune() {
 	open := make([]Approval, 0)
 	closed := make([]Approval, 0)
-	for _, a := range s.items {
+	for _, a := range doc.Approvals {
 		if a.open() {
 			open = append(open, a)
 			continue
@@ -94,24 +120,63 @@ func (s *store) prune() {
 	if len(closed) > keepClosed {
 		closed = closed[:keepClosed]
 	}
-	s.items = append(open, closed...)
+	for i := keepTails; i < len(closed); i++ {
+		if e := closed[i].Execution; e != nil && e.OutputTail != "" {
+			c := *e
+			c.OutputTail = ""
+			closed[i].Execution = &c
+		}
+	}
+	doc.Approvals = append(open, closed...)
 }
 
-func (s *store) put(a Approval) {
-	for i := range s.items {
-		if s.items[i].ID == a.ID {
-			s.items[i] = a
+// dropOldestClosed removes the last terminal record (prune sorted them newest
+// first, after the open ones). false when none is left.
+func (doc *file) dropOldestClosed() bool {
+	for i := len(doc.Approvals) - 1; i >= 0; i-- {
+		if !doc.Approvals[i].open() {
+			doc.Approvals = append(doc.Approvals[:i], doc.Approvals[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+func (doc *file) put(a Approval) {
+	for i := range doc.Approvals {
+		if doc.Approvals[i].ID == a.ID {
+			doc.Approvals[i] = a
 			return
 		}
 	}
-	s.items = append(s.items, a)
+	doc.Approvals = append(doc.Approvals, a)
 }
 
-func (s *store) get(id string) (Approval, bool) {
-	for _, a := range s.items {
-		if a.ID == id {
+// find resolves an approval id or a number ("57" or "#57").
+func (doc *file) find(ref string) (Approval, bool) {
+	if n, ok := parseNumber(ref); ok {
+		for _, a := range doc.Approvals {
+			if a.Number == n {
+				return a, true
+			}
+		}
+		return Approval{}, false
+	}
+	for _, a := range doc.Approvals {
+		if a.ID == ref {
 			return a, true
 		}
 	}
 	return Approval{}, false
+}
+
+func (doc *file) nextNumber() int {
+	n := doc.LastNumber
+	for _, a := range doc.Approvals {
+		if a.Number > n {
+			n = a.Number
+		}
+	}
+	doc.LastNumber = n + 1
+	return doc.LastNumber
 }

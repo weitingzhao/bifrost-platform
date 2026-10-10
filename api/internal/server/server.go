@@ -334,7 +334,7 @@ func New(cfg *config.Config) (*Server, error) {
 			if err != nil {
 				return actions.PlanSummary{}, err
 			}
-			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon}, nil
+			return actions.PlanSummary{Ready: sum.Ready, Namespaces: sum.Namespaces, Daemon: sum.Daemon, Path: sum.Path, Objects: len(sum.Objects)}, nil
 		})
 	}
 	dataDir := strings.TrimSpace(os.Getenv("PLATFORM_DATA_DIR"))
@@ -344,8 +344,18 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.bindActionExecutors()
+	if role.RunsWorkers() {
+		approvalsSvc := srv.approvals
+		safego.Go("approvals.retries", func() {
+			approvalsSvc.RunRetries(context.Background(), approvalRetryInterval)
+		})
+	}
 	return srv, nil
 }
+
+// approvalRetryInterval is how often platform-workers retries approvals left
+// approved by a transient refusal and moves lapsed leases to unknown.
+const approvalRetryInterval = 15 * time.Second
 
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()

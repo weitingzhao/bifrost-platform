@@ -66,7 +66,7 @@ func (s *Service) Plan(ctx context.Context, repo, path, commit string) (string, 
 		return "", err
 	}
 	name := fmt.Sprintf("plan-%s-%d", commit[:8], s.now().Unix())
-	if err := s.startRun(ctx, name, "plan", repo, path, commit, false); err != nil {
+	if err := s.startRun(ctx, name, "plan", repo, path, commit, false, ""); err != nil {
 		return "", err
 	}
 	return name, nil
@@ -93,8 +93,8 @@ func (s *Service) Apply(ctx context.Context, planID string) (map[string]any, err
 			return nil, err
 		}
 	}
-	name := trimName("apply-" + planID)
-	if err := s.startRun(ctx, name, "apply", summary.Repo, summary.Path, summary.Commit, tier == "C" || tier == "D"); err != nil {
+	name := applyRunName(planID, s.now())
+	if err := s.startRun(ctx, name, "apply", summary.Repo, summary.Path, summary.Commit, tier == "C" || tier == "D", planID); err != nil {
 		return nil, err
 	}
 	return map[string]any{
@@ -187,7 +187,18 @@ func planRunOK(obj *unstructured.Unstructured, pipeline, mode string) bool {
 	return true
 }
 
-func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit string, requireMain bool) error {
+// applyRunName is unique per attempt, so a plan whose apply failed can be
+// applied again under a new approval (TD-276). The plan id is also a label.
+func applyRunName(planID string, now time.Time) string {
+	suffix := fmt.Sprintf("-%d", now.Unix())
+	base := trimName("apply-" + planID)
+	if len(base)+len(suffix) > 63 {
+		base = strings.Trim(base[:63-len(suffix)], "-")
+	}
+	return base + suffix
+}
+
+func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit string, requireMain bool, planID string) error {
 	dyn, err := s.Clients.Dynamic()
 	if err != nil {
 		return err
@@ -197,17 +208,21 @@ func (s *Service) startRun(ctx context.Context, name, mode, repo, path, commit s
 		require = "true"
 	}
 	d := s.Policy.Delivery
+	labels := map[string]any{
+		"tekton.dev/pipeline": d.Pipeline,
+		"bifrost.io/trigger":  "platform-api",
+		"bifrost.io/mode":     mode,
+	}
+	if planID != "" {
+		labels["bifrost.io/plan"] = trimName(planID)
+	}
 	obj := &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "tekton.dev/v1",
 		"kind":       "PipelineRun",
 		"metadata": map[string]any{
 			"name":      name,
 			"namespace": d.Namespace,
-			"labels": map[string]any{
-				"tekton.dev/pipeline": d.Pipeline,
-				"bifrost.io/trigger":  "platform-api",
-				"bifrost.io/mode":     mode,
-			},
+			"labels":    labels,
 		},
 		"spec": map[string]any{
 			"pipelineRef": map[string]any{"name": d.Pipeline},

@@ -17,6 +17,9 @@ type PlanSummary struct {
 	Ready      bool
 	Namespaces []string
 	Daemon     bool
+	// Path and Objects feed the approval summary only.
+	Path    string
+	Objects int
 }
 
 var (
@@ -120,7 +123,9 @@ func classifyProbe(_ context.Context, params map[string]any) Tier {
 	return tierOf(tier)
 }
 
-// OwnerRunResult is what approve returns. The platform does not run the command.
+// OwnerRunResult is the handoff stored on approve. The platform does not run
+// the command: the approval stays approved until owner-run.sh (runner owner)
+// or the host executor (runner host) claims it and posts the result.
 func OwnerRunResult(approvalID, command string) map[string]any {
 	if approvalID == "" {
 		approvalID = "<id>"
@@ -134,6 +139,18 @@ func OwnerRunResult(approvalID, command string) map[string]any {
 		"command_sha256":       hex.EncodeToString(sum[:]),
 		"message":              "Run: " + script,
 	}
+}
+
+// Handoff is the result stored on approve for an action the platform does
+// not run itself (runner owner or host).
+func Handoff(id, approvalID string, params map[string]any) any {
+	switch id {
+	case "owner_run_command":
+		return OwnerRunResult(approvalID, str(params["command"]))
+	case "rolling_reboot":
+		return RollingRebootResult(approvalID)
+	}
+	return nil
 }
 
 // ExecuteOwnerRunCommand records the command. It does not call commandRunner.
