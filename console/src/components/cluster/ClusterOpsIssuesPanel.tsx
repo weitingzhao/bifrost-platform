@@ -12,7 +12,7 @@ import {
   DenseTag,
   StatusLamp,
 } from '@bifrost/ui'
-import { ChevronDown, ChevronRight, Wrench } from 'lucide-react'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { fetchMatrix, isAllMatrices } from '@/api/core'
 import { fetchStgSmoke } from '@/api/promote'
 import { fetchSupplyChain } from '@/api/delivery'
@@ -21,9 +21,7 @@ import type {
   ClusterServiceReadinessResponse,
   ClusterSummary,
 } from '@/api/clusterTypes'
-import type { StgSmokeResponse, SupplyChainResponse } from '@/api/deliveryTypes'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { buildDeliverStgRecoverPrompt } from '@/lib/agent/deliverStgRecoverPrompt'
 import {
   buildClusterFailureTriage,
   type FailureTriageRow,
@@ -65,65 +63,15 @@ function primaryPodReason(reason: string): string {
 
 function TriageRowActions({
   row,
-  supply,
-  stgSmoke,
-  onOpenAgentDesk,
   onOpenDefects,
 }: {
   row: FailureTriageRow
-  supply?: SupplyChainResponse
-  stgSmoke?: StgSmokeResponse
-  onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
 }) {
-  if (row.playbookId === 'deliver-stg-recover' && onOpenAgentDesk != null) {
-    return (
-      <Button
-        variant="ghost"
-        size="xs"
-        className="shrink-0"
-        onClick={() =>
-          onOpenAgentDesk({
-            prefill: buildDeliverStgRecoverPrompt({ supply, stgSmoke }),
-          })
-        }
-        title="Open Agent Desk with deliver-stg-recover playbook"
-      >
-        <Wrench size={12} className="mr-1" aria-hidden />
-        Fix
-      </Button>
-    )
-  }
   if (row.retrospectiveOccurrences != null && row.retrospectiveOccurrences >= 2 && onOpenDefects != null) {
     return (
       <Button variant="ghost" size="xs" onClick={onOpenDefects}>
         Defects
-      </Button>
-    )
-  }
-  if (row.playbookId != null && onOpenAgentDesk != null) {
-    return (
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={() =>
-          onOpenAgentDesk({
-            prefill: [
-              `Playbook: ${row.playbookId}`,
-              '',
-              `Issue: ${row.title}`,
-              `Track: ${row.track} — ${row.trackReason}`,
-              '',
-              'Suggested action:',
-              row.suggestedAction,
-              '',
-              'Evidence:',
-              ...row.evidence.map(e => `- ${e}`),
-            ].join('\n'),
-          })
-        }
-      >
-        Agent Fix
       </Button>
     )
   }
@@ -142,7 +90,6 @@ export type ClusterOpsIssuesPanelProps = {
   serviceReadiness?: ClusterServiceReadinessResponse
   postgresStatus?: ClusterPostgresStatusResponse
   topN?: number
-  onOpenAgentDesk?: (opts: { prefill: string }) => void
   onOpenDefects?: () => void
   onSelectPodNamespace?: (namespace: string) => void
   /** Notify parent so Cluster Verdict uses the same health grade. */
@@ -163,7 +110,6 @@ export function ClusterOpsIssuesPanel({
   serviceReadiness,
   postgresStatus,
   topN = 8,
-  onOpenAgentDesk,
   onOpenDefects,
   onSelectPodNamespace,
   onHealthChange,
@@ -332,13 +278,7 @@ export function ClusterOpsIssuesPanel({
                   {row.suggestedAction}
                 </DenseTableCell>
                 <DenseTableCell>
-                  <TriageRowActions
-                    row={row}
-                    supply={supplyQ.data}
-                    stgSmoke={smokeQ.data}
-                    onOpenAgentDesk={onOpenAgentDesk}
-                    onOpenDefects={onOpenDefects}
-                  />
+                  <TriageRowActions row={row} onOpenDefects={onOpenDefects} />
                 </DenseTableCell>
               </DenseTableRow>
             ))}

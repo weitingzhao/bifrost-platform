@@ -91,8 +91,6 @@ export function buildVendorCell(input: {
     }
   }
 
-  // Git bridge is scored on Engineer (automation) — do not mirror on Vendor (closes Board→Checklist gap).
-
   const signal = signalFromStandards(standards)
   const required = standards.filter(s => s.required !== false)
   const okRequired = required.filter(s => s.signal === 'ok').length

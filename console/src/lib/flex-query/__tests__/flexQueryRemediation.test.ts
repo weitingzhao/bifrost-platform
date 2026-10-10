@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  analyzeFlexProbe,
-  buildFlexDiagnosePrefill,
-} from '@/lib/flex-query/flexQueryRemediation'
+import { analyzeFlexProbe } from '@/lib/flex-query/flexQueryRemediation'
 import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 
 describe('flexQueryRemediation', () => {
@@ -44,20 +41,5 @@ describe('flexQueryRemediation', () => {
     const analysis = analyzeFlexProbe(status)
     expect(analysis.findings.some(f => f.id === 'worker-failed')).toBe(false)
     expect(analysis.needsAttention).toBe(false)
-  })
-
-  it('builds diagnose prefill with D10 guard', () => {
-    const analysis = analyzeFlexProbe({
-      reachability: 'degraded',
-      summary: 'test',
-      freshness: [],
-      freshness_reachability: 'unknown',
-    })
-    const prefill = buildFlexDiagnosePrefill(
-      { reachability: 'degraded', summary: 'test' },
-      analysis,
-    )
-    expect(prefill).toContain('D10')
-    expect(prefill).toContain('flex-trades')
   })
 })

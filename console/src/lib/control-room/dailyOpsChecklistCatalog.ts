@@ -23,7 +23,6 @@ import {
 } from '@/lib/agent/agentScopes'
 import { PROD_ENV_FIX_SCOPE } from '@/lib/agent/prodEnvironmentFixPrompt'
 import { OPERATOR_PLANE_FIX_SCOPE } from '@/lib/agent/operatorPlaneFixPrompt'
-import { GIT_DIRTY_FIX_SCOPE } from '@/lib/agent/gitDirtyRemediatePrompt'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -223,7 +222,7 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
     order: 3,
     label: 'Engineer · Operator Plane',
     purpose:
-      'The operator plane on the Mac minis and Git Bridge are the system\'s "hands". If both minis are down, AI-driven fix is impossible and workflow degrades to manual.',
+      'The operator plane on the Mac minis is the system\'s "hands". If both minis are down, AI-driven fix is impossible and workflow degrades to manual.',
     fleetMapping: [{ role: 'engineer', env: 'span' }],
     groups: ['automation', 'seat'],
     items: [
@@ -245,25 +244,6 @@ export const DAILY_OPS_CHECKLIST: DailyOpsChecklistStep[] = [
           'peer_agent_health',
         ],
         critical: true,
-      },
-      {
-        id: 'git-bridge',
-        label: 'Git bridge healthy',
-        group: 'automation',
-        idPattern: '^git-bridge$',
-        healthyCriteria:
-          'git_bridge.status=ok. Dirty repos are informational (Owner WIP) — not a failure.',
-        fixScope: GIT_DIRTY_FIX_SCOPE,
-        fixCapability: 'semi_auto',
-        manualAction:
-          'Review dirty repos on Engineer; Propose commit with operator approval — never stash or auto-discard WIP',
-        agentTools: [
-          'get_agent_bridge',
-          'git_workspace_status',
-          'git_diff',
-          'request_operator_approval',
-          'git_commit',
-        ],
       },
       {
         id: 'mac-probe-bridge',

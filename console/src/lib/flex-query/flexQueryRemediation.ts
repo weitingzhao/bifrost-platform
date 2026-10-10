@@ -1,4 +1,4 @@
-import type { MarketDataFreshnessInfo, MarketDataStatusResponse } from '@/api/satelliteBusTypes'
+import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 
 export type FlexRemediationFinding = {
   id: string
@@ -124,48 +124,4 @@ export function analyzeFlexProbe(status: MarketDataStatusResponse | undefined): 
             : null
 
   return { findings, staleKinds: [...new Set(staleKinds)], needsAttention, primaryCause }
-}
-
-export function buildFlexDiagnosePrefill(
-  status: MarketDataStatusResponse | undefined,
-  analysis: FlexRemediationAnalysis,
-): string {
-  const lines = [
-    'IB Flex Query plugin — assisted diagnose (L0 read-only + safe enqueue only).',
-    'D10: do NOT enable live trading or IB place_order.',
-    '',
-    `Verdict: ${status?.reachability ?? 'unknown'} · ${status?.summary ?? '—'}`,
-  ]
-
-  if (analysis.primaryCause) {
-    lines.push(`Primary cause: ${analysis.primaryCause}`)
-  }
-
-  if ((status?.freshness?.length ?? 0) > 0) {
-    lines.push('', 'ingest_freshness:')
-    for (const f of status!.freshness as MarketDataFreshnessInfo[]) {
-      lines.push(
-        `- ${f.dimension}: verdict=${f.verdict} age=${formatAgeHours(f.age_hours)} rows=${f.rows_written}`,
-      )
-    }
-  }
-
-  if (analysis.findings.length > 0) {
-    lines.push('', 'Findings:')
-    for (const f of analysis.findings) {
-      lines.push(`- [${f.severity}] ${f.title}: ${f.detail}`)
-    }
-  }
-
-  lines.push(
-    '',
-    'Remediation plan (operator approval for writes):',
-    '1. GET flex config summary — tokens/query IDs set?',
-    '2. If stale: POST enqueue flex-trades + flex-transactions (or Flex Refresh on Manual tab).',
-    '3. Poll GET flex/ingest/jobs until done; confirm ops_jobs.flex_ingest_freshness latest_ts < 48h.',
-    '4. If worker stuck: check plugin-flex-query worker logs; rollout restart flex-query-worker.',
-    '5. Report evidence before any k8s secret or credential changes.',
-  )
-
-  return lines.join('\n')
 }

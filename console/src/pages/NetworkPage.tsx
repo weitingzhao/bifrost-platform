@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Button, DenseTag } from '@bifrost/ui'
+import { DenseTag } from '@bifrost/ui'
 import type { OpsContextResponse } from '@/api/opsContextTypes'
 import {
   fetchNetworkAnomalies,
@@ -89,13 +89,7 @@ function networkVerdict(
   }
 }
 
-export function NetworkPage({
-  context,
-  onOpenAgentProtocol,
-}: {
-  context: OpsContextResponse | undefined
-  onOpenAgentProtocol: () => void
-}) {
+export function NetworkPage({ context }: { context: OpsContextResponse | undefined }) {
   const liveProbe = useNetworkLiveProbe()
   const spineLoaded = context?.tracks?.infra != null
   const probeLive = liveProbe.probeReach === 'ok' || liveProbe.probeReach === 'degraded'
@@ -146,11 +140,6 @@ export function NetworkPage({
         tagLabel={verdict.tagLabel}
         tagVariant={verdict.tagVariant}
         summary={verdict.summary}
-        actions={
-          <Button variant="outline" size="sm" onClick={onOpenAgentProtocol}>
-            Agent Protocol
-          </Button>
-        }
         meta={
           <>
             <span>
@@ -165,8 +154,6 @@ export function NetworkPage({
 
       <NetworkHealthPanel
         context={context}
-        onOpenAgentProtocol={onOpenAgentProtocol}
-        showPrimaryAgentAction={false}
         title="Probe & stream evidence"
         description="Catalog/spine stream projection and live UniFi probe detail (GET /api/v1/network/status + audit + health, Session v2 / D9)."
       />

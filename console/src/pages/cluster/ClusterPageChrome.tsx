@@ -252,8 +252,7 @@ export function ClusterPageChrome({
             <>
               {unreachable && (
                 <OpsFeedback variant="warning" title="Cluster API unreachable" className="mt-2">
-                  AI Agent can call ensure_kubeconfig_secret / sync_cluster_kubeconfig when Auto-Check
-                  runs. Manual sync is only a bootstrap fallback.
+                  platform-api cannot reach the Kubernetes API with its kubeconfig.
                   {onSyncKubeconfig != null && (
                     <>
                       {' '}

@@ -15,14 +15,9 @@ import {
   denseTableNumCell,
 } from '@bifrost/ui'
 import { ExternalLink, RefreshCw } from 'lucide-react'
-import { AgentTriggerButton } from '@/components/agent/AgentTriggerButton'
 import {
   analyzeResearchEngine,
-  buildResearchEngineAgentPack,
-  buildResearchEngineDiagnosePrefill,
-  gatherResearchEngineSnapshot,
 } from '@/components/research/researchEngineAgentPack'
-import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 import {
   ELEMENTARY_REPORT_URL,
   fetchElementaryStatus,
@@ -132,14 +127,10 @@ function laneLamp(verdict: string | undefined): 'ok' | 'degraded' | 'fail' | 'un
 
 export function ResearchEnginePage({
   onNavigate,
-  onOpenAgentDesk,
 }: {
   onNavigate?: (tabId: string) => void
-  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
 } = {}) {
   const [tab, setTab] = useState<ManageTab>(() => consumeResearchEngineLandingTab())
-  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
-  const [diagnoseBusy, setDiagnoseBusy] = useState(false)
   const marketProbe = useMarketDataLiveProbe()
 
   const statusQ = useQuery({
@@ -317,33 +308,6 @@ export function ResearchEnginePage({
   )
   const liveAnalysis = useMemo(() => analyzeResearchEngine(livePackSnap), [livePackSnap])
 
-  async function handleCopyForAgent() {
-    if (copyState === 'busy') return
-    setCopyState('busy')
-    try {
-      const snap = await gatherResearchEngineSnapshot().catch(() => livePackSnap)
-      await navigator.clipboard.writeText(buildResearchEngineAgentPack(snap))
-      setCopyState('copied')
-      window.setTimeout(() => setCopyState('idle'), 2000)
-    } catch {
-      try {
-        await navigator.clipboard.writeText(buildResearchEngineAgentPack(livePackSnap))
-        setCopyState('copied')
-        window.setTimeout(() => setCopyState('idle'), 2000)
-      } catch {
-        setCopyState('error')
-        window.setTimeout(() => setCopyState('idle'), 3000)
-      }
-    }
-  }
-
-  function handleDiagnoseWithAgent() {
-    if (diagnoseBusy || onOpenAgentDesk == null) return
-    setDiagnoseBusy(true)
-    onOpenAgentDesk({ prefill: buildResearchEngineDiagnosePrefill(livePackSnap) })
-    window.setTimeout(() => setDiagnoseBusy(false), 400)
-  }
-
   const refreshAll = () => {
     void statusQ.refetch()
     void husbandryQ.refetch()
@@ -365,30 +329,6 @@ export function ResearchEnginePage({
         tagVariant={verdict.tagVariant as OpsVerdictTagVariant}
         actions={
           <>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={copyState === 'busy'}
-              title="Copy a repair pack (husbandry + signal-health + Dagster) for an AI agent"
-              onClick={() => void handleCopyForAgent()}
-            >
-              {copyState === 'busy'
-                ? 'Exporting…'
-                : copyState === 'copied'
-                  ? 'Copied!'
-                  : copyState === 'error'
-                    ? 'Copy failed'
-                    : 'Copy for Agent'}
-            </Button>
-            {onOpenAgentDesk != null ? (
-              <AgentTriggerButton
-                label="Diagnose with Agent"
-                size="sm"
-                pending={diagnoseBusy}
-                title="Open Agent Desk with Research Engine diagnose prefill (read-first)"
-                onClick={() => void handleDiagnoseWithAgent()}
-              />
-            ) : null}
             <Button asChild size="sm" variant="outline">
               <a href={ELEMENTARY_REPORT_URL} target="_blank" rel="noreferrer">
                 <ExternalLink className="size-3.5" />

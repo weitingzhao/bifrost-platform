@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
 import {
   DenseDataTable,
   DenseTableBody,
@@ -28,21 +27,15 @@ import {
   lastRunTone,
   type FlexKpiTone,
 } from '@/components/flex-query/flexQueryStatusUtils'
-import {
-  buildFlexAgentPack,
-  gatherFlexAgentSnapshot,
-} from '@/components/flex-query/flexAgentPack'
 import { FlexCheckPanel, FLEX_CHECK_QUERY_KEY } from '@/components/flex-query/FlexCheckPanel'
 import { FlexRemediationPanel } from '@/components/flex-query/FlexRemediationPanel'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { OpsVerdictStrip } from '@/components/layout/OpsVerdictStrip'
 import { useFlexQueryLiveProbe } from '@/hooks/useFlexQueryLiveProbe'
 import { parseReadyRatio } from '@/components/market-data/overviewDashModel'
-import type { OpenAgentDeskArg } from '@/lib/agent/openAgentDesk'
 
 type FlexOverviewTabProps = {
   onOpenIngest?: (sub: 'enqueue' | 'manual') => void
-  onOpenAgentDesk?: (arg: OpenAgentDeskArg) => void
 }
 
 function FreshnessKpiSection() {
@@ -216,28 +209,12 @@ function FreshnessKpiSection() {
   )
 }
 
-export function FlexOverviewTab({ onOpenIngest, onOpenAgentDesk }: FlexOverviewTabProps) {
+export function FlexOverviewTab({ onOpenIngest }: FlexOverviewTabProps) {
   const queryClient = useQueryClient()
   const probe = useFlexQueryLiveProbe()
   const mdReach = probe.isLoading ? 'unknown' : probe.probeReach
   const verdict = flexReachToVerdict(mdReach)
   const deployments = probe.status?.deployments ?? []
-  const [copyState, setCopyState] = useState<'idle' | 'busy' | 'copied' | 'error'>('idle')
-
-  async function handleCopyForAgent() {
-    if (copyState === 'busy') return
-    setCopyState('busy')
-    try {
-      const snap = await gatherFlexAgentSnapshot()
-      const text = buildFlexAgentPack(snap)
-      await navigator.clipboard.writeText(text)
-      setCopyState('copied')
-      window.setTimeout(() => setCopyState('idle'), 2000)
-    } catch {
-      setCopyState('error')
-      window.setTimeout(() => setCopyState('idle'), 3000)
-    }
-  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -251,21 +228,6 @@ export function FlexOverviewTab({ onOpenIngest, onOpenAgentDesk }: FlexOverviewT
         summary={probe.summary}
         actions={
           <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={copyState === 'busy'}
-              title="Copy a repair pack (husbandry + probe + KPIs + config) for an AI agent"
-              onClick={() => void handleCopyForAgent()}
-            >
-              {copyState === 'busy'
-                ? 'Exporting…'
-                : copyState === 'copied'
-                  ? 'Copied!'
-                  : copyState === 'error'
-                    ? 'Copy failed'
-                    : 'Copy for Agent'}
-            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -287,7 +249,6 @@ export function FlexOverviewTab({ onOpenIngest, onOpenAgentDesk }: FlexOverviewT
         status={probe.status}
         probeReach={mdReach}
         onOpenIngest={onOpenIngest}
-        onOpenAgentDesk={onOpenAgentDesk}
       />
 
       <FreshnessKpiSection />

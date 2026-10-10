@@ -56,24 +56,21 @@ function bridge(partial: {
   }
 }
 
-describe('agentSignal (seat map — dirty informational)', () => {
-  it('keeps ok when Bridge is reachable with dirty repos', () => {
-    const state = agentSignal(bridge({ dirty: 4 }))
-    expect(state.signal).toBe('ok')
-    expect(state.detail).toContain('Bridge 4 dirty')
-    expect(state.detail).toContain('operator-plane 2/2')
+describe('agentSignal (operator plane only)', () => {
+  it('stays ok when both planes are up, whatever git-bridge reports', () => {
+    for (const gitStatus of ['ok', 'unavailable', 'fail']) {
+      const state = agentSignal(bridge({ gitStatus, dirty: 4 }))
+      expect(state.signal).toBe('ok')
+      expect(state.detail).toContain('operator-plane 2/2')
+      expect(state.detail).not.toContain('Bridge')
+    }
   })
 
-  it('fails when Bridge is down even if dirty count is zero', () => {
-    const state = agentSignal(bridge({ gitStatus: 'fail', dirty: 0 }))
+  it('fails when the operator plane is down', () => {
+    const state = agentSignal(bridge({ runnersOk: false }))
     expect(state.signal).toBe('fail')
-    expect(state.detail).toContain('Bridge down')
-  })
-
-  it('stays ok when Bridge is clean', () => {
-    const state = agentSignal(bridge({ dirty: 0 }))
-    expect(state.signal).toBe('ok')
-    expect(state.detail).toContain('Bridge clean')
+    expect(state.value).toBe('down')
+    expect(state.detail).toContain('operator-plane down')
   })
 })
 
@@ -84,7 +81,6 @@ describe('buildMissionSnapshot + Control Room bays (dirty alone)', () => {
       matrices: [],
     })
     expect(snap.agent.signal).toBe('ok')
-    expect(snap.agent.detail).toContain('Bridge 4 dirty')
     expect(collectMissionDegradationItems(snap).filter(i => i.id === 'Agent')).toHaveLength(0)
 
     // Isolate Agent dirty by seeding a NOMINAL snapshot with dirty agent detail.

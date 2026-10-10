@@ -222,7 +222,6 @@ export function ClusterPage({
               summary={q.clusterSummary}
               serviceReadiness={q.serviceReadinessQuery.data}
               postgresStatus={q.postgresStatusQuery.data}
-              onOpenAgentDesk={opts => onOpenAgentDesk?.(opts)}
               onOpenDefects={onOpenDefects}
               onHealthChange={handleOpsHealthChange}
               onSelectPodNamespace={ns => {

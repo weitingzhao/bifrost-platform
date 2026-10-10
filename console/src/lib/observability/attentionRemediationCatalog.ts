@@ -70,7 +70,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
       cta: 'agent_fix',
       trackReason: 'DaemonSet stuck / mis-scheduled — node or scheduling issue (standby noise excluded)',
       suggestedAction:
-        'Agent Fix: describe DaemonSet + node events; recover node or reschedule pods; verify Desired=Current',
+        'Describe DaemonSet + node events; recover node or reschedule pods; verify Desired=Current',
     }
   }
 
@@ -81,7 +81,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
       cta: 'agent_fix',
       trackReason: 'Pod NotReady — case-by-case diagnosis (standby noise excluded)',
       suggestedAction:
-        'Agent Fix with namespace/workload scope; collect events/logs; escalate if same pod >24h',
+        'Collect events/logs for the namespace/workload; escalate if same pod >24h',
     }
   }
 
@@ -147,7 +147,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
       playbookId: signalId.includes('matrix') || /matrix/i.test(name) ? 'matrix-target-triage' : undefined,
       cta: 'manual',
       trackReason: 'Satellite bus/matrix — inspect on Satellite plane (not cluster node recycle)',
-      suggestedAction: `Open ${route}; triage bus/matrix targets; Agent Fix from Satellite if needed`,
+      suggestedAction: `Open ${route}; triage bus/matrix targets`,
     }
   }
 
@@ -155,7 +155,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
     return {
       track: 'product',
       cta: 'manual',
-      trackReason: 'IB Gateway / subcontractor — plugin plane, not Observability Agent Fix',
+      trackReason: 'IB Gateway / subcontractor — plugin plane, fix it there',
       suggestedAction: 'Open Plugin Gallery / IB Gateway; fix connectivity there',
     }
   }
@@ -184,7 +184,7 @@ export function classifyAttentionItem(input: ClassifyInput): AttentionRemediatio
         track: 'agent-adhoc',
         playbookId: 'pod-failure-triage',
         cta: 'diagnose',
-        trackReason: 'Scrape target health degraded — diagnose before Agent Fix',
+        trackReason: 'Scrape target health degraded — diagnose before restarting',
         suggestedAction: 'Diagnose down targets; fix exporters / ServiceMonitors',
       }
     }
