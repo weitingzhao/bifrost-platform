@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AgentThread } from '@/api/agentThreads'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
@@ -70,7 +71,49 @@ function healthResponse(url: string): Response | null {
   return null
 }
 
-function stubFetch(approvals: (headers: Headers) => Response) {
+function threadsResponse(threads: AgentThread[], hosts: unknown[] = [], extra: Record<string, unknown> = {}): Response {
+  return json({
+    generated_at: '2026-10-10T07:25:00Z',
+    silent_after_seconds: 600,
+    tool_grace_seconds: 120,
+    threads,
+    hosts,
+    ...extra,
+  })
+}
+
+function silentThread(over: Partial<AgentThread> = {}): AgentThread {
+  return {
+    thread: '0b8e2f4a-1111-2222-3333-444455556666',
+    vendor: 'claude',
+    host: 'vision-mac',
+    work: 'W-54',
+    title: 'W-54 thread heartbeat',
+    event: 'before_tool',
+    tool: 'Bash',
+    tool_timeout_s: 120,
+    at: '2026-10-10T07:10:00Z',
+    turn_started_at: '2026-10-10T06:50:00Z',
+    status: 'silent',
+    quiet_seconds: 900,
+    in_turn_seconds: 2100,
+    threshold_seconds: 600,
+    ...over,
+  }
+}
+
+/** The threads list is viewer-level: no bearer, 401. */
+function viewerThreads(threads: AgentThread[]): (headers: Headers) => Response {
+  return headers =>
+    headers.get('Authorization') == null
+      ? json({ error: 'viewer token required' }, 401)
+      : threadsResponse(threads)
+}
+
+function stubFetch(
+  approvals: (headers: Headers) => Response,
+  threads: (headers: Headers) => Response = viewerThreads([]),
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -78,6 +121,7 @@ function stubFetch(approvals: (headers: Headers) => Response) {
       const health = healthResponse(url)
       if (health != null) return health
       if (url.includes('/api/v1/approvals?status=pending')) return approvals(new Headers(init?.headers))
+      if (url.includes('/api/v1/agent/threads')) return threads(new Headers(init?.headers))
       return json({ error: `unexpected ${url}` }, 500)
     }),
   )
@@ -154,5 +198,145 @@ describe('NeedsYouPage', () => {
     )
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+  })
+
+  it('counts silent agent threads toward the total and lists them, but not threads in turn', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
+      viewerThreads([
+        silentThread(),
+        silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn', quiet_seconds: 30 }),
+        silentThread({ thread: 'done', title: 'Done thread', status: 'idle', event: 'turn_end' }),
+      ]),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('2 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('W-54 thread heartbeat')).toBeTruthy()
+    expect(within(group).getByText('Silent 15m')).toBeTruthy()
+    expect(within(group).getByText('in turn 35m · last before_tool Bash (timeout 120s) 15m ago')).toBeTruthy()
+    expect(within(group).queryByText('Busy thread')).toBeNull()
+    expect(within(group).queryByText('Done thread')).toBeNull()
+  })
+
+  it('counts a lost host toward the total and does not count a thread that is waiting', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse(
+          [
+            silentThread({ thread: 'wait', title: 'Waiting on you', status: 'waiting_owner', reason: 'idle_prompt' }),
+            silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn' }),
+          ],
+          [
+            {
+              host: 'mbp',
+              at: '2026-10-10T07:00:00Z',
+              age_seconds: 240,
+              status: 'lost',
+              vendors: [{ vendor: 'codex', wired: false, token: false, monitored: false }],
+            },
+          ],
+        ),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('mbp')).toBeTruthy()
+    expect(within(group).getByText('not monitored: codex')).toBeTruthy()
+    expect(within(group).queryByText('Waiting on you')).toBeNull()
+    expect(within(group).queryByText('Busy thread')).toBeNull()
+  })
+
+  it('counts a capacity refusal younger than one hour, and not one that is exactly an hour old', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse([], [], {
+          threads_refused: 2,
+          last_thread_refusal: '2026-10-10T07:00:00Z',
+        }),
+    )
+    const { unmount } = render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('monitoring is full: 2 threads refused, last at 2026-10-10T07:00:00Z')).toBeTruthy()
+    unmount()
+
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse([], [], {
+          generated_at: '2026-10-10T08:00:00Z',
+          threads_refused: 2,
+          last_thread_refusal: '2026-10-10T07:00:00Z',
+        }),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(screen.queryByText(/monitoring is full/)).toBeNull()
+    expect(screen.queryByText(/monitoring refused/)).toBeNull()
+  })
+
+  it('counts an expected host that has never reported', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      () =>
+        threadsResponse(
+          [],
+          [
+            {
+              host: 'mini',
+              at: '0001-01-01T00:00:00Z',
+              age_seconds: 0,
+              status: 'never_reported',
+              vendors: [{ vendor: 'codex', wired: false, token: false, monitored: false }],
+            },
+          ],
+        ),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('Never reported')).toBeTruthy()
+    expect(within(group).getByText('no heartbeat yet')).toBeTruthy()
+    expect(within(group).queryByText('heartbeat 0s ago')).toBeNull()
+  })
+
+  it('shows Unknown when the agent threads cannot be read, and still lists approvals', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
+      () => json({ error: 'boom' }, 500),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Approve' })).getAllByRole('link')).toHaveLength(1)
+    expect(
+      within(screen.getByRole('region', { name: 'Silent threads' })).getByText(/Could not read agent threads/),
+    ).toBeTruthy()
+  })
+
+  it('reads the threads with a saved approval token when there is no operator token', async () => {
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    const seen: (string | null)[] = []
+    stubFetch(
+      headers =>
+        headers.get('Authorization') === 'Bearer admin-token'
+          ? json(buildApprovalListResponse([]))
+          : json({ error: 'viewer token required' }, 401),
+      headers => {
+        seen.push(headers.get('Authorization'))
+        return viewerThreads([silentThread()])(headers)
+      },
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    expect(seen).toContain('Bearer admin-token')
+    expect(within(screen.getByRole('region', { name: 'Silent threads' })).getByText('W-54 thread heartbeat')).toBeTruthy()
   })
 })
