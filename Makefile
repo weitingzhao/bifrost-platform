@@ -72,6 +72,14 @@ check: test
 # Output: api/bin/platform-api (gitignored). run_platform.py prefers this over `go run`.
 build-api:
 	cd api && go build -o bin/platform-api ./cmd/platform-api
+	@# Same reason as build-operator-plane: Go's linker names every darwin binary
+	@# "a.out", and macOS grants local-network access per executable — so with
+	@# that identifier platform-api cannot be found in the Local Network pane at
+	@# all, and its reach into 192.168.10.x fails as "no route to host".
+	@if command -v codesign >/dev/null 2>&1 && [ "$$(uname)" = "Darwin" ]; then \
+		codesign --force --sign - --identifier com.bifrost.platform-api api/bin/platform-api && \
+		echo "Signed api/bin/platform-api as com.bifrost.platform-api"; \
+	fi
 	@echo "Built api/bin/platform-api"
 
 # The out-of-band operator plane (L-1). Same module, no cluster dependency — it
