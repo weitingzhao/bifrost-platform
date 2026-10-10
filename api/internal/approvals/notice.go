@@ -64,6 +64,9 @@ const (
 // write before sending. A send whose deliveries all failed releases the claim
 // so the next pass retries. A skipped send (no relay configured) is kept, so
 // a missing relay does not spin. Two workers racing on one store send once.
+// Reminders are retried and may arrive twice: the claim expires, a slow relay
+// can accept the push and still look failed here, and there is no stable id
+// for the relay to drop the duplicate.
 func (s *Service) deliverReminder(ctx context.Context, kind string, rec Approval) {
 	now := s.clock()
 	claimID, ok, err := s.claimReminder(rec.ID, kind, now)
