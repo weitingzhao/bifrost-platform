@@ -20,8 +20,6 @@ func fakePlatform(t *testing.T, override map[string]string) *httptest.Server {
 		"/api/v1/gitops/apps": `{"reachability":"ok","detail":"argocd-server ready","apps":[
 			{"name":"app-a","sync_status":"Synced","health_status":"Healthy"},
 			{"name":"app-b","sync_status":"Synced","health_status":"Progressing"}]}`,
-		"/api/v1/agent/bridge": `{"runners":[{"url":"http://r1","role":"primary","status":"ok"},{"url":"http://r2","role":"standby","status":"ok"}],
-			"git_bridge":{"status":"ok"},"satellite_probe_bridge":{"status":"not_configured"}}`,
 		"/api/v1/cluster/postgres/backup-status": `{"signal":"ok","detail":"daily · last completed 1h ago"}`,
 		"/api/v1/matrix": `{"matrices":[
 			{"environment":"stg","targets":[{"id":"postgres","reachability":"fail"}]},
@@ -93,7 +91,6 @@ func TestProberCoversTheCatalogExceptHusbandry(t *testing.T) {
 	want := map[string]string{
 		"cluster-api": SignalOK, "nodes-ready": SignalOK, "failing-pods": SignalOK,
 		"platform-api": SignalOK, "platform-console": SignalOK, "argo-apps": SignalOK,
-		"runners-ha": SignalOK, "git-bridge": SignalOK, "mac-probe-bridge": SignalUnknown,
 		"db-backup-fresh": SignalOK, "postgres": SignalOK, "redis": SignalOK,
 		"nginx-edge": SignalOK, "trade-apis": SignalOK, "deliver-pipeline": SignalOK,
 		"stg-smoke": SignalOK, "massive-polygon": SignalOK, "ib-feed": SignalUnknown,
@@ -123,14 +120,12 @@ func TestProberRedWhenTheClusterSaysSo(t *testing.T) {
 		"/api/v1/cluster": `{"api_reachability":"ok","nodes_ready":4,"nodes_total":5,"failing_pods":2,
 			"failing_pod_details":[{"namespace":"ns","name":"p1","reason":"CrashLoopBackOff"}]}`,
 		"/api/v1/gitops/apps":                    `{"reachability":"ok","apps":[{"name":"app-a","sync_status":"OutOfSync","health_status":"Healthy"}]}`,
-		"/api/v1/agent/bridge":                   `{"runners":[{"role":"primary","status":"unavailable"},{"role":"standby","status":"ok"}],"git_bridge":{"status":"unavailable","error":"dial tcp: refused"},"satellite_probe_bridge":{"status":"ok"}}`,
 		"/api/v1/cluster/postgres/backup-status": `{"signal":"fail","detail":"last completed 60h ago"}`,
 	})
 	defer srv.Close()
 	got := bySignalID(testProber(srv).Probe(context.Background()))
 	cases := map[string]string{
 		"nodes-ready": SignalDegraded, "failing-pods": SignalDegraded, "argo-apps": SignalDegraded,
-		"runners-ha": SignalDegraded, "git-bridge": SignalFail, "mac-probe-bridge": SignalOK,
 		"db-backup-fresh": SignalFail,
 	}
 	for id, sig := range cases {
@@ -191,18 +186,18 @@ func TestProberDbInitOnlyDriftIsOK(t *testing.T) {
 	}
 }
 
-func TestProberUnsetBridgesAreLocalOnly(t *testing.T) {
-	srv := fakePlatform(t, map[string]string{
-		"/api/v1/agent/bridge": `{"runners":[{"role":"primary","status":"ok"}],"git_bridge":{"status":"not_configured"},"satellite_probe_bridge":{"status":"not_configured"}}`,
-	})
+func TestProberSkipsRetiredAgentItems(t *testing.T) {
+	// Runners and Hermes are retired; git-bridge and the Mac probe bridge are
+	// laptop tools PROD does not depend on (ADR §4).
+	srv := fakePlatform(t, nil)
 	defer srv.Close()
 	got := bySignalID(testProber(srv).Probe(context.Background()))
-	for _, id := range []string{"git-bridge", "mac-probe-bridge"} {
-		if got[id].Signal != SignalUnknown {
-			t.Errorf("%s = %s, unset bridge must be unknown", id, got[id].Signal)
+	for _, id := range []string{"runners-ha", "git-bridge", "mac-probe-bridge", "hermes-tooling"} {
+		if _, ok := got[id]; ok {
+			t.Errorf("prober wrote retired item %s", id)
 		}
-		if got[id].Detail != localOnlyBridgeDetail {
-			t.Errorf("%s detail = %q, want %q", id, got[id].Detail, localOnlyBridgeDetail)
+		if _, ok := ItemByID(id); ok {
+			t.Errorf("catalog still lists retired item %s", id)
 		}
 	}
 }

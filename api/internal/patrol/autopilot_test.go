@@ -247,12 +247,13 @@ func TestAutopilotThrottlePreventsReRestart(t *testing.T) {
 	}
 }
 
-func TestAutopilotObserveManualSkipped(t *testing.T) {
+func TestAutopilotSkipsRetiredCatalogItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/api/v1/checklist/signals" {
 			w.Write(signalsJSON([]checklist.ItemSignal{
-				{ItemID: "mac-probe-bridge", Signal: "fail", Detail: "unreachable"},
+				{ItemID: "runners-ha", Signal: "fail", Detail: "1/2"},
+				{ItemID: "git-bridge", Signal: "fail", Detail: "unhealthy"},
 			}))
 			return
 		}
@@ -269,8 +270,11 @@ func TestAutopilotObserveManualSkipped(t *testing.T) {
 		TimeoutSeconds: 15,
 	}, TriggerCron, "", nil)
 
-	if !strings.Contains(out.Evidence, "observe/manual") {
-		t.Fatalf("manual items should be logged as skipped:\n%s", out.Evidence)
+	if strings.Count(out.Evidence, "unknown catalog item") != 2 {
+		t.Fatalf("retired items should be skipped as unknown:\n%s", out.Evidence)
+	}
+	if strings.Contains(out.Evidence, "rollout-restart") || strings.Contains(out.Evidence, "FIX ERROR") {
+		t.Fatalf("retired items must not be acted on:\n%s", out.Evidence)
 	}
 }
 
@@ -470,7 +474,7 @@ func TestAutopilotObserveOnlyIsSkippedNotFailed(t *testing.T) {
 				{ItemID: "postgres", Signal: "fail", Detail: "CNPG degraded"},
 				{ItemID: "deliver-pipeline", Signal: "fail", Detail: "stale"},
 				{ItemID: "stg-smoke", Signal: "degraded", Detail: "1 target"},
-				{ItemID: "runners-ha", Signal: "fail", Detail: "1/2"},
+				{ItemID: "cluster-api", Signal: "fail", Detail: "api_reachability=fail"},
 			}))
 			return
 		}

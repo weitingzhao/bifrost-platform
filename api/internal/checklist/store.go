@@ -42,13 +42,24 @@ func (s *Store) loadLocked() (*FileRecord, error) {
 	if err := json.Unmarshal(data, &rec); err != nil {
 		return nil, fmt.Errorf("parse checklist signals: %w", err)
 	}
-	if rec.Signals == nil {
-		rec.Signals = []ItemSignal{}
-	}
+	rec.Signals = catalogSignals(rec.Signals)
 	if rec.Version == "" {
 		rec.Version = stateVersion
 	}
 	return &rec, nil
+}
+
+// catalogSignals keeps only items still in CatalogItems. Items removed from the
+// catalog (runners-ha, hermes-tooling, …) otherwise stay in the state file
+// forever: Merge carries every earlier item forward, and nothing writes them again.
+func catalogSignals(in []ItemSignal) []ItemSignal {
+	out := make([]ItemSignal, 0, len(in))
+	for _, sig := range in {
+		if _, ok := ItemByID(sig.ItemID); ok {
+			out = append(out, sig)
+		}
+	}
+	return out
 }
 
 func (s *Store) saveLocked(rec *FileRecord) error {

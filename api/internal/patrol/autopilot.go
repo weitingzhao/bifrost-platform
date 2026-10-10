@@ -219,8 +219,6 @@ func plannedFix(itemID string) string {
 		return "restart the owners of the failing pods"
 	case "platform-api", "platform-console":
 		return "rollout restart " + itemID + " (last, after the report)"
-	case "git-bridge":
-		return "restart git-bridge"
 	case "nodes-ready":
 		return "uncordon or wake the NotReady nodes"
 	case "argo-apps":
@@ -246,11 +244,6 @@ func (a *autopilotDispatcher) executeFixRoute(ctx context.Context, meta checklis
 		return a.selfRestart(ctx, "platform-api")
 	case "platform-console":
 		return a.selfRestart(ctx, "platform-console")
-	case "git-bridge":
-		if isInCluster() {
-			return a.rolloutRestart(ctx, resolvePlatformNamespace(), "git-bridge")
-		}
-		return a.restartDevSession(ctx, "git-bridge")
 	case "nodes-ready":
 		return a.fixNodesReady(ctx, sig)
 	case "argo-apps":
@@ -278,8 +271,6 @@ func (a *autopilotDispatcher) executeFixRoute(ctx context.Context, meta checklis
 		return "observe-only", 0, fmt.Errorf("stg-smoke fix requires investigation")
 	case "massive-polygon":
 		return a.rolloutRestart(ctx, resolveMarketDataNamespace(), "polygon-worker-stocks")
-	case "runners-ha":
-		return "observe-only", 0, fmt.Errorf("runners-ha fix requires manual runner restart")
 	default:
 		return "skip", 0, fmt.Errorf("no autopilot fix mapped for %s", meta.ID)
 	}

@@ -219,48 +219,6 @@ func (p *Prober) Probe(ctx context.Context) []ItemSignal {
 		}
 	}
 
-	// runners-ha · git-bridge · mac-probe-bridge
-	var br struct {
-		Runners []struct {
-			URL    string `json:"url"`
-			Role   string `json:"role"`
-			Status string `json:"status"`
-		} `json:"runners"`
-		GitBridge struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		} `json:"git_bridge"`
-		ProbeBridge struct {
-			Status string `json:"status"`
-			Error  string `json:"error"`
-		} `json:"satellite_probe_bridge"`
-	}
-	if err := p.getJSON(ctx, "/api/v1/agent/bridge", &br); err != nil {
-		for _, id := range []string{"runners-ha", "git-bridge", "mac-probe-bridge"} {
-			add(id, SignalUnknown, "GET /api/v1/agent/bridge: "+err.Error())
-		}
-	} else {
-		okN, parts := 0, []string{}
-		for _, r := range br.Runners {
-			if r.Status == "ok" {
-				okN++
-			}
-			parts = append(parts, r.Role+" "+r.Status)
-		}
-		switch {
-		case len(br.Runners) == 0:
-			add("runners-ha", SignalUnknown, "no runners configured")
-		case okN == len(br.Runners):
-			add("runners-ha", SignalOK, strings.Join(parts, " · "))
-		case okN > 0:
-			add("runners-ha", SignalDegraded, strings.Join(parts, " · "))
-		default:
-			add("runners-ha", SignalFail, strings.Join(parts, " · "))
-		}
-		add("git-bridge", bridgeSignal(br.GitBridge.Status), bridgeDetail(br.GitBridge.Status, "git_bridge", br.GitBridge.Error))
-		add("mac-probe-bridge", bridgeSignal(br.ProbeBridge.Status), bridgeDetail(br.ProbeBridge.Status, "probe_bridge", br.ProbeBridge.Error))
-	}
-
 	// db-backup-fresh
 	var bk struct {
 		Signal string `json:"signal"`
@@ -444,27 +402,6 @@ func reachSignal(r string) string {
 	default:
 		return SignalUnknown
 	}
-}
-
-// localOnlyBridgeDetail is the checklist text when a workstation bridge is not
-// configured. Git Bridge and the Mac probe bridge are local tools, not a
-// cluster feature, so an unset URL is unknown rather than a failure.
-const localOnlyBridgeDetail = "local-only (dev workstation)"
-
-// bridgeSignal: a bridge that is not configured for this seat is unknown, not
-// a failure.
-func bridgeSignal(status string) string {
-	if strings.EqualFold(strings.TrimSpace(status), "not_configured") {
-		return SignalUnknown
-	}
-	return reachSignal(status)
-}
-
-func bridgeDetail(status, head, err string) string {
-	if strings.EqualFold(strings.TrimSpace(status), "not_configured") {
-		return localOnlyBridgeDetail
-	}
-	return joinDetail(head+" "+status, err)
 }
 
 func truncate(s string, n int) string {
