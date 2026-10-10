@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 )
 
@@ -16,12 +15,24 @@ import (
 // a comment). Dropping, renaming, changing a type or a constraint, rewriting
 // rows, or changing grants and owners stays tier D.
 //
-// The check is an allow-list of statements, not a textual scan of lines.
-// A lexer splits the file (line comments, nested block comments, quotes and
-// dollar quotes); whitespace and comments do not by themselves make a change.
-// Only a path ending in ".sql" is classified, and a migrations/ directory or
-// a db_init* name is never classified. The policy's DDL paths also match
-// *.py, db_init*, YAML jobs and migrations/**; those always wait for the Owner.
+// The check is an allow-list of statements, not a scan for forbidden words.
+// A statement from before is still present only when it is textually the
+// same after comments are removed and each run of whitespace outside quotes
+// is collapsed to one space. Whitespace that was present between two tokens
+// stays present; whitespace that was absent stays absent. Nothing is
+// case-folded. Whitespace inside quotes is kept as written.
+//
+// The lexer refuses input that PostgreSQL sessions do not all read the same
+// way: a U& unicode string or identifier (a lone U or u, an ampersand and a
+// quote, even when whitespace or comments sit between those pieces), a
+// backslash in an ordinary non-E string, any non-ASCII byte outside a quoted
+// string, a quoted identifier or a comment, and a NUL byte anywhere. Keyword
+// matching for the allow-list is ASCII-only.
+//
+// Added columns accept only an explicit list of built-in types. Only a path
+// ending in ".sql" is classified, and a migrations/ directory or a db_init*
+// name is never classified. The policy's DDL paths also match *.py, db_init*,
+// YAML jobs and migrations/**; those always wait for the Owner.
 //
 // ClassifyDDL compares a DDL file before and after a release. ok is true when
 // the change is allow-listed. A file that did not exist before is compared
@@ -93,36 +104,21 @@ type token struct {
 	kind   tokKind
 	text   string
 	prefix string // string introducer as written: "", "E"/"e", or "$tag$"
-}
-
-func (a token) equal(b token) bool {
-	if a.kind != b.kind || a.prefix != b.prefix {
-		return false
-	}
-	if a.kind == kindWord {
-		ak, bk := isKeyword(a.text), isKeyword(b.text)
-		if ak || bk {
-			return ak && bk && strings.EqualFold(a.text, b.text)
-		}
-	}
-	return a.text == b.text
+	start  int
+	end    int
 }
 
 type statement struct {
 	raw  string
+	norm string
 	toks []token
+	semi int // index of ';' in the source, or -1
 }
 
+// stmtEqual is textual. Comments are already gone from norm, whitespace
+// outside quotes is already collapsed, and case is not folded.
 func stmtEqual(a, b statement) bool {
-	if len(a.toks) != len(b.toks) {
-		return false
-	}
-	for i := range a.toks {
-		if !a.toks[i].equal(b.toks[i]) {
-			return false
-		}
-	}
-	return true
+	return a.norm == b.norm
 }
 
 func show(st statement) string {
@@ -147,35 +143,82 @@ var (
 	errUntermDollar  = errors.New("unterminated dollar quote")
 	errBadDollar     = errors.New("invalid dollar quote")
 	errUntermStmt    = errors.New("unterminated statement")
+	errUnicode       = errors.New("unicode escape string or identifier")
+	errBackslash     = errors.New("backslash in an ordinary string")
+	errNonASCII      = errors.New("non-ASCII outside a quoted string, quoted identifier, or comment")
+	errNUL           = errors.New("NUL byte")
+	errBadUTF8       = errors.New("invalid UTF-8")
 )
+
+// normText collapses whitespace outside quotes and remembers whether any
+// whitespace sat between tokens. Token bytes are copied unchanged.
+type normText struct {
+	b         strings.Builder
+	needSpace bool
+	saw       bool
+}
+
+func (n *normText) reset() {
+	n.b.Reset()
+	n.needSpace = false
+	n.saw = false
+}
+
+func (n *normText) space() {
+	if n.saw {
+		n.needSpace = true
+	}
+}
+
+func (n *normText) write(s string) {
+	if n.needSpace {
+		n.b.WriteByte(' ')
+		n.needSpace = false
+	}
+	n.b.WriteString(s)
+	n.saw = true
+}
 
 func splitSQL(text string) ([]statement, error) {
 	s := text
 	var stmts []statement
 	var toks []token
+	var norm normText
 	start := -1
 	lineBare := true
-	emit := func(kind tokKind, text, prefix string, tokStart int) {
+	emit := func(kind tokKind, text, prefix string, tokStart, tokEnd int) {
 		if start < 0 {
 			start = tokStart
 		}
-		toks = append(toks, token{kind: kind, text: text, prefix: prefix})
+		norm.write(s[tokStart:tokEnd])
+		toks = append(toks, token{kind: kind, text: text, prefix: prefix, start: tokStart, end: tokEnd})
 		lineBare = false
 	}
 	finish := func(semi int) {
-		if start >= 0 {
-			stmts = append(stmts, statement{raw: strings.TrimSpace(s[start:semi]), toks: toks})
+		if start >= 0 && len(toks) > 0 {
+			stmts = append(stmts, statement{
+				raw:  strings.TrimSpace(s[start : semi+1]),
+				norm: norm.b.String(),
+				toks: toks,
+				semi: semi,
+			})
 		}
 		toks = nil
 		start = -1
+		norm.reset()
 	}
 	for i := 0; i < len(s); {
 		c := s[i]
+		if c == 0 {
+			return nil, errNUL
+		}
 		if c == ' ' || c == '\t' || c == '\f' || c == '\v' {
+			norm.space()
 			i++
 			continue
 		}
 		if c == '\n' || c == '\r' {
+			norm.space()
 			if c == '\r' && i+1 < len(s) && s[i+1] == '\n' {
 				i += 2
 			} else {
@@ -185,10 +228,11 @@ func splitSQL(text string) ([]statement, error) {
 			continue
 		}
 		if strings.HasPrefix(s[i:], "--") {
-			i += 2
-			for i < len(s) && s[i] != '\n' && s[i] != '\r' {
-				i++
+			j, err := scanLineComment(s, i)
+			if err != nil {
+				return nil, err
 			}
+			i = j
 			continue
 		}
 		if strings.HasPrefix(s[i:], "/*") {
@@ -198,6 +242,9 @@ func splitSQL(text string) ([]statement, error) {
 			}
 			i = j
 			continue
+		}
+		if c >= 0x80 {
+			return nil, errNonASCII
 		}
 		if lineBare && c == '#' {
 			return nil, fmt.Errorf("not SQL %q", clip(strings.TrimSpace(restOfLine(s, i))))
@@ -210,59 +257,72 @@ func splitSQL(text string) ([]statement, error) {
 		}
 		switch c {
 		case '\'':
-			body, j, err := scanQuoted(s, i, '\'', errUntermString)
+			body, j, err := scanQuoted(s, i, '\'', errUntermString, true)
 			if err != nil {
 				return nil, err
 			}
-			emit(kindString, body, "", i)
+			emit(kindString, body, "", i, j)
 			i = j
 		case '"':
-			body, j, err := scanQuoted(s, i, '"', errUntermIdent)
+			body, j, err := scanQuoted(s, i, '"', errUntermIdent, false)
 			if err != nil {
 				return nil, err
 			}
-			emit(kindQIdent, body, "", i)
+			emit(kindQIdent, body, "", i, j)
 			i = j
 		case '$':
 			prefix, body, j, err := scanDollar(s, i)
 			if err != nil {
 				return nil, err
 			}
-			emit(kindString, body, prefix, i)
+			emit(kindString, body, prefix, i, j)
 			i = j
 		case '(', ')', '[', ']', ',', '.', ';':
 			if c == '.' && i+1 < len(s) && isDigit(s[i+1]) {
 				j := readNumber(s, i)
-				emit(kindNumber, s[i:j], "", i)
+				emit(kindNumber, s[i:j], "", i, j)
 				i = j
 				continue
 			}
 			if c == ';' {
-				finish(i + 1)
+				if norm.saw {
+					norm.write(";")
+				}
+				finish(i)
 				i++
 				continue
 			}
-			emit(kindOp, s[i:i+1], "", i)
+			emit(kindOp, s[i:i+1], "", i, i+1)
 			i++
 		default:
 			if isDigit(c) {
 				j := readNumber(s, i)
-				emit(kindNumber, s[i:j], "", i)
+				emit(kindNumber, s[i:j], "", i, j)
 				i = j
 				continue
 			}
-			if r, _ := utf8.DecodeRuneInString(s[i:]); identStart(r) {
-				j := readIdent(s, i)
-				if (s[i:j] == "E" || s[i:j] == "e") && j < len(s) && s[j] == '\'' {
+			if isASCIIIdentStart(c) {
+				j := readASCIIIdent(s, i)
+				word := s[i:j]
+				if isSingleU(word) {
+					yes, err := unicodeIntro(s, j)
+					if err != nil {
+						return nil, err
+					}
+					if yes {
+						return nil, errUnicode
+					}
+				}
+				if (word == "E" || word == "e") && j < len(s) && s[j] == '\'' {
 					body, n, err := scanEString(s, j)
 					if err != nil {
 						return nil, err
 					}
-					emit(kindString, body, s[i:j], i)
+					emit(kindString, body, word, i, n)
 					i = n
 					continue
 				}
-				emit(kindWord, s[i:j], "", i)
+				emit(kindWord, word, "", i, j)
 				i = j
 				continue
 			}
@@ -271,7 +331,7 @@ func splitSQL(text string) ([]statement, error) {
 				for j < len(s) && isOpByte(s[j]) {
 					j++
 				}
-				emit(kindOp, s[i:j], "", i)
+				emit(kindOp, s[i:j], "", i, j)
 				i = j
 				continue
 			}
@@ -292,9 +352,28 @@ func restOfLine(s string, i int) string {
 	return s[i:j]
 }
 
+func scanLineComment(s string, i int) (int, error) {
+	body := i + 2
+	i = body
+	for i < len(s) && s[i] != '\n' && s[i] != '\r' {
+		if s[i] == 0 {
+			return i, errNUL
+		}
+		i++
+	}
+	if !utf8.ValidString(s[body:i]) {
+		return i, errBadUTF8
+	}
+	return i, nil
+}
+
 func scanBlock(s string, i int) (int, error) {
+	body := i
 	depth := 1
 	for i < len(s) {
+		if s[i] == 0 {
+			return i, errNUL
+		}
 		if i+1 < len(s) && s[i] == '/' && s[i+1] == '*' {
 			depth++
 			i += 2
@@ -304,6 +383,9 @@ func scanBlock(s string, i int) (int, error) {
 			depth--
 			i += 2
 			if depth == 0 {
+				if !utf8.ValidString(s[body : i-2]) {
+					return i, errBadUTF8
+				}
 				return i, nil
 			}
 			continue
@@ -313,10 +395,16 @@ func scanBlock(s string, i int) (int, error) {
 	return i, errUntermComment
 }
 
-func scanQuoted(s string, i int, quote byte, unterm error) (string, int, error) {
+func scanQuoted(s string, i int, quote byte, unterm error, ordinary bool) (string, int, error) {
 	var b strings.Builder
 	i++
 	for i < len(s) {
+		if s[i] == 0 {
+			return "", i, errNUL
+		}
+		if ordinary && s[i] == '\\' {
+			return "", i, errBackslash
+		}
 		if s[i] == quote {
 			if i+1 < len(s) && s[i+1] == quote {
 				b.WriteByte(quote)
@@ -324,7 +412,11 @@ func scanQuoted(s string, i int, quote byte, unterm error) (string, int, error) 
 				i += 2
 				continue
 			}
-			return b.String(), i + 1, nil
+			body := b.String()
+			if !utf8.ValidString(body) {
+				return "", i, errBadUTF8
+			}
+			return body, i + 1, nil
 		}
 		b.WriteByte(s[i])
 		i++
@@ -336,9 +428,15 @@ func scanEString(s string, i int) (string, int, error) {
 	var b strings.Builder
 	i++
 	for i < len(s) {
+		if s[i] == 0 {
+			return "", i, errNUL
+		}
 		if s[i] == '\\' {
 			if i+1 >= len(s) {
 				return "", i, errUntermString
+			}
+			if s[i+1] == 0 {
+				return "", i + 1, errNUL
 			}
 			b.WriteByte('\\')
 			b.WriteByte(s[i+1])
@@ -351,7 +449,11 @@ func scanEString(s string, i int) (string, int, error) {
 				i += 2
 				continue
 			}
-			return b.String(), i + 1, nil
+			body := b.String()
+			if !utf8.ValidString(body) {
+				return "", i, errBadUTF8
+			}
+			return body, i + 1, nil
 		}
 		b.WriteByte(s[i])
 		i++
@@ -365,12 +467,18 @@ func scanDollar(s string, i int) (prefix, body string, next int, err error) {
 	}
 	j := i + 1
 	if j < len(s) && s[j] != '$' {
+		if s[j] >= 0x80 {
+			return "", "", j, errNonASCII
+		}
 		if !isASCIIIdentStart(s[j]) {
 			return "", "", i, errBadDollar
 		}
 		j++
 		for j < len(s) && isTagCont(s[j]) {
 			j++
+		}
+		if j < len(s) && s[j] >= 0x80 {
+			return "", "", j, errNonASCII
 		}
 		if j >= len(s) || s[j] != '$' {
 			return "", "", i, errBadDollar
@@ -385,7 +493,105 @@ func scanDollar(s string, i int) (prefix, body string, next int, err error) {
 	if k < 0 {
 		return "", "", i, errUntermDollar
 	}
-	return prefix, s[j : j+k], j + k + len(prefix), nil
+	body = s[j : j+k]
+	if strings.IndexByte(body, 0) >= 0 {
+		return "", "", i, errNUL
+	}
+	if !utf8.ValidString(body) {
+		return "", "", i, errBadUTF8
+	}
+	return prefix, body, j + k + len(prefix), nil
+}
+
+// unicodeIntro reports whether a lone U that ended at i introduces a U&'…'
+// or U&"…" form. Whitespace and comments may sit between U, & and the quote.
+func unicodeIntro(s string, i int) (bool, error) {
+	j, err := skipSep(s, i)
+	if err != nil || j >= len(s) || s[j] != '&' {
+		return false, err
+	}
+	j, err = skipSep(s, j+1)
+	if err != nil || j >= len(s) {
+		return false, err
+	}
+	return s[j] == '\'' || s[j] == '"', nil
+}
+
+func skipSep(s string, i int) (int, error) {
+	for i < len(s) {
+		if s[i] == 0 {
+			return i, errNUL
+		}
+		if s[i] == ' ' || s[i] == '\t' || s[i] == '\f' || s[i] == '\v' || s[i] == '\n' || s[i] == '\r' {
+			if s[i] == '\r' && i+1 < len(s) && s[i+1] == '\n' {
+				i += 2
+				continue
+			}
+			i++
+			continue
+		}
+		if strings.HasPrefix(s[i:], "--") {
+			j, err := scanLineComment(s, i)
+			if err != nil {
+				return i, err
+			}
+			i = j
+			continue
+		}
+		if strings.HasPrefix(s[i:], "/*") {
+			j, err := scanBlock(s, i+2)
+			if err != nil {
+				return i, err
+			}
+			i = j
+			continue
+		}
+		break
+	}
+	return i, nil
+}
+
+func isSingleU(word string) bool { return word == "U" || word == "u" }
+
+func statementTexts(sql string) ([]string, error) {
+	stmts, err := splitSQL(sql)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(stmts))
+	for _, st := range stmts {
+		out = append(out, st.raw)
+	}
+	return out, nil
+}
+
+// mutationPoints lists indexes where two tokens touch, including a semicolon
+// that immediately follows the last token, and indexes of ASCII letters that
+// belong to tokens. Comment text is not included.
+func mutationPoints(sql string) (gaps, letters []int, err error) {
+	stmts, err := splitSQL(sql)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, st := range stmts {
+		for i := 0; i+1 < len(st.toks); i++ {
+			if st.toks[i].end == st.toks[i+1].start {
+				gaps = append(gaps, st.toks[i].end)
+			}
+		}
+		if n := len(st.toks); n > 0 && st.semi == st.toks[n-1].end {
+			gaps = append(gaps, st.semi)
+		}
+		for _, tok := range st.toks {
+			for i := tok.start; i < tok.end && i < len(sql); i++ {
+				c := sql[i]
+				if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') {
+					letters = append(letters, i)
+				}
+			}
+		}
+	}
+	return gaps, letters, nil
 }
 
 func readNumber(s string, i int) int {
@@ -421,23 +627,14 @@ func readNumber(s string, i int) int {
 	return i
 }
 
-func readIdent(s string, i int) int {
-	_, w := utf8.DecodeRuneInString(s[i:])
-	i += w
-	for i < len(s) {
-		r, w := utf8.DecodeRuneInString(s[i:])
-		if (r == utf8.RuneError && w == 1) || !identCont(r) {
-			break
-		}
-		i += w
+func readASCIIIdent(s string, i int) int {
+	i++
+	for i < len(s) && isTagCont(s[i]) {
+		i++
 	}
 	return i
 }
 
-func identStart(r rune) bool { return r == '_' || unicode.IsLetter(r) }
-func identCont(r rune) bool {
-	return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
-}
 func isDigit(b byte) bool { return b >= '0' && b <= '9' }
 func isASCIIIdentStart(b byte) bool {
 	return b == '_' || (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
@@ -453,7 +650,28 @@ func isOpByte(b byte) bool {
 }
 
 func wordIs(t token, w string) bool {
-	return t.kind == kindWord && strings.EqualFold(t.text, w)
+	return t.kind == kindWord && asciiFoldEq(t.text, w)
+}
+
+// asciiFoldEq compares ASCII letters without Unicode case folding.
+// A non-ASCII byte never matches.
+func asciiFoldEq(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 'A' && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if cb >= 'A' && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb || ca > 127 {
+			return false
+		}
+	}
+	return true
 }
 
 func hasWord(st statement, w string) bool {
@@ -536,8 +754,8 @@ func allowStatement(st statement) (bool, string) {
 	if len(st.toks) == 0 || st.toks[0].kind != kindWord {
 		return notAllowed(st)
 	}
-	switch strings.ToUpper(st.toks[0].text) {
-	case "CREATE":
+	switch {
+	case wordIs(st.toks[0], "CREATE"):
 		if len(st.toks) >= 2 && wordIs(st.toks[1], "TABLE") {
 			return allowCreateTable(st)
 		}
@@ -545,9 +763,9 @@ func allowStatement(st statement) (bool, string) {
 			return allowCreateIndex(st)
 		}
 		return notAllowed(st)
-	case "ALTER":
+	case wordIs(st.toks[0], "ALTER"):
 		return allowAlterTable(st)
-	case "COMMENT":
+	case wordIs(st.toks[0], "COMMENT"):
 		return allowComment(st)
 	default:
 		return notAllowed(st)
@@ -577,7 +795,7 @@ func forbiddenWords(st statement, words []string, pairs [][2]string) bool {
 			continue
 		}
 		for _, w := range words {
-			if strings.EqualFold(t.text, w) {
+			if asciiFoldEq(t.text, w) {
 				return true
 			}
 		}
@@ -589,7 +807,7 @@ func forbiddenWords(st statement, words []string, pairs [][2]string) bool {
 			continue
 		}
 		for _, pr := range pairs {
-			if strings.EqualFold(t.text, pr[0]) && strings.EqualFold(n.text, pr[1]) {
+			if asciiFoldEq(t.text, pr[0]) && asciiFoldEq(n.text, pr[1]) {
 				return true
 			}
 		}
@@ -706,74 +924,120 @@ func (p *parser) eatColConstraint() int {
 	}
 }
 
+// eatType accepts only an unqualified built-in from the allow-list, with the
+// modifiers that type is documented to take, and at most one [] suffix.
 func (p *parser) eatType() bool {
-	t, ok := p.peek()
-	if !ok || !typeStart(t) {
-		return false
-	}
-	if !p.eatQual(1, 2) {
-		return false
-	}
-	if p.peekOp("(") && !p.eatTypmod() {
-		return false
-	}
-	for p.peekOp("[") {
-		p.i++
-		if !p.eatOp("]") {
+	switch {
+	case p.peekWord("double"):
+		if !p.eatWord("double") || !p.eatWord("precision") || p.peekOp("(") {
 			return false
 		}
+		return p.eatOneArray()
+	case p.peekWord("character"):
+		if !p.eatWord("character") {
+			return false
+		}
+		if p.peekWord("varying") {
+			p.i++
+		}
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return p.eatOneArray()
+	case p.peekWord("varchar"), p.peekWord("char"):
+		p.i++
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return p.eatOneArray()
+	case p.peekWord("numeric"), p.peekWord("decimal"):
+		p.i++
+		if p.peekOp("(") && !p.eatNumericMod() {
+			return false
+		}
+		return p.eatOneArray()
+	case p.peekWord("timestamp"), p.peekWord("time"):
+		p.i++
+		if p.peekWord("with") || p.peekWord("without") {
+			which := "with"
+			if p.peekWord("without") {
+				which = "without"
+			}
+			if !p.eatWord(which) || !p.eatWord("time") || !p.eatWord("zone") || p.peekOp("(") {
+				return false
+			}
+			return p.eatOneArray()
+		}
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return p.eatOneArray()
+	case p.peekWord("timestamptz"), p.peekWord("timetz"):
+		p.i++
+		if p.peekOp("(") && !p.eatParenUint() {
+			return false
+		}
+		return p.eatOneArray()
+	default:
+		if !p.peekPlainType() {
+			return false
+		}
+		p.i++
+		if p.peekOp("(") {
+			return false
+		}
+		return p.eatOneArray()
+	}
+}
+
+func (p *parser) peekPlainType() bool {
+	for _, w := range []string{
+		"smallint", "integer", "int", "bigint", "boolean", "bool", "text",
+		"uuid", "date", "json", "jsonb", "bytea", "real",
+	} {
+		if p.peekWord(w) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *parser) eatOneArray() bool {
+	if !p.peekOp("[") {
+		return true
+	}
+	if !p.eatOp("[") || !p.eatOp("]") || p.peekOp("[") {
+		return false
 	}
 	return true
 }
 
-func typeStart(t token) bool {
-	if t.kind == kindQIdent {
-		return t.text != ""
-	}
-	if t.kind != kindWord {
-		return false
-	}
-	switch strings.ToUpper(t.text) {
-	case "NOT", "NULL", "DEFAULT", "PRIMARY", "UNIQUE", "CHECK", "CONSTRAINT",
-		"REFERENCES", "FOREIGN", "GENERATED", "COLLATE", "LIKE", "TABLESPACE",
-		"INHERITS", "AS", "PARTITION", "ARRAY":
-		return false
-	default:
-		return true
-	}
+func (p *parser) eatParenUint() bool {
+	return p.eatOp("(") && p.eatUint() && p.eatOp(")")
 }
 
-func (p *parser) eatTypmod() bool {
-	if !p.eatOp("(") || !p.eatTypmodItem() {
+func (p *parser) eatNumericMod() bool {
+	if !p.eatOp("(") || !p.eatUint() {
 		return false
 	}
-	for p.peekOp(",") {
-		p.i++
-		if !p.eatTypmodItem() {
-			return false
-		}
+	if p.eatOp(",") && !p.eatUint() {
+		return false
 	}
 	return p.eatOp(")")
 }
 
-func (p *parser) eatTypmodItem() bool {
+func (p *parser) eatUint() bool {
 	t, ok := p.peek()
-	if !ok {
+	if !ok || t.kind != kindNumber || t.text == "" {
 		return false
 	}
-	switch t.kind {
-	case kindNumber, kindWord, kindQIdent:
-		p.i++
-		return true
-	case kindString:
-		if strings.HasPrefix(t.prefix, "$") {
+	for i := 0; i < len(t.text); i++ {
+		if t.text[i] < '0' || t.text[i] > '9' {
 			return false
 		}
-		p.i++
-		return true
-	default:
-		return false
 	}
+	p.i++
+	return true
 }
 
 func (p *parser) eatLiteral() bool {
@@ -786,19 +1050,17 @@ func (p *parser) eatLiteral() bool {
 		p.i++
 		return true
 	case kindString:
-		if t.prefix == "" || strings.EqualFold(t.prefix, "E") {
+		if t.prefix == "" || asciiFoldEq(t.prefix, "E") {
 			p.i++
 			return true
 		}
 		return false
 	case kindWord:
-		switch strings.ToUpper(t.text) {
-		case "TRUE", "FALSE", "NULL":
+		if wordIs(t, "true") || wordIs(t, "false") || wordIs(t, "null") {
 			p.i++
 			return true
-		default:
-			return false
 		}
+		return false
 	default:
 		return false
 	}
@@ -956,50 +1218,6 @@ func allowComment(st statement) (bool, string) {
 	}
 	return true, ""
 }
-
-func isKeyword(s string) bool {
-	_, ok := sqlKeywords[strings.ToLower(s)]
-	return ok
-}
-
-var sqlKeywords = map[string]struct{}{}
-
-func init() {
-	for _, w := range strings.Fields(sqlKeywordList) {
-		sqlKeywords[w] = struct{}{}
-	}
-}
-
-const sqlKeywordList = "" +
-	"abort absolute access action add admin after aggregate all also alter always analyse analyze and any array as asc " +
-	"asymmetric at attach attribute authorization backward before begin between binary both by cache call called cascade " +
-	"cascaded case cast catalog chain char character characteristics check checkpoint class close cluster coalesce collate " +
-	"collation column comment comments commit committed concurrently configuration conflict connection constraint constraints " +
-	"content continue conversion copy cost create cross csv current current_catalog current_date current_role current_schema " +
-	"current_time current_timestamp current_user cursor cycle data database day deallocate dec decimal declare default defaults " +
-	"deferrable deferred definer delete delimiter delimiters depends desc detach dictionary disable discard distinct do document " +
-	"domain double drop each else enable encoding encrypted end enum escape event except exclude excluding exclusive execute " +
-	"exists explain expression extension external extract false family fetch filter first float following for force foreign " +
-	"forward freeze from full function functions generated global grant granted greatest group grouping handler having header " +
-	"hold hour identity if ilike immediate immutable implicit import in including increment index indexes inherit inherits " +
-	"initially inline inner inout input insensitive insert instead int integer intersect interval into invoker is isnull " +
-	"isolation join key language large last lateral leading leakproof least left level like limit listen load local localtime " +
-	"localtimestamp location lock locked logged mapping match materialized maxvalue method minvalue mode month move name names " +
-	"national natural nchar new next no none not nothing notify notnull nowait null nulls numeric object of off offset oids old " +
-	"on only operator option options or order ordinality others out outer over overlaps overlay overriding owned owner parallel " +
-	"parser partial partition passing password placing plans policy position preceding precision prepare prepared preserve " +
-	"primary prior privileges procedural procedure procedures program publication quote range read real reassign recursive ref " +
-	"references referencing refresh reindex relative release rename repeatable replace replica reset restart restrict return " +
-	"returning returns revoke right role rollback rollup routine routines row rows rule savepoint schema schemas scroll search " +
-	"second security select sequence sequences serializable server session session_user set setof sets share show similar simple " +
-	"skip snapshot some sql stable standalone start statement statistics stdin stdout storage stored strict strip subscription " +
-	"substring support symmetric sysid system table tables tablesample tablespace temp template temporary text then ties time " +
-	"timestamp to trailing transaction transform treat trigger trim true truncate trusted type types unbounded uncommitted " +
-	"unencrypted union unique unknown unlisten unlogged until update user using vacuum valid validate validator value values " +
-	"varchar variadic varying verbose version view views volatile when where whitespace window with within without work wrapper " +
-	"write xml xmlattributes xmlconcat xmlelement xmlexists xmlforest xmlnamespaces xmlparse xmlpi xmlroot xmlserialize " +
-	"xmltable year yes zone " +
-	"bigint bigserial bool boolean bytea cidr float4 float8 inet jsonb macaddr money serial smallint smallserial timestamptz uuid json"
 
 // dbStep is the front matter of one db-steps.d file, read the way
 // bifrost-trade-infra scripts/release/release_tool.py read_step reads it.

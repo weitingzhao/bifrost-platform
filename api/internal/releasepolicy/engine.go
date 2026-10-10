@@ -617,9 +617,44 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo
 // maxDDLFiles bounds the per-file reads one decision makes.
 const maxDDLFiles = 20
 
+var (
+	ddlClassifyMu sync.Mutex
+	ddlClassify   = ClassifyDDL
+)
+
+// ReplaceDDLClassifierForTest installs fn as the classifier the engine calls
+// and returns a function that restores the previous one.
+func ReplaceDDLClassifierForTest(fn func(before, after string) (bool, string)) func() {
+	ddlClassifyMu.Lock()
+	prev := ddlClassify
+	ddlClassify = fn
+	ddlClassifyMu.Unlock()
+	return func() {
+		ddlClassifyMu.Lock()
+		ddlClassify = prev
+		ddlClassifyMu.Unlock()
+	}
+}
+
+// callClassify runs the classifier. A panic becomes a reason that waits for
+// the Owner; it is never treated as an allow-listed change.
+func callClassify(before, after string) (ok bool, why string) {
+	ddlClassifyMu.Lock()
+	fn := ddlClassify
+	ddlClassifyMu.Unlock()
+	defer func() {
+		if rec := recover(); rec != nil {
+			ok = false
+			why = fmt.Sprintf("DDL classifier panicked (%v); ask the Owner", rec)
+		}
+	}()
+	return fn(before, after)
+}
+
 // additiveDDL classifies each DDL hit. A path that is not a classifiable
 // .sql file waits for the Owner. why is empty when every file only adds
-// allow-listed statements; the list names those files.
+// allow-listed statements; the list names those files. A classifier panic
+// is a reason, not coverage.
 func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits []string) ([]string, string) {
 	if len(hits) > maxDDLFiles {
 		return nil, fmt.Sprintf("%d DDL files changed, more than the %d this check reads", len(hits), maxDDLFiles)
@@ -640,7 +675,7 @@ func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits [
 		if !found {
 			return nil, path + " is deleted"
 		}
-		if ok, why := ClassifyDDL(before, after); !ok {
+		if ok, why := callClassify(before, after); !ok {
 			return nil, path + ": " + why
 		}
 		out = append(out, repo+":"+path)

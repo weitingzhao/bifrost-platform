@@ -156,6 +156,7 @@ type Facts struct {
 	Files    map[string][]string
 	FilesErr error
 	Text     map[string]string   // "repo@ref:path" -> file text
+	FileErr  map[string]error    // "repo@ref:path" -> injected read error
 	Dirs     map[string][]string // "repo@ref:dir" -> file names
 	Green    map[string]bool     // "repo@sha"
 	Window   string
@@ -164,7 +165,11 @@ type Facts struct {
 }
 
 func (f *Facts) FileAt(_ context.Context, repo, ref, path string) (string, bool, error) {
-	text, ok := f.Text[repo+"@"+ref+":"+path]
+	key := repo + "@" + ref + ":" + path
+	if err := f.FileErr[key]; err != nil {
+		return "", false, err
+	}
+	text, ok := f.Text[key]
 	return text, ok, nil
 }
 
