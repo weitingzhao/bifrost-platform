@@ -1,4 +1,9 @@
-const TERMINAL = new Set(['executed', 'failed', 'rejected', 'expired'])
+/**
+ * pending, approved (queued for an executor, or retrying a transient refusal)
+ * and running keep the wait going. unknown (executor lost; never retried
+ * automatically) ends it, like the other final states.
+ */
+export const TERMINAL = new Set(['executed', 'failed', 'rejected', 'expired', 'unknown'])
 
 export interface PollRequestOptions {
   id: string

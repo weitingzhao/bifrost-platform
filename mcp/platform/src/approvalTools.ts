@@ -7,6 +7,15 @@ export interface RequestActionInput {
   params?: Record<string, unknown>
   reason: string
   rollback: string
+  /** W-n, TD-n or LANE-name the request belongs to. */
+  work_id?: string
+  /** One line naming the requesting thread. */
+  requester_thread?: string
+}
+
+/** An approval is addressed by its id (appr_…) or its number (57 or #57). */
+export function approvalRef(id: string): string {
+  return id.trim().replace(/^#/, '')
 }
 
 /** POST /api/v1/approvals. Blocked until MCP_WRITES=on so this does not hit PROD early. */
@@ -23,14 +32,18 @@ export async function requestAction(input: RequestActionInput): Promise<unknown>
     params: input.params ?? {},
     reason: input.reason,
     rollback: input.rollback,
+    ...(input.work_id ? { work_id: input.work_id } : {}),
+    ...(input.requester_thread ? { requester_thread: input.requester_thread } : {}),
   })
 }
 
 export async function getRequest(id: string): Promise<unknown> {
-  return platformGet(`/api/v1/approvals/${encodeURIComponent(id)}`)
+  return platformGet(`/api/v1/approvals/${encodeURIComponent(approvalRef(id))}`)
 }
 
-export async function listRequests(status: 'pending' | 'all' = 'pending'): Promise<unknown> {
+export type ListStatus = 'pending' | 'open' | 'all'
+
+export async function listRequests(status: ListStatus = 'pending'): Promise<unknown> {
   return platformGet(`/api/v1/approvals?status=${encodeURIComponent(status)}`)
 }
 

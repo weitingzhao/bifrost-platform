@@ -500,36 +500,38 @@ reg(
 
 reg(
   'request_action',
-  'Create an approval request and return its id. Does not run the action. Requires MCP_WRITES=on.',
+  'Create an approval request and return its id and number (#n). Does not run the action. Requires MCP_WRITES=on.',
   {
     action: z.string().describe('Action id from the approvals catalog'),
     params: z.record(z.string(), z.unknown()).optional().describe('Parameters signed into the approval'),
     reason: z.string().describe('Why this action is requested'),
     rollback: z.string().describe('How to undo it if the approval is executed'),
+    work_id: z.string().optional().describe('Work item this request belongs to: W-n, TD-n or LANE-name'),
+    requester_thread: z.string().optional().describe('One line naming the requesting thread'),
   },
-  async ({ action, params, reason, rollback }) =>
-    jsonResult(await requestAction({ action, params, reason, rollback })),
+  async ({ action, params, reason, rollback, work_id, requester_thread }) =>
+    jsonResult(await requestAction({ action, params, reason, rollback, work_id, requester_thread })),
 )
 
 reg(
   'get_request',
-  'Read one approval request by id',
+  'Read one approval request by id (appr_…) or number (57 or #57)',
   { id: z.string() },
   async ({ id }) => jsonResult(await getRequest(id)),
 )
 
 reg(
   'list_requests',
-  'List approval requests. status is pending (default) or all.',
-  { status: z.enum(['pending', 'all']).optional() },
+  'List approval requests. status is pending (default), open (pending, approved, running, unknown) or all.',
+  { status: z.enum(['pending', 'open', 'all']).optional() },
   async ({ status }) => jsonResult(await listRequests(status ?? 'pending')),
 )
 
 reg(
   'wait_for_request',
-  'Poll an approval until executed, failed, rejected, expired, or the timeout',
+  'Poll an approval until executed, failed, rejected, expired, unknown, or the timeout. approved and running keep waiting.',
   {
-    id: z.string(),
+    id: z.string().describe('Approval id (appr_…) or number (57 or #57)'),
     timeout_seconds: z.number().int().min(1).max(600).optional().describe('Default 120, max 600'),
   },
   async ({ id, timeout_seconds }) => jsonResult(await waitForRequest(id, timeout_seconds ?? 120)),
