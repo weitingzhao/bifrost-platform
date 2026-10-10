@@ -65,7 +65,7 @@ See Ops Console → Architecture → MCP Contract.
 
 ## Future servers
 
-`mcp-server-kubernetes`, `mcp-server-redis`, etc. — see `console/src/lib/standards/mcpContractCatalog.ts`
+`mcp-server-kubernetes`, `mcp-server-redis`, etc.
 
 ## mcp-server-trade (V4 — available)
 
