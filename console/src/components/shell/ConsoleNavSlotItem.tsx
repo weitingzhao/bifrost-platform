@@ -15,11 +15,38 @@ import {
   shellNavSubItemIconClass,
   type ShellNavItem,
 } from '@bifrost/ui'
-import { NavAgentAskSlot } from '@/components/shell/NavAgentAskSlot'
 
 export type ConsoleNavSlotSignals = {
   isDimmed?: (id: string) => boolean
   isPhaseFocus?: (id: string) => boolean
+}
+
+/** Count pill on a nav row. `unknown` is drawn muted so it never reads as zero. */
+export type ConsoleNavBadge = {
+  text: string
+  title: string
+  tone: 'attention' | 'unknown'
+}
+
+function NavBadge({ badge, collapsed }: { badge: ConsoleNavBadge; collapsed?: boolean }) {
+  return (
+    <span
+      data-nav-badge={badge.tone}
+      title={badge.title}
+      aria-label={badge.title}
+      className={cn(
+        'inline-flex shrink-0 items-center justify-center rounded-full font-semibold tabular-nums leading-none',
+        collapsed
+          ? 'absolute -right-1 -top-1 h-3.5 min-w-3.5 px-0.5 text-[9px]'
+          : 'h-4 min-w-4 px-1 text-[10px]',
+        badge.tone === 'attention'
+          ? 'bg-[var(--color-lamp-red)] text-white'
+          : 'bg-muted text-muted-foreground',
+      )}
+    >
+      {badge.text}
+    </span>
+  )
 }
 
 export function ConsoleNavSlotItem({
@@ -31,6 +58,7 @@ export function ConsoleNavSlotItem({
   leading,
   signals,
   flyout,
+  badge,
 }: {
   item: ShellNavItem
   activeId: string
@@ -40,6 +68,7 @@ export function ConsoleNavSlotItem({
   leading?: ReactNode
   signals?: ConsoleNavSlotSignals
   flyout?: boolean
+  badge?: ConsoleNavBadge
 }) {
   const isActive = item.id === activeId
   const phaseFocus = signals?.isPhaseFocus?.(item.id) === true
@@ -69,7 +98,7 @@ export function ConsoleNavSlotItem({
             >
               {icon}
             </button>
-            <NavAgentAskSlot itemId={item.id} collapsed />
+            {badge != null ? <NavBadge badge={badge} collapsed /> : null}
           </div>
         </TooltipTrigger>
         <TooltipContent side="right" className="text-xs font-medium">
@@ -96,27 +125,25 @@ export function ConsoleNavSlotItem({
           {leading}
           {icon}
           {label}
+          {badge != null ? <NavBadge badge={badge} /> : null}
         </button>
-        <NavAgentAskSlot itemId={item.id} />
       </div>
     )
   }
 
   return (
     <SidebarMenuSubItem>
-      <div className="flex min-w-0 items-center gap-0.5">
-        <SidebarMenuSubButton
-          isActive={isActive}
-          className={shellNavSubItemButtonClassName({ flex: true, className: signalClass })}
-          title={signalTitle}
-          onClick={() => onSelect(item.id)}
-        >
-          {leading}
-          {icon}
-          {label}
-        </SidebarMenuSubButton>
-        <NavAgentAskSlot itemId={item.id} />
-      </div>
+      <SidebarMenuSubButton
+        isActive={isActive}
+        className={shellNavSubItemButtonClassName({ flex: true, className: signalClass })}
+        title={signalTitle}
+        onClick={() => onSelect(item.id)}
+      >
+        {leading}
+        {icon}
+        {label}
+        {badge != null ? <NavBadge badge={badge} /> : null}
+      </SidebarMenuSubButton>
     </SidebarMenuSubItem>
   )
 }

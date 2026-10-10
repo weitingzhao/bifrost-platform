@@ -1,9 +1,10 @@
 import type { ShellNavItem } from '@bifrost/ui'
 import {
   Activity,
-  ClipboardCheck,
+  Archive,
   Database,
   GitBranch,
+  Inbox,
   Plug,
   Rocket,
   Server,
@@ -11,13 +12,14 @@ import {
 import { SHELL_NAV, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
+  'needs-you': Inbox,
   status: Activity,
   data: Database,
   ib: Plug,
-  maintenance: ClipboardCheck,
   releases: Rocket,
   infrastructure: Server,
   progress: GitBranch,
+  records: Archive,
 }
 
 /** One layer. No System / Ops / Analysis lens, and no per-lens hiding. */

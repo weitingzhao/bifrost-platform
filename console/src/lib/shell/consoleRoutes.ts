@@ -1,18 +1,14 @@
 /**
- * Ops Console shell routes — one layer, seven questions.
- * Old bookmarks resolve through LEGACY_HASH_REDIRECTS. Page modules stay on
- * disk; only the hash and the nav move in this step.
+ * Ops Console shell routes — one layer: Needs you first (home), the health and
+ * delivery questions, then Records. Old bookmarks resolve through
+ * LEGACY_HASH_REDIRECTS. `#approvals?id=` is the request page; it has no nav row.
  */
 
 export const SHELL_NAV = [
+  { id: 'needs-you', label: 'Needs you', question: 'What do I need to do right now?' },
   { id: 'status', label: 'Status', question: 'Is everything okay right now?' },
   { id: 'data', label: 'Data', question: "Has today's data arrived?" },
   { id: 'ib', label: 'IB', question: 'Is the IB connection healthy?' },
-  {
-    id: 'maintenance',
-    label: 'Maintenance',
-    question: 'What needs approval, and what are maintainers doing?',
-  },
   {
     id: 'releases',
     label: 'Releases',
@@ -24,14 +20,25 @@ export const SHELL_NAV = [
     question: 'How are the cluster, network, and machines?',
   },
   { id: 'progress', label: 'Progress', question: 'How far along is the project?' },
+  {
+    id: 'records',
+    label: 'Records',
+    question: 'History: closed requests, audit, and patrol runs.',
+  },
 ] as const
 
 export type ShellRouteId = (typeof SHELL_NAV)[number]['id']
 
 export const SHELL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.map(item => item.id)
 
+export const HOME_ROUTE: ShellRouteId = 'needs-you'
+
+/** The request page. Phone notifications link here (`#approvals?id=<id>`). */
+export const APPROVAL_ROUTE = 'approvals'
+
 /** Tabs that used to be real pages. `dev-sessions` stays a local-only route. */
 export const FORMER_CONSOLE_TABS = [
+  'maintenance',
   'queue',
   'analysis-workspace',
   'insight-log',
@@ -46,7 +53,6 @@ export const FORMER_CONSOLE_TABS = [
   'agent-release',
   'control-room',
   'observability',
-  'approvals',
   'code-health',
   'task-cc',
   'audit',
@@ -61,7 +67,6 @@ export const FORMER_CONSOLE_TABS = [
   'platform-release',
   'plugin-release',
   'platform-standards',
-  'agent-protocol',
   'mcp-contract',
   'design-system',
   'ai-compute',
@@ -82,21 +87,22 @@ export const FORMER_CONSOLE_TABS = [
 
 export type ConsoleLocation =
   | { kind: 'shell'; id: ShellRouteId }
+  | { kind: 'approval' }
   | { kind: 'dev-sessions' }
 
 /**
  * Old hash → new hash. Choices that the destination table left open:
- * - defects → maintenance (a retrospective log, next to Audit; not live health)
- * - queue → maintenance (operator inbox, not a health reading)
- * - agent-capability → infrastructure (runner readiness sits with the mini card)
- * - agent-governance → maintenance (trust policy for patrol, which lives here)
+ * - maintenance → needs-you (the old approvals home; `#maintenance?id=` opens the request)
+ * - queue / agent-desk → needs-you (operator inbox)
+ * - defects, audit, execution-log, insight-log → records audit tab
+ * - autonomous-skills, agent-governance → records patrol tab (trust policy for patrol)
+ * - agent-capability → infrastructure (runner readiness sat with the mini card)
  * - analysis-workspace / hermes-status → infrastructure (已退役 former tab)
- * - insight-log → maintenance (history, same shelf as Audit)
- * - nine Guides + agent-system → progress (project direction, not a live system)
+ * - eight Guides + agent-system → progress (project direction, not a live system)
  * - console → infrastructure (the old hash opened Network)
  */
 export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
-  approvals: 'maintenance',
+  maintenance: 'needs-you',
   'control-room': 'status',
   observability: 'status',
   'rocket-health': 'status',
@@ -108,10 +114,10 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'runtime-map': 'infrastructure',
   'code-health': 'progress',
   'commit-lineage': 'progress',
-  defects: 'maintenance',
-  audit: 'maintenance',
-  'autonomous-skills': 'maintenance',
-  'execution-log': 'maintenance',
+  defects: 'records',
+  audit: 'records',
+  'autonomous-skills': 'records',
+  'execution-log': 'records',
   'platform-release': 'releases',
   'trade-release': 'releases',
   'research-release': 'releases',
@@ -126,23 +132,22 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'plugin-gallery': 'data',
   'market-data-manage': 'data',
   'flex-query-manage': 'data',
-  queue: 'maintenance',
+  queue: 'needs-you',
   'agent-capability': 'infrastructure',
-  'agent-governance': 'maintenance',
+  'agent-governance': 'records',
   'analysis-workspace': 'infrastructure',
-  'insight-log': 'maintenance',
+  'insight-log': 'records',
   'hermes-status': 'infrastructure', // 已退役 former tab hash
   'flywheel-vision': 'progress',
   blueprint: 'progress',
   roadmap: 'progress',
   'platform-standards': 'progress',
-  'agent-protocol': 'progress',
   'agent-system': 'progress',
   'mcp-contract': 'progress',
   'design-system': 'progress',
   'ai-compute': 'progress',
   console: 'infrastructure',
-  'agent-desk': 'maintenance',
+  'agent-desk': 'needs-you',
   'dev-agent': 'status',
   briefing: 'status',
   'active-session': 'status',
@@ -170,6 +175,16 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'analytics-pipeline': 'data',
 }
 
+/** Records tab a legacy hash lands on. */
+export const LEGACY_HASH_QUERY: Record<string, string> = {
+  defects: 'tab=audit',
+  audit: 'tab=audit',
+  'execution-log': 'tab=audit',
+  'insight-log': 'tab=audit',
+  'autonomous-skills': 'tab=patrol',
+  'agent-governance': 'tab=patrol',
+}
+
 export function isShellRouteId(value: string): value is ShellRouteId {
   return (SHELL_ROUTE_IDS as readonly string[]).includes(value)
 }
@@ -194,14 +209,51 @@ export function formatShellHash(id: string, query = ''): string {
   return `#${id}?${query}`
 }
 
+/** `id=` from a hash query, trimmed; null when absent or blank. */
+export function hashQueryParam(query: string, key: string): string | null {
+  const value = new URLSearchParams(query).get(key)?.trim() ?? ''
+  return value === '' ? null : value
+}
+
+/** Link to one request's page. */
+export function approvalHref(id: string): string {
+  return formatShellHash(APPROVAL_ROUTE, new URLSearchParams({ id }).toString())
+}
+
 export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy: boolean } {
   if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
+  if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
   if (isShellRouteId(tab)) return { location: { kind: 'shell', id: tab }, legacy: false }
   const target = LEGACY_HASH_REDIRECTS[tab]
   if (target != null) return { location: { kind: 'shell', id: target }, legacy: true }
-  return { location: { kind: 'shell', id: 'status' }, legacy: tab !== '' }
+  return { location: { kind: 'shell', id: HOME_ROUTE }, legacy: tab !== '' }
+}
+
+/**
+ * Where a raw hash (without `#`) lands, and the hash the address bar should show.
+ * `#approvals?id=` and `#maintenance?id=` open the request; either without an id
+ * lands on Needs you.
+ */
+export function resolveConsoleHash(raw: string): { location: ConsoleLocation; canonical: string } {
+  const tab = raw.split('?')[0] ?? ''
+  const query = hashQueryWithoutTaskMode(raw)
+  const approvalId = hashQueryParam(query, 'id')
+  if (tab === APPROVAL_ROUTE || tab === 'maintenance') {
+    if (approvalId != null) {
+      return { location: { kind: 'approval' }, canonical: formatShellHash(APPROVAL_ROUTE, query) }
+    }
+    return { location: { kind: 'shell', id: HOME_ROUTE }, canonical: formatShellHash(HOME_ROUTE) }
+  }
+  const resolved = resolveHashTab(tab)
+  const id = locationId(resolved.location)
+  if (resolved.legacy || tab === '') {
+    return { location: resolved.location, canonical: formatShellHash(id, LEGACY_HASH_QUERY[tab] ?? '') }
+  }
+  return { location: resolved.location, canonical: formatShellHash(id, query) }
 }
 
 export function locationId(location: ConsoleLocation): string {
-  return location.kind === 'dev-sessions' ? 'dev-sessions' : location.id
+  if (location.kind === 'dev-sessions') return 'dev-sessions'
+  if (location.kind === 'approval') return APPROVAL_ROUTE
+  return location.id
 }

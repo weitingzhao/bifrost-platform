@@ -1,24 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApprovalItem } from '@/api/approvals'
+import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
-import { MaintenancePage } from '@/pages/shell/maintenance/MaintenancePage'
-
-function item(partial: Partial<ApprovalItem> & Pick<ApprovalItem, 'id'>): ApprovalItem {
-  return {
-    action: 'gitops_sync_app',
-    tier: 'C',
-    params: { app: 'rocket' },
-    reason: 'prod drift',
-    rollback: 'argocd rollback',
-    requester: 'sess-owner',
-    status: 'pending',
-    expires_at: new Date(Date.now() + 2 * 60 * 60_000).toISOString(),
-    ...partial,
-  }
-}
+import { RecordsPage } from '@/pages/shell/records/RecordsPage'
+import { recordsTabFromHash } from '@/pages/shell/records/recordsTabs'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -74,29 +61,21 @@ function wrapper(children: ReactNode) {
   )
 }
 
-describe('MaintenancePage', () => {
+describe('RecordsPage', () => {
   beforeEach(() => {
     installStorage()
-    window.location.hash = '#maintenance'
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
-        if (url.includes('/approvals/ap-9')) {
+        if (url.includes('/api/v1/approvals?status=all')) {
           return json(
-            item({
-              id: 'ap-9',
-              action: 'drain_node',
-              requester: 'sess-phone',
-              tier: 'D',
-              reason: 'patch the node',
-              rollback: 'uncordon',
-              params: { node: 'worker-a' },
-            }),
+            buildApprovalListResponse([
+              buildPlatformApproval({ id: 'ap-open' }),
+              buildPlatformApproval({ id: 'ap-done', status: 'executed', action: 'cordon_node' }),
+            ]),
           )
         }
-        if (url.includes('status=pending')) return json({ items: [] })
-        if (url.includes('status=all')) return json({ items: [] })
         if (url.includes('/api/v1/patrol/skills')) return json({ skills: [] })
         if (url.includes('/api/v1/patrol/runs')) return json({ runs: [], total: 0 })
         if (url.includes('/api/v1/audit')) return json({ records: [] })
@@ -110,25 +89,29 @@ describe('MaintenancePage', () => {
     window.location.hash = ''
   })
 
-  it('opens the request named by #maintenance?id=', async () => {
-    window.location.hash = '#maintenance?id=ap-9'
-    render(wrapper(<MaintenancePage />))
-    const region = await screen.findByRole('region', { name: 'Approval ap-9' })
-    await waitFor(() => {
-      expect(screen.getByText('sess-phone')).toBeTruthy()
-    })
-    expect(region.querySelector('[data-open="true"]')).toBeTruthy()
-    expect(screen.getByText('drain_node')).toBeTruthy()
+  it('reads the tab from the address', () => {
+    expect(recordsTabFromHash('#records')).toBe('closed')
+    expect(recordsTabFromHash('#records?tab=audit')).toBe('audit')
+    expect(recordsTabFromHash('#records?tab=patrol')).toBe('patrol')
+    expect(recordsTabFromHash('#records?tab=nope')).toBe('closed')
   })
 
-  it('puts patrol skills and one run history on Autopilot, and audit on History', async () => {
-    render(wrapper(<MaintenancePage />))
+  it('lists only closed requests, each linking to its page', async () => {
+    window.location.hash = '#records'
+    render(wrapper(<RecordsPage />))
+    const list = await screen.findByRole('list', { name: 'Closed requests' })
+    const links = list.querySelectorAll('a')
+    expect([...links].map(link => link.getAttribute('href'))).toEqual(['#approvals?id=ap-done'])
+    expect(screen.queryByRole('button', { name: /Approve|Reject/ })).toBeNull()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Autopilot' }))
+  it('keeps the Autopilot patrol content and the audit history, and writes the tab to the address', async () => {
+    window.location.hash = '#records?tab=patrol'
+    render(wrapper(<RecordsPage />))
     expect(await screen.findByText('Patrol Skills')).toBeTruthy()
-    expect(screen.queryByText('Patrol Log')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Audit' }))
+    expect(window.location.hash).toBe('#records?tab=audit')
     expect(await screen.findByText('ACTUATION HISTORY')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Download JSON' })).toBeTruthy()
     expect(screen.queryByText('Patrol Skills')).toBeNull()

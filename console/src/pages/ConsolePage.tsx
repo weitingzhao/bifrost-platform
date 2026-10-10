@@ -4,21 +4,27 @@ import { ConsoleHeader } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
+import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import {
   DataPage,
   IbPage,
   InfrastructurePage,
-  MaintenancePage,
+  NeedsYouPage,
   ProgressPage,
+  RecordsPage,
   ReleasesPage,
   StatusPage,
 } from '@/pages/shell/shellPages'
+import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
+import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
+import { syncAppBadge } from '@/pwa/appBadge'
 import {
+  HOME_ROUTE,
   formatShellHash,
-  hashQueryWithoutTaskMode,
   isShellRouteId,
   locationId,
+  resolveConsoleHash,
   resolveHashTab,
   shellNavEntry,
   type ConsoleLocation,
@@ -27,23 +33,38 @@ import {
 import { showDevSessions } from '@/lib/shell/localConsole'
 
 const SHELL_PAGES: Record<ShellRouteId, ComponentType> = {
+  'needs-you': NeedsYouPage,
   status: StatusPage,
   data: DataPage,
   ib: IbPage,
-  maintenance: MaintenancePage,
   releases: ReleasesPage,
   infrastructure: InfrastructurePage,
   progress: ProgressPage,
+  records: RecordsPage,
 }
 
 function readLocation(): ConsoleLocation {
-  if (typeof window === 'undefined') return { kind: 'shell', id: 'status' }
-  const tab = window.location.hash.replace(/^#/, '').split('?')[0] ?? ''
-  return resolveHashTab(tab).location
+  if (typeof window === 'undefined') return { kind: 'shell', id: HOME_ROUTE }
+  return resolveConsoleHash(window.location.hash.replace(/^#/, '')).location
+}
+
+function locationTitle(location: ConsoleLocation): { title: string; description: string } {
+  if (location.kind === 'dev-sessions') {
+    return {
+      title: 'Dev Sessions',
+      description: 'Local dev service orchestration — tmux sessions, logs, and restart.',
+    }
+  }
+  if (location.kind === 'approval') {
+    return { title: 'Request', description: 'Approve or reject one request.' }
+  }
+  const entry = shellNavEntry(location.id)
+  return { title: entry.label, description: entry.question }
 }
 
 function ConsolePageInner() {
   const status = useShellStatusLine()
+  const needsYou = useNeedsYou()
   const local = showDevSessions({
     viewerEnv: status.viewerEnv,
     viewerEnvLoading: status.viewerEnvLoading,
@@ -54,23 +75,15 @@ function ConsolePageInner() {
 
   const applyHash = useCallback(() => {
     const raw = window.location.hash.replace(/^#/, '')
-    const tab = raw.split('?')[0] ?? ''
-    const query = hashQueryWithoutTaskMode(raw)
-    const resolved = resolveHashTab(tab)
+    const resolved = resolveConsoleHash(raw)
     let next = resolved.location
+    let canonical = resolved.canonical
     if (next.kind === 'dev-sessions' && viewerKnown && !local) {
-      next = { kind: 'shell', id: 'status' }
+      next = { kind: 'shell', id: HOME_ROUTE }
+      canonical = formatShellHash(HOME_ROUTE)
     }
     setLocation(next)
-    const id = locationId(next)
-    const dropQuery = tab === 'dev-sessions' && viewerKnown && !local
-    const canonical = formatShellHash(id, dropQuery ? '' : query)
-    const shouldRewrite =
-      resolved.legacy ||
-      tab === '' ||
-      (tab === 'dev-sessions' && viewerKnown && !local) ||
-      (tab !== '' && tab !== id && resolved.legacy)
-    if ((shouldRewrite || tab === '') && window.location.hash !== canonical) {
+    if (window.location.hash !== canonical) {
       window.history.replaceState(null, '', canonical)
     }
   }, [local, viewerKnown])
@@ -81,35 +94,40 @@ function ConsolePageInner() {
     return () => window.removeEventListener('hashchange', applyHash)
   }, [applyHash])
 
+  const count = needsYou.count
+  const knownCount = count.state === 'known' ? count.count : null
+  useEffect(() => {
+    syncAppBadge(knownCount)
+  }, [knownCount])
+
   const select = useCallback((id: string) => {
     if (id === 'dev-sessions') {
       window.location.hash = '#dev-sessions'
       return
     }
-    const resolved = resolveHashTab(id)
-    const next = locationId(resolved.location)
-    window.location.hash = formatShellHash(isShellRouteId(next) ? next : 'status')
+    const next = locationId(resolveHashTab(id).location)
+    window.location.hash = formatShellHash(isShellRouteId(next) ? next : HOME_ROUTE)
   }, [])
 
-  const pageId = location.kind === 'dev-sessions' ? null : location.id
-  const Page = pageId != null ? SHELL_PAGES[pageId] : null
-  const title =
+  const Page = location.kind === 'shell' ? SHELL_PAGES[location.id] : null
+  const { title, description } = locationTitle(location)
+  const activeTab =
     location.kind === 'dev-sessions'
-      ? 'Dev Sessions'
-      : shellNavEntry(location.id).label
-  const description =
-    location.kind === 'dev-sessions'
-      ? 'Local dev service orchestration — tmux sessions, logs, and restart.'
-      : shellNavEntry(location.id).question
+      ? 'dev-sessions'
+      : location.kind === 'approval'
+        ? HOME_ROUTE
+        : location.id
+  const needsYouNavBadge = needsYouBadge(count)
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <ConsoleSidebar
-          activeTab={location.kind === 'dev-sessions' ? 'dev-sessions' : location.id}
+          activeTab={activeTab}
           onSelect={select}
           viewerEnv={status.viewerEnv}
           viewerEnvLoading={status.viewerEnvLoading}
+          badges={needsYouNavBadge != null ? { [HOME_ROUTE]: needsYouNavBadge } : undefined}
         />
         <SidebarInset className={local ? 'min-w-0 overflow-x-hidden pb-14' : 'min-w-0 overflow-x-hidden'}>
           <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
@@ -117,6 +135,7 @@ function ConsolePageInner() {
               pageTitle={title}
               pageDescription={description}
               statusLine={status.statusLine}
+              statusTone={status.statusTone}
               healthy={status.healthy}
               onRefresh={() => {
                 void status.refetch()
@@ -129,6 +148,7 @@ function ConsolePageInner() {
           </div>
           <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
+            {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {Page != null ? <Page /> : null}
           </PageShell>
         </SidebarInset>

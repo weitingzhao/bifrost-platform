@@ -6,6 +6,7 @@ import { ObservabilityPage } from '@/pages/ObservabilityPage'
 import { RocketHealthPage } from '@/pages/RocketHealthPage'
 import { SatelliteHealthPage } from '@/pages/SatelliteHealthPage'
 import { ChecklistSignalsSummary } from '@/pages/shell/status/ChecklistSignalsSummary'
+import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 
 function openHash(hash: string) {
   if (window.location.hash !== hash) window.location.hash = hash
@@ -16,7 +17,7 @@ function asMatrices(data: Awaited<ReturnType<typeof fetchMatrix>> | undefined): 
   return isAllMatrices(data) ? data.matrices : [data]
 }
 
-/** Status: control-room posture, observability, platform card, Trade card. */
+/** Status: the header's verdict with its red and yellow items, then posture, observability, platform, Trade. */
 export function StatusPage() {
   const matrixQ = useQuery({
     queryKey: ['matrix', 'all'],
@@ -28,6 +29,7 @@ export function StatusPage() {
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
+      <SystemVerdictLine showCauses />
       <section aria-label="Control room" className="flex w-full min-w-0 flex-col">
         <ChecklistSignalsSummary />
         <ControlRoomPage
@@ -41,7 +43,7 @@ export function StatusPage() {
           onOpenRuntimeMap={() => openHash('#infrastructure')}
           onOpenDelivery={() => openHash('#releases')}
           onOpenCluster={() => openHash('#infrastructure')}
-          onOpenAudit={() => openHash('#maintenance')}
+          onOpenAudit={() => openHash('#records?tab=audit')}
           onOpenNetwork={() => openHash('#infrastructure')}
         />
       </section>

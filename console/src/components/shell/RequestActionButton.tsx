@@ -2,13 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@bifrost/ui'
 import { fetchActionCatalog } from '@/api/actions'
-import {
-  createApprovalRequest,
-  postApprovalDecision,
-  readApprovalToken,
-  type ApprovalCreateResult,
-} from '@/api/approvals'
+import { createApprovalRequest } from '@/api/approvals'
 import { authedFetch } from '@/api/client'
+import { approvalHref } from '@/lib/shell/consoleRoutes'
 
 export const REQUEST_SUBMITTED_WAITING = 'Request submitted, waiting for approval'
 
@@ -30,28 +26,15 @@ export type RequestActionButtonProps = {
   disabled?: boolean
 }
 
-type ConfirmState = {
-  id: string
-  tier: string
-  action: string
-}
-
 type Notice =
   | { kind: 'idle' }
-  | { kind: 'waiting' }
+  | { kind: 'waiting'; id: string; tier: string }
   | { kind: 'done'; message: string }
   | { kind: 'error'; message: string }
 
-function tierLabel(result: ApprovalCreateResult, catalogTier: string | undefined): string {
-  if (result.kind === 'error') return result.tier ?? catalogTier ?? ''
-  if (result.tier !== '') return result.tier
-  return catalogTier ?? ''
-}
-
 /**
- * B runs `direct` immediately. C and D create an approval. When this browser
- * holds an approval token, the confirm dialog approves with channel "console".
- * Without a token, the request waits.
+ * B runs `direct` immediately. C and D create an approval and link to its page;
+ * approve and reject happen on `#approvals?id=` only.
  */
 export function RequestActionButton({
   action,
@@ -69,7 +52,6 @@ export function RequestActionButton({
   })
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice>({ kind: 'idle' })
-  const [confirm, setConfirm] = useState<ConfirmState | null>(null)
 
   async function runDirect() {
     await authedFetch(action, direct.path, {
@@ -83,7 +65,6 @@ export function RequestActionButton({
     if (busy || disabled) return
     setBusy(true)
     setNotice({ kind: 'idle' })
-    setConfirm(null)
     try {
       const catalog = catalogQuery.data ?? (await catalogQuery.refetch()).data
       const listed = catalog?.find(row => row.id === action)?.tier
@@ -93,13 +74,7 @@ export function RequestActionButton({
         return
       }
       if (result.kind === 'pending') {
-        const tier = tierLabel(result, listed)
-        const token = readApprovalToken()
-        if (token !== '') {
-          setConfirm({ id: result.id, tier, action: result.action })
-        } else {
-          setNotice({ kind: 'waiting' })
-        }
+        setNotice({ kind: 'waiting', id: result.id, tier: result.tier !== '' ? result.tier : (listed ?? '') })
         return
       }
       setNotice({ kind: 'error', message: result.error })
@@ -113,32 +88,6 @@ export function RequestActionButton({
     }
   }
 
-  async function onApprove() {
-    if (confirm == null) return
-    const token = readApprovalToken()
-    if (token === '') {
-      setConfirm(null)
-      setNotice({ kind: 'waiting' })
-      return
-    }
-    setBusy(true)
-    try {
-      await postApprovalDecision(confirm.id, token, 'approve', { channel: 'console' })
-      setConfirm(null)
-      setNotice({ kind: 'done', message: 'Approved' })
-    } catch (err) {
-      setConfirm(null)
-      setNotice({
-        kind: 'error',
-        message: err instanceof Error ? err.message : 'Approve failed',
-      })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const confirmTier = confirm != null && confirm.tier !== '' ? ` (${confirm.tier})` : ''
-
   return (
     <span className="inline-flex min-w-0 flex-col items-start gap-1">
       <Button type="button" size="sm" disabled={disabled || busy} onClick={() => void onClick()}>
@@ -146,7 +95,11 @@ export function RequestActionButton({
       </Button>
       {notice.kind === 'waiting' ? (
         <span role="status" className="text-[var(--text-dense-caption)] text-muted-foreground">
-          {REQUEST_SUBMITTED_WAITING}
+          <span>{REQUEST_SUBMITTED_WAITING}</span>
+          {notice.tier !== '' ? ` (${notice.tier})` : ''} ·{' '}
+          <a href={approvalHref(notice.id)} className="underline">
+            Open request
+          </a>
         </span>
       ) : null}
       {notice.kind === 'done' ? (
@@ -158,31 +111,6 @@ export function RequestActionButton({
         <span role="alert" className="text-[var(--text-dense-caption)] text-destructive">
           {notice.message}
         </span>
-      ) : null}
-      {confirm != null ? (
-        <div
-          role="dialog"
-          aria-labelledby="request-action-approve-title"
-          className="flex flex-col gap-2 rounded-md border border-[var(--table-rule)] bg-card p-3"
-        >
-          <h2 id="request-action-approve-title" className="m-0 text-sm font-semibold">
-            Approve this request?
-          </h2>
-          <p className="m-0 text-sm text-muted-foreground">
-            {`${confirm.action}${confirmTier}. ${reason}`}
-          </p>
-          <span className="flex gap-2">
-            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => {
-              setConfirm(null)
-              setNotice({ kind: 'waiting' })
-            }}>
-              Cancel
-            </Button>
-            <Button type="button" size="sm" disabled={busy} onClick={() => void onApprove()}>
-              {busy ? 'Requesting…' : 'Approve'}
-            </Button>
-          </span>
-        </div>
       ) : null}
     </span>
   )

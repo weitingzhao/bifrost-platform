@@ -16,6 +16,7 @@ import { viewerSeatTagVariant } from '@/lib/envVisual'
 import { UserMenu } from '@/components/UserMenu'
 import { ToolsMenu } from '@/components/ToolsMenu'
 import { DevSessionsIndicator } from '@/components/DevSessionsIndicator'
+import { VERDICT_DOT_COLOR, type VerdictTone } from '@/lib/shell/shellStatusLine'
 
 function ViewerEnvChip({
   viewerEnv,
@@ -40,13 +41,14 @@ function ViewerEnvChip({
 }
 
 /**
- * Shell top bar. The only live reading is the Status sentence.
+ * Shell top bar. The only live reading is the system verdict, the same sentence Status opens with.
  * Dev Sessions is mounted by the parent only on the local console.
  */
 export function ConsoleHeader({
   pageTitle,
   pageDescription,
   statusLine,
+  statusTone,
   healthy,
   onRefresh,
   viewerEnv,
@@ -57,6 +59,7 @@ export function ConsoleHeader({
   pageTitle: string
   pageDescription?: string
   statusLine: string
+  statusTone: VerdictTone
   healthy: boolean | undefined
   onRefresh: () => void
   viewerEnv: FleetViewerEnv
@@ -98,12 +101,20 @@ export function ConsoleHeader({
       </nav>
 
       <p
-        className="min-w-0 flex-1 truncate text-[var(--text-dense-caption)] text-muted-foreground"
+        className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--text-dense-caption)] text-muted-foreground"
         title={statusLine}
         aria-live="polite"
         data-shell-status-line
+        data-tone={statusTone}
       >
-        {statusLine}
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: VERDICT_DOT_COLOR[statusTone] }}
+          aria-hidden
+        />
+        <a href="#status" className="min-w-0 truncate text-inherit no-underline hover:text-foreground">
+          {statusLine}
+        </a>
       </p>
 
       <ViewerEnvChip viewerEnv={viewerEnv} isLoading={viewerEnvLoading} />

@@ -142,7 +142,7 @@ describe('RequestActionButton', () => {
     },
   )
 
-  it('opens an approve confirm when a token is saved and posts channel console', async () => {
+  it('links to the request page and never approves in place, even with a saved token', async () => {
     window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input)
@@ -153,9 +153,6 @@ describe('RequestActionButton', () => {
           { id: 'ap-1', action: 'gitops_rollback_app', tier: 'C', status: 'pending' },
           201,
         )
-      }
-      if (url.endsWith('/api/v1/approvals/ap-1/approve') && method === 'POST') {
-        return json({ status: 'executed' })
       }
       return json({ error: `unexpected ${method} ${url}` }, 500)
     })
@@ -171,20 +168,12 @@ describe('RequestActionButton', () => {
       ),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Request rollback' }))
-    expect(await screen.findByRole('dialog')).toBeTruthy()
-    expect(screen.getByText(/gitops_rollback_app \(C\)/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-
-    await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('Approved')
-    })
-    const approve = vi.mocked(fetch).mock.calls.find(call =>
-      String(call[0]).endsWith('/api/v1/approvals/ap-1/approve'),
-    )
-    expect(approve).toBeTruthy()
-    const init = approve?.[1]
-    expect(init?.body).toBe(JSON.stringify({ channel: 'console' }))
-    const headers = new Headers(init?.headers)
-    expect(headers.get('Authorization')).toBe('Bearer admin-token')
+    const link = await screen.findByRole('link', { name: 'Open request' })
+    expect(link.getAttribute('href')).toBe('#approvals?id=ap-1')
+    expect(screen.getByRole('status').textContent).toContain(`${REQUEST_SUBMITTED_WAITING} (C)`)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+    const urls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
+    expect(urls.some(url => url.includes('/approve'))).toBe(false)
   })
 })

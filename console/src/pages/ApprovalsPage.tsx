@@ -3,18 +3,19 @@ import { useEffect, useState } from 'react'
 import { Button } from '@bifrost/ui'
 import { authedFetch } from '@/api/client'
 import {
+  approvalEnv,
   approvalIdFromHash,
   fetchApproval,
-  fetchApprovalList,
   formatDecidedAt,
   formatParams,
   formatTimeRemaining,
+  formatWaited,
   postApprovalDecision,
   readApprovalToken,
-  recentClosed,
-  writeApprovalToken,
   type ApprovalItem,
 } from '@/api/approvals'
+import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
 const MISSING_TOKEN =
   'Approve and Reject stay disabled until an approval token is saved in this browser. The console operator token is not used for these actions.'
@@ -27,37 +28,6 @@ function useDeepLinkId(): string | null {
     return () => window.removeEventListener('hashchange', sync)
   }, [])
   return id
-}
-
-function TokenField({ token, onSaved }: { token: string; onSaved: (next: string) => void }) {
-  const [draft, setDraft] = useState(token)
-  return (
-    <form
-      className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-end"
-      onSubmit={event => {
-        event.preventDefault()
-        writeApprovalToken(draft)
-        onSaved(readApprovalToken())
-      }}
-    >
-      <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm" htmlFor="approval-token">
-        Set approval token
-        <input
-          id="approval-token"
-          name="approval-token"
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
-          value={draft}
-          onChange={event => setDraft(event.target.value)}
-        />
-      </label>
-      <Button type="submit" variant="outline" className="w-full sm:w-auto">
-        Save token
-      </Button>
-    </form>
-  )
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -124,14 +94,12 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
 function ApprovalCard({
   item,
   hasToken,
-  open,
   busy,
   onApprove,
   onReject,
 }: {
   item: ApprovalItem
   hasToken: boolean
-  open: boolean
   busy: boolean
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
@@ -143,17 +111,24 @@ function ApprovalCard({
   return (
     <article
       id={`approval-${item.id}`}
-      data-open={open ? 'true' : 'false'}
-      aria-current={open ? 'true' : undefined}
+      data-open="true"
+      aria-current="true"
       className="flex w-full min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3"
     >
+      <h2 className="m-0 break-all text-sm font-medium" data-approval-ref>
+        Request {item.id}
+      </h2>
       <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
         <Field label="Requester" value={item.requester} />
         <Field label="Action" value={item.action} />
         <Field label="Tier" value={item.tier} />
+        <Field label="Environment" value={approvalEnv(item)} />
         <Field label="Status" value={item.status} />
         {pending ? (
-          <Field label="Time remaining" value={formatTimeRemaining(item.expires_at)} />
+          <Field
+            label="Waited · time remaining"
+            value={`${formatWaited(item.created_at)} · ${formatTimeRemaining(item.expires_at)}`}
+          />
         ) : (
           <Field label="Decided at" value={formatDecidedAt(item)} />
         )}
@@ -161,7 +136,7 @@ function ApprovalCard({
       </div>
       <Field label="Reason" value={item.reason} />
       <ActuationDetail item={item} />
-      <details open={open ? true : undefined} className="min-w-0">
+      <details open className="min-w-0">
         <summary className="cursor-pointer text-sm">Params</summary>
         <pre className="mt-1 max-w-full whitespace-pre-wrap break-all text-xs">
           {formatParams(item.params)}
@@ -186,7 +161,7 @@ function ApprovalCard({
           <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row">
             <Button
               type="button"
-              className="w-full sm:w-auto"
+              className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide}
               aria-label={`Approve ${item.action}`}
               onClick={() => onApprove(item.id)}
@@ -196,7 +171,7 @@ function ApprovalCard({
             <Button
               type="button"
               variant="outline"
-              className="w-full sm:w-auto"
+              className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide || trimmed === ''}
               aria-label={`Reject ${item.action}`}
               onClick={() => onReject(item.id, trimmed)}
@@ -210,42 +185,31 @@ function ApprovalCard({
   )
 }
 
+/** The request page, `#approvals?id=<id>`: the only place to approve or reject. */
 export function ApprovalsPage() {
   const qc = useQueryClient()
-  const deepLinkId = useDeepLinkId()
+  const id = useDeepLinkId()
   const [token, setToken] = useState(() => readApprovalToken())
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const hasToken = token !== ''
 
-  const pendingQ = useQuery({
-    queryKey: ['approvals', 'pending'],
-    queryFn: () => fetchApprovalList('pending'),
-    retry: false,
-  })
-  const historyQ = useQuery({
-    queryKey: ['approvals', 'all'],
-    queryFn: () => fetchApprovalList('all'),
-    retry: false,
-  })
   const itemQ = useQuery({
-    queryKey: ['approvals', 'item', deepLinkId],
-    queryFn: () => fetchApproval(deepLinkId ?? ''),
-    enabled: deepLinkId != null,
+    queryKey: ['approvals', 'item', id],
+    queryFn: () => fetchApproval(id ?? ''),
+    enabled: id != null,
     retry: false,
+    refetchInterval: query => (query.state.data?.status === 'pending' ? NEEDS_YOU_REFRESH_MS : false),
   })
+  const opened = id == null ? null : (itemQ.data ?? null)
 
-  const pending = (pendingQ.data ?? []).filter(item => item.id !== deepLinkId)
-  const closed = recentClosed(historyQ.data ?? []).filter(item => item.id !== deepLinkId)
-  const opened = deepLinkId == null ? null : (itemQ.data ?? null)
-
-  async function decide(id: string, path: 'approve' | 'reject', reason?: string) {
+  async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (!hasToken) return
-    setBusyId(id)
+    setBusy(true)
     setActionError(null)
     try {
       await postApprovalDecision(
-        id,
+        requestId,
         token,
         path,
         path === 'approve' ? { channel: 'console' } : { reason: reason ?? '' },
@@ -254,87 +218,54 @@ export function ApprovalsPage() {
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Approval action failed')
     } finally {
-      setBusyId(null)
+      setBusy(false)
     }
   }
 
-  const listError = pendingQ.error ?? historyQ.error
-
   return (
-    <div data-testid="approvals-page" className="flex w-full min-w-0 flex-col gap-4">
-      <TokenField token={token} onSaved={setToken} />
+    <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4">
+      <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
+        ← Needs you
+      </a>
       {hasToken ? (
-        <p className="text-sm text-muted-foreground">Approval token saved in this browser.</p>
+        <details className="min-w-0 text-sm text-muted-foreground">
+          <summary className="cursor-pointer">Approval token saved in this browser.</summary>
+          <div className="mt-2">
+            <ApprovalTokenField token={token} onSaved={setToken} />
+          </div>
+        </details>
       ) : (
-        <p role="status" className="text-sm">
-          {MISSING_TOKEN}
-        </p>
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <p role="status" className="m-0 text-sm">
+            {MISSING_TOKEN}
+          </p>
+          <ApprovalTokenField token={token} onSaved={setToken} />
+        </div>
       )}
-      {actionError != null ? <p className="text-sm text-destructive">{actionError}</p> : null}
-      {listError != null ? (
-        <p className="text-sm text-destructive">
-          {listError instanceof Error ? listError.message : 'Could not load approvals'}
-        </p>
-      ) : null}
+      {actionError != null ? <p className="m-0 text-sm text-destructive">{actionError}</p> : null}
 
-      {deepLinkId != null ? (
-        <section aria-label={`Approval ${deepLinkId}`} className="flex w-full min-w-0 flex-col gap-2">
-          <h2 className="text-sm font-medium">Open request</h2>
-          {itemQ.isLoading ? <p className="text-sm">Opening {deepLinkId}…</p> : null}
+      {id == null ? (
+        <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
+      ) : (
+        <section aria-label={`Approval ${id}`} className="flex w-full min-w-0 flex-col gap-2">
+          {itemQ.isLoading ? <p className="m-0 text-sm">Opening {id}…</p> : null}
           {itemQ.error != null ? (
-            <p className="text-sm text-destructive">
+            <p className="m-0 text-sm text-destructive">
               {itemQ.error instanceof Error ? itemQ.error.message : 'Could not open this request'}
             </p>
           ) : null}
           {opened != null ? (
             <ApprovalCard
+              key={opened.id}
               item={opened}
               hasToken={hasToken}
-              open
-              busy={busyId === opened.id}
-              onApprove={id => void decide(id, 'approve')}
-              onReject={(id, reason) => void decide(id, 'reject', reason)}
+              busy={busy}
+              onApprove={requestId => void decide(requestId, 'approve')}
+              onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}
             />
           ) : null}
         </section>
-      ) : null}
-
-      <section aria-label="Pending requests" className="flex w-full min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">Pending</h2>
-        {pendingQ.isLoading ? <p className="text-sm">Loading pending requests…</p> : null}
-        {!pendingQ.isLoading && pending.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No pending requests.</p>
-        ) : null}
-        {pending.map(item => (
-          <ApprovalCard
-            key={item.id}
-            item={item}
-            hasToken={hasToken}
-            open={false}
-            busy={busyId === item.id}
-            onApprove={id => void decide(id, 'approve')}
-            onReject={(id, reason) => void decide(id, 'reject', reason)}
-          />
-        ))}
-      </section>
-
-      <section aria-label="Closed requests" className="flex w-full min-w-0 flex-col gap-2">
-        <h2 className="text-sm font-medium">Closed</h2>
-        {closed.length === 0 && !historyQ.isLoading ? (
-          <p className="text-sm text-muted-foreground">No closed requests.</p>
-        ) : null}
-        {closed.map(item => (
-          <ApprovalCard
-            key={item.id}
-            item={item}
-            hasToken={hasToken}
-            open={false}
-            busy={false}
-            onApprove={() => undefined}
-            onReject={() => undefined}
-          />
-        ))}
-      </section>
+      )}
     </div>
   )
 }

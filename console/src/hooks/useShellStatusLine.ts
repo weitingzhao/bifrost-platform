@@ -1,31 +1,74 @@
 import { useQuery } from '@tanstack/react-query'
+import { fetchChecklistSignals } from '@/api/checklist'
 import { fetchSelfHealth } from '@/api/core'
+import { fetchTelemetryAlerts } from '@/api/telemetry'
 import { normalizeViewerEnv } from '@/lib/control-room/fleetSnapshot'
-import { shellStatusSentence, shellViewerHealthy } from '@/lib/shell/shellStatusLine'
+import { shellViewerHealthy, systemVerdict, type SystemVerdict } from '@/lib/shell/shellStatusLine'
+
+function errorText(error: unknown, fallback: string): string | null {
+  if (error == null) return null
+  return error instanceof Error ? error.message : fallback
+}
 
 /**
- * The shell's only health poll: one sentence for the header, scoped to
- * viewer_env inside the response. No environment selector, no env query.
+ * The system verdict shown in the header and at the top of Status. Query keys are
+ * shared with the Status page panels so both read the same responses.
  */
-export function useShellStatusLine() {
-  const query = useQuery({
+export function useSystemVerdict() {
+  const health = useQuery({
     queryKey: ['shell', 'self-health'],
     queryFn: fetchSelfHealth,
     refetchInterval: 20_000,
     staleTime: 10_000,
   })
-  const loading = query.isLoading && query.data == null
-  const error =
-    query.isError
-      ? query.error instanceof Error
-        ? query.error.message
-        : 'Self-health request failed'
-      : null
+  const checklist = useQuery({
+    queryKey: ['status', 'checklist-signals'],
+    queryFn: fetchChecklistSignals,
+    refetchInterval: 60_000,
+    retry: false,
+  })
+  const alerts = useQuery({
+    queryKey: ['telemetry', 'alerts'],
+    queryFn: fetchTelemetryAlerts,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+  const verdict: SystemVerdict = systemVerdict({
+    health: {
+      data: health.data,
+      loading: health.isLoading,
+      error: errorText(health.error, 'Self-health request failed'),
+    },
+    checklist: {
+      data: checklist.data,
+      loading: checklist.isLoading,
+      error: errorText(checklist.error, 'Checklist request failed'),
+    },
+    alerts: {
+      data: alerts.data,
+      loading: alerts.isLoading,
+      error: errorText(alerts.error, 'Alerts request failed'),
+    },
+  })
   return {
-    statusLine: shellStatusSentence({ health: query.data, loading, error }),
-    viewerEnv: normalizeViewerEnv(query.data?.viewer_env),
+    verdict,
+    health,
+    refetch: async () => {
+      await Promise.all([health.refetch(), checklist.refetch(), alerts.refetch()])
+    },
+  }
+}
+
+/** Shell header: the verdict sentence plus the viewer seat from self-health. */
+export function useShellStatusLine() {
+  const { verdict, health, refetch } = useSystemVerdict()
+  const loading = health.isLoading && health.data == null
+  return {
+    statusLine: verdict.sentence,
+    statusTone: verdict.tone,
+    viewerEnv: normalizeViewerEnv(health.data?.viewer_env),
     viewerEnvLoading: loading,
-    healthy: shellViewerHealthy(query.data),
-    refetch: query.refetch,
+    healthy: shellViewerHealthy(health.data),
+    refetch,
   }
 }

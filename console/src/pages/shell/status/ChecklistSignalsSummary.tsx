@@ -1,11 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchChecklistSignals } from '@/api/checklist'
-import { findStepByItemId } from '@/lib/control-room/dailyOpsChecklistCatalog'
-
-function itemLabel(itemId: string): string {
-  const step = findStepByItemId(itemId)
-  return step?.items.find(item => item.id === itemId)?.label ?? itemId
-}
+import { checklistItemLabel } from '@/lib/shell/shellStatusLine'
 
 /** Status page summary of GET /checklist/signals. Labels come from the checklist catalog. */
 export function ChecklistSignalsSummary() {
@@ -51,7 +46,7 @@ export function ChecklistSignalsSummary() {
         <ul className="m-0 list-disc pl-4 text-sm text-muted-foreground">
           {notOk.slice(0, 5).map(row => (
             <li key={row.item_id}>
-              {itemLabel(row.item_id)} · {row.signal}
+              {checklistItemLabel(row.item_id)} · {row.signal}
               {row.detail != null && row.detail !== '' ? ` · ${row.detail}` : ''}
             </li>
           ))}

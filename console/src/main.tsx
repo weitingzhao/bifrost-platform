@@ -3,7 +3,10 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { registerServiceWorker } from '@/pwa/serviceWorker'
 import './index.css'
+
+registerServiceWorker()
 
 const queryClient = new QueryClient({
   defaultOptions: {

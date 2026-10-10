@@ -5,7 +5,7 @@ import {
   ShellNavSidebar,
   shellNavSubItemIconClass,
 } from '@bifrost/ui'
-import { ConsoleNavSlotItem } from '@/components/shell/ConsoleNavSlotItem'
+import { ConsoleNavSlotItem, type ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { TradeMonitoringPeerLinks } from '@/components/TradeMonitoringPeerLinks'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
 import { shellSidebarItems } from '@/lib/shell/shellNavItems'
@@ -15,11 +15,13 @@ export function ConsoleSidebar({
   onSelect,
   viewerEnv,
   viewerEnvLoading,
+  badges,
 }: {
   activeTab: string
   onSelect: (id: string) => void
   viewerEnv: FleetViewerEnv
   viewerEnvLoading?: boolean
+  badges?: Partial<Record<string, ConsoleNavBadge>>
 }) {
   const items = shellSidebarItems()
   const seat = (collapsed: boolean): ReactNode => (
@@ -33,6 +35,7 @@ export function ConsoleSidebar({
               activeId={activeTab}
               onSelect={onSelect}
               collapsed
+              badge={badges?.[item.id]}
             />
           ))}
         </div>
@@ -45,6 +48,7 @@ export function ConsoleSidebar({
                 item={item}
                 activeId={activeTab}
                 onSelect={onSelect}
+                badge={badges?.[item.id]}
                 renderItemIcon={entry => {
                   const Icon = entry.icon
                   if (Icon == null) return null

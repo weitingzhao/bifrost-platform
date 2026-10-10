@@ -1,4 +1,4 @@
-import { authHeaders, authedFetch, parseError } from '@/api/client'
+import { authHeaders, authedFetch, operatorToken, parseError } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
   type PlatformApprovalRecord,
@@ -43,7 +43,7 @@ export function approvalIdFromHash(hash: string): string | null {
   const q = raw.indexOf('?')
   if (q < 0) return null
   const page = raw.slice(0, q)
-  // S2 redirects #approvals?id= to #maintenance?id=. Both open the same request.
+  // #maintenance?id= is the old link; the shell rewrites it to #approvals?id=.
   if (page !== 'approvals' && page !== 'maintenance') return null
   const id = new URLSearchParams(raw.slice(q + 1)).get('id')?.trim() ?? ''
   return id === '' ? null : id
@@ -75,6 +75,35 @@ export function formatTimeRemaining(expiresAt: string, now = Date.now()): string
   if (hours === 0) return `${mins}m left`
   if (mins === 0) return `${hours}h left`
   return `${hours}h ${mins}m left`
+}
+
+/** How long a request has waited since it was created: `3d 4h`, `5h 12m`, `12m`. */
+export function formatWaited(createdAt: string, now = Date.now()): string {
+  const start = Date.parse(createdAt)
+  if (!Number.isFinite(start)) return 'unknown'
+  const totalMin = Math.max(0, Math.floor((now - start) / 60_000))
+  const days = Math.floor(totalMin / 1440)
+  const hours = Math.floor((totalMin % 1440) / 60)
+  const mins = totalMin % 60
+  if (days > 0) return hours === 0 ? `${days}d` : `${days}d ${hours}h`
+  if (hours > 0) return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`
+  return `${mins}m`
+}
+
+/** Environment named in the request params, if any. */
+export function approvalEnv(item: Pick<ApprovalItem, 'params'>): string {
+  for (const key of ['env', 'environment']) {
+    const value = item.params?.[key]
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+  }
+  return ''
+}
+
+/** Still waiting for a decision: pending and not past its expiry. */
+export function isAwaitingDecision(item: ApprovalItem, now = Date.now()): boolean {
+  if (item.status !== 'pending') return false
+  const end = Date.parse(item.expires_at)
+  return !Number.isFinite(end) || end > now
 }
 
 export function formatParams(params: unknown): string {
@@ -117,13 +146,28 @@ export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMI
     .slice(0, limit)
 }
 
+/**
+ * Reads need a viewer token. The console operator token wins; a device that only
+ * saved the approval token (the phone home-screen app) reads with that one, so the
+ * token is entered once.
+ */
+async function approvalsRead(path: string): Promise<Response> {
+  if (operatorToken() !== '') return authedFetch('approvals', path)
+  const headers = new Headers()
+  const token = readApprovalToken()
+  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
+  const r = await fetch(path, { headers })
+  if (!r.ok) throw await parseError('approvals', r)
+  return r
+}
+
 export async function fetchApprovalList(status: 'pending' | 'all'): Promise<ApprovalItem[]> {
-  const r = await authedFetch('approvals', `/api/v1/approvals?status=${status}`)
+  const r = await approvalsRead(`/api/v1/approvals?status=${status}`)
   return parseApprovalList(await r.json())
 }
 
 export async function fetchApproval(id: string): Promise<ApprovalItem> {
-  const r = await authedFetch('approvals', `/api/v1/approvals/${encodeURIComponent(id)}`)
+  const r = await approvalsRead(`/api/v1/approvals/${encodeURIComponent(id)}`)
   const body: unknown = await r.json()
   if (!isItem(body)) throw new Error('approvals: unexpected item')
   return body
