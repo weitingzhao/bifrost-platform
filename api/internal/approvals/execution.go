@@ -160,8 +160,10 @@ func (s *Service) forgetFinish(id, lease string) {
 }
 
 // flushHeld retries a finish whose write failed. It does not run the action.
-// Once the lease is past unknownGrace the held result is dropped and the
-// record becomes unknown by the normal lapse rule.
+// A read error leaves the held result in place so the next pass retries the
+// write. The held result is dropped only when the record was read and is
+// gone, the lease has changed, or the record is already finished or past
+// unknownGrace. Past that grace the record becomes unknown by the lapse rule.
 func (s *Service) flushHeld() {
 	s.mu.Lock()
 	if len(s.held) == 0 {
@@ -175,7 +177,10 @@ func (s *Service) flushHeld() {
 	s.mu.Unlock()
 	now := s.clock()
 	for id, h := range pending {
-		rec, ok := s.find(id)
+		rec, ok, err := s.load(id)
+		if err != nil {
+			continue
+		}
 		if !ok || rec.Execution == nil || rec.Execution.LeaseID != h.lease || rec.Status != StatusRunning || lapseRunning(&rec, now) {
 			s.forgetFinish(id, h.lease)
 			continue
@@ -417,7 +422,8 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 
 func (s *Service) retryDue(ctx context.Context) {
 	// Retry a finish that was computed but not stored before sweep can turn
-	// a lapsed lease into unknown. A lapsed lease drops the held result.
+	// a lapsed lease into unknown. A read error keeps the held result.
+	// A lapsed lease drops it.
 	s.flushHeld()
 	doc, err := s.sweptDoc()
 	if err != nil {

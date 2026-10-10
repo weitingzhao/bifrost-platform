@@ -65,6 +65,58 @@ func TestActionSucceededFinalWriteFailed(t *testing.T) {
 	}
 }
 
+func TestHeldFinishSurvivesAReadError(t *testing.T) {
+	root := t.TempDir()
+	b := newCAS()
+	statefile.Use(b, root)
+	t.Cleanup(func() { statefile.Use(nil, "") })
+	svc := New(filepath.Join(root, "approvals"), nil)
+	var calls atomic.Int32
+	actions.RegisterExecutor("cordon_node", func(_ context.Context, params map[string]any) (any, error) {
+		calls.Add(1)
+		return map[string]any{"node": params["name"]}, nil
+	})
+	c := svc.create(context.Background(), "s", "cordon_node", "patch", "", map[string]any{"name": "node-a"})
+	if c.Status != 201 {
+		t.Fatalf("create = %d %v", c.Status, c.Body)
+	}
+	b.failUpdate = errors.New("disk full")
+	b.allowBeforeFail = 1
+	out := svc.approve(context.Background(), c.Approval.ID, "console")
+	if out.Status != 500 || calls.Load() != 1 {
+		t.Fatalf("approve = %d %v calls=%d", out.Status, out.Body, calls.Load())
+	}
+	got, _ := svc.find(c.Approval.ID)
+	if got.Status != StatusRunning {
+		t.Fatalf("stored = %s, want the lease still running", got.Status)
+	}
+
+	b.failUpdate = nil
+	b.failRead = errors.New("store unavailable")
+	svc.retryDue(context.Background())
+	if calls.Load() != 1 {
+		t.Fatalf("the action ran again during the read failure: %d", calls.Load())
+	}
+	b.failRead = nil
+	got, _ = svc.find(c.Approval.ID)
+	if got.Status != StatusRunning {
+		t.Fatalf("read failure changed the record to %s", got.Status)
+	}
+
+	svc.retryDue(context.Background())
+	if calls.Load() != 1 {
+		t.Fatalf("the action ran again after the store recovered: %d", calls.Load())
+	}
+	got, _ = svc.find(c.Approval.ID)
+	if got.Status != StatusExecuted {
+		t.Fatalf("retried write = %s %s", got.Status, got.Error)
+	}
+	res, _ := got.Result.(map[string]any)
+	if res["node"] != "node-a" {
+		t.Fatalf("stored result = %#v", got.Result)
+	}
+}
+
 func TestUnstoredFinishBecomesUnknownWhenTheLeaseLapses(t *testing.T) {
 	root := t.TempDir()
 	b := newCAS()

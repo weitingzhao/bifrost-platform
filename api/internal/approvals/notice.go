@@ -305,13 +305,22 @@ func (s *Service) noticeEvents(evs []event) {
 	}
 }
 
-// find reads one record without sweeping.
+// find reads one record without sweeping. A read error is reported as absent.
+// Callers that must keep state across a read failure use load.
 func (s *Service) find(ref string) (Approval, bool) {
+	a, ok, _ := s.load(ref)
+	return a, ok
+}
+
+// load reads one record without sweeping. err is a store read failure.
+// ok is false only after a successful read that does not contain ref.
+func (s *Service) load(ref string) (Approval, bool, error) {
 	doc, err := s.store.read()
 	if err != nil {
-		return Approval{}, false
+		return Approval{}, false, err
 	}
-	return doc.find(ref)
+	a, ok := doc.find(ref)
+	return a, ok, nil
 }
 
 // remindDue sends the two reminders for a pending record, each at most once:

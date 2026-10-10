@@ -32,6 +32,7 @@ type casBackend struct {
 	conflicts       int
 	failUpdate      error
 	allowBeforeFail int
+	failRead        error
 }
 
 func newCAS() *casBackend {
@@ -41,6 +42,9 @@ func newCAS() *casBackend {
 func (b *casBackend) Read(_ context.Context, key string) ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.failRead != nil {
+		return nil, b.failRead
+	}
 	d, ok := b.data[key]
 	if !ok {
 		return nil, fs.ErrNotExist
