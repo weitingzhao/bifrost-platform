@@ -110,9 +110,23 @@ function viewerThreads(threads: AgentThread[]): (headers: Headers) => Response {
       : threadsResponse(threads)
 }
 
+function emptyLineage(): Response {
+  return json({
+    generated_at: '2026-10-10T07:25:00Z',
+    since: '2026-09-26T07:25:00Z',
+    days: 14,
+    reachability: 'ok',
+    threads: [],
+    coverage: [],
+    releases: [],
+    errors: [],
+  })
+}
+
 function stubFetch(
   approvals: (headers: Headers) => Response,
   threads: (headers: Headers) => Response = viewerThreads([]),
+  lineage: () => Response = emptyLineage,
 ) {
   vi.stubGlobal(
     'fetch',
@@ -122,6 +136,7 @@ function stubFetch(
       if (health != null) return health
       if (url.includes('/api/v1/approvals?status=pending')) return approvals(new Headers(init?.headers))
       if (url.includes('/api/v1/agent/threads')) return threads(new Headers(init?.headers))
+      if (url.includes('/api/v1/lineage')) return lineage()
       return json({ error: `unexpected ${url}` }, 500)
     }),
   )
@@ -213,9 +228,20 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('2 waiting for you')).toBeTruthy()
     const group = screen.getByRole('region', { name: 'Silent threads' })
-    expect(within(group).getByText('W-54 thread heartbeat')).toBeTruthy()
-    expect(within(group).getByText('Silent 15m')).toBeTruthy()
-    expect(within(group).getByText('in turn 35m · last before_tool Bash (timeout 120s) 15m ago')).toBeTruthy()
+    expect(
+      within(group).getByText(
+        'A thread stopped in the middle of a turn and has sent nothing since. Nobody is working on it until someone opens it.',
+      ),
+    ).toBeTruthy()
+    expect(within(group).getByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeTruthy()
+    expect(within(group).queryByText('W-54 thread heartbeat')).toBeNull()
+    expect(
+      within(group).getByText('Stopped 15m ago · last activity: started a tool call · vision-mac'),
+    ).toBeTruthy()
+    expect(within(group).getByText('Open it in claude on vision-mac')).toBeTruthy()
+    expect(within(group).queryByRole('button', { name: /dismiss/i })).toBeNull()
+    const row = group.querySelector('[data-agent-thread="0b8e2f4a-1111-2222-3333-444455556666"]')
+    expect(row?.querySelector('.truncate')).toBeNull()
     expect(within(group).queryByText('Busy thread')).toBeNull()
     expect(within(group).queryByText('Done thread')).toBeNull()
   })
@@ -316,9 +342,10 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Approve' })).getAllByRole('link')).toHaveLength(1)
-    expect(
-      within(screen.getByRole('region', { name: 'Silent threads' })).getByText(/Could not read agent threads/),
-    ).toBeTruthy()
+    const silent = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(silent).getByText(/Could not read agent threads/)).toBeTruthy()
+    expect(within(silent).getByText('Silent threads · Unknown')).toBeTruthy()
+    expect(within(silent).queryByText('Silent threads · 0')).toBeNull()
   })
 
   it('reads the threads with a saved approval token when there is no operator token', async () => {
@@ -337,6 +364,86 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('1 waiting for you')).toBeTruthy()
     expect(seen).toContain('Bearer admin-token')
-    expect(within(screen.getByRole('region', { name: 'Silent threads' })).getByText('W-54 thread heartbeat')).toBeTruthy()
+    expect(
+      within(screen.getByRole('region', { name: 'Silent threads' })).getByText(
+        'claude 0b8e2f4a-1111-2222-3333-444455556666',
+      ),
+    ).toBeTruthy()
+  })
+
+  it('uses the lineage title and link when a transcript matches, and the id when lineage fails', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      viewerThreads([
+        silentThread(),
+        silentThread({
+          thread: 'thread-no-link',
+          vendor: 'codex',
+          host: 'mini',
+          event: 'turn_start',
+          title: 'payload title that lineage replaces',
+        }),
+      ]),
+      () =>
+        json({
+          threads: [
+            {
+              session: 'local_s1',
+              title: 'Heartbeat work',
+              transcripts: ['0b8e2f4a-1111-2222-3333-444455556666'],
+              link: 'https://claude.example/t/1',
+            },
+            {
+              session: 'local_s2',
+              title: 'Codex job',
+              transcripts: ['/Users/owner/.codex/thread-no-link.jsonl'],
+              link: '',
+            },
+          ],
+        }),
+    )
+    const { unmount } = render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Heartbeat work')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(screen.getByText('2 waiting for you')).toBeTruthy()
+    expect(within(group).getByRole('link', { name: 'Open thread' }).getAttribute('href')).toBe(
+      'https://claude.example/t/1',
+    )
+    expect(within(group).getByText('Codex job')).toBeTruthy()
+    expect(within(group).queryByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeNull()
+    expect(within(group).getByText('Stopped 15m ago · last activity: started a turn · mini')).toBeTruthy()
+    expect(within(group).getByText('Open it in codex on mini')).toBeTruthy()
+    expect(within(group).queryByText('payload title that lineage replaces')).toBeNull()
+    expect(within(group).queryByRole('button', { name: /dismiss/i })).toBeNull()
+    unmount()
+
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      viewerThreads([silentThread({ event: 'after_tool' })]),
+      () => json({ error: 'lineage down' }, 500),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const failed = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(failed).getByText('Silent threads · 1')).toBeTruthy()
+    expect(within(failed).queryByText('Silent threads · 0')).toBeNull()
+    expect(within(failed).getByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeTruthy()
+    expect(
+      within(failed).getByText('Stopped 15m ago · last activity: finished a tool call · vision-mac'),
+    ).toBeTruthy()
+  })
+
+  it('does not put a saved approval token in the page HTML', async () => {
+    const secret = 'w61-saved-token-not-in-dom'
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, secret)
+    stubFetch(() => json({ error: 'down' }, 500))
+    const { container } = render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.getByText('A token is saved. Type a new one to replace it.')).toBeTruthy()
+    expect(container.innerHTML).not.toContain(secret)
+    expect(container.textContent ?? '').not.toContain(secret)
+    expect((screen.getByLabelText('Set approval token') as HTMLInputElement).value).toBe('')
+    expect((document.getElementById('approval-token') as HTMLInputElement).outerHTML).not.toContain(secret)
   })
 })

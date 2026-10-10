@@ -1,19 +1,30 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { Button } from '@bifrost/ui'
+import { Button, DenseTag } from '@bifrost/ui'
 import { authedFetch } from '@/api/client'
 import {
-  approvalEnv,
   approvalIdFromHash,
   fetchApproval,
-  formatDecidedAt,
   formatParams,
   formatTimeRemaining,
   formatWaited,
+  isUnsetDecidedAt,
   postApprovalDecision,
   readApprovalToken,
   type ApprovalItem,
 } from '@/api/approvals'
+import {
+  commandText,
+  decisionBanner,
+  decisionEnv,
+  decisionTitle,
+  ownerTerminal,
+  splitReason,
+  technicalParams,
+  tierWords,
+  visibleTimestamp,
+  workItems,
+} from '@/pages/approvalDecision'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
@@ -32,9 +43,67 @@ function useDeepLinkId(): string | null {
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 max-w-full">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="break-words">{value || '—'}</div>
+    </div>
+  )
+}
+
+function Prose({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 max-w-full">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="max-w-[65ch] whitespace-pre-wrap break-words" data-prose={label}>
+        {value || '—'}
+      </div>
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [label, setLabel] = useState('Copy')
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className="w-full shrink-0 sm:w-auto"
+      onClick={() => {
+        void (async () => {
+          try {
+            await navigator.clipboard.writeText(text)
+            setLabel('Copied')
+          } catch {
+            setLabel('Copy failed')
+          }
+          window.setTimeout(() => setLabel('Copy'), 2000)
+        })()
+      }}
+    >
+      {label}
+    </Button>
+  )
+}
+
+function CodeBox({
+  text,
+  capped = false,
+  marker,
+}: {
+  text: string
+  capped?: boolean
+  marker?: 'command' | 'owner'
+}) {
+  return (
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-2">
+      <pre
+        data-approval-command={marker === 'command' ? '' : undefined}
+        data-owner-line={marker === 'owner' ? '' : undefined}
+        className={`m-0 w-full min-w-0 max-w-full overflow-auto whitespace-pre font-mono text-xs ${capped ? 'max-h-48' : ''}`}
+      >
+        {text}
+      </pre>
+      <CopyButton text={text} />
     </div>
   )
 }
@@ -42,8 +111,7 @@ function Field({ label, value }: { label: string; value: string }) {
 function ActuationDetail({ item }: { item: ApprovalItem }) {
   const planId =
     item.action === 'apply_manifest' && typeof item.params.plan_id === 'string' ? item.params.plan_id : ''
-  const command =
-    item.action === 'owner_run_command' && typeof item.params.command === 'string' ? item.params.command : ''
+  const command = commandText(item.params)
   const plan = useQuery({
     queryKey: ['actuation-plan', planId],
     enabled: planId !== '',
@@ -60,7 +128,8 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
       }
     },
   })
-  if (command !== '') return <Field label="Command" value={command} />
+  // The command has its own block above this one.
+  if (command != null) return null
   const pipelineParams =
     item.action === 'start_pipeline_run' && item.params.params != null && typeof item.params.params === 'object'
       ? (item.params.params as Record<string, unknown>)
@@ -85,7 +154,9 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
       <Field label="Plan" value={status} />
       {summary?.logs ? <Field label="Plan logs" value={summary.logs} /> : null}
       {summary?.objects != null ? (
-        <pre className="overflow-x-auto text-xs">{JSON.stringify(summary.objects, null, 2)}</pre>
+        <pre className="m-0 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre font-mono text-xs">
+          {JSON.stringify(summary.objects, null, 2)}
+        </pre>
       ) : null}
     </>
   )
@@ -108,46 +179,72 @@ function ApprovalCard({
   const pending = item.status === 'pending'
   const canDecide = pending && hasToken && !busy
   const trimmed = reason.trim()
+  const title = decisionTitle(item)
+  const env = decisionEnv(item)
+  const words = tierWords(item.tier)
+  const { lead, rest } = splitReason(item.reason)
+  const chips = workItems(item.reason)
+  const command = commandText(item.params)
+  const paramsLeft = technicalParams(item.params)
+  const terminal = ownerTerminal(item)
+  const created = visibleTimestamp(item.created_at)
+  const expires = visibleTimestamp(item.expires_at)
+  const decided = visibleTimestamp(item.decided_at)
   return (
-    <article
-      id={`approval-${item.id}`}
-      data-open="true"
-      aria-current="true"
-      className="flex w-full min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3"
-    >
-      <h2 className="m-0 break-all text-sm font-medium" data-approval-ref>
-        Request {item.id}
-      </h2>
-      <div className="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-        <Field label="Requester" value={item.requester} />
-        <Field label="Action" value={item.action} />
-        <Field label="Tier" value={item.tier} />
-        <Field label="Environment" value={approvalEnv(item)} />
-        <Field label="Status" value={item.status} />
-        {pending ? (
-          <Field
-            label="Waited · time remaining"
-            value={`${formatWaited(item.created_at)} · ${formatTimeRemaining(item.expires_at)}`}
-          />
-        ) : (
-          <Field label="Decided at" value={formatDecidedAt(item)} />
-        )}
-        <Field label="Rollback" value={item.rollback ?? ''} />
-      </div>
-      <Field label="Reason" value={item.reason} />
-      <ActuationDetail item={item} />
-      <details open className="min-w-0">
-        <summary className="cursor-pointer text-sm">Params</summary>
-        <pre className="mt-1 max-w-full whitespace-pre-wrap break-all text-xs">
-          {formatParams(item.params)}
-        </pre>
-      </details>
-      {!pending ? (
-        <Field
-          label={item.error ? 'Error' : 'Result'}
-          value={item.error ? item.error : formatParams(item.result)}
-        />
-      ) : (
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-3">
+      <article
+        id={`approval-${item.id}`}
+        data-open="true"
+        aria-current="true"
+        className="flex w-full min-w-0 max-w-full flex-col gap-3 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3"
+      >
+        <h2 className="m-0 break-words text-base font-medium" data-approval-ref>
+          {title}
+        </h2>
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+          {env !== '' ? <DenseTag variant="neutral">{env}</DenseTag> : null}
+          <DenseTag variant={item.tier === 'D' ? 'danger' : item.tier === 'B' ? 'neutral' : 'warning'}>
+            {item.tier || '—'}
+          </DenseTag>
+          {words !== '' ? <span className="break-words text-sm">{words}</span> : null}
+          <DenseTag variant="neutral">{item.status}</DenseTag>
+        </div>
+        <p
+          role="status"
+          data-decision-banner
+          className="m-0 max-w-full break-words rounded-[var(--control-radius)] border border-[var(--card-border)] bg-[var(--field-fill)] px-3 py-2 text-sm"
+        >
+          {decisionBanner(item)}
+        </p>
+        <Prose label="If you approve" value={lead} />
+        {rest !== '' ? <Prose label="Why" value={rest} /> : null}
+        <Prose label="If it goes wrong" value={item.rollback ?? ''} />
+        <div className="min-w-0 max-w-full">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Asked by</div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <span className="break-words">{item.requester || '—'}</span>
+            {chips.map(id => (
+              <DenseTag key={id} variant="neutral">
+                {id}
+              </DenseTag>
+            ))}
+          </div>
+        </div>
+        {terminal != null ? (
+          <div className="min-w-0 max-w-full">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+              After approving, run in a terminal:
+            </div>
+            <div className="mt-1">
+              <CodeBox text={terminal.line} marker="owner" />
+            </div>
+            {terminal.fallback ? (
+              <p className="m-0 mt-1 break-words text-sm">run the owner-run script with this id</p>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+      {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
           <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor={`reject-${item.id}`}>
             Reject reason
@@ -180,8 +277,56 @@ function ApprovalCard({
             </Button>
           </div>
         </div>
-      )}
-    </article>
+      ) : null}
+      <details className="min-w-0 max-w-full">
+        <summary className="cursor-pointer text-sm">Technical details</summary>
+        <div className="mt-2 flex w-full min-w-0 max-w-full flex-col gap-3">
+          {command != null ? (
+            <div className="min-w-0 max-w-full">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Command</div>
+              <div className="mt-1">
+                <CodeBox text={command} capped marker="command" />
+              </div>
+            </div>
+          ) : null}
+          {paramsLeft != null ? (
+            <div className="min-w-0 max-w-full">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Params</div>
+              <pre
+                data-approval-params
+                className="m-0 mt-1 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre font-mono text-xs"
+              >
+                {paramsLeft}
+              </pre>
+            </div>
+          ) : null}
+          {item.error ? <Field label="Error" value={item.error} /> : null}
+          {!item.error && item.result != null ? (
+            <div className="min-w-0 max-w-full">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Result</div>
+              <pre className="m-0 mt-1 max-h-48 w-full min-w-0 max-w-full overflow-auto whitespace-pre-wrap break-words font-mono text-xs">
+                {formatParams(item.result)}
+              </pre>
+            </div>
+          ) : null}
+          {item.reject_reason ? <Field label="Reject reason" value={item.reject_reason} /> : null}
+          <Field label="Action" value={item.action} />
+          <Field label="Request id" value={item.id} />
+          {item.params_hash ? <Field label="Params hash" value={item.params_hash} /> : null}
+          {item.approval_line ? <Field label="Approval line" value={item.approval_line} /> : null}
+          {created != null ? <Field label="Created" value={created} /> : null}
+          {expires != null ? <Field label="Expires" value={expires} /> : null}
+          {decided != null ? <Field label="Decided at" value={decided} /> : null}
+          {pending && !isUnsetDecidedAt(item.created_at) ? (
+            <Field
+              label="Waited · time remaining"
+              value={`${formatWaited(item.created_at)} · ${formatTimeRemaining(item.expires_at)}`}
+            />
+          ) : null}
+          <ActuationDetail item={item} />
+        </div>
+      </details>
+    </div>
   )
 }
 
@@ -229,7 +374,7 @@ export function ApprovalsPage() {
   }
 
   return (
-    <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4">
+    <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
         ← Needs you
       </a>

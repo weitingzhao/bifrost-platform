@@ -1,27 +1,32 @@
+import { useQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
+import { fetchLineage } from '@/api/lineage'
 import { readApprovalToken } from '@/api/approvals'
 import { operatorToken } from '@/api/client'
 import { OpsSection } from '@/components/layout/OpsSection'
-import { AgentThreadRow } from '@/components/shell/AgentThreadRow'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
 import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
+import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 
 function Group({
   label,
   count,
+  description,
   children,
 }: {
   label: string
   count: string
+  description?: string
   children: ReactNode
 }) {
   return (
     <div role="region" aria-label={label}>
-      <OpsSection title={`${label} · ${count}`} bodyPadding="compact">
+      <OpsSection title={`${label} · ${count}`} description={description} bodyPadding="compact">
         {children}
       </OpsSection>
     </div>
@@ -38,6 +43,12 @@ function Note({ children }: { children: ReactNode }) {
  */
 export function NeedsYouPage() {
   const { count, approveCount, silentCount, toApprove, silent, lost, capacityText, query } = useNeedsYou()
+  const lineageQ = useQuery({
+    queryKey: ['lineage', 'needs-you'],
+    queryFn: () => fetchLineage(14),
+    staleTime: 60_000,
+    retry: false,
+  })
   const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
   const hasReadToken = operatorToken() !== '' || approvalToken !== ''
   const now = Date.now()
@@ -93,14 +104,18 @@ export function NeedsYouPage() {
           <HostHeartbeatRow key={host.host} host={host} />
         ))}
         {silent.map(t => (
-          <AgentThreadRow key={`${t.vendor}/${t.thread}`} thread={t} />
+          <SilentThreadRow
+            key={`${t.vendor}/${t.thread}`}
+            thread={t}
+            match={resolveSilentThread(t.thread, lineageQ.data?.threads)}
+          />
         ))}
       </ul>
     )
   }
 
   return (
-    <div data-testid="needs-you-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4">
+    <div data-testid="needs-you-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <SystemVerdictLine link />
       <p className="m-0 text-base font-medium text-foreground" data-needs-you-count={needsYouCountText(count)}>
         {count.state === 'known' && count.count === 0
@@ -114,7 +129,11 @@ export function NeedsYouPage() {
       <Group label="Approve" count={needsYouCountText(approveCount)}>
         {approve}
       </Group>
-      <Group label="Silent threads" count={needsYouCountText(silentCount)}>
+      <Group
+        label="Silent threads"
+        count={needsYouCountText(silentCount)}
+        description={SILENT_THREAD_EXPLANATION}
+      >
         {stalled}
       </Group>
       <Group label="Decide" count="—">
