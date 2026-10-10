@@ -715,7 +715,14 @@ func (s *Service) result(ref string, in resultInput) decided {
 		}
 		if !started {
 			if late {
-				bad = &decided{Status: 409, Body: map[string]any{"error": "lease lapsed; a refusal cannot requeue an unknown run", "status": a.Status}}
+				// The unknown transition is stored with this refusal. Hand the
+				// events to the handler so the Owner is notified once. A later
+				// request finds the record already unknown and has no events.
+				bad = &decided{
+					Status: 409,
+					Body:   map[string]any{"error": "lease lapsed; a refusal cannot requeue an unknown run", "status": a.Status},
+					events: append([]event(nil), evs...),
+				}
 				doc.put(a)
 				rec = a
 				return nil
