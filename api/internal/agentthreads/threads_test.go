@@ -1,12 +1,14 @@
 package agentthreads
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -754,6 +756,51 @@ func TestLostFirstResponseReplaysNonce(t *testing.T) {
 	}
 }
 
+func TestPeriodicFlushWipesRegisterKeyWhenNothingIsBuffered(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "agent-threads")
+	rec := NewRecorder(NewStore(path), DefaultConfig())
+	now := t0
+	rec.now = func() time.Time { return now }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	h.now = func() time.Time { return now }
+	const nonce = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	res := postBeat(h, `{"thread":"t1","vendor":"codex","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1,"register_nonce":"`+nonce+`"}`)
+	if res.Code != http.StatusAccepted {
+		t.Fatal(res.Body.String())
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || !bytes.Contains(raw, []byte(`"register_key"`)) {
+		t.Fatalf("register key not stored: %v %s", err, raw)
+	}
+	// Every reporter has stopped. A flush inside the window must not write.
+	now = t0.Add(time.Minute)
+	if err := rec.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(raw, after) {
+		t.Fatal("periodic flush wrote while the registration window was still open")
+	}
+	now = t0.Add(registerWindow + time.Second)
+	if err := rec.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	st, err := NewStore(path).Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := st.Threads[Key("codex", "t1")]
+	if got.RegisterKey != "" {
+		t.Fatal("plaintext key survived a quiet periodic flush")
+	}
+	if got.KeyHash == "" {
+		t.Fatal("the quiet flush removed the key hash")
+	}
+}
+
 func TestUnknownKeyLeavesTheThread(t *testing.T) {
 	rec := NewRecorder(NewStore(""), DefaultConfig())
 	rec.now = func() time.Time { return t0 }
@@ -953,6 +1000,17 @@ func TestLiveThreadsFillTheCap(t *testing.T) {
 	if _, ok := st.Threads[Key("codex", "overflow")]; ok || len(st.Threads) != maxThreads {
 		t.Fatalf("overflow stored, len %d", len(st.Threads))
 	}
+	if st.ThreadsRefused != 1 || !st.LastThreadRefusal.Equal(t0) {
+		t.Fatalf("refusal record: %d %s", st.ThreadsRefused, st.LastThreadRefusal)
+	}
+	listed := httptest.NewRecorder()
+	h.HandleList(listed, httptest.NewRequest(http.MethodGet, "/api/v1/agent/threads", nil))
+	if !strings.Contains(listed.Body.String(), `"threads_refused":1`) || !strings.Contains(listed.Body.String(), `"last_thread_refusal":"2026-10-10T04:03:00Z"`) {
+		t.Fatalf("list hid the refusal: %s", listed.Body.String())
+	}
+	if strings.Contains(listed.Body.String(), "register_key") || strings.Contains(listed.Body.String(), "overflow") {
+		t.Fatalf("list stored the refused thread or a key: %s", listed.Body.String())
+	}
 	// A finished thread is the one that makes room. The oldest mid-turn stays.
 	end := postBeat(h, `{"thread":"t0","vendor":"codex","host":"mbp","turn_id":"turn","event":"turn_end","seq":2,"thread_key":"`+keys[0]+`"}`)
 	if end.Code != http.StatusAccepted {
@@ -974,6 +1032,49 @@ func TestLiveThreadsFillTheCap(t *testing.T) {
 	}
 	if _, kept := st.Threads[Key("codex", "overflow")]; !kept || len(st.Threads) != maxThreads {
 		t.Fatalf("new thread not kept, len %d", len(st.Threads))
+	}
+	if st.ThreadsRefused != 1 {
+		t.Fatalf("a later registration cleared the refusal count: %d", st.ThreadsRefused)
+	}
+}
+
+func TestUnstartedTurnStaysRefusedUntilTurnStart(t *testing.T) {
+	rec := NewRecorder(NewStore(""), DefaultConfig())
+	rec.now = func() time.Time { return t0 }
+	h := NewHandler(rec, DefaultConfig(), nil, nil)
+	first := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"turn_start","seq":1}`)
+	var issued struct {
+		Key string `json:"thread_key"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &issued); err != nil || first.Code != http.StatusAccepted {
+		t.Fatal(first.Body.String())
+	}
+	// The turn_start for turn-b never arrived. A later event of that turn is refused.
+	missed := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-b","event":"before_tool","tool":"Bash","seq":2,"thread_key":"`+issued.Key+`"}`)
+	if missed.Code != http.StatusConflict || !strings.Contains(missed.Body.String(), "older turn refused") {
+		t.Fatalf("unstarted turn was accepted: %d %s", missed.Code, missed.Body.String())
+	}
+	st, _ := rec.State()
+	if st.Threads[Key("claude", "t1")].TurnID != "turn-a" {
+		t.Fatal("a refused event moved the turn")
+	}
+	opened := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-b","event":"turn_start","seq":2,"thread_key":"`+issued.Key+`"}`)
+	if opened.Code != http.StatusAccepted {
+		t.Fatal(opened.Body.String())
+	}
+	next := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-b","event":"before_tool","tool":"Bash","seq":3,"thread_key":"`+issued.Key+`"}`)
+	if next.Code != http.StatusAccepted {
+		t.Fatal(next.Body.String())
+	}
+	st, _ = rec.State()
+	got := st.Threads[Key("claude", "t1")]
+	if got.TurnID != "turn-b" || got.Event != BeforeTool {
+		t.Fatalf("server did not end on the new turn: %+v", got)
+	}
+	// A finished turn stays refused. turn-a has been left.
+	back := postBeat(h, `{"thread":"t1","vendor":"claude","host":"mbp","turn_id":"turn-a","event":"before_tool","tool":"Bash","seq":4,"thread_key":"`+issued.Key+`"}`)
+	if back.Code != http.StatusConflict || !strings.Contains(back.Body.String(), "older turn refused") {
+		t.Fatalf("finished turn was reopened: %d %s", back.Code, back.Body.String())
 	}
 }
 

@@ -39,8 +39,10 @@ func decodeState(raw []byte) (State, error) {
 
 func clone(st State) State {
 	out := State{
-		Threads: make(map[string]Thread, len(st.Threads)),
-		Hosts:   make(map[string]Host, len(st.Hosts)),
+		Threads:           make(map[string]Thread, len(st.Threads)),
+		Hosts:             make(map[string]Host, len(st.Hosts)),
+		ThreadsRefused:    st.ThreadsRefused,
+		LastThreadRefusal: st.LastThreadRefusal,
 	}
 	for k, t := range st.Threads {
 		if t.PriorTurns != nil {

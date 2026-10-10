@@ -1,5 +1,5 @@
 // Package agentthreads notices an agent session that stopped in the middle of
-// a turn (host asleep, process hung, network gone) and pages the Owner once.
+// a turn (host asleep, process hung, network gone) and pages the Owner.
 //
 // A host is shown as lost about 3 to 4 minutes after its last heartbeat: the
 // threshold itself is 3 minutes, and the API may still take one flush interval
@@ -7,29 +7,41 @@
 // hard "within 3 minutes". Session silence is max(10 minutes, declared tool
 // timeout + 2 minutes), measured on the server clock.
 //
-// The first event of a thread is issued a random thread key. Only the hash is
-// stored. The client also sends a registration nonce it generated; the same
-// nonce returns the same key for registerWindow (2 minutes), which is how a
-// lost first response is retried. After that window the plaintext key is
-// wiped. A later event must present the key. A record created before keys
-// existed is migrated by issuing a key on its next event. A thread the server
-// has already pruned accepts a stale key only as a tombstone: it re-registers
-// with a new key and never accepts the stale one again. A live thread whose
-// key the caller does not hold answers 409 "unknown key" and is left in
-// place. The client then opens a new thread record and keeps the old key as
-// superseded; it does not reuse that key, and this server does not let the
-// reporter token delete or replace the old record.
+// What is stored for a thread is the sha256 of its key, plus the plaintext
+// key during the registration window. The first event is issued a random
+// key. The client also sends a registration nonce it generated. For
+// registerWindow (2 minutes) that nonce is a recovery credential: a holder
+// of the shared reporter token who also has the nonce can replay it and
+// receive the same key. The nonce is not bound to a reporter principal.
+// Once the window has passed, the plaintext key is removed. The periodic
+// flush does that even when no event is buffered, and it writes only when a
+// key has actually expired. A later event must present the key. A record
+// that has no hash (it was created before keys existed) is migrated by
+// issuing a key on its next event. A thread the server has already pruned
+// accepts a stale key only as a tombstone: it re-registers with a new key
+// and never accepts the stale one again. A live thread whose key the caller
+// does not hold answers 409 "unknown key" and is left in place. The client
+// then opens a new thread record and keeps the old key as superseded; it
+// does not reuse that key, and this server does not let the reporter token
+// delete or replace the old record.
 //
 // Each event carries a per-thread turn id and a sequence that only grows. A
 // sequence that is not newer is ignored. An event from an older turn is
 // refused even when its sequence is newer: a new turn is accepted only as
-// turn_start, and a turn id that has already been left is refused. Silence
-// and host loss are timed from the server clock. A waiting_owner thread stays
-// in progress and is not paged. A lost host is paged once, and its mid-turn
-// threads are shown as host lost; the heartbeat that marks the host back is
-// not paged. Sending is claimed with an id and an expiry, and marked sent
-// only after the push returns; a claim whose worker died is retried once it
-// expires.
+// turn_start, and a turn id that has already been left is refused. That
+// refusal stays strict for a finished turn; a later event does not reopen
+// it. Silence and host loss are timed from the server clock. A
+// waiting_owner thread stays in progress and is not paged. A lost host is
+// paged, and its mid-turn threads are shown as host lost; the heartbeat
+// that marks the host back is not paged. Sending is claimed with an id and
+// an expiry, and marked sent only after the push returns. A claim whose
+// worker died is retried once it expires. The push may arrive twice: the
+// relay is not given a stable dedup id, so a crash after the push returns
+// and before the sent mark is written sends again when the claim expires.
+//
+// When every thread slot is a live thread, the new registration is refused
+// and not stored. The statefile keeps a counter of those refusals and the
+// time of the last one, and the thread list returns both.
 //
 // Trust boundary: there is one shared reporter token, not a credential per
 // host. Every holder of that token can report a heartbeat for any host and
@@ -227,6 +239,13 @@ type Host struct {
 type State struct {
 	Threads map[string]Thread `json:"threads"`
 	Hosts   map[string]Host   `json:"hosts,omitempty"`
+	// ThreadsRefused counts new thread registrations that were refused
+	// because the live cap was full. LastThreadRefusal is when the last one
+	// happened. Neither is a thread row, so a refusal does not consume a slot.
+	// The list returns both. Needs You counts the condition while the last
+	// refusal is younger than one hour.
+	ThreadsRefused    int       `json:"threads_refused,omitempty"`
+	LastThreadRefusal time.Time `json:"last_thread_refusal,omitempty"`
 }
 
 // Key is the map key of a thread: vendor and thread id.

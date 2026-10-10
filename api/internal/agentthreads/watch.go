@@ -136,6 +136,8 @@ func (w *Watcher) tick(ctx context.Context) bool {
 		}
 		subject, body := w.cfg.HostMessage(h, w.cfg.MidTurn(st, name), now)
 		slog.Info("agent_host_lost", "host", name, "quiet", now.Sub(h.At).String(), "claim", id)
+		// Retryable delivery, not exactly once. The relay has no dedup id:
+		// a crash after notify returns and before complete sends this again.
 		if w.notify == nil {
 			if cerr := w.completeHost(name, id, h.At, now); cerr != nil {
 				slog.Warn("agent_threads_watch", "host_complete", name, "err", cerr)
@@ -180,6 +182,8 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 		}
 		subject, body := w.cfg.Message(t, now)
 		slog.Info("agent_thread_silent", "thread", k, "host", t.Host, "last_event", t.Event, "quiet", now.Sub(t.At).String(), "claim", id)
+		// Retryable delivery, not exactly once. The relay has no dedup id:
+		// a crash after notify returns and before complete sends this again.
 		if w.notify == nil {
 			if cerr := w.complete(k, id, t.At, now); cerr != nil {
 				slog.Warn("agent_threads_watch", "complete", k, "err", cerr)

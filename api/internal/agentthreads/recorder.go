@@ -143,6 +143,13 @@ func (r *Recorder) admitSync(b Beat, now time.Time) (Decision, error) {
 	})
 	if refused {
 		noteThreadRefused()
+		// The registration update rolled back, so the counter is a separate write.
+		// A failure here still leaves the caller with ErrThreadFull.
+		_ = r.store.Update(func(st *State) error {
+			st.ThreadsRefused++
+			st.LastThreadRefusal = now
+			return nil
+		})
 	}
 	if err != nil {
 		return Decision{}, err
@@ -304,17 +311,19 @@ func (r *Recorder) enqueue(b Beat) {
 }
 
 // Flush writes the buffered events. On failure they stay buffered.
+// An empty buffer still drops registration plaintext whose window has
+// passed, and that path writes only when a key is actually expired.
 func (r *Recorder) Flush() error {
 	r.mu.Lock()
 	batch := r.pending
 	hosts := r.hosts
 	r.pending = nil
 	r.hosts = nil
+	now := r.now().UTC()
 	r.mu.Unlock()
 	if len(batch) == 0 && len(hosts) == 0 {
-		return nil
+		return r.wipeExpiredRegisterKeys(now)
 	}
-	now := r.now().UTC()
 	cutoff := now.Add(-r.cfg.Retain)
 	var refusedThreads, refusedHosts int
 	err := r.store.Update(func(st *State) error {
@@ -329,6 +338,8 @@ func (r *Recorder) Flush() error {
 			if !seen {
 				if ferr := st.fitNewThread(k); ferr != nil {
 					delete(st.Threads, k)
+					st.ThreadsRefused++
+					st.LastThreadRefusal = now
 					refusedThreads++
 				}
 			}
@@ -362,6 +373,33 @@ func (r *Recorder) Flush() error {
 			r.hosts = r.hosts[over:]
 		}
 		r.mu.Unlock()
+	}
+	return err
+}
+
+// errNothingExpired tells Update not to write when a concurrent pass already
+// cleared the plaintext keys.
+var errNothingExpired = errors.New("nothing expired")
+
+// wipeExpiredRegisterKeys removes registration plaintext after the window.
+// It does not write when every key is still inside the window.
+func (r *Recorder) wipeExpiredRegisterKeys(now time.Time) error {
+	st, err := r.store.Load()
+	if err != nil {
+		return err
+	}
+	if !expiredRegisterKey(st, now) {
+		return nil
+	}
+	err = r.store.Update(func(st *State) error {
+		if !expiredRegisterKey(*st, now) {
+			return errNothingExpired
+		}
+		wipeKeys(st, now)
+		return nil
+	})
+	if errors.Is(err, errNothingExpired) {
+		return nil
 	}
 	return err
 }

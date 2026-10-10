@@ -103,6 +103,10 @@ type listResponse struct {
 	HostLostAfterSeconds int64      `json:"host_lost_after_seconds"`
 	Threads              []View     `json:"threads"`
 	Hosts                []HostView `json:"hosts"`
+	// ThreadsRefused and LastThreadRefusal are the capacity gap. The refused
+	// threads themselves are not in Threads.
+	ThreadsRefused    int       `json:"threads_refused"`
+	LastThreadRefusal time.Time `json:"last_thread_refusal,omitempty"`
 }
 
 // HandleList is GET /api/v1/agent/threads: every retained thread with its
@@ -133,5 +137,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		HostLostAfterSeconds: secs(h.cfg.HostLostAfter),
 		Threads:              h.cfg.Views(st, now),
 		Hosts:                h.cfg.HostViews(st, now),
+		ThreadsRefused:       st.ThreadsRefused,
+		LastThreadRefusal:    st.LastThreadRefusal,
 	})
 }
