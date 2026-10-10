@@ -130,7 +130,8 @@ func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
 	if rec.Code != http.StatusCreated || hits != 1 {
 		t.Fatalf("create with notify = %d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}
-	if !strings.Contains(got.Message, "cordon_node") || !strings.Contains(got.Message, "cursor-b1") || !strings.Contains(got.ClickURL, "#approvals?id=") {
+	if got.Title != "#1 · C · cordon_node · node" || !strings.Contains(got.Message, "name=node-a") ||
+		!strings.Contains(got.Message, "cursor-b1") || !strings.Contains(got.ClickURL, "#approvals?id=") {
 		t.Fatalf("notify body = %+v", got)
 	}
 	if strings.Contains(got.Message, "notify-test-token") {
@@ -140,6 +141,26 @@ func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
 	rec = call(t, h, http.MethodPost, "/api/v1/approvals", `{"action":"cordon_node","params":{"name":"node-b"},"reason":"patch","rollback":"uncordon"}`, "operator-test-token")
 	if rec.Code != http.StatusCreated || hits != 2 {
 		t.Fatalf("create after relay failure = %d hits=%d %s", rec.Code, hits, rec.Body.String())
+	}
+
+	// TD-286: each record shows what happened to its push.
+	for _, tc := range []struct{ ref, result string }{{"1", "accepted"}, {"2", "failed"}} {
+		rec = call(t, h, http.MethodGet, "/api/v1/approvals/"+tc.ref, "", "viewer-test-token")
+		var a struct {
+			Number     int `json:"number"`
+			Deliveries []struct {
+				Kind, Channel, Result, Error string
+			} `json:"deliveries"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &a); err != nil || rec.Code != http.StatusOK {
+			t.Fatalf("get #%s = %d %s", tc.ref, rec.Code, rec.Body.String())
+		}
+		if len(a.Deliveries) != 1 || a.Deliveries[0].Kind != "created" || a.Deliveries[0].Channel != "ntfy" || a.Deliveries[0].Result != tc.result {
+			t.Fatalf("#%s deliveries = %s", tc.ref, rec.Body.String())
+		}
+		if tc.result == "failed" && !strings.Contains(a.Deliveries[0].Error, "502") {
+			t.Fatalf("#%s failure reason = %s", tc.ref, rec.Body.String())
+		}
 	}
 }
 

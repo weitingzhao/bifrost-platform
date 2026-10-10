@@ -15,6 +15,9 @@
 //   - POST /alerts/notify takes {title, message, click_url, priority} and
 //     publishes one ntfy message. click_url is sent as the Click header so a
 //     phone tap opens the Console approval. Same bearer as the other posts.
+//     The answer carries one delivery per target ({channel, target, result,
+//     error}) so the platform can store it on the approval; target is a hash,
+//     never the topic.
 //
 // It is cluster-free (no client-go) like the rest of the operator plane.
 package alertrelay
@@ -22,7 +25,9 @@ package alertrelay
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -89,11 +94,29 @@ type Message struct {
 	ClickURL string // ntfy Click header; empty means no header
 }
 
+// Delivery is the outcome of one publication to one target, as returned by
+// POST /alerts/notify.
+type Delivery struct {
+	Channel string `json:"channel"`
+	// Target names the destination without revealing it: ntfy:<hash>.
+	Target string `json:"target"`
+	// Result is accepted (the push service took it) or failed.
+	Result string `json:"result"`
+	Error  string `json:"error,omitempty"`
+}
+
+const (
+	DeliveryAccepted = "accepted"
+	DeliveryFailed   = "failed"
+)
+
 // Relay receives alerts and publishes them.
 type Relay struct {
 	cfg    Config
 	client *http.Client
 	now    func() time.Time
+	// target is the ntfy destination as a hash (the topic is a credential).
+	target string
 
 	mu          sync.Mutex
 	started     time.Time
@@ -108,6 +131,8 @@ type Relay struct {
 func New(cfg Config) *Relay {
 	r := &Relay{cfg: cfg, client: &http.Client{Timeout: 10 * time.Second}, now: time.Now, seen: map[string]time.Time{}}
 	r.started = r.now()
+	sum := sha256.Sum256([]byte(cfg.NtfyURL + "/" + cfg.Topic))
+	r.target = "ntfy:" + hex.EncodeToString(sum[:])[:12]
 	return r
 }
 
@@ -280,16 +305,19 @@ func (r *Relay) handleNotify(w http.ResponseWriter, req *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "priority must be 1..5"})
 		return
 	}
-	if err := r.publish(req.Context(), Message{
+	err := r.publish(req.Context(), Message{
 		Title:    title,
 		Body:     message,
 		Priority: priority,
 		ClickURL: strings.TrimSpace(body.ClickURL),
-	}); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+	})
+	d := Delivery{Channel: "ntfy", Target: r.target, Result: DeliveryAccepted}
+	if err != nil {
+		d.Result, d.Error = DeliveryFailed, err.Error()
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error(), "deliveries": []Delivery{d}})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "sent", "deliveries": []Delivery{d}})
 }
 
 func (r *Relay) handleHeartbeat(w http.ResponseWriter, req *http.Request) {
@@ -388,6 +416,10 @@ func (r *Relay) publish(ctx context.Context, m Message) error {
 		if resp.StatusCode/100 != 2 {
 			err = fmt.Errorf("ntfy: status %d", resp.StatusCode)
 		}
+	} else if r.cfg.Topic != "" {
+		// A transport error quotes the URL, and the topic in it is the read
+		// credential; the error reaches /alerts/relay and approval records.
+		err = fmt.Errorf("%s", strings.ReplaceAll(err.Error(), r.cfg.Topic, "<topic>"))
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

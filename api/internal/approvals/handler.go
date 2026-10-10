@@ -71,13 +71,8 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 			s.audit.Record(r, "approval.create", a.ID, StatusPending,
 				fmt.Sprintf("number=%d action=%s tier=%s runner=%s requester=%s", a.Number, a.Action, a.Tier, a.Runner, a.Requester))
 		}
-		// A down relay must not fail create. NotifyCreated logs its own error.
-		_ = approvalnotify.NotifyCreated(r.Context(), approvalnotify.Created{
-			ID:        a.ID,
-			Action:    body.Action,
-			Tier:      a.Tier,
-			Requester: r.Header.Get("X-Bifrost-Session"),
-		})
+		// A down relay must not fail create; the failed delivery is on the record.
+		s.deliver(r.Context(), approvalnotify.KindCreated, a)
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"id":          a.ID,
 			"number":      a.Number,
@@ -157,6 +152,10 @@ func (s *Service) HandleApprove(w http.ResponseWriter, r *http.Request) {
 			}
 			s.audit.Record(r, "approval.queue", id, StatusApproved, detail)
 		}
+	}
+	if status, _ := out.Body["status"].(string); status == StatusFailed && out.Status == http.StatusOK {
+		id, _ := out.Body["id"].(string)
+		s.noticeEvents([]event{{action: "approval.execute", target: id, status: StatusFailed}})
 	}
 	writeJSON(w, out.Status, out.Body)
 }

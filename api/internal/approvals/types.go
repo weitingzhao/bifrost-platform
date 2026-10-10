@@ -85,7 +85,11 @@ type Execution struct {
 }
 
 // Delivery is one notification attempt to one target (filled by S0-0b).
+// Result is accepted (the push service took it), failed or skipped (no relay
+// configured). Kind is which notice: created, failed, unknown, not_executed,
+// reminder_waiting, reminder_expiring.
 type Delivery struct {
+	Kind    string    `json:"kind,omitempty"`
 	Channel string    `json:"channel"`
 	Target  string    `json:"target,omitempty"`
 	At      time.Time `json:"at"`
