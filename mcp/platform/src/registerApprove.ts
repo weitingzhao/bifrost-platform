@@ -16,7 +16,10 @@ import { jsonResult, platformGet, platformSend } from './platformClient.js'
  *
  * Tier D is decided on Console only (ADR §5, Owner 2026-10-10): a prompt
  * cannot show the full command, and once the out-of-band executor runs the
- * approval is the only gate. The tier is the one the API stored.
+ * approval is the only gate. The tier is the one the API stored. The API
+ * also answers 403 to a chat approval of tier D; refusing here as well keeps
+ * the model from raising a prompt for it. The API accepts a tier D reject
+ * from any route; this tool still refuses it so tier D is decided on Console.
  */
 export const APPROVE_TOOL_NAMES = ['approve_request', 'reject_request', 'list_pending'] as const
 
