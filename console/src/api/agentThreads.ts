@@ -1,4 +1,4 @@
-import { authedFetch } from '@/api/client'
+import { viewerRead } from '@/api/approvals'
 
 /** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended. */
 export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle'
@@ -31,8 +31,9 @@ export type AgentThreadsResponse = {
 
 export const AGENT_THREADS_REFRESH_MS = 30_000
 
+/** Viewer-level read, with the same token fallback as the approvals list (phone app). */
 export async function fetchAgentThreads(): Promise<AgentThreadsResponse> {
-  const r = await authedFetch('Agent threads', '/api/v1/agent/threads')
+  const r = await viewerRead('Agent threads', '/api/v1/agent/threads')
   const body = (await r.json()) as AgentThreadsResponse
   return { ...body, threads: body.threads ?? [] }
 }

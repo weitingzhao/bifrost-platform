@@ -151,14 +151,18 @@ export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMI
  * saved the approval token (the phone home-screen app) reads with that one, so the
  * token is entered once.
  */
-async function approvalsRead(path: string): Promise<Response> {
-  if (operatorToken() !== '') return authedFetch('approvals', path)
+export async function viewerRead(prefix: string, path: string): Promise<Response> {
+  if (operatorToken() !== '') return authedFetch(prefix, path)
   const headers = new Headers()
   const token = readApprovalToken()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
   const r = await fetch(path, { headers })
-  if (!r.ok) throw await parseError('approvals', r)
+  if (!r.ok) throw await parseError(prefix, r)
   return r
+}
+
+function approvalsRead(path: string): Promise<Response> {
+  return viewerRead('approvals', path)
 }
 
 export async function fetchApprovalList(status: 'pending' | 'all'): Promise<ApprovalItem[]> {

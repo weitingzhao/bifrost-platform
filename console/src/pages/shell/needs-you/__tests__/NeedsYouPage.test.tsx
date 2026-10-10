@@ -95,9 +95,17 @@ function silentThread(over: Partial<AgentThread> = {}): AgentThread {
   }
 }
 
+/** The threads list is viewer-level: no bearer, 401. */
+function viewerThreads(threads: AgentThread[]): (headers: Headers) => Response {
+  return headers =>
+    headers.get('Authorization') == null
+      ? json({ error: 'viewer token required' }, 401)
+      : threadsResponse(threads)
+}
+
 function stubFetch(
   approvals: (headers: Headers) => Response,
-  threads: () => Response = () => threadsResponse([]),
+  threads: (headers: Headers) => Response = viewerThreads([]),
 ) {
   vi.stubGlobal(
     'fetch',
@@ -106,7 +114,7 @@ function stubFetch(
       const health = healthResponse(url)
       if (health != null) return health
       if (url.includes('/api/v1/approvals?status=pending')) return approvals(new Headers(init?.headers))
-      if (url.includes('/api/v1/agent/threads')) return threads()
+      if (url.includes('/api/v1/agent/threads')) return threads(new Headers(init?.headers))
       return json({ error: `unexpected ${url}` }, 500)
     }),
   )
@@ -189,12 +197,11 @@ describe('NeedsYouPage', () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(
       () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
-      () =>
-        threadsResponse([
-          silentThread(),
-          silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn', quiet_seconds: 30 }),
-          silentThread({ thread: 'done', title: 'Done thread', status: 'idle', event: 'turn_end' }),
-        ]),
+      viewerThreads([
+        silentThread(),
+        silentThread({ thread: 'busy', title: 'Busy thread', status: 'in_turn', quiet_seconds: 30 }),
+        silentThread({ thread: 'done', title: 'Done thread', status: 'idle', event: 'turn_end' }),
+      ]),
     )
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('2 waiting for you')).toBeTruthy()
@@ -218,5 +225,24 @@ describe('NeedsYouPage', () => {
     expect(
       within(screen.getByRole('region', { name: 'Silent threads' })).getByText(/Could not read agent threads/),
     ).toBeTruthy()
+  })
+
+  it('reads the threads with a saved approval token when there is no operator token', async () => {
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    const seen: (string | null)[] = []
+    stubFetch(
+      headers =>
+        headers.get('Authorization') === 'Bearer admin-token'
+          ? json(buildApprovalListResponse([]))
+          : json({ error: 'viewer token required' }, 401),
+      headers => {
+        seen.push(headers.get('Authorization'))
+        return viewerThreads([silentThread()])(headers)
+      },
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    expect(seen).toContain('Bearer admin-token')
+    expect(within(screen.getByRole('region', { name: 'Silent threads' })).getByText('W-54 thread heartbeat')).toBeTruthy()
   })
 })

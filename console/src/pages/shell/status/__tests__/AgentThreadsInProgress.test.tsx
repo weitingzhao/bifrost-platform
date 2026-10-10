@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentThread } from '@/api/agentThreads'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { AgentThreadsInProgress } from '@/pages/shell/status/AgentThreadsInProgress'
 
 function json(body: unknown, status = 200): Response {
@@ -35,12 +36,17 @@ function thread(over: Partial<AgentThread>): AgentThread {
   }
 }
 
+/** Viewer-level, as on the server: no bearer, 401. */
 function stubThreads(response: () => Response) {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) =>
-      String(input).includes('/api/v1/agent/threads') ? response() : json({ error: 'unused' }, 500),
-    ),
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).includes('/api/v1/agent/threads')) return json({ error: 'unused' }, 500)
+      if (new Headers(init?.headers).get('Authorization') !== 'Bearer viewer-token') {
+        return json({ error: 'viewer token required' }, 401)
+      }
+      return response()
+    }),
   )
 }
 
@@ -72,6 +78,7 @@ function installStorage(): void {
 describe('AgentThreadsInProgress', () => {
   beforeEach(() => {
     installStorage()
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
   })
 
   afterEach(() => {
@@ -117,6 +124,16 @@ describe('AgentThreadsInProgress', () => {
     stubThreads(() => json({ error: 'boom' }, 502))
     render(wrapper(<AgentThreadsInProgress />))
     expect(await screen.findByText(/Could not read agent threads/)).toBeTruthy()
+    expect(screen.queryByText('No agent thread is mid-turn.')).toBeNull()
+  })
+
+  it('reports the 401 on a device with no token instead of an empty list', async () => {
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
+    stubThreads(() =>
+      json({ generated_at: '2026-10-10T07:05:00Z', silent_after_seconds: 600, tool_grace_seconds: 120, threads: [] }),
+    )
+    render(wrapper(<AgentThreadsInProgress />))
+    expect(await screen.findByText(/Could not read agent threads: .*viewer token required/)).toBeTruthy()
     expect(screen.queryByText('No agent thread is mid-turn.')).toBeNull()
   })
 })
