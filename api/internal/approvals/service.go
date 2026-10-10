@@ -567,7 +567,7 @@ func (s *Service) RecordDeliveries(ref string, ds []Delivery) error {
 		if !ok {
 			return fmt.Errorf("approval %s not found", ref)
 		}
-		found.Deliveries = append(found.Deliveries, ds...)
+		found.Deliveries = capDeliveries(append(found.Deliveries, ds...))
 		doc.put(found)
 		return nil
 	})
