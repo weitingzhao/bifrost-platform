@@ -12,12 +12,14 @@ export type ReleasePolicyStatus = {
   allow: string[]
   frozen: boolean
   freeze_reason?: string
+  frozen_at?: string
+  reminder_windows: string[]
   sign_command: string
   unfreeze_command: string
 }
 
-/** Yellow from this many hours before expiry (the first phone reminder). */
-export const RELEASE_POLICY_WARN_HOURS = 48
+/** Yellow from this many hours before expiry (the first phone reminder, 14 days). */
+export const RELEASE_POLICY_WARN_HOURS = 14 * 24
 
 export type ReleasePolicyBannerState =
   | { kind: 'hidden' }

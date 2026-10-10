@@ -57,6 +57,14 @@ func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 			_, _ = w.Write([]byte(`{"files":[{"filename":"src/b.py"},{"filename":"docs/a.md"}]}`))
 		case "/api/v1/repos/bifrost/repo-broken/branches/main":
 			w.WriteHeader(http.StatusInternalServerError)
+		case "/api/v1/repos/bifrost/repo-ops/raw/db-steps.d/a step.md":
+			if r.URL.Query().Get("ref") != "main" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_, _ = w.Write([]byte("---\nid: a\n---\n"))
+		case "/api/v1/repos/bifrost/repo-ops/contents/db-steps.d":
+			_, _ = w.Write([]byte(`[{"name":"a step.md","type":"file"},{"name":"old","type":"dir"}]`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -163,5 +171,35 @@ func TestPolicyFactsWindowAndConfigMaps(t *testing.T) {
 	none := newFactsService(t)
 	if msg := none.HeldBy(ctx, "bifrost-deliver-research", "agent@mac"); !strings.Contains(msg, "no release window is open") {
 		t.Fatalf("no window = %q", msg)
+	}
+}
+
+func TestPolicyFactsReadFilesAndWriteConfigMaps(t *testing.T) {
+	f := newFactsService(t)
+	ctx := context.Background()
+	text, found, err := f.FileAt(ctx, "repo-ops", "main", "db-steps.d/a step.md")
+	if err != nil || !found || !strings.Contains(text, "id: a") {
+		t.Fatalf("FileAt = %q %v %v", text, found, err)
+	}
+	if _, found, err = f.FileAt(ctx, "repo-ops", factSHA1, "db-steps.d/a step.md"); err != nil || found {
+		t.Fatalf("FileAt at a ref without the file = %v %v", found, err)
+	}
+	names, err := f.ListDir(ctx, "repo-ops", "main", "db-steps.d")
+	if err != nil || strings.Join(names, ",") != "a step.md" {
+		t.Fatalf("ListDir = %q %v", names, err)
+	}
+	if _, err = f.ListDir(ctx, "repo-ops", "main", "nowhere"); err == nil {
+		t.Fatal("ListDir of a missing dir did not fail")
+	}
+
+	if err = f.WriteConfigMap(ctx, "bifrost-release-freeze", map[string]string{"frozen": "true"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.WriteConfigMap(ctx, "bifrost-release-freeze", map[string]string{"frozen": "false"}); err != nil {
+		t.Fatal(err)
+	}
+	data, found, err := f.ConfigMap(ctx, "bifrost-release-freeze")
+	if err != nil || !found || data["frozen"] != "false" || len(data) != 1 {
+		t.Fatalf("ConfigMap after two writes = %v %v %v", data, found, err)
 	}
 }

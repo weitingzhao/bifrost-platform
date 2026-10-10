@@ -118,6 +118,33 @@ var catalog = []Action{
 		},
 	},
 	{
+		ID: "release_policy_install", Tier: TierB,
+		Description: "Install a release policy the Owner signed (release.sh policy sign). The platform verifies the signature against the compiled-in Owner key and refuses an expired policy or one signed before the installed one. Tier B: the signature is the authority.",
+		Method:      "PUT", Pattern: "/api/v1/release-policy",
+		Params: []Param{
+			{Name: "policy_yaml", Type: "string", Required: true, In: "body"},
+			{Name: "policy_sig", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
+		ID: "release_freeze", Tier: TierB,
+		Description: "Freeze releases: tier B release starts are refused and nothing is auto-approved until a signed unfreeze. Anyone may tighten. Tier B.",
+		Method:      "POST", Pattern: "/api/v1/release-policy/freeze",
+		Params: []Param{
+			{Name: "who", Type: "string", Required: true, In: "body"},
+			{Name: "reason", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
+		ID: "release_unfreeze", Tier: TierB,
+		Description: "Lift the current freeze with an Owner signature over \"unfreeze frozen_at=<frozen_at> ...\" (release.sh unfreeze). Tier B: the signature is the authority.",
+		Method:      "POST", Pattern: "/api/v1/release-policy/unfreeze",
+		Params: []Param{
+			{Name: "text", Type: "string", Required: true, In: "body"},
+			{Name: "sig", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "sync_mirrors", Tier: TierB,
 		Description: "Ask Gitea to fetch allow-listed repositories and wait until the named commits are present. Tier B.",
 		Method:      "POST", Pattern: "/api/v1/delivery/mirrors/sync",

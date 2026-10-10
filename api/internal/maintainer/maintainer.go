@@ -28,6 +28,7 @@ const (
 	LoopPatrol          = "patrol-autopilot"
 	LoopChecklistProber = "checklist-prober"
 	LoopReleaseRecorder = "release-recorder"
+	LoopReleasePolicy   = "release-policy-expiry"
 
 	ResultSuccess = "success"
 	ResultFailure = "failure"
@@ -50,6 +51,7 @@ func Loops() []Loop {
 		{Name: LoopPatrol, Symbol: "LoopPatrol", File: "internal/patrol/handler.go"},
 		{Name: LoopChecklistProber, Symbol: "LoopChecklistProber", File: "internal/checklist/prober.go"},
 		{Name: LoopReleaseRecorder, Symbol: "LoopReleaseRecorder", File: "internal/releases/service.go"},
+		{Name: LoopReleasePolicy, Symbol: "LoopReleasePolicy", File: "internal/releasepolicy/expiry.go"},
 	}
 }
 

@@ -46,6 +46,7 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 	facts := s.delivery.PolicyFacts()
 	s.releasePolicy = releasepolicy.New(releasepolicy.Deps{
 		ConfigMaps: facts,
+		Writer:     facts,
 		Git:        facts,
 		CI:         facts,
 		Window:     facts,
@@ -54,7 +55,7 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 		Anchor:     releasepolicy.OwnerKeyFingerprint,
 	})
 	s.approvals.SetAutoApprover(s.releasePolicyApprover())
-	if runsWorkers {
+	if runsWorkers && releasepolicy.RemindersWanted() {
 		releasepolicy.NewChecker(s.releasePolicy, func() int { return pendingReleases(s.approvals) },
 			func(ctx context.Context, title, message string) error {
 				return approvalnotify.Notify(ctx, approvalnotify.Message{Title: title, Message: message})
@@ -100,9 +101,95 @@ func (s *Server) autoApprove(r *http.Request, id string, tier actions.Tier, para
 	}
 	if s.audit != nil {
 		s.audit.Record(r, "release_policy.auto_approve", id+" "+d.Pipeline, "approved",
-			fmt.Sprintf("auto-approved policy_id=%s requester=%s sha=%s", d.PolicyID, policyRequester(r), d.SHAText()))
+			"auto-approved "+decisionDetail(r, d))
 	}
 	return true, nil
+}
+
+func decisionDetail(r *http.Request, d releasepolicy.Decision) string {
+	out := fmt.Sprintf("policy_id=%s requester=%s sha=%s clauses=%s", d.PolicyID, policyRequester(r), d.SHAText(), d.ClauseText())
+	if len(d.AdditiveDDL) > 0 {
+		out += " additive_ddl=" + strings.Join(d.AdditiveDDL, ",")
+	}
+	if len(d.Reasons) > 0 {
+		out += " reasons=" + strings.Join(d.Reasons, "; ")
+	}
+	return out
+}
+
+// releasePipeline is a pipeline that ships something: deliver and image
+// builds. CI and smoke pipelines are not releases.
+func releasePipeline(name string) bool {
+	return strings.HasPrefix(name, "bifrost-deliver-") || strings.HasPrefix(name, "bifrost-build-")
+}
+
+const tierBPolicyTimeout = 20 * time.Second
+
+// checkTierBRelease runs before a tier B start_pipeline_run. A freeze that
+// someone set refuses it (true: the response is written). Otherwise, while a
+// signed policy is in force, the policy is evaluated and audited, and the run
+// goes ahead either way: tier B never needed an approval, and the STG release
+// is where the policy's facts are first exercised before PROD relies on them.
+func (s *Server) checkTierBRelease(w http.ResponseWriter, r *http.Request, id string, params map[string]any) bool {
+	name := strings.TrimSpace(fmt.Sprint(params["name"]))
+	if s.releasePolicy == nil || id != "start_pipeline_run" || !releasePipeline(name) {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), tierBPolicyTimeout)
+	defer cancel()
+	if frozen, reason := s.releasePolicy.FreezeSet(ctx); frozen {
+		if s.audit != nil {
+			s.audit.Record(r, "release_policy.frozen", id+" "+name, "refused", reason)
+		}
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error":    "releases are frozen",
+			"action":   id,
+			"freeze":   reason,
+			"unfreeze": releasepolicy.UnfreezeCommand,
+		})
+		return true
+	}
+	d := s.releasePolicy.Evaluate(ctx, id, params)
+	if d.PolicyID != "" && s.audit != nil {
+		result := "not covered"
+		if d.Auto {
+			result = "covered"
+		}
+		s.audit.Record(r, "release_policy.check", id+" "+name, result, decisionDetail(r, d))
+	}
+	return false
+}
+
+func (s *Server) auditRecorder() releasepolicy.Audit {
+	return func(r *http.Request, action, target, result, detail string) {
+		if s.audit != nil {
+			s.audit.Record(r, action, target, result, detail)
+		}
+	}
+}
+
+func (s *Server) handleReleasePolicyInstall(w http.ResponseWriter, r *http.Request) {
+	if s.releasePolicy == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "release policy not wired"})
+		return
+	}
+	s.releasePolicy.HandleInstall(s.auditRecorder())(w, r)
+}
+
+func (s *Server) handleReleaseFreeze(w http.ResponseWriter, r *http.Request) {
+	if s.releasePolicy == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "release policy not wired"})
+		return
+	}
+	s.releasePolicy.HandleFreeze(s.auditRecorder())(w, r)
+}
+
+func (s *Server) handleReleaseUnfreeze(w http.ResponseWriter, r *http.Request) {
+	if s.releasePolicy == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "release policy not wired"})
+		return
+	}
+	s.releasePolicy.HandleUnfreeze(s.auditRecorder())(w, r)
 }
 
 func policyRequester(r *http.Request) string {

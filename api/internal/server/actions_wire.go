@@ -53,7 +53,14 @@ func (s *Server) guard(id string, next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		tier := act.TierOf(r.Context(), params)
-		if !tier.NeedsApproval() || fromExecutor(r.Context()) {
+		if fromExecutor(r.Context()) {
+			next(w, r)
+			return
+		}
+		if !tier.NeedsApproval() {
+			if tier == actions.TierB && s.checkTierBRelease(w, r, id, params) {
+				return
+			}
 			next(w, r)
 			return
 		}

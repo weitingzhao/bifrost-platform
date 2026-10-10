@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
@@ -32,32 +33,46 @@ func reminderCount(t *testing.T, window string) string {
 	return ""
 }
 
+func maintainerSuccess(t *testing.T) string {
+	t.Helper()
+	var b strings.Builder
+	maintainer.Write(&b)
+	prefix := `bifrost_maintainer_last_success_timestamp_seconds{maintainer="` + maintainer.PlatformID(maintainer.LoopReleasePolicy) + `"} `
+	for _, line := range strings.Split(b.String(), "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimPrefix(line, prefix)
+		}
+	}
+	return ""
+}
+
 func TestRemindersOncePerWindow(t *testing.T) {
 	f := newFixture(t)
-	expires := now.Add(-time.Hour).Add(7 * 24 * time.Hour)
+	expires := now.Add(-time.Hour).Add(90 * 24 * time.Hour)
 	p := &pushes{}
 	pending := 0
 	c := releasepolicy.NewChecker(f.eng, func() int { return pending }, p.notify, filepath.Join(t.TempDir(), "reminders"))
-	before24 := reminderCount(t, "24h")
+	before1d := reminderCount(t, "1d")
 	tick := func(left time.Duration) {
 		f.clock = expires.Add(-left)
 		c.Tick(context.Background())
 	}
 
-	tick(72 * time.Hour)
+	tick(20 * 24 * time.Hour)
 	if len(p.titles) != 0 {
-		t.Fatalf("pushed with 72h left: %q", p.titles)
+		t.Fatalf("pushed with 20 days left: %q", p.titles)
 	}
-	tick(47 * time.Hour)
-	tick(46 * time.Hour)
+	tick(13 * 24 * time.Hour)
+	tick(12 * 24 * time.Hour)
+	tick(71 * time.Hour)
+	tick(70 * time.Hour)
 	tick(23 * time.Hour)
 	tick(22 * time.Hour)
-	tick(90 * time.Minute)
 	tick(30 * time.Minute)
 	if len(p.titles) != 3 ||
-		!strings.Contains(p.titles[0], "expires in 47h") ||
-		!strings.Contains(p.titles[1], "expires in 23h") ||
-		!strings.Contains(p.titles[2], "expires in 90m") {
+		!strings.Contains(p.titles[0], "expires in 13d") ||
+		!strings.Contains(p.titles[1], "expires in 2d") ||
+		!strings.Contains(p.titles[2], "expires in 23h") {
 		t.Fatalf("pushes = %q", p.titles)
 	}
 	for _, m := range p.messages {
@@ -65,8 +80,11 @@ func TestRemindersOncePerWindow(t *testing.T) {
 			t.Fatalf("message without the sign command or policy id: %q", m)
 		}
 	}
-	if got := reminderCount(t, "24h"); got == before24 {
-		t.Fatalf("24h counter did not move (%s)", got)
+	if got := reminderCount(t, "1d"); got == before1d {
+		t.Fatalf("1d counter did not move (%s)", got)
+	}
+	if got := maintainerSuccess(t); got == "" {
+		t.Fatal("no maintainer success for the expiry check")
 	}
 
 	// Expired with nothing waiting: silent.
@@ -86,11 +104,11 @@ func TestRemindersOncePerWindow(t *testing.T) {
 
 func TestLateStartSkipsEarlierWindows(t *testing.T) {
 	f := newFixture(t)
-	expires := now.Add(-time.Hour).Add(7 * 24 * time.Hour)
+	expires := now.Add(-time.Hour).Add(90 * 24 * time.Hour)
 	p := &pushes{}
 	c := releasepolicy.NewChecker(f.eng, nil, p.notify, "")
-	// First check happens with 20h left: only the 24h reminder, and the 48h
-	// one never follows.
+	// First check happens with 20h left: only the 1d reminder, and the 14d
+	// and 3d ones never follow.
 	for _, left := range []time.Duration{20 * time.Hour, 19 * time.Hour} {
 		f.clock = expires.Add(-left)
 		c.Tick(context.Background())
@@ -102,7 +120,7 @@ func TestLateStartSkipsEarlierWindows(t *testing.T) {
 
 func TestRemindersSurviveRestart(t *testing.T) {
 	f := newFixture(t)
-	expires := now.Add(-time.Hour).Add(7 * 24 * time.Hour)
+	expires := now.Add(-time.Hour).Add(90 * 24 * time.Hour)
 	path := filepath.Join(t.TempDir(), "reminders")
 	p := &pushes{}
 	f.clock = expires.Add(-30 * time.Hour)
@@ -122,5 +140,23 @@ func TestNoPolicyWithWaitingReleasesPushes(t *testing.T) {
 	c.Tick(context.Background())
 	if len(p.titles) != 1 || p.titles[0] != "No valid release policy, 1 releases waiting" {
 		t.Fatalf("pushes = %q", p.titles)
+	}
+}
+
+func TestRemindersWantedOnlyInClusterByDefault(t *testing.T) {
+	for _, c := range []struct {
+		flag, host string
+		want       bool
+	}{
+		{"", "", false},
+		{"", "10.0.0.1", true},
+		{"off", "10.0.0.1", false},
+		{"on", "", true},
+	} {
+		t.Setenv("PLATFORM_RELEASE_POLICY_REMINDERS", c.flag)
+		t.Setenv("KUBERNETES_SERVICE_HOST", c.host)
+		if got := releasepolicy.RemindersWanted(); got != c.want {
+			t.Fatalf("flag=%q host=%q: got %v", c.flag, c.host, got)
+		}
 	}
 }

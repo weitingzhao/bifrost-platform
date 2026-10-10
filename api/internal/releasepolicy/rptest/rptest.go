@@ -76,12 +76,22 @@ func PolicyText(id string, signedAt time.Time, days int, allow ...string) string
 		"allow":      allow,
 		"conditions": map[string]any{
 			"revision": "main-or-tag", "ci_succeeded": true, "window_held_by_requester": true,
-			"no_pending_before_db_steps": true, "no_ddl": true, "no_d10_paths": true, "no_trust_anchor_change": true,
+			"no_pending_before_db_steps": true, "no_ddl": true, "additive_ddl": true,
+			"no_d10_paths": true, "no_trust_anchor_change": true,
 		},
-		"limits":            map[string]any{"rolling_24h": "none", "concurrency": 1},
-		"reminders":         map[string]any{"before_expiry_hours": []int{48, 24, 2}, "on_blocked_after_expiry": true},
-		"ci_repos":          []string{"repo-app", "repo-lib"},
-		"db_step_pipelines": []string{"deliver-with-db"},
+		"limits":    map[string]any{"rolling_24h": "none", "concurrency": 1},
+		"reminders": map[string]any{"on_blocked_after_expiry": true},
+		"ci_repos":  []string{"repo-app", "repo-lib"},
+		"db_steps": map[string]any{
+			"repo": "repo-ops", "dir": "db-steps.d",
+			"pipelines": map[string]string{"deliver-with-db": "prod"},
+		},
+		"pinned": map[string]any{
+			"deliver-pinned": map[string]any{
+				"from":   "deliver-app-stg",
+				"params": map[string]string{"appRevision": "repo-app", "revision": "repo-lib"},
+			},
+		},
 		"paths": map[string]any{
 			"no_ddl": []map[string]any{
 				{"repo": "*", "paths": []string{"**/ddl*.py", "**/*.sql", "**/migrations/**"}},
@@ -145,10 +155,33 @@ type Facts struct {
 	Commits  map[string]bool // "repo@sha"
 	Files    map[string][]string
 	FilesErr error
-	Green    map[string]bool // "repo@sha"
+	Text     map[string]string   // "repo@ref:path" -> file text
+	Dirs     map[string][]string // "repo@ref:dir" -> file names
+	Green    map[string]bool     // "repo@sha"
 	Window   string
 	Records  map[string]map[string]string
 	Missing  []string
+}
+
+func (f *Facts) FileAt(_ context.Context, repo, ref, path string) (string, bool, error) {
+	text, ok := f.Text[repo+"@"+ref+":"+path]
+	return text, ok, nil
+}
+
+func (f *Facts) ListDir(_ context.Context, repo, ref, dir string) ([]string, error) {
+	names, ok := f.Dirs[repo+"@"+ref+":"+dir]
+	if !ok {
+		return nil, fmt.Errorf("%s has no %s at %s", repo, dir, ref)
+	}
+	return names, nil
+}
+
+// Writer is an in-memory ConfigMapWriter over a ConfigMaps reader.
+type Writer struct{ CMs *ConfigMaps }
+
+func (w Writer) WriteConfigMap(_ context.Context, name string, data map[string]string) error {
+	w.CMs.Set(name, data)
+	return nil
 }
 
 func (f *Facts) MainHead(_ context.Context, repo string) (string, error) {

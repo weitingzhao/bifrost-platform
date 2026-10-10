@@ -29,12 +29,12 @@ type fixture struct {
 	clock time.Time
 }
 
-// newFixture: a policy signed an hour ago for 7 days, no freeze, window held,
-// main moved by one docs file, CI green.
+// newFixture: a policy signed an hour ago for 90 days, no freeze, window held,
+// main moved by one docs file, CI green, the one committed DB step done.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{key: rptest.NewKey(t), cms: rptest.NewConfigMaps(), clock: now}
-	f.signPolicy(t, f.key, rptest.PolicyText("rp-20261008-1100", now.Add(-time.Hour), 7, pipeline, "deliver-with-db"))
+	f.signPolicy(t, f.key, rptest.PolicyText("rp-20261008-1100", now.Add(-time.Hour), 90, pipeline, "deliver-with-db"))
 	f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "false"})
 	oldSHA, newSHA := rptest.SHA("old"), rptest.SHA("new")
 	f.facts = &rptest.Facts{
@@ -42,6 +42,10 @@ func newFixture(t *testing.T) *fixture {
 		Files:   map[string][]string{"repo-app": {"docs/readme.md"}},
 		Green:   map[string]bool{"repo-app@" + newSHA: true},
 		Records: map[string]map[string]string{pipeline: {"repo-app": oldSHA}, "deliver-with-db": {"repo-app": oldSHA}},
+		Dirs:    map[string][]string{"repo-ops@main:db-steps.d": {"README.md", "2026-10-01-a.md"}},
+		Text: map[string]string{
+			"repo-ops@main:db-steps.d/2026-10-01-a.md": "---\nid: 2026-10-01-a\nenvs: stg prod\nwhen: before\ndone: stg prod\n---\n# a\n",
+		},
 	}
 	f.eng = f.engine(f.key.Fingerprint)
 	return f
@@ -49,7 +53,7 @@ func newFixture(t *testing.T) *fixture {
 
 func (f *fixture) engine(anchor string) *releasepolicy.Engine {
 	return releasepolicy.New(releasepolicy.Deps{
-		ConfigMaps: f.cms, Git: f.facts, CI: f.facts, Window: f.facts, Deployed: f.facts,
+		ConfigMaps: f.cms, Writer: rptest.Writer{CMs: f.cms}, Git: f.facts, CI: f.facts, Window: f.facts, Deployed: f.facts,
 		Anchor: anchor, Now: func() time.Time { return f.clock },
 	})
 }
@@ -93,6 +97,14 @@ func TestValidPolicyAutoApprovesAndNamesTheCommits(t *testing.T) {
 	if d.PolicyID != "rp-20261008-1100" || d.SHAText() != "repo-app="+rptest.SHA("new") {
 		t.Fatalf("decision = %+v sha=%s", d, d.SHAText())
 	}
+	if got, want := d.ClauseText(), "signature,unexpired,not_frozen,allow:"+pipeline+
+		",window_held_by_requester,revision,ci_succeeded,no_ddl,no_d10_paths,no_trust_anchor_change"; got != want {
+		t.Fatalf("clauses = %s, want %s", got, want)
+	}
+	// A pipeline that delivers an env with DB steps names that clause too.
+	if c := f.decide(map[string]any{"name": "deliver-with-db", "revision": "main", "who": "agent@mac"}).ClauseText(); !strings.Contains(c, "no_pending_before_db_steps") {
+		t.Fatalf("db pipeline clauses = %s", c)
+	}
 	// A tag and a SHA equal to the head of main are both releasable revisions.
 	f.facts.Tags = map[string]map[string]string{"repo-app": {"v1.2.0": rptest.SHA("new")}}
 	wantAuto(t, f.decide(map[string]any{"name": pipeline, "revision": "v1.2.0", "who": "agent@mac"}))
@@ -107,7 +119,7 @@ func TestPolicyFailuresWait(t *testing.T) {
 		mutate func(t *testing.T, f *fixture)
 		want   string
 	}{
-		"expired": {func(t *testing.T, f *fixture) { f.clock = now.Add(8 * 24 * time.Hour) }, "expired at"},
+		"expired": {func(t *testing.T, f *fixture) { f.clock = now.Add(91 * 24 * time.Hour) }, "expired at"},
 		"missing": {func(t *testing.T, f *fixture) { f.cms.Set(releasepolicy.PolicyConfigMap, nil) }, "no signed policy"},
 		"no signature": {func(t *testing.T, f *fixture) {
 			d, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
@@ -116,7 +128,7 @@ func TestPolicyFailuresWait(t *testing.T) {
 		}, "policy.sig is missing"},
 		"tampered": {func(t *testing.T, f *fixture) {
 			d, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
-			d["policy.yaml"] = strings.Replace(d["policy.yaml"], `"valid_days": 7`, `"valid_days": 70`, 1)
+			d["policy.yaml"] = strings.Replace(d["policy.yaml"], `"valid_days": 90`, `"valid_days": 900`, 1)
 			f.cms.Set(releasepolicy.PolicyConfigMap, d)
 		}, "does not verify"},
 		"foreign key": {func(t *testing.T, f *fixture) {
@@ -158,8 +170,11 @@ func TestConditionFailuresWait(t *testing.T) {
 		params map[string]any
 		want   string
 	}{
-		"ddl":          {func(f *fixture) { f.facts.Files["repo-app"] = []string{"src/app/ddl_orders.py"} }, nil, "hits no_ddl"},
-		"sql":          {func(f *fixture) { f.facts.Files["repo-app"] = []string{"db/seed.sql"} }, nil, "hits no_ddl"},
+		"ddl deleted": {func(f *fixture) { f.facts.Files["repo-app"] = []string{"src/app/ddl_orders.py"} }, nil, "is deleted"},
+		"sql drop": {func(f *fixture) {
+			f.facts.Files["repo-app"] = []string{"db/seed.sql"}
+			f.facts.Text = map[string]string{"repo-app@" + rptest.SHA("new") + ":db/seed.sql": "DROP TABLE orders;\n"}
+		}, nil, "not additive-only"},
 		"d10 path":     {func(f *fixture) { f.facts.Files["repo-app"] = []string{"engine/orders/place.go"} }, nil, "hits no_d10_paths"},
 		"trust anchor": {func(f *fixture) { f.facts.Files["repo-app"] = []string{"internal/releasepolicy/anchor.go"} }, nil, "hits no_trust_anchor_change"},
 		"ci red":       {func(f *fixture) { f.facts.Green = nil }, nil, "no Succeeded ci run"},
@@ -179,7 +194,13 @@ func TestConditionFailuresWait(t *testing.T) {
 		"stale sha": {func(f *fixture) {
 			f.facts.Commits = map[string]bool{"repo-app@" + rptest.SHA("mid"): true}
 		}, map[string]any{"name": pipeline, "revision": rptest.SHA("mid"), "who": "agent@mac"}, "is not the head of main"},
-		"db steps": {func(*fixture) {}, map[string]any{"name": "deliver-with-db", "revision": "main", "who": "agent@mac"}, "DB steps"},
+		"db step pending": {func(f *fixture) {
+			f.facts.Text["repo-ops@main:db-steps.d/2026-10-01-a.md"] = "---\nid: 2026-10-01-a\nenvs: stg prod\nwhen: before\ndone: stg\n---\n"
+		}, map[string]any{"name": "deliver-with-db", "revision": "main", "who": "agent@mac"}, "not marked done on main: 2026-10-01-a"},
+		"db steps unreadable": {func(f *fixture) { f.facts.Dirs = nil }, map[string]any{"name": "deliver-with-db", "revision": "main", "who": "agent@mac"}, "cannot list repo-ops/db-steps.d"},
+		"db step bad front matter": {func(f *fixture) {
+			f.facts.Text["repo-ops@main:db-steps.d/2026-10-01-a.md"] = "no front matter"
+		}, map[string]any{"name": "deliver-with-db", "revision": "main", "who": "agent@mac"}, "no readable front matter"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -340,15 +361,16 @@ func TestGlobMatchesPolicyCheck(t *testing.T) {
 func TestStatusAndMetrics(t *testing.T) {
 	f := newFixture(t)
 	st := f.eng.Status(context.Background())
-	if !st.Valid || st.Frozen || st.RemainingSeconds != int64((7*24-1)*3600) || st.SignCommand != releasepolicy.SignCommand {
+	if !st.Valid || st.Frozen || st.RemainingSeconds != int64((90*24-1)*3600) || st.SignCommand != releasepolicy.SignCommand ||
+		strings.Join(st.ReminderWindows, ",") != "14d,3d,1d" {
 		t.Fatalf("status = %+v", st)
 	}
 	var b strings.Builder
 	releasepolicy.WriteMetrics(&b)
-	if !strings.Contains(b.String(), "bifrost_release_policy_expires_in_seconds 601200\n") {
+	if !strings.Contains(b.String(), "bifrost_release_policy_expires_in_seconds 7772400\n") {
 		t.Fatalf("metrics:\n%s", b.String())
 	}
-	f.clock = now.Add(30 * 24 * time.Hour)
+	f.clock = now.Add(91 * 24 * time.Hour)
 	st = f.eng.Status(context.Background())
 	if st.Valid || !st.Expired {
 		t.Fatalf("expired status = %+v", st)

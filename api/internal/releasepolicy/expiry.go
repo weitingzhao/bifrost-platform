@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/maintainer"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
@@ -24,8 +27,18 @@ const (
 var (
 	expiresIn     atomic.Int64
 	remindersMu   sync.Mutex
-	remindersSent = map[string]int64{"48h": 0, "24h": 0, "2h": 0, WindowExpired: 0}
+	remindersSent = defaultReminderCounts()
 )
+
+// defaultReminderCounts seeds one zero series per default window, so a rate()
+// over the counter exists before the first push.
+func defaultReminderCounts() map[string]int64 {
+	out := map[string]int64{WindowExpired: 0}
+	for _, h := range DefaultReminderHours {
+		out[WindowLabel(h)] = 0
+	}
+	return out
+}
 
 func setExpiresIn(sec int64) {
 	if sec < 0 {
@@ -49,7 +62,12 @@ func WriteMetrics(b *strings.Builder) {
 	b.WriteString("# TYPE bifrost_release_policy_reminders_sent_total counter\n")
 	remindersMu.Lock()
 	defer remindersMu.Unlock()
-	for _, w := range []string{"48h", "24h", "2h", WindowExpired} {
+	windows := make([]string, 0, len(remindersSent))
+	for w := range remindersSent {
+		windows = append(windows, w)
+	}
+	sort.Strings(windows)
+	for _, w := range windows {
 		fmt.Fprintf(b, "bifrost_release_policy_reminders_sent_total{window=%q} %d\n", w, remindersSent[w])
 	}
 }
@@ -69,6 +87,20 @@ type Checker struct {
 
 type reminderState struct {
 	Sent map[string]string `json:"sent"`
+}
+
+// RemindersWanted says whether this process pushes expiry reminders. They go
+// to the Owner's phone, so by default only an in-cluster workers pod sends
+// them; STG sets PLATFORM_RELEASE_POLICY_REMINDERS=off so PROD is the one
+// sender. "on" turns them on anywhere, "off" off anywhere.
+func RemindersWanted() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("PLATFORM_RELEASE_POLICY_REMINDERS"))) {
+	case "on", "true", "1":
+		return true
+	case "off", "false", "0":
+		return false
+	}
+	return os.Getenv("KUBERNETES_SERVICE_HOST") != ""
 }
 
 // NewChecker returns a checker. pending counts release approvals waiting for
@@ -95,45 +127,57 @@ func (c *Checker) Start(ctx context.Context, interval time.Duration) {
 	}()
 }
 
-// Tick checks once and pushes at most one reminder.
+// Tick checks once and pushes at most one reminder. A pass that read its
+// state and pushed what was due counts as a maintainer success.
 func (c *Checker) Tick(ctx context.Context) {
+	id := maintainer.PlatformID(maintainer.LoopReleasePolicy)
+	if c.tick(ctx) {
+		maintainer.Success(id)
+	} else {
+		maintainer.Failure(id)
+	}
+}
+
+func (c *Checker) tick(ctx context.Context) bool {
 	st := c.eng.Status(ctx)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	state, err := c.load()
 	if err != nil {
 		slog.Warn("release_policy_expiry_check", "err", err)
-		return
+		return false
 	}
 	window, key, title, msg := c.plan(st)
 	slog.Info("release_policy_expiry_check",
 		"valid", st.Valid, "policy_id", st.PolicyID, "remaining_seconds", st.RemainingSeconds,
 		"frozen", st.Frozen, "window", window, "already_sent", window != "" && state.Sent[key] != "")
 	if window == "" || state.Sent[key] != "" || c.notify == nil {
-		return
+		return true
 	}
 	if err := c.notify(ctx, title, msg); err != nil {
 		slog.Warn("release_policy_expiry_check", "window", window, "err", err)
-		return
+		return false
 	}
 	now := c.eng.d.Now()
 	state.Sent[key] = now.Format(time.RFC3339)
 	if window != WindowExpired {
-		// At 20h left the 48h push is moot: a window covers every larger one.
+		// At 2 days left the 14d push is moot: a window covers every larger one.
 		due := st.RemainingSeconds
 		for _, h := range st.policy.ReminderHours() {
 			if int64(h)*3600 >= due {
-				if wk := fmt.Sprintf("%s/%dh", st.PolicyID, h); state.Sent[wk] == "" {
+				if wk := st.PolicyID + "/" + WindowLabel(h); state.Sent[wk] == "" {
 					state.Sent[wk] = now.Format(time.RFC3339)
 				}
 			}
 		}
 	}
-	prune(state.Sent, now.Add(-30*24*time.Hour))
+	prune(state.Sent, now.Add(-120*24*time.Hour))
 	countReminder(window)
 	if err := c.store(state); err != nil {
 		slog.Warn("release_policy_expiry_check", "store", err)
+		return false
 	}
+	return true
 }
 
 // plan picks the window due now and its message, or "" for none.
@@ -143,7 +187,7 @@ func (c *Checker) plan(st Status) (window, key, title, msg string) {
 		for i := len(hours) - 1; i >= 0; i-- {
 			h := hours[i]
 			if st.RemainingSeconds <= int64(h)*3600 {
-				window = fmt.Sprintf("%dh", h)
+				window = WindowLabel(h)
 				key = st.PolicyID + "/" + window
 				title = "Release policy expires in " + humanHours(st.RemainingSeconds)
 				msg = fmt.Sprintf("Policy %s expires at %s. Releases will wait for manual approval after that. Sign a new one: %s",
@@ -177,10 +221,14 @@ func (c *Checker) plan(st Status) (window, key, title, msg string) {
 }
 
 func humanHours(sec int64) string {
-	if sec < 2*3600 {
+	switch {
+	case sec < 2*3600:
 		return fmt.Sprintf("%dm", sec/60)
+	case sec < 48*3600:
+		return fmt.Sprintf("%dh", sec/3600)
+	default:
+		return fmt.Sprintf("%dd", sec/(24*3600))
 	}
-	return fmt.Sprintf("%dh", sec/3600)
 }
 
 func prune(sent map[string]string, before time.Time) {

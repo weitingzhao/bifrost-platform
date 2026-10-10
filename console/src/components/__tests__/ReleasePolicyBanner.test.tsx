@@ -12,11 +12,12 @@ function status(partial: Partial<ReleasePolicyStatus>): ReleasePolicyStatus {
     valid: true,
     policy_id: 'rp-20261008-1100',
     expires_at: '2026-10-15T11:00:00Z',
-    remaining_seconds: 5 * 24 * 3600,
+    remaining_seconds: 30 * 24 * 3600,
     expired: false,
     reasons: [],
     allow: ['bifrost-deliver-research'],
     frozen: false,
+    reminder_windows: ['14d', '3d', '1d'],
     sign_command: SIGN,
     unfreeze_command: 'bifrost-trade-infra/scripts/release/release.sh unfreeze',
     ...partial,
@@ -57,14 +58,14 @@ describe('ReleasePolicyBanner', () => {
     vi.unstubAllGlobals()
   })
 
-  it('stays hidden with more than 48h left', async () => {
+  it('stays hidden with more than 14 days left', async () => {
     vi.mocked(fetch).mockResolvedValue(json(status({})))
     const { container } = render(wrapper(<ReleasePolicyBanner />))
     await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
     expect(container.querySelector('[data-testid="release-policy-banner"]')).toBeNull()
   })
 
-  it('turns yellow at 48h or less, with the sign command', async () => {
+  it('turns yellow at 14 days or less, with the sign command', async () => {
     vi.mocked(fetch).mockResolvedValue(json(status({ remaining_seconds: 23 * 3600 + 120 })))
     render(wrapper(<ReleasePolicyBanner />))
     const banner = await screen.findByTestId('release-policy-banner')
@@ -72,6 +73,13 @@ describe('ReleasePolicyBanner', () => {
     expect(banner.className).toContain('amber')
     expect(banner.textContent).toContain('Release policy rp-20261008-1100 expires in 23h')
     expect(banner.textContent).toContain(SIGN)
+  })
+
+  it('counts days while more than two are left', async () => {
+    vi.mocked(fetch).mockResolvedValue(json(status({ remaining_seconds: 13 * 24 * 3600 + 120 })))
+    render(wrapper(<ReleasePolicyBanner />))
+    const banner = await screen.findByTestId('release-policy-banner')
+    expect(banner.textContent).toContain('Release policy rp-20261008-1100 expires in 13d')
   })
 
   it('turns red once the policy has expired', async () => {
@@ -106,8 +114,8 @@ describe('releasePolicyBannerState', () => {
       title: 'No valid release policy',
       command: SIGN,
     })
-    expect(releasePolicyBannerState(status({ remaining_seconds: 48 * 3600 })).kind).toBe('expiring')
-    expect(releasePolicyBannerState(status({ remaining_seconds: 48 * 3600 + 1 })).kind).toBe('hidden')
+    expect(releasePolicyBannerState(status({ remaining_seconds: 14 * 24 * 3600 })).kind).toBe('expiring')
+    expect(releasePolicyBannerState(status({ remaining_seconds: 14 * 24 * 3600 + 1 })).kind).toBe('hidden')
     expect(releasePolicyBannerState(undefined).kind).toBe('hidden')
   })
 })

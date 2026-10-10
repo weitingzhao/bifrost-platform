@@ -29,6 +29,10 @@ type Git interface {
 	TagCommit(ctx context.Context, repo, tag string) (sha string, found bool, err error)
 	CommitExists(ctx context.Context, repo, sha string) (bool, error)
 	ChangedFiles(ctx context.Context, repo, from, to string) ([]string, error)
+	// FileAt is a file's text at ref; found is false when the path does not exist there.
+	FileAt(ctx context.Context, repo, ref, path string) (text string, found bool, err error)
+	// ListDir lists the file names (not subdirectories) in dir at ref.
+	ListDir(ctx context.Context, repo, ref, dir string) ([]string, error)
 }
 
 // CI reports whether a Succeeded ci-* run exists for repo at sha.
@@ -52,6 +56,7 @@ type Deployed interface {
 // freeze seen; empty keeps it in memory only.
 type Deps struct {
 	ConfigMaps ConfigMaps
+	Writer     ConfigMapWriter
 	Git        Git
 	CI         CI
 	Window     Window
@@ -88,6 +93,8 @@ type Status struct {
 	Allow            []string `json:"allow"`
 	Frozen           bool     `json:"frozen"`
 	FreezeReason     string   `json:"freeze_reason,omitempty"`
+	FrozenAt         string   `json:"frozen_at,omitempty"`
+	ReminderWindows  []string `json:"reminder_windows"`
 	Anchor           string   `json:"anchor_fingerprint"`
 	SignCommand      string   `json:"sign_command"`
 	UnfreezeCommand  string   `json:"unfreeze_command"`
@@ -122,8 +129,18 @@ func (e *Engine) Status(ctx context.Context) Status {
 			st.Expired = !ev.expiresAt.After(now)
 		}
 	}
+	hours := DefaultReminderHours
+	if ev.policy != nil {
+		hours = ev.policy.ReminderHours()
+	}
+	for _, h := range hours {
+		st.ReminderWindows = append(st.ReminderWindows, WindowLabel(h))
+	}
 	fz := e.freeze(ctx)
 	st.Frozen, st.FreezeReason = fz.frozen, fz.reason
+	if fz.frozen && !fz.frozenAt.IsZero() {
+		st.FrozenAt = fz.frozenAt.UTC().Format(time.RFC3339)
+	}
 	if st.Valid {
 		setExpiresIn(st.RemainingSeconds)
 	} else {
@@ -193,14 +210,38 @@ func (e *Engine) storeSeenLocked(at time.Time) error {
 	return statefile.WriteFile(e.d.StatePath, raw, 0o644)
 }
 
-// Decision is the result for one action call.
+// Decision is the result for one action call. Clauses are the policy terms
+// that were checked and held, in the order checked; the audit records them.
 type Decision struct {
-	Auto     bool
-	PolicyID string
-	Pipeline string
-	Who      string
-	SHAs     map[string]string
-	Reasons  []string
+	Auto        bool
+	PolicyID    string
+	Pipeline    string
+	Who         string
+	SHAs        map[string]string
+	Reasons     []string
+	Clauses     []string
+	AdditiveDDL []string
+}
+
+// ClauseText is the audit's clauses= value.
+func (d Decision) ClauseText() string {
+	if len(d.Clauses) == 0 {
+		return "-"
+	}
+	return strings.Join(d.Clauses, ",")
+}
+
+// FreezeSet reports a freeze that someone actually set: the ConfigMap is
+// readable, present and evaluates as frozen. Tier B releases, which never
+// needed an approval, stop only for this; a missing or unreadable freeze
+// ConfigMap only withholds auto-approval.
+func (e *Engine) FreezeSet(ctx context.Context) (bool, string) {
+	_, found, err := e.read(ctx, FreezeConfigMap)
+	if err != nil || !found {
+		return false, ""
+	}
+	fz := e.freeze(ctx)
+	return fz.frozen, fz.reason
 }
 
 // SHAText is the audit's sha= value: repo=commit pairs in name order.
@@ -242,6 +283,15 @@ func (e *Engine) Decide(ctx context.Context, actionID string, tier actions.Tier,
 		d.Reasons = []string{"only tier C actions can be auto-approved"}
 		return d
 	}
+	return e.Evaluate(ctx, actionID, params)
+}
+
+// Evaluate runs the policy's checks on a release without the tier rule.
+// Auto means the policy covers it. The guard uses it directly for tier B
+// releases, which run either way, so the audit shows whether the policy
+// would have covered them.
+func (e *Engine) Evaluate(ctx context.Context, actionID string, params map[string]any) Decision {
+	d := Decision{SHAs: map[string]string{}}
 	if actionID != releaseAction {
 		d.Reasons = []string{actionID + " is not a release; the policy covers " + releaseAction + " only"}
 		return d
@@ -264,26 +314,104 @@ func (e *Engine) Decide(ctx context.Context, actionID string, tier actions.Tier,
 	}
 	pol := st.policy
 	d.PolicyID = pol.PolicyID
+	d.Clauses = append(d.Clauses, "signature", "unexpired", "not_frozen")
 	if !pol.Allows(d.Pipeline) {
 		d.Reasons = []string{d.Pipeline + " is not in the policy's allow list"}
 		return d
 	}
+	d.Clauses = append(d.Clauses, "allow:"+d.Pipeline)
 
 	var reasons []string
-	if pol.Enforced("no_pending_before_db_steps") && contains(pol.DBStepPipelines, d.Pipeline) {
-		reasons = append(reasons, d.Pipeline+" has DB steps that only release.sh tracks; start it with release.sh")
+	if _, delivers := pol.DBSteps.Pipelines[d.Pipeline]; delivers && pol.Enforced("no_pending_before_db_steps") {
+		if r := e.dbStepReasons(ctx, pol, d.Pipeline); len(r) > 0 {
+			reasons = append(reasons, r...)
+		} else {
+			d.Clauses = append(d.Clauses, "no_pending_before_db_steps")
+		}
 	}
 	if pol.Enforced("window_held_by_requester") {
 		if e.d.Window == nil {
 			reasons = append(reasons, "release window: no reader")
 		} else if msg := e.d.Window.HeldBy(ctx, d.Pipeline, d.Who); msg != "" {
 			reasons = append(reasons, "release window: "+msg)
+		} else {
+			d.Clauses = append(d.Clauses, "window_held_by_requester")
 		}
 	}
-	reasons = append(reasons, e.diffReasons(ctx, pol, &d, revision)...)
+	var diff []string
+	pin, pinnedPipeline := pol.Pinned[d.Pipeline]
+	if pinnedPipeline {
+		diff = e.pinnedReasons(ctx, pol, &d, pin, params)
+	} else {
+		diff = e.diffReasons(ctx, pol, &d, revision)
+	}
+	reasons = append(reasons, diff...)
+	if len(diff) == 0 {
+		switch {
+		case pinnedPipeline:
+			d.Clauses = append(d.Clauses, "pinned_to:"+pin.From)
+		case pol.Enforced("revision"):
+			d.Clauses = append(d.Clauses, "revision")
+		}
+		if pol.Enforced("ci_succeeded") {
+			d.Clauses = append(d.Clauses, "ci_succeeded")
+		}
+		for _, rule := range PathRules {
+			if !pol.Enforced(rule) {
+				continue
+			}
+			if rule == "no_ddl" && len(d.AdditiveDDL) > 0 {
+				d.Clauses = append(d.Clauses, "additive_ddl")
+				continue
+			}
+			d.Clauses = append(d.Clauses, rule)
+		}
+	}
 	d.Reasons = reasons
 	d.Auto = len(reasons) == 0
 	return d
+}
+
+// dbStepReasons lists the before-deliver DB steps still pending for the env
+// the pipeline delivers, from the files committed on main.
+func (e *Engine) dbStepReasons(ctx context.Context, pol *Policy, pipeline string) []string {
+	env, ok := pol.DBSteps.Pipelines[pipeline]
+	if !ok {
+		return nil
+	}
+	if pol.DBSteps.Repo == "" || pol.DBSteps.Dir == "" {
+		return []string{pipeline + " delivers " + env + ", but the policy names no db_steps repo and dir"}
+	}
+	if e.d.Git == nil {
+		return []string{"no reader for the DB steps on Gitea"}
+	}
+	names, err := e.d.Git.ListDir(ctx, pol.DBSteps.Repo, "main", pol.DBSteps.Dir)
+	if err != nil {
+		return []string{"cannot list " + pol.DBSteps.Repo + "/" + pol.DBSteps.Dir + ": " + err.Error()}
+	}
+	var pending []string
+	for _, name := range names {
+		if !strings.HasSuffix(name, ".md") || strings.EqualFold(name, "README.md") {
+			continue
+		}
+		text, found, err := e.d.Git.FileAt(ctx, pol.DBSteps.Repo, "main", pol.DBSteps.Dir+"/"+name)
+		if err != nil || !found {
+			return []string{"cannot read DB step " + name + ": " + errText(err)}
+		}
+		step, ok := parseDBStep(text)
+		if !ok {
+			return []string{"DB step " + name + " has no readable front matter"}
+		}
+		if step.pendingBefore(env) {
+			pending = append(pending, step.id)
+		}
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+	sort.Strings(pending)
+	return []string{fmt.Sprintf("%d DB step(s) due before the %s deliver are not marked done on main: %s",
+		len(pending), env, strings.Join(pending, ", "))}
 }
 
 // diffReasons resolves the commit each repo will ship, then checks the
@@ -351,7 +479,7 @@ func (e *Engine) diffReasons(ctx context.Context, pol *Policy, d *Decision, revi
 		if old == next {
 			continue
 		}
-		reasons = append(reasons, e.repoReasons(ctx, pol, repo, old, next)...)
+		reasons = append(reasons, e.repoReasons(ctx, pol, d, repo, old, next)...)
 	}
 	if checkRev && !revFound {
 		reasons = append(reasons, "revision "+revision+" is not main, a tag, or a commit on main")
@@ -359,7 +487,86 @@ func (e *Engine) diffReasons(ctx context.Context, pol *Policy, d *Decision, revi
 	return reasons
 }
 
-func (e *Engine) repoReasons(ctx context.Context, pol *Policy, repo, old, next string) []string {
+// pinnedReasons checks a pipeline that ships the commits in its params: each
+// must be what the newest record of the source pipeline shipped, and the CI
+// and path rules run from the newest record of this pipeline to those commits.
+func (e *Engine) pinnedReasons(ctx context.Context, pol *Policy, d *Decision, pin PinnedPipeline, params map[string]any) []string {
+	if e.d.Deployed == nil || e.d.Git == nil {
+		return []string{"no reader for deployed commits or Gitea"}
+	}
+	from := pin.From
+	if from == "" {
+		return []string{"the policy pins " + d.Pipeline + " to no source pipeline"}
+	}
+	pinned := map[string]string{}
+	inner, _ := params["params"].(map[string]any)
+	for key, repo := range pin.Params {
+		sha := str(inner[key])
+		if key == "revision" {
+			sha = str(params["revision"])
+		}
+		if sha != "" {
+			pinned[repo] = sha
+		}
+	}
+	if len(pinned) == 0 {
+		return []string{d.Pipeline + " ships pinned commits, and the request names none"}
+	}
+	source, _, err := e.d.Deployed.Deployed(ctx, from)
+	if err != nil {
+		return []string{"deployed commits for " + from + ": " + err.Error()}
+	}
+	deployed, missing, err := e.d.Deployed.Deployed(ctx, d.Pipeline)
+	if err != nil {
+		return []string{"deployed commits for " + d.Pipeline + ": " + err.Error()}
+	}
+	if len(deployed) == 0 {
+		return []string{"no release record for " + d.Pipeline + ", so the deployed commits are unknown"}
+	}
+	var reasons []string
+	for _, repo := range missing {
+		reasons = append(reasons, repo+": the newest release record has no commit for it")
+	}
+	repos := make([]string, 0, len(pinned))
+	for r := range pinned {
+		repos = append(repos, r)
+	}
+	sort.Strings(repos)
+	for _, repo := range repos {
+		next := pinned[repo]
+		d.SHAs[repo] = next
+		if !fullSHA.MatchString(next) {
+			reasons = append(reasons, repo+": pinned revision "+next+" is not a full commit id")
+			continue
+		}
+		if source[repo] != next {
+			reasons = append(reasons, fmt.Sprintf("%s: pinned %s is not what the newest %s record shipped (%s)", repo, short(next), from, orQ(short(source[repo]))))
+			continue
+		}
+		old := deployed[repo]
+		if old == "" {
+			reasons = append(reasons, repo+": the newest release record has no commit for it")
+			continue
+		}
+		if old == next {
+			continue
+		}
+		reasons = append(reasons, e.repoReasons(ctx, pol, d, repo, old, next)...)
+	}
+	unpinned := make([]string, 0)
+	for repo := range deployed {
+		if _, ok := pinned[repo]; !ok {
+			unpinned = append(unpinned, repo)
+		}
+	}
+	sort.Strings(unpinned)
+	for _, repo := range unpinned {
+		reasons = append(reasons, repo+": the request pins no commit for it")
+	}
+	return reasons
+}
+
+func (e *Engine) repoReasons(ctx context.Context, pol *Policy, d *Decision, repo, old, next string) []string {
 	var reasons []string
 	if pol.Enforced("ci_succeeded") && contains(pol.CIRepos, repo) {
 		if e.d.CI == nil {
@@ -383,16 +590,58 @@ func (e *Engine) repoReasons(ctx context.Context, pol *Policy, repo, old, next s
 		if !pol.Enforced(rule) {
 			continue
 		}
-		if hits := RuleHits(pol.Paths, rule, repo, files); len(hits) > 0 {
-			shown := hits
-			more := ""
-			if len(hits) > 5 {
-				shown, more = hits[:5], fmt.Sprintf(" (+%d more)", len(hits)-5)
-			}
-			reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s%s", repo, short(old), short(next), rule, strings.Join(shown, ", "), more))
+		hits := RuleHits(pol.Paths, rule, repo, files)
+		if len(hits) == 0 {
+			continue
 		}
+		if rule == "no_ddl" && pol.AdditiveDDL() {
+			additive, why := e.additiveDDL(ctx, repo, old, next, hits)
+			if why == "" {
+				d.AdditiveDDL = append(d.AdditiveDDL, additive...)
+				continue
+			}
+			reasons = append(reasons, fmt.Sprintf("%s %s..%s changes DDL that is not additive-only (tier D, ask the Owner): %s",
+				repo, short(old), short(next), why))
+			continue
+		}
+		shown := hits
+		more := ""
+		if len(hits) > 5 {
+			shown, more = hits[:5], fmt.Sprintf(" (+%d more)", len(hits)-5)
+		}
+		reasons = append(reasons, fmt.Sprintf("%s %s..%s hits %s: %s%s", repo, short(old), short(next), rule, strings.Join(shown, ", "), more))
 	}
 	return reasons
+}
+
+// maxDDLFiles bounds the per-file reads one decision makes.
+const maxDDLFiles = 20
+
+// additiveDDL classifies each DDL hit by comparing its text at old and next.
+// why is empty when every file only adds; the list names those files.
+func (e *Engine) additiveDDL(ctx context.Context, repo, old, next string, hits []string) ([]string, string) {
+	if len(hits) > maxDDLFiles {
+		return nil, fmt.Sprintf("%d DDL files changed, more than the %d this check reads", len(hits), maxDDLFiles)
+	}
+	out := make([]string, 0, len(hits))
+	for _, path := range hits {
+		before, _, err := e.d.Git.FileAt(ctx, repo, old, path)
+		if err != nil {
+			return nil, path + ": cannot read at " + short(old) + ": " + err.Error()
+		}
+		after, found, err := e.d.Git.FileAt(ctx, repo, next, path)
+		if err != nil {
+			return nil, path + ": cannot read at " + short(next) + ": " + err.Error()
+		}
+		if !found {
+			return nil, path + " is deleted"
+		}
+		if ok, why := ClassifyDDL(before, after); !ok {
+			return nil, path + ": " + why
+		}
+		out = append(out, repo+":"+path)
+	}
+	return out, ""
 }
 
 func str(v any) string {

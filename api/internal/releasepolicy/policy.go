@@ -45,22 +45,53 @@ type PathRule struct {
 
 // Policy is policy.yaml as release.sh policy sign writes it (canonical JSON).
 type Policy struct {
-	Version         int                   `yaml:"version"`
-	PolicyID        string                `yaml:"policy_id"`
-	SignedAt        string                `yaml:"signed_at"`
-	ExpiresAt       string                `yaml:"expires_at"`
-	Allow           []string              `yaml:"allow"`
-	Conditions      map[string]any        `yaml:"conditions"`
-	Reminders       Reminders             `yaml:"reminders"`
-	CIRepos         []string              `yaml:"ci_repos"`
-	DBStepPipelines []string              `yaml:"db_step_pipelines"`
-	Paths           map[string][]PathRule `yaml:"paths"`
+	Version    int                   `yaml:"version"`
+	PolicyID   string                `yaml:"policy_id"`
+	SignedAt   string                `yaml:"signed_at"`
+	ExpiresAt  string                `yaml:"expires_at"`
+	Allow      []string              `yaml:"allow"`
+	Conditions map[string]any        `yaml:"conditions"`
+	Reminders  Reminders             `yaml:"reminders"`
+	CIRepos    []string              `yaml:"ci_repos"`
+	DBSteps    DBSteps               `yaml:"db_steps"`
+	Pinned     Pinned                `yaml:"pinned"`
+	Paths      map[string][]PathRule `yaml:"paths"`
+}
+
+// Pinned covers pipelines that ship the commits named in their params rather
+// than main: bifrost-deliver-prod ships the commits of an STG run. Keyed by
+// pipeline. From is the pipeline whose newest release record must have shipped
+// exactly those commits; that record is what makes them "main" for the
+// revision rule. Params maps a param to its repo; "revision" is the top-level
+// revision, every other key is read from params.params.
+type Pinned map[string]PinnedPipeline
+
+type PinnedPipeline struct {
+	From   string            `yaml:"from"`
+	Params map[string]string `yaml:"params"`
 }
 
 // Reminders is the policy's reminder schedule.
 type Reminders struct {
 	BeforeExpiryHours    []int `yaml:"before_expiry_hours"`
 	OnBlockedAfterExpiry *bool `yaml:"on_blocked_after_expiry"`
+}
+
+// DBSteps says where the one-off DB steps of a release are committed and
+// which pipelines deliver which env. A step is pending for an env when its
+// front matter lists the env in envs, has when: before, and does not list the
+// env in done. Only the committed state on main counts.
+type DBSteps struct {
+	Repo      string            `yaml:"repo"`
+	Dir       string            `yaml:"dir"`
+	Pipelines map[string]string `yaml:"pipelines"`
+}
+
+// AdditiveDDL reports whether a no_ddl hit may pass when every hit file only
+// adds (ADR §5, 2026-10-08 revision). It is off unless the policy says true.
+func (p *Policy) AdditiveDDL() bool {
+	v, ok := p.Conditions["additive_ddl"].(bool)
+	return ok && v
 }
 
 // Enforced reports whether a condition applies. Only an explicit false turns
@@ -91,14 +122,25 @@ func contains(list []string, v string) bool {
 	return false
 }
 
-// ReminderHours is the reminder schedule, largest first (48, 24, 2 by default).
+// DefaultReminderHours is 14, 3 and 1 days before expiry (ADR §5: 90-day policies).
+var DefaultReminderHours = []int{14 * 24, 3 * 24, 24}
+
+// ReminderHours is the reminder schedule, largest first.
 func (p *Policy) ReminderHours() []int {
 	hours := append([]int(nil), p.Reminders.BeforeExpiryHours...)
 	if len(hours) == 0 {
-		hours = []int{48, 24, 2}
+		hours = append(hours, DefaultReminderHours...)
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(hours)))
 	return hours
+}
+
+// WindowLabel names a reminder window: whole days as "14d", otherwise "36h".
+func WindowLabel(hours int) string {
+	if hours > 0 && hours%24 == 0 {
+		return fmt.Sprintf("%dd", hours/24)
+	}
+	return fmt.Sprintf("%dh", hours)
 }
 
 type policyEval struct {
