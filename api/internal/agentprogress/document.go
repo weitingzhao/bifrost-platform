@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 const (
@@ -40,17 +40,6 @@ var (
 	// 413 and keeps the previous document.
 	errTooLarge = errors.New("document too large")
 )
-
-// redactedText replaces a value kept under a key that names a secret, whatever
-// JSON type that value has.
-const redactedText = "[redacted]"
-
-// A key that contains one of these, in any case, holds a secret. The match is
-// on the key, so a value that does not look like a bearer is still replaced.
-var sensitiveKeyParts = []string{
-	"token", "secret", "password", "passwd", "authorization",
-	"api_key", "apikey", "credential", "cookie",
-}
 
 // Snapshot is the one document the platform keeps.
 type Snapshot struct {
@@ -135,46 +124,10 @@ func hostField(obj map[string]any) (string, error) {
 	return s, nil
 }
 
-func keySensitive(key string) bool {
-	folded := strings.ToLower(key)
-	for _, part := range sensitiveKeyParts {
-		if strings.Contains(folded, part) {
-			return true
-		}
-	}
-	return false
-}
+// redactValue and redactNested are the progress-document walk. The rules live in notice.
+func redactValue(v any) any { return notice.RedactDocument(v, false) }
 
-func redactValue(v any) any {
-	return redactNested(v, false)
-}
-
-// force replaces the whole value. It is set only for a child of a sensitive
-// key, so a number, boolean, array, object or null under that key is stored
-// as [redacted] and is not walked.
-func redactNested(v any, force bool) any {
-	if force {
-		return redactedText
-	}
-	switch t := v.(type) {
-	case string:
-		return approvalnotify.Redact(t)
-	case map[string]any:
-		out := make(map[string]any, len(t))
-		for k, child := range t {
-			out[approvalnotify.Redact(k)] = redactNested(child, keySensitive(k))
-		}
-		return out
-	case []any:
-		out := make([]any, len(t))
-		for i, child := range t {
-			out[i] = redactNested(child, false)
-		}
-		return out
-	default:
-		return v
-	}
-}
+func redactNested(v any, force bool) any { return notice.RedactDocument(v, force) }
 
 // generatedTime is the document's at as UTC. ok is false when at is missing
 // or not a finite number.
