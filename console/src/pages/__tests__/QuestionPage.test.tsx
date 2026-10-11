@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
@@ -229,6 +229,8 @@ describe('QuestionPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
     expect(await screen.findByText('The answer was not confirmed. You can send it again.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /b Wait/ }))
     const confirm = screen.getByRole('button', { name: 'Confirm answer' })
     expect(confirm.hasAttribute('disabled')).toBe(false)
     fireEvent.click(confirm)
@@ -572,5 +574,141 @@ describe('QuestionPage', () => {
       else expect(screen.queryByText(secrets), item.name).toBeNull()
       view.unmount()
     }
+  })
+
+  it('treats a truncated 200 as unknown and does not enable Confirm answer', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/answer')) {
+        return new Response('{"id":"q_0123456789abcdef","status":"answered","answer":', {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return json(contractBody('question-open.json'))
+    })
+    render(wrapper(<QuestionPage />))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('The answer was not confirmed. You can send it again.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
+    expect(posts()).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: /b Wait/ }))
+    expect(screen.getByRole('button', { name: 'Confirm answer' }).hasAttribute('disabled')).toBe(false)
+  })
+
+  it('does not restore Confirm answer when the read after a saved post returns open', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/answer')) return json(contractBody('answer-response.json'))
+      return json(contractBody('question-open.json'))
+    })
+    render(wrapper(<QuestionPage />))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    const stored = await screen.findByText('The thread has not reported reading it')
+    expect(stored.closest('[data-stored-answer]')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
+    expect(posts()).toBe(1)
+  })
+
+  it('keeps a saved answer when an in-flight read later returns open', async () => {
+    const client = freshClient()
+    const open = contractBody('question-open.json')
+    const parsed = parseQuestion(open)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    client.setQueryData(['questions', 'item', ID], parsed.question)
+    let releaseLate: (value: Response) => void = () => undefined
+    let sawLate = false
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) return Promise.resolve(json(contractBody('answer-response.json')))
+      if (!sawLate) {
+        sawLate = true
+        return new Promise(resolve => {
+          releaseLate = resolve
+        })
+      }
+      return Promise.resolve(json(contractBody('question-answered.json')))
+    })
+    window.location.hash = `#questions?id=${ID}`
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    const refresh = client.refetchQueries({ queryKey: ['questions', 'item', ID] })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    const stored = await screen.findByText('The thread has not reported reading it')
+    expect(stored.closest('[data-stored-answer]')).toBeTruthy()
+    await act(async () => {
+      releaseLate(json(open))
+      await refresh.catch(() => undefined)
+    })
+    const cached = client.getQueryData<{ status?: string }>(['questions', 'item', ID])
+    expect(cached?.status, 'stale open read overwrote the saved answer').toBe('answered')
+    expect(screen.getByText('The thread has not reported reading it')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
+    expect(posts()).toBe(1)
+  })
+
+  it('withdraws the old confirm when a lost response is re-read open with a new label', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    let posted = false
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/answer')) {
+        posted = true
+        throw new TypeError('Failed to fetch')
+      }
+      const open = contractBody('question-open.json')
+      if (posted) {
+        const options = open.options as { key: string; label: string }[]
+        const choice = options.find(option => option.key === 'b')
+        if (choice != null) choice.label = 'Later'
+      }
+      return json(open)
+    })
+    render(wrapper(<QuestionPage />))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('Could not confirm whether the answer was saved.')).toBeTruthy()
+    expect(await screen.findByText(/Later/)).toBeTruthy()
+    const confirm = screen.queryByRole('button', { name: 'Confirm answer' })
+    if (confirm != null) expect(confirm.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+    expect(posts()).toBe(1)
+  })
+
+  it('keeps Check again when a refresh changes the option during unknown', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let gets = 0
+    let label = 'Wait'
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) throw new TypeError('Failed to fetch')
+      gets += 1
+      if (gets === 1) return json(contractBody('question-open.json'))
+      if (gets === 2) throw new TypeError('Failed to fetch')
+      const open = contractBody('question-open.json')
+      const options = open.options as { key: string; label: string }[]
+      const choice = options.find(option => option.key === 'b')
+      if (choice != null) choice.label = label
+      return json(open)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('Could not confirm whether the answer was saved.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+    label = 'Later'
+    await client.refetchQueries({ queryKey: ['questions', 'item', ID] })
+    expect(await screen.findByText(/Later/)).toBeTruthy()
+    expect(screen.getByText('Could not confirm whether the answer was saved.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy()
+    const getsAfterRefresh = gets
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    await waitFor(() => expect(gets).toBeGreaterThan(getsAfterRefresh))
+    expect(posts()).toBe(1)
+    const confirm = screen.queryByRole('button', { name: 'Confirm answer' })
+    if (confirm != null) expect(confirm.hasAttribute('disabled')).toBe(true)
   })
 })

@@ -80,18 +80,30 @@ export type QuestionRecordResult = { ok: true; question: Question } | QuestionFa
 
 export type QuestionListResult = { ok: true; questions: Question[] } | QuestionFailure
 
-/** HTTP error whose message is words, never a raw JSON object. */
+/**
+ * HTTP error whose message is words, never a raw JSON object.
+ * `parsed` is true only when the body was JSON. A 4xx that did not parse is
+ * not an explicit rejection.
+ */
 export class QuestionHttpError extends Error {
   readonly status: number
   readonly answer: QuestionAnswer | null
   readonly recordStatus: string | null
+  readonly parsed: boolean
 
-  constructor(message: string, status: number, answer: QuestionAnswer | null, recordStatus: string | null) {
+  constructor(
+    message: string,
+    status: number,
+    answer: QuestionAnswer | null,
+    recordStatus: string | null,
+    parsed = false,
+  ) {
     super(message)
     this.name = 'QuestionHttpError'
     this.status = status
     this.answer = answer
     this.recordStatus = recordStatus
+    this.parsed = parsed
   }
 }
 
@@ -359,13 +371,15 @@ export function storedAnswerWords(answer: QuestionAnswer): string {
 
 async function readError(response: Response): Promise<QuestionHttpError> {
   let body: unknown
+  let parsed = false
   try {
     body = await response.json()
+    parsed = true
   } catch {
     body = null
   }
-  const parsed = questionErrorMessage(body, response.status)
-  return new QuestionHttpError(parsed.message, response.status, parsed.answer, parsed.recordStatus)
+  const message = questionErrorMessage(body, response.status)
+  return new QuestionHttpError(message.message, response.status, message.answer, message.recordStatus, parsed)
 }
 
 function readHeaders(): Headers {
