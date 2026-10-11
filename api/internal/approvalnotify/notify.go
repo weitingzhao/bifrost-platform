@@ -108,12 +108,16 @@ func Configured() bool { return notice.Configured() }
 // Send composes the notice of this kind and posts it. A kind with no verb is
 // not a message: Send returns nothing and does not call the relay, and the
 // caller skips it. Otherwise it never returns an empty list: a relay that was
-// not configured or not reached is a delivery too.
+// not configured or not reached is a delivery too. The fallback is the verb
+// and the server reference, with none of the agent's text.
 func Send(ctx context.Context, kind string, it Item, now time.Time) []Delivery {
 	msg := Compose(kind, it, now)
 	if msg.Title == "" {
 		return nil
 	}
+	msg.Fallback = fallbackTitle(kind, it)
+	msg.Kind = kind
+	msg.ID = it.ID
 	ds, _ := notice.Send(ctx, msg)
 	for i := range ds {
 		ds[i].Kind = kind
@@ -133,6 +137,17 @@ func Notify(ctx context.Context, msg Message) error {
 	}
 	_, err := notice.Send(ctx, msg)
 	return err
+}
+
+// fallbackTitle is the verb and the server's reference, with none of the
+// agent's text. Send posts it when the composed title or body is hidden.
+func fallbackTitle(kind string, it Item) string {
+	verb := kindVerb[kind]
+	ref := "#" + fmt.Sprint(it.Number)
+	if it.Number == 0 {
+		ref = it.ID
+	}
+	return verb + " · " + ref
 }
 
 // kindVerb is what the push asks of the Owner. A kind that is not in this

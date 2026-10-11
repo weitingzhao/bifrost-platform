@@ -18,6 +18,12 @@ import (
 
 const releasePolicyCheckInterval = time.Hour
 
+// releasePolicyNotice is owner-written. It has no fallback: a hidden
+// character in it is posted as the stock withheld title.
+func releasePolicyNotice(title, message string) approvalnotify.Message {
+	return approvalnotify.Message{Title: title, Message: message, Kind: "release_policy"}
+}
+
 // recordDeployed takes the deployed commits from the newest release record
 // of the pipeline (releases.Service.List is newest first).
 type recordDeployed struct{ svc *releases.Service }
@@ -58,7 +64,7 @@ func (s *Server) wireReleasePolicy(releasesSvc *releases.Service, dataDir string
 	if runsWorkers && releasepolicy.RemindersWanted() {
 		releasepolicy.NewChecker(s.releasePolicy, func() int { return pendingReleases(s.approvals) },
 			func(ctx context.Context, title, message string) error {
-				return approvalnotify.Notify(ctx, approvalnotify.Message{Title: title, Message: message})
+				return approvalnotify.Notify(ctx, releasePolicyNotice(title, message))
 			},
 			filepath.Join(dataDir, "release-policy-reminders"),
 		).Start(context.Background(), releasePolicyCheckInterval)

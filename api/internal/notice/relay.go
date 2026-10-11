@@ -30,12 +30,17 @@ type Delivery struct {
 	Error   string
 }
 
-// Message is one push through the relay.
+// Message is one push through the relay. Fallback, Kind and ID are not
+// posted. Fallback is the server-written title used when Title or Message
+// contains a hidden character. Kind and ID are the log line for that case.
 type Message struct {
 	Title    string
 	Message  string
 	ClickURL string
 	Priority int
+	Fallback string
+	Kind     string
+	ID       string
 }
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
@@ -62,6 +67,7 @@ type relayAnswer struct {
 // delivery too. The log lines still say "approval notify": that is the text
 // already shipped.
 func Send(ctx context.Context, msg Message) ([]Delivery, error) {
+	msg = Posted(msg)
 	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
 	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
 	if endpoint == "" || token == "" {

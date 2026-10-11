@@ -25,7 +25,7 @@ type pager struct {
 	fail bool
 }
 
-func (p *pager) notify(_ context.Context, title, body string) error {
+func (p *pager) notify(_ context.Context, title, body, _, _ string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.fail {
