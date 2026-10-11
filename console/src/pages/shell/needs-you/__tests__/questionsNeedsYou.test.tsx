@@ -7,8 +7,11 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+import { ConsoleNavBadgeMark } from '@/components/shell/ConsoleNavSlotItem'
 import { QuestionPage } from '@/pages/QuestionPage'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
+import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
+import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 
 const CONTRACT = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -183,7 +186,9 @@ describe('Needs you questions', () => {
     const stale = await screen.findByText('Could not refresh questions: boom')
     expect(stale.getAttribute('data-questions-state')).toBe('stale')
     expect(screen.getByText('Q12 Where is the quota?')).toBeTruthy()
-    expect(screen.queryByText('Needs you: Unknown')).toBeNull()
+    expect(screen.getByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByText('1 waiting for you')).toBeNull()
   })
 
   it('lists unread answers, and one Recently handled line per finished question', async () => {
@@ -263,5 +268,67 @@ describe('Needs you questions', () => {
     expect(screen.getByRole('button', { name: /a Ship/ })).toBeTruthy()
     expect(screen.queryByText('owner-console')).toBeNull()
     expect(screen.queryByText(/Agent-reported session:/)).toBeNull()
+  })
+
+  it('refetches the question list after 30 seconds', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date('2026-10-11T10:00:00Z'))
+    stub(() => json({ questions: [openQuestion(12)] }))
+    render(wrapper(<NeedsYouPage />))
+    await screen.findByText(/Q12 /)
+    const listCalls = () =>
+      vi.mocked(fetch).mock.calls.filter(call => String(call[0]).includes('/api/v1/questions?status=all')).length
+    const before = listCalls()
+    expect(before).toBeGreaterThan(0)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(listCalls()).toBe(before + 1)
+  })
+
+  function SidebarBadge() {
+    const badge = needsYouBadge(useNeedsYou().count)
+    if (badge == null) return null
+    return <ConsoleNavBadgeMark badge={badge} />
+  }
+
+  it('shows a sidebar number when the total is known and none when the list cannot be refreshed', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let fail = false
+    stub(() => (fail ? json({ error: 'boom' }, 500) : json({ questions: [openQuestion(12)] })))
+    render(
+      wrapper(
+        <>
+          <SidebarBadge />
+          <NeedsYouPage />
+        </>,
+        client,
+      ),
+    )
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const badgeText = () =>
+      [...document.querySelectorAll('[data-nav-badge]')].map(badge => badge.textContent?.trim() ?? '')
+    expect(badgeText()).toEqual(['1'])
+    fail = true
+    await client.refetchQueries({ queryKey: ['questions', 'all'] })
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Could not refresh questions: boom')).toBeTruthy()
+    expect(screen.getByText(/Q12 /)).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(badgeText().some(text => /\d/.test(text))).toBe(false)
+    expect(badgeText()).toEqual(['?'])
+  })
+
+  it('does not say nothing needs you when a refresh of an empty list fails', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let fail = false
+    stub(() => (fail ? json({ error: 'boom' }, 500) : json({ questions: [] })))
+    render(wrapper(<NeedsYouPage />, client))
+    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    fail = true
+    await client.refetchQueries({ queryKey: ['questions', 'all'] })
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.getByText('Could not refresh questions: boom')).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
   })
 })

@@ -170,6 +170,49 @@ describe('QuestionPage', () => {
     expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
   })
 
+  it('stays disabled when a lost response cannot be re-read, and Check again only re-reads', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    let gets = 0
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) throw new TypeError('Failed to fetch')
+      gets += 1
+      if (gets === 1) return json(contractBody('question-open.json'))
+      throw new TypeError('Failed to fetch')
+    })
+    render(wrapper(<QuestionPage />))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('Could not confirm whether the answer was saved.')).toBeTruthy()
+    const confirm = screen.getByRole('button', { name: 'Confirm answer' })
+    expect(confirm.hasAttribute('disabled')).toBe(true)
+    expect(posts()).toBe(1)
+    const getsAfterFailure = gets
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    await waitFor(() => expect(gets).toBe(getsAfterFailure + 1))
+    expect(posts()).toBe(1)
+    expect(confirm.hasAttribute('disabled')).toBe(true)
+  })
+
+  it('shows the posted answer when the follow-up read fails', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    let gets = 0
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) return json(contractBody('answer-response.json'))
+      gets += 1
+      if (gets === 1) return json(contractBody('question-open.json'))
+      throw new TypeError('Failed to fetch')
+    })
+    render(wrapper(<QuestionPage />))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    const stored = await screen.findByText('The thread has not reported reading it')
+    expect(stored.closest('[data-stored-answer]')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Confirm answer' })).toBeNull()
+    expect(posts()).toBe(1)
+  })
+
   it('re-reads after a lost response and allows another send when the question is still open', async () => {
     window.location.hash = `#questions?id=${ID}`
     let attempts = 0

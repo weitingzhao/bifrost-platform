@@ -4,6 +4,7 @@ import {
   isLostResponse,
   postQuestionAnswer,
   QuestionHttpError,
+  type PostedAnswer,
   type Question,
   type QuestionAnswer,
 } from '@/api/questions'
@@ -12,6 +13,7 @@ import { useNow } from '@/pages/shell/progress/progressClock'
 
 const CONFIRMS_NOTHING = 'Answering approves nothing. A release or a change needs a request.'
 const QUESTION_CHANGED = 'The question changed. Choose again.'
+const OUTCOME_UNKNOWN = 'Could not confirm whether the answer was saved.'
 
 type ConfirmSnapshot = {
   id: string
@@ -79,6 +81,8 @@ export function QuestionAnswerForm({
   const [snapshot, setSnapshot] = useState<ConfirmSnapshot | null>(null)
   const [withdrawn, setWithdrawn] = useState(false)
   const [sending, setSending] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [outcome, setOutcome] = useState<'ready' | 'unknown'>('ready')
   const [note, setNote] = useState<string | null>(null)
   const expired = question.status !== 'open' || pastExpiry(question.expires_at, now)
   const recordChanged = snapshot != null && snapshotStale(question, snapshot)
@@ -89,13 +93,15 @@ export function QuestionAnswerForm({
   }
   const active = snapshot != null && !recordChanged ? snapshot : null
   const canConfirm =
+    outcome === 'ready' &&
     !expired &&
     !sending &&
+    !checking &&
     active != null &&
     active.id === question.id &&
     readApprovalToken() !== '' &&
     (active.letter !== 'none' || active.text !== '')
-  const disabled = expired || sending
+  const disabled = expired || sending || outcome === 'unknown'
 
   function choose(letter: string) {
     setWithdrawn(false)
@@ -111,6 +117,32 @@ export function QuestionAnswerForm({
     })
   }
 
+  function withPosted(posted: PostedAnswer): Question {
+    return { ...question, id: posted.id, status: posted.status, answer: posted.answer }
+  }
+
+  async function reread(snap: ConfirmSnapshot) {
+    setChecking(true)
+    try {
+      const again = await fetchQuestion(snap.id)
+      if (again.id !== snap.id) {
+        setOutcome('unknown')
+        return
+      }
+      if (again.status === 'open') {
+        setOutcome('ready')
+        setNote('The answer was not confirmed. You can send it again.')
+        return
+      }
+      onResolved(again)
+    } catch {
+      setOutcome('unknown')
+      setNote(null)
+    } finally {
+      setChecking(false)
+    }
+  }
+
   async function confirm() {
     const snap = active
     if (!canConfirm || snap == null || snap.id !== question.id) {
@@ -120,30 +152,33 @@ export function QuestionAnswerForm({
     setSending(true)
     setNote(null)
     try {
-      await postQuestionAnswer(snap.id, snap.letter, snap.text)
-      const again = await fetchQuestion(snap.id)
-      if (again.id !== snap.id) return
-      onResolved(again)
-    } catch (err) {
-      if (err instanceof QuestionHttpError) {
-        if (err.answer != null) onConflict(snap.id, err.answer, err.recordStatus)
-        else setNote(err.message)
+      let posted: PostedAnswer
+      try {
+        posted = await postQuestionAnswer(snap.id, snap.letter, snap.text)
+      } catch (err) {
+        if (err instanceof QuestionHttpError) {
+          if (err.answer != null) onConflict(snap.id, err.answer, err.recordStatus)
+          else setNote(err.message)
+          return
+        }
+        if (!isLostResponse(err)) {
+          setNote(err instanceof Error ? err.message : 'Could not send this answer')
+          return
+        }
+        setOutcome('unknown')
+        await reread(snap)
         return
       }
-      if (!isLostResponse(err)) {
-        setNote(err instanceof Error ? err.message : 'Could not send this answer')
+      if (posted.id !== snap.id) {
+        setOutcome('unknown')
+        await reread(snap)
         return
       }
       try {
         const again = await fetchQuestion(snap.id)
-        if (again.id !== snap.id) return
-        if (again.status === 'open') {
-          setNote('The answer was not confirmed. You can send it again.')
-          return
-        }
-        onResolved(again)
-      } catch (readErr) {
-        setNote(readErr instanceof Error ? readErr.message : 'Could not re-read this question')
+        if (again.id === snap.id) onResolved(again)
+      } catch {
+        onResolved(withPosted(posted))
       }
     } finally {
       setSending(false)
@@ -218,6 +253,14 @@ export function QuestionAnswerForm({
         </div>
       ) : null}
       {withdrawn || recordChanged ? <p className="m-0 text-sm">{QUESTION_CHANGED}</p> : null}
+      {outcome === 'unknown' && !checking ? (
+        <div className="flex w-full min-w-0 flex-col gap-2">
+          <p className="m-0 text-sm">{OUTCOME_UNKNOWN}</p>
+          <button type="button" className="min-h-11 w-full min-w-0" onClick={() => active != null && void reread(active)}>
+            Check again
+          </button>
+        </div>
+      ) : null}
       {note != null ? <p className="m-0 break-words text-sm text-destructive">{note}</p> : null}
     </div>
   )

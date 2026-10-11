@@ -28,7 +28,7 @@ export type ConsoleNavBadge = {
   tone: 'attention' | 'unknown'
 }
 
-function NavBadge({ badge, collapsed }: { badge: ConsoleNavBadge; collapsed?: boolean }) {
+export function ConsoleNavBadgeMark({ badge, collapsed }: { badge: ConsoleNavBadge; collapsed?: boolean }) {
   return (
     <span
       data-nav-badge={badge.tone}
@@ -47,6 +47,10 @@ function NavBadge({ badge, collapsed }: { badge: ConsoleNavBadge; collapsed?: bo
       {badge.text}
     </span>
   )
+}
+
+function NavBadge({ badge, collapsed }: { badge: ConsoleNavBadge; collapsed?: boolean }) {
+  return <ConsoleNavBadgeMark badge={badge} collapsed={collapsed} />
 }
 
 export function ConsoleNavSlotItem({

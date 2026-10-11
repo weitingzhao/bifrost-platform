@@ -35,9 +35,9 @@ function knownOrPending(
 /**
  * Open approvals (decide, run in a terminal, check), open questions, and silent
  * agent threads. The waiting total is Unknown when the open list, the thread
- * list, or the question list cannot be read. A failed refresh that still has
- * the last question list is stale, not Unknown. The handled list is Unknown
- * when the approvals `status=all` cannot be read.
+ * list, or the question list cannot be read. A failed question refresh is
+ * Unknown even when the last list is still on screen. The handled list is
+ * Unknown when the approvals `status=all` cannot be read.
  * Running, and approved work the platform runs, are not part of the total.
  */
 export function useNeedsYou() {
@@ -94,7 +94,7 @@ export function useNeedsYou() {
   let count: NeedsYouCount
   if (openCount.state === 'unknown') count = openCount
   else if (silentCount.state === 'unknown') count = silentCount
-  else if (questionsUnreadable) {
+  else if (questionsQ.isError) {
     count = { state: 'unknown', reason: reasonOf(questionsQ.error, 'questions request failed') }
   } else if (openCount.state === 'loading' || silentCount.state === 'loading' || questionsLoading) {
     count = { state: 'loading' }

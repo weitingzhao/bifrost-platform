@@ -391,8 +391,31 @@ export function answerRequestBody(option: string, text: string): { channel: 'con
   return body
 }
 
+export type PostedAnswer = {
+  id: string
+  status: QuestionStatus
+  answer: QuestionAnswer
+}
+
+/**
+ * `answer-response.json` is not a full question. It carries the id, the status,
+ * and the answer that was stored.
+ */
+export function parsePostedAnswer(value: unknown): { ok: true; posted: PostedAnswer } | QuestionFailure {
+  if (!isRecord(value)) return fail('questions: answer response is not an object')
+  if (typeof value.id !== 'string' || !QUESTION_ID_PATTERN.test(value.id)) {
+    return fail('questions: id is not a question id')
+  }
+  if (typeof value.status !== 'string' || !(QUESTION_STATUSES as readonly string[]).includes(value.status)) {
+    return fail('questions: status is not a question status')
+  }
+  const answer = parseQuestionAnswer(value.answer)
+  if (isFailure(answer)) return answer
+  return { ok: true, posted: { id: value.id, status: value.status as QuestionStatus, answer } }
+}
+
 /** Admin token from the approval-token field. Does not use the operator token. */
-export async function postQuestionAnswer(id: string, option: string, text: string): Promise<void> {
+export async function postQuestionAnswer(id: string, option: string, text: string): Promise<PostedAnswer> {
   const token = readApprovalToken()
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
@@ -404,6 +427,9 @@ export async function postQuestionAnswer(id: string, option: string, text: strin
     body: JSON.stringify(answerRequestBody(option, text)),
   })
   if (!response.ok) throw await readError(response)
+  const parsed = parsePostedAnswer(await response.json())
+  if (!parsed.ok) throw new Error(parsed.reason)
+  return parsed.posted
 }
 
 /** A fetch that never produced an HTTP response: timeout, abort, or a dropped connection. */
