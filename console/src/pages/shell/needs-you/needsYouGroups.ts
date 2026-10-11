@@ -1,11 +1,10 @@
 import type { AgentThread } from '@/api/agentThreads'
 import { isAwaitingDecision, isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
-import { visibleTimestamp } from '@/pages/approvalDecision'
+import { visibleTimestamp, youClosedLine } from '@/pages/approvalDecision'
 
 export const TERMINAL_NOT_RUN = 'Approved. It has not run yet.'
 
-export const CHECK_PAGE_DOES_NOT_RUN =
-  "Nothing ran on this page's say-so; check before asking again."
+export const CHECK_SAY_WHAT_HAPPENED = 'Open it and say what happened.'
 
 export const EARLIER_NOTIFICATIONS =
   'Notifications you received earlier are under Recently handled.'
@@ -80,7 +79,7 @@ export function waitingCount(groups: NeedsYouGroups, silentSectionCount: number)
 export function checkLines(error: string | undefined): string[] {
   const text = error?.trim() ?? ''
   const first = text === '' ? 'The result could not be confirmed.' : `The result could not be confirmed: ${text}`
-  return [first, CHECK_PAGE_DOES_NOT_RUN]
+  return [first, CHECK_SAY_WHAT_HAPPENED]
 }
 
 function instant(value: string | undefined): number | null {
@@ -95,8 +94,10 @@ function inWindow(ms: number, now: number): boolean {
   return ms <= now && now - ms <= RECENT_WINDOW_MS
 }
 
-/** When a closed request ended: finish time, else the decision, else expiry. */
+/** When a closed request ended: the Owner's close, else finish time, else the decision, else expiry. */
 function closedInstant(item: ApprovalItem): number | null {
+  const resolved = instant(item.resolution?.at)
+  if (resolved != null) return resolved
   const status = item.status.trim().toLowerCase()
   if (status === 'executed' || status === 'failed') {
     const finished = instant(executionBits(item.execution).finishedAt ?? undefined)
@@ -108,7 +109,13 @@ function closedInstant(item: ApprovalItem): number | null {
   return null
 }
 
+function resolvedHandledLine(outcome: string | undefined): string | null {
+  return youClosedLine(outcome)
+}
+
 function handledApprovalLine(item: ApprovalItem, at: number): string | null {
+  const closed = resolvedHandledLine(item.resolution?.outcome)
+  if (closed != null) return closed
   const status = item.status.trim().toLowerCase()
   const time = new Date(at).toLocaleString()
   switch (status) {

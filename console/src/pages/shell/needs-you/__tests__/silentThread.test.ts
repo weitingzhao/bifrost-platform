@@ -52,7 +52,7 @@ describe('resolveSilentThread', () => {
     {
       session: 'local_s2',
       title: '  Codex job  ',
-      transcripts: ['/Users/owner/.codex/thread-no-link.jsonl'],
+      transcripts: ['sessions/thread-no-link.jsonl'],
       link: '   ',
     },
   ] as LineageThread[]

@@ -36,6 +36,7 @@ export function buildPlatformApproval(
     reject_reason: '',
     error: '',
     result: null,
+    resolution: null,
     ...partial,
   }
 }

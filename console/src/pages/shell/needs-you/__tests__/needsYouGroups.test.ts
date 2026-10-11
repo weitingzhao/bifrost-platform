@@ -94,7 +94,7 @@ describe('needs you groups', () => {
     expect(groups.check.map(item => item.id)).toEqual(['check', 'check-empty'])
     expect(checkLines('lease expired before a result')).toEqual([
       'The result could not be confirmed: lease expired before a result',
-      "Nothing ran on this page's say-so; check before asking again.",
+      'Open it and say what happened.',
     ])
     expect(checkLines('  ')[0]).toBe('The result could not be confirmed.')
     const total = waitingCount(groups, 2)
@@ -199,6 +199,40 @@ describe('recently handled', () => {
       `Rejected at ${local(24 * hour)}`,
     ])
     expect(rows.some(row => row.line.includes('0001'))).toBe(false)
+  })
+
+  it('reads a resolved record as closed by the Owner', () => {
+    const rows = recentlyHandledApprovals(
+      [
+        buildPlatformApproval({
+          id: 'did-not',
+          status: 'failed',
+          reason: 'The lease lapsed.',
+          decided_at: at(2 * hour),
+          resolution: { outcome: 'not_run', note: 'asleep', at: at(hour), by: 'owner' },
+        }),
+        buildPlatformApproval({
+          id: 'did-ok',
+          status: 'executed',
+          reason: 'It ran.',
+          decided_at: at(3 * hour),
+          resolution: { outcome: 'succeeded', note: 'finished', at: at(2 * hour), by: 'owner' },
+        }),
+        buildPlatformApproval({
+          id: 'did-bad',
+          status: 'failed',
+          reason: 'It failed.',
+          decided_at: at(4 * hour),
+          resolution: { outcome: 'failed', note: 'broke', at: at(3 * hour), by: 'owner' },
+        }),
+      ],
+      now,
+    )
+    expect(rows.map(row => row.line)).toEqual([
+      'You closed it: it did not run',
+      'You closed it: it ran and succeeded',
+      'You closed it: it ran and failed',
+    ])
   })
 
   it('keeps the ten newest closed approvals', () => {

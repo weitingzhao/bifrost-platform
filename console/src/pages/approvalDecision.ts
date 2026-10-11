@@ -3,6 +3,7 @@ import {
   formatParams,
   isUnsetDecidedAt,
   type ApprovalItem,
+  type ApprovalResolution,
 } from '@/api/approvals'
 
 /** `#n · summary`, or the action name when either piece is missing. */
@@ -96,14 +97,33 @@ export function formatTook(durationMs: number): string {
   return `${text} s`
 }
 
+/** Needs you and the request banner share this. The banner adds a period. */
+export function youClosedLine(outcome: string | undefined): string | null {
+  switch (outcome) {
+    case 'not_run':
+      return 'You closed it: it did not run'
+    case 'succeeded':
+      return 'You closed it: it ran and succeeded'
+    case 'failed':
+      return 'You closed it: it ran and failed'
+    default:
+      return null
+  }
+}
+
 /**
- * What the Owner should do now. Unknown (and any status we do not recognise)
- * says the result was not confirmed. An exit code replaces the executed / failed
- * sentences: 0 finished, anything else (or failed with a code) failed.
+ * What the Owner should do now. A resolution replaces the status sentence:
+ * not_run is stored as failed, and the status alone would say "This failed."
+ * Unknown (and any status we do not recognise) says the result was not confirmed.
+ * An exit code replaces the executed / failed sentences: 0 finished, anything
+ * else (or failed with a code) failed.
  */
 export function decisionBanner(
-  item: Pick<ApprovalItem, 'status' | 'runner'> & Partial<Pick<ApprovalItem, 'execution'>>,
+  item: Pick<ApprovalItem, 'status' | 'runner'> &
+    Partial<Pick<ApprovalItem, 'execution' | 'resolution'>>,
 ): string {
+  const closed = youClosedLine(item.resolution?.outcome)
+  if (closed != null) return `${closed}.`
   const status = item.status.trim().toLowerCase()
   const runner = runnerOf(item.runner)
   switch (status) {
@@ -150,19 +170,32 @@ export function executionOutcome(
   return parts.join(' · ')
 }
 
-export const UNKNOWN_CANNOT_CLOSE =
-  'This page cannot close it yet. Check whether it ran before asking again.'
-
-/** Plain words for an unknown request: what was recorded, and that this page cannot close it. */
+/** Plain words for an unknown request: what the platform recorded. */
 export function unknownFollowup(item: Pick<ApprovalItem, 'status' | 'error'>): {
   knows: string | null
-  cannotClose: string | null
 } {
-  if (item.status.trim().toLowerCase() !== 'unknown') return { knows: null, cannotClose: null }
+  if (item.status.trim().toLowerCase() !== 'unknown') return { knows: null }
   const text = item.error?.trim() ?? ''
   const knows =
     text === '' ? null : `What the platform knows: ${/[.!?]$/.test(text) ? text : `${text}.`}`
-  return { knows, cannotClose: UNKNOWN_CANNOT_CLOSE }
+  return { knows }
+}
+
+const CLOSED_PHRASE: Record<string, string> = {
+  not_run: 'it did not run',
+  succeeded: 'it ran and succeeded',
+  failed: 'it ran and failed',
+}
+
+/** Under the banner after the Owner closes an unknown result, with the local time. */
+export function closedByYou(resolution: ApprovalResolution | null | undefined): string | null {
+  if (resolution == null) return null
+  const phrase = CLOSED_PHRASE[resolution.outcome]
+  if (phrase == null) return null
+  const note = resolution.note.trim()
+  const line = note === '' ? `Closed by you: ${phrase}` : `Closed by you: ${phrase} — ${note}`
+  const when = visibleTimestamp(resolution.at)
+  return when == null ? line : `${line} (${when})`
 }
 
 export function executionOutputTail(execution: unknown): string | null {

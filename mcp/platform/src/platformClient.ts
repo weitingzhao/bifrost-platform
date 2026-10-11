@@ -123,7 +123,7 @@ async function consultApproval(action: string, params: Record<string, unknown>):
 
 async function sendWrite(method: 'POST' | 'DELETE' | 'PUT', path: string, body?: unknown): Promise<unknown> {
   const plan = planWrite(method, path, body, writesMode())
-  if (plan.kind === 'blocked' || plan.kind === 'unmapped') return plan.body
+  if (plan.kind === 'blocked' || plan.kind === 'unmapped' || plan.kind === 'refused') return plan.body
   if (plan.kind === 'consult') {
     const answer = await consultApproval(plan.action, plan.params)
     if (answer.kind === 'stop') return answer.body

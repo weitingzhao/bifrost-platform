@@ -34,6 +34,16 @@ export type PlatformApprovalRecord = {
   reject_reason?: string
   result?: unknown
   error?: string
+  /** Set when the Owner closed an unknown result. */
+  resolution?: ApprovalResolution | null
+}
+
+/** How the Owner closed an unknown result. `by` is `owner`. */
+export type ApprovalResolution = {
+  outcome: string
+  note: string
+  at: string
+  by: string
 }
 
 /** GET /api/v1/approvals?status=… — see HandleList in handler.go. */

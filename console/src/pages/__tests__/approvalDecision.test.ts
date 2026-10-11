@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { GO_ZERO_DECIDED_AT } from '@/api/approvalsServerContract'
 import {
   approvalRowTitle,
+  closedByYou,
   commandText,
   decisionBanner,
   decisionTitle,
@@ -15,6 +16,7 @@ import {
   unknownFollowup,
   visibleTimestamp,
   workItems,
+  youClosedLine,
 } from '@/pages/approvalDecision'
 
 describe('decisionBanner', () => {
@@ -50,6 +52,31 @@ describe('decisionBanner', () => {
     expect(decisionBanner({ status: 'mystery', runner: '' })).toBe(
       'The result could not be confirmed and must be checked before anything is retried.',
     )
+  })
+
+  it('follows the resolution, so a closed not_run does not read as a failure', () => {
+    const at = '2026-10-10T19:22:16Z'
+    const when = new Date(at).toLocaleString()
+    const cases = [
+      ['not_run', 'You closed it: it did not run.'],
+      ['succeeded', 'You closed it: it ran and succeeded.'],
+      ['failed', 'You closed it: it ran and failed.'],
+    ] as const
+    for (const [outcome, banner] of cases) {
+      expect(youClosedLine(outcome)).toBe(banner.slice(0, -1))
+      expect(
+        decisionBanner({
+          status: outcome === 'succeeded' ? 'executed' : 'failed',
+          runner: 'owner',
+          execution: { exit_code: 1 },
+          resolution: { outcome, note: 'checked the host', at, by: 'owner' },
+        }),
+      ).toBe(banner)
+      expect(decisionBanner({ status: 'failed', runner: 'owner' })).toBe('This failed.')
+    }
+    expect(
+      closedByYou({ outcome: 'not_run', note: 'checked the host', at, by: 'owner' }),
+    ).toBe(`Closed by you: it did not run — checked the host (${when})`)
   })
 })
 
@@ -104,13 +131,26 @@ describe('execution outcome', () => {
   it('tells the Owner what an unknown request recorded', () => {
     expect(unknownFollowup({ status: 'unknown', error: 'executor lost: lease lapsed with no result' })).toEqual({
       knows: 'What the platform knows: executor lost: lease lapsed with no result.',
-      cannotClose: 'This page cannot close it yet. Check whether it ran before asking again.',
     })
     expect(unknownFollowup({ status: 'unknown', error: '' }).knows).toBeNull()
     expect(unknownFollowup({ status: 'failed', error: 'plan expired' })).toEqual({
       knows: null,
-      cannotClose: null,
     })
+  })
+
+  it('says how the Owner closed an unknown result, with the local time', () => {
+    const at = '2026-10-10T19:22:16Z'
+    const when = new Date(at).toLocaleString()
+    expect(
+      closedByYou({ outcome: 'not_run', note: 'the host was asleep', at, by: 'owner' }),
+    ).toBe(`Closed by you: it did not run — the host was asleep (${when})`)
+    expect(closedByYou({ outcome: 'succeeded', note: 'it finished', at, by: 'owner' })).toBe(
+      `Closed by you: it ran and succeeded — it finished (${when})`,
+    )
+    expect(closedByYou({ outcome: 'failed', note: 'exit was bad', at, by: 'owner' })).toBe(
+      `Closed by you: it ran and failed — exit was bad (${when})`,
+    )
+    expect(closedByYou(null)).toBeNull()
   })
 })
 

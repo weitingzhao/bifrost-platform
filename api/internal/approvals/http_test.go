@@ -143,7 +143,7 @@ func TestCreateNotifiesAndSurvivesRelayFailure(t *testing.T) {
 	if rec.Code != http.StatusCreated || hits != 1 {
 		t.Fatalf("create with notify = %d hits=%d %s", rec.Code, hits, rec.Body.String())
 	}
-	if got.Title != "#1 · C · cordon_node · node" || !strings.Contains(got.Message, "name=node-a") ||
+	if got.Title != "Decide · #1 · patch" || !strings.Contains(got.Message, "Runs as soon as you approve.") || !strings.Contains(got.Message, "name=node-a") ||
 		!strings.Contains(got.Message, "cursor-b1") || !strings.Contains(got.ClickURL, "#approvals?id=") {
 		t.Fatalf("notify body = %+v", got)
 	}

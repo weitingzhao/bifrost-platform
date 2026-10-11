@@ -19,7 +19,8 @@ const (
 	StatusExpired  = "expired"
 	// StatusUnknown: the lease lapsed past unknownGrace with no result. A
 	// started run is never retried automatically; the first result posted
-	// with the same lease is accepted once.
+	// with the same lease is accepted once. The Owner can close it with
+	// POST /approvals/{id}/resolve.
 	StatusUnknown = "unknown"
 
 	ttl = 24 * time.Hour
@@ -55,6 +56,8 @@ type Approval struct {
 	RejectReason string    `json:"reject_reason,omitempty"`
 	Result       any       `json:"result,omitempty"`
 	Error        string    `json:"error,omitempty"`
+	// Resolution is how the Owner closed an unknown result. Nil until then.
+	Resolution *Resolution `json:"resolution,omitempty"`
 
 	Env       string            `json:"env,omitempty"`
 	Summary   string            `json:"summary,omitempty"`
@@ -68,6 +71,14 @@ type Approval struct {
 	// extra is the JSON object keys this binary does not know. The store
 	// writes them back. They are not part of the API.
 	extra map[string]json.RawMessage
+}
+
+// Resolution is the Owner's close of an unknown result.
+type Resolution struct {
+	Outcome string    `json:"outcome"`
+	Note    string    `json:"note"`
+	At      time.Time `json:"at"`
+	By      string    `json:"by"`
 }
 
 // Execution is everything after the decision. It is one block so it can move
@@ -127,7 +138,13 @@ func (a Approval) open() bool {
 	return false
 }
 
+// closedAt is the latest thing that happened. A resolution is that moment:
+// the decision time is older, and prune would otherwise drop a long-unknown
+// record in the same update that closed it.
 func (a Approval) closedAt() time.Time {
+	if a.Resolution != nil {
+		return a.Resolution.At
+	}
 	if a.Execution != nil && !a.Execution.FinishedAt.IsZero() {
 		return a.Execution.FinishedAt
 	}

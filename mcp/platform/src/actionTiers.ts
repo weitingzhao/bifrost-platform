@@ -216,6 +216,24 @@ export function splitPath(path: string): { pathname: string; query: URLSearchPar
   return { pathname: path.slice(0, q), query: new URLSearchParams(path.slice(q + 1)) }
 }
 
+/**
+ * Owner decisions on one approval. Same class as approve and reject:
+ * not a catalog action, and not an MCP tool. An agent must not close a request.
+ */
+const OWNER_DECISION = /^\/api\/v1\/approvals\/[^/]+\/(approve|reject|resolve)$/
+
+export function ownerDecision(
+  method: string,
+  path: string,
+): 'approve' | 'reject' | 'resolve' | undefined {
+  if (method.toUpperCase() !== 'POST') return undefined
+  const { pathname } = splitPath(path)
+  const found = pathname.match(OWNER_DECISION)
+  const kind = found?.[1]
+  if (kind === 'approve' || kind === 'reject' || kind === 'resolve') return kind
+  return undefined
+}
+
 export function matchWrite(
   method: string,
   path: string,
