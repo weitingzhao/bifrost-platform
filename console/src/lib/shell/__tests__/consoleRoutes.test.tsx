@@ -8,7 +8,9 @@ import {
   approvalHref,
   formatShellHash,
   hashQueryWithoutTaskMode,
+  isQuestionId,
   isShellRouteId,
+  questionHref,
   resolveConsoleHash,
   resolveHashTab,
 } from '@/lib/shell/consoleRoutes'
@@ -118,5 +120,26 @@ describe('request links', () => {
 
   it('builds the request link', () => {
     expect(approvalHref('ap-1')).toBe('#approvals?id=ap-1')
+  })
+})
+
+describe('question links', () => {
+  it('opens #questions?id=q_… and sends #questions without an id to Needs you', () => {
+    const id = 'q_0123456789abcdef'
+    expect(isQuestionId(id)).toBe(true)
+    expect(resolveConsoleHash(`questions?id=${id}`)).toEqual({
+      location: { kind: 'question' },
+      canonical: `#questions?id=${id}`,
+    })
+    expect(questionHref(id)).toBe(`#questions?id=${id}`)
+    expect(resolveConsoleHash('questions')).toEqual({
+      location: { kind: 'shell', id: 'needs-you' },
+      canonical: '#needs-you',
+    })
+    expect(resolveConsoleHash('questions?id=').location).toEqual({ kind: 'shell', id: 'needs-you' })
+    expect(resolveHashTab('questions').location).toEqual({ kind: 'question' })
+    expect(isQuestionId('Q12')).toBe(false)
+    expect(isQuestionId('q_0123456789ABCDE')).toBe(false)
+    expect(resolveConsoleHash('questions?id=Q12').location).toEqual({ kind: 'question' })
   })
 })
