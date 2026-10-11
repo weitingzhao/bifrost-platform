@@ -15,10 +15,7 @@ import (
 // Any non-GET route under /research or /plugins/research fails this test.
 func TestResearchRoutesAreReadOnly(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	routes, ok := srv.Router().(chi.Routes)
 	if !ok {
 		t.Fatalf("Router() is %T, want chi.Routes", srv.Router())

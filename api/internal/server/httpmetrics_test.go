@@ -40,10 +40,7 @@ func mustNotContain(t *testing.T, out string, unwanted ...string) {
 // TD-195 ratchet: platform-api must keep exporting the series the cluster's API
 // rules read, under the real router, with the route pattern as the handler.
 func TestRouterExportsHTTPRequestMetrics(t *testing.T) {
-	srv, err := New(newTestConfig(t))
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, newTestConfig(t))
 	router := srv.Router()
 	hit := func(method, path string) int {
 		rec := httptest.NewRecorder()

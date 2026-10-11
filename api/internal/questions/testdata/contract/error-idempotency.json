@@ -1,0 +1,6 @@
+{
+  "body": {
+    "error": "idempotency key reused with different content"
+  },
+  "status": 409
+}

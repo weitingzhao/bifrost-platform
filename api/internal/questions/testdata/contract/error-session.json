@@ -1,0 +1,6 @@
+{
+  "body": {
+    "error": "X-Bifrost-Session is required"
+  },
+  "status": 400
+}

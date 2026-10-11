@@ -1,0 +1,6 @@
+{
+  "body": {
+    "error": "session is not the requester"
+  },
+  "status": 403
+}

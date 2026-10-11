@@ -116,12 +116,22 @@ phases:
 	return cfg
 }
 
-func TestNewBuildsServerAndHealthRoute(t *testing.T) {
-	cfg := newTestConfig(t)
+// newTestServer builds a server and stops its questions sweep before the temp
+// directory is removed. Cleanup is LIFO, and newTestConfig registers the
+// directory first, so Close runs before RemoveAll.
+func newTestServer(t *testing.T, cfg *config.Config) *Server {
+	t.Helper()
 	srv, err := New(cfg)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
+	t.Cleanup(func() { srv.Close() })
+	return srv
+}
+
+func TestNewBuildsServerAndHealthRoute(t *testing.T) {
+	cfg := newTestConfig(t)
+	srv := newTestServer(t, cfg)
 
 	router := srv.Router()
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -152,10 +162,7 @@ func TestNewBuildsServerAndHealthRoute(t *testing.T) {
 
 func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 
 	// GET routes that are safe to hit without auth or live cluster/K8s access —
@@ -181,10 +188,7 @@ func TestRouterRegistersExpectedPublicRoutes(t *testing.T) {
 
 func TestRetiredRoutesAre404(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 	retired := []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/operate/queue"},
@@ -274,10 +278,7 @@ func TestRetiredRoutesAre404(t *testing.T) {
 
 func TestTrustMatrixMissingFileIs200(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 	for _, path := range []string{
 		"/api/v1/agent/governance/trust-matrix",
@@ -303,10 +304,7 @@ func TestTrustMatrixMissingFileIs200(t *testing.T) {
 
 func TestRouterUnknownRouteIs404(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/does-not-exist", nil)
@@ -319,10 +317,7 @@ func TestRouterUnknownRouteIs404(t *testing.T) {
 
 func TestRouterRequiresAuthForOperatorRoutes(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 
 	// Without a platform-auth.yaml, the AuthService has no principals — an
@@ -344,10 +339,7 @@ func TestRouterRequiresAuthForOperatorRoutes(t *testing.T) {
 
 func TestHandleEnvironmentsListsConfiguredEnvironments(t *testing.T) {
 	cfg := newTestConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	router := srv.Router()
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/environments", nil)
@@ -382,10 +374,7 @@ func TestRoleDecidesWhoRunsTheBackgroundLoops(t *testing.T) {
 	} {
 		t.Run("role="+tc.role, func(t *testing.T) {
 			t.Setenv(config.RoleEnv, tc.role)
-			srv, err := New(newTestConfig(t))
-			if err != nil {
-				t.Fatalf("server.New: %v", err)
-			}
+			srv := newTestServer(t, newTestConfig(t))
 			t.Cleanup(func() { srv.plane.StopBackground() })
 
 			if got := srv.plane.Patrol().Running(); got != tc.loops {
@@ -435,10 +424,7 @@ func TestPatrolReadsSharedStateInsteadOfProxy(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	if srv.plane != nil {
 		t.Fatal("proxying host constructed a local plane")
 	}
@@ -459,4 +445,71 @@ func TestPatrolReadsSharedStateInsteadOfProxy(t *testing.T) {
 			t.Fatalf("patrol request was proxied: %s", path)
 		}
 	}
+}
+
+func TestReadOnlyRequestsCreateNoDataFiles(t *testing.T) {
+	cfg := newTestConfig(t)
+	const auth = "tokens:\n  - {name: viewer, role: viewer, token: viewer-test-token}\n"
+	if err := os.WriteFile(cfg.PlatformAuthPath, []byte(auth), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dataDir := os.Getenv("PLATFORM_DATA_DIR")
+	before := dataFiles(t, dataDir)
+	srv := newTestServer(t, cfg)
+	router := srv.Router()
+	for _, c := range []struct {
+		path string
+		want int
+	}{
+		{"/api/v1/agent/governance/trust-matrix", http.StatusOK},
+		{"/api/v1/agent/governance/trust-overrides", http.StatusOK},
+		{"/api/v1/questions", http.StatusOK},
+		{"/api/v1/questions?status=all", http.StatusOK},
+		{"/api/v1/questions/q_0123456789abcdef", http.StatusNotFound},
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, c.path, nil)
+		req.Header.Set("Authorization", "Bearer viewer-test-token")
+		req.Header.Set("X-Bifrost-Session", "thread-a")
+		router.ServeHTTP(rec, req)
+		if rec.Code != c.want {
+			t.Fatalf("%s = %d, want %d; body %s", c.path, rec.Code, c.want, rec.Body.String())
+		}
+	}
+	srv.Close()
+	after := dataFiles(t, dataDir)
+	if strings.Join(before, "\n") != strings.Join(after, "\n") {
+		t.Fatalf("data files before %v after %v", before, after)
+	}
+	for _, name := range after {
+		if strings.Contains(name, "questions") {
+			t.Fatalf("read created %s", name)
+		}
+	}
+}
+
+func dataFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var names []string
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if path == root || d.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		names = append(names, rel)
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	return names
 }

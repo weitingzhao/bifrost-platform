@@ -8,10 +8,7 @@ import (
 
 // TD-203 / TD-208: these routes answered anyone who could reach the port.
 func TestShellAndRemediationRoutesNeedAToken(t *testing.T) {
-	srv, err := New(newTestConfig(t))
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, newTestConfig(t))
 	router := srv.Router()
 	for _, c := range []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/cluster/workloads/pods/data/bifrost-postgres-1/logs"},

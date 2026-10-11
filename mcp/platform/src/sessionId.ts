@@ -19,3 +19,12 @@ export function bifrostSessionId(
   }
   return hostname()
 }
+
+/** True when neither a Claude host session nor a Cursor conversation id is set. */
+export function sessionFellBack(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.CLAUDE_CODE_HOST_SESSION_ID?.trim()) return false
+  for (const key of CURSOR_SESSION_KEYS) {
+    if (env[key]?.trim()) return false
+  }
+  return true
+}
