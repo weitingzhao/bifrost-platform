@@ -2,6 +2,7 @@ package agentprogress
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 func TestRecorderFixturesPassHandlePut(t *testing.T) {
 	dir := os.Getenv("RECORDER_FIXTURES")
 	if dir == "" {
+		fmt.Println("SKIP TestRecorderFixturesPassHandlePut: RECORDER_FIXTURES is unset")
 		t.Skip("RECORDER_FIXTURES is unset")
 	}
 	entries, err := os.ReadDir(dir)
