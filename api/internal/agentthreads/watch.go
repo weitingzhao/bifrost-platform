@@ -32,8 +32,10 @@ const (
 	PushStale  = "stale"
 )
 
-// Notify pushes one message to the Owner's phone.
-type Notify func(ctx context.Context, title, body string) error
+// Notify pushes one message to the Owner's phone. kind and id are the
+// server's labels for the log when the send door withholds the text. They
+// are not part of the push. title and body are unchanged.
+type Notify func(ctx context.Context, title, body, kind, id string) error
 
 // TitlesFunc returns thread id -> title from the lineage titles (Claude
 // sessions report theirs there, TD-197). Nil or an error leaves reported titles.
@@ -145,7 +147,7 @@ func (w *Watcher) tick(ctx context.Context) bool {
 			}
 			continue
 		}
-		if err := w.notify(ctx, subject, body); err != nil {
+		if err := w.notify(ctx, subject, body, "host", name); err != nil {
 			slog.Warn("agent_threads_watch", "host_push", name, "err", err)
 			countHostPush(PushFailed)
 			if uerr := w.releaseHost(name, id); uerr != nil {
@@ -191,7 +193,7 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 			}
 			continue
 		}
-		if err := w.notify(ctx, subject, body); err != nil {
+		if err := w.notify(ctx, subject, body, "thread", k); err != nil {
 			slog.Warn("agent_threads_watch", "push", k, "err", err)
 			countPush(PushFailed)
 			if uerr := w.release(k, id); uerr != nil {

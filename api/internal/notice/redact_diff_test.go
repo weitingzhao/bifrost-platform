@@ -213,7 +213,7 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 	validAssign := []string{"=", ":", " = ", "\t=\t", "\n:\n", "='", "=\"", "'='"}
 	start = time.Now()
 	var b strings.Builder
-	for i := 0; i < 200_000; i++ {
+	for i := 0; i < diffRandomN; i++ {
 		sec := secrets[rng.Intn(len(secrets))]
 		b.Reset()
 		chunks := 2 + rng.Intn(5)
@@ -256,11 +256,11 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 		exhaustive, randomN, exhaustive+randomN, enforced,
 		hits["keyword"], hits["bearer"], hits["basic"], hits["aws"], hits["pem"],
 		exhaustiveDur.Milliseconds(), randomDur.Milliseconds())
-	if randomN < 200_000 {
+	if randomN < diffRandomN {
 		t.Fatalf("random=%d", randomN)
 	}
-	if enforced < 200_000 {
-		t.Fatalf("enforced=%d, want at least 200000", enforced)
+	if enforced < diffRandomN {
+		t.Fatalf("enforced=%d, want at least %d", enforced, diffRandomN)
 	}
 	for _, c := range []string{"keyword", "bearer", "basic", "aws", "pem"} {
 		if hits[c] < 1 {

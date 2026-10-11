@@ -1,9 +1,17 @@
 package approvalnotify
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // TestPinRedact records Redact as it behaves today. The expected strings are
@@ -71,6 +79,50 @@ func TestPinApprovalNoticeText(t *testing.T) {
 			m := Compose(tc.kind, it, pinNow)
 			if m.Title != tc.title || m.Message != tc.body || m.Priority != tc.priority || m.ClickURL != click {
 				t.Fatalf("title %q\nbody %q\npriority %d click %q", m.Title, m.Message, m.Priority, m.ClickURL)
+			}
+		})
+	}
+}
+
+// TestPinRelayWithholdsTheHiddenRows is the same Decide and Check inputs as
+// TestPinApprovalNoticeText. Compose still returns those bytes. The relay
+// receives the server-written fallback, because the summary contains U+202E.
+func TestPinRelayWithholdsTheHiddenRows(t *testing.T) {
+	it := pinItem()
+	click := ConsoleClickPrefix + url.QueryEscape(it.ID)
+	var raw []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ = io.ReadAll(r.Body)
+		_, _ = w.Write([]byte(`{"deliveries":[{"channel":"ntfy","target":"phone","result":"accepted"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "tok")
+	for _, tc := range []struct {
+		kind, title string
+	}{
+		{KindCreated, "Decide · #7"},
+		{KindFailed, "Check · #7"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			ds := Send(context.Background(), tc.kind, it, pinNow)
+			var posted struct {
+				Title    string `json:"title"`
+				Message  string `json:"message"`
+				ClickURL string `json:"click_url"`
+				Priority int    `json:"priority"`
+			}
+			if err := json.Unmarshal(raw, &posted); err != nil {
+				t.Fatal(err)
+			}
+			if posted.Title != tc.title || posted.Message != notice.WithheldBody || posted.ClickURL != click || posted.Priority != 4 {
+				t.Fatalf("%+v", posted)
+			}
+			if strings.Contains(string(raw), "Sync") || strings.Contains(string(raw), "\u202e") || strings.Contains(string(raw), "s3cr3t") || strings.Contains(string(raw), "token=") {
+				t.Fatalf("composed text was posted: %s", raw)
+			}
+			if len(ds) != 1 || ds[0].Result != ResultAccepted || ds[0].Kind != tc.kind || !ds[0].At.Equal(pinNow) || ds[0].Error != "" {
+				t.Fatalf("delivery %+v", ds)
 			}
 		})
 	}

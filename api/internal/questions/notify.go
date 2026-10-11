@@ -10,12 +10,7 @@ import (
 
 func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 	now := s.clock()
-	msg := notice.Message{
-		Title:    noticeTitle(q),
-		Message:  noticeBody(q, now),
-		ClickURL: consoleURL(q.ID),
-		Priority: 4,
-	}
+	msg := createdNotice(q, now)
 	sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	dels, postErr := s.post(sendCtx, msg)
@@ -48,6 +43,22 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 		status = stored[0].Result
 	}
 	s.writeAudit(c, []event{{"question.notify", q.ID, status, ""}})
+}
+
+func createdNotice(q Question, now time.Time) notice.Message {
+	return notice.Message{
+		Title:    noticeTitle(q),
+		Message:  noticeBody(q, now),
+		ClickURL: consoleURL(q.ID),
+		Priority: 4,
+		Fallback: answerFallback(q.Number),
+		Kind:     "question",
+		ID:       q.ID,
+	}
+}
+
+func answerFallback(n int) string {
+	return "Answer · " + numberLabel(n)
 }
 
 func noticeTitle(q Question) string {
