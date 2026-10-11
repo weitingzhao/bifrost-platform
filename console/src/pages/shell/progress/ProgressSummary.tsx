@@ -28,7 +28,9 @@ import {
   notYetDueCount,
   openDetails,
   orderedAsks,
+  requestAgentLines,
   requestItem,
+  requestLinked,
   runningQuietLine,
   runningRank,
   runningTone,
@@ -40,6 +42,7 @@ import {
   slicesHeadline,
   sumOpen,
   takesMarker,
+  uncoveredOpenCount,
   timesHeadline,
   troubleTone,
   turnMarker,
@@ -91,16 +94,20 @@ function RequestLink({ item }: { item: ApprovalItem }) {
 }
 
 function AgentAside({ ask }: { ask: AskSource }) {
-  const before = agentText(ask.not_before)
+  const before = requestLinked(ask) ? '' : agentText(ask.not_before)
+  const lines = requestAgentLines(ask)
   const name = agentText(ask.name)
   const work = agentText(ask.work)
-  if (before === '' && name === '' && work === '') return null
+  if (before === '' && name === '' && work === '' && lines.length === 0) return null
   return (
     <span data-agent-note="" className="block min-w-0 truncate">
       <span className="text-muted-foreground">Agent&apos;s note: </span>
       {before !== '' ? <span>{before}</span> : null}
-      {name !== '' ? <span className="font-medium">{`${before !== '' ? ' · ' : ''}${name}`}</span> : null}
-      {work !== '' ? <span className="text-muted-foreground">{`${before !== '' || name !== '' ? ' · ' : ''}${work}`}</span> : null}
+      {lines.map((line, index) => (
+        <span key={index}>{`${before !== '' || index > 0 ? ' · ' : ''}${line}`}</span>
+      ))}
+      {name !== '' ? <span className="font-medium">{`${before !== '' || lines.length > 0 ? ' · ' : ''}${name}`}</span> : null}
+      {work !== '' ? <span className="text-muted-foreground">{`${before !== '' || lines.length > 0 || name !== '' ? ' · ' : ''}${work}`}</span> : null}
     </span>
   )
 }
@@ -212,8 +219,9 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
   const counts = roadmap != null ? planCounts(roadmap) : null
   const total = counts != null ? counts.done + counts.doing + counts.todo : 0
   const details = openDetails(roadmap)
-  const mine = sumOpen(details, 'mine')
-  const ownerTimes = sumOpen(details, 'owner')
+  const uncovered = uncoveredOpenCount(roadmap)
+  const mine = sumOpen(details, 'mine', uncovered)
+  const ownerTimes = sumOpen(details, 'owner', uncovered)
   const pace = roadmap?.pace
   const nights = pace == null || pace.unreadable ? null : nightsFrom(mine, ownerTimes, pace.per_night)
   const slicesText = slicesHeadline(mine)
@@ -290,7 +298,7 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
       {showFigures ? (
         <span data-plan-figures="" className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           {slicesText != null ? <span>{slicesText}</span> : null}
-          {nights != null ? <span data-nights="">{`${nights} nights`}</span> : null}
+          {nights === 'Unknown' ? <span data-nights="unknown">Unknown</span> : nights != null ? <span data-nights="">{`${nights} nights`}</span> : null}
           {timesText != null ? <span>{timesText}</span> : null}
         </span>
       ) : null}

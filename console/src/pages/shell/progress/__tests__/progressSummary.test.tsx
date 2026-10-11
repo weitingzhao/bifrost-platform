@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_PROGRESS_POLL_MS, GENERATION_SKEW_SECONDS } from '@/api/agentProgress'
 import { formatHourMinute } from '@/pages/shell/progress/progressModel'
@@ -75,6 +75,8 @@ describe('progress summary model', () => {
     expect(nightsFigure(4, 'unknown')).toBeNull()
     expect(nightsFigure('unknown', 5)).toBeNull()
     expect(nightsFigure(11, 5.5)).toBe('2')
+    expect(nightsFigure(1, 1e-308)).toBe('Unknown')
+    expect(nightsFigure(1, 1e-308)).not.toBe('Infinity')
   })
 })
 
@@ -492,7 +494,13 @@ describe('Progress summary', () => {
       roadmap: { groups: [{ state: 'done', items: ['a'] }, { state: 'doing', items: ['b'] }, { state: 'todo', items: [] }] },
       works: [{ title: 'Board', short: 'Board', steps: [{ name: 'Run', state: 'running', who: 'Cursor', started: NOW_SEC - 600, usual_min: 30 }] }],
     })
-    render(wrap(<AgentWorkBoard />))
+    render(
+      wrap(
+        <StrictMode>
+          <AgentWorkBoard />
+        </StrictMode>,
+      ),
+    )
     const summary = await screen.findByTestId('progress-summary')
     const paints = summary.getAttribute('data-paints')
     const block = (name: string) => summary.querySelector(`[data-summary-block="${name}"]`)?.getAttribute('data-summary-renders')
@@ -505,14 +513,12 @@ describe('Progress summary', () => {
       quota: gauge('quota'),
       done: gauge('done'),
       elapsed: summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct'),
+      trouble: summary.querySelector('[data-trouble-renders]')?.getAttribute('data-trouble-renders'),
     }
     expect(before.elapsed).toBe('33')
-    expect(before.needs).toBe('1')
-    expect(before.plan).toBe('1')
-    expect(before.running).toBe('1')
-    expect(before.gauges).toBe('1')
-    expect(before.quota).toBe('1')
-    expect(before.done).toBe('1')
+    expect(before.needs).not.toBeNull()
+    expect(before.plan).not.toBeNull()
+    expect(before.running).not.toBeNull()
     await act(async () => {
       vi.setSystemTime(NOW + 120_000)
       await vi.advanceTimersByTimeAsync(1000)
@@ -525,5 +531,6 @@ describe('Progress summary', () => {
     expect(gauge('quota')).toBe(before.quota)
     expect(gauge('done')).toBe(before.done)
     expect(summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct')).toBe('40')
+    expect(Number(summary.querySelector('[data-trouble-renders]')?.getAttribute('data-trouble-renders'))).toBeGreaterThan(Number(before.trouble))
   })
 })

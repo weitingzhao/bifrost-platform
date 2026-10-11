@@ -19,7 +19,20 @@ import { approvalHref } from '@/lib/shell/consoleRoutes'
 import type { OwnerAskAction } from '@/api/progressFields'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { boundDocumentText } from '@/pages/shell/progress/progressPart'
-import { agentText, asksFromDocument, type AskSource } from '@/pages/shell/progress/progressSummaryModel'
+import {
+  agentText,
+  askAct,
+  asksFromDocument,
+  deadlineMarker,
+  holdsMarker,
+  orderedAsks,
+  requestAgentLines,
+  requestItem,
+  takesMarker,
+  turnMarker,
+  type ApprovalRead,
+  type AskSource,
+} from '@/pages/shell/progress/progressSummaryModel'
 
 const NAME_MAX = 120
 const URGENCY_MAX = 200
@@ -357,22 +370,103 @@ function DocumentAskCard({ ask }: { ask: AskSource }) {
 
 const cardClass = 'flex w-full min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5'
 
+function approvalRead(enabled: boolean, isSuccess: boolean, isError: boolean, isPending: boolean): ApprovalRead {
+  if (!enabled) return 'ready'
+  if (isPending) return 'loading'
+  if (isError || !isSuccess) return 'unreadable'
+  return 'ready'
+}
+
+/** A document row that names a request. Facts come from that request; the document sits in the note. */
+function LinkedDetail({
+  ask,
+  items,
+  read,
+}: {
+  ask: AskSource
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+}) {
+  const now = useNow()
+  const act = askAct(ask, items, read, now)
+  const turn = turnMarker(ask, act)
+  const holds = holdsMarker(ask)
+  const takes = takesMarker(ask)
+  const deadline = deadlineMarker(ask, items, read, now)
+  const lines = requestAgentLines(ask)
+  const entry: OwnerNow = {
+    name: ask.name,
+    work: ask.work,
+    actions: asActions(ask.actions),
+    approval: ask.approval,
+  }
+  const dot =
+    turn.tone === 'now'
+      ? 'inline-block size-2.5 shrink-0 rounded-full bg-emerald-500'
+      : 'inline-block size-2.5 shrink-0 rounded-full border border-current'
+  return (
+    <>
+      <span className="inline-flex min-h-11 items-center gap-2">
+        <i data-turn-dot={turn.tone} className={dot} />
+        {turn.text}
+      </span>
+      <RequestCard entry={entry} item={requestItem(ask, items, read)} unreadable={read === 'unreadable'} />
+      {deadline === 'unknown' ? <span data-deadline="unknown">Unknown</span> : null}
+      {deadline !== 'none' && deadline !== 'unknown' ? (
+        <span data-deadline="by" data-urgent={deadline.amber ? 'true' : 'false'} className={deadline.amber ? 'text-warning' : ''}>
+          {deadline.text}
+        </span>
+      ) : null}
+      <span data-holds={holds.amber ? 'yes' : 'no'} className={holds.amber ? 'text-warning' : ''}>
+        {holds.text}
+      </span>
+      {takes != null ? <span>{takes}</span> : null}
+      {lines.length > 0 ? (
+        <div data-agent-note="">
+          <span className="text-sm text-muted-foreground">Agent&apos;s note:</span>
+          {lines.map((line, index) => (
+            <span key={index} className="break-words text-sm text-foreground">
+              {line}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 function MixedList({ doc, asks }: { doc: ProgressDocument; asks: readonly AskSource[] }) {
   const now = useNow()
   const ownerNow = doc.owner_now ?? []
   const ids = asks.map(ask => ask.approval?.id).filter((id): id is string => isApprovalId(id))
-  const list = useProgressApprovals(ids.length > 0)
-  const readable = list.isSuccess && list.data != null
+  const enabled = ids.length > 0
+  const list = useProgressApprovals(enabled)
+  const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
+  const readable = read === 'ready'
+  const ordered = orderedAsks(asks, list.data, read, now)
+  if (ordered.length === 0) return null
   return (
     <section aria-label="Needs you now" className="flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium text-foreground">Needs you now</h3>
       <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-2 p-0">
-        {asks.map((ask, index) => {
+        {ordered.map((ask, index) => {
           const entry = ask.fallback === true ? ownerNow[ask.index] : undefined
+          const linked = isApprovalId(ask.approval?.id)
           const quiet = entry != null ? requestIsQuiet(entry, list.data, readable, now) : false
           return (
-            <li key={`${ask.name ?? 'ask'}-${index}`} data-request-quiet={entry?.approval == null ? undefined : quiet ? 'true' : 'false'} className={quiet ? `${cardClass} text-muted-foreground opacity-60` : cardClass}>
-              {entry != null ? <OwnerCard entry={entry} items={list.data} readable={readable} /> : <DocumentAskCard ask={ask} />}
+            <li
+              key={`${ask.name ?? 'ask'}-${index}`}
+              data-ask={linked ? askAct(ask, list.data, read, now) : undefined}
+              data-request-quiet={entry?.approval == null ? undefined : quiet ? 'true' : 'false'}
+              className={quiet ? `${cardClass} text-muted-foreground opacity-60` : cardClass}
+            >
+              {linked ? (
+                <LinkedDetail ask={ask} items={list.data} read={read} />
+              ) : entry != null ? (
+                <OwnerCard entry={entry} items={list.data} readable={readable} />
+              ) : (
+                <DocumentAskCard ask={ask} />
+              )}
             </li>
           )
         })}

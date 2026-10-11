@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import type { ProgressGroup, ProgressRoadmap } from '@/api/agentProgressBoard'
 import type { PlanEstimate } from '@/api/progressFields'
@@ -16,8 +17,18 @@ import {
   slicesHeadline,
   sumOpen,
   timesHeadline,
+  uncoveredOpenCount,
   waitsOnOwner,
 } from '@/pages/shell/progress/progressSummaryModel'
+
+function AgentNote({ children }: { children: ReactNode }) {
+  return (
+    <span data-agent-note="" className="block min-w-0">
+      <span className="text-muted-foreground">Agent&apos;s note: </span>
+      {children}
+    </span>
+  )
+}
 
 function Chips({ group }: { group: ProgressGroup }) {
   return (
@@ -33,11 +44,17 @@ function Chips({ group }: { group: ProgressGroup }) {
   )
 }
 
+function countWord(value: PlanEstimate['mine']): string {
+  if (value === 'unknown' || value == null) return 'Unknown'
+  return formatCount(value)
+}
+
 function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate | undefined }) {
+  const title = agentText(name)
   if (est == null || est.unreadable) {
     return (
       <p className="m-0 text-sm">
-        <span className="font-medium">{name}</span> <span className="text-muted-foreground">No estimate</span>
+        <span className="break-words font-medium">{title}</span> <span className="text-muted-foreground">No estimate</span>
       </p>
     )
   }
@@ -48,21 +65,29 @@ function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate 
   const sure = agentText(est.sure)
   const asOf = agentText(est.as_of)
   const owner = waitsOnOwner(blocked)
-  const title = agentText(name)
+  const agentBits = note !== '' || blocked !== '' || sure !== '' || asOf !== ''
   return (
     <div className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm">
       <span className="break-words font-medium">
         {title}
         {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" /> : null}
       </span>
-      {note !== '' ? <span className="break-words text-muted-foreground">{note}</span> : null}
       <span className="block h-1.5 max-w-full overflow-hidden rounded bg-foreground/10">
         {unknown ? null : <span className="block h-full bg-emerald-500" style={{ width: `${pct ?? 0}%` }} />}
       </span>
       <span className="text-muted-foreground">{unknown ? 'Done Unknown' : `Done ${sliceLabel(est.done, est.total)}`}</span>
-      <span>{`Agent slices left ${est.mine === 'unknown' || est.mine == null ? 'Unknown' : formatCount(est.mine)} · times you ${est.owner === 'unknown' || est.owner == null ? 'Unknown' : formatCount(est.owner)}`}</span>
-      <span className={owner ? 'text-warning' : ''}>{`Waiting on: ${blocked || '—'}`}</span>
-      <span className="text-muted-foreground">{`Confidence: ${sure || '?'}${asOf !== '' ? ` · ${asOf}` : ''}`}</span>
+      <span>{`Agent slices left ${countWord(est.mine)}`}</span>
+      <span>{`times you ${countWord(est.owner)}`}</span>
+      <span>Waiting on</span>
+      <span>Confidence</span>
+      {agentBits ? (
+        <AgentNote>
+          {note !== '' ? <span className="break-words">{note}</span> : null}
+          {blocked !== '' ? <span className="break-words">{blocked}</span> : null}
+          {sure !== '' ? <span className="break-words">{sure}</span> : null}
+          {asOf !== '' ? <span className="break-words">{asOf}</span> : null}
+        </AgentNote>
+      ) : null}
     </div>
   )
 }
@@ -74,10 +99,11 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
   const total = counts.done + counts.doing + counts.todo
   const groups = roadmap.groups ?? []
   const open = openDetails(roadmap)
+  const uncovered = uncoveredOpenCount(roadmap)
   const onYou = open.filter(row => !row.detail.unreadable && waitsOnOwner(row.detail.est?.blocked))
   const rest = open.filter(row => row.detail.unreadable || !waitsOnOwner(row.detail.est?.blocked))
-  const mine = sumOpen(open, 'mine')
-  const ownerTimes = sumOpen(open, 'owner')
+  const mine = sumOpen(open, 'mine', uncovered)
+  const ownerTimes = sumOpen(open, 'owner', uncovered)
   const pace = roadmap.pace
   const nights = pace == null || pace.unreadable ? null : nightsFrom(mine, ownerTimes, pace.per_night)
   const range = mine.kind === 'full' && ownerTimes.kind === 'full' && pace != null && !pace.unreadable ? nightsRange(mine.value, pace.per_night) : null
@@ -121,8 +147,11 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
         ) : null}
       </div>
       <p className="m-0 text-sm text-foreground">{planMeterLine(roadmap)}</p>
-      {nights != null && mine.kind === 'full' && ownerTimes.kind === 'full' ? (
+      {nights != null && nights !== 'Unknown' && mine.kind === 'full' && ownerTimes.kind === 'full' ? (
         <p className="m-0 text-sm text-foreground">{`${formatCount(mine.value)} slices left · about ${nights} nights${range != null ? ` (${range})` : ''} · ${formatCount(ownerTimes.value)} times you`}</p>
+      ) : null}
+      {nights === 'Unknown' && mine.kind === 'full' && ownerTimes.kind === 'full' ? (
+        <p className="m-0 text-sm text-foreground">Unknown</p>
       ) : null}
       {mine.kind === 'partial' || ownerTimes.kind === 'partial' ? (
         <p className="m-0 text-sm text-foreground">{[slicesHeadline(mine), timesHeadline(ownerTimes)].filter(text => text != null).join(' · ')}</p>

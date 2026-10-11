@@ -133,8 +133,21 @@ function hasDeadline(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, 
   return typeof ask.deadline === 'number'
 }
 
+/** A row with a real request id. Document prose is not a fact about that row. */
+export function requestLinked(ask: OwnerAsk): boolean {
+  return isApprovalId(ask.approval?.id)
+}
+
 function holdsUp(ask: OwnerAsk): boolean {
+  if (requestLinked(ask)) return false
   return agentText(ask.blocks) !== ''
+}
+
+/** What the agent wrote, for the labelled note. Never a sentence the Console composes. */
+export function requestAgentLines(ask: OwnerAsk): string[] {
+  if (!requestLinked(ask)) return []
+  const lines = [ask.not_before, ask.blocks, ask.blocks_text, ask.takes, ask.deadline_text]
+  return lines.map(line => agentText(line)).filter(line => line !== '')
 }
 
 /**
@@ -220,6 +233,7 @@ export function deadlineMarker(
 }
 
 export function holdsMarker(ask: OwnerAsk): { text: string; amber: boolean } {
+  if (requestLinked(ask)) return { text: 'Unknown', amber: false }
   const blocks = agentText(ask.blocks)
   if (blocks !== '') return { text: `Holding up: ${blocks}`, amber: true }
   const text = agentText(ask.blocks_text)
@@ -228,6 +242,7 @@ export function holdsMarker(ask: OwnerAsk): { text: string; amber: boolean } {
 }
 
 export function takesMarker(ask: OwnerAsk): string | null {
+  if (requestLinked(ask)) return 'Unknown'
   const takes = agentText(ask.takes)
   if (takes === '') return null
   return `Takes effect in ${takes}`
@@ -298,6 +313,21 @@ export function openDetails(roadmap: ProgressRoadmap | undefined): OpenDetail[] 
   return rows
 }
 
+/**
+ * Items in an open group that have no detail row.
+ * A doing or todo group with more `items` than `detail` rows leaves the extras unestimated.
+ */
+export function uncoveredOpenCount(roadmap: ProgressRoadmap | undefined): number {
+  let missing = 0
+  for (const group of roadmap?.groups ?? []) {
+    if (group.state !== 'doing' && group.state !== 'todo') continue
+    const items = group.items?.length ?? 0
+    const details = Array.isArray(group.detail) ? group.detail.length : 0
+    if (items > details) missing += items - details
+  }
+  return missing
+}
+
 export function doingDetails(roadmap: ProgressRoadmap | undefined): PlanDetail[] {
   const group = (roadmap?.groups ?? []).find(row => row.state === 'doing')
   if (group == null || !Array.isArray(group.detail)) return []
@@ -311,9 +341,9 @@ export type OpenFigure =
   | { kind: 'partial'; value: number; missing: number }
 
 /** Sum of a slice field over open items. A missing field is a partial subtotal, not a zero. */
-export function sumOpen(details: readonly OpenDetail[], key: 'mine' | 'owner'): OpenFigure {
+export function sumOpen(details: readonly OpenDetail[], key: 'mine' | 'owner', uncovered = 0): OpenFigure {
   let anyEst = false
-  let missing = 0
+  let missing = uncovered
   let sum = 0
   let saw = false
   for (const row of details) {
@@ -333,7 +363,10 @@ export function sumOpen(details: readonly OpenDetail[], key: 'mine' | 'owner'): 
     saw = true
     sum += value
   }
-  if (!anyEst) return { kind: 'none' }
+  if (!anyEst) {
+    if (missing > 0) return { kind: 'partial', value: 0, missing }
+    return { kind: 'none' }
+  }
   if (missing > 0) return { kind: 'partial', value: sum, missing }
   if (!saw) return { kind: 'none' }
   return { kind: 'full', value: sum }
@@ -359,13 +392,28 @@ export function timesHeadline(figure: OpenFigure): string | null {
 
 type Sum = number | 'unknown' | null
 
+const NIGHTS_MAX = 10_000
+
+/**
+ * Nights after the division. Not finite, not positive, or above 10,000 — including a
+ * rounded result that overflowed — is Unknown. An unusable pace stays absent.
+ */
+function nightsChecked(slicesLeft: number, perNight: number): number | 'unknown' | null {
+  if (!Number.isFinite(perNight) || !(perNight > 0)) return null
+  const nights = slicesLeft / perNight
+  const rounded = Math.round(nights * 10) / 10
+  if (!Number.isFinite(rounded) || !(rounded > 0) || rounded > NIGHTS_MAX) return 'unknown'
+  return rounded
+}
+
 /** Nights from slices left ÷ per night. Absent or unusable pace → null, never NaN or Infinity. */
 export function nightsFigure(slicesLeft: Sum, perNight: CountRead | undefined): string | null {
   if (typeof slicesLeft !== 'number') return null
-  if (typeof perNight !== 'number' || !Number.isFinite(perNight) || !(perNight > 0)) return null
-  const nights = slicesLeft / perNight
-  if (!Number.isFinite(nights)) return null
-  return formatCount(nights)
+  if (typeof perNight !== 'number') return null
+  const checked = nightsChecked(slicesLeft, perNight)
+  if (checked == null) return null
+  if (checked === 'unknown') return 'Unknown'
+  return formatCount(checked)
 }
 
 /** Nights only from a complete set of estimates and a usable pace. A partial subtotal has no nights. */
@@ -375,12 +423,12 @@ export function nightsFrom(mine: OpenFigure, owner: OpenFigure, perNight: CountR
 }
 
 export function nightsRange(slicesLeft: Sum, perNight: CountRead | undefined): string | null {
-  if (typeof slicesLeft !== 'number') return null
-  if (typeof perNight !== 'number' || !Number.isFinite(perNight) || !(perNight > 0)) return null
-  const nights = slicesLeft / perNight
-  if (!Number.isFinite(nights)) return null
-  const low = Math.round(nights * 0.75 * 10) / 10
-  const high = Math.round(nights * 1.5 * 10) / 10
+  if (typeof slicesLeft !== 'number' || typeof perNight !== 'number') return null
+  const checked = nightsChecked(slicesLeft, perNight)
+  if (typeof checked !== 'number') return null
+  const low = Math.round(checked * 0.75 * 10) / 10
+  const high = Math.round(checked * 1.5 * 10) / 10
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null
   return `${formatCount(low)}–${formatCount(high)} nights`
 }
 

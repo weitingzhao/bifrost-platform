@@ -154,6 +154,66 @@ describe('a request row follows the real request', () => {
     expect(row?.textContent).not.toContain('Not your turn yet')
     expect(box.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('1')
   })
+
+  it('a pending request ignores document blocks and takes, and an approved request leaves both lists', async () => {
+    const later = new Date(NOW + 23 * 60 * 60 * 1000).toISOString()
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Facts',
+        owner_items: [
+          {
+            name: 'Hold',
+            now: false,
+            not_before: 'the freeze',
+            blocks: 'the merge',
+            takes: 'about 10 min',
+            deadline: NOW_SEC + 86_400,
+            approval: { id: LIVE_ID },
+          },
+        ],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: LIVE_ID, number: 4, summary: 'real', status: 'pending', expires_at: later })])),
+    )
+    const pending = render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const row = (await within(box).findByText('You can do this now')).closest('[data-ask]')
+    expect(row?.getAttribute('data-ask')).toBe('now')
+    expect(row?.textContent).not.toContain('Not your turn yet')
+    expect(row?.textContent).not.toContain('Holding up:')
+    expect(row?.textContent).not.toContain('Takes effect in')
+    expect(row?.querySelector('[data-holds]')?.textContent).toBe('Unknown')
+    expect(row?.querySelector('[data-holds]')?.getAttribute('data-holds')).toBe('no')
+    expect(row?.querySelector('[data-holds]')?.className).not.toContain('text-warning')
+    const note = row?.querySelector('[data-agent-note]')
+    expect(note?.textContent).toContain('the merge')
+    expect(note?.textContent).toContain('about 10 min')
+    expect(note?.textContent).toContain('the freeze')
+    const section = await screen.findByRole('region', { name: 'Needs you now' })
+    expect(within(section).getByText('You can do this now')).toBeTruthy()
+    expect(section.textContent).not.toContain('Not your turn yet')
+    expect(section.textContent).not.toContain('Holding up:')
+    expect(section.textContent).not.toContain('Takes effect in')
+    expect(within(section).getByRole('link', { name: 'Open request #4' })).toBeTruthy()
+    expect(section.querySelector('[data-agent-note]')?.textContent).toContain('the merge')
+    pending.unmount()
+
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Closed',
+        owner_items: [{ name: 'Hold', now: true, blocks: 'the merge', approval: { id: LIVE_ID } }],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: LIVE_ID, number: 4, summary: 'real', status: 'approved', expires_at: later })])),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const closed = await screen.findByTestId('progress-summary')
+    expect(await within(closed).findByText('Nothing needs you now')).toBeTruthy()
+    expect(within(closed).queryByText('the merge')).toBeNull()
+    expect(within(closed).queryByText('You can do this now')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Needs you now' })).toBeNull()
+    expect(closed.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('0')
+  })
 })
 
 const XSS = '<script id="xss-field">alert(1)</script>'
@@ -277,6 +337,47 @@ describe('agent text is shown as text', () => {
     const turn = box.querySelector('[data-ask="now"]')
     expect(turn?.textContent?.startsWith('You can do this now')).toBe(true)
   })
+
+  it('B cleans a name that has no estimate, and does not fold agent words into a console sentence', async () => {
+    const raw = `\u202E${'n'.repeat(10_000)}`
+    stub({
+      at: NOW_SEC,
+      verdict: 'Plan text',
+      roadmap: {
+        groups: [
+          {
+            state: 'doing',
+            items: ['bare', 'full'],
+            detail: [
+              { name: raw },
+              { name: 'Counted', est: { done: 1, total: 2, mine: 1, owner: 0, blocked: 'the lane', sure: 'high', note: 'a note', as_of: 'today' } },
+            ],
+          },
+        ],
+      },
+    })
+    render(wrap(<AgentWorkBoard />))
+    await screen.findByTestId('progress-summary')
+    fireEvent.click(await screen.findByTestId('fold-sec-plan'))
+    fireEvent.click(await screen.findByTestId('fold-plan-rest'))
+    const plan = screen.getByRole('region', { name: 'Plan' })
+    expect(plan.textContent).not.toContain('\u202E')
+    expect(plan.textContent).toContain('…')
+    expect(plan.textContent).toContain('No estimate')
+    const title = [...plan.querySelectorAll('span')].find(node => (node.textContent ?? '').startsWith('n') && (node.textContent ?? '').includes('…'))
+    expect(title?.textContent?.match(/n+/)?.[0]?.length ?? 0).toBeLessThanOrEqual(AGENT_TEXT_MAX - 1)
+    expect(plan.textContent).not.toContain('Waiting on:')
+    expect(plan.textContent).not.toContain('Confidence:')
+    const noted = plan.querySelector('[data-agent-note]')
+    expect(noted?.textContent).toContain('the lane')
+    expect(noted?.textContent).toContain('high')
+    expect(noted?.textContent).toContain('a note')
+    expect(noted?.textContent).toContain('today')
+    const outside = plan.textContent?.replace(noted?.textContent ?? '', '') ?? ''
+    expect(outside).not.toContain('the lane')
+    expect(outside).toContain('Waiting on')
+    expect(outside).toContain('Confidence')
+  })
 })
 
 describe('one list for the summary, the section, and the empty state', () => {
@@ -374,6 +475,51 @@ describe('progress numbers that can be wrong are Unknown', () => {
     expect(within(box).getByText('at least 1 times you (1 item not estimated)')).toBeTruthy()
     expect(box.querySelector('[data-nights]')).toBeNull()
     expect(box.textContent).not.toMatch(/nights/)
+  })
+
+  it('E counts an item that has no detail as not estimated, and will not derive nights from that', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Gap',
+      roadmap: {
+        groups: [
+          {
+            state: 'doing',
+            items: ['a'],
+            detail: [{ name: 'Counted', est: { done: 1, total: 2, mine: 1, owner: 0 } }],
+          },
+          { state: 'todo', items: ['b'] },
+        ],
+        pace: { per_night: 1 },
+      },
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(within(box).getByText('at least 1 slices (1 item not estimated)')).toBeTruthy()
+    expect(box.querySelector('[data-nights]')).toBeNull()
+    expect(box.textContent).not.toMatch(/Infinity|NaN/)
+    expect(box.textContent).not.toMatch(/\d+(\.\d+)? nights/)
+  })
+
+  it('E shows Unknown when the nights figure overflows, as with per_night 1e-308', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Tiny',
+      roadmap: {
+        groups: [
+          {
+            state: 'doing',
+            items: ['a'],
+            detail: [{ name: 'One', est: { done: 0, total: 1, mine: 1, owner: 0 } }],
+          },
+        ],
+        pace: { per_night: 1e-308 },
+      },
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(box.querySelector('[data-nights="unknown"]')?.textContent).toBe('Unknown')
+    expect(box.textContent).not.toMatch(/Infinity/)
   })
 
   it('F shows when a running step is expected, and Unknown when it has no time', async () => {

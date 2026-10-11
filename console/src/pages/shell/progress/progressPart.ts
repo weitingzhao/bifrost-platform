@@ -52,11 +52,12 @@ export function sanitizeDocumentText(value: string): string {
   return clean.replace(/\s+/g, ' ').trim()
 }
 
-/** Same cleaning, then at most `max` characters. A longer value ends with an ellipsis. */
+/** Same cleaning, then at most `max` Unicode code points. A longer value ends with an ellipsis. */
 export function boundDocumentText(value: string, max: number): string {
   const clean = sanitizeDocumentText(value)
-  if (clean.length <= max) return clean
-  return `${clean.slice(0, Math.max(0, max - 1))}…`
+  const points = Array.from(clean)
+  if (points.length <= max) return clean
+  return `${points.slice(0, Math.max(0, max - 1)).join('')}…`
 }
 
 /**
