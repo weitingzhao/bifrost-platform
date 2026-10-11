@@ -227,6 +227,12 @@ func TestFreeze(t *testing.T) {
 		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": frozenAt, "who": "owner", "reason": "incident"})
 		wantWait(t, f.decide(nil), "releases are frozen: frozen by owner")
 	})
+	t.Run("a freeze set by hand is still honoured when no anchor is compiled", func(t *testing.T) {
+		f := newFixture(t)
+		f.eng = f.engine("")
+		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": frozenAt, "who": "owner", "reason": "incident"})
+		wantWait(t, f.decide(nil), "releases are frozen: frozen by owner")
+	})
 	t.Run("missing counts as frozen", func(t *testing.T) {
 		f := newFixture(t)
 		f.cms.Set(releasepolicy.FreezeConfigMap, nil)
