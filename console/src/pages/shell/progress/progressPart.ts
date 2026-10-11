@@ -31,6 +31,23 @@ export function partOfReference(doc: ProgressDocument | null | undefined, id: st
   return null
 }
 
+function isHiddenChar(char: string): boolean {
+  const code = char.charCodeAt(0)
+  if (code <= 31 || (code >= 127 && code <= 159)) return true
+  if (code >= 0x202a && code <= 0x202e) return true
+  return code >= 0x2066 && code <= 0x2069
+}
+
+/**
+ * What an agent says this request belongs to. One line, at most 120 characters.
+ * It is not a fact about the request.
+ */
 export function partOfLine(part: ProgressPart): string {
-  return `Part of: ${part.work} — ${part.step}`
+  let clean = ''
+  for (const char of `Agent-reported: ${part.work} — ${part.step}`) {
+    if (!isHiddenChar(char)) clean += char
+  }
+  clean = clean.replace(/\s+/g, ' ').trim()
+  if (clean.length <= 120) return clean
+  return `${clean.slice(0, 119)}…`
 }

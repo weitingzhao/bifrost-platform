@@ -33,7 +33,7 @@ export function ApprovalRow({
   const words = tierWords(item.tier)
   const detail = lines != null && lines.length > 0 ? lines : null
   return (
-    <li className="list-none">
+    <li className="list-none min-w-0 max-w-full">
       <a
         href={approvalHref(item.id)}
         data-approval-row={item.id}
@@ -67,7 +67,11 @@ export function ApprovalRow({
         </span>
       </a>
       {pending && partOf != null ? (
-        <a href="#progress" className="mt-1 block min-w-0 break-words text-sm text-foreground underline">
+        <a
+          href="#progress"
+          data-agent-reported=""
+          className="mt-1 block max-h-5 min-w-0 max-w-full truncate text-sm text-muted-foreground underline"
+        >
           {partOfLine(partOf)}
         </a>
       ) : null}

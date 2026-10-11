@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { tierWords } from '@/pages/approvalDecision'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
+import { partOfLine } from '@/pages/shell/progress/progressPart'
 
 describe('ApprovalRow', () => {
   const now = Date.UTC(2026, 9, 10, 12, 0)
@@ -63,5 +64,49 @@ describe('ApprovalRow', () => {
     const again = render(<ApprovalRow item={action} now={now} />)
     expect(again.container.querySelector('[data-approval-row-title]')?.textContent).toBe('drain_node')
     expect(again.container.textContent).not.toContain('#')
+  })
+
+  it('puts a muted one-line agent report after the title and strips control characters', () => {
+    const item = buildPlatformApproval({
+      id: 'appr-part',
+      number: 8,
+      summary: 'Deliver bifrost-platform to PROD',
+      reason: 'Publish the ConfigMap.',
+    })
+    const next = buildPlatformApproval({
+      id: 'appr-next',
+      number: 9,
+      summary: 'The next request',
+      reason: 'Leave this visible.',
+    })
+    const work = `${'长'.repeat(200)}\u202E\u0007`
+    const step = `步骤\u2066\n下一行`
+    const { container } = render(
+      <ul>
+        <ApprovalRow item={item} now={now} partOf={{ work, step }} />
+        <ApprovalRow item={next} now={now} />
+      </ul>,
+    )
+    const line = partOfLine({ work, step })
+    expect(line.length).toBe(120)
+    expect(line.endsWith('…')).toBe(true)
+    expect(
+      [...line].some(char => {
+        const code = char.charCodeAt(0)
+        return code <= 31 || (code >= 127 && code <= 159) || (code >= 0x202a && code <= 0x202e) || (code >= 0x2066 && code <= 0x2069)
+      }),
+    ).toBe(false)
+    expect(line.startsWith('Agent-reported:')).toBe(true)
+    const agent = screen.getByRole('link', { name: line })
+    expect(agent.getAttribute('href')).toBe('#progress')
+    expect(agent.className).toContain('text-muted-foreground')
+    expect(agent.className).toContain('truncate')
+    const title = container.querySelector('[data-approval-row-title]')
+    expect(title).toBeTruthy()
+    expect(title!.compareDocumentPosition(agent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText('#9 · Leave this visible.')).toBeTruthy()
+    const rows = container.querySelectorAll('li')
+    expect(rows[1]?.textContent).toContain('#9')
+    expect(rows[0]?.textContent?.includes('\u202E')).toBe(false)
   })
 })
