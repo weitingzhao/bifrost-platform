@@ -47,14 +47,31 @@ export function waitsOnOwner(blocked: string | undefined): boolean {
   return false
 }
 
-export type AskSource = OwnerAsk & { index: number; fallback?: boolean }
+export type AskSource = OwnerAsk & { index: number; fallback?: boolean; since?: number; urgency?: string }
 
-/** owner_items when that field is present. Otherwise the slice-3 owner_now rows, all due now. */
+type NowRow = {
+  name?: string
+  work?: string
+  since?: number
+  urgency?: string
+  actions?: OwnerAsk['actions']
+  approval?: OwnerAsk['approval']
+}
+
+/**
+ * `owner_all` when the publisher sent that merged list.
+ * Otherwise owner_items ∪ standing_items, or owner_now when owner_items is absent.
+ */
 export function asksFromDocument(
   ownerItems: OwnerAsk[] | 'unreadable' | undefined,
   standing: OwnerAsk[] | 'unreadable' | undefined,
-  ownerNow: readonly { name?: string; work?: string; actions?: OwnerAsk['actions']; approval?: OwnerAsk['approval'] }[] | undefined,
+  ownerNow: readonly NowRow[] | undefined,
+  ownerAll?: OwnerAsk[] | 'unreadable',
 ): { listUnreadable: boolean; asks: AskSource[] } {
+  if (ownerAll === 'unreadable') return { listUnreadable: true, asks: [] }
+  if (ownerAll !== undefined) {
+    return { listUnreadable: false, asks: ownerAll.map((ask, index) => ({ ...ask, index })) }
+  }
   const standingAsks = standing === 'unreadable' ? [] : (standing ?? [])
   const standingFlag = standing === 'unreadable'
   if (ownerItems === 'unreadable') {
@@ -69,6 +86,8 @@ export function asksFromDocument(
     name: entry.name,
     work: entry.work,
     now: true,
+    since: entry.since,
+    urgency: entry.urgency,
     actions: entry.actions,
     approval: entry.approval,
     index,
@@ -118,10 +137,43 @@ export function askAct(
 export function hasNeedsYou(
   ownerItems: OwnerAsk[] | 'unreadable' | undefined,
   standing: OwnerAsk[] | 'unreadable' | undefined,
-  ownerNow: readonly { name?: string; work?: string; actions?: OwnerAsk['actions']; approval?: OwnerAsk['approval'] }[] | undefined,
+  ownerNow: readonly NowRow[] | undefined,
+  ownerAll?: OwnerAsk[] | 'unreadable',
 ): boolean {
-  const gathered = asksFromDocument(ownerItems, standing, ownerNow)
+  const gathered = asksFromDocument(ownerItems, standing, ownerNow, ownerAll)
   return gathered.asks.length > 0 || gathered.listUnreadable
+}
+
+export type AskBuckets = { now: AskSource[]; later: AskSource[]; unknown: AskSource[]; expired: AskSource[] }
+
+/** Can do now, then not his turn, then unknown. Expired stays visible and is not part of N. */
+export function bucketAsks(
+  asks: readonly AskSource[],
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): AskBuckets {
+  const buckets: AskBuckets = { now: [], later: [], unknown: [], expired: [] }
+  for (const ask of asks) {
+    if (ask.unreadable) {
+      buckets.unknown.push(ask)
+      continue
+    }
+    const act = askAct(ask, items, read, nowMs)
+    if (act === 'now') buckets.now.push(ask)
+    else if (act === 'later') buckets.later.push(ask)
+    else if (act === 'expired') buckets.expired.push(ask)
+    else buckets.unknown.push(ask)
+  }
+  return buckets
+}
+
+/** N = a + b + c. Expired rows are not an open count. */
+export function needsYouTotal(buckets: AskBuckets): { n: number; a: number; b: number; c: number } {
+  const a = buckets.now.length
+  const b = buckets.later.length
+  const c = buckets.unknown.length
+  return { n: a + b + c, a, b, c }
 }
 
 function hasDeadline(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, read: ApprovalRead): boolean {
@@ -517,6 +569,62 @@ export function troubleTone(works: readonly ProgressWork[] | undefined, nowMs: n
   if (steps.some(step => step.state === 'gap' || step.state === 'slow')) return 'amber'
   if (steps.some(step => step.state === 'running' && pastUsual(step, nowMs))) return 'amber'
   return 'green'
+}
+
+const BUSY_STEP = new Set(['running', 'slow', 'gap', 'quiet', 'dead', 'failed'])
+
+function waitingBelongsToAgent(step: ProgressStep): boolean {
+  if (step.state !== 'waiting') return false
+  if (step.needs_owner === true) return false
+  const who = step.who?.trim() ?? ''
+  if (who === '' || /^you\b/i.test(who) || /^owner\b/i.test(who) || who.startsWith('你')) return false
+  return true
+}
+
+export type IdleTone = 'unknown' | 'green' | 'red' | 'amber' | 'running'
+
+/**
+ * Why nothing is in Running now. A missing works list is Unknown.
+ * While a step is running, slow, gap, quiet, dead, or failed, the line stays off.
+ */
+export function idleQueue(works: unknown, canDoNow: boolean): { tone: IdleTone; line: string | null } {
+  if (!Array.isArray(works)) return { tone: 'unknown', line: 'Unknown' }
+  const list = works as ProgressWork[]
+  const steps = list.flatMap(work => work.steps ?? [])
+  if (steps.some(step => BUSY_STEP.has(step.state ?? ''))) return { tone: 'running', line: null }
+  const open = list.filter(work => work.finished !== true)
+  if (open.length === 0) return { tone: 'green', line: 'All done — the queue is empty' }
+  const firstWaitingIsAgent = open.some(work => {
+    const waiting = (work.steps ?? []).find(step => step.state === 'waiting')
+    return waiting != null && waitingBelongsToAgent(waiting)
+  })
+  if (!firstWaitingIsAgent && canDoNow) return { tone: 'red', line: 'Stopped — waiting on you' }
+  return { tone: 'amber', line: 'Stopped — waiting on the coordinator — nothing for you' }
+}
+
+/** `for N min` since the latest step `ended`. Unknown when none has ended. */
+export function idleForText(works: readonly ProgressWork[] | undefined, nowMs: number): string {
+  let latest = 0
+  for (const work of works ?? []) {
+    for (const step of work.steps ?? []) {
+      const ended = step.ended
+      if (typeof ended === 'number' && Number.isFinite(ended) && ended > latest) latest = ended
+    }
+  }
+  if (!(latest > 0) || !Number.isFinite(nowMs)) return 'Unknown'
+  const minutes = Math.max(0, Math.floor(nowMs / 1000 - latest) / 60)
+  return `for ${Math.floor(minutes)} min`
+}
+
+export function finishedStepCount(works: readonly ProgressWork[] | undefined): number {
+  return (works ?? []).flatMap(work => work.steps ?? []).filter(step => step.state === 'done').length
+}
+
+/** Full owner-times figure for the Needs you footer. Partial or missing stays off the page. */
+export function laterRequestCount(roadmap: ProgressRoadmap | undefined): number | null {
+  const figure = sumOpen(openDetails(roadmap), 'owner', uncoveredOpenCount(roadmap))
+  if (figure.kind !== 'full') return null
+  return figure.value
 }
 
 export function runningQuietLine(

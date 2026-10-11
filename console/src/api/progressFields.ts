@@ -22,6 +22,12 @@ export type OwnerAsk = {
   blocks?: string
   blocks_text?: string
   takes?: string
+  /** What the coordinator recommends. Agent text. */
+  advice?: string
+  /** Where it is done, when there is no request card. Agent text. */
+  where?: string
+  /** How to tell the coordinator, when there is no request. Agent text. */
+  reply?: string
   actions?: OwnerAskAction[]
   approval?: ProgressApproval
 }
@@ -183,6 +189,11 @@ function parseAsk(value: Record<string, unknown>, standing: boolean): OwnerAsk {
     const approval = parseAskApproval(value.approval)
     if (approval.bad) return { unreadable: true }
     if (approval.approval !== undefined) ask.approval = approval.approval
+  }
+  for (const key of ['advice', 'where', 'reply'] as const) {
+    const extra = readString(value, key)
+    if (extra.bad) return { unreadable: true }
+    if (extra.value !== undefined) ask[key] = extra.value
   }
   const actions = parseActions(has(value, 'actions') ? value.actions : undefined)
   if (actions.bad) return { unreadable: true }

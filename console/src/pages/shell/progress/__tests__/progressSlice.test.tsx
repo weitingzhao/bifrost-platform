@@ -76,7 +76,7 @@ describe('progress board parity', () => {
     stub(sample)
     render(wrap(<AgentWorkBoard />))
     expect(await screen.findByText('2 个步骤在做，都正常')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Needs you now' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Needs you' })).toBeTruthy()
     fireEvent.click(screen.getByTestId('fold-sec-coord'))
     expect(screen.getByText(/Coordinator: 三件事在跑：Cursor 做调度脚本第 3 轮和 Progress 第三片/)).toBeTruthy()
     expect(screen.getByText(/Then: 哪件先完先处理哪件/)).toBeTruthy()

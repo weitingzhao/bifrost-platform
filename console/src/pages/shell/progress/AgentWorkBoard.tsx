@@ -20,7 +20,6 @@ import {
   type ProgressDocument,
 } from '@/api/agentProgress'
 import { ProgressActivity, ProgressDoneToday } from '@/pages/shell/progress/ProgressActivity'
-import { NeedsYouNow } from '@/pages/shell/progress/ProgressNeedsYou'
 import { FinishedWorks, IdleWorkLine, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
 import { ProgressRunning } from '@/pages/shell/progress/ProgressRunning'
@@ -75,7 +74,7 @@ function Verdict({ doc }: { doc: ProgressDocument }) {
 }
 
 function NextTime({ doc }: { doc: ProgressDocument }) {
-  if (hasNeedsYou(doc.owner_items, doc.standing_items, doc.owner_now)) return null
+  if (hasNeedsYou(doc.owner_items, doc.standing_items, doc.owner_now, doc.owner_all)) return null
   return (
     <section aria-label="Next time you are needed" className="flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium text-foreground">Next time you are needed</h3>
@@ -129,9 +128,6 @@ function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | u
   )
 }
 
-function needsYouOpen(doc: ProgressDocument): boolean {
-  return hasNeedsYou(doc.owner_items, doc.standing_items, doc.owner_now)
-}
 
 const WorkDocument = memo(function WorkDocument({
   doc,
@@ -147,14 +143,10 @@ const WorkDocument = memo(function WorkDocument({
   const idle = active.filter(work => !workIsHot(work))
   const running = runningRows(doc.works ?? []).length
   const coord = doc.coordinator?.doing?.trim() || doc.coordinator?.state?.trim() || ''
-  const needsDigest = needsYouOpen(doc) ? 'Open' : 'Nothing now'
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
-      <Verdict doc={doc} />
       <ProgressSummary doc={doc} env={env} />
-      <SectionFold id="sec-needs-you" title="Needs you" digest={needsDigest} defaultOpen={needsYouOpen(doc)}>
-        <NeedsYouNow doc={doc} />
-      </SectionFold>
+      <Verdict doc={doc} />
       <NextTime doc={doc} />
       <SectionFold id="sec-running" title="Running now" digest={running > 0 ? `${running} steps` : 'Nothing running'} defaultOpen={running > 0}>
         <ProgressRunning works={active} />

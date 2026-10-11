@@ -231,7 +231,7 @@ describe('AgentWorkBoard', () => {
       ),
     )
     render(wrap(<AgentWorkBoard />))
-    const needed = await screen.findByRole('region', { name: 'Needs you now' })
+    const needed = await screen.findByRole('region', { name: 'Needs you' })
     expect(within(needed).getByText('Approve the release')).toBeTruthy()
     expect(within(needed).getByText('Blocking the rollout')).toBeTruthy()
     expect(within(needed).getByText('waiting 2m')).toBeTruthy()
@@ -393,7 +393,7 @@ describe('AgentWorkBoard', () => {
     expect(screen.getAllByText('实现接口').length).toBeGreaterThan(0)
     expect(screen.getByText('running')).toBeTruthy()
     expect(screen.getByText('实现接口: 在写页面')).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Needs you now' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Needs you' })).toBeTruthy()
     const activity = screen.getByRole('region', { name: 'Activity' })
     fireEvent.click(activity.querySelector('summary')!)
     const feed = within(activity).getByRole('list', { name: 'Activity' })
@@ -430,7 +430,7 @@ describe('AgentWorkBoard', () => {
       ),
     )
     render(wrap(<AgentWorkBoard />))
-    const needed = await screen.findByRole('region', { name: 'Needs you now' })
+    const needed = await screen.findByRole('region', { name: 'Needs you' })
     const open = within(needed).getAllByRole('link', { name: 'Open Needs you (ops.bifrost.lan)' })
     expect(open.map(link => link.getAttribute('href')).sort()).toEqual([
       'http://ops.bifrost.lan/needs',
@@ -489,7 +489,7 @@ describe('AgentWorkBoard', () => {
       ),
     )
     render(wrap(<AgentWorkBoard />))
-    const needed = await screen.findByRole('region', { name: 'Needs you now' })
+    const needed = await screen.findByRole('region', { name: 'Needs you' })
     const bounded = within(needed).getByRole('link', { name: /^#a+…$/ })
     expect(bounded.getAttribute('href')).toBe(hash)
     expect(bounded.textContent?.includes('\u200F')).toBe(false)

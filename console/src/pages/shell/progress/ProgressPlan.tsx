@@ -16,7 +16,6 @@ import {
   slicePercent,
   slicesHeadline,
   sumOpen,
-  timesHeadline,
   uncoveredOpenCount,
   waitsOnOwner,
 } from '@/pages/shell/progress/progressSummaryModel'
@@ -77,7 +76,6 @@ function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate 
       </span>
       <span className="text-muted-foreground">{unknown ? 'Done Unknown' : `Done ${sliceLabel(est.done, est.total)}`}</span>
       <span>{`Agent slices left ${countWord(est.mine)}`}</span>
-      <span>{`times you ${countWord(est.owner)}`}</span>
       <span>Waiting on</span>
       <span>Confidence</span>
       {agentBits ? (
@@ -148,16 +146,20 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
       </div>
       <p className="m-0 text-sm text-foreground">{planMeterLine(roadmap)}</p>
       {nights != null && nights !== 'Unknown' && mine.kind === 'full' && ownerTimes.kind === 'full' ? (
-        <p className="m-0 text-sm text-foreground">{`${formatCount(mine.value)} slices left · about ${nights} nights${range != null ? ` (${range})` : ''} · ${formatCount(ownerTimes.value)} times you`}</p>
+        <p className="m-0 text-sm text-foreground">{`${formatCount(mine.value)} slices left · about ${nights} nights${range != null ? ` (${range})` : ''}`}</p>
       ) : null}
       {nights === 'Unknown' && mine.kind === 'full' && ownerTimes.kind === 'full' ? (
         <p className="m-0 text-sm text-foreground">Unknown</p>
       ) : null}
       {mine.kind === 'partial' || ownerTimes.kind === 'partial' ? (
-        <p className="m-0 text-sm text-foreground">{[slicesHeadline(mine), timesHeadline(ownerTimes)].filter(text => text != null).join(' · ')}</p>
+        <p className="m-0 text-sm text-foreground">{slicesHeadline(mine)}</p>
       ) : null}
       {onYou.length > 0 ? (
-        <SectionFold id="plan-owner" title="Waiting on you" digest={`${onYou.length}`} defaultOpen>
+        <SectionFold
+          id="plan-owner"
+          title={<a href="#needs-you" onClick={event => event.stopPropagation()}>Waiting on you</a>}
+          defaultOpen
+        >
           {onYou.map((row, index) => (
             <DetailRow key={`${row.detail.name ?? 'you'}-${index}`} name={row.detail.name} est={row.detail.est} />
           ))}

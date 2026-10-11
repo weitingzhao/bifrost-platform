@@ -136,6 +136,8 @@ export type ProgressDocument = {
   /** Present list, or `'unreadable'` when the field is not a list. Absent stays absent. */
   owner_items?: OwnerAskList
   standing_items?: OwnerAskList
+  /** Publisher's single merged list. When present, it replaces the older lists. */
+  owner_all?: OwnerAskList
   needs_you?: string[]
   sure?: boolean
   works?: ProgressWork[]
@@ -371,6 +373,10 @@ export function parseProgressDocument(raw: unknown): ProgressDocument | null {
   if ('standing_items' in raw) {
     const standing = parseOwnerAsks(raw.standing_items, true)
     if (standing !== undefined) doc.standing_items = standing
+  }
+  if ('owner_all' in raw) {
+    const all = parseOwnerAsks(raw.owner_all)
+    if (all !== undefined) doc.owner_all = all
   }
   if (Array.isArray(raw.needs_you)) doc.needs_you = raw.needs_you.filter((item): item is string => typeof item === 'string')
   if (Array.isArray(raw.works)) doc.works = raw.works.filter(isRecord).map(parseWork)

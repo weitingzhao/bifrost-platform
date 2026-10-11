@@ -65,7 +65,7 @@ export function SectionFold({
   children,
 }: {
   id: string
-  title: string
+  title: ReactNode
   digest?: ReactNode
   defaultOpen: boolean
   children: ReactNode

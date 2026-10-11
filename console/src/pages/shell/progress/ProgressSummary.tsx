@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
+import type { ApprovalItem } from '@/api/approvals'
 import {
   ageSeconds,
   computedAgeLine,
@@ -9,9 +9,9 @@ import {
   type ProgressDocument,
   type ProgressWork,
 } from '@/api/agentProgress'
-import { isApprovalId, openRequestLabel } from '@/api/agentProgressExtra'
+import { isApprovalId } from '@/api/agentProgressExtra'
 import type { ProgressPool } from '@/api/agentProgressExtra'
-import { approvalHref } from '@/lib/shell/consoleRoutes'
+import { NeedsYouBlock } from '@/pages/shell/progress/NeedsYouBlock'
 import { useProgressApprovals } from '@/pages/shell/progress/ProgressNeedsYou'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { useOpenSection } from '@/pages/shell/progress/progressFold'
@@ -20,18 +20,14 @@ import {
   agentText,
   askAct,
   asksFromDocument,
-  deadlineMarker,
   doingDetails,
   elapsedPercent,
-  holdsMarker,
+  finishedStepCount,
+  idleForText,
+  idleQueue,
+  laterRequestCount,
   nightsFrom,
-  notYetDueCount,
   openDetails,
-  orderedAsks,
-  requestAgentLines,
-  requestItem,
-  requestLinked,
-  runningQuietLine,
   runningRank,
   runningTone,
   runningWhen,
@@ -41,12 +37,8 @@ import {
   slicePercent,
   slicesHeadline,
   sumOpen,
-  takesMarker,
-  uncoveredOpenCount,
-  timesHeadline,
   troubleTone,
-  turnMarker,
-  waitingNowCount,
+  uncoveredOpenCount,
   waitsOnOwner,
   type ApprovalRead,
   type AskSource,
@@ -62,154 +54,6 @@ function approvalRead(enabled: boolean, isSuccess: boolean, isError: boolean, is
   return 'ready'
 }
 
-function requestHeadline(item: Pick<ApprovalItem, 'number' | 'summary'>): string {
-  const summary = item.summary?.trim() ?? ''
-  const number = typeof item.number === 'number' && Number.isFinite(item.number) ? item.number : null
-  if (number != null && summary !== '') return `Request #${number} — ${summary}`
-  if (number != null) return `Request #${number}`
-  if (summary !== '') return `Request — ${summary}`
-  return 'Request'
-}
-
-function DeadlineChip({ ask, items, read }: { ask: AskSource; items: ApprovalItem[] | undefined; read: ApprovalRead }) {
-  const now = useNow()
-  const marker = deadlineMarker(ask, items, read, now)
-  if (marker === 'none') return null
-  if (marker === 'unknown') return <span data-deadline="unknown">Unknown</span>
-  return (
-    <span data-deadline="by" data-urgent={marker.amber ? 'true' : 'false'} className={marker.amber ? 'text-warning' : ''}>
-      {marker.text}
-    </span>
-  )
-}
-
-function RequestLink({ item }: { item: ApprovalItem }) {
-  const now = useNow()
-  if (item.status !== 'pending' || !isAwaitingDecision(item, now)) return null
-  return (
-    <a href={approvalHref(item.id)} className="inline-flex min-h-11 items-center text-sm text-foreground underline">
-      {openRequestLabel(item.number)}
-    </a>
-  )
-}
-
-function AgentAside({ ask }: { ask: AskSource }) {
-  const before = requestLinked(ask) ? '' : agentText(ask.not_before)
-  const lines = requestAgentLines(ask)
-  const name = agentText(ask.name)
-  const work = agentText(ask.work)
-  if (before === '' && name === '' && work === '' && lines.length === 0) return null
-  return (
-    <span data-agent-note="" className="block min-w-0 truncate">
-      <span className="text-muted-foreground">Agent&apos;s note: </span>
-      {before !== '' ? <span>{before}</span> : null}
-      {lines.map((line, index) => (
-        <span key={index}>{`${before !== '' || index > 0 ? ' · ' : ''}${line}`}</span>
-      ))}
-      {name !== '' ? <span className="font-medium">{`${before !== '' || lines.length > 0 ? ' · ' : ''}${name}`}</span> : null}
-      {work !== '' ? <span className="text-muted-foreground">{`${before !== '' || lines.length > 0 || name !== '' ? ' · ' : ''}${work}`}</span> : null}
-    </span>
-  )
-}
-
-function AskRow({ ask, items, read }: { ask: AskSource; items: ApprovalItem[] | undefined; read: ApprovalRead }) {
-  const now = useNow()
-  if (ask.unreadable) {
-    return (
-      <li data-ask="unreadable" className="flex min-h-11 min-w-0 flex-wrap items-center gap-2 py-1 text-sm">
-        Could not read this item
-      </li>
-    )
-  }
-  const act = askAct(ask, items, read, now)
-  const linked = isApprovalId(ask.approval?.id)
-  const item = requestItem(ask, items, read)
-  const unreadableList = linked && read === 'unreadable'
-  const turn = turnMarker(ask, act)
-  const holds = holdsMarker(ask)
-  const takes = takesMarker(ask)
-  const dot =
-    turn.tone === 'now'
-      ? 'inline-block size-2.5 shrink-0 rounded-full bg-emerald-500'
-      : 'inline-block size-2.5 shrink-0 rounded-full border border-current'
-  return (
-    <li data-ask={act} className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm first:border-t-0">
-      <span className="inline-flex min-h-11 items-center gap-2">
-        <i data-turn-dot={turn.tone} className={dot} />
-        {turn.text}
-      </span>
-      {unreadableList ? <span>Could not read the request&apos;s state</span> : null}
-      {unreadableList ? (
-        <a href="#needs-you" className="inline-flex min-h-11 items-center text-sm underline">
-          Open Needs you
-        </a>
-      ) : null}
-      {item != null && ask.fallback !== true ? <span className="min-w-0 truncate font-medium">{requestHeadline(item)}</span> : null}
-      {item != null ? <RequestLink item={item} /> : null}
-      {!unreadableList ? <DeadlineChip ask={ask} items={items} read={read} /> : null}
-      <AgentAside ask={ask} />
-      <span data-holds={holds.amber ? 'yes' : 'no'} className={`block min-w-0 truncate ${holds.amber ? 'text-warning' : 'text-muted-foreground'}`}>
-        {holds.text}
-      </span>
-      {takes != null ? <span className="block min-w-0 truncate">{takes}</span> : null}
-    </li>
-  )
-}
-
-function NeedsYouLive({
-  asks,
-  items,
-  read,
-  listUnreadable,
-}: {
-  asks: AskSource[]
-  items: ApprovalItem[] | undefined
-  read: ApprovalRead
-  listUnreadable: boolean
-}) {
-  const now = useNow()
-  const openSection = useOpenSection()
-  const ordered = orderedAsks(asks, items, read, now)
-  const later = notYetDueCount(ordered, items, read, now)
-  const nowCount = waitingNowCount(ordered, items, read, now)
-  return (
-    <>
-      <button type="button" className="flex min-h-11 flex-wrap items-center gap-2 text-left text-sm font-medium" onClick={() => openSection('sec-needs-you')}>
-        Needs you
-        <span data-now-count={nowCount} className="rounded-full bg-foreground/10 px-2">{nowCount}</span>
-        {later > 0 ? <span className="font-normal text-muted-foreground">{`${later} more not yet due`}</span> : null}
-      </button>
-      {listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
-      {ordered.length === 0 && !listUnreadable ? (
-        <span className="text-sm text-muted-foreground">Nothing needs you now</span>
-      ) : (
-        <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
-          {ordered.map((ask, index) => (
-            <AskRow key={`${ask.name ?? 'ask'}-${index}`} ask={ask} items={items} read={read} />
-          ))}
-        </ul>
-      )}
-    </>
-  )
-}
-
-function NeedsYouBlock({ doc }: { doc: ProgressDocument }) {
-  const renders = useRef(0)
-  renders.current += 1
-  const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now)
-  const enabled = gathered.asks.some(ask => isApprovalId(ask.approval?.id))
-  const list = useProgressApprovals(enabled)
-  const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
-  return (
-    <div
-      data-summary-block="needs-you"
-      data-summary-renders={renders.current}
-      className="flex w-full min-w-0 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
-    >
-      <NeedsYouLive asks={gathered.asks} items={list.data} read={read} listUnreadable={gathered.listUnreadable} />
-    </div>
-  )
-}
 
 function PlanPicture({ doc }: { doc: ProgressDocument }) {
   const renders = useRef(0)
@@ -225,8 +69,7 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
   const pace = roadmap?.pace
   const nights = pace == null || pace.unreadable ? null : nightsFrom(mine, ownerTimes, pace.per_night)
   const slicesText = slicesHeadline(mine)
-  const timesText = timesHeadline(ownerTimes)
-  const showFigures = slicesText != null || timesText != null || nights != null
+  const showFigures = slicesText != null || nights != null
   const items = doingDetails(roadmap).filter(item => !item.unreadable && item.est != null)
   return (
     <button
@@ -280,7 +123,11 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
               <li key={`${item.name ?? 'item'}-${index}`} data-plan-item="" className="grid min-w-0 grid-cols-[minmax(0,1fr)_4rem_2.5rem] items-center gap-2 text-xs">
                 <span className="min-w-0 truncate">
                   {label}
-                  {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" title="Waiting on you" /> : null}
+                  {owner ? (
+                    <a href="#needs-you" className="ml-1 inline-flex min-h-11 min-w-11 items-center" aria-label="Waiting on you" onClick={event => event.stopPropagation()}>
+                      <i data-owner-dot="" className="inline-block size-2 rounded-full bg-amber-500" />
+                    </a>
+                  ) : null}
                 </span>
                 <span className="block h-1.5 overflow-hidden rounded bg-foreground/10">
                   {unknown ? null : (
@@ -299,7 +146,6 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
         <span data-plan-figures="" className="flex flex-wrap gap-3 text-xs text-muted-foreground">
           {slicesText != null ? <span>{slicesText}</span> : null}
           {nights === 'Unknown' ? <span data-nights="unknown">Unknown</span> : nights != null ? <span data-nights="">{`${nights} nights`}</span> : null}
-          {timesText != null ? <span>{timesText}</span> : null}
         </span>
       ) : null}
     </button>
@@ -332,7 +178,82 @@ function RunningRowView({ row }: { row: RunningRow }) {
   )
 }
 
-function RunningPicture({ doc }: { doc: ProgressDocument }) {
+function canDoNow(asks: readonly AskSource[], items: readonly ApprovalItem[] | undefined, read: ApprovalRead, nowMs: number): boolean {
+  return asks.some(ask => !ask.unreadable && askAct(ask, items, read, nowMs) === 'now')
+}
+
+const PILL: Record<string, string> = {
+  green: 'bg-emerald-500 text-[var(--card-fill)]',
+  red: 'bg-destructive text-white',
+  amber: 'bg-amber-500 text-[var(--card-fill)]',
+  unknown: 'bg-foreground/20 text-foreground',
+  running: 'bg-foreground/10 text-foreground',
+}
+
+function RunPill({
+  works,
+  asks,
+  items,
+  read,
+  count,
+}: {
+  works: ProgressWork[] | undefined
+  asks: readonly AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+  count: number
+}) {
+  const now = useNow()
+  const tone = idleQueue(works, canDoNow(asks, items, read, now)).tone
+  return (
+    <span data-run-state={tone} className={`rounded-full px-2 text-xs ${PILL[tone] ?? PILL.running}`}>
+      {count}
+    </span>
+  )
+}
+
+function IdleLine({
+  works,
+  asks,
+  items,
+  read,
+}: {
+  works: ProgressWork[] | undefined
+  asks: readonly AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+}) {
+  const now = useNow()
+  const renders = useRef(0)
+  renders.current += 1
+  const state = idleQueue(works, canDoNow(asks, items, read, now))
+  if (state.line == null) return null
+  const waited = state.tone === 'amber' ? idleForText(works, now) : null
+  return (
+    <span data-idle-line="" data-idle-renders={renders.current} className="text-sm">
+      {state.tone === 'red' ? (
+        <a href="#needs-you" className="text-destructive underline" onClick={event => event.stopPropagation()}>
+          {state.line}
+        </a>
+      ) : (
+        <span className={state.tone === 'green' ? 'text-emerald-700' : state.tone === 'amber' ? 'text-warning' : ''}>{state.line}</span>
+      )}
+      {waited != null ? <span data-idle-for="" className="text-warning">{` ${waited}`}</span> : null}
+    </span>
+  )
+}
+
+function RunningPicture({
+  doc,
+  asks,
+  items,
+  read,
+}: {
+  doc: ProgressDocument
+  asks: readonly AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+}) {
   const renders = useRef(0)
   renders.current += 1
   const openSection = useOpenSection()
@@ -350,13 +271,10 @@ function RunningPicture({ doc }: { doc: ProgressDocument }) {
     >
       <span className="flex min-h-11 items-center gap-2 text-sm font-medium">
         Running now
-        <span className="rounded-full bg-foreground/10 px-2 text-xs">{rows.length}</span>
+        <RunPill works={doc.works} asks={asks} items={items} read={read} count={rows.length} />
       </span>
       {rows.length === 0 ? (
-        <>
-          <span className="text-sm text-muted-foreground">Nothing is running.</span>
-          <span className="text-sm">{runningQuietLine(doc.works, doc.queue)}</span>
-        </>
+        <IdleLine works={doc.works} asks={asks} items={items} read={read} />
       ) : (
         <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
           {rows.map(row => (
@@ -423,12 +341,30 @@ function CoordGauge({ doc }: { doc: ProgressDocument }) {
   )
 }
 
-function TroubleGauge({ works }: { works: ProgressWork[] | undefined }) {
+function TroubleGauge({
+  works,
+  asks,
+  items,
+  read,
+}: {
+  works: ProgressWork[] | undefined
+  asks: readonly AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+}) {
   const now = useNow()
   const renders = useRef(0)
   renders.current += 1
   const openSection = useOpenSection()
   const trouble = troubleTone(works, now)
+  const idle = idleQueue(works, canDoNow(asks, items, read, now))
+  const doneSteps = finishedStepCount(works)
+  const whose =
+    idle.tone === 'amber'
+      ? doneSteps > 0
+        ? `${doneSteps} steps finished, waiting for the coordinator's check — nothing for you`
+        : 'Waiting for the coordinator — nothing for you'
+      : null
   const light = (name: 'green' | 'amber' | 'red', on: boolean, className: string) => (
     <i data-light={name} data-on={on ? 'true' : 'false'} className={`inline-block size-3.5 rounded-full ${on ? className : 'bg-foreground/15'}`} />
   )
@@ -447,11 +383,24 @@ function TroubleGauge({ works }: { works: ProgressWork[] | undefined }) {
         {light('amber', trouble === 'amber', 'bg-amber-500')}
         {light('red', trouble === 'red', 'bg-destructive')}
       </span>
+      {whose != null ? <span data-trouble-whose="">{whose}</span> : null}
     </button>
   )
 }
 
-function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressResponse | undefined }) {
+function Gauges({
+  doc,
+  env,
+  asks,
+  items,
+  read,
+}: {
+  doc: ProgressDocument
+  env: AgentProgressResponse | undefined
+  asks: readonly AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+}) {
   const renders = useRef(0)
   renders.current += 1
   const openSection = useOpenSection()
@@ -459,7 +408,7 @@ function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressRespons
   const done = doc.recent?.length ?? 0
   return (
     <div data-summary-block="gauges" data-summary-renders={renders.current} className="grid w-full min-w-0 grid-cols-2 gap-2 min-[821px]:grid-cols-5">
-      <TroubleGauge works={doc.works} />
+      <TroubleGauge works={doc.works} asks={asks} items={items} read={read} />
       <button type="button" data-gauge="quota" data-summary-renders={renders.current} className="flex min-h-11 min-w-0 flex-col justify-center gap-1 text-left text-xs" onClick={() => openSection('sec-quota')}>
         <span className="text-muted-foreground">Quota</span>
         {pools.length === 0 ? (
@@ -486,14 +435,18 @@ function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressRespons
 export function ProgressSummary({ doc, env }: { doc: ProgressDocument; env?: AgentProgressResponse }) {
   const paints = useRef(0)
   paints.current += 1
+  const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now, doc.owner_all)
+  const enabled = gathered.asks.some(ask => isApprovalId(ask.approval?.id))
+  const list = useProgressApprovals(enabled)
+  const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
   return (
     <div data-testid="progress-summary" data-paints={paints.current} className="flex w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
-      <NeedsYouBlock doc={doc} />
+      <NeedsYouBlock asks={gathered.asks} items={list.data} read={read} listUnreadable={gathered.listUnreadable} later={laterRequestCount(doc.roadmap)} />
       <div data-summary-block="pictures" className="grid w-full min-w-0 grid-cols-1 gap-3 min-[821px]:grid-cols-2">
         <PlanPicture doc={doc} />
-        <RunningPicture doc={doc} />
+        <RunningPicture doc={doc} asks={gathered.asks} items={list.data} read={read} />
       </div>
-      <Gauges doc={doc} env={env} />
+      <Gauges doc={doc} env={env} asks={gathered.asks} items={list.data} read={read} />
     </div>
   )
 }

@@ -127,7 +127,7 @@ describe('a request row follows the real request', () => {
     )
     render(wrap(<AgentWorkBoard />))
     const box = await screen.findByTestId('progress-summary')
-    const row = await within(box).findByText('Expired')
+    const row = await within(box).findByText('Expired', { selector: '[data-ask="expired"] span' })
     const item = row.closest('[data-ask]')
     expect(item?.getAttribute('data-ask')).toBe('expired')
     expect(item?.querySelector('[data-turn-dot]')?.getAttribute('data-turn-dot')).toBe('neutral')
@@ -189,9 +189,9 @@ describe('a request row follows the real request', () => {
     expect(note?.textContent).toContain('the merge')
     expect(note?.textContent).toContain('about 10 min')
     expect(note?.textContent).toContain('the freeze')
-    const section = await screen.findByRole('region', { name: 'Needs you now' })
+    const section = await screen.findByRole('region', { name: 'Needs you' })
     expect(within(section).getByText('You can do this now')).toBeTruthy()
-    expect(section.textContent).not.toContain('Not your turn yet')
+    expect(section.querySelector('[data-ask="now"]')?.textContent).not.toContain('Not your turn yet')
     expect(section.textContent).not.toContain('Holding up:')
     expect(section.textContent).not.toContain('Takes effect in')
     expect(within(section).getByRole('link', { name: 'Open request #4' })).toBeTruthy()
@@ -208,10 +208,10 @@ describe('a request row follows the real request', () => {
     )
     render(wrap(<AgentWorkBoard />))
     const closed = await screen.findByTestId('progress-summary')
-    expect(await within(closed).findByText('Nothing needs you now')).toBeTruthy()
+    expect(await within(closed).findByText('Nothing needs you now, and nothing is queued for you.')).toBeTruthy()
     expect(within(closed).queryByText('the merge')).toBeNull()
     expect(within(closed).queryByText('You can do this now')).toBeNull()
-    expect(screen.queryByRole('region', { name: 'Needs you now' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Needs you' })).toBeTruthy()
     expect(closed.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('0')
   })
 })
@@ -281,6 +281,9 @@ const FIELD_CASES: FieldCase[] = [
     open: [],
     where: 'needs',
   },
+  { field: 'advice', document: { owner_items: [{ name: 'Advise', now: true, advice: XSS }] }, open: [], where: 'summary' },
+  { field: 'where', document: { owner_items: [{ name: 'Place', now: true, where: XSS }] }, open: [], where: 'summary' },
+  { field: 'reply', document: { owner_items: [{ name: 'Reply', now: true, reply: XSS }] }, open: [], where: 'summary' },
 ]
 
 describe('agent text is shown as text', () => {
@@ -306,8 +309,9 @@ describe('agent text is shown as text', () => {
       where === 'plan'
         ? screen.getByRole('region', { name: 'Plan' })
         : where === 'needs'
-          ? screen.getByRole('region', { name: 'Needs you now' })
+          ? screen.getByRole('region', { name: 'Needs you' })
           : summary()
+    for (const button of root.querySelectorAll('button[aria-expanded="false"]')) fireEvent.click(button)
     expect(root.textContent).toContain(XSS)
     expect(root.querySelector('script')).toBeNull()
     expect(window.document.getElementById('xss-field')).toBeNull()
@@ -401,7 +405,7 @@ describe('one list for the summary, the section, and the empty state', () => {
     render(wrap(<AgentWorkBoard />))
     const box = await screen.findByTestId('progress-summary')
     expect(within(box).getByText('Sign')).toBeTruthy()
-    const section = await screen.findByRole('region', { name: 'Needs you now' })
+    const section = await screen.findByRole('region', { name: 'Needs you' })
     expect(within(section).getByText('签署规则')).toBeTruthy()
     expect(screen.queryByText('Nothing is waiting for you.')).toBeNull()
   })
@@ -472,7 +476,7 @@ describe('progress numbers that can be wrong are Unknown', () => {
     render(wrap(<AgentWorkBoard />))
     const box = await screen.findByTestId('progress-summary')
     expect(within(box).getByText('at least 2 slices (1 item not estimated)')).toBeTruthy()
-    expect(within(box).getByText('at least 1 times you (1 item not estimated)')).toBeTruthy()
+    expect(box.textContent).not.toContain('times you')
     expect(box.querySelector('[data-nights]')).toBeNull()
     expect(box.textContent).not.toMatch(/nights/)
   })

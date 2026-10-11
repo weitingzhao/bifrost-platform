@@ -92,8 +92,7 @@ describe('Progress board blocks', () => {
     stubProgress(sample)
     render(wrap(<AgentWorkBoard />))
     expect(await screen.findByText('现在没有后台步骤在跑')).toBeTruthy()
-    expect(screen.getByText('Nothing is queued.')).toBeTruthy()
-    expect(screen.getByText('Nothing is running.')).toBeTruthy()
+    expect(screen.getByText('All done — the queue is empty')).toBeTruthy()
     fireEvent.click(screen.getByTestId('fold-sec-plan'))
     const plan = screen.getByRole('region', { name: 'Plan' })
     expect(within(plan).getByText('you are here')).toBeTruthy()
@@ -121,17 +120,18 @@ describe('Progress board blocks', () => {
       }),
     )
     const { unmount } = render(wrap(<AgentWorkBoard />))
-    expect(await screen.findByText('Next: Review the plan — waiting until morning')).toBeTruthy()
+    expect(await screen.findByText('All done — the queue is empty')).toBeTruthy()
+    expect(screen.queryByText(/Next: Review the plan/)).toBeNull()
     unmount()
 
     stubProgress(doc({ queue: [] }))
     const empty = render(wrap(<AgentWorkBoard />))
-    expect(await screen.findByText('Nothing is queued.')).toBeTruthy()
+    expect(await screen.findByText('All done — the queue is empty')).toBeTruthy()
     empty.unmount()
 
     stubProgress(doc())
     const absent = render(wrap(<AgentWorkBoard />))
-    expect(await screen.findByText('Nothing is queued.')).toBeTruthy()
+    expect(await screen.findByText('All done — the queue is empty')).toBeTruthy()
     absent.unmount()
 
     stubProgress(
