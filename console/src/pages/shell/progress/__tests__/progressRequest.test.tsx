@@ -564,6 +564,7 @@ describe('Needs you names the progress work', () => {
           if (failProgress) return json({ error: 'down' }, 500)
           return json(progressBody(document))
         }
+        if (url.includes('/api/v1/questions')) return json({ questions: [] })
         return json({ error: `unexpected ${url}` }, 500)
       }),
     )

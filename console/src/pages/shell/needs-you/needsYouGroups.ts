@@ -1,5 +1,6 @@
 import type { AgentThread } from '@/api/agentThreads'
 import { isAwaitingDecision, isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
+import { questionNumberLabel, type Question } from '@/api/questions'
 import { visibleTimestamp, youClosedLine } from '@/pages/approvalDecision'
 
 export const TERMINAL_NOT_RUN = 'Approved. It has not run yet.'
@@ -24,6 +25,13 @@ export type NeedsYouGroups = {
 export type HandledRow =
   | { kind: 'approval'; item: ApprovalItem; line: string; at: number }
   | { kind: 'thread'; thread: AgentThread; line: string; at: number }
+  | { kind: 'question'; id: string; line: string; at: number }
+
+/** An unread answer stays in the "not reported" line until this age, then the seven-day line. */
+export const UNREAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000
+
+/** The Answer group shows this many open questions before `Show N more`. */
+export const ANSWER_PREVIEW = 5
 
 function runnerOf(item: Pick<ApprovalItem, 'runner'>): string {
   return item.runner?.trim().toLowerCase() ?? ''
@@ -71,9 +79,13 @@ export function groupOpenApprovals(items: readonly ApprovalItem[], now = Date.no
   return { decide, terminal, check }
 }
 
-/** Sidebar and the page heading: the three groups plus the silent-section count. */
-export function waitingCount(groups: NeedsYouGroups, silentSectionCount: number): number {
-  return groups.decide.length + groups.terminal.length + groups.check.length + silentSectionCount
+/** Sidebar and the page heading: the three approval groups, silent threads, and open questions. */
+export function waitingCount(
+  groups: NeedsYouGroups,
+  silentSectionCount: number,
+  openQuestions = 0,
+): number {
+  return groups.decide.length + groups.terminal.length + groups.check.length + silentSectionCount + openQuestions
 }
 
 export function checkLines(error: string | undefined): string[] {
@@ -136,7 +148,9 @@ function handledApprovalLine(item: ApprovalItem, at: number): string | null {
 }
 
 function rowId(row: HandledRow): string {
-  return row.kind === 'approval' ? row.item.id : row.thread.thread
+  if (row.kind === 'approval') return row.item.id
+  if (row.kind === 'question') return row.id
+  return row.thread.thread
 }
 
 function byNewest(a: { at: number; id: string }, b: { at: number; id: string }): number {
@@ -189,6 +203,58 @@ export function recentlyHandledThreads(threads: readonly AgentThread[], now = Da
     rows.push({ kind: 'thread', thread, line: handledThreadLine(thread), at })
   }
   return mergeHandled(rows)
+}
+
+function terminalInstant(question: Question): number | null {
+  if (question.status === 'answered') return instant(question.answer?.at)
+  if (question.status === 'withdrawn') return instant(question.withdrawal?.at)
+  if (question.status === 'expired') return instant(question.expires_at)
+  return null
+}
+
+/** One line, no option and no text. Same day window as a closed approval. */
+export function handledQuestionLine(question: Question): string | null {
+  const label = questionNumberLabel(question.number)
+  if (question.status === 'answered') return `${label} answered`
+  if (question.status === 'expired') return `${label} expired with no answer`
+  if (question.status === 'withdrawn') return `${label} withdrawn by the thread`
+  return null
+}
+
+export function recentlyHandledQuestions(questions: readonly Question[], now = Date.now()): HandledRow[] {
+  const rows: HandledRow[] = []
+  for (const question of questions) {
+    const line = handledQuestionLine(question)
+    if (line == null) continue
+    const at = terminalInstant(question)
+    if (at == null || !inWindow(at, now)) continue
+    rows.push({ kind: 'question', id: question.id, line, at })
+  }
+  return mergeHandled(rows)
+}
+
+export type UnreadAnswers = { fresh: Question[]; aged: Question[] }
+
+/** Answered, and the thread has not reported reading it. Not part of the waiting total. */
+export function unreadAnswers(questions: readonly Question[], now = Date.now()): UnreadAnswers {
+  const fresh: Question[] = []
+  const aged: Question[] = []
+  for (const question of questions) {
+    if (question.status !== 'answered' || question.answer == null || question.answer.read != null) continue
+    const at = instant(question.answer.at)
+    const bucket = at != null && now - at >= UNREAD_KEEP_MS ? aged : fresh
+    bucket.push(question)
+  }
+  const byNumber = (a: Question, b: Question) => a.number - b.number
+  fresh.sort(byNumber)
+  aged.sort(byNumber)
+  return { fresh, aged }
+}
+
+export function unreadAnswerLine(questions: readonly Question[], aged: boolean): string {
+  const labels = questions.map(question => questionNumberLabel(question.number)).join(', ')
+  if (aged) return `Answered, never read by the thread: ${labels}`
+  return `Answered, not reported as read: ${labels}`
 }
 
 /** Approvals (capped) and recovered threads, newest first. */
