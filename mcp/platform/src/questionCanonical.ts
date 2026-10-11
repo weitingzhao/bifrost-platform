@@ -13,10 +13,15 @@ const ZERO = new Set([0x180e, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 // Characters outside the redacted span are copied unchanged. Do not use \s, \w,
 // \b, look-around, or the i flag. Bounded rules match the secret only; the edges
 // are checked outside the pattern and the scan resumes at the end of the match.
-const REDACT: Array<{ re: RegExp; repl: string; bound: boolean }> = [
+// Keyword assignments are not in this list. replaceKeyword walks once; the old
+// expression restarted one character after each failed try and was quadratic
+// on a run of one character.
+const KEYWORD_HIT = /(?:[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Dd]|[Pp][Ww][Dd]|[Ss\u017F][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\u212A][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\u212A][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\u017F][Ss\u017F][_-]?[Kk\u212A][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\u212A][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])/
+
+const REDACT: Array<{ re: RegExp; repl: string; bound: boolean; keyword?: boolean }> = [
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\0-\uFFFF]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, repl: '[redacted private key]', bound: false },
   { re: /([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\u017F][Ii][Cc])[ \t\n\r\f]+[A-Za-z\u017F\u212A0-9._~+/=-]{8,}/g, repl: '$1 [redacted]', bound: true },
-  { re: /([A-Za-z\u017F\u212A0-9_.-]*(?:[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Dd]|[Pp][Ww][Dd]|[Ss\u017F][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\u212A][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\u212A][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\u017F][Ss\u017F][_-]?[Kk\u212A][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\u212A][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])[A-Za-z\u017F\u212A0-9_.-]*)(["']?[ \t\n\r\f]*[:=][ \t\n\r\f]*["']?)[^ \t\n\r\f"',;]+/g, repl: '$1$2[redacted]', bound: true },
+  { re: /(?:)/, repl: '$1$2[redacted]', bound: true, keyword: true },
   { re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, repl: '[redacted jwt]', bound: true },
   { re: /(?:AKIA|ASIA)[0-9A-Z]{16}/g, repl: '[redacted aws key]', bound: true },
   { re: /(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)/g, repl: '[redacted token]', bound: true },
@@ -43,13 +48,16 @@ function expand(m: RegExpExecArray, repl: string): string {
 
 // replaceBounded is the same scan as notice.replaceBounded: a candidate is
 // kept only when both sides are edges, and the next search starts at the end
-// of the match rather than after a consumed separator.
-function replaceBounded(s: string, re: RegExp, repl: string): string {
+// of the match rather than after a consumed separator. A candidate that fails
+// the edge check resumes one character later, because a later token can begin
+// inside this match.
+function replaceBounded(s: string, re: RegExp, repl: string, steps: { n: number } | null): string {
   const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`
   const r = new RegExp(re.source, flags.replace('g', ''))
   let out = ''
   let i = 0
   while (i < s.length) {
+    if (steps) steps.n++
     r.lastIndex = 0
     const m = r.exec(s.slice(i))
     if (!m) {
@@ -75,13 +83,123 @@ function replaceBounded(s: string, re: RegExp, repl: string): string {
   return out
 }
 
-/** Masks the same secret shapes as api/internal/notice.Redact. */
-export function redact(s: string): string {
-  let out = s
-  for (const rule of REDACT) {
-    out = rule.bound ? replaceBounded(out, rule.re, rule.repl) : out.replace(rule.re, rule.repl)
+function isASCIIWS(c: number): boolean {
+  return c === 32 || c === 9 || c === 10 || c === 13 || c === 12
+}
+
+function isValueStop(c: number): boolean {
+  return isASCIIWS(c) || c === 34 || c === 39 || c === 44 || c === 59
+}
+
+function isSecretClass(c: number): boolean {
+  return c === 95 || c === 46 || c === 45 ||
+    (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) ||
+    c === 0x17f || c === 0x212a
+}
+
+// replaceKeyword masks keyword assignments in one pass. '=' or ':' is required,
+// so a run of one character is a single walk. A separator that is not an
+// assignment is stepped past; the search does not restart one character later.
+function replaceKeyword(s: string, steps: { n: number } | null): string {
+  let out = ''
+  let i = 0
+  while (i < s.length) {
+    let sep = -1
+    for (let k = i; k < s.length; k++) {
+      if (steps) steps.n++
+      const c = s.charCodeAt(k)
+      if (c === 61 || c === 58) {
+        sep = k
+        break
+      }
+    }
+    if (sep < 0) {
+      out += s.slice(i)
+      break
+    }
+    const parsed = keywordAssignmentAt(s, i, sep, steps)
+    if (!parsed || !leftEdge(s, parsed.start) || !rightEdge(s, parsed.valEnd)) {
+      out += s.slice(i, sep + 1)
+      i = sep + 1
+      continue
+    }
+    out += s.slice(i, parsed.start) + s.slice(parsed.start, parsed.sepEnd) + '[redacted]'
+    i = parsed.valEnd
   }
   return out
+}
+
+function keywordAssignmentAt(s: string, from: number, sep: number, steps: { n: number } | null): { start: number; sepEnd: number; valEnd: number } | null {
+  let j = sep
+  while (j > 0) {
+    const c = s.charCodeAt(j - 1)
+    if (steps) steps.n++
+    if (!isASCIIWS(c)) break
+    j--
+  }
+  if (j > 0) {
+    const c = s.charCodeAt(j - 1)
+    if (c === 39 || c === 34) {
+      if (steps) steps.n++
+      j--
+    }
+  }
+  const idEnd = j
+  let idStart = idEnd
+  while (idStart > 0) {
+    const c = s.charCodeAt(idStart - 1)
+    if (steps) steps.n++
+    if (!isSecretClass(c)) break
+    idStart--
+  }
+  if (idStart < from) idStart = from
+  if (idStart >= idEnd || !KEYWORD_HIT.test(s.slice(idStart, idEnd))) return null
+  let p = sep + 1
+  while (p < s.length) {
+    const c = s.charCodeAt(p)
+    if (steps) steps.n++
+    if (!isASCIIWS(c)) break
+    p++
+  }
+  if (p < s.length) {
+    const c = s.charCodeAt(p)
+    if (c === 39 || c === 34) {
+      if (steps) steps.n++
+      p++
+    }
+  }
+  const valStart = p
+  let valEnd = valStart
+  while (valEnd < s.length) {
+    const c = s.charCodeAt(valEnd)
+    if (steps) steps.n++
+    if (isValueStop(c)) break
+    valEnd++
+  }
+  if (valEnd === valStart) return null
+  return { start: idStart, sepEnd: valStart, valEnd }
+}
+
+function applyRedact(s: string, steps: { n: number } | null): string {
+  let out = s
+  for (const rule of REDACT) {
+    if (rule.keyword) out = replaceKeyword(out, steps)
+    else if (rule.bound) out = replaceBounded(out, rule.re, rule.repl, steps)
+    else out = out.replace(rule.re, rule.repl)
+  }
+  return out
+}
+
+/** Masks the same secret shapes as api/internal/notice.Redact. */
+export function redact(s: string): string {
+  return applyRedact(s, null)
+}
+
+/** Iterations of the scans redact runs. Linear in the length of a repeated character. */
+export function redactScanSteps(s: string): number {
+  const steps = { n: 0 }
+  applyRedact(s, steps)
+  return steps.n
 }
 
 export class CanonicalError extends Error {

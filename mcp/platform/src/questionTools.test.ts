@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { APPROVE_TOOL_NAMES } from './registerApprove.js'
-import { canonicalizeObject, CanonicalError, defaultKey, redact } from './questionCanonical.js'
+import { canonicalizeObject, CanonicalError, defaultKey, redact, redactScanSteps } from './questionCanonical.js'
 import {
   ACK_ANSWER_NOTE,
   ASK_OWNER_DESCRIPTION,
@@ -85,6 +85,39 @@ describe('canonical vectors', () => {
     assert.match(inside!.canonical!, /token=\[redacted\]/)
     assert.equal(inside!.canonical!.includes('s3cr3t'), false)
     assert.match(edge!.canonical!, /mybearer abcdefgh/)
+  })
+
+  it('scans a repeated character in one pass', () => {
+    for (const ch of ['a', '\u017f']) {
+      const s = ch.repeat(8000)
+      const steps = redactScanSteps(s)
+      assert.equal(redact(s), s)
+      assert.ok(steps >= s.length && steps <= 8 * s.length, `${JSON.stringify(ch)} steps=${steps}`)
+    }
+  })
+
+  it('redacts keyword assignments the same way as the server scan', () => {
+    const cases: Array<[string, string]> = [
+      ['token=s3cr3tvalue', 'token=[redacted]'],
+      ["token='s3cr3tvalue'", "token='[redacted]'"],
+      ['token="s3cr3tvalue"', 'token="[redacted]"'],
+      ['token = s3cr3tvalue', 'token = [redacted]'],
+      ["token = 's3cr3tvalue'", "token = '[redacted]'"],
+      ['pa\u017fsword=s3cr3tvalue', 'pa\u017fsword=[redacted]'],
+      ['token=password=secret', 'token=[redacted]'],
+      ['xx=password=s3cr3tvalue', 'xx=password=[redacted]'],
+      ['token:=s3cr3tvalue', 'token:[redacted]'],
+      ["token:='s3cr3tvalue'", "token:[redacted]'s3cr3tvalue'"],
+      ['token=s3cr3tvalue,password=othersecret', 'token=[redacted],password=[redacted]'],
+      ['api-key=s3cr3tvalue', 'api-key=[redacted]'],
+      ['to\u212aen=s3cr3tvalue', 'to\u212aen=[redacted]'],
+      ['\u017fecret=abcdefgh12345678', '\u017fecret=[redacted]'],
+      ['Zxoxb-aaaaaaaaaa-xoxb-bbbbbbbbbb', 'Zxoxb-aaaaaaaaaa-[redacted token]'],
+      ['bearer abcdefgh token=s3cr3tvalue', 'bearer [redacted] token=[redacted]'],
+    ]
+    for (const [input, output] of cases) {
+      assert.equal(redact(input), output, input)
+    }
   })
 
   it('redacts adjacent secrets without consuming the separator', () => {

@@ -30,40 +30,69 @@ const (
 // trailing identifier into the match: their body stops before '_', and a
 // right-edge check would otherwise leave the token in place.
 var redactions = []struct {
-	re    *regexp.Regexp
-	repl  string
-	bound bool
+	re      *regexp.Regexp
+	repl    string
+	bound   bool
+	keyword bool
 }{
-	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "[redacted private key]", false},
-	{regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\x{017F}][Ii][Cc])` + asciiWS + `+[` + foldAZ + `0-9._~+/=-]{8,}`), "$1 [redacted]", true},
-	{regexp.MustCompile(`([` + foldAZ + `0-9_.-]*(?:` + secretWords + `)[` + foldAZ + `0-9_.-]*)(["']?` + asciiWS + `*[:=]` + asciiWS + `*["']?)` + notSecretValue + `+`), "$1$2[redacted]", true},
-	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "[redacted jwt]", true},
-	{regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`), "[redacted aws key]", true},
-	{regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)`), "[redacted token]", true},
-	{regexp.MustCompile(`://(` + notURLUser + `+):(` + notURLPass + `+)@`), "://$1:[redacted]@", false},
+	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "[redacted private key]", false, false},
+	{regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\x{017F}][Ii][Cc])` + asciiWS + `+[` + foldAZ + `0-9._~+/=-]{8,}`), "$1 [redacted]", true, false},
+	// Keyword assignments are a single pass in replaceKeyword. The expression
+	// above used to be a regexp whose failure restarted one character later;
+	// on a long run of one character that re-scan was quadratic.
+	{nil, "$1$2[redacted]", true, true},
+	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "[redacted jwt]", true, false},
+	{regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`), "[redacted aws key]", true, false},
+	{regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)`), "[redacted token]", true, false},
+	{regexp.MustCompile(`://(` + notURLUser + `+):(` + notURLPass + `+)@`), "://$1:[redacted]@", false, false},
 }
+
+// keywordHit is the keyword alternation alone, with no leading star, so a
+// miss on a repeated character is one left-to-right pass.
+var keywordHit = regexp.MustCompile(secretWords)
 
 // Redact masks common secret shapes. Call it before clipping or storing:
 // a tail or a clip that cuts the marker off would otherwise keep the secret.
 // Controls, bidi marks and newlines are not rewritten.
 func Redact(s string) string {
+	return applyRedactions(s, nil)
+}
+
+// redactScanSteps counts iterations of the scans Redact runs. The keyword
+// rule walks each rune a small number of times; a failed separator is not a
+// place to start the search over from the next character.
+func redactScanSteps(s string) int {
+	var n int
+	applyRedactions(s, &n)
+	return n
+}
+
+func applyRedactions(s string, steps *int) string {
 	for _, r := range redactions {
-		if r.bound {
-			s = replaceBounded(s, r.re, r.repl)
-			continue
+		switch {
+		case r.keyword:
+			s = replaceKeyword(s, steps)
+		case r.bound:
+			s = replaceBounded(s, r.re, r.repl, steps)
+		default:
+			s = r.re.ReplaceAllString(s, r.repl)
 		}
-		s = r.re.ReplaceAllString(s, r.repl)
 	}
 	return s
 }
 
 // replaceBounded accepts a candidate only when the character before it and the
 // character after it are an edge, then resumes at the end of the match.
-func replaceBounded(s string, re *regexp.Regexp, repl string) string {
+// A candidate that fails the edge check resumes one byte later: a later token
+// can begin inside this match, and the shared vectors depend on finding it.
+func replaceBounded(s string, re *regexp.Regexp, repl string, steps *int) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	i := 0
 	for i < len(s) {
+		if steps != nil {
+			*steps++
+		}
 		loc := re.FindStringSubmatchIndex(s[i:])
 		if loc == nil {
 			b.WriteString(s[i:])
@@ -89,6 +118,156 @@ func replaceBounded(s string, re *regexp.Regexp, repl string) string {
 		i = next
 	}
 	return b.String()
+}
+
+// replaceKeyword masks keyword assignments in one pass. The separator (= or :)
+// is required, so a run of one character with no separator is a single walk.
+// A separator that is not an assignment is stepped past; the search does not
+// restart one character after a failed candidate.
+func replaceKeyword(s string, steps *int) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		sep := nextSep(s, i, steps)
+		if sep < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		start, sepEnd, valEnd, ok := keywordAssignmentAt(s, i, sep, steps)
+		if !ok || !leftEdge(s, start) || !rightEdge(s, valEnd) {
+			next := sep + 1
+			b.WriteString(s[i:next])
+			i = next
+			continue
+		}
+		b.WriteString(s[i:start])
+		b.WriteString(s[start:sepEnd])
+		b.WriteString("[redacted]")
+		i = valEnd
+	}
+	return b.String()
+}
+
+func nextSep(s string, from int, steps *int) int {
+	for i := from; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if steps != nil {
+			*steps++
+		}
+		if r == '=' || r == ':' {
+			return i
+		}
+		if size < 1 {
+			size = 1
+		}
+		i += size
+	}
+	return -1
+}
+
+// keywordAssignmentAt parses the assignment whose [:=] is at sep, but only the
+// part that starts at or after from. sepEnd is the first byte of the value.
+func keywordAssignmentAt(s string, from, sep int, steps *int) (start, sepEnd, valEnd int, ok bool) {
+	j := sep
+	for j > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:j])
+		if steps != nil {
+			*steps++
+		}
+		if !isASCIIWS(r) {
+			break
+		}
+		j -= size
+	}
+	if j > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:j])
+		if r == '\'' || r == '"' {
+			if steps != nil {
+				*steps++
+			}
+			j -= size
+		}
+	}
+	idEnd := j
+	idStart := idEnd
+	for idStart > 0 {
+		r, size := utf8.DecodeLastRuneInString(s[:idStart])
+		if steps != nil {
+			*steps++
+		}
+		if !isSecretClass(r) {
+			break
+		}
+		idStart -= size
+	}
+	if idStart < from {
+		idStart = from
+	}
+	if idStart >= idEnd || !keywordHit.MatchString(s[idStart:idEnd]) {
+		return 0, 0, 0, false
+	}
+	p := sep + 1
+	for p < len(s) {
+		r, size := utf8.DecodeRuneInString(s[p:])
+		if steps != nil {
+			*steps++
+		}
+		if !isASCIIWS(r) {
+			break
+		}
+		if size < 1 {
+			size = 1
+		}
+		p += size
+	}
+	if p < len(s) {
+		r, size := utf8.DecodeRuneInString(s[p:])
+		if r == '\'' || r == '"' {
+			if steps != nil {
+				*steps++
+			}
+			if size < 1 {
+				size = 1
+			}
+			p += size
+		}
+	}
+	valStart := p
+	valEnd = p
+	for valEnd < len(s) {
+		r, size := utf8.DecodeRuneInString(s[valEnd:])
+		if steps != nil {
+			*steps++
+		}
+		if isValueStop(r) {
+			break
+		}
+		if size < 1 {
+			size = 1
+		}
+		valEnd += size
+	}
+	if valEnd == valStart {
+		return 0, 0, 0, false
+	}
+	return idStart, valStart, valEnd, true
+}
+
+func isASCIIWS(r rune) bool {
+	return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\f'
+}
+
+func isValueStop(r rune) bool {
+	return isASCIIWS(r) || r == '"' || r == '\'' || r == ',' || r == ';'
+}
+
+func isSecretClass(r rune) bool {
+	return r == '_' || r == '.' || r == '-' ||
+		(r >= '0' && r <= '9') ||
+		(r >= 'A' && r <= 'Z') ||
+		(r >= 'a' && r <= 'z') ||
+		r == '\u017f' || r == '\u212a'
 }
 
 func leftEdge(s string, i int) bool {
