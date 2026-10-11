@@ -1,4 +1,4 @@
-import { matchWrite, splitPath } from './actionTiers.js'
+import { matchWrite, ownerDecision, splitPath } from './actionTiers.js'
 
 export const WRITES_OFF_HINT =
   'MCP_WRITES=off sends no writes. Leave MCP_WRITES unset to call the original route. Set MCP_WRITES=on to ask POST /api/v1/approvals first.'
@@ -30,7 +30,9 @@ export type WritePlan =
   | { kind: 'unmapped'; body: { error: 'unmapped write'; method: string; path: string; hint: string } }
   | { kind: 'consult'; action: string; params: Record<string, unknown> }
 
-function isApprovalPath(pathname: string): boolean {
+function isApprovalPath(method: string, pathname: string): boolean {
+  // approve, reject, and resolve are Owner decisions, not catalog actions.
+  if (ownerDecision(method, pathname) != null) return true
   return pathname === '/api/v1/approvals' || pathname.startsWith('/api/v1/approvals/')
 }
 
@@ -53,7 +55,7 @@ export function planWrite(method: string, path: string, body: unknown, mode: Wri
       },
     }
   }
-  if (isApprovalPath(pathname)) return { kind: 'direct' }
+  if (isApprovalPath(method, pathname)) return { kind: 'direct' }
   if (found == null) {
     return {
       kind: 'unmapped',

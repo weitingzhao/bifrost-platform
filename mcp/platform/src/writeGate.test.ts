@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, it } from 'node:test'
-import { WRITE_SPECS } from './actionTiers.js'
+import { WRITE_SPECS, ownerDecision } from './actionTiers.js'
 import { approveRequest } from './registerApprove.js'
 import { APPROVE_TOOL_NAMES } from './registerApprove.js'
 import { LOCAL_TOOL_NAMES } from './registerLocal.js'
@@ -56,6 +56,22 @@ describe('write mode', () => {
       assert.equal(deleted.action, 'market_data_delete')
       assert.deepEqual(deleted.params, { path: 'contracts/ES' })
     }
+  })
+
+  it('classifies resolve the same way as approve and reject', () => {
+    for (const path of [
+      '/api/v1/approvals/appr_x/approve',
+      '/api/v1/approvals/appr_x/reject',
+      '/api/v1/approvals/appr_x/resolve',
+    ]) {
+      const plan = planWrite('POST', path, { outcome: 'not_run', note: 'checked' }, 'on')
+      assert.equal(plan.kind, 'direct')
+      assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test(path)), false)
+    }
+    assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/approve'), 'approve')
+    assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/reject'), 'reject')
+    assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/resolve'), 'resolve')
+    assert.equal(ownerDecision('GET', '/api/v1/approvals/appr_x/resolve'), undefined)
   })
 
   it('refuses an unmapped write when on and does not invent unlisted_write', () => {

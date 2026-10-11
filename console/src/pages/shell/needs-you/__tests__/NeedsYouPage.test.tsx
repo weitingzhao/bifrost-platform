@@ -515,7 +515,7 @@ describe('NeedsYouPage', () => {
     const check = screen.getByRole('region', { name: 'Check' })
     expect(within(check).getByText('#9 · The lease lapsed.')).toBeTruthy()
     expect(within(check).getByText('The result could not be confirmed: lease expired before a result')).toBeTruthy()
-    expect(within(check).getByText("Nothing ran on this page's say-so; check before asking again.")).toBeTruthy()
+    expect(within(check).getByText('Open it and say what happened.')).toBeTruthy()
     expect(screen.queryByText('Platform runs this itself.')).toBeNull()
     expect(screen.queryByText('Already running in the terminal.')).toBeNull()
     expect(screen.queryByText('0 waiting for you')).toBeNull()

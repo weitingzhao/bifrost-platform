@@ -34,6 +34,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 		r.Use(auth.Require(actuation.RoleAdmin))
 		r.Post("/approvals/{id}/approve", svc.HandleApprove)
 		r.Post("/approvals/{id}/reject", svc.HandleReject)
+		r.Post("/approvals/{id}/resolve", svc.HandleResolve)
 	})
 	r.Group(func(r chi.Router) {
 		r.Use(auth.RequireAny(actuation.RoleExecutor, actuation.RoleAdmin))
@@ -182,6 +183,25 @@ func confirmNumber(raw json.RawMessage) (*int, error) {
 		return nil, fmt.Errorf("confirm_number must be the approval number")
 	}
 	return &n, nil
+}
+
+func (s *Service) HandleResolve(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Outcome string `json:"outcome"`
+		Note    string `json:"note"`
+	}
+	if err := decode(r, &body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	out := s.resolve(chi.URLParam(r, "id"), body.Outcome, body.Note)
+	if out.Status == http.StatusOK && s.audit != nil {
+		id, _ := out.Body["id"].(string)
+		outcome, _ := out.Body["outcome"].(string)
+		note, _ := out.Body["note"].(string)
+		s.writeAudit(r, []event{{"approval.resolve", id, outcome, "outcome=" + outcome + " note=" + note}})
+	}
+	writeJSON(w, out.Status, out.Body)
 }
 
 func (s *Service) HandleReject(w http.ResponseWriter, r *http.Request) {

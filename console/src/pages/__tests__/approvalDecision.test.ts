@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { GO_ZERO_DECIDED_AT } from '@/api/approvalsServerContract'
 import {
   approvalRowTitle,
+  closedByYou,
   commandText,
   decisionBanner,
   decisionTitle,
@@ -104,13 +105,26 @@ describe('execution outcome', () => {
   it('tells the Owner what an unknown request recorded', () => {
     expect(unknownFollowup({ status: 'unknown', error: 'executor lost: lease lapsed with no result' })).toEqual({
       knows: 'What the platform knows: executor lost: lease lapsed with no result.',
-      cannotClose: 'This page cannot close it yet. Check whether it ran before asking again.',
     })
     expect(unknownFollowup({ status: 'unknown', error: '' }).knows).toBeNull()
     expect(unknownFollowup({ status: 'failed', error: 'plan expired' })).toEqual({
       knows: null,
-      cannotClose: null,
     })
+  })
+
+  it('says how the Owner closed an unknown result, with the local time', () => {
+    const at = '2026-10-10T19:22:16Z'
+    const when = new Date(at).toLocaleString()
+    expect(
+      closedByYou({ outcome: 'not_run', note: 'the host was asleep', at, by: 'owner' }),
+    ).toBe(`Closed by you: it did not run — the host was asleep (${when})`)
+    expect(closedByYou({ outcome: 'succeeded', note: 'it finished', at, by: 'owner' })).toBe(
+      `Closed by you: it ran and succeeded — it finished (${when})`,
+    )
+    expect(closedByYou({ outcome: 'failed', note: 'exit was bad', at, by: 'owner' })).toBe(
+      `Closed by you: it ran and failed — exit was bad (${when})`,
+    )
+    expect(closedByYou(null)).toBeNull()
   })
 })
 

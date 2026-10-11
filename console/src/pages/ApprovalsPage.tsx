@@ -9,10 +9,13 @@ import {
   formatWaited,
   isUnsetDecidedAt,
   postApprovalDecision,
+  postApprovalResolve,
   readApprovalToken,
   type ApprovalItem,
+  type ResolveOutcome,
 } from '@/api/approvals'
 import {
+  closedByYou,
   commandText,
   decisionBanner,
   decisionEnv,
@@ -168,18 +171,89 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
   )
 }
 
+const CLOSE_CHOICES: readonly { outcome: ResolveOutcome; label: string }[] = [
+  { outcome: 'not_run', label: 'It did not run' },
+  { outcome: 'succeeded', label: 'It ran and succeeded' },
+  { outcome: 'failed', label: 'It ran and failed' },
+]
+
+function CloseUnknownForm({
+  hasToken,
+  busy,
+  error,
+  onClose,
+}: {
+  hasToken: boolean
+  busy: boolean
+  error: string | null
+  onClose: (outcome: ResolveOutcome, note: string) => void
+}) {
+  const [outcome, setOutcome] = useState<ResolveOutcome | ''>('')
+  const [note, setNote] = useState('')
+  const trimmed = note.trim()
+  const ready = hasToken && !busy && outcome !== '' && trimmed !== ''
+  return (
+    <form
+      className="flex w-full min-w-0 flex-col gap-2"
+      onSubmit={event => {
+        event.preventDefault()
+        if (outcome === '' || trimmed === '') return
+        onClose(outcome, trimmed)
+      }}
+    >
+      <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
+        <legend className="text-sm">What happened</legend>
+        {CLOSE_CHOICES.map(choice => (
+          <label key={choice.outcome} className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="outcome"
+              value={choice.outcome}
+              checked={outcome === choice.outcome}
+              onChange={() => setOutcome(choice.outcome)}
+            />
+            {choice.label}
+          </label>
+        ))}
+      </fieldset>
+      <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor="close-note">
+        Note
+        <input
+          id="close-note"
+          required
+          value={note}
+          onChange={event => setNote(event.target.value)}
+          className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
+        />
+      </label>
+      <Button type="submit" className="h-11 w-full sm:h-auto sm:w-auto" disabled={!ready}>
+        Close this request
+      </Button>
+      {error != null ? (
+        <p role="alert" className="m-0 text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  )
+}
+
 function ApprovalCard({
   item,
   hasToken,
   busy,
+  closeError,
   onApprove,
   onReject,
+  onClose,
 }: {
   item: ApprovalItem
   hasToken: boolean
   busy: boolean
+  closeError: string | null
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
+  onClose: (id: string, outcome: ResolveOutcome, note: string) => void
 }) {
   const [reason, setReason] = useState('')
   const pending = item.status === 'pending'
@@ -196,6 +270,7 @@ function ApprovalCard({
   const fromTradeInfra = runFromTradeInfra(terminal)
   const outcome = executionOutcome(item)
   const unknown = unknownFollowup(item)
+  const closed = closedByYou(item.resolution)
   const outputTail = executionOutputTail(item.execution)
   const attempts = executionAttempts(item.execution)
   const executor = executionExecutor(item.execution)
@@ -229,6 +304,11 @@ function ApprovalCard({
         >
           {decisionBanner(item)}
         </p>
+        {closed != null ? (
+          <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
+            {closed}
+          </p>
+        ) : null}
         {outcome != null ? (
           <p data-execution-outcome className="m-0 max-w-full break-words text-sm">
             {outcome}
@@ -239,10 +319,13 @@ function ApprovalCard({
             {unknown.knows}
           </p>
         ) : null}
-        {unknown.cannotClose != null ? (
-          <p data-cannot-close className="m-0 max-w-full break-words text-sm">
-            {unknown.cannotClose}
-          </p>
+        {item.status === 'unknown' ? (
+          <CloseUnknownForm
+            hasToken={hasToken}
+            busy={busy}
+            error={closeError}
+            onClose={(outcome, note) => onClose(item.id, outcome, note)}
+          />
         ) : null}
         <Prose label="If you approve" value={lead} />
         {rest !== '' ? <Prose label="Why" value={rest} /> : null}
@@ -386,6 +469,7 @@ export function ApprovalsPage() {
   const [token, setToken] = useState(() => readApprovalToken())
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [closeError, setCloseError] = useState<string | null>(null)
   const hasToken = token !== ''
 
   const itemQ = useQuery({
@@ -417,6 +501,20 @@ export function ApprovalsPage() {
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Approval action failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
+    if (!hasToken) return
+    setBusy(true)
+    setCloseError(null)
+    try {
+      await postApprovalResolve(requestId, token, { outcome, note })
+      await qc.invalidateQueries({ queryKey: ['approvals'] })
+    } catch (err) {
+      setCloseError(err instanceof Error ? err.message : 'Could not close this request')
     } finally {
       setBusy(false)
     }
@@ -460,8 +558,10 @@ export function ApprovalsPage() {
               item={opened}
               hasToken={hasToken}
               busy={busy}
+              closeError={closeError}
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}
+              onClose={(requestId, outcome, note) => void closeUnknown(requestId, outcome, note)}
             />
           ) : null}
         </section>

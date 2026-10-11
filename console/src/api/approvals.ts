@@ -1,8 +1,11 @@
 import { authHeaders, authedFetch, operatorToken, parseError } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
+  type ApprovalResolution,
   type PlatformApprovalRecord,
 } from '@/api/approvalsServerContract'
+
+export type { ApprovalResolution }
 
 /** Browser-only admin token for approve / reject. Not the console operator token. */
 export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
@@ -176,6 +179,26 @@ export async function fetchApproval(id: string): Promise<ApprovalItem> {
   const body: unknown = await r.json()
   if (!isItem(body)) throw new Error('approvals: unexpected item')
   return body
+}
+
+export type ResolveOutcome = 'not_run' | 'succeeded' | 'failed'
+
+/** Close an unknown result. Uses the saved approval token, like approve and reject. */
+export async function postApprovalResolve(
+  id: string,
+  token: string,
+  body: { outcome: ResolveOutcome; note: string },
+): Promise<ApprovalDecision> {
+  const headers = new Headers()
+  headers.set('Content-Type', 'application/json')
+  headers.set('Authorization', `Bearer ${token}`)
+  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  })
+  if (!r.ok) throw await parseError('approvals', r)
+  return (await r.json()) as ApprovalDecision
 }
 
 export async function postApprovalDecision(

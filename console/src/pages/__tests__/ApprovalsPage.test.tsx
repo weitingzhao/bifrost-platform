@@ -494,10 +494,83 @@ describe('ApprovalsPage (request page)', () => {
     expect(
       screen.getByText('What the platform knows: executor lost: lease lapsed with no result.'),
     ).toBeTruthy()
-    expect(
-      screen.getByText('This page cannot close it yet. Check whether it ran before asking again.'),
-    ).toBeTruthy()
+    expect(screen.getByText('It did not run')).toBeTruthy()
+    expect(screen.getByText('It ran and succeeded')).toBeTruthy()
+    expect(screen.getByText('It ran and failed')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close this request' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.queryByText('This page cannot close it yet. Check whether it ran before asking again.')).toBeNull()
     expect(screen.getByText('owner-run:Visions-MBP')).toBeTruthy()
+  })
+
+  it.each([
+    ['not_run', 'It did not run', 'failed', 'it did not run'],
+    ['succeeded', 'It ran and succeeded', 'executed', 'it ran and succeeded'],
+    ['failed', 'It ran and failed', 'failed', 'it ran and failed'],
+  ] as const)('closes an unknown request as %s', async (outcome, choice, status, phrase) => {
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    const id = `appr-${outcome}`
+    const at = '2026-10-10T19:22:16Z'
+    window.location.hash = `#approvals?id=${id}`
+    let closed = false
+    const posts: { outcome: string; note: string; auth: string | null }[] = []
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith(`/resolve`) && init?.method === 'POST') {
+        closed = true
+        posts.push({
+          ...(JSON.parse(String(init.body)) as { outcome: string; note: string }),
+          auth: new Headers(init.headers).get('Authorization'),
+        })
+        return json({ id, status })
+      }
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(
+          buildPlatformApproval({
+            id,
+            status: closed ? status : 'unknown',
+            error: closed ? '' : 'executor lost: lease lapsed with no result',
+            resolution: closed
+              ? { outcome, note: 'checked the host', at, by: 'owner' }
+              : null,
+          }),
+        )
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    fireEvent.click(await screen.findByLabelText(choice))
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked the host' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close this request' }))
+    expect(
+      await screen.findByText(
+        `Closed by you: ${phrase} — checked the host (${new Date(at).toLocaleString()})`,
+      ),
+    ).toBeTruthy()
+    expect(posts).toEqual([{ outcome, note: 'checked the host', auth: 'Bearer admin-token' }])
+    expect(screen.queryByRole('button', { name: 'Close this request' })).toBeNull()
+  })
+
+  it('shows a resolve error in place and leaves the form up', async () => {
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    const id = 'appr-err'
+    window.location.hash = `#approvals?id=${id}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/resolve') && init?.method === 'POST') {
+        return json({ error: 'only an unknown result can be closed', status: 'failed' }, 409)
+      }
+      if (url.endsWith(`/api/v1/approvals/${id}`)) {
+        return json(buildPlatformApproval({ id, status: 'unknown', error: 'lease lost' }))
+      }
+      return json({ error: url }, 500)
+    })
+    render(wrapper(<ApprovalsPage />))
+    fireEvent.click(await screen.findByLabelText('It did not run'))
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'looked' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Close this request' }))
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    expect(screen.getByRole('alert').textContent).toContain('only an unknown result can be closed')
+    expect(screen.getByRole('button', { name: 'Close this request' })).toBeTruthy()
   })
 
   it('prints the command once when the result repeats params.command', async () => {

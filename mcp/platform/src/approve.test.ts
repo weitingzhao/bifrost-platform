@@ -216,6 +216,15 @@ test('sessions without bifrost-approve get the number and a Console link; tier D
   assert.deepEqual(withApproveHint({ error: 'forbidden' }, env), { error: 'forbidden' })
 })
 
+test('no tool posts the resolve route of an approval', () => {
+  const dir = fileURLToPath(new URL('.', import.meta.url))
+  const route = /approvals\/\$\{[^}]+\}\/resolve\b/
+  const senders = readdirSync(dir)
+    .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+    .filter((f) => route.test(readFileSync(dir + f, 'utf8')))
+  assert.deepEqual(senders, [])
+})
+
 test('only registerApprove.ts sends approve or reject, and only the approve focus registers it', () => {
   const dir = fileURLToPath(new URL('.', import.meta.url))
   const route = /approvals\/\$\{[^}]+\}\/(approve|reject)\b/
