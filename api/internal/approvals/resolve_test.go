@@ -3,6 +3,7 @@ package approvals
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -64,6 +65,49 @@ func TestResolveEachOutcome(t *testing.T) {
 				t.Fatalf("resolve pushed: before %d after %d %+v", pushes, n, f.got())
 			}
 		})
+	}
+}
+
+func TestResolveKeepsAnOldUnknownAmongNewerTerminals(t *testing.T) {
+	svc := New(filepath.Join(t.TempDir(), "approvals"), nil)
+	base := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	rec, _ := unknownApproval(t, svc, base)
+	err := svc.store.update(func(doc *file) error {
+		for i := 0; i < keepClosed; i++ {
+			doc.Approvals = append(doc.Approvals, Approval{
+				ID:        fmt.Sprintf("newer-%d", i),
+				Status:    StatusExecuted,
+				CreatedAt: base,
+				DecidedAt: base.Add(time.Duration(i+1) * time.Second),
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const note = "the host was asleep"
+	svc.SetClock(func() time.Time { return base.Add(2 * time.Hour) })
+	out := svc.resolve(rec.ID, "not_run", note)
+	if out.Status != http.StatusOK {
+		t.Fatalf("resolve = %d %v", out.Status, out.Body)
+	}
+	got, ok := svc.find(rec.ID)
+	if !ok {
+		t.Fatal("resolved record was pruned in the same update")
+	}
+	if got.Resolution == nil || got.Resolution.Note != note || got.Resolution.Outcome != "not_run" {
+		t.Fatalf("resolution = %#v", got.Resolution)
+	}
+	doc, err := svc.store.read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Approvals) != keepClosed {
+		t.Fatalf("kept %d approvals, want %d", len(doc.Approvals), keepClosed)
+	}
+	if _, still := doc.find("newer-0"); still {
+		t.Fatal("the oldest terminal was kept in place of the record just closed")
 	}
 }
 

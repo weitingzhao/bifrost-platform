@@ -546,6 +546,9 @@ describe('ApprovalsPage (request page)', () => {
         `Closed by you: ${phrase} — checked the host (${new Date(at).toLocaleString()})`,
       ),
     ).toBeTruthy()
+    expect(document.querySelector('[data-decision-banner]')?.textContent).toBe(`You closed it: ${phrase}.`)
+    expect(screen.queryByText('This failed.')).toBeNull()
+    expect(screen.queryByText('This has run.')).toBeNull()
     expect(posts).toEqual([{ outcome, note: 'checked the host', auth: 'Bearer admin-token' }])
     expect(screen.queryByRole('button', { name: 'Close this request' })).toBeNull()
   })

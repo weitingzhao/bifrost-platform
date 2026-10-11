@@ -16,6 +16,7 @@ import {
   unknownFollowup,
   visibleTimestamp,
   workItems,
+  youClosedLine,
 } from '@/pages/approvalDecision'
 
 describe('decisionBanner', () => {
@@ -51,6 +52,31 @@ describe('decisionBanner', () => {
     expect(decisionBanner({ status: 'mystery', runner: '' })).toBe(
       'The result could not be confirmed and must be checked before anything is retried.',
     )
+  })
+
+  it('follows the resolution, so a closed not_run does not read as a failure', () => {
+    const at = '2026-10-10T19:22:16Z'
+    const when = new Date(at).toLocaleString()
+    const cases = [
+      ['not_run', 'You closed it: it did not run.'],
+      ['succeeded', 'You closed it: it ran and succeeded.'],
+      ['failed', 'You closed it: it ran and failed.'],
+    ] as const
+    for (const [outcome, banner] of cases) {
+      expect(youClosedLine(outcome)).toBe(banner.slice(0, -1))
+      expect(
+        decisionBanner({
+          status: outcome === 'succeeded' ? 'executed' : 'failed',
+          runner: 'owner',
+          execution: { exit_code: 1 },
+          resolution: { outcome, note: 'checked the host', at, by: 'owner' },
+        }),
+      ).toBe(banner)
+      expect(decisionBanner({ status: 'failed', runner: 'owner' })).toBe('This failed.')
+    }
+    expect(
+      closedByYou({ outcome: 'not_run', note: 'checked the host', at, by: 'owner' }),
+    ).toBe(`Closed by you: it did not run — checked the host (${when})`)
   })
 })
 

@@ -8,7 +8,14 @@ import { LOCAL_TOOL_NAMES } from './registerLocal.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
 import { pollRequest } from './pollRequest.js'
 import { bifrostSessionId } from './sessionId.js'
-import { OWNER_WAIT_NOTE, planWrite, writesEnabled, writesMode } from './writeGate.js'
+import {
+  OWNER_WAIT_NOTE,
+  RESOLVE_REFUSAL_ERROR,
+  RESOLVE_REFUSAL_HINT,
+  planWrite,
+  writesEnabled,
+  writesMode,
+} from './writeGate.js'
 import { platformDelete, platformPost, platformPut, resetClientCacheForTests } from './platformClient.js'
 
 const catalogIds = JSON.parse(
@@ -58,16 +65,26 @@ describe('write mode', () => {
     }
   })
 
-  it('classifies resolve the same way as approve and reject', () => {
-    for (const path of [
-      '/api/v1/approvals/appr_x/approve',
-      '/api/v1/approvals/appr_x/reject',
-      '/api/v1/approvals/appr_x/resolve',
-    ]) {
-      const plan = planWrite('POST', path, { outcome: 'not_run', note: 'checked' }, 'on')
-      assert.equal(plan.kind, 'direct')
+  it('approve and reject stay direct; resolve is refused in every mode', () => {
+    for (const path of ['/api/v1/approvals/appr_x/approve', '/api/v1/approvals/appr_x/reject']) {
+      for (const mode of ['legacy', 'on'] as const) {
+        const plan = planWrite('POST', path, { channel: 'chat' }, mode)
+        assert.equal(plan.kind, 'direct', `${mode} ${path}`)
+      }
+      const off = planWrite('POST', path, { channel: 'chat' }, 'off')
+      assert.equal(off.kind, 'blocked', path)
       assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test(path)), false)
     }
+    for (const mode of ['legacy', 'on', 'off'] as const) {
+      const plan = planWrite('POST', '/api/v1/approvals/appr_x/resolve?x=1', { outcome: 'not_run', note: 'checked' }, mode)
+      assert.equal(plan.kind, 'refused', mode)
+      if (plan.kind !== 'refused') return
+      assert.equal(plan.body.error, RESOLVE_REFUSAL_ERROR)
+      assert.equal(plan.body.hint, RESOLVE_REFUSAL_HINT)
+      assert.equal(plan.body.path, '/api/v1/approvals/appr_x/resolve')
+      assert.equal(plan.kind === 'direct', false)
+    }
+    assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test('/api/v1/approvals/appr_x/resolve')), false)
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/approve'), 'approve')
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/reject'), 'reject')
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/resolve'), 'resolve')
@@ -217,6 +234,43 @@ describe('platformClient write gate', () => {
     }
     assert.equal(refused.error, 'unmapped write')
     assert.equal(JSON.stringify(refused).includes('unlisted_write'), false)
+    assert.equal(calls.length, 0)
+  })
+
+  it('refuses resolve in every mode and does not call fetch', async () => {
+    const path = '/api/v1/approvals/appr_x/resolve'
+    for (const mode of ['legacy', 'on', 'off'] as const) {
+      calls.length = 0
+      if (mode === 'legacy') delete process.env.MCP_WRITES
+      else process.env.MCP_WRITES = mode
+      const refused = (await platformPost(path, { outcome: 'not_run', note: 'checked' })) as {
+        error: string
+        hint: string
+      }
+      assert.equal(refused.error, RESOLVE_REFUSAL_ERROR)
+      assert.equal(refused.hint, RESOLVE_REFUSAL_HINT)
+      assert.equal(calls.length, 0, mode)
+    }
+  })
+
+  it('approve and reject still follow the write mode', async () => {
+    for (const path of ['/api/v1/approvals/appr_x/approve', '/api/v1/approvals/appr_x/reject']) {
+      for (const mode of ['legacy', 'on'] as const) {
+        calls.length = 0
+        if (mode === 'legacy') delete process.env.MCP_WRITES
+        else process.env.MCP_WRITES = mode
+        const sent = (await platformPost(path, { channel: 'chat' })) as { status: string }
+        assert.equal(sent.status, 'executed', `${mode} ${path}`)
+        assert.equal(calls.length, 1, `${mode} ${path}`)
+        assert.ok(calls[0].url.endsWith(path), calls[0].url)
+      }
+    }
+    calls.length = 0
+    process.env.MCP_WRITES = 'off'
+    const blocked = (await platformPost('/api/v1/approvals/appr_x/approve', { channel: 'chat' })) as {
+      error: string
+    }
+    assert.equal(blocked.error, 'writes not cut over')
     assert.equal(calls.length, 0)
   })
 

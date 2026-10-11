@@ -138,7 +138,13 @@ func (a Approval) open() bool {
 	return false
 }
 
+// closedAt is the latest thing that happened. A resolution is that moment:
+// the decision time is older, and prune would otherwise drop a long-unknown
+// record in the same update that closed it.
 func (a Approval) closedAt() time.Time {
+	if a.Resolution != nil {
+		return a.Resolution.At
+	}
 	if a.Execution != nil && !a.Execution.FinishedAt.IsZero() {
 		return a.Execution.FinishedAt
 	}

@@ -97,14 +97,33 @@ export function formatTook(durationMs: number): string {
   return `${text} s`
 }
 
+/** Needs you and the request banner share this. The banner adds a period. */
+export function youClosedLine(outcome: string | undefined): string | null {
+  switch (outcome) {
+    case 'not_run':
+      return 'You closed it: it did not run'
+    case 'succeeded':
+      return 'You closed it: it ran and succeeded'
+    case 'failed':
+      return 'You closed it: it ran and failed'
+    default:
+      return null
+  }
+}
+
 /**
- * What the Owner should do now. Unknown (and any status we do not recognise)
- * says the result was not confirmed. An exit code replaces the executed / failed
- * sentences: 0 finished, anything else (or failed with a code) failed.
+ * What the Owner should do now. A resolution replaces the status sentence:
+ * not_run is stored as failed, and the status alone would say "This failed."
+ * Unknown (and any status we do not recognise) says the result was not confirmed.
+ * An exit code replaces the executed / failed sentences: 0 finished, anything
+ * else (or failed with a code) failed.
  */
 export function decisionBanner(
-  item: Pick<ApprovalItem, 'status' | 'runner'> & Partial<Pick<ApprovalItem, 'execution'>>,
+  item: Pick<ApprovalItem, 'status' | 'runner'> &
+    Partial<Pick<ApprovalItem, 'execution' | 'resolution'>>,
 ): string {
+  const closed = youClosedLine(item.resolution?.outcome)
+  if (closed != null) return `${closed}.`
   const status = item.status.trim().toLowerCase()
   const runner = runnerOf(item.runner)
   switch (status) {

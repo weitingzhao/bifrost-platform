@@ -8,6 +8,12 @@ export const UNMAPPED_WRITE_HINT =
 
 export const OWNER_WAIT_NOTE = 'waiting for the Owner to approve'
 
+/** Resolve is the Owner's close. Every write mode refuses it and sends nothing. */
+export const RESOLVE_REFUSAL_ERROR = 'an agent cannot close a request'
+
+export const RESOLVE_REFUSAL_HINT =
+  "The resolve route is the Owner's close of an unknown result. No request was sent."
+
 /** Explicit on is the only mode that creates approvals. Unset stays on the pre-merge direct path. */
 export type WritesMode = 'legacy' | 'on' | 'off'
 
@@ -28,11 +34,18 @@ export type WritePlan =
   | { kind: 'direct' }
   | { kind: 'blocked'; body: { error: 'writes not cut over'; action?: string; hint: string } }
   | { kind: 'unmapped'; body: { error: 'unmapped write'; method: string; path: string; hint: string } }
+  | {
+      kind: 'refused'
+      body: { error: typeof RESOLVE_REFUSAL_ERROR; method: string; path: string; hint: typeof RESOLVE_REFUSAL_HINT }
+    }
   | { kind: 'consult'; action: string; params: Record<string, unknown> }
 
 function isApprovalPath(method: string, pathname: string): boolean {
-  // approve, reject, and resolve are Owner decisions, not catalog actions.
-  if (ownerDecision(method, pathname) != null) return true
+  // approve and reject are Owner decisions, not catalog actions.
+  // resolve is refused before this runs, in every mode.
+  const decision = ownerDecision(method, pathname)
+  if (decision === 'resolve') return false
+  if (decision === 'approve' || decision === 'reject') return true
   return pathname === '/api/v1/approvals' || pathname.startsWith('/api/v1/approvals/')
 }
 
@@ -44,6 +57,17 @@ function isApprovalPath(method: string, pathname: string): boolean {
 export function planWrite(method: string, path: string, body: unknown, mode: WritesMode): WritePlan {
   const found = matchWrite(method, path)
   const { pathname, query } = splitPath(path)
+  if (ownerDecision(method, pathname) === 'resolve') {
+    return {
+      kind: 'refused',
+      body: {
+        error: RESOLVE_REFUSAL_ERROR,
+        method,
+        path: pathname,
+        hint: RESOLVE_REFUSAL_HINT,
+      },
+    }
+  }
   if (mode === 'legacy') return { kind: 'direct' }
   if (mode === 'off') {
     return {

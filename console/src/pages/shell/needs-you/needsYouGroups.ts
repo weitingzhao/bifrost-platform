@@ -1,6 +1,6 @@
 import type { AgentThread } from '@/api/agentThreads'
 import { isAwaitingDecision, isUnsetDecidedAt, type ApprovalItem } from '@/api/approvals'
-import { visibleTimestamp } from '@/pages/approvalDecision'
+import { visibleTimestamp, youClosedLine } from '@/pages/approvalDecision'
 
 export const TERMINAL_NOT_RUN = 'Approved. It has not run yet.'
 
@@ -110,16 +110,7 @@ function closedInstant(item: ApprovalItem): number | null {
 }
 
 function resolvedHandledLine(outcome: string | undefined): string | null {
-  switch (outcome) {
-    case 'not_run':
-      return 'You closed it: it did not run'
-    case 'succeeded':
-      return 'You closed it: it ran and succeeded'
-    case 'failed':
-      return 'You closed it: it ran and failed'
-    default:
-      return null
-  }
+  return youClosedLine(outcome)
 }
 
 function handledApprovalLine(item: ApprovalItem, at: number): string | null {
