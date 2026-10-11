@@ -14,10 +14,20 @@ import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
  * `#approvals?id=` only. The raw id stays on the link (`title`, `data-approval-row`)
  * and is not drawn as text.
  */
-export function ApprovalRow({ item, now = Date.now() }: { item: ApprovalItem; now?: number }) {
+export function ApprovalRow({
+  item,
+  now = Date.now(),
+  lines,
+}: {
+  item: ApprovalItem
+  now?: number
+  /** Replaces the waited / decided caption. Pending Decide rows leave this unset. */
+  lines?: readonly string[]
+}) {
   const env = approvalEnv(item)
   const pending = item.status === 'pending'
   const words = tierWords(item.tier)
+  const detail = lines != null && lines.length > 0 ? lines : null
   return (
     <li className="list-none">
       <a
@@ -38,12 +48,18 @@ export function ApprovalRow({ item, now = Date.now() }: { item: ApprovalItem; no
             <span className="text-[var(--text-dense-caption)] text-muted-foreground">{words}</span>
           ) : null}
           {env !== '' ? <DenseTag variant="neutral">{env}</DenseTag> : null}
-          {!pending ? <DenseTag variant="neutral">{item.status}</DenseTag> : null}
+          {!pending && detail == null ? <DenseTag variant="neutral">{item.status}</DenseTag> : null}
         </span>
         <span className="text-[var(--text-dense-caption)] text-muted-foreground">
-          {pending
-            ? `waited ${formatWaited(item.created_at, now)} · ${formatTimeRemaining(item.expires_at, now)}`
-            : `${item.requester || '—'} · decided ${formatDecidedAt(item)}`}
+          {detail != null
+            ? detail.map((line, index) => (
+                <span key={index} className="block min-w-0 break-words">
+                  {line}
+                </span>
+              ))
+            : pending
+              ? `waited ${formatWaited(item.created_at, now)} · ${formatTimeRemaining(item.expires_at, now)}`
+              : `${item.requester || '—'} · decided ${formatDecidedAt(item)}`}
         </span>
       </a>
     </li>

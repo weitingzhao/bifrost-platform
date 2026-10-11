@@ -165,7 +165,8 @@ function approvalsRead(path: string): Promise<Response> {
   return viewerRead('approvals', path)
 }
 
-export async function fetchApprovalList(status: 'pending' | 'all'): Promise<ApprovalItem[]> {
+/** `open` is pending, approved, running, and unknown. `all` is every status. */
+export async function fetchApprovalList(status: 'pending' | 'open' | 'all'): Promise<ApprovalItem[]> {
   const r = await approvalsRead(`/api/v1/approvals?status=${status}`)
   return parseApprovalList(await r.json())
 }

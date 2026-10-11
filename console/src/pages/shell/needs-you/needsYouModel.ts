@@ -1,8 +1,8 @@
 import type { ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 
 /**
- * Needs you counts three kinds only: decide, approve, sign off (ADR §6).
- * Approve is wired today; decide and sign off arrive with the D1 transition layer.
+ * Waiting total for the sidebar pill and the Needs you heading.
+ * Zero draws nothing. Unknown is `?`, never a zero, when a read failed.
  */
 export type NeedsYouCount =
   | { state: 'loading' }

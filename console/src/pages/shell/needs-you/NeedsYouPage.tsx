@@ -9,7 +9,13 @@ import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
-import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
+import { needsYouCountText, type NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
+import {
+  EARLIER_NOTIFICATIONS,
+  TERMINAL_NOT_RUN,
+  checkLines,
+  type HandledRow,
+} from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 
@@ -37,12 +43,69 @@ function Note({ children }: { children: ReactNode }) {
   return <p className="m-0 text-sm text-muted-foreground">{children}</p>
 }
 
+function ApprovalList({ children }: { children: ReactNode }) {
+  return <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">{children}</ul>
+}
+
+function HandledRows({ rows }: { rows: HandledRow[] }) {
+  if (rows.length === 0) return null
+  return (
+    <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">
+      {rows.map(row =>
+        row.kind === 'approval' ? (
+          <ApprovalRow key={row.item.id} item={row.item} lines={[row.line]} />
+        ) : (
+          <li
+            key={`${row.thread.vendor}/${row.thread.thread}`}
+            data-agent-thread={row.thread.thread}
+            className="list-none min-w-0 break-words text-sm text-foreground"
+          >
+            {row.line}
+          </li>
+        ),
+      )}
+    </ul>
+  )
+}
+
+function RecentlyHandled({ count, rows }: { count: NeedsYouCount; rows: HandledRow[] }) {
+  return (
+    <OpsSection
+      id="recently-handled"
+      title={`Recently handled · ${needsYouCountText(count)}`}
+      collapsible
+      defaultCollapsed
+      bodyPadding="compact"
+      className="min-w-0 max-w-full"
+    >
+      {count.state === 'unknown' ? <Note>{`Could not read handled requests: ${count.reason}`}</Note> : null}
+      <HandledRows rows={rows} />
+    </OpsSection>
+  )
+}
+
 /**
- * Home. Lists what waits for the Owner — approve, silent agent threads, decide, sign
- * off — and links each request to its page. No approve or reject here.
+ * Home. Lists what waits for the Owner: decide, run in a terminal, check,
+ * and silent threads. Recently handled keeps a notification findable after
+ * the item has closed. No approve or reject here.
  */
 export function NeedsYouPage() {
-  const { count, approveCount, silentCount, toApprove, silent, lost, capacityText, query } = useNeedsYou()
+  const {
+    count,
+    openCount,
+    silentCount,
+    recentCount,
+    decide,
+    terminal,
+    check,
+    recent,
+    silent,
+    lost,
+    capacityText,
+    now,
+    query,
+    handledQuery,
+  } = useNeedsYou()
   const lineageQ = useQuery({
     queryKey: ['lineage', 'needs-you'],
     queryFn: () => fetchLineage(14),
@@ -51,17 +114,18 @@ export function NeedsYouPage() {
   })
   const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
   const hasReadToken = operatorToken() !== '' || approvalToken !== ''
-  const now = Date.now()
+  const showRecent =
+    recentCount.state === 'unknown' || (recentCount.state === 'known' && recentCount.count > 0)
 
-  let approve: ReactNode
-  if (approveCount.state === 'loading') {
-    approve = <Note>Loading…</Note>
-  } else if (approveCount.state === 'unknown') {
-    approve = (
+  let openBody: ReactNode = null
+  if (openCount.state === 'loading') {
+    openBody = <Note>Loading…</Note>
+  } else if (openCount.state === 'unknown') {
+    openBody = (
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
           {hasReadToken
-            ? `Could not read approvals: ${approveCount.reason}`
+            ? `Could not read approvals: ${openCount.reason}`
             : 'This device has no approval token. Save it once to see what waits for you here.'}
         </Note>
         <ApprovalTokenField
@@ -69,19 +133,10 @@ export function NeedsYouPage() {
           onSaved={next => {
             setApprovalToken(next)
             void query.refetch()
+            void handledQuery.refetch()
           }}
         />
       </div>
-    )
-  } else if (toApprove.length === 0) {
-    approve = <Note>Nothing to approve.</Note>
-  } else {
-    approve = (
-      <ul className="m-0 flex w-full min-w-0 flex-col gap-2 p-0">
-        {toApprove.map(item => (
-          <ApprovalRow key={item.id} item={item} now={now} />
-        ))}
-      </ul>
     )
   }
 
@@ -126,18 +181,39 @@ export function NeedsYouPage() {
               ? 'Needs you: Unknown'
               : 'Checking what needs you…'}
       </p>
-      <Group label="Approve" count={needsYouCountText(approveCount)}>
-        {approve}
-      </Group>
-      <Group
-        label="Silent threads"
-        count={needsYouCountText(silentCount)}
-        description={SILENT_THREAD_EXPLANATION}
-      >
+      {count.state === 'known' && count.count === 0 && recentCount.state === 'known' && recentCount.count > 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">{EARLIER_NOTIFICATIONS}</p>
+      ) : null}
+      {openBody}
+      {decide.length > 0 ? (
+        <Group label="Decide" count={String(decide.length)}>
+          <ApprovalList>
+            {decide.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {terminal.length > 0 ? (
+        <Group label="Run in a terminal" count={String(terminal.length)}>
+          <ApprovalList>
+            {terminal.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      {check.length > 0 ? (
+        <Group label="Check" count={String(check.length)}>
+          <ApprovalList>
+            {check.map(item => (
+              <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} />
+            ))}
+          </ApprovalList>
+        </Group>
+      ) : null}
+      <Group label="Silent threads" count={needsYouCountText(silentCount)} description={SILENT_THREAD_EXPLANATION}>
         {stalled}
-      </Group>
-      <Group label="Decide" count="—">
-        <Note>Not connected yet.</Note>
       </Group>
       <Group label="Sign off" count="—">
         <Note>Not connected yet.</Note>
@@ -149,6 +225,7 @@ export function NeedsYouPage() {
         </a>
         .
       </Note>
+      {showRecent ? <RecentlyHandled count={recentCount} rows={recent} /> : null}
     </div>
   )
 }

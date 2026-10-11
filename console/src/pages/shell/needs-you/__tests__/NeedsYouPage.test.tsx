@@ -7,6 +7,7 @@ import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
+import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -127,6 +128,7 @@ function stubFetch(
   approvals: (headers: Headers) => Response,
   threads: (headers: Headers) => Response = viewerThreads([]),
   lineage: () => Response = emptyLineage,
+  handled: (headers: Headers) => Response = () => json(buildApprovalListResponse([])),
 ) {
   vi.stubGlobal(
     'fetch',
@@ -134,7 +136,8 @@ function stubFetch(
       const url = String(input)
       const health = healthResponse(url)
       if (health != null) return health
-      if (url.includes('/api/v1/approvals?status=pending')) return approvals(new Headers(init?.headers))
+      if (url.includes('/api/v1/approvals?status=open')) return approvals(new Headers(init?.headers))
+      if (url.includes('/api/v1/approvals?status=all')) return handled(new Headers(init?.headers))
       if (url.includes('/api/v1/agent/threads')) return threads(new Headers(init?.headers))
       if (url.includes('/api/v1/lineage')) return lineage()
       return json({ error: `unexpected ${url}` }, 500)
@@ -168,16 +171,17 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
 
     expect(await screen.findByText('2 waiting for you')).toBeTruthy()
-    const approve = screen.getByRole('region', { name: 'Approve' })
-    const links = within(approve).getAllByRole('link')
+    const decide = screen.getByRole('region', { name: 'Decide' })
+    const links = within(decide).getAllByRole('link')
     expect(links.map(link => link.getAttribute('href'))).toEqual([
       '#approvals?id=ap-1',
       '#approvals?id=ap-2',
     ])
-    expect(within(approve).getAllByText(/^waited 3h · \d+h( \d+m)? left$/)).toHaveLength(2)
-    expect(within(approve).getByText('prod')).toBeTruthy()
+    expect(within(decide).getAllByText(/^waited 3h · \d+h( \d+m)? left$/)).toHaveLength(2)
+    expect(within(decide).getByText('prod')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Approve|Reject/ })).toBeNull()
-    expect(within(screen.getByRole('region', { name: 'Decide' })).getByText('Not connected yet.')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
     expect(within(screen.getByRole('region', { name: 'Sign off' })).getByText('Not connected yet.')).toBeTruthy()
     expect(await screen.findByText('Degraded — 1 warning alert')).toBeTruthy()
   })
@@ -187,7 +191,11 @@ describe('NeedsYouPage', () => {
     stubFetch(() => json(buildApprovalListResponse([])))
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
-    expect(screen.getByText('Nothing to approve.')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
+    expect(screen.queryByText(/Recently handled · 0/)).toBeNull()
+    expect(screen.queryByText('Notifications you received earlier are under Recently handled.')).toBeNull()
   })
 
   it('shows Unknown, not zero, on a device without a token', async () => {
@@ -341,7 +349,7 @@ describe('NeedsYouPage', () => {
     )
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
-    expect(within(screen.getByRole('region', { name: 'Approve' })).getAllByRole('link')).toHaveLength(1)
+    expect(within(screen.getByRole('region', { name: 'Decide' })).getAllByRole('link')).toHaveLength(1)
     const silent = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(silent).getByText(/Could not read agent threads/)).toBeTruthy()
     expect(within(silent).getByText('Silent threads · Unknown')).toBeTruthy()
@@ -445,5 +453,191 @@ describe('NeedsYouPage', () => {
     expect(container.textContent ?? '').not.toContain(secret)
     expect((screen.getByLabelText('Set approval token') as HTMLInputElement).value).toBe('')
     expect((document.getElementById('approval-token') as HTMLInputElement).outerHTML).not.toContain(secret)
+  })
+
+  it('lists decide, run, and check, and the badge is their sum plus silent threads', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    const created = new Date(Date.now() - 3 * 60 * 60_000).toISOString()
+    stubFetch(
+      () =>
+        json(
+          buildApprovalListResponse([
+            buildPlatformApproval({ id: 'ap-decide', number: 2, reason: 'Needs a decision.', created_at: created }),
+            buildPlatformApproval({
+              id: 'ap-run',
+              number: 8,
+              status: 'approved',
+              runner: 'owner',
+              reason: 'Publish the ConfigMap.',
+              execution: null,
+            }),
+            buildPlatformApproval({
+              id: 'ap-check',
+              number: 9,
+              status: 'unknown',
+              reason: 'The lease lapsed.',
+              error: 'lease expired before a result',
+            }),
+            buildPlatformApproval({
+              id: 'ap-platform',
+              number: 4,
+              status: 'approved',
+              runner: 'platform',
+              reason: 'Platform runs this itself.',
+            }),
+            buildPlatformApproval({
+              id: 'ap-running',
+              number: 5,
+              status: 'running',
+              runner: 'owner',
+              reason: 'Already running in the terminal.',
+            }),
+          ]),
+        ),
+      viewerThreads([silentThread()]),
+    )
+    render(wrapper(<NeedsYouPage />))
+
+    expect(await screen.findByText('4 waiting for you')).toBeTruthy()
+    expect(document.querySelector('[data-needs-you-count]')?.getAttribute('data-needs-you-count')).toBe('4')
+    expect(needsYouBadge({ state: 'known', count: 4 })).toEqual({
+      text: '4',
+      title: 'Needs you: 4 waiting',
+      tone: 'attention',
+    })
+    const decide = screen.getByRole('region', { name: 'Decide' })
+    expect(within(decide).getByText('#2 · Needs a decision.')).toBeTruthy()
+    expect(within(decide).getByText(/^waited 3h · /)).toBeTruthy()
+    const run = screen.getByRole('region', { name: 'Run in a terminal' })
+    expect(within(run).getByText('#8 · Publish the ConfigMap.')).toBeTruthy()
+    expect(within(run).getByText('Approved. It has not run yet.')).toBeTruthy()
+    expect(within(run).getByRole('link').getAttribute('href')).toBe('#approvals?id=ap-run')
+    const check = screen.getByRole('region', { name: 'Check' })
+    expect(within(check).getByText('#9 · The lease lapsed.')).toBeTruthy()
+    expect(within(check).getByText('The result could not be confirmed: lease expired before a result')).toBeTruthy()
+    expect(within(check).getByText("Nothing ran on this page's say-so; check before asking again.")).toBeTruthy()
+    expect(screen.queryByText('Platform runs this itself.')).toBeNull()
+    expect(screen.queryByText('Already running in the terminal.')).toBeNull()
+    expect(screen.queryByText('0 waiting for you')).toBeNull()
+  })
+
+  it('keeps a notification under Recently handled after the groups are empty', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    const finished = new Date(Date.now() - 60 * 60_000).toISOString()
+    const failedAt = new Date(Date.now() - 2 * 60 * 60_000).toISOString()
+    const rejectedAt = new Date(Date.now() - 3 * 60 * 60_000).toISOString()
+    const expiredAt = new Date(Date.now() - 4 * 60 * 60_000).toISOString()
+    const notified = new Date(Date.now() - 30 * 60_000).toISOString()
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      viewerThreads([
+        silentThread({
+          thread: 'busy',
+          title: 'Heartbeat work',
+          status: 'in_turn',
+          event: 'turn_start',
+          notified_at: notified,
+        }),
+        silentThread({
+          thread: 'done',
+          title: 'Codex job',
+          status: 'idle',
+          event: 'turn_end',
+          notified_at: new Date(Date.now() - 90 * 60_000).toISOString(),
+        }),
+      ]),
+      emptyLineage,
+      () =>
+        json(
+          buildApprovalListResponse([
+            buildPlatformApproval({
+              id: 'ap-done',
+              number: 3,
+              status: 'executed',
+              reason: 'Sync rocket.',
+              execution: { exit_code: 0, finished_at: finished },
+            }),
+            buildPlatformApproval({
+              id: 'ap-broke',
+              number: 4,
+              status: 'failed',
+              reason: 'Drain the node.',
+              execution: { exit_code: 7, finished_at: failedAt },
+            }),
+            buildPlatformApproval({
+              id: 'ap-nope',
+              number: 6,
+              status: 'rejected',
+              reason: 'Do not sync.',
+              decided_at: rejectedAt,
+            }),
+            buildPlatformApproval({
+              id: 'ap-old',
+              number: 7,
+              status: 'expired',
+              reason: 'Sat too long.',
+              decided_at: expiredAt,
+            }),
+            buildPlatformApproval({
+              id: 'ap-stale',
+              number: 1,
+              status: 'executed',
+              reason: 'Yesterday.',
+              execution: {
+                exit_code: 0,
+                finished_at: new Date(Date.now() - 25 * 60 * 60_000).toISOString(),
+              },
+            }),
+          ]),
+        ),
+    )
+    render(wrapper(<NeedsYouPage />))
+
+    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(screen.getByText('Notifications you received earlier are under Recently handled.')).toBeTruthy()
+    const block = document.getElementById('recently-handled')
+    expect(block?.tagName).toBe('DETAILS')
+    expect(block?.hasAttribute('open')).toBe(false)
+    expect(block?.textContent).toContain('Recently handled · 6')
+    expect(block?.textContent).toContain(`You approved it; it ran and finished at ${new Date(finished).toLocaleString()}`)
+    expect(block?.textContent).toContain('You approved it; it ran and failed (exit code 7)')
+    expect(block?.textContent).toContain(`Rejected at ${new Date(rejectedAt).toLocaleString()}`)
+    expect(block?.textContent).toContain(`Expired at ${new Date(expiredAt).toLocaleString()}`)
+    expect(block?.textContent).toContain('Heartbeat work was silent; it is active again')
+    expect(block?.textContent).toContain('Codex job was silent; its turn ended')
+    expect(block?.textContent).not.toContain('Yesterday.')
+    expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
+  })
+
+  it('shows Unknown, never zero, when the open read fails', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(() => json({ error: 'boom' }, 500))
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.getByText(/Could not read approvals/)).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByText('0 waiting for you')).toBeNull()
+    expect(screen.queryByText(/Decide · 0/)).toBeNull()
+    expect(screen.queryByText(/Run in a terminal · 0/)).toBeNull()
+    expect(screen.queryByText(/Check · 0/)).toBeNull()
+  })
+
+  it('shows Unknown, never zero, when the handled read fails', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])),
+      viewerThreads([]),
+      emptyLineage,
+      () => json({ error: 'boom' }, 500),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const block = document.getElementById('recently-handled')
+    expect(block?.textContent).toContain('Recently handled · Unknown')
+    expect(block?.textContent).toContain('Could not read handled requests')
+    expect(block?.textContent).not.toContain('Recently handled · 0')
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
   })
 })
