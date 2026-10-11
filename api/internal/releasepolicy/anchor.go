@@ -8,4 +8,8 @@ package releasepolicy
 //
 // Empty means the Owner has not generated the key yet. No policy is valid then
 // and every tier C release waits for a manual approval.
-const OwnerKeyFingerprint = ""
+//
+// Set on 2026-10-11 from the key the Owner generated that day; he read the
+// same fingerprint off his own terminal before approving the release that
+// carried it.
+const OwnerKeyFingerprint = "SHA256:pzjcenBSbCbgIoqamoQLsvlxELfp4ikcLbvp164Eel8"
