@@ -388,7 +388,9 @@ export function formatDuration(seconds: number): string {
 /** Local clock time for a unix-seconds timestamp. */
 export function formatLocalTime(unixSeconds: number): string {
   if (!Number.isFinite(unixSeconds)) return ''
-  return new Date(unixSeconds * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const date = new Date(unixSeconds * 1000)
+  if (Number.isNaN(date.getTime())) return 'unknown time'
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
 export function ageSeconds(fromUnix: number, nowMs: number): number {
@@ -537,9 +539,24 @@ export type ActionLinkView =
   | { kind: 'blocked'; text: string; host: string }
   | { kind: 'text'; text: string }
 
+/** The scheme's default port: none written, 443 on https, or 80 on http. */
+function isDefaultPort(url: URL): boolean {
+  if (url.port === '') return true
+  if (url.protocol === 'https:' && url.port === '443') return true
+  if (url.protocol === 'http:' && url.port === '80') return true
+  return false
+}
+
+function shownHost(url: URL): string {
+  const name = url.hostname.toLowerCase()
+  if (url.port === '') return name
+  return `${name}:${url.port}`
+}
+
 /**
- * A link opens only as a same-page hash, or as http(s) on TRUSTED_PROGRESS_HOSTS.
- * The label always names the destination. Anything else stays text.
+ * A link opens only as a same-page hash, or as http(s) on TRUSTED_PROGRESS_HOSTS
+ * using that scheme's default port. The label names the destination. A trusted
+ * host on any other port stays text, and the note includes the host and port.
  */
 export function actionLink(action: Pick<ProgressAction, 'text' | 'link' | 'link_text'>): ActionLinkView {
   const text = action.text ?? ''
@@ -560,11 +577,12 @@ export function actionLink(action: Pick<ProgressAction, 'text' | 'link' | 'link_
   }
   const host = url?.hostname.toLowerCase() ?? ''
   const trusted = (TRUSTED_PROGRESS_HOSTS as readonly string[]).includes(host)
-  if (url != null && (url.protocol === 'http:' || url.protocol === 'https:') && trusted) {
+  const http = url != null && (url.protocol === 'http:' || url.protocol === 'https:')
+  if (url != null && http && trusted && isDefaultPort(url)) {
     url.username = ''
     url.password = ''
     const label = linkText || text.trim() || raw
     return { kind: 'anchor', href: url.href, label: `${label} (${host})`, external: true }
   }
-  return { kind: 'blocked', text, host }
+  return { kind: 'blocked', text, host: url != null && http ? shownHost(url) : host }
 }

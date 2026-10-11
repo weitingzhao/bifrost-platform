@@ -394,10 +394,13 @@ func TestRedactsSecretKeys(t *testing.T) {
 			t.Fatalf("secret %s kept: %s", secret, got.Document)
 		}
 	}
-	for _, want := range []string{`"token":"[redacted]"`, `"ApiKey":"[redacted]"`, `"session":"[redacted]"`, `"n":1`, `Bearer [redacted]`, `"verdict":"plain"`} {
+	for _, want := range []string{`"token":"[redacted]"`, `"ApiKey":"[redacted]"`, `"Cookie":"[redacted]"`, `Bearer [redacted]`, `"verdict":"plain"`} {
 		if !bytes.Contains(got.Document, []byte(want)) {
 			t.Fatalf("missing %s in %s", want, got.Document)
 		}
+	}
+	if bytes.Contains(got.Document, []byte(`"session"`)) || bytes.Contains(got.Document, []byte(`"n":1`)) {
+		t.Fatalf("secret object was walked instead of replaced: %s", got.Document)
 	}
 	if err := rec.Flush(); err != nil {
 		t.Fatal(err)
@@ -408,6 +411,34 @@ func TestRedactsSecretKeys(t *testing.T) {
 	}
 	if bytes.Contains(snap.Document, []byte("abcdefgh12345678")) {
 		t.Fatalf("store kept the token: %s", snap.Document)
+	}
+}
+
+func TestRedactsAnyValueUnderSecretKey(t *testing.T) {
+	body := `{"at":1,"password":123456,"SecretFlag":false,"api_key":[1,"abcdefgh12345678"],"credential":{"n":9},"cookie":null,"nested":{"token":true},"verdict":"plain","count":7}`
+	h, _, _ := newRig(t, "")
+	if put(t, h, body).Code != http.StatusAccepted {
+		t.Fatal("put")
+	}
+	got := decodeGet(t, get(t, h))
+	for _, want := range []string{
+		`"password":"[redacted]"`,
+		`"SecretFlag":"[redacted]"`,
+		`"api_key":"[redacted]"`,
+		`"credential":"[redacted]"`,
+		`"cookie":"[redacted]"`,
+		`"token":"[redacted]"`,
+		`"verdict":"plain"`,
+		`"count":7`,
+	} {
+		if !bytes.Contains(got.Document, []byte(want)) {
+			t.Fatalf("missing %s in %s", want, got.Document)
+		}
+	}
+	for _, kept := range []string{`123456`, `abcdefgh12345678`, `"SecretFlag":false`, `"token":true`, `"cookie":null`, `"n":9`, `"api_key":[`} {
+		if bytes.Contains(got.Document, []byte(kept)) {
+			t.Fatalf("kept %s in %s", kept, got.Document)
+		}
 	}
 }
 

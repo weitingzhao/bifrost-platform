@@ -41,7 +41,8 @@ var (
 	errTooLarge = errors.New("document too large")
 )
 
-// redactedText replaces a string kept under a key that names a secret.
+// redactedText replaces a value kept under a key that names a secret, whatever
+// JSON type that value has.
 const redactedText = "[redacted]"
 
 // A key that contains one of these, in any case, holds a secret. The match is
@@ -148,24 +149,26 @@ func redactValue(v any) any {
 	return redactNested(v, false)
 }
 
-// force replaces every string, including those nested under a secret key.
+// force replaces the whole value. It is set only for a child of a sensitive
+// key, so a number, boolean, array, object or null under that key is stored
+// as [redacted] and is not walked.
 func redactNested(v any, force bool) any {
+	if force {
+		return redactedText
+	}
 	switch t := v.(type) {
 	case string:
-		if force {
-			return redactedText
-		}
 		return approvalnotify.Redact(t)
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, child := range t {
-			out[approvalnotify.Redact(k)] = redactNested(child, force || keySensitive(k))
+			out[approvalnotify.Redact(k)] = redactNested(child, keySensitive(k))
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, child := range t {
-			out[i] = redactNested(child, force)
+			out[i] = redactNested(child, false)
 		}
 		return out
 	default:

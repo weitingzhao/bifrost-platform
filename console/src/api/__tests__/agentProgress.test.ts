@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   actionLink,
   AGENT_PROGRESS_TIMEOUT_MS,
+  expectationLine,
   fetchAgentProgress,
+  formatLocalTime,
+  ownerNextLine,
   generationIsSkewed,
   GENERATION_SKEW_SECONDS,
   parseAgentProgress,
@@ -81,6 +84,33 @@ describe('actionLink', () => {
       text: 'Read the note',
       host: 'evil.example',
     })
+    expect(actionLink({ text: 'Open', link: 'https://ops.bifrost.lan:443/needs' })).toEqual({
+      kind: 'anchor',
+      href: 'https://ops.bifrost.lan/needs',
+      label: 'Open (ops.bifrost.lan)',
+      external: true,
+    })
+    expect(actionLink({ text: 'Open', link: 'http://ops.bifrost.lan:80/needs' })).toEqual({
+      kind: 'anchor',
+      href: 'http://ops.bifrost.lan/needs',
+      label: 'Open (ops.bifrost.lan)',
+      external: true,
+    })
+    expect(actionLink({ text: 'Open', link: 'https://ops.bifrost.lan:8443/' })).toEqual({
+      kind: 'blocked',
+      text: 'Open',
+      host: 'ops.bifrost.lan:8443',
+    })
+  })
+})
+
+describe('formatLocalTime', () => {
+  it('renders a timestamp too large to be a date as unknown time', () => {
+    expect(formatLocalTime(1e16)).toBe('unknown time')
+    expect(formatLocalTime(1e16)).not.toContain('Invalid Date')
+    expect(ownerNextLine({ name: 'Ship', at: 1e16 })).toBe('Ship · expected around unknown time')
+    expect(expectationLine({ eta_end: 1e16 })).toBe('expected unknown time')
+    expect(formatLocalTime(NOW / 1000)).not.toBe('unknown time')
   })
 })
 

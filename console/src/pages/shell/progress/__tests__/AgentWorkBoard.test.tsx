@@ -399,6 +399,9 @@ describe('AgentWorkBoard', () => {
                 { text: 'Read the note', link: 'https://evil.example/phish', link_text: 'Approve the release' },
                 { text: 'Stay', link: 'https://ops.bifrost.lan.evil.com/x' },
                 { text: 'Script', link: 'javascript:alert(1)' },
+                { text: 'Default port', link: 'https://ops.bifrost.lan:443/ok', link_text: 'Default port' },
+                { text: 'Plain http', link: 'http://ops.bifrost.lan:80/ok', link_text: 'Plain http' },
+                { text: 'Other port', link: 'https://ops.bifrost.lan:8443/' },
               ],
             },
           ],
@@ -428,6 +431,22 @@ describe('AgentWorkBoard', () => {
     expect(within(needed).getByText('Script')).toBeTruthy()
     expect(within(needed).getByText('link not shown')).toBeTruthy()
     expect(within(needed).queryByRole('link', { name: /Script/ })).toBeNull()
+    const def = within(needed).getByRole('link', { name: 'Default port (ops.bifrost.lan)' })
+    expect(def.getAttribute('href')).toBe('https://ops.bifrost.lan/ok')
+    expect(def.getAttribute('href')).not.toContain(':443')
+    const plain = within(needed).getByRole('link', { name: 'Plain http (ops.bifrost.lan)' })
+    expect(plain.getAttribute('href')).toBe('http://ops.bifrost.lan/ok')
+    expect(within(needed).queryByRole('link', { name: /Other port/ })).toBeNull()
+    expect(within(needed).getByText('Other port')).toBeTruthy()
+    expect(within(needed).getByText('link not shown: ops.bifrost.lan:8443')).toBeTruthy()
+  })
+
+  it('shows unknown time when a timestamp cannot be a date', async () => {
+    stubProgress(envelope(baseDoc({ owner_next: { name: 'Ship', at: 1e16, work: 'W-62' } })))
+    render(wrap(<AgentWorkBoard />))
+    const needed = await screen.findByRole('region', { name: 'Next time you are needed' })
+    expect(within(needed).getByText('Ship · expected around unknown time')).toBeTruthy()
+    expect(within(needed).queryByText(/Invalid Date/)).toBeNull()
   })
 
   it('renders a document the server would have rejected, dropping null entries', async () => {
