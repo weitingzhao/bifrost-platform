@@ -1,4 +1,13 @@
 import { parsePools, type ProgressPool } from '@/api/agentProgressExtra'
+import {
+  parsePlanDelta,
+  parsePlanDetail,
+  parsePlanPace,
+  parsePlainText,
+  type PlanDelta,
+  type PlanDetailList,
+  type PlanPace,
+} from '@/api/progressFields'
 
 /** Optional board fields the publisher adds. The server keeps them as-is. */
 
@@ -25,6 +34,7 @@ export type ProgressGroup = {
   name?: string
   state?: string
   items?: string[]
+  detail?: PlanDetailList
 }
 
 export type ProgressExit = {
@@ -37,9 +47,13 @@ export type ProgressRoadmap = {
   goal?: string
   note?: string
   generated_from?: string
+  generated_at?: number
   stages?: ProgressStage[]
   groups?: ProgressGroup[]
   exit?: ProgressExit[]
+  pace?: PlanPace
+  delta?: PlanDelta
+  uncovered_exit?: string
 }
 
 export type ProgressCursorUsage = {
@@ -143,7 +157,19 @@ export function parseRoadmap(value: unknown): ProgressRoadmap | undefined {
   if (Array.isArray(value.stages)) roadmap.stages = value.stages.filter(isRecord).map(parseStage)
   if (Array.isArray(value.groups)) roadmap.groups = value.groups.filter(isRecord).map(parseGroup)
   if (Array.isArray(value.exit)) roadmap.exit = value.exit.filter(isRecord).map(parseExit)
+  const generatedAt = asNumber(value.generated_at)
+  if (generatedAt !== undefined) roadmap.generated_at = generatedAt
+  const pace = parsePlanPace(hasKey(value, 'pace') ? value.pace : undefined)
+  if (pace !== undefined) roadmap.pace = pace
+  const delta = parsePlanDelta(hasKey(value, 'delta') ? value.delta : undefined)
+  if (delta !== undefined) roadmap.delta = delta
+  const uncovered = parsePlainText(hasKey(value, 'uncovered_exit') ? value.uncovered_exit : undefined)
+  if (typeof uncovered === 'string') roadmap.uncovered_exit = uncovered
   return roadmap
+}
+
+function hasKey(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key)
 }
 
 function parseStage(value: Record<string, unknown>): ProgressStage {
@@ -166,6 +192,8 @@ function parseGroup(value: Record<string, unknown>): ProgressGroup {
   if (Array.isArray(value.items)) {
     group.items = value.items.filter((item): item is string => typeof item === 'string')
   }
+  const detail = parsePlanDetail(hasKey(value, 'detail') ? value.detail : undefined)
+  if (detail !== undefined) group.detail = detail
   return group
 }
 

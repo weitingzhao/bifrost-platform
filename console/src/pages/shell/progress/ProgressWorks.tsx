@@ -11,6 +11,7 @@ import {
 } from '@/api/agentProgress'
 import type { ProgressEvent } from '@/api/agentProgressBoard'
 import { RequestChipLink } from '@/pages/shell/progress/ProgressNeedsYou'
+import { SectionFold } from '@/pages/shell/progress/progressFold'
 import { Tick } from '@/pages/shell/progress/progressClock'
 import {
   earlierStepsLabel,
@@ -268,9 +269,9 @@ function WorkBody({ work, foldDone, atSec }: { work: ProgressWork; foldDone: boo
       <h3 className="m-0 break-words text-sm font-medium text-foreground">{work.title}</h3>
       {work.goal?.trim() ? <p className="m-0 break-words text-sm text-foreground">{work.goal}</p> : null}
       {typeof work.round === 'number' ? <p className="m-0 text-sm text-muted-foreground">Round {work.round}</p> : null}
-      {done.length > 0 ? (
-        <Fold summary={earlierStepsLabel(done.length)}>
-          <StepFlow steps={done} label="Earlier steps" atSec={atSec} />
+      {done.length > 0 || work.earlier_done != null ? (
+        <Fold summary={doneFoldSummary(done.length, work.earlier_done)}>
+          {done.length > 0 ? <StepFlow steps={done} label="Earlier steps" atSec={atSec} /> : <p className="m-0 text-sm text-muted-foreground">Left out of this document.</p>}
         </Fold>
       ) : null}
       <StepFlow steps={flow} label="Steps" atSec={atSec} />
@@ -301,11 +302,33 @@ export function WorkCard({ work, index, at }: { work: ProgressWork; index: numbe
   )
 }
 
+function doneFoldSummary(doneCount: number, earlier: ProgressWork['earlier_done']): string {
+  const base = doneCount > 0 ? earlierStepsLabel(doneCount) : ''
+  if (earlier === 'unknown') return base === '' ? 'Older steps Unknown' : `${base} · older steps Unknown`
+  if (typeof earlier === 'number' && earlier > 0) {
+    const older = earlier === 1 ? '1 older step not listed' : `${earlier} older steps not listed`
+    return base === '' ? older : `${base} · ${older}`
+  }
+  return base
+}
+
 function finishedLine(work: ProgressWork): string {
   const title = work.title?.trim() || workShortName(work) || 'Finished work'
   const at = workFinishedAt(work)
   if (!(at > 0)) return title
   return `${title} · ${formatLocalTime(at)}`
+}
+
+/** A work with nothing running and nothing waiting on the Owner, drawn as one line. */
+export function IdleWorkLine({ work, index, at }: { work: ProgressWork; index: number; at?: number }) {
+  const name = workShortName(work) || 'Work'
+  const risk = work.risk?.trim() ?? ''
+  const digest = risk === '' ? 'Nothing running' : risk.slice(0, 64)
+  return (
+    <SectionFold id={`sec-work-${index}`} title={name} digest={digest} defaultOpen={false}>
+      <WorkCard work={work} index={index} at={at} />
+    </SectionFold>
+  )
 }
 
 export function FinishedWorks({ works, at }: { works: readonly ProgressWork[]; at?: number }) {

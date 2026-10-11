@@ -60,6 +60,10 @@ function stub(usage: unknown) {
   )
 }
 
+async function openQuota(): Promise<void> {
+  fireEvent.click(await screen.findByTestId('fold-sec-quota'))
+}
+
 describe('quota by pace', () => {
   beforeEach(() => {
     installStorage()
@@ -75,13 +79,15 @@ describe('quota by pace', () => {
   it('keeps Usage today when pools are absent and replaces it when they are present', async () => {
     stub({ cursor: { runs: 1, min: 2 } })
     const first = render(wrap(<AgentWorkBoard />))
-    expect(await screen.findByRole('region', { name: 'Usage today' })).toBeTruthy()
+    await openQuota()
+    expect(screen.getByRole('region', { name: 'Usage today' })).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Quota' })).toBeNull()
     first.unmount()
 
     stub({ pools: [] })
     render(wrap(<AgentWorkBoard />))
-    const quota = await screen.findByRole('region', { name: 'Quota' })
+    await openQuota()
+    const quota = screen.getByRole('region', { name: 'Quota' })
     expect(within(quota).getByText('Left of the tick: room to spare. Right of it: being used faster than the clock.')).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Usage today' })).toBeNull()
   })
@@ -139,7 +145,8 @@ describe('quota by pace', () => {
       ],
     })
     render(wrap(<AgentWorkBoard />))
-    const quota = await screen.findByRole('region', { name: 'Quota' })
+    await openQuota()
+    const quota = screen.getByRole('region', { name: 'Quota' })
     expect(within(quota).getByText('每周 · 全部模型')).toBeTruthy()
     expect(within(quota).getByText(/used 78%/)).toBeTruthy()
     expect(within(quota).getByText(/resets in 1d 21h/)).toBeTruthy()
@@ -212,7 +219,8 @@ describe('quota by pace', () => {
       ],
     })
     render(wrap(<AgentWorkBoard />))
-    const quota = await screen.findByRole('region', { name: 'Quota' })
+    await openQuota()
+    const quota = screen.getByRole('region', { name: 'Quota' })
     const row = (label: string) => within(quota).getByText(label).closest('div')
     for (const label of ['Missing used', 'Not numeric', 'Negative', 'Too high', 'Bad reset']) {
       const body = row(label)
@@ -260,7 +268,8 @@ describe('quota by pace', () => {
       })),
     })
     render(wrap(<AgentWorkBoard />))
-    const quota = await screen.findByRole('region', { name: 'Quota' })
+    await openQuota()
+    const quota = screen.getByRole('region', { name: 'Quota' })
     expect(within(quota).getByText('Pool 1')).toBeTruthy()
     expect(within(quota).getByText('Pool 12')).toBeTruthy()
     expect(within(quota).queryByText('Pool 13')).toBeNull()

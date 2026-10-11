@@ -1,32 +1,24 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { stepStateLabel, type ProgressFeedItem } from '@/api/agentProgress'
 import { formatHourMinute } from '@/pages/shell/progress/progressModel'
+import { useFolds } from '@/pages/shell/progress/progressFold'
 
-const NARROW = '(max-width: 360px)'
-
-function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(() => {
-    if (typeof window.matchMedia !== 'function') return false
-    return window.matchMedia(NARROW).matches
-  })
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return
-    const mq = window.matchMedia(NARROW)
-    const apply = () => setNarrow(mq.matches)
-    apply()
-    mq.addEventListener('change', apply)
-    return () => mq.removeEventListener('change', apply)
-  }, [])
-  return narrow
-}
-
-function Collapsible({ title, children }: { title: string; children: ReactNode }) {
-  const narrow = useNarrow()
+function Collapsible({ id, title, children }: { id: string; title: string; children: ReactNode }) {
+  const folds = useFolds()
+  const open = folds.isOpen(id, false)
   return (
-    <section aria-label={title} className="w-full min-w-0">
-      <details open={!narrow} className="min-w-0 max-w-full">
-        <summary className="cursor-pointer text-sm font-medium text-foreground">{title}</summary>
-        <div className="mt-2 min-w-0">{children}</div>
+    <section id={id} aria-label={title} className="w-full min-w-0">
+      <details open={open} className="min-w-0 max-w-full">
+        <summary
+          className="flex min-h-11 cursor-pointer items-center text-sm font-medium text-foreground"
+          onClick={event => {
+            event.preventDefault()
+            folds.toggle(id, false)
+          }}
+        >
+          {title}
+        </summary>
+        {open ? <div className="mt-2 min-w-0">{children}</div> : null}
       </details>
     </section>
   )
@@ -48,7 +40,7 @@ export function ProgressActivity({ feed }: { feed: ProgressFeedItem[] | undefine
     .map(row => row.item)
   if (rows.length === 0) return null
   return (
-    <Collapsible title="Activity">
+    <Collapsible id="sec-activity" title="Activity">
       <ul aria-label="Activity" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
         {rows.map((item, index) => {
           const time = typeof item.at === 'number' ? formatHourMinute(item.at) : ''
@@ -72,7 +64,7 @@ export function ProgressActivity({ feed }: { feed: ProgressFeedItem[] | undefine
 export function ProgressDoneToday({ recent }: { recent: string[] | undefined }) {
   if (recent == null || recent.length === 0) return null
   return (
-    <Collapsible title="Done today">
+    <Collapsible id="sec-done" title="Done today">
       <ul aria-label="Done today" className="m-0 flex list-none flex-col gap-1 p-0">
         {recent.map((line, index) => (
           <li key={index} className="break-words text-sm text-foreground">

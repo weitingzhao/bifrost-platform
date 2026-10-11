@@ -12,6 +12,7 @@ import {
   type ProgressUsage,
 } from '@/api/agentProgressBoard'
 import { parseApproval, parseOwnerTurn, type ProgressApproval, type ProgressOwnerTurn } from '@/api/agentProgressExtra'
+import { parseEarlierDone, parseOwnerAsks, type CountRead, type OwnerAskList } from '@/api/progressFields'
 
 /** How often the Progress page re-reads the published document. */
 export const AGENT_PROGRESS_POLL_MS = 15_000
@@ -103,6 +104,8 @@ export type ProgressWork = {
   next?: ProgressNext | null
   owner?: ProgressOwnerTurn | null
   steps?: ProgressStep[]
+  /** Older finished steps left out of `steps`. Unknown when the field is not a count. */
+  earlier_done?: CountRead
 }
 
 export type ProgressFeedItem = {
@@ -130,6 +133,9 @@ export type ProgressDocument = {
   coordinator?: ProgressCoordinator
   owner_now?: OwnerNow[]
   owner_next?: OwnerNext | null
+  /** Present list, or `'unreadable'` when the field is not a list. Absent stays absent. */
+  owner_items?: OwnerAskList
+  standing_items?: OwnerAskList
   needs_you?: string[]
   sure?: boolean
   works?: ProgressWork[]
@@ -306,6 +312,10 @@ function parseWork(value: Record<string, unknown>): ProgressWork {
   if (end !== undefined) work.end = end
   if (sure !== undefined) work.sure = sure
   if (finished !== undefined) work.finished = finished
+  if ('earlier_done' in value) {
+    const earlier = parseEarlierDone(value.earlier_done)
+    if (earlier !== undefined) work.earlier_done = earlier
+  }
   if ('next' in value) {
     const next = parseNext(value.next)
     if (next !== undefined) work.next = next
@@ -353,6 +363,14 @@ export function parseProgressDocument(raw: unknown): ProgressDocument | null {
   if ('owner_next' in raw) {
     const next = parseOwnerNext(raw.owner_next)
     if (next !== undefined) doc.owner_next = next
+  }
+  if ('owner_items' in raw) {
+    const items = parseOwnerAsks(raw.owner_items)
+    if (items !== undefined) doc.owner_items = items
+  }
+  if ('standing_items' in raw) {
+    const standing = parseOwnerAsks(raw.standing_items, true)
+    if (standing !== undefined) doc.standing_items = standing
   }
   if (Array.isArray(raw.needs_you)) doc.needs_you = raw.needs_you.filter((item): item is string => typeof item === 'string')
   if (Array.isArray(raw.works)) doc.works = raw.works.filter(isRecord).map(parseWork)

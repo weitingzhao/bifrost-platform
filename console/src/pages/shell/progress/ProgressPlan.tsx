@@ -1,18 +1,86 @@
 import { DenseTag } from '@bifrost/ui'
-import type { ProgressRoadmap } from '@/api/agentProgressBoard'
+import type { ProgressGroup, ProgressRoadmap } from '@/api/agentProgressBoard'
+import type { PlanEstimate } from '@/api/progressFields'
+import { SectionFold } from '@/pages/shell/progress/progressFold'
 import { planCounts, planMeterLine, planStateLabel } from '@/pages/shell/progress/progressModel'
+import {
+  formatCount,
+  groupNames,
+  nightsFigure,
+  nightsRange,
+  openDetails,
+  sliceLabel,
+  slicePercent,
+  sumOpen,
+  waitsOnOwner,
+} from '@/pages/shell/progress/progressSummaryModel'
 
-/** The global plan: where we are, what is shipped, and what the Owner signs. */
+function Chips({ group }: { group: ProgressGroup }) {
+  return (
+    <ul className="m-0 flex list-none flex-wrap gap-1 p-0">
+      {(group.items ?? []).map((item, index) => (
+        <li key={`${item}-${index}`}>
+          <DenseTag variant="category" size="pill">
+            {item}
+          </DenseTag>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate | undefined }) {
+  if (est == null || est.unreadable) {
+    return (
+      <p className="m-0 text-sm">
+        <span className="font-medium">{name}</span> <span className="text-muted-foreground">No estimate</span>
+      </p>
+    )
+  }
+  const pct = slicePercent(est.done, est.total)
+  const owner = waitsOnOwner(est.blocked)
+  return (
+    <div className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm">
+      <span className="break-words font-medium">
+        {name}
+        {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" /> : null}
+      </span>
+      {est.note?.trim() ? <span className="break-words text-muted-foreground">{est.note}</span> : null}
+      <span className="block h-1.5 max-w-full overflow-hidden rounded bg-foreground/10">
+        <span className="block h-full bg-emerald-500" style={{ width: `${pct ?? 0}%` }} />
+      </span>
+      <span className="text-muted-foreground">{`Done ${sliceLabel(est.done, est.total)}`}</span>
+      <span>{`Agent slices left ${est.mine === 'unknown' || est.mine == null ? 'Unknown' : formatCount(est.mine)} · times you ${est.owner === 'unknown' || est.owner == null ? 'Unknown' : formatCount(est.owner)}`}</span>
+      <span className={owner ? 'text-warning' : ''}>{`Waiting on: ${est.blocked?.trim() || '—'}`}</span>
+      <span className="text-muted-foreground">{`Confidence: ${est.sure?.trim() || '?'}${est.as_of?.trim() ? ` · ${est.as_of}` : ''}`}</span>
+    </div>
+  )
+}
+
+/** The global plan. History and the arithmetic sit in their own folds. */
 export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined }) {
   if (roadmap == null) return null
   const counts = planCounts(roadmap)
   const total = counts.done + counts.doing + counts.todo
+  const groups = roadmap.groups ?? []
+  const open = openDetails(roadmap)
+  const onYou = open.filter(row => !row.detail.unreadable && waitsOnOwner(row.detail.est?.blocked))
+  const rest = open.filter(row => row.detail.unreadable || !waitsOnOwner(row.detail.est?.blocked))
+  const mine = sumOpen(open, 'mine')
+  const ownerTimes = sumOpen(open, 'owner')
+  const pace = roadmap.pace
+  const nights = pace == null || pace.unreadable ? null : nightsFigure(mine, pace.per_night)
+  const range = pace == null || pace.unreadable ? null : nightsRange(mine, pace.per_night)
+  const shipped = groupNames(groups, ['done', 'dropped'])
   const from = roadmap.generated_from?.trim() ?? ''
+  const basisBody =
+    (pace != null && !pace.unreadable && (pace.basis?.trim() || pace.owner_wait?.trim())) ||
+    roadmap.uncovered_exit?.trim() ||
+    roadmap.note?.trim() ||
+    from !== ''
   return (
     <section aria-label="Plan" className="flex w-full min-w-0 flex-col gap-2">
-      <h3 className="m-0 text-sm font-medium text-foreground">Plan</h3>
       {roadmap.goal?.trim() ? <p className="m-0 break-words text-sm text-foreground">{roadmap.goal}</p> : null}
-      {roadmap.note?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.note}</p> : null}
       {(roadmap.stages ?? []).length > 0 ? (
         <ol aria-label="Stages" className="m-0 flex w-full min-w-0 list-none flex-wrap gap-2 p-0">
           {(roadmap.stages ?? []).map((stage, index) => (
@@ -45,38 +113,101 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
         ) : null}
       </div>
       <p className="m-0 text-sm text-foreground">{planMeterLine(roadmap)}</p>
-      {(roadmap.groups ?? []).length > 0 ? (
-        <ul aria-label="Plan groups" className="m-0 flex w-full min-w-0 list-none flex-wrap gap-2 p-0">
-          {(roadmap.groups ?? []).map((group, index) => (
-            <li key={`${group.name ?? 'group'}-${index}`} className="flex min-w-0 items-center gap-1">
-              <DenseTag variant="category" size="pill">
-                {group.name}
-              </DenseTag>
-              <span className="text-xs text-muted-foreground">{planStateLabel(group.state)}</span>
-            </li>
+      {nights != null && typeof mine === 'number' ? (
+        <p className="m-0 text-sm text-foreground">{`${formatCount(mine)} slices left · about ${nights} nights${range != null ? ` (${range})` : ''} · ${ownerTimes === 'unknown' || ownerTimes == null ? 'Unknown' : formatCount(ownerTimes)} times you`}</p>
+      ) : null}
+      {onYou.length > 0 ? (
+        <SectionFold id="plan-owner" title="Waiting on you" digest={`${onYou.length}`} defaultOpen>
+          {onYou.map((row, index) => (
+            <DetailRow key={`${row.detail.name ?? 'you'}-${index}`} name={row.detail.name} est={row.detail.est} />
           ))}
-        </ul>
+        </SectionFold>
+      ) : null}
+      <SectionFold id="plan-rest" title="Other open items" digest={`${rest.length || groups.filter(group => group.state === 'doing' || group.state === 'todo').length}`} defaultOpen={false}>
+        {rest.map((row, index) => (
+          <DetailRow key={`${row.detail.name ?? 'rest'}-${index}`} name={row.detail.name} est={row.detail.est} />
+        ))}
+        {groups
+          .filter(group => group.state === 'doing' || group.state === 'todo')
+          .map((group, index) => (
+            <div key={`${group.name ?? 'open'}-${index}`} className="flex min-w-0 flex-col gap-1">
+              <span className="text-sm text-muted-foreground">{`${group.name ?? ''} · ${planStateLabel(group.state)}`}</span>
+              <Chips group={group} />
+            </div>
+          ))}
+      </SectionFold>
+      {roadmap.delta != null ? (
+        <SectionFold
+          id="plan-delta"
+          title="Since last time"
+          digest={roadmap.delta.unreadable ? 'Unknown' : (roadmap.delta.since ?? '')}
+          defaultOpen={false}
+        >
+          {roadmap.delta.unreadable ? (
+            <p className="m-0 text-sm">Could not read this item</p>
+          ) : (
+            <ul className="m-0 list-disc pl-5 text-sm">
+              {roadmap.delta.lines.map((line, index) => (
+                <li key={index} className="break-words">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionFold>
+      ) : null}
+      {basisBody ? (
+        <SectionFold id="plan-basis" title="How the numbers were computed" defaultOpen={false}>
+          {pace != null && !pace.unreadable && pace.basis?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{pace.basis}</p> : null}
+          {pace != null && !pace.unreadable && pace.owner_wait?.trim() ? <p className="m-0 break-words text-sm text-warning">{pace.owner_wait}</p> : null}
+          {roadmap.uncovered_exit?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.uncovered_exit}</p> : null}
+          {roadmap.note?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.note}</p> : null}
+          {from !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">Generated from {from}</p> : null}
+        </SectionFold>
+      ) : null}
+      {shipped !== '' ? (
+        <SectionFold
+          id="plan-shipped"
+          title="Shipped"
+          digest={groups
+            .filter(group => group.state === 'done' || group.state === 'dropped')
+            .map(group => group.name?.trim() ?? '')
+            .filter(name => name !== '')
+            .map((name, index) => (
+              <span key={`${name}-${index}`}>{name}</span>
+            ))}
+          defaultOpen={false}
+        >
+          {groups
+            .filter(group => group.state === 'done' || group.state === 'dropped')
+            .map((group, index) => (
+              <div key={`${group.name ?? 'shipped'}-${index}`}>
+                <Chips group={group} />
+              </div>
+            ))}
+        </SectionFold>
       ) : null}
       {(roadmap.exit ?? []).length > 0 ? (
-        <ul aria-label="Exit criteria" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
-          {(roadmap.exit ?? []).map((row, index) => (
-            <li key={`${row.text ?? 'exit'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
-              <span className="break-words">{row.text}</span>
-              {planStateLabel(row.state) !== '' ? (
-                <DenseTag variant={row.state === 'done' ? 'success' : 'neutral'} size="pill">
-                  {planStateLabel(row.state)}
-                </DenseTag>
-              ) : null}
-              {row.owner === true ? (
-                <DenseTag variant="warning" size="pill">
-                  You sign
-                </DenseTag>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        <SectionFold id="plan-exit" title="Exit criteria" digest={`${(roadmap.exit ?? []).filter(row => row.state === 'done').length} / ${(roadmap.exit ?? []).length}`} defaultOpen={false}>
+          <ul aria-label="Exit criteria" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
+            {(roadmap.exit ?? []).map((row, index) => (
+              <li key={`${row.text ?? 'exit'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
+                <span className="break-words">{row.text}</span>
+                {planStateLabel(row.state) !== '' ? (
+                  <DenseTag variant={row.state === 'done' ? 'success' : 'neutral'} size="pill">
+                    {planStateLabel(row.state)}
+                  </DenseTag>
+                ) : null}
+                {row.owner === true ? (
+                  <DenseTag variant="warning" size="pill">
+                    You sign
+                  </DenseTag>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </SectionFold>
       ) : null}
-      {from !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">Generated from {from}</p> : null}
     </section>
   )
 }

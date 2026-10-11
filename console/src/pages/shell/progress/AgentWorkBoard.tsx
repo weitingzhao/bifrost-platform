@@ -21,12 +21,14 @@ import {
 } from '@/api/agentProgress'
 import { ProgressActivity, ProgressDoneToday } from '@/pages/shell/progress/ProgressActivity'
 import { NeedsYouNow } from '@/pages/shell/progress/ProgressNeedsYou'
-import { FinishedWorks, WorkCard } from '@/pages/shell/progress/ProgressWorks'
+import { FinishedWorks, IdleWorkLine, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
 import { ProgressRunning } from '@/pages/shell/progress/ProgressRunning'
+import { ProgressSummary, workIsHot } from '@/pages/shell/progress/ProgressSummary'
 import { ProgressUsageBlock } from '@/pages/shell/progress/ProgressUsage'
+import { FoldProvider, SectionFold } from '@/pages/shell/progress/progressFold'
 import { NowClock, Tick, useNow } from '@/pages/shell/progress/progressClock'
-import { queuedNextLine, splitWorks } from '@/pages/shell/progress/progressModel'
+import { runningRows, splitWorks } from '@/pages/shell/progress/progressModel'
 
 /**
  * Interim bridge (DESIGN §20.4): the coordinating thread publishes the
@@ -53,7 +55,6 @@ function lampFor(level: string | undefined): 'ok' | 'degraded' | 'fail' | 'unkno
 
 function Verdict({ doc }: { doc: ProgressDocument }) {
   const at = doc.at
-  const next = queuedNextLine(doc.works, doc.queue)
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
       <div className="flex w-full min-w-0 items-start gap-2">
@@ -68,7 +69,6 @@ function Verdict({ doc }: { doc: ProgressDocument }) {
           ) : null}
         </p>
       </div>
-      {next != null ? <p className="m-0 break-words text-sm text-foreground">{next}</p> : null}
     </div>
   )
 }
@@ -128,28 +128,84 @@ function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | u
   )
 }
 
-const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument }) {
+function needsYouOpen(doc: ProgressDocument): boolean {
+  if ((doc.owner_now ?? []).length > 0) return true
+  if (Array.isArray(doc.owner_items) && doc.owner_items.length > 0) return true
+  if (Array.isArray(doc.standing_items) && doc.standing_items.length > 0) return true
+  return false
+}
+
+const WorkDocument = memo(function WorkDocument({
+  doc,
+  env,
+}: {
+  doc: ProgressDocument
+  env?: AgentProgressResponse
+}) {
   const paints = useRef(0)
   paints.current += 1
   const { active, finished } = splitWorks(doc.works ?? [])
+  const hot = active.filter(workIsHot)
+  const idle = active.filter(work => !workIsHot(work))
+  const running = runningRows(doc.works ?? []).length
+  const coord = doc.coordinator?.doing?.trim() || doc.coordinator?.state?.trim() || ''
+  const needsDigest = needsYouOpen(doc) ? 'Open' : 'Nothing now'
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
       <Verdict doc={doc} />
-      <NeedsYouNow doc={doc} />
-      <CoordinatorLine coordinator={doc.coordinator} />
+      <ProgressSummary doc={doc} env={env} />
+      <SectionFold id="sec-needs-you" title="Needs you" digest={needsDigest} defaultOpen={needsYouOpen(doc)}>
+        <NeedsYouNow doc={doc} />
+      </SectionFold>
       <NextTime doc={doc} />
-      <ProgressPlan roadmap={doc.roadmap} />
-      <ProgressUsageBlock usage={doc.usage} />
-      <ProgressRunning works={active} />
-      {active.map((work, index) => (
-        <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} index={index} at={doc.at} />
-      ))}
+      <SectionFold id="sec-running" title="Running now" digest={running > 0 ? `${running} steps` : 'Nothing running'} defaultOpen={running > 0}>
+        <ProgressRunning works={active} />
+      </SectionFold>
+      <SectionFold id="sec-coord" title="Coordinator" digest={coord === '' ? '' : coord.slice(0, 48)} defaultOpen={false}>
+        <CoordinatorLine coordinator={doc.coordinator} />
+      </SectionFold>
+      {doc.roadmap != null ? (
+        <SectionFold id="sec-plan" title="Plan" digest={`${planDigest(doc)}`} defaultOpen={false}>
+          <ProgressPlan roadmap={doc.roadmap} />
+        </SectionFold>
+      ) : null}
+      {doc.usage != null ? (
+        <SectionFold id="sec-quota" title="Quota" digest={doc.usage.pools != null ? `${doc.usage.pools.length} pools` : 'Usage'} defaultOpen={false}>
+          <ProgressUsageBlock usage={doc.usage} />
+        </SectionFold>
+      ) : null}
+      <SectionFold
+        id="sec-works"
+        title="Every work"
+        digest={`${hot.length} underway · ${idle.length} quiet`}
+        defaultOpen={hot.length > 0}
+      >
+        {hot.map(work => {
+          const index = (doc.works ?? []).indexOf(work)
+          return <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} index={index} at={doc.at} />
+        })}
+        {idle.map(work => {
+          const index = (doc.works ?? []).indexOf(work)
+          return <IdleWorkLine key={`${work.title ?? 'idle'}-${index}`} work={work} index={index} at={doc.at} />
+        })}
+      </SectionFold>
       <ProgressActivity feed={doc.feed} />
       <ProgressDoneToday recent={doc.recent} />
       <FinishedWorks works={finished} at={doc.at} />
     </div>
   )
 })
+
+function planDigest(doc: ProgressDocument): string {
+  const counts = doc.roadmap != null ? { done: 0, doing: 0, todo: 0 } : null
+  if (counts == null || doc.roadmap == null) return ''
+  for (const group of doc.roadmap.groups ?? []) {
+    if (group.state === 'done' || group.state === 'doing' || group.state === 'todo') {
+      counts[group.state] += group.items?.length ?? 0
+    }
+  }
+  return `${counts.done} live · ${counts.doing} in progress · ${counts.todo} not started`
+}
 
 function Freshness({
   failed,
@@ -189,7 +245,7 @@ function Freshness({
           }
         >
           {dim ? <p className="m-0 text-sm font-medium text-foreground">Last known</p> : null}
-          <WorkDocument doc={doc} />
+          <WorkDocument doc={doc} env={env} />
         </section>
       )}
     </>
@@ -225,9 +281,11 @@ export function AgentWorkBoard() {
 
   return (
     <OpsSection title="Agent work" bodyPadding="compact" className="min-w-0 max-w-full overflow-x-hidden">
-      <NowClock>
-        <ProgressBody pending={query.isPending} failed={query.isError} error={query.error} env={query.data} />
-      </NowClock>
+      <FoldProvider>
+        <NowClock>
+          <ProgressBody pending={query.isPending} failed={query.isError} error={query.error} env={query.data} />
+        </NowClock>
+      </FoldProvider>
     </OpsSection>
   )
 }

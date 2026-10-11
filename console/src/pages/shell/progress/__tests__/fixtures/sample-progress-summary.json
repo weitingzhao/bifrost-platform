@@ -1,0 +1,67 @@
+{
+  "at": 1791737000,
+  "verdict": "2 steps running",
+  "level": "run",
+  "coordinator": { "at": 1791736900, "doing": "三件事在跑", "next": "然后核对" },
+  "owner_items": [
+    {
+      "name": "批 #7",
+      "work": "W-62",
+      "now": true,
+      "blocks": "主线不能合并",
+      "takes": "about 10 min",
+      "actions": [{ "text": "在 Console 上批" }]
+    }
+  ],
+  "standing_items": [
+    {
+      "name": "换掉审批令牌",
+      "now": false,
+      "not_before": "下一次发版前",
+      "deadline_text": "不限时",
+      "blocks_text": "不挡别的事",
+      "takes": "重启各线程"
+    }
+  ],
+  "roadmap": {
+    "goal": "阶段 0",
+    "stages": [
+      { "name": "阶段 0", "what": "现在", "state": "current" },
+      { "name": "阶段 1", "state": "later" }
+    ],
+    "groups": [
+      { "name": "已上线", "state": "done", "items": ["W-61"] },
+      {
+        "name": "在做",
+        "state": "doing",
+        "items": ["W-62"],
+        "detail": [
+          {
+            "name": "W-62 进展看得见",
+            "est": { "done": 3, "total": 5, "mine": 2, "owner": 1, "blocked": "你", "sure": "中", "note": "等你批", "as_of": "2026-10-11" }
+          }
+        ]
+      }
+    ],
+    "pace": { "per_night": 5.5, "basis": "昨晚实测", "owner_wait": "日历主要看等你的时间" },
+    "delta": { "since": "昨晚", "lines": ["W-62 第三片上了测试环境"] },
+    "uncovered_exit": "三条还没有工作项",
+    "generated_from": "工作台账"
+  },
+  "works": [
+    {
+      "title": "协作进展",
+      "short": "进展",
+      "earlier_done": 2,
+      "steps": [
+        { "name": "实现", "who": "Cursor", "state": "running", "started": 1791736400, "usual_min": 30 }
+      ]
+    }
+  ],
+  "recent": ["上了测试环境"],
+  "usage": {
+    "pools": [
+      { "id": "claude.weekly", "label": "每周", "used": 83, "elapsed_pct": 80, "verdict": "on_pace", "resets_at": "2026-10-12T13:00:00Z" }
+    ]
+  }
+}

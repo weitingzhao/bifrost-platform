@@ -95,7 +95,7 @@ function ActionList({ actions }: { actions: readonly ProgressAction[] }) {
 }
 
 /** The approvals list this page already loads. Same cadence as the progress document. */
-function useProgressApprovals(enabled: boolean) {
+export function useProgressApprovals(enabled: boolean) {
   return useQuery({
     queryKey: ['approvals', 'all'],
     queryFn: () => fetchApprovalList('all'),
