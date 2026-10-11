@@ -95,13 +95,16 @@ type Server struct {
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
-	releasePolicy *releasepolicy.Engine
-	agentThreads  *agentthreads.Handler
-	agentProgress *agentprogress.Handler
-	authLoaded    bool
-	audit         *actuation.AuditLog
-	jobs          *actuation.JobStore
-	httpMetrics   *httpMetrics
+	// questionRuntime is the Owner-question record. The type lives next to
+	// Mount so this file does not name the questions package.
+	questionRuntime *questionRuntime
+	releasePolicy   *releasepolicy.Engine
+	agentThreads    *agentthreads.Handler
+	agentProgress   *agentprogress.Handler
+	authLoaded      bool
+	audit           *actuation.AuditLog
+	jobs            *actuation.JobStore
+	httpMetrics     *httpMetrics
 	// pluginProbes, when set, replaces the four plugin health calls on /metrics.
 	// Tests inject counters. Production leaves it nil.
 	pluginProbes []func(context.Context) probe.PluginHealth
@@ -346,6 +349,7 @@ func New(cfg *config.Config) (*Server, error) {
 		dataDir = filepath.Join(cfg.ConfigDir(), "..", "data")
 	}
 	srv.approvals = approvals.New(filepath.Join(dataDir, "approvals"), audit)
+	srv.wireQuestions(dataDir, role.RunsWorkers())
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)
 	srv.wireAgentProgress(dataDir, role)
@@ -390,6 +394,7 @@ func (s *Server) Router() http.Handler {
 		// cmd/operator-plane serves the same routes off-cluster for when it is not.
 		s.mountPlane(r)
 		approvals.Mount(r, s.auth, s.approvals)
+		s.mountQuestions(r)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)

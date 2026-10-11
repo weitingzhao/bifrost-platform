@@ -47,6 +47,12 @@ func exempt(reason string, keys ...string) {
 var exemptions = map[string]string{}
 
 func init() {
+	exempt("owner question workflow, not a catalog action",
+		"POST /api/v1/questions",
+		"POST /api/v1/questions/{id}/answer",
+		"POST /api/v1/questions/{id}/withdraw",
+		"POST /api/v1/questions/{id}/ack",
+	)
 	exempt("approval workflow, not a catalog action",
 		"POST /api/v1/approvals",
 		"POST /api/v1/approvals/{id}/approve",
