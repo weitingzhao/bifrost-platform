@@ -142,11 +142,11 @@ const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument
       <ProgressUsageBlock usage={doc.usage} />
       <ProgressRunning works={active} />
       {active.map((work, index) => (
-        <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} index={index} />
+        <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} index={index} at={doc.at} />
       ))}
       <ProgressActivity feed={doc.feed} />
       <ProgressDoneToday recent={doc.recent} />
-      <FinishedWorks works={finished} />
+      <FinishedWorks works={finished} at={doc.at} />
     </div>
   )
 })

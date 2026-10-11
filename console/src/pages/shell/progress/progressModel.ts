@@ -1,18 +1,19 @@
-import { formatDuration, formatLocalTime, waitingLine, type ProgressStep, type ProgressWork } from '@/api/agentProgress'
+import { ageSeconds, formatDuration, formatLocalTime, waitingLine, type ProgressStep, type ProgressWork } from '@/api/agentProgress'
 import type { ProgressEvent, ProgressQueueItem, ProgressRoadmap } from '@/api/agentProgressBoard'
 
-const RUNNING_NOW = new Set(['running', 'slow', 'quiet', 'dead', 'failed'])
+const RUNNING_NOW = new Set(['running', 'slow', 'quiet', 'dead', 'failed', 'gap'])
 
+/** Waiting is not started. Gap is its turn, and it belongs in Running now. */
 export function showsInRunningNow(step: ProgressStep): boolean {
-  const state = step.state ?? ''
-  if (state === 'waiting') return step.needs_owner !== true
-  return RUNNING_NOW.has(state)
+  return RUNNING_NOW.has(step.state ?? '')
 }
 
-/** A step that is underway, as opposed to done or still to come. */
+const LIVE_STATES = new Set(['running', 'slow', 'quiet', 'dead', 'failed', 'gap'])
+
+/** Live only for a step that is active and already has events. */
 export function showLive(step: ProgressStep): boolean {
-  const state = step.state ?? ''
-  return state !== 'done' && state !== 'gap'
+  if (!LIVE_STATES.has(step.state ?? '')) return false
+  return (step.events ?? []).length > 0
 }
 
 export function workIsFinished(work: ProgressWork): boolean {
@@ -274,12 +275,14 @@ export function resetsIn(unixSeconds: number, nowMs: number): string {
   return remH === 0 ? `resets in ${days}d` : `resets in ${days}d ${remH}h`
 }
 
-const CURRENT_STEP = new Set(['running', 'slow', 'quiet', 'dead', 'gap', 'failed'])
+const NOW_STEP = new Set(['running', 'slow', 'quiet', 'dead', 'gap'])
 
-export function isCurrentStep(step: ProgressStep): boolean {
-  if (step.state === 'done') return false
-  if (step.needs_owner === true) return true
-  return CURRENT_STEP.has(step.state ?? '')
+/** Now is underway. An Owner step counts only once it is running or its turn (gap). */
+export function isNowStep(step: ProgressStep): boolean {
+  const state = step.state ?? ''
+  if (!NOW_STEP.has(state)) return false
+  if (step.needs_owner === true) return state === 'running' || state === 'gap'
+  return true
 }
 
 /** Elapsed over the usual duration, capped. A done step is full. */
@@ -292,10 +295,21 @@ export function stepBarPercent(step: ProgressStep, nowMs: number): number {
   return Math.min(100, (elapsed / (usual * 60)) * 100)
 }
 
-/** "1m of the usual 15". A step waiting on the Owner says "waiting", never "late". */
+/** "for 10m" from when a gap step's turn arrived. Owner gaps say "waiting" instead. */
+export function gapForLine(step: ProgressStep, nowMs: number): string | null {
+  if (step.state !== 'gap' || step.needs_owner === true) return null
+  const started = step.started ?? 0
+  if (!(started > 0)) return null
+  return `for ${formatDuration(ageSeconds(started, nowMs))}`
+}
+
+/** "1m of the usual 15" only while running, slow, or quiet. Owner steps say "waiting", never "late". */
 export function stepPaceLine(step: ProgressStep, nowMs: number): string | null {
-  if (step.needs_owner === true) return waitingLine(step.started ?? 0, nowMs)
-  if (step.state === 'done') return null
+  if (step.needs_owner === true && (step.state === 'running' || step.state === 'gap')) {
+    return waitingLine(step.started ?? 0, nowMs)
+  }
+  if (step.state === 'gap') return gapForLine(step, nowMs)
+  if (step.state !== 'running' && step.state !== 'slow' && step.state !== 'quiet') return null
   const started = step.started ?? 0
   if (!(started > 0)) return null
   const ended = step.ended ?? 0
@@ -311,25 +325,37 @@ export function stepPaceLine(step: ProgressStep, nowMs: number): string | null {
 
 export function nowRow(work: ProgressWork): string | null {
   const parts = (work.steps ?? [])
-    .filter(isCurrentStep)
+    .filter(isNowStep)
     .map(step => [step.name?.trim() ?? '', step.who?.trim() ?? ''].filter(part => part !== '').join(' · '))
     .filter(part => part !== '')
   if (parts.length === 0) return null
   return `Now: ${parts.join('; ')}`
 }
 
+function nextHead(name: string, who: string, needsOwner: boolean): string {
+  const head = who !== '' ? `Next: ${name} · ${who}` : `Next: ${name}`
+  return needsOwner ? `${head} — this one needs you` : head
+}
+
+/** The first waiting step after whatever is Now. The document's `next` is the fallback. */
 export function nextRow(work: ProgressWork): string | null {
+  const steps = work.steps ?? []
+  let lastNow = -1
+  steps.forEach((step, index) => {
+    if (isNowStep(step)) lastNow = index
+  })
+  const upcoming = steps.slice(lastNow + 1).find(step => step.state === 'waiting' && (step.name?.trim() ?? '') !== '')
+  if (upcoming != null) return nextHead(upcoming.name?.trim() ?? '', upcoming.who?.trim() ?? '', upcoming.needs_owner === true)
   const name = work.next?.name?.trim() ?? ''
   if (name === '') return null
-  const who = work.next?.who?.trim() ?? ''
-  const head = who !== '' ? `Next: ${name} · ${who}` : `Next: ${name}`
-  return work.next?.needs_owner === true ? `${head} — this one needs you` : head
+  return nextHead(name, work.next?.who?.trim() ?? '', work.next?.needs_owner === true)
 }
 
 export function yourTurnWhen(at: number | undefined, nowMs: number): string | null {
   if (typeof at !== 'number' || !(at > 0)) return null
-  const delta = Math.max(0, Math.floor(at - nowMs / 1000))
-  return ` · expected about ${formatLocalTime(at)} (in ${formatDuration(delta)})`
+  const delta = Math.floor(at - nowMs / 1000)
+  const when = delta < 60 ? 'now' : `in ${formatDuration(delta)}`
+  return ` · expected about ${formatLocalTime(at)} (${when})`
 }
 
 export function formatHourMinute(unixSeconds: number): string {

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import {
   activeStepText,
@@ -11,7 +11,7 @@ import {
 } from '@/api/agentProgress'
 import type { ProgressEvent } from '@/api/agentProgressBoard'
 import { RequestChipLink } from '@/pages/shell/progress/ProgressNeedsYou'
-import { Tick, useNow } from '@/pages/shell/progress/progressClock'
+import { Tick } from '@/pages/shell/progress/progressClock'
 import {
   earlierStepsLabel,
   editDelta,
@@ -58,7 +58,10 @@ function stateVariant(label: string): 'success' | 'warning' | 'danger' | 'neutra
     case 'slower than usual':
     case 'may be stuck':
     case 'waiting for you':
+    case 'waiting for the coordinator':
       return 'warning'
+    case 'not your turn yet':
+      return 'neutral'
     case 'process gone':
     case 'failed':
       return 'danger'
@@ -131,27 +134,41 @@ function EventList({ events }: { events: ProgressEvent[] | undefined }) {
   )
 }
 
-function StepBar({ step }: { step: ProgressStep }) {
-  const now = useNow()
-  const pct = Math.round(stepBarPercent(step, now))
+const PACE_BAR = new Set(['running', 'slow', 'quiet'])
+
+function StepBar({ step, atSec }: { step: ProgressStep; atSec: number | undefined }) {
+  const renders = useRef(0)
+  renders.current += 1
+  if (!PACE_BAR.has(step.state ?? '')) return null
+  const basis = typeof atSec === 'number' && atSec > 0 ? atSec * 1000 : 0
+  const pct = Math.round(stepBarPercent(step, basis))
   return (
-    <span className="mt-1 block h-1 w-full max-w-full overflow-hidden rounded bg-foreground/10" aria-hidden="true">
+    <span
+      className="mt-1 block h-1 w-full max-w-full overflow-hidden rounded bg-foreground/10"
+      aria-hidden="true"
+      data-bar-renders={renders.current}
+    >
       <span className="block h-full bg-foreground/70" style={{ width: `${pct}%` }} data-step-bar={pct} />
     </span>
   )
 }
 
-function StepCard({ step }: { step: ProgressStep }) {
+function StepCard({ step, atSec }: { step: ProgressStep; atSec: number | undefined }) {
+  const renders = useRef(0)
+  renders.current += 1
   const label = stepStateLabel(step.state, step.needs_owner)
+  const follow = step.needs_owner === true && step.state === 'waiting' ? (step.label?.trim() ?? '') : ''
   const done = step.state === 'done'
   const waits = step.needs_owner === true
-  const expectation = done || waits ? null : expectationLine(step)
+  const paced = step.state === 'running' || step.state === 'slow' || step.state === 'quiet' || step.state === 'dead' || step.state === 'failed'
+  const expectation = done || waits || !paced ? null : expectationLine(step)
   const took = tookLine(step)
   const who = step.who?.trim() ?? ''
   const waitsFor = step.waits_for?.trim() ?? ''
   return (
     <li
       aria-label={step.name ?? 'Step'}
+      data-renders={renders.current}
       className="flex min-w-0 max-w-full flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
     >
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
@@ -167,6 +184,7 @@ function StepCard({ step }: { step: ProgressStep }) {
         <DenseTag variant={stateVariant(label)} size="pill">
           {label}
         </DenseTag>
+        {follow !== '' ? <span className="break-words text-sm text-foreground">{follow}</span> : null}
       </span>
       {done ? (
         took != null ? <span className="break-words text-sm text-muted-foreground">{took}</span> : null
@@ -178,7 +196,7 @@ function StepCard({ step }: { step: ProgressStep }) {
         </>
       )}
       {waitsFor !== '' ? <span className="break-words text-sm text-muted-foreground">waits for: {waitsFor}</span> : null}
-      <StepBar step={step} />
+      <StepBar step={step} atSec={atSec} />
       {done ? (
         <Fold summary="What it did last">
           <EventList events={step.events} />
@@ -188,7 +206,7 @@ function StepCard({ step }: { step: ProgressStep }) {
   )
 }
 
-function StepFlow({ steps, label }: { steps: ProgressStep[]; label: string }) {
+function StepFlow({ steps, label, atSec }: { steps: ProgressStep[]; label: string; atSec: number | undefined }) {
   const groups = groupParallel(steps)
   return (
     <ul aria-label={label} className="m-0 flex w-full min-w-0 list-none flex-wrap gap-2 p-0">
@@ -201,12 +219,14 @@ function StepFlow({ steps, label }: { steps: ProgressStep[]; label: string }) {
             <span className="text-sm text-muted-foreground">at the same time</span>
             <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-2 p-0">
               {group.steps.map((step, stepIndex) => (
-                <StepCard key={`${step.name ?? 'step'}-${stepIndex}`} step={step} />
+                <StepCard key={`${step.name ?? 'step'}-${stepIndex}`} step={step} atSec={atSec} />
               ))}
             </ul>
           </li>
         ) : (
-          group.steps.map((step, stepIndex) => <StepCard key={`${step.name ?? 'step'}-${stepIndex}`} step={step} />)
+          group.steps.map((step, stepIndex) => (
+            <StepCard key={`${step.name ?? 'step'}-${stepIndex}`} step={step} atSec={atSec} />
+          ))
         ),
       )}
     </ul>
@@ -236,7 +256,7 @@ function YourTurn({ work }: { work: ProgressWork }) {
   )
 }
 
-function WorkBody({ work, foldDone }: { work: ProgressWork; foldDone: boolean }) {
+function WorkBody({ work, foldDone, atSec }: { work: ProgressWork; foldDone: boolean; atSec: number | undefined }) {
   const { done, flow } = flowSteps(work, foldDone)
   const notes = (work.steps ?? []).map(activeStepText).filter(text => text !== '')
   const nowText = nowRow(work)
@@ -250,10 +270,10 @@ function WorkBody({ work, foldDone }: { work: ProgressWork; foldDone: boolean })
       {typeof work.round === 'number' ? <p className="m-0 text-sm text-muted-foreground">Round {work.round}</p> : null}
       {done.length > 0 ? (
         <Fold summary={earlierStepsLabel(done.length)}>
-          <StepFlow steps={done} label="Earlier steps" />
+          <StepFlow steps={done} label="Earlier steps" atSec={atSec} />
         </Fold>
       ) : null}
-      <StepFlow steps={flow} label="Steps" />
+      <StepFlow steps={flow} label="Steps" atSec={atSec} />
       {nowText != null ? <p className="m-0 break-words text-sm text-foreground">{nowText}</p> : null}
       {next != null ? <p className="m-0 break-words text-sm text-foreground">{next}</p> : null}
       <YourTurn work={work} />
@@ -270,13 +290,13 @@ function WorkBody({ work, foldDone }: { work: ProgressWork; foldDone: boolean })
   )
 }
 
-export function WorkCard({ work, index }: { work: ProgressWork; index: number }) {
+export function WorkCard({ work, index, at }: { work: ProgressWork; index: number; at?: number }) {
   return (
     <article
       id={workCardId(index)}
       className="flex w-full min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5"
     >
-      <WorkBody work={work} foldDone />
+      <WorkBody work={work} foldDone atSec={at} />
     </article>
   )
 }
@@ -288,7 +308,7 @@ function finishedLine(work: ProgressWork): string {
   return `${title} · ${formatLocalTime(at)}`
 }
 
-export function FinishedWorks({ works }: { works: readonly ProgressWork[] }) {
+export function FinishedWorks({ works, at }: { works: readonly ProgressWork[]; at?: number }) {
   if (works.length === 0) return null
   return (
     <section aria-label="Finished" className="w-full min-w-0">
@@ -297,7 +317,7 @@ export function FinishedWorks({ works }: { works: readonly ProgressWork[] }) {
           {works.map((work, index) => (
             <li key={`${work.title ?? 'finished'}-${index}`} className="min-w-0">
               <Fold summary={finishedLine(work)}>
-                <StepFlow steps={work.steps ?? []} label="Steps" />
+                <StepFlow steps={work.steps ?? []} label="Steps" atSec={at} />
               </Fold>
             </li>
           ))}

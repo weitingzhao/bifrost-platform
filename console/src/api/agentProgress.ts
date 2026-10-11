@@ -491,7 +491,8 @@ export function generationIsSkewed(at: number | undefined, receivedAt: string, n
 }
 
 export function stepStateLabel(state: string | undefined, needsOwner: boolean | undefined): string {
-  if (needsOwner) return 'waiting for you'
+  if (needsOwner === true && (state === 'running' || state === 'gap')) return 'waiting for you'
+  if (needsOwner === true && state === 'waiting') return 'not your turn yet'
   switch (state) {
     case 'running':
       return 'running'
@@ -506,9 +507,9 @@ export function stepStateLabel(state: string | undefined, needsOwner: boolean | 
     case 'done':
       return 'done'
     case 'gap':
-      return 'not started'
-    case 'waiting':
       return 'waiting for the coordinator'
+    case 'waiting':
+      return 'not started'
     default:
       return state != null && state.trim() !== '' ? state : 'unknown'
   }

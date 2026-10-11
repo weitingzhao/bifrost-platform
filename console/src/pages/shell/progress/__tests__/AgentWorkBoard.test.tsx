@@ -266,8 +266,8 @@ describe('AgentWorkBoard', () => {
       ['Yours', 'running', true],
     ]
     const labels = [
-      'waiting for the coordinator',
       'not started',
+      'waiting for the coordinator',
       'running',
       'slower than usual',
       'may be stuck',
