@@ -41,6 +41,8 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 	affixHead := []string{longS, "x" + longS, kelvin, "pre" + kelvin}
 
 	var exhaustive, randomN, enforced int
+	hits := map[string]int{}
+	class := ""
 	check := func(in, secret string) bool {
 		old := redactAt8b3259a(in)
 		got := Redact(in)
@@ -50,10 +52,14 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 		if strings.Contains(got, secret) {
 			t.Fatalf("input %q\noracle %q\nredact %q", in, old, got)
 		}
+		if class != "" {
+			hits[class]++
+		}
 		return true
 	}
 
 	start := time.Now()
+	class = "keyword"
 	for _, kw := range keywords {
 		forms := foldForms(kw)
 		for _, form := range forms {
@@ -98,6 +104,7 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 		}
 	}
 	for _, scheme := range []string{"bearer", "basic"} {
+		class = scheme
 		for _, form := range foldForms(scheme) {
 			for _, w := range ws {
 				for _, sec := range secrets {
@@ -117,29 +124,34 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 	for _, sp := range splits {
 		for _, sec := range secrets {
 			exhaustive += 4
+			class = "bearer"
 			if check("bearer "+sec+sp+"bearer "+sec, sec) {
 				enforced++
 			}
+			class = "basic"
 			if check("basic "+sec+sp+"token="+sec, sec) {
 				enforced++
 			}
+			class = "keyword"
 			if check("token="+sec+sp+"password="+sec, sec) {
 				enforced++
 			}
+			class = "bearer"
 			if check(sec+sp+"bearer "+sec, sec) {
 				enforced++
 			}
 		}
 	}
-	measured := []struct{ in, secret string }{
-		{"Ba" + longS + "ic abcdefgh", "abcdefgh"},
-		{"Bearer abcdefg" + kelvin, "abcdefg" + kelvin},
-		{"token" + longS + "uffix=s3cr3tvalue", "s3cr3tvalue"},
-		{longS + "ecret=abcdefgh12345678", "abcdefgh12345678"},
-		{"x" + longS + "ecret=abcdefgh12345678", "abcdefgh12345678"},
-		{"pa" + longS + longS + "word=s3cr3tvalue", "s3cr3tvalue"},
+	measured := []struct{ in, secret, kind string }{
+		{"Ba" + longS + "ic abcdefgh", "abcdefgh", "basic"},
+		{"Bearer abcdefg" + kelvin, "abcdefg" + kelvin, "bearer"},
+		{"token" + longS + "uffix=s3cr3tvalue", "s3cr3tvalue", "keyword"},
+		{longS + "ecret=abcdefgh12345678", "abcdefgh12345678", "keyword"},
+		{"x" + longS + "ecret=abcdefgh12345678", "abcdefgh12345678", "keyword"},
+		{"pa" + longS + longS + "word=s3cr3tvalue", "s3cr3tvalue", "keyword"},
 	}
 	for _, m := range measured {
+		class = m.kind
 		exhaustive++
 		if check(m.in, m.secret) {
 			enforced++
@@ -152,6 +164,7 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 	xox := "xoxb-" + strings.Repeat("c", 10)
 	jwt := "eyJQQQQQQQQ.RRRRRRRR.SSSSSSSS"
 	pem := "-----BEGIN PRIVATE KEY-----\nQQQQQQQQ\n-----END PRIVATE KEY-----"
+	class = "aws"
 	for _, sp := range []string{"", " ", "\n", "\t", ",", "!", " start ", " end"} {
 		exhaustive += 2
 		if check(awsA+sp+awsB, awsA) {
@@ -161,6 +174,7 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 			enforced++
 		}
 	}
+	class = ""
 	for _, in := range []string{gh, " " + gh + " ", gh + "_tail", gh + "\n" + gl + " " + xox, "x" + gh} {
 		exhaustive++
 		if check(in, gh) {
@@ -168,12 +182,15 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 		}
 	}
 	exhaustive += 3
+	class = ""
 	if check(" "+jwt+" ", jwt) {
 		enforced++
 	}
+	class = "pem"
 	if check(pem, "QQQQQQQQ") {
 		enforced++
 	}
+	class = ""
 	if check("postgres://app:QQQQQQQ"+kelvin+"@db/x", "QQQQQQQ"+kelvin) {
 		enforced++
 	}
@@ -205,6 +222,7 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 			b.WriteByte(' ')
 			switch rng.Intn(3) {
 			case 0:
+				class = "keyword"
 				form := keywordForms[rng.Intn(len(keywordForms))]
 				if rng.Intn(2) == 0 {
 					form += affixTail[rng.Intn(len(affixTail))]
@@ -213,10 +231,13 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 				b.WriteString(validAssign[rng.Intn(len(validAssign))])
 				b.WriteString(sec)
 			case 1:
-				b.WriteString(schemeForms[rng.Intn(len(schemeForms))])
+				form := schemeForms[rng.Intn(len(schemeForms))]
+				class = schemeClass(form)
+				b.WriteString(form)
 				b.WriteString(ws[rng.Intn(len(ws))])
 				b.WriteString(sec)
 			default:
+				class = "keyword"
 				b.WriteString("token=")
 				b.WriteString(sec)
 				b.WriteString(splits[rng.Intn(len(splits))])
@@ -231,11 +252,31 @@ func TestRedactHidesEverySecretMainHides(t *testing.T) {
 		}
 	}
 	randomDur := time.Since(start)
-	t.Logf("exhaustive=%d random=%d total=%d enforced=%d exhaustive_ms=%d random_ms=%d",
-		exhaustive, randomN, exhaustive+randomN, enforced, exhaustiveDur.Milliseconds(), randomDur.Milliseconds())
+	t.Logf("exhaustive=%d random=%d total=%d enforced=%d keyword=%d bearer=%d basic=%d aws=%d pem=%d exhaustive_ms=%d random_ms=%d",
+		exhaustive, randomN, exhaustive+randomN, enforced,
+		hits["keyword"], hits["bearer"], hits["basic"], hits["aws"], hits["pem"],
+		exhaustiveDur.Milliseconds(), randomDur.Milliseconds())
 	if randomN < 200_000 {
 		t.Fatalf("random=%d", randomN)
 	}
+	if enforced < 200_000 {
+		t.Fatalf("enforced=%d, want at least 200000", enforced)
+	}
+	for _, c := range []string{"keyword", "bearer", "basic", "aws", "pem"} {
+		if hits[c] < 1 {
+			t.Fatalf("oracle class %s hits=%d", c, hits[c])
+		}
+	}
+}
+
+func schemeClass(form string) string {
+	for _, r := range form {
+		switch r {
+		case 'i', 'I', 'c', 'C', 's', 'S', '\u017f':
+			return "basic"
+		}
+	}
+	return "bearer"
 }
 
 // foldForms replaces every s/S with s, S, or U+017F and every k/K with k, K, or
