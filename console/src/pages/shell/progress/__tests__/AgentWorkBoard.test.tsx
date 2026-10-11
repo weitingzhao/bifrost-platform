@@ -460,6 +460,46 @@ describe('AgentWorkBoard', () => {
     expect(within(needed).getByText('link not shown: ops.bifrost.lan:8443')).toBeTruthy()
   })
 
+  it('bounds an action link label when the text is only control characters', async () => {
+    const controls = '\u0000\u0007\u061C\u200E\u200F\u202E\uFEFF'
+    const hash = `#${'a'.repeat(4998)}\u200F`
+    const hidden = `#${'\u200F'.repeat(4999)}`
+    const trusted = `https://ops.bifrost.lan/${'b'.repeat(5000)}`
+    stubProgress(
+      envelope(
+        baseDoc({
+          owner_now: [
+            {
+              name: 'Needs you',
+              since: NOW_SEC - 10,
+              actions: [
+                { text: controls, link_text: controls, link: hash },
+                { text: controls, link_text: controls, link: hidden },
+                { link: trusted },
+                { text: 'Open the brief', link: 'https://ops.bifrost.lan/brief', link_text: 'Open the brief' },
+              ],
+            },
+          ],
+        }),
+      ),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const needed = await screen.findByRole('region', { name: 'Needs you now' })
+    const bounded = within(needed).getByRole('link', { name: /^#a+…$/ })
+    expect(bounded.getAttribute('href')).toBe(hash)
+    expect(bounded.textContent?.includes('\u200F')).toBe(false)
+    expect(bounded.textContent?.length).toBeLessThanOrEqual(200)
+    const open = within(needed).getByRole('link', { name: 'Open link' })
+    expect(open.getAttribute('href')).toBe(hidden)
+    const longUrl = within(needed).getByRole('link', { name: /^https:\/\/ops\.bifrost\.lan\/b+…$/ })
+    expect(longUrl.getAttribute('href')).toBe(trusted)
+    expect(longUrl.textContent?.length).toBeLessThanOrEqual(200)
+    expect(longUrl.getAttribute('href')).not.toBe(longUrl.textContent)
+    expect(within(needed).getByRole('link', { name: 'Open the brief (ops.bifrost.lan)' }).getAttribute('href')).toBe(
+      'https://ops.bifrost.lan/brief',
+    )
+  })
+
   it('shows unknown time when a timestamp cannot be a date', async () => {
     stubProgress(envelope(baseDoc({ owner_next: { name: 'Ship', at: 1e16, work: 'W-62' } })))
     render(wrap(<AgentWorkBoard />))

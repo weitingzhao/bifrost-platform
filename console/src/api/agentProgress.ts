@@ -1,5 +1,6 @@
 import { authedFetch, operatorToken, parseError } from '@/api/client'
 import { readApprovalToken } from '@/api/approvals'
+import { boundDocumentText, sanitizeDocumentText } from '@/pages/shell/progress/progressPart'
 import {
   parseEvents,
   parseQueue,
@@ -603,6 +604,24 @@ function shownHost(url: URL): string {
   return `${name}:${url.port}`
 }
 
+/** Same bound as an action's own text on the Needs you now card. */
+const ACTION_LINK_LABEL_MAX = 200
+
+/**
+ * Visible label of an anchor. Prefer link text, then the action text, then the
+ * link itself. Each candidate goes through the shared document cleaner; the
+ * one that is shown is bounded like other action text. Nothing left to read,
+ * including a fallback that is only the hash mark, is the console's own
+ * "Open link". The href stays the original link, never this label.
+ */
+function actionAnchorLabel(linkText: string, text: string, raw: string, where: string): string {
+  const authored = sanitizeDocumentText(linkText) || sanitizeDocumentText(text)
+  const fallback = sanitizeDocumentText(raw)
+  const body = authored || (fallback === '#' ? '' : fallback)
+  if (body === '') return 'Open link'
+  return boundDocumentText(`${body} (${where})`, ACTION_LINK_LABEL_MAX)
+}
+
 /**
  * A link opens only as a same-page hash, or as http(s) on TRUSTED_PROGRESS_HOSTS
  * using that scheme's default port. The label names the destination. A trusted
@@ -615,8 +634,12 @@ export function actionLink(action: Pick<ProgressAction, 'text' | 'link' | 'link_
   if (raw === '') return { kind: 'text', text }
 
   if (raw.startsWith('#')) {
-    const label = linkText || text.trim() || raw
-    return { kind: 'anchor', href: raw, label: `${label} (this console)`, external: false }
+    return {
+      kind: 'anchor',
+      href: raw,
+      label: actionAnchorLabel(linkText, text, raw, 'this console'),
+      external: false,
+    }
   }
 
   let url: URL | null = null
@@ -631,8 +654,12 @@ export function actionLink(action: Pick<ProgressAction, 'text' | 'link' | 'link_
   if (url != null && http && trusted && isDefaultPort(url)) {
     url.username = ''
     url.password = ''
-    const label = linkText || text.trim() || raw
-    return { kind: 'anchor', href: url.href, label: `${label} (${host})`, external: true }
+    return {
+      kind: 'anchor',
+      href: url.href,
+      label: actionAnchorLabel(linkText, text, raw, host),
+      external: true,
+    }
   }
   return { kind: 'blocked', text, host: url != null && http ? shownHost(url) : host }
 }
