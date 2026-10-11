@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formatDuration } from '@/api/agentProgress'
@@ -128,14 +128,14 @@ describe('quota by pace', () => {
           rate_basis: '近 33 小时实测',
           projected: 108,
         },
-        { vendor: 'Claude', label: 'Early', verdict: 'too_early' },
-        { vendor: 'Claude', label: 'Burst', verdict: 'short', used: 0 },
-        { vendor: 'Claude', label: 'Fable', verdict: 'sublimit' },
-        { vendor: 'Cursor', label: 'Grok', verdict: 'unknown', note: '读不到：命令行不给' },
-        { vendor: 'Cursor', label: 'Due', verdict: 'reset_due' },
-        { vendor: 'Claude', label: 'Bare', verdict: 'on_pace' },
-        { vendor: 'Codex', label: 'Over bare', verdict: 'over' },
-        { vendor: 'Claude', label: 'Spare bare', verdict: 'spare' },
+        { vendor: 'Claude', label: 'Early', verdict: 'too_early', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Claude', label: 'Burst', verdict: 'short', used: 0, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Claude', label: 'Fable', verdict: 'sublimit', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Cursor', label: 'Grok', verdict: 'unknown', note: '读不到：命令行不给', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Cursor', label: 'Due', verdict: 'reset_due', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Claude', label: 'Bare', verdict: 'on_pace', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Codex', label: 'Over bare', verdict: 'over', used: 1, resets_at: '2026-11-01T00:00:00Z' },
+        { vendor: 'Claude', label: 'Spare bare', verdict: 'spare', used: 1, resets_at: '2026-11-01T00:00:00Z' },
       ],
     })
     render(wrap(<AgentWorkBoard />))
@@ -168,8 +168,100 @@ describe('quota by pace', () => {
     expect(quota.querySelector('[data-window-tick="81.6"]')).toBeTruthy()
     const fill = quota.querySelector('[data-quota-fill="78"]')
     expect(fill).toBeTruthy()
-    expect(within(quota).getByText('Cursor · 1 run · 23 min · in 10 · out 2 · cache 3')).toBeTruthy()
+    expect(within(quota).getByText('Cursor · 1 run · 23 min · 10 in · 2 out · 3 cached')).toBeTruthy()
     expect(within(quota).getByText('Codex · 2 runs · 100 tokens')).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Usage today' })).toBeNull()
+  })
+
+  it('does not call bad numbers healthy, and formats run totals', async () => {
+    const future = '2026-10-20T00:00:00Z'
+    const past = '2020-01-01T00:00:00Z'
+    stub({
+      cursor: { runs: 1, min: 23.783166666666666, in: 364769, out: 144618, cache: 10146048 },
+      codex: { runs: 4.2, tokens: 280000 },
+      pools: [
+        { vendor: 'Claude', label: 'Missing used', verdict: 'spare', spare_pct: 12, resets_at: future },
+        { vendor: 'Claude', label: 'Not numeric', verdict: 'spare', used: 'nope', spare_pct: 12, resets_at: future },
+        { vendor: 'Claude', label: 'Negative', verdict: 'on_pace', used: -3, resets_at: future, elapsed_pct: 10 },
+        { vendor: 'Claude', label: 'Too high', verdict: 'spare', used: 1001, spare_pct: 4, resets_at: future },
+        { vendor: 'Claude', label: 'Over full', verdict: 'on_pace', used: 140, resets_at: future, elapsed_pct: 10 },
+        { vendor: 'Claude', label: 'At cap', verdict: 'on_pace', used: 1000, resets_at: future },
+        { vendor: 'Claude', label: 'Bad reset', verdict: 'on_pace', used: 50, resets_at: 'not-a-date', elapsed_pct: 80 },
+        {
+          vendor: 'Claude',
+          label: 'Past reset',
+          verdict: 'on_pace',
+          used: 40,
+          resets_at: past,
+          elapsed_pct: 90,
+          left_pct: 10,
+          allow_per_day: 5,
+          rate_per_day: 4,
+          projected: 80,
+        },
+        {
+          vendor: 'Cursor',
+          label: 'Empty pool',
+          verdict: 'exhausted',
+          used: 100,
+          resets_at: future,
+          note: '已用完；按量付费关着',
+        },
+        { vendor: 'Cursor', label: 'Weird', verdict: 'sideways', used: 10, resets_at: future },
+        { vendor: 'Codex', label: 'Codex pool', verdict: 'on_pace', used: 3, resets_at: future },
+      ],
+    })
+    render(wrap(<AgentWorkBoard />))
+    const quota = await screen.findByRole('region', { name: 'Quota' })
+    const row = (label: string) => within(quota).getByText(label).closest('div')
+    for (const label of ['Missing used', 'Not numeric', 'Negative', 'Too high', 'Bad reset']) {
+      const body = row(label)
+      expect(body?.textContent).toContain('Unknown')
+      expect(body?.textContent).not.toContain('On pace')
+      expect(body?.textContent).not.toContain('Spare')
+      expect(body?.querySelector('[data-quota-fill]')).toBeNull()
+      expect(body?.textContent).not.toContain('of the window')
+    }
+    const over = row('Over full')
+    expect(over?.textContent).toContain('used 140%')
+    expect(over?.querySelector('[data-quota-fill="100"]')).toBeTruthy()
+    expect(over?.textContent).toContain('On pace')
+    const cap = row('At cap')
+    expect(cap?.textContent).toContain('used 1000%')
+    expect(cap?.querySelector('[data-quota-fill="100"]')).toBeTruthy()
+    const pastRow = row('Past reset')
+    expect(pastRow?.textContent).toContain('Reset due')
+    expect(pastRow?.textContent).toContain('used 40%')
+    expect(pastRow?.textContent).not.toContain('On pace')
+    expect(pastRow?.textContent).not.toContain('of the window')
+    expect(within(quota).getByText('Used up — not available until the reset')).toBeTruthy()
+    expect(within(quota).getByText('已用完；按量付费关着')).toBeTruthy()
+    expect(row('Weird')?.textContent).toContain('Unknown')
+    expect(within(quota).getByText('Cursor · 1 run · 24 min · 365K in · 145K out · 10.1M cached')).toBeTruthy()
+    expect(within(quota).getByText('Codex · 4 runs · 280K tokens')).toBeTruthy()
+    expect(quota.textContent).not.toContain('23.783')
+    expect(quota.textContent).not.toContain('364769')
+    expect(quota.textContent).not.toContain('280000')
+  })
+
+  it('draws at most 12 pools until the rest are asked for', async () => {
+    const future = '2026-10-20T00:00:00Z'
+    stub({
+      pools: Array.from({ length: 13 }, (_, index) => ({
+        vendor: 'Claude',
+        label: `Pool ${index + 1}`,
+        used: 10,
+        resets_at: future,
+        verdict: 'on_pace',
+      })),
+    })
+    render(wrap(<AgentWorkBoard />))
+    const quota = await screen.findByRole('region', { name: 'Quota' })
+    expect(within(quota).getByText('Pool 1')).toBeTruthy()
+    expect(within(quota).getByText('Pool 12')).toBeTruthy()
+    expect(within(quota).queryByText('Pool 13')).toBeNull()
+    fireEvent.click(within(quota).getByRole('button', { name: 'Show 1 more' }))
+    expect(within(quota).getByText('Pool 13')).toBeTruthy()
+    expect(within(quota).queryByRole('button', { name: /Show .* more/ })).toBeNull()
   })
 })

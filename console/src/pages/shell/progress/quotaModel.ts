@@ -32,10 +32,48 @@ export function poolResetsLine(resetsAt: string | undefined, nowMs: number): str
   return resetsIn(sec, nowMs)
 }
 
+/** 0 through 1000, including 100 and above. Missing, negative, and above 1000 are not a fill. */
+export function usedIsDisplayable(used: unknown): used is number {
+  return typeof used === 'number' && Number.isFinite(used) && used >= 0 && used <= 1000
+}
+
 export function usedLine(used: number | undefined): string | null {
+  if (!usedIsDisplayable(used)) return null
   const text = qty(used)
   if (text == null) return null
   return `used ${text}%`
+}
+
+export type PoolRead = 'unknown' | 'reset_due' | 'ok'
+
+/**
+ * Bad `used` or an unreadable reset makes the pool Unknown.
+ * A reset that has already passed is "Reset due" and nothing computed for that window.
+ */
+export function poolRead(pool: ProgressPool, nowMs: number): PoolRead {
+  if (pool.resets_at != null) {
+    const sec = isoSeconds(pool.resets_at)
+    if (sec == null) return 'unknown'
+    if (sec * 1000 <= nowMs) return 'reset_due'
+  }
+  if (!usedIsDisplayable(pool.used)) return 'unknown'
+  return 'ok'
+}
+
+/** Readable units. No raw float, and no plain integer above 9,999. */
+export function compactCount(value: number): string {
+  const rounded = Math.round(value)
+  const abs = Math.abs(rounded)
+  const sign = rounded < 0 ? '-' : ''
+  if (abs <= 9999) return `${sign}${String(abs)}`
+  if (abs < 1_000_000) return `${sign}${String(Math.round(abs / 1000))}K`
+  const millions = abs / 1_000_000
+  if (abs < 1_000_000_000) {
+    const shown = Math.round(millions * 10) / 10
+    return `${sign}${Number.isInteger(shown) ? String(shown) : shown.toFixed(1)}M`
+  }
+  const billions = Math.round((abs / 1_000_000_000) * 10) / 10
+  return `${sign}${Number.isInteger(billions) ? String(billions) : billions.toFixed(1)}B`
 }
 
 /** The pace sentence for on_pace, spare, and over. Missing numbers drop their phrase. */
@@ -97,8 +135,11 @@ export function verdictChip(pool: ProgressPool): { text: string; tone: QuotaTone
     }
     case 'reset_due':
       return { text: 'Reset due', tone: 'warning' }
+    case 'exhausted':
+      return { text: 'Used up — not available until the reset', tone: 'warning' }
     default:
-      return null
+      if (pool.verdict == null || pool.verdict.trim() === '') return null
+      return { text: 'Unknown', tone: 'neutral' }
   }
 }
 
