@@ -43,6 +43,7 @@ import {
   waitsOnOwner,
   type ApprovalRead,
   type AskSource,
+  type DocumentRead,
 } from '@/pages/shell/progress/progressSummaryModel'
 import { barPercent, usedIsDisplayable } from '@/pages/shell/progress/quotaModel'
 
@@ -441,7 +442,15 @@ function Gauges({
 }
 
 /** The Owner's first screen: what needs him, the plan, what is running, then small gauges. */
-export function ProgressSummary({ doc, env }: { doc: ProgressDocument; env?: AgentProgressResponse }) {
+export function ProgressSummary({
+  doc,
+  env,
+  documentRead = { kind: 'ok' },
+}: {
+  doc: ProgressDocument
+  env?: AgentProgressResponse
+  documentRead?: DocumentRead
+}) {
   const paints = useRef(0)
   paints.current += 1
   const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now, doc.owner_all)
@@ -450,7 +459,14 @@ export function ProgressSummary({ doc, env }: { doc: ProgressDocument; env?: Age
   const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
   return (
     <div data-testid="progress-summary" data-paints={paints.current} className="flex w-full min-w-0 max-w-full flex-col gap-3 overflow-x-hidden">
-      <NeedsYouBlock asks={gathered.asks} items={list.data} read={read} listUnreadable={gathered.listUnreadable} later={laterRequestCount(doc.roadmap)} />
+      <NeedsYouBlock
+        asks={gathered.asks}
+        items={list.data}
+        read={read}
+        listUnreadable={gathered.listUnreadable}
+        later={laterRequestCount(doc.roadmap)}
+        documentRead={documentRead}
+      />
       <div data-summary-block="pictures" className="grid w-full min-w-0 grid-cols-1 gap-3 min-[821px]:grid-cols-2">
         <PlanPicture doc={doc} />
         <RunningPicture doc={doc} asks={gathered.asks} items={list.data} read={read} />

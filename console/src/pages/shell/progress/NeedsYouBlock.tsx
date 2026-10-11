@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
-import { waitingLine, type OwnerNow } from '@/api/agentProgress'
+import { formatLocalTime, waitingLine, type OwnerNow } from '@/api/agentProgress'
 import { isApprovalId } from '@/api/agentProgressExtra'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { AgentText } from '@/pages/shell/progress/AgentText'
@@ -18,6 +18,7 @@ import {
   turnMarker,
   type ApprovalRead,
   type AskSource,
+  type DocumentRead,
 } from '@/pages/shell/progress/progressSummaryModel'
 
 function requestHeadline(item: Pick<ApprovalItem, 'number' | 'summary'>): string {
@@ -108,7 +109,30 @@ function Latest({
       </span>
     )
   }
-  return <span>No deadline</span>
+  if (deadline === 'unknown') return <span>Unknown</span>
+  return <Missing field="deadline" />
+}
+
+function actionHasWords(action: { text?: string; link?: string; link_text?: string }): boolean {
+  return agentText(action.text) !== '' || agentText(action.link_text) !== '' || agentText(action.link) !== ''
+}
+
+function HowTo({ actions }: { actions: AskSource['actions'] }) {
+  const written = (actions ?? []).filter(actionHasWords)
+  if (written.length === 0) {
+    return (
+      <span data-agent-note="" data-agent-text="" className="block min-w-0">
+        <span className="text-muted-foreground">Agent&apos;s note: </span>
+        <span data-agent-text="" data-missing="actions">Not written</span>
+      </span>
+    )
+  }
+  return (
+    <span data-agent-note="" data-agent-text="" className="block min-w-0">
+      <span className="text-muted-foreground">Agent&apos;s note: </span>
+      <DocumentActions actions={written} />
+    </span>
+  )
 }
 
 function AskBody({
@@ -136,7 +160,7 @@ function AskBody({
         {linked ? <span>The request card, here</span> : where !== '' ? <AgentBits lines={[where]} /> : <Missing field="where" amber />}
       </Fact>
       <Fact label="How to do it">
-        {linked ? <RequestCard entry={ownerEntry(ask)} item={item} unreadable={read === 'unreadable'} /> : <DocumentActions actions={ask.actions} />}
+        {linked ? <RequestCard entry={ownerEntry(ask)} item={item} unreadable={read === 'unreadable'} /> : <HowTo actions={ask.actions} />}
       </Fact>
       <Fact label="How to reply">
         {linked ? (
@@ -171,10 +195,12 @@ function AskLine({
   ask,
   items,
   read,
+  allowGreen,
 }: {
   ask: AskSource
   items: ApprovalItem[] | undefined
   read: ApprovalRead
+  allowGreen: boolean
 }) {
   const now = useNow()
   const act = ask.unreadable ? 'unreadable' : askAct(ask, items, read, now)
@@ -185,7 +211,7 @@ function AskLine({
   const item = requestItem(ask, items, read)
   const quiet = linked && requestQuiet(item, now)
   const dot =
-    turn.tone === 'now'
+    allowGreen && turn.tone === 'now'
       ? 'inline-block size-2.5 shrink-0 rounded-full bg-emerald-500'
       : 'inline-block size-2.5 shrink-0 rounded-full border border-current'
   const name = agentText(ask.name)
@@ -230,11 +256,13 @@ function Group({
   asks,
   items,
   read,
+  allowGreen,
 }: {
   title: string
   asks: readonly AskSource[]
   items: ApprovalItem[] | undefined
   read: ApprovalRead
+  allowGreen: boolean
 }) {
   if (asks.length === 0) return null
   return (
@@ -242,11 +270,17 @@ function Group({
       <h3 className="m-0 text-sm font-medium text-foreground">{title}</h3>
       <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
         {asks.map((ask, index) => (
-          <AskLine key={`${ask.name ?? 'ask'}-${ask.index}-${index}`} ask={ask} items={items} read={read} />
+          <AskLine key={`${ask.name ?? 'ask'}-${ask.index}-${index}`} ask={ask} items={items} read={read} allowGreen={allowGreen} />
         ))}
       </ul>
     </div>
   )
+}
+
+function asOfText(at: number | null): string {
+  if (at == null) return 'Unknown'
+  const clock = formatLocalTime(at)
+  return clock === '' ? 'Unknown' : clock
 }
 
 function NeedsYouLive({
@@ -255,18 +289,25 @@ function NeedsYouLive({
   read,
   listUnreadable,
   later,
+  documentRead,
 }: {
   asks: AskSource[]
   items: ApprovalItem[] | undefined
   read: ApprovalRead
   listUnreadable: boolean
   later: number | null
+  documentRead: DocumentRead
 }) {
   const now = useNow()
-  const ordered = orderedAsks(asks, items, read, now)
+  if (documentRead.kind === 'loading') return <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+  const current = documentRead.kind === 'ok'
+  const bothOk = current && read === 'ready'
+  const ordered = current ? orderedAsks(asks, items, read, now) : []
   const buckets = bucketAsks(ordered, items, read, now)
-  const { n, a, b, c } = needsYouTotal(buckets)
-  const empty = ordered.length === 0 && !listUnreadable
+  const counted = current ? needsYouTotal(buckets) : { n: 0, a: 0, b: 0, c: 0 }
+  const { n, a, b, c } = counted
+  const empty = bothOk && ordered.length === 0 && !listUnreadable
+  const asOf = documentRead.kind === 'ok' ? '' : asOfText(documentRead.lastGoodAt)
   return (
     <>
       <h2 className="m-0 flex min-h-11 flex-wrap items-center gap-2 text-sm font-medium">
@@ -286,22 +327,44 @@ function NeedsYouLive({
           </>
         ) : null}
       </p>
-      {listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
+      {current && listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
       {empty ? <span className="text-sm text-muted-foreground">Nothing needs you now, and nothing is queued for you.</span> : null}
-      <Group title="Can do now" asks={buckets.now} items={items} read={read} />
-      <Group title="Not your turn yet" asks={buckets.later} items={items} read={read} />
-      <Group title="Unknown" asks={buckets.unknown} items={items} read={read} />
-      <Group title="Expired" asks={buckets.expired} items={items} read={read} />
-      {ordered.length > 0 ? (
-        <p className="m-0 text-sm text-muted-foreground">
-          Three places to act: reply in the thread · decide in Needs you · paste a command in your terminal. Each row says which.
-        </p>
-      ) : null}
-      {later != null ? (
-        <p className="m-0 text-sm text-muted-foreground">
-          Later: about <span data-owner-count="">{later}</span> more requests to you over this step, most of them a release to approve
-        </p>
-      ) : null}
+      {current ? (
+        <>
+          <Group title="Can do now" asks={buckets.now} items={items} read={read} allowGreen={bothOk} />
+          <Group title="Not your turn yet" asks={buckets.later} items={items} read={read} allowGreen={bothOk} />
+          <Group title="Unknown" asks={buckets.unknown} items={items} read={read} allowGreen={bothOk} />
+          <Group title="Expired" asks={buckets.expired} items={items} read={read} allowGreen={bothOk} />
+          {ordered.length > 0 ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Three places to act: reply in the thread · decide in Needs you · paste a command in your terminal. Each row says which.
+            </p>
+          ) : null}
+          {later != null ? (
+            <p className="m-0 text-sm text-muted-foreground">
+              Later: about <span data-owner-count="">{later}</span> more requests to you over this step, most of them a release to approve
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <p className="m-0 text-sm text-foreground">Unknown — the progress document could not be read</p>
+          <p className="m-0 text-sm text-muted-foreground">Last good read: {asOf}</p>
+          <a href="#needs-you" className="inline-flex min-h-11 items-center text-sm underline">
+            Requests waiting for you are listed there
+          </a>
+          {asks.length > 0 ? (
+            <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
+              {asks.map((ask, index) => (
+                <li key={`${ask.name ?? 'ask'}-${ask.index}-${index}`} data-historical="" className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-1 text-sm first:border-t-0">
+                  <span className="text-muted-foreground">as of {asOf}</span>
+                  {agentText(ask.name) !== '' ? <AgentText value={ask.name} /> : <Missing field="name" />}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      )}
     </>
   )
 }
@@ -313,12 +376,14 @@ export function NeedsYouBlock({
   read,
   listUnreadable,
   later,
+  documentRead = { kind: 'ok' },
 }: {
   asks: AskSource[]
   items: ApprovalItem[] | undefined
   read: ApprovalRead
   listUnreadable: boolean
   later: number | null
+  documentRead?: DocumentRead
 }) {
   const renders = useRef(0)
   renders.current += 1
@@ -330,7 +395,7 @@ export function NeedsYouBlock({
       data-summary-renders={renders.current}
       className="flex w-full min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
     >
-      <NeedsYouLive asks={asks} items={items} read={read} listUnreadable={listUnreadable} later={later} />
+      <NeedsYouLive asks={asks} items={items} read={read} listUnreadable={listUnreadable} later={later} documentRead={documentRead} />
     </section>
   )
 }

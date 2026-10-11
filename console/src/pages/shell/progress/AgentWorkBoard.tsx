@@ -19,6 +19,7 @@ import {
   type ProgressDocument,
 } from '@/api/agentProgress'
 import { AgentText } from '@/pages/shell/progress/AgentText'
+import { NeedsYouBlock } from '@/pages/shell/progress/NeedsYouBlock'
 import { ProgressActivity, ProgressDoneToday } from '@/pages/shell/progress/ProgressActivity'
 import { FinishedWorks, IdleWorkLine, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
@@ -28,7 +29,9 @@ import { ProgressUsageBlock } from '@/pages/shell/progress/ProgressUsage'
 import { FoldProvider, SectionFold } from '@/pages/shell/progress/progressFold'
 import { NowClock, Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { runningRows, splitWorks } from '@/pages/shell/progress/progressModel'
-import { agentText, hasNeedsYou } from '@/pages/shell/progress/progressSummaryModel'
+import { agentText, hasNeedsYou, type DocumentRead } from '@/pages/shell/progress/progressSummaryModel'
+
+const DOCUMENT_READY: DocumentRead = { kind: 'ok' }
 
 /**
  * Interim bridge (DESIGN §20.4): the coordinating thread publishes the
@@ -160,9 +163,11 @@ function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | u
 const WorkDocument = memo(function WorkDocument({
   doc,
   env,
+  documentRead,
 }: {
   doc: ProgressDocument
   env?: AgentProgressResponse
+  documentRead: DocumentRead
 }) {
   const paints = useRef(0)
   paints.current += 1
@@ -172,7 +177,7 @@ const WorkDocument = memo(function WorkDocument({
   const running = runningRows(doc.works ?? []).length
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
-      <ProgressSummary doc={doc} env={env} />
+      <ProgressSummary doc={doc} env={env} documentRead={documentRead} />
       <Verdict doc={doc} />
       <NextTime doc={doc} />
       <SectionFold id="sec-running" title="Running now" digest={running > 0 ? `${running} steps` : 'Nothing running'} defaultOpen={running > 0}>
@@ -258,7 +263,16 @@ function Freshness({
         <p className="m-0 break-words text-sm text-foreground">{skewSentence(doc.at, now)}</p>
       ) : null}
       {doc == null ? (
-        failed || stale || skewed ? null : (
+        failed ? (
+          <NeedsYouBlock
+            asks={[]}
+            items={undefined}
+            read="ready"
+            listUnreadable={false}
+            later={null}
+            documentRead={{ kind: 'failed', lastGoodAt: null }}
+          />
+        ) : stale || skewed ? null : (
           <p className="m-0 text-sm text-muted-foreground">No progress has been published.</p>
         )
       ) : (
@@ -271,7 +285,17 @@ function Freshness({
           }
         >
           {dim ? <p className="m-0 text-sm font-medium text-foreground">Last known</p> : null}
-          <WorkDocument doc={doc} env={env} />
+          <WorkDocument
+            doc={doc}
+            env={env}
+            documentRead={
+              failed
+                ? { kind: 'failed', lastGoodAt: typeof doc.at === 'number' && doc.at > 0 ? doc.at : null }
+                : stale
+                  ? { kind: 'stale', lastGoodAt: typeof doc.at === 'number' && doc.at > 0 ? doc.at : null }
+                  : DOCUMENT_READY
+            }
+          />
         </section>
       )}
     </>

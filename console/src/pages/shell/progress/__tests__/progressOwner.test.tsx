@@ -207,7 +207,9 @@ describe('one Needs you block', () => {
     expect(bare.querySelector('[data-missing="reply"]')?.className).toContain('text-warning')
     expect(bare.querySelector('[data-missing="takes"]')?.textContent).toBe('Not written')
     expect(bare.querySelector('[data-missing="blocks"]')?.textContent).toBe('Not written')
-    expect(within(bare).getByText('No deadline')).toBeTruthy()
+    expect(bare.querySelector('[data-fact="Latest"] [data-missing="deadline"]')?.textContent).toBe('Not written')
+    expect(within(bare).queryByText('No deadline')).toBeNull()
+    expect(bare.querySelector('[data-fact="How to do it"] [data-missing="actions"]')?.textContent).toBe('Not written')
     expect(block.textContent).toContain('Three places to act: reply in the thread · decide in Needs you · paste a command in your terminal. Each row says which.')
   })
 

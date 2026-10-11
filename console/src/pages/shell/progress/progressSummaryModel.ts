@@ -75,10 +75,10 @@ export function asksFromDocument(
   const standingAsks = standing === 'unreadable' ? [] : (standing ?? [])
   const standingFlag = standing === 'unreadable'
   if (ownerItems === 'unreadable') {
-    return { listUnreadable: true, asks: standingAsks.map((ask, index) => ({ ...ask, index })) }
+    return { listUnreadable: true, asks: dedupeAsks(standingAsks.map((ask, index) => ({ ...ask, index }))) }
   }
   if (ownerItems !== undefined) {
-    const asks = ownerItems.concat(standingAsks).map((ask, index) => ({ ...ask, index }))
+    const asks = dedupeAsks(ownerItems.concat(standingAsks).map((ask, index) => ({ ...ask, index })))
     return { listUnreadable: standingFlag, asks }
   }
   const fallback: AskSource[] = (ownerNow ?? []).map((entry, index) => ({
@@ -93,11 +93,43 @@ export function asksFromDocument(
     index,
     fallback: true,
   }))
-  const asks = fallback.concat(standingAsks.map((ask, index) => ({ ...ask, index: fallback.length + index })))
+  const asks = dedupeAsks(fallback.concat(standingAsks.map((ask, index) => ({ ...ask, index: fallback.length + index }))))
   return { listUnreadable: standingFlag, asks }
 }
 
 export type ApprovalRead = 'loading' | 'unreadable' | 'ready'
+
+/** What the Progress page knows about the document it is showing. */
+export type DocumentRead =
+  | { kind: 'loading' }
+  | { kind: 'failed' | 'stale'; lastGoodAt: number | null }
+  | { kind: 'ok' }
+
+/**
+ * Stable identity for one Needs you row.
+ * An approval id wins. Otherwise the cleaned work and name. A row with neither stays unique.
+ */
+export function askIdentity(ask: { approval?: { id?: string }; work?: string; name?: string }): string | null {
+  if (isApprovalId(ask.approval?.id)) return `id:${ask.approval.id}`
+  const work = agentText(ask.work)
+  const name = agentText(ask.name)
+  if (work === '' && name === '') return null
+  return `pair:${work}\0${name}`
+}
+
+function dedupeAsks(asks: AskSource[]): AskSource[] {
+  const seen = new Set<string>()
+  const kept: AskSource[] = []
+  for (const ask of asks) {
+    const id = askIdentity(ask)
+    if (id != null) {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
+    kept.push(ask)
+  }
+  return kept.map((ask, index) => ({ ...ask, index }))
+}
 
 export function requestItem(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, read: ApprovalRead): ApprovalItem | undefined {
   if (read !== 'ready' || !isApprovalId(ask.approval?.id)) return undefined
@@ -281,7 +313,7 @@ export function deadlineMarker(
   if (typeof ask.deadline === 'number') return byWhenText(ask.deadline * 1000, nowMs) ?? 'unknown'
   const text = agentText(ask.deadline_text)
   if (text !== '') return { text, amber: false }
-  return { text: 'No deadline', amber: false }
+  return 'none'
 }
 
 export function holdsMarker(ask: OwnerAsk): { text: string; amber: boolean } {
