@@ -56,6 +56,12 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_request',
   'list_requests',
   'wait_for_request',
+  'ask_owner',
+  'get_question',
+  'list_questions',
+  'wait_for_answer',
+  'ack_answer',
+  'withdraw_question',
 ] as const
 
 export type PlatformStdioToolName = (typeof PLATFORM_STDIO_TOOL_NAMES)[number]
