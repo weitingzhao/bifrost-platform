@@ -1,5 +1,6 @@
 import { formatLocalTime } from '@/api/agentProgress'
 import type { ProgressClaudeUsage, ProgressCodexUsage, ProgressCursorUsage, ProgressUsage } from '@/api/agentProgressBoard'
+import { ProgressQuota } from '@/pages/shell/progress/ProgressQuota'
 import { percentText, resetsIn, windowIsHot } from '@/pages/shell/progress/progressModel'
 import { Tick } from '@/pages/shell/progress/progressClock'
 
@@ -51,9 +52,10 @@ function ClaudeRow({ claude }: { claude: ProgressClaudeUsage }) {
   )
 }
 
-/** One row per vendor. A Claude window at 75% or more is highlighted. */
+/** Pools replace the vendor rows. Without pools, one row per vendor stays. */
 export function ProgressUsageBlock({ usage }: { usage: ProgressUsage | undefined }) {
   if (usage == null) return null
+  if (usage.pools != null) return <ProgressQuota usage={usage} />
   const empty = usage.cursor == null && usage.codex == null && usage.claude == null
   return (
     <section aria-label="Usage today" className="flex w-full min-w-0 flex-col gap-2">

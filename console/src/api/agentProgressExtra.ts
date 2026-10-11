@@ -69,3 +69,55 @@ export function requestChipLabel(number: number | undefined): string {
   if (typeof number === 'number' && Number.isFinite(number)) return `request #${number}`
   return 'request'
 }
+
+export type ProgressPool = {
+  vendor?: string
+  role?: string
+  id?: string
+  label?: string
+  used?: number
+  resets_at?: string
+  window_h?: number
+  elapsed_pct?: number
+  left_pct?: number
+  left_h?: number
+  allow_per_day?: number
+  rate_per_day?: number
+  rate_basis?: string
+  projected?: number
+  verdict?: string
+  runs_out_at?: string
+  spare_pct?: number
+  note?: string
+}
+
+const POOL_STRINGS = ['vendor', 'role', 'id', 'label', 'resets_at', 'rate_basis', 'verdict', 'runs_out_at', 'note'] as const
+const POOL_NUMBERS = [
+  'used',
+  'window_h',
+  'elapsed_pct',
+  'left_pct',
+  'left_h',
+  'allow_per_day',
+  'rate_per_day',
+  'projected',
+  'spare_pct',
+] as const
+
+function parsePool(value: Record<string, unknown>): ProgressPool {
+  const pool: ProgressPool = {}
+  for (const key of POOL_STRINGS) {
+    const text = asString(value[key])
+    if (text !== undefined) pool[key] = text
+  }
+  for (const key of POOL_NUMBERS) {
+    const n = asNumber(value[key])
+    if (n !== undefined) pool[key] = n
+  }
+  return pool
+}
+
+export function parsePools(value: unknown): ProgressPool[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.filter(isRecord).map(parsePool)
+}

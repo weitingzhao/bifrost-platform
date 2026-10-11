@@ -1,3 +1,5 @@
+import { parsePools, type ProgressPool } from '@/api/agentProgressExtra'
+
 /** Optional board fields the publisher adds. The server keeps them as-is. */
 
 export type ProgressEvent = {
@@ -68,6 +70,7 @@ export type ProgressUsage = {
   cursor?: ProgressCursorUsage
   codex?: ProgressCodexUsage
   claude?: ProgressClaudeUsage
+  pools?: ProgressPool[]
 }
 
 export type ProgressQueueItem = {
@@ -220,6 +223,8 @@ export function parseUsage(value: unknown): ProgressUsage | undefined {
   if (isRecord(value.cursor)) usage.cursor = parseCursor(value.cursor)
   if (isRecord(value.codex)) usage.codex = parseCodex(value.codex)
   if (isRecord(value.claude)) usage.claude = parseClaude(value.claude)
+  const pools = parsePools(value.pools)
+  if (pools !== undefined) usage.pools = pools
   return usage
 }
 
