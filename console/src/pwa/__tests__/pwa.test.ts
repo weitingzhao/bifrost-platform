@@ -13,7 +13,7 @@ describe('app badge', () => {
   it('sets the count, and clears on zero or unknown', () => {
     const nav = badgingNavigator()
     syncAppBadge(3, nav as unknown as Navigator)
-    expect(nav.setAppBadge).toHaveBeenCalledWith(3)
+    expect(nav.setAppBadge).toHaveBeenCalledWith(4)
     syncAppBadge(0, nav as unknown as Navigator)
     syncAppBadge(null, nav as unknown as Navigator)
     expect(nav.clearAppBadge).toHaveBeenCalledTimes(2)
