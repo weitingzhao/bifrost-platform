@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
+import { formatLocalTime } from '@/api/agentProgress'
 import { AGENT_TEXT_MAX } from '@/pages/shell/progress/progressSummaryModel'
 import { AgentWorkBoard } from '@/pages/shell/progress/AgentWorkBoard'
 
@@ -302,5 +303,166 @@ describe('one list for the summary, the section, and the empty state', () => {
     const section = await screen.findByRole('region', { name: 'Needs you now' })
     expect(within(section).getByText('签署规则')).toBeTruthy()
     expect(screen.queryByText('Nothing is waiting for you.')).toBeNull()
+  })
+})
+
+describe('progress numbers that can be wrong are Unknown', () => {
+  beforeEach(() => {
+    installStorage()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(NOW))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('D shows Unknown for a contradictory estimate and keeps a legitimate 0/0', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Est',
+      roadmap: {
+        groups: [
+          {
+            state: 'doing',
+            items: ['a'],
+            detail: [
+              { name: 'Over', est: { done: 9, total: 2, mine: 1, owner: 1 } },
+              { name: 'Empty', est: { done: 0, total: 0, mine: 1, owner: 0 } },
+              { name: 'Zero total', est: { done: 1, total: 0, mine: 1, owner: 0 } },
+              { name: 'Fraction', est: { done: 1.5, total: 4, mine: 1, owner: 0 } },
+            ],
+          },
+        ],
+      },
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const rows = [...box.querySelectorAll('[data-plan-item]')]
+    expect(rows[0]?.textContent).toContain('Unknown')
+    expect(rows[0]?.textContent).not.toContain('9/2')
+    expect(rows[0]?.querySelector('[data-slice-pct]')).toBeNull()
+    expect(rows[0]?.querySelector('.bg-emerald-500')).toBeNull()
+    expect(rows[1]?.querySelector('[data-slice-pct]')?.getAttribute('data-slice-pct')).toBe('0')
+    expect(rows[1]?.textContent).toContain('0/0')
+    expect(rows[2]?.querySelector('[data-slice="unknown"]')?.textContent).toBe('Unknown')
+    expect(rows[3]?.querySelector('[data-slice="unknown"]')?.textContent).toBe('Unknown')
+  })
+
+  it('E labels a partial total and does not derive nights from it', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Partial',
+      roadmap: {
+        groups: [
+          {
+            state: 'doing',
+            items: ['a', 'b'],
+            detail: [
+              { name: 'Counted', est: { done: 1, total: 2, mine: 2, owner: 1 } },
+              { name: 'Bare', est: { done: 0, total: 10 } },
+            ],
+          },
+        ],
+        pace: { per_night: 2 },
+      },
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(within(box).getByText('at least 2 slices (1 item not estimated)')).toBeTruthy()
+    expect(within(box).getByText('at least 1 times you (1 item not estimated)')).toBeTruthy()
+    expect(box.querySelector('[data-nights]')).toBeNull()
+    expect(box.textContent).not.toMatch(/nights/)
+  })
+
+  it('F shows when a running step is expected, and Unknown when it has no time', async () => {
+    const eta = NOW_SEC + 600
+    stub({
+      at: NOW_SEC,
+      verdict: 'Eta',
+      works: [
+        {
+          title: 'Board',
+          short: 'Board',
+          steps: [
+            { name: 'Run', state: 'running', who: 'Cursor', started: NOW_SEC - 60, usual_min: 30, eta_end: eta },
+            { name: 'Bare', state: 'running', who: 'Codex', started: NOW_SEC - 60, usual_min: 30 },
+            { name: 'Yours', state: 'gap', who: 'You', needs_owner: true, eta_end: eta },
+          ],
+        },
+      ],
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const rows = [...box.querySelectorAll('[data-running-row]')]
+    const when = (name: string) => rows.find(row => row.textContent?.includes(name))?.querySelector('[data-running-when]')?.textContent
+    expect(when('Run')).toBe(formatLocalTime(eta))
+    expect(when('Bare')).toBe('Unknown')
+    expect(when('Yours')).toBe('Waiting for you')
+  })
+
+  it('G turns the trouble light amber when a running step passes its usual time', async () => {
+    vi.useRealTimers()
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(NOW))
+    stub({
+      at: NOW_SEC,
+      verdict: 'Cross',
+      works: [
+        {
+          title: 'Board',
+          short: 'Board',
+          steps: [{ name: 'Run', state: 'running', who: 'Cursor', started: NOW_SEC - 9 * 60, usual_min: 10 }],
+        },
+      ],
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(box.querySelector('[data-trouble]')?.getAttribute('data-trouble')).toBe('green')
+    const stable = {
+      paints: box.getAttribute('data-paints'),
+      plan: box.querySelector('[data-summary-block="plan"]')?.getAttribute('data-summary-renders'),
+      running: box.querySelector('[data-summary-block="running"]')?.getAttribute('data-summary-renders'),
+      gauges: box.querySelector('[data-summary-block="gauges"]')?.getAttribute('data-summary-renders'),
+      needs: box.querySelector('[data-summary-block="needs-you"]')?.getAttribute('data-summary-renders'),
+    }
+    await act(async () => {
+      vi.setSystemTime(NOW + 2 * 60 * 1000)
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(box.querySelector('[data-trouble]')?.getAttribute('data-trouble')).toBe('amber')
+    expect(box.querySelector('[data-running-row]')?.getAttribute('data-tone')).toBe('amber')
+    expect(box.getAttribute('data-paints')).toBe(stable.paints)
+    expect(box.querySelector('[data-summary-block="plan"]')?.getAttribute('data-summary-renders')).toBe(stable.plan)
+    expect(box.querySelector('[data-summary-block="running"]')?.getAttribute('data-summary-renders')).toBe(stable.running)
+    expect(box.querySelector('[data-summary-block="gauges"]')?.getAttribute('data-summary-renders')).toBe(stable.gauges)
+    expect(box.querySelector('[data-summary-block="needs-you"]')?.getAttribute('data-summary-renders')).toBe(stable.needs)
+    expect(Number(box.querySelector('[data-trouble-renders]')?.getAttribute('data-trouble-renders'))).toBeGreaterThan(1)
+  })
+
+  it('H shows Unknown for an absurd usual time or a start in the future', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Absurd',
+      works: [
+        {
+          title: 'Board',
+          short: 'Board',
+          steps: [
+            { name: 'Huge', state: 'running', who: 'Cursor', started: NOW_SEC - 3600, usual_min: 1e100 },
+            { name: 'Future', state: 'running', who: 'Codex', started: NOW_SEC + 120, usual_min: 10 },
+          ],
+        },
+      ],
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const rows = [...box.querySelectorAll('[data-running-row]')]
+    for (const row of rows) {
+      expect(row.querySelector('[data-elapsed="unknown"]')?.textContent).toBe('Unknown')
+      expect(row.querySelector('[data-elapsed-pct]')).toBeNull()
+      expect(row.querySelector('.bg-emerald-500')).toBeNull()
+    }
   })
 })

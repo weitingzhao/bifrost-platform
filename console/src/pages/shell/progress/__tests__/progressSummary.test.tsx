@@ -495,15 +495,29 @@ describe('Progress summary', () => {
     render(wrap(<AgentWorkBoard />))
     const summary = await screen.findByTestId('progress-summary')
     const paints = summary.getAttribute('data-paints')
-    const planRenders = summary.querySelector('[data-summary-renders]')?.getAttribute('data-summary-renders')
-    const before = summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct')
-    expect(before).toBe('33')
+    const block = (name: string) => summary.querySelector(`[data-summary-block="${name}"]`)?.getAttribute('data-summary-renders')
+    const gauge = (name: string) => summary.querySelector(`[data-gauge="${name}"]`)?.getAttribute('data-summary-renders')
+    const before = {
+      needs: block('needs-you'),
+      plan: block('plan'),
+      running: block('running'),
+      gauges: block('gauges'),
+      quota: gauge('quota'),
+      done: gauge('done'),
+      elapsed: summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct'),
+    }
+    expect(before.elapsed).toBe('33')
     await act(async () => {
       vi.setSystemTime(NOW + 120_000)
       await vi.advanceTimersByTimeAsync(1000)
     })
     expect(summary.getAttribute('data-paints')).toBe(paints)
-    expect(summary.querySelector('[data-summary-renders]')?.getAttribute('data-summary-renders')).toBe(planRenders)
+    expect(block('needs-you')).toBe(before.needs)
+    expect(block('plan')).toBe(before.plan)
+    expect(block('running')).toBe(before.running)
+    expect(block('gauges')).toBe(before.gauges)
+    expect(gauge('quota')).toBe(before.quota)
+    expect(gauge('done')).toBe(before.done)
     expect(summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct')).toBe('40')
   })
 })

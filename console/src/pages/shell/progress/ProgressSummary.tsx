@@ -24,7 +24,7 @@ import {
   doingDetails,
   elapsedPercent,
   holdsMarker,
-  nightsFigure,
+  nightsFrom,
   notYetDueCount,
   openDetails,
   orderedAsks,
@@ -32,16 +32,19 @@ import {
   runningQuietLine,
   runningRank,
   runningTone,
+  runningWhen,
   segmentFlex,
+  sliceIsUnknown,
   sliceLabel,
   slicePercent,
+  slicesHeadline,
   sumOpen,
   takesMarker,
+  timesHeadline,
   troubleTone,
   turnMarker,
   waitingNowCount,
   waitsOnOwner,
-  formatCount,
   type ApprovalRead,
   type AskSource,
 } from '@/pages/shell/progress/progressSummaryModel'
@@ -212,8 +215,10 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
   const mine = sumOpen(details, 'mine')
   const ownerTimes = sumOpen(details, 'owner')
   const pace = roadmap?.pace
-  const nights = pace == null || pace.unreadable ? null : nightsFigure(mine, pace.per_night)
-  const showFigures = mine != null || ownerTimes != null || nights != null
+  const nights = pace == null || pace.unreadable ? null : nightsFrom(mine, ownerTimes, pace.per_night)
+  const slicesText = slicesHeadline(mine)
+  const timesText = timesHeadline(ownerTimes)
+  const showFigures = slicesText != null || timesText != null || nights != null
   const items = doingDetails(roadmap).filter(item => !item.unreadable && item.est != null)
   return (
     <button
@@ -258,6 +263,7 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
       {items.length > 0 ? (
         <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
           {items.map((item, index) => {
+            const unknown = sliceIsUnknown(item.est?.done, item.est?.total)
             const pct = slicePercent(item.est?.done, item.est?.total)
             const blocked = typeof item.est?.blocked === 'string' ? agentText(item.est.blocked) : ''
             const owner = waitsOnOwner(blocked)
@@ -269,9 +275,13 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
                   {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" title="Waiting on you" /> : null}
                 </span>
                 <span className="block h-1.5 overflow-hidden rounded bg-foreground/10">
-                  <span className="block h-full bg-emerald-500" style={{ width: `${pct ?? 0}%` }} data-slice-pct={pct ?? 0} />
+                  {unknown ? null : (
+                    <span className="block h-full bg-emerald-500" style={{ width: `${pct ?? 0}%` }} data-slice-pct={pct ?? 0} />
+                  )}
                 </span>
-                <span className="text-right text-muted-foreground">{sliceLabel(item.est?.done, item.est?.total)}</span>
+                <span className="text-right text-muted-foreground" data-slice={unknown ? 'unknown' : 'bar'}>
+                  {unknown ? 'Unknown' : sliceLabel(item.est?.done, item.est?.total)}
+                </span>
               </li>
             )
           })}
@@ -279,13 +289,9 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
       ) : null}
       {showFigures ? (
         <span data-plan-figures="" className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-          {mine === 'unknown' ? <span>slices left Unknown</span> : mine != null ? <span>{`${formatCount(mine)} slices left`}</span> : null}
+          {slicesText != null ? <span>{slicesText}</span> : null}
           {nights != null ? <span data-nights="">{`${nights} nights`}</span> : null}
-          {ownerTimes === 'unknown' ? (
-            <span>times you Unknown</span>
-          ) : ownerTimes != null ? (
-            <span>{`${formatCount(ownerTimes)} times you`}</span>
-          ) : null}
+          {timesText != null ? <span>{timesText}</span> : null}
         </span>
       ) : null}
     </button>
@@ -295,18 +301,9 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
 function RunningRowView({ row }: { row: RunningRow }) {
   const now = useNow()
   const tone = runningTone(row.step, now)
-  const pct = Math.round(elapsedPercent(row.step, now))
+  const pct = elapsedPercent(row.step, now)
   const who = row.step.who?.trim() ?? ''
-  const when =
-    row.step.needs_owner === true
-      ? 'Waiting for you'
-      : tone === 'bad'
-        ? row.step.state === 'failed'
-          ? 'Failed'
-          : 'Stuck'
-        : (row.step.overdue ?? 0) > 0
-          ? 'Late'
-          : ''
+  const when = runningWhen(row.step)
   const barClass = tone === 'bad' ? 'bg-destructive' : tone === 'amber' || tone === 'owner' ? 'bg-amber-500' : 'bg-emerald-500'
   return (
     <li data-running-row="" data-tone={tone} className="grid min-w-0 grid-cols-[minmax(0,1.4fr)_auto_minmax(3rem,1fr)_auto] items-center gap-2 py-1 text-xs">
@@ -315,15 +312,21 @@ function RunningRowView({ row }: { row: RunningRow }) {
         <span className="text-muted-foreground">{` ${row.step.name ?? ''}`}</span>
       </span>
       <span className="truncate text-muted-foreground">{who}</span>
-      <span className="block h-2 overflow-hidden rounded bg-foreground/10">
-        <span data-elapsed-pct={pct} className={`block h-full ${barClass}`} style={{ width: `${pct}%` }} />
-      </span>
-      <span className={tone === 'amber' || tone === 'owner' ? 'text-warning' : tone === 'bad' ? 'text-destructive' : ''}>{when}</span>
+      {pct === 'unknown' ? (
+        <span data-elapsed="unknown" className="text-muted-foreground">Unknown</span>
+      ) : (
+        <span className="block h-2 overflow-hidden rounded bg-foreground/10">
+          <span data-elapsed-pct={Math.round(pct)} className={`block h-full ${barClass}`} style={{ width: `${Math.round(pct)}%` }} />
+        </span>
+      )}
+      <span data-running-when="" className={tone === 'amber' || tone === 'owner' ? 'text-warning' : tone === 'bad' ? 'text-destructive' : ''}>{when}</span>
     </li>
   )
 }
 
 function RunningPicture({ doc }: { doc: ProgressDocument }) {
+  const renders = useRef(0)
+  renders.current += 1
   const openSection = useOpenSection()
   const rows = runningRows(doc.works ?? [])
     .map((row, index) => ({ row, index }))
@@ -333,6 +336,7 @@ function RunningPicture({ doc }: { doc: ProgressDocument }) {
     <button
       type="button"
       data-summary-block="running"
+      data-summary-renders={renders.current}
       className="flex min-h-11 w-full min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
       onClick={() => openSection('sec-running')}
     >
@@ -411,25 +415,44 @@ function CoordGauge({ doc }: { doc: ProgressDocument }) {
   )
 }
 
-function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressResponse | undefined }) {
+function TroubleGauge({ works }: { works: ProgressWork[] | undefined }) {
+  const now = useNow()
+  const renders = useRef(0)
+  renders.current += 1
   const openSection = useOpenSection()
-  const trouble = troubleTone(doc.works)
-  const pools = (doc.usage?.pools ?? []).filter(pool => pool.verdict !== 'sublimit')
-  const done = doc.recent?.length ?? 0
+  const trouble = troubleTone(works, now)
   const light = (name: 'green' | 'amber' | 'red', on: boolean, className: string) => (
     <i data-light={name} data-on={on ? 'true' : 'false'} className={`inline-block size-3.5 rounded-full ${on ? className : 'bg-foreground/15'}`} />
   )
   return (
-    <div data-summary-block="gauges" className="grid w-full min-w-0 grid-cols-2 gap-2 min-[821px]:grid-cols-5">
-      <button type="button" data-gauge="trouble" data-trouble={trouble} className="flex min-h-11 min-w-0 flex-col justify-center gap-1 text-left text-xs" onClick={() => openSection('sec-running')}>
-        <span className="text-muted-foreground">Trouble</span>
-        <span className="inline-flex gap-1">
-          {light('green', trouble === 'green', 'bg-emerald-500')}
-          {light('amber', trouble === 'amber', 'bg-amber-500')}
-          {light('red', trouble === 'red', 'bg-destructive')}
-        </span>
-      </button>
-      <button type="button" data-gauge="quota" className="flex min-h-11 min-w-0 flex-col justify-center gap-1 text-left text-xs" onClick={() => openSection('sec-quota')}>
+    <button
+      type="button"
+      data-gauge="trouble"
+      data-trouble={trouble}
+      data-trouble-renders={renders.current}
+      className="flex min-h-11 min-w-0 flex-col justify-center gap-1 text-left text-xs"
+      onClick={() => openSection('sec-running')}
+    >
+      <span className="text-muted-foreground">Trouble</span>
+      <span className="inline-flex gap-1">
+        {light('green', trouble === 'green', 'bg-emerald-500')}
+        {light('amber', trouble === 'amber', 'bg-amber-500')}
+        {light('red', trouble === 'red', 'bg-destructive')}
+      </span>
+    </button>
+  )
+}
+
+function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressResponse | undefined }) {
+  const renders = useRef(0)
+  renders.current += 1
+  const openSection = useOpenSection()
+  const pools = (doc.usage?.pools ?? []).filter(pool => pool.verdict !== 'sublimit')
+  const done = doc.recent?.length ?? 0
+  return (
+    <div data-summary-block="gauges" data-summary-renders={renders.current} className="grid w-full min-w-0 grid-cols-2 gap-2 min-[821px]:grid-cols-5">
+      <TroubleGauge works={doc.works} />
+      <button type="button" data-gauge="quota" data-summary-renders={renders.current} className="flex min-h-11 min-w-0 flex-col justify-center gap-1 text-left text-xs" onClick={() => openSection('sec-quota')}>
         <span className="text-muted-foreground">Quota</span>
         {pools.length === 0 ? (
           <span className="text-muted-foreground">No pools</span>
@@ -442,7 +465,7 @@ function Gauges({ doc, env }: { doc: ProgressDocument; env: AgentProgressRespons
         )}
       </button>
       <CoordGauge doc={doc} />
-      <button type="button" data-gauge="done" className="flex min-h-11 min-w-0 flex-col justify-center gap-0.5 text-left text-xs" onClick={() => openSection('sec-done')}>
+      <button type="button" data-gauge="done" data-summary-renders={renders.current} className="flex min-h-11 min-w-0 flex-col justify-center gap-0.5 text-left text-xs" onClick={() => openSection('sec-done')}>
         <span className="text-muted-foreground">Done today</span>
         <span data-done-count={done} className="text-base font-medium">{done}</span>
       </button>

@@ -1,6 +1,6 @@
 import type { ApprovalItem } from '@/api/approvals'
 import { isApprovalId } from '@/api/agentProgressExtra'
-import type { ProgressStep, ProgressWork } from '@/api/agentProgress'
+import { formatLocalTime, type ProgressStep, type ProgressWork } from '@/api/agentProgress'
 import type { ProgressGroup, ProgressQueueItem, ProgressRoadmap } from '@/api/agentProgressBoard'
 import type { CountRead, OwnerAsk, PlanDetail, PlanEstimate } from '@/api/progressFields'
 import { formatHourMinute, queuedNextLine } from '@/pages/shell/progress/progressModel'
@@ -239,20 +239,45 @@ export function countOrNull(value: CountRead | undefined): number | 'unknown' | 
   return value
 }
 
-/** Slices done of total. Zero total is an empty bar, never NaN. */
+/**
+ * A usable pair, Unknown when the pair contradicts itself, or absent when a side is missing.
+ * `0/0` is usable. `done > total`, a non-integer, a negative, or `total: 0` with `done > 0` is not.
+ */
+function sliceNumbers(
+  done: CountRead | undefined,
+  total: CountRead | undefined,
+): { done: number; total: number } | 'unknown' | 'absent' {
+  if (done === undefined || total === undefined) return 'absent'
+  if (done === 'unknown' || total === 'unknown') return 'unknown'
+  if (!Number.isInteger(done) || !Number.isInteger(total) || done < 0 || total < 0) return 'unknown'
+  if (done === 0 && total === 0) return { done: 0, total: 0 }
+  if (!(total > 0) || done > total) return 'unknown'
+  return { done, total }
+}
+
+export function sliceIsUnknown(done: CountRead | undefined, total: CountRead | undefined): boolean {
+  return sliceNumbers(done, total) === 'unknown'
+}
+
+/** Slices done of total. A legitimate `0/0` is an empty bar. A contradiction is not a percent. */
 export function slicePercent(done: CountRead | undefined, total: CountRead | undefined): number | null {
-  if (done === 'unknown' || total === 'unknown') return null
-  if (typeof done !== 'number' || typeof total !== 'number') return null
-  if (!(total > 0)) return 0
-  const pct = (done / total) * 100
+  const read = sliceNumbers(done, total)
+  if (read === 'unknown' || read === 'absent') return null
+  if (read.total === 0) return 0
+  const pct = (read.done / read.total) * 100
   if (!Number.isFinite(pct)) return null
   return Math.min(100, Math.max(0, pct))
 }
 
 export function sliceLabel(done: CountRead | undefined, total: CountRead | undefined): string {
-  const left = done === 'unknown' || done === undefined ? '?' : formatCount(done)
-  const right = total === 'unknown' || total === undefined ? '?' : formatCount(total)
-  return `${left}/${right}`
+  const read = sliceNumbers(done, total)
+  if (read === 'unknown') return 'Unknown'
+  if (read === 'absent') {
+    const left = done === 'unknown' || done === undefined ? '?' : formatCount(done)
+    const right = total === 'unknown' || total === undefined ? '?' : formatCount(total)
+    return `${left}/${right}`
+  }
+  return `${formatCount(read.done)}/${formatCount(read.total)}`
 }
 
 export function formatCount(value: number): string {
@@ -279,45 +304,79 @@ export function doingDetails(roadmap: ProgressRoadmap | undefined): PlanDetail[]
   return group.detail
 }
 
-type Sum = number | 'unknown' | null
+export type OpenFigure =
+  | { kind: 'none' }
+  | { kind: 'unknown' }
+  | { kind: 'full'; value: number }
+  | { kind: 'partial'; value: number; missing: number }
 
-function addCount(sum: Sum, value: CountRead | undefined, seen: { any: boolean }): Sum {
-  if (sum === 'unknown') return 'unknown'
-  if (value === undefined) return sum
-  if (value === 'unknown') return 'unknown'
-  seen.any = true
-  return (sum ?? 0) + value
-}
-
-/** Sum of a slice field over open items. No estimates → null. Any Unknown → Unknown. */
-export function sumOpen(details: readonly OpenDetail[], key: 'mine' | 'owner'): Sum {
+/** Sum of a slice field over open items. A missing field is a partial subtotal, not a zero. */
+export function sumOpen(details: readonly OpenDetail[], key: 'mine' | 'owner'): OpenFigure {
   let anyEst = false
+  let missing = 0
+  let sum = 0
+  let saw = false
   for (const row of details) {
-    if (row.detail.est != null) anyEst = true
+    if (row.detail.unreadable || row.detail.est?.unreadable) return { kind: 'unknown' }
+    const est = row.detail.est
+    if (est == null) {
+      missing += 1
+      continue
+    }
+    anyEst = true
+    const value = est[key]
+    if (value === undefined) {
+      missing += 1
+      continue
+    }
+    if (value === 'unknown' || !Number.isInteger(value) || value < 0) return { kind: 'unknown' }
+    saw = true
+    sum += value
   }
-  if (!anyEst) return null
-  const seen = { any: false }
-  let sum: Sum = 0
-  for (const row of details) {
-    if (row.detail.unreadable || row.detail.est?.unreadable) return 'unknown'
-    sum = addCount(sum, row.detail.est?.[key], seen)
-    if (sum === 'unknown') return 'unknown'
-  }
-  return seen.any ? sum : null
+  if (!anyEst) return { kind: 'none' }
+  if (missing > 0) return { kind: 'partial', value: sum, missing }
+  if (!saw) return { kind: 'none' }
+  return { kind: 'full', value: sum }
 }
+
+function missingItems(missing: number): string {
+  return `${missing} ${missing === 1 ? 'item' : 'items'} not estimated`
+}
+
+export function slicesHeadline(figure: OpenFigure): string | null {
+  if (figure.kind === 'none') return null
+  if (figure.kind === 'unknown') return 'slices left Unknown'
+  if (figure.kind === 'partial') return `at least ${formatCount(figure.value)} slices (${missingItems(figure.missing)})`
+  return `${formatCount(figure.value)} slices left`
+}
+
+export function timesHeadline(figure: OpenFigure): string | null {
+  if (figure.kind === 'none') return null
+  if (figure.kind === 'unknown') return 'times you Unknown'
+  if (figure.kind === 'partial') return `at least ${formatCount(figure.value)} times you (${missingItems(figure.missing)})`
+  return `${formatCount(figure.value)} times you`
+}
+
+type Sum = number | 'unknown' | null
 
 /** Nights from slices left ÷ per night. Absent or unusable pace → null, never NaN or Infinity. */
 export function nightsFigure(slicesLeft: Sum, perNight: CountRead | undefined): string | null {
   if (typeof slicesLeft !== 'number') return null
-  if (typeof perNight !== 'number' || !(perNight > 0)) return null
+  if (typeof perNight !== 'number' || !Number.isFinite(perNight) || !(perNight > 0)) return null
   const nights = slicesLeft / perNight
   if (!Number.isFinite(nights)) return null
   return formatCount(nights)
 }
 
+/** Nights only from a complete set of estimates and a usable pace. A partial subtotal has no nights. */
+export function nightsFrom(mine: OpenFigure, owner: OpenFigure, perNight: CountRead | undefined): string | null {
+  if (mine.kind !== 'full' || owner.kind !== 'full') return null
+  return nightsFigure(mine.value, perNight)
+}
+
 export function nightsRange(slicesLeft: Sum, perNight: CountRead | undefined): string | null {
   if (typeof slicesLeft !== 'number') return null
-  if (typeof perNight !== 'number' || !(perNight > 0)) return null
+  if (typeof perNight !== 'number' || !Number.isFinite(perNight) || !(perNight > 0)) return null
   const nights = slicesLeft / perNight
   if (!Number.isFinite(nights)) return null
   const low = Math.round(nights * 0.75 * 10) / 10
@@ -333,12 +392,29 @@ export function segmentFlex(count: number, total: number): number {
 
 export type RunningTone = 'owner' | 'bad' | 'amber' | 'run'
 
+const USUAL_MAX_MIN = 7 * 24 * 60
+const START_SKEW_SEC = 60
+
+function usualMinutes(step: ProgressStep): number | null {
+  const usual = step.usual_min
+  if (typeof usual !== 'number' || !Number.isFinite(usual) || usual <= 0 || usual > USUAL_MAX_MIN) return null
+  return usual
+}
+
+function startedAt(step: ProgressStep, nowMs: number): number | null {
+  const started = step.started
+  if (typeof started !== 'number' || !Number.isFinite(started) || !(started > 0) || !Number.isFinite(nowMs)) return null
+  if (started > nowMs / 1000 + START_SKEW_SEC) return null
+  return started
+}
+
 export function pastUsual(step: ProgressStep, nowMs: number): boolean {
-  const usual = step.usual_min ?? 0
-  const started = step.started ?? 0
-  if (!(usual > 0) || !(started > 0)) return (step.overdue ?? 0) > 0
+  if ((step.overdue ?? 0) > 0) return true
+  const usual = usualMinutes(step)
+  const started = startedAt(step, nowMs)
+  if (usual == null || started == null) return false
   const elapsed = Math.max(0, nowMs / 1000 - started)
-  return elapsed > usual * 60 || (step.overdue ?? 0) > 0
+  return elapsed > usual * 60
 }
 
 export function runningTone(step: ProgressStep, nowMs: number): RunningTone {
@@ -349,16 +425,32 @@ export function runningTone(step: ProgressStep, nowMs: number): RunningTone {
   return 'run'
 }
 
-/** Elapsed against the usual time, capped at 100. No usual time → 0, not a stand-in fill. */
-export function elapsedPercent(step: ProgressStep, nowMs: number): number {
+/** Elapsed against the usual time, capped at 100. Absurd or missing timing is Unknown, not a green 0%. */
+export function elapsedPercent(step: ProgressStep, nowMs: number): number | 'unknown' {
   if (step.needs_owner === true) return 100
-  const usual = step.usual_min ?? 0
-  const started = step.started ?? 0
-  if (!(usual > 0) || !(started > 0) || !Number.isFinite(nowMs)) return 0
+  const usual = usualMinutes(step)
+  const started = startedAt(step, nowMs)
+  if (usual == null || started == null) return 'unknown'
   const elapsed = Math.max(0, nowMs / 1000 - started)
   const pct = (elapsed / (usual * 60)) * 100
-  if (!Number.isFinite(pct)) return 0
+  if (!Number.isFinite(pct)) return 'unknown'
   return Math.min(100, Math.max(0, pct))
+}
+
+/** Clock time for a normal running step. Owner, trouble and overdue keep their own words. */
+export function runningWhen(step: ProgressStep): string {
+  if (step.needs_owner === true) return 'Waiting for you'
+  const state = step.state ?? ''
+  if (state === 'failed') return 'Failed'
+  if (state === 'quiet' || state === 'dead') return 'Stuck'
+  if ((step.overdue ?? 0) > 0) return 'Late'
+  const eta = step.eta_end
+  if (typeof eta !== 'number' || !Number.isFinite(eta) || eta <= 0) return 'Unknown'
+  const date = new Date(eta * 1000)
+  if (Number.isNaN(date.getTime())) return 'Unknown'
+  const text = formatLocalTime(eta)
+  if (text === '' || text === 'unknown time') return 'Unknown'
+  return text
 }
 
 export function runningRank(step: ProgressStep): number {
@@ -370,11 +462,12 @@ export function runningRank(step: ProgressStep): number {
 
 export type TroubleTone = 'red' | 'amber' | 'green'
 
-/** Red only for stuck or failed. Amber for the coordinator's gap or a slow step. */
-export function troubleTone(works: readonly ProgressWork[] | undefined): TroubleTone {
+/** Red only for stuck or failed. Amber for a gap, a slow step, or a step past its usual time. */
+export function troubleTone(works: readonly ProgressWork[] | undefined, nowMs: number): TroubleTone {
   const steps = (works ?? []).flatMap(work => work.steps ?? [])
   if (steps.some(step => step.state === 'quiet' || step.state === 'dead' || step.state === 'failed')) return 'red'
   if (steps.some(step => step.state === 'gap' || step.state === 'slow')) return 'amber'
+  if (steps.some(step => step.state === 'running' && pastUsual(step, nowMs))) return 'amber'
   return 'green'
 }
 
