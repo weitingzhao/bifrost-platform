@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 func (s *Service) heartbeat(ref, lease string) decided {
@@ -203,6 +203,6 @@ func oneLine(s string) string {
 	return s
 }
 
-// Redact masks common secret shapes. The patterns live in approvalnotify so
-// delivery errors can be redacted before they are clipped.
-func Redact(s string) string { return approvalnotify.Redact(s) }
+// Redact masks common secret shapes before a tail or a clip can cut the
+// marker off. The patterns live in notice.
+func Redact(s string) string { return notice.Redact(s) }

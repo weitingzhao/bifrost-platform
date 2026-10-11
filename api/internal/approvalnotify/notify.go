@@ -4,10 +4,11 @@
 // notices (release policy reminders) the same way.
 //
 // The operator-plane alert relay (Mac mini .50) accepts
-// POST /api/v1/alerts/notify and publishes to ntfy. This package is the
-// platform-side client. Send returns one Delivery per target the relay
-// reports (or one failed/skipped entry when the relay was not reached); the
-// approvals service stores them on the record (deliveries[]).
+// POST /api/v1/alerts/notify and publishes to ntfy. The post itself lives in
+// package notice. This package composes the approval text and calls it.
+// Send returns one Delivery per target the relay reports (or one
+// failed/skipped entry when the relay was not reached); the approvals
+// service stores them on the record (deliveries[]).
 //
 // What a push carries (execution card 6, v4 §19): a verb that says what the
 // Owner has to do, then the reference, then a short lead, plus the one-line
@@ -24,20 +25,15 @@
 package approvalnotify
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // ConsoleClickPrefix is the Console deep link the notification opens.
@@ -45,8 +41,6 @@ const ConsoleClickPrefix = "http://ops.bifrost.lan/#approvals?id="
 
 // ConsoleApprovals is the Console approvals page without a selected item.
 const ConsoleApprovals = "http://ops.bifrost.lan/#approvals"
-
-var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 // Kinds of approval notices. The kind is stored on each delivery so a
 // reminder is sent once per record.
@@ -73,11 +67,11 @@ const (
 	RemindBeforeExpiry = 2 * time.Hour
 )
 
-// Delivery results.
+// Delivery results. The values are the relay's.
 const (
-	ResultAccepted = "accepted"
-	ResultFailed   = "failed"
-	ResultSkipped  = "skipped"
+	ResultAccepted = notice.ResultAccepted
+	ResultFailed   = notice.ResultFailed
+	ResultSkipped  = notice.ResultSkipped
 )
 
 // Item is the part of an approval a notice may show. It has no params:
@@ -102,29 +96,14 @@ type Item struct {
 	Error string
 }
 
-// Delivery is one notice to one target.
-type Delivery struct {
-	Kind    string
-	Channel string
-	Target  string
-	At      time.Time
-	Result  string
-	Error   string
-}
+// Delivery is one notice to one target. The relay record lives in notice.
+type Delivery = notice.Delivery
 
-// Message is one push through the relay.
-type Message struct {
-	Title    string
-	Message  string
-	ClickURL string
-	Priority int
-}
+// Message is one push through the relay. The relay record lives in notice.
+type Message = notice.Message
 
 // Configured is true when the relay URL and token are both set.
-func Configured() bool {
-	return strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL")) != "" &&
-		strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN")) != ""
-}
+func Configured() bool { return notice.Configured() }
 
 // Send composes the notice of this kind and posts it. A kind with no verb is
 // not a message: Send returns nothing and does not call the relay, and the
@@ -135,7 +114,7 @@ func Send(ctx context.Context, kind string, it Item, now time.Time) []Delivery {
 	if msg.Title == "" {
 		return nil
 	}
-	ds, _ := send(ctx, msg)
+	ds, _ := notice.Send(ctx, msg)
 	for i := range ds {
 		ds[i].Kind = kind
 		ds[i].At = now
@@ -152,7 +131,7 @@ func Notify(ctx context.Context, msg Message) error {
 	if msg.Priority == 0 {
 		msg.Priority = 4
 	}
-	_, err := send(ctx, msg)
+	_, err := notice.Send(ctx, msg)
 	return err
 }
 
@@ -324,75 +303,6 @@ func age(d time.Duration) string {
 	return fmt.Sprintf("%dm", int(d/time.Minute))
 }
 
-// relayAnswer is the relay's reply to POST /alerts/notify.
-type relayAnswer struct {
-	Error      string `json:"error"`
-	Deliveries []struct {
-		Channel string `json:"channel"`
-		Target  string `json:"target"`
-		Result  string `json:"result"`
-		Error   string `json:"error"`
-	} `json:"deliveries"`
-}
-
-func send(ctx context.Context, msg Message) ([]Delivery, error) {
-	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
-	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
-	if endpoint == "" || token == "" {
-		slog.Info("approval notify skipped", "title", msg.Title, "reason", "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset")
-		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultSkipped,
-			Error: "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"}}, nil
-	}
-	failed := func(err error) ([]Delivery, error) {
-		redacted := Redact(err.Error())
-		slog.Warn("approval notify failed", "title", msg.Title, "err", redacted)
-		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: clipErr(redacted)}}, err
-	}
-	raw, err := json.Marshal(map[string]any{
-		"title":     msg.Title,
-		"message":   msg.Message,
-		"click_url": msg.ClickURL,
-		"priority":  msg.Priority,
-	})
-	if err != nil {
-		return failed(err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
-	if err != nil {
-		return failed(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return failed(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	var ans relayAnswer
-	_ = json.Unmarshal(body, &ans)
-	var out []Delivery
-	for _, d := range ans.Deliveries {
-		out = append(out, Delivery{Channel: d.Channel, Target: d.Target, Result: d.Result, Error: clipErr(d.Error)})
-	}
-	if resp.StatusCode/100 != 2 {
-		err = fmt.Errorf("approval notify: relay status %d", resp.StatusCode)
-		if ans.Error != "" {
-			err = fmt.Errorf("%w: %s", err, Redact(ans.Error))
-		}
-		if len(out) == 0 {
-			return failed(err)
-		}
-		slog.Warn("approval notify failed", "title", msg.Title, "err", Redact(err.Error()))
-		return out, err
-	}
-	if len(out) == 0 {
-		// A relay older than per-target answers only says it sent.
-		out = []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultAccepted}}
-	}
-	return out, nil
-}
-
 func lines(parts ...string) string {
 	return joinNonEmpty("\n", parts...)
 }
@@ -413,10 +323,6 @@ func oneLine(s string) string {
 		s = strings.TrimSpace(s[:i])
 	}
 	return s
-}
-
-func clipErr(s string) string {
-	return clip(oneLine(Redact(s)), 300)
 }
 
 func clip(s string, n int) string {
