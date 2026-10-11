@@ -60,9 +60,19 @@ func (e *Engine) Install(ctx context.Context, policyText, sig string) (Status, e
 	return e.Status(ctx), nil
 }
 
+// freezeRefusedNoAnchor is the text Freeze returns, via refused, when no
+// trust anchor is compiled in. A freeze that no signature could lift is not
+// offered.
+const freezeRefusedNoAnchor = `freeze refused: platform-api has no trust anchor, so no signature could lift it. Generate the release owner key and compile its fingerprint in first (docs/RELEASE.md, "The release owner key").`
+
 // Freeze stops releases. Anyone with the operator role may set it; it only
-// tightens.
+// tightens. It is refused while the anchor is empty, before any write and
+// before the remembered newest freeze changes: until a signature could lift
+// it, the switch is not offered.
 func (e *Engine) Freeze(ctx context.Context, who, reason string) (Status, error) {
+	if strings.TrimSpace(e.d.Anchor) == "" {
+		return Status{}, refused("%s", freezeRefusedNoAnchor)
+	}
 	if e.d.Writer == nil {
 		return Status{}, errors.New("no ConfigMap writer")
 	}
