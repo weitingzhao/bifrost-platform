@@ -92,7 +92,13 @@ describe('canonical vectors', () => {
       const s = ch.repeat(8000)
       const steps = redactScanSteps(s)
       assert.equal(redact(s), s)
-      assert.ok(steps >= s.length && steps <= 8 * s.length, `${JSON.stringify(ch)} steps=${steps}`)
+      assert.ok(steps >= 2 * s.length && steps <= 16 * s.length, `${JSON.stringify(ch)} steps=${steps}`)
+    }
+    for (const n of [1000, 2000, 4000]) {
+      const s = 'Zxoxb-'.repeat(n) + 'a'.repeat(20)
+      const steps = redactScanSteps(s)
+      assert.equal(redact(s), s)
+      assert.ok(steps >= 2 * s.length && steps <= 16 * s.length, `n=${n} steps=${steps} len=${s.length}`)
     }
   })
 

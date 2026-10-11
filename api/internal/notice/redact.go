@@ -24,27 +24,49 @@ const (
 	secretWords    = `[Pp][Aa][Ss\x{017F}][Ss\x{017F}][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\x{017F}][Ss\x{017F}][Ww][Dd]|[Pp][Ww][Dd]|[Ss\x{017F}][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\x{212A}][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\x{212A}][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\x{017F}][Ss\x{017F}][_-]?[Kk\x{212A}][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\x{212A}][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]`
 )
 
-// A bounded rule matches the secret only. The characters on either side are
-// checked afterwards and are not part of the match, so the next secret can
-// use the same separator as its left edge. Github and Slack tokens fold a
-// trailing identifier into the match: their body stops before '_', and a
-// right-edge check would otherwise leave the token in place.
+// How a rule is applied. The token-prefix rules (bearer, jwt, aws, github and
+// slack) keep overlapping start positions: a failed edge check resumes one
+// byte after the match start, because a later token can begin inside it.
+// Each of those rules walks the text a constant number of times. A regexp
+// Find that restarts one byte later re-scans a long greedy tail on every
+// candidate, which is quadratic on "Zxoxb-" repeated.
+const (
+	scanRegex = iota
+	scanKeyword
+	scanBearer
+	scanJWT
+	scanAWS
+	scanToken
+)
+
+var (
+	pemRE    = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z ]*PRIVATE KEY-----|$)`)
+	bearerRE = regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\x{017F}][Ii][Cc])` + asciiWS + `+[` + foldAZ + `0-9._~+/=-]{8,}`)
+	jwtRE    = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`)
+	awsRE    = regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`)
+	tokenRE  = regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)`)
+	urlRE    = regexp.MustCompile(`://(` + notURLUser + `+):(` + notURLPass + `+)@`)
+)
+
+// Github and Slack tokens fold a trailing identifier into the match: their
+// body stops before '_', and a right-edge check would otherwise leave the
+// token in place. The characters on either side of a bounded match are not
+// part of it, so the next secret can use the same separator as its left edge.
 var redactions = []struct {
-	re      *regexp.Regexp
-	repl    string
-	bound   bool
-	keyword bool
+	re   *regexp.Regexp
+	repl string
+	scan int
 }{
-	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "[redacted private key]", false, false},
-	{regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\x{017F}][Ii][Cc])` + asciiWS + `+[` + foldAZ + `0-9._~+/=-]{8,}`), "$1 [redacted]", true, false},
+	{pemRE, "[redacted private key]", scanRegex},
+	{bearerRE, "$1 [redacted]", scanBearer},
 	// Keyword assignments are a single pass in replaceKeyword. The expression
-	// above used to be a regexp whose failure restarted one character later;
-	// on a long run of one character that re-scan was quadratic.
-	{nil, "$1$2[redacted]", true, true},
-	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "[redacted jwt]", true, false},
-	{regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`), "[redacted aws key]", true, false},
-	{regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)`), "[redacted token]", true, false},
-	{regexp.MustCompile(`://(` + notURLUser + `+):(` + notURLPass + `+)@`), "://$1:[redacted]@", false, false},
+	// used to be a regexp whose failure restarted one character later; on a
+	// long run of one character that re-scan was quadratic.
+	{nil, "$1$2[redacted]", scanKeyword},
+	{jwtRE, "[redacted jwt]", scanJWT},
+	{awsRE, "[redacted aws key]", scanAWS},
+	{tokenRE, "[redacted token]", scanToken},
+	{urlRE, "://$1:[redacted]@", scanRegex},
 }
 
 // keywordHit is the keyword alternation alone, with no leading star, so a
@@ -58,9 +80,9 @@ func Redact(s string) string {
 	return applyRedactions(s, nil)
 }
 
-// redactScanSteps counts iterations of the scans Redact runs. The keyword
-// rule walks each rune a small number of times; a failed separator is not a
-// place to start the search over from the next character.
+// redactScanSteps counts characters the scans examine, including the class-run
+// walks inside the token-prefix rules. A counter that only ticks once per
+// failed candidate is not a bound on that work.
 func redactScanSteps(s string) int {
 	var n int
 	applyRedactions(s, &n)
@@ -69,11 +91,17 @@ func redactScanSteps(s string) int {
 
 func applyRedactions(s string, steps *int) string {
 	for _, r := range redactions {
-		switch {
-		case r.keyword:
+		switch r.scan {
+		case scanKeyword:
 			s = replaceKeyword(s, steps)
-		case r.bound:
-			s = replaceBounded(s, r.re, r.repl, steps)
+		case scanBearer:
+			s = replaceBearer(s, steps)
+		case scanJWT:
+			s = replaceJWT(s, steps)
+		case scanAWS:
+			s = replaceAWS(s, steps)
+		case scanToken:
+			s = replaceToken(s, steps)
 		default:
 			s = r.re.ReplaceAllString(s, r.repl)
 		}
@@ -81,10 +109,11 @@ func applyRedactions(s string, steps *int) string {
 	return s
 }
 
-// replaceBounded accepts a candidate only when the character before it and the
-// character after it are an edge, then resumes at the end of the match.
-// A candidate that fails the edge check resumes one byte later: a later token
-// can begin inside this match, and the shared vectors depend on finding it.
+// replaceBounded is the regexp form of a bounded rule. The keyword equivalence
+// test still uses it. The token-prefix rules do not: Find restarts one byte
+// after a failed edge and re-scans a long greedy tail each time. A candidate
+// that fails the edge check resumes one byte later, because a later token can
+// begin inside this match, and the shared vectors depend on finding it.
 func replaceBounded(s string, re *regexp.Regexp, repl string, steps *int) string {
 	var b strings.Builder
 	b.Grow(len(s))

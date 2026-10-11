@@ -12,20 +12,19 @@ const ZERO = new Set([0x180e, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 // in the bearer and basic schemes, and in the character classes of the secret.
 // Characters outside the redacted span are copied unchanged. Do not use \s, \w,
 // \b, look-around, or the i flag. Bounded rules match the secret only; the edges
-// are checked outside the pattern and the scan resumes at the end of the match.
-// Keyword assignments are not in this list. replaceKeyword walks once; the old
-// expression restarted one character after each failed try and was quadratic
-// on a run of one character.
+// are checked outside the pattern. A failed edge resumes one character later.
+// Bearer, jwt, AWS and github/slack walk those starts in a few passes, so a
+// long "Zxoxb-" tail is not re-scanned. Keyword assignments walk once.
 const KEYWORD_HIT = /(?:[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Dd]|[Pp][Ww][Dd]|[Ss\u017F][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\u212A][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\u212A][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\u017F][Ss\u017F][_-]?[Kk\u212A][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\u212A][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])/
 
-const REDACT: Array<{ re: RegExp; repl: string; bound: boolean; keyword?: boolean }> = [
-  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\0-\uFFFF]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, repl: '[redacted private key]', bound: false },
-  { re: /([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\u017F][Ii][Cc])[ \t\n\r\f]+[A-Za-z\u017F\u212A0-9._~+/=-]{8,}/g, repl: '$1 [redacted]', bound: true },
-  { re: /(?:)/, repl: '$1$2[redacted]', bound: true, keyword: true },
-  { re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, repl: '[redacted jwt]', bound: true },
-  { re: /(?:AKIA|ASIA)[0-9A-Z]{16}/g, repl: '[redacted aws key]', bound: true },
-  { re: /(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)/g, repl: '[redacted token]', bound: true },
-  { re: /:\/\/([^/ \t\n\r\f:@]+):([^@ \t\n\r\f/]+)@/g, repl: '://$1:[redacted]@', bound: false },
+const REDACT: Array<{ re: RegExp; repl: string; scan: 're' | 'keyword' | 'bearer' | 'jwt' | 'aws' | 'token' }> = [
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\0-\uFFFF]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, repl: '[redacted private key]', scan: 're' },
+  { re: /([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\u017F][Ii][Cc])[ \t\n\r\f]+[A-Za-z\u017F\u212A0-9._~+/=-]{8,}/g, repl: '$1 [redacted]', scan: 'bearer' },
+  { re: /(?:)/, repl: '$1$2[redacted]', scan: 'keyword' },
+  { re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, repl: '[redacted jwt]', scan: 'jwt' },
+  { re: /(?:AKIA|ASIA)[0-9A-Z]{16}/g, repl: '[redacted aws key]', scan: 'aws' },
+  { re: /(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)/g, repl: '[redacted token]', scan: 'token' },
+  { re: /:\/\/([^/ \t\n\r\f:@]+):([^@ \t\n\r\f/]+)@/g, repl: '://$1:[redacted]@', scan: 're' },
 ]
 
 function asciiWord(code: number): boolean {
@@ -42,45 +41,238 @@ function rightEdge(s: string, i: number): boolean {
   return !asciiWord(s.charCodeAt(i))
 }
 
-function expand(m: RegExpExecArray, repl: string): string {
-  return repl.replace(/\$(\d)/g, (_, n) => m[Number(n)] ?? '')
-}
-
-// replaceBounded is the same scan as notice.replaceBounded: a candidate is
-// kept only when both sides are edges, and the next search starts at the end
-// of the match rather than after a consumed separator. A candidate that fails
-// the edge check resumes one character later, because a later token can begin
-// inside this match.
-function replaceBounded(s: string, re: RegExp, repl: string, steps: { n: number } | null): string {
-  const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`
-  const r = new RegExp(re.source, flags.replace('g', ''))
+// replaceLinear keeps overlapping starts. A failed edge resumes one character
+// later. next walks forward only, so a long token tail is not re-scanned.
+function replaceLinear(
+  s: string,
+  next: (from: number) => { start: number; end: number; repl: string } | null,
+): string {
   let out = ''
   let i = 0
   while (i < s.length) {
-    if (steps) steps.n++
-    r.lastIndex = 0
-    const m = r.exec(s.slice(i))
-    if (!m) {
+    const m = next(i)
+    if (!m || m.start < i || m.end <= m.start) {
       out += s.slice(i)
       break
     }
-    const start = i + m.index
-    const end = start + m[0].length
-    if (end > start && leftEdge(s, start) && rightEdge(s, end)) {
-      out += s.slice(i, start) + expand(m, repl)
-      i = end
+    if (leftEdge(s, m.start) && rightEdge(s, m.end)) {
+      out += s.slice(i, m.start) + m.repl
+      i = m.end
       continue
     }
-    let next = start + 1
-    if (next <= i) next = i + 1
-    if (next > s.length) {
+    let n = m.start + 1
+    if (n <= i) n = i + 1
+    if (n > s.length) {
       out += s.slice(i)
       break
     }
-    out += s.slice(i, next)
-    i = next
+    out += s.slice(i, n)
+    i = n
   }
   return out
+}
+
+function count(steps: { n: number } | null, k: number): void {
+  if (steps && k > 0) steps.n += k
+}
+
+function foldCode(c: number, lower: number): boolean {
+  return c === lower || c === lower - 32
+}
+
+function bearerSecret(c: number): boolean {
+  return c === 46 || c === 95 || c === 126 || c === 43 || c === 47 || c === 61 || c === 45 ||
+    (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) ||
+    c === 0x17f || c === 0x212a
+}
+
+function buildBearerRuns(s: string, steps: { n: number } | null): Array<{ runes: number; end: number }> {
+  const r = new Array<{ runes: number; end: number }>(s.length + 1)
+  r[s.length] = { runes: 0, end: s.length }
+  for (let i = s.length - 1; i >= 0; i--) {
+    count(steps, 1)
+    const c = s.charCodeAt(i)
+    if (!bearerSecret(c)) {
+      r[i] = { runes: 0, end: i }
+      continue
+    }
+    const next = r[i + 1]
+    if (next && next.runes > 0) r[i] = { runes: 1 + next.runes, end: next.end }
+    else r[i] = { runes: 1, end: i + 1 }
+  }
+  return r
+}
+
+function matchScheme(s: string, i: number): number {
+  if (i + 6 <= s.length &&
+    foldCode(s.charCodeAt(i), 98) && foldCode(s.charCodeAt(i + 1), 101) && foldCode(s.charCodeAt(i + 2), 97) &&
+    foldCode(s.charCodeAt(i + 3), 114) && foldCode(s.charCodeAt(i + 4), 101) && foldCode(s.charCodeAt(i + 5), 114)) {
+    return i + 6
+  }
+  if (i >= s.length || !foldCode(s.charCodeAt(i), 98) || !foldCode(s.charCodeAt(i + 1), 97)) return -1
+  let j = i + 2
+  const sCode = s.charCodeAt(j)
+  if (sCode === 115 || sCode === 83) j++
+  else if (sCode === 0x17f) j++
+  else return -1
+  if (j + 2 <= s.length && foldCode(s.charCodeAt(j), 105) && foldCode(s.charCodeAt(j + 1), 99)) return j + 2
+  return -1
+}
+
+function wsLen(s: string, i: number): number {
+  let j = i
+  while (j < s.length) {
+    const c = s.charCodeAt(j)
+    if (c !== 32 && c !== 9 && c !== 10 && c !== 13 && c !== 12) break
+    j++
+  }
+  return j - i
+}
+
+function replaceBearer(s: string, steps: { n: number } | null): string {
+  const runs = buildBearerRuns(s, steps)
+  return replaceLinear(s, (from) => {
+    for (let j = from; j < s.length; j++) {
+      count(steps, 1)
+      const schemeEnd = matchScheme(s, j)
+      if (schemeEnd < 0) continue
+      const ws = wsLen(s, schemeEnd)
+      count(steps, ws)
+      if (ws < 1) continue
+      const val = schemeEnd + ws
+      const run = runs[val]
+      if (!run || run.runes < 8) continue
+      return { start: j, end: run.end, repl: s.slice(j, schemeEnd) + ' [redacted]' }
+    }
+    return null
+  })
+}
+
+function buildClassRun(s: string, steps: { n: number } | null, ok: (c: number) => boolean): number[] {
+  const run = new Array<number>(s.length + 1).fill(0)
+  for (let i = s.length - 1; i >= 0; i--) {
+    count(steps, 1)
+    if (ok(s.charCodeAt(i))) run[i] = run[i + 1] + 1
+  }
+  return run
+}
+
+function jwtByte(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45
+}
+
+function jwtAt(s: string, i: number, run: number[]): number {
+  if (i + 3 > s.length || s[i] !== 'e' || s[i + 1] !== 'y' || s[i + 2] !== 'J') return -1
+  let p = i + 3
+  if (p > s.length || run[p] < 8) return -1
+  p += run[p]
+  if (p >= s.length || s[p] !== '.') return -1
+  p++
+  if (p > s.length || run[p] < 8) return -1
+  p += run[p]
+  if (p >= s.length || s[p] !== '.') return -1
+  p++
+  if (p > s.length || run[p] < 8) return -1
+  return p + run[p]
+}
+
+function replaceJWT(s: string, steps: { n: number } | null): string {
+  const run = buildClassRun(s, steps, jwtByte)
+  return replaceLinear(s, (from) => {
+    for (let j = from; j < s.length; j++) {
+      count(steps, 1)
+      const end = jwtAt(s, j, run)
+      if (end >= 0) return { start: j, end, repl: '[redacted jwt]' }
+    }
+    return null
+  })
+}
+
+function awsAt(s: string, i: number, steps: { n: number } | null): number {
+  if (i + 20 > s.length) return -1
+  const prefix = s.slice(i, i + 4)
+  if (prefix !== 'AKIA' && prefix !== 'ASIA') return -1
+  for (let k = i + 4; k < i + 20; k++) {
+    count(steps, 1)
+    const c = s.charCodeAt(k)
+    if (c < 48 || c > 90 || (c > 57 && c < 65)) return -1
+  }
+  return i + 20
+}
+
+function replaceAWS(s: string, steps: { n: number } | null): string {
+  return replaceLinear(s, (from) => {
+    for (let j = from; j < s.length; j++) {
+      count(steps, 1)
+      const end = awsAt(s, j, steps)
+      if (end >= 0) return { start: j, end, repl: '[redacted aws key]' }
+    }
+    return null
+  })
+}
+
+function isAZ09(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+}
+
+function buildTokenRuns(s: string, steps: { n: number } | null): { alnum: number[]; alnumU: number[]; alnumH: number[]; alnumUH: number[] } {
+  const n = s.length
+  const alnum = new Array<number>(n + 1).fill(0)
+  const alnumU = new Array<number>(n + 1).fill(0)
+  const alnumH = new Array<number>(n + 1).fill(0)
+  const alnumUH = new Array<number>(n + 1).fill(0)
+  for (let i = n - 1; i >= 0; i--) {
+    count(steps, 1)
+    const c = s.charCodeAt(i)
+    const az = isAZ09(c)
+    if (az) alnum[i] = alnum[i + 1] + 1
+    if (az || c === 95) alnumU[i] = alnumU[i + 1] + 1
+    if (az || c === 45) alnumH[i] = alnumH[i + 1] + 1
+    if (az || c === 95 || c === 45) alnumUH[i] = alnumUH[i + 1] + 1
+  }
+  return { alnum, alnumU, alnumH, alnumUH }
+}
+
+function tokenAt(s: string, i: number, r: { alnum: number[]; alnumU: number[]; alnumH: number[]; alnumUH: number[] }): number {
+  if (i + 4 <= s.length && s[i] === 'g' && s[i + 1] === 'h' && s[i + 3] === '_') {
+    const k = s[i + 2]
+    if (k === 'p' || k === 'o' || k === 'u' || k === 's' || k === 'r') {
+      const n = r.alnum[i + 4]
+      if (n >= 20) {
+        let e = i + 4 + n
+        if (e < s.length) e += r.alnumU[e]
+        return e
+      }
+    }
+  }
+  if (i + 6 <= s.length && s.slice(i, i + 6) === 'glpat-') {
+    const n = r.alnumUH[i + 6]
+    if (n >= 20) return i + 6 + n
+  }
+  if (i + 5 <= s.length && s[i] === 'x' && s[i + 1] === 'o' && s[i + 2] === 'x' && s[i + 4] === '-') {
+    const k = s[i + 3]
+    if (k === 'a' || k === 'b' || k === 'p' || k === 'r') {
+      const n = r.alnumH[i + 5]
+      if (n >= 10) {
+        let e = i + 5 + n
+        if (e < s.length) e += r.alnumU[e]
+        return e
+      }
+    }
+  }
+  return -1
+}
+
+function replaceToken(s: string, steps: { n: number } | null): string {
+  const runs = buildTokenRuns(s, steps)
+  return replaceLinear(s, (from) => {
+    for (let j = from; j < s.length; j++) {
+      count(steps, 1)
+      const end = tokenAt(s, j, runs)
+      if (end >= 0) return { start: j, end, repl: '[redacted token]' }
+    }
+    return null
+  })
 }
 
 function isASCIIWS(c: number): boolean {
@@ -88,7 +280,12 @@ function isASCIIWS(c: number): boolean {
 }
 
 function isValueStop(c: number): boolean {
-  return isASCIIWS(c) || c === 34 || c === 39 || c === 44 || c === 59
+  // Controls, bidi marks and zero-width characters stop a value. If one of
+  // them were the whole value, redacting it would consume the assignment and
+  // a secret after the strip would remain.
+  if (isASCIIWS(c) || c === 34 || c === 39 || c === 44 || c === 59) return true
+  if (c === 0x2028 || c === 0x2029 || BIDI.has(c) || ZERO.has(c)) return true
+  return c < 0x20 || (c >= 0x7f && c <= 0x9f)
 }
 
 function isSecretClass(c: number): boolean {
@@ -183,9 +380,25 @@ function keywordAssignmentAt(s: string, from: number, sep: number, steps: { n: n
 function applyRedact(s: string, steps: { n: number } | null): string {
   let out = s
   for (const rule of REDACT) {
-    if (rule.keyword) out = replaceKeyword(out, steps)
-    else if (rule.bound) out = replaceBounded(out, rule.re, rule.repl, steps)
-    else out = out.replace(rule.re, rule.repl)
+    switch (rule.scan) {
+      case 'keyword':
+        out = replaceKeyword(out, steps)
+        break
+      case 'bearer':
+        out = replaceBearer(out, steps)
+        break
+      case 'jwt':
+        out = replaceJWT(out, steps)
+        break
+      case 'aws':
+        out = replaceAWS(out, steps)
+        break
+      case 'token':
+        out = replaceToken(out, steps)
+        break
+      default:
+        out = out.replace(rule.re, rule.repl)
+    }
   }
   return out
 }
@@ -195,7 +408,7 @@ export function redact(s: string): string {
   return applyRedact(s, null)
 }
 
-/** Iterations of the scans redact runs. Linear in the length of a repeated character. */
+/** Characters the scans examine, including class-run walks. Linear in the length. */
 export function redactScanSteps(s: string): number {
   const steps = { n: 0 }
   applyRedact(s, steps)
