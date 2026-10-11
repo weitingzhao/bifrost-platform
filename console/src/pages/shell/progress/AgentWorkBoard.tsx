@@ -1,22 +1,28 @@
-import { useEffect, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
-  AGENT_PROGRESS_POLL_MS,
+  actionLink,
   activeStepText,
+  AGENT_PROGRESS_POLL_MS,
+  computedAgeLine,
   coordinatorLine,
   elapsedLine,
   expectationLine,
   fetchAgentProgress,
+  generationIsSkewed,
   lastOutputLine,
   nextLine,
   ownerNextLine,
   publishedAgeSeconds,
-  safeLink,
+  receivedIsStale,
+  skewSentence,
   staleSentence,
   stepStateLabel,
   waitingLine,
+  type AgentProgressResponse,
+  type ProgressAction,
   type ProgressDocument,
   type ProgressStep,
   type ProgressWork,
@@ -25,15 +31,29 @@ import {
 /**
  * Interim bridge (DESIGN §20.4): the coordinating thread publishes the
  * document its local board already computes. Later the runtime computes it
- * from events. Durations tick from the timestamps; the read is every 15s.
+ * from events. Duration texts tick each second; the rest of the board does not.
  */
-function useNow(): number {
+const NowContext = createContext(0)
+
+function NowClock({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(id)
   }, [])
-  return now
+  return <NowContext.Provider value={now}>{children}</NowContext.Provider>
+}
+
+function useNow(): number {
+  return useContext(NowContext)
+}
+
+function Tick({ text, className }: { text: (nowMs: number) => string | null; className?: string }) {
+  const now = useNow()
+  const value = text(now)
+  if (value == null || value === '') return null
+  if (className == null) return <>{value}</>
+  return <span className={className}>{value}</span>
 }
 
 function failureReason(err: unknown): string {
@@ -75,17 +95,50 @@ function stateVariant(label: string): 'success' | 'warning' | 'danger' | 'neutra
 }
 
 function Verdict({ doc }: { doc: ProgressDocument }) {
+  const at = doc.at
   return (
     <div className="flex w-full min-w-0 items-start gap-2">
       <StatusLamp value={lampFor(doc.level)} />
-      <p className="m-0 break-words text-sm font-medium text-foreground" data-level={doc.level ?? ''}>
-        {doc.verdict ?? ''}
+      <p className="m-0 min-w-0 break-words text-sm font-medium text-foreground">
+        <span data-level={doc.level ?? ''}>{doc.verdict ?? ''}</span>
+        {typeof at === 'number' ? (
+          <>
+            {' '}
+            <Tick className="font-normal text-muted-foreground" text={now => computedAgeLine(at, now)} />
+          </>
+        ) : null}
       </p>
     </div>
   )
 }
 
-function OwnerSection({ doc, nowMs }: { doc: ProgressDocument; nowMs: number }) {
+function ActionBody({ action }: { action: ProgressAction }) {
+  const view = actionLink(action)
+  if (view.kind === 'anchor') {
+    return (
+      <a
+        href={view.href}
+        rel="noopener noreferrer"
+        {...(view.external ? { target: '_blank' } : {})}
+        className="underline"
+      >
+        {view.label}
+      </a>
+    )
+  }
+  if (view.kind === 'blocked') {
+    const note = view.host !== '' ? `link not shown: ${view.host}` : 'link not shown'
+    return (
+      <>
+        <span>{view.text}</span>
+        <span className="mt-0.5 block text-xs text-muted-foreground">{note}</span>
+      </>
+    )
+  }
+  return <>{view.text}</>
+}
+
+function OwnerSection({ doc }: { doc: ProgressDocument }) {
   const nowItems = doc.owner_now ?? []
   return (
     <section aria-label="Next time you are needed" className="flex w-full min-w-0 flex-col gap-2">
@@ -101,23 +154,13 @@ function OwnerSection({ doc, nowMs }: { doc: ProgressDocument; nowMs: number }) 
               {entry.urgency?.trim() ? (
                 <span className="break-words text-sm text-muted-foreground">{entry.urgency}</span>
               ) : null}
-              <span className="text-sm text-muted-foreground">{waitingLine(entry.since ?? 0, nowMs)}</span>
+              <Tick className="text-sm text-muted-foreground" text={now => waitingLine(entry.since ?? 0, now)} />
               <ol className="m-0 list-decimal pl-5 text-sm text-foreground">
-                {(entry.actions ?? []).map((action, actionIndex) => {
-                  const href = safeLink(action.link)
-                  const linkText = action.link_text?.trim() || action.text || href
-                  return (
-                    <li key={actionIndex} className={action.done ? 'break-words line-through' : 'break-words'}>
-                      {href !== '' ? (
-                        <a href={href} target="_blank" rel="noopener noreferrer" className="underline">
-                          {linkText}
-                        </a>
-                      ) : (
-                        action.text
-                      )}
-                    </li>
-                  )
-                })}
+                {(entry.actions ?? []).map((action, actionIndex) => (
+                  <li key={actionIndex} className={action.done ? 'break-words line-through' : 'break-words'}>
+                    <ActionBody action={action} />
+                  </li>
+                ))}
               </ol>
             </li>
           ))}
@@ -131,11 +174,9 @@ function OwnerSection({ doc, nowMs }: { doc: ProgressDocument; nowMs: number }) 
   )
 }
 
-function StepCard({ step, nowMs }: { step: ProgressStep; nowMs: number }) {
+function StepCard({ step }: { step: ProgressStep }) {
   const label = stepStateLabel(step.state, step.needs_owner)
-  const elapsed = elapsedLine(step, nowMs)
   const expectation = expectationLine(step)
-  const last = lastOutputLine(step, nowMs)
   const who = step.who?.trim() ?? ''
   return (
     <li
@@ -153,14 +194,14 @@ function StepCard({ step, nowMs }: { step: ProgressStep; nowMs: number }) {
           {label}
         </DenseTag>
       </span>
-      {elapsed != null ? <span className="break-words text-sm text-muted-foreground">{elapsed}</span> : null}
+      <Tick className="break-words text-sm text-muted-foreground" text={now => elapsedLine(step, now)} />
       {expectation != null ? <span className="break-words text-sm text-muted-foreground">{expectation}</span> : null}
-      {last != null ? <span className="break-words text-sm text-muted-foreground">{last}</span> : null}
+      <Tick className="break-words text-sm text-muted-foreground" text={now => lastOutputLine(step, now)} />
     </li>
   )
 }
 
-function WorkCard({ work, nowMs }: { work: ProgressWork; nowMs: number }) {
+function WorkCard({ work }: { work: ProgressWork }) {
   const steps = work.steps ?? []
   const notes = steps.map(activeStepText).filter(text => text !== '')
   const next = nextLine(work.next)
@@ -174,7 +215,7 @@ function WorkCard({ work, nowMs }: { work: ProgressWork; nowMs: number }) {
       ) : null}
       <ul aria-label="Steps" className="m-0 flex w-full min-w-0 list-none flex-wrap gap-2 p-0">
         {steps.map((step, index) => (
-          <StepCard key={`${step.name ?? 'step'}-${index}`} step={step} nowMs={nowMs} />
+          <StepCard key={`${step.name ?? 'step'}-${index}`} step={step} />
         ))}
       </ul>
       {notes.map(note => (
@@ -219,29 +260,93 @@ function RecentBlock({ doc }: { doc: ProgressDocument }) {
   )
 }
 
-function Board({ doc, nowMs }: { doc: ProgressDocument; nowMs: number }) {
+const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument }) {
+  const paints = useRef(0)
+  paints.current += 1
   const coordinator = doc.coordinator
-  const line = coordinator != null ? coordinatorLine(coordinator, nowMs) : ''
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4">
+    <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
       <Verdict doc={doc} />
-      <OwnerSection doc={doc} nowMs={nowMs} />
-      {line !== '' ? (
+      <OwnerSection doc={doc} />
+      {coordinator != null ? (
         <p className="m-0 break-words text-sm text-foreground">
           <span className="font-medium">Coordinator: </span>
-          {line}
+          <Tick text={now => coordinatorLine(coordinator, now)} />
         </p>
       ) : null}
       {(doc.works ?? []).map((work, index) => (
-        <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} nowMs={nowMs} />
+        <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} />
       ))}
       <RecentBlock doc={doc} />
     </div>
   )
+})
+
+function Freshness({
+  failed,
+  error,
+  env,
+}: {
+  failed: boolean
+  error: unknown
+  env: AgentProgressResponse | undefined
+}) {
+  const now = useNow()
+  const doc = env?.document ?? null
+  const age = publishedAgeSeconds(env?.received_at ?? '', env?.age_seconds ?? 0, now)
+  const stale = env?.stale === true || receivedIsStale(env?.received_at ?? '', env?.age_seconds ?? 0, now)
+  const skewed = generationIsSkewed(doc?.at, env?.received_at ?? '', now)
+  const dim = failed || stale || skewed
+  return (
+    <>
+      {failed ? (
+        <p className="m-0 break-words text-sm text-foreground">Progress: Unknown — {failureReason(error)}</p>
+      ) : null}
+      {stale ? <p className="m-0 break-words text-sm text-foreground">{staleSentence(age)}</p> : null}
+      {skewed && typeof doc?.at === 'number' ? (
+        <p className="m-0 break-words text-sm text-foreground">{skewSentence(doc.at, now)}</p>
+      ) : null}
+      {doc == null ? (
+        failed || stale || skewed ? null : (
+          <p className="m-0 text-sm text-muted-foreground">No progress has been published.</p>
+        )
+      ) : (
+        <section
+          aria-label={dim ? 'Last known' : undefined}
+          className={
+            dim
+              ? 'flex w-full min-w-0 flex-col gap-4 opacity-60'
+              : 'flex w-full min-w-0 flex-col gap-4'
+          }
+        >
+          {dim ? <p className="m-0 text-sm font-medium text-foreground">Last known</p> : null}
+          <WorkDocument doc={doc} />
+        </section>
+      )}
+    </>
+  )
 }
 
+const ProgressBody = memo(function ProgressBody({
+  pending,
+  failed,
+  error,
+  env,
+}: {
+  pending: boolean
+  failed: boolean
+  error: unknown
+  env: AgentProgressResponse | undefined
+}) {
+  if (pending) return <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+  return (
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden [overflow-wrap:anywhere]">
+      <Freshness failed={failed} error={error} env={env} />
+    </div>
+  )
+})
+
 export function AgentWorkBoard() {
-  const nowMs = useNow()
   const query = useQuery({
     queryKey: ['agent-progress'],
     queryFn: fetchAgentProgress,
@@ -249,41 +354,11 @@ export function AgentWorkBoard() {
     retry: false,
   })
 
-  let body
-  if (query.isPending) {
-    body = <p className="m-0 text-sm text-muted-foreground">Loading…</p>
-  } else {
-    const failed = query.isError
-    const env = query.data
-    const doc = env?.document ?? null
-    const dim = failed || env?.stale === true
-    const age = publishedAgeSeconds(env?.received_at ?? '', env?.age_seconds ?? 0, nowMs)
-    body = (
-      <div className="flex w-full min-w-0 max-w-full flex-col gap-4 overflow-x-hidden [overflow-wrap:anywhere]">
-        {failed ? (
-          <p className="m-0 break-words text-sm text-foreground">Progress: Unknown — {failureReason(query.error)}</p>
-        ) : env?.stale ? (
-          <p className="m-0 break-words text-sm text-foreground">{staleSentence(age)}</p>
-        ) : null}
-        {doc == null ? (
-          failed || env?.stale ? null : (
-            <p className="m-0 text-sm text-muted-foreground">No progress has been published.</p>
-          )
-        ) : dim ? (
-          <section aria-label="Last known" className="flex w-full min-w-0 flex-col gap-4 opacity-60">
-            <p className="m-0 text-sm font-medium text-foreground">Last known</p>
-            <Board doc={doc} nowMs={nowMs} />
-          </section>
-        ) : (
-          <Board doc={doc} nowMs={nowMs} />
-        )}
-      </div>
-    )
-  }
-
   return (
     <OpsSection title="Agent work" bodyPadding="compact" className="min-w-0 max-w-full overflow-x-hidden">
-      {body}
+      <NowClock>
+        <ProgressBody pending={query.isPending} failed={query.isError} error={query.error} env={query.data} />
+      </NowClock>
     </OpsSection>
   )
 }

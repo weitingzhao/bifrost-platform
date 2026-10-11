@@ -129,6 +129,25 @@ func TestAgentProgressMalformedSizeRedactionLatest(t *testing.T) {
 	}
 }
 
+func TestAgentProgressSchemaRedactionAndGeneration(t *testing.T) {
+	srv := progressServer(t)
+	bad := progressDo(srv, http.MethodPut, "fixture-reporter-w62", `{"at":1,"owner_now":[null]}`)
+	if bad.Code != http.StatusBadRequest || !strings.Contains(bad.Body.String(), "owner_now[0]") {
+		t.Fatalf("null owner: %d %s", bad.Code, bad.Body.String())
+	}
+	secret := progressDo(srv, http.MethodPut, "fixture-reporter-w62", `{"at":1791680000,"token":"abcdefgh12345678","verdict":"kept"}`)
+	if secret.Code != http.StatusAccepted {
+		t.Fatalf("put: %d %s", secret.Code, secret.Body.String())
+	}
+	got := progressDo(srv, http.MethodGet, "fixture-viewer-w62", "")
+	if strings.Contains(got.Body.String(), "abcdefgh12345678") || !strings.Contains(got.Body.String(), `"token":"[redacted]"`) {
+		t.Fatalf("key redaction: %s", got.Body.String())
+	}
+	if !strings.Contains(got.Body.String(), `"generated_at":`) || !strings.Contains(got.Body.String(), `"generation_lag_seconds":`) {
+		t.Fatalf("generation fields: %s", got.Body.String())
+	}
+}
+
 func TestAgentProgressSurvivesRestartAndStale(t *testing.T) {
 	cfg, dataDir := progressConfig(t)
 	path := filepath.Join(dataDir, agentprogress.StateRel)

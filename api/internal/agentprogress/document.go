@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"strings"
 	"time"
@@ -35,7 +36,20 @@ var hostRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var (
 	errNotObject = errors.New("document: want a JSON object with a numeric at")
 	errHost      = errors.New("host: want a host name")
+	// errTooLarge is a snapshot that would not fit the state file. PUT answers
+	// 413 and keeps the previous document.
+	errTooLarge = errors.New("document too large")
 )
+
+// redactedText replaces a string kept under a key that names a secret.
+const redactedText = "[redacted]"
+
+// A key that contains one of these, in any case, holds a secret. The match is
+// on the key, so a value that does not look like a bearer is still replaced.
+var sensitiveKeyParts = []string{
+	"token", "secret", "password", "passwd", "authorization",
+	"api_key", "apikey", "credential", "cookie",
+}
 
 // Snapshot is the one document the platform keeps.
 type Snapshot struct {
@@ -68,6 +82,9 @@ func prepare(body []byte) (json.RawMessage, string, error) {
 	if _, err := num.Float64(); err != nil {
 		return nil, "", errNotObject
 	}
+	if err := validateDocument(obj); err != nil {
+		return nil, "", err
+	}
 	host, err := hostField(obj)
 	if err != nil {
 		return nil, "", err
@@ -76,11 +93,26 @@ func prepare(body []byte) (json.RawMessage, string, error) {
 	if !ok {
 		return nil, "", errNotObject
 	}
-	raw, err := json.Marshal(redacted)
+	// encoding/json HTML-escapes <, > and & to six bytes each. A body under the
+	// input cap can become a snapshot the state file will never accept. Encode
+	// the bytes we store, and refuse them before they are kept.
+	raw, err := marshalJSON(redacted)
 	if err != nil {
 		return nil, "", fmt.Errorf("document: %w", err)
 	}
 	return raw, host, nil
+}
+
+// marshalJSON encodes without HTML escaping. json.Encoder adds a trailing
+// newline; the stored snapshot does not include it.
+func marshalJSON(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
 func hostField(obj map[string]any) (string, error) {
@@ -102,23 +134,62 @@ func hostField(obj map[string]any) (string, error) {
 	return s, nil
 }
 
+func keySensitive(key string) bool {
+	folded := strings.ToLower(key)
+	for _, part := range sensitiveKeyParts {
+		if strings.Contains(folded, part) {
+			return true
+		}
+	}
+	return false
+}
+
 func redactValue(v any) any {
+	return redactNested(v, false)
+}
+
+// force replaces every string, including those nested under a secret key.
+func redactNested(v any, force bool) any {
 	switch t := v.(type) {
 	case string:
+		if force {
+			return redactedText
+		}
 		return approvalnotify.Redact(t)
 	case map[string]any:
 		out := make(map[string]any, len(t))
 		for k, child := range t {
-			out[approvalnotify.Redact(k)] = redactValue(child)
+			out[approvalnotify.Redact(k)] = redactNested(child, force || keySensitive(k))
 		}
 		return out
 	case []any:
 		out := make([]any, len(t))
 		for i, child := range t {
-			out[i] = redactValue(child)
+			out[i] = redactNested(child, force)
 		}
 		return out
 	default:
 		return v
 	}
+}
+
+// generatedTime is the document's at as UTC. ok is false when at is missing
+// or not a finite number.
+func generatedTime(doc json.RawMessage) (time.Time, bool) {
+	var probe struct {
+		At *float64 `json:"at"`
+	}
+	if err := json.Unmarshal(doc, &probe); err != nil || probe.At == nil {
+		return time.Time{}, false
+	}
+	sec := *probe.At
+	if math.IsNaN(sec) || math.IsInf(sec, 0) {
+		return time.Time{}, false
+	}
+	whole, frac := math.Modf(sec)
+	if frac < 0 {
+		whole--
+		frac++
+	}
+	return time.Unix(int64(whole), int64(math.Round(frac*1e9))).UTC(), true
 }

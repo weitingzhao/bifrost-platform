@@ -29,16 +29,25 @@ func NewRecorder(store *Store) *Recorder {
 }
 
 // Publish keeps doc as the latest document. A newer call replaces an older
-// one that has not been flushed yet.
-func (r *Recorder) Publish(doc json.RawMessage, host string) {
+// one that has not been flushed yet. A snapshot over MaxDocumentBytes is
+// refused and the previous document stays.
+func (r *Recorder) Publish(doc json.RawMessage, host string) error {
 	snap := Snapshot{
 		Document:   append(json.RawMessage(nil), doc...),
 		ReceivedAt: r.now().UTC(),
 		Host:       host,
 	}
+	raw, err := marshalJSON(snap)
+	if err != nil {
+		return err
+	}
+	if int64(len(raw)) > MaxDocumentBytes {
+		return errTooLarge
+	}
 	r.mu.Lock()
 	r.pending = &snap
 	r.mu.Unlock()
+	return nil
 }
 
 // Flush writes the buffered document. A newer Publish during the write stays

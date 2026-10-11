@@ -20,7 +20,7 @@ type Store struct {
 func NewStore(path string) *Store { return &Store{path: path} }
 
 func (s *Store) Save(snap Snapshot) error {
-	raw, err := json.Marshal(snap)
+	raw, err := marshalJSON(snap)
 	if err != nil {
 		return err
 	}

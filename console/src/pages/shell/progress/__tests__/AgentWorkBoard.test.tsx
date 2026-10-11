@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -83,8 +83,16 @@ function envelope(document: ProgressDocument | null, over: Partial<AgentProgress
     age_seconds: 0,
     stale: false,
     host: 'vision-mac',
+    generated_at: new Date(NOW).toISOString(),
+    generation_lag_seconds: 0,
     ...over,
   }
+}
+
+function clockTimers(): void {
+  vi.useRealTimers()
+  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+  vi.setSystemTime(new Date(NOW))
 }
 
 function baseDoc(over: Partial<ProgressDocument> = {}): ProgressDocument {
@@ -214,7 +222,7 @@ describe('AgentWorkBoard', () => {
               since,
               actions: [
                 { text: 'Read the note', done: true },
-                { text: 'Open the brief', done: false, link: 'https://example.test/brief', link_text: 'Open the brief' },
+                { text: 'Open the brief', done: false, link: 'https://ops.bifrost.lan/brief', link_text: 'Open the brief' },
               ],
             },
           ],
@@ -228,9 +236,10 @@ describe('AgentWorkBoard', () => {
     expect(within(needed).getByText('Blocking the rollout')).toBeTruthy()
     expect(within(needed).getByText('waiting 2m')).toBeTruthy()
     expect(within(needed).getByText('Read the note').closest('li')?.className).toContain('line-through')
-    const link = within(needed).getByRole('link', { name: 'Open the brief' })
-    expect(link.getAttribute('href')).toBe('https://example.test/brief')
+    const link = within(needed).getByRole('link', { name: 'Open the brief (ops.bifrost.lan)' })
+    expect(link.getAttribute('href')).toBe('https://ops.bifrost.lan/brief')
     expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
     expect(within(needed).queryByText(/Later · expected around/)).toBeNull()
     expect(within(needed).queryByText('Nothing is waiting for you.')).toBeNull()
   })
@@ -374,6 +383,192 @@ describe('AgentWorkBoard', () => {
     expect(items[1]?.textContent).toContain('旧的一句')
     expect(screen.getByText('刚做完验收')).toBeTruthy()
   })
+
+  it('shows a trusted destination and does not open an outside link', async () => {
+    stubProgress(
+      envelope(
+        baseDoc({
+          owner_now: [
+            {
+              name: 'Needs you',
+              since: NOW_SEC - 10,
+              actions: [
+                { text: 'Open Needs you', link: 'https://ops.bifrost.lan/needs', link_text: 'Open Needs you' },
+                { text: 'Open Needs you', link: 'http://ops.bifrost.lan/needs' },
+                { text: 'Jump', link: '#needs-you', link_text: 'Jump' },
+                { text: 'Read the note', link: 'https://evil.example/phish', link_text: 'Approve the release' },
+                { text: 'Stay', link: 'https://ops.bifrost.lan.evil.com/x' },
+                { text: 'Script', link: 'javascript:alert(1)' },
+              ],
+            },
+          ],
+        }),
+      ),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const needed = await screen.findByRole('region', { name: 'Next time you are needed' })
+    const open = within(needed).getAllByRole('link', { name: 'Open Needs you (ops.bifrost.lan)' })
+    expect(open.map(link => link.getAttribute('href')).sort()).toEqual([
+      'http://ops.bifrost.lan/needs',
+      'https://ops.bifrost.lan/needs',
+    ])
+    open.forEach(link => {
+      expect(link.getAttribute('target')).toBe('_blank')
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+    })
+    const hash = within(needed).getByRole('link', { name: 'Jump (this console)' })
+    expect(hash.getAttribute('href')).toBe('#needs-you')
+    expect(hash.getAttribute('target')).toBeNull()
+    expect(hash.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(within(needed).queryByRole('link', { name: /Approve the release/ })).toBeNull()
+    expect(within(needed).queryByText('Approve the release')).toBeNull()
+    expect(within(needed).getByText('Read the note')).toBeTruthy()
+    expect(within(needed).getByText('link not shown: evil.example')).toBeTruthy()
+    expect(within(needed).getByText('link not shown: ops.bifrost.lan.evil.com')).toBeTruthy()
+    expect(within(needed).getByText('Script')).toBeTruthy()
+    expect(within(needed).getByText('link not shown')).toBeTruthy()
+    expect(within(needed).queryByRole('link', { name: /Script/ })).toBeNull()
+  })
+
+  it('renders a document the server would have rejected, dropping null entries', async () => {
+    stubProgress({
+      document: {
+        at: 1,
+        verdict: 'Still here',
+        owner_now: [null, { name: 'Keep', actions: [null, { text: 'Go', done: false }] }],
+        works: [null, { title: 'One', steps: [null, { name: 'Step', state: 'running', who: 'Cursor' }] }],
+        needs_you: [null, 'you'],
+        recent: [1, 'line'],
+        feed: [null, { text: 'hi', at: NOW_SEC }],
+        owner_next: null,
+        coordinator: null,
+      },
+      received_at: new Date(NOW).toISOString(),
+      age_seconds: 0,
+      stale: false,
+      host: 'vision-mac',
+    })
+    render(wrap(<AgentWorkBoard />))
+    expect(await screen.findByText('Still here')).toBeTruthy()
+    expect(screen.getByText('Keep')).toBeTruthy()
+    expect(screen.getByText('Go')).toBeTruthy()
+    expect(screen.getByText('One')).toBeTruthy()
+    expect(screen.getByText('Step')).toBeTruthy()
+    expect(screen.getByText('line')).toBeTruthy()
+    expect(screen.getByText(/hi/)).toBeTruthy()
+  })
+
+  it('shows computed age beside the verdict', async () => {
+    stubProgress(envelope(baseDoc({ at: NOW_SEC - 90, verdict: 'All quiet' })))
+    render(wrap(<AgentWorkBoard />))
+    expect(await screen.findByText('computed 1m ago')).toBeTruthy()
+    expect(screen.getByText('All quiet')).toBeTruthy()
+  })
+
+  it('dims a document whose at is much older than when it was published', async () => {
+    stubProgress(envelope(baseDoc({ at: NOW_SEC - 180 })))
+    render(wrap(<AgentWorkBoard />))
+    const warning = await screen.findByText(
+      'The published progress was computed 3m ago; it may not reflect the present.',
+    )
+    const known = screen.getByRole('region', { name: 'Last known' })
+    expect(known.className).toContain('opacity-60')
+    expect(within(known).getByText('All quiet')).toBeTruthy()
+    expect(known.contains(warning)).toBe(false)
+  })
+
+  it('dims a document dated more than two minutes in the future', async () => {
+    stubProgress(envelope(baseDoc({ at: NOW_SEC + 180 })))
+    render(wrap(<AgentWorkBoard />))
+    expect(
+      await screen.findByText('The published progress was computed 3m ago; it may not reflect the present.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Last known' })).toBeTruthy()
+  })
+
+  it('marks the page stale from received_at as the clock moves', async () => {
+    clockTimers()
+    const received = NOW - 4 * 60_000
+    stubProgress(
+      envelope(baseDoc({ at: received / 1000, coordinator: { at: received / 1000, state: 'watching', note: 'quiet' } }), {
+        stale: false,
+        age_seconds: 240,
+        received_at: new Date(received).toISOString(),
+        generated_at: new Date(received).toISOString(),
+        generation_lag_seconds: 0,
+      }),
+    )
+    render(wrap(<AgentWorkBoard />))
+    expect(await screen.findByText('All quiet')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Last known' })).toBeNull()
+    await act(async () => {
+      vi.setSystemTime(NOW + 2 * 60_000)
+      vi.advanceTimersByTime(1000)
+    })
+    const warning = screen.getByText('Progress was last published 6m ago. The coordinating thread may be offline.')
+    const known = screen.getByRole('region', { name: 'Last known' })
+    expect(known.className).toContain('opacity-60')
+    expect(known.contains(warning)).toBe(false)
+  })
+
+  it('ticks a waiting duration without repainting the board', async () => {
+    clockTimers()
+    stubProgress(
+      envelope(
+        baseDoc({
+          owner_now: [{ name: 'Approve', since: NOW_SEC - 125, actions: [] }],
+        }),
+      ),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const doc = await screen.findByTestId('agent-work-document')
+    expect(screen.getByText('waiting 2m')).toBeTruthy()
+    const paints = doc.getAttribute('data-paints')
+    await act(async () => {
+      vi.setSystemTime(NOW + 60_000)
+      vi.advanceTimersByTime(1000)
+    })
+    expect(doc.getAttribute('data-paints')).toBe(paints)
+    expect(screen.getByText('waiting 3m')).toBeTruthy()
+    expect(screen.queryByText('waiting 2m')).toBeNull()
+  })
+
+  it(
+    'keeps the last document when the next read times out',
+    async () => {
+      let calls = 0
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+          calls += 1
+          if (calls === 1) return Promise.resolve(json(envelope(baseDoc())))
+          return new Promise((_resolve, reject) => {
+            const signal = init?.signal
+            if (signal == null) {
+              reject(new Error('missing signal'))
+              return
+            }
+            const abort = () => reject(new DOMException('The operation was aborted', 'AbortError'))
+            if (signal.aborted) {
+              abort()
+              return
+            }
+            signal.addEventListener('abort', abort)
+          })
+        }),
+      )
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(wrap(<AgentWorkBoard />, client))
+      expect(await screen.findByText('All quiet')).toBeTruthy()
+      expect(screen.queryByRole('region', { name: 'Last known' })).toBeNull()
+      await client.refetchQueries({ queryKey: ['agent-progress'] })
+      expect(await screen.findByText('Progress: Unknown — timed out')).toBeTruthy()
+      const known = screen.getByRole('region', { name: 'Last known' })
+      expect(within(known).getByText('All quiet')).toBeTruthy()
+      expect(known.className).toContain('opacity-60')
+    },
+    20_000,
+  )
 
   it('places Agent work above commit lineage and code health', async () => {
     stubProgress(envelope(null))

@@ -2,6 +2,7 @@ package agentprogress
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"time"
@@ -20,7 +21,9 @@ func NewHandler(rec *Recorder) *Handler {
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(v)
 }
 
 // HandlePut is PUT /api/v1/agent/progress (reporter). The body is one JSON
@@ -44,16 +47,25 @@ func (h *Handler) HandlePut(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	h.rec.Publish(doc, host)
+	if err := h.rec.Publish(doc, host); err != nil {
+		if errors.Is(err, errTooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "document too large"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true})
 }
 
 type getResponse struct {
-	Document   json.RawMessage `json:"document"`
-	ReceivedAt string          `json:"received_at"`
-	AgeSeconds int64           `json:"age_seconds"`
-	Stale      bool            `json:"stale"`
-	Host       string          `json:"host"`
+	Document             json.RawMessage `json:"document"`
+	ReceivedAt           string          `json:"received_at"`
+	AgeSeconds           int64           `json:"age_seconds"`
+	Stale                bool            `json:"stale"`
+	Host                 string          `json:"host"`
+	GeneratedAt          string          `json:"generated_at"`
+	GenerationLagSeconds int64           `json:"generation_lag_seconds"`
 }
 
 // HandleGet is GET /api/v1/agent/progress (viewer). Nothing published yet is
@@ -79,11 +91,18 @@ func project(snap Snapshot, ok bool, now time.Time) getResponse {
 	if !snap.ReceivedAt.IsZero() {
 		received = snap.ReceivedAt.UTC().Format(time.RFC3339Nano)
 	}
-	return getResponse{
+	resp := getResponse{
 		Document:   snap.Document,
 		ReceivedAt: received,
 		AgeSeconds: int64(age / time.Second),
 		Stale:      age > StaleAfter,
 		Host:       snap.Host,
 	}
+	if gen, ok := generatedTime(snap.Document); ok {
+		resp.GeneratedAt = gen.Format(time.RFC3339Nano)
+		if !snap.ReceivedAt.IsZero() {
+			resp.GenerationLagSeconds = int64(snap.ReceivedAt.Sub(gen) / time.Second)
+		}
+	}
+	return resp
 }
