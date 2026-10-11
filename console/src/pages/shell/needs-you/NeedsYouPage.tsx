@@ -7,6 +7,8 @@ import { operatorToken } from '@/api/client'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
 import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
+import { AnswerGroup } from '@/pages/shell/needs-you/AnswerGroup'
+import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
@@ -56,6 +58,12 @@ function HandledRows({ rows }: { rows: HandledRow[] }) {
       {rows.map(row =>
         row.kind === 'approval' ? (
           <ApprovalRow key={row.item.id} item={row.item} lines={[row.line]} />
+        ) : row.kind === 'question' ? (
+          <li key={row.id} className="list-none min-w-0 break-words text-sm text-foreground">
+            <a href={questionHref(row.id)} className="text-inherit no-underline">
+              {row.line}
+            </a>
+          </li>
         ) : (
           <li
             key={`${row.thread.vendor}/${row.thread.thread}`}
@@ -105,8 +113,15 @@ export function NeedsYouPage() {
     lost,
     capacityText,
     now,
+    questions,
+    openQuestions,
+    questionsLoading,
+    questionsUnreadable,
+    questionsStale,
+    questionsReason,
     query,
     handledQuery,
+    questionsQuery,
   } = useNeedsYou()
   const lineageQ = useQuery({
     queryKey: ['lineage', 'needs-you'],
@@ -143,6 +158,7 @@ export function NeedsYouPage() {
             setApprovalToken(next)
             void query.refetch()
             void handledQuery.refetch()
+            void questionsQuery.refetch()
           }}
         />
       </div>
@@ -225,6 +241,24 @@ export function NeedsYouPage() {
             ))}
           </ApprovalList>
         </Group>
+      ) : null}
+      {questionsLoading ? (
+        <p className="m-0 text-sm text-muted-foreground" data-questions-state="loading">
+          Loading…
+        </p>
+      ) : null}
+      {questionsUnreadable ? (
+        <p className="m-0 break-words text-sm text-destructive" data-questions-state="unreadable">
+          {`Could not read questions: ${questionsReason}`}
+        </p>
+      ) : null}
+      {questionsStale ? (
+        <p className="m-0 break-words text-sm text-destructive" data-questions-state="stale">
+          {`Could not refresh questions: ${questionsReason}`}
+        </p>
+      ) : null}
+      {!questionsLoading && !questionsUnreadable ? (
+        <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} />
       ) : null}
       <Group label="Silent threads" count={needsYouCountText(silentCount)} description={SILENT_THREAD_EXPLANATION}>
         {stalled}

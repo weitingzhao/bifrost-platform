@@ -140,6 +140,7 @@ function stubFetch(
       if (url.includes('/api/v1/approvals?status=all')) return handled(new Headers(init?.headers))
       if (url.includes('/api/v1/agent/threads')) return threads(new Headers(init?.headers))
       if (url.includes('/api/v1/lineage')) return lineage()
+      if (url.includes('/api/v1/questions')) return json({ questions: [] })
       return json({ error: `unexpected ${url}` }, 500)
     }),
   )

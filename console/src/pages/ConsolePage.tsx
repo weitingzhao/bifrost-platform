@@ -5,6 +5,7 @@ import { ConsoleSidebar } from '@/components/ConsoleSidebar'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { QuestionPage } from '@/pages/QuestionPage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import {
   DataPage,
@@ -57,6 +58,9 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
   }
   if (location.kind === 'approval') {
     return { title: 'Request', description: 'Approve or reject one request.' }
+  }
+  if (location.kind === 'question') {
+    return { title: 'Question', description: 'Answer one question. Answering approves nothing.' }
   }
   const entry = shellNavEntry(location.id)
   return { title: entry.label, description: entry.question }
@@ -114,7 +118,7 @@ function ConsolePageInner() {
   const activeTab =
     location.kind === 'dev-sessions'
       ? 'dev-sessions'
-      : location.kind === 'approval'
+      : location.kind === 'approval' || location.kind === 'question'
         ? HOME_ROUTE
         : location.id
   const needsYouNavBadge = needsYouBadge(count)
@@ -149,6 +153,7 @@ function ConsolePageInner() {
           <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
+            {location.kind === 'question' ? <QuestionPage /> : null}
             {Page != null ? <Page /> : null}
           </PageShell>
         </SidebarInset>

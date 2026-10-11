@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
+import { fetchQuestionList, type Question } from '@/api/questions'
 import { useAgentThreads } from '@/hooks/useAgentThreads'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import {
   groupOpenApprovals,
   mergeHandled,
   recentlyHandledApprovals,
+  recentlyHandledQuestions,
   recentlyHandledThreads,
   waitingCount,
   type NeedsYouGroups,
@@ -31,9 +33,11 @@ function knownOrPending(
 }
 
 /**
- * Open approvals (decide, run in a terminal, check) and silent agent threads.
- * The waiting total is Unknown when the open list or the thread list cannot
- * be read. The handled list is Unknown when `status=all` cannot be read.
+ * Open approvals (decide, run in a terminal, check), open questions, and silent
+ * agent threads. The waiting total is Unknown when the open list, the thread
+ * list, or the question list cannot be read. A failed question refresh is
+ * Unknown even when the last list is still on screen. The handled list is
+ * Unknown when the approvals `status=all` cannot be read.
  * Running, and approved work the platform runs, are not part of the total.
  */
 export function useNeedsYou() {
@@ -51,7 +55,18 @@ export function useNeedsYou() {
     retry: false,
   })
   const threadsQuery = useAgentThreads()
+  const questionsQ = useQuery({
+    queryKey: ['questions', 'all'],
+    queryFn: () => fetchQuestionList('all'),
+    refetchInterval: NEEDS_YOU_REFRESH_MS,
+    retry: false,
+  })
   const groups: NeedsYouGroups = groupOpenApprovals(openQ.data ?? [], now)
+  const questions: Question[] = questionsQ.data ?? []
+  const openQuestions = questions.filter(question => question.status === 'open')
+  const questionsUnreadable = questionsQ.isError && questionsQ.data == null
+  const questionsLoading = questionsQ.data == null && !questionsQ.isError
+  const questionsStale = questionsQ.isError && questionsQ.data != null
   const silent = silentThreads(threadsQuery.data?.threads ?? [])
   const lost = hostsNeedingYou(threadsQuery.data?.hosts)
   const capacityActive = threadsQuery.data != null && capacityRefusalActive(threadsQuery.data)
@@ -79,12 +94,16 @@ export function useNeedsYou() {
   let count: NeedsYouCount
   if (openCount.state === 'unknown') count = openCount
   else if (silentCount.state === 'unknown') count = silentCount
-  else if (openCount.state === 'loading' || silentCount.state === 'loading') count = { state: 'loading' }
-  else count = { state: 'known', count: waitingCount(groups, silentCount.count) }
+  else if (questionsQ.isError) {
+    count = { state: 'unknown', reason: reasonOf(questionsQ.error, 'questions request failed') }
+  } else if (openCount.state === 'loading' || silentCount.state === 'loading' || questionsLoading) {
+    count = { state: 'loading' }
+  } else count = { state: 'known', count: waitingCount(groups, silentCount.count, openQuestions.length) }
 
   const approvalRows = allQ.data != null ? recentlyHandledApprovals(allQ.data, now) : []
   const threadRows = threadsQuery.data != null ? recentlyHandledThreads(threadsQuery.data.threads, now) : []
-  const recent = mergeHandled([...approvalRows, ...threadRows])
+  const questionRows = questionsQ.data != null ? recentlyHandledQuestions(questionsQ.data, now) : []
+  const recent = mergeHandled([...approvalRows, ...threadRows, ...questionRows])
 
   let recentCount: NeedsYouCount
   if (allQ.isError) {
@@ -108,8 +127,15 @@ export function useNeedsYou() {
     lost,
     capacityText,
     now,
+    questions,
+    openQuestions,
+    questionsLoading,
+    questionsUnreadable,
+    questionsStale,
+    questionsReason: questionsUnreadable || questionsStale ? reasonOf(questionsQ.error, 'questions request failed') : '',
     query: openQ,
     handledQuery: allQ,
     threadsQuery,
+    questionsQuery: questionsQ,
   }
 }

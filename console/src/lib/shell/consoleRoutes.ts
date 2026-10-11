@@ -36,6 +36,12 @@ export const HOME_ROUTE: ShellRouteId = 'needs-you'
 /** The request page. Phone notifications link here (`#approvals?id=<id>`). */
 export const APPROVAL_ROUTE = 'approvals'
 
+/** The question page. Phone notifications link here (`#questions?id=q_…`). */
+export const QUESTION_ROUTE = 'questions'
+
+/** Server question ids. Anything else is not requested. */
+export const QUESTION_ID_PATTERN = /^q_[0-9a-f]{16}$/
+
 /** Tabs that used to be real pages. `dev-sessions` stays a local-only route. */
 export const FORMER_CONSOLE_TABS = [
   'maintenance',
@@ -88,6 +94,7 @@ export const FORMER_CONSOLE_TABS = [
 export type ConsoleLocation =
   | { kind: 'shell'; id: ShellRouteId }
   | { kind: 'approval' }
+  | { kind: 'question' }
   | { kind: 'dev-sessions' }
 
 /**
@@ -220,9 +227,19 @@ export function approvalHref(id: string): string {
   return formatShellHash(APPROVAL_ROUTE, new URLSearchParams({ id }).toString())
 }
 
+export function isQuestionId(id: string): boolean {
+  return QUESTION_ID_PATTERN.test(id)
+}
+
+/** Link to one question's page. */
+export function questionHref(id: string): string {
+  return formatShellHash(QUESTION_ROUTE, new URLSearchParams({ id }).toString())
+}
+
 export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy: boolean } {
   if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
   if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
+  if (tab === QUESTION_ROUTE) return { location: { kind: 'question' }, legacy: false }
   if (isShellRouteId(tab)) return { location: { kind: 'shell', id: tab }, legacy: false }
   const target = LEGACY_HASH_REDIRECTS[tab]
   if (target != null) return { location: { kind: 'shell', id: target }, legacy: true }
@@ -232,12 +249,21 @@ export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy
 /**
  * Where a raw hash (without `#`) lands, and the hash the address bar should show.
  * `#approvals?id=` and `#maintenance?id=` open the request; either without an id
- * lands on Needs you.
+ * lands on Needs you. `#questions?id=` opens the question; `#questions` with no
+ * id lands on Needs you. A malformed id still opens the question page, which
+ * does not request it.
  */
 export function resolveConsoleHash(raw: string): { location: ConsoleLocation; canonical: string } {
   const tab = raw.split('?')[0] ?? ''
   const query = hashQueryWithoutTaskMode(raw)
   const approvalId = hashQueryParam(query, 'id')
+  if (tab === QUESTION_ROUTE) {
+    const questionId = hashQueryParam(query, 'id')
+    if (questionId == null) {
+      return { location: { kind: 'shell', id: HOME_ROUTE }, canonical: formatShellHash(HOME_ROUTE) }
+    }
+    return { location: { kind: 'question' }, canonical: formatShellHash(QUESTION_ROUTE, query) }
+  }
   if (tab === APPROVAL_ROUTE || tab === 'maintenance') {
     if (approvalId != null) {
       return { location: { kind: 'approval' }, canonical: formatShellHash(APPROVAL_ROUTE, query) }
@@ -255,5 +281,6 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
 export function locationId(location: ConsoleLocation): string {
   if (location.kind === 'dev-sessions') return 'dev-sessions'
   if (location.kind === 'approval') return APPROVAL_ROUTE
+  if (location.kind === 'question') return QUESTION_ROUTE
   return location.id
 }
