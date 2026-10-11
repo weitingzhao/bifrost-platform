@@ -3,11 +3,12 @@ import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentThread } from '@/api/agentThreads'
-import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
+
+const LEGACY_APPROVAL_TOKEN_KEY = 'bifrost-ops-approval-token'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -208,20 +209,21 @@ describe('NeedsYouPage', () => {
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
-    expect(screen.getByText(/This device has no approval token/)).toBeTruthy()
-    expect(screen.getByLabelText('Set approval token')).toBeTruthy()
-    expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull()
+    expect(screen.getByText('Sign in at the top right to see what waits for you.')).toBeTruthy()
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
+    expect(window.localStorage.getItem(LEGACY_APPROVAL_TOKEN_KEY)).toBeNull()
   })
 
-  it('reads the list with a saved approval token when there is no operator token', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+  it('does not read the list with the retired approval token when there is no session', async () => {
+    window.localStorage.setItem(LEGACY_APPROVAL_TOKEN_KEY, 'admin-token')
     stubFetch(headers =>
       headers.get('Authorization') === 'Bearer admin-token'
         ? json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-7' })]))
         : json({ error: 'viewer token required' }, 401),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.queryByText('1 waiting for you')).toBeNull()
   })
 
   it('counts silent agent threads toward the total and lists them, but not threads in turn', async () => {
@@ -357,8 +359,8 @@ describe('NeedsYouPage', () => {
     expect(within(silent).queryByText('Silent threads · 0')).toBeNull()
   })
 
-  it('reads the threads with a saved approval token when there is no operator token', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+  it('does not read threads with the retired approval token when there is no session', async () => {
+    window.localStorage.setItem(LEGACY_APPROVAL_TOKEN_KEY, 'admin-token')
     const seen: (string | null)[] = []
     stubFetch(
       headers =>
@@ -371,13 +373,9 @@ describe('NeedsYouPage', () => {
       },
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
-    expect(seen).toContain('Bearer admin-token')
-    expect(
-      within(screen.getByRole('region', { name: 'Silent threads' })).getByText(
-        'claude 0b8e2f4a-1111-2222-3333-444455556666',
-      ),
-    ).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(seen).not.toContain('Bearer admin-token')
+    expect(screen.queryByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeNull()
   })
 
   it('uses the lineage title and link when a transcript matches, and the id when lineage fails', async () => {
@@ -445,15 +443,13 @@ describe('NeedsYouPage', () => {
 
   it('does not put a saved approval token in the page HTML', async () => {
     const secret = 'w61-saved-token-not-in-dom'
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, secret)
+    window.localStorage.setItem(LEGACY_APPROVAL_TOKEN_KEY, secret)
     stubFetch(() => json({ error: 'down' }, 500))
     const { container } = render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
-    expect(screen.getByText('A token is saved. Type a new one to replace it.')).toBeTruthy()
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(container.innerHTML).not.toContain(secret)
     expect(container.textContent ?? '').not.toContain(secret)
-    expect((screen.getByLabelText('Set approval token') as HTMLInputElement).value).toBe('')
-    expect((document.getElementById('approval-token') as HTMLInputElement).outerHTML).not.toContain(secret)
   })
 
   it('lists decide, run, and check, and the badge is their sum plus silent threads', async () => {

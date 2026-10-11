@@ -34,6 +34,7 @@ export type AnswerSendEvent =
   | { type: 'choose'; id: string; snapshot: ConfirmSnapshot }
   | { type: 'cancel'; id: string }
   | { type: 'confirm'; id: string }
+  | { type: 'notSent'; id: string }
   | { type: 'leave'; id: string }
   | { type: 'return'; id: string }
   | { type: 'postSaved'; id: string; answer: QuestionAnswer }
@@ -179,6 +180,9 @@ function reducePhase(phase: AnswerPhase, event: AnswerSendEvent): AnswerPhase {
     case 'confirm':
       if (phase.kind !== 'confirming' || phase.snapshot.id !== event.id) return phase
       return { kind: 'sending', snapshot: phase.snapshot }
+    case 'notSent':
+      if (phase.kind !== 'sending') return phase
+      return { kind: 'confirming', snapshot: phase.snapshot, rejection: null }
     case 'postSaved':
       if (phase.kind === 'unknown' || phase.kind === 'closed') return phase
       return { kind: 'saved', answer: event.answer }

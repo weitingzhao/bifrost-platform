@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { withDecisionAuth } from '@/pages/__tests__/decisionAuthFixture'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -39,7 +40,7 @@ function installStorage(): void {
 
 function wrapper(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={client}>{withDecisionAuth('guest', children)}</QueryClientProvider>
 }
 
 function route(itemId: string, item: unknown, approvals: unknown[]) {

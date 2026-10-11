@@ -11,7 +11,6 @@ import {
   isUnsetDecidedAt,
   postApprovalDecision,
   postApprovalResolve,
-  readApprovalToken,
   type ApprovalItem,
   type ResolveOutcome,
 } from '@/api/approvals'
@@ -42,11 +41,10 @@ import {
   siblingRequests,
   statusInPlainWords,
 } from '@/pages/approvalSiblings'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { useDecisionAuth } from '@/hooks/useDecisionAuth'
+import { adminSessionToken, isAdminRoleRefusal, isDecisionNotSent, type DecisionGate } from '@/lib/decisionAuth'
+import { DecisionHold } from '@/pages/DecisionHold'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
-
-const MISSING_TOKEN =
-  'Approve and Reject stay disabled until an approval token is saved in this browser. The console operator token is not used for these actions.'
 
 function useDeepLinkId(): string | null {
   const [id, setId] = useState(() => approvalIdFromHash(window.location.hash))
@@ -186,12 +184,12 @@ const CLOSE_CHOICES: readonly { outcome: ResolveOutcome; label: string }[] = [
 ]
 
 function CloseUnknownForm({
-  hasToken,
+  maySend,
   busy,
   error,
   onClose,
 }: {
-  hasToken: boolean
+  maySend: boolean
   busy: boolean
   error: string | null
   onClose: (outcome: ResolveOutcome, note: string) => void
@@ -199,7 +197,7 @@ function CloseUnknownForm({
   const [outcome, setOutcome] = useState<ResolveOutcome | ''>('')
   const [note, setNote] = useState('')
   const trimmed = note.trim()
-  const ready = hasToken && !busy && outcome !== '' && trimmed !== ''
+  const ready = maySend && !busy && outcome !== '' && trimmed !== ''
   return (
     <form
       className="flex w-full min-w-0 flex-col gap-2"
@@ -287,7 +285,9 @@ function WhatIsKnown({ item, rows }: { item: ApprovalItem; rows: readonly Approv
 
 function ApprovalCard({
   item,
-  hasToken,
+  maySend,
+  gate,
+  refusal,
   busy,
   closeError,
   rows,
@@ -296,7 +296,9 @@ function ApprovalCard({
   onClose,
 }: {
   item: ApprovalItem
-  hasToken: boolean
+  maySend: boolean
+  gate: DecisionGate
+  refusal: string | null
   busy: boolean
   closeError: string | null
   rows: readonly ApprovalItem[] | undefined
@@ -306,7 +308,7 @@ function ApprovalCard({
 }) {
   const [reason, setReason] = useState('')
   const pending = item.status === 'pending'
-  const canDecide = pending && hasToken && !busy
+  const canDecide = pending && maySend && !busy
   const trimmed = reason.trim()
   const title = decisionTitle(item)
   const env = decisionEnv(item)
@@ -374,12 +376,15 @@ function ApprovalCard({
           <RelatedRequests item={item} rows={rows} />
         )}
         {item.status === 'unknown' ? (
-          <CloseUnknownForm
-            hasToken={hasToken}
-            busy={busy}
-            error={closeError}
-            onClose={(outcome, note) => onClose(item.id, outcome, note)}
-          />
+          <>
+            <DecisionHold gate={gate} refusal={refusal} />
+            <CloseUnknownForm
+              maySend={maySend}
+              busy={busy}
+              error={closeError != null && isAdminRoleRefusal(closeError) ? null : closeError}
+              onClose={(outcome, note) => onClose(item.id, outcome, note)}
+            />
+          </>
         ) : null}
         <Prose label="If you approve" value={lead} />
         {rest !== '' ? <Prose label="Why" value={rest} /> : null}
@@ -416,6 +421,7 @@ function ApprovalCard({
       </article>
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
+          <DecisionHold gate={gate} refusal={refusal} />
           <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor={`reject-${item.id}`}>
             Reject reason
             <input
@@ -520,11 +526,12 @@ function ApprovalCard({
 export function ApprovalsPage() {
   const qc = useQueryClient()
   const id = useDeepLinkId()
-  const [token, setToken] = useState(() => readApprovalToken())
+  const gate = useDecisionAuth()
+  const maySend = gate.kind === 'admin'
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [closeError, setCloseError] = useState<string | null>(null)
-  const hasToken = token !== ''
+  const refusal = [actionError, closeError].find(message => message != null && isAdminRoleRefusal(message)) ?? null
 
   const itemQ = useQuery({
     queryKey: ['approvals', 'item', id],
@@ -542,13 +549,12 @@ export function ApprovalsPage() {
   })
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
-    if (!hasToken) return
+    if (adminSessionToken() == null) return
     setBusy(true)
     setActionError(null)
     try {
       await postApprovalDecision(
         requestId,
-        token,
         path,
         path === 'approve'
           ? {
@@ -560,21 +566,25 @@ export function ApprovalsPage() {
       )
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      if (!isDecisionNotSent(err)) {
+        setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      }
     } finally {
       setBusy(false)
     }
   }
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
-    if (!hasToken) return
+    if (adminSessionToken() == null) return
     setBusy(true)
     setCloseError(null)
     try {
-      await postApprovalResolve(requestId, token, { outcome, note })
+      await postApprovalResolve(requestId, { outcome, note })
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
-      setCloseError(err instanceof Error ? err.message : 'Could not close this request')
+      if (!isDecisionNotSent(err)) {
+        setCloseError(err instanceof Error ? err.message : 'Could not close this request')
+      }
     } finally {
       setBusy(false)
     }
@@ -585,22 +595,9 @@ export function ApprovalsPage() {
       <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
         ← Needs you
       </a>
-      {hasToken ? (
-        <details className="min-w-0 text-sm text-muted-foreground">
-          <summary className="cursor-pointer">Approval token saved in this browser.</summary>
-          <div className="mt-2">
-            <ApprovalTokenField token={token} onSaved={setToken} />
-          </div>
-        </details>
-      ) : (
-        <div className="flex w-full min-w-0 flex-col gap-2">
-          <p role="status" className="m-0 text-sm">
-            {MISSING_TOKEN}
-          </p>
-          <ApprovalTokenField token={token} onSaved={setToken} />
-        </div>
-      )}
-      {actionError != null ? <p className="m-0 text-sm text-destructive">{actionError}</p> : null}
+      {actionError != null && !isAdminRoleRefusal(actionError) ? (
+        <p className="m-0 text-sm text-destructive">{actionError}</p>
+      ) : null}
 
       {id == null ? (
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
@@ -616,7 +613,9 @@ export function ApprovalsPage() {
             <ApprovalCard
               key={opened.id}
               item={opened}
-              hasToken={hasToken}
+              maySend={maySend}
+              gate={gate}
+              refusal={refusal}
               busy={busy}
               closeError={closeError}
               rows={allQ.data}

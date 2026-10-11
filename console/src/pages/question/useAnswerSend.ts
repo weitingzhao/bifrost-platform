@@ -7,7 +7,7 @@ import {
   type Question,
   type QuestionAnswer,
 } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
+import { adminSessionToken, isDecisionNotSent } from '@/lib/decisionAuth'
 import {
   isTerminalPhase,
   presentedQuestion,
@@ -109,6 +109,10 @@ export function useAnswerSend(questionId: string) {
       }
       await reread(snap.id)
     } catch (err) {
+      if (isDecisionNotSent(err)) {
+        dispatchAnswerSend({ type: 'notSent', id: snap.id })
+        return
+      }
       if (isParsedClientError(err)) {
         dispatchAnswerSend({
           type: 'postRejected',
@@ -139,7 +143,7 @@ export function useAnswerSend(questionId: string) {
     const snap = current.phase.snapshot
     if (snap.id !== questionId) return
     if (snap.letter === 'none' && snap.text === '') return
-    if (readApprovalToken() === '') return
+    if (adminSessionToken() == null) return
     void runSend(snap)
   }
 

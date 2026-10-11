@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Question } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
+import { isAdminRoleRefusal } from '@/lib/decisionAuth'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
   confirmIsSendable,
@@ -33,12 +33,14 @@ function rowSnapshot(phase: AnswerPhase): ConfirmSnapshot | null {
 export function QuestionAnswerForm({
   question,
   phase,
+  maySend,
   onChoose,
   onConfirm,
   onCheckAgain,
 }: {
   question: Question
   phase: AnswerPhase
+  maySend: boolean
   onChoose: (snapshot: ConfirmSnapshot) => void
   onConfirm: () => void
   onCheckAgain: () => void
@@ -55,7 +57,7 @@ export function QuestionAnswerForm({
     !expired &&
     active != null &&
     active.id === question.id &&
-    readApprovalToken() !== '' &&
+    maySend &&
     (active.letter !== 'none' || active.text !== '')
 
   function choose(letter: string) {
@@ -148,7 +150,10 @@ export function QuestionAnswerForm({
           </button>
         </div>
       ) : null}
-      {phase.kind === 'confirming' && phase.rejection != null && phase.rejection !== '' ? (
+      {phase.kind === 'confirming' &&
+      phase.rejection != null &&
+      phase.rejection !== '' &&
+      !isAdminRoleRefusal(phase.rejection) ? (
         <p className="m-0 break-words text-sm text-destructive">{phase.rejection}</p>
       ) : null}
     </div>

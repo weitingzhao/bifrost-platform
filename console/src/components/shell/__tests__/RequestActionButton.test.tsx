@@ -2,11 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import {
   REQUEST_SUBMITTED_WAITING,
   RequestActionButton,
 } from '@/components/shell/RequestActionButton'
+
+const LEGACY_APPROVAL_TOKEN_KEY = 'bifrost-ops-approval-token'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -64,7 +65,7 @@ describe('RequestActionButton', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
-    window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(LEGACY_APPROVAL_TOKEN_KEY)
   })
 
   it('calls the direct endpoint when the approval API says tier B', async () => {
@@ -143,7 +144,7 @@ describe('RequestActionButton', () => {
   )
 
   it('links to the request page and never approves in place, even with a saved token', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(LEGACY_APPROVAL_TOKEN_KEY, 'admin-token')
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input)
       const method = init?.method ?? 'GET'

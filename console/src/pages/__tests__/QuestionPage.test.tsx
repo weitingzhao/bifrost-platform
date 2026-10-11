@@ -5,9 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { parseQuestion } from '@/api/questions'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { QuestionPage } from '@/pages/QuestionPage'
+import { applySession, withDecisionAuth } from '@/pages/__tests__/decisionAuthFixture'
 import { resetAnswerSendStore } from '@/pages/question/answerSendStore'
 import { QuestionRow } from '@/pages/shell/needs-you/QuestionRow'
 
@@ -54,7 +55,11 @@ function installStorage(): void {
 }
 
 function wrapper(children: ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      {withDecisionAuth('admin', children)}
+    </QueryClientProvider>
+  )
 }
 
 function posts(): number {
@@ -68,7 +73,7 @@ describe('QuestionPage', () => {
   beforeEach(() => {
     resetAnswerSendStore()
     installStorage()
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    applySession('admin')
     vi.stubGlobal('fetch', vi.fn())
   })
 
@@ -76,7 +81,7 @@ describe('QuestionPage', () => {
     cleanup()
     resetAnswerSendStore()
     vi.unstubAllGlobals()
-    window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     window.location.hash = ''
   })
 

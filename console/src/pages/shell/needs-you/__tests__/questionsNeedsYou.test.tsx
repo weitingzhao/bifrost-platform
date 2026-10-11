@@ -9,6 +9,7 @@ import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approval
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ConsoleNavBadgeMark } from '@/components/shell/ConsoleNavSlotItem'
 import { QuestionPage } from '@/pages/QuestionPage'
+import { withDecisionAuth } from '@/pages/__tests__/decisionAuthFixture'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
@@ -62,7 +63,7 @@ function installStorage(): void {
 }
 
 function wrapper(children: ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return <QueryClientProvider client={client}>{withDecisionAuth('viewer', children)}</QueryClientProvider>
 }
 
 function health(url: string): Response | null {

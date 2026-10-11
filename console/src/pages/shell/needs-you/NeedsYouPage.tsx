@@ -1,16 +1,16 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
+import { Button } from '@bifrost/ui'
 import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { fetchLineage } from '@/api/lineage'
-import { readApprovalToken } from '@/api/approvals'
 import { operatorToken } from '@/api/client'
+import { requestSignIn } from '@/lib/signInRequest'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
 import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { AnswerGroup } from '@/pages/shell/needs-you/AnswerGroup'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
 import { needsYouCountText, type NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import {
@@ -119,9 +119,6 @@ export function NeedsYouPage() {
     questionsUnreadable,
     questionsStale,
     questionsReason,
-    query,
-    handledQuery,
-    questionsQuery,
   } = useNeedsYou()
   const lineageQ = useQuery({
     queryKey: ['lineage', 'needs-you'],
@@ -136,8 +133,7 @@ export function NeedsYouPage() {
     retry: false,
   })
   const progressDoc = progressQ.data?.document ?? null
-  const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
-  const hasReadToken = operatorToken() !== '' || approvalToken !== ''
+  const hasReadToken = operatorToken() !== ''
   const showRecent =
     recentCount.state === 'unknown' || (recentCount.state === 'known' && recentCount.count > 0)
 
@@ -150,17 +146,13 @@ export function NeedsYouPage() {
         <Note>
           {hasReadToken
             ? `Could not read approvals: ${openCount.reason}`
-            : 'This device has no approval token. Save it once to see what waits for you here.'}
+            : 'Sign in at the top right to see what waits for you.'}
         </Note>
-        <ApprovalTokenField
-          token={approvalToken}
-          onSaved={next => {
-            setApprovalToken(next)
-            void query.refetch()
-            void handledQuery.refetch()
-            void questionsQuery.refetch()
-          }}
-        />
+        {hasReadToken ? null : (
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => requestSignIn()}>
+            Sign in
+          </Button>
+        )}
       </div>
     )
   }

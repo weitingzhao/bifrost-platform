@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { fetchQuestion, type QuestionStatus } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
+import { useDecisionAuth } from '@/hooks/useDecisionAuth'
+import { isAdminRoleRefusal } from '@/lib/decisionAuth'
 import { isQuestionId } from '@/lib/shell/consoleRoutes'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { DecisionHold } from '@/pages/DecisionHold'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
@@ -52,7 +53,7 @@ function Frame({
  */
 function QuestionSession({ id }: { id: string }) {
   const send = useAnswerSend(id)
-  const [token, setToken] = useState(() => readApprovalToken())
+  const gate = useDecisionAuth()
   const acceptRef = send.acceptRef
   const readQuestion = useCallback(() => fetchQuestion(id).then(record => acceptRef.current(record)), [acceptRef, id])
 
@@ -73,6 +74,7 @@ function QuestionSession({ id }: { id: string }) {
   const showStored = shown != null && status === 'answered' && answer != null
   const showClosed = shown != null && !showStored && (status === 'withdrawn' || status === 'expired')
   const showForm = shown != null && !showStored && status !== 'withdrawn'
+  const rejection = send.state.phase.kind === 'confirming' ? send.state.phase.rejection : null
   const stale = itemQ.isError && itemQ.data != null
   const unreadable = itemQ.isError && itemQ.data == null
 
@@ -103,15 +105,14 @@ function QuestionSession({ id }: { id: string }) {
             <p className="m-0 text-sm">{SECRETS_LINE}</p>
             {showForm ? (
               <>
-                {token === '' ? (
-                  <p className="m-0 text-sm">
-                    Confirm answer stays disabled until an approval token is saved in this browser.
-                  </p>
-                ) : null}
-                <ApprovalTokenField token={token} onSaved={setToken} />
+                <DecisionHold
+                  gate={gate}
+                  refusal={rejection != null && isAdminRoleRefusal(rejection) ? rejection : null}
+                />
                 <QuestionAnswerForm
                   question={shown}
                   phase={send.state.phase}
+                  maySend={gate.kind === 'admin'}
                   onChoose={send.choose}
                   onConfirm={send.confirm}
                   onCheckAgain={send.checkAgain}

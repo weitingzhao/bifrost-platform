@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, StatusLamp, cn } from '@bifrost/ui'
 import { RefreshCw, User } from 'lucide-react'
 import {
@@ -14,6 +14,7 @@ import {
   platformAuthAuthenticatedBadgeClass,
   platformAuthRoleBadgeClass,
 } from '@/lib/platformAuthUi'
+import { useSignInRequest } from '@/lib/signInRequest'
 
 export type UserMenuProps = {
   /** Ops platform-api health. */
@@ -32,8 +33,18 @@ export function UserMenu({
   const [open, setOpen] = useState(false)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
+  const signInRequest = useSignInRequest()
+  const seenSignIn = useRef(signInRequest)
   const { token, caps, capsLoading, setToken, signOut, refreshCapabilities } =
     usePlatformAuth()
+
+  useEffect(() => {
+    if (signInRequest === seenSignIn.current) return
+    seenSignIn.current = signInRequest
+    setOpen(true)
+    setShowTokenForm(true)
+    setTokenInput('')
+  }, [signInRequest])
 
   const role = (caps?.role ?? 'viewer').toLowerCase()
   const isAuthenticated = caps?.authenticated === true

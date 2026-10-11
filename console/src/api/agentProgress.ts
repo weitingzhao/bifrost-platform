@@ -1,5 +1,4 @@
-import { authedFetch, operatorToken, parseError } from '@/api/client'
-import { readApprovalToken } from '@/api/approvals'
+import { authedFetch } from '@/api/client'
 import { boundDocumentText, sanitizeDocumentText } from '@/pages/shell/progress/progressPart'
 import {
   parseEvents,
@@ -396,16 +395,10 @@ function isAbortError(err: unknown): boolean {
 }
 
 async function readAgentProgress(signal: AbortSignal): Promise<Response> {
-  if (operatorToken() !== '') return authedFetch('Agent progress', '/api/v1/agent/progress', { signal })
-  const headers = new Headers()
-  const token = readApprovalToken()
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch('/api/v1/agent/progress', { headers, signal })
-  if (!response.ok) throw await parseError('Agent progress', response)
-  return response
+  return authedFetch('Agent progress', '/api/v1/agent/progress', { signal })
 }
 
-/** Viewer-level read, with the same token fallback as the other console reads. */
+/** Viewer-level read. Uses the signed-in session, the same bearer as every other console call. */
 export async function fetchAgentProgress(): Promise<AgentProgressResponse> {
   const controller = new AbortController()
   let timedOut = false

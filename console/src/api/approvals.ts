@@ -1,14 +1,12 @@
-import { authHeaders, authedFetch, operatorToken, parseError } from '@/api/client'
+import { authHeaders, authedFetch, parseError } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
   type ApprovalResolution,
   type PlatformApprovalRecord,
 } from '@/api/approvalsServerContract'
+import { DecisionNotSent, adminSessionToken } from '@/lib/decisionAuth'
 
 export type { ApprovalResolution }
-
-/** Browser-only admin token for approve / reject. Not the console operator token. */
-export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
 
 export const APPROVAL_HISTORY_LIMIT = 50
 
@@ -18,26 +16,6 @@ export type ApprovalDecision = {
   status?: string
   result?: unknown
   error?: string
-}
-
-function approvalTokenStore(): Storage | null {
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-export function readApprovalToken(): string {
-  return approvalTokenStore()?.getItem(APPROVAL_TOKEN_STORAGE_KEY)?.trim() ?? ''
-}
-
-export function writeApprovalToken(value: string): void {
-  const store = approvalTokenStore()
-  if (store == null) return
-  const next = value.trim()
-  if (next === '') store.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
-  else store.setItem(APPROVAL_TOKEN_STORAGE_KEY, next)
 }
 
 /** `#approvals?id=<id>` — the phone notification target. */
@@ -149,19 +127,9 @@ export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMI
     .slice(0, limit)
 }
 
-/**
- * Reads need a viewer token. The console operator token wins; a device that only
- * saved the approval token (the phone home-screen app) reads with that one, so the
- * token is entered once.
- */
+/** Reads use the signed-in session, the same bearer as every other console call. */
 export async function viewerRead(prefix: string, path: string): Promise<Response> {
-  if (operatorToken() !== '') return authedFetch(prefix, path)
-  const headers = new Headers()
-  const token = readApprovalToken()
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(path, { headers })
-  if (!r.ok) throw await parseError(prefix, r)
-  return r
+  return authedFetch(prefix, path)
 }
 
 function approvalsRead(path: string): Promise<Response> {
@@ -183,16 +151,12 @@ export async function fetchApproval(id: string): Promise<ApprovalItem> {
 
 export type ResolveOutcome = 'not_run' | 'succeeded' | 'failed'
 
-/** Close an unknown result. Uses the saved approval token, like approve and reject. */
-export async function postApprovalResolve(
-  id: string,
-  token: string,
-  body: { outcome: ResolveOutcome; note: string },
-): Promise<ApprovalDecision> {
-  const headers = new Headers()
-  headers.set('Content-Type', 'application/json')
-  headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/resolve`, {
+async function postAsAdmin(path: string, body: unknown): Promise<ApprovalDecision> {
+  const token = adminSessionToken()
+  if (token == null) throw new DecisionNotSent()
+  const headers = authHeaders(true)
+  if (headers.get('Authorization') !== `Bearer ${token}`) throw new DecisionNotSent()
+  const r = await fetch(path, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -201,22 +165,20 @@ export async function postApprovalResolve(
   return (await r.json()) as ApprovalDecision
 }
 
+/** Close an unknown result. Sends the signed-in admin session, like approve and reject. */
+export async function postApprovalResolve(
+  id: string,
+  body: { outcome: ResolveOutcome; note: string },
+): Promise<ApprovalDecision> {
+  return postAsAdmin(`/api/v1/approvals/${encodeURIComponent(id)}/resolve`, body)
+}
+
 export async function postApprovalDecision(
   id: string,
-  token: string,
   path: 'approve' | 'reject',
   body: { channel: 'console'; approval_line: string; params_hash: string } | { reason: string },
 ): Promise<ApprovalDecision> {
-  const headers = new Headers()
-  headers.set('Content-Type', 'application/json')
-  headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  })
-  if (!r.ok) throw await parseError('approvals', r)
-  return (await r.json()) as ApprovalDecision
+  return postAsAdmin(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, body)
 }
 
 export type ApprovalCreateBody = {

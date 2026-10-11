@@ -1,12 +1,25 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchAuthCapabilities } from '@/api/cluster'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
-import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
+import { forgetLegacyApprovalToken } from '@/lib/forgetLegacyApprovalToken'
+import { PLATFORM_TOKEN_KEY, getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
 
 export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
-  const [token, setTokenState] = useState(() => getPlatformOperatorToken())
+  const [token, setTokenState] = useState(() => {
+    forgetLegacyApprovalToken()
+    return getPlatformOperatorToken()
+  })
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key != null && event.key !== PLATFORM_TOKEN_KEY) return
+      setTokenState(getPlatformOperatorToken())
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   const capsQuery = useQuery({
     queryKey: ['platform', 'auth', 'capabilities', token],

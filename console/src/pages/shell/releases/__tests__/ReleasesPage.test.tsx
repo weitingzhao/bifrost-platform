@@ -2,11 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { REQUEST_SUBMITTED_WAITING } from '@/components/shell/RequestActionButton'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { NOTHING_NEEDS_YOU } from '@/pages/shell/releases/ReleaseNeedsYouSection'
 import { ReleasesPage } from '@/pages/shell/releases/ReleasesPage'
+
+const LEGACY_APPROVAL_TOKEN_KEY = 'bifrost-ops-approval-token'
 
 function installStorage(): void {
   const mem = new Map<string, string>()
@@ -272,7 +273,7 @@ describe('ReleasesPage', () => {
   })
 
   afterEach(() => {
-    window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(LEGACY_APPROVAL_TOKEN_KEY)
     window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     vi.unstubAllGlobals()
   })

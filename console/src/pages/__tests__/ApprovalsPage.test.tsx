@@ -2,17 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  APPROVAL_HISTORY_LIMIT,
-  APPROVAL_TOKEN_STORAGE_KEY,
-  formatWaited,
-  recentClosed,
-} from '@/api/approvals'
+import { APPROVAL_HISTORY_LIMIT, formatWaited, recentClosed } from '@/api/approvals'
 import {
   buildApprovalListResponse,
   buildPlatformApproval,
 } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { applySession, withDecisionAuth, type DecisionKind } from '@/pages/__tests__/decisionAuthFixture'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -47,9 +44,13 @@ function installStorage(): Storage {
   return store
 }
 
-function wrapper(children: ReactNode) {
+function wrapper(children: ReactNode, kind: DecisionKind = 'guest') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      {withDecisionAuth(kind, children)}
+    </QueryClientProvider>
+  )
 }
 
 describe('ApprovalsPage (request page)', () => {
@@ -60,7 +61,7 @@ describe('ApprovalsPage (request page)', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
-    window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     window.location.hash = ''
   })
 
@@ -131,10 +132,8 @@ describe('ApprovalsPage (request page)', () => {
     expect(screen.getByText('argocd rollback')).toBeTruthy()
     expect(screen.queryByText('Decided at')).toBeNull()
     expect(screen.getByText(/"app": "rocket"/)).toBeTruthy()
-    expect(
-      screen.getByText(/Approve and Reject stay disabled until an approval token is saved/),
-    ).toBeTruthy()
-    expect(screen.getByLabelText('Set approval token')).toBeTruthy()
+    expect(screen.getByText('Deciding needs the admin sign-in. You are signed in as GUEST.')).toBeTruthy()
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(
       true,
     )
@@ -143,31 +142,29 @@ describe('ApprovalsPage (request page)', () => {
     )
   })
 
-  it('reads the request with the saved approval token when no operator token is set', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+  it('reads the request with the signed-in session and does not show a token field', async () => {
+    applySession('operator')
+    window.localStorage.setItem('bifrost-ops-approval-token', 'legacy-secret')
     window.location.hash = '#approvals?id=ap-1'
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.endsWith('/api/v1/approvals/ap-1')) return json(buildPlatformApproval({ id: 'ap-1' }))
       return json({ error: url }, 500)
     })
-    const { container } = render(wrapper(<ApprovalsPage />))
+    const { container } = render(wrapper(<ApprovalsPage />, 'operator'))
     await screen.findByText('sess-owner')
-    const input = document.getElementById('approval-token') as HTMLInputElement
-    expect(input.value).toBe('')
-    expect(input.outerHTML).not.toContain('admin-token')
-    expect(container.innerHTML).not.toContain('admin-token')
-    expect(container.textContent ?? '').not.toContain('admin-token')
-    expect(screen.getByText('A token is saved. Type a new one to replace it.')).toBeTruthy()
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
+    expect(container.innerHTML).not.toContain('operator-token')
+    expect(container.innerHTML).not.toContain('legacy-secret')
+    expect(container.textContent ?? '').not.toContain('operator-token')
     const call = vi.mocked(fetch).mock.calls.find(entry => String(entry[0]).endsWith('/approvals/ap-1'))
-    expect(new Headers(call?.[1]?.headers).get('Authorization')).toBe('Bearer admin-token')
-    expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(
-      false,
-    )
+    expect(new Headers(call?.[1]?.headers).get('Authorization')).toBe('Bearer operator-token')
+    expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('Deciding needs the admin sign-in. You are signed in as OPERATOR.')).toBeTruthy()
   })
 
   it('approves with the server line and params hash', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    applySession('admin')
     window.location.hash = '#approvals?id=ap-1'
     const opened = buildPlatformApproval({
       id: 'ap-1',
@@ -184,7 +181,7 @@ describe('ApprovalsPage (request page)', () => {
       if (url.endsWith('/api/v1/approvals/ap-1')) return json(opened)
       return json(buildApprovalListResponse([]))
     })
-    render(wrapper(<ApprovalsPage />))
+    render(wrapper(<ApprovalsPage />, 'admin'))
     fireEvent.click(await screen.findByRole('button', { name: 'Approve gitops_sync_app' }))
     await waitFor(() => {
       expect(posts).toEqual([
@@ -508,7 +505,7 @@ describe('ApprovalsPage (request page)', () => {
     ['succeeded', 'It ran and succeeded', 'executed', 'it ran and succeeded'],
     ['failed', 'It ran and failed', 'failed', 'it ran and failed'],
   ] as const)('closes an unknown request as %s', async (outcome, choice, status, phrase) => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    applySession('admin')
     const id = `appr-${outcome}`
     const at = '2026-10-10T19:22:16Z'
     window.location.hash = `#approvals?id=${id}`
@@ -538,7 +535,7 @@ describe('ApprovalsPage (request page)', () => {
       }
       return json({ error: url }, 500)
     })
-    render(wrapper(<ApprovalsPage />))
+    render(wrapper(<ApprovalsPage />, 'admin'))
     fireEvent.click(await screen.findByLabelText(choice))
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked the host' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close this request' }))
@@ -555,7 +552,7 @@ describe('ApprovalsPage (request page)', () => {
   })
 
   it('shows a resolve error in place and leaves the form up', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    applySession('admin')
     const id = 'appr-err'
     window.location.hash = `#approvals?id=${id}`
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -568,7 +565,7 @@ describe('ApprovalsPage (request page)', () => {
       }
       return json({ error: url }, 500)
     })
-    render(wrapper(<ApprovalsPage />))
+    render(wrapper(<ApprovalsPage />, 'admin'))
     fireEvent.click(await screen.findByLabelText('It did not run'))
     fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'looked' } })
     fireEvent.click(screen.getByRole('button', { name: 'Close this request' }))
