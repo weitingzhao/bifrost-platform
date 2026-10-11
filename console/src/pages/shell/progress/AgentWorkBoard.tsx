@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
-  actionLink,
   AGENT_PROGRESS_POLL_MS,
   computedAgeLine,
   coordinatorLine,
@@ -14,11 +13,10 @@ import {
   receivedIsStale,
   skewSentence,
   staleSentence,
-  waitingLine,
   type AgentProgressResponse,
-  type ProgressAction,
   type ProgressDocument,
 } from '@/api/agentProgress'
+import { NeedsYouNow } from '@/pages/shell/progress/ProgressNeedsYou'
 import { FinishedWorks, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
 import { ProgressRunning } from '@/pages/shell/progress/ProgressRunning'
@@ -71,60 +69,12 @@ function Verdict({ doc }: { doc: ProgressDocument }) {
   )
 }
 
-function ActionBody({ action }: { action: ProgressAction }) {
-  const view = actionLink(action)
-  if (view.kind === 'anchor') {
-    return (
-      <a
-        href={view.href}
-        rel="noopener noreferrer"
-        {...(view.external ? { target: '_blank' } : {})}
-        className="underline"
-      >
-        {view.label}
-      </a>
-    )
-  }
-  if (view.kind === 'blocked') {
-    const note = view.host !== '' ? `link not shown: ${view.host}` : 'link not shown'
-    return (
-      <>
-        <span>{view.text}</span>
-        <span className="mt-0.5 block text-xs text-muted-foreground">{note}</span>
-      </>
-    )
-  }
-  return <>{view.text}</>
-}
-
-function OwnerSection({ doc }: { doc: ProgressDocument }) {
-  const nowItems = doc.owner_now ?? []
+function NextTime({ doc }: { doc: ProgressDocument }) {
+  if ((doc.owner_now ?? []).length > 0) return null
   return (
     <section aria-label="Next time you are needed" className="flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium text-foreground">Next time you are needed</h3>
-      {nowItems.length > 0 ? (
-        <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-2 p-0">
-          {nowItems.map((entry, index) => (
-            <li
-              key={`${entry.name ?? 'item'}-${index}`}
-              className="flex w-full min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5"
-            >
-              <span className="break-words text-sm font-medium text-foreground">{entry.name}</span>
-              {entry.urgency?.trim() ? (
-                <span className="break-words text-sm text-muted-foreground">{entry.urgency}</span>
-              ) : null}
-              <Tick className="text-sm text-muted-foreground" text={now => waitingLine(entry.since ?? 0, now)} />
-              <ol className="m-0 list-decimal pl-5 text-sm text-foreground">
-                {(entry.actions ?? []).map((action, actionIndex) => (
-                  <li key={actionIndex} className={action.done ? 'break-words line-through' : 'break-words'}>
-                    <ActionBody action={action} />
-                  </li>
-                ))}
-              </ol>
-            </li>
-          ))}
-        </ul>
-      ) : doc.owner_next != null && ownerNextLine(doc.owner_next) !== '' ? (
+      {doc.owner_next != null && ownerNextLine(doc.owner_next) !== '' ? (
         <p className="m-0 break-words text-sm text-foreground">{ownerNextLine(doc.owner_next)}</p>
       ) : (
         <p className="m-0 text-sm text-muted-foreground">Nothing is waiting for you.</p>
@@ -172,13 +122,14 @@ const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
       <Verdict doc={doc} />
-      <OwnerSection doc={doc} />
+      <NeedsYouNow doc={doc} />
       {coordinator != null ? (
         <p className="m-0 break-words text-sm text-foreground">
           <span className="font-medium">Coordinator: </span>
           <Tick text={now => coordinatorLine(coordinator, now)} />
         </p>
       ) : null}
+      <NextTime doc={doc} />
       <ProgressPlan roadmap={doc.roadmap} />
       <ProgressUsageBlock usage={doc.usage} />
       <ProgressRunning works={active} />

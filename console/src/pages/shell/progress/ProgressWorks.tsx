@@ -12,6 +12,7 @@ import {
   type ProgressWork,
 } from '@/api/agentProgress'
 import type { ProgressEvent } from '@/api/agentProgressBoard'
+import { RequestChipLink } from '@/pages/shell/progress/ProgressNeedsYou'
 import { Tick } from '@/pages/shell/progress/progressClock'
 import {
   earlierStepsLabel,
@@ -138,7 +139,10 @@ function StepCard({ step }: { step: ProgressStep }) {
       aria-label={step.name ?? 'Step'}
       className="flex min-w-0 max-w-full flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
     >
-      <span className="break-words text-sm font-medium text-foreground">{step.name}</span>
+      <span className="flex min-w-0 flex-wrap items-baseline gap-2">
+        <span className="break-words text-sm font-medium text-foreground">{step.name}</span>
+        <RequestChipLink approval={step.approval} />
+      </span>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {who !== '' ? (
           <DenseTag variant="category" size="pill">

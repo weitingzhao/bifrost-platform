@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
+import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { fetchLineage } from '@/api/lineage'
 import { readApprovalToken } from '@/api/approvals'
 import { operatorToken } from '@/api/client'
@@ -18,6 +19,7 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
+import { partOfReference } from '@/pages/shell/progress/progressPart'
 
 function Group({
   label,
@@ -112,6 +114,13 @@ export function NeedsYouPage() {
     staleTime: 60_000,
     retry: false,
   })
+  const progressQ = useQuery({
+    queryKey: ['agent-progress'],
+    queryFn: fetchAgentProgress,
+    refetchInterval: AGENT_PROGRESS_POLL_MS,
+    retry: false,
+  })
+  const progressDoc = progressQ.data?.document ?? null
   const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
   const hasReadToken = operatorToken() !== '' || approvalToken !== ''
   const showRecent =
@@ -189,7 +198,12 @@ export function NeedsYouPage() {
         <Group label="Decide" count={String(decide.length)}>
           <ApprovalList>
             {decide.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} />
+              <ApprovalRow
+                key={item.id}
+                item={item}
+                now={now}
+                partOf={item.status === 'pending' ? partOfReference(progressDoc, item.id) : null}
+              />
             ))}
           </ApprovalList>
         </Group>

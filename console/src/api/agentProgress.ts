@@ -10,6 +10,7 @@ import {
   type ProgressRoadmap,
   type ProgressUsage,
 } from '@/api/agentProgressBoard'
+import { parseApproval, type ProgressApproval } from '@/api/agentProgressExtra'
 
 /** How often the Progress page re-reads the published document. */
 export const AGENT_PROGRESS_POLL_MS = 15_000
@@ -47,9 +48,11 @@ export type ProgressAction = {
 
 export type OwnerNow = {
   name?: string
+  work?: string
   urgency?: string
   since?: number
   actions?: ProgressAction[]
+  approval?: ProgressApproval
 }
 
 export type OwnerNext = {
@@ -74,6 +77,8 @@ export type ProgressStep = {
   doing?: string
   needs_owner?: boolean
   parallel?: boolean
+  waits_for?: string
+  approval?: ProgressApproval
   events?: ProgressEvent[]
 }
 
@@ -178,13 +183,17 @@ function parseActions(value: unknown): ProgressAction[] | undefined {
 function parseOwnerNow(value: Record<string, unknown>): OwnerNow {
   const entry: OwnerNow = {}
   const name = asString(value.name)
+  const work = asString(value.work)
   const urgency = asString(value.urgency)
   const since = asNumber(value.since)
   if (name !== undefined) entry.name = name
+  if (work !== undefined) entry.work = work
   if (urgency !== undefined) entry.urgency = urgency
   if (since !== undefined) entry.since = since
   const actions = parseActions(value.actions)
   if (actions !== undefined) entry.actions = actions
+  const approval = parseApproval(value.approval)
+  if (approval !== undefined) entry.approval = approval
   return entry
 }
 
@@ -259,6 +268,10 @@ function parseStep(value: Record<string, unknown>): ProgressStep {
   if (needs !== undefined) step.needs_owner = needs
   const parallel = asBoolean(value.parallel)
   if (parallel !== undefined) step.parallel = parallel
+  const waits = asString(value.waits_for)
+  if (waits !== undefined) step.waits_for = waits
+  const approval = parseApproval(value.approval)
+  if (approval !== undefined) step.approval = approval
   const events = parseEvents(value.events)
   if (events !== undefined) step.events = events
   return step

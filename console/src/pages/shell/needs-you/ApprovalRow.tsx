@@ -8,6 +8,7 @@ import {
 } from '@/api/approvals'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
+import { partOfLine, type ProgressPart } from '@/pages/shell/progress/progressPart'
 
 /**
  * One request as a link to its page. No buttons here: approve and reject live on
@@ -18,11 +19,14 @@ export function ApprovalRow({
   item,
   now = Date.now(),
   lines,
+  partOf = null,
 }: {
   item: ApprovalItem
   now?: number
   /** Replaces the waited / decided caption. Pending Decide rows leave this unset. */
   lines?: readonly string[]
+  /** Set when the current progress document names this pending request. */
+  partOf?: ProgressPart | null
 }) {
   const env = approvalEnv(item)
   const pending = item.status === 'pending'
@@ -62,6 +66,11 @@ export function ApprovalRow({
               : `${item.requester || '—'} · decided ${formatDecidedAt(item)}`}
         </span>
       </a>
+      {pending && partOf != null ? (
+        <a href="#progress" className="mt-1 block min-w-0 break-words text-sm text-foreground underline">
+          {partOfLine(partOf)}
+        </a>
+      ) : null}
     </li>
   )
 }
