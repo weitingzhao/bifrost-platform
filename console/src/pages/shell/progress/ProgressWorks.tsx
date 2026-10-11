@@ -2,18 +2,16 @@ import { useState, type ReactNode } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import {
   activeStepText,
-  elapsedLine,
   expectationLine,
   formatLocalTime,
   lastOutputLine,
-  nextLine,
   stepStateLabel,
   type ProgressStep,
   type ProgressWork,
 } from '@/api/agentProgress'
 import type { ProgressEvent } from '@/api/agentProgressBoard'
 import { RequestChipLink } from '@/pages/shell/progress/ProgressNeedsYou'
-import { Tick } from '@/pages/shell/progress/progressClock'
+import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import {
   earlierStepsLabel,
   editDelta,
@@ -21,12 +19,17 @@ import {
   flowSteps,
   groupParallel,
   lastOutLine,
+  nextRow,
+  nowRow,
   runResultLine,
   showLive,
+  stepBarPercent,
+  stepPaceLine,
   tookLine,
   workCardId,
   workFinishedAt,
   workShortName,
+  yourTurnWhen,
 } from '@/pages/shell/progress/progressModel'
 
 function Fold({ summary, children }: { summary: string; children: ReactNode }) {
@@ -128,12 +131,24 @@ function EventList({ events }: { events: ProgressEvent[] | undefined }) {
   )
 }
 
+function StepBar({ step }: { step: ProgressStep }) {
+  const now = useNow()
+  const pct = Math.round(stepBarPercent(step, now))
+  return (
+    <span className="mt-1 block h-1 w-full max-w-full overflow-hidden rounded bg-foreground/10" aria-hidden="true">
+      <span className="block h-full bg-foreground/70" style={{ width: `${pct}%` }} data-step-bar={pct} />
+    </span>
+  )
+}
+
 function StepCard({ step }: { step: ProgressStep }) {
   const label = stepStateLabel(step.state, step.needs_owner)
   const done = step.state === 'done'
-  const expectation = done ? null : expectationLine(step)
+  const waits = step.needs_owner === true
+  const expectation = done || waits ? null : expectationLine(step)
   const took = tookLine(step)
   const who = step.who?.trim() ?? ''
+  const waitsFor = step.waits_for?.trim() ?? ''
   return (
     <li
       aria-label={step.name ?? 'Step'}
@@ -157,11 +172,13 @@ function StepCard({ step }: { step: ProgressStep }) {
         took != null ? <span className="break-words text-sm text-muted-foreground">{took}</span> : null
       ) : (
         <>
-          <Tick className="break-words text-sm text-muted-foreground" text={now => elapsedLine(step, now)} />
+          <Tick className="break-words text-sm text-muted-foreground" text={now => stepPaceLine(step, now)} />
           {expectation != null ? <span className="break-words text-sm text-muted-foreground">{expectation}</span> : null}
           <Tick className="break-words text-sm text-muted-foreground" text={now => lastOutputLine(step, now)} />
         </>
       )}
+      {waitsFor !== '' ? <span className="break-words text-sm text-muted-foreground">waits for: {waitsFor}</span> : null}
+      <StepBar step={step} />
       {done ? (
         <Fold summary="What it did last">
           <EventList events={step.events} />
@@ -205,10 +222,25 @@ function LivePanel({ step }: { step: ProgressStep }) {
   )
 }
 
+function YourTurn({ work }: { work: ProgressWork }) {
+  const name = work.owner?.name?.trim() ?? ''
+  if (name === '') return null
+  if (work.sure === false) {
+    return <p className="m-0 break-words text-sm text-foreground">Your turn: {name} · cannot be estimated</p>
+  }
+  return (
+    <p className="m-0 break-words text-sm text-foreground">
+      Your turn: {name}
+      <Tick text={now => yourTurnWhen(work.owner?.at, now)} />
+    </p>
+  )
+}
+
 function WorkBody({ work, foldDone }: { work: ProgressWork; foldDone: boolean }) {
   const { done, flow } = flowSteps(work, foldDone)
   const notes = (work.steps ?? []).map(activeStepText).filter(text => text !== '')
-  const next = nextLine(work.next)
+  const nowText = nowRow(work)
+  const next = nextRow(work)
   const risk = work.risk?.trim() ?? ''
   const live = flow.filter(showLive)
   return (
@@ -222,12 +254,14 @@ function WorkBody({ work, foldDone }: { work: ProgressWork; foldDone: boolean })
         </Fold>
       ) : null}
       <StepFlow steps={flow} label="Steps" />
+      {nowText != null ? <p className="m-0 break-words text-sm text-foreground">{nowText}</p> : null}
+      {next != null ? <p className="m-0 break-words text-sm text-foreground">{next}</p> : null}
+      <YourTurn work={work} />
       {notes.map(note => (
         <p key={note} className="m-0 break-words text-sm text-muted-foreground">
           {note}
         </p>
       ))}
-      {next !== '' ? <p className="m-0 break-words text-sm text-foreground">{next}</p> : null}
       {risk !== '' ? <p className="m-0 break-words text-sm text-foreground">Risk: {risk}</p> : null}
       {live.map((step, index) => (
         <LivePanel key={`${step.name ?? 'live'}-${index}`} step={step} />

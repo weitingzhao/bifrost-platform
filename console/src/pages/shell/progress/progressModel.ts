@@ -1,4 +1,4 @@
-import { formatDuration, type ProgressStep, type ProgressWork } from '@/api/agentProgress'
+import { formatDuration, formatLocalTime, waitingLine, type ProgressStep, type ProgressWork } from '@/api/agentProgress'
 import type { ProgressEvent, ProgressQueueItem, ProgressRoadmap } from '@/api/agentProgressBoard'
 
 const RUNNING_NOW = new Set(['running', 'slow', 'quiet', 'dead', 'failed'])
@@ -272,4 +272,69 @@ export function resetsIn(unixSeconds: number, nowMs: number): string {
   }
   const remH = hours % 24
   return remH === 0 ? `resets in ${days}d` : `resets in ${days}d ${remH}h`
+}
+
+const CURRENT_STEP = new Set(['running', 'slow', 'quiet', 'dead', 'gap', 'failed'])
+
+export function isCurrentStep(step: ProgressStep): boolean {
+  if (step.state === 'done') return false
+  if (step.needs_owner === true) return true
+  return CURRENT_STEP.has(step.state ?? '')
+}
+
+/** Elapsed over the usual duration, capped. A done step is full. */
+export function stepBarPercent(step: ProgressStep, nowMs: number): number {
+  if (step.state === 'done') return 100
+  const usual = step.usual_min ?? 0
+  const started = step.started ?? 0
+  if (!(usual > 0) || !(started > 0)) return 0
+  const elapsed = Math.max(0, nowMs / 1000 - started)
+  return Math.min(100, (elapsed / (usual * 60)) * 100)
+}
+
+/** "1m of the usual 15". A step waiting on the Owner says "waiting", never "late". */
+export function stepPaceLine(step: ProgressStep, nowMs: number): string | null {
+  if (step.needs_owner === true) return waitingLine(step.started ?? 0, nowMs)
+  if (step.state === 'done') return null
+  const started = step.started ?? 0
+  if (!(started > 0)) return null
+  const ended = step.ended ?? 0
+  const end = ended > 0 ? ended : nowMs / 1000
+  const elapsed = Math.max(0, Math.floor(end - started))
+  const dur = formatDuration(elapsed)
+  const usual = step.usual_min
+  if (typeof usual === 'number' && Number.isFinite(usual) && usual > 0) {
+    return `${dur} of the usual ${String(Math.round(usual * 10) / 10)}`
+  }
+  return dur
+}
+
+export function nowRow(work: ProgressWork): string | null {
+  const parts = (work.steps ?? [])
+    .filter(isCurrentStep)
+    .map(step => [step.name?.trim() ?? '', step.who?.trim() ?? ''].filter(part => part !== '').join(' · '))
+    .filter(part => part !== '')
+  if (parts.length === 0) return null
+  return `Now: ${parts.join('; ')}`
+}
+
+export function nextRow(work: ProgressWork): string | null {
+  const name = work.next?.name?.trim() ?? ''
+  if (name === '') return null
+  const who = work.next?.who?.trim() ?? ''
+  const head = who !== '' ? `Next: ${name} · ${who}` : `Next: ${name}`
+  return work.next?.needs_owner === true ? `${head} — this one needs you` : head
+}
+
+export function yourTurnWhen(at: number | undefined, nowMs: number): string | null {
+  if (typeof at !== 'number' || !(at > 0)) return null
+  const delta = Math.max(0, Math.floor(at - nowMs / 1000))
+  return ` · expected about ${formatLocalTime(at)} (in ${formatDuration(delta)})`
+}
+
+export function formatHourMinute(unixSeconds: number): string {
+  if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return ''
+  const date = new Date(unixSeconds * 1000)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }

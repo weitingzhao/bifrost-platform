@@ -23,6 +23,10 @@ export function partOfReference(doc: ProgressDocument | null | undefined, id: st
       if (workName === '' && stepName === '') continue
       return { work: workName, step: stepName }
     }
+    if (work.owner?.approval?.id === id) {
+      const stepName = work.owner.name?.trim() ?? ''
+      if (workName !== '' || stepName !== '') return { work: workName, step: stepName }
+    }
   }
   return null
 }

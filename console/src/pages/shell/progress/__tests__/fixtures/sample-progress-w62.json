@@ -1,0 +1,853 @@
+{
+  "at": 1791699087.8429608,
+  "verdict": "3 个步骤在做，都正常",
+  "level": "run",
+  "works": [
+    {
+      "title": "Console 下一片：全局计划、同时在跑的事、现场；「结果未知」给事实",
+      "short": "Console 下一片",
+      "goal": "W-62、W-48 · 你今晚指出的几条：进展页只说「没有步骤在跑」；想看全局计划和现在的位置；现场要最新的在上；「结果未知」那一页不知道该怎么办",
+      "steps": [
+        {
+          "name": "实现",
+          "who": "Cursor",
+          "usual_min": 30,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791695715.0618544,
+          "last": 1791697181.0381818,
+          "ended": 1791697181.3681893,
+          "note": "Cursor 做完，三个提交",
+          "doing": "",
+          "events": [
+            {
+              "at": 1791697123.138,
+              "kind": "think",
+              "text": "ommit hook command before committing. The script will run against a temporary root containing only the bifrost-platform symlink. Untracked files are not in git "
+            },
+            {
+              "kind": "run",
+              "text": "mkdir -p ~/agent-work/w62-slice2/scripts && ln -sfn ../bifrost-trade-infra/agent-config/scripts/code-health ~/agent-work/w62-slice2/scripts/code-health && ROOT=",
+              "at": 1791697123.155,
+              "done": true,
+              "exit": 0,
+              "ms": 488,
+              "out": "I9288a7b0dd46c237c3062c4734a72c47a0c1069f"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791695715.0618544,
+          "eta_end": 1791697181.3681893
+        },
+        {
+          "name": "验收",
+          "who": "Claude 的脚本",
+          "usual_min": 5,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791697201.5412104,
+          "last": 1791697318.3095992,
+          "ended": 1791697318.3096952,
+          "note": "全过：前端 724 条、后端 52 个包、代码健康和写死路径检查都过",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "tsc exit=0"
+            },
+            {
+              "kind": "line",
+              "text": "✖ 4 problems (0 errors, 4 warnings)"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791697201.5412104,
+          "eta_end": 1791697318.3096952
+        },
+        {
+          "name": "进主线，跑真实 CI",
+          "who": "集群",
+          "usual_min": 5,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791697378.3157043,
+          "last": 1791697602.1778312,
+          "ended": 1791697602.1794307,
+          "note": "CI 全绿（457454c）",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "00:46:42 finished: True/Succeeded"
+            },
+            {
+              "kind": "line",
+              "text": "TASK                OK     REASON"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791697378.3157043,
+          "eta_end": 1791697602.1794307
+        },
+        {
+          "name": "上测试环境并核对",
+          "who": "集群 + Claude",
+          "usual_min": 8,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791692541.7051573,
+          "last": 1791697970.4759345,
+          "ended": 1791697970.4772775,
+          "note": "测试环境跑的是 457454c：健康检查 200，页面里已有新的几块",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "TASK                       OK     REASON"
+            },
+            {
+              "kind": "line",
+              "text": "build-platform-api         True   Succeeded"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791692541.7051573,
+          "eta_end": 1791697970.4772775
+        },
+        {
+          "name": "你批 #6，正式环境发布",
+          "who": "你",
+          "usual_min": 0,
+          "manual": true,
+          "needs_owner": true,
+          "actions": [
+            {
+              "text": "在 Console 的 Needs you 里点 #6 的批准（手机也行）",
+              "link": "https://ops.bifrost.lan/",
+              "link_text": "打开 Console"
+            }
+          ],
+          "urgency": "不急：一天内有效（到 10-12 01:00）。批了之后约 10 分钟发完，期间控制面中断约 20 秒",
+          "approval": {
+            "id": "appr_6f4ac97469fd6f10",
+            "number": 6,
+            "summary": "bifrost-deliver-platform-prod @ main"
+          },
+          "state": "running",
+          "label": "在做",
+          "started": 1791698467.480083,
+          "note": "",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791698467.480083,
+          "eta_end": 1791699087.8429608
+        },
+        {
+          "name": "正式环境发布并核对",
+          "who": "集群 + Claude",
+          "usual_min": 10,
+          "waits_for": "你批 #6",
+          "state": "running",
+          "label": "在做",
+          "started": 1791698487.0137002,
+          "last": 1791699077.5591161,
+          "note": "01:11:17 no run yet",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "01:09:41 no run yet"
+            },
+            {
+              "kind": "line",
+              "text": "01:09:52 no run yet"
+            }
+          ],
+          "overdue": 0.8292605876922607,
+          "eta_start": 1791698487.0137002,
+          "eta_end": 1791699237.8429608
+        }
+      ],
+      "owner": {
+        "name": "你批 #6，正式环境发布",
+        "at": 1791698467.480083,
+        "work": "Console 下一片",
+        "now": true,
+        "actions": [
+          {
+            "text": "在 Console 的 Needs you 里点 #6 的批准（手机也行）",
+            "link": "https://ops.bifrost.lan/",
+            "link_text": "打开 Console"
+          }
+        ],
+        "urgency": "不急：一天内有效（到 10-12 01:00）。批了之后约 10 分钟发完，期间控制面中断约 20 秒",
+        "since": 1791698467.480083,
+        "approval": {
+          "id": "appr_6f4ac97469fd6f10",
+          "number": 6,
+          "summary": "bifrost-deliver-platform-prod @ main"
+        }
+      },
+      "risk": "你已在线程里说可以发。申请 #6 在 Console 的 Needs you 里等你点批准",
+      "sure": true,
+      "end": 1791699237.8429608,
+      "finished": false
+    },
+    {
+      "title": "派工流水线：让程序推进，不靠我记着",
+      "short": "派工流水线",
+      "goal": "W-66 · 你问「没有后台步骤在跑，是不是工作停了」。是真的停了：现在只有我被叫醒才会有下一步。这件事就是补这个缺口的第一步：把实现、验收、复核做成一个由程序推进的状态机，带轮次预算",
+      "round": 2,
+      "steps": [
+        {
+          "name": "第 1 轮：实现",
+          "who": "Cursor",
+          "usual_min": 30,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791695715.062124,
+          "last": 1791696654.5362687,
+          "ended": 1791696655.0144606,
+          "note": "Cursor 做完：lane.py 状态机，12 条测试",
+          "doing": "",
+          "events": [
+            {
+              "kind": "run",
+              "text": "git status",
+              "at": 1791696617.514,
+              "done": true,
+              "exit": 0,
+              "ms": 387,
+              "out": "nothing added to commit but untracked files present (use \"git add\" to track)"
+            },
+            {
+              "kind": "run",
+              "text": "git diff && git diff --cached",
+              "at": 1791696617.523,
+              "done": true,
+              "exit": 0,
+              "ms": 444
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791695715.062124,
+          "eta_end": 1791696655.0144606
+        },
+        {
+          "name": "第 1 轮：验收",
+          "who": "Claude",
+          "manual": true,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791697108.028439,
+          "ended": 1791697228.028439,
+          "note": "12 条测试全过，没有写死路径",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791697108.028439,
+          "eta_end": 1791697228.028439
+        },
+        {
+          "name": "第 1 轮：独立复核",
+          "who": "Codex（只读）",
+          "usual_min": 8,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791697228.0085604,
+          "last": 1791697311.9702744,
+          "ended": 1791697312.0703208,
+          "note": "没过：5 个必须改、4 个应该改。脚本只是记下发生了什么，还没有强制：失败的步骤也能过、结果没绑定到这一轮和这次提交、两个进程能同时推同一件事、预算能自己给自己加、路径能注入命令",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "VERDICT: fix first"
+            },
+            {
+              "kind": "line",
+              "text": "- **P1：失败或崩溃仍可通过。** `outcome_after_exit` 只在 implement 检查退出码；verify 输出 `pass` 后退出 7 仍进入审查，review 写出首行后退出 9 仍进入 `passed`。已用内存调用复现。应同时要求成功退出和完整有效报告。证据：[lane.py:351"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791697228.0085604,
+          "eta_end": 1791697312.0703208
+        },
+        {
+          "name": "第 2 轮：实现",
+          "who": "Cursor",
+          "usual_min": 35,
+          "state": "running",
+          "label": "在做",
+          "started": 1791697927.4774284,
+          "last": 1791699087.801617,
+          "note": "现有脚本只记录结果，还没拦住失败、过期、并发和自己加预算。我按这九条把状态、步骤和启动拆开，并补上对应测试。",
+          "doing": "在思考",
+          "events": [
+            {
+              "kind": "edit",
+              "text": "scripts/lane/test_lane.py",
+              "at": 1791698908.79,
+              "done": true,
+              "added": 27,
+              "removed": 3
+            },
+            {
+              "kind": "edit",
+              "text": "scripts/lane/test_lane.py",
+              "at": 1791698911.169,
+              "done": true,
+              "added": 2,
+              "removed": 3
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791697927.4774284,
+          "eta_end": 1791700027.4774284
+        },
+        {
+          "name": "第 2 轮：验收",
+          "who": "Claude",
+          "usual_min": 3,
+          "manual": true,
+          "state": "waiting",
+          "label": "还没开始",
+          "note": "",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791700027.4774284,
+          "eta_end": 1791700207.4774284
+        },
+        {
+          "name": "第 2 轮：独立复核",
+          "who": "Codex（只读）",
+          "usual_min": 8,
+          "manual": true,
+          "state": "waiting",
+          "label": "还没开始",
+          "note": "",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791700207.4774284,
+          "eta_end": 1791700687.4774284
+        },
+        {
+          "name": "进主线并开始用它派工",
+          "who": "Claude",
+          "usual_min": 5,
+          "manual": true,
+          "state": "waiting",
+          "label": "还没开始",
+          "note": "",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791700687.4774284,
+          "eta_end": 1791700987.4774284
+        }
+      ],
+      "next": {
+        "name": "第 2 轮：验收",
+        "who": "Claude",
+        "at": 1791700027.4774284,
+        "needs_owner": false
+      },
+      "risk": "只在分支上做，今晚不启用",
+      "sure": true,
+      "end": 1791700987.4774284,
+      "finished": false
+    },
+    {
+      "title": "正式环境自动发布：前两个门槛（只在分支上做）",
+      "short": "自动发布",
+      "goal": "W-56 · 你选了 A。修订后的方案要先过 Codex 复核再派实现；我今晚把修订稿写细，交给 Codex",
+      "steps": [
+        {
+          "name": "第一版：实现、验收、复核（没过）",
+          "who": "Cursor、Claude、Codex",
+          "manual": true,
+          "state": "done",
+          "label": "已完成",
+          "note": "6 个要紧问题，方案改了；分支不合并",
+          "doing": "",
+          "hold": false,
+          "overdue": 0
+        },
+        {
+          "name": "Codex 复核修订后的方案",
+          "who": "Codex（只读）",
+          "usual_min": 10,
+          "state": "done",
+          "label": "已完成",
+          "started": 1791695775.385557,
+          "last": 1791695893.653692,
+          "ended": 1791695893.7518356,
+          "note": "Codex：方向成立，但要改。给出七步上线顺序；先堵旁路，再做新流水线；无人值守前要有独立于平台的监督器",
+          "doing": "",
+          "events": [
+            {
+              "kind": "line",
+              "text": "3. **闸门先影子运行，再强制执行。** 演练最新 CI 红／运行中、STG 错版、workers 未收敛、观察期重启及换版；明确拒绝原因，人工批准也不省略产物校验。"
+            },
+            {
+              "kind": "line",
+              "text": "4. **部署窄动作与写入器，先人工授权。** 演练越权路径／键、任意摘要、并发请求、重复请求、Git 冲突和 push 后断线；只产生一次允许的成套提交，并能恢复状态。"
+            }
+          ],
+          "overdue": 0,
+          "eta_start": 1791695775.385557,
+          "eta_end": 1791695893.7518356
+        },
+        {
+          "name": "按复核意见定稿，再派实现",
+          "who": "Claude",
+          "usual_min": 20,
+          "manual": true,
+          "state": "running",
+          "label": "在做",
+          "started": 1791698294.017967,
+          "note": "一个 Claude 子任务在把方案改写成一条完整流程（七步），只改这一份文档；写完我审，再交 Codex 复核设计",
+          "doing": "",
+          "hold": false,
+          "overdue": 0,
+          "eta_start": 1791698294.017967,
+          "eta_end": 1791699494.017967
+        }
+      ],
+      "sure": true,
+      "end": 1791699494.017967,
+      "finished": false
+    }
+  ],
+  "needs_you": [
+    "换掉审批令牌"
+  ],
+  "recent": [
+    "00:14 你把 #2 关掉了（没有执行）；这是「结果未知由你收尾」第一次真实使用，记录和审计都对",
+    "00:15 你指出进展页显示「没有步骤在跑」：确实停了。重新开工：Console 下一片和派工流水线交给两个 Cursor",
+    "00:08 进展看板开始每 15 秒推到正式环境",
+    "00:00 你批了 #5；00:04 正式环境发布完成，核对通过",
+    "23:54 你说「发可以」，选 A；23:55 发布单 #5 已建",
+    "23:51 自动发布的第一版没过 Codex 复核（6 个要紧问题），方案已修订，等你明早定一个选择",
+    "23:35 开始准备正式环境自动发布的前两个门槛（只在分支上）",
+    "23:26 两件事都在测试环境"
+  ],
+  "feed": [
+    {
+      "at": 1791699087.8429608,
+      "work": "自动发布",
+      "step": "按复核意见定稿，再派实现",
+      "who": "Claude",
+      "state": "running",
+      "text": "在做"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "自动发布",
+      "step": "Codex 复核修订后的方案",
+      "who": "Codex（只读）",
+      "state": "done",
+      "text": "已完成：Codex：方向成立，但要改。给出七步上线顺序；先堵旁路，再做新流水线；无人值守前要有独立于平台的监督器"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "自动发布",
+      "step": "第一版：实现、验收、复核（没过）",
+      "who": "Cursor、Claude、Codex",
+      "state": "done",
+      "text": "已完成：6 个要紧问题，方案改了；分支不合并"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "派工流水线",
+      "step": "第 2 轮：实现",
+      "who": "Cursor",
+      "state": "running",
+      "text": "在做"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "派工流水线",
+      "step": "第 1 轮：独立复核",
+      "who": "Codex（只读）",
+      "state": "done",
+      "text": "已完成：没过：5 个必须改、4 个应该改。脚本只是记下发生了什么，还没有强制：失败的步骤也能过、结果没绑定到这一轮和这次提交、两个进程能同时推同一件事、预算能自己给自己加、路径能注入命令"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "派工流水线",
+      "step": "第 1 轮：验收",
+      "who": "Claude",
+      "state": "done",
+      "text": "已完成：12 条测试全过，没有写死路径"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "派工流水线",
+      "step": "第 1 轮：实现",
+      "who": "Cursor",
+      "state": "done",
+      "text": "已完成：Cursor 做完：lane.py 状态机，12 条测试"
+    },
+    {
+      "at": 1791699087.8429608,
+      "work": "Console 下一片",
+      "step": "正式环境发布并核对",
+      "who": "集群 + Claude",
+      "state": "running",
+      "text": "在做"
+    }
+  ],
+  "coordinator": {
+    "at": 1791698467.480083,
+    "doing": "正式环境的发布申请 #6 已建好，等你在 Needs you 里批；Cursor 在改调度脚本第 2 轮；自动发布方案在改写",
+    "next": "你批了之后我盯发布并核对；Cursor 做完后验收并交 Codex 复核"
+  },
+  "roadmap": {
+    "goal": "让 Claude、Cursor、Codex 这些 Agent 互不踩脚地协作，你只做三件事：定目标、定规则、做不可逆的决定",
+    "stages": [
+      {
+        "name": "第 0 步",
+        "what": "打地基",
+        "state": "current"
+      },
+      {
+        "name": "阶段 0",
+        "what": "单 Agent 基线：任务、租约、验收、预算",
+        "state": "later"
+      },
+      {
+        "name": "阶段 1",
+        "what": "交互总线与叫停；卡住自动重派",
+        "state": "later"
+      },
+      {
+        "name": "阶段 2",
+        "what": "多厂商与参谋长；按额度分流",
+        "state": "later"
+      },
+      {
+        "name": "阶段 3",
+        "what": "推理网关与本地算力",
+        "state": "later"
+      },
+      {
+        "name": "阶段 4",
+        "what": "业务系统接入",
+        "state": "later"
+      },
+      {
+        "name": "阶段 5",
+        "what": "扩展",
+        "state": "later"
+      }
+    ],
+    "note": "现在做的事（我手工统筹 Cursor 和 Codex）就是阶段 0 到 2 的人肉版，踩到的坑都记成了运行时的要求",
+    "groups": [
+      {
+        "name": "已上线",
+        "state": "done",
+        "items": [
+          "W-34 根目录 AGENTS.md",
+          "W-35 Codex 最低护栏",
+          "W-36 治理层可移植",
+          "W-38 节点非计划重启告警",
+          "W-42 发版策略合并并签发",
+          "W-43 Console 清理 A",
+          "W-44 外壳与「需要你」第一版",
+          "W-45 ⑤ Releases 三段式",
+          "W-46 Console 清理 B",
+          "W-48 状态机与编号",
+          "W-49 通知文案与投递记录",
+          "W-53 VPN → Ops 防火墙放行与网络审计覆盖",
+          "W-54 线程心跳与静默告警",
+          "W-61 Ops Console · Owner 事项的七个问题与"
+        ]
+      },
+      {
+        "name": "在做",
+        "state": "doing",
+        "items": [
+          "W-37 批准后由系统执行",
+          "W-47 给 Design 的 ASK",
+          "W-51 会话「批 #n」",
+          "W-56 无人值守 PROD 发布的门槛",
+          "W-62 Ops Console · 协作进展看得见",
+          "W-64 额度台账与按额度分流",
+          "W-65 Owner 的感受进系统：随手说一句 → 记下 → 分诊"
+        ]
+      },
+      {
+        "name": "还没开始",
+        "state": "todo",
+        "items": [
+          "W-39 编号规则",
+          "W-40 D1 过渡层",
+          "W-41 Gitea 先备份",
+          "W-50 带外执行器",
+          "W-52 网页推送",
+          "W-57 宿主心跳与「未接入监测」",
+          "W-58 W-31 设计修订",
+          "W-59 观测类清单变更随策略自动执行",
+          "W-60 Tekton 运行记录的保留与清理",
+          "W-63 闸门按动作的含义判断：提到不等于运行",
+          "W-66 派工流水线：手工的链条变成脚本，状态由事件生成，不再手抄"
+        ]
+      },
+      {
+        "name": "放弃",
+        "state": "dropped",
+        "items": [
+          "W-55 发版策略 · DDL 分类器重做成允许清单"
+        ]
+      }
+    ],
+    "exit": [
+      {
+        "text": "Needs you 真的能用",
+        "state": "done"
+      },
+      {
+        "text": "进展看得见（Console 上）",
+        "state": "doing"
+      },
+      {
+        "text": "发版规则已签，并有一次按规则放行的发布",
+        "state": "todo",
+        "owner": true
+      },
+      {
+        "text": "Gitea 是主仓库，备份演练过",
+        "state": "todo"
+      },
+      {
+        "text": "运行时的数据库和队列可用",
+        "state": "todo"
+      },
+      {
+        "text": "新节点测试通过",
+        "state": "todo"
+      }
+    ],
+    "generated_from": "工作台账（WORK.md）",
+    "generated_at": 1791699087.862313
+  },
+  "queue": [
+    {
+      "title": "Progress 页与本地看板逐块对齐（W-62 第三片）：额度的节奏、待办卡、步骤进度条",
+      "why_waiting": "等第二片上正式环境后接着派",
+      "needs_owner": false
+    },
+    {
+      "title": "自动发布方案定稿（W-56）",
+      "why_waiting": "按 Codex 第 15 次复核改成一条完整流程，先复核设计再派实现",
+      "needs_owner": false
+    },
+    {
+      "title": "闸门按含义判断（W-63）",
+      "why_waiting": "排在后面",
+      "needs_owner": false
+    },
+    {
+      "title": "Cursor 三个额度池的读数",
+      "why_waiting": "命令行读不到；要你告诉我在哪看，或同意我读账户页",
+      "needs_owner": true
+    },
+    {
+      "title": "签第一份发版规则",
+      "why_waiting": "要你生成签名密钥",
+      "needs_owner": true
+    }
+  ],
+  "owner_next": {
+    "name": "你批 #6，正式环境发布",
+    "at": 1791698467.480083,
+    "work": "Console 下一片",
+    "now": true,
+    "actions": [
+      {
+        "text": "在 Console 的 Needs you 里点 #6 的批准（手机也行）",
+        "link": "https://ops.bifrost.lan/",
+        "link_text": "打开 Console"
+      }
+    ],
+    "urgency": "不急：一天内有效（到 10-12 01:00）。批了之后约 10 分钟发完，期间控制面中断约 20 秒",
+    "since": 1791698467.480083,
+    "approval": {
+      "id": "appr_6f4ac97469fd6f10",
+      "number": 6,
+      "summary": "bifrost-deliver-platform-prod @ main"
+    }
+  },
+  "owner_now": [
+    {
+      "name": "你批 #6，正式环境发布",
+      "at": 1791698467.480083,
+      "work": "Console 下一片",
+      "now": true,
+      "actions": [
+        {
+          "text": "在 Console 的 Needs you 里点 #6 的批准（手机也行）",
+          "link": "https://ops.bifrost.lan/",
+          "link_text": "打开 Console"
+        }
+      ],
+      "urgency": "不急：一天内有效（到 10-12 01:00）。批了之后约 10 分钟发完，期间控制面中断约 20 秒",
+      "since": 1791698467.480083,
+      "approval": {
+        "id": "appr_6f4ac97469fd6f10",
+        "number": 6,
+        "summary": "bifrost-deliver-platform-prod @ main"
+      }
+    }
+  ],
+  "sure": true,
+  "watchers": 4,
+  "usage": {
+    "at": 1791698975.38229,
+    "day": "2026-10-11",
+    "cursor": {
+      "runs": 1,
+      "min": 23.783166666666666,
+      "in": 364769,
+      "out": 144618,
+      "cache": 10146048
+    },
+    "codex": {
+      "runs": 2,
+      "tokens": 118717,
+      "quota": {
+        "plan": "prolite",
+        "read_at": 1791697311.069203,
+        "windows": [
+          {
+            "id": "codex.weekly",
+            "label": "每周",
+            "used": 3.0,
+            "window_h": 168.0,
+            "resets_at": "2026-10-18T03:58:22Z"
+          }
+        ]
+      }
+    },
+    "claude": {
+      "read_at": 1791697830,
+      "plan": "Max",
+      "windows": [
+        {
+          "id": "claude.5h",
+          "label": "5 小时窗口",
+          "used": 0,
+          "resets_at": "2026-10-11T10:39:59Z",
+          "window_h": 5
+        },
+        {
+          "id": "claude.weekly",
+          "label": "每周 · 全部模型",
+          "used": 78,
+          "resets_at": "2026-10-12T12:59:59Z",
+          "window_h": 168
+        },
+        {
+          "id": "claude.weekly.fable",
+          "label": "每周 · Fable（总额度里的分项）",
+          "used": 0,
+          "resets_at": "2026-10-12T13:00:00Z",
+          "window_h": 168,
+          "sublimit": true
+        }
+      ]
+    },
+    "pools": [
+      {
+        "vendor": "Claude",
+        "role": "统筹、验收",
+        "read_at": 1791697830,
+        "id": "claude.5h",
+        "label": "5 小时窗口",
+        "used": 0,
+        "resets_at": "2026-10-11T10:39:59Z",
+        "window_h": 5,
+        "verdict": "short",
+        "left_h": 4.5
+      },
+      {
+        "vendor": "Claude",
+        "role": "统筹、验收",
+        "read_at": 1791697830,
+        "id": "claude.weekly",
+        "label": "每周 · 全部模型",
+        "used": 78,
+        "resets_at": "2026-10-12T12:59:59Z",
+        "window_h": 168,
+        "left_h": 30.8,
+        "elapsed_pct": 81.6,
+        "left_pct": 22,
+        "allow_per_day": 17.1,
+        "rate_per_day": 13.6,
+        "rate_basis": "本窗口平均",
+        "projected": 96.0,
+        "verdict": "on_pace"
+      },
+      {
+        "vendor": "Claude",
+        "role": "统筹、验收",
+        "read_at": 1791697830,
+        "id": "claude.weekly.fable",
+        "label": "每周 · Fable（总额度里的分项）",
+        "used": 0,
+        "resets_at": "2026-10-12T13:00:00Z",
+        "window_h": 168,
+        "sublimit": true,
+        "verdict": "sublimit",
+        "left_h": 30.8
+      },
+      {
+        "vendor": "Codex",
+        "role": "独立复核",
+        "read_at": 1791697311.069203,
+        "id": "codex.weekly",
+        "label": "每周",
+        "used": 3.0,
+        "window_h": 168.0,
+        "resets_at": "2026-10-18T03:58:22Z",
+        "left_h": 165.8,
+        "elapsed_pct": 1.3,
+        "left_pct": 97.0,
+        "allow_per_day": 14.0,
+        "rate_per_day": 15.2,
+        "rate_basis": "近 33 小时实测",
+        "projected": 108.0,
+        "verdict": "over",
+        "runs_out_at": "2026-10-17T15:37:39Z"
+      },
+      {
+        "vendor": "Cursor",
+        "role": "实现",
+        "id": "cursor.grok",
+        "label": "Grok 每周（无头运行现在用的就是它）",
+        "verdict": "unknown",
+        "note": "读不到：命令行不给，要看账户页"
+      },
+      {
+        "vendor": "Cursor",
+        "role": "实现",
+        "id": "cursor.own",
+        "label": "Cursor 自己的模型",
+        "verdict": "unknown",
+        "note": "读不到：命令行不给，要看账户页"
+      },
+      {
+        "vendor": "Cursor",
+        "role": "实现",
+        "id": "cursor.other",
+        "label": "别家的模型",
+        "verdict": "unknown",
+        "note": "读不到：命令行不给，要看账户页"
+      }
+    ]
+  }
+}

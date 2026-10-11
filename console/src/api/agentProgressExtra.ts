@@ -25,6 +25,30 @@ function asNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
+export type ProgressOwnerTurn = {
+  name?: string
+  at?: number
+  work?: string
+  now?: boolean
+  approval?: ProgressApproval
+}
+
+export function parseOwnerTurn(value: unknown): ProgressOwnerTurn | null | undefined {
+  if (value == null) return null
+  if (!isRecord(value)) return undefined
+  const owner: ProgressOwnerTurn = {}
+  const name = asString(value.name)
+  const at = asNumber(value.at)
+  const work = asString(value.work)
+  if (name !== undefined) owner.name = name
+  if (at !== undefined) owner.at = at
+  if (work !== undefined) owner.work = work
+  if (typeof value.now === 'boolean') owner.now = value.now
+  const approval = parseApproval(value.approval)
+  if (approval !== undefined) owner.approval = approval
+  return owner
+}
+
 export function parseApproval(value: unknown): ProgressApproval | undefined {
   if (!isRecord(value)) return undefined
   const approval: ProgressApproval = {}

@@ -307,7 +307,7 @@ describe('AgentWorkBoard', () => {
     expect(within(work).getByText('Show the board')).toBeTruthy()
     expect(within(work).getByText('Round 2')).toBeTruthy()
     expect(within(work).getByText('Risk: one more round')).toBeTruthy()
-    expect(within(work).getByText(`Next: Review · expected ${formatLocalTime(NOW_SEC + 3600)}`)).toBeTruthy()
+    expect(within(work).getByText('Next: Review · Owner — this one needs you')).toBeTruthy()
     expect(within(work).getByRole('list', { name: 'Steps' }).className).toContain('flex-wrap')
     states.forEach(([name], index) => {
       if (name === 'Done') return
@@ -325,7 +325,7 @@ describe('AgentWorkBoard', () => {
     expect(within(done).queryByRole('img')).toBeNull()
     expect(within(done).getByText('What it did last')).toBeTruthy()
     const running = within(work).getByRole('listitem', { name: 'Run' })
-    expect(within(running).getByText('elapsed 1m of usual 15 min')).toBeTruthy()
+    expect(within(running).getByText('1m of the usual 15')).toBeTruthy()
     expect(within(running).getByText('last output 30s ago')).toBeTruthy()
     expect(within(running).getByText(expectationLine(step())!)).toBeTruthy()
     expect(within(work).getByText('Run: editing the handler')).toBeTruthy()
@@ -393,7 +393,7 @@ describe('AgentWorkBoard', () => {
     expect(screen.getByText('running')).toBeTruthy()
     expect(screen.getByText('实现接口: 在写页面')).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Needs you now' })).toBeTruthy()
-    const feed = screen.getByRole('list', { name: 'Feed' })
+    const feed = screen.getByRole('list', { name: 'Activity' })
     const items = within(feed).getAllByRole('listitem')
     expect(items[0]?.textContent).toContain('正在写页面')
     expect(items[1]?.textContent).toContain('旧的一句')

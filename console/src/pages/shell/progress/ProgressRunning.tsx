@@ -17,7 +17,7 @@ export function ProgressRunning({ works }: { works: readonly ProgressWork[] }) {
       ) : (
         <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
           {rows.map(row => {
-            const expect = expectationLine(row.step)
+            const expect = row.step.needs_owner === true ? null : expectationLine(row.step)
             const words = latestEventWords(row.step)
             const who = row.step.who?.trim() ?? ''
             const line = [workShortName(row.work), row.step.name ?? '', who, words, expect ?? '']

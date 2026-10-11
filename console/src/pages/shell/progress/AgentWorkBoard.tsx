@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
 import { OpsSection } from '@/components/layout/OpsSection'
 import {
+  ageSeconds,
   AGENT_PROGRESS_POLL_MS,
   computedAgeLine,
   coordinatorLine,
   fetchAgentProgress,
+  formatDuration,
   generationIsSkewed,
   ownerNextLine,
   publishedAgeSeconds,
@@ -14,8 +16,10 @@ import {
   skewSentence,
   staleSentence,
   type AgentProgressResponse,
+  type ProgressCoordinator,
   type ProgressDocument,
 } from '@/api/agentProgress'
+import { ProgressActivity, ProgressDoneToday } from '@/pages/shell/progress/ProgressActivity'
 import { NeedsYouNow } from '@/pages/shell/progress/ProgressNeedsYou'
 import { FinishedWorks, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
@@ -83,52 +87,56 @@ function NextTime({ doc }: { doc: ProgressDocument }) {
   )
 }
 
-function RecentBlock({ doc }: { doc: ProgressDocument }) {
-  const recent = doc.recent ?? []
-  const feed = [...(doc.feed ?? [])].sort((a, b) => (b.at ?? 0) - (a.at ?? 0)).slice(0, 15)
+const COORDINATOR_STALE_SECONDS = 20 * 60
+
+function CoordinatorAge({ at, lead }: { at: number | undefined; lead: boolean }) {
+  const now = useNow()
+  if (typeof at !== 'number' || !(at > 0)) return null
+  const age = ageSeconds(at, now)
+  const stale = age > COORDINATOR_STALE_SECONDS
+  const text = stale ? `updated ${formatDuration(age)} ago — may be stale` : `updated ${formatDuration(age)} ago`
   return (
-    <details className="w-full min-w-0">
-      <summary className="cursor-pointer text-sm font-medium text-foreground">Recent</summary>
-      {recent.length === 0 && feed.length === 0 ? (
-        <p className="m-0 mt-2 text-sm text-muted-foreground">Nothing recent.</p>
-      ) : null}
-      {recent.length > 0 ? (
-        <ul aria-label="Recent lines" className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-          {recent.map((line, index) => (
-            <li key={index} className="break-words text-sm text-foreground">
-              {line}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {feed.length > 0 ? (
-        <ul aria-label="Feed" className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-          {feed.map((item, index) => (
-            <li key={index} className="break-words text-sm text-muted-foreground">
-              {[item.work, item.step, item.who, item.text].filter(part => (part ?? '').trim() !== '').join(' · ')}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </details>
+    <span
+      data-stale={stale ? 'true' : 'false'}
+      className={stale ? 'font-medium text-destructive' : 'text-muted-foreground'}
+    >
+      {lead ? ` · ${text}` : text}
+    </span>
+  )
+}
+
+function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | undefined }) {
+  if (coordinator == null) return null
+  const doing = coordinator.doing?.trim() ?? ''
+  const next = coordinator.next?.trim() ?? ''
+  if (doing === '' && next === '') {
+    const legacy = coordinatorLine(coordinator, Date.now())
+    if (legacy === '' && !((coordinator.at ?? 0) > 0)) return null
+    return (
+      <p className="m-0 break-words text-sm text-foreground">
+        <span className="font-medium">Coordinator: </span>
+        <Tick text={now => coordinatorLine(coordinator, now)} />
+      </p>
+    )
+  }
+  return (
+    <p className="m-0 break-words text-sm text-foreground">
+      {doing !== '' ? <span>Coordinator: {doing}</span> : null}
+      {next !== '' ? <span>{doing !== '' ? ' · ' : ''}Then: {next}</span> : null}
+      <CoordinatorAge at={coordinator.at} lead={doing !== '' || next !== ''} />
+    </p>
   )
 }
 
 const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument }) {
   const paints = useRef(0)
   paints.current += 1
-  const coordinator = doc.coordinator
   const { active, finished } = splitWorks(doc.works ?? [])
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
       <Verdict doc={doc} />
       <NeedsYouNow doc={doc} />
-      {coordinator != null ? (
-        <p className="m-0 break-words text-sm text-foreground">
-          <span className="font-medium">Coordinator: </span>
-          <Tick text={now => coordinatorLine(coordinator, now)} />
-        </p>
-      ) : null}
+      <CoordinatorLine coordinator={doc.coordinator} />
       <NextTime doc={doc} />
       <ProgressPlan roadmap={doc.roadmap} />
       <ProgressUsageBlock usage={doc.usage} />
@@ -136,7 +144,8 @@ const WorkDocument = memo(function WorkDocument({ doc }: { doc: ProgressDocument
       {active.map((work, index) => (
         <WorkCard key={`${work.title ?? 'work'}-${index}`} work={work} index={index} />
       ))}
-      <RecentBlock doc={doc} />
+      <ProgressActivity feed={doc.feed} />
+      <ProgressDoneToday recent={doc.recent} />
       <FinishedWorks works={finished} />
     </div>
   )

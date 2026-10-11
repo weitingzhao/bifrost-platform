@@ -10,7 +10,7 @@ import {
   type ProgressRoadmap,
   type ProgressUsage,
 } from '@/api/agentProgressBoard'
-import { parseApproval, type ProgressApproval } from '@/api/agentProgressExtra'
+import { parseApproval, parseOwnerTurn, type ProgressApproval, type ProgressOwnerTurn } from '@/api/agentProgressExtra'
 
 /** How often the Progress page re-reads the published document. */
 export const AGENT_PROGRESS_POLL_MS = 15_000
@@ -100,6 +100,7 @@ export type ProgressWork = {
   end?: number
   finished?: boolean
   next?: ProgressNext | null
+  owner?: ProgressOwnerTurn | null
   steps?: ProgressStep[]
 }
 
@@ -116,6 +117,8 @@ export type ProgressCoordinator = {
   at?: number
   state?: string
   note?: string
+  doing?: string
+  next?: string
 }
 
 /** The document the local board publishes. Unknown fields are kept by the API. */
@@ -216,9 +219,13 @@ function parseCoordinator(value: unknown): ProgressCoordinator | undefined {
   const at = asNumber(value.at)
   const state = asString(value.state)
   const note = asString(value.note)
+  const doing = asString(value.doing)
+  const next = asString(value.next)
   if (at !== undefined) coordinator.at = at
   if (state !== undefined) coordinator.state = state
   if (note !== undefined) coordinator.note = note
+  if (doing !== undefined) coordinator.doing = doing
+  if (next !== undefined) coordinator.next = next
   return coordinator
 }
 
@@ -301,6 +308,10 @@ function parseWork(value: Record<string, unknown>): ProgressWork {
   if ('next' in value) {
     const next = parseNext(value.next)
     if (next !== undefined) work.next = next
+  }
+  if ('owner' in value) {
+    const owner = parseOwnerTurn(value.owner)
+    if (owner !== undefined) work.owner = owner
   }
   if (Array.isArray(value.steps)) work.steps = value.steps.filter(isRecord).map(parseStep)
   return work
