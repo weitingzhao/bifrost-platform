@@ -496,31 +496,50 @@ function decodeOnce(value: string): string {
   }
 }
 
+function slash(value: string): string {
+  return value.replaceAll('\\', '/')
+}
+
 /**
- * Page name after one parse: cut at `?`, percent-decode once, drop a leading
- * `/`, trim, lower-case. A second `#`, including one revealed by that decode,
- * is refused on its own.
+ * Percent-decode until the value stops changing, at most three changes.
+ * `\` is `/` after every pass. Still changing after that → null (refused).
  */
-function pageName(segment: string): { name: string; secondHash: boolean } {
-  const cut = cutQuery(segment)
-  if (cut.includes('#')) return { name: '', secondHash: true }
-  const decoded = decodeOnce(cut)
-  const hashAt = decoded.indexOf('#')
-  if (hashAt > 0) return { name: '', secondHash: true }
-  const body = hashAt === 0 ? decoded.slice(1) : decoded
-  if (body.includes('#')) return { name: '', secondHash: true }
-  return { name: body.replace(/^\/+/, '').trim().toLowerCase(), secondHash: false }
+function decodeFixed(value: string): string | null {
+  let current = slash(value)
+  let changes = 0
+  for (;;) {
+    const next = slash(decodeOnce(current))
+    if (next === current) return current
+    changes += 1
+    if (changes > 3) return null
+    current = next
+  }
+}
+
+/**
+ * Page name: a second `#` anywhere in the segment is refused before the cut
+ * at `?`. Decode to a fixed point and treat `\` as `/` before the name is
+ * compared. Leading and trailing slashes are not part of the name.
+ */
+function pageName(segment: string): { name: string; refused: boolean } {
+  if (segment.includes('#')) return { name: '', refused: true }
+  const decoded = decodeFixed(segment)
+  if (decoded == null || decoded.includes('#')) return { name: '', refused: true }
+  const name = cutQuery(decoded).replace(/^\/+|\/+$/g, '').trim().toLowerCase()
+  return { name, refused: false }
 }
 
 function refusedTarget(url: URL): boolean {
   const hashBody = url.hash.startsWith('#') ? url.hash.slice(1) : ''
-  const hash = pageName(hashBody)
-  if (hash.secondHash || REFUSED_HASH.has(hash.name)) return true
+  if (hashBody !== '') {
+    const hash = pageName(hashBody)
+    if (hash.refused || REFUSED_HASH.has(hash.name)) return true
+  }
   const parts = url.pathname.split('/').filter(part => part !== '')
   const last = parts.length > 0 ? (parts[parts.length - 1] ?? '') : ''
   if (last === '') return false
   const path = pageName(last)
-  return path.secondHash || REFUSED_HASH.has(path.name)
+  return path.refused || REFUSED_HASH.has(path.name)
 }
 
 function hrefFromParsed(parsed: { url: URL; hashOnly: boolean }): string {

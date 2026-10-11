@@ -26,12 +26,21 @@ function Field({ label, value }: { label: string; value: string }) {
   )
 }
 
-function LinkLine({ view }: { view: ActionLinkView }) {
+function LinkLine({ view, linkText }: { view: ActionLinkView; linkText: string }) {
   if (view.kind === 'anchor') {
     return (
-      <a href={view.href} className="break-words underline" {...(view.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
-        {view.label}
-      </a>
+      <div className="min-w-0 max-w-full break-words text-sm">
+        <span>Agent-provided link: </span>
+        {linkText !== '' ? <span className="whitespace-pre-wrap">{linkText}</span> : null}
+        {linkText !== '' ? ' ' : null}
+        <a
+          href={view.href}
+          className="break-words underline"
+          {...(view.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+        >
+          {view.href}
+        </a>
+      </div>
     )
   }
   if (view.kind === 'blocked') {
@@ -55,7 +64,7 @@ export function QuestionBody({ question }: { question: Question }) {
       {question.body != null && question.body !== '' ? <Prose value={question.body} /> : null}
       <Field label="If you do not answer" value={question.urgency} />
       <Field label="Meanwhile the thread will" value={question.meanwhile} />
-      {link != null ? <LinkLine view={link} /> : null}
+      {link != null ? <LinkLine view={link} linkText={question.link_text ?? ''} /> : null}
     </div>
   )
 }

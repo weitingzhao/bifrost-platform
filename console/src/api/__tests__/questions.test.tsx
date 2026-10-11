@@ -166,6 +166,7 @@ describe('question links', () => {
     for (const target of ['approvals', 'maintenance', 'questions']) {
       const capital = `${target[0]?.toUpperCase() ?? ''}${target.slice(1)}`
       const encoded = encodeLetter(target)
+      const twice = `${target[0] ?? ''}%25${target.codePointAt(1)?.toString(16) ?? '61'}${target.slice(2)}`
       const refused = [
         `https://ops.bifrost.lan/#\t${target}?id=ap-1`,
         `#\t${target}`,
@@ -176,6 +177,13 @@ describe('question links', () => {
         `https://ops.bifrost.lan/%23${target}`,
         `# ${target}`,
         `#a#${target}`,
+        `#progress?x=#${target}`,
+        `#progress?x=%23${target}`,
+        `#${twice}`,
+        `https://ops.bifrost.lan/${twice}`,
+        `#\\${target}`,
+        `#${target}\\`,
+        `#%5C${target}`,
         `https://ops.bifrost.lan/#${capital}?id=1`,
         `https://ops.bifrost.lan/${capital}`,
         `https://ops.bifrost.lan/${encoded}`,
@@ -198,11 +206,26 @@ describe('question links', () => {
       expect(view.container.textContent, link).toContain('Docs')
       view.unmount()
     }
+    const still = show('#p%25252572ogress', 'Open')
+    expect(still.container.querySelector('a'), 'still changing after three decodes').toBeNull()
+    expect(still.container.textContent).toContain('Open')
+    still.unmount()
     const hash = show('#progress', 'Open')
-    expect(hash.container.querySelector('a')?.getAttribute('href')).toBe('#progress')
+    const hashAnchor = hash.container.querySelector('a')
+    expect(hashAnchor?.getAttribute('href')).toBe('#progress')
+    expect(hashAnchor?.getAttribute('target')).toBeNull()
+    expect(hash.container.textContent).toContain('Agent-provided link:')
+    expect(hash.container.textContent).toContain('Open')
+    expect(hashAnchor?.textContent).toBe('#progress')
     hash.unmount()
     const full = show('https://ops.bifrost.lan/docs', 'Brief')
-    expect(full.container.querySelector('a')?.getAttribute('href')).toBe('https://ops.bifrost.lan/docs')
+    const fullAnchor = full.container.querySelector('a')
+    expect(fullAnchor?.getAttribute('href')).toBe('https://ops.bifrost.lan/docs')
+    expect(fullAnchor?.getAttribute('target')).toBe('_blank')
+    expect(fullAnchor?.getAttribute('rel')).toBe('noopener noreferrer')
+    expect(full.container.textContent).toContain('Agent-provided link:')
+    expect(full.container.textContent).toContain('Brief')
+    expect(fullAnchor?.textContent).toBe('https://ops.bifrost.lan/docs')
     full.unmount()
   })
 })

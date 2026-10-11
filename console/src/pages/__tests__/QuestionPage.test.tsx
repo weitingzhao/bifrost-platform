@@ -247,7 +247,7 @@ describe('QuestionPage', () => {
     open.meanwhile = mark('meanwhile')
     open.requester_thread = mark('requester_thread')
     open.work_id = mark('work_id')
-    open.link = '#progress'
+    open.link = 'https://evil.example/phish'
     open.link_text = mark('link_text')
     const options = open.options as { key: string; label: string; detail?: string }[]
     const ship = options.find(option => option.key === 'a')
