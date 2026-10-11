@@ -7,14 +7,16 @@ const ZERO = new Set([0x180e, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 
 // Same classes as api/internal/notice/redact.go. Whitespace is space, tab, LF, CR,
 // and FF. A word edge is the start or end of the text, or one character outside
-// [A-Za-z0-9_]. Letters are listed in both cases. U+212A and U+017F stand in
-// for K and S. Do not use \s, \w, \b, look-around, or the i flag. Bounded rules
-// match the secret only; the edges are checked outside the pattern and the
-// scan resumes at the end of the match.
+// [A-Za-z0-9_]. Letters are listed in both cases. Where a pattern matches a letter
+// without regard to case, U+017F counts as s and U+212A counts as k: in keywords,
+// in the bearer and basic schemes, and in the character classes of the secret.
+// Characters outside the redacted span are copied unchanged. Do not use \s, \w,
+// \b, look-around, or the i flag. Bounded rules match the secret only; the edges
+// are checked outside the pattern and the scan resumes at the end of the match.
 const REDACT: Array<{ re: RegExp; repl: string; bound: boolean }> = [
   { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----[\0-\uFFFF]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, repl: '[redacted private key]', bound: false },
-  { re: /([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss][Ii][Cc])[ \t\n\r\f]+[A-Za-z0-9._~+/=-]{8,}/g, repl: '$1 [redacted]', bound: true },
-  { re: /([A-Za-z0-9_.-]*(?:[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Dd]|[Pp][Ww][Dd]|[Ss\u017F][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\u212A][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\u212A][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\u017F][Ss\u017F][_-]?[Kk\u212A][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\u212A][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])[A-Za-z0-9_.-]*)(["']?[ \t\n\r\f]*[:=][ \t\n\r\f]*["']?)[^ \t\n\r\f"',;]+/g, repl: '$1$2[redacted]', bound: true },
+  { re: /([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\u017F][Ii][Cc])[ \t\n\r\f]+[A-Za-z\u017F\u212A0-9._~+/=-]{8,}/g, repl: '$1 [redacted]', bound: true },
+  { re: /([A-Za-z\u017F\u212A0-9_.-]*(?:[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\u017F][Ss\u017F][Ww][Dd]|[Pp][Ww][Dd]|[Ss\u017F][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\u212A][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\u212A][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\u017F][Ss\u017F][_-]?[Kk\u212A][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\u212A][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])[A-Za-z\u017F\u212A0-9_.-]*)(["']?[ \t\n\r\f]*[:=][ \t\n\r\f]*["']?)[^ \t\n\r\f"',;]+/g, repl: '$1$2[redacted]', bound: true },
   { re: /eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, repl: '[redacted jwt]', bound: true },
   { re: /(?:AKIA|ASIA)[0-9A-Z]{16}/g, repl: '[redacted aws key]', bound: true },
   { re: /(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)/g, repl: '[redacted token]', bound: true },

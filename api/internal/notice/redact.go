@@ -10,14 +10,17 @@ import (
 // set. Go and JavaScript do not agree on \s, \w, \b, or case-folding flags.
 // Whitespace is space, tab, LF, CR, and FF. A word edge is the start or end
 // of the text, or one character outside [A-Za-z0-9_]. Letters are listed in
-// both cases. U+212A and U+017F are the two single-rune folds the previous
-// (?i) rules treated as K and S; they stay in the class so those shapes are
-// still redacted.
+// both cases. Where a pattern matches a letter without regard to case, U+017F
+// (ſ) counts as s and U+212A (K) counts as k: in keywords, in the bearer and
+// basic schemes, and in the character classes of the secret. Characters
+// outside the redacted span are copied unchanged. The hyphen stays at the end
+// of a class so it is literal.
 const (
 	asciiWS        = "[ \t\n\r\f]"
 	notSecretValue = "[^ \t\n\r\f\"',;]"
 	notURLUser     = "[^/ \t\n\r\f:@]"
 	notURLPass     = "[^@ \t\n\r\f/]"
+	foldAZ         = `A-Za-z\x{017F}\x{212A}`
 	secretWords    = `[Pp][Aa][Ss\x{017F}][Ss\x{017F}][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss\x{017F}][Ss\x{017F}][Ww][Dd]|[Pp][Ww][Dd]|[Ss\x{017F}][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk\x{212A}][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk\x{212A}][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss\x{017F}][Ss\x{017F}][_-]?[Kk\x{212A}][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk\x{212A}][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]`
 )
 
@@ -32,8 +35,8 @@ var redactions = []struct {
 	bound bool
 }{
 	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "[redacted private key]", false},
-	{regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss][Ii][Cc])` + asciiWS + `+[A-Za-z0-9._~+/=-]{8,}`), "$1 [redacted]", true},
-	{regexp.MustCompile(`([A-Za-z0-9_.-]*(?:` + secretWords + `)[A-Za-z0-9_.-]*)(["']?` + asciiWS + `*[:=]` + asciiWS + `*["']?)` + notSecretValue + `+`), "$1$2[redacted]", true},
+	{regexp.MustCompile(`([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss\x{017F}][Ii][Cc])` + asciiWS + `+[` + foldAZ + `0-9._~+/=-]{8,}`), "$1 [redacted]", true},
+	{regexp.MustCompile(`([` + foldAZ + `0-9_.-]*(?:` + secretWords + `)[` + foldAZ + `0-9_.-]*)(["']?` + asciiWS + `*[:=]` + asciiWS + `*["']?)` + notSecretValue + `+`), "$1$2[redacted]", true},
 	{regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`), "[redacted jwt]", true},
 	{regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`), "[redacted aws key]", true},
 	{regexp.MustCompile(`(?:gh[pousr]_[A-Za-z0-9]{20,}[A-Za-z0-9_]*|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}[A-Za-z0-9_]*)`), "[redacted token]", true},

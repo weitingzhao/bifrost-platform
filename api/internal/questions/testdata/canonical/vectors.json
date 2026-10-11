@@ -314,6 +314,84 @@
       "input": "BeArEr AbCdEfGh ToKeN=s3cr3tvalue",
       "output": "BeArEr [redacted] ToKeN=[redacted]",
       "secrets": ["AbCdEfGh", "s3cr3tvalue"]
+    },
+    {
+      "name": "basic long s",
+      "input": "Ba\u017fic abcdefgh",
+      "output": "Ba\u017fic [redacted]",
+      "secrets": ["abcdefgh"]
+    },
+    {
+      "name": "bearer kelvin in secret",
+      "input": "Bearer abcdefg\u212a",
+      "output": "Bearer [redacted]",
+      "secrets": ["abcdefg\u212a"]
+    },
+    {
+      "name": "token long s suffix",
+      "input": "token\u017fuffix=s3cr3tvalue",
+      "output": "token\u017fuffix=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "long s secret hides more",
+      "input": "\u017fecret=abcdefgh12345678",
+      "output": "\u017fecret=[redacted]",
+      "secrets": []
+    },
+    {
+      "name": "password long s",
+      "input": "pa\u017fsword=s3cr3tvalue",
+      "output": "pa\u017fsword=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "passwd long s",
+      "input": "pa\u017fswd=s3cr3tvalue",
+      "output": "pa\u017fswd=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "pwd long s suffix",
+      "input": "pwd\u017fuffix=s3cr3tvalue",
+      "output": "pwd\u017fuffix=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "secret long s",
+      "input": "x\u017fecret=s3cr3tvalue",
+      "output": "x\u017fecret=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "token kelvin",
+      "input": "to\u212aen=s3cr3tvalue",
+      "output": "to\u212aen=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "api key kelvin",
+      "input": "api_\u212aey=s3cr3tvalue",
+      "output": "api_\u212aey=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "access key folds",
+      "input": "acce\u017fs_\u212aey=s3cr3tvalue",
+      "output": "acce\u017fs_\u212aey=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "private key kelvin",
+      "input": "private_\u212aey=s3cr3tvalue",
+      "output": "private_\u212aey=[redacted]",
+      "secrets": ["s3cr3tvalue"]
+    },
+    {
+      "name": "credential long s suffix",
+      "input": "credential\u017f=s3cr3tvalue",
+      "output": "credential\u017f=[redacted]",
+      "secrets": ["s3cr3tvalue"]
     }
   ]
 }
