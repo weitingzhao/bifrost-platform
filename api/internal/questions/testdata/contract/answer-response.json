@@ -1,0 +1,15 @@
+{
+  "body": {
+    "answer": {
+      "option": "b",
+      "by": "admin",
+      "at": "2026-10-11T06:00:00Z",
+      "channel": "console",
+      "approval": false
+    },
+    "id": "q_0123456789abcdef",
+    "number": 12,
+    "status": "answered"
+  },
+  "status": 200
+}

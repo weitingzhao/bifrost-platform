@@ -1,0 +1,54 @@
+{
+  "body": {
+    "questions": [
+      {
+        "id": "q_0123456789abcdef",
+        "number": 12,
+        "status": "answered",
+        "requester": "thread-a",
+        "requester_principal": "reporter",
+        "requester_thread": "quota thread",
+        "work_id": "W-65",
+        "title": "Where is the quota?",
+        "body": "The thread is blocked on the number.",
+        "options": [
+          {
+            "key": "a",
+            "label": "Ship"
+          },
+          {
+            "key": "b",
+            "label": "Wait",
+            "detail": "one day"
+          }
+        ],
+        "recommended": "b",
+        "allow_text": false,
+        "urgency": "Before tonight",
+        "meanwhile": "The thread waits",
+        "link": "https://example.com/docs",
+        "link_text": "Docs",
+        "created_at": "2026-10-11T06:00:00Z",
+        "expires_at": "2026-10-12T06:00:00Z",
+        "answer": {
+          "option": "b",
+          "by": "admin",
+          "at": "2026-10-11T06:00:00Z",
+          "channel": "console",
+          "approval": false
+        },
+        "deliveries": [
+          {
+            "kind": "created",
+            "channel": "ntfy",
+            "target": "phone",
+            "at": "2026-10-11T06:00:00Z",
+            "result": "accepted"
+          }
+        ],
+        "mine": true
+      }
+    ]
+  },
+  "status": 200
+}

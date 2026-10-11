@@ -1,0 +1,11 @@
+{
+  "body": {
+    "console_url": "http://ops.bifrost.lan/#questions?id=q_0123456789abcdef",
+    "expires_at": "2026-10-12T06:00:00Z",
+    "id": "q_0123456789abcdef",
+    "number": 12,
+    "replayed": true,
+    "status": "open"
+  },
+  "status": 200
+}

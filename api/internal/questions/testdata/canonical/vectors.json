@@ -1,0 +1,169 @@
+{
+  "vectors": [
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": " wait ",
+        "title": "  Hello  ",
+        "urgency": "  now  "
+      },
+      "name": "trim",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "missing body",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "body": null,
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "null body",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "body": "  ",
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "empty body",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"body\":\"a\\nb\",\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "body": "a\r\nb\r",
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "crlf",
+      "sha256": "9d4fe1b4724d5094d1f230b143b8353734e91127ffef8ba4cf96434b3c65d3c1"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "title": "Hello​",
+        "urgency": "now"
+      },
+      "name": "zero width",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "defaults",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":false,\"meanwhile\":\"wait\",\"options\":[{\"label\":\"Yes\"},{\"label\":\"No\"}],\"recommended\":2,\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "options": [
+          {
+            "label": " Yes "
+          },
+          {
+            "detail": "",
+            "label": "No"
+          }
+        ],
+        "recommended": 2,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "recommended",
+      "sha256": "65c6234c8efa9bfe3c599f8d31dcbbebed0d82a6435ad525d55e3023c66baf2b"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "recommended": 0,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "recommended zero",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "recommended omitted",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"等待\",\"title\":\"额度在哪里\",\"ttl_hours\":24,\"urgency\":\"今天\"}",
+      "input": {
+        "meanwhile": "等待",
+        "title": "额度在哪里",
+        "urgency": "今天"
+      },
+      "name": "chinese",
+      "sha256": "5d6259187886b9d511e6fe09af69094323bee56d95ed38b7c87c06c6032fd3f3"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"m\",\"title\":\"<script>\",\"ttl_hours\":24,\"urgency\":\"u\"}",
+      "input": {
+        "meanwhile": "m",
+        "title": "<script>",
+        "urgency": "u"
+      },
+      "name": "script",
+      "sha256": "c24494fda382aa61f1470347e11f167bd749cf95fba54e8427c7ba49ac6e24ff"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\",\"work_id\":\"W-65\"}",
+      "idempotency_key": "07bf0e3d290a035c96369c9082cfee5255c686ceebaa1db2b5b80a1c4058674e",
+      "input": {
+        "meanwhile": "wait",
+        "title": "Hello",
+        "urgency": "now",
+        "work_id": "W-65"
+      },
+      "name": "default key",
+      "session": "thread-a",
+      "sha256": "4786087d9adab81d92c07c4d450c3c78fcca29c1a88f65aa465acc41d97362ce"
+    },
+    {
+      "error_field": "recommended",
+      "input": {
+        "meanwhile": "wait",
+        "options": [
+          {
+            "label": "Yes"
+          },
+          {
+            "label": "No"
+          }
+        ],
+        "recommended": 9,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "out of range"
+    }
+  ]
+}

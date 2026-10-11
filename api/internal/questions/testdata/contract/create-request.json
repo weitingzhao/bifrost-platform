@@ -1,0 +1,23 @@
+{
+  "allow_text": false,
+  "body": "The thread is blocked on the number.",
+  "idempotency_key": "0123456789abcdef",
+  "link": "https://example.com/docs",
+  "link_text": "Docs",
+  "meanwhile": "The thread waits",
+  "options": [
+    {
+      "label": "Ship"
+    },
+    {
+      "detail": "one day",
+      "label": "Wait"
+    }
+  ],
+  "recommended": 2,
+  "requester_thread": "quota thread",
+  "title": "Where is the quota?",
+  "ttl_hours": 24,
+  "urgency": "Before tonight",
+  "work_id": "W-65"
+}
