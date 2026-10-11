@@ -60,8 +60,12 @@ type relayAnswer struct {
 // Send posts msg to the alert relay and returns one Delivery per target the
 // relay reports. A relay that was not configured or not reached is one
 // delivery too. The log lines still say "approval notify": that is the text
-// already shipped.
+// already shipped. Title and body go through PushText here, after whatever
+// the caller composed, so a path that forgot to clean still cannot put
+// unclean text on the wire. A second pass is a no-op.
 func Send(ctx context.Context, msg Message) ([]Delivery, error) {
+	msg.Title = PushText(msg.Title, false)
+	msg.Message = PushText(msg.Message, true)
 	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
 	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
 	if endpoint == "" || token == "" {

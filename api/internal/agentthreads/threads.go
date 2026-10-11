@@ -489,31 +489,33 @@ func (st *State) fitNewHost(name string) error {
 }
 
 // Name is how a thread is called in a push: its title, else vendor and a short id.
+// The title keeps newlines so a host-loss body can; the Look title strips them
+// afterwards. The id is cleaned before the 8-byte cut.
 func (t Thread) Name() string {
 	if t.Title != "" {
-		return t.Title
+		return notice.PushText(t.Title, true)
 	}
-	id := t.Thread
+	id := notice.PushText(t.Thread, false)
 	if len(id) > 8 {
 		id = id[:8]
 	}
-	return t.Vendor + " " + id
+	return notice.PushText(t.Vendor, true) + " " + id
 }
 
 // Message is the push for a silent thread. The title asks the Owner to look.
 func (c Config) Message(t Thread, now time.Time) (title, body string) {
 	quiet := now.Sub(t.At)
 	title = fmt.Sprintf("Look · %s stopped %s ago", t.Name(), human(quiet))
-	last := string(t.Event)
+	last := notice.PushText(string(t.Event), true)
 	if t.Tool != "" {
-		last += " " + t.Tool
+		last += " " + notice.PushText(t.Tool, true)
 	}
 	if t.Event == BeforeTool && t.ToolTimeoutS > 0 {
 		last += fmt.Sprintf(" (timeout %ds)", t.ToolTimeoutS)
 	}
-	parts := []string{t.Vendor + " on " + t.Host}
+	parts := []string{notice.PushText(t.Vendor, true) + " on " + notice.PushText(t.Host, true)}
 	if t.Work != "" {
-		parts = append(parts, t.Work)
+		parts = append(parts, notice.PushText(t.Work, true))
 	}
 	parts = append(parts,
 		"silent "+human(quiet),
@@ -528,13 +530,13 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 // The body lines are unchanged; the title asks the Owner to look.
 func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body string) {
 	age := now.Sub(h.At)
-	title = fmt.Sprintf("Look · %s has not reported for %s", h.Host, human(age))
+	title = fmt.Sprintf("Look · %s has not reported for %s", notice.PushText(h.Host, false), human(age))
 	names := make([]string, 0, len(mid))
 	for _, t := range mid {
 		names = append(names, t.Name())
 	}
 	sort.Strings(names)
-	parts := []string{h.Host, "last heartbeat " + human(age) + " ago"}
+	parts := []string{notice.PushText(h.Host, true), "last heartbeat " + human(age) + " ago"}
 	if len(names) == 0 {
 		parts = append(parts, "no thread mid-turn")
 	} else {
@@ -555,7 +557,7 @@ func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body st
 }
 
 func cleanNotice(title, body string) (string, string) {
-	return notice.Redact(notice.StripControls(title, false)), notice.Redact(notice.StripControls(body, true))
+	return notice.PushText(title, false), notice.PushText(body, true)
 }
 
 // Validate checks a host heartbeat.

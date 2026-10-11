@@ -154,14 +154,20 @@ func Compose(kind string, it Item, now time.Time) Message {
 	if !ok {
 		return Message{}
 	}
-	it.Env = Redact(it.Env)
-	it.Summary = Redact(it.Summary)
-	it.Reason = Redact(it.Reason)
-	it.Error = Redact(it.Error)
-	it.Requester = Redact(it.Requester)
-	it.Thread = Redact(it.Thread)
-	it.WorkID = Redact(it.WorkID)
-	it.KeyParams = redactKeyParams(actions.FilterNotifyParams(it.Action, it.KeyParams))
+	// Agent-written fields are cleaned before any clip. A removed character can
+	// sit on the clip boundary and join a secret that, once cut, no longer
+	// matches. Action is filtered first: the allow-list is the catalog key,
+	// not the cleaned spelling.
+	filtered := actions.FilterNotifyParams(it.Action, it.KeyParams)
+	it.Action = notice.PushText(it.Action, true)
+	it.Env = notice.PushText(it.Env, true)
+	it.Summary = notice.PushText(it.Summary, true)
+	it.Reason = notice.PushText(it.Reason, true)
+	it.Error = notice.PushText(it.Error, true)
+	it.Requester = notice.PushText(it.Requester, true)
+	it.Thread = notice.PushText(it.Thread, true)
+	it.WorkID = notice.PushText(it.WorkID, true)
+	it.KeyParams = pushKeyParams(filtered)
 	ref := "#" + fmt.Sprint(it.Number)
 	if it.Number == 0 {
 		ref = it.ID
@@ -200,8 +206,8 @@ func Compose(kind string, it Item, now time.Time) Message {
 		m.Title = joinNonEmpty(" · ", verb, ref, lead)
 		m.Message = lines(ask, summary, params, from+" · "+expiry(it.ExpiresAt, now))
 	}
-	m.Title = notice.Redact(notice.StripControls(m.Title, false))
-	m.Message = notice.Redact(notice.StripControls(m.Message, true))
+	m.Title = notice.PushText(m.Title, false)
+	m.Message = notice.PushText(m.Message, true)
 	return m
 }
 
@@ -256,13 +262,13 @@ func runnerLabel(r string) string {
 	return r
 }
 
-func redactKeyParams(kp map[string]string) map[string]string {
+func pushKeyParams(kp map[string]string) map[string]string {
 	if len(kp) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(kp))
 	for k, v := range kp {
-		out[k] = Redact(v)
+		out[notice.PushText(k, true)] = notice.PushText(v, true)
 	}
 	return out
 }

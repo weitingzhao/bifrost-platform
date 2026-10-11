@@ -288,7 +288,7 @@ func isASCIIWS(r rune) bool {
 }
 
 func isValueStop(r rune) bool {
-	return isASCIIWS(r) || r == '"' || r == '\'' || r == ',' || r == ';'
+	return isASCIIWS(r) || r == '"' || r == '\'' || r == ',' || r == ';' || removedRune(r)
 }
 
 func isSecretClass(r rune) bool {

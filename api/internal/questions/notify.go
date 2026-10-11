@@ -10,9 +10,10 @@ import (
 
 func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 	now := s.clock()
+	title, body := NoticeMessage(q, now)
 	msg := notice.Message{
-		Title:    noticeTitle(q),
-		Message:  noticeBody(q, now),
+		Title:    title,
+		Message:  body,
 		ClickURL: consoleURL(q.ID),
 		Priority: 4,
 	}
@@ -50,9 +51,17 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 	s.writeAudit(c, []event{{"question.notify", q.ID, status, ""}})
 }
 
+// NoticeMessage is the push title and body for one question.
+func NoticeMessage(q Question, now time.Time) (string, string) {
+	return noticeTitle(q), noticeBody(q, now)
+}
+
 func noticeTitle(q Question) string {
-	title := "Answer · " + numberLabel(q.Number) + " · " + clipRunes(q.Title, 100)
-	return notice.Redact(notice.StripControls(title, false))
+	// The title is clipped to 100 runes. Clean before that clip, then clean
+	// the composed line. Newlines are removed on a title.
+	lead := clipRunes(notice.PushText(q.Title, false), 100)
+	title := "Answer · " + numberLabel(q.Number) + " · " + lead
+	return notice.PushText(title, false)
 }
 
 func noticeBody(q Question, now time.Time) string {
@@ -61,12 +70,12 @@ func noticeBody(q Question, now time.Time) string {
 		from = q.RequesterThread
 	}
 	body := strings.Join([]string{
-		q.Urgency,
-		"From " + from,
+		notice.PushText(q.Urgency, true),
+		"From " + notice.PushText(from, true),
 		expiresIn(q.ExpiresAt.Sub(now)),
 		"Answering approves nothing.",
 	}, "\n")
-	return notice.Redact(notice.StripControls(body, true))
+	return notice.PushText(body, true)
 }
 
 func expiresIn(d time.Duration) string {
