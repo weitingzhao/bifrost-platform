@@ -66,9 +66,9 @@ var notifySafeKeys = map[string][]string{
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
 }
 
-// Describe summarizes normalized params. approvalReason is the request's
-// reason, used when the action has nothing better to say.
-func (a Action) Describe(ctx context.Context, params map[string]any, approvalReason string) Description {
+// NoticeSource is the summary, env and key params before the first-line cut
+// and before clipping. Notifications redact this text, then clip.
+func (a Action) NoticeSource(ctx context.Context, params map[string]any, approvalReason string) Description {
 	d := Description{KeyParams: keyParams(a, params)}
 	p := func(k string) string { return str(params[k]) }
 	switch a.ID {
@@ -156,15 +156,29 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		d.Summary = "Run a probe Job from " + p("image")
 	case "owner_run_command":
 		d.Env = "host"
-		d.Summary = firstLine(p("reason"))
+		d.Summary = p("reason")
 	}
 	if d.Summary == "" {
-		d.Summary = firstLine(approvalReason)
+		d.Summary = approvalReason
 	}
 	if d.Summary == "" {
 		d.Summary = a.ID
 	}
+	return d
+}
+
+// Describe summarizes normalized params. approvalReason is the request's
+// reason, used when the action has nothing better to say. The stored summary
+// is the first line, clipped. NoticeSource is the same text before that cut.
+func (a Action) Describe(ctx context.Context, params map[string]any, approvalReason string) Description {
+	d := a.NoticeSource(ctx, params, approvalReason)
+	if a.ID == "owner_run_command" || d.Summary == approvalReason {
+		d.Summary = firstLine(d.Summary)
+	}
 	d.Summary = clip(d.Summary, summaryMax)
+	for k, v := range d.KeyParams {
+		d.KeyParams[k] = clip(v, keyValueMax)
+	}
 	return d
 }
 
@@ -236,7 +250,7 @@ func keyParams(a Action, params map[string]any) map[string]string {
 		if s == "" || s == "false" {
 			continue
 		}
-		out[name] = clip(s, keyValueMax)
+		out[name] = s
 	}
 	if len(out) == 0 {
 		return nil

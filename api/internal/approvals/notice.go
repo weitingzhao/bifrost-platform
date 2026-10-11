@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
@@ -14,29 +16,110 @@ import (
 const noticeTimeout = 30 * time.Second
 
 func noticeItem(a Approval) approvalnotify.Item {
-	var kp map[string]string
-	if len(a.KeyParams) > 0 {
-		kp = make(map[string]string, len(a.KeyParams))
-		for k, v := range a.KeyParams {
-			kp[k] = Redact(v)
-		}
+	src := actions.Description{Summary: a.Summary, Env: a.Env, KeyParams: a.KeyParams}
+	if act, ok := actions.ByID(a.Action); ok {
+		src = act.NoticeSource(context.Background(), a.Params, a.Reason)
+	}
+	kp := map[string]string{}
+	for k, v := range src.KeyParams {
+		kp[k] = held(v, a.NoticeHold.Params[k])
+	}
+	if len(kp) == 0 {
+		kp = nil
 	}
 	return approvalnotify.Item{
 		ID:        a.ID,
 		Number:    a.Number,
 		Action:    a.Action,
 		Tier:      a.Tier,
-		Env:       Redact(a.Env),
-		Summary:   Redact(a.Summary),
+		Env:       held(src.Env, a.NoticeHold.Env),
+		Summary:   held(src.Summary, a.NoticeHold.Summary),
 		KeyParams: kp,
-		Requester: Redact(a.Requester),
-		Thread:    Redact(a.RequesterThread),
-		WorkID:    Redact(a.WorkID),
+		Requester: held(a.Requester, a.NoticeHold.Requester),
+		Thread:    held(a.RequesterThread, a.NoticeHold.Thread),
+		WorkID:    held(a.WorkID, a.NoticeHold.WorkID),
 		Runner:    a.Runner,
 		CreatedAt: a.CreatedAt,
 		ExpiresAt: a.ExpiresAt,
-		Reason:    a.Reason,
-		Error:     Redact(oneLine(a.Error)),
+		Reason:    held(a.Reason, a.NoticeHold.Reason),
+		Error:     held(a.Error, a.NoticeHold.Error),
+	}
+}
+
+// held is the raw field, or the withheld marker when the entry-time decision
+// or the text still in hand says the field is hidden.
+func held(raw string, hold bool) string {
+	if hold || notice.HasHidden(raw) {
+		return notice.WithheldMarker
+	}
+	return raw
+}
+
+func noticeHoldFrom(in createInput) NoticeHold {
+	h := NoticeHold{
+		Reason:    notice.HasHidden(in.Reason) || in.JSONHold["reason"] || in.JSONHold["*"],
+		Requester: notice.HasHidden(in.Requester) || in.JSONHold["*"],
+		Thread:    notice.HasHidden(in.Thread) || in.JSONHold["requester_thread"] || in.JSONHold["*"],
+		WorkID:    notice.HasHidden(in.WorkID) || in.JSONHold["work_id"] || in.JSONHold["*"],
+	}
+	return h
+}
+
+func (h *NoticeHold) mergeSource(src actions.Description, rawParams map[string]any, rawReason string, jsonHold map[string]bool) {
+	reasonShown := strings.TrimSpace(rawReason)
+	if notice.HasHidden(src.Summary) || jsonHold["*"] || (h.Reason && reasonShown != "" && strings.Contains(src.Summary, reasonShown)) {
+		h.Summary = true
+	}
+	if notice.HasHidden(src.Env) || jsonHold["*"] {
+		h.Env = true
+	}
+	for k, v := range src.KeyParams {
+		if notice.HasHidden(v) || rawParamHidden(rawParams, k) || jsonHold["params."+k] || jsonHold["*"] {
+			if h.Params == nil {
+				h.Params = map[string]bool{}
+			}
+			h.Params[k] = true
+		}
+	}
+	for k, v := range rawParams {
+		s, isStr := v.(string)
+		hidden := jsonHold["params."+k] || jsonHold["*"] || (isStr && notice.HasHidden(s))
+		if !hidden {
+			continue
+		}
+		trimmed := ""
+		if isStr {
+			trimmed = strings.TrimSpace(s)
+		}
+		if trimmed != "" && strings.Contains(src.Summary, trimmed) {
+			h.Summary = true
+		}
+		if trimmed != "" && strings.Contains(src.Env, trimmed) {
+			h.Env = true
+		}
+		if _, shown := src.KeyParams[k]; shown {
+			if h.Params == nil {
+				h.Params = map[string]bool{}
+			}
+			h.Params[k] = true
+		}
+	}
+}
+
+func rawParamHidden(params map[string]any, key string) bool {
+	v, ok := params[key]
+	if !ok {
+		return false
+	}
+	s, ok := v.(string)
+	return ok && notice.HasHidden(s)
+}
+
+// noteHiddenError records that an agent-written error or refusal contained a
+// hidden character. Call it on the raw text, before oneLine or Redact.
+func noteHiddenError(a *Approval, raw string) {
+	if notice.HasHidden(raw) {
+		a.NoticeHold.Error = true
 	}
 }
 

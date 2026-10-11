@@ -1,6 +1,7 @@
 package approvals
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvalnotify"
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // SessionHeader is the caller identity stored as requester.
@@ -45,6 +47,11 @@ func Mount(r chi.Router, auth *actuation.AuthService, svc *Service) {
 }
 
 func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
 	var body struct {
 		Action          string         `json:"action"`
 		Params          map[string]any `json:"params"`
@@ -53,8 +60,13 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		RequesterThread string         `json:"requester_thread"`
 		WorkID          string         `json:"work_id"`
 	}
-	if err := decode(r, &body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	if len(bytes.TrimSpace(raw)) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty body"})
+		return
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if err := dec.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
 		return
 	}
 	res := s.createWith(r.Context(), createInput{
@@ -65,6 +77,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 		Params:    body.Params,
 		Thread:    body.RequesterThread,
 		WorkID:    body.WorkID,
+		JSONHold:  notice.HiddenJSONFields(raw),
 	})
 	if res.Status == http.StatusCreated {
 		a := res.Approval
@@ -251,11 +264,20 @@ func (s *Service) HandleHeartbeat(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) HandleResult(w http.ResponseWriter, r *http.Request) {
-	var body resultInput
-	if err := decode(r, &body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil || len(bytes.TrimSpace(raw)) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "empty body"})
 		return
 	}
+	var body resultInput
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if err := dec.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid json body"})
+		return
+	}
+	holds := notice.HiddenJSONFields(raw)
+	body.errorHold = holds["error"] || holds["*"]
+	body.refusalHold = holds["refusal"] || holds["*"]
 	out := s.result(chi.URLParam(r, "id"), body)
 	s.record(r, out.events)
 	writeJSON(w, out.Status, out.Body)

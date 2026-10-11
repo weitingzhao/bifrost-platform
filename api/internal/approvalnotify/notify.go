@@ -154,20 +154,17 @@ func Compose(kind string, it Item, now time.Time) Message {
 	if !ok {
 		return Message{}
 	}
-	it.Env = Redact(it.Env)
-	it.Summary = Redact(it.Summary)
-	it.Reason = Redact(it.Reason)
-	it.Error = Redact(it.Error)
-	it.Requester = Redact(it.Requester)
-	it.Thread = Redact(it.Thread)
-	it.WorkID = Redact(it.WorkID)
-	it.KeyParams = redactKeyParams(actions.FilterNotifyParams(it.Action, it.KeyParams))
+	// Agent-written fields are prepared at the point they are placed.
+	// Field redacts the original, then normalises. A hidden character
+	// withholds the whole field. Clipping comes after and does not cut a
+	// marker in half.
+	it.KeyParams = fieldKeyParams(actions.FilterNotifyParams(it.Action, it.KeyParams))
 	ref := "#" + fmt.Sprint(it.Number)
 	if it.Number == 0 {
 		ref = it.ID
 	}
 	lead := noticeLead(it)
-	summary := clip(oneLine(it.Summary), 140)
+	summary := notice.ClipBytes(notice.Field(it.Summary, false), 140)
 	params := keyParamsLine(it.KeyParams)
 	from := fromLine(it)
 	ask := tierAsk(it.Tier)
@@ -178,10 +175,10 @@ func Compose(kind string, it Item, now time.Time) Message {
 	switch kind {
 	case KindFailed:
 		m.Title = joinNonEmpty(" · ", verb, ref, "failed", lead)
-		m.Message = lines("error: "+orDefault(clip(oneLine(it.Error), 160), "unknown"), "Nothing else was run.", summary, from)
+		m.Message = lines("error: "+orDefault(notice.ClipBytes(notice.Field(it.Error, false), 160), "unknown"), "Nothing else was run.", summary, from)
 	case KindUnknown:
 		m.Title = joinNonEmpty(" · ", verb, ref, "result unknown", lead)
-		reason := clip(oneLine(it.Error), 160)
+		reason := notice.ClipBytes(notice.Field(it.Error, false), 160)
 		if reason == "" {
 			reason = "executor lost: lease lapsed with no result"
 		}
@@ -189,7 +186,7 @@ func Compose(kind string, it Item, now time.Time) Message {
 		m.Priority = 5
 	case KindNotExecuted:
 		m.Title = joinNonEmpty(" · ", verb, ref, "approved but never ran", lead)
-		m.Message = lines("It was approved and not run before its deadline.", clip(oneLine(it.Error), 160), from)
+		m.Message = lines("It was approved and not run before its deadline.", notice.ClipBytes(notice.Field(it.Error, false), 160), from)
 	case KindWaiting:
 		m.Title = joinNonEmpty(" · ", verb, ref, "waiting "+age(now.Sub(it.CreatedAt)), lead)
 		m.Message = lines(ask, summary, params, from+" · "+expiry(it.ExpiresAt, now))
@@ -203,15 +200,15 @@ func Compose(kind string, it Item, now time.Time) Message {
 	return m
 }
 
-// noticeLead is the first paragraph of the reason, else the summary, else
-// action · env. It is already redacted. Clipped to 100 characters.
+// noticeLead is the reason, else the summary, else action · env.
+// Title placement: a newline becomes a space. Clipped to 100 characters.
 func noticeLead(it Item) string {
-	lead := clipChars(oneLine(it.Reason), 100)
+	lead := notice.ClipRunes(notice.Field(it.Reason, true), 100)
 	if lead == "" {
-		lead = clipChars(oneLine(it.Summary), 100)
+		lead = notice.ClipRunes(notice.Field(it.Summary, true), 100)
 	}
 	if lead == "" {
-		lead = joinNonEmpty(" · ", it.Action, it.Env)
+		lead = joinNonEmpty(" · ", it.Action, notice.Field(it.Env, true))
 	}
 	return lead
 }
@@ -229,11 +226,11 @@ func tierAsk(tier string) string {
 }
 
 func fromLine(it Item) string {
-	who := strings.TrimSpace(it.Requester)
+	who := strings.TrimSpace(notice.Field(it.Requester, false))
 	if who == "" {
 		who = "unknown session"
 	}
-	origin := joinNonEmpty(" · ", strings.TrimSpace(it.WorkID), clip(oneLine(it.Thread), 60))
+	origin := joinNonEmpty(" · ", notice.Field(it.WorkID, false), notice.ClipBytes(notice.Field(it.Thread, false), 60))
 	from := "from " + who
 	if origin != "" {
 		from = "from " + origin + " (" + who + ")"
@@ -254,13 +251,13 @@ func runnerLabel(r string) string {
 	return r
 }
 
-func redactKeyParams(kp map[string]string) map[string]string {
+func fieldKeyParams(kp map[string]string) map[string]string {
 	if len(kp) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(kp))
 	for k, v := range kp {
-		out[k] = Redact(v)
+		out[k] = notice.Field(v, false)
 	}
 	return out
 }
@@ -277,7 +274,7 @@ func keyParamsLine(kp map[string]string) string {
 	sort.Strings(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
-		parts = append(parts, k+"="+clip(oneLine(kp[k]), 60))
+		parts = append(parts, k+"="+notice.ClipBytes(kp[k], 60))
 	}
 	return strings.Join(parts, " · ")
 }

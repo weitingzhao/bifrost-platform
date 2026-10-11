@@ -1,11 +1,15 @@
 package agentthreads
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // Auditor records a rejected thread-key write. *actuation.AuditLog satisfies it.
@@ -35,11 +39,17 @@ func writeJSON(w http.ResponseWriter, code int, v any) {
 // HandleBeat is POST /api/v1/agent/threads/heartbeat (reporter): one session
 // reports one of its own events.
 func (h *Handler) HandleBeat(w http.ResponseWriter, r *http.Request) {
-	var b Beat
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&b); err != nil {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body: " + err.Error()})
 		return
 	}
+	var b Beat
+	if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&b); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body: " + err.Error()})
+		return
+	}
+	b.jsonHold = notice.HiddenJSONFields(raw)
 	if err := b.Validate(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -76,11 +86,17 @@ func (h *Handler) HandleBeat(w http.ResponseWriter, r *http.Request) {
 // HandleHost is POST /api/v1/agent/hosts/heartbeat (reporter): one machine
 // reports its hook wiring and whether the reporter token is readable.
 func (h *Handler) HandleHost(w http.ResponseWriter, r *http.Request) {
-	var b HostBeat
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&b); err != nil {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 4096))
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body: " + err.Error()})
 		return
 	}
+	var b HostBeat
+	if err := json.NewDecoder(bytes.NewReader(raw)).Decode(&b); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body: " + err.Error()})
+		return
+	}
+	b.jsonHold = notice.HiddenJSONFields(raw)
 	if err := b.Validate(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -123,7 +139,7 @@ func (h *Handler) HandleList(w http.ResponseWriter, r *http.Request) {
 		} else {
 			for k, t := range st.Threads {
 				if title, found := titles[t.Thread]; found {
-					t.Title = title
+					applyLineageTitle(&t, title)
 					st.Threads[k] = t
 				}
 			}

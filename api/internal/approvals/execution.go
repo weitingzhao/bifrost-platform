@@ -218,6 +218,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 			if execErr != nil && actions.IsUncertain(execErr) {
 				// The create response does not prove the object is absent.
 				// Leave the record unknown; do not requeue under a new name.
+				noteHiddenError(&a, execErr.Error())
 				e.Error = oneLine(Redact(execErr.Error()))
 				a.Status = StatusUnknown
 				a.Error = e.Error
@@ -226,7 +227,8 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 				break
 			}
 			if execErr != nil && actions.IsTransient(execErr) {
-				requeue(&a, oneLine(execErr.Error()), now)
+				noteHiddenError(&a, execErr.Error())
+				requeue(&a, execErr.Error(), now)
 				evs = append(evs, event{"approval.queue", a.ID, StatusApproved,
 					fmt.Sprintf("attempt=%d refusal=%s", e.Attempts, e.LastRefusal)})
 				break
@@ -250,6 +252,7 @@ func (s *Service) finishPlatform(id, lease string, started time.Time, result any
 			}
 			if execErr != nil && actions.IsUncertain(execErr) {
 				// Already unknown: keep the newer reason, do not notify again.
+				noteHiddenError(&a, execErr.Error())
 				e.Error = oneLine(Redact(execErr.Error()))
 				a.Error = e.Error
 				e.LeaseExpiresAt = time.Time{}
@@ -309,6 +312,7 @@ func finishWith(a *Approval, started, now time.Time, result any, execErr error) 
 	e.LeaseExpiresAt = time.Time{}
 	if execErr != nil {
 		a.Status = StatusFailed
+		noteHiddenError(a, execErr.Error())
 		a.Error = oneLine(Redact(execErr.Error()))
 		a.Result = nil
 		e.Error = a.Error

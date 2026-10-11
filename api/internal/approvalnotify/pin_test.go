@@ -53,17 +53,17 @@ func TestPinApprovalNoticeText(t *testing.T) {
 		priority int
 	}{
 		{KindCreated,
-			"Decide · #7 · Sync \u202e app token=[redacted]",
+			"Decide · #7 · [withheld: hidden characters]",
 			"Runs as soon as you approve.\n" +
-				"Sync \u202e app token=[redacted]\n" +
+				"[withheld: hidden characters]\n" +
 				"name=app-prod\n" +
 				"from W-65 · slice zero (cursor) · runs on: platform · expires in 23h",
 			4},
 		{KindFailed,
-			"Check · #7 · failed · Sync \u202e app token=[redacted]",
+			"Check · #7 · failed · [withheld: hidden characters]",
 			"error: relay token=[redacted]\n" +
 				"Nothing else was run.\n" +
-				"Sync \u202e app token=[redacted]\n" +
+				"[withheld: hidden characters]\n" +
 				"from W-65 · slice zero (cursor) · runs on: platform",
 			4},
 	} {

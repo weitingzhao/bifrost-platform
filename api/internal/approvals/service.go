@@ -104,6 +104,9 @@ type createInput struct {
 	Params    map[string]any
 	Thread    string
 	WorkID    string
+	// JSONHold is set from the raw JSON, before unmarshal replaces an
+	// unpaired surrogate with U+FFFD. Keys are field names; params use params.name.
+	JSONHold map[string]bool
 }
 
 var workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
@@ -113,6 +116,7 @@ func (s *Service) create(ctx context.Context, requester, action, reason, rollbac
 }
 
 func (s *Service) createWith(ctx context.Context, in createInput) createResult {
+	hold := noticeHoldFrom(in)
 	action := strings.TrimSpace(in.Action)
 	reason := strings.TrimSpace(in.Reason)
 	rollback := strings.TrimSpace(in.Rollback)
@@ -125,10 +129,13 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 	if reason == "" {
 		return fail(400, "reason is required")
 	}
-	if strings.ContainsAny(thread, "\r\n") || len(thread) > 120 {
+	// A hidden character is withheld in the notice. The structural checks
+	// still apply when the raw field has none, so a notice is never built
+	// from a thread or work id the record refused to store.
+	if !hold.Thread && (strings.ContainsAny(thread, "\r\n") || len(thread) > 120) {
 		return fail(400, "requester_thread must be one line of at most 120 bytes")
 	}
-	if work != "" && (len(work) > 40 || !workIDPattern.MatchString(work)) {
+	if work != "" && !hold.WorkID && (len(work) > 40 || !workIDPattern.MatchString(work)) {
 		return fail(400, "work_id must look like W-n, TD-n or LANE-name")
 	}
 	act, ok := actions.ByID(action)
@@ -182,6 +189,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		return fail(400, err.Error())
 	}
 	desc := act.Describe(ctx, norm, reason)
+	hold.mergeSource(act.NoticeSource(ctx, norm, reason), in.Params, in.Reason, in.JSONHold)
 	now := s.clock()
 	rec := Approval{
 		ID:              newID(),
@@ -201,6 +209,7 @@ func (s *Service) createWith(ctx context.Context, in createInput) createResult {
 		Runner:          act.RunnerOf(norm),
 		RequesterThread: thread,
 		WorkID:          work,
+		NoticeHold:      hold,
 	}
 	err = s.store.update(func(doc *file) error {
 		rec.Number = doc.nextNumber()

@@ -67,6 +67,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // Event is what a session reports.
@@ -160,6 +162,11 @@ type Beat struct {
 	Reason        string `json:"reason,omitempty"`
 	// keyHash is the server-side sha256 of ThreadKey. The client cannot set it.
 	keyHash string
+	// jsonHold is set from the raw JSON before unmarshal replaces an unpaired
+	// surrogate. The *Hold flags are the decision, taken before trim or clip.
+	jsonHold                        map[string]bool
+	titleHold, toolHold, vendorHold bool
+	hostHold, workHold, threadHold  bool
 }
 
 // Thread is the stored view of one session.
@@ -200,6 +207,14 @@ type Thread struct {
 	// SilenceClaimExpires is when a dead worker's claim may be taken again.
 	SilenceClaimID      string    `json:"silence_claim_id,omitempty"`
 	SilenceClaimExpires time.Time `json:"silence_claim_expires,omitempty"`
+	// Holds record a hidden character in the raw field, decided before
+	// cleaning. A later beat with an empty title does not clear TitleHold.
+	TitleHold  bool `json:"title_hold,omitempty"`
+	ToolHold   bool `json:"tool_hold,omitempty"`
+	VendorHold bool `json:"vendor_hold,omitempty"`
+	HostHold   bool `json:"host_hold,omitempty"`
+	WorkHold   bool `json:"work_hold,omitempty"`
+	ThreadHold bool `json:"thread_hold,omitempty"`
 }
 
 // VendorReport is one vendor on a host heartbeat.
@@ -215,6 +230,9 @@ func (v VendorReport) Monitored() bool { return v.Wired && v.Token }
 type HostBeat struct {
 	Host    string                  `json:"host"`
 	Vendors map[string]VendorReport `json:"vendors"`
+	// hostHold and jsonHold are decided from the raw body, before trim.
+	hostHold bool
+	jsonHold map[string]bool
 }
 
 // Host is the stored view of one machine.
@@ -231,6 +249,7 @@ type Host struct {
 	// sent. LossClaimExpires is when a dead worker's claim may be taken again.
 	LossClaimID      string    `json:"loss_claim_id,omitempty"`
 	LossClaimExpires time.Time `json:"loss_claim_expires,omitempty"`
+	HostHold         bool      `json:"host_hold,omitempty"`
 }
 
 // State is the statefile document.
@@ -261,27 +280,46 @@ var (
 )
 
 // Validate checks a beat before it is stored.
+// A hidden character is decided on the raw value, before trim, before
+// strings.Fields, and before the 160-rune cut. That field is kept and the
+// pattern check is skipped, so the notice can show the withheld marker.
+// Anything else is redacted and then normalised. If that changes the text,
+// the pattern check is skipped too: a secret that the pattern would reject
+// is stored as the redacted text, not refused with the secret still in it.
 func (b *Beat) Validate() error {
-	b.Thread = strings.TrimSpace(b.Thread)
-	b.Vendor = strings.TrimSpace(b.Vendor)
-	b.Host = strings.TrimSpace(b.Host)
-	b.Work = strings.TrimSpace(b.Work)
-	b.Tool = strings.TrimSpace(b.Tool)
-	b.Title = strings.Join(strings.Fields(b.Title), " ")
+	b.titleHold = notice.HasHidden(b.Title) || b.jsonHold["title"] || b.jsonHold["*"]
+	b.toolHold = notice.HasHidden(b.Tool) || b.jsonHold["tool"] || b.jsonHold["*"]
+	b.vendorHold = notice.HasHidden(b.Vendor) || b.jsonHold["vendor"] || b.jsonHold["*"]
+	b.hostHold = notice.HasHidden(b.Host) || b.jsonHold["host"] || b.jsonHold["*"]
+	b.workHold = notice.HasHidden(b.Work) || b.jsonHold["work"] || b.jsonHold["*"]
+	b.threadHold = notice.HasHidden(b.Thread) || b.jsonHold["thread"] || b.jsonHold["*"]
+
+	var skipThread, skipVendor, skipHost, skipWork, skipTool bool
+	b.Thread, skipThread = prepareAgent(b.Thread, b.threadHold)
+	b.Vendor, skipVendor = prepareAgent(b.Vendor, b.vendorHold)
+	b.Host, skipHost = prepareAgent(b.Host, b.hostHold)
+	b.Work, skipWork = prepareAgent(b.Work, b.workHold)
+	b.Tool, skipTool = prepareAgent(b.Tool, b.toolHold)
+	if !b.titleHold {
+		// Redact the original, then normalise, then clip. strings.Fields is
+		// not used: it would turn the newline inside a private key into a
+		// space before Redact and end the match early.
+		b.Title = notice.ClipRunesHard(notice.Field(b.Title, true), maxText)
+	}
 	b.TurnID = strings.TrimSpace(b.TurnID)
 	b.Reason = strings.TrimSpace(b.Reason)
 	b.ThreadKey = strings.TrimSpace(b.ThreadKey)
 	b.RegisterNonce = strings.TrimSpace(b.RegisterNonce)
 	switch {
-	case !idRe.MatchString(b.Thread):
+	case !skipThread && !idRe.MatchString(b.Thread):
 		return fmt.Errorf("thread: want 1-128 of [A-Za-z0-9._:-]")
-	case !vendRe.MatchString(b.Vendor):
+	case !skipVendor && !vendRe.MatchString(b.Vendor):
 		return fmt.Errorf("vendor: want a lowercase name")
-	case !hostRe.MatchString(b.Host):
+	case !skipHost && !hostRe.MatchString(b.Host):
 		return fmt.Errorf("host: want a host name")
-	case b.Work != "" && !workRe.MatchString(b.Work):
+	case b.Work != "" && !skipWork && !workRe.MatchString(b.Work):
 		return fmt.Errorf("work: want an id like W-54")
-	case b.Tool != "" && !toolRe.MatchString(b.Tool):
+	case b.Tool != "" && !skipTool && !toolRe.MatchString(b.Tool):
 		return fmt.Errorf("tool: want a tool name")
 	case b.ToolTimeoutS < 0 || b.ToolTimeoutS > maxToolTimeout:
 		return fmt.Errorf("tool_timeout_s: want 0..%d", maxToolTimeout)
@@ -309,10 +347,29 @@ func (b *Beat) Validate() error {
 	if b.Event != BeforeTool {
 		b.ToolTimeoutS = 0
 	}
-	if r := []rune(b.Title); len(r) > maxText {
-		b.Title = string(r[:maxText])
-	}
 	return nil
+}
+
+// prepareAgent trims and redacts a field that is not withheld.
+// skip is true when the pattern check must not reject it.
+func prepareAgent(raw string, hold bool) (string, bool) {
+	if hold {
+		return raw, true
+	}
+	trimmed := strings.TrimSpace(raw)
+	prepared := notice.Field(trimmed, false)
+	return prepared, prepared != trimmed
+}
+
+// applyLineageTitle replaces a thread title with the lineage string.
+// The hold is decided on that raw string, before redaction or the 160 cut.
+func applyLineageTitle(t *Thread, title string) {
+	t.TitleHold = notice.HasHidden(title)
+	if t.TitleHold {
+		t.Title = title
+		return
+	}
+	t.Title = notice.ClipRunesHard(notice.Field(title, true), maxText)
 }
 
 // Apply folds one beat received at `at` into st. A sequence that is not strictly
@@ -342,13 +399,17 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 		t.TurnStartedAt = at
 	}
 	t.Thread, t.Vendor, t.Host = b.Thread, b.Vendor, b.Host
+	t.ThreadHold, t.VendorHold, t.HostHold = b.threadHold, b.vendorHold, b.hostHold
 	if b.Work != "" {
 		t.Work = b.Work
+		t.WorkHold = b.workHold
 	}
 	if b.Title != "" {
 		t.Title = b.Title
+		t.TitleHold = b.titleHold
 	}
 	t.Event, t.Tool, t.ToolTimeoutS = b.Event, b.Tool, b.ToolTimeoutS
+	t.ToolHold = b.toolHold
 	if b.Event == WaitingOwner {
 		t.Reason = b.Reason
 	} else {
@@ -408,6 +469,7 @@ func (st *State) ApplyHost(b HostBeat, at time.Time) {
 		return
 	}
 	h.Host = b.Host
+	h.HostHold = b.hostHold
 	h.At = at
 	h.Vendors = cloneVendors(fillVendors(b.Vendors))
 	// A new heartbeat retires a claim for the previous loss. The sent mark
@@ -486,16 +548,30 @@ func (st *State) fitNewHost(name string) error {
 	return nil
 }
 
-// Name is how a thread is called in a push: its title, else vendor and a short id.
-func (t Thread) Name() string {
+// Name is how a thread is called in a push title: its title, else vendor and a short id.
+func (t Thread) Name() string { return t.pushName(true) }
+
+// pushName is the thread's name in a title (newlines become spaces) or a body.
+// A withheld field is the marker. The short id is a hard cut with no ellipsis,
+// and it does not split a redaction or withheld marker.
+func (t Thread) pushName(title bool) string {
 	if t.Title != "" {
-		return t.Title
+		return shown(t.Title, t.TitleHold, title)
 	}
 	id := t.Thread
-	if len(id) > 8 {
-		id = id[:8]
+	if t.ThreadHold || notice.HasHidden(id) {
+		id = notice.WithheldMarker
+	} else {
+		id = notice.ClipRunesHard(notice.Field(id, title), 8)
 	}
-	return t.Vendor + " " + id
+	return shown(t.Vendor, t.VendorHold, title) + " " + id
+}
+
+func shown(raw string, hold bool, title bool) string {
+	if hold || notice.HasHidden(raw) {
+		return notice.WithheldMarker
+	}
+	return notice.Field(raw, title)
 }
 
 // Message is the push for a silent thread. The title asks the Owner to look.
@@ -504,14 +580,14 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 	title = fmt.Sprintf("Look · %s stopped %s ago", t.Name(), human(quiet))
 	last := string(t.Event)
 	if t.Tool != "" {
-		last += " " + t.Tool
+		last += " " + shown(t.Tool, t.ToolHold, false)
 	}
 	if t.Event == BeforeTool && t.ToolTimeoutS > 0 {
 		last += fmt.Sprintf(" (timeout %ds)", t.ToolTimeoutS)
 	}
-	parts := []string{t.Vendor + " on " + t.Host}
+	parts := []string{shown(t.Vendor, t.VendorHold, false) + " on " + shown(t.Host, t.HostHold, false)}
 	if t.Work != "" {
-		parts = append(parts, t.Work)
+		parts = append(parts, shown(t.Work, t.WorkHold, false))
 	}
 	parts = append(parts,
 		"silent "+human(quiet),
@@ -526,13 +602,13 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 // The body lines are unchanged; the title asks the Owner to look.
 func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body string) {
 	age := now.Sub(h.At)
-	title = fmt.Sprintf("Look · %s has not reported for %s", h.Host, human(age))
+	title = fmt.Sprintf("Look · %s has not reported for %s", shown(h.Host, h.HostHold, true), human(age))
 	names := make([]string, 0, len(mid))
 	for _, t := range mid {
-		names = append(names, t.Name())
+		names = append(names, t.pushName(false))
 	}
 	sort.Strings(names)
-	parts := []string{h.Host, "last heartbeat " + human(age) + " ago"}
+	parts := []string{shown(h.Host, h.HostHold, false), "last heartbeat " + human(age) + " ago"}
 	if len(names) == 0 {
 		parts = append(parts, "no thread mid-turn")
 	} else {
@@ -554,9 +630,13 @@ func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body st
 
 // Validate checks a host heartbeat.
 func (b *HostBeat) Validate() error {
-	b.Host = strings.TrimSpace(b.Host)
-	if !hostRe.MatchString(b.Host) {
-		return fmt.Errorf("host: want a host name")
+	b.hostHold = notice.HasHidden(b.Host) || b.jsonHold["host"] || b.jsonHold["*"]
+	if !b.hostHold {
+		host, skip := prepareAgent(b.Host, false)
+		b.Host = host
+		if !skip && !hostRe.MatchString(b.Host) {
+			return fmt.Errorf("host: want a host name")
+		}
 	}
 	if b.Vendors == nil {
 		b.Vendors = map[string]VendorReport{}

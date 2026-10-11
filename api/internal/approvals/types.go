@@ -63,14 +63,31 @@ type Approval struct {
 	Summary   string            `json:"summary,omitempty"`
 	KeyParams map[string]string `json:"key_params,omitempty"`
 	// Runner is who executes after approval: platform, host or owner.
-	Runner          string     `json:"runner,omitempty"`
-	RequesterThread string     `json:"requester_thread,omitempty"`
-	WorkID          string     `json:"work_id,omitempty"`
-	Execution       *Execution `json:"execution,omitempty"`
-	Deliveries      []Delivery `json:"deliveries,omitempty"`
+	Runner          string `json:"runner,omitempty"`
+	RequesterThread string `json:"requester_thread,omitempty"`
+	WorkID          string `json:"work_id,omitempty"`
+	// NoticeHold records fields withheld from a push, decided on the raw
+	// value before cleaning. Zero means the notice redacts the original text.
+	NoticeHold NoticeHold `json:"notice_hold,omitempty"`
+	Execution  *Execution `json:"execution,omitempty"`
+	Deliveries []Delivery `json:"deliveries,omitempty"`
 	// extra is the JSON object keys this binary does not know. The store
 	// writes them back. They are not part of the API.
 	extra map[string]json.RawMessage
+}
+
+// NoticeHold is one boolean per field a push can show. A true field was
+// hidden in the raw text, including a character later trimming or clipping
+// would have removed, or an unpaired surrogate in the raw JSON.
+type NoticeHold struct {
+	Summary   bool            `json:"summary,omitempty"`
+	Reason    bool            `json:"reason,omitempty"`
+	Error     bool            `json:"error,omitempty"`
+	Requester bool            `json:"requester,omitempty"`
+	Thread    bool            `json:"thread,omitempty"`
+	WorkID    bool            `json:"work_id,omitempty"`
+	Env       bool            `json:"env,omitempty"`
+	Params    map[string]bool `json:"params,omitempty"`
 }
 
 // Resolution is the Owner's close of an unknown result.

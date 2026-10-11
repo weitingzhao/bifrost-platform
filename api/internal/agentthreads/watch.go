@@ -178,7 +178,7 @@ func (w *Watcher) pushThreads(ctx context.Context, st State, push []string, titl
 			continue
 		}
 		if title, found := titles[t.Thread]; found {
-			t.Title = title
+			applyLineageTitle(&t, title)
 		}
 		subject, body := w.cfg.Message(t, now)
 		slog.Info("agent_thread_silent", "thread", k, "host", t.Host, "last_event", t.Event, "quiet", now.Sub(t.At).String(), "claim", id)

@@ -148,7 +148,9 @@ func TestLeadIsTheReasonThenTheSummaryThenActionAndEnv(t *testing.T) {
 	it := gitopsSync()
 	it.Reason = "Publish token=SYNTHETIC_SECRET now.\nThe flags are stale."
 	m := Compose(KindCreated, it, now)
-	if !strings.HasPrefix(m.Title, "Decide · #58 · Publish token=[redacted] now.") || strings.Contains(m.Title, "flags") || strings.Contains(m.Title+m.Message, "SYNTHETIC_SECRET") {
+	// A newline in a title becomes one space after redaction. The second
+	// sentence stays, and the secret does not.
+	if m.Title != "Decide · #58 · Publish token=[redacted] now. The flags are stale." || strings.Contains(m.Title+m.Message, "SYNTHETIC_SECRET") {
 		t.Fatalf("title %q body %q", m.Title, m.Message)
 	}
 	long := strings.Repeat("a", 120)

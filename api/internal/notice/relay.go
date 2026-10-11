@@ -61,7 +61,16 @@ type relayAnswer struct {
 // relay reports. A relay that was not configured or not reached is one
 // delivery too. The log lines still say "approval notify": that is the text
 // already shipped.
+//
+// Send checks the title and body and does not rewrite them. A hidden
+// character, invalid UTF-8, or a tab (LF is allowed in the body only) is a
+// failed delivery, error "unclean text", and no HTTP. The record the caller
+// is writing is not this function's concern.
 func Send(ctx context.Context, msg Message) ([]Delivery, error) {
+	if unclean(msg.Title, false) || unclean(msg.Message, true) {
+		slog.Warn("approval notify failed", "reason", "unclean text")
+		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: "unclean text"}}, fmt.Errorf("unclean text")
+	}
 	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
 	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
 	if endpoint == "" || token == "" {

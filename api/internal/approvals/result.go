@@ -48,6 +48,10 @@ type resultInput struct {
 	OutputSHA256 string `json:"output_sha256"`
 	OutputTail   string `json:"output_tail"`
 	Error        string `json:"error"`
+	// errorHold and refusalHold are set from the raw JSON before unmarshal
+	// replaces an unpaired surrogate. They are not part of the body.
+	errorHold   bool
+	refusalHold bool
 }
 
 var sha256Hex = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -119,6 +123,10 @@ func (s *Service) result(ref string, in resultInput) decided {
 				rec = a
 				return nil
 			}
+			noteHiddenError(&a, in.Refusal)
+			if in.refusalHold {
+				a.NoticeHold.Error = true
+			}
 			requeue(&a, refusal, now)
 			evs = append(evs, event{"approval.queue", a.ID, StatusApproved, fmt.Sprintf("attempt=%d refusal=%s", e.Attempts, refusal)})
 			doc.put(a)
@@ -133,6 +141,10 @@ func (s *Service) result(ref string, in resultInput) decided {
 		e.ExitCode = in.ExitCode
 		e.OutputSHA256 = sum
 		e.OutputTail = tail(Redact(in.OutputTail), maxTail)
+		noteHiddenError(&a, in.Error)
+		if in.errorHold {
+			a.NoticeHold.Error = true
+		}
 		e.Error = oneLine(Redact(in.Error))
 		e.LeaseExpiresAt = time.Time{}
 		e.LateResult = late
