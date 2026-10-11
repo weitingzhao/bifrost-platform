@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import type { ProgressGroup, ProgressRoadmap } from '@/api/agentProgressBoard'
 import type { PlanEstimate } from '@/api/progressFields'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { SectionFold } from '@/pages/shell/progress/progressFold'
 import { planCounts, planMeterLine, planStateLabel } from '@/pages/shell/progress/progressModel'
 import {
@@ -22,7 +23,7 @@ import {
 
 function AgentNote({ children }: { children: ReactNode }) {
   return (
-    <span data-agent-note="" className="block min-w-0">
+    <span data-agent-note="" data-agent-text="" className="block min-w-0">
       <span className="text-muted-foreground">Agent&apos;s note: </span>
       {children}
     </span>
@@ -35,7 +36,7 @@ function Chips({ group }: { group: ProgressGroup }) {
       {(group.items ?? []).map((item, index) => (
         <li key={`${item}-${index}`}>
           <DenseTag variant="category" size="pill">
-            {item}
+            <AgentText value={item} />
           </DenseTag>
         </li>
       ))}
@@ -49,11 +50,10 @@ function countWord(value: PlanEstimate['mine']): string {
 }
 
 function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate | undefined }) {
-  const title = agentText(name)
   if (est == null || est.unreadable) {
     return (
       <p className="m-0 text-sm">
-        <span className="break-words font-medium">{title}</span> <span className="text-muted-foreground">No estimate</span>
+        <span className="break-words font-medium"><AgentText value={name} /></span> <span className="text-muted-foreground">No estimate</span>
       </p>
     )
   }
@@ -68,7 +68,7 @@ function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate 
   return (
     <div className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm">
       <span className="break-words font-medium">
-        {title}
+        <AgentText value={name} />
         {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" /> : null}
       </span>
       <span className="block h-1.5 max-w-full overflow-hidden rounded bg-foreground/10">
@@ -80,10 +80,10 @@ function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate 
       <span>Confidence</span>
       {agentBits ? (
         <AgentNote>
-          {note !== '' ? <span className="break-words">{note}</span> : null}
-          {blocked !== '' ? <span className="break-words">{blocked}</span> : null}
-          {sure !== '' ? <span className="break-words">{sure}</span> : null}
-          {asOf !== '' ? <span className="break-words">{asOf}</span> : null}
+          {note !== '' ? <AgentText value={est?.note} /> : null}
+          {blocked !== '' ? <AgentText value={est?.blocked} /> : null}
+          {sure !== '' ? <AgentText value={est?.sure} /> : null}
+          {asOf !== '' ? <AgentText value={est?.as_of} /> : null}
         </AgentNote>
       ) : null}
     </div>
@@ -112,7 +112,11 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
   const basisBody = basis !== '' || ownerWait !== '' || roadmap.uncovered_exit?.trim() || roadmap.note?.trim() || from !== ''
   return (
     <section aria-label="Plan" className="flex w-full min-w-0 flex-col gap-2">
-      {roadmap.goal?.trim() ? <p className="m-0 break-words text-sm text-foreground">{roadmap.goal}</p> : null}
+      {roadmap.goal?.trim() ? (
+        <p className="m-0 break-words text-sm text-foreground">
+          <AgentText value={roadmap.goal} />
+        </p>
+      ) : null}
       {(roadmap.stages ?? []).length > 0 ? (
         <ol aria-label="Stages" className="m-0 flex w-full min-w-0 list-none flex-wrap gap-2 p-0">
           {(roadmap.stages ?? []).map((stage, index) => (
@@ -121,8 +125,14 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
               aria-current={stage.state === 'current' ? 'step' : undefined}
               className="min-w-0 max-w-full break-words text-sm"
             >
-              <span className="font-medium text-foreground">{stage.name}</span>
-              {stage.what?.trim() ? <span className="block text-muted-foreground">{stage.what}</span> : null}
+              <span className="font-medium text-foreground">
+                <AgentText value={stage.name} />
+              </span>
+              {stage.what?.trim() ? (
+                <span className="block text-muted-foreground">
+                  <AgentText value={stage.what} />
+                </span>
+              ) : null}
               {stage.state === 'current' ? <span className="block text-foreground">you are here</span> : null}
             </li>
           ))}
@@ -173,7 +183,10 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
           .filter(group => group.state === 'doing' || group.state === 'todo')
           .map((group, index) => (
             <div key={`${group.name ?? 'open'}-${index}`} className="flex min-w-0 flex-col gap-1">
-              <span className="text-sm text-muted-foreground">{`${group.name ?? ''} · ${planStateLabel(group.state)}`}</span>
+              <span className="text-sm text-muted-foreground">
+                <AgentText value={group.name} />
+                {planStateLabel(group.state) !== '' ? ` · ${planStateLabel(group.state)}` : null}
+              </span>
               <Chips group={group} />
             </div>
           ))}
@@ -182,33 +195,55 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
         <SectionFold
           id="plan-delta"
           title="Since last time"
-          digest={roadmap.delta.unreadable ? 'Unknown' : (roadmap.delta.since ?? '')}
+          digest={roadmap.delta.unreadable ? 'Unknown' : <AgentText value={roadmap.delta.since} />}
           defaultOpen={false}
         >
           {roadmap.delta.unreadable ? (
             <p className="m-0 text-sm">Could not read this item</p>
           ) : (
             <ul className="m-0 list-disc pl-5 text-sm">
-              {roadmap.delta.lines.map((line, index) => {
-                const text = agentText(line)
-                if (text === '') return null
-                return (
+              {roadmap.delta.lines.map((line, index) =>
+                agentText(line) === '' ? null : (
                   <li key={index} className="break-words">
-                    {text}
+                    <AgentText value={line} />
                   </li>
-                )
-              })}
+                ),
+              )}
             </ul>
           )}
         </SectionFold>
       ) : null}
       {basisBody ? (
         <SectionFold id="plan-basis" title="How the numbers were computed" defaultOpen={false}>
-          {basis !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">{basis}</p> : null}
-          {ownerWait !== '' ? <p className="m-0 break-words text-sm text-warning">{ownerWait}</p> : null}
-          {roadmap.uncovered_exit?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.uncovered_exit}</p> : null}
-          {roadmap.note?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.note}</p> : null}
-          {from !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">Generated from {from}</p> : null}
+          {basis !== '' ? (
+            <p className="m-0 break-words text-sm text-muted-foreground">
+              <AgentText value={pace?.basis} />
+            </p>
+          ) : null}
+          {ownerWait !== '' ? (
+            <p className="m-0 break-words text-sm text-warning">
+              <AgentText value={pace?.owner_wait} />
+            </p>
+          ) : null}
+          {agentText(roadmap.uncovered_exit) !== '' ? (
+            <p className="m-0 break-words text-sm text-muted-foreground">
+              <AgentText value={roadmap.uncovered_exit} />
+            </p>
+          ) : null}
+          {agentText(roadmap.note) !== '' ? (
+            <p className="m-0 break-words text-sm text-muted-foreground">
+              <AgentText value={roadmap.note} />
+            </p>
+          ) : null}
+          {from !== '' ? (
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-sm text-muted-foreground">Generated from</span>
+              <span data-agent-note="" data-agent-text="" className="block min-w-0">
+                <span className="text-muted-foreground">Agent&apos;s note: </span>
+                <AgentText value={roadmap.generated_from} />
+              </span>
+            </div>
+          ) : null}
         </SectionFold>
       ) : null}
       {shipped !== '' ? (
@@ -220,7 +255,7 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
             .map(group => group.name?.trim() ?? '')
             .filter(name => name !== '')
             .map((name, index) => (
-              <span key={`${name}-${index}`}>{name}</span>
+              <AgentText key={`${name}-${index}`} value={name} />
             ))}
           defaultOpen={false}
         >
@@ -238,7 +273,9 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
           <ul aria-label="Exit criteria" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
             {(roadmap.exit ?? []).map((row, index) => (
               <li key={`${row.text ?? 'exit'}-${index}`} className="flex min-w-0 flex-wrap items-center gap-1 text-sm">
-                <span className="break-words">{row.text}</span>
+                <span className="break-words">
+                  <AgentText value={row.text} />
+                </span>
                 {planStateLabel(row.state) !== '' ? (
                   <DenseTag variant={row.state === 'done' ? 'success' : 'neutral'} size="pill">
                     {planStateLabel(row.state)}

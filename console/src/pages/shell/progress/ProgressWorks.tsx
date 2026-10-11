@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { Fragment, useRef, useState, type ReactNode } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import {
   activeStepText,
@@ -10,7 +10,9 @@ import {
   type ProgressWork,
 } from '@/api/agentProgress'
 import type { ProgressEvent } from '@/api/agentProgressBoard'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { RequestChipLink } from '@/pages/shell/progress/ProgressNeedsYou'
+import { agentText } from '@/pages/shell/progress/progressSummaryModel'
 import { SectionFold } from '@/pages/shell/progress/progressFold'
 import { Tick } from '@/pages/shell/progress/progressClock'
 import {
@@ -19,9 +21,8 @@ import {
   eventsNewestFirst,
   flowSteps,
   groupParallel,
+  isNowStep,
   lastOutLine,
-  nextRow,
-  nowRow,
   runResultLine,
   showLive,
   stepBarPercent,
@@ -33,7 +34,7 @@ import {
   yourTurnWhen,
 } from '@/pages/shell/progress/progressModel'
 
-function Fold({ summary, children }: { summary: string; children: ReactNode }) {
+function Fold({ summary, children }: { summary: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <details open={open} className="min-w-0 max-w-full">
@@ -99,9 +100,15 @@ function EventBody({ event }: { event: ProgressEvent }) {
     const out = lastOutLine(event.out)
     return (
       <>
-        <code className="block whitespace-pre-wrap break-all font-mono text-xs">{event.text ?? ''}</code>
+        <code data-agent-text="" className="block whitespace-pre-wrap break-all font-mono text-xs">
+          {agentText(event.text)}
+        </code>
         {status != null ? <span>{status}</span> : null}
-        {out != null ? <span className="break-all text-muted-foreground">{out}</span> : null}
+        {out != null ? (
+          <span data-agent-text="" className="break-all text-muted-foreground">
+            {agentText(out)}
+          </span>
+        ) : null}
       </>
     )
   }
@@ -109,12 +116,18 @@ function EventBody({ event }: { event: ProgressEvent }) {
     const delta = editDelta(event)
     return (
       <>
-        <span className="break-all">{event.text}</span>
+        <span className="break-all">
+          <AgentText value={event.text} />
+        </span>
         {delta != null ? <span>{delta}</span> : null}
       </>
     )
   }
-  return <span className="break-words">{event.text}</span>
+  return (
+    <span className="break-words">
+      <AgentText value={event.text} />
+    </span>
+  )
 }
 
 function EventList({ events }: { events: ProgressEvent[] | undefined }) {
@@ -168,24 +181,30 @@ function StepCard({ step, atSec }: { step: ProgressStep; atSec: number | undefin
   const waitsFor = step.waits_for?.trim() ?? ''
   return (
     <li
-      aria-label={step.name ?? 'Step'}
+      aria-label={agentText(step.name) || 'Step'}
       data-renders={renders.current}
       className="flex min-w-0 max-w-full flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-2 py-1.5"
     >
       <span className="flex min-w-0 flex-wrap items-baseline gap-2">
-        <span className="break-words text-sm font-medium text-foreground">{step.name}</span>
+        <span className="break-words text-sm font-medium text-foreground">
+          <AgentText value={step.name} />
+        </span>
         <RequestChipLink approval={step.approval} />
       </span>
       <span className="flex min-w-0 flex-wrap items-center gap-1">
         {who !== '' ? (
           <DenseTag variant="category" size="pill">
-            {who}
+            <AgentText value={step.who} />
           </DenseTag>
         ) : null}
         <DenseTag variant={stateVariant(label)} size="pill">
           {label}
         </DenseTag>
-        {follow !== '' ? <span className="break-words text-sm text-foreground">{follow}</span> : null}
+        {follow !== '' ? (
+          <span className="break-words text-sm text-foreground">
+            <AgentText value={step.label} />
+          </span>
+        ) : null}
       </span>
       {done ? (
         took != null ? <span className="break-words text-sm text-muted-foreground">{took}</span> : null
@@ -196,7 +215,12 @@ function StepCard({ step, atSec }: { step: ProgressStep; atSec: number | undefin
           <Tick className="break-words text-sm text-muted-foreground" text={now => lastOutputLine(step, now)} />
         </>
       )}
-      {waitsFor !== '' ? <span className="break-words text-sm text-muted-foreground">waits for: {waitsFor}</span> : null}
+      {waitsFor !== '' ? (
+        <span data-agent-text="" className="break-words text-sm text-muted-foreground">
+          {'waits for: '}
+          {agentText(step.waits_for)}
+        </span>
+      ) : null}
       <StepBar step={step} atSec={atSec} />
       {done ? (
         <Fold summary="What it did last">
@@ -236,7 +260,7 @@ function StepFlow({ steps, label, atSec }: { steps: ProgressStep[]; label: strin
 
 function LivePanel({ step }: { step: ProgressStep }) {
   return (
-    <section aria-label={`Live ${step.name ?? 'step'}`} className="flex w-full min-w-0 flex-col gap-1">
+    <section aria-label={`Live ${agentText(step.name) || 'step'}`} className="flex w-full min-w-0 flex-col gap-1">
       <h4 className="m-0 text-sm font-medium text-foreground">Live</h4>
       <EventList events={step.events} />
     </section>
@@ -244,30 +268,91 @@ function LivePanel({ step }: { step: ProgressStep }) {
 }
 
 function YourTurn({ work }: { work: ProgressWork }) {
-  const name = work.owner?.name?.trim() ?? ''
-  if (name === '') return null
+  if (agentText(work.owner?.name) === '') return null
   if (work.sure === false) {
-    return <p className="m-0 break-words text-sm text-foreground">Your turn: {name} · cannot be estimated</p>
+    return (
+      <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+        {'Your turn: '}
+        {agentText(work.owner?.name)}
+        {' · cannot be estimated'}
+      </p>
+    )
   }
   return (
-    <p className="m-0 break-words text-sm text-foreground">
-      Your turn: {name}
+    <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+      {'Your turn: '}
+      {agentText(work.owner?.name)}
       <Tick text={now => yourTurnWhen(work.owner?.at, now)} />
+    </p>
+  )
+}
+
+function NowLine({ work }: { work: ProgressWork }) {
+  const shown = (work.steps ?? []).filter(step => isNowStep(step) && (agentText(step.name) !== '' || agentText(step.who) !== ''))
+  if (shown.length === 0) return null
+  return (
+    <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+      {'Now: '}
+      {shown.map((step, index) => (
+        <Fragment key={index}>
+          {index > 0 ? '; ' : null}
+          {agentText(step.name)}
+          {agentText(step.name) !== '' && agentText(step.who) !== '' ? ' · ' : null}
+          {agentText(step.who)}
+        </Fragment>
+      ))}
+    </p>
+  )
+}
+
+function NextLine({ work }: { work: ProgressWork }) {
+  const steps = work.steps ?? []
+  let lastNow = -1
+  steps.forEach((step, index) => {
+    if (isNowStep(step)) lastNow = index
+  })
+  const upcoming = steps.slice(lastNow + 1).find(step => step.state === 'waiting' && agentText(step.name) !== '')
+  const name = upcoming?.name ?? work.next?.name
+  const who = upcoming != null ? upcoming.who : work.next?.who
+  const needs = upcoming != null ? upcoming.needs_owner === true : work.next?.needs_owner === true
+  if (agentText(name) === '') return null
+  return (
+    <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+      {'Next: '}
+      {agentText(name)}
+      {agentText(who) !== '' ? ' · ' : null}
+      {agentText(who) !== '' ? agentText(who) : null}
+      {needs ? ' — this one needs you' : null}
+    </p>
+  )
+}
+
+function StepNote({ step }: { step: ProgressStep }) {
+  if (activeStepText(step) === '') return null
+  const body = agentText(step.note) !== '' ? step.note : step.doing
+  if (agentText(body) === '') return null
+  return (
+    <p data-agent-text="" className="m-0 break-words text-sm text-muted-foreground">
+      {agentText(step.name) !== '' ? agentText(step.name) : null}
+      {agentText(step.name) !== '' ? ': ' : null}
+      {agentText(body)}
     </p>
   )
 }
 
 function WorkBody({ work, foldDone, atSec }: { work: ProgressWork; foldDone: boolean; atSec: number | undefined }) {
   const { done, flow } = flowSteps(work, foldDone)
-  const notes = (work.steps ?? []).map(activeStepText).filter(text => text !== '')
-  const nowText = nowRow(work)
-  const next = nextRow(work)
-  const risk = work.risk?.trim() ?? ''
   const live = flow.filter(showLive)
   return (
     <>
-      <h3 className="m-0 break-words text-sm font-medium text-foreground">{work.title}</h3>
-      {work.goal?.trim() ? <p className="m-0 break-words text-sm text-foreground">{work.goal}</p> : null}
+      <h3 className="m-0 break-words text-sm font-medium text-foreground">
+        <AgentText value={work.title} />
+      </h3>
+      {agentText(work.goal) !== '' ? (
+        <p className="m-0 break-words text-sm text-foreground">
+          <AgentText value={work.goal} />
+        </p>
+      ) : null}
       {typeof work.round === 'number' ? <p className="m-0 text-sm text-muted-foreground">Round {work.round}</p> : null}
       {done.length > 0 || work.earlier_done != null ? (
         <Fold summary={doneFoldSummary(done.length, work.earlier_done)}>
@@ -275,15 +360,18 @@ function WorkBody({ work, foldDone, atSec }: { work: ProgressWork; foldDone: boo
         </Fold>
       ) : null}
       <StepFlow steps={flow} label="Steps" atSec={atSec} />
-      {nowText != null ? <p className="m-0 break-words text-sm text-foreground">{nowText}</p> : null}
-      {next != null ? <p className="m-0 break-words text-sm text-foreground">{next}</p> : null}
+      <NowLine work={work} />
+      <NextLine work={work} />
       <YourTurn work={work} />
-      {notes.map(note => (
-        <p key={note} className="m-0 break-words text-sm text-muted-foreground">
-          {note}
-        </p>
+      {(work.steps ?? []).map((step, index) => (
+        <StepNote key={index} step={step} />
       ))}
-      {risk !== '' ? <p className="m-0 break-words text-sm text-foreground">Risk: {risk}</p> : null}
+      {agentText(work.risk) !== '' ? (
+        <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+          {'Risk: '}
+          {agentText(work.risk)}
+        </p>
+      ) : null}
       {live.map((step, index) => (
         <LivePanel key={`${step.name ?? 'live'}-${index}`} step={step} />
       ))}
@@ -312,20 +400,27 @@ function doneFoldSummary(doneCount: number, earlier: ProgressWork['earlier_done'
   return base
 }
 
-function finishedLine(work: ProgressWork): string {
-  const title = work.title?.trim() || workShortName(work) || 'Finished work'
+function FinishedSummary({ work }: { work: ProgressWork }) {
+  const title = agentText(work.title) || agentText(workShortName(work))
   const at = workFinishedAt(work)
-  if (!(at > 0)) return title
-  return `${title} · ${formatLocalTime(at)}`
+  return (
+    <>
+      {title !== '' ? <AgentText value={work.title || work.short} /> : 'Finished work'}
+      {at > 0 ? ` · ${formatLocalTime(at)}` : null}
+    </>
+  )
 }
 
 /** A work with nothing running and nothing waiting on the Owner, drawn as one line. */
 export function IdleWorkLine({ work, index, at }: { work: ProgressWork; index: number; at?: number }) {
-  const name = workShortName(work) || 'Work'
-  const risk = work.risk?.trim() ?? ''
-  const digest = risk === '' ? 'Nothing running' : risk.slice(0, 64)
+  const name = agentText(workShortName(work))
   return (
-    <SectionFold id={`sec-work-${index}`} title={name} digest={digest} defaultOpen={false}>
+    <SectionFold
+      id={`sec-work-${index}`}
+      title={name !== '' ? <AgentText value={work.short || work.title} /> : 'Work'}
+      digest={agentText(work.risk) !== '' ? <AgentText value={work.risk} /> : 'Nothing running'}
+      defaultOpen={false}
+    >
       <WorkCard work={work} index={index} at={at} />
     </SectionFold>
   )
@@ -339,7 +434,7 @@ export function FinishedWorks({ works, at }: { works: readonly ProgressWork[]; a
         <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-2 p-0">
           {works.map((work, index) => (
             <li key={`${work.title ?? 'finished'}-${index}`} className="min-w-0">
-              <Fold summary={finishedLine(work)}>
+              <Fold summary={<FinishedSummary work={work} />}>
                 <StepFlow steps={work.steps ?? []} label="Steps" atSec={at} />
               </Fold>
             </li>

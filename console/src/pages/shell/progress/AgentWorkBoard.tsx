@@ -6,11 +6,10 @@ import {
   ageSeconds,
   AGENT_PROGRESS_POLL_MS,
   computedAgeLine,
-  coordinatorLine,
   fetchAgentProgress,
   formatDuration,
+  formatLocalTime,
   generationIsSkewed,
-  ownerNextLine,
   publishedAgeSeconds,
   receivedIsStale,
   skewSentence,
@@ -19,6 +18,7 @@ import {
   type ProgressCoordinator,
   type ProgressDocument,
 } from '@/api/agentProgress'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { ProgressActivity, ProgressDoneToday } from '@/pages/shell/progress/ProgressActivity'
 import { FinishedWorks, IdleWorkLine, WorkCard } from '@/pages/shell/progress/ProgressWorks'
 import { ProgressPlan } from '@/pages/shell/progress/ProgressPlan'
@@ -28,7 +28,7 @@ import { ProgressUsageBlock } from '@/pages/shell/progress/ProgressUsage'
 import { FoldProvider, SectionFold } from '@/pages/shell/progress/progressFold'
 import { NowClock, Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { runningRows, splitWorks } from '@/pages/shell/progress/progressModel'
-import { hasNeedsYou } from '@/pages/shell/progress/progressSummaryModel'
+import { agentText, hasNeedsYou } from '@/pages/shell/progress/progressSummaryModel'
 
 /**
  * Interim bridge (DESIGN §20.4): the coordinating thread publishes the
@@ -60,7 +60,9 @@ function Verdict({ doc }: { doc: ProgressDocument }) {
       <div className="flex w-full min-w-0 items-start gap-2">
         <StatusLamp value={lampFor(doc.level)} />
         <p className="m-0 min-w-0 break-words text-sm font-medium text-foreground">
-          <span data-level={doc.level ?? ''}>{doc.verdict ?? ''}</span>
+          <span data-level={doc.level ?? ''}>
+            <AgentText value={doc.verdict} />
+          </span>
           {typeof at === 'number' ? (
             <>
               {' '}
@@ -78,8 +80,13 @@ function NextTime({ doc }: { doc: ProgressDocument }) {
   return (
     <section aria-label="Next time you are needed" className="flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium text-foreground">Next time you are needed</h3>
-      {doc.owner_next != null && ownerNextLine(doc.owner_next) !== '' ? (
-        <p className="m-0 break-words text-sm text-foreground">{ownerNextLine(doc.owner_next)}</p>
+      {doc.owner_next != null && agentText(doc.owner_next.name) !== '' ? (
+        <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
+          {agentText(doc.owner_next.name)}
+          {typeof doc.owner_next.at === 'number' && doc.owner_next.at > 0
+            ? ` · expected around ${formatLocalTime(doc.owner_next.at)}`
+            : null}
+        </p>
       ) : (
         <p className="m-0 text-sm text-muted-foreground">Nothing is waiting for you.</p>
       )}
@@ -110,19 +117,40 @@ function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | u
   const doing = coordinator.doing?.trim() ?? ''
   const next = coordinator.next?.trim() ?? ''
   if (doing === '' && next === '') {
-    const legacy = coordinatorLine(coordinator, Date.now())
-    if (legacy === '' && !((coordinator.at ?? 0) > 0)) return null
+    const state = agentText(coordinator.state)
+    const note = agentText(coordinator.note)
+    if (state === '' && note === '' && !((coordinator.at ?? 0) > 0)) return null
     return (
-      <p className="m-0 break-words text-sm text-foreground">
+      <p data-agent-text="" className="m-0 break-words text-sm text-foreground">
         <span className="font-medium">Coordinator: </span>
-        <Tick text={now => coordinatorLine(coordinator, now)} />
+        {state !== '' ? agentText(coordinator.state) : null}
+        {note !== '' ? (
+          <>
+            {state !== '' ? ' — ' : null}
+            {agentText(coordinator.note)}
+          </>
+        ) : null}
+        {(coordinator.at ?? 0) > 0 ? (
+          <Tick text={now => `${state !== '' || note !== '' ? ' · ' : ''}${formatDuration(ageSeconds(coordinator.at ?? 0, now))} ago`} />
+        ) : null}
       </p>
     )
   }
   return (
     <p className="m-0 break-words text-sm text-foreground">
-      {doing !== '' ? <span>Coordinator: {doing}</span> : null}
-      {next !== '' ? <span>{doing !== '' ? ' · ' : ''}Then: {next}</span> : null}
+      {doing !== '' ? (
+        <span data-agent-text="">
+          {'Coordinator: '}
+          {agentText(coordinator.doing)}
+        </span>
+      ) : null}
+      {next !== '' ? (
+        <span data-agent-text="">
+          {doing !== '' ? ' · ' : ''}
+          {'Then: '}
+          {agentText(coordinator.next)}
+        </span>
+      ) : null}
       <CoordinatorAge at={coordinator.at} lead={doing !== '' || next !== ''} />
     </p>
   )
@@ -142,7 +170,6 @@ const WorkDocument = memo(function WorkDocument({
   const hot = active.filter(workIsHot)
   const idle = active.filter(work => !workIsHot(work))
   const running = runningRows(doc.works ?? []).length
-  const coord = doc.coordinator?.doing?.trim() || doc.coordinator?.state?.trim() || ''
   return (
     <div data-testid="agent-work-document" data-paints={paints.current} className="flex w-full min-w-0 flex-col gap-4">
       <ProgressSummary doc={doc} env={env} />
@@ -151,7 +178,16 @@ const WorkDocument = memo(function WorkDocument({
       <SectionFold id="sec-running" title="Running now" digest={running > 0 ? `${running} steps` : 'Nothing running'} defaultOpen={running > 0}>
         <ProgressRunning works={active} />
       </SectionFold>
-      <SectionFold id="sec-coord" title="Coordinator" digest={coord === '' ? '' : coord.slice(0, 48)} defaultOpen={false}>
+      <SectionFold
+        id="sec-coord"
+        title="Coordinator"
+        digest={agentText(doc.coordinator?.doing) !== '' || agentText(doc.coordinator?.state) !== '' ? (
+          <AgentText value={doc.coordinator?.doing || doc.coordinator?.state} />
+        ) : (
+          ''
+        )}
+        defaultOpen={false}
+      >
         <CoordinatorLine coordinator={doc.coordinator} />
       </SectionFold>
       {doc.roadmap != null ? (

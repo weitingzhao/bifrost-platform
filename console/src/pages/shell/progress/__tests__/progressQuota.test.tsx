@@ -151,7 +151,7 @@ describe('quota by pace', () => {
     expect(within(quota).getByText(/used 78%/)).toBeTruthy()
     expect(within(quota).getByText(/resets in 1d 21h/)).toBeTruthy()
     expect(
-      within(quota).getByText('81.6% of the window gone · 22 pts left · 17.1/day allowed · 13.6/day lately (本窗口平均) · about 96% at reset'),
+      within(quota).getByText('81.6% of the window gone · 22 pts left · 17.1/day allowed · 13.6/day lately · about 96% at reset'),
     ).toBeTruthy()
     expect(within(quota).getAllByText('On pace').length).toBeGreaterThan(0)
     expect(within(quota).getByText('Spare — about 12.5 pts will expire unused')).toBeTruthy()
@@ -161,7 +161,9 @@ describe('quota by pace', () => {
     expect(within(quota).getByText('Too early to tell')).toBeTruthy()
     expect(within(quota).getByText('Burst limit')).toBeTruthy()
     expect(within(quota).getByText('Sub-limit of another pool')).toBeTruthy()
-    expect(within(quota).getByText('Not readable 读不到：命令行不给')).toBeTruthy()
+    expect(within(quota).getByText('Not readable')).toBeTruthy()
+    expect(within(quota).getByText('读不到：命令行不给').closest('[data-agent-text]')).toBeTruthy()
+    expect(within(quota).getByText('本窗口平均').closest('[data-agent-text]')).toBeTruthy()
     expect(within(quota).getByText('Reset due')).toBeTruthy()
     expect(within(quota).getByText('Spare')).toBeTruthy()
     expect(within(quota).queryByText(/undefined|NaN/)).toBeNull()

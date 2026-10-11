@@ -536,7 +536,7 @@ export function stepStateLabel(state: string | undefined, needsOwner: boolean | 
     case 'waiting':
       return 'not started'
     default:
-      return state != null && state.trim() !== '' ? state : 'unknown'
+      return 'unknown'
   }
 }
 

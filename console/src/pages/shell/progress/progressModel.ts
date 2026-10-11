@@ -236,7 +236,7 @@ export function planStateLabel(state: string | undefined): string {
     case 'later':
       return 'Later'
     default:
-      return state?.trim() ?? ''
+      return state != null && state.trim() !== '' ? 'Unknown' : ''
   }
 }
 

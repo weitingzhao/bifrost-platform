@@ -29,7 +29,7 @@ function ActionBody({ action }: { action: ProgressAction }) {
   if (view.kind === 'anchor') {
     return (
       <a href={view.href} rel="noopener noreferrer" {...(view.external ? { target: '_blank' } : {})} className="underline">
-        {view.label}
+        <span data-agent-text="">{view.label}</span>
       </a>
     )
   }
@@ -37,12 +37,12 @@ function ActionBody({ action }: { action: ProgressAction }) {
     const note = view.host !== '' ? `link not shown: ${view.host}` : 'link not shown'
     return (
       <>
-        <span>{view.text}</span>
+        <span data-agent-text="">{view.text}</span>
         <span className="mt-0.5 block text-xs text-muted-foreground">{note}</span>
       </>
     )
   }
-  return <>{view.text}</>
+  return <span data-agent-text="">{view.text}</span>
 }
 
 function shownAction(action: ProgressAction): ProgressAction {
@@ -157,12 +157,24 @@ function AgentNote({
   const actions = showAsk ? (entry.actions ?? []) : []
   if (work === '' && name === '' && urgency === '' && actions.length === 0 && !showTimer) return null
   return (
-    <div data-agent-note="" className="mt-1 flex min-w-0 flex-col gap-1 truncate border-t border-[var(--card-border)] pt-1">
+    <div data-agent-note="" data-agent-text="" className="mt-1 flex min-w-0 flex-col gap-1 truncate border-t border-[var(--card-border)] pt-1">
       <span className="text-sm text-muted-foreground">Agent's note:</span>
-      {work !== '' ? <span className="break-words text-sm text-foreground">{work}</span> : null}
-      {name !== '' ? <span className="break-words text-sm text-foreground">{name}</span> : null}
+      {work !== '' ? (
+        <span data-agent-text="" className="break-words text-sm text-foreground">
+          {work}
+        </span>
+      ) : null}
+      {name !== '' ? (
+        <span data-agent-text="" className="break-words text-sm text-foreground">
+          {name}
+        </span>
+      ) : null}
       {showTimer ? <Tick className="text-sm text-muted-foreground" text={now => waitingLine(entry.since ?? 0, now)} /> : null}
-      {urgency !== '' ? <span className="break-words text-sm text-muted-foreground">{urgency}</span> : null}
+      {urgency !== '' ? (
+        <span data-agent-text="" className="break-words text-sm text-muted-foreground">
+          {urgency}
+        </span>
+      ) : null}
       <ActionList actions={actions} />
     </div>
   )

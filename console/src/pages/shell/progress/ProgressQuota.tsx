@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { DenseTag } from '@bifrost/ui'
 import type { ProgressCodexUsage, ProgressCursorUsage, ProgressUsage } from '@/api/agentProgressBoard'
 import type { ProgressPool } from '@/api/agentProgressExtra'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
   barPercent,
@@ -92,23 +93,38 @@ function PoolRow({ pool }: { pool: ProgressPool }) {
   const reset = read === 'unknown' ? null : poolResetsLine(pool.resets_at, now)
   const pace = read === 'ok' ? paceLine(pool) : null
   const chip = read === 'unknown' ? { text: 'Unknown', tone: 'neutral' as const } : read === 'ok' ? verdictChip(pool) : null
-  const note = read === 'ok' && pool.verdict === 'exhausted' ? (pool.note?.trim() ?? '') : ''
+  const showNote = pool.verdict === 'exhausted' || pool.verdict === 'unknown'
   const bits = [used, reset].filter((part): part is string => part != null && part !== '')
   const body = bits.join(' · ')
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p className="m-0 break-words text-sm text-foreground">
-        {label !== '' ? <span className="font-medium">{label}</span> : null}
+        {label !== '' ? (
+          <span className="font-medium">
+            <AgentText value={pool.label} />
+          </span>
+        ) : null}
         {body !== '' ? <span>{label !== '' ? ` · ${body}` : body}</span> : null}
       </p>
       {read === 'ok' ? <PoolBar pool={pool} /> : null}
-      {pace != null ? <p className="m-0 break-words text-sm text-foreground">{pace}</p> : null}
+      {pace != null ? (
+        <p className="m-0 break-words text-sm text-foreground">
+          <span>{pace}</span>
+          {pool.rate_basis != null && pool.rate_basis.trim() !== '' ? (
+            <span>
+              {' ('}
+              <AgentText value={pool.rate_basis} />
+              {')'}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
       {chip != null ? (
         <DenseTag variant={toneVariant(chip.tone)} size="pill">
           {chip.text}
         </DenseTag>
       ) : null}
-      {note !== '' ? <p className="m-0 break-words text-sm text-foreground">{note}</p> : null}
+      {showNote ? <p className="m-0 break-words text-sm text-foreground"><AgentText value={pool.note} /></p> : null}
     </div>
   )
 }
@@ -130,7 +146,11 @@ export function ProgressQuota({ usage }: { usage: ProgressUsage }) {
         const total = vendorTotal(group.vendor, usage)
         return (
           <div key={`${group.vendor}-${index}`} className="flex min-w-0 flex-col gap-2">
-            {group.vendor !== '' ? <p className="m-0 text-sm font-medium text-foreground">{group.vendor}</p> : null}
+            {group.vendor !== '' ? (
+              <p className="m-0 text-sm font-medium text-foreground">
+                <AgentText value={group.vendor} />
+              </p>
+            ) : null}
             {group.pools.map((pool, poolIndex) => (
               <PoolRow key={`${pool.id ?? pool.label ?? 'pool'}-${poolIndex}`} pool={pool} />
             ))}

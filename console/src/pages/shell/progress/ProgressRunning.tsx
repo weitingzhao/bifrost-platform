@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { expectationLine, type ProgressWork } from '@/api/agentProgress'
 import {
   latestEventWords,
@@ -5,6 +6,20 @@ import {
   workCardId,
   workShortName,
 } from '@/pages/shell/progress/progressModel'
+import { agentText } from '@/pages/shell/progress/progressSummaryModel'
+
+function LaneBits({ parts }: { parts: string[] }) {
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 ? ' · ' : null}
+          {part}
+        </Fragment>
+      ))}
+    </>
+  )
+}
 
 /** Steps that are running, slow, quiet, dead, failed, or gap (their turn, not started). */
 export function ProgressRunning({ works }: { works: readonly ProgressWork[] }) {
@@ -21,20 +36,26 @@ export function ProgressRunning({ works }: { works: readonly ProgressWork[] }) {
             const expect =
               row.step.needs_owner === true || state === 'gap' || state === 'waiting' ? null : expectationLine(row.step)
             const words = latestEventWords(row.step)
-            const who = row.step.who?.trim() ?? ''
-            const line = [workShortName(row.work), row.step.name ?? '', who, words, expect ?? '']
-              .filter(part => part.trim() !== '')
-              .join(' · ')
+            const who = agentText(row.step.who)
             return (
               <li key={`${row.workIndex}-${row.stepIndex}`} className="min-w-0">
                 <button
                   type="button"
+                  data-agent-text=""
                   className="w-full min-w-0 break-words text-left text-sm text-foreground"
                   onClick={() => {
                     document.getElementById(workCardId(row.workIndex))?.scrollIntoView({ block: 'start' })
                   }}
                 >
-                  {line}
+                  <LaneBits
+                    parts={[
+                      agentText(workShortName(row.work)),
+                      agentText(row.step.name),
+                      who,
+                      agentText(words),
+                      expect != null ? expect.trim() : '',
+                    ].filter(part => part !== '')}
+                  />
                 </button>
               </li>
             )

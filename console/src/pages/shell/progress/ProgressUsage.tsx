@@ -1,4 +1,5 @@
 import { formatLocalTime } from '@/api/agentProgress'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import type { ProgressClaudeUsage, ProgressCodexUsage, ProgressCursorUsage, ProgressUsage } from '@/api/agentProgressBoard'
 import { ProgressQuota } from '@/pages/shell/progress/ProgressQuota'
 import { percentText, resetsIn, windowIsHot } from '@/pages/shell/progress/progressModel'
@@ -39,7 +40,7 @@ function ClaudeRow({ claude }: { claude: ProgressClaudeUsage }) {
                 : 'max-w-full break-words'
             }
           >
-            {window.label} {percentText(window.used)}{' '}
+            <AgentText value={window.label} /> {percentText(window.used)}{' '}
             {typeof window.resets_at === 'number' ? (
               <span>
                 <Tick text={now => resetsIn(window.resets_at ?? 0, now)} />

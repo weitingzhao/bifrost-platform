@@ -1,6 +1,8 @@
 import { type ReactNode } from 'react'
 import { stepStateLabel, type ProgressFeedItem } from '@/api/agentProgress'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { formatHourMinute } from '@/pages/shell/progress/progressModel'
+import { agentText } from '@/pages/shell/progress/progressSummaryModel'
 import { useFolds } from '@/pages/shell/progress/progressFold'
 
 function Collapsible({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -44,14 +46,25 @@ export function ProgressActivity({ feed }: { feed: ProgressFeedItem[] | undefine
       <ul aria-label="Activity" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
         {rows.map((item, index) => {
           const time = typeof item.at === 'number' ? formatHourMinute(item.at) : ''
-          const text = [item.work, item.step, item.who, activityState(item.state), item.text]
-            .map(part => (part ?? '').trim())
-            .filter(part => part !== '')
-            .join(' · ')
+          const state = activityState(item.state)
+          const bits = [
+            agentText(item.work) !== '' ? <AgentText key="work" value={item.work} /> : null,
+            agentText(item.step) !== '' ? <AgentText key="step" value={item.step} /> : null,
+            agentText(item.who) !== '' ? <AgentText key="who" value={item.who} /> : null,
+            state !== '' ? <span key="state">{state}</span> : null,
+            agentText(item.text) !== '' ? <AgentText key="text" value={item.text} /> : null,
+          ].filter(bit => bit != null)
           return (
             <li key={index} className="break-words text-sm text-foreground">
               {time !== '' ? <time className="mr-2 text-muted-foreground">{time}</time> : null}
-              <span>{text}</span>
+              <span data-activity-line="">
+                {bits.map((bit, bitIndex) => (
+                  <span key={bitIndex}>
+                    {bitIndex > 0 ? ' · ' : null}
+                    {bit}
+                  </span>
+                ))}
+              </span>
             </li>
           )
         })}
@@ -68,7 +81,7 @@ export function ProgressDoneToday({ recent }: { recent: string[] | undefined }) 
       <ul aria-label="Done today" className="m-0 flex list-none flex-col gap-1 p-0">
         {recent.map((line, index) => (
           <li key={index} className="break-words text-sm text-foreground">
-            {line}
+            <AgentText value={line} />
           </li>
         ))}
       </ul>

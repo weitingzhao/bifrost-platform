@@ -87,10 +87,7 @@ export function paceLine(pool: ProgressPool): string | null {
   const allow = qty(pool.allow_per_day)
   if (allow != null) parts.push(`${allow}/day allowed`)
   const rate = qty(pool.rate_per_day)
-  if (rate != null) {
-    const basis = pool.rate_basis?.trim() ?? ''
-    parts.push(basis !== '' ? `${rate}/day lately (${basis})` : `${rate}/day lately`)
-  }
+  if (rate != null) parts.push(`${rate}/day lately`)
   const projected = qty(pool.projected)
   if (projected != null) parts.push(`about ${projected}% at reset`)
   return parts.length > 0 ? parts.join(' · ') : null
@@ -129,10 +126,8 @@ export function verdictChip(pool: ProgressPool): { text: string; tone: QuotaTone
       return { text: 'Burst limit', tone: 'neutral' }
     case 'sublimit':
       return { text: 'Sub-limit of another pool', tone: 'neutral' }
-    case 'unknown': {
-      const note = pool.note?.trim() ?? ''
-      return { text: note === '' ? 'Not readable' : `Not readable ${note}`, tone: 'neutral' }
-    }
+    case 'unknown':
+      return { text: 'Not readable', tone: 'neutral' }
     case 'reset_due':
       return { text: 'Reset due', tone: 'warning' }
     case 'exhausted':

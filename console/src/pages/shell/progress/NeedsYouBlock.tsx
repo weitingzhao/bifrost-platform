@@ -3,6 +3,7 @@ import { isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
 import { waitingLine, type OwnerNow } from '@/api/agentProgress'
 import { isApprovalId } from '@/api/agentProgressExtra'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { DocumentActions, RequestCard } from '@/pages/shell/progress/ProgressNeedsYou'
 import {
   agentText,
@@ -45,10 +46,10 @@ function Missing({ field, amber }: { field: string; amber?: boolean }) {
 function AgentBits({ lines }: { lines: string[] }) {
   if (lines.length === 0) return null
   return (
-    <span data-agent-note="" className="block min-w-0">
+    <span data-agent-note="" data-agent-text="" className="block min-w-0">
       <span className="text-muted-foreground">Agent&apos;s note: </span>
       {lines.map((line, index) => (
-        <span key={index} className="break-words">
+        <span key={index} data-agent-text="" className="break-words">
           {line}
         </span>
       ))}
@@ -154,7 +155,11 @@ function AskBody({
       <Fact label="If not done">
         {linked ? <span data-holds="no">Unknown</span> : blockedLines.length > 0 ? <AgentBits lines={blockedLines} /> : <Missing field="blocks" />}
       </Fact>
-      {!linked && agentText(ask.name) !== '' ? <span className="break-words font-medium">{agentText(ask.name)}</span> : null}
+      {!linked && agentText(ask.name) !== '' ? (
+        <span className="break-words font-medium">
+          <AgentText value={ask.name} />
+        </span>
+      ) : null}
       {badId ? <span className="text-sm text-muted-foreground">request not shown</span> : null}
       {!linked && typeof ask.since === 'number' ? <Tick className="text-sm text-muted-foreground" text={clock => waitingLine(ask.since ?? 0, clock)} /> : null}
       {!linked && agentText(ask.urgency) !== '' ? <AgentBits lines={[agentText(ask.urgency)]} /> : null}
@@ -197,7 +202,11 @@ function AskLine({
       <button type="button" aria-expanded={open} className="flex min-h-11 w-full min-w-0 flex-wrap items-center gap-2 text-left" onClick={() => setForced(!open)}>
         <i data-turn-dot={turn.tone} className={dot} />
         <span>{turn.text}</span>
-        {!open && name !== '' ? <span className="min-w-0 truncate font-medium">{name}</span> : null}
+        {!open && name !== '' ? (
+          <span className="min-w-0 truncate font-medium">
+            <AgentText value={ask.name} />
+          </span>
+        ) : null}
         {!open && item != null ? <span className="min-w-0 truncate">{requestHeadline(item)}</span> : null}
       </button>
       {linked && read === 'unreadable' ? (

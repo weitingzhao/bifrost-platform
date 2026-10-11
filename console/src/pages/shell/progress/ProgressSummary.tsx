@@ -11,6 +11,7 @@ import {
 } from '@/api/agentProgress'
 import { isApprovalId } from '@/api/agentProgressExtra'
 import type { ProgressPool } from '@/api/agentProgressExtra'
+import { AgentText } from '@/pages/shell/progress/AgentText'
 import { NeedsYouBlock } from '@/pages/shell/progress/NeedsYouBlock'
 import { useProgressApprovals } from '@/pages/shell/progress/ProgressNeedsYou'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
@@ -93,7 +94,7 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
                   : 'rounded bg-foreground/10 px-1.5 py-0.5 text-xs text-muted-foreground'
               }
             >
-              {stage.name}
+              <AgentText value={stage.name} />
             </span>
           ))}
         </span>
@@ -118,11 +119,10 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
             const pct = slicePercent(item.est?.done, item.est?.total)
             const blocked = typeof item.est?.blocked === 'string' ? agentText(item.est.blocked) : ''
             const owner = waitsOnOwner(blocked)
-            const label = agentText(item.name)
             return (
               <li key={`${item.name ?? 'item'}-${index}`} data-plan-item="" className="grid min-w-0 grid-cols-[minmax(0,1fr)_4rem_2.5rem] items-center gap-2 text-xs">
                 <span className="min-w-0 truncate">
-                  {label}
+                  <AgentText value={item.name} />
                   {owner ? (
                     <a href="#needs-you" className="ml-1 inline-flex min-h-11 min-w-11 items-center" aria-label="Waiting on you" onClick={event => event.stopPropagation()}>
                       <i data-owner-dot="" className="inline-block size-2 rounded-full bg-amber-500" />
@@ -162,10 +162,17 @@ function RunningRowView({ row }: { row: RunningRow }) {
   return (
     <li data-running-row="" data-tone={tone} className="grid min-w-0 grid-cols-[minmax(0,1.4fr)_auto_minmax(3rem,1fr)_auto] items-center gap-2 py-1 text-xs">
       <span className="min-w-0 truncate">
-        <span className="font-medium">{workShortName(row.work)}</span>
-        <span className="text-muted-foreground">{` ${row.step.name ?? ''}`}</span>
+        <span className="font-medium">
+          <AgentText value={workShortName(row.work)} />
+        </span>
+        <span className="text-muted-foreground">
+          {' '}
+          <AgentText value={row.step.name} />
+        </span>
       </span>
-      <span className="truncate text-muted-foreground">{who}</span>
+      <span className="truncate text-muted-foreground">
+        <AgentText value={who} />
+      </span>
       {pct === 'unknown' ? (
         <span data-elapsed="unknown" className="text-muted-foreground">Unknown</span>
       ) : (
@@ -304,7 +311,9 @@ function PoolTick({ pool }: { pool: ProgressPool }) {
           <span data-window-tick={elapsed} className="absolute inset-y-0 w-0.5 bg-foreground" style={{ left: `${Math.min(100, elapsed)}%` }} />
         ) : null}
       </span>
-      <span className="truncate text-[10px] text-muted-foreground">{pool.label ?? pool.id ?? ''}</span>
+      <span className="truncate text-[10px] text-muted-foreground">
+        <AgentText value={pool.label ?? pool.id} />
+      </span>
     </span>
   )
 }

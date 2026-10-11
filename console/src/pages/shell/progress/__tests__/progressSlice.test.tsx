@@ -238,7 +238,7 @@ describe('progress board parity', () => {
     items.forEach((item, index) => {
       const row = rows[index]
       expect(row).toBeTruthy()
-      const parts = (item.querySelector('span')?.textContent ?? '').split(' · ').map(part => part.trim())
+      const parts = (item.querySelector('[data-activity-line]')?.textContent ?? '').split(' · ').map(part => part.trim())
       expect(parts).not.toContain('gap')
       expect(parts).not.toContain('note')
       expect(item.textContent).toContain(row?.text)
