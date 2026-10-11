@@ -417,6 +417,91 @@ describe('a to-do opens its request', () => {
     })
     expect(approvalCalls).toBeGreaterThan(calls)
   })
+
+  it('keeps the real request line first when the agent note is huge', async () => {
+    const marks = '\u061C\u200E\u200F\u200B\u200C\u200D\u2060\uFEFF'
+    const secondId = 'appr_abcdef0123456789'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/api/v1/approvals')) {
+          return json(
+            buildApprovalListResponse([
+              buildPlatformApproval({
+                id: PENDING_ID,
+                number: 91,
+                summary: 'delete production data',
+                status: 'pending',
+              }),
+              buildPlatformApproval({
+                id: secondId,
+                number: 92,
+                summary: 'keep this visible',
+                status: 'pending',
+              }),
+            ]),
+          )
+        }
+        return json(
+          progressBody({
+            at: NOW_SEC,
+            verdict: 'Long note',
+            owner_now: [
+              {
+                name: `${marks}${'名'.repeat(5000)}`,
+                work: 'Console',
+                since: NOW_SEC - 60,
+                urgency: `${marks}${'急'.repeat(5000)}`,
+                actions: Array.from({ length: 40 }, (_, index) => ({
+                  text: index === 0 ? `${marks}${'做'.repeat(5000)}` : `act-${index}`,
+                })),
+                approval: { id: PENDING_ID, number: 6, summary: 'harmless docs' },
+              },
+              {
+                name: 'Next step',
+                work: 'Next work',
+                approval: { id: secondId, number: 1, summary: 'other docs' },
+              },
+            ],
+          }),
+        )
+      }),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const now = await screen.findByRole('region', { name: 'Needs you now' })
+    const headline = await within(now).findByText('Request #91 — delete production data')
+    const card = headline.closest('li')
+    expect(card).toBeTruthy()
+    const note = within(card as HTMLElement).getByText("Agent's note:")
+    expect(headline.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(headline.textContent).toBe('Request #91 — delete production data')
+    expect(headline.className).not.toMatch(/truncate|line-clamp/)
+    const step = within(card as HTMLElement).getByText(/^名+…$/)
+    expect(step.textContent).toHaveLength(120)
+    const urgency = within(card as HTMLElement).getByText(/^急+…$/)
+    expect(urgency.textContent).toHaveLength(200)
+    const lists = [...(card as HTMLElement).querySelectorAll('ol')]
+    expect(lists[0]?.querySelectorAll('li')).toHaveLength(6)
+    const firstAction = lists[0]?.querySelector('li')?.textContent ?? ''
+    expect(firstAction).toHaveLength(200)
+    expect(firstAction.endsWith('…')).toBe(true)
+    expect(lists[0]?.textContent).toContain('act-1')
+    expect(lists[0]?.textContent).toContain('act-5')
+    expect(lists[0]?.textContent).not.toContain('act-6')
+    const more = within(card as HTMLElement).getByText('34 more')
+    const details = more.closest('details')
+    expect(details?.open).toBe(false)
+    expect(details?.contains(lists[1] ?? null)).toBe(true)
+    expect(lists[1]?.textContent).toContain('act-6')
+    expect(lists[1]?.textContent).toContain('act-39')
+    for (const mark of marks) expect((card as HTMLElement).textContent?.includes(mark)).toBe(false)
+    const next = within(now).getByText('Request #92 — keep this visible')
+    expect(next.textContent).toBe('Request #92 — keep this visible')
+    expect(headline.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(now.textContent).not.toContain('harmless docs')
+    expect(now.textContent).not.toContain('other docs')
+  })
 })
 
 function healthResponse(url: string): Response | null {

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import type { ProgressFeedItem } from '@/api/agentProgress'
+import { stepStateLabel, type ProgressFeedItem } from '@/api/agentProgress'
 import { formatHourMinute } from '@/pages/shell/progress/progressModel'
 
 const NARROW = '(max-width: 360px)'
@@ -32,6 +32,13 @@ function Collapsible({ title, children }: { title: string; children: ReactNode }
   )
 }
 
+/** The page's own words. A note is not a state, so that word is left off. */
+function activityState(state: string | undefined): string {
+  const raw = (state ?? '').trim()
+  if (raw === '' || raw === 'note') return ''
+  return stepStateLabel(raw, false)
+}
+
 /** Newest first, at most 25. Empty feed is not drawn. */
 export function ProgressActivity({ feed }: { feed: ProgressFeedItem[] | undefined }) {
   const rows = [...(feed ?? [])]
@@ -45,7 +52,7 @@ export function ProgressActivity({ feed }: { feed: ProgressFeedItem[] | undefine
       <ul aria-label="Activity" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
         {rows.map((item, index) => {
           const time = typeof item.at === 'number' ? formatHourMinute(item.at) : ''
-          const text = [item.work, item.step, item.who, item.state, item.text]
+          const text = [item.work, item.step, item.who, activityState(item.state), item.text]
             .map(part => (part ?? '').trim())
             .filter(part => part !== '')
             .join(' · ')

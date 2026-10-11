@@ -32,10 +32,31 @@ export function partOfReference(doc: ProgressDocument | null | undefined, id: st
 }
 
 function isHiddenChar(char: string): boolean {
-  const code = char.charCodeAt(0)
+  const code = char.codePointAt(0) ?? 0
   if (code <= 31 || (code >= 127 && code <= 159)) return true
+  if (code === 0x061c || code === 0x200e || code === 0x200f || code === 0x2060 || code === 0xfeff) return true
+  if (code >= 0x200b && code <= 0x200d) return true
   if (code >= 0x202a && code <= 0x202e) return true
   return code >= 0x2066 && code <= 0x2069
+}
+
+/**
+ * Document text shown beside a request. Drops controls, bidi marks, and
+ * zero-width characters, then collapses whitespace.
+ */
+export function sanitizeDocumentText(value: string): string {
+  let clean = ''
+  for (const char of value) {
+    if (!isHiddenChar(char)) clean += char
+  }
+  return clean.replace(/\s+/g, ' ').trim()
+}
+
+/** Same cleaning, then at most `max` characters. A longer value ends with an ellipsis. */
+export function boundDocumentText(value: string, max: number): string {
+  const clean = sanitizeDocumentText(value)
+  if (clean.length <= max) return clean
+  return `${clean.slice(0, Math.max(0, max - 1))}…`
 }
 
 /**
@@ -43,11 +64,5 @@ function isHiddenChar(char: string): boolean {
  * It is not a fact about the request.
  */
 export function partOfLine(part: ProgressPart): string {
-  let clean = ''
-  for (const char of `Agent-reported: ${part.work} — ${part.step}`) {
-    if (!isHiddenChar(char)) clean += char
-  }
-  clean = clean.replace(/\s+/g, ' ').trim()
-  if (clean.length <= 120) return clean
-  return `${clean.slice(0, 119)}…`
+  return boundDocumentText(`Agent-reported: ${part.work} — ${part.step}`, 120)
 }

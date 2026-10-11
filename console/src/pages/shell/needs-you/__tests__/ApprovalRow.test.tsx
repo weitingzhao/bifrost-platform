@@ -79,8 +79,9 @@ describe('ApprovalRow', () => {
       summary: 'The next request',
       reason: 'Leave this visible.',
     })
-    const work = `${'长'.repeat(200)}\u202E\u0007`
-    const step = `步骤\u2066\n下一行`
+    const marks = '\u061C\u200E\u200F\u200B\u200C\u200D\u2060\uFEFF'
+    const work = `${'长'.repeat(200)}\u202E\u0007${marks}`
+    const step = `步骤\u2066\n下一行${marks}`
     const { container } = render(
       <ul>
         <ApprovalRow item={item} now={now} partOf={{ work, step }} />
@@ -97,6 +98,7 @@ describe('ApprovalRow', () => {
       }),
     ).toBe(false)
     expect(line.startsWith('Agent-reported:')).toBe(true)
+    for (const mark of marks) expect(line.includes(mark)).toBe(false)
     const agent = screen.getByRole('link', { name: line })
     expect(agent.getAttribute('href')).toBe('#progress')
     expect(agent.className).toContain('text-muted-foreground')

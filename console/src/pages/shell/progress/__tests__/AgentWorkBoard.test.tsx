@@ -447,6 +447,9 @@ describe('AgentWorkBoard', () => {
     expect(within(needed).getByText('Script')).toBeTruthy()
     expect(within(needed).getByText('link not shown')).toBeTruthy()
     expect(within(needed).queryByRole('link', { name: /Script/ })).toBeNull()
+    const details = within(needed).getByText('3 more').closest('details')
+    expect(details?.open).toBe(false)
+    if (details != null) details.open = true
     const def = within(needed).getByRole('link', { name: 'Default port (ops.bifrost.lan)' })
     expect(def.getAttribute('href')).toBe('https://ops.bifrost.lan/ok')
     expect(def.getAttribute('href')).not.toContain(':443')

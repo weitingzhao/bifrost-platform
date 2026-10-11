@@ -200,4 +200,44 @@ describe('progress board parity', () => {
     expect(narrow.querySelector('details')?.open).toBe(false)
     expect(screen.getByRole('region', { name: 'Done today' }).querySelector('details')?.open).toBe(false)
   })
+
+  it('words activity states and leaves a note as text only', async () => {
+    const rows: Array<{ state: string; words: string; text: string; step: string }> = [
+      { state: 'gap', words: 'waiting for the coordinator', text: '等统筹线程接手', step: 'Takeover' },
+      { state: 'note', words: '', text: 'vitest exit=0', step: 'Log' },
+      { state: 'waiting', words: 'not started', text: 'later', step: 'Hold' },
+      { state: 'running', words: 'running', text: 'going', step: 'Build' },
+      { state: 'slow', words: 'slower than usual', text: 'slowing', step: 'Pace' },
+      { state: 'quiet', words: 'may be stuck', text: 'quiet line', step: 'Watch' },
+      { state: 'dead', words: 'process gone', text: 'gone', step: 'Exit' },
+      { state: 'failed', words: 'failed', text: 'broke', step: 'Check' },
+      { state: 'done', words: 'done', text: 'finished', step: 'Ship' },
+    ]
+    stub({
+      at: NOW_SEC,
+      verdict: 'Feed',
+      feed: rows.map((row, index) => ({
+        at: NOW_SEC - index,
+        work: 'Board',
+        step: row.step,
+        who: 'Cursor',
+        state: row.state,
+        text: row.text,
+      })),
+    })
+    render(wrap(<AgentWorkBoard />))
+    const activity = await screen.findByRole('list', { name: 'Activity' })
+    const items = within(activity).getAllByRole('listitem')
+    expect(items).toHaveLength(rows.length)
+    items.forEach((item, index) => {
+      const row = rows[index]
+      expect(row).toBeTruthy()
+      const parts = (item.querySelector('span')?.textContent ?? '').split(' · ').map(part => part.trim())
+      expect(parts).not.toContain('gap')
+      expect(parts).not.toContain('note')
+      expect(item.textContent).toContain(row?.text)
+      if (row?.words === '') expect(parts).not.toContain(row.state)
+      else expect(parts).toContain(row?.words)
+    })
+  })
 })

@@ -17,6 +17,12 @@ import {
 } from '@/api/agentProgressExtra'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
+import { boundDocumentText } from '@/pages/shell/progress/progressPart'
+
+const NAME_MAX = 120
+const URGENCY_MAX = 200
+const ACTION_MAX = 200
+const ACTION_CAP = 6
 
 function ActionBody({ action }: { action: ProgressAction }) {
   const view = actionLink(action)
@@ -39,10 +45,18 @@ function ActionBody({ action }: { action: ProgressAction }) {
   return <>{view.text}</>
 }
 
-function ActionList({ actions }: { actions: readonly ProgressAction[] }) {
-  if (actions.length === 0) return null
+function shownAction(action: ProgressAction): ProgressAction {
+  const linkText = action.link_text
+  return {
+    ...action,
+    text: boundDocumentText(action.text ?? '', ACTION_MAX),
+    link_text: linkText == null ? linkText : boundDocumentText(linkText, ACTION_MAX),
+  }
+}
+
+function ActionItems({ actions, start }: { actions: readonly ProgressAction[]; start?: number }) {
   return (
-    <ol className="m-0 list-decimal pl-5 text-sm text-foreground">
+    <ol start={start} className="m-0 list-decimal pl-5 text-sm text-foreground">
       {actions.map((action, actionIndex) => (
         <li key={actionIndex} className={action.done ? 'break-words text-muted-foreground line-through' : 'break-words'}>
           {action.done ? (
@@ -59,6 +73,24 @@ function ActionList({ actions }: { actions: readonly ProgressAction[] }) {
         </li>
       ))}
     </ol>
+  )
+}
+
+function ActionList({ actions }: { actions: readonly ProgressAction[] }) {
+  if (actions.length === 0) return null
+  const clean = actions.map(shownAction)
+  const shown = clean.slice(0, ACTION_CAP)
+  const rest = clean.slice(ACTION_CAP)
+  return (
+    <>
+      <ActionItems actions={shown} />
+      {rest.length > 0 ? (
+        <details className="min-w-0">
+          <summary className="cursor-pointer text-sm text-muted-foreground">{`${rest.length} more`}</summary>
+          <ActionItems actions={rest} start={ACTION_CAP + 1} />
+        </details>
+      ) : null}
+    </>
   )
 }
 
@@ -128,9 +160,9 @@ function AgentNote({
   showTimer: boolean
   showAsk: boolean
 }) {
-  const work = entry.work?.trim() ?? ''
-  const name = entry.name?.trim() ?? ''
-  const urgency = showAsk ? (entry.urgency?.trim() ?? '') : ''
+  const work = boundDocumentText(entry.work ?? '', NAME_MAX)
+  const name = boundDocumentText(entry.name ?? '', NAME_MAX)
+  const urgency = showAsk ? boundDocumentText(entry.urgency ?? '', URGENCY_MAX) : ''
   const actions = showAsk ? (entry.actions ?? []) : []
   if (work === '' && name === '' && urgency === '' && actions.length === 0 && !showTimer) return null
   return (
@@ -154,12 +186,15 @@ function OpenNeedsYou() {
 }
 
 function PlainCard({ entry }: { entry: OwnerNow }) {
+  const work = boundDocumentText(entry.work ?? '', NAME_MAX)
+  const name = boundDocumentText(entry.name ?? '', NAME_MAX)
+  const urgency = boundDocumentText(entry.urgency ?? '', URGENCY_MAX)
   return (
     <>
-      {entry.work?.trim() ? <span className="break-words text-sm font-medium text-foreground">{entry.work}</span> : null}
-      {entry.name?.trim() ? <span className="break-words text-sm text-foreground">{entry.name}</span> : null}
+      {work !== '' ? <span className="break-words text-sm font-medium text-foreground">{work}</span> : null}
+      {name !== '' ? <span className="break-words text-sm text-foreground">{name}</span> : null}
       <Tick className="text-sm text-muted-foreground" text={now => waitingLine(entry.since ?? 0, now)} />
-      {entry.urgency?.trim() ? <span className="break-words text-sm text-muted-foreground">{entry.urgency}</span> : null}
+      {urgency !== '' ? <span className="break-words text-sm text-muted-foreground">{urgency}</span> : null}
       <ActionList actions={entry.actions ?? []} />
     </>
   )
@@ -196,7 +231,9 @@ function RequestCard({
   const asking = status === 'pending'
   return (
     <>
-      <p className="m-0 break-words text-sm font-medium text-foreground">{requestHeadline(item)}</p>
+      <p data-request-line="" className="m-0 break-words text-sm font-medium text-foreground">
+        {requestHeadline(item)}
+      </p>
       <p className="m-0 text-sm text-foreground">{stateWords(status)}</p>
       {asking ? (
         <a

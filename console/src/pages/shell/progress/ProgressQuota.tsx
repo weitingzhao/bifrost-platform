@@ -88,7 +88,7 @@ function PoolRow({ pool }: { pool: ProgressPool }) {
   const now = useNow()
   const read = poolRead(pool, now)
   const label = pool.label?.trim() ?? ''
-  const used = read === 'unknown' ? null : usedLine(pool.used)
+  const used = read === 'ok' ? usedLine(pool.used) : null
   const reset = read === 'unknown' ? null : poolResetsLine(pool.resets_at, now)
   const pace = read === 'ok' ? paceLine(pool) : null
   const chip = read === 'unknown' ? { text: 'Unknown', tone: 'neutral' as const } : read === 'ok' ? verdictChip(pool) : null
@@ -101,7 +101,7 @@ function PoolRow({ pool }: { pool: ProgressPool }) {
         {label !== '' ? <span className="font-medium">{label}</span> : null}
         {body !== '' ? <span>{label !== '' ? ` · ${body}` : body}</span> : null}
       </p>
-      {read === 'unknown' ? null : <PoolBar pool={pool} />}
+      {read === 'ok' ? <PoolBar pool={pool} /> : null}
       {pace != null ? <p className="m-0 break-words text-sm text-foreground">{pace}</p> : null}
       {chip != null ? (
         <DenseTag variant={toneVariant(chip.tone)} size="pill">
