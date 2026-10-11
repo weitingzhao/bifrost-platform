@@ -197,7 +197,7 @@ func TestHostLostPushesOnceAndReturnPushesNone(t *testing.T) {
 	if r.page.count() != 1 {
 		t.Fatalf("want one host push, got %d (%v)", r.page.count(), r.page.sent)
 	}
-	if !strings.Contains(r.page.sent[0], "Host lost") || !strings.Contains(r.page.sent[0], "mbp") {
+	if !strings.Contains(r.page.sent[0], "Look · mbp has not reported") || !strings.Contains(r.page.sent[0], "mbp") {
 		t.Fatalf("push: %s", r.page.sent[0])
 	}
 	views := DefaultConfig().Views(mustState(t, r), r.clk.at)

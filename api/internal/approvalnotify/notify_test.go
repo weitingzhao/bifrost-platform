@@ -57,39 +57,42 @@ func TestComposeSnapshots(t *testing.T) {
 		prio  int
 	}{
 		{KindCreated, ownerRun(),
-			"#57 · D · owner_run_command · host",
-			"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
+			"Decide · #57 · Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)",
+			"After approving, run one command in a terminal.\n" +
+				"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
 				"from W-37 · S0-0 plan (claude) · runs on: system · expires in 23h", 5},
 		{KindCreated, gitopsSync(),
-			"#58 · C · gitops_sync_app · prod",
-			"Sync Argo app bifrost-platform-prod to HEAD\n" +
+			"Decide · #58 · Sync Argo app bifrost-platform-prod to HEAD",
+			"Runs as soon as you approve.\n" +
+				"Sync Argo app bifrost-platform-prod to HEAD\n" +
 				"name=bifrost-platform-prod\n" +
 				"from cursor-w49 · runs on: platform · expires in 23h", 4},
 		{KindFailed, failed,
-			"#58 failed · gitops_sync_app · prod",
-			"Sync Argo app bifrost-platform-prod to HEAD\n" +
-				"error: argocd: app bifrost-platform-prod not found\n" +
+			"Check · #58 · failed · Sync Argo app bifrost-platform-prod to HEAD",
+			"error: argocd: app bifrost-platform-prod not found\n" +
+				"Nothing else was run.\n" +
+				"Sync Argo app bifrost-platform-prod to HEAD\n" +
 				"from cursor-w49 · runs on: platform", 4},
 		{KindUnknown, ownerRun(),
-			"#57 unknown · owner_run_command · host",
-			"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
-				"executor lost: lease lapsed with no result\n" +
-				"Check before running it again.\n" +
+			"Check · #57 · result unknown · Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)",
+			"The platform lost track of it: executor lost: lease lapsed with no result.\n" +
+				"Open it and say what happened.\n" +
 				"from W-37 · S0-0 plan (claude) · runs on: system", 5},
 		{KindNotExecuted, notRun,
-			"#58 not executed · gitops_sync_app · prod",
-			"Sync Argo app bifrost-platform-prod to HEAD\n" +
-				"Approved, but not executed before the deadline.\n" +
+			"Check · #58 · approved but never ran · Sync Argo app bifrost-platform-prod to HEAD",
+			"It was approved and not run before its deadline.\n" +
 				"not executed before the execution deadline; last refusal: release window held by bifrost-research\n" +
 				"from cursor-w49 · runs on: platform", 4},
 		{KindWaiting, waiting,
-			"Waiting 4h · #58 · C · gitops_sync_app · prod",
-			"Sync Argo app bifrost-platform-prod to HEAD\n" +
+			"Decide · #58 · waiting 4h · Sync Argo app bifrost-platform-prod to HEAD",
+			"Runs as soon as you approve.\n" +
+				"Sync Argo app bifrost-platform-prod to HEAD\n" +
 				"name=bifrost-platform-prod\n" +
 				"from cursor-w49 · runs on: platform · expires in 20h", 4},
 		{KindExpiring, expiring,
-			"Expires in 2h · #57 · D · owner_run_command · host",
-			"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
+			"Decide · #57 · expires in 2h · Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)",
+			"After approving, run one command in a terminal.\n" +
+				"Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)\n" +
 				"from W-37 · S0-0 plan (claude) · runs on: system", 5},
 	} {
 		m := Compose(tc.kind, tc.item, now)
@@ -109,7 +112,56 @@ func TestComposeSnapshots(t *testing.T) {
 func TestComposeWithoutNumberUsesTheID(t *testing.T) {
 	it := gitopsSync()
 	it.Number = 0
-	if m := Compose(KindCreated, it, now); !strings.HasPrefix(m.Title, "appr_fedcba9876543210 · C") {
+	if m := Compose(KindCreated, it, now); !strings.HasPrefix(m.Title, "Decide · appr_fedcba9876543210 · ") || strings.HasPrefix(m.Title, "#") {
+		t.Fatalf("title %q", m.Title)
+	}
+}
+
+func TestKindVerbStartsTheTitleAndAnUnmappedKindIsNothing(t *testing.T) {
+	if len(kindVerb) == 0 {
+		t.Fatal("kind table is empty")
+	}
+	for kind, verb := range kindVerb {
+		m := Compose(kind, gitopsSync(), now)
+		if !strings.HasPrefix(m.Title, verb+" · ") || strings.HasPrefix(m.Title, "#") {
+			t.Errorf("%s title %q, verb %s", kind, m.Title, verb)
+		}
+		if m.Title == "" || m.Message == "" {
+			t.Errorf("%s produced no message", kind)
+		}
+	}
+	if m := Compose("settled", gitopsSync(), now); m != (Message{}) {
+		t.Fatalf("unmapped kind produced %+v", m)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("unmapped kind was posted")
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("APPROVAL_NOTIFY_URL", srv.URL)
+	t.Setenv("APPROVAL_NOTIFY_TOKEN", "tok")
+	if ds := Send(context.Background(), "settled", gitopsSync(), now); ds != nil {
+		t.Fatalf("deliveries %+v", ds)
+	}
+}
+
+func TestLeadIsTheReasonThenTheSummaryThenActionAndEnv(t *testing.T) {
+	it := gitopsSync()
+	it.Reason = "Publish token=SYNTHETIC_SECRET now.\nThe flags are stale."
+	m := Compose(KindCreated, it, now)
+	if !strings.HasPrefix(m.Title, "Decide · #58 · Publish token=[redacted] now.") || strings.Contains(m.Title, "flags") || strings.Contains(m.Title+m.Message, "SYNTHETIC_SECRET") {
+		t.Fatalf("title %q body %q", m.Title, m.Message)
+	}
+	long := strings.Repeat("a", 120)
+	it.Reason = long
+	m = Compose(KindCreated, it, now)
+	lead := strings.TrimPrefix(m.Title, "Decide · #58 · ")
+	if len([]rune(lead)) != 100 || !strings.HasSuffix(lead, "…") || strings.Contains(m.Title, strings.Repeat("a", 100)) {
+		t.Fatalf("lead %q (%d runes)", lead, len([]rune(lead)))
+	}
+	it.Reason = ""
+	it.Summary = ""
+	m = Compose(KindCreated, it, now)
+	if m.Title != "Decide · #58 · gitops_sync_app · prod" {
 		t.Fatalf("title %q", m.Title)
 	}
 }
@@ -149,7 +201,7 @@ func TestSendPostsAndKeepsTheRelayTargets(t *testing.T) {
 	if gotAuth != "Bearer "+token {
 		t.Fatalf("auth %q", gotAuth)
 	}
-	if body.Title != "#57 · D · owner_run_command · host" || body.Priority != 5 || body.ClickURL != ConsoleClickPrefix+"appr_0123456789abcdef" {
+	if body.Title != "Decide · #57 · Delete retired ConfigMap bifrost-remediation-runner-stg-dockerfile (TD-290)" || body.Priority != 5 || body.ClickURL != ConsoleClickPrefix+"appr_0123456789abcdef" {
 		t.Fatalf("body %+v", body)
 	}
 	if strings.Contains(gotBody, token) || strings.Contains(gotBody, "kubectl") {

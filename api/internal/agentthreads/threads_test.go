@@ -178,7 +178,7 @@ func TestSilentMidTurnPushesOnceWithinTwelveMinutes(t *testing.T) {
 		t.Fatalf("pushed again for the same silence: %v", r.page.sent)
 	}
 	msg := r.page.sent[0]
-	for _, want := range []string{"Agent thread silent 10m", "claude on mbp", "W-54", "last event before_tool Bash (timeout 120s) at 04:04 UTC", "in turn 11m"} {
+	for _, want := range []string{"Look · claude 7e939cd5 stopped 10m ago", "Nothing is working on it. Open the thread.", "claude on mbp", "W-54", "last event before_tool Bash (timeout 120s) at 04:04 UTC", "in turn 11m"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("push %q lacks %q", msg, want)
 		}
@@ -338,7 +338,7 @@ func TestLineageTitleNamesThePush(t *testing.T) {
 	r.beat(t, AfterTool, "Read", 0)
 	r.at(11 * time.Minute)
 	r.tick(t)
-	if r.page.count() != 1 || !strings.Contains(r.page.sent[0], ": W-31 decisions |") {
+	if r.page.count() != 1 || !strings.Contains(r.page.sent[0], "Look · W-31 decisions stopped") {
 		t.Fatalf("push %v does not carry the lineage title", r.page.sent)
 	}
 }

@@ -82,7 +82,7 @@ func TestFailedRunPushesAndRecordsTheDelivery(t *testing.T) {
 	}
 	ds := deliveriesOf(t, svc, c.Approval.ID)
 	got := f.got()
-	if len(got) != 1 || got[0].Title != "#1 failed · sweep_failed_backups · data" || !strings.Contains(got[0].Message, "error: invalid params") {
+	if len(got) != 1 || got[0].Title != "Check · #1 · failed · sweep" || !strings.Contains(got[0].Message, "error: invalid params") || !strings.Contains(got[0].Message, "Nothing else was run.") {
 		t.Fatalf("pushes = %+v", got)
 	}
 	if len(ds) != 1 || ds[0].Kind != "failed" || ds[0].Result != "accepted" || ds[0].Target != "ntfy:0a1b2c3d4e5f" || ds[0].At.IsZero() {
@@ -145,7 +145,7 @@ func TestNotExecutedBeforeTheDeadlinePushes(t *testing.T) {
 	ds := deliveriesOf(t, svc, c.Approval.ID)
 	pushes := f.got()
 	if len(ds) != 1 || ds[0].Kind != "not_executed" || len(pushes) != 1 ||
-		!strings.HasPrefix(pushes[0].Title, "#1 not executed · trigger_cnpg_backup") || !strings.Contains(pushes[0].Message, "no release window") {
+		!strings.HasPrefix(pushes[0].Title, "Check · #1 · approved but never ran") || !strings.Contains(pushes[0].Message, "no release window") || !strings.Contains(pushes[0].Message, "It was approved and not run before its deadline.") {
 		t.Fatalf("deliveries %+v pushes %+v", ds, pushes)
 	}
 }
@@ -194,8 +194,9 @@ func TestRemindersOnceEach(t *testing.T) {
 		}
 	}
 	got := f.got()
-	if got[0].Title != "Waiting 4h · #1 · C · cordon_node · node" || !strings.Contains(got[0].Message, "expires in 20h") ||
-		got[1].Title != "Expires in 2h · #1 · C · cordon_node · node" {
+	if got[0].Title != "Decide · #1 · waiting 4h · patch" || !strings.Contains(got[0].Message, "expires in 20h") ||
+		!strings.Contains(got[0].Message, "Runs as soon as you approve.") ||
+		got[1].Title != "Decide · #1 · expires in 2h · patch" {
 		t.Fatalf("reminders = %+v", got)
 	}
 	ds := deliveriesOf(t, svc, c.Approval.ID)

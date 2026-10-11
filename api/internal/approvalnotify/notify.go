@@ -9,9 +9,11 @@
 // reports (or one failed/skipped entry when the relay was not reached); the
 // approvals service stores them on the record (deliveries[]).
 //
-// What a push carries (execution card 6, v4 §19): #n, tier, action, env, the
-// one-line summary, key params, requester and expiry. Never the command text
-// of owner_run_command, params beyond the key params, tokens or output.
+// What a push carries (execution card 6, v4 §19): a verb that says what the
+// Owner has to do, then the reference, then a short lead, plus the one-line
+// summary, key params, requester and expiry. Never the command text of
+// owner_run_command, params beyond the key params, tokens or output.
+// A kind with no verb in kindVerb is not a message and is not sent.
 //
 // Environment (either unset → a "skipped" delivery, no HTTP):
 //
@@ -94,6 +96,8 @@ type Item struct {
 	Runner    string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+	// Reason is the approval reason. The lead is its first paragraph.
+	Reason string
 	// Error is the one-line, redacted reason for failed / not executed.
 	Error string
 }
@@ -122,10 +126,16 @@ func Configured() bool {
 		strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN")) != ""
 }
 
-// Send composes the notice of this kind and posts it. It never returns an
-// empty list: a relay that was not configured or not reached is a delivery too.
+// Send composes the notice of this kind and posts it. A kind with no verb is
+// not a message: Send returns nothing and does not call the relay, and the
+// caller skips it. Otherwise it never returns an empty list: a relay that was
+// not configured or not reached is a delivery too.
 func Send(ctx context.Context, kind string, it Item, now time.Time) []Delivery {
-	ds, _ := send(ctx, Compose(kind, it, now))
+	msg := Compose(kind, it, now)
+	if msg.Title == "" {
+		return nil
+	}
+	ds, _ := send(ctx, msg)
 	for i := range ds {
 		ds[i].Kind = kind
 		ds[i].At = now
@@ -146,11 +156,28 @@ func Notify(ctx context.Context, msg Message) error {
 	return err
 }
 
+// kindVerb is what the push asks of the Owner. A kind that is not in this
+// table asks nothing, Compose returns no message, and Send does not post it.
+var kindVerb = map[string]string{
+	KindCreated:     "Decide",
+	KindWaiting:     "Decide",
+	KindExpiring:    "Decide",
+	KindUnknown:     "Check",
+	KindFailed:      "Check",
+	KindNotExecuted: "Check",
+}
+
 // Compose is the push text for one notice. English (UI string rule), one
-// phone screen.
+// phone screen. The title starts with the verb, then the reference, then
+// plain words. A kind with no verb returns a zero Message.
 func Compose(kind string, it Item, now time.Time) Message {
+	verb, ok := kindVerb[kind]
+	if !ok {
+		return Message{}
+	}
 	it.Env = Redact(it.Env)
 	it.Summary = Redact(it.Summary)
+	it.Reason = Redact(it.Reason)
 	it.Error = Redact(it.Error)
 	it.Requester = Redact(it.Requester)
 	it.Thread = Redact(it.Thread)
@@ -160,41 +187,66 @@ func Compose(kind string, it Item, now time.Time) Message {
 	if it.Number == 0 {
 		ref = it.ID
 	}
-	head := joinNonEmpty(" · ", ref, it.Tier, it.Action, it.Env)
-	short := joinNonEmpty(" · ", it.Action, it.Env)
+	lead := noticeLead(it)
 	summary := clip(oneLine(it.Summary), 140)
 	params := keyParamsLine(it.KeyParams)
 	from := fromLine(it)
+	ask := tierAsk(it.Tier)
 	m := Message{ClickURL: ConsoleClickPrefix + url.QueryEscape(it.ID), Priority: 4}
 	if it.Tier == "D" {
 		m.Priority = 5
 	}
 	switch kind {
 	case KindFailed:
-		m.Title = ref + " failed · " + short
-		m.Message = lines(summary, "error: "+orDefault(clip(oneLine(it.Error), 160), "unknown"), from)
+		m.Title = joinNonEmpty(" · ", verb, ref, "failed", lead)
+		m.Message = lines("error: "+orDefault(clip(oneLine(it.Error), 160), "unknown"), "Nothing else was run.", summary, from)
 	case KindUnknown:
-		m.Title = ref + " unknown · " + short
+		m.Title = joinNonEmpty(" · ", verb, ref, "result unknown", lead)
 		reason := clip(oneLine(it.Error), 160)
 		if reason == "" {
 			reason = "executor lost: lease lapsed with no result"
 		}
-		m.Message = lines(summary, reason, "Check before running it again.", from)
+		m.Message = lines("The platform lost track of it: "+reason+".", "Open it and say what happened.", from)
 		m.Priority = 5
 	case KindNotExecuted:
-		m.Title = ref + " not executed · " + short
-		m.Message = lines(summary, "Approved, but not executed before the deadline.", clip(oneLine(it.Error), 160), from)
+		m.Title = joinNonEmpty(" · ", verb, ref, "approved but never ran", lead)
+		m.Message = lines("It was approved and not run before its deadline.", clip(oneLine(it.Error), 160), from)
 	case KindWaiting:
-		m.Title = "Waiting " + age(now.Sub(it.CreatedAt)) + " · " + head
-		m.Message = lines(summary, params, from+" · "+expiry(it.ExpiresAt, now))
+		m.Title = joinNonEmpty(" · ", verb, ref, "waiting "+age(now.Sub(it.CreatedAt)), lead)
+		m.Message = lines(ask, summary, params, from+" · "+expiry(it.ExpiresAt, now))
 	case KindExpiring:
-		m.Title = "Expires in " + age(it.ExpiresAt.Sub(now)) + " · " + head
-		m.Message = lines(summary, params, from)
+		m.Title = joinNonEmpty(" · ", verb, ref, "expires in "+age(it.ExpiresAt.Sub(now)), lead)
+		m.Message = lines(ask, summary, params, from)
 	default:
-		m.Title = head
-		m.Message = lines(summary, params, from+" · "+expiry(it.ExpiresAt, now))
+		m.Title = joinNonEmpty(" · ", verb, ref, lead)
+		m.Message = lines(ask, summary, params, from+" · "+expiry(it.ExpiresAt, now))
 	}
 	return m
+}
+
+// noticeLead is the first paragraph of the reason, else the summary, else
+// action · env. It is already redacted. Clipped to 100 characters.
+func noticeLead(it Item) string {
+	lead := clipChars(oneLine(it.Reason), 100)
+	if lead == "" {
+		lead = clipChars(oneLine(it.Summary), 100)
+	}
+	if lead == "" {
+		lead = joinNonEmpty(" · ", it.Action, it.Env)
+	}
+	return lead
+}
+
+// tierAsk is the first body line of a decision the Owner has not made yet.
+func tierAsk(tier string) string {
+	switch tier {
+	case "C":
+		return "Runs as soon as you approve."
+	case "D":
+		return "After approving, run one command in a terminal."
+	default:
+		return ""
+	}
 }
 
 func fromLine(it Item) string {
@@ -376,6 +428,18 @@ func clip(s string, n int) string {
 		cut--
 	}
 	return s[:cut] + "…"
+}
+
+// clipChars keeps at most n characters (runes), with an ellipsis when it cuts.
+func clipChars(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n < 1 {
+		return ""
+	}
+	return string(r[:n-1]) + "…"
 }
 
 func orDefault(s, def string) string {

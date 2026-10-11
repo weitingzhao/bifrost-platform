@@ -498,10 +498,10 @@ func (t Thread) Name() string {
 	return t.Vendor + " " + id
 }
 
-// Message is the push for a silent thread.
+// Message is the push for a silent thread. The title asks the Owner to look.
 func (c Config) Message(t Thread, now time.Time) (title, body string) {
 	quiet := now.Sub(t.At)
-	title = fmt.Sprintf("Agent thread silent %s: %s", human(quiet), t.Name())
+	title = fmt.Sprintf("Look · %s stopped %s ago", t.Name(), human(quiet))
 	last := string(t.Event)
 	if t.Tool != "" {
 		last += " " + t.Tool
@@ -518,14 +518,15 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 		"last event "+last+" at "+t.At.UTC().Format("15:04")+" UTC",
 		"in turn "+human(now.Sub(t.TurnStartedAt)),
 	)
-	body = strings.Join(parts, " · ") + ". Nothing was restarted."
+	body = "Nothing is working on it. Open the thread.\n" + strings.Join(parts, " · ") + ". Nothing was restarted."
 	return title, body
 }
 
 // HostMessage is the one push for a host that stopped heartbeating.
+// The body lines are unchanged; the title asks the Owner to look.
 func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body string) {
 	age := now.Sub(h.At)
-	title = fmt.Sprintf("Host lost %s: %s", human(age), h.Host)
+	title = fmt.Sprintf("Look · %s has not reported for %s", h.Host, human(age))
 	names := make([]string, 0, len(mid))
 	for _, t := range mid {
 		names = append(names, t.Name())

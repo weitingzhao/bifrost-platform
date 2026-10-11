@@ -35,6 +35,7 @@ func noticeItem(a Approval) approvalnotify.Item {
 		Runner:    a.Runner,
 		CreatedAt: a.CreatedAt,
 		ExpiresAt: a.ExpiresAt,
+		Reason:    a.Reason,
 		Error:     Redact(oneLine(a.Error)),
 	}
 }
@@ -43,6 +44,9 @@ func noticeItem(a Approval) approvalnotify.Item {
 // ones included, with one approval.notify audit line each.
 func (s *Service) deliver(ctx context.Context, kind string, rec Approval) {
 	ds := noticeDeliveries(approvalnotify.Send(ctx, kind, noticeItem(rec), s.clock()))
+	if len(ds) == 0 {
+		return
+	}
 	s.record(nil, noticeAudit(rec.ID, ds))
 	if err := s.RecordDeliveries(rec.ID, ds); err != nil {
 		s.record(nil, []event{{"approval.notify", rec.ID, approvalnotify.ResultFailed, "store deliveries: " + err.Error()}})
