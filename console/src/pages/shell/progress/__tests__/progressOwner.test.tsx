@@ -226,7 +226,7 @@ describe('one Needs you block', () => {
     stub({
       at: NOW_SEC,
       verdict: 'Red',
-      owner_items: [{ name: 'Sign', now: true }],
+      owner_items: [{ name: 'Wait', work: 'Open', now: true }],
       works: [{ title: 'Open', steps: [{ name: 'Wait', state: 'waiting', who: 'you', needs_owner: true }] }],
     })
     const red = render(wrap(<AgentWorkBoard />))

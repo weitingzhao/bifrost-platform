@@ -603,38 +603,74 @@ export function troubleTone(works: readonly ProgressWork[] | undefined, nowMs: n
   return 'green'
 }
 
-const BUSY_STEP = new Set(['running', 'slow', 'gap', 'quiet', 'dead', 'failed'])
+const KNOWN_STEP = new Set(['waiting', 'running', 'slow', 'quiet', 'dead', 'failed', 'gap', 'done'])
 
-function waitingBelongsToAgent(step: ProgressStep): boolean {
-  if (step.state !== 'waiting') return false
-  if (step.needs_owner === true) return false
+function ownerStep(step: ProgressStep): boolean {
+  if (step.needs_owner === true) return true
   const who = step.who?.trim() ?? ''
-  if (who === '' || /^you\b/i.test(who) || /^owner\b/i.test(who) || who.startsWith('你')) return false
-  return true
+  if (who.startsWith('你')) return true
+  if (/^you\b/i.test(who)) return true
+  if (/^owner\b/i.test(who)) return true
+  return false
+}
+
+function firstUndone(work: ProgressWork): ProgressStep | undefined {
+  return (work.steps ?? []).find(step => step.state !== 'done')
+}
+
+/** The same identity as a Needs you row: approval id, else cleaned work and step name. */
+function stepIdentity(work: ProgressWork, step: ProgressStep): string | null {
+  const workName = (work.short ?? '').trim() !== '' ? work.short : work.title
+  return askIdentity({ approval: step.approval, work: workName, name: step.name })
+}
+
+function ownerWaitIsProven(
+  open: readonly ProgressWork[],
+  asks: readonly AskSource[],
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): boolean {
+  if (open.length === 0) return false
+  const heads: Array<{ work: ProgressWork; step: ProgressStep }> = []
+  for (const work of open) {
+    const step = firstUndone(work)
+    if (step == null || !ownerStep(step)) return false
+    heads.push({ work, step })
+  }
+  return heads.every(({ work, step }) => {
+    const id = stepIdentity(work, step)
+    if (id == null) return false
+    return asks.some(ask => askIdentity(ask) === id && askAct(ask, items, read, nowMs) === 'now')
+  })
 }
 
 export type IdleTone = 'unknown' | 'green' | 'red' | 'amber' | 'running'
 
 /**
- * Why nothing is in Running now. A missing works list is Unknown.
- * While a step is running, slow, gap, quiet, dead, or failed, the line stays off.
+ * Why the queue is idle. Unknown state is checked before running.
+ * Running means `running` or `slow` only. Red only when every open work is on the Owner and that row can be done now.
  */
-export function idleQueue(works: unknown, canDoNow: boolean): { tone: IdleTone; line: string | null } {
+export function idleQueue(
+  works: unknown,
+  asks: readonly AskSource[],
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): { tone: IdleTone; line: string | null } {
   if (!Array.isArray(works)) return { tone: 'unknown', line: 'Unknown' }
   const list = works as ProgressWork[]
-  const steps = list.flatMap(work => work.steps ?? [])
-  if (steps.some(step => BUSY_STEP.has(step.state ?? ''))) return { tone: 'running', line: null }
   const open = list.filter(work => work.finished !== true)
+  const unrecognised = open.some(work => (work.steps ?? []).some(step => !KNOWN_STEP.has(step.state ?? '')))
+  if (unrecognised) return { tone: 'unknown', line: "Unknown — a step's state is not recognised" }
+  const moving = list.some(work => (work.steps ?? []).some(step => step.state === 'running' || step.state === 'slow'))
+  if (moving) return { tone: 'running', line: null }
   if (open.length === 0) return { tone: 'green', line: 'All done — the queue is empty' }
-  const firstWaitingIsAgent = open.some(work => {
-    const waiting = (work.steps ?? []).find(step => step.state === 'waiting')
-    return waiting != null && waitingBelongsToAgent(waiting)
-  })
-  if (!firstWaitingIsAgent && canDoNow) return { tone: 'red', line: 'Stopped — waiting on you' }
+  if (ownerWaitIsProven(open, asks, items, read, nowMs)) return { tone: 'red', line: 'Stopped — waiting on you' }
   return { tone: 'amber', line: 'Stopped — waiting on the coordinator — nothing for you' }
 }
 
-/** `for N min` since the latest step `ended`. Unknown when none has ended. */
+/** `for N min` since the latest step `ended`. A future end beyond the skew is Unknown. */
 export function idleForText(works: readonly ProgressWork[] | undefined, nowMs: number): string {
   let latest = 0
   for (const work of works ?? []) {
@@ -644,7 +680,9 @@ export function idleForText(works: readonly ProgressWork[] | undefined, nowMs: n
     }
   }
   if (!(latest > 0) || !Number.isFinite(nowMs)) return 'Unknown'
-  const minutes = Math.max(0, Math.floor(nowMs / 1000 - latest) / 60)
+  const delta = nowMs / 1000 - latest
+  if (delta < -START_SKEW_SEC) return 'Unknown'
+  const minutes = Math.max(0, Math.floor(delta) / 60)
   return `for ${Math.floor(minutes)} min`
 }
 

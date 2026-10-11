@@ -19,7 +19,6 @@ import { useOpenSection } from '@/pages/shell/progress/progressFold'
 import { planCounts, runningRows, workShortName, type RunningRow } from '@/pages/shell/progress/progressModel'
 import {
   agentText,
-  askAct,
   asksFromDocument,
   doingDetails,
   elapsedPercent,
@@ -186,10 +185,6 @@ function RunningRowView({ row }: { row: RunningRow }) {
   )
 }
 
-function canDoNow(asks: readonly AskSource[], items: readonly ApprovalItem[] | undefined, read: ApprovalRead, nowMs: number): boolean {
-  return asks.some(ask => !ask.unreadable && askAct(ask, items, read, nowMs) === 'now')
-}
-
 const PILL: Record<string, string> = {
   green: 'bg-emerald-500 text-[var(--card-fill)]',
   red: 'bg-destructive text-white',
@@ -212,7 +207,7 @@ function RunPill({
   count: number
 }) {
   const now = useNow()
-  const tone = idleQueue(works, canDoNow(asks, items, read, now)).tone
+  const tone = idleQueue(works, asks, items, read, now).tone
   return (
     <span data-run-state={tone} className={`rounded-full px-2 text-xs ${PILL[tone] ?? PILL.running}`}>
       {count}
@@ -234,7 +229,7 @@ function IdleLine({
   const now = useNow()
   const renders = useRef(0)
   renders.current += 1
-  const state = idleQueue(works, canDoNow(asks, items, read, now))
+  const state = idleQueue(works, asks, items, read, now)
   if (state.line == null) return null
   const waited = state.tone === 'amber' ? idleForText(works, now) : null
   return (
@@ -281,15 +276,14 @@ function RunningPicture({
         Running now
         <RunPill works={doc.works} asks={asks} items={items} read={read} count={rows.length} />
       </span>
-      {rows.length === 0 ? (
-        <IdleLine works={doc.works} asks={asks} items={items} read={read} />
-      ) : (
+      {rows.length > 0 ? (
         <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
           {rows.map(row => (
             <RunningRowView key={`${row.workIndex}-${row.stepIndex}`} row={row} />
           ))}
         </ul>
-      )}
+      ) : null}
+      <IdleLine works={doc.works} asks={asks} items={items} read={read} />
     </button>
   )
 }
@@ -367,7 +361,7 @@ function TroubleGauge({
   renders.current += 1
   const openSection = useOpenSection()
   const trouble = troubleTone(works, now)
-  const idle = idleQueue(works, canDoNow(asks, items, read, now))
+  const idle = idleQueue(works, asks, items, read, now)
   const doneSteps = finishedStepCount(works)
   const whose =
     idle.tone === 'amber'
