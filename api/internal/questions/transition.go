@@ -234,7 +234,7 @@ func (s *Service) Get(ctx context.Context, session, principal, role, ref string)
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
 	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "get", ref: ref}
-	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
+	return s.view(ctx, c, func(doc *document, now time.Time) applied {
 		i, ok := doc.find(strings.TrimSpace(ref))
 		if !ok {
 			return applied{res: fail(http.StatusNotFound, "not found", nil)}
@@ -260,7 +260,7 @@ func (s *Service) List(ctx context.Context, session, principal, role, status str
 		return fail(http.StatusBadRequest, "status is invalid", nil)
 	}
 	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "list"}
-	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
+	return s.view(ctx, c, func(doc *document, now time.Time) applied {
 		var rows []Question
 		for _, q := range doc.Questions {
 			if !listed(q, status, session, mine, now) {

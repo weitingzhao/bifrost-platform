@@ -259,5 +259,61 @@
       "name": "word edge",
       "sha256": "8de1d24275f030f27f75568ec11179171e5179da175418ca413734fb9b06816e"
     }
+  ],
+  "redact": [
+    {
+      "name": "adjacent aws space",
+      "input": "AKIAAAAAAAAAAAAAAAAA ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key] [redacted aws key]",
+      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+    },
+    {
+      "name": "adjacent aws newline",
+      "input": "AKIAAAAAAAAAAAAAAAAA\nASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key]\n[redacted aws key]",
+      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+    },
+    {
+      "name": "adjacent aws comma",
+      "input": "AKIAAAAAAAAAAAAAAAAA,ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key],[redacted aws key]",
+      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+    },
+    {
+      "name": "adjacent aws punctuation",
+      "input": "AKIAAAAAAAAAAAAAAAAA!!!ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key]!!![redacted aws key]",
+      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+    },
+    {
+      "name": "aws key at start",
+      "input": "AKIAAAAAAAAAAAAAAAAA is first",
+      "output": "[redacted aws key] is first",
+      "secrets": ["AKIAAAAAAAAAAAAAAAAA"]
+    },
+    {
+      "name": "aws key at end",
+      "input": "ends with ASIABBBBBBBBBBBBBBBB",
+      "output": "ends with [redacted aws key]",
+      "secrets": ["ASIABBBBBBBBBBBBBBBB"]
+    },
+    {
+      "name": "two token assignments",
+      "input": "token=s3cr3tvalue token=othersecret",
+      "output": "token=[redacted] token=[redacted]",
+      "secrets": ["s3cr3tvalue", "othersecret"]
+    },
+    {
+      "name": "two bearers",
+      "input": "bearer abcdefgh bearer ijklmnop",
+      "output": "bearer [redacted] bearer [redacted]",
+      "secrets": ["abcdefgh", "ijklmnop"]
+    },
+    {
+      "name": "mixed case",
+      "input": "BeArEr AbCdEfGh ToKeN=s3cr3tvalue",
+      "output": "BeArEr [redacted] ToKeN=[redacted]",
+      "secrets": ["AbCdEfGh", "s3cr3tvalue"]
+    }
   ]
 }

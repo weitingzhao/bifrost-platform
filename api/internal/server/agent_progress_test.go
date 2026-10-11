@@ -39,11 +39,7 @@ func progressConfig(t *testing.T) (*config.Config, string) {
 func progressServer(t *testing.T) *Server {
 	t.Helper()
 	cfg, _ := progressConfig(t)
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
-	return srv
+	return newTestServer(t, cfg)
 }
 
 func progressDo(srv *Server, method, token, body string) *httptest.ResponseRecorder {
@@ -156,10 +152,7 @@ func TestAgentProgressSurvivesRestartAndStale(t *testing.T) {
 	if err := rec.Flush(); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	srv := newTestServer(t, cfg)
 	got := progressDo(srv, http.MethodGet, "fixture-viewer-w62", "")
 	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"kept"`) || !strings.Contains(got.Body.String(), "仍在") {
 		t.Fatalf("restart: %d %s", got.Code, got.Body.String())
@@ -173,10 +166,7 @@ func TestAgentProgressSurvivesRestartAndStale(t *testing.T) {
 	if err := os.WriteFile(path, raw, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv2, err := New(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	srv2 := newTestServer(t, cfg)
 	stale := progressDo(srv2, http.MethodGet, "fixture-viewer-w62", "")
 	if stale.Code != http.StatusOK || !strings.Contains(stale.Body.String(), `"stale":true`) || !strings.Contains(stale.Body.String(), `"held"`) {
 		t.Fatalf("stale after restart: %d %s", stale.Code, stale.Body.String())

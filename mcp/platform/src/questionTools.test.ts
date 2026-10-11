@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import { APPROVE_TOOL_NAMES } from './registerApprove.js'
-import { canonicalizeObject, CanonicalError, defaultKey } from './questionCanonical.js'
+import { canonicalizeObject, CanonicalError, defaultKey, redact } from './questionCanonical.js'
 import {
   ACK_ANSWER_NOTE,
   ASK_OWNER_DESCRIPTION,
@@ -29,6 +29,12 @@ const vectors = JSON.parse(
     sha256?: string
     idempotency_key?: string
     error_field?: string
+  }>
+  redact: Array<{
+    name: string
+    input: string
+    output: string
+    secrets: string[]
   }>
 }
 
@@ -79,6 +85,17 @@ describe('canonical vectors', () => {
     assert.match(inside!.canonical!, /token=\[redacted\]/)
     assert.equal(inside!.canonical!.includes('s3cr3t'), false)
     assert.match(edge!.canonical!, /mybearer abcdefgh/)
+  })
+
+  it('redacts adjacent secrets without consuming the separator', () => {
+    assert.ok(vectors.redact?.length >= 9)
+    for (const v of vectors.redact) {
+      const got = redact(v.input)
+      assert.equal(got, v.output, v.name)
+      for (const secret of v.secrets) {
+        assert.equal(got.includes(secret), false, `${v.name} kept ${secret}`)
+      }
+    }
   })
 })
 

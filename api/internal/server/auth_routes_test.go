@@ -42,10 +42,7 @@ func isMutating(method string) bool {
 // Every route that changes state must carry auth.Require. A spot check once
 // let /cluster/sync-kubeconfig ship anonymous; this walk catches the next one.
 func TestEveryMutatingRouteRequiresARole(t *testing.T) {
-	srv, err := New(newTestConfig(t))
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, newTestConfig(t))
 	routes, ok := srv.Router().(chi.Routes)
 	if !ok {
 		t.Fatal("Router() is not a chi.Routes")
@@ -53,7 +50,7 @@ func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 
 	var walked, gated int
 	seenTicket := map[string]bool{}
-	err = chi.Walk(routes, func(method, route string, _ http.Handler, mws ...func(http.Handler) http.Handler) error {
+	err := chi.Walk(routes, func(method, route string, _ http.Handler, mws ...func(http.Handler) http.Handler) error {
 		key := method + " " + strings.TrimSuffix(route, "/")
 		if route == "/" {
 			key = method + " /"
@@ -92,10 +89,7 @@ func TestEveryMutatingRouteRequiresARole(t *testing.T) {
 }
 
 func TestHealthReportsAuthNotLoaded(t *testing.T) {
-	srv, err := New(newTestConfig(t))
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, newTestConfig(t))
 	rec := httptest.NewRecorder()
 	srv.Router().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	if !strings.Contains(rec.Body.String(), `"auth_loaded":false`) {

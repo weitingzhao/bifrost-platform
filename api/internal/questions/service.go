@@ -95,13 +95,52 @@ func (s *Service) RunSweep(ctx context.Context, every time.Duration) {
 	}
 }
 
-// Sweep expires due questions once.
+// Sweep expires due questions once. A store with nothing due is left untouched,
+// including a missing file: creating it would race with a test deleting the
+// data directory.
 func (s *Service) Sweep() {
+	if !s.due() {
+		return
+	}
 	s.apply(context.Background(), caller{
 		session: "-", principal: "platform", role: string(actuation.RoleAdmin), op: "sweep",
 	}, func(doc *document, now time.Time) applied {
 		return applied{res: Result{Code: http.StatusOK, Body: map[string]any{"ok": true}}}
 	})
+}
+
+// view is a read. It writes only when a question has expired, and then through
+// the same update that a sweep uses. Listing an empty store does not create
+// the questions file or its lock.
+func (s *Service) view(ctx context.Context, c caller, fn func(*document, time.Time) applied) Result {
+	doc, err := s.load()
+	if err != nil {
+		return Result{Code: http.StatusInternalServerError, Body: map[string]any{"error": "store questions: " + err.Error()}}
+	}
+	now := s.clock()
+	doc.asOf = now
+	if len(sweep(doc, now)) > 0 {
+		return s.apply(ctx, c, fn)
+	}
+	return fn(doc, now).res
+}
+
+func (s *Service) due() bool {
+	doc, err := s.load()
+	if err != nil || doc == nil {
+		return false
+	}
+	now := s.clock()
+	doc.asOf = now
+	return len(sweep(doc, now)) > 0
+}
+
+func (s *Service) load() (*document, error) {
+	raw, err := s.store.readBytes()
+	if err != nil {
+		return nil, err
+	}
+	return parse(raw)
 }
 
 func (s *Service) apply(ctx context.Context, c caller, fn func(*document, time.Time) applied) Result {

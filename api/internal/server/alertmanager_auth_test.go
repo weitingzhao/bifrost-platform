@@ -28,10 +28,7 @@ func TestAlertmanagerWebhookIsReporterOrAbove(t *testing.T) {
 	if err := os.WriteFile(cfg.PlatformAuthPath, []byte(alertmanagerAuthYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	body := `{"receiver":"bifrost-ops-agent","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"Watchdog"}}]}`
 	post := func(token string) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/ops-agent/alertmanager", strings.NewReader(body))

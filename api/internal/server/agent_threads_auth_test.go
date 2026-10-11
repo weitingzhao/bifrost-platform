@@ -29,10 +29,7 @@ func TestAgentThreadsRoutesAuth(t *testing.T) {
 	if err := os.WriteFile(cfg.PlatformAuthPath, []byte(agentThreadsAuthYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(cfg)
-	if err != nil {
-		t.Fatalf("server.New: %v", err)
-	}
+	srv := newTestServer(t, cfg)
 	do := func(method, path, token, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		if token != "" {
