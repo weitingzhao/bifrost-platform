@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
@@ -96,13 +95,13 @@ const freezeRefusedNoAnchor = `freeze refused: platform-api has no trust anchor,
 // before the remembered newest freeze changes: until a signature could lift
 // it, the switch is not offered.
 //
-// Each freeze gets a freeze_id strictly greater than any id this platform has
-// seen or that is already on the object. The id is chosen from that read and
-// published in the same write, conditional on the object's resourceVersion.
-// A conflict allocates again and does not keep the id it lost, so two freezes
-// cannot share one. A freeze that overwrote an unfreeze would only tighten;
-// publishing one id onto two freezes would not, which is why the write is
-// conditional anyway.
+// Each freeze gets a new 128-bit id from crypto/rand. The id is not a counter,
+// not a clock, and not derived from the freeze this process remembers, so two
+// freezes cannot share one after a reset or across two platforms. The write
+// carries the resourceVersion of the read. A conflict writes nothing and does
+// not retry: the id that lost the race was never published. A freeze that
+// overwrote an unfreeze would only tighten; the condition is what keeps one
+// id from being published onto an object that changed.
 func (e *Engine) Freeze(ctx context.Context, who, reason string) (Status, error) {
 	if strings.TrimSpace(e.d.Anchor) == "" {
 		return Status{}, refused("%s", freezeRefusedNoAnchor)
@@ -115,58 +114,37 @@ func (e *Engine) Freeze(ctx context.Context, who, reason string) (Status, error)
 		return Status{}, refused("freeze needs who and reason")
 	}
 	at := e.d.Now().UTC().Truncate(time.Second)
-	for attempt := 0; attempt < 5; attempt++ {
-		id, rv, err := e.allocateFreezeID(ctx)
-		if err != nil {
-			return Status{}, err
-		}
-		err = e.d.Writer.WriteConfigMap(ctx, FreezeConfigMap, map[string]string{
-			"frozen":    "true",
-			"frozen_at": at.Format(time.RFC3339),
-			"freeze_id": id,
-			"who":       who,
-			"reason":    reason,
-		}, rv)
-		if errors.Is(err, ErrConflict) {
-			continue
-		}
-		if err != nil {
-			return Status{}, err
-		}
-		n, _ := parseFreezeID(id)
-		e.noteFreeze(seenSnap{at: at, id: n})
-		return e.Status(ctx), nil
-	}
-	return Status{}, refused("the freeze changed while a new freeze id was being allocated; try again")
-}
-
-// allocateFreezeID returns the next freeze id and the resourceVersion the
-// write must match. The id is max(remembered, id on the object) + 1, so it
-// is strictly greater than either. A missing object returns an empty version,
-// which creates it.
-func (e *Engine) allocateFreezeID(ctx context.Context) (string, string, error) {
-	data, rv, found, err := e.read(ctx, FreezeConfigMap)
+	id, err := newFreezeID()
 	if err != nil {
-		return "", "", fmt.Errorf("read the freeze: %w", err)
+		return Status{}, err
 	}
-	e.mu.Lock()
-	seen, serr := e.loadSeenLocked()
-	e.mu.Unlock()
-	if serr != nil {
-		return "", "", fmt.Errorf("read the freeze history: %w", serr)
+	_, rv, found, err := e.read(ctx, FreezeConfigMap)
+	if err != nil {
+		return Status{}, fmt.Errorf("read the freeze: %w", err)
 	}
-	base := seen.id
-	if found {
-		if id, ok := parseFreezeID(data["freeze_id"]); ok && id > base {
-			base = id
-		}
-	} else {
+	if !found {
 		rv = ""
 	}
-	if base == math.MaxUint64 {
-		return "", "", refused("the freeze counter is exhausted")
+	err = e.d.Writer.WriteConfigMap(ctx, FreezeConfigMap, map[string]string{
+		"frozen":    "true",
+		"frozen_at": at.Format(time.RFC3339),
+		"freeze_id": id,
+		"who":       who,
+		"reason":    reason,
+	}, rv)
+	if errors.Is(err, ErrConflict) {
+		return Status{}, refused("the freeze changed while this freeze was being written; try again")
 	}
-	return fmt.Sprintf("%d", base+1), rv, nil
+	if err != nil {
+		return Status{}, err
+	}
+	e.mu.Lock()
+	rerr := e.rememberLocked(seenSnap{id: id, at: at})
+	e.mu.Unlock()
+	if rerr != nil {
+		return Status{}, fmt.Errorf("record the freeze: %w", rerr)
+	}
+	return e.Status(ctx), nil
 }
 
 // Unfreeze lifts the current freeze with an Owner signature over
@@ -189,14 +167,36 @@ func (e *Engine) Unfreeze(ctx context.Context, text, sig string) (Status, error)
 	}
 	id := strings.TrimSpace(cur["freeze_id"])
 	at := strings.TrimSpace(cur["frozen_at"])
-	if _, ok := parseFreezeID(id); !ok {
-		return Status{}, refused("the freeze has no identifier to sign against; set a new freeze first")
+	if !wellFormedFreezeID(id) {
+		return Status{}, refused("%s", unidentifiedFreeze)
 	}
 	if at == "" {
 		return Status{}, refused("the freeze has no frozen_at to sign against; set a new freeze first")
 	}
+	parsedAt, err := time.Parse(time.RFC3339, at)
+	if err != nil {
+		return Status{}, refused("frozen_at %q is not a timestamp", at)
+	}
+	e.mu.Lock()
+	block, berr := e.blocksLaterLocked(id)
+	if berr != nil {
+		e.mu.Unlock()
+		return Status{}, fmt.Errorf("read the freeze history: %w", berr)
+	}
+	if block {
+		e.mu.Unlock()
+		return Status{}, refused("%s", laterFreezeGone)
+	}
+	if rerr := e.rememberLocked(seenSnap{id: id, at: parsedAt}); rerr != nil {
+		e.mu.Unlock()
+		return Status{}, fmt.Errorf("record the freeze: %w", rerr)
+	}
+	e.mu.Unlock()
+	if named, ok := signedFreezeID(text); ok && named != id {
+		return Status{}, refused("the unfreeze names %s, not %s", named, id)
+	}
 	prefix := UnfreezePrefix(id, at)
-	if !strings.HasPrefix(text, prefix) {
+	if !unfreezeNames(text, id, at) {
 		return Status{}, refused("the signed text must start with %q", prefix)
 	}
 	if err := verifyAnchored([]byte(sig), []byte(text), NamespaceUnfreeze, e.d.Anchor); err != nil {

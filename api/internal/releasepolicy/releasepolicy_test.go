@@ -250,7 +250,8 @@ func TestFreeze(t *testing.T) {
 	})
 	t.Run("signed unfreeze lifts it; an old one cannot lift a newer freeze", func(t *testing.T) {
 		f := newFixture(t)
-		const id = "1"
+		const id = "0123456789abcdef0123456789abcdef"
+		const later = "fedcba9876543210fedcba9876543210"
 		text := releasepolicy.UnfreezePrefix(id, frozenAt) + "at=2026-10-08T11:45:00Z by=owner\n"
 		lifted := map[string]string{
 			"frozen": "false", "frozen_at": frozenAt, "freeze_id": id,
@@ -267,7 +268,7 @@ func TestFreeze(t *testing.T) {
 		f.cms.Set(releasepolicy.FreezeConfigMap, wrongNS)
 		wantWait(t, f.decide(nil), "unfreeze signature")
 		// New freeze is seen, then someone restores the old signed unfreeze.
-		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:50:00Z", "freeze_id": "2", "who": "owner", "reason": "incident"})
+		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:50:00Z", "freeze_id": later, "who": "owner", "reason": "incident"})
 		wantWait(t, f.decide(nil), "releases are frozen")
 		f.cms.Set(releasepolicy.FreezeConfigMap, lifted)
 		wantWait(t, f.decide(nil), "a later freeze")
@@ -369,7 +370,7 @@ func TestStatusAndMetrics(t *testing.T) {
 	f := newFixture(t)
 	st := f.eng.Status(context.Background())
 	if !st.Valid || st.Frozen || st.RemainingSeconds != int64((90*24-1)*3600) || st.SignCommand != releasepolicy.SignCommand ||
-		strings.Join(st.ReminderWindows, ",") != "14d,3d,1d" {
+		strings.Join(st.ReminderWindows, ",") != "14d,3d,1d" || st.FreezeProtocol != releasepolicy.FreezeProtocol {
 		t.Fatalf("status = %+v", st)
 	}
 	var b strings.Builder

@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
-	"strconv"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -187,7 +187,7 @@ func TestFreezeRefusedWithoutTrustAnchor(t *testing.T) {
 			t.Fatalf("writer saw %d writes, want 1", w.n)
 		}
 		got, err := os.ReadFile(path)
-		if err != nil || !strings.Contains(string(got), `"frozen_at":"2026-10-08T12:00:00Z"`) || !strings.Contains(string(got), `"freeze_id":"1"`) {
+		if err != nil || !strings.Contains(string(got), `"frozen_at":"2026-10-08T12:00:00Z"`) || !regexp.MustCompile(`"freeze_id":"[0-9a-f]{32}"`).Match(got) {
 			t.Fatalf("remembered freeze = %q (%v)", got, err)
 		}
 	})
@@ -229,10 +229,8 @@ func TestSameSecondUnfreezeDoesNotLiftTheNextFreeze(t *testing.T) {
 	if second.FrozenAt != first.FrozenAt {
 		t.Fatalf("clock moved: %s vs %s", first.FrozenAt, second.FrozenAt)
 	}
-	idA, _ := strconv.ParseUint(first.FreezeID, 10, 64)
-	idB, _ := strconv.ParseUint(second.FreezeID, 10, 64)
-	if idB <= idA {
-		t.Fatalf("freeze B id %s is not after %s", second.FreezeID, first.FreezeID)
+	if !wellFormedHex(first.FreezeID) || !wellFormedHex(second.FreezeID) || first.FreezeID == second.FreezeID {
+		t.Fatalf("freeze ids = %s, %s; each must be its own 128-bit hex value", first.FreezeID, second.FreezeID)
 	}
 	before, _, _, _ := f.cms.ConfigMap(ctx, releasepolicy.FreezeConfigMap)
 	if _, err := f.eng.Unfreeze(ctx, textA, sigA); !errors.Is(err, releasepolicy.ErrRefused) {
@@ -366,6 +364,18 @@ sys.stdout.write(("allow\n" if allow else "frozen\n") + line)
 	if !strings.Contains(string(out), "拒绝：发布已冻结") {
 		t.Fatalf("tekton decision = %q, want the frozen refusal", out)
 	}
+}
+
+func wellFormedHex(id string) bool {
+	if len(id) < 32 || len(id)%2 != 0 {
+		return false
+	}
+	for _, c := range id {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func siblingReleaseDir() string {

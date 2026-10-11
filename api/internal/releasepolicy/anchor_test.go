@@ -45,6 +45,12 @@ func TestOwnerKeyFingerprintMatchesAllowedSigners(t *testing.T) {
 	path, err := allowedSignersPath("")
 	if err != nil {
 		if errors.Is(err, errSiblingAbsent) {
+			// CI has cloned the sibling by the time this test runs. Skipping
+			// here would let a wrong fingerprint through. Outside CI the
+			// checkout may simply be absent.
+			if os.Getenv("BIFROST_CI") != "" {
+				t.Fatal(err)
+			}
 			t.Skip(err.Error())
 		}
 		t.Fatal(err)

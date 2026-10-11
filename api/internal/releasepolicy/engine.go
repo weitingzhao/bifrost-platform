@@ -2,20 +2,16 @@ package releasepolicy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actions"
-	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
 
 // ConfigMaps reads ConfigMaps in the pipelines namespace. found=false with a
@@ -97,6 +93,7 @@ type Status struct {
 	FreezeReason     string   `json:"freeze_reason,omitempty"`
 	FrozenAt         string   `json:"frozen_at,omitempty"`
 	FreezeID         string   `json:"freeze_id,omitempty"`
+	FreezeProtocol   int      `json:"freeze_protocol"`
 	ReminderWindows  []string `json:"reminder_windows"`
 	Anchor           string   `json:"anchor_fingerprint"`
 	SignCommand      string   `json:"sign_command"`
@@ -147,6 +144,7 @@ func (e *Engine) Status(ctx context.Context) Status {
 	if fz.frozen {
 		st.FreezeID = fz.freezeID
 	}
+	st.FreezeProtocol = FreezeProtocol
 	if st.Valid {
 		setExpiresIn(st.RemainingSeconds)
 	} else {
@@ -162,14 +160,9 @@ func (e *Engine) read(ctx context.Context, name string) (map[string]string, stri
 	return e.d.ConfigMaps.ConfigMap(ctx, name)
 }
 
-type seenState struct {
-	FrozenAt string `json:"frozen_at"`
-	FreezeID string `json:"freeze_id,omitempty"`
-}
-
-// freeze evaluates the freeze ConfigMap and records a newer freeze. An id
-// that is not strictly greater than the remembered one is not newer, and
-// neither is an equal timestamp on an object that has no id.
+// freeze evaluates the freeze ConfigMap and records a freeze it has not seen
+// before. A lifted object is recorded only when its signature verifies for
+// the id in the object; an earlier id is left where it is.
 func (e *Engine) freeze(ctx context.Context) freezeEval {
 	data, _, found, err := e.read(ctx, FreezeConfigMap)
 	e.mu.Lock()
@@ -178,10 +171,11 @@ func (e *Engine) freeze(ctx context.Context) freezeEval {
 	if seenErr != nil {
 		return freezeEval{frozen: true, reason: "freeze history unreadable: " + seenErr.Error()}
 	}
-	if err == nil && found && strings.EqualFold(strings.TrimSpace(data["frozen"]), "true") {
-		if next, ok := snapFromFreeze(data); ok && newerSnap(next, seen) {
-			if werr := e.storeSeenLocked(next); werr != nil {
-				slog.Warn("release policy: cannot record freeze", "err", werr)
+	e.seen = seen
+	if err == nil && found {
+		if obs, ok := e.observation(data); ok {
+			if rerr := e.rememberLocked(obs); rerr != nil {
+				slog.Warn("release policy: cannot record freeze", "err", rerr)
 			} else {
 				seen = e.seen
 			}
@@ -190,125 +184,41 @@ func (e *Engine) freeze(ctx context.Context) freezeEval {
 	return evaluateFreeze(data, found, err, e.d.Anchor, seen)
 }
 
-// noteFreeze records a freeze this process just published. A lower id
-// already in the history is left where it is.
-func (e *Engine) noteFreeze(next seenSnap) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if !newerSnap(next, e.seen) && e.d.StatePath == "" {
-		return
-	}
-	if err := e.storeSeenLocked(next); err != nil {
-		slog.Warn("release policy: cannot record freeze", "err", err)
-	}
-}
-
-func snapFromFreeze(data map[string]string) (seenSnap, bool) {
-	at, err := time.Parse(time.RFC3339, strings.TrimSpace(data["frozen_at"]))
-	id, idOK := parseFreezeID(data["freeze_id"])
-	if idOK {
-		snap := seenSnap{id: id}
-		if err == nil {
-			snap.at = at
+// observation is one freeze visible in the object right now. A frozen object
+// with no well-formed id is unidentified. A lifted object counts only when
+// this read verifies the signature for that exact id; the bit is not kept
+// from a previous read.
+func (e *Engine) observation(data map[string]string) (seenSnap, bool) {
+	flag := strings.ToLower(strings.TrimSpace(data["frozen"]))
+	atStr := strings.TrimSpace(data["frozen_at"])
+	at, atErr := time.Parse(time.RFC3339, atStr)
+	if flag == "true" {
+		id := strings.TrimSpace(data["freeze_id"])
+		if wellFormedFreezeID(id) {
+			obs := seenSnap{id: id}
+			if atErr == nil {
+				obs.at = at
+			}
+			return obs, true
 		}
-		return snap, true
-	}
-	if err == nil {
-		return seenSnap{at: at}, true
-	}
-	return seenSnap{}, false
-}
-
-// newerSnap reports whether next is strictly after cur. A greater id is
-// newer even when the clock did not move. The same id is newer only when
-// its timestamp is later. An equal timestamp is not newer.
-func newerSnap(next, cur seenSnap) bool {
-	if next.id != cur.id {
-		return next.id > cur.id
-	}
-	return next.at.After(cur.at)
-}
-
-func (e *Engine) loadSeenLocked() (seenSnap, error) {
-	if e.d.StatePath == "" {
-		return e.seen, nil
-	}
-	raw, err := statefile.ReadFile(e.d.StatePath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return seenSnap{}, nil
+		obs := seenSnap{unidentified: true, seenAt: e.d.Now().UTC()}
+		if atErr == nil {
+			obs.at = at
 		}
-		return seenSnap{}, err
+		return obs, true
 	}
-	return decodeSeen(raw)
-}
-
-func decodeSeen(raw []byte) (seenSnap, error) {
-	if len(bytesTrim(raw)) == 0 {
-		return seenSnap{}, nil
+	if flag != "false" || atErr != nil {
+		return seenSnap{}, false
 	}
-	var st seenState
-	if err := json.Unmarshal(raw, &st); err != nil {
-		return seenSnap{}, fmt.Errorf("freeze history: %w", err)
+	id := strings.TrimSpace(data["freeze_id"])
+	text := data["unfreeze.txt"]
+	if !wellFormedFreezeID(id) || !unfreezeNames(text, id, atStr) {
+		return seenSnap{}, false
 	}
-	var snap seenSnap
-	if st.FrozenAt != "" {
-		at, err := time.Parse(time.RFC3339, st.FrozenAt)
-		if err != nil {
-			return seenSnap{}, fmt.Errorf("freeze history: %w", err)
-		}
-		snap.at = at
+	if err := verifyAnchored([]byte(data["unfreeze.sig"]), []byte(text), NamespaceUnfreeze, e.d.Anchor); err != nil {
+		return seenSnap{}, false
 	}
-	if st.FreezeID != "" {
-		id, ok := parseFreezeID(st.FreezeID)
-		if !ok {
-			return seenSnap{}, fmt.Errorf("freeze history: freeze_id %q is not a counter", st.FreezeID)
-		}
-		snap.id = id
-	}
-	return snap, nil
-}
-
-func bytesTrim(raw []byte) []byte {
-	return []byte(strings.TrimSpace(string(raw)))
-}
-
-func encodeSeen(s seenSnap) []byte {
-	st := seenState{}
-	if !s.at.IsZero() {
-		st.FrozenAt = s.at.UTC().Format(time.RFC3339)
-	}
-	if s.id > 0 {
-		st.FreezeID = strconv.FormatUint(s.id, 10)
-	}
-	raw, _ := json.Marshal(st)
-	return raw
-}
-
-func (e *Engine) storeSeenLocked(next seenSnap) error {
-	if e.d.StatePath == "" {
-		if newerSnap(next, e.seen) {
-			e.seen = next
-		}
-		return nil
-	}
-	var merged seenSnap
-	err := statefile.Update(e.d.StatePath, func(old []byte) ([]byte, error) {
-		cur, err := decodeSeen(old)
-		if err != nil {
-			return nil, err
-		}
-		if newerSnap(next, cur) {
-			cur = next
-		}
-		merged = cur
-		return encodeSeen(cur), nil
-	})
-	if err != nil {
-		return err
-	}
-	e.seen = merged
-	return nil
+	return seenSnap{id: id, at: at, lifted: true}, true
 }
 
 // Decision is the result for one action call. Clauses are the policy terms

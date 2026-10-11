@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -207,31 +206,6 @@ type freezeEval struct {
 	freezeID string
 }
 
-// seenSnap is the newest freeze the platform has observed. id is the
-// counter; at is that freeze's frozen_at, kept for people and for a
-// hand-written object that has no id. An id that is not strictly greater
-// than the one already remembered is not a newer freeze. An equal frozen_at
-// is not newer either, except when the unfreeze names that same id: the
-// signature carries the freeze's own time, which is not a later one.
-type seenSnap struct {
-	at time.Time
-	id uint64
-}
-
-// parseFreezeID accepts the decimal counter Freeze writes: no sign, no
-// leading zero, and not zero.
-func parseFreezeID(s string) (uint64, bool) {
-	s = strings.TrimSpace(s)
-	if s == "" || s[0] < '1' || s[0] > '9' {
-		return 0, false
-	}
-	n, err := strconv.ParseUint(s, 10, 64)
-	if err != nil || strconv.FormatUint(n, 10) != s {
-		return 0, false
-	}
-	return n, true
-}
-
 // UnfreezePrefix is the start of the text the Owner signs for one freeze.
 // frozen_at is there so a person can see which moment they are lifting.
 // The check that the signature belongs to the freeze in place is the id.
@@ -239,11 +213,11 @@ func UnfreezePrefix(id, frozenAt string) string {
 	return "unfreeze freeze_id=" + strings.TrimSpace(id) + " frozen_at=" + strings.TrimSpace(frozenAt) + " "
 }
 
-// evaluateFreeze mirrors policy_check.freeze_state. seen is the newest freeze
-// ever observed, so an old signed unfreeze cannot lift a new freeze. A
-// remembered id refuses an unfreeze whose id is lower. A remembered time
-// refuses an unfreeze whose frozen_at is not strictly later, which includes
-// an equal time, unless the unfreeze names that same freeze id.
+// evaluateFreeze decides the gate from the object and the latest freeze this
+// process remembers. A lifted object is accepted only when its freeze_id is
+// that latest one and unfreeze.txt / unfreeze.sig verify, on this read, for
+// that id. The stored lifted bit is not consulted. Anything else stays frozen,
+// including a never-frozen object while a freeze is still remembered.
 func evaluateFreeze(data map[string]string, found bool, readErr error, anchor string, seen seenSnap) freezeEval {
 	if readErr != nil {
 		return freezeEval{frozen: true, reason: "freeze ConfigMap cicd/" + FreezeConfigMap + " is unreadable: " + readErr.Error()}
@@ -254,6 +228,8 @@ func evaluateFreeze(data map[string]string, found bool, readErr error, anchor st
 	flag := strings.ToLower(strings.TrimSpace(data["frozen"]))
 	at := strings.TrimSpace(data["frozen_at"])
 	parsedAt, atErr := time.Parse(time.RFC3339, at)
+	id := strings.TrimSpace(data["freeze_id"])
+	idOK := wellFormedFreezeID(id)
 	if flag == "true" {
 		who, reason := data["who"], data["reason"]
 		if who == "" {
@@ -262,7 +238,12 @@ func evaluateFreeze(data map[string]string, found bool, readErr error, anchor st
 		if reason == "" {
 			reason = "no reason given"
 		}
-		ev := freezeEval{frozen: true, reason: fmt.Sprintf("frozen by %s at %s: %s", who, orQ(at), reason), freezeID: strings.TrimSpace(data["freeze_id"])}
+		ev := freezeEval{frozen: true, reason: fmt.Sprintf("frozen by %s at %s: %s", who, orQ(at), reason)}
+		if idOK {
+			ev.freezeID = id
+		} else {
+			ev.reason += "; " + unidentifiedFreeze
+		}
 		if atErr == nil {
 			ev.frozenAt = parsedAt
 		}
@@ -272,7 +253,7 @@ func evaluateFreeze(data map[string]string, found bool, readErr error, anchor st
 		return freezeEval{frozen: true, reason: fmt.Sprintf("freeze flag is %q, not false", flag)}
 	}
 	if at == "" {
-		if seen.id > 0 || !seen.at.IsZero() {
+		if seen.remembersFreeze() {
 			return freezeEval{frozen: true, reason: "a freeze from " + seenWhen(seen) + " was seen and its record is gone"}
 		}
 		return freezeEval{}
@@ -280,32 +261,55 @@ func evaluateFreeze(data map[string]string, found bool, readErr error, anchor st
 	if atErr != nil {
 		return freezeEval{frozen: true, reason: fmt.Sprintf("frozen_at %q is not a timestamp", at)}
 	}
-	objID, idOK := parseFreezeID(data["freeze_id"])
-	if seen.id > 0 && (!idOK || objID < seen.id) {
-		return freezeEval{frozen: true, reason: "unfreeze is for freeze " + orQ(strings.TrimSpace(data["freeze_id"])) + "; a later freeze (" + strconv.FormatUint(seen.id, 10) + ") was seen"}
-	}
-	sameFreeze := idOK && seen.id > 0 && objID == seen.id
-	if !seen.at.IsZero() && !parsedAt.After(seen.at) && !sameFreeze {
-		return freezeEval{frozen: true, reason: "unfreeze is for " + at + "; a later freeze (" + seen.at.UTC().Format(time.RFC3339) + ") was seen"}
-	}
 	if !idOK {
 		return freezeEval{frozen: true, reason: "no signed unfreeze for the freeze at " + at}
 	}
 	text := data["unfreeze.txt"]
-	if !strings.HasPrefix(text, UnfreezePrefix(strings.TrimSpace(data["freeze_id"]), at)) {
-		return freezeEval{frozen: true, reason: "no signed unfreeze for freeze " + strings.TrimSpace(data["freeze_id"])}
+	if named, ok := signedFreezeID(text); ok && named != id {
+		return freezeEval{frozen: true, reason: "the unfreeze names " + named + ", not " + id}
+	}
+	if !unfreezeNames(text, id, at) {
+		return freezeEval{frozen: true, reason: "no signed unfreeze for freeze " + id}
 	}
 	if err := verifyAnchored([]byte(data["unfreeze.sig"]), []byte(text), NamespaceUnfreeze, anchor); err != nil {
 		return freezeEval{frozen: true, reason: "unfreeze signature: " + err.Error()}
 	}
-	return freezeEval{frozenAt: parsedAt, freezeID: strings.TrimSpace(data["freeze_id"])}
+	if !sameFreezeRemembered(seen, id) {
+		return freezeEval{frozen: true, reason: laterFreezeGone}
+	}
+	return freezeEval{frozenAt: parsedAt, freezeID: id}
+}
+
+// sameFreezeRemembered reports whether the verified lift is the latest freeze
+// this process remembers. An empty memory matches: this process has not seen
+// a later freeze, and the object is what it has to go on.
+func sameFreezeRemembered(seen seenSnap, id string) bool {
+	if seen.unidentified {
+		return false
+	}
+	if _, ok := seen.earlier[id]; ok {
+		return false
+	}
+	if seen.id != "" && seen.id != id {
+		return false
+	}
+	if seen.id == "" && seen.remembersFreeze() {
+		return false
+	}
+	return true
 }
 
 func seenWhen(seen seenSnap) string {
 	if !seen.at.IsZero() {
 		return seen.at.UTC().Format(time.RFC3339)
 	}
-	return "freeze " + strconv.FormatUint(seen.id, 10)
+	if seen.id != "" {
+		return "freeze " + seen.id
+	}
+	if !seen.seenAt.IsZero() {
+		return seen.seenAt.UTC().Format(time.RFC3339)
+	}
+	return "an earlier freeze"
 }
 
 func orQ(s string) string {
