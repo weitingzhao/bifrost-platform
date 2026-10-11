@@ -7,6 +7,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+import { QuestionPage } from '@/pages/QuestionPage'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 
 const CONTRACT = join(
@@ -240,5 +241,27 @@ describe('Needs you questions', () => {
     expect(list?.getAttribute('data-paints')).toBe(paints)
     expect(within(group).getByText(/waited 2h 1m · 21h 59m left/)).toBeTruthy()
     vi.useRealTimers()
+  })
+
+  it('labels a session id when no lineage title exists and does not use mine', async () => {
+    const question = openQuestion(12, { requester: 'owner-console', mine: true, title: 'Who asked?' })
+    stub(() => json({ questions: [question] }))
+    const listed = render(wrapper(<NeedsYouPage />))
+    const answer = await screen.findByRole('region', { name: 'Answer' })
+    expect(within(answer).getByText(/Agent-reported session: owner-console/)).toBeTruthy()
+    expect(within(answer).getByText(/Who asked\?/)).toBeTruthy()
+    listed.unmount()
+
+    window.location.hash = `#questions?id=${String(question.id)}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes(`/api/v1/questions/${String(question.id)}`)) return json(question)
+      return json({ questions: [] })
+    })
+    render(wrapper(<QuestionPage />))
+    expect(await screen.findByText('Who asked?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /a Ship/ })).toBeTruthy()
+    expect(screen.queryByText('owner-console')).toBeNull()
+    expect(screen.queryByText(/Agent-reported session:/)).toBeNull()
   })
 })

@@ -3,6 +3,7 @@ import { questionLink, questionNumberLabel, storedAnswerWords, type Question, ty
 import type { ActionLinkView } from '@/api/agentProgress'
 
 export const FROM_AN_AGENT = 'From an agent thread. Answering approves nothing.'
+export const SECRETS_LINE = 'Visible to every agent thread. Do not paste secrets.'
 
 function readReportLine(answer: QuestionAnswer | undefined): string {
   const at = answer?.read?.at
@@ -50,7 +51,6 @@ export function QuestionBody({ question }: { question: Question }) {
   const link = question.link != null && question.link !== '' ? questionLink(question.link, question.link_text) : null
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
-      <p className="m-0 text-sm">{FROM_AN_AGENT}</p>
       <h2 className="m-0 whitespace-pre-wrap break-words text-base font-medium">{question.title}</h2>
       {question.body != null && question.body !== '' ? <Prose value={question.body} /> : null}
       <Field label="If you do not answer" value={question.urgency} />

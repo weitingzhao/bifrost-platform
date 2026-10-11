@@ -6,10 +6,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
+import { parseQuestion } from '@/api/questions'
 import { QuestionPage } from '@/pages/QuestionPage'
+import { QuestionRow } from '@/pages/shell/needs-you/QuestionRow'
 
 const CONTRACT = join(dirname(fileURLToPath(import.meta.url)), '../../../../api/internal/questions/testdata/contract')
 const ID = 'q_0123456789abcdef'
+const ID_B = 'q_0000000000000002'
+
+function freshClient(): QueryClient {
+  return new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } })
+}
 
 function contractBody(name: string): Record<string, unknown> {
   const file = JSON.parse(readFileSync(join(CONTRACT, name), 'utf8')) as { body: Record<string, unknown> }
@@ -185,19 +192,55 @@ describe('QuestionPage', () => {
     await waitFor(() => expect(attempts).toBe(2))
   })
 
-  it('shows a script and a URL in the title and body as text', async () => {
+  it('shows a script in every record text as text and adds no element', async () => {
+    const mark = (field: string) => `<script>${field}</script>`
     window.location.hash = `#questions?id=${ID}`
     const open = contractBody('question-open.json')
-    open.title = '<script>alert(1)</script>'
-    open.body = 'See https://evil.example/phish\nsecond line'
+    open.title = mark('title')
+    open.body = `${mark('body')}\nsecond line`
+    open.urgency = mark('urgency')
+    open.meanwhile = mark('meanwhile')
+    open.requester_thread = mark('requester_thread')
+    open.work_id = mark('work_id')
+    open.link = '#progress'
+    open.link_text = mark('link_text')
+    const options = open.options as { key: string; label: string; detail?: string }[]
+    const ship = options.find(option => option.key === 'a')
+    const wait = options.find(option => option.key === 'b')
+    if (ship != null) ship.label = mark('label')
+    if (wait != null) wait.detail = mark('detail')
     vi.mocked(fetch).mockResolvedValue(json(open))
-    const { container } = render(wrapper(<QuestionPage />))
-    expect(await screen.findByText('<script>alert(1)</script>')).toBeTruthy()
-    expect(container.querySelector('script')).toBeNull()
-    expect(container.querySelector('a[href="https://evil.example/phish"]')).toBeNull()
-    expect(screen.getByText(/https:\/\/evil\.example\/phish/)).toBeTruthy()
+    const page = render(wrapper(<QuestionPage />))
+    for (const field of ['title', 'body', 'urgency', 'meanwhile', 'link_text', 'label', 'detail']) {
+      expect(await screen.findByText(mark(field), { exact: false })).toBeTruthy()
+    }
+    expect(page.container.querySelector('script')).toBeNull()
+    expect(page.container.querySelector('a[href="https://evil.example/phish"]')).toBeNull()
     const body = screen.getByText(/second line/)
     expect(body.className).toContain('whitespace-pre-wrap')
+    page.unmount()
+
+    const answered = contractBody('question-answered.json')
+    const answer = answered.answer as Record<string, unknown>
+    answer.text = mark('answer')
+    vi.mocked(fetch).mockResolvedValue(json(answered))
+    const answeredPage = render(wrapper(<QuestionPage />))
+    expect(await screen.findByText(mark('answer'), { exact: false })).toBeTruthy()
+    expect(answeredPage.container.querySelector('script')).toBeNull()
+    answeredPage.unmount()
+
+    const parsed = parseQuestion(open)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const row = render(
+      <ul>
+        <QuestionRow question={parsed.question} />
+      </ul>,
+    )
+    for (const field of ['title', 'work_id', 'requester_thread']) {
+      expect(row.container.textContent).toContain(mark(field))
+    }
+    expect(row.container.querySelector('script')).toBeNull()
   })
 
   it('keeps 360×780 in one column with options at least 44px and the text box at 16px', async () => {
@@ -211,8 +254,12 @@ describe('QuestionPage', () => {
     expect(page.className).toContain('flex-col')
     const option = await screen.findByRole('button', { name: /a Ship/ })
     expect(Number.parseFloat(option.style.minHeight)).toBeGreaterThanOrEqual(44)
-    const confirmRow = screen.queryByRole('button', { name: 'None of these' })
-    expect(Number.parseFloat(confirmRow?.style.minHeight ?? '0')).toBeGreaterThanOrEqual(44)
+    fireEvent.click(option)
+    const confirm = screen.getByRole('button', { name: 'Confirm answer' })
+    expect(Number.parseFloat(confirm.style.minHeight)).toBeGreaterThanOrEqual(44)
+    const confirmRow = document.querySelector('[data-confirm-row]')
+    expect(confirmRow).toBeTruthy()
+    expect(Number.parseFloat((confirmRow as HTMLElement).style.minHeight)).toBeGreaterThanOrEqual(44)
     const box = document.querySelector('textarea')
     expect(box?.style.fontSize).toBe('16px')
     for (const el of page.querySelectorAll<HTMLElement>('*')) {
@@ -299,5 +346,188 @@ describe('QuestionPage', () => {
     expect(await screen.findByText('Could not refresh this question: boom')).toBeTruthy()
     expect(screen.getByText('Where is the quota?')).toBeTruthy()
     expect(screen.getByTestId('question-page').getAttribute('data-question-state')).toBe('stale')
+  })
+
+  it('drops A’s choice when the hash changes to B, and the request is B’s', async () => {
+    const client = freshClient()
+    const a = contractBody('question-open.json')
+    a.allow_text = true
+    const b = contractBody('question-open.json')
+    b.id = ID_B
+    b.number = 2
+    b.title = 'The other question'
+    b.allow_text = true
+    const parsedA = parseQuestion(a)
+    const parsedB = parseQuestion(b)
+    expect(parsedA.ok && parsedB.ok).toBe(true)
+    if (!parsedA.ok || !parsedB.ok) return
+    client.setQueryData(['questions', 'item', ID], parsedA.question)
+    client.setQueryData(['questions', 'item', ID_B], parsedB.question)
+    window.location.hash = `#questions?id=${ID}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) return json(contractBody('answer-response.json'))
+      if (url.includes(ID_B)) return json(b)
+      return json(a)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.change(document.querySelector('textarea') as HTMLTextAreaElement, { target: { value: 'from A' } })
+    expect(document.querySelector('[data-confirm-row]')?.textContent).toContain('from A')
+    const callsBefore = vi.mocked(fetch).mock.calls.length
+    window.location.hash = `#questions?id=${ID_B}`
+    expect(await screen.findByText('The other question')).toBeTruthy()
+    expect(vi.mocked(fetch).mock.calls.length).toBe(callsBefore)
+    expect(posts()).toBe(0)
+    expect(document.querySelector('[data-confirm-row]')).toBeNull()
+    expect((document.querySelector('textarea') as HTMLTextAreaElement).value).toBe('')
+    expect(screen.queryByText('Where is the quota?')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /a Ship/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    await waitFor(() => expect(posts()).toBe(1))
+    const call = vi.mocked(fetch).mock.calls.find(item => String(item[0]).includes('/answer'))
+    expect(String(call?.[0])).toContain(`/api/v1/questions/${ID_B}/answer`)
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ channel: 'console', option: 'a' })
+  })
+
+  it('withdraws the confirm row when the chosen option’s label changes', async () => {
+    window.location.hash = `#questions?id=${ID}`
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    let label = 'Wait'
+    vi.mocked(fetch).mockImplementation(async () => {
+      const open = contractBody('question-open.json')
+      const options = open.options as { key: string; label: string; detail?: string }[]
+      const choice = options.find(option => option.key === 'b')
+      if (choice != null) choice.label = label
+      return json(open)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    const row = document.querySelector('[data-confirm-row]')
+    expect(row?.textContent).toContain('b')
+    expect(row?.textContent).toContain('Wait')
+    expect(row?.textContent).toContain('one day')
+    label = 'Later'
+    await client.refetchQueries({ queryKey: ['questions', 'item', ID] })
+    expect(await screen.findByText('The question changed. Choose again.')).toBeTruthy()
+    expect(document.querySelector('[data-confirm-row]')).toBeNull()
+    expect(posts()).toBe(0)
+  })
+
+  it('does not show A’s answer on B', async () => {
+    const client = freshClient()
+    const a = contractBody('question-open.json')
+    const b = contractBody('question-open.json')
+    b.id = ID_B
+    b.number = 2
+    b.title = 'The other question'
+    const answered = contractBody('question-answered.json')
+    const parsedA = parseQuestion(a)
+    const parsedB = parseQuestion(b)
+    expect(parsedA.ok && parsedB.ok).toBe(true)
+    if (!parsedA.ok || !parsedB.ok) return
+    client.setQueryData(['questions', 'item', ID], parsedA.question)
+    client.setQueryData(['questions', 'item', ID_B], parsedB.question)
+    window.location.hash = `#questions?id=${ID}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/answer')) return json(contractBody('answer-response.json'))
+      if (url.includes(ID_B)) return json(b)
+      return json(answered)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('The thread has not reported reading it')).toBeTruthy()
+    window.location.hash = `#questions?id=${ID_B}`
+    expect(await screen.findByText('The other question')).toBeTruthy()
+    expect(screen.queryByText('Where is the quota?')).toBeNull()
+    expect(screen.queryByText('The thread has not reported reading it')).toBeNull()
+    expect(document.querySelector('[data-stored-answer]')).toBeNull()
+  })
+
+  it('does not show a 409 on A after the hash changes to B', async () => {
+    const client = freshClient()
+    const a = contractBody('question-open.json')
+    const b = contractBody('question-open.json')
+    b.id = ID_B
+    b.number = 2
+    b.title = 'The other question'
+    const conflict = JSON.parse(readFileSync(join(CONTRACT, 'error-already-answered.json'), 'utf8')) as {
+      status: number
+      body: unknown
+    }
+    const parsedA = parseQuestion(a)
+    const parsedB = parseQuestion(b)
+    expect(parsedA.ok && parsedB.ok).toBe(true)
+    if (!parsedA.ok || !parsedB.ok) return
+    client.setQueryData(['questions', 'item', ID], parsedA.question)
+    client.setQueryData(['questions', 'item', ID_B], parsedB.question)
+    window.location.hash = `#questions?id=${ID}`
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/answer')) return json(conflict.body, conflict.status)
+      if (String(input).includes(ID_B)) return json(b)
+      return json(a)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /a Ship/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    const stored = await screen.findByText('The thread has not reported reading it')
+    expect(stored.closest('[data-stored-answer]')).toBeTruthy()
+    window.location.hash = `#questions?id=${ID_B}`
+    expect(await screen.findByText('The other question')).toBeTruthy()
+    expect(screen.queryByText('The thread has not reported reading it')).toBeNull()
+    expect(document.querySelector('[data-stored-answer]')).toBeNull()
+  })
+
+  it('shows a later read report on the question that was answered', async () => {
+    const client = freshClient()
+    const open = contractBody('question-open.json')
+    const answered = contractBody('question-answered.json')
+    const withRead = contractBody('question-answered.json')
+    const answer = withRead.answer as Record<string, unknown>
+    answer.read = { at: '2026-10-11T08:00:00Z', session: 'thread-a', principal: 'reporter' }
+    const parsed = parseQuestion(open)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    client.setQueryData(['questions', 'item', ID], parsed.question)
+    window.location.hash = `#questions?id=${ID}`
+    let reads = 0
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/answer')) return json(contractBody('answer-response.json'))
+      reads += 1
+      return json(reads === 1 ? answered : withRead)
+    })
+    render(wrapper(<QuestionPage />, client))
+    fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
+    expect(await screen.findByText('The thread has not reported reading it')).toBeTruthy()
+    vi.mocked(fetch).mockImplementation(async () => json(withRead))
+    await client.refetchQueries({ queryKey: ['questions', 'item', ID] })
+    const when = new Date('2026-10-11T08:00:00Z').toLocaleString()
+    expect(await screen.findByText(`The thread reported reading it at ${when}`)).toBeTruthy()
+  })
+
+  it('keeps the two fixed lines outside the state branches', async () => {
+    const fromAgent = 'From an agent thread. Answering approves nothing.'
+    const secrets = 'Visible to every agent thread. Do not paste secrets.'
+    const cases: { name: string; hash: string; body: () => Promise<Response> | Response; secrets: boolean }[] = [
+      { name: 'loading', hash: `#questions?id=${ID}`, body: () => new Promise(() => undefined), secrets: false },
+      { name: 'unreadable', hash: `#questions?id=${ID}`, body: () => json({ error: 'boom' }, 500), secrets: false },
+      { name: 'malformed', hash: '#questions?id=Q12', body: () => json({}), secrets: false },
+      { name: 'open', hash: `#questions?id=${ID}`, body: () => json(contractBody('question-open.json')), secrets: true },
+      { name: 'answered', hash: `#questions?id=${ID}`, body: () => json(contractBody('question-answered.json')), secrets: true },
+      { name: 'withdrawn', hash: `#questions?id=${ID}`, body: () => json(contractBody('question-withdrawn.json')), secrets: true },
+      { name: 'expired', hash: `#questions?id=${ID}`, body: () => json(contractBody('question-expired.json')), secrets: true },
+    ]
+    for (const item of cases) {
+      window.location.hash = item.hash
+      vi.mocked(fetch).mockImplementation(item.body)
+      const view = render(wrapper(<QuestionPage />))
+      expect(await screen.findByText(fromAgent), item.name).toBeTruthy()
+      if (item.secrets) expect(await screen.findByText(secrets), item.name).toBeTruthy()
+      else expect(screen.queryByText(secrets), item.name).toBeNull()
+      view.unmount()
+    }
   })
 })
