@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 )
@@ -75,13 +77,8 @@ type optionJSON struct {
 // The key is required, not trimmed, and absent from the canonical JSON.
 func CanonicalizeRequestJSON(raw []byte) (Canonical, error) {
 	var in createJSON
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return Canonical{}, decodeErr(err)
-	}
-	if dec.More() {
-		return Canonical{}, fieldErr("body", "invalid json body")
+	if err := decodeStrict(raw, &in); err != nil {
+		return Canonical{}, err
 	}
 	return buildCanonical(in, true)
 }
@@ -90,12 +87,25 @@ func CanonicalizeRequestJSON(raw []byte) (Canonical, error) {
 // The shared test vectors call it.
 func CanonicalizeObjectJSON(raw []byte) (Canonical, error) {
 	var in createJSON
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return Canonical{}, decodeErr(err)
+	if err := decodeStrict(raw, &in); err != nil {
+		return Canonical{}, err
 	}
 	return buildCanonical(in, false)
+}
+
+// decodeStrict accepts one JSON value and trailing whitespace only.
+// Unknown fields are refused. A second value or any other trailer is an error.
+func decodeStrict(raw []byte, dest any) error {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dest); err != nil {
+		return decodeErr(err)
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return fieldErr("body", "invalid json body")
+	}
+	return nil
 }
 
 func buildCanonical(in createJSON, requireKey bool) (Canonical, error) {

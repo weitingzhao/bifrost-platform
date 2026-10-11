@@ -14,7 +14,7 @@ func (s *Service) Answer(ctx context.Context, session, principal, role, ref stri
 	if err := ValidSession(session); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "answer", ref: ref}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "answer", ref: ref}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		i, ok := doc.find(strings.TrimSpace(ref))
 		if !ok {
@@ -84,10 +84,8 @@ func parseAnswer(raw []byte, q Question) (option, text, channel string, err erro
 		return "", "", "", fieldErr("body", "invalid json body")
 	}
 	var in answerJSON
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return "", "", "", decodeErr(err)
+	if err := decodeStrict(raw, &in); err != nil {
+		return "", "", "", err
 	}
 	opt, _, err := cleanedString(in.Option, false)
 	if err != nil {
@@ -140,7 +138,7 @@ func (s *Service) Withdraw(ctx context.Context, session, principal, role, ref st
 	if err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "withdraw", ref: ref}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "withdraw", ref: ref}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		i, ok := doc.find(strings.TrimSpace(ref))
 		if !ok {
@@ -173,10 +171,8 @@ func parseReason(raw []byte) (string, error) {
 		return "", fieldErr("reason", "reason is required")
 	}
 	var in reasonJSON
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return "", decodeErr(err)
+	if err := decodeStrict(raw, &in); err != nil {
+		return "", err
 	}
 	reason, ok, err := cleanedString(in.Reason, false)
 	if err != nil {
@@ -198,7 +194,7 @@ func (s *Service) Ack(ctx context.Context, session, principal, role, ref string,
 	if err := parseAck(raw); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "ack", ref: ref}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "ack", ref: ref}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		i, ok := doc.find(strings.TrimSpace(ref))
 		if !ok {
@@ -230,19 +226,14 @@ func parseAck(raw []byte) error {
 		return nil
 	}
 	var in struct{}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&in); err != nil {
-		return decodeErr(err)
-	}
-	return nil
+	return decodeStrict(raw, &in)
 }
 
 func (s *Service) Get(ctx context.Context, session, principal, role, ref string) Result {
 	if err := ValidSession(session); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "get", ref: ref}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "get", ref: ref}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		i, ok := doc.find(strings.TrimSpace(ref))
 		if !ok {
@@ -268,7 +259,7 @@ func (s *Service) List(ctx context.Context, session, principal, role, status str
 	default:
 		return fail(http.StatusBadRequest, "status is invalid", nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "list"}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "list"}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		var rows []Question
 		for _, q := range doc.Questions {

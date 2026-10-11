@@ -1,15 +1,19 @@
 package questions
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 	"github.com/weitingzhao/bifrost-platform/api/internal/statefile"
 )
@@ -87,6 +91,131 @@ func TestMaxRecordFits(t *testing.T) {
 	if n > maxRecordBytes {
 		t.Fatalf("max record = %d bytes, maxRecordBytes = %d", n, maxRecordBytes)
 	}
+
+	nuls := strings.Repeat("\x00", 300)
+	if encodedBytes(nuls) != 1802 {
+		t.Fatalf("300 NUL characters encode to %d bytes, want 1802", encodedBytes(nuls))
+	}
+	worst := worstQuestion()
+	n, err = recordBytes(worst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n > maxRecordBytes {
+		t.Fatalf("worst-case record = %d bytes, maxRecordBytes = %d", n, maxRecordBytes)
+	}
+	raw, err := marshalJSON(worst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(raw, []byte{0}) || bytes.Contains(raw, []byte(`\u0000`)) {
+		t.Fatal("a control character survived into the stored record")
+	}
+	for _, field := range worstFields(worst) {
+		if encodedBytes(field.value) > field.limit {
+			t.Fatalf("%s encodes to %d bytes, cap %d", field.name, encodedBytes(field.value), field.limit)
+		}
+		if !strings.Contains(field.value, "\"") || !strings.Contains(field.value, "\\") || !strings.Contains(field.value, "\U0001F600") {
+			t.Fatalf("%s = %q, want a quote, a backslash, and a non-BMP character", field.name, field.value)
+		}
+	}
+}
+
+type cappedField struct {
+	name  string
+	value string
+	limit int
+}
+
+func worstFields(q Question) []cappedField {
+	out := []cappedField{
+		{"requester_principal", q.RequesterPrincipal, principalLimit},
+		{"requester_thread", q.RequesterThread, threadLimit},
+		{"title", q.Title, titleLimit},
+		{"body", q.Body, bodyLimit},
+		{"urgency", q.Urgency, lineLimit},
+		{"meanwhile", q.Meanwhile, lineLimit},
+		{"link", q.Link, linkLimit},
+		{"link_text", q.LinkText, linkTextLimit},
+		{"answer.text", q.Answer.Text, bodyLimit},
+		{"answer.by", q.Answer.By, principalLimit},
+		{"answer.read.principal", q.Answer.Read.Principal, principalLimit},
+		{"withdrawal.principal", q.Withdrawal.Principal, principalLimit},
+		{"withdrawal.reason", q.Withdrawal.Reason, lineLimit},
+	}
+	for _, o := range q.Options {
+		out = append(out,
+			cappedField{"label", o.Label, labelLimit},
+			cappedField{"detail", o.Detail, detailLimit},
+		)
+	}
+	for _, d := range q.Deliveries {
+		out = append(out,
+			cappedField{"delivery.kind", d.Kind, 32},
+			cappedField{"delivery.channel", d.Channel, 16},
+			cappedField{"delivery.target", d.Target, 64},
+			cappedField{"delivery.result", d.Result, 16},
+			cappedField{"delivery.error", d.Error, 300},
+		)
+	}
+	return out
+}
+
+func worstQuestion() Question {
+	text := func(limit int) string {
+		return clipEncoded(dirty(limit), limit)
+	}
+	principal := clipPrincipal(strings.Repeat("\x00", 300) + dirty(principalLimit))
+	at := time.Date(2026, 10, 11, 6, 1, 0, 0, time.UTC)
+	var relay []notice.Delivery
+	for i := 0; i < maxDeliveries; i++ {
+		relay = append(relay, notice.Delivery{
+			Kind:    strings.Repeat("\x00", 300) + dirty(32),
+			Channel: dirty(16),
+			Target:  dirty(64),
+			Result:  dirty(16),
+			Error:   strings.Repeat("\x00", 300) + dirty(300),
+			At:      at,
+		})
+	}
+	return Question{
+		ID: "q_0123456789abcdef", Number: 12, Status: StatusAnswered,
+		Requester: repeat('a', sessionLimit), RequesterPrincipal: principal,
+		RequesterThread: text(threadLimit), WorkID: "W-65",
+		Title: text(titleLimit), Body: text(bodyLimit),
+		Options: []Option{
+			{Key: "a", Label: text(labelLimit), Detail: text(detailLimit)},
+			{Key: "b", Label: text(labelLimit), Detail: text(detailLimit)},
+			{Key: "c", Label: text(labelLimit), Detail: text(detailLimit)},
+			{Key: "d", Label: text(labelLimit), Detail: text(detailLimit)},
+		},
+		Recommended: "b", AllowText: true,
+		Urgency: text(lineLimit), Meanwhile: text(lineLimit),
+		Link: text(linkLimit), LinkText: text(linkTextLimit),
+		CreatedAt:      time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC),
+		ExpiresAt:      time.Date(2026, 10, 12, 6, 0, 0, 0, time.UTC),
+		IdempotencyKey: repeat('k', keyMax), RequestFP: repeat('e', 64), QuestionFP: repeat('f', 64),
+		Answer: &Answer{
+			Option: "none", Text: text(bodyLimit), By: principal,
+			At: time.Date(2026, 10, 11, 7, 0, 0, 0, time.UTC), Channel: "console", Approval: false,
+			Read: &ReadReceipt{At: time.Date(2026, 10, 11, 8, 0, 0, 0, time.UTC), Session: repeat('a', sessionLimit), Principal: principal},
+		},
+		Withdrawal: &Withdrawal{
+			Session: repeat('a', sessionLimit), Principal: principal, Reason: text(lineLimit),
+			At: time.Date(2026, 10, 11, 9, 0, 0, 0, time.UTC),
+		},
+		Deliveries: clipDeliveries(relay, at),
+	}
+}
+
+func dirty(limit int) string {
+	var b strings.Builder
+	b.WriteString("\x00\x01\x07\x1f\u007f\u0080\u009f\u202e\u200b\u2028\u2029\ufeff")
+	unit := "\"\\\U0001F600"
+	for b.Len() < limit*4+len(unit) {
+		b.WriteString(unit)
+	}
+	return b.String()
 }
 
 func TestNotifyIsAtMostOnce(t *testing.T) {
@@ -166,6 +295,151 @@ func TestNotifySurvivesOneConflict(t *testing.T) {
 	if res.Body.(map[string]any)["id"] == nil {
 		t.Fatal(res.Body)
 	}
+}
+
+func TestNotifyStoreFailureDoesNotAuditUncommittedExpiry(t *testing.T) {
+	root := t.TempDir()
+	b := &failUpdateBackend{data: map[string][]byte{}, failAt: 3}
+	statefile.Use(b, root)
+	t.Cleanup(func() { statefile.Use(nil, "") })
+	s := New(filepath.Join(root, "questions"), actuation.NewAuditLog(filepath.Join(root, "audit.json")))
+	s.post = acceptPost()
+	start := time.Date(2026, 10, 11, 6, 0, 0, 0, time.UTC)
+	jumped := false
+	s.SetClock(func() time.Time {
+		if jumped {
+			return start.Add(2 * time.Hour)
+		}
+		return start
+	})
+	created := mustCreate(t, s, "thread-a", "0123456789abcdef", map[string]any{"ttl_hours": 1})
+	id := created["id"].(string)
+	if b.updates != 2 {
+		t.Fatalf("updates before the failing notify = %d", b.updates)
+	}
+	before := append([]byte(nil), b.data["questions"]...)
+	s.post = func(context.Context, notice.Message) ([]notice.Delivery, error) {
+		jumped = true
+		return []notice.Delivery{{
+			Channel: "ntfy", Target: "phone", Result: notice.ResultAccepted,
+			Error: strings.Repeat("\x00", 300),
+		}}, nil
+	}
+	s.sendCreated(context.Background(), caller{
+		session: "thread-a", principal: "reporter", role: "reporter", op: "notify",
+	}, Question{ID: id, Number: 1, Title: "Where is the quota?"})
+
+	if !bytes.Equal(b.data["questions"], before) {
+		t.Fatal("failed update stored the delivery")
+	}
+	doc, err := parse(b.data["questions"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Questions) != 1 || doc.Questions[0].Status != StatusOpen {
+		t.Fatalf("status after failed update = %+v", doc.Questions)
+	}
+	if doc.Questions[0].Deliveries[0].Error != "" || doc.Questions[0].Deliveries[0].Result != notice.ResultAccepted {
+		t.Fatalf("delivery changed: %+v", doc.Questions[0].Deliveries)
+	}
+	recs := auditRecords(t, b.data["audit.json"])
+	stores, expires, notifies := 0, 0, 0
+	for _, rec := range recs {
+		switch rec.Action {
+		case "question.store":
+			stores++
+			if rec.Status != "error" || !strings.Contains(rec.Detail, "op=notify") || rec.Target != id {
+				t.Fatalf("store audit = %+v", rec)
+			}
+		case "question.expire":
+			expires++
+		case "question.notify":
+			notifies++
+		}
+	}
+	if stores != 1 || expires != 0 || notifies != 1 {
+		t.Fatalf("store=%d expire=%d notify=%d, want 1, 0, 1", stores, expires, notifies)
+	}
+
+	s.Sweep()
+	doc, err = parse(b.data["questions"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Questions[0].Status != StatusExpired {
+		t.Fatalf("sweep after the failed update left status %s", doc.Questions[0].Status)
+	}
+	if !auditHasAction(auditRecords(t, b.data["audit.json"]), "question.expire", id) {
+		t.Fatal("committed expiry was not audited")
+	}
+}
+
+type auditRec struct {
+	Action string `json:"action"`
+	Target string `json:"target"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+}
+
+func auditRecords(t *testing.T, raw []byte) []auditRec {
+	t.Helper()
+	var recs []auditRec
+	if err := json.Unmarshal(raw, &recs); err != nil {
+		t.Fatal(err)
+	}
+	return recs
+}
+
+func auditHasAction(recs []auditRec, action, id string) bool {
+	for _, rec := range recs {
+		if rec.Action == action && rec.Target == id {
+			return true
+		}
+	}
+	return false
+}
+
+type failUpdateBackend struct {
+	mu      sync.Mutex
+	data    map[string][]byte
+	updates int
+	failAt  int
+}
+
+func (b *failUpdateBackend) Read(_ context.Context, key string) ([]byte, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	d, ok := b.data[key]
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return append([]byte(nil), d...), nil
+}
+
+func (b *failUpdateBackend) Write(_ context.Context, key string, data []byte) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.data[key] = append([]byte(nil), data...)
+	return nil
+}
+
+func (b *failUpdateBackend) Update(_ context.Context, key string, mutate func([]byte) ([]byte, error)) error {
+	b.mu.Lock()
+	b.updates++
+	n := b.updates
+	old := append([]byte(nil), b.data[key]...)
+	b.mu.Unlock()
+	next, err := mutate(old)
+	if err != nil {
+		return err
+	}
+	if n == b.failAt {
+		return errors.New("update failed")
+	}
+	b.mu.Lock()
+	b.data[key] = append([]byte(nil), next...)
+	b.mu.Unlock()
+	return nil
 }
 
 func TestLinksAreRejected(t *testing.T) {

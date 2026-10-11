@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
@@ -83,14 +82,28 @@ func marshalJSON(v any) ([]byte, error) {
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), nil
 }
 
-func clipBytes(s string, n int) string {
-	if len(s) <= n {
+// clipEncoded cleans s the way a single-line question field is cleaned, then
+// keeps the longest prefix whose JSON encoding is at most n bytes (quotes included).
+func clipEncoded(s string, n int) string {
+	s = clean(s, false)
+	if encodedBytes(s) <= n {
 		return s
 	}
-	for n > 0 && !utf8.RuneStart(s[n]) {
-		n--
+	r := []rune(s)
+	lo, hi := 0, len(r)
+	for lo < hi {
+		mid := (lo + hi + 1) / 2
+		if encodedBytes(string(r[:mid])) <= n {
+			lo = mid
+		} else {
+			hi = mid - 1
+		}
 	}
-	return s[:n]
+	return string(r[:lo])
+}
+
+func clipPrincipal(s string) string {
+	return clipEncoded(s, principalLimit)
 }
 
 func clipRunes(s string, n int) string {

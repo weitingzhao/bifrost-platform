@@ -33,6 +33,15 @@ func TestPrintVectors(t *testing.T) {
 		{"script", map[string]any{"title": "<script>", "urgency": "u", "meanwhile": "m"}, ""},
 		{"default key", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "work_id": "W-65"}, "thread-a"},
 		{"out of range", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "options": []any{map[string]any{"label": "Yes"}, map[string]any{"label": "No"}}, "recommended": 9}, ""},
+		{"nbsp bearer", map[string]any{"title": "bearer\u00a0abcdefgh", "urgency": "now", "meanwhile": "wait"}, "thread-a"},
+		{"unicode spaces", map[string]any{"title": "bearer\u2003abcdefgh\u3000ijklmno\u1680pqrstuvw\u202fxyz", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"zero width joins token", map[string]any{"title": "token=\u200bs3cr3tvalue", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"zero width is not space", map[string]any{"title": "bearer\u200babcdefgh", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"mixed case", map[string]any{"title": "BeArEr AbCdEfGh", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"secret at start", map[string]any{"title": "bearer abcdefgh", "urgency": "now", "meanwhile": "wait"}, "thread-a"},
+		{"secret at end", map[string]any{"title": "note token=s3cr3tvalue", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"nbsp inside value", map[string]any{"title": "token=s3cr3t\u00a0value", "urgency": "now", "meanwhile": "wait"}, ""},
+		{"word edge", map[string]any{"title": "mybearer abcdefgh", "urgency": "now", "meanwhile": "wait"}, ""},
 	}
 	var out []map[string]any
 	for _, c := range cases {
@@ -93,6 +102,10 @@ func TestCanonicalVectors(t *testing.T) {
 		t.Fatalf("vectors = %d, want the cases from the design", len(file.Vectors))
 	}
 	hexKey := regexp.MustCompile(`^[0-9a-f]{64}$`)
+	seen := map[string]struct {
+		canonical string
+		key       string
+	}{}
 	for _, v := range file.Vectors {
 		t.Run(v.Name, func(t *testing.T) {
 			got, err := CanonicalizeObjectJSON(v.Input)
@@ -122,6 +135,60 @@ func TestCanonicalVectors(t *testing.T) {
 				}
 			}
 		})
+		if v.Error == "" {
+			got, err := CanonicalizeObjectJSON(v.Input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			key := ""
+			if v.Session != "" {
+				key = DefaultKey(v.Session, got.JSON)
+			}
+			seen[v.Name] = struct {
+				canonical string
+				key       string
+			}{got.JSON, key}
+		}
+	}
+	nbsp := seen["nbsp bearer"]
+	space := seen["secret at start"]
+	if nbsp.canonical == "" || space.canonical == "" {
+		t.Fatal("redaction boundary vectors are missing")
+	}
+	if !contains(nbsp.canonical, "bearer\u00a0abcdefgh") || contains(nbsp.canonical, "[redacted]") {
+		t.Fatalf("nbsp bearer canonical = %s", nbsp.canonical)
+	}
+	if !contains(space.canonical, "bearer [redacted]") {
+		t.Fatalf("ascii bearer canonical = %s", space.canonical)
+	}
+	if nbsp.key == "" || nbsp.key == space.key {
+		t.Fatalf("nbsp key %s and ascii-space key %s must both exist and differ", nbsp.key, space.key)
+	}
+	for _, name := range []string{"unicode spaces", "zero width joins token", "zero width is not space", "mixed case", "secret at end", "nbsp inside value", "word edge"} {
+		if seen[name].canonical == "" {
+			t.Fatalf("missing redaction vector %s", name)
+		}
+	}
+	if contains(seen["unicode spaces"].canonical, "[redacted]") || !contains(seen["unicode spaces"].canonical, "\u2003") {
+		t.Fatalf("unicode spaces canonical = %s", seen["unicode spaces"].canonical)
+	}
+	if !contains(seen["zero width joins token"].canonical, "token=[redacted]") || contains(seen["zero width joins token"].canonical, "s3cr3tvalue") {
+		t.Fatalf("zero width canonical = %s", seen["zero width joins token"].canonical)
+	}
+	if !contains(seen["zero width is not space"].canonical, "bearerabcdefgh") {
+		t.Fatalf("zero width space canonical = %s", seen["zero width is not space"].canonical)
+	}
+	if !contains(seen["mixed case"].canonical, "BeArEr [redacted]") {
+		t.Fatalf("mixed case canonical = %s", seen["mixed case"].canonical)
+	}
+	if !contains(seen["secret at end"].canonical, "note token=[redacted]") || contains(seen["secret at end"].canonical, "s3cr3tvalue") {
+		t.Fatalf("secret at end canonical = %s", seen["secret at end"].canonical)
+	}
+	if !contains(seen["nbsp inside value"].canonical, "token=[redacted]") || contains(seen["nbsp inside value"].canonical, "s3cr3t") {
+		t.Fatalf("nbsp inside value canonical = %s", seen["nbsp inside value"].canonical)
+	}
+	if !contains(seen["word edge"].canonical, "mybearer abcdefgh") {
+		t.Fatalf("word edge canonical = %s", seen["word edge"].canonical)
 	}
 }
 

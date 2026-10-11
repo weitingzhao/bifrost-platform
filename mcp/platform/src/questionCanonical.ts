@@ -5,14 +5,17 @@ import { createHash } from 'node:crypto'
 const BIDI = new Set([0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069])
 const ZERO = new Set([0x180e, 0x200b, 0x200c, 0x200d, 0x2060, 0xfeff])
 
+// Same classes as api/internal/notice/redact.go. Whitespace is space, tab, LF, CR,
+// and FF. A word edge is the start of the text or one character outside
+// [A-Za-z0-9_]. Letters are listed in both cases. Do not use \s, \w, \b, or the i flag.
 const REDACT: Array<[RegExp, string]> = [
-  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted private key]'],
-  [/(?:\b)(bearer|basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 [redacted]'],
-  [/([A-Za-z0-9_.-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credential)[A-Za-z0-9_.-]*)(["']?\s*[:=]\s*["']?)[^\s"',;]+/gi, '$1$2[redacted]'],
-  [/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '[redacted jwt]'],
-  [/\b(AKIA|ASIA)[0-9A-Z]{16}\b/g, '[redacted aws key]'],
-  [/\b(gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,})/g, '[redacted token]'],
-  [/:\/\/([^/\s:@]+):([^@\s/]+)@/g, '://$1:[redacted]@'],
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\0-\uFFFF]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted private key]'],
+  [/(^|[^A-Za-z0-9_])([Bb][Ee][Aa][Rr][Ee][Rr]|[Bb][Aa][Ss][Ii][Cc])[ \t\n\r\f]+[A-Za-z0-9._~+/=-]{8,}/g, '$1$2 [redacted]'],
+  [/(^|[^A-Za-z0-9_])([A-Za-z0-9_.-]*(?:[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Ww][Dd]|[Ss][Ee][Cc][Rr][Ee][Tt]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Cc][Cc][Ee][Ss][Ss][_-]?[Kk][Ee][Yy]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll])[A-Za-z0-9_.-]*)(["']?[ \t\n\r\f]*[:=][ \t\n\r\f]*["']?)[^ \t\n\r\f"',;]+/g, '$1$2$3[redacted]'],
+  [/(^|[^A-Za-z0-9_])eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, '$1[redacted jwt]'],
+  [/(^|[^A-Za-z0-9_])(?:AKIA|ASIA)[0-9A-Z]{16}($|[^A-Za-z0-9_])/g, '$1[redacted aws key]$2'],
+  [/(^|[^A-Za-z0-9_])(?:gh[pousr]_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[abpr]-[A-Za-z0-9-]{10,})/g, '$1[redacted token]'],
+  [/:\/\/([^/ \t\n\r\f:@]+):([^@ \t\n\r\f/]+)@/g, '://$1:[redacted]@'],
 ]
 
 export class CanonicalError extends Error {

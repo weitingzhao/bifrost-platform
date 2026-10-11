@@ -17,7 +17,7 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 	if err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
-	c := caller{session: session, principal: clipBytes(principal, principalLimit), role: role, op: "create"}
+	c := caller{session: session, principal: clipPrincipal(principal), role: role, op: "create"}
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		if prev, ok := protectedByKey(doc, session, canon.Key, now); ok {
 			if prev.RequestFP != canon.RequestFP {

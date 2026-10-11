@@ -18,10 +18,10 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	dels, err := s.post(sendCtx, msg)
+	dels, postErr := s.post(sendCtx, msg)
 	stored := clipDeliveries(dels, s.clock())
 	var swept []event
-	_ = s.store.update(func(doc *document) error {
+	storeErr := s.store.update(func(doc *document) error {
 		now := s.clock()
 		doc.asOf = now
 		swept = sweep(doc, now)
@@ -35,9 +35,13 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 		doc.Questions[i].Deliveries = stored
 		return nil
 	})
+	if storeErr != nil {
+		s.writeAudit(c, []event{{"question.store", q.ID, "error", "op=notify"}})
+		return
+	}
 	s.writeAudit(c, swept)
 	status := "skipped"
-	if err != nil {
+	if postErr != nil {
 		status = "failed"
 	}
 	if len(stored) > 0 && stored[0].Result != "" {
@@ -88,12 +92,12 @@ func clipDeliveries(in []notice.Delivery, now time.Time) []Delivery {
 			kind = "created"
 		}
 		out = append(out, Delivery{
-			Kind:    clipBytes(kind, 32),
-			Channel: clipBytes(d.Channel, 16),
-			Target:  clipBytes(d.Target, 64),
+			Kind:    clipEncoded(kind, 32),
+			Channel: clipEncoded(d.Channel, 16),
+			Target:  clipEncoded(d.Target, 64),
 			At:      at,
-			Result:  clipBytes(d.Result, 16),
-			Error:   clipBytes(d.Error, 300),
+			Result:  clipEncoded(d.Result, 16),
+			Error:   clipEncoded(d.Error, 300),
 		})
 	}
 	return out

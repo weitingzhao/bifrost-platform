@@ -104,7 +104,8 @@ type Withdrawal struct {
 	Reason    string    `json:"reason"`
 }
 
-// Delivery is one relay attempt. Values longer than the field cap are clipped.
+// Delivery is one relay attempt. Each string is cleaned, then clipped so its
+// JSON encoding stays within the field cap.
 type Delivery struct {
 	Kind    string    `json:"kind,omitempty"`
 	Channel string    `json:"channel,omitempty"`

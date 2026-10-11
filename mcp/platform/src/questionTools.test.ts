@@ -49,6 +49,37 @@ describe('canonical vectors', () => {
       }
     })
   }
+
+  it('redacts on the same boundary as the server', () => {
+    const byName = new Map(vectors.vectors.map((v) => [v.name, v]))
+    const nbsp = byName.get('nbsp bearer')
+    const space = byName.get('secret at start')
+    const spaces = byName.get('unicode spaces')
+    const joined = byName.get('zero width joins token')
+    const glued = byName.get('zero width is not space')
+    const mixed = byName.get('mixed case')
+    const end = byName.get('secret at end')
+    const inside = byName.get('nbsp inside value')
+    const edge = byName.get('word edge')
+    for (const v of [nbsp, space, spaces, joined, glued, mixed, end, inside, edge]) {
+      assert.ok(v?.canonical, v?.name ?? 'missing redaction vector')
+    }
+    assert.match(nbsp!.canonical!, /bearer\u00a0abcdefgh/)
+    assert.equal(nbsp!.canonical!.includes('[redacted]'), false)
+    assert.match(space!.canonical!, /bearer \[redacted\]/)
+    assert.notEqual(nbsp!.idempotency_key, space!.idempotency_key)
+    assert.match(spaces!.canonical!, /\u2003/)
+    assert.equal(spaces!.canonical!.includes('[redacted]'), false)
+    assert.match(joined!.canonical!, /token=\[redacted\]/)
+    assert.equal(joined!.canonical!.includes('s3cr3tvalue'), false)
+    assert.match(glued!.canonical!, /bearerabcdefgh/)
+    assert.match(mixed!.canonical!, /BeArEr \[redacted\]/)
+    assert.match(end!.canonical!, /note token=\[redacted\]/)
+    assert.equal(end!.canonical!.includes('s3cr3tvalue'), false)
+    assert.match(inside!.canonical!, /token=\[redacted\]/)
+    assert.equal(inside!.canonical!.includes('s3cr3t'), false)
+    assert.match(edge!.canonical!, /mybearer abcdefgh/)
+  })
 })
 
 function deps(over: Partial<QuestionDeps> = {}): QuestionDeps & { calls: Array<{ method: string; path: string; body?: unknown }> } {
