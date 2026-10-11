@@ -307,6 +307,21 @@ func TestSchemaRejectsWrongTypes(t *testing.T) {
 	}
 }
 
+func TestNullMeansAbsent(t *testing.T) {
+	h, _, _ := newRig(t, "")
+	body := `{"at":1,"verdict":null,"level":null,"sure":null,"needs_you":null,"recent":null,"feed":null,"owner_now":null,"works":[{"title":"t","risk":null,"round":null,"sure":null,"steps":[{"name":"s","started":null,"ended":null,"needs_owner":null,"note":null}]}],"owner_next":{"name":null,"at":null},"coordinator":{"at":1,"state":"up","note":null}}`
+	rec := put(t, h, body)
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("null fields: %d %s", rec.Code, rec.Body.String())
+	}
+	got := decodeGet(t, get(t, h))
+	for _, want := range []string{`"risk":null`, `"round":null`, `"started":null`} {
+		if !bytes.Contains(got.Document, []byte(want)) {
+			t.Fatalf("stored document missing %s: %s", want, got.Document)
+		}
+	}
+}
+
 func TestSchemaCaps(t *testing.T) {
 	h, _, _ := newRig(t, "")
 	works := func(n int) string {

@@ -18,6 +18,7 @@ const (
 )
 
 // validateDocument checks the known fields. Unknown fields are left in place.
+// A known field whose value is JSON null is absent, at every level, not a 400.
 // A wrong JSON type, or an array over its cap, is an error whose text includes
 // the field path.
 func validateDocument(obj map[string]any) error {
@@ -247,11 +248,11 @@ func validateStringArray(obj map[string]any, path, key string, max int) error {
 	return nil
 }
 
-// arrayOf returns the array, or nil when the field is absent. A present null
-// or other type is an error. Over the cap is an error.
+// arrayOf returns the array, or nil when the field is absent or JSON null.
+// Another type is an error. Over the cap is an error.
 func arrayOf(obj map[string]any, path, key string, max int, kind string) ([]any, error) {
 	v, present := obj[key]
-	if !present {
+	if !present || v == nil {
 		return nil, nil
 	}
 	items, ok := v.([]any)
@@ -309,7 +310,7 @@ func wantBool(obj map[string]any, path, key string) error {
 
 func wantScalar(obj map[string]any, path, key, what string, match func(any) bool) error {
 	v, present := obj[key]
-	if !present {
+	if !present || v == nil {
 		return nil
 	}
 	if !match(v) {
