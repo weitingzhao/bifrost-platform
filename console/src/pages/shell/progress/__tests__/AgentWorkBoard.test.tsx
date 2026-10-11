@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -287,7 +287,14 @@ describe('AgentWorkBoard', () => {
               risk: 'one more round',
               next: { name: 'Review', who: 'Owner', at: NOW_SEC + 3600, needs_owner: true },
               steps: states.map(([name, state, needs]) =>
-                step({ name, state, needs_owner: needs, who: 'Cursor', doing: name === 'Run' ? 'editing the handler' : '' }),
+                step({
+                  name,
+                  state,
+                  needs_owner: needs,
+                  who: 'Cursor',
+                  doing: name === 'Run' ? 'editing the handler' : '',
+                  ...(name === 'Done' ? { started: NOW_SEC - 90, ended: NOW_SEC - 30 } : {}),
+                }),
               ),
             },
           ],
@@ -303,11 +310,20 @@ describe('AgentWorkBoard', () => {
     expect(within(work).getByText(`Next: Review · expected ${formatLocalTime(NOW_SEC + 3600)}`)).toBeTruthy()
     expect(within(work).getByRole('list', { name: 'Steps' }).className).toContain('flex-wrap')
     states.forEach(([name], index) => {
+      if (name === 'Done') return
       const card = within(work).getByRole('listitem', { name })
       expect(within(card).getByText(labels[index])).toBeTruthy()
       expect(within(card).getByText('Cursor')).toBeTruthy()
       expect(within(card).queryByRole('img')).toBeNull()
     })
+    fireEvent.click(within(work).getByText('1 earlier step done'))
+    const done = within(work).getByRole('listitem', { name: 'Done' })
+    expect(within(done).getByText('done')).toBeTruthy()
+    expect(within(done).getByText('took 1m')).toBeTruthy()
+    expect(within(done).queryByText(/^expected /)).toBeNull()
+    expect(within(done).queryByText(/elapsed/)).toBeNull()
+    expect(within(done).queryByRole('img')).toBeNull()
+    expect(within(done).getByText('What it did last')).toBeTruthy()
     const running = within(work).getByRole('listitem', { name: 'Run' })
     expect(within(running).getByText('elapsed 1m of usual 15 min')).toBeTruthy()
     expect(within(running).getByText('last output 30s ago')).toBeTruthy()
@@ -455,7 +471,7 @@ describe('AgentWorkBoard', () => {
         at: 1,
         verdict: 'Still here',
         owner_now: [null, { name: 'Keep', actions: [null, { text: 'Go', done: false }] }],
-        works: [null, { title: 'One', steps: [null, { name: 'Step', state: 'running', who: 'Cursor' }] }],
+        works: [null, { title: 'One', risk: null, round: null, steps: [null, { name: 'Step', state: 'running', who: 'Cursor', started: null }] }],
         needs_you: [null, 'you'],
         recent: [1, 'line'],
         feed: [null, { text: 'hi', at: NOW_SEC }],

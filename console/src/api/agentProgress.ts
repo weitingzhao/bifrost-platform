@@ -1,5 +1,15 @@
 import { authedFetch, operatorToken, parseError } from '@/api/client'
 import { readApprovalToken } from '@/api/approvals'
+import {
+  parseEvents,
+  parseQueue,
+  parseRoadmap,
+  parseUsage,
+  type ProgressEvent,
+  type ProgressQueueItem,
+  type ProgressRoadmap,
+  type ProgressUsage,
+} from '@/api/agentProgressBoard'
 
 /** How often the Progress page re-reads the published document. */
 export const AGENT_PROGRESS_POLL_MS = 15_000
@@ -63,6 +73,8 @@ export type ProgressStep = {
   note?: string
   doing?: string
   needs_owner?: boolean
+  parallel?: boolean
+  events?: ProgressEvent[]
 }
 
 export type ProgressNext = {
@@ -114,6 +126,9 @@ export type ProgressDocument = {
   works?: ProgressWork[]
   feed?: ProgressFeedItem[]
   recent?: string[]
+  roadmap?: ProgressRoadmap
+  usage?: ProgressUsage
+  queue?: ProgressQueueItem[]
 }
 
 export type AgentProgressResponse = {
@@ -242,6 +257,10 @@ function parseStep(value: Record<string, unknown>): ProgressStep {
   }
   const needs = asBoolean(value.needs_owner)
   if (needs !== undefined) step.needs_owner = needs
+  const parallel = asBoolean(value.parallel)
+  if (parallel !== undefined) step.parallel = parallel
+  const events = parseEvents(value.events)
+  if (events !== undefined) step.events = events
   return step
 }
 
@@ -314,6 +333,12 @@ export function parseProgressDocument(raw: unknown): ProgressDocument | null {
   if (Array.isArray(raw.works)) doc.works = raw.works.filter(isRecord).map(parseWork)
   if (Array.isArray(raw.feed)) doc.feed = raw.feed.filter(isRecord).map(parseFeedItem)
   if (Array.isArray(raw.recent)) doc.recent = raw.recent.filter((item): item is string => typeof item === 'string')
+  const roadmap = parseRoadmap(raw.roadmap)
+  if (roadmap !== undefined) doc.roadmap = roadmap
+  const usage = parseUsage(raw.usage)
+  if (usage !== undefined) doc.usage = usage
+  const queue = parseQueue(raw.queue)
+  if (queue !== undefined) doc.queue = queue
   return doc
 }
 
