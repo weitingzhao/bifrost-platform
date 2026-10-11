@@ -67,6 +67,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // Event is what a session reports.
@@ -486,32 +488,81 @@ func (st *State) fitNewHost(name string) error {
 	return nil
 }
 
-// Name is how a thread is called in a push: its title, else vendor and a short id.
+// Name is how a thread is called in a push title: its title, else vendor and
+// a short id. Newlines in that title become spaces.
 func (t Thread) Name() string {
+	return t.pushName(true)
+}
+
+// pushName is the thread's name in a push. title sets PushField's title flag:
+// the Look title passes true, a host-loss body passes false so a newline in
+// the name stays a newline. The id is pushed before the 8-byte cut, and the
+// cut ends before a marker rather than through one.
+func (t Thread) pushName(title bool) string {
 	if t.Title != "" {
-		return t.Title
+		return notice.PushField(t.Title, title)
 	}
-	id := t.Thread
+	id := notice.PushField(t.Thread, title)
 	if len(id) > 8 {
-		id = id[:8]
+		id = hardClip(id, 8)
 	}
-	return t.Vendor + " " + id
+	return notice.PushField(t.Vendor, title) + " " + id
+}
+
+func hardClip(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := n
+	for cut > 0 && cut < len(s) && (s[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return s[:clipEnd(s, cut)]
+}
+
+// clipEnd moves cut to the start of a withheld or [redacted …] marker when cut
+// falls inside one.
+func clipEnd(s string, cut int) int {
+	best := cut
+	for _, m := range []string{
+		"[withheld: hidden characters]",
+		"[redacted private key]",
+		"[redacted aws key]",
+		"[redacted token]",
+		"[redacted jwt]",
+		"[redacted]",
+	} {
+		from := 0
+		for from < len(s) {
+			i := strings.Index(s[from:], m)
+			if i < 0 {
+				break
+			}
+			i += from
+			end := i + len(m)
+			if cut > i && cut < end && i < best {
+				best = i
+			}
+			from = end
+		}
+	}
+	return best
 }
 
 // Message is the push for a silent thread. The title asks the Owner to look.
 func (c Config) Message(t Thread, now time.Time) (title, body string) {
 	quiet := now.Sub(t.At)
 	title = fmt.Sprintf("Look · %s stopped %s ago", t.Name(), human(quiet))
-	last := string(t.Event)
+	last := notice.PushField(string(t.Event), false)
 	if t.Tool != "" {
-		last += " " + t.Tool
+		last += " " + notice.PushField(t.Tool, false)
 	}
 	if t.Event == BeforeTool && t.ToolTimeoutS > 0 {
 		last += fmt.Sprintf(" (timeout %ds)", t.ToolTimeoutS)
 	}
-	parts := []string{t.Vendor + " on " + t.Host}
+	parts := []string{notice.PushField(t.Vendor, false) + " on " + notice.PushField(t.Host, false)}
 	if t.Work != "" {
-		parts = append(parts, t.Work)
+		parts = append(parts, notice.PushField(t.Work, false))
 	}
 	parts = append(parts,
 		"silent "+human(quiet),
@@ -526,13 +577,13 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 // The body lines are unchanged; the title asks the Owner to look.
 func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body string) {
 	age := now.Sub(h.At)
-	title = fmt.Sprintf("Look · %s has not reported for %s", h.Host, human(age))
+	title = fmt.Sprintf("Look · %s has not reported for %s", notice.PushField(h.Host, true), human(age))
 	names := make([]string, 0, len(mid))
 	for _, t := range mid {
-		names = append(names, t.Name())
+		names = append(names, t.pushName(false))
 	}
 	sort.Strings(names)
-	parts := []string{h.Host, "last heartbeat " + human(age) + " ago"}
+	parts := []string{notice.PushField(h.Host, false), "last heartbeat " + human(age) + " ago"}
 	if len(names) == 0 {
 		parts = append(parts, "no thread mid-turn")
 	} else {

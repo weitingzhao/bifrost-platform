@@ -61,7 +61,15 @@ type relayAnswer struct {
 // relay reports. A relay that was not configured or not reached is one
 // delivery too. The log lines still say "approval notify": that is the text
 // already shipped.
+//
+// Send checks the title and body and does not rewrite them. A removed-class
+// character (LF allowed in the body only) is a failed delivery, error
+// "unclean text", and no HTTP. The caller that forgot PushField fails here.
 func Send(ctx context.Context, msg Message) ([]Delivery, error) {
+	if pushUnclean(msg.Title, false) || pushUnclean(msg.Message, true) {
+		slog.Warn("approval notify failed", "reason", "unclean text")
+		return []Delivery{{Channel: "ntfy", Target: "relay", Result: ResultFailed, Error: "unclean text"}}, fmt.Errorf("unclean text")
+	}
 	endpoint := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_URL"))
 	token := strings.TrimSpace(os.Getenv("APPROVAL_NOTIFY_TOKEN"))
 	if endpoint == "" || token == "" {

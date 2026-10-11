@@ -51,7 +51,10 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 }
 
 func noticeTitle(q Question) string {
-	return "Answer · " + numberLabel(q.Number) + " · " + clipRunes(q.Title, 100)
+	// The title is clipped to 100 runes. Push the field first, and end the
+	// clip before a marker rather than through one. Newlines become spaces.
+	lead := clipPushRunes(notice.PushField(q.Title, true), 100)
+	return "Answer · " + numberLabel(q.Number) + " · " + lead
 }
 
 func noticeBody(q Question, now time.Time) string {
@@ -60,11 +63,53 @@ func noticeBody(q Question, now time.Time) string {
 		from = q.RequesterThread
 	}
 	return strings.Join([]string{
-		q.Urgency,
-		"From " + from,
+		notice.PushField(q.Urgency, false),
+		"From " + notice.PushField(from, false),
 		expiresIn(q.ExpiresAt.Sub(now)),
 		"Answering approves nothing.",
 	}, "\n")
+}
+
+// clipPushRunes is clipRunes, except a cut inside a withheld or [redacted …]
+// marker ends at the marker's start.
+func clipPushRunes(s string, n int) string {
+	plain := clipRunes(s, n)
+	if plain == s {
+		return s
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	cut := clipEnd(s, len(string(r[:n])))
+	return s[:cut]
+}
+
+func clipEnd(s string, cut int) int {
+	best := cut
+	for _, m := range []string{
+		"[withheld: hidden characters]",
+		"[redacted private key]",
+		"[redacted aws key]",
+		"[redacted token]",
+		"[redacted jwt]",
+		"[redacted]",
+	} {
+		from := 0
+		for from < len(s) {
+			i := strings.Index(s[from:], m)
+			if i < 0 {
+				break
+			}
+			i += from
+			end := i + len(m)
+			if cut > i && cut < end && i < best {
+				best = i
+			}
+			from = end
+		}
+	}
+	return best
 }
 
 func expiresIn(d time.Duration) string {

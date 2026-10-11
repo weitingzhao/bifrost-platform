@@ -154,14 +154,21 @@ func Compose(kind string, it Item, now time.Time) Message {
 	if !ok {
 		return Message{}
 	}
-	it.Env = Redact(it.Env)
-	it.Summary = Redact(it.Summary)
-	it.Reason = Redact(it.Reason)
-	it.Error = Redact(it.Error)
-	it.Requester = Redact(it.Requester)
-	it.Thread = Redact(it.Thread)
-	it.WorkID = Redact(it.WorkID)
-	it.KeyParams = redactKeyParams(actions.FilterNotifyParams(it.Action, it.KeyParams))
+	// Agent-written fields go through PushField before any clip. A hidden
+	// character withholds the whole field. Action is filtered first: the
+	// allow-list is the catalog key, not the push spelling. Summary, reason,
+	// error and thread stay multi-line so oneLine still keeps the first line
+	// only; action and env are title text, so a newline there becomes a space.
+	filtered := actions.FilterNotifyParams(it.Action, it.KeyParams)
+	it.Action = notice.PushField(it.Action, true)
+	it.Env = notice.PushField(it.Env, true)
+	it.Summary = notice.PushField(it.Summary, false)
+	it.Reason = notice.PushField(it.Reason, false)
+	it.Error = notice.PushField(it.Error, false)
+	it.Requester = notice.PushField(it.Requester, false)
+	it.Thread = notice.PushField(it.Thread, false)
+	it.WorkID = notice.PushField(it.WorkID, false)
+	it.KeyParams = pushKeyParams(filtered)
 	ref := "#" + fmt.Sprint(it.Number)
 	if it.Number == 0 {
 		ref = it.ID
@@ -243,6 +250,7 @@ func fromLine(it Item) string {
 
 // runnerLabel: "system" is the name the Owner uses for the host executor.
 func runnerLabel(r string) string {
+	r = notice.PushField(r, false)
 	switch r {
 	case "host":
 		return "system"
@@ -254,13 +262,13 @@ func runnerLabel(r string) string {
 	return r
 }
 
-func redactKeyParams(kp map[string]string) map[string]string {
+func pushKeyParams(kp map[string]string) map[string]string {
 	if len(kp) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(kp))
 	for k, v := range kp {
-		out[k] = Redact(v)
+		out[notice.PushField(k, false)] = notice.PushField(v, false)
 	}
 	return out
 }
@@ -333,10 +341,15 @@ func clip(s string, n int) string {
 	for cut > 0 && (s[cut]&0xC0) == 0x80 {
 		cut--
 	}
+	cut = clipEnd(s, cut)
+	if cut <= 0 {
+		return "…"
+	}
 	return s[:cut] + "…"
 }
 
 // clipChars keeps at most n characters (runes), with an ellipsis when it cuts.
+// A cut that would split a withheld or [redacted …] marker ends before it.
 func clipChars(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
@@ -345,7 +358,41 @@ func clipChars(s string, n int) string {
 	if n < 1 {
 		return ""
 	}
-	return string(r[:n-1]) + "…"
+	cut := len(string(r[:n-1]))
+	cut = clipEnd(s, cut)
+	if cut <= 0 {
+		return "…"
+	}
+	return s[:cut] + "…"
+}
+
+// clipEnd moves cut to the start of a withheld or [redacted …] marker when cut
+// falls inside one, so the marker is not shown in half.
+func clipEnd(s string, cut int) int {
+	best := cut
+	for _, m := range []string{
+		"[withheld: hidden characters]",
+		"[redacted private key]",
+		"[redacted aws key]",
+		"[redacted token]",
+		"[redacted jwt]",
+		"[redacted]",
+	} {
+		from := 0
+		for from < len(s) {
+			i := strings.Index(s[from:], m)
+			if i < 0 {
+				break
+			}
+			i += from
+			end := i + len(m)
+			if cut > i && cut < end && i < best {
+				best = i
+			}
+			from = end
+		}
+	}
+	return best
 }
 
 func orDefault(s, def string) string {
