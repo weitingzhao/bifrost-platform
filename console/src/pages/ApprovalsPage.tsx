@@ -5,6 +5,7 @@ import { authedFetch } from '@/api/client'
 import {
   approvalIdFromHash,
   fetchApproval,
+  fetchApprovalList,
   formatTimeRemaining,
   formatWaited,
   isUnsetDecidedAt,
@@ -34,6 +35,13 @@ import {
   visibleTimestamp,
   workItems,
 } from '@/pages/approvalDecision'
+import {
+  approvalRequestHref,
+  claimedSentence,
+  requestRef,
+  siblingRequests,
+  statusInPlainWords,
+} from '@/pages/approvalSiblings'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
@@ -216,6 +224,7 @@ function CloseUnknownForm({
           </label>
         ))}
       </fieldset>
+      <p className="m-0 text-sm">If the same command later ran as another request, this one did not run.</p>
       <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor="close-note">
         Note
         <input
@@ -238,11 +247,50 @@ function CloseUnknownForm({
   )
 }
 
+function RelatedRequests({
+  item,
+  rows,
+}: {
+  item: ApprovalItem
+  rows: readonly ApprovalItem[] | undefined
+}) {
+  if (rows == null) return null
+  const siblings = siblingRequests(item, rows)
+  if (siblings.length === 0) return null
+  return (
+    <ul aria-label="Related requests" className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
+      {siblings.map(other => (
+        <li key={other.id} className="break-words text-sm">
+          The same command was requested again as{' '}
+          <a href={approvalRequestHref(other.id)} className="underline">
+            {requestRef(other)}
+          </a>
+          {': '}
+          {statusInPlainWords(other.status)}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function WhatIsKnown({ item, rows }: { item: ApprovalItem; rows: readonly ApprovalItem[] | undefined }) {
+  const claimed = claimedSentence(item.execution)
+  return (
+    <section aria-label="What is known" className="flex w-full min-w-0 flex-col gap-1">
+      <h3 className="m-0 text-sm font-medium">What is known</h3>
+      {claimed != null ? <p className="m-0 break-words text-sm">{claimed}</p> : null}
+      <p className="m-0 text-sm">No result was posted.</p>
+      <RelatedRequests item={item} rows={rows} />
+    </section>
+  )
+}
+
 function ApprovalCard({
   item,
   hasToken,
   busy,
   closeError,
+  rows,
   onApprove,
   onReject,
   onClose,
@@ -251,6 +299,7 @@ function ApprovalCard({
   hasToken: boolean
   busy: boolean
   closeError: string | null
+  rows: readonly ApprovalItem[] | undefined
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
   onClose: (id: string, outcome: ResolveOutcome, note: string) => void
@@ -320,6 +369,11 @@ function ApprovalCard({
           </p>
         ) : null}
         {item.status === 'unknown' ? (
+          <WhatIsKnown item={item} rows={rows} />
+        ) : (
+          <RelatedRequests item={item} rows={rows} />
+        )}
+        {item.status === 'unknown' ? (
           <CloseUnknownForm
             hasToken={hasToken}
             busy={busy}
@@ -341,7 +395,7 @@ function ApprovalCard({
             ))}
           </div>
         </div>
-        {terminal != null ? (
+        {terminal != null && item.status !== 'unknown' ? (
           <div className="min-w-0 max-w-full">
             <div className="text-xs uppercase tracking-wide text-muted-foreground">
               After approving, run in a terminal:
@@ -480,6 +534,12 @@ export function ApprovalsPage() {
     refetchInterval: query => (query.state.data?.status === 'pending' ? NEEDS_YOU_REFRESH_MS : false),
   })
   const opened = id == null ? null : (itemQ.data ?? null)
+  const allQ = useQuery({
+    queryKey: ['approvals', 'all'],
+    queryFn: () => fetchApprovalList('all'),
+    enabled: id != null,
+    retry: false,
+  })
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (!hasToken) return
@@ -559,6 +619,7 @@ export function ApprovalsPage() {
               hasToken={hasToken}
               busy={busy}
               closeError={closeError}
+              rows={allQ.data}
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}
               onClose={(requestId, outcome, note) => void closeUnknown(requestId, outcome, note)}

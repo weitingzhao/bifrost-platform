@@ -100,7 +100,8 @@ describe('ApprovalsPage (request page)', () => {
     const details = screen.getByText('Technical details').closest('details')
     expect(details?.hasAttribute('open')).toBe(false)
     const urls = vi.mocked(fetch).mock.calls.map(call => String(call[0]))
-    expect(urls.some(url => url.includes('status='))).toBe(false)
+    expect(urls.some(url => url.endsWith('/api/v1/approvals/ap-9'))).toBe(true)
+    expect(urls.filter(url => url.includes('status=') && !url.includes('status=all'))).toEqual([])
   })
 
   it('opens the same request from an old #maintenance?id= link', async () => {
