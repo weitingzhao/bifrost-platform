@@ -122,12 +122,12 @@ func TestPolicyFailuresWait(t *testing.T) {
 		"expired": {func(t *testing.T, f *fixture) { f.clock = now.Add(91 * 24 * time.Hour) }, "expired at"},
 		"missing": {func(t *testing.T, f *fixture) { f.cms.Set(releasepolicy.PolicyConfigMap, nil) }, "no signed policy"},
 		"no signature": {func(t *testing.T, f *fixture) {
-			d, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
+			d, _, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
 			d["policy.sig"] = ""
 			f.cms.Set(releasepolicy.PolicyConfigMap, d)
 		}, "policy.sig is missing"},
 		"tampered": {func(t *testing.T, f *fixture) {
-			d, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
+			d, _, _, _ := f.cms.ConfigMap(context.Background(), releasepolicy.PolicyConfigMap)
 			d["policy.yaml"] = strings.Replace(d["policy.yaml"], `"valid_days": 90`, `"valid_days": 900`, 1)
 			f.cms.Set(releasepolicy.PolicyConfigMap, d)
 		}, "does not verify"},
@@ -250,9 +250,10 @@ func TestFreeze(t *testing.T) {
 	})
 	t.Run("signed unfreeze lifts it; an old one cannot lift a newer freeze", func(t *testing.T) {
 		f := newFixture(t)
-		text := "unfreeze frozen_at=" + frozenAt + " at=2026-10-08T11:45:00Z by=owner\n"
+		const id = "1"
+		text := releasepolicy.UnfreezePrefix(id, frozenAt) + "at=2026-10-08T11:45:00Z by=owner\n"
 		lifted := map[string]string{
-			"frozen": "false", "frozen_at": frozenAt,
+			"frozen": "false", "frozen_at": frozenAt, "freeze_id": id,
 			"unfreeze.txt": text, "unfreeze.sig": f.key.Sign(t, []byte(text), releasepolicy.NamespaceUnfreeze),
 		}
 		f.cms.Set(releasepolicy.FreezeConfigMap, lifted)
@@ -266,7 +267,7 @@ func TestFreeze(t *testing.T) {
 		f.cms.Set(releasepolicy.FreezeConfigMap, wrongNS)
 		wantWait(t, f.decide(nil), "unfreeze signature")
 		// New freeze is seen, then someone restores the old signed unfreeze.
-		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:50:00Z"})
+		f.cms.Set(releasepolicy.FreezeConfigMap, map[string]string{"frozen": "true", "frozen_at": "2026-10-08T11:50:00Z", "freeze_id": "2", "who": "owner", "reason": "incident"})
 		wantWait(t, f.decide(nil), "releases are frozen")
 		f.cms.Set(releasepolicy.FreezeConfigMap, lifted)
 		wantWait(t, f.decide(nil), "a later freeze")

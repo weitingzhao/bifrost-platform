@@ -10,11 +10,14 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // Key is a throwaway signing key and its SHA256 fingerprint.
@@ -109,43 +112,66 @@ func PolicyText(id string, signedAt time.Time, days int, allow ...string) string
 }
 
 // ConfigMaps is an in-memory ConfigMap reader. Err makes every read fail.
+// Each Set or successful write bumps a resourceVersion, and a write whose
+// version is not the one just read returns ErrConflict and leaves the object.
 type ConfigMaps struct {
 	mu   sync.Mutex
 	Data map[string]map[string]string
+	rv   map[string]uint64
 	Err  map[string]error
 }
 
 // NewConfigMaps returns an empty reader.
 func NewConfigMaps() *ConfigMaps {
-	return &ConfigMaps{Data: map[string]map[string]string{}, Err: map[string]error{}}
+	return &ConfigMaps{
+		Data: map[string]map[string]string{},
+		rv:   map[string]uint64{},
+		Err:  map[string]error{},
+	}
 }
 
-// Set stores one ConfigMap; nil deletes it.
+// Set stores one ConfigMap; nil deletes it. A store bumps resourceVersion.
 func (c *ConfigMaps) Set(name string, data map[string]string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if data == nil {
-		delete(c.Data, name)
-		return
-	}
-	c.Data[name] = data
+	c.setLocked(name, data)
 }
 
-func (c *ConfigMaps) ConfigMap(_ context.Context, name string) (map[string]string, bool, error) {
+func (c *ConfigMaps) setLocked(name string, data map[string]string) {
+	if c.Data == nil {
+		c.Data = map[string]map[string]string{}
+	}
+	if c.rv == nil {
+		c.rv = map[string]uint64{}
+	}
+	if data == nil {
+		delete(c.Data, name)
+		delete(c.rv, name)
+		return
+	}
+	c.Data[name] = cloneMap(data)
+	c.rv[name]++
+}
+
+func (c *ConfigMaps) ConfigMap(_ context.Context, name string) (map[string]string, string, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err := c.Err[name]; err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
 	d, ok := c.Data[name]
 	if !ok {
-		return nil, false, nil
+		return nil, "", false, nil
 	}
-	out := make(map[string]string, len(d))
-	for k, v := range d {
+	return cloneMap(d), strconv.FormatUint(c.rv[name], 10), true, nil
+}
+
+func cloneMap(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
 		out[k] = v
 	}
-	return out, true, nil
+	return out
 }
 
 // Facts fakes Git, CI, Window and Deployed.
@@ -179,8 +205,30 @@ func (f *Facts) ListDir(_ context.Context, repo, ref, dir string) ([]string, err
 // Writer is an in-memory ConfigMapWriter over a ConfigMaps reader.
 type Writer struct{ CMs *ConfigMaps }
 
-func (w Writer) WriteConfigMap(_ context.Context, name string, data map[string]string) error {
-	w.CMs.Set(name, data)
+// WriteConfigMap updates name only when resourceVersion is the version
+// ConfigMap last returned. An empty version creates the object; if it
+// already exists the write conflicts and changes nothing.
+func (w Writer) WriteConfigMap(_ context.Context, name string, data map[string]string, resourceVersion string) error {
+	w.CMs.mu.Lock()
+	defer w.CMs.mu.Unlock()
+	if w.CMs.Data == nil {
+		w.CMs.Data = map[string]map[string]string{}
+	}
+	if w.CMs.rv == nil {
+		w.CMs.rv = map[string]uint64{}
+	}
+	_, ok := w.CMs.Data[name]
+	if !ok {
+		if resourceVersion != "" {
+			return releasepolicy.ErrConflict
+		}
+		w.CMs.setLocked(name, data)
+		return nil
+	}
+	if resourceVersion != strconv.FormatUint(w.CMs.rv[name], 10) {
+		return releasepolicy.ErrConflict
+	}
+	w.CMs.setLocked(name, data)
 	return nil
 }
 

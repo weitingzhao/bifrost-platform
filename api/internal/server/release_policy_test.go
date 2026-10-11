@@ -230,14 +230,18 @@ func TestFreezeAndInstallRoutes(t *testing.T) {
 		handler(rec, req)
 		return rec
 	}
-	if rec := call(h.srv.handleReleaseFreeze, `{"who":"agent@mac","reason":"incident"}`); rec.Code != http.StatusOK ||
-		!strings.Contains(rec.Body.String(), `"frozen":true`) {
+	rec := call(h.srv.handleReleaseFreeze, `{"who":"agent@mac","reason":"incident"}`)
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"frozen":true`) {
 		t.Fatalf("freeze = %d %s", rec.Code, rec.Body.String())
+	}
+	var frozen releasepolicy.Status
+	if err := json.Unmarshal(rec.Body.Bytes(), &frozen); err != nil || frozen.FreezeID == "" {
+		t.Fatalf("freeze body = %s %v", rec.Body.String(), err)
 	}
 	if rec := call(h.srv.handleReleaseUnfreeze, `{"text":"unfreeze frozen_at=2026-10-08T12:00:00Z x\n","sig":"nope"}`); rec.Code != http.StatusConflict {
 		t.Fatalf("unsigned unfreeze = %d %s", rec.Code, rec.Body.String())
 	}
-	text := "unfreeze frozen_at=2026-10-08T12:00:00Z at=2026-10-08T12:01:00Z by=owner\n"
+	text := releasepolicy.UnfreezePrefix(frozen.FreezeID, frozen.FrozenAt) + "at=2026-10-08T12:01:00Z by=owner\n"
 	body, _ := json.Marshal(map[string]string{"text": text, "sig": h.key.Sign(t, []byte(text), releasepolicy.NamespaceUnfreeze)})
 	if rec := call(h.srv.handleReleaseUnfreeze, string(body)); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"frozen":false`) {
 		t.Fatalf("signed unfreeze = %d %s", rec.Code, rec.Body.String())

@@ -13,6 +13,8 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // PolicyFacts answers the release policy's questions from Gitea, Tekton and
@@ -26,22 +28,23 @@ func (s *Service) PolicyFacts() PolicyFacts { return PolicyFacts{s: s} }
 func (h *Handler) PolicyFacts() PolicyFacts { return h.svc.PolicyFacts() }
 
 // ConfigMap reads a ConfigMap in the pipelines namespace; found is false on NotFound.
-func (f PolicyFacts) ConfigMap(ctx context.Context, name string) (map[string]string, bool, error) {
+// resourceVersion is the version of that object, empty when it is absent.
+func (f PolicyFacts) ConfigMap(ctx context.Context, name string) (map[string]string, string, bool, error) {
 	clientset, _, err := f.s.cluster.KubernetesClient()
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
 	cm, err := clientset.CoreV1().ConfigMaps(f.s.PipelinesNamespace()).Get(ctx, name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
-		return nil, false, nil
+		return nil, "", false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, "", false, err
 	}
 	if cm.Data == nil {
-		return map[string]string{}, true, nil
+		return map[string]string{}, cm.ResourceVersion, true, nil
 	}
-	return cm.Data, true, nil
+	return cm.Data, cm.ResourceVersion, true, nil
 }
 
 // ciPipelines are the pipelines whose Succeeded run vouches for a commit
@@ -49,16 +52,18 @@ func (f PolicyFacts) ConfigMap(ctx context.Context, name string) (map[string]str
 var ciPipelines = []string{"bifrost-ci-python", "bifrost-ci-frontend", "bifrost-ci-platform"}
 
 // WriteConfigMap replaces the data of a ConfigMap in the pipelines
-// namespace, creating it when missing. The release policy's install, freeze
-// and unfreeze routes are its only callers; each verifies before writing.
-func (f PolicyFacts) WriteConfigMap(ctx context.Context, name string, data map[string]string) error {
+// namespace. An empty resourceVersion creates it; the object must be absent.
+// Any other version is an update precondition: the write succeeds only while
+// the object is still that version. A conflict or a missing object returns
+// releasepolicy.ErrConflict and writes nothing. The release policy's install,
+// freeze and unfreeze routes are its only callers; each verifies before writing.
+func (f PolicyFacts) WriteConfigMap(ctx context.Context, name string, data map[string]string, resourceVersion string) error {
 	clientset, _, err := f.s.cluster.KubernetesClient()
 	if err != nil {
 		return err
 	}
 	cms := clientset.CoreV1().ConfigMaps(f.s.PipelinesNamespace())
-	cm, err := cms.Get(ctx, name, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
+	if resourceVersion == "" {
 		_, err = cms.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   name,
@@ -66,13 +71,24 @@ func (f PolicyFacts) WriteConfigMap(ctx context.Context, name string, data map[s
 			},
 			Data: data,
 		}, metav1.CreateOptions{})
+		if apierrors.IsAlreadyExists(err) {
+			return releasepolicy.ErrConflict
+		}
 		return err
+	}
+	cm, err := cms.Get(ctx, name, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) || (err == nil && cm.ResourceVersion != resourceVersion) {
+		return releasepolicy.ErrConflict
 	}
 	if err != nil {
 		return err
 	}
 	cm.Data = data
+	cm.ResourceVersion = resourceVersion
 	_, err = cms.Update(ctx, cm, metav1.UpdateOptions{})
+	if apierrors.IsConflict(err) {
+		return releasepolicy.ErrConflict
+	}
 	return err
 }
 

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,9 +19,10 @@ import (
 )
 
 // ConfigMaps reads ConfigMaps in the pipelines namespace. found=false with a
-// nil error means NotFound.
+// nil error means NotFound. resourceVersion is the object's version at that
+// read; it is empty when the object is absent.
 type ConfigMaps interface {
-	ConfigMap(ctx context.Context, name string) (data map[string]string, found bool, err error)
+	ConfigMap(ctx context.Context, name string) (data map[string]string, resourceVersion string, found bool, err error)
 }
 
 // Git answers questions about repos on the in-cluster Gitea mirror.
@@ -68,9 +70,9 @@ type Deps struct {
 
 // Engine decides whether a tier C action may run on the signed policy.
 type Engine struct {
-	d       Deps
-	mu      sync.Mutex
-	seenMem time.Time
+	d    Deps
+	mu   sync.Mutex
+	seen seenSnap
 }
 
 // New returns an engine. A nil Now uses the wall clock.
@@ -94,6 +96,7 @@ type Status struct {
 	Frozen           bool     `json:"frozen"`
 	FreezeReason     string   `json:"freeze_reason,omitempty"`
 	FrozenAt         string   `json:"frozen_at,omitempty"`
+	FreezeID         string   `json:"freeze_id,omitempty"`
 	ReminderWindows  []string `json:"reminder_windows"`
 	Anchor           string   `json:"anchor_fingerprint"`
 	SignCommand      string   `json:"sign_command"`
@@ -114,7 +117,7 @@ func (e *Engine) Status(ctx context.Context) Status {
 		UnfreezeCommand: UnfreezeCommand,
 		CheckedAt:       now.Format(time.RFC3339),
 	}
-	pdata, pfound, perr := e.read(ctx, PolicyConfigMap)
+	pdata, _, pfound, perr := e.read(ctx, PolicyConfigMap)
 	ev := evaluatePolicy(pdata, pfound, perr, e.d.Anchor, now)
 	st.Valid = ev.valid
 	st.Reasons = append(st.Reasons, ev.reasons...)
@@ -141,6 +144,9 @@ func (e *Engine) Status(ctx context.Context) Status {
 	if fz.frozen && !fz.frozenAt.IsZero() {
 		st.FrozenAt = fz.frozenAt.UTC().Format(time.RFC3339)
 	}
+	if fz.frozen {
+		st.FreezeID = fz.freezeID
+	}
 	if st.Valid {
 		setExpiresIn(st.RemainingSeconds)
 	} else {
@@ -149,20 +155,23 @@ func (e *Engine) Status(ctx context.Context) Status {
 	return st
 }
 
-func (e *Engine) read(ctx context.Context, name string) (map[string]string, bool, error) {
+func (e *Engine) read(ctx context.Context, name string) (map[string]string, string, bool, error) {
 	if e.d.ConfigMaps == nil {
-		return nil, false, errors.New("no cluster client")
+		return nil, "", false, errors.New("no cluster client")
 	}
 	return e.d.ConfigMaps.ConfigMap(ctx, name)
 }
 
 type seenState struct {
 	FrozenAt string `json:"frozen_at"`
+	FreezeID string `json:"freeze_id,omitempty"`
 }
 
-// freeze evaluates the freeze ConfigMap and records a newer frozen_at.
+// freeze evaluates the freeze ConfigMap and records a newer freeze. An id
+// that is not strictly greater than the remembered one is not newer, and
+// neither is an equal timestamp on an object that has no id.
 func (e *Engine) freeze(ctx context.Context) freezeEval {
-	data, found, err := e.read(ctx, FreezeConfigMap)
+	data, _, found, err := e.read(ctx, FreezeConfigMap)
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	seen, seenErr := e.loadSeenLocked()
@@ -170,44 +179,136 @@ func (e *Engine) freeze(ctx context.Context) freezeEval {
 		return freezeEval{frozen: true, reason: "freeze history unreadable: " + seenErr.Error()}
 	}
 	if err == nil && found && strings.EqualFold(strings.TrimSpace(data["frozen"]), "true") {
-		if at, perr := time.Parse(time.RFC3339, strings.TrimSpace(data["frozen_at"])); perr == nil && at.After(seen) {
-			if werr := e.storeSeenLocked(at); werr != nil {
+		if next, ok := snapFromFreeze(data); ok && newerSnap(next, seen) {
+			if werr := e.storeSeenLocked(next); werr != nil {
 				slog.Warn("release policy: cannot record freeze", "err", werr)
+			} else {
+				seen = e.seen
 			}
-			seen = at
 		}
 	}
 	return evaluateFreeze(data, found, err, e.d.Anchor, seen)
 }
 
-func (e *Engine) loadSeenLocked() (time.Time, error) {
+// noteFreeze records a freeze this process just published. A lower id
+// already in the history is left where it is.
+func (e *Engine) noteFreeze(next seenSnap) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if !newerSnap(next, e.seen) && e.d.StatePath == "" {
+		return
+	}
+	if err := e.storeSeenLocked(next); err != nil {
+		slog.Warn("release policy: cannot record freeze", "err", err)
+	}
+}
+
+func snapFromFreeze(data map[string]string) (seenSnap, bool) {
+	at, err := time.Parse(time.RFC3339, strings.TrimSpace(data["frozen_at"]))
+	id, idOK := parseFreezeID(data["freeze_id"])
+	if idOK {
+		snap := seenSnap{id: id}
+		if err == nil {
+			snap.at = at
+		}
+		return snap, true
+	}
+	if err == nil {
+		return seenSnap{at: at}, true
+	}
+	return seenSnap{}, false
+}
+
+// newerSnap reports whether next is strictly after cur. A greater id is
+// newer even when the clock did not move. The same id is newer only when
+// its timestamp is later. An equal timestamp is not newer.
+func newerSnap(next, cur seenSnap) bool {
+	if next.id != cur.id {
+		return next.id > cur.id
+	}
+	return next.at.After(cur.at)
+}
+
+func (e *Engine) loadSeenLocked() (seenSnap, error) {
 	if e.d.StatePath == "" {
-		return e.seenMem, nil
+		return e.seen, nil
 	}
 	raw, err := statefile.ReadFile(e.d.StatePath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return time.Time{}, nil
+			return seenSnap{}, nil
 		}
-		return time.Time{}, err
+		return seenSnap{}, err
+	}
+	return decodeSeen(raw)
+}
+
+func decodeSeen(raw []byte) (seenSnap, error) {
+	if len(bytesTrim(raw)) == 0 {
+		return seenSnap{}, nil
 	}
 	var st seenState
 	if err := json.Unmarshal(raw, &st); err != nil {
-		return time.Time{}, fmt.Errorf("freeze history: %w", err)
+		return seenSnap{}, fmt.Errorf("freeze history: %w", err)
 	}
-	if st.FrozenAt == "" {
-		return time.Time{}, nil
+	var snap seenSnap
+	if st.FrozenAt != "" {
+		at, err := time.Parse(time.RFC3339, st.FrozenAt)
+		if err != nil {
+			return seenSnap{}, fmt.Errorf("freeze history: %w", err)
+		}
+		snap.at = at
 	}
-	return time.Parse(time.RFC3339, st.FrozenAt)
+	if st.FreezeID != "" {
+		id, ok := parseFreezeID(st.FreezeID)
+		if !ok {
+			return seenSnap{}, fmt.Errorf("freeze history: freeze_id %q is not a counter", st.FreezeID)
+		}
+		snap.id = id
+	}
+	return snap, nil
 }
 
-func (e *Engine) storeSeenLocked(at time.Time) error {
-	e.seenMem = at
+func bytesTrim(raw []byte) []byte {
+	return []byte(strings.TrimSpace(string(raw)))
+}
+
+func encodeSeen(s seenSnap) []byte {
+	st := seenState{}
+	if !s.at.IsZero() {
+		st.FrozenAt = s.at.UTC().Format(time.RFC3339)
+	}
+	if s.id > 0 {
+		st.FreezeID = strconv.FormatUint(s.id, 10)
+	}
+	raw, _ := json.Marshal(st)
+	return raw
+}
+
+func (e *Engine) storeSeenLocked(next seenSnap) error {
 	if e.d.StatePath == "" {
+		if newerSnap(next, e.seen) {
+			e.seen = next
+		}
 		return nil
 	}
-	raw, _ := json.Marshal(seenState{FrozenAt: at.UTC().Format(time.RFC3339)})
-	return statefile.WriteFile(e.d.StatePath, raw, 0o644)
+	var merged seenSnap
+	err := statefile.Update(e.d.StatePath, func(old []byte) ([]byte, error) {
+		cur, err := decodeSeen(old)
+		if err != nil {
+			return nil, err
+		}
+		if newerSnap(next, cur) {
+			cur = next
+		}
+		merged = cur
+		return encodeSeen(cur), nil
+	})
+	if err != nil {
+		return err
+	}
+	e.seen = merged
+	return nil
 }
 
 // Decision is the result for one action call. Clauses are the policy terms
@@ -236,7 +337,7 @@ func (d Decision) ClauseText() string {
 // needed an approval, stop only for this; a missing or unreadable freeze
 // ConfigMap only withholds auto-approval.
 func (e *Engine) FreezeSet(ctx context.Context) (bool, string) {
-	_, found, err := e.read(ctx, FreezeConfigMap)
+	_, _, found, err := e.read(ctx, FreezeConfigMap)
 	if err != nil || !found {
 		return false, ""
 	}
