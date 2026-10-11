@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { fetchQuestion, type Question, type QuestionAnswer, type QuestionStatus } from '@/api/questions'
+import { fetchQuestion, type Question, type QuestionStatus } from '@/api/questions'
 import { readApprovalToken } from '@/api/approvals'
 import { isQuestionId } from '@/lib/shell/consoleRoutes'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'

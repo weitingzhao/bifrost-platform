@@ -8,9 +8,9 @@ import { operatorToken } from '@/api/client'
  * A field of the wrong type makes that record unreadable: callers get a
  * reason, never a throw into the page and never a stand-in that looks healthy.
  *
- * Every question route requires X-Bifrost-Session. The console is not an agent
- * thread, so reads and the answer post send the fixed label below. It is not
- * the requester, so `mine` stays false.
+ * Every question route requires X-Bifrost-Session. Reads and the answer post
+ * send the fixed label below. That header is self-reported, so a record can
+ * name the same session. The page and the row do not use `mine`.
  */
 export const QUESTION_SESSION = 'owner-console'
 
@@ -105,9 +105,9 @@ function fail(reason: string): QuestionFailure {
   return { ok: false, reason }
 }
 
-/** Optional string. Absent is fine. The wrong type fails the record. */
+/** Optional string. A missing key is fine. Null or any other type fails the record. */
 function optionalString(raw: Record<string, unknown>, key: string): string | undefined | QuestionFailure {
-  if (!(key in raw) || raw[key] == null) return undefined
+  if (!(key in raw)) return undefined
   if (typeof raw[key] !== 'string') return fail(`questions: ${key} is not text`)
   return raw[key] as string
 }
@@ -135,7 +135,6 @@ function parseOption(value: unknown): QuestionOption | QuestionFailure {
 }
 
 function parseOptions(value: unknown): QuestionOption[] | QuestionFailure {
-  if (value == null) return []
   if (!Array.isArray(value)) return fail('questions: options is not a list')
   const options: QuestionOption[] = []
   for (const item of value) {
@@ -195,11 +194,24 @@ function parseWithdrawal(value: unknown): QuestionWithdrawal | undefined | Quest
   return { session, principal, at, reason }
 }
 
+function parseDelivery(value: unknown): QuestionFailure | undefined {
+  if (!isRecord(value)) return fail('questions: delivery is not a record')
+  for (const key of ['kind', 'channel', 'target', 'error']) {
+    const parsed = optionalString(value, key)
+    if (isFailure(parsed)) return parsed
+  }
+  const at = requiredString(value, 'at')
+  if (isFailure(at)) return at
+  const result = requiredString(value, 'result')
+  if (isFailure(result)) return result
+  return undefined
+}
+
 function parseDeliveries(value: unknown): QuestionFailure | undefined {
-  if (value == null) return undefined
   if (!Array.isArray(value)) return fail('questions: deliveries is not a list')
   for (const item of value) {
-    if (!isRecord(item)) return fail('questions: delivery is not a record')
+    const parsed = parseDelivery(item)
+    if (parsed != null) return parsed
   }
   return undefined
 }
@@ -229,7 +241,7 @@ export function parseQuestion(value: unknown): QuestionRecordResult {
   if (isFailure(created)) return created
   const expires = requiredString(value, 'expires_at')
   if (isFailure(expires)) return expires
-  const options = parseOptions(value.options)
+  const options = 'options' in value ? parseOptions(value.options) : []
   if (isFailure(options)) return options
   const principal = optionalString(value, 'requester_principal')
   if (isFailure(principal)) return principal
@@ -253,11 +265,15 @@ export function parseQuestion(value: unknown): QuestionRecordResult {
   }
   const withdrawal = parseWithdrawal(value.withdrawal)
   if (isFailure(withdrawal)) return withdrawal
-  const deliveries = parseDeliveries(value.deliveries)
-  if (deliveries != null) return deliveries
-  if ('mine' in value && value.mine != null && typeof value.mine !== 'boolean') {
-    return fail('questions: mine is not a boolean')
+  for (const key of ['idempotency_key', 'request_fp', 'question_fp']) {
+    const parsed = optionalString(value, key)
+    if (isFailure(parsed)) return parsed
   }
+  if ('deliveries' in value) {
+    const deliveries = parseDeliveries(value.deliveries)
+    if (deliveries != null) return deliveries
+  }
+  if ('mine' in value && typeof value.mine !== 'boolean') return fail('questions: mine is not a boolean')
   const question: Question = {
     id: value.id,
     number: value.number,
@@ -439,56 +455,89 @@ export function isLostResponse(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError'
 }
 
-function hashSegment(raw: string): string {
-  const mark = raw.indexOf('#')
-  if (mark < 0) return ''
-  let fragment = raw.slice(mark + 1)
-  const query = fragment.indexOf('?')
-  if (query >= 0) fragment = fragment.slice(0, query)
+const LINK_BASE = 'https://ops.bifrost.lan/'
+
+/** WHATWG parse. A hash or a relative link is resolved on the console host so the fragment is real. */
+function parseConsoleLink(raw: string): { url: URL; hashOnly: boolean } | null {
+  const trimmed = raw.trim()
+  if (trimmed === '') return null
   try {
-    fragment = decodeURIComponent(fragment)
+    if (/^[a-zA-Z][a-zA-Z+\-.]*:/.test(trimmed)) return { url: new URL(trimmed), hashOnly: false }
+    return { url: new URL(trimmed, LINK_BASE), hashOnly: trimmed.startsWith('#') }
   } catch {
-    // keep the raw fragment
+    return null
   }
-  return fragment.replace(/^\/+|\/+$/g, '').toLowerCase()
 }
 
-function pathSegment(raw: string): string {
+function cutQuery(segment: string): string {
+  const query = segment.indexOf('?')
+  return query >= 0 ? segment.slice(0, query) : segment
+}
+
+function decodeOnce(value: string): string {
   try {
-    const url = new URL(raw)
-    const path = url.pathname.replace(/^\/+|\/+$/g, '')
-    if (path === '') return ''
-    const last = path.split('/').pop() ?? ''
-    return last.toLowerCase()
+    return decodeURIComponent(value)
   } catch {
-    return ''
+    return value
   }
 }
 
 /**
- * True when the link's hash (before `?`, lower-cased) or a full URL's last
- * path segment is the approvals page, its old alias, or the questions page.
+ * Page name after one parse: cut at `?`, percent-decode once, drop a leading
+ * `/`, trim, lower-case. A second `#`, including one revealed by that decode,
+ * is refused on its own.
+ */
+function pageName(segment: string): { name: string; secondHash: boolean } {
+  const cut = cutQuery(segment)
+  if (cut.includes('#')) return { name: '', secondHash: true }
+  const decoded = decodeOnce(cut)
+  const hashAt = decoded.indexOf('#')
+  if (hashAt > 0) return { name: '', secondHash: true }
+  const body = hashAt === 0 ? decoded.slice(1) : decoded
+  if (body.includes('#')) return { name: '', secondHash: true }
+  return { name: body.replace(/^\/+/, '').trim().toLowerCase(), secondHash: false }
+}
+
+function refusedTarget(url: URL): boolean {
+  const hashBody = url.hash.startsWith('#') ? url.hash.slice(1) : ''
+  const hash = pageName(hashBody)
+  if (hash.secondHash || REFUSED_HASH.has(hash.name)) return true
+  const parts = url.pathname.split('/').filter(part => part !== '')
+  const last = parts.length > 0 ? (parts[parts.length - 1] ?? '') : ''
+  if (last === '') return false
+  const path = pageName(last)
+  return path.secondHash || REFUSED_HASH.has(path.name)
+}
+
+function hrefFromParsed(parsed: { url: URL; hashOnly: boolean }): string {
+  if (parsed.hashOnly) return parsed.url.hash
+  parsed.url.username = ''
+  parsed.url.password = ''
+  return parsed.url.href
+}
+
+/**
+ * True when the parsed hash or the last path segment names the approvals page,
+ * its old alias, or the questions page. The check uses the URL parser's result.
  */
 export function questionLinkRefused(raw: string): boolean {
-  const trimmed = raw.trim()
-  if (trimmed === '') return false
-  if (REFUSED_HASH.has(hashSegment(trimmed))) return true
-  if (REFUSED_HASH.has(pathSegment(trimmed))) return true
-  return false
+  const parsed = parseConsoleLink(raw)
+  if (parsed == null) return false
+  return refusedTarget(parsed.url)
 }
 
 /**
- * Same destinations as `actionLink`, except a refused target is text.
- * The record's words are the label, never the href of a refused target.
+ * The refusal check and the href are the same parsed URL. A refused target is
+ * text. Anything else follows `actionLink`, using that parsed href.
  */
 export function questionLink(link: string, linkText?: string): ActionLinkView {
   const raw = link.trim()
   if (raw === '') return { kind: 'text', text: linkText ?? '' }
-  if (questionLinkRefused(raw)) {
-    const label = linkText?.trim() ?? ''
-    return { kind: 'text', text: label !== '' ? label : raw }
-  }
-  return actionLink({ text: linkText ?? '', link: raw, link_text: linkText })
+  const label = linkText?.trim() ?? ''
+  const parsed = parseConsoleLink(raw)
+  if (parsed == null) return { kind: 'text', text: label !== '' ? label : raw }
+  if (refusedTarget(parsed.url)) return { kind: 'text', text: label !== '' ? label : raw }
+  return actionLink({ text: linkText ?? '', link: hrefFromParsed(parsed), link_text: linkText })
 }
 
 /** `Q12` from the server's integer. */
