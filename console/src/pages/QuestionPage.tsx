@@ -47,8 +47,8 @@ function Frame({
 }
 
 /**
- * One question id. Remounting on id (the parent's key) drops the previous
- * send state. A late event for the old id cannot land here.
+ * One question id. The parent's key remounts this session. The send lifecycle
+ * is not kept here: a late POST or GET still lands on that id's store entry.
  */
 function QuestionSession({ id }: { id: string }) {
   const send = useAnswerSend(id)

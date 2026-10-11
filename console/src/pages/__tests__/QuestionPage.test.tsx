@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { parseQuestion } from '@/api/questions'
 import { QuestionPage } from '@/pages/QuestionPage'
+import { resetAnswerSendStore } from '@/pages/question/answerSendStore'
 import { QuestionRow } from '@/pages/shell/needs-you/QuestionRow'
 
 const CONTRACT = join(dirname(fileURLToPath(import.meta.url)), '../../../../api/internal/questions/testdata/contract')
@@ -65,12 +66,15 @@ function posts(): number {
 
 describe('QuestionPage', () => {
   beforeEach(() => {
+    resetAnswerSendStore()
     installStorage()
     window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
     vi.stubGlobal('fetch', vi.fn())
   })
 
   afterEach(() => {
+    cleanup()
+    resetAnswerSendStore()
     vi.unstubAllGlobals()
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
     window.location.hash = ''

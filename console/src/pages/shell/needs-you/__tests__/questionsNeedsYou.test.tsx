@@ -131,15 +131,12 @@ describe('Needs you questions', () => {
     stub(() => json({ questions: [openQuestion(12)] }), filled)
     render(wrapper(<NeedsYouPage />))
     // Questions, approvals, and lineage resolve independently. Wait until every
-    // region and the lineage title are on screen; the order assertion is then
-    // independent of which fetch settled first. The wait is longer than the
-    // default second so a busy machine does not time out.
-    const slow = { timeout: 15_000 }
-    await screen.findByRole('region', { name: 'Decide' }, slow)
-    await screen.findByRole('region', { name: 'Run in a terminal' }, slow)
-    await screen.findByRole('region', { name: 'Check' }, slow)
-    const answer = await screen.findByRole('region', { name: 'Answer' }, slow)
-    expect(await within(answer).findByText(/Quota work/, {}, slow)).toBeTruthy()
+    // region and the lineage title are on screen, then read the order.
+    await screen.findByRole('region', { name: 'Decide' })
+    await screen.findByRole('region', { name: 'Run in a terminal' })
+    await screen.findByRole('region', { name: 'Check' })
+    const answer = await screen.findByRole('region', { name: 'Answer' })
+    expect(await within(answer).findByText(/Quota work/)).toBeTruthy()
     const names = screen.getAllByRole('region').map(region => region.getAttribute('aria-label'))
     expect(names.indexOf('Answer')).toBeGreaterThan(names.indexOf('Check'))
     expect(names.indexOf('Check')).toBeGreaterThan(names.indexOf('Run in a terminal'))
@@ -149,7 +146,7 @@ describe('Needs you questions', () => {
     expect(within(answer).getByText('Agent-reported: quota thread')).toBeTruthy()
     expect(within(answer).getByRole('link').getAttribute('href')).toBe('#questions?id=q_000000000000000c')
     expect(within(answer).queryByRole('button', { name: 'Confirm answer' })).toBeNull()
-  }, 20_000)
+  })
 
   it('shows five open questions and Show 2 more when seven are open', async () => {
     const questions = [1, 2, 3, 4, 5, 6, 7].map(number => openQuestion(number, { title: `Question ${number}` }))

@@ -31,10 +31,11 @@ export type AnswerSendState = {
 }
 
 export type AnswerSendEvent =
-  | { type: 'focus'; id: string }
   | { type: 'choose'; id: string; snapshot: ConfirmSnapshot }
   | { type: 'cancel'; id: string }
   | { type: 'confirm'; id: string }
+  | { type: 'leave'; id: string }
+  | { type: 'return'; id: string }
   | { type: 'postSaved'; id: string; answer: QuestionAnswer }
   | {
       type: 'postRejected'
@@ -163,7 +164,11 @@ function reduceRejected(phase: AnswerPhase, event: Extract<AnswerSendEvent, { ty
 
 function reducePhase(phase: AnswerPhase, event: AnswerSendEvent): AnswerPhase {
   switch (event.type) {
-    case 'focus':
+    case 'leave':
+      // The choice is not a send. Leaving the question drops it.
+      return phase.kind === 'confirming' ? IDLE : phase
+    case 'return':
+      // Mounting reads the entry that is already here. It does not start over.
       return phase
     case 'choose':
       if (phase.kind === 'sending' || phase.kind === 'unknown' || isTerminalPhase(phase)) return phase
@@ -195,10 +200,6 @@ function reducePhase(phase: AnswerPhase, event: AnswerSendEvent): AnswerPhase {
 }
 
 export function reduceAnswerSend(state: AnswerSendState, event: AnswerSendEvent): AnswerSendState {
-  if (event.type === 'focus') {
-    if (event.id === state.questionId) return state
-    return { questionId: event.id, phase: IDLE }
-  }
   if (event.id !== state.questionId) return state
   const phase = reducePhase(state.phase, event)
   if (phase === state.phase) return state
