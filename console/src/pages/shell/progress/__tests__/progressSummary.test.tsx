@@ -507,6 +507,12 @@ describe('Progress summary', () => {
       elapsed: summary.querySelector('[data-elapsed-pct]')?.getAttribute('data-elapsed-pct'),
     }
     expect(before.elapsed).toBe('33')
+    expect(before.needs).toBe('1')
+    expect(before.plan).toBe('1')
+    expect(before.running).toBe('1')
+    expect(before.gauges).toBe('1')
+    expect(before.quota).toBe('1')
+    expect(before.done).toBe('1')
     await act(async () => {
       vi.setSystemTime(NOW + 120_000)
       await vi.advanceTimersByTimeAsync(1000)
