@@ -200,6 +200,8 @@ func Compose(kind string, it Item, now time.Time) Message {
 		m.Title = joinNonEmpty(" · ", verb, ref, lead)
 		m.Message = lines(ask, summary, params, from+" · "+expiry(it.ExpiresAt, now))
 	}
+	m.Title = notice.Redact(notice.StripControls(m.Title, false))
+	m.Message = notice.Redact(notice.StripControls(m.Message, true))
 	return m
 }
 

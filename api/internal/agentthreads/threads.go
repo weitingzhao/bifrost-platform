@@ -67,6 +67,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/notice"
 )
 
 // Event is what a session reports.
@@ -519,7 +521,7 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 		"in turn "+human(now.Sub(t.TurnStartedAt)),
 	)
 	body = "Nothing is working on it. Open the thread.\n" + strings.Join(parts, " · ") + ". Nothing was restarted."
-	return title, body
+	return cleanNotice(title, body)
 }
 
 // HostMessage is the one push for a host that stopped heartbeating.
@@ -549,7 +551,11 @@ func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body st
 		parts = append(parts, "not monitored "+strings.Join(dark, ", "))
 	}
 	body = strings.Join(parts, " · ") + ". Nothing was restarted."
-	return title, body
+	return cleanNotice(title, body)
+}
+
+func cleanNotice(title, body string) (string, string) {
+	return notice.Redact(notice.StripControls(title, false)), notice.Redact(notice.StripControls(body, true))
 }
 
 // Validate checks a host heartbeat.

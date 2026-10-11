@@ -52,18 +52,21 @@ func TestPinApprovalNoticeText(t *testing.T) {
 		body     string
 		priority int
 	}{
+		// U+202E in the summary is removed before redaction. The spaces on either
+		// side of it stay, so the lead reads "Sync  app". The Check row is the
+		// same summary and changes with it.
 		{KindCreated,
-			"Decide · #7 · Sync \u202e app token=[redacted]",
+			"Decide · #7 · Sync  app token=[redacted]",
 			"Runs as soon as you approve.\n" +
-				"Sync \u202e app token=[redacted]\n" +
+				"Sync  app token=[redacted]\n" +
 				"name=app-prod\n" +
 				"from W-65 · slice zero (cursor) · runs on: platform · expires in 23h",
 			4},
 		{KindFailed,
-			"Check · #7 · failed · Sync \u202e app token=[redacted]",
+			"Check · #7 · failed · Sync  app token=[redacted]",
 			"error: relay token=[redacted]\n" +
 				"Nothing else was run.\n" +
-				"Sync \u202e app token=[redacted]\n" +
+				"Sync  app token=[redacted]\n" +
 				"from W-65 · slice zero (cursor) · runs on: platform",
 			4},
 	} {

@@ -51,7 +51,8 @@ func (s *Service) sendCreated(ctx context.Context, c caller, q Question) {
 }
 
 func noticeTitle(q Question) string {
-	return "Answer · " + numberLabel(q.Number) + " · " + clipRunes(q.Title, 100)
+	title := "Answer · " + numberLabel(q.Number) + " · " + clipRunes(q.Title, 100)
+	return notice.Redact(notice.StripControls(title, false))
 }
 
 func noticeBody(q Question, now time.Time) string {
@@ -59,12 +60,13 @@ func noticeBody(q Question, now time.Time) string {
 	if q.RequesterThread != "" {
 		from = q.RequesterThread
 	}
-	return strings.Join([]string{
+	body := strings.Join([]string{
 		q.Urgency,
 		"From " + from,
 		expiresIn(q.ExpiresAt.Sub(now)),
 		"Answering approves nothing.",
 	}, "\n")
+	return notice.Redact(notice.StripControls(body, true))
 }
 
 func expiresIn(d time.Duration) string {

@@ -9,8 +9,8 @@ import (
 )
 
 // TestNoticeDoesNotDependOnActionsOrApprovals fails if this package imports
-// actions or approvals, directly or through another package. go list -deps
-// is the same list the acceptance grep checks.
+// actions, approvals, or questions, directly or through another package.
+// go list -deps is the same list the acceptance grep checks.
 func TestNoticeDoesNotDependOnActionsOrApprovals(t *testing.T) {
 	root := moduleRoot(t)
 	cmd := exec.Command("go", "list", "-deps", "./internal/notice/...")
@@ -24,7 +24,7 @@ func TestNoticeDoesNotDependOnActionsOrApprovals(t *testing.T) {
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasSuffix(line, "internal/actions") || strings.HasSuffix(line, "internal/approvals") {
+		if strings.HasSuffix(line, "internal/actions") || strings.HasSuffix(line, "internal/approvals") || strings.HasSuffix(line, "internal/questions") {
 			t.Errorf("notice depends on %s", line)
 		}
 	}
