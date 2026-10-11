@@ -291,9 +291,7 @@ function Freshness({
             documentRead={
               failed
                 ? { kind: 'failed', lastGoodAt: typeof doc.at === 'number' && doc.at > 0 ? doc.at : null }
-                : stale
-                  ? { kind: 'stale', lastGoodAt: typeof doc.at === 'number' && doc.at > 0 ? doc.at : null }
-                  : DOCUMENT_READY
+                : DOCUMENT_READY
             }
           />
         </section>

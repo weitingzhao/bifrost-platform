@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { isAwaitingDecision, type ApprovalItem } from '@/api/approvals'
-import { formatLocalTime, waitingLine, type OwnerNow } from '@/api/agentProgress'
+import { formatLocalTime, receivedIsStale, waitingLine, type AgentProgressResponse, type OwnerNow } from '@/api/agentProgress'
 import { isApprovalId } from '@/api/agentProgressExtra'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { AgentText } from '@/pages/shell/progress/AgentText'
@@ -283,6 +283,15 @@ function asOfText(at: number | null): string {
   return clock === '' ? 'Unknown' : clock
 }
 
+/** Stale is a clock fact. It is decided here so a tick does not repaint the whole board. */
+function shownRead(documentRead: DocumentRead, env: AgentProgressResponse | undefined, nowMs: number): DocumentRead {
+  if (documentRead.kind !== 'ok') return documentRead
+  const stale = env?.stale === true || (env != null && receivedIsStale(env.received_at, env.age_seconds ?? 0, nowMs))
+  if (!stale) return documentRead
+  const at = env?.document?.at
+  return { kind: 'stale', lastGoodAt: typeof at === 'number' && at > 0 ? at : null }
+}
+
 function NeedsYouLive({
   asks,
   items,
@@ -290,6 +299,7 @@ function NeedsYouLive({
   listUnreadable,
   later,
   documentRead,
+  env,
 }: {
   asks: AskSource[]
   items: ApprovalItem[] | undefined
@@ -297,17 +307,19 @@ function NeedsYouLive({
   listUnreadable: boolean
   later: number | null
   documentRead: DocumentRead
+  env?: AgentProgressResponse
 }) {
   const now = useNow()
-  if (documentRead.kind === 'loading') return <p className="m-0 text-sm text-muted-foreground">Loading…</p>
-  const current = documentRead.kind === 'ok'
+  const shown = shownRead(documentRead, env, now)
+  if (shown.kind === 'loading') return <p className="m-0 text-sm text-muted-foreground">Loading…</p>
+  const current = shown.kind === 'ok'
   const bothOk = current && read === 'ready'
   const ordered = current ? orderedAsks(asks, items, read, now) : []
   const buckets = bucketAsks(ordered, items, read, now)
   const counted = current ? needsYouTotal(buckets) : { n: 0, a: 0, b: 0, c: 0 }
   const { n, a, b, c } = counted
   const empty = bothOk && ordered.length === 0 && !listUnreadable
-  const asOf = documentRead.kind === 'ok' ? '' : asOfText(documentRead.lastGoodAt)
+  const asOf = shown.kind === 'ok' ? '' : asOfText(shown.lastGoodAt)
   return (
     <>
       <h2 className="m-0 flex min-h-11 flex-wrap items-center gap-2 text-sm font-medium">
@@ -329,7 +341,7 @@ function NeedsYouLive({
       </p>
       {current && listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
       {empty ? <span className="text-sm text-muted-foreground">Nothing needs you now, and nothing is queued for you.</span> : null}
-      {current ? (
+      {shown.kind === 'ok' ? (
         <>
           <Group title="Can do now" asks={buckets.now} items={items} read={read} allowGreen={bothOk} />
           <Group title="Not your turn yet" asks={buckets.later} items={items} read={read} allowGreen={bothOk} />
@@ -377,6 +389,7 @@ export function NeedsYouBlock({
   listUnreadable,
   later,
   documentRead = { kind: 'ok' },
+  env,
 }: {
   asks: AskSource[]
   items: ApprovalItem[] | undefined
@@ -384,6 +397,7 @@ export function NeedsYouBlock({
   listUnreadable: boolean
   later: number | null
   documentRead?: DocumentRead
+  env?: AgentProgressResponse
 }) {
   const renders = useRef(0)
   renders.current += 1
@@ -395,7 +409,7 @@ export function NeedsYouBlock({
       data-summary-renders={renders.current}
       className="flex w-full min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
     >
-      <NeedsYouLive asks={asks} items={items} read={read} listUnreadable={listUnreadable} later={later} documentRead={documentRead} />
+      <NeedsYouLive asks={asks} items={items} read={read} listUnreadable={listUnreadable} later={later} documentRead={documentRead} env={env} />
     </section>
   )
 }

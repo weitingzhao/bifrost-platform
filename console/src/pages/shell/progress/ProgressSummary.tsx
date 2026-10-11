@@ -460,6 +460,7 @@ export function ProgressSummary({
         listUnreadable={gathered.listUnreadable}
         later={laterRequestCount(doc.roadmap)}
         documentRead={documentRead}
+        env={env}
       />
       <div data-summary-block="pictures" className="grid w-full min-w-0 grid-cols-1 gap-3 min-[821px]:grid-cols-2">
         <PlanPicture doc={doc} />
