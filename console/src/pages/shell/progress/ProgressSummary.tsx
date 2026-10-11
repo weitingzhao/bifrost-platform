@@ -17,6 +17,8 @@ import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { useOpenSection } from '@/pages/shell/progress/progressFold'
 import { planCounts, runningRows, workShortName, type RunningRow } from '@/pages/shell/progress/progressModel'
 import {
+  agentText,
+  askAct,
   asksFromDocument,
   deadlineMarker,
   doingDetails,
@@ -37,6 +39,7 @@ import {
   takesMarker,
   troubleTone,
   turnMarker,
+  waitingNowCount,
   waitsOnOwner,
   formatCount,
   type ApprovalRead,
@@ -84,7 +87,23 @@ function RequestLink({ item }: { item: ApprovalItem }) {
   )
 }
 
+function AgentAside({ ask }: { ask: AskSource }) {
+  const before = agentText(ask.not_before)
+  const name = agentText(ask.name)
+  const work = agentText(ask.work)
+  if (before === '' && name === '' && work === '') return null
+  return (
+    <span data-agent-note="" className="block min-w-0 truncate">
+      <span className="text-muted-foreground">Agent&apos;s note: </span>
+      {before !== '' ? <span>{before}</span> : null}
+      {name !== '' ? <span className="font-medium">{`${before !== '' ? ' · ' : ''}${name}`}</span> : null}
+      {work !== '' ? <span className="text-muted-foreground">{`${before !== '' || name !== '' ? ' · ' : ''}${work}`}</span> : null}
+    </span>
+  )
+}
+
 function AskRow({ ask, items, read }: { ask: AskSource; items: ApprovalItem[] | undefined; read: ApprovalRead }) {
+  const now = useNow()
   if (ask.unreadable) {
     return (
       <li data-ask="unreadable" className="flex min-h-11 min-w-0 flex-wrap items-center gap-2 py-1 text-sm">
@@ -92,84 +111,92 @@ function AskRow({ ask, items, read }: { ask: AskSource; items: ApprovalItem[] | 
       </li>
     )
   }
+  const act = askAct(ask, items, read, now)
   const linked = isApprovalId(ask.approval?.id)
   const item = requestItem(ask, items, read)
   const unreadableList = linked && read === 'unreadable'
-  const turn = turnMarker(ask)
+  const turn = turnMarker(ask, act)
   const holds = holdsMarker(ask)
   const takes = takesMarker(ask)
-  const name = ask.name?.trim() ?? ''
-  const work = ask.work?.trim() ?? ''
-  const note = linked && (item != null || unreadableList)
+  const dot =
+    turn.tone === 'now'
+      ? 'inline-block size-2.5 shrink-0 rounded-full bg-emerald-500'
+      : 'inline-block size-2.5 shrink-0 rounded-full border border-current'
   return (
-    <li data-ask={turn.now ? 'now' : 'later'} className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm first:border-t-0">
-      {unreadableList ? (
-        <span>Could not read the request&apos;s state</span>
-      ) : (
-        <span className="inline-flex min-h-11 items-center gap-2">
-          <i
-            data-turn-dot={turn.now ? 'now' : 'later'}
-            className={
-              turn.now
-                ? 'inline-block size-2.5 shrink-0 rounded-full bg-emerald-500'
-                : 'inline-block size-2.5 shrink-0 rounded-full border border-current'
-            }
-          />
-          {turn.text}
-        </span>
-      )}
+    <li data-ask={act} className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm first:border-t-0">
+      <span className="inline-flex min-h-11 items-center gap-2">
+        <i data-turn-dot={turn.tone} className={dot} />
+        {turn.text}
+      </span>
+      {unreadableList ? <span>Could not read the request&apos;s state</span> : null}
       {unreadableList ? (
         <a href="#needs-you" className="inline-flex min-h-11 items-center text-sm underline">
           Open Needs you
         </a>
       ) : null}
-      {item != null && ask.fallback !== true ? <span className="font-medium">{requestHeadline(item)}</span> : null}
+      {item != null && ask.fallback !== true ? <span className="min-w-0 truncate font-medium">{requestHeadline(item)}</span> : null}
       {item != null ? <RequestLink item={item} /> : null}
       {!unreadableList ? <DeadlineChip ask={ask} items={items} read={read} /> : null}
-      {note ? <span className="text-muted-foreground">Agent&apos;s note:</span> : null}
-      {name !== '' || work !== '' ? (
-        <span className="min-w-0 break-words">
-          {name !== '' ? <span className="font-medium">{name}</span> : null}
-          {work !== '' ? <span className="text-muted-foreground">{name !== '' ? ` · ${work}` : work}</span> : null}
-        </span>
-      ) : null}
-      <span data-holds={holds.amber ? 'yes' : 'no'} className={holds.amber ? 'text-warning' : 'text-muted-foreground'}>
+      <AgentAside ask={ask} />
+      <span data-holds={holds.amber ? 'yes' : 'no'} className={`block min-w-0 truncate ${holds.amber ? 'text-warning' : 'text-muted-foreground'}`}>
         {holds.text}
       </span>
-      {takes != null ? <span>{takes}</span> : null}
+      {takes != null ? <span className="block min-w-0 truncate">{takes}</span> : null}
     </li>
   )
 }
 
-function NeedsYouBlock({ doc }: { doc: ProgressDocument }) {
+function NeedsYouLive({
+  asks,
+  items,
+  read,
+  listUnreadable,
+}: {
+  asks: AskSource[]
+  items: ApprovalItem[] | undefined
+  read: ApprovalRead
+  listUnreadable: boolean
+}) {
+  const now = useNow()
   const openSection = useOpenSection()
-  const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now)
-  const enabled = gathered.asks.some(ask => isApprovalId(ask.approval?.id))
-  const list = useProgressApprovals(enabled)
-  const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
-  const ordered = orderedAsks(gathered.asks, list.data, read)
-  const later = notYetDueCount(ordered)
-  const nowCount = ordered.filter(ask => !ask.unreadable && ask.now === true).length
+  const ordered = orderedAsks(asks, items, read, now)
+  const later = notYetDueCount(ordered, items, read, now)
+  const nowCount = waitingNowCount(ordered, items, read, now)
   return (
-    <div
-      data-summary-block="needs-you"
-      className="flex w-full min-w-0 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
-    >
+    <>
       <button type="button" className="flex min-h-11 flex-wrap items-center gap-2 text-left text-sm font-medium" onClick={() => openSection('sec-needs-you')}>
         Needs you
-        <span className="rounded-full bg-foreground/10 px-2">{nowCount}</span>
+        <span data-now-count={nowCount} className="rounded-full bg-foreground/10 px-2">{nowCount}</span>
         {later > 0 ? <span className="font-normal text-muted-foreground">{`${later} more not yet due`}</span> : null}
       </button>
-      {gathered.listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
-      {ordered.length === 0 && !gathered.listUnreadable ? (
+      {listUnreadable ? <span className="text-sm">Could not read this item</span> : null}
+      {ordered.length === 0 && !listUnreadable ? (
         <span className="text-sm text-muted-foreground">Nothing needs you now</span>
       ) : (
         <ul className="m-0 flex w-full min-w-0 list-none flex-col p-0">
           {ordered.map((ask, index) => (
-            <AskRow key={`${ask.name ?? 'ask'}-${index}`} ask={ask} items={list.data} read={read} />
+            <AskRow key={`${ask.name ?? 'ask'}-${index}`} ask={ask} items={items} read={read} />
           ))}
         </ul>
       )}
+    </>
+  )
+}
+
+function NeedsYouBlock({ doc }: { doc: ProgressDocument }) {
+  const renders = useRef(0)
+  renders.current += 1
+  const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now)
+  const enabled = gathered.asks.some(ask => isApprovalId(ask.approval?.id))
+  const list = useProgressApprovals(enabled)
+  const read = approvalRead(enabled, list.isSuccess, list.isError, list.isPending)
+  return (
+    <div
+      data-summary-block="needs-you"
+      data-summary-renders={renders.current}
+      className="flex w-full min-w-0 flex-col rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2 text-left"
+    >
+      <NeedsYouLive asks={gathered.asks} items={list.data} read={read} listUnreadable={gathered.listUnreadable} />
     </div>
   )
 }
@@ -232,11 +259,13 @@ function PlanPicture({ doc }: { doc: ProgressDocument }) {
         <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
           {items.map((item, index) => {
             const pct = slicePercent(item.est?.done, item.est?.total)
-            const owner = waitsOnOwner(typeof item.est?.blocked === 'string' ? item.est.blocked : undefined)
+            const blocked = typeof item.est?.blocked === 'string' ? agentText(item.est.blocked) : ''
+            const owner = waitsOnOwner(blocked)
+            const label = agentText(item.name)
             return (
               <li key={`${item.name ?? 'item'}-${index}`} data-plan-item="" className="grid min-w-0 grid-cols-[minmax(0,1fr)_4rem_2.5rem] items-center gap-2 text-xs">
                 <span className="min-w-0 truncate">
-                  {item.name}
+                  {label}
                   {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" title="Waiting on you" /> : null}
                 </span>
                 <span className="block h-1.5 overflow-hidden rounded bg-foreground/10">

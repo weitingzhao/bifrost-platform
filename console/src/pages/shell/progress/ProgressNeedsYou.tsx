@@ -16,8 +16,10 @@ import {
   type ProgressApproval,
 } from '@/api/agentProgressExtra'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
+import type { OwnerAskAction } from '@/api/progressFields'
 import { Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { boundDocumentText } from '@/pages/shell/progress/progressPart'
+import { agentText, asksFromDocument, type AskSource } from '@/pages/shell/progress/progressSummaryModel'
 
 const NAME_MAX = 120
 const URGENCY_MAX = 200
@@ -282,7 +284,7 @@ function requestIsQuiet(entry: OwnerNow, items: ApprovalItem[] | undefined, read
   return liveStatus(item, nowMs) !== 'pending'
 }
 
-export function NeedsYouNow({ doc }: { doc: ProgressDocument }) {
+function OwnerNowList({ doc }: { doc: ProgressDocument }) {
   const now = useNow()
   const entries = doc.owner_now ?? []
   const ids = validOwnerIds(doc)
@@ -312,4 +314,88 @@ export function NeedsYouNow({ doc }: { doc: ProgressDocument }) {
       </ul>
     </section>
   )
+}
+
+function asActions(actions: readonly OwnerAskAction[] | undefined): ProgressAction[] {
+  return (actions ?? []).map(action => ({
+    text: action.text,
+    done: action.done,
+    link: action.link,
+    link_text: action.link_text,
+  }))
+}
+
+/** A card from owner_items or standing_items. Agent text wraps here; the summary keeps one line. */
+function DocumentAskCard({ ask }: { ask: AskSource }) {
+  if (ask.unreadable) return <p className="m-0 text-sm text-foreground">Could not read this item</p>
+  const name = agentText(ask.name)
+  const work = agentText(ask.work)
+  const before = agentText(ask.not_before)
+  const blocks = agentText(ask.blocks)
+  const takes = agentText(ask.takes)
+  const deadline = agentText(ask.deadline_text)
+  const blocksText = agentText(ask.blocks_text)
+  return (
+    <>
+      {work !== '' ? <span className="break-words text-sm font-medium text-foreground">{work}</span> : null}
+      {name !== '' ? <span className="break-words text-sm text-foreground">{name}</span> : null}
+      {before !== '' ? (
+        <>
+          <span className="text-sm text-foreground">Not your turn yet</span>
+          <span className="text-sm text-muted-foreground">Agent&apos;s note:</span>
+          <span className="break-words text-sm text-foreground">{before}</span>
+        </>
+      ) : null}
+      {blocks !== '' ? <span className="break-words text-sm text-warning">{`Holding up: ${blocks}`}</span> : null}
+      {blocks === '' && blocksText !== '' ? <span className="break-words text-sm text-muted-foreground">{blocksText}</span> : null}
+      {deadline !== '' ? <span className="break-words text-sm text-foreground">{deadline}</span> : null}
+      {takes !== '' ? <span className="break-words text-sm text-foreground">{`Takes effect in ${takes}`}</span> : null}
+      <ActionList actions={asActions(ask.actions)} />
+    </>
+  )
+}
+
+const cardClass = 'flex w-full min-w-0 flex-col gap-1 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] px-3 py-2.5'
+
+function MixedList({ doc, asks }: { doc: ProgressDocument; asks: readonly AskSource[] }) {
+  const now = useNow()
+  const ownerNow = doc.owner_now ?? []
+  const ids = asks.map(ask => ask.approval?.id).filter((id): id is string => isApprovalId(id))
+  const list = useProgressApprovals(ids.length > 0)
+  const readable = list.isSuccess && list.data != null
+  return (
+    <section aria-label="Needs you now" className="flex w-full min-w-0 flex-col gap-2">
+      <h3 className="m-0 text-sm font-medium text-foreground">Needs you now</h3>
+      <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-2 p-0">
+        {asks.map((ask, index) => {
+          const entry = ask.fallback === true ? ownerNow[ask.index] : undefined
+          const quiet = entry != null ? requestIsQuiet(entry, list.data, readable, now) : false
+          return (
+            <li key={`${ask.name ?? 'ask'}-${index}`} data-request-quiet={entry?.approval == null ? undefined : quiet ? 'true' : 'false'} className={quiet ? `${cardClass} text-muted-foreground opacity-60` : cardClass}>
+              {entry != null ? <OwnerCard entry={entry} items={list.data} readable={readable} /> : <DocumentAskCard ask={ask} />}
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+/**
+ * The same list the summary uses. owner_now is the fallback only when owner_items is absent,
+ * and those cards keep the slice-3 request rendering.
+ */
+export function NeedsYouNow({ doc }: { doc: ProgressDocument }) {
+  const gathered = asksFromDocument(doc.owner_items, doc.standing_items, doc.owner_now)
+  if (gathered.asks.length === 0) {
+    if (!gathered.listUnreadable) return null
+    return (
+      <section aria-label="Needs you now" className="flex w-full min-w-0 flex-col gap-2">
+        <h3 className="m-0 text-sm font-medium text-foreground">Needs you now</h3>
+        <p className="m-0 text-sm text-foreground">Could not read this item</p>
+      </section>
+    )
+  }
+  if (gathered.asks.every(ask => ask.fallback === true)) return <OwnerNowList doc={doc} />
+  return <MixedList doc={doc} asks={gathered.asks} />
 }

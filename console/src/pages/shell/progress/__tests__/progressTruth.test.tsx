@@ -1,0 +1,306 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
+import { AGENT_TEXT_MAX } from '@/pages/shell/progress/progressSummaryModel'
+import { AgentWorkBoard } from '@/pages/shell/progress/AgentWorkBoard'
+
+const NOW = Date.parse('2026-10-10T15:00:00Z')
+const NOW_SEC = NOW / 1000
+const LIVE_ID = 'appr_6f4ac97469fd6f10'
+const OTHER_ID = 'appr_aaaaaaaaaaaaaaaa'
+const MISSING_ID = 'appr_bbbbbbbbbbbbbbbb'
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+}
+
+function installStorage(): void {
+  const mem = new Map<string, string>()
+  const store: Storage = {
+    get length() { return mem.size },
+    clear() { mem.clear() },
+    getItem(key) { return mem.has(key) ? (mem.get(key) ?? null) : null },
+    key(index) { return [...mem.keys()][index] ?? null },
+    removeItem(key) { mem.delete(key) },
+    setItem(key, value) { mem.set(key, String(value)) },
+  }
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: store })
+}
+
+function wrap(children: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
+function envelope(document: unknown) {
+  return {
+    document,
+    received_at: new Date(NOW).toISOString(),
+    age_seconds: 0,
+    stale: false,
+    host: 'vision-mac',
+    generated_at: new Date(NOW).toISOString(),
+    generation_lag_seconds: 0,
+  }
+}
+
+function stub(document: unknown, approvals?: () => Promise<Response> | Response) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/v1/approvals')) return (approvals ?? (() => json(buildApprovalListResponse([]))))()
+      return json(envelope(document))
+    }),
+  )
+}
+
+function summary() {
+  return screen.getByTestId('progress-summary')
+}
+
+describe('a request row follows the real request', () => {
+  beforeEach(() => {
+    installStorage()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(NOW))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('A shows Unknown, never green, while the approvals list is loading', async () => {
+    stub(
+      { at: NOW_SEC, verdict: 'Load', owner_items: [{ name: 'Sign', now: true, approval: { id: LIVE_ID } }] },
+      () => new Promise<Response>(() => undefined),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const item = await within(box).findByRole('listitem')
+    expect(item.getAttribute('data-ask')).toBe('unknown')
+    expect(item.textContent).toContain('Unknown')
+    expect(item?.querySelector('[data-turn-dot]')?.getAttribute('data-turn-dot')).toBe('neutral')
+    expect(item?.querySelector('[data-turn-dot]')?.className).not.toContain('bg-emerald-500')
+    expect(item?.textContent).not.toContain('You can do this now')
+    expect(summary().textContent).not.toMatch(/By /)
+    expect(summary().textContent).not.toContain('No deadline')
+  })
+
+  it('A shows Unknown when the id is not in the list, after a request he can act on', async () => {
+    const later = new Date(NOW + 23 * 60 * 60 * 1000).toISOString()
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Order',
+        owner_items: [
+          { name: 'Missing', now: true, approval: { id: MISSING_ID } },
+          { name: 'Live', now: false, approval: { id: LIVE_ID } },
+        ],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: LIVE_ID, number: 4, summary: 'real', expires_at: later })])),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(await within(box).findByText('You can do this now')).toBeTruthy()
+    const rows = [...box.querySelectorAll('[data-ask]')].map(row => row.getAttribute('data-ask'))
+    expect(rows.indexOf('now')).toBeLessThan(rows.indexOf('unknown'))
+    const missing = [...box.querySelectorAll('[data-ask="unknown"]')][0]
+    expect(missing?.querySelector('[data-turn-dot]')?.className).not.toContain('bg-emerald-500')
+    expect(missing?.textContent).not.toMatch(/By /)
+    expect(box.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('1')
+  })
+
+  it('A says Expired for a pending request past expires_at, and does not count it', async () => {
+    const past = new Date(NOW - 60_000).toISOString()
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Past',
+        owner_items: [{ name: 'Late', now: true, approval: { id: LIVE_ID } }],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: LIVE_ID, number: 9, summary: 'old', expires_at: past })])),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const row = await within(box).findByText('Expired')
+    const item = row.closest('[data-ask]')
+    expect(item?.getAttribute('data-ask')).toBe('expired')
+    expect(item?.querySelector('[data-turn-dot]')?.getAttribute('data-turn-dot')).toBe('neutral')
+    expect(item?.textContent).not.toContain('You can do this now')
+    expect(box.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('0')
+    expect(box.textContent).not.toContain('more not yet due')
+  })
+
+  it('A says you can do this now when the request is pending, whatever the document says', async () => {
+    const later = new Date(NOW + 23 * 60 * 60 * 1000).toISOString()
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Ignore now',
+        owner_items: [{ name: 'Wait', now: false, not_before: 'the freeze', approval: { id: OTHER_ID } }],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: OTHER_ID, number: 3, summary: 'go', expires_at: later })])),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const row = (await within(box).findByText('You can do this now')).closest('[data-ask]')
+    expect(row?.getAttribute('data-ask')).toBe('now')
+    expect(row?.querySelector('[data-turn-dot]')?.className).toContain('bg-emerald-500')
+    expect(row?.textContent).not.toContain('Not your turn yet')
+    expect(box.querySelector('[data-now-count]')?.getAttribute('data-now-count')).toBe('1')
+  })
+})
+
+const XSS = '<script id="xss-field">alert(1)</script>'
+
+type FieldCase = {
+  field: string
+  document: Record<string, unknown>
+  open: string[]
+  where: 'summary' | 'plan' | 'needs'
+}
+
+const FIELD_CASES: FieldCase[] = [
+  { field: 'name', document: { owner_items: [{ name: XSS, now: true }] }, open: [], where: 'summary' },
+  { field: 'not_before', document: { owner_items: [{ name: 'Later', now: false, not_before: XSS }] }, open: [], where: 'summary' },
+  { field: 'blocks', document: { owner_items: [{ name: 'Hold', now: true, blocks: XSS }] }, open: [], where: 'summary' },
+  { field: 'takes', document: { owner_items: [{ name: 'Take', now: true, takes: XSS }] }, open: [], where: 'summary' },
+  { field: 'deadline_text', document: { standing_items: [{ name: 'Stand', deadline_text: XSS }] }, open: [], where: 'summary' },
+  { field: 'blocks_text', document: { standing_items: [{ name: 'Stand', blocks_text: XSS }] }, open: [], where: 'summary' },
+  { field: 'standing takes', document: { standing_items: [{ name: 'Stand', takes: XSS }] }, open: [], where: 'summary' },
+  {
+    field: 'est.note',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'], detail: [{ name: 'W', est: { done: 1, total: 2, note: XSS, blocked: '你' } }] }] } },
+    open: ['fold-sec-plan'],
+    where: 'plan',
+  },
+  {
+    field: 'est.blocked',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'], detail: [{ name: 'W', est: { done: 1, total: 2, blocked: XSS } }] }] } },
+    open: ['fold-sec-plan', 'fold-plan-rest'],
+    where: 'plan',
+  },
+  {
+    field: 'est.sure',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'], detail: [{ name: 'W', est: { done: 1, total: 2, sure: XSS, blocked: '你' } }] }] } },
+    open: ['fold-sec-plan'],
+    where: 'plan',
+  },
+  {
+    field: 'est.as_of',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'], detail: [{ name: 'W', est: { done: 1, total: 2, as_of: XSS, blocked: '你' } }] }] } },
+    open: ['fold-sec-plan'],
+    where: 'plan',
+  },
+  {
+    field: 'pace.basis',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'] }], pace: { per_night: 2, basis: XSS } } },
+    open: ['fold-sec-plan', 'fold-plan-basis'],
+    where: 'plan',
+  },
+  {
+    field: 'pace.owner_wait',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'] }], pace: { per_night: 2, owner_wait: XSS } } },
+    open: ['fold-sec-plan', 'fold-plan-basis'],
+    where: 'plan',
+  },
+  {
+    field: 'delta.lines',
+    document: { roadmap: { groups: [{ state: 'doing', items: ['a'] }], delta: { since: 'yesterday', lines: [XSS] } } },
+    open: ['fold-sec-plan', 'fold-plan-delta'],
+    where: 'plan',
+  },
+  {
+    field: 'actions[].text',
+    document: { owner_items: [{ name: 'Sign', now: true, actions: [{ text: XSS }] }] },
+    open: [],
+    where: 'needs',
+  },
+]
+
+describe('agent text is shown as text', () => {
+  beforeEach(() => {
+    installStorage()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(NOW))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it.each(FIELD_CASES)('B shows $field as text and adds no element', async ({ document: doc, open, where }) => {
+    stub({ at: NOW_SEC, verdict: 'Text', ...doc })
+    render(wrap(<AgentWorkBoard />))
+    await screen.findByTestId('progress-summary')
+    for (const id of open) {
+      fireEvent.click(await screen.findByTestId(id))
+    }
+    const root =
+      where === 'plan'
+        ? screen.getByRole('region', { name: 'Plan' })
+        : where === 'needs'
+          ? screen.getByRole('region', { name: 'Needs you now' })
+          : summary()
+    expect(root.textContent).toContain(XSS)
+    expect(root.querySelector('script')).toBeNull()
+    expect(window.document.getElementById('xss-field')).toBeNull()
+  })
+
+  it('B bounds a long not_before, drops bidi marks, and keeps the action link ahead of it', async () => {
+    const later = new Date(NOW + 23 * 60 * 60 * 1000).toISOString()
+    const raw = `\u202E${'Z'.repeat(10_000)}`
+    stub(
+      {
+        at: NOW_SEC,
+        verdict: 'Bound',
+        owner_items: [{ name: 'Sign', now: false, not_before: raw, approval: { id: LIVE_ID } }],
+      },
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: LIVE_ID, number: 4, summary: 'real', expires_at: later })])),
+    )
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    const link = await within(box).findByRole('link', { name: 'Open request #4' })
+    const note = box.querySelector('[data-agent-note]')
+    expect(note).toBeTruthy()
+    expect(note?.textContent).not.toContain('\u202E')
+    expect(note?.textContent).toContain('…')
+    expect(note?.textContent?.match(/Z+/)?.[0]?.length ?? 0).toBeLessThanOrEqual(AGENT_TEXT_MAX - 1)
+    expect(note?.className).toContain('truncate')
+    expect(link.compareDocumentPosition(note as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const turn = box.querySelector('[data-ask="now"]')
+    expect(turn?.textContent?.startsWith('You can do this now')).toBe(true)
+  })
+})
+
+describe('one list for the summary, the section, and the empty state', () => {
+  beforeEach(() => {
+    installStorage()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(NOW))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('C shows an owner_items action in the section and does not say nothing is waiting', async () => {
+    stub({
+      at: NOW_SEC,
+      verdict: 'Items',
+      owner_items: [{ name: 'Sign', now: true, actions: [{ text: '签署规则' }] }],
+    })
+    render(wrap(<AgentWorkBoard />))
+    const box = await screen.findByTestId('progress-summary')
+    expect(within(box).getByText('Sign')).toBeTruthy()
+    const section = await screen.findByRole('region', { name: 'Needs you now' })
+    expect(within(section).getByText('签署规则')).toBeTruthy()
+    expect(screen.queryByText('Nothing is waiting for you.')).toBeNull()
+  })
+})

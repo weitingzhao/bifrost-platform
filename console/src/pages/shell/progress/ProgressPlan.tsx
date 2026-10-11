@@ -4,6 +4,7 @@ import type { PlanEstimate } from '@/api/progressFields'
 import { SectionFold } from '@/pages/shell/progress/progressFold'
 import { planCounts, planMeterLine, planStateLabel } from '@/pages/shell/progress/progressModel'
 import {
+  agentText,
   formatCount,
   groupNames,
   nightsFigure,
@@ -38,21 +39,26 @@ function DetailRow({ name, est }: { name: string | undefined; est: PlanEstimate 
     )
   }
   const pct = slicePercent(est.done, est.total)
-  const owner = waitsOnOwner(est.blocked)
+  const blocked = agentText(est.blocked)
+  const note = agentText(est.note)
+  const sure = agentText(est.sure)
+  const asOf = agentText(est.as_of)
+  const owner = waitsOnOwner(blocked)
+  const title = agentText(name)
   return (
     <div className="flex min-w-0 flex-col gap-1 border-t border-[var(--card-border)] py-2 text-sm">
       <span className="break-words font-medium">
-        {name}
+        {title}
         {owner ? <i data-owner-dot="" className="ml-1 inline-block size-2 rounded-full bg-amber-500" /> : null}
       </span>
-      {est.note?.trim() ? <span className="break-words text-muted-foreground">{est.note}</span> : null}
+      {note !== '' ? <span className="break-words text-muted-foreground">{note}</span> : null}
       <span className="block h-1.5 max-w-full overflow-hidden rounded bg-foreground/10">
         <span className="block h-full bg-emerald-500" style={{ width: `${pct ?? 0}%` }} />
       </span>
       <span className="text-muted-foreground">{`Done ${sliceLabel(est.done, est.total)}`}</span>
       <span>{`Agent slices left ${est.mine === 'unknown' || est.mine == null ? 'Unknown' : formatCount(est.mine)} · times you ${est.owner === 'unknown' || est.owner == null ? 'Unknown' : formatCount(est.owner)}`}</span>
-      <span className={owner ? 'text-warning' : ''}>{`Waiting on: ${est.blocked?.trim() || '—'}`}</span>
-      <span className="text-muted-foreground">{`Confidence: ${est.sure?.trim() || '?'}${est.as_of?.trim() ? ` · ${est.as_of}` : ''}`}</span>
+      <span className={owner ? 'text-warning' : ''}>{`Waiting on: ${blocked || '—'}`}</span>
+      <span className="text-muted-foreground">{`Confidence: ${sure || '?'}${asOf !== '' ? ` · ${asOf}` : ''}`}</span>
     </div>
   )
 }
@@ -73,11 +79,9 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
   const range = pace == null || pace.unreadable ? null : nightsRange(mine, pace.per_night)
   const shipped = groupNames(groups, ['done', 'dropped'])
   const from = roadmap.generated_from?.trim() ?? ''
-  const basisBody =
-    (pace != null && !pace.unreadable && (pace.basis?.trim() || pace.owner_wait?.trim())) ||
-    roadmap.uncovered_exit?.trim() ||
-    roadmap.note?.trim() ||
-    from !== ''
+  const basis = pace != null && !pace.unreadable ? agentText(pace.basis) : ''
+  const ownerWait = pace != null && !pace.unreadable ? agentText(pace.owner_wait) : ''
+  const basisBody = basis !== '' || ownerWait !== '' || roadmap.uncovered_exit?.trim() || roadmap.note?.trim() || from !== ''
   return (
     <section aria-label="Plan" className="flex w-full min-w-0 flex-col gap-2">
       {roadmap.goal?.trim() ? <p className="m-0 break-words text-sm text-foreground">{roadmap.goal}</p> : null}
@@ -147,19 +151,23 @@ export function ProgressPlan({ roadmap }: { roadmap: ProgressRoadmap | undefined
             <p className="m-0 text-sm">Could not read this item</p>
           ) : (
             <ul className="m-0 list-disc pl-5 text-sm">
-              {roadmap.delta.lines.map((line, index) => (
-                <li key={index} className="break-words">
-                  {line}
-                </li>
-              ))}
+              {roadmap.delta.lines.map((line, index) => {
+                const text = agentText(line)
+                if (text === '') return null
+                return (
+                  <li key={index} className="break-words">
+                    {text}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </SectionFold>
       ) : null}
       {basisBody ? (
         <SectionFold id="plan-basis" title="How the numbers were computed" defaultOpen={false}>
-          {pace != null && !pace.unreadable && pace.basis?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{pace.basis}</p> : null}
-          {pace != null && !pace.unreadable && pace.owner_wait?.trim() ? <p className="m-0 break-words text-sm text-warning">{pace.owner_wait}</p> : null}
+          {basis !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">{basis}</p> : null}
+          {ownerWait !== '' ? <p className="m-0 break-words text-sm text-warning">{ownerWait}</p> : null}
           {roadmap.uncovered_exit?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.uncovered_exit}</p> : null}
           {roadmap.note?.trim() ? <p className="m-0 break-words text-sm text-muted-foreground">{roadmap.note}</p> : null}
           {from !== '' ? <p className="m-0 break-words text-sm text-muted-foreground">Generated from {from}</p> : null}

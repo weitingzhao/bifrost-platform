@@ -4,8 +4,16 @@ import type { ProgressStep, ProgressWork } from '@/api/agentProgress'
 import type { ProgressGroup, ProgressQueueItem, ProgressRoadmap } from '@/api/agentProgressBoard'
 import type { CountRead, OwnerAsk, PlanDetail, PlanEstimate } from '@/api/progressFields'
 import { formatHourMinute, queuedNextLine } from '@/pages/shell/progress/progressModel'
+import { boundDocumentText } from '@/pages/shell/progress/progressPart'
 
 const SIX_HOURS_MS = 6 * 60 * 60 * 1000
+
+/** Agent prose in the new blocks. Longer text keeps an ellipsis; controls and bidi marks are dropped. */
+export const AGENT_TEXT_MAX = 200
+
+export function agentText(value: string | undefined): string {
+  return boundDocumentText(value ?? '', AGENT_TEXT_MAX)
+}
 
 export type ByWhen = { text: string; amber: boolean }
 
@@ -87,6 +95,35 @@ export function askStillWaiting(ask: OwnerAsk, items: readonly ApprovalItem[] | 
   return item.status === 'pending'
 }
 
+/** What the row may say about acting. A real request ignores the document's `now`. */
+export type AskAct = 'now' | 'later' | 'expired' | 'unknown'
+
+export function askAct(
+  ask: OwnerAsk,
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): AskAct {
+  if (ask.unreadable) return 'unknown'
+  if (!isApprovalId(ask.approval?.id)) return ask.now === true ? 'now' : 'later'
+  if (read !== 'ready') return 'unknown'
+  const item = requestItem(ask, items, read)
+  if (item == null || item.status !== 'pending') return 'unknown'
+  const at = Date.parse(item.expires_at)
+  if (!Number.isFinite(at)) return 'unknown'
+  if (at <= nowMs) return 'expired'
+  return 'now'
+}
+
+export function hasNeedsYou(
+  ownerItems: OwnerAsk[] | 'unreadable' | undefined,
+  standing: OwnerAsk[] | 'unreadable' | undefined,
+  ownerNow: readonly { name?: string; work?: string; actions?: OwnerAsk['actions']; approval?: OwnerAsk['approval'] }[] | undefined,
+): boolean {
+  const gathered = asksFromDocument(ownerItems, standing, ownerNow)
+  return gathered.asks.length > 0 || gathered.listUnreadable
+}
+
 function hasDeadline(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, read: ApprovalRead): boolean {
   if (isApprovalId(ask.approval?.id)) {
     const item = requestItem(ask, items, read)
@@ -97,42 +134,64 @@ function hasDeadline(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, 
 }
 
 function holdsUp(ask: OwnerAsk): boolean {
-  return (ask.blocks?.trim() ?? '') !== ''
+  return agentText(ask.blocks) !== ''
 }
 
-/** Blocking or a deadline first. Not his turn yet last. Stable for equal rank. */
+/**
+ * Actionable rows first. A request whose list is loading, unreadable, or missing
+ * comes after those. Expired is not actionable. Not his turn yet is last.
+ */
 export function orderedAsks(
   asks: readonly AskSource[],
   items: readonly ApprovalItem[] | undefined,
   read: ApprovalRead,
+  nowMs: number,
 ): AskSource[] {
   return asks
     .map((ask, index) => ({ ask, index }))
     .filter(row => askStillWaiting(row.ask, items, read))
-    .sort((a, b) => rankAsk(a.ask, items, read) - rankAsk(b.ask, items, read) || a.index - b.index)
+    .sort((a, b) => rankAsk(a.ask, items, read, nowMs) - rankAsk(b.ask, items, read, nowMs) || a.index - b.index)
     .map(row => row.ask)
 }
 
-function rankAsk(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, read: ApprovalRead): number {
+function rankAsk(ask: OwnerAsk, items: readonly ApprovalItem[] | undefined, read: ApprovalRead, nowMs: number): number {
   if (ask.unreadable) return 0
-  const later = ask.now !== true
+  const act = askAct(ask, items, read, nowMs)
   const urgent = holdsUp(ask) || hasDeadline(ask, items, read)
-  return (later ? 2 : 0) + (urgent ? 0 : 1)
+  if (act === 'now') return urgent ? 0 : 1
+  if (act === 'unknown') return 2
+  if (act === 'expired') return 3
+  return urgent ? 4 : 5
 }
 
-export function notYetDueCount(asks: readonly AskSource[]): number {
-  return asks.filter(ask => !ask.unreadable && ask.now !== true).length
+export function notYetDueCount(
+  asks: readonly AskSource[],
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): number {
+  return asks.filter(ask => !ask.unreadable && askAct(ask, items, read, nowMs) === 'later').length
 }
 
-export type TurnMarker = { text: string; now: boolean }
+export function waitingNowCount(
+  asks: readonly AskSource[],
+  items: readonly ApprovalItem[] | undefined,
+  read: ApprovalRead,
+  nowMs: number,
+): number {
+  return asks.filter(ask => !ask.unreadable && askAct(ask, items, read, nowMs) === 'now').length
+}
 
-export function turnMarker(ask: OwnerAsk): TurnMarker {
-  if (ask.now === true) return { text: 'You can do this now', now: true }
-  const before = ask.not_before?.trim() ?? ''
-  if (before !== '') return { text: `Not your turn yet · ${before}`, now: false }
-  if (typeof ask.at === 'number') return { text: `Not your turn yet · about ${formatHourMinute(ask.at)}`, now: false }
-  if (ask.at === 'unknown') return { text: 'Not your turn yet · Unknown', now: false }
-  return { text: 'Not your turn yet', now: false }
+export type TurnMarker = { text: string; tone: 'now' | 'later' | 'neutral' }
+
+/** The console's own sentence. What the agent says it waits for is not part of this sentence. */
+export function turnMarker(ask: OwnerAsk, act: AskAct): TurnMarker {
+  if (act === 'expired') return { text: 'Expired', tone: 'neutral' }
+  if (act === 'unknown') return { text: 'Unknown', tone: 'neutral' }
+  if (act === 'now') return { text: 'You can do this now', tone: 'now' }
+  if (typeof ask.at === 'number') return { text: `Not your turn yet · about ${formatHourMinute(ask.at)}`, tone: 'later' }
+  if (ask.at === 'unknown') return { text: 'Not your turn yet · Unknown', tone: 'later' }
+  return { text: 'Not your turn yet', tone: 'later' }
 }
 
 /**
@@ -155,21 +214,21 @@ export function deadlineMarker(
   }
   if (ask.deadline === 'unknown') return 'unknown'
   if (typeof ask.deadline === 'number') return byWhenText(ask.deadline * 1000, nowMs) ?? 'unknown'
-  const text = ask.deadline_text?.trim() ?? ''
+  const text = agentText(ask.deadline_text)
   if (text !== '') return { text, amber: false }
   return { text: 'No deadline', amber: false }
 }
 
 export function holdsMarker(ask: OwnerAsk): { text: string; amber: boolean } {
-  const blocks = ask.blocks?.trim() ?? ''
+  const blocks = agentText(ask.blocks)
   if (blocks !== '') return { text: `Holding up: ${blocks}`, amber: true }
-  const text = ask.blocks_text?.trim() ?? ''
+  const text = agentText(ask.blocks_text)
   if (text !== '') return { text, amber: false }
   return { text: 'Holds up nothing else', amber: false }
 }
 
 export function takesMarker(ask: OwnerAsk): string | null {
-  const takes = ask.takes?.trim() ?? ''
+  const takes = agentText(ask.takes)
   if (takes === '') return null
   return `Takes effect in ${takes}`
 }
@@ -336,5 +395,5 @@ export function groupNames(groups: readonly ProgressGroup[] | undefined, states:
 
 export function estimateNote(est: PlanEstimate | undefined): string {
   if (est == null || est.unreadable) return ''
-  return est.note?.trim() ?? ''
+  return agentText(est.note)
 }

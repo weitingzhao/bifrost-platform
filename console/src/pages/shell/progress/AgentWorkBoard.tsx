@@ -29,6 +29,7 @@ import { ProgressUsageBlock } from '@/pages/shell/progress/ProgressUsage'
 import { FoldProvider, SectionFold } from '@/pages/shell/progress/progressFold'
 import { NowClock, Tick, useNow } from '@/pages/shell/progress/progressClock'
 import { runningRows, splitWorks } from '@/pages/shell/progress/progressModel'
+import { hasNeedsYou } from '@/pages/shell/progress/progressSummaryModel'
 
 /**
  * Interim bridge (DESIGN §20.4): the coordinating thread publishes the
@@ -74,7 +75,7 @@ function Verdict({ doc }: { doc: ProgressDocument }) {
 }
 
 function NextTime({ doc }: { doc: ProgressDocument }) {
-  if ((doc.owner_now ?? []).length > 0) return null
+  if (hasNeedsYou(doc.owner_items, doc.standing_items, doc.owner_now)) return null
   return (
     <section aria-label="Next time you are needed" className="flex w-full min-w-0 flex-col gap-2">
       <h3 className="m-0 text-sm font-medium text-foreground">Next time you are needed</h3>
@@ -129,10 +130,7 @@ function CoordinatorLine({ coordinator }: { coordinator: ProgressCoordinator | u
 }
 
 function needsYouOpen(doc: ProgressDocument): boolean {
-  if ((doc.owner_now ?? []).length > 0) return true
-  if (Array.isArray(doc.owner_items) && doc.owner_items.length > 0) return true
-  if (Array.isArray(doc.standing_items) && doc.standing_items.length > 0) return true
-  return false
+  return hasNeedsYou(doc.owner_items, doc.standing_items, doc.owner_now)
 }
 
 const WorkDocument = memo(function WorkDocument({
