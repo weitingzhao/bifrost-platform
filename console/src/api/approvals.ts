@@ -1,10 +1,10 @@
-import { authHeaders, authedFetch, parseError } from '@/api/client'
+import { authHeaders, authedFetch } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
   type ApprovalResolution,
   type PlatformApprovalRecord,
 } from '@/api/approvalsServerContract'
-import { DecisionNotSent, adminSessionToken } from '@/lib/decisionAuth'
+import { DecisionNotSent, adminSessionToken, decisionErrorText } from '@/lib/decisionAuth'
 
 export type { ApprovalResolution }
 
@@ -161,8 +161,28 @@ async function postAsAdmin(path: string, body: unknown): Promise<ApprovalDecisio
     headers,
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw await parseError('approvals', r)
+  if (!r.ok) throw new Error(await decisionFailureText(r, token))
   return (await r.json()) as ApprovalDecision
+}
+
+/** Safe to store. The token is the one this request sent, not whatever is signed in now. */
+async function decisionFailureText(response: Response, sentToken: string): Promise<string> {
+  let serverText = ''
+  try {
+    const body = (await response.json()) as {
+      error?: unknown
+      message?: unknown
+      detail?: unknown
+      hint?: unknown
+    }
+    const parts = [body.error, body.message, body.detail, body.hint].filter(
+      (part): part is string => typeof part === 'string' && part.trim() !== '',
+    )
+    serverText = parts.join(' — ')
+  } catch {
+    // The body was not JSON. The status alone is enough.
+  }
+  return decisionErrorText(response.status, serverText, sentToken)
 }
 
 /** Close an unknown result. Sends the signed-in admin session, like approve and reject. */

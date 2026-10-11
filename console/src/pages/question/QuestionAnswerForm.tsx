@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { Question } from '@/api/questions'
-import { isAdminRoleRefusal } from '@/lib/decisionAuth'
+import { roleRefusalStatus } from '@/lib/decisionAuth'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
   confirmIsSendable,
@@ -153,7 +153,7 @@ export function QuestionAnswerForm({
       {phase.kind === 'confirming' &&
       phase.rejection != null &&
       phase.rejection !== '' &&
-      !isAdminRoleRefusal(phase.rejection) ? (
+      roleRefusalStatus(phase.rejection) == null ? (
         <p className="m-0 break-words text-sm text-destructive">{phase.rejection}</p>
       ) : null}
     </div>

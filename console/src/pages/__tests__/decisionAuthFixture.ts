@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from 'react'
 import type { AuthCapabilities } from '@/api/matrixTypes'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+import { beginSignInEpoch, currentSignInEpoch } from '@/lib/signInEpoch'
 
 export type DecisionKind = 'admin' | 'operator' | 'viewer' | 'guest' | 'unknown'
 
@@ -17,17 +18,28 @@ export function applySession(kind: DecisionKind): void {
   const token = sessionTokenFor(kind)
   if (token === '') window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
   else window.localStorage.setItem(PLATFORM_TOKEN_KEY, token)
+  beginSignInEpoch(token)
 }
 
 export function authValue(kind: DecisionKind): PlatformAuthContextValue {
   const token = sessionTokenFor(kind)
+  const epoch = currentSignInEpoch().token === token ? currentSignInEpoch() : beginSignInEpoch(token)
   const actions = {
     setToken: () => undefined,
     signOut: () => undefined,
     refreshCapabilities: () => undefined,
   }
   if (kind === 'unknown') {
-    return { ...actions, token, caps: undefined, capsLoading: true, canOperate: false, canAdmin: false }
+    return {
+      ...actions,
+      token: epoch.token,
+      epoch: epoch.id,
+      caps: undefined,
+      capsEpoch: null,
+      capsLoading: true,
+      canOperate: false,
+      canAdmin: false,
+    }
   }
   const caps: AuthCapabilities =
     kind === 'guest'
@@ -40,8 +52,10 @@ export function authValue(kind: DecisionKind): PlatformAuthContextValue {
         }
   return {
     ...actions,
-    token,
+    token: epoch.token,
+    epoch: epoch.id,
     caps,
+    capsEpoch: epoch.id,
     capsLoading: false,
     canOperate: caps.can_operate,
     canAdmin: caps.can_admin,

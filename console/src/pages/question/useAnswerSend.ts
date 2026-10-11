@@ -7,7 +7,7 @@ import {
   type Question,
   type QuestionAnswer,
 } from '@/api/questions'
-import { adminSessionToken, isDecisionNotSent } from '@/lib/decisionAuth'
+import { adminSessionToken, isDecisionNotSent, roleRefusalStatus } from '@/lib/decisionAuth'
 import {
   isTerminalPhase,
   presentedQuestion,
@@ -111,6 +111,16 @@ export function useAnswerSend(questionId: string) {
     } catch (err) {
       if (isDecisionNotSent(err)) {
         dispatchAnswerSend({ type: 'notSent', id: snap.id })
+        return
+      }
+      if (err instanceof QuestionHttpError && roleRefusalStatus(err.message) != null) {
+        dispatchAnswerSend({
+          type: 'postRejected',
+          id: snap.id,
+          recordStatus: null,
+          answer: null,
+          message: err.message,
+        })
         return
       }
       if (isParsedClientError(err)) {

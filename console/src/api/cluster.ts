@@ -19,7 +19,7 @@ import type {
   DataFreshnessResponse,
   NodePowerResponse,
 } from './clusterTypes'
-import { authHeaders, authedFetch, operatorToken, parseError } from './client'
+import { authHeaders, authedFetch, parseError } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
   const r = await fetch('/api/v1/cluster')
@@ -187,11 +187,11 @@ export async function fetchClusterEvents(
   return r.json() as Promise<ClusterEventsResponse>
 }
 
-export async function fetchAuthCapabilities(): Promise<AuthCapabilities> {
-  const token = operatorToken()
+/** Capabilities for the token captured when this sign-in began. Does not read storage. */
+export async function fetchAuthCapabilities(token: string, signal?: AbortSignal): Promise<AuthCapabilities> {
   const headers = new Headers()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch('/api/v1/auth/capabilities', { headers })
+  const r = await fetch('/api/v1/auth/capabilities', { headers, signal })
   if (!r.ok) throw new Error(`auth capabilities: HTTP ${r.status}`)
   return r.json() as Promise<AuthCapabilities>
 }

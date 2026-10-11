@@ -89,7 +89,9 @@ function wrapper(children: ReactNode) {
       <PlatformAuthContext.Provider
         value={{
           token: '',
+          epoch: 0,
           caps: undefined,
+          capsEpoch: null,
           capsLoading: false,
           canOperate: false,
           canAdmin: false,

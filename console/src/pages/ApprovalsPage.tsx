@@ -42,7 +42,8 @@ import {
   statusInPlainWords,
 } from '@/pages/approvalSiblings'
 import { useDecisionAuth } from '@/hooks/useDecisionAuth'
-import { adminSessionToken, isAdminRoleRefusal, isDecisionNotSent, type DecisionGate } from '@/lib/decisionAuth'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { adminSessionToken, isDecisionNotSent, roleRefusalStatus, type DecisionGate } from '@/lib/decisionAuth'
 import { DecisionHold } from '@/pages/DecisionHold'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
@@ -283,6 +284,10 @@ function WhatIsKnown({ item, rows }: { item: ApprovalItem; rows: readonly Approv
   )
 }
 
+function isRoleRefusal(message: string | null): boolean {
+  return message != null && roleRefusalStatus(message) != null
+}
+
 function ApprovalCard({
   item,
   maySend,
@@ -291,6 +296,7 @@ function ApprovalCard({
   busy,
   closeError,
   rows,
+  onRetry,
   onApprove,
   onReject,
   onClose,
@@ -302,6 +308,7 @@ function ApprovalCard({
   busy: boolean
   closeError: string | null
   rows: readonly ApprovalItem[] | undefined
+  onRetry: () => void
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
   onClose: (id: string, outcome: ResolveOutcome, note: string) => void
@@ -377,11 +384,11 @@ function ApprovalCard({
         )}
         {item.status === 'unknown' ? (
           <>
-            <DecisionHold gate={gate} refusal={refusal} />
+            <DecisionHold gate={gate} refusal={refusal} onRetry={onRetry} />
             <CloseUnknownForm
               maySend={maySend}
               busy={busy}
-              error={closeError != null && isAdminRoleRefusal(closeError) ? null : closeError}
+              error={isRoleRefusal(closeError) ? null : closeError}
               onClose={(outcome, note) => onClose(item.id, outcome, note)}
             />
           </>
@@ -421,7 +428,7 @@ function ApprovalCard({
       </article>
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
-          <DecisionHold gate={gate} refusal={refusal} />
+          <DecisionHold gate={gate} refusal={refusal} onRetry={onRetry} />
           <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor={`reject-${item.id}`}>
             Reject reason
             <input
@@ -527,11 +534,12 @@ export function ApprovalsPage() {
   const qc = useQueryClient()
   const id = useDeepLinkId()
   const gate = useDecisionAuth()
+  const { refreshCapabilities } = usePlatformAuth()
   const maySend = gate.kind === 'admin'
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [closeError, setCloseError] = useState<string | null>(null)
-  const refusal = [actionError, closeError].find(message => message != null && isAdminRoleRefusal(message)) ?? null
+  const refusal = [actionError, closeError].find(message => isRoleRefusal(message)) ?? null
 
   const itemQ = useQuery({
     queryKey: ['approvals', 'item', id],
@@ -595,7 +603,7 @@ export function ApprovalsPage() {
       <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
         ← Needs you
       </a>
-      {actionError != null && !isAdminRoleRefusal(actionError) ? (
+      {actionError != null && !isRoleRefusal(actionError) ? (
         <p className="m-0 text-sm text-destructive">{actionError}</p>
       ) : null}
 
@@ -619,6 +627,7 @@ export function ApprovalsPage() {
               busy={busy}
               closeError={closeError}
               rows={allQ.data}
+              onRetry={refreshCapabilities}
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}
               onClose={(requestId, outcome, note) => void closeUnknown(requestId, outcome, note)}

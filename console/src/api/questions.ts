@@ -1,6 +1,12 @@
 import { actionLink, type ActionLinkView } from '@/api/agentProgress'
 import { authHeaders, operatorToken } from '@/api/client'
-import { DecisionNotSent, adminSessionToken } from '@/lib/decisionAuth'
+import {
+  DecisionNotSent,
+  adminSessionToken,
+  decisionErrorText,
+  roleRefusalStatus,
+  textWithoutSentToken,
+} from '@/lib/decisionAuth'
 
 /**
  * Owner questions. Shapes follow
@@ -369,6 +375,32 @@ export function storedAnswerWords(answer: QuestionAnswer): string {
   return 'an answer with no option and no text'
 }
 
+/** The answer is stored only when it does not contain the token this request sent. */
+function answerWithoutToken(answer: QuestionAnswer | null, sentToken: string): QuestionAnswer | null {
+  if (answer == null || sentToken === '') return null
+  if (JSON.stringify(answer).includes(sentToken)) return null
+  return answer
+}
+
+/**
+ * The answer call's error, safe to put into state. Role and authentication
+ * refusals carry the status only. The token is the one this request sent.
+ */
+async function decisionCallError(response: Response, sentToken: string): Promise<QuestionHttpError> {
+  const error = await readError(response)
+  const safe = decisionErrorText(response.status, error.message, sentToken)
+  const role = roleRefusalStatus(safe) != null
+  if (role) return new QuestionHttpError(safe, response.status, null, null, true)
+  const recordStatus = error.recordStatus == null ? null : textWithoutSentToken(error.recordStatus, sentToken)
+  return new QuestionHttpError(
+    safe,
+    response.status,
+    answerWithoutToken(error.answer, sentToken),
+    recordStatus,
+    error.parsed,
+  )
+}
+
 async function readError(response: Response): Promise<QuestionHttpError> {
   let body: unknown
   let parsed = false
@@ -456,7 +488,7 @@ export async function postQuestionAnswer(id: string, option: string, text: strin
     headers,
     body: JSON.stringify(answerRequestBody(option, text)),
   })
-  if (!response.ok) throw await readError(response)
+  if (!response.ok) throw await decisionCallError(response, token)
   const parsed = parsePostedAnswer(await response.json())
   if (!parsed.ok) throw new Error(parsed.reason)
   return parsed.posted

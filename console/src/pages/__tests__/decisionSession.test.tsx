@@ -13,8 +13,8 @@ import {
   DECISION_ROLE_UNKNOWN,
   decisionNeedsAdmin,
   deriveDecisionGate,
-  refusalDetail,
 } from '@/lib/decisionAuth'
+import { beginSignInEpoch } from '@/lib/signInEpoch'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { resetAnswerSendStore } from '@/pages/question/answerSendStore'
@@ -340,10 +340,10 @@ describe('one sign-in for decisions', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: 'Approve gitops_sync_app' }))
     expect(await screen.findByText(ADMIN_SIGN_IN_REFUSED)).toBeTruthy()
-    const detail = document.querySelector('[data-refusal-detail]')
-    expect(detail?.textContent).toBe('admin token required')
-    expect(detail?.className).toContain('text-xs')
+    expect(screen.getByText('HTTP 401')).toBeTruthy()
+    expect(document.querySelector('[data-refusal-detail]')).toBeNull()
     expect(container.innerHTML).not.toContain(sessionTokenFor('admin'))
+    expect(container.innerHTML).not.toContain('admin token required')
     fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
     const input = await screen.findByPlaceholderText('Platform operator token…')
     expect((input as HTMLInputElement).type).toBe('password')
@@ -383,7 +383,8 @@ describe('one sign-in for decisions', () => {
     fireEvent.click(await screen.findByRole('button', { name: /b Wait/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Confirm answer' }))
     expect(await screen.findByText(ADMIN_SIGN_IN_REFUSED)).toBeTruthy()
-    expect(document.querySelector('[data-refusal-detail]')?.textContent).toContain('admin token required')
+    expect(screen.getByText('HTTP 401')).toBeTruthy()
+    expect(document.body.innerHTML).not.toContain('admin token required')
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy()
     expect(decisionCalls()).toHaveLength(1)
   })
@@ -485,22 +486,27 @@ describe('one sign-in for decisions', () => {
   })
 
   it('does not treat a contradictory capability read as admin', () => {
+    const epoch = beginSignInEpoch('admin-token')
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     expect(
       deriveDecisionGate({
-        token: 'admin-token',
+        token: epoch.token,
+        epoch: epoch.id,
+        capsEpoch: epoch.id,
         capsLoading: false,
+        failed: false,
         caps: { authenticated: true, role: 'admin', can_operate: true, can_admin: false },
       }).kind,
     ).toBe('unknown')
     expect(
       deriveDecisionGate({
-        token: 'admin-token',
+        token: epoch.token,
+        epoch: epoch.id,
+        capsEpoch: epoch.id,
         capsLoading: true,
+        failed: false,
         caps: { authenticated: true, role: 'admin', can_operate: true, can_admin: true },
       }).kind,
     ).toBe('unknown')
-    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
-    expect(refusalDetail(`admin token required ${sessionTokenFor('admin')}`)).toBe('admin token required')
   })
 })

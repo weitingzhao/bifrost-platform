@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { fetchQuestion, type QuestionStatus } from '@/api/questions'
 import { useDecisionAuth } from '@/hooks/useDecisionAuth'
-import { isAdminRoleRefusal } from '@/lib/decisionAuth'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { roleRefusalStatus } from '@/lib/decisionAuth'
 import { isQuestionId } from '@/lib/shell/consoleRoutes'
 import { DecisionHold } from '@/pages/DecisionHold'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
@@ -54,6 +55,7 @@ function Frame({
 function QuestionSession({ id }: { id: string }) {
   const send = useAnswerSend(id)
   const gate = useDecisionAuth()
+  const { refreshCapabilities } = usePlatformAuth()
   const acceptRef = send.acceptRef
   const readQuestion = useCallback(() => fetchQuestion(id).then(record => acceptRef.current(record)), [acceptRef, id])
 
@@ -107,7 +109,8 @@ function QuestionSession({ id }: { id: string }) {
               <>
                 <DecisionHold
                   gate={gate}
-                  refusal={rejection != null && isAdminRoleRefusal(rejection) ? rejection : null}
+                  refusal={rejection != null && roleRefusalStatus(rejection) != null ? rejection : null}
+                  onRetry={refreshCapabilities}
                 />
                 <QuestionAnswerForm
                   question={shown}
