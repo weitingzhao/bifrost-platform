@@ -317,10 +317,7 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		}
 	}
 	if pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
-		spec["taskRunSpecs"] = []map[string]any{
-			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
-		}
+		spec["taskRunSpecs"] = platformTaskRunSpecs(pipelineName, pipe)
 	}
 	// Research (second payload). verify-research also needs the SA: it asserts the
 	// running Deployment image matches the tag just built, which the default SA
@@ -1541,4 +1538,24 @@ func (s *Service) fetchGiteaCompareFiles(ctx context.Context, repo, from, to, us
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// Only name the source gate once the installed Pipeline declares it. Tekton
+// rejects taskRunSpecs naming absent tasks, so the API can ship before the Pipeline.
+func platformTaskRunSpecs(pipelineName string, pipe *unstructured.Unstructured) []map[string]any {
+	overrides := []map[string]any{
+		{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
+		{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
+	}
+	if pipelineName == "bifrost-deliver-platform-prod" {
+		tasks, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "tasks")
+		for _, raw := range tasks {
+			task, ok := raw.(map[string]any)
+			if ok && task["name"] == "check-source" {
+				overrides = append(overrides, map[string]any{"pipelineTaskName": "check-source", "serviceAccountName": "tekton-deliver"})
+				break
+			}
+		}
+	}
+	return overrides
 }
