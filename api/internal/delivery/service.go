@@ -215,6 +215,19 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	}
 	var empty PipelineRunView
 
+	ciRepo := ""
+	if isCIPipeline(pipelineName) {
+		if tag != "" {
+			resp.Message = fmt.Sprintf("tag %q cannot be set for CI: CI builds no image", tag)
+			return resp, empty, fmt.Errorf("%s", resp.Message)
+		}
+		var inputErr error
+		revision, ciRepo, inputErr = ciRunInputs(pipelineName, revision, extra)
+		if inputErr != nil {
+			resp.Message = inputErr.Error()
+			return resp, empty, inputErr
+		}
+	}
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
 		rev = "main"
@@ -236,10 +249,17 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	// any repo the pipeline clones — otherwise it fails halfway at a clone-*
 	// task. Only block when probes had full visibility (reachability ok); never
 	// block on network/probe uncertainty.
-	if pf := s.RefPreflight(ctx, pipelineName, rev); pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
+	repos := reposForPipeline(pipelineName)
+	if ciRepo != "" {
+		repos = []string{ciRepo}
+	}
+	if pf := s.refPreflightForRepos(ctx, pipelineName, rev, repos); pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
 		resp.Message = fmt.Sprintf(
 			"revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)",
 			rev, strings.Join(pf.Missing, ", "))
+		if ciRepo != "" {
+			resp.Message = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", rev, ciRepo)
+		}
 		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
 
@@ -266,68 +286,10 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if att, ok := actions.CreateAttemptFrom(ctx); ok {
 		runName = actions.ObjectName(pipelineName, att)
 	}
-	spec := map[string]any{
-		"pipelineRef": map[string]any{
-			"name": pipelineName,
-		},
-	}
-	var legacy []map[string]any
-	if pipelineTakesRevision(pipelineName) {
-		legacy = pipelineRunParams(pipelineName, rev, tag)
-	}
-	if len(legacy) > 0 || len(extra) > 0 {
-		merged, mergeErr := mergePipelineParams(declaredPipelineParams(pipe), legacy, extra)
-		if mergeErr != nil {
-			resp.Message = mergeErr.Error()
-			return resp, empty, fmt.Errorf("%s", resp.Message)
-		}
-		if len(merged) > 0 {
-			spec["params"] = merged
-			for _, p := range merged {
-				if p["name"] == "revision" {
-					if v, ok := p["value"].(string); ok && v != "" {
-						rev = v
-					}
-				}
-			}
-		}
-	}
-	if ws := pipelineRunWorkspaces(pipelineName); len(ws) > 0 {
-		spec["workspaces"] = ws
-	}
-	if isKanikoPipeline(pipelineName) {
-		spec["taskRunTemplate"] = amd64CITaskRunTemplate()
-	}
-	if err := applyDeclaredRunExtras(spec, pipe.GetAnnotations()); err != nil {
-		resp.Message = err.Error()
-		return resp, empty, fmt.Errorf("%s", resp.Message)
-	}
-	if pipelineName == "bifrost-deliver-stg" {
-		spec["taskRunSpecs"] = []map[string]any{
-			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
-		}
-	}
-	if pipelineName == "bifrost-deliver-prod" {
-		spec["taskRunSpecs"] = []map[string]any{
-			{"pipelineTaskName": "prepare", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "rollout", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
-		}
-	}
-	if pipelineName == "bifrost-deliver-platform" || pipelineName == "bifrost-deliver-platform-prod" {
-		spec["taskRunSpecs"] = platformTaskRunSpecs(pipelineName, pipe)
-	}
-	// Research (second payload). verify-research also needs the SA: it asserts the
-	// running Deployment image matches the tag just built, which the default SA
-	// cannot read in the research namespace.
-	if pipelineName == "bifrost-deliver-research" {
-		spec["taskRunSpecs"] = []map[string]any{
-			{"pipelineTaskName": "rollout-research", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "verify-research", "serviceAccountName": "tekton-deliver"},
-			{"pipelineTaskName": "gitops-sync", "serviceAccountName": "tekton-deliver"},
-		}
+	spec, rev, buildErr := buildPipelineRunSpec(pipelineName, rev, tag, extra, pipe)
+	if buildErr != nil {
+		resp.Message = buildErr.Error()
+		return resp, empty, buildErr
 	}
 	meta := map[string]any{
 		"name":      runName,
@@ -337,6 +299,9 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			"bifrost.io/trigger":  "platform-api",
 			"bifrost.io/revision": sanitizeLabelValue(rev),
 		},
+	}
+	if ciRepo != "" {
+		meta["labels"].(map[string]any)["bifrost.io/repo"] = ciRepo
 	}
 	if ann := actions.IdentityAnnotations(ctx); len(ann) > 0 {
 		raw := make(map[string]any, len(ann))
@@ -354,6 +319,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if objErr != nil {
 		resp.Message = objErr.Error()
 		return resp, empty, objErr
+	}
+
+	if err := validateRunRequirements(pipe, obj); err != nil {
+		resp.Message = err.Error()
+		return resp, empty, err
 	}
 
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
