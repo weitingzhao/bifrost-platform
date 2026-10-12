@@ -158,6 +158,10 @@ type Beat struct {
 	TurnID        string `json:"turn_id"`
 	Seq           uint64 `json:"seq"`
 	Reason        string `json:"reason,omitempty"`
+	// Sidebar is the desktop thread id, when the client sends one. Empty for
+	// an old client. It is not a new list field: the list uses it to show the
+	// thread once.
+	Sidebar string `json:"sidebar,omitempty"`
 	// keyHash is the server-side sha256 of ThreadKey. The client cannot set it.
 	keyHash string
 }
@@ -191,6 +195,12 @@ type Thread struct {
 	// PriorTurns are turn ids this thread has left. An event for one of them
 	// is refused even when its sequence is newer.
 	PriorTurns []string `json:"prior_turns,omitempty"`
+	// Sidebar is the desktop thread this session belongs to. Empty when the
+	// client did not send one. It stays in the statefile and is omitted from
+	// the list; the list shows the thread id in Thread instead.
+	Sidebar string `json:"sidebar,omitempty"`
+	// OpenedTurn is set once this session has sent turn_start. It is not listed.
+	OpenedTurn bool `json:"opened_turn,omitempty"`
 	// NotifiedFor is At of the event whose silence was pushed. It is set
 	// only after the push returns. A new event moves At, so the next silence
 	// is a new one.
@@ -272,9 +282,12 @@ func (b *Beat) Validate() error {
 	b.Reason = strings.TrimSpace(b.Reason)
 	b.ThreadKey = strings.TrimSpace(b.ThreadKey)
 	b.RegisterNonce = strings.TrimSpace(b.RegisterNonce)
+	b.Sidebar = strings.TrimSpace(b.Sidebar)
 	switch {
 	case !idRe.MatchString(b.Thread):
 		return fmt.Errorf("thread: want 1-128 of [A-Za-z0-9._:-]")
+	case b.Sidebar != "" && !idRe.MatchString(b.Sidebar):
+		return fmt.Errorf("sidebar: want 1-128 of [A-Za-z0-9._:-]")
 	case !vendRe.MatchString(b.Vendor):
 		return fmt.Errorf("vendor: want a lowercase name")
 	case !hostRe.MatchString(b.Host):
@@ -366,6 +379,12 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 		t.KeyHash = b.keyHash
 	}
 	t.TurnID, t.Seq = b.TurnID, b.Seq
+	if b.Sidebar != "" {
+		t.Sidebar = b.Sidebar
+	}
+	if b.Event == TurnStart {
+		t.OpenedTurn = true
+	}
 	t.At = at
 	// A new event is a different silence. A claim for the previous one must
 	// not block it, and must not be completed against the new timestamp.
