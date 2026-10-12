@@ -54,7 +54,9 @@ func TestReview127RestartBetweenDueAndClaimDoesNotPush(t *testing.T) {
 	}
 }
 
-func TestReview127SidebarAcrossVendorsIsOneItem(t *testing.T) {
+// A session of another vendor that carries the same sidebar id is a job started
+// from that thread's shell, not its successor: neither supersedes the other.
+func TestSidebarAcrossVendorsDoesNotSupersede(t *testing.T) {
 	st := State{}
 	for i, vendor := range []string{"claude", "cursor"} {
 		b := Beat{Thread: "sess-" + vendor, Vendor: vendor, Host: "mbp", Sidebar: sidebarID, Event: TurnStart, TurnID: "t1", Seq: 1}
@@ -66,8 +68,57 @@ func TestReview127SidebarAcrossVendorsIsOneItem(t *testing.T) {
 	cfg := DefaultConfig()
 	views := cfg.Views(st, t0.Add(12*time.Minute))
 	push, _ := cfg.Due(st, t0.Add(12*time.Minute))
-	if len(views) != 2 || views[0].Thread.Thread != "sess-cursor" || views[0].Status != Silent || views[1].Status != Superseded || len(push) != 1 || push[0] != Key("cursor", "sess-cursor") {
-		t.Fatalf("one sidebar duplicated: views=%d push=%v", len(views), push)
+	if len(views) != 2 || views[0].Status != Silent || views[1].Status != Silent || len(push) != 2 {
+		t.Fatalf("sessions of two vendors: views=%+v push=%v", views, push)
+	}
+}
+
+// A session that ended its turn is idle; a later session of the thread does not
+// turn it into a superseded one (review 128).
+func TestEndedSessionStaysIdle(t *testing.T) {
+	r := newRig(t, "")
+	r.beatSession(t, "a", sidebarID, "mbp", TurnStart)
+	r.at(time.Minute)
+	r.beatSession(t, "a", sidebarID, "mbp", TurnEnd)
+	r.at(2 * time.Minute)
+	r.beatSession(t, "b", sidebarID, "mbp", TurnStart)
+	r.at(13 * time.Minute)
+	seen := false
+	for _, v := range DefaultConfig().Views(mustState(t, r), r.clk.at) {
+		if v.Thread.Thread == "a" {
+			seen = true
+			if v.Status != Idle || v.InTurnSeconds != 0 {
+				t.Fatalf("ended session: status %s in_turn %d, want idle 0", v.Status, v.InTurnSeconds)
+			}
+		}
+	}
+	if !seen {
+		t.Fatal("ended session missing from the list")
+	}
+}
+
+// The mark for a silence too old to page re-checks the current state, as the
+// claim does (review 128).
+func TestMarkRechecksCurrentState(t *testing.T) {
+	r := newRig(t, "")
+	r.beatSession(t, "a", sidebarID, "mbp", TurnStart)
+	r.at(11 * time.Minute)
+	key := Key("claude", "a")
+	at := mustState(t, r).Threads[key].At
+	if err := r.store.Update(func(st *State) error {
+		th := st.Threads[key]
+		th.Event = TurnEnd
+		st.Threads[key] = th
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	marked, err := r.w.mark(key, at, r.clk.at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marked {
+		t.Fatal("a session that is no longer silent was marked as handled")
 	}
 }
 

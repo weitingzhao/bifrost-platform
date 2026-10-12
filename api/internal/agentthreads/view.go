@@ -15,15 +15,17 @@ type View struct {
 	ThresholdSeconds int64  `json:"threshold_seconds"`
 }
 
-// sessionSuperseded requires another session's actual turn opening after t's
-// last event. Vendor does not partition sidebar identity; wrapped runs do not
-// participate in either direction.
+// sessionSuperseded requires another session of the same vendor to have
+// actually opened a turn after t's last event. A session whose turn has ended
+// is idle, not superseded. A session of another vendor that carries the same
+// sidebar id is a job started from that thread's shell, not its successor.
+// Wrapped runs do not participate in either direction.
 func (c Config) sessionSuperseded(st State, t Thread, now time.Time) bool {
-	if t.Sidebar == "" || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
+	if t.Sidebar == "" || t.Event == TurnEnd || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
 		return false
 	}
 	for _, o := range st.Threads {
-		if o.Sidebar != t.Sidebar || Key(o.Vendor, o.Thread) == Key(t.Vendor, t.Thread) || headlessRun(o.Thread) {
+		if o.Sidebar != t.Sidebar || o.Vendor != t.Vendor || Key(o.Vendor, o.Thread) == Key(t.Vendor, t.Thread) || headlessRun(o.Thread) {
 			continue
 		}
 		if o.OpenedTurn && o.OpenedTurnAt.After(t.At) {
