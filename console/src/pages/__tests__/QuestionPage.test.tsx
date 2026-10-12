@@ -66,6 +66,12 @@ function posts(): number {
 
 describe('QuestionPage', () => {
   beforeEach(() => {
+    // question-open.json expires_at is 2026-10-12T06:00:00Z. NowClock (progressClock.tsx)
+    // publishes Date.now() every 1s, and QuestionAnswerForm.tsx pastExpiry locks the
+    // options once that instant is reached, so Confirm answer never mounts. Hold the
+    // clock before expiry; do not follow the wall clock.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-11T12:00:00Z'))
     resetAnswerSendStore()
     installStorage()
     window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
@@ -78,6 +84,7 @@ describe('QuestionPage', () => {
     vi.unstubAllGlobals()
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
     window.location.hash = ''
+    vi.useRealTimers()
   })
 
   it('opens #questions?id=q_… and does not request a malformed id', async () => {
