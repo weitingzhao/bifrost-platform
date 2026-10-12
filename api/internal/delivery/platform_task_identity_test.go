@@ -48,7 +48,7 @@ func boolInt(v bool) int {
 }
 
 func TestPlatformSourceGateIdentityWiredIntoRun(t *testing.T) {
-	source, err := os.ReadFile("service.go")
+	source, err := os.ReadFile("run_spec.go")
 	if err != nil {
 		t.Fatal(err)
 	}

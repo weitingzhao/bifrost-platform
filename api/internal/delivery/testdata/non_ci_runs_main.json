@@ -1,0 +1,1246 @@
+{
+  "bifrost-build-flex-query/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-flex-query"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "source",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-flex-query/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-flex-query"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "source",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-frontend-stg/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-build-frontend-stg"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-frontend-stg/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-build-frontend-stg"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-ib-gateway/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-ib-gateway"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "source",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-ib-gateway/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-ib-gateway"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "source",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-market-data/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-market-data"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-market-data/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "image",
+          "value": "registry.cicd.svc.cluster.local:5000/bifrost-market-data:1.2.3"
+        },
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-market-data"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-research-dagster/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-research-dagster"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "8Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-research-dagster/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "image",
+          "value": "registry.cicd.svc.cluster.local:5000/bifrost-research:1.2.3-dagster"
+        },
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-build-research-dagster"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "8Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-build-stg/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-build-stg"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "emptyDir": {},
+          "name": "api-source"
+        },
+        {
+          "emptyDir": {},
+          "name": "frontend-source"
+        }
+      ]
+    }
+  },
+  "bifrost-build-stg/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-build-stg"
+      },
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "emptyDir": {},
+          "name": "api-source"
+        },
+        {
+          "emptyDir": {},
+          "name": "frontend-source"
+        }
+      ]
+    }
+  },
+  "bifrost-clone-frontend-smoke/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-clone-frontend-smoke"
+      }
+    }
+  },
+  "bifrost-clone-frontend-smoke/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-clone-frontend-smoke"
+      }
+    }
+  },
+  "bifrost-deliver-platform-prod/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform-prod/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-prod/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "apiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "coreRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "frontendRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "infraRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "workerRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "prepare",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        },
+        "serviceAccountName": "default"
+      },
+      "timeouts": {
+        "pipeline": "1h0m0s"
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "10Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-prod/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "apiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "coreRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "frontendRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "infraRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "workerRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "prepare",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        },
+        "serviceAccountName": "default"
+      },
+      "timeouts": {
+        "pipeline": "1h0m0s"
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "10Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-research/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-research"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout-research",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "verify-research",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-research/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "tag",
+          "value": "1.2.3"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-research"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout-research",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "verify-research",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-stg/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-stg"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "prepare",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        },
+        "serviceAccountName": "default"
+      },
+      "timeouts": {
+        "pipeline": "1h0m0s"
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "10Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-stg/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "1111111111111111111111111111111111111111"
+        },
+        {
+          "name": "uiRevision",
+          "value": "1111111111111111111111111111111111111111"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-stg"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "prepare",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        },
+        "serviceAccountName": "default"
+      },
+      "timeouts": {
+        "pipeline": "1h0m0s"
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "10Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-smoke/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-smoke"
+      }
+    }
+  },
+  "bifrost-smoke/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "bifrost-smoke"
+      }
+    }
+  },
+  "unknown/empty": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "unknown"
+      }
+    }
+  },
+  "unknown/tagged": {
+    "revision": "1111111111111111111111111111111111111111",
+    "spec": {
+      "pipelineRef": {
+        "name": "unknown"
+      }
+    }
+  }
+}

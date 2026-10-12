@@ -83,6 +83,13 @@ func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass s
 // pipeline clones. It is the gate that prevents multi-repo deploys from failing
 // halfway at a clone-* task.
 func (s *Service) RefPreflight(ctx context.Context, pipelineName, revision string) RefPreflightResponse {
+	if pipelineName == "bifrost-ci-python" {
+		return RefPreflightResponse{Pipeline: pipelineName, Revision: revision, Reachability: probe.ReachFail, Detail: "python-ci requires param repo to select its repository"}
+	}
+	return s.refPreflightForRepos(ctx, pipelineName, revision, reposForPipeline(pipelineName))
+}
+
+func (s *Service) refPreflightForRepos(ctx context.Context, pipelineName, revision string, repos []string) RefPreflightResponse {
 	now := time.Now().UTC()
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
@@ -104,7 +111,6 @@ func (s *Service) RefPreflight(ctx context.Context, pipelineName, revision strin
 		return out
 	}
 
-	repos := reposForPipeline(pipelineName)
 	ns := s.PipelinesNamespace()
 
 	clientset, _, err := s.cluster.KubernetesClient()

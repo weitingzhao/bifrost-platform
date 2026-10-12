@@ -209,6 +209,9 @@ func (s *Service) readReleaseWindow(ctx context.Context) (bool, map[string]any, 
 }
 
 func (s *Service) releaseWindowMessage(ctx context.Context, pipeline, callerWho string) string {
+	if isCIPipeline(pipeline) {
+		return ""
+	}
 	cs, _, err := s.cluster.KubernetesClient()
 	if err != nil {
 		if mustHoldWindow(pipeline) {

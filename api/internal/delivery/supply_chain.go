@@ -38,6 +38,8 @@ var trackedGiteaRepos = []string{
 // pipelineMirrorRepos maps a deliver pipeline to the Gitea repos it clones.
 // A multi-repo deploy requires the chosen revision to exist in every repo.
 var pipelineMirrorRepos = map[string][]string{
+	"bifrost-ci-platform":           {"bifrost-platform"},
+	"bifrost-ci-frontend":           {"bifrost-trade-frontend"},
 	"bifrost-deliver-platform":      {"bifrost-platform", "bifrost-ui"},
 	"bifrost-deliver-platform-prod": {"bifrost-platform", "bifrost-ui"},
 	"bifrost-deliver-stg": {
