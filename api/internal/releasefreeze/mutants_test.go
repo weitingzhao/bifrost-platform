@@ -59,6 +59,7 @@ var mutants = []mutant{
 	{"trailer-framing-field", "httplang.go", "if f.name == \"content-encoding\" || f.name == \"content-length\" || f.name == \"transfer-encoding\" { // rule: no framing field in a trailer", "if f.name == \"\" { // rule: no framing field in a trailer", []string{"TestHTTPVectors"}},
 	{"length-not-digits", "httplang.go", "\t\tif !isDigit(s[i]) {\n\t\t\treturn 0, false\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", "\t\tif !isDigit(s[i]) {\n\t\t\tcontinue\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", []string{"TestHTTPVectors"}},
 	{"field-without-colon", "httplang.go", "\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", "\tif i == len(line) && i > 0 {\n\t\treturn lowerASCII(line), \"\", true\n\t}\n\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", []string{"TestHTTPVectors"}},
+	{"chunk-data-crlf", "httplang.go", "if _, err := io.ReadFull(br, crlf[:]); err != nil || crlf != [2]byte{'\\r', '\\n'} {", "if _, err := io.ReadFull(br, crlf[:]); err != nil {", []string{"TestHTTPVectors"}},
 }
 
 func TestMutantList(t *testing.T) {

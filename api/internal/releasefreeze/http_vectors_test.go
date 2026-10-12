@@ -19,7 +19,7 @@ import (
 // responses with the verdict the language H of design §3.2 gives each. The file is
 // generated in the infra repository (scripts/release/freeze_http_vectors.py) by a
 // recogniser written from the productions; the Python reader is held to the same file.
-const freezeHTTPVectorsSHA256 = "e1e45356cbbd1d41496f634f30c0caa1714ad0319990d017e875cb58a16aa68e"
+const freezeHTTPVectorsSHA256 = "ea2f51577ddd33a1eda3b7ee4e53f401ed826ad00ab0d906e0d98e6ff96f4a3a"
 
 type httpVector struct {
 	Name  string `json:"name"`
