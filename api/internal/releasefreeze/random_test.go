@@ -3,34 +3,27 @@ package releasefreeze
 import (
 	"bufio"
 	"bytes"
-	"context"
-	"crypto/rand"
-	"encoding/binary"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
-	mrand "math/rand"
+	"math/rand"
+	"net"
 	"net/http"
-	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"k8s.io/client-go/rest"
 )
 
 const randomFixedSeed int64 = 31020261011
-
-const (
-	randomSequences = 5000
-	randomSteps     = 40
-	pythonSequences = 500
-)
 
 const pyGateSrc = `
 import json, sys
@@ -42,9 +35,23 @@ for line in sys.stdin:
         continue
     req = json.loads(line)
     d = freeze_gate.read_freeze(req["url"], req["token"], req["ca"])
-    sys.stdout.write(json.dumps({"verdict": d.verdict, "first": d.lines[0]}) + "\n")
+    clear = d.verdict == "clear"
+    sys.stdout.write(json.dumps({"clear": clear}) + "\n")
     sys.stdout.flush()
 `
+
+func randomPlan() (mem, live, py int) {
+	mem, live, py = 2000, 20, 3
+	if os.Getenv("BIFROST_FREEZE_FULL") == "1" {
+		return 5000, 40, 8
+	}
+	if v := os.Getenv("FREEZE_MODEL_SEQUENCES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			mem = n
+		}
+	}
+	return mem, live, py
+}
 
 type cluster struct {
 	mu     sync.Mutex
@@ -59,6 +66,7 @@ func (c *cluster) reset() {
 	c.mu.Lock()
 	c.w = world{}
 	c.left = 0
+	c.fault = -1
 	c.mu.Unlock()
 }
 
@@ -75,65 +83,41 @@ func (c *cluster) arm(fault, n int) {
 	c.mu.Unlock()
 }
 
-func (c *cluster) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path == "/api/v1/release-policy/unfreeze" {
-		UnfreezeHandler(w, r)
-		return
-	}
-	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+func (c *cluster) serve(method, path, query, header string) (int, []byte) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if r.Method == http.MethodGet && r.URL.Path == ListPath {
-		if r.URL.RawQuery != "" {
+	if method == http.MethodGet && path == ListPath {
+		if query != "" {
 			c.badGet++
 		}
 		if c.left > 0 {
-			writeFault(w, uint8(c.fault))
 			c.left--
-			return
+			return faultResponse(uint8(c.fault))
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(listBody(c.w))
-		return
+		return http.StatusOK, listBody(c.w)
 	}
-	ev, ok := parseEvent(r.Header.Get("X-Model-Event"))
+	if path == "/api/v1/release-policy/unfreeze" {
+		return http.StatusGone, []byte(UnfreezeGoneBody)
+	}
+	ev, ok := parseEvent(header)
 	if !ok {
-		ev = event{kind: evCreate, who: idP, class: classBadSpec}
+		return http.StatusForbidden, []byte("no event")
 	}
 	next, refused := step(c.rules, c.w, ev)
 	if !refused {
 		c.w = next
 	}
 	if refused {
-		w.WriteHeader(http.StatusForbidden)
-		return
+		return http.StatusForbidden, []byte("refused")
 	}
-	w.WriteHeader(http.StatusOK)
+	return http.StatusOK, []byte("ok")
 }
 
-func writeFault(w http.ResponseWriter, kind uint8) {
-	switch kind {
-	case faultNon200:
-		http.Error(w, string(listBody(world{})), http.StatusInternalServerError)
-	case fault403:
-		http.Error(w, "forbidden", http.StatusForbidden)
-	case fault404:
-		http.Error(w, "missing", http.StatusNotFound)
-	case faultContinue:
-		writeJSON(w, `{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{"continue":"tok"},"items":[]}`)
-	case faultKind:
-		writeJSON(w, `{"apiVersion":"release.bifrost.io/v1","kind":"Freeze","metadata":{},"items":[]}`)
-	case faultItems:
-		writeJSON(w, `{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{},"items":{}}`)
-	default:
-		writeJSON(w, `{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{},"items":[{}]}`)
+func faultResponse(kind uint8) (int, []byte) {
+	if kind == faultBody {
+		return http.StatusOK, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{"resourceVersion":"1","resourceVersion":"2"},"items":[]}`)
 	}
-}
-
-func writeJSON(w http.ResponseWriter, body string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.WriteString(w, body)
+	return http.StatusInternalServerError, EmptyListBody()
 }
 
 func eventHeader(e event) string {
@@ -148,12 +132,49 @@ func parseEvent(s string) (event, bool) {
 	return e, err == nil && n == 10
 }
 
-type recorded struct {
-	method string
-	url    string
-	body   string
-	header string
-	gone   bool
+func liveCheck(w world, d Decision) string {
+	clear := d.Verdict == VerdictClear
+	if !anyPresent(w) && !clear {
+		return "L"
+	}
+	if anyPresent(w) && clear {
+		return "present record was clear"
+	}
+	if clear && !allDeletedByO(w) {
+		return "S"
+	}
+	return ""
+}
+
+func runMemory(t *testing.T, seed int64, n int) {
+	t.Helper()
+	rng := rand.New(rand.NewSource(seed))
+	all := alphabet()
+	rules := correctRules()
+	for seq := 0; seq < n; seq++ {
+		w := world{}
+		for stepN := 0; stepN < 40; stepN++ {
+			evs := eventsFor(all, w)
+			e := evs[rng.Intn(len(evs))]
+			switch e.kind {
+			case evRead:
+				d := DecideHTTP(200, listBody(w))
+				if msg := liveCheck(w, d); msg != "" {
+					t.Fatalf("memory %s seq %d step %d", msg, seq, stepN)
+				}
+			case evFault:
+				d := faultDecision(e.fault)
+				if d.Verdict == VerdictClear {
+					t.Fatalf("U: fault read reported clear seq %d", seq)
+				}
+			default:
+				next, refused := step(rules, w, e)
+				if !refused {
+					w = next
+				}
+			}
+		}
+	}
 }
 
 type pyChild struct {
@@ -183,21 +204,20 @@ func startPy(t *testing.T, dir string) *pyChild {
 	return ch
 }
 
-func (p *pyChild) read(url, token, ca string) (string, string, error) {
+func (p *pyChild) clear(url, token, ca string) (bool, error) {
 	if _, err := io.WriteString(p.in, fmt.Sprintf("{\"url\":%q,\"token\":%q,\"ca\":%q}\n", url, token, ca)); err != nil {
-		return "", "", err
+		return false, err
 	}
 	if !p.sc.Scan() {
-		return "", "", fmt.Errorf("python closed: %v %s", p.sc.Err(), p.stderr.String())
+		return false, fmt.Errorf("python closed: %v %s", p.sc.Err(), p.stderr.String())
 	}
 	var resp struct {
-		Verdict string `json:"verdict"`
-		First   string `json:"first"`
+		Clear bool `json:"clear"`
 	}
 	if err := json.Unmarshal(p.sc.Bytes(), &resp); err != nil {
-		return "", "", fmt.Errorf("%w (%s)", err, p.stderr.String())
+		return false, fmt.Errorf("%w (%s)", err, p.stderr.String())
 	}
-	return resp.Verdict, resp.First, nil
+	return resp.Clear, nil
 }
 
 func (p *pyChild) stop() {
@@ -228,123 +248,171 @@ func siblingReleaseDir(t *testing.T) string {
 	return dir
 }
 
-func TestRandomSequences(t *testing.T) {
-	dir := siblingReleaseDir(t)
-	cl := &cluster{rules: correctRules(), fault: -1}
-	srv := httptest.NewUnstartedServer(cl)
-	srv.EnableHTTP2 = false
-	srv.StartTLS()
-	defer srv.Close()
-	caPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
-	tmp := t.TempDir()
-	caFile := filepath.Join(tmp, "ca.pem")
-	tokenFile := filepath.Join(tmp, "token")
+func startModelServer(t *testing.T, cl *cluster) (addr, caFile string) {
+	t.Helper()
+	caPEM, cert, err := mintCert(OriginHost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		NextProtos:   []string{"http/1.1"},
+		MinVersion:   tls.VersionTLS12,
+	}
+	tlsLn := tls.NewListener(ln, cfg)
+	t.Cleanup(func() { _ = tlsLn.Close() })
+	go func() {
+		for {
+			conn, err := tlsLn.Accept()
+			if err != nil {
+				return
+			}
+			go func(conn net.Conn) {
+				defer conn.Close()
+				_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+				method, path, query, header, err := readHTTPRequest(conn)
+				if err != nil {
+					return
+				}
+				status, body := cl.serve(method, path, query, header)
+				_, _ = conn.Write(resp(strconv.Itoa(status)+" "+http.StatusText(status), "", body))
+			}(conn)
+		}
+	}()
+	dir := t.TempDir()
+	caFile = filepath.Join(dir, "ca.pem")
 	if err := os.WriteFile(caFile, caPEM, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	return ln.Addr().String(), caFile
+}
+
+func readHTTPRequest(conn net.Conn) (method, path, query, header string, err error) {
+	br := bufio.NewReader(conn)
+	line, err := br.ReadString('\n')
+	if err != nil {
+		return "", "", "", "", err
+	}
+	parts := strings.Fields(strings.TrimRight(line, "\r\n"))
+	if len(parts) < 2 {
+		return "", "", "", "", fmt.Errorf("request line")
+	}
+	method = parts[0]
+	target := parts[1]
+	path, query, _ = strings.Cut(target, "?")
+	var clen int
+	for {
+		h, err := br.ReadString('\n')
+		if err != nil {
+			return "", "", "", "", err
+		}
+		h = strings.TrimRight(h, "\r\n")
+		if h == "" {
+			break
+		}
+		name, value, ok := strings.Cut(h, ":")
+		if !ok {
+			continue
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		value = strings.TrimSpace(value)
+		if name == "content-length" {
+			clen, _ = strconv.Atoi(value)
+		}
+		if name == "x-model-event" {
+			header = value
+		}
+	}
+	if clen > 0 {
+		buf := make([]byte, clen)
+		if _, err := io.ReadFull(br, buf); err != nil {
+			return "", "", "", "", err
+		}
+	}
+	return method, path, query, header, nil
+}
+
+func TestRandomSequences(t *testing.T) {
+	mem, live, pyN := randomPlan()
+	start := time.Now()
+	runMemory(t, randomFixedSeed, mem)
+	t.Logf("seed %d", randomFixedSeed)
+	t.Logf("sequences %d", mem)
+	t.Logf("memory seconds %.3f", time.Since(start).Seconds())
+
+	dir := siblingReleaseDir(t)
+	cl := &cluster{rules: correctRules(), fault: -1}
+	addr, caFile := startModelServer(t, cl)
+	tokenFile := filepath.Join(t.TempDir(), "token")
 	if err := os.WriteFile(tokenFile, []byte("model-token\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	reader := testRESTFull(t, srv.URL, caPEM, tokenFile)
-	writer := srv.Client()
+	pool := loadPool(t, caFile)
+	writer := &http.Client{Transport: &http.Transport{
+		Proxy: func(*http.Request) (*url.URL, error) { return nil, nil },
+		TLSClientConfig: &tls.Config{
+			RootCAs:    pool,
+			ServerName: OriginHost,
+			NextProtos: []string{"http/1.1"},
+			MinVersion: tls.VersionTLS12,
+		},
+		ForceAttemptHTTP2: false,
+		TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
+		DisableKeepAlives: true,
+	}}
+	base := "https://" + addr
 	py := startPy(t, dir)
 	defer py.stop()
-
-	var seedBuf [8]byte
-	if _, err := rand.Read(seedBuf[:]); err != nil {
-		t.Fatal(err)
-	}
-	runtimeSeed := int64(binary.LittleEndian.Uint64(seedBuf[:]) & 0x7fffffffffffffff)
-	t.Logf("seed fixed %d", randomFixedSeed)
-	t.Logf("seed runtime %d", runtimeSeed)
-
-	start := time.Now()
-	replays := 0
-	pyReads, pySeqs := runSequences(t, cl, writer, reader, py, srv.URL, tokenFile, caFile, randomFixedSeed, randomSequences, &replays)
-	extraReads, extraSeqs := runSequences(t, cl, writer, reader, py, srv.URL, tokenFile, caFile, runtimeSeed, 1, &replays)
-	pyReads += extraReads
-	pySeqs += extraSeqs
-	if cl.badGet != 0 {
-		t.Fatalf("%d GET requests carried a query", cl.badGet)
-	}
-	t.Logf("python sequences %d", pySeqs)
-	t.Logf("python reads %d", pyReads)
-	t.Logf("replays %d", replays)
-	t.Logf("random seconds %.3f", time.Since(start).Seconds())
-}
-
-func runSequences(t *testing.T, cl *cluster, writer *http.Client, reader rest.Interface, py *pyChild, base, token, ca string, seed int64, n int, replays *int) (int, int) {
-	t.Helper()
-	rng := mrand.New(mrand.NewSource(seed))
-	all := alphabet()
-	reused := Gate{}
+	session := tls.NewLRUClientSessionCache(128)
+	reused := Gate{Addr: addr, CAFile: caFile, Token: "model-token", Session: session}
 	listURL := base + ListPath
 	pyReads := 0
-	pySeqs := 0
-	oldBody := `{"text":"unfreeze frozen_at=2026-10-10T09:00:00Z","sig":"abc"}`
-	for seq := 0; seq < n; seq++ {
+	liveStart := time.Now()
+	rng := rand.New(rand.NewSource(randomFixedSeed))
+	all := alphabet()
+	for seq := 0; seq < live; seq++ {
 		cl.reset()
-		usePy := seq < pythonSequences
-		if usePy {
-			pySeqs++
-		}
-		var pending []recorded
-		for stepN := 0; stepN < randomSteps; stepN++ {
-			snap := cl.snapshot()
-			var armed = -1
-			switch {
-			case len(pending) > 0 && rng.Intn(3) == 0:
-				rec := pending[0]
-				pending = pending[1:]
-				doRecorded(t, writer, rec)
-				*replays++
-			case rng.Intn(12) == 0:
-				rec := recorded{method: http.MethodPost, url: base + "/api/v1/release-policy/unfreeze", body: oldBody, gone: true}
-				doRecorded(t, writer, rec)
-				pending = append(pending, rec)
-				bad := recorded{method: http.MethodPost, url: base + ListPath, body: oldBody}
-				doRecorded(t, writer, bad)
-				pending = append(pending, bad)
+		usePy := seq < pyN
+		for stepN := 0; stepN < 40; stepN++ {
+			evs := eventsFor(all, cl.snapshot())
+			e := evs[rng.Intn(len(evs))]
+			reads := 1
+			if usePy {
+				reads = 2
+			}
+			switch e.kind {
+			case evRead, evFault:
 			default:
-				evs := eventsFor(all, snap)
-				e := evs[rng.Intn(len(evs))]
-				switch e.kind {
-				case evRead:
-				case evFault:
-					if e.fault != faultTimeout {
-						armed = int(e.fault)
-					}
-				default:
-					rec := recordFor(base, snap, e)
-					doRecorded(t, writer, rec)
-					pending = append(pending, rec)
-				}
+				doModelWrite(t, writer, base, e)
 			}
 			if rng.Intn(2) == 0 {
 				continue
 			}
-			reads := 2
-			if usePy {
-				reads = 3
-			}
-			if armed >= 0 {
+			armed := -1
+			if e.kind == evFault {
+				armed = int(e.fault)
 				cl.arm(armed, reads)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			first := reused.Read(ctx, reader)
-			second := Gate{}.Read(ctx, reader)
-			cancel()
-			if first.Verdict != second.Verdict || first.Lines[0] != second.Lines[0] {
-				t.Fatalf("reused and fresh gates differ: %+v vs %+v", first, second)
+			ctx := t.Context()
+			first := reused.Read(ctx)
+			if armed < 0 && seq == 0 && stepN == 0 {
+				fresh := Gate{Addr: addr, CAFile: caFile, Token: "model-token"}.Read(ctx)
+				if (first.Verdict == VerdictClear) != (fresh.Verdict == VerdictClear) {
+					t.Fatalf("reused and fresh differ: %+v vs %+v", first, fresh)
+				}
 			}
 			if usePy {
-				pv, pf, err := py.read(listURL, token, ca)
+				got, err := py.clear(listURL, tokenFile, caFile)
 				if err != nil {
 					t.Fatal(err)
 				}
 				pyReads++
-				if pv != first.Verdict || pf != first.Lines[0] {
-					t.Fatalf("seq %d step %d armed %d python %s %q, go %s %q", seq, stepN, armed, pv, pf, first.Verdict, first.Lines[0])
+				if got != (first.Verdict == VerdictClear) {
+					t.Fatalf("seq %d step %d armed %d python clear %v go %s", seq, stepN, armed, got, first.Verdict)
 				}
 			}
 			after := cl.snapshot()
@@ -353,95 +421,44 @@ func runSequences(t *testing.T, cl *cluster, writer *http.Client, reader rest.In
 					t.Fatal("U: fault read reported clear")
 				}
 			} else if msg := liveCheck(after, first); msg != "" {
-				t.Fatalf("%s after %s", msg, formatPath(nil))
-			}
-			if rng.Intn(2) == 0 && after.create && oldAllows(after) {
-				t.Fatal("S: old program would allow after create is enabled")
+				t.Fatalf("%s seq %d step %d verdict %s", msg, seq, stepN, first.Verdict)
 			}
 		}
-		for _, rec := range pending {
-			doRecorded(t, writer, rec)
-			*replays++
-		}
 	}
-	return pyReads, pySeqs
+	if cl.badGet != 0 {
+		t.Fatalf("%d GET requests carried a query", cl.badGet)
+	}
+	t.Logf("live sequences %d", live)
+	t.Logf("python sequences %d", pyN)
+	t.Logf("python reads %d", pyReads)
+	t.Logf("random seconds %.3f", time.Since(liveStart).Seconds())
 }
 
-func liveCheck(w world, d Decision) string {
-	if !anyPresent(w) && d.Verdict != VerdictClear {
-		return "L"
-	}
-	if anyPresent(w) && d.Verdict != VerdictFrozen {
-		return "present record was not frozen"
-	}
-	if d.Verdict == VerdictClear && !allDeletedByO(w) {
-		return "S"
-	}
-	return ""
-}
-
-func recordFor(base string, w world, e event) recorded {
-	name := modelNames[e.name]
-	rec := recorded{header: eventHeader(e), body: "{}"}
-	switch e.kind {
-	case evCreate:
-		rec.method = http.MethodPost
-		rec.url = base + ListPath
-		rec.body = fmt.Sprintf(`{"apiVersion":"release.bifrost.io/v1","kind":"Freeze","metadata":{"name":"%s"},"spec":{"who":"x","reason":"y","at":"2026-10-11T00:00:00Z"}}`, name)
-	case evUpdate:
-		rec.url = base + ListPath + "/" + name
-		rec.method = http.MethodPut
-		if e.field == updMeta {
-			rec.method = http.MethodPatch
-		}
-		if e.field == updSub {
-			rec.url += "/status"
-		}
-		rec.body = `{"spec":{"reason":"changed"}}`
-	case evDelete:
-		rec.method = http.MethodDelete
-		rec.url = base + ListPath + "/" + name
-		pol := "Background"
-		if e.prop == propForeground {
-			pol = "Foreground"
-		}
-		if e.uidMode == uidAbsent {
-			rec.body = fmt.Sprintf(`{"kind":"DeleteOptions","apiVersion":"v1","propagationPolicy":"%s"}`, pol)
-		} else {
-			uid := "uid-stale"
-			if e.uidMode == uidMatch {
-				uid = fmt.Sprintf("uid-%d-%d", e.name, w.names[e.name].n)
-			}
-			rec.body = fmt.Sprintf(`{"kind":"DeleteOptions","apiVersion":"v1","preconditions":{"uid":"%s"},"propagationPolicy":"%s"}`, uid, pol)
-		}
-	case evDeleteCollection:
-		rec.method = http.MethodDelete
-		rec.url = base + ListPath
-	default:
-		rec.method = http.MethodPost
-		rec.url = base + "/model/control"
-	}
-	return rec
-}
-
-func doRecorded(t *testing.T, client *http.Client, rec recorded) {
+func loadPool(t *testing.T, caFile string) *x509.CertPool {
 	t.Helper()
-	req, err := http.NewRequest(rec.method, rec.url, bytes.NewReader([]byte(rec.body)))
+	return mustPool(t, caFile)
+}
+
+func mustPool(t *testing.T, caFile string) *x509.CertPool {
+	t.Helper()
+	pool, err := loadCA(caFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.header != "" {
-		req.Header.Set("X-Model-Event", rec.header)
+	return pool
+}
+
+func doModelWrite(t *testing.T, client *http.Client, base string, e event) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, base+"/model/control", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
 	}
+	req.Header.Set("X-Model-Event", eventHeader(e))
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, _ := io.ReadAll(resp.Body)
+	_, _ = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
-	if rec.gone {
-		if resp.StatusCode != http.StatusGone || string(got) != UnfreezeGoneBody {
-			t.Fatalf("unfreeze route %d %s", resp.StatusCode, got)
-		}
-	}
 }

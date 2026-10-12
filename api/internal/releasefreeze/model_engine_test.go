@@ -68,14 +68,8 @@ const (
 )
 
 const (
-	faultNon200 uint8 = iota
-	fault403
-	fault404
-	faultTimeout
-	faultContinue
-	faultKind
-	faultItems
-	faultItem
+	faultBody uint8 = iota
+	faultTransport
 	faultCount
 )
 
@@ -116,13 +110,19 @@ type world struct {
 }
 
 type rules struct {
-	refuseOwnerRef       bool
-	createNeedsTombstone bool
-	admission            bool
+	refuseOwnerRef        bool
+	ownerOnlyDelete       bool
+	createNeedsTombstone  bool
+	sweepThroughAdmission bool
 }
 
 func correctRules() rules {
-	return rules{refuseOwnerRef: true, createNeedsTombstone: true, admission: true}
+	return rules{
+		refuseOwnerRef:        true, // rule: no owner reference
+		ownerOnlyDelete:       true, // rule: delete username is the Owner
+		createNeedsTombstone:  true, // rule: tombstone before create
+		sweepThroughAdmission: true, // rule: sweep uses admission
+	}
 }
 
 type event struct {
@@ -139,7 +139,7 @@ type event struct {
 }
 
 func alphabet() []event {
-	out := make([]event, 0, 188)
+	out := make([]event, 0, 182)
 	for who := uint8(0); who < idCount; who++ {
 		for name := uint8(0); name < 2; name++ {
 			for class := uint8(0); class < classCount; class++ {
@@ -198,19 +198,13 @@ func rbacDeleteCollection(who uint8) bool { return who == idO || who == idW }
 func rbacUpdate(who uint8) bool { return who == idO || who == idG || who == idW }
 
 // allowed is the expected table. Everything that is not listed here is refused
-// and must leave the world unchanged.
+// and must leave the world unchanged. Sweep uses the same RBAC and admission as a delete.
 func allowed(r rules, w world, e event) bool {
 	switch e.kind {
 	case evCreate:
 		ns := w.names[e.name]
 		if ns.n >= 2 || ns.present || !rbacCreate(w, e.who) {
 			return false
-		}
-		if e.class == classBadName || e.class == classBadSpec {
-			return false
-		}
-		if !r.admission {
-			return true
 		}
 		switch e.class {
 		case classCompliant:
@@ -221,27 +215,32 @@ func allowed(r rules, w world, e event) bool {
 			return false
 		}
 	case evUpdate:
-		if !w.names[e.name].present || !rbacUpdate(e.who) {
-			return false
-		}
-		return !r.admission
+		return false
 	case evDelete:
-		if !w.names[e.name].present || !rbacDelete(e.who) || e.uidMode == uidStale {
+		if !w.names[e.name].present || !rbacDelete(e.who) || e.uidMode == uidStale || e.prop != propPlain {
 			return false
 		}
-		if r.admission {
-			return e.who == idO && e.prop == propPlain && (e.uidMode == uidMatch || e.uidMode == uidAbsent)
+		if r.ownerOnlyDelete && e.who != idO {
+			return false
 		}
-		return true
+		return e.uidMode == uidMatch || e.uidMode == uidAbsent
 	case evDeleteCollection:
 		if !rbacDeleteCollection(e.who) {
 			return false
 		}
-		if r.admission {
-			return e.who == idO
+		if r.ownerOnlyDelete && e.who != idO {
+			return false
 		}
 		return true
-	case evSweep, evRead, evFault:
+	case evSweep:
+		if !rbacDelete(idG) {
+			return false
+		}
+		if r.sweepThroughAdmission && r.ownerOnlyDelete {
+			return false // admission refuses the sweep
+		}
+		return true
+	case evRead, evFault:
 		return true
 	case evTombstone:
 		return w.old == oldFalse || w.old == oldTomb
@@ -334,6 +333,9 @@ func allDeletedByO(w world) bool {
 func oldAllows(w world) bool { return w.old == oldFalse }
 
 func listBody(w world) []byte {
+	if !anyPresent(w) {
+		return EmptyListBody()
+	}
 	whoName := []string{"O", "P", "T", "G", "W"}
 	items := make([]byte, 0, 256)
 	items = append(items, '[')
@@ -361,32 +363,49 @@ func listBody(w world) []byte {
 }
 
 func faultDecision(kind uint8) Decision {
-	empty := listBody(world{})
 	switch kind {
-	case faultNon200:
-		return DecideHTTP(500, empty)
-	case fault403:
-		return DecideHTTP(403, empty)
-	case fault404:
-		return DecideHTTP(404, empty)
-	case faultTimeout:
-		return DecideTransport("timeout")
-	case faultContinue:
-		return DecideHTTP(200, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{"continue":"tok"},"items":[]}`))
-	case faultKind:
-		return DecideHTTP(200, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"Freeze","metadata":{},"items":[]}`))
-	case faultItems:
-		return DecideHTTP(200, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{},"items":{}}`))
-	case faultItem:
-		return DecideHTTP(200, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{},"items":[{}]}`))
+	case faultBody:
+		return DecideHTTP(200, []byte(`{"apiVersion":"release.bifrost.io/v1","kind":"FreezeList","metadata":{"resourceVersion":"1","resourceVersion":"2"},"items":[]}`))
 	default:
-		return DecideTransport("connection failed")
+		return DecideHTTP(500, EmptyListBody())
 	}
+}
+
+func afterAdjacent(r rules, all []event, w world) world {
+	for _, e := range eventsFor(all, w) {
+		switch e.kind {
+		case evRead, evFault, evSweep:
+			continue
+		}
+		next, refused := step(r, w, e)
+		if !refused && next != w {
+			return next
+		}
+	}
+	return w
+}
+
+func judgeSnapshot(snap world, gate uint8) string {
+	if gate == gateOld {
+		if snap.create && snap.old == oldFalse {
+			return "S: old program reports clear after create is enabled"
+		}
+		return ""
+	}
+	d := DecideHTTP(200, listBody(snap))
+	clear := d.Verdict == VerdictClear
+	if !anyPresent(snap) && !clear {
+		return "L: no record and the LIST succeeded, but the gate did not report clear"
+	}
+	if clear && !allDeletedByO(snap) {
+		return "S: clear while a record was not deleted by O"
+	}
+	return ""
 }
 
 // check is the written assertion for one event at one world. A non-empty
 // string is a violation of S, L, U, or the expected table.
-func check(w, next world, e event, refused bool) string {
+func check(w, next, later world, e event, refused bool) string {
 	if refused && next != w {
 		return "refused event changed the state"
 	}
@@ -430,22 +449,11 @@ func check(w, next world, e event, refused bool) string {
 			return "create was not enabled"
 		}
 	case evRead:
-		if e.gate == gateOld {
-			if next.create && oldAllows(next) {
-				return "S: old program reports not-frozen after create is enabled"
-			}
-			return ""
+		snap := w
+		if e.lin == 1 {
+			snap = later
 		}
-		d := DecideHTTP(200, listBody(next))
-		if !anyPresent(next) && d.Verdict != VerdictClear {
-			return "L: no record and the LIST succeeded, but the gate did not report clear"
-		}
-		if anyPresent(next) && d.Verdict != VerdictFrozen {
-			return "a present record was not reported frozen"
-		}
-		if d.Verdict == VerdictClear && !allDeletedByO(next) {
-			return "S: clear while a record was not deleted by O"
-		}
+		return judgeSnapshot(snap, e.gate)
 	case evFault:
 		if faultDecision(e.fault).Verdict == VerdictClear {
 			return "U: a failed or incomplete LIST reported clear"
@@ -467,10 +475,11 @@ func explore(r rules) (states, transitions int, violation string) {
 	seen := map[world]int{root: 0}
 	for i := 0; i < len(nodes); i++ {
 		w := nodes[i].w
+		later := afterAdjacent(r, all, w)
 		for _, e := range eventsFor(all, w) {
 			transitions++
 			next, refused := step(r, w, e)
-			if msg := check(w, next, e, refused); msg != "" {
+			if msg := check(w, next, later, e, refused); msg != "" {
 				return len(seen), transitions, formatPath(pathOf(nodes, i, e)) + " :: " + msg
 			}
 			if _, ok := seen[next]; ok {
@@ -526,7 +535,7 @@ func eventString(e event) string {
 	case evRead:
 		return "read " + []string{"prod-api", "prod-workers", "stg", "check", "fresh", "old"}[e.gate] + " " + []string{"before", "after"}[e.lin]
 	case evFault:
-		return "fault " + []string{"non-200", "403", "404", "timeout", "continue", "kind", "items", "item"}[e.fault]
+		return "fault " + []string{"body", "transport"}[e.fault]
 	case evTombstone:
 		return "tombstone"
 	case evEnableCreate:

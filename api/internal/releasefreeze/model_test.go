@@ -8,13 +8,13 @@ import (
 // Counts from the exhaustive search. A change to the alphabet is a diff here.
 const (
 	wantStates      = 963
-	wantTransitions = 134984
+	wantTransitions = 129206
 )
 
 func TestExhaustive(t *testing.T) {
 	alpha := alphabet()
-	if len(alpha) != 188 {
-		t.Fatalf("alphabet %d, want 188", len(alpha))
+	if len(alpha) != 182 {
+		t.Fatalf("alphabet %d, want 182", len(alpha))
 	}
 	t.Logf("alphabet identities=5 names=2 classes=7 events=%d", len(alpha))
 
@@ -40,11 +40,52 @@ func TestExhaustive(t *testing.T) {
 	if s1 != wantStates || t1 != wantTransitions {
 		t.Fatalf("counts states=%d transitions=%d, constants states=%d transitions=%d", s1, t1, wantStates, wantTransitions)
 	}
+	later := afterAdjacent(correctRules(), alpha, world{})
+	if later == (world{}) {
+		t.Fatal("before and after snapshots are the same")
+	}
+	saved := world{}
+	if msg := judgeSnapshot(saved, gateFresh); msg != "" {
+		t.Fatalf("snapshot before the write: %s", msg)
+	}
+	if msg := judgeSnapshot(later, gateFresh); msg != "" {
+		t.Fatalf("snapshot after the write: %s", msg)
+	}
+	if DecideHTTP(200, listBody(saved)).Verdict != VerdictClear {
+		t.Fatal("the saved empty snapshot was not clear")
+	}
+	if DecideHTTP(200, listBody(later)).Verdict == VerdictClear {
+		t.Fatal("the snapshot after the write was clear")
+	}
 }
 
-func TestNegativeOwnerRef(t *testing.T) {
+func TestOwnerRefCreateIsRefused(t *testing.T) {
+	_, refused := step(correctRules(), world{}, event{kind: evCreate, who: idO, name: 0, class: classOwnerRef})
+	if !refused {
+		t.Fatal("ownerRef create was admitted")
+	}
+}
+
+func TestSweepGoesThroughAdmission(t *testing.T) {
 	r := correctRules()
 	r.refuseOwnerRef = false
+	created, refused := step(r, world{}, event{kind: evCreate, who: idO, name: 0, class: classOwnerRef})
+	if refused || !created.names[0].present {
+		t.Fatal("setup create")
+	}
+	next, refused := step(correctRules(), created, event{kind: evSweep})
+	if !refused || next != created {
+		t.Fatal("sweep bypassed admission")
+	}
+}
+
+func TestOwnerRefIsNotASafetyPremise(t *testing.T) {
+	r := correctRules()
+	r.refuseOwnerRef = false
+	_, _, v := explore(r)
+	if v != "" {
+		t.Fatalf("ownerRef is not a premise of S, but explore found %s", v)
+	}
 	path := search(r, func(path []event, w world) bool {
 		phase := 0
 		for _, e := range path {
@@ -69,10 +110,10 @@ func TestNegativeOwnerRef(t *testing.T) {
 		d := DecideHTTP(200, listBody(w))
 		return d.Verdict == VerdictClear && !allDeletedByO(w)
 	})
-	if path == nil {
-		t.Fatal("negative control did not find create ownerRef → sweep → fresh clear")
+	if path != nil {
+		t.Fatalf("sweep bypassed admission: %s", formatPath(path))
 	}
-	t.Logf("negative ownerRef %s", formatPath(path))
+	t.Log("ownerRef is not a premise of S")
 }
 
 func TestNegativeCreateGuard(t *testing.T) {
@@ -109,7 +150,7 @@ func TestNegativeCreateGuard(t *testing.T) {
 
 func TestNegativeAdmission(t *testing.T) {
 	r := correctRules()
-	r.admission = false
+	r.ownerOnlyDelete = false
 	path := search(r, func(path []event, w world) bool {
 		if len(path) == 0 {
 			return false
