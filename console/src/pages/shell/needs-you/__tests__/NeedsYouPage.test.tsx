@@ -255,6 +255,36 @@ describe('NeedsYouPage', () => {
     expect(within(group).queryByText('Done thread')).toBeNull()
   })
 
+  it('leaves a silent headless run off Needs you and does not tell the Owner to open a thread with no sidebar link', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    const runId = 'run-bc611f64-0000-4000-8000-000000000001'
+    stubFetch(
+      () => json(buildApprovalListResponse([])),
+      viewerThreads([
+        silentThread(),
+        silentThread({
+          thread: runId,
+          vendor: 'codex',
+          host: 'vision-mac',
+          title: 'Headless review',
+          event: 'turn_start',
+          tool: undefined,
+          tool_timeout_s: undefined,
+        }),
+      ]),
+    )
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'Silent threads' })
+    expect(within(group).getByText('Silent threads · 1')).toBeTruthy()
+    expect(within(group).getByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeTruthy()
+    expect(within(group).getByText('Open it in claude on vision-mac')).toBeTruthy()
+    expect(within(group).queryByText(`codex ${runId}`)).toBeNull()
+    expect(within(group).queryByText('Headless review')).toBeNull()
+    expect(within(group).queryByText('Open it in codex on vision-mac')).toBeNull()
+    expect(group.querySelector(`[data-agent-thread="${runId}"]`)).toBeNull()
+  })
+
   it('counts a lost host toward the total and does not count a thread that is waiting', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(
