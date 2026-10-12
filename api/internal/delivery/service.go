@@ -217,6 +217,10 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 
 	ciRepo := ""
 	if isCIPipeline(pipelineName) {
+		if tag != "" {
+			resp.Message = fmt.Sprintf("tag %q cannot be set for CI: CI builds no image", tag)
+			return resp, empty, fmt.Errorf("%s", resp.Message)
+		}
 		var inputErr error
 		revision, ciRepo, inputErr = ciRunInputs(pipelineName, revision, extra)
 		if inputErr != nil {

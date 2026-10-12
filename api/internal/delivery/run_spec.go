@@ -1,9 +1,16 @@
 package delivery
 
-import "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+import (
+	"fmt"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+)
 
 func buildPipelineRunSpec(pipelineName, rev, tag string, extra map[string]string, pipe *unstructured.Unstructured) (map[string]any, string, error) {
 	if isCIPipeline(pipelineName) {
+		if tag != "" {
+			return nil, rev, fmt.Errorf("tag %q cannot be set for CI: CI builds no image", tag)
+		}
 		commit, repo, err := ciRunInputs(pipelineName, rev, extra)
 		if err != nil {
 			return nil, rev, err

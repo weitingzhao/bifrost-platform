@@ -76,9 +76,30 @@ func infraPipelines(t *testing.T) map[string]*unstructured.Unstructured {
 	return out
 }
 
+// Platform CI clones infra main. These fixtures pin platform behaviour, not
+// infra definitions; ratchet and trigger-equivalence tests still read live infra.
+// Declarations were taken from infra ab9a593, used for the main 2726c47 golden.
+func baselinePipelines(t *testing.T) map[string]*unstructured.Unstructured {
+	t.Helper()
+	raw, err := os.ReadFile("testdata/non_ci_pipelines_main.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var objects []map[string]any
+	if err := json.Unmarshal(raw, &objects); err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]*unstructured.Unstructured{}
+	for _, object := range objects {
+		obj := &unstructured.Unstructured{Object: object}
+		out[obj.GetName()] = obj
+	}
+	return out
+}
+
 func baselineRunSpecs(t *testing.T) map[string]any {
 	t.Helper()
-	pipes := infraPipelines(t)
+	pipes := baselinePipelines(t)
 	names := map[string]bool{"unknown": true, "bifrost-smoke": true, "bifrost-clone-frontend-smoke": true, "bifrost-build-flex-query": true}
 	for name := range kanikoPipelineNames {
 		names[name] = true
@@ -132,7 +153,11 @@ func TestPipelineRunRequirementsRatchet(t *testing.T) {
 			if name == "bifrost-ci-python" {
 				extra["repo"] = pythonCIRepos[0]
 			}
-			spec, _, err := buildPipelineRunSpec(name, factSHA1, "1.2.3", extra, pipe)
+			tag := "1.2.3"
+			if isCIPipeline(name) {
+				tag = ""
+			}
+			spec, _, err := buildPipelineRunSpec(name, factSHA1, tag, extra, pipe)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -210,26 +235,17 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				// Param order is irrelevant, but names, values and multiplicity must match.
-				gotParams, _, _ := unstructured.NestedSlice(run.Object, "spec", "params")
-				wantParams, _, _ := unstructured.NestedSlice(expected, "spec", "params")
-				byName := func(items []any) map[string]any {
-					m := map[string]any{}
-					for _, p := range items {
-						x := p.(map[string]any)
-						m[x["name"].(string)] = x["value"]
-					}
-					return m
+				wantSpec := expected["spec"].(map[string]any)
+				gotSpec := run.Object["spec"].(map[string]any)
+				// Only param order is irrelevant. Sort lists without collapsing
+				// duplicate names, then compare every field of the complete spec.
+				for _, spec := range []map[string]any{gotSpec, wantSpec} {
+					params := spec["params"].([]any)
+					sort.SliceStable(params, func(i, j int) bool {
+						return params[i].(map[string]any)["name"].(string) < params[j].(map[string]any)["name"].(string)
+					})
 				}
-				assertJSONEqual(t, byName(gotParams), byName(wantParams))
-				if len(gotParams) != len(wantParams) {
-					t.Fatal("param count differs")
-				}
-				for _, field := range []string{"workspaces", "taskRunTemplate"} {
-					want, _, _ := unstructured.NestedFieldNoCopy(expected, "spec", field)
-					got, _, _ := unstructured.NestedFieldNoCopy(run.Object, "spec", field)
-					assertJSONEqual(t, got, want)
-				}
+				assertJSONEqual(t, gotSpec, wantSpec)
 				s, dyn, _ := contractService(t, pipes[name], "present")
 				response, _, err := s.StartPipelineRun(context.Background(), name, factSHA1, "", "", extra)
 				if err != nil || !response.OK {
@@ -239,7 +255,12 @@ func TestCIRunTriggerEquivalence(t *testing.T) {
 				if created.GetLabels()["bifrost.io/repo"] != repo || created.GetLabels()["bifrost.io/revision"] != factSHA1 || created.GetLabels()["bifrost.io/trigger"] != "platform-api" || created.GetLabels()["tekton.dev/pipeline"] != name {
 					t.Fatal(created.GetLabels())
 				}
-				assertJSONEqual(t, created.Object["spec"], run.Object["spec"])
+				createdSpec := created.Object["spec"].(map[string]any)
+				params := createdSpec["params"].([]any)
+				sort.SliceStable(params, func(i, j int) bool {
+					return params[i].(map[string]any)["name"].(string) < params[j].(map[string]any)["name"].(string)
+				})
+				assertJSONEqual(t, createdSpec, wantSpec)
 				wantLabel, _, _ := unstructured.NestedString(expected, "metadata", "labels", "bifrost.io/repo")
 				if wantLabel != repo {
 					t.Fatalf("trigger repo label %q differs", wantLabel)

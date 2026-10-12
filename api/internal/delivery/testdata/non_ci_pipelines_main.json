@@ -1,0 +1,767 @@
+[
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-build-frontend-stg",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-trade-frontend.git",
+          "name": "frontendRepo",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-ui.git",
+          "name": "uiRepo",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-frontend:dev",
+          "name": "frontendImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "clone-frontend"
+        },
+        {
+          "name": "clone-ui"
+        },
+        {
+          "name": "stage-dockerfile"
+        },
+        {
+          "name": "kaniko-frontend"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-build-ib-gateway",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-platform-plugin-ib-gateway:0.3.0",
+          "name": "image",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "release-window"
+        },
+        {
+          "name": "validate-revision"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-plugin"
+        },
+        {
+          "name": "kaniko"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "source"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-build-market-data",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-market-data:0.9.7",
+          "name": "image",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "release-window"
+        },
+        {
+          "name": "clone-plugin"
+        },
+        {
+          "name": "kaniko"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-build-research-dagster",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-research:0.58.0-dagster",
+          "name": "image",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "release-window"
+        },
+        {
+          "name": "validate-revision"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-research"
+        },
+        {
+          "name": "clone-infra"
+        },
+        {
+          "name": "lint-test"
+        },
+        {
+          "name": "kaniko"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-build-stg",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-api-monitor:smoke",
+          "name": "apiImage",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-frontend:smoke",
+          "name": "frontendImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "build-api-monitor"
+        },
+        {
+          "name": "build-frontend"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "api-source"
+        },
+        {
+          "name": "frontend-source"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-clone-frontend-smoke",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost/bifrost-trade-frontend.git",
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "clone-frontend"
+        },
+        {
+          "name": "verify-frontend"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "source"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-deliver-platform-prod",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-platform-api:prod",
+          "name": "platformApiImage",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-platform-console:prod",
+          "name": "platformConsoleImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "preflight-stg"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-platform"
+        },
+        {
+          "name": "clone-ui"
+        },
+        {
+          "name": "stage-api-dockerfile"
+        },
+        {
+          "name": "stage-console-dockerfile"
+        },
+        {
+          "name": "build-platform-api"
+        },
+        {
+          "name": "build-platform-console"
+        },
+        {
+          "name": "rollout"
+        },
+        {
+          "name": "gitops-sync"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-deliver-platform",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-platform-api:stg",
+          "name": "platformApiImage",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-platform-console:stg",
+          "name": "platformConsoleImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-platform"
+        },
+        {
+          "name": "clone-ui"
+        },
+        {
+          "name": "stage-api-dockerfile"
+        },
+        {
+          "name": "stage-console-dockerfile"
+        },
+        {
+          "name": "build-platform-api"
+        },
+        {
+          "name": "build-platform-console"
+        },
+        {
+          "name": "gitops-sync"
+        },
+        {
+          "name": "rollout"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "annotations": {
+        "bifrost.io/run-arch": "amd64",
+        "bifrost.io/run-timeout": "1h0m0s"
+      },
+      "name": "bifrost-deliver-prod",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "coreRevision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "workerRevision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "apiRevision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "frontendRevision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "infraRevision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000",
+          "name": "registry",
+          "type": "string"
+        },
+        {
+          "default": "prod",
+          "name": "tag",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-frontend:prod",
+          "name": "frontendImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "preflight-stg"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-core"
+        },
+        {
+          "name": "clone-worker"
+        },
+        {
+          "name": "clone-api"
+        },
+        {
+          "name": "clone-frontend"
+        },
+        {
+          "name": "clone-ui"
+        },
+        {
+          "name": "clone-infra"
+        },
+        {
+          "name": "prepare"
+        },
+        {
+          "name": "stage-api-dockerfile"
+        },
+        {
+          "name": "build-all-apis"
+        },
+        {
+          "name": "stage-frontend-dockerfile"
+        },
+        {
+          "name": "build-frontend"
+        },
+        {
+          "name": "build-worker"
+        },
+        {
+          "name": "rollout"
+        },
+        {
+          "name": "verify-prod"
+        },
+        {
+          "name": "gitops-sync"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-deliver-research",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000",
+          "name": "registry",
+          "type": "string"
+        },
+        {
+          "default": "dev",
+          "name": "tag",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "release-window"
+        },
+        {
+          "name": "validate-revision"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-research"
+        },
+        {
+          "name": "clone-infra"
+        },
+        {
+          "name": "lint-test"
+        },
+        {
+          "name": "build-research"
+        },
+        {
+          "name": "pin-check"
+        },
+        {
+          "name": "gitops-sync"
+        },
+        {
+          "name": "rollout-research"
+        },
+        {
+          "name": "verify-research"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "annotations": {
+        "bifrost.io/run-arch": "amd64",
+        "bifrost.io/run-timeout": "1h0m0s"
+      },
+      "name": "bifrost-deliver-stg",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "default": "main",
+          "name": "revision",
+          "type": "string"
+        },
+        {
+          "default": "main",
+          "name": "uiRevision",
+          "type": "string"
+        },
+        {
+          "default": "http://gitea.cicd.svc.cluster.local:3000/bifrost",
+          "name": "giteaBase",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000",
+          "name": "registry",
+          "type": "string"
+        },
+        {
+          "default": "stg",
+          "name": "tag",
+          "type": "string"
+        },
+        {
+          "default": "registry.cicd.svc.cluster.local:5000/bifrost-frontend:stg",
+          "name": "frontendImage",
+          "type": "string"
+        }
+      ],
+      "tasks": [
+        {
+          "name": "freeze-check"
+        },
+        {
+          "name": "mirror-sync"
+        },
+        {
+          "name": "clone-core"
+        },
+        {
+          "name": "clone-worker"
+        },
+        {
+          "name": "clone-api"
+        },
+        {
+          "name": "clone-frontend"
+        },
+        {
+          "name": "clone-ui"
+        },
+        {
+          "name": "clone-infra"
+        },
+        {
+          "name": "prepare"
+        },
+        {
+          "name": "stage-api-dockerfile"
+        },
+        {
+          "name": "build-all-apis"
+        },
+        {
+          "name": "stage-frontend-dockerfile"
+        },
+        {
+          "name": "build-frontend"
+        },
+        {
+          "name": "build-worker"
+        },
+        {
+          "name": "rollout"
+        },
+        {
+          "name": "verify-stg"
+        },
+        {
+          "name": "gitops-sync"
+        }
+      ],
+      "workspaces": [
+        {
+          "name": "build-context"
+        }
+      ]
+    }
+  },
+  {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "Pipeline",
+    "metadata": {
+      "name": "bifrost-smoke",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "tasks": [
+        {
+          "name": "smoke-echo"
+        }
+      ]
+    }
+  }
+]

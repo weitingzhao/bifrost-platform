@@ -9,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -106,7 +109,7 @@ func TestCIRevisionRefusals(t *testing.T) {
 					}
 					revision := value
 					if viaParam {
-						revision = factSHA1
+						revision = ""
 						extra["revision"] = value
 					}
 					assertContractRefused(t, s, dyn, name, revision, extra, "40-character lowercase git SHA")
@@ -160,9 +163,9 @@ func TestCIRefPreflightOneRepository(t *testing.T) {
 					}
 					// The transport accepts commit lookups; verify we probe the effective caller SHA.
 					if visibility == "missing" {
-						assertContractRefused(t, s, dyn, name, factSHA1, extra, "missing in: "+repo)
+						assertContractRefused(t, s, dyn, name, "", extra, "missing in: "+repo)
 					} else {
-						resp, _, err := s.StartPipelineRun(context.Background(), name, factSHA1, "", "", extra)
+						resp, _, err := s.StartPipelineRun(context.Background(), name, "", "", "", extra)
 						if err != nil || !resp.OK {
 							t.Fatal(resp, err)
 						}
@@ -269,7 +272,7 @@ func TestNonCICreatedRunsUnchangedFromMain(t *testing.T) {
 	if err := json.Unmarshal(raw, &baseline); err != nil {
 		t.Fatal(err)
 	}
-	pipes := infraPipelines(t)
+	pipes := baselinePipelines(t)
 	for key, want := range baseline {
 		parts := strings.Split(key, "/")
 		name := parts[0]
@@ -311,5 +314,114 @@ func TestNonCICreatedRunsUnchangedFromMain(t *testing.T) {
 			expected := map[string]any{"apiVersion": "tekton.dev/v1", "kind": "PipelineRun", "metadata": map[string]any{"name": "timestamp-name", "namespace": "cicd", "labels": map[string]any{"tekton.dev/pipeline": name, "bifrost.io/trigger": "platform-api", "bifrost.io/revision": want.Revision}}, "spec": want.Spec}
 			assertJSONEqual(t, run.Object, expected)
 		})
+	}
+}
+
+func TestDeliverPipelineDeclarationRefusals(t *testing.T) {
+	const name = "bifrost-deliver-platform-prod"
+	for _, tc := range []struct {
+		field, owed, sentence string
+	}{
+		{"workspaces", "owed-source", `workspace "owed-source"`},
+		{"params", "owed-param", `param "owed-param"`},
+	} {
+		t.Run(tc.field, func(t *testing.T) {
+			pipe := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+				"metadata": map[string]any{"name": name, "namespace": "cicd"},
+				"spec":     map[string]any{tc.field: []any{map[string]any{"name": tc.owed}}},
+			}}
+			s, dyn, _ := contractService(t, pipe, "unknown")
+			s.SetClientsetForTest(k8sfake.NewSimpleClientset(
+				&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "ci", Labels: map[string]string{"kubernetes.io/arch": "amd64"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}},
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"}, Data: map[string]string{releaseWindowDataKey: `{"who":"tester","what":"bifrost-platform"}`}},
+			))
+			resp, _, err := s.StartPipelineRun(context.Background(), name, factSHA1, "", "tester", nil)
+			if err == nil || resp.OK || resp.Changed || !strings.Contains(resp.Message, tc.sentence) {
+				t.Fatalf("expected refusal naming %q: %+v, %v", tc.sentence, resp, err)
+			}
+			assertNoContractCreate(t, dyn)
+		})
+	}
+}
+
+func assertNoContractCreate(t *testing.T, dyn *dynfake.FakeDynamicClient) {
+	t.Helper()
+	for _, action := range dyn.Actions() {
+		if action.GetVerb() == "create" {
+			t.Fatalf("refusal reached create: %v", action)
+		}
+	}
+}
+
+func TestCIContradictoryInputsRefused(t *testing.T) {
+	for _, name := range []string{"bifrost-ci-platform", "bifrost-ci-frontend", "bifrost-ci-python"} {
+		for _, tc := range []struct {
+			name, tag string
+			extra     map[string]string
+			words     []string
+		}{
+			{"revision conflict", "", map[string]string{"revision": factSHA2}, []string{"revision", "params.revision", factSHA1, factSHA2}},
+			{"image tag", "1.2.3", nil, []string{"tag", "1.2.3", "CI builds no image"}},
+		} {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				pipe := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "tekton.dev/v1", "kind": "Pipeline",
+					"metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{},
+				}}
+				extra := map[string]string{}
+				for k, v := range tc.extra {
+					extra[k] = v
+				}
+				if name == "bifrost-ci-python" {
+					extra["repo"] = pythonCIRepos[0]
+				}
+				s, dyn, paths := contractService(t, pipe, "present")
+				resp, _, err := s.StartPipelineRun(context.Background(), name, factSHA1, tc.tag, "", extra)
+				if err == nil || resp.OK || resp.Changed {
+					t.Fatalf("expected refusal: %+v, %v", resp, err)
+				}
+				for _, word := range tc.words {
+					if !strings.Contains(resp.Message, word) {
+						t.Fatalf("refusal missing %q: %s", word, resp.Message)
+					}
+				}
+				assertNoContractCreate(t, dyn)
+				if len(*paths) != 0 {
+					t.Fatal("invalid inputs reached preflight", *paths)
+				}
+				if _, _, err := buildPipelineRunSpec(name, factSHA1, tc.tag, extra, pipe); err == nil {
+					t.Fatal("builder accepted contradictory CI inputs")
+				}
+			})
+		}
+	}
+}
+
+func TestPythonCIRefPreflightResponse(t *testing.T) {
+	s := NewService(&config.ClusterEntry{ID: "test"})
+	before := time.Now().UTC()
+	resp := s.RefPreflight(context.Background(), "bifrost-ci-python", factSHA1)
+	if resp.Ready || resp.Reachability != probe.ReachFail || !strings.Contains(resp.Detail, "param repo") || resp.ClusterID != "test" {
+		t.Fatal(resp)
+	}
+	if resp.GeneratedAt.Before(before) || resp.GeneratedAt.After(time.Now().UTC()) {
+		t.Fatal("invalid timestamp", resp.GeneratedAt)
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(b, &fields); err != nil {
+		t.Fatal(err)
+	}
+	for _, key := range []string{"repos", "missing"} {
+		if list, ok := fields[key].([]any); !ok || len(list) != 0 {
+			t.Fatalf("%s must be an empty list: %s", key, b)
+		}
+	}
+	if fields["generated_at"] == "0001-01-01T00:00:00Z" {
+		t.Fatal(string(b))
 	}
 }

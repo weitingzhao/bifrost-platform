@@ -84,7 +84,9 @@ func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass s
 // halfway at a clone-* task.
 func (s *Service) RefPreflight(ctx context.Context, pipelineName, revision string) RefPreflightResponse {
 	if pipelineName == "bifrost-ci-python" {
-		return RefPreflightResponse{Pipeline: pipelineName, Revision: revision, Reachability: probe.ReachFail, Detail: "python-ci requires param repo to select its repository"}
+		return RefPreflightResponse{ClusterID: s.clusterID(), Pipeline: pipelineName, Revision: revision,
+			Repos: []RepoRefStatus{}, Missing: []string{}, GeneratedAt: time.Now().UTC(),
+			Reachability: probe.ReachFail, Detail: "python-ci requires param repo to select its repository"}
 	}
 	return s.refPreflightForRepos(ctx, pipelineName, revision, reposForPipeline(pipelineName))
 }

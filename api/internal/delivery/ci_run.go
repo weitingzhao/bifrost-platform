@@ -30,6 +30,9 @@ func ciRunInputs(name, revision string, extra map[string]string) (string, string
 		}
 	}
 	if value, ok := extra["revision"]; ok {
+		if revision != "" && revision != value {
+			return "", "", fmt.Errorf("revision %q and params.revision %q must match", revision, value)
+		}
 		revision = value
 	}
 	if !callerParamSHA.MatchString(revision) {
