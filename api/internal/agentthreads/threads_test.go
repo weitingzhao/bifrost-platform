@@ -635,7 +635,15 @@ func TestHostLostMessageOmitsWrappedRuns(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			r := newRig(t, "")
-			r.beatOn(t, "run-x", "mbp", TurnStart, "", 0)
+			// A real wrapped run always carries a title; the message names threads by title.
+			titled := Beat{Thread: "run-x", Vendor: "codex", Host: "mbp", Title: "headless codex", Event: TurnStart, TurnID: "T", Seq: 1}
+			if err := titled.Validate(); err != nil {
+				t.Fatal(err)
+			}
+			r.rec.Record(titled)
+			if err := r.rec.Flush(); err != nil {
+				t.Fatal(err)
+			}
 			if withDesktop {
 				r.beatOn(t, "desk-x", "mbp", TurnStart, "", 0)
 			}
@@ -646,7 +654,7 @@ func TestHostLostMessageOmitsWrappedRuns(t *testing.T) {
 				t.Fatalf("want one host-loss alert, got %v", r.page.sent)
 			}
 			message := r.page.sent[0]
-			if !strings.Contains(message, "Look · mbp has not reported") || strings.Contains(message, "run-x") {
+			if !strings.Contains(message, "Look · mbp has not reported") || strings.Contains(message, "run-x") || strings.Contains(message, "headless codex") {
 				t.Fatalf("Owner host-loss message: %s", message)
 			}
 			if withDesktop && !strings.Contains(message, "desk-x") {
