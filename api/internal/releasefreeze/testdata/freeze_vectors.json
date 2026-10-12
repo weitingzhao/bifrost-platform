@@ -1,0 +1,624 @@
+{
+  "tokens": [
+    "timeout",
+    "connection failed",
+    "context canceled",
+    "invalid utf-8",
+    "bom",
+    "not a JSON object",
+    "duplicate key",
+    "wrong apiVersion",
+    "wrong kind",
+    "metadata is not an object",
+    "continue is not a string",
+    "continue is not empty",
+    "items is not a list",
+    "missing token",
+    "missing CA",
+    "corrupt CA"
+  ],
+  "patterns": [
+    "^HTTP [0-9]+$",
+    "^item [0-9]+ is malformed$"
+  ],
+  "cases": [
+    {
+      "name": "clear-empty",
+      "row": "empty",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "clear-continue-empty",
+      "row": "empty",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\"},\"items\":[]}"
+    },
+    {
+      "name": "clear-extra-field",
+      "row": "empty",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[],\"note\":\"kept\"}"
+    },
+    {
+      "name": "clear-whitespace",
+      "row": "exact-whitespace",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "\n  {\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}\n"
+    },
+    {
+      "name": "clear-resource-version",
+      "row": "empty",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\"},\"items\":[]}"
+    },
+    {
+      "name": "clear-continue-key-case",
+      "row": "exact-case",
+      "verdict": "clear",
+      "first_line": "未冻结：0 条记录",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"Continue\":\"tok\"},\"items\":[]}"
+    },
+    {
+      "name": "status-404-empty-body",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 404），按冻结处理",
+      "status": 404,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "status-403-empty-body",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 403），按冻结处理",
+      "status": 403,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "status-500-empty-body",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 500），按冻结处理",
+      "status": 500,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "status-502",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 502），按冻结处理",
+      "status": 502,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "status-201",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 201），按冻结处理",
+      "status": 201,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "status-400",
+      "row": "status",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（HTTP 400），按冻结处理",
+      "status": 400,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "transport-timeout",
+      "row": "timeout",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（timeout），按冻结处理",
+      "transport": "timeout"
+    },
+    {
+      "name": "transport-connection",
+      "row": "connection",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（connection failed），按冻结处理",
+      "transport": "connection failed"
+    },
+    {
+      "name": "transport-canceled",
+      "row": "canceled",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（context canceled），按冻结处理",
+      "transport": "context canceled"
+    },
+    {
+      "name": "body-array",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "[]"
+    },
+    {
+      "name": "body-string",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "\"hello\""
+    },
+    {
+      "name": "body-number",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "42"
+    },
+    {
+      "name": "body-true",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "true"
+    },
+    {
+      "name": "body-null",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "null"
+    },
+    {
+      "name": "body-empty",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": ""
+    },
+    {
+      "name": "body-whitespace",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": " \n\t"
+    },
+    {
+      "name": "body-truncated",
+      "row": "not-json",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "{"
+    },
+    {
+      "name": "body-trailing",
+      "row": "exact-trailing",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（not a JSON object），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}{}"
+    },
+    {
+      "name": "utf8-invalid",
+      "row": "exact-utf8",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（invalid utf-8），按冻结处理",
+      "status": 200,
+      "body_base64": "/w=="
+    },
+    {
+      "name": "bom",
+      "row": "exact-bom",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（bom），按冻结处理",
+      "status": 200,
+      "body": "﻿{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "wrong-apiversion",
+      "row": "apiVersion",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong apiVersion），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "missing-apiversion",
+      "row": "apiVersion",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong apiVersion），按冻结处理",
+      "status": 200,
+      "body": "{\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "apiversion-case",
+      "row": "exact-case",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong apiVersion），按冻结处理",
+      "status": 200,
+      "body": "{\"APIVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "apiversion-number",
+      "row": "apiVersion",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong apiVersion），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":1,\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "wrong-kind",
+      "row": "kind",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong kind），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"Freeze\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "kind-case",
+      "row": "exact-case",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong kind），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"freezelist\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "missing-kind",
+      "row": "kind",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（wrong kind），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "continue-token",
+      "row": "continue",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（continue is not empty），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"tok\"},\"items\":[]}"
+    },
+    {
+      "name": "continue-space",
+      "row": "continue",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（continue is not empty），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\" \"},\"items\":[]}"
+    },
+    {
+      "name": "continue-number",
+      "row": "exact-continue-type",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（continue is not a string），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":1},\"items\":[]}"
+    },
+    {
+      "name": "continue-null",
+      "row": "exact-continue-type",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（continue is not a string），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":null},\"items\":[]}"
+    },
+    {
+      "name": "metadata-array",
+      "row": "exact-metadata",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（metadata is not an object），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":[],\"items\":[]}"
+    },
+    {
+      "name": "metadata-null",
+      "row": "exact-metadata",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（metadata is not an object），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":null,\"items\":[]}"
+    },
+    {
+      "name": "metadata-string",
+      "row": "exact-metadata",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（metadata is not an object），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":\"x\",\"items\":[]}"
+    },
+    {
+      "name": "metadata-missing",
+      "row": "exact-metadata",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（metadata is not an object），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"items\":[]}"
+    },
+    {
+      "name": "items-object",
+      "row": "items",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（items is not a list），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":{}}"
+    },
+    {
+      "name": "items-null",
+      "row": "items",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（items is not a list），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":null}"
+    },
+    {
+      "name": "items-string",
+      "row": "items",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（items is not a list），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":\"no\"}"
+    },
+    {
+      "name": "items-missing",
+      "row": "items",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（items is not a list），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{}}"
+    },
+    {
+      "name": "items-key-case",
+      "row": "exact-case",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（items is not a list），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"Items\":[]}"
+    },
+    {
+      "name": "item-string",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[\"x\"]}"
+    },
+    {
+      "name": "item-null",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[null]}"
+    },
+    {
+      "name": "item-array",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[[]]}"
+    },
+    {
+      "name": "item-no-metadata",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"spec\":{\"who\":\"a\",\"reason\":\"r\",\"at\":\"2026-10-11T00:00:00Z\"}}]}"
+    },
+    {
+      "name": "item-metadata-string",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":\"x\"}]}"
+    },
+    {
+      "name": "item-no-name",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"uid\":\"u\"}}]}"
+    },
+    {
+      "name": "item-empty-name",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"\"}}]}"
+    },
+    {
+      "name": "item-name-number",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 0 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":1}}]}"
+    },
+    {
+      "name": "item-1-malformed",
+      "row": "item",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（item 1 is malformed），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\"},\"spec\":{\"who\":\"ada\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}},{\"metadata\":{}}]}"
+    },
+    {
+      "name": "dup-top",
+      "row": "exact-dup",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（duplicate key），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[]}"
+    },
+    {
+      "name": "dup-metadata",
+      "row": "exact-dup",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（duplicate key），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"continue\":\"\"},\"items\":[]}"
+    },
+    {
+      "name": "dup-item-top",
+      "row": "exact-dup",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（duplicate key），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"spec\":{\"who\":\"ada\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}}]}"
+    },
+    {
+      "name": "dup-item-metadata",
+      "row": "exact-dup",
+      "verdict": "unreadable",
+      "first_line": "拒绝：读不到冻结状态（duplicate key），按冻结处理",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"spec\":{\"who\":\"ada\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}}]}"
+    },
+    {
+      "name": "frozen-one",
+      "row": "frozen",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\"},\"spec\":{\"who\":\"ada\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\",\"via\":\"stg\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=ada  at=2026-10-11T00:00:00Z  reason=because"
+      ],
+      "records": [
+        {
+          "name": "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "uid": "uid-1",
+          "who": "ada",
+          "reason": "because",
+          "at": "2026-10-11T00:00:00Z",
+          "via": "stg"
+        }
+      ]
+    },
+    {
+      "name": "frozen-two-unsorted",
+      "row": "frozen",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（2 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"uid\":\"uid-b\"},\"spec\":{\"who\":\"bob\",\"reason\":\"second\",\"at\":\"2026-10-11T00:00:02Z\"}},{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-a\"},\"spec\":{\"who\":\"ada\",\"reason\":\"first\",\"at\":\"2026-10-11T00:00:01Z\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（2 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=ada  at=2026-10-11T00:00:01Z  reason=first",
+        "freeze-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  who=bob  at=2026-10-11T00:00:02Z  reason=second"
+      ]
+    },
+    {
+      "name": "frozen-missing-fields",
+      "row": "missing-fields",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"},\"spec\":{\"reason\":1,\"at\":null}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=?  at=?  reason=?"
+      ]
+    },
+    {
+      "name": "frozen-who-number",
+      "row": "missing-fields",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":7},\"spec\":{\"who\":1,\"reason\":true,\"at\":[\"t\"]}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=?  at=?  reason=?"
+      ]
+    },
+    {
+      "name": "frozen-empty-who",
+      "row": "missing-fields",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\"},\"spec\":{\"who\":\"\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=  at=2026-10-11T00:00:00Z  reason=because"
+      ]
+    },
+    {
+      "name": "frozen-newline-reason",
+      "row": "frozen",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\"},\"spec\":{\"who\":\"ada\",\"reason\":\"line1\\nline2\\rline3\",\"at\":\"2026-10-11T00:00:00Z\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=ada  at=2026-10-11T00:00:00Z  reason=line1 line2 line3"
+      ]
+    },
+    {
+      "name": "frozen-deletion-timestamp",
+      "row": "deletionTimestamp",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\",\"deletionTimestamp\":\"2026-10-11T00:00:00Z\"},\"spec\":{\"who\":\"ada\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=ada  at=2026-10-11T00:00:00Z  reason=because"
+      ]
+    },
+    {
+      "name": "frozen-no-spec",
+      "row": "missing-fields",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=?  at=?  reason=?"
+      ]
+    },
+    {
+      "name": "spec-dup-who",
+      "row": "exact-dup-spec",
+      "verdict": "frozen",
+      "first_line": "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"uid-1\"},\"spec\":{\"who\":\"first\",\"who\":\"second\",\"reason\":\"because\",\"at\":\"2026-10-11T00:00:00Z\"}}]}",
+      "lines": [
+        "拒绝：发布已冻结（1 条记录）；解冻由 Owner 删除记录：release.sh unfreeze",
+        "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  who=second  at=2026-10-11T00:00:00Z  reason=because"
+      ],
+      "records": [
+        {
+          "name": "freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "uid": "uid-1",
+          "who": "second",
+          "reason": "because",
+          "at": "2026-10-11T00:00:00Z",
+          "via": ""
+        }
+      ]
+    }
+  ]
+}
