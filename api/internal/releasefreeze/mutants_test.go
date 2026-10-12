@@ -64,6 +64,7 @@ var mutants = []mutant{
 	{"field-without-colon", "httplang.go", "\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", "\tif i == len(line) && i > 0 {\n\t\treturn lowerASCII(line), \"\", true\n\t}\n\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", []string{"TestHTTPVectors"}},
 	{"chunk-data-crlf", "httplang.go", "if _, err := io.ReadFull(br, crlf[:]); err != nil || crlf != [2]byte{'\\r', '\\n'} {", "if _, err := io.ReadFull(br, crlf[:]); err != nil {", []string{"TestHTTPVectors"}},
 	{"status-first-byte", "httplang.go", "\tif len(line) < len(prefix)+3 || string(line[:len(prefix)]) != prefix {\n", "\tif len(line) < len(prefix)+3 || string(line[1:len(prefix)]) != prefix[1:] {\n", []string{"TestHTTPByteClasses"}},
+	{"second-chunk-nonhex", "httplang.go", "\t\tsize, ok := parseChunkSize(line)\n", "\t\tif len(body)>0 && len(line)==2 && line[0]=='!' {line[0]='7'}\n\t\tsize, ok := parseChunkSize(line)\n", []string{"TestHTTPByteClasses"}},
 }
 
 // mutantEvidence names, for a planted violation of H, the response whose verdict has to flip: the failure must
@@ -86,6 +87,7 @@ var mutantEvidence = map[string]string{
 	"field-without-colon":   "extra field b'X-Junk'",
 	"chunk-data-crlf":       "two bytes that are not CRLF after the chunk data",
 	"status-first-byte":     "a replace 0",
+	"second-chunk-nonhex":   "d replace 67",
 }
 
 // evidenceHeld reports whether want names a vector, or a byte-class position ("<base> <mode> <index>").

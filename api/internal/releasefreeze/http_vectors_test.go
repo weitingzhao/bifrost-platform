@@ -22,7 +22,7 @@ import (
 // responses with the verdict the language H of design §3.2 gives each. The file is
 // generated in the infra repository (scripts/release/freeze_http_vectors.py) by a
 // recogniser written from the productions; the Python reader is held to the same file.
-const freezeHTTPVectorsSHA256 = "daf5e79f9893370e738eb0b5d15a9057caa2a36008fb5e1135aed940ddeaa5f5"
+const freezeHTTPVectorsSHA256 = "b9873fa5a8611716d576a1b3c8cbf4a6588ee8b6651545d4200367d5d1b77374"
 
 type httpVector struct {
 	Name  string `json:"name"`
@@ -128,7 +128,7 @@ func TestHTTPByteClasses(t *testing.T) {
 		compare("replace", base.Positions, base.Replace, false)
 		compare("insert", base.InsertPositions, base.Insert, true)
 	}
-	if n < 400 {
+	if n < 646 {
 		t.Fatalf("byte-class positions %d", n)
 	}
 	t.Logf("byte-class positions %d; %s", n, strings.Join(detail, "; "))

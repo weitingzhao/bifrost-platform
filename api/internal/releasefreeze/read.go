@@ -196,7 +196,7 @@ func defaultDial(ctx context.Context, addr string, cfg *tls.Config, deadline tim
 		return nil, err
 	}
 	if p := tlsConn.ConnectionState().NegotiatedProtocol; p != "http/1.1" {
-		_ = tlsConn.Close()
+		closeConn(tlsConn)
 		return nil, errors.New("connection failed")
 	}
 	return tlsConn, nil
