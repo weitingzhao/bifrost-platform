@@ -30,8 +30,6 @@ const (
 	maxDigits = 32
 )
 
-func allowFifth() bool { return false }
-
 func membersOK(seen [4]bool, dups int) bool {
 	if dups > 0 || seen != [4]bool{true, true, true, true} {
 		return false
@@ -65,9 +63,6 @@ func parseTop(b []byte, i int) (int, bool) {
 			i++
 		}
 	}
-	if allowFifth() && i < len(b) && b[i] == ',' {
-		i = skipFifth(b, i)
-	}
 	if !membersOK(seen, dups) {
 		return i, false
 	}
@@ -75,24 +70,6 @@ func parseTop(b []byte, i int) (int, bool) {
 		return i, false
 	}
 	return i + 1, true
-}
-
-func skipFifth(b []byte, i int) int {
-	i++
-	i = skipW(b, i)
-	var ok bool
-	i, ok = expectQuoted(b, i, "z")
-	if !ok {
-		return i
-	}
-	i = skipW(b, i)
-	if i < len(b) && b[i] == ':' {
-		i++
-		i = skipW(b, i)
-		i, _ = expectQuoted(b, i, "")
-		i = skipW(b, i)
-	}
-	return i
 }
 
 func parseM(b []byte, i int) (int, int, bool) {
@@ -137,32 +114,6 @@ func parseItems(b []byte, i int) (int, bool) {
 	return i + 1, true
 }
 
-// metaRR is the repeated-resourceVersion sequence. It is not one of R, CR, RC.
-func metaRR(b []byte, i int) (int, bool) {
-	i = skipW(b, i)
-	i, ok := parseR(b, i)
-	if !ok {
-		return i, false
-	}
-	i = skipW(b, i)
-	if i >= len(b) || b[i] != ',' {
-		return i, false
-	}
-	i++
-	i = skipW(b, i)
-	i, ok = parseR(b, i)
-	if !ok {
-		return i, false
-	}
-	i = skipW(b, i)
-	if i >= len(b) || b[i] != '}' {
-		return i, false
-	}
-	return i + 1, true
-}
-
-var metaExtras = []func([]byte, int) (int, bool){}
-
 func parseMeta(b []byte, i int) (int, bool) {
 	if i >= len(b) || b[i] != '{' {
 		return i, false
@@ -177,12 +128,6 @@ func parseMeta(b []byte, i int) (int, bool) {
 	if j, ok := metaRC(b, start); ok {
 		return j, true
 	}
-	for _, fn := range metaExtras {
-		if j, ok := fn(b, start); ok {
-			return j, true
-		}
-	}
-	_ = metaRR
 	return i, false
 }
 

@@ -170,6 +170,9 @@ func armDeadline(conn net.Conn, deadline time.Time) {
 	_ = conn.SetDeadline(deadline) // one total deadline
 }
 
+// finishedInTime is the second hold on the deadline: clear only when the response was complete before it.
+func finishedInTime(deadline time.Time) bool { return !time.Now().After(deadline) }
+
 func defaultDial(ctx context.Context, addr string, cfg *tls.Config, deadline time.Time) (net.Conn, error) {
 	raw, err := (&net.Dialer{}).DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -226,8 +229,6 @@ func loadCA(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
-func followRedirect() bool { return false }
-
 func encodingForbidden(present bool) bool { return present }
 
 func chunkFrameComplete(finalCRLF bool) bool { return finalCRLF }
@@ -255,66 +256,17 @@ func readHTTP(br *bufio.Reader, conn net.Conn, deadline time.Time, token string,
 		if head.status == 101 || (head.status >= 100 && head.status < 200) {
 			return notClear("HTTP " + strconv.Itoa(head.status)), nil
 		}
-		if head.status >= 300 && head.status < 400 {
-			if !followRedirect() {
-				return notClear("HTTP " + strconv.Itoa(head.status)), nil
-			}
-			return followOnce(head, token, g, ctx, pool, deadline)
+		if head.status >= 300 && head.status < 400 { // rule: a redirect is not followed
+			return notClear("HTTP " + strconv.Itoa(head.status)), nil
 		}
 		body, err := readBody(br, conn, deadline, head)
 		if err != nil {
 			return Decision{}, err
 		}
-		return DecideHTTP(head.status, body), nil
+		got := DecideHTTP(head.status, body)
+		if got.Verdict == VerdictClear && !finishedInTime(deadline) {
+			return notClear("timeout"), nil
+		}
+		return got, nil
 	}
-}
-
-func followOnce(head respHead, token string, g Gate, ctx context.Context, pool *x509.CertPool, deadline time.Time) (Decision, error) {
-	loc := ""
-	if vs := head.values("location"); len(vs) > 0 {
-		loc = strings.TrimSpace(vs[0])
-	}
-	path := loc
-	if u, err := url.Parse(loc); err == nil && u.Path != "" {
-		path = u.Path
-	}
-	if path == "" || !strings.HasPrefix(path, "/") {
-		return notClear("HTTP 302"), nil
-	}
-	tr := http1Transport(pool)
-	addr := g.Addr
-	if addr == "" {
-		addr = OriginHost + ":443"
-	}
-	var conn net.Conn
-	var err error
-	if g.Dial != nil {
-		conn, err = g.Dial(ctx, "tcp", addr, tr.TLSClientConfig, deadline)
-	} else {
-		conn, err = defaultDial(ctx, addr, tr.TLSClientConfig, deadline)
-	}
-	if err != nil {
-		return Decision{}, err
-	}
-	defer conn.Close()
-	armDeadline(conn, deadline)
-	req := "GET " + path + " HTTP/1.1\r\n" +
-		"Host: " + OriginHost + "\r\n" +
-		"Accept: application/json\r\n" +
-		"Accept-Encoding: identity\r\n" +
-		"Authorization: Bearer " + token + "\r\n" +
-		"Connection: close\r\n\r\n"
-	if _, err := io.WriteString(conn, req); err != nil {
-		return Decision{}, err
-	}
-	br := bufio.NewReader(conn)
-	h2, err := readHead(br, conn, deadline)
-	if err != nil {
-		return Decision{}, err
-	}
-	body, err := readBody(br, conn, deadline, h2)
-	if err != nil {
-		return Decision{}, err
-	}
-	return DecideHTTP(h2.status, body), nil
 }
