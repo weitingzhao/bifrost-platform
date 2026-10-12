@@ -531,12 +531,15 @@ func (c Config) Message(t Thread, now time.Time) (title, body string) {
 }
 
 // HostMessage is the one push for a host that stopped heartbeating.
-// The body lines are unchanged; the title asks the Owner to look.
+// Wrapped runs stay on the coordinator's list, outside this Owner summary.
 func (c Config) HostMessage(h Host, mid []Thread, now time.Time) (title, body string) {
 	age := now.Sub(h.At)
 	title = fmt.Sprintf("Look · %s has not reported for %s", h.Host, human(age))
 	names := make([]string, 0, len(mid))
 	for _, t := range mid {
+		if strings.HasPrefix(t.Thread, "run-") {
+			continue
+		}
 		names = append(names, t.Name())
 	}
 	sort.Strings(names)

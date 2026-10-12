@@ -626,6 +626,63 @@ func TestProgressBeatKeepsDeclaredToolTimeout(t *testing.T) {
 	}
 }
 
+// Planted violation: remove the run- filter from Config.HostMessage.
+func TestHostLostMessageOmitsWrappedRuns(t *testing.T) {
+	for _, withDesktop := range []bool{false, true} {
+		name := "runs-only"
+		if withDesktop {
+			name = "mixed"
+		}
+		t.Run(name, func(t *testing.T) {
+			r := newRig(t, "")
+			r.beatOn(t, "run-x", "mbp", TurnStart, "", 0)
+			if withDesktop {
+				r.beatOn(t, "desk-x", "mbp", TurnStart, "", 0)
+			}
+			r.host(t, "mbp", map[string]VendorReport{"claude": {Wired: true, Token: true}})
+			r.at(11 * time.Minute)
+			r.tick(t)
+			if r.page.count() != 1 {
+				t.Fatalf("want one host-loss alert, got %v", r.page.sent)
+			}
+			message := r.page.sent[0]
+			if !strings.Contains(message, "Look · mbp has not reported") || strings.Contains(message, "run-x") {
+				t.Fatalf("Owner host-loss message: %s", message)
+			}
+			if withDesktop && !strings.Contains(message, "desk-x") {
+				t.Fatalf("desktop thread missing from Owner message: %s", message)
+			}
+			if !withDesktop && !strings.Contains(message, "no thread mid-turn") {
+				t.Fatalf("runs-only Owner message: %s", message)
+			}
+			views := DefaultConfig().Views(mustState(t, r), r.clk.at)
+			want := 1
+			if withDesktop {
+				want++
+			}
+			if len(views) != want {
+				t.Fatalf("coordinator list lost threads: %+v", views)
+			}
+			found := false
+			for _, v := range views {
+				if v.Thread.Thread == "run-x" {
+					found = true
+					if v.Status != HostLost {
+						t.Fatalf("run status %s, want host_lost", v.Status)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("wrapped run missing from coordinator list")
+			}
+			r.tick(t)
+			if r.page.count() != 1 {
+				t.Fatalf("host-loss alert repeated: %v", r.page.sent)
+			}
+		})
+	}
+}
+
 func mustState(t *testing.T, r *rig) State {
 	t.Helper()
 	st, err := r.store.Load()
