@@ -158,12 +158,10 @@ func headlessRun(id string) bool {
 // Due lists the keys of silent threads whose silence has not been pushed, and
 // whether each is fresh enough to push (false = mark only). A live claim is
 // left to the worker that holds it. A headless run is left out of both lists.
-// A superseded session is not an item, and a thread is not silent while any
-// of its sessions is live, so only the listed session is judged.
+// Superseded sessions remain listed but are never due.
 func (c Config) Due(st State, now time.Time) (push, mark []string) {
-	for _, item := range c.listedSessions(st, now) {
-		k, t := item.key, item.thread
-		if headlessRun(t.Thread) || item.status != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
+	for k, t := range st.Threads {
+		if headlessRun(t.Thread) || c.sessionStatus(st, t, now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
 			continue
 		}
 		if now.Sub(t.At.Add(c.Threshold(t))) > c.PushWithin {
@@ -197,15 +195,14 @@ func (c Config) HostsDue(st State, now time.Time) (push, mark []string) {
 }
 
 // MidTurn returns the host's threads that have not ended, sorted by id.
-// A sidebar thread is named once. A superseded session is not a second name.
+// Superseded sessions and wrapped runs are excluded from the host-loss message.
 func (c Config) MidTurn(st State, host string, now time.Time) []Thread {
 	out := make([]Thread, 0)
-	for _, item := range c.listedSessions(st, now) {
-		t := item.thread
-		if t.Host != host || t.Event == TurnEnd {
+	for _, t := range st.Threads {
+		if t.Host != host || t.Event == TurnEnd || headlessRun(t.Thread) || c.sessionSuperseded(st, t, now) {
 			continue
 		}
-		out = append(out, asThreadItem(t))
+		out = append(out, t)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Thread < out[j].Thread })
 	return out

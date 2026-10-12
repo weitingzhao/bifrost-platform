@@ -15,117 +15,39 @@ type View struct {
 	ThresholdSeconds int64  `json:"threshold_seconds"`
 }
 
-// listedSession is one stored session that stands for an item the Owner sees.
-type listedSession struct {
-	key    string
-	thread Thread
-	status Status
-}
-
-// sessionSuperseded reports that t is an old session of a sidebar thread:
-// another session of that same thread has opened a turn, and t itself has
-// sent nothing for its silent threshold. A session that is still sending is
-// not superseded, so two live sessions of one thread do not close each other.
-// A wrapped run is not a session of the sidebar thread. A session with no
-// sidebar id is never superseded.
+// sessionSuperseded requires another session's actual turn opening after t's
+// last event. Vendor does not partition sidebar identity; wrapped runs do not
+// participate in either direction.
 func (c Config) sessionSuperseded(st State, t Thread, now time.Time) bool {
-	if t.Sidebar == "" || headlessRun(t.Thread) {
-		return false
-	}
-	if now.Sub(t.At) <= c.Threshold(t) {
+	if t.Sidebar == "" || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
 		return false
 	}
 	for _, o := range st.Threads {
-		if o.Vendor != t.Vendor || o.Sidebar != t.Sidebar || o.Thread == t.Thread {
+		if o.Sidebar != t.Sidebar || Key(o.Vendor, o.Thread) == Key(t.Vendor, t.Thread) || headlessRun(o.Thread) {
 			continue
 		}
-		if headlessRun(o.Thread) || !o.OpenedTurn {
-			continue
-		}
-		if o.At.After(t.At) || o.TurnStartedAt.After(t.At) {
+		if o.OpenedTurn && o.OpenedTurnAt.After(t.At) {
 			return true
 		}
 	}
 	return false
 }
 
-// listedSessions is one item per sidebar thread, plus one item per session
-// that has no sidebar id. A superseded session is left out. A wrapped run
-// stays its own item. Within a thread, a live session is the item.
-func (c Config) listedSessions(st State, now time.Time) []listedSession {
-	groups := map[string][]listedSession{}
-	order := make([]string, 0, len(st.Threads))
-	for k, t := range st.Threads {
-		if c.sessionSuperseded(st, t, now) {
-			continue
-		}
-		item := listedSession{key: k, thread: t, status: c.StatusOf(t, c.HostDown(st, t.Host, now), now)}
-		gk := k
-		if t.Sidebar != "" && !headlessRun(t.Thread) {
-			gk = t.Vendor + "\x00" + t.Sidebar
-		}
-		if _, ok := groups[gk]; !ok {
-			order = append(order, gk)
-		}
-		groups[gk] = append(groups[gk], item)
+// sessionStatus classifies against the current state, before host-loss rules.
+func (c Config) sessionStatus(st State, t Thread, now time.Time) Status {
+	if c.sessionSuperseded(st, t, now) {
+		return Superseded
 	}
-	out := make([]listedSession, 0, len(order))
-	for _, gk := range order {
-		out = append(out, chooseListed(groups[gk]))
-	}
-	return out
+	return c.StatusOf(t, c.HostDown(st, t.Host, now), now)
 }
 
-func statusIsLive(s Status) bool {
-	return s == InTurn || s == StatusWaiting || s == HostLost
-}
-
-func laterListed(a, b listedSession) bool {
-	if a.thread.At.After(b.thread.At) {
-		return true
-	}
-	return a.thread.At.Equal(b.thread.At) && a.key < b.key
-}
-
-func chooseListed(items []listedSession) listedSession {
-	best := items[0]
-	live := items[0]
-	haveLive := false
-	for _, it := range items {
-		if laterListed(it, best) {
-			best = it
-		}
-		if statusIsLive(it.status) && (!haveLive || laterListed(it, live)) {
-			live = it
-			haveLive = true
-		}
-	}
-	if haveLive {
-		return live
-	}
-	return best
-}
-
-// asThreadItem copies t and, when it belongs to a sidebar thread, names that
-// thread. The stored session id is left as it is.
-func asThreadItem(t Thread) Thread {
-	if t.Sidebar != "" && !headlessRun(t.Thread) {
-		t.Thread = t.Sidebar
-	}
-	return t
-}
-
-// Views classifies every thread the Owner sees, newest first. Sessions of one
-// sidebar thread are one item, and that item is not silent while any of them
-// is live.
+// Views preserves every session's identity and metadata, newest first.
 func (c Config) Views(st State, now time.Time) []View {
-	listed := c.listedSessions(st, now)
-	out := make([]View, 0, len(listed))
-	for _, item := range listed {
-		t := asThreadItem(item.thread)
-		v := View{Thread: t, Status: item.status, QuietSeconds: secs(now.Sub(item.thread.At)), ThresholdSeconds: secs(c.Threshold(item.thread))}
+	out := make([]View, 0, len(st.Threads))
+	for _, t := range st.Threads {
+		v := View{Thread: t, Status: c.sessionStatus(st, t, now), QuietSeconds: secs(now.Sub(t.At)), ThresholdSeconds: secs(c.Threshold(t))}
 		if v.Status != Idle {
-			v.InTurnSeconds = secs(now.Sub(item.thread.TurnStartedAt))
+			v.InTurnSeconds = secs(now.Sub(t.TurnStartedAt))
 		}
 		out = append(out, v)
 	}

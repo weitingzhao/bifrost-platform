@@ -154,3 +154,14 @@ describe('agentThreads', () => {
     expect(capacityRefusalStatusText(undefined)).toBe('')
   })
 })
+
+// Planted violation: include superseded in silence or drop it from Status.
+describe('superseded sessions', () => {
+  it('keeps superseded and unknown statuses in Status, out of Needs you', () => {
+    const old = thread({ thread: 'old', status: 'superseded' })
+    const unknown = thread({ thread: 'unknown', status: 'future' as AgentThread['status'] })
+    const silent = thread({ thread: 'new', status: 'silent' })
+    expect(silentThreads([old, unknown, silent])).toEqual([silent])
+    expect(threadsMidTurn([unknown, old, silent]).map(t => t.thread)).toEqual(['new', 'old', 'unknown'])
+  })
+})

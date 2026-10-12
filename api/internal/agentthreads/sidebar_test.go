@@ -162,83 +162,57 @@ func TestSupersedeNeedsAnotherTurnAndSilence(t *testing.T) {
 	}
 }
 
-// Planted violation: list each session, or call the thread silent while one
-// of its sessions is still live.
-func TestOwnerListsTheThreadOnce(t *testing.T) {
-	const (
-		a   = "aaaaaaaa-1111-2222-3333-444455556666"
-		b   = "bbbbbbbb-1111-2222-3333-444455556666"
-		run = "run-bc611f64-0000-4000-8000-000000000099"
-	)
+// Planted violation: collapse sessions or replace their ids with sidebar ids.
+func TestSessionListPreservesIdentityAndCounts(t *testing.T) {
+	r := newRig(t, "")
+	r.beatSession(t, "a", sidebarID, "mbp", TurnStart)
+	r.at(time.Minute)
+	r.beatSession(t, "b", sidebarID, "mini", BeforeTool)
+	if err := r.store.Update(func(st *State) error {
+		th := st.Threads[Key("claude", "b")]
+		th.Tool = "Bash"
+		st.Threads[Key("claude", "b")] = th
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st := mustState(t, r)
 	cfg := DefaultConfig()
-
-	live := newRig(t, "")
-	live.beatSession(t, a, sidebarID, "mbp", TurnStart)
-	live.at(11 * time.Minute)
-	live.beatSession(t, b, sidebarID, "mbp", TurnStart)
-	views := cfg.Views(mustState(t, live), live.clk.at)
-	if len(views) != 1 || views[0].Thread.Thread != sidebarID || views[0].Status == Silent {
-		t.Fatalf("live thread: %v", viewIDs(views))
+	views := cfg.Views(st, r.clk.at)
+	if len(views) != 2 {
+		t.Fatalf("sessions collapsed: %+v", views)
 	}
-	if strings.Contains(strings.Join(viewIDs(views), " "), a) {
-		t.Fatalf("superseded session is a second item: %v", viewIDs(views))
-	}
-	push, mark := cfg.Due(mustState(t, live), live.clk.at)
-	if len(push)+len(mark) != 0 {
-		t.Fatalf("live thread was due: push %v mark %v", push, mark)
-	}
-
-	both := newRig(t, "")
-	both.beatSession(t, a, sidebarID, "mbp", TurnStart)
-	both.at(time.Minute)
-	both.beatSession(t, b, sidebarID, "mbp", TurnStart)
-	both.at(12 * time.Minute)
-	views = cfg.Views(mustState(t, both), both.clk.at)
-	if len(views) != 1 || views[0].Thread.Thread != sidebarID || views[0].Status != Silent {
-		t.Fatalf("quiet thread: %+v", views)
-	}
-	push, _ = cfg.Due(mustState(t, both), both.clk.at)
-	if len(push) != 1 || push[0] != Key("claude", b) {
-		t.Fatalf("quiet thread due: %v", push)
-	}
-	both.tick(t)
-	if both.page.count() != 1 {
-		t.Fatalf("quiet thread pushes: %d", both.page.count())
-	}
-	msg := both.page.sent[0]
-	if !strings.Contains(msg, "local_4a") || strings.Contains(msg, "aaaaaaaa") || strings.Contains(msg, "bbbbbbbb") {
-		t.Fatalf("push named a session, not the thread: %s", msg)
-	}
-
-	sideBySide := newRig(t, "")
-	sideBySide.beatSession(t, a, sidebarID, "mbp", TurnStart)
-	sideBySide.at(time.Minute)
-	sideBySide.beatSession(t, b, sidebarID, "mbp", TurnStart)
-	views = cfg.Views(mustState(t, sideBySide), sideBySide.clk.at)
-	if len(views) != 1 || views[0].Status == Silent || views[0].Thread.Thread != sidebarID {
-		t.Fatalf("two live sessions: %v", viewIDs(views))
-	}
-
-	runRig := newRig(t, "")
-	runRig.beatSession(t, a, sidebarID, "mbp", TurnStart)
-	runRig.at(11 * time.Minute)
-	runRig.beatSession(t, run, sidebarID, "mbp", TurnStart)
-	views = cfg.Views(mustState(t, runRig), runRig.clk.at)
-	gotRun, gotThread := false, false
 	for _, v := range views {
-		if v.Thread.Thread == run {
-			gotRun = true
+		if v.Thread.Thread == "a" && (v.Host != "mbp" || v.Event != TurnStart) {
+			t.Fatalf("a metadata: %+v", v)
 		}
-		if v.Thread.Thread == sidebarID && v.Status == Silent {
-			gotThread = true
+		if v.Thread.Thread == "b" && (v.Host != "mini" || v.Event != BeforeTool || v.Tool != "Bash") {
+			t.Fatalf("b metadata: %+v", v)
+		}
+		if v.Thread.Thread != "a" && v.Thread.Thread != "b" {
+			t.Fatalf("session identity lost: %+v", v)
 		}
 	}
-	if !gotRun || !gotThread {
-		t.Fatalf("wrapped run joined the sidebar thread: %v", viewIDs(views))
+	setGauges(cfg, st, r.clk.at)
+	var metrics strings.Builder
+	WriteMetrics(&metrics)
+	if !strings.Contains(metrics.String(), `bifrost_agent_threads{status="in_turn"} 2`) {
+		t.Fatal(metrics.String())
 	}
-	push, _ = cfg.Due(mustState(t, runRig), runRig.clk.at)
-	if len(push) != 1 || push[0] != Key("claude", a) {
-		t.Fatalf("desktop silence due: %v", push)
+	r.at(12 * time.Minute)
+	r.beatSession(t, "c", sidebarID, "mini", TurnStart)
+	st = mustState(t, r)
+	views = cfg.Views(st, r.clk.at)
+	if len(views) != 3 {
+		t.Fatalf("superseded sessions omitted: %+v", views)
+	}
+	if got := cfg.MidTurn(st, "mbp", r.clk.at); len(got) != 0 {
+		t.Fatalf("superseded host-loss names: %+v", got)
+	}
+	for _, v := range views {
+		if v.Thread.Thread != "c" && v.Status != Superseded {
+			t.Fatalf("quiet old session: %+v", v)
+		}
 	}
 }
 
