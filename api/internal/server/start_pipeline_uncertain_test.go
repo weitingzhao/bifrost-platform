@@ -40,6 +40,16 @@ func prodPipelineObject() *unstructured.Unstructured {
 		"apiVersion": "tekton.dev/v1",
 		"kind":       "Pipeline",
 		"metadata":   map[string]any{"name": prodPipeline, "namespace": "cicd"},
+		// start_pipeline_run reads the live declaration before it creates a run and refuses a
+		// Pipeline whose spec it cannot read; the fake declares what the real pipeline declares.
+		"spec": map[string]any{
+			"params": []any{
+				map[string]any{"name": "revision", "type": "string", "default": "main"},
+				map[string]any{"name": "uiRevision", "type": "string", "default": "main"},
+			},
+			"workspaces": []any{map[string]any{"name": "build-context"}},
+			"tasks":      []any{map[string]any{"name": "clone-platform"}},
+		},
 	}}
 }
 
