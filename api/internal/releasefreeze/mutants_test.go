@@ -44,6 +44,21 @@ var mutants = []mutant{
 	{"delete-username", "model_engine_test.go", "ownerOnlyDelete:       true, // rule: delete username is the Owner", "ownerOnlyDelete:       false, // rule: delete username is the Owner", []string{"TestExhaustive"}},
 	{"create-guard", "model_engine_test.go", "createNeedsTombstone:  true, // rule: tombstone before create", "createNeedsTombstone:  false, // rule: tombstone before create", []string{"TestExhaustive"}},
 	{"sweep-admission", "model_engine_test.go", "sweepThroughAdmission: true, // rule: sweep uses admission", "sweepThroughAdmission: false, // rule: sweep uses admission", []string{"TestSweepGoesThroughAdmission"}},
+	{"line-1025", "httplang.go", "maxLine      = 1024 // rule", "maxLine      = 1025 // rule", []string{"TestHTTPVectors"}},
+	{"fields-65", "httplang.go", "maxFields    = 64   // rule", "maxFields    = 65   // rule", []string{"TestHTTPVectors"}},
+	{"interim-9", "httplang.go", "maxInterim   = 8    // rule", "maxInterim   = 9    // rule", []string{"TestHTTPVectors"}},
+	{"length-5-digits", "httplang.go", "maxLenDigits = 4    // rule", "maxLenDigits = 5    // rule", []string{"TestHTTPVectors"}},
+	{"hex-5-digits", "httplang.go", "maxHexDigits = 4    // rule", "maxHexDigits = 5    // rule", []string{"TestHTTPVectors"}},
+	{"bare-lf", "httplang.go", "if n < 2 || line[n-2] != '\\r' { // rule: a line ends with CRLF", "if n < 2 { // rule: a line ends with CRLF", []string{"TestHTTPVectors"}},
+	{"reason-without-sp", "httplang.go", "if rest[0] != ' ' { // rule: SP between the status code and the reason", "if false { // rule: SP between the status code and the reason", []string{"TestHTTPVectors"}},
+	{"field-text-wide", "httplang.go", "return c == 0x09 || (c >= 0x20 && c <= 0x7E) // rule: field text is HTAB or 0x20-0x7E", "return c == 0x09 || c >= 0x20 // rule: field text is HTAB or 0x20-0x7E", []string{"TestHTTPVectors"}},
+	{"token-wide", "httplang.go", "'|', '~': // rule: the fifteen other token bytes", "'|', '~', ' ', '(': // rule: the fifteen other token bytes", []string{"TestHTTPVectors"}},
+	{"chunked-with-length", "httplang.go", "if len(cl) != 0 || len(te) != 1 { // rule: chunked excludes content-length and a second transfer-encoding", "if len(te) != 1 { // rule: chunked excludes content-length and a second transfer-encoding", []string{"TestHTTPVectors"}},
+	{"other-transfer-coding", "httplang.go", "if lowerASCII([]byte(te[0])) != \"chunked\" { // rule: the only transfer coding is chunked", "if false { // rule: the only transfer coding is chunked", []string{"TestHTTPVectors"}},
+	{"chunk-extension", "httplang.go", "func chunkSizeText(line []byte) []byte { return line } // rule: no chunk extension", "func chunkSizeText(line []byte) []byte {\n\tfor i, c := range line {\n\t\tif c == ';' {\n\t\t\treturn line[:i]\n\t\t}\n\t}\n\treturn line\n} // rule: no chunk extension", []string{"TestHTTPVectors"}},
+	{"trailer-framing-field", "httplang.go", "if f.name == \"content-encoding\" || f.name == \"content-length\" || f.name == \"transfer-encoding\" { // rule: no framing field in a trailer", "if f.name == \"\" { // rule: no framing field in a trailer", []string{"TestHTTPVectors"}},
+	{"length-not-digits", "httplang.go", "\t\tif !isDigit(s[i]) {\n\t\t\treturn 0, false\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", "\t\tif !isDigit(s[i]) {\n\t\t\tcontinue\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", []string{"TestHTTPVectors"}},
+	{"field-without-colon", "httplang.go", "\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", "\tif i == len(line) && i > 0 {\n\t\treturn lowerASCII(line), \"\", true\n\t}\n\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", []string{"TestHTTPVectors"}},
 }
 
 func TestMutantList(t *testing.T) {
@@ -111,6 +126,12 @@ func TestMutantRuns(t *testing.T) {
 		if err == nil {
 			t.Errorf("mutant %s survived\n%s", m.name, out)
 			fmt.Printf("mutant %s survived\n", m.name)
+			continue
+		}
+		// Caught means a named test FAILED. A build failure is not a catch.
+		if !strings.Contains(string(out), "--- FAIL: ") || strings.Contains(string(out), "[build failed]") || strings.Contains(string(out), "[setup failed]") {
+			t.Errorf("mutant %s broke the build without failing a test\n%s", m.name, out)
+			fmt.Printf("mutant %s broke the build without failing a test\n", m.name)
 			continue
 		}
 		fmt.Printf("mutant %s killed\n", m.name)

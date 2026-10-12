@@ -234,34 +234,22 @@ func chunkFrameComplete(finalCRLF bool) bool { return finalCRLF }
 
 func lengthComplete(got, want int) bool { return got == want }
 
-type respHead struct {
-	status int
-	lines  []headerLine
-}
-
-type headerLine struct {
-	name  string
-	value string
-}
-
-func (h respHead) values(name string) []string {
-	var out []string
-	for _, ln := range h.lines {
-		if strings.EqualFold(ln.name, name) {
-			out = append(out, ln.value)
-		}
-	}
-	return out
-}
-
 func readHTTP(br *bufio.Reader, conn net.Conn, deadline time.Time, token string, g Gate, ctx context.Context, pool *x509.CertPool) (Decision, error) {
+	interim := 0
 	for {
 		armDeadline(conn, deadline)
-		head, err := readHead(br)
+		head, err := readHead(br, conn, deadline)
 		if err != nil {
 			return Decision{}, err
 		}
+		if encodingForbidden(len(head.values("content-encoding")) > 0) {
+			return notClear("content-encoding"), nil
+		}
 		if head.status == 100 || head.status == 102 || head.status == 103 {
+			interim++
+			if interim > maxInterim {
+				return notClear("too many interim responses"), nil
+			}
 			continue
 		}
 		if head.status == 101 || (head.status >= 100 && head.status < 200) {
@@ -273,9 +261,6 @@ func readHTTP(br *bufio.Reader, conn net.Conn, deadline time.Time, token string,
 			}
 			return followOnce(head, token, g, ctx, pool, deadline)
 		}
-		if encodingForbidden(len(head.values("Content-Encoding")) > 0) {
-			return notClear("content-encoding"), nil
-		}
 		body, err := readBody(br, conn, deadline, head)
 		if err != nil {
 			return Decision{}, err
@@ -286,7 +271,7 @@ func readHTTP(br *bufio.Reader, conn net.Conn, deadline time.Time, token string,
 
 func followOnce(head respHead, token string, g Gate, ctx context.Context, pool *x509.CertPool, deadline time.Time) (Decision, error) {
 	loc := ""
-	if vs := head.values("Location"); len(vs) > 0 {
+	if vs := head.values("location"); len(vs) > 0 {
 		loc = strings.TrimSpace(vs[0])
 	}
 	path := loc
@@ -323,7 +308,7 @@ func followOnce(head respHead, token string, g Gate, ctx context.Context, pool *
 		return Decision{}, err
 	}
 	br := bufio.NewReader(conn)
-	h2, err := readHead(br)
+	h2, err := readHead(br, conn, deadline)
 	if err != nil {
 		return Decision{}, err
 	}
@@ -332,143 +317,4 @@ func followOnce(head respHead, token string, g Gate, ctx context.Context, pool *
 		return Decision{}, err
 	}
 	return DecideHTTP(h2.status, body), nil
-}
-
-func readHead(br *bufio.Reader) (respHead, error) {
-	line, err := readLine(br)
-	if err != nil {
-		return respHead{}, err
-	}
-	if !strings.HasPrefix(line, "HTTP/1.1 ") {
-		return respHead{}, errors.New("connection failed")
-	}
-	parts := strings.SplitN(line, " ", 3)
-	if len(parts) < 2 {
-		return respHead{}, errors.New("connection failed")
-	}
-	status, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return respHead{}, errors.New("connection failed")
-	}
-	var lines []headerLine
-	for {
-		h, err := readLine(br)
-		if err != nil {
-			return respHead{}, err
-		}
-		if h == "" {
-			break
-		}
-		name, value, ok := strings.Cut(h, ":")
-		if !ok {
-			return respHead{}, errors.New("connection failed")
-		}
-		lines = append(lines, headerLine{name: strings.TrimSpace(name), value: strings.TrimSpace(value)})
-	}
-	return respHead{status: status, lines: lines}, nil
-}
-
-func readLine(br *bufio.Reader) (string, error) {
-	s, err := br.ReadString('\n')
-	if err != nil {
-		return "", err
-	}
-	if !strings.HasSuffix(s, "\r\n") {
-		return "", errors.New("connection failed")
-	}
-	return strings.TrimSuffix(s, "\r\n"), nil
-}
-
-func readBody(br *bufio.Reader, conn net.Conn, deadline time.Time, head respHead) ([]byte, error) {
-	tes := head.values("Transfer-Encoding")
-	chunked := false
-	for _, v := range tes {
-		if strings.Contains(strings.ToLower(v), "chunked") {
-			chunked = true
-		}
-	}
-	if chunked {
-		body, final, err := readChunked(br, conn, deadline)
-		if err != nil {
-			return nil, err
-		}
-		if !chunkFrameComplete(final) {
-			return nil, errors.New("connection failed")
-		}
-		return body, nil
-	}
-	cls := head.values("Content-Length")
-	if len(cls) != 1 {
-		return nil, errors.New("connection failed")
-	}
-	n, err := strconv.Atoi(strings.TrimSpace(cls[0]))
-	if err != nil || n < 0 {
-		return nil, errors.New("connection failed")
-	}
-	if bodyTooBig(n) {
-		return nil, errors.New("connection failed")
-	}
-	buf := make([]byte, n)
-	armDeadline(conn, deadline)
-	got, err := io.ReadFull(br, buf)
-	if !lengthComplete(got, n) {
-		if err == nil {
-			err = io.ErrUnexpectedEOF
-		}
-		return nil, err
-	}
-	return buf[:got], nil
-}
-
-func readChunked(br *bufio.Reader, conn net.Conn, deadline time.Time) ([]byte, bool, error) {
-	var body []byte
-	for {
-		armDeadline(conn, deadline)
-		line, err := readLine(br)
-		if err != nil {
-			return body, false, err
-		}
-		hexPart := line
-		if i := strings.IndexByte(hexPart, ';'); i >= 0 {
-			hexPart = hexPart[:i]
-		}
-		size, err := strconv.ParseInt(strings.TrimSpace(hexPart), 16, 64)
-		if err != nil || size < 0 {
-			return body, false, errors.New("connection failed")
-		}
-		if size == 0 {
-			final, err := readTrailers(br, conn, deadline)
-			return body, final, err
-		}
-		if bodyTooBig(len(body) + int(size)) {
-			return body, false, errors.New("connection failed")
-		}
-		chunk := make([]byte, size)
-		armDeadline(conn, deadline)
-		if _, err := io.ReadFull(br, chunk); err != nil {
-			return body, false, err
-		}
-		body = append(body, chunk...)
-		armDeadline(conn, deadline)
-		crlf := make([]byte, 2)
-		if _, err := io.ReadFull(br, crlf); err != nil || string(crlf) != "\r\n" {
-			return body, false, errors.New("connection failed")
-		}
-	}
-}
-
-func readTrailers(br *bufio.Reader, conn net.Conn, deadline time.Time) (bool, error) {
-	for {
-		armDeadline(conn, deadline)
-		line, err := readLine(br)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return false, nil
-			}
-			return false, err
-		}
-		if line == "" {
-			return true, nil
-		}
-	}
 }
