@@ -145,7 +145,7 @@ func (g Gate) read(ctx context.Context) (Decision, error) {
 	if err != nil {
 		return Decision{}, err
 	}
-	defer conn.Close()
+	defer closeConn(conn)
 
 	armDeadline(conn, deadline)
 	req := "GET " + ListPath + " HTTP/1.1\r\n" +
@@ -164,6 +164,17 @@ func (g Gate) read(ctx context.Context) (Decision, error) {
 	}
 	br := bufio.NewReader(src)
 	return readHTTP(br, conn, deadline, token, g, ctx, pool)
+}
+
+// closeConn closes without writing a TLS close_notify. crypto/tls writes that alert
+// under its own deadline, and the write blocks when the peer does not read, so the
+// answer would come back late after the verdict was already known.
+func closeConn(conn net.Conn) {
+	if tc, ok := conn.(*tls.Conn); ok {
+		_ = tc.NetConn().Close()
+		return
+	}
+	_ = conn.Close()
 }
 
 func armDeadline(conn net.Conn, deadline time.Time) {

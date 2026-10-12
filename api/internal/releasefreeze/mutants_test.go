@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,8 @@ var mutants = []mutant{
 	{"unterminated-chunked", "read.go", "func chunkFrameComplete(finalCRLF bool) bool { return finalCRLF }", "func chunkFrameComplete(finalCRLF bool) bool { return true }", []string{"TestReadChunked"}},
 	{"skip-hostname", "read.go", "InsecureSkipVerify: false, // hostname and chain are verified", "InsecureSkipVerify: true, // hostname and chain are verified", []string{"TestReadWrongHostname"}},
 	{"per-op-deadline", "read.go", "\t_ = conn.SetDeadline(deadline) // one total deadline\n}\n\n// finishedInTime is the second hold on the deadline: clear only when the response was complete before it.\nfunc finishedInTime(deadline time.Time) bool { return !time.Now().After(deadline) }", "\t_ = conn.SetDeadline(time.Now().Add(10 * time.Second)) // one total deadline\n}\n\n// finishedInTime is the second hold on the deadline: clear only when the response was complete before it.\nfunc finishedInTime(deadline time.Time) bool { return true }", []string{"TestReadSlowDripUsesOneDeadline", "TestHTTPTiming"}},
+	{"second-deadline-hold", "read.go", "\t\tif got.Verdict == VerdictClear && !finishedInTime(deadline) {\n", "\t\tif false && got.Verdict == VerdictClear && !finishedInTime(deadline) {\n", []string{"TestSecondDeadlineHold"}},
+	{"close-notify", "read.go", "\tdefer closeConn(conn)\n", "\tdefer conn.Close()\n", []string{"TestReadReturnsWithoutWaitingForCloseNotify"}},
 	{"status-404", "decision.go", "return false // 404 is not a list", "return true // 404 is not a list", []string{"TestStatusIsNotAList"}},
 	{"status-403", "decision.go", "return false // 403 is not a list", "return true // 403 is not a list", []string{"TestStatusIsNotAList"}},
 	{"status-500", "decision.go", "return false // 500 is not a list", "return true // 500 is not a list", []string{"TestStatusIsNotAList"}},
@@ -60,6 +63,7 @@ var mutants = []mutant{
 	{"length-not-digits", "httplang.go", "\t\tif !isDigit(s[i]) {\n\t\t\treturn 0, false\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", "\t\tif !isDigit(s[i]) {\n\t\t\tcontinue\n\t\t}\n\t\tn = n*10 + int(s[i]-'0')", []string{"TestHTTPVectors"}},
 	{"field-without-colon", "httplang.go", "\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", "\tif i == len(line) && i > 0 {\n\t\treturn lowerASCII(line), \"\", true\n\t}\n\tif i == 0 || i >= len(line) || line[i] != ':' {\n\t\treturn \"\", \"\", false\n\t}", []string{"TestHTTPVectors"}},
 	{"chunk-data-crlf", "httplang.go", "if _, err := io.ReadFull(br, crlf[:]); err != nil || crlf != [2]byte{'\\r', '\\n'} {", "if _, err := io.ReadFull(br, crlf[:]); err != nil {", []string{"TestHTTPVectors"}},
+	{"status-first-byte", "httplang.go", "\tif len(line) < len(prefix)+3 || string(line[:len(prefix)]) != prefix {\n", "\tif len(line) < len(prefix)+3 || string(line[1:len(prefix)]) != prefix[1:] {\n", []string{"TestHTTPByteClasses"}},
 }
 
 // mutantEvidence names, for a planted violation of H, the response whose verdict has to flip: the failure must
@@ -81,6 +85,41 @@ var mutantEvidence = map[string]string{
 	"length-not-digits":     "content-length value b'+126'",
 	"field-without-colon":   "extra field b'X-Junk'",
 	"chunk-data-crlf":       "two bytes that are not CRLF after the chunk data",
+	"status-first-byte":     "a replace 0",
+}
+
+// evidenceHeld reports whether want names a vector, or a byte-class position ("<base> <mode> <index>").
+func evidenceHeld(file httpVectorFile, want string) bool {
+	for _, c := range file.Cases {
+		if strings.Contains(c.Name, want) {
+			return true
+		}
+	}
+	parts := strings.Split(want, " ")
+	if len(parts) != 3 {
+		return false
+	}
+	index, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return false
+	}
+	for _, base := range file.ByteClasses {
+		if base.Name != parts[0] {
+			continue
+		}
+		positions := base.Positions
+		if parts[1] == "insert" {
+			positions = base.InsertPositions
+		} else if parts[1] != "replace" {
+			return false
+		}
+		for _, k := range positions {
+			if k == index {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestMutantList(t *testing.T) {
@@ -116,15 +155,8 @@ func TestMutantList(t *testing.T) {
 		if !seen[name] {
 			t.Fatalf("evidence for an unknown mutant %s", name)
 		}
-		found := false
-		for _, c := range vectors.Cases {
-			if strings.Contains(c.Name, want) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("evidence of %s names no vector: %q", name, want)
+		if !evidenceHeld(vectors, want) {
+			t.Fatalf("evidence of %s names no vector and no position: %q", name, want)
 		}
 	}
 	t.Logf("mutants %d", len(mutants))

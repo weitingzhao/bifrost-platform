@@ -1,6 +1,7 @@
 package releasefreeze
 
 import (
+	"bufio"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -10,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net"
@@ -501,6 +503,74 @@ func TestImportGraph(t *testing.T) {
 				t.Fatalf("import graph contains %s", line)
 			}
 		}
+	}
+}
+
+// TestReadReturnsWithoutWaitingForCloseNotify sends a clear response at 0.6 of the
+// budget over an in-memory TLS connection, then the peer stops reading. The answer
+// has to come back within the budget plus 250ms, not after close_notify blocks.
+func TestReadReturnsWithoutWaitingForCloseNotify(t *testing.T) {
+	for _, budget := range []time.Duration{200 * time.Millisecond, 10 * time.Second} {
+		t.Run(budget.String(), func(t *testing.T) {
+			ca, cert, err := mintCert(OriginHost)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := writeCA(t, ca)
+			release := make(chan struct{})
+			var once sync.Once
+			letGo := func() { once.Do(func() { close(release) }) }
+			done := make(chan struct{})
+			body := EmptyListBody()
+			raw := append([]byte(fmt.Sprintf("HTTP/1.1 200\r\nContent-Length: %d\r\n\r\n", len(body))), body...)
+			g := Gate{CAFile: path, Token: "gate-token", Budget: budget}
+			g.Dial = func(ctx context.Context, network, addr string, cfg *tls.Config, dl time.Time) (net.Conn, error) {
+				a, b := net.Pipe()
+				server := tls.Server(b, &tls.Config{
+					Certificates: []tls.Certificate{cert},
+					NextProtos:   []string{"http/1.1"},
+					MinVersion:   tls.VersionTLS12,
+				})
+				go func() {
+					defer close(done)
+					defer b.Close()
+					br := bufio.NewReader(server)
+					for {
+						line, e := br.ReadString('\n')
+						if e != nil {
+							return
+						}
+						if strings.TrimSpace(line) == "" {
+							break
+						}
+					}
+					time.Sleep(budget * 6 / 10)
+					if _, e := server.Write(raw); e != nil {
+						return
+					}
+					<-release
+				}()
+				_ = a.SetDeadline(dl)
+				client := tls.Client(a, cfg)
+				if e := client.HandshakeContext(ctx); e != nil {
+					_ = a.Close()
+					letGo()
+					return nil, e
+				}
+				return client, nil
+			}
+			start := time.Now()
+			d := g.Read(context.Background())
+			elapsed := time.Since(start)
+			letGo()
+			<-done
+			if d.Verdict != VerdictClear {
+				t.Fatalf("budget %v: verdict %s after %v", budget, d.Verdict, elapsed)
+			}
+			if elapsed > budget+250*time.Millisecond {
+				t.Fatalf("budget %v: answered only after %v", budget, elapsed)
+			}
+		})
 	}
 }
 

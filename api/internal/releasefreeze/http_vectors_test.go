@@ -7,10 +7,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -19,7 +22,7 @@ import (
 // responses with the verdict the language H of design §3.2 gives each. The file is
 // generated in the infra repository (scripts/release/freeze_http_vectors.py) by a
 // recogniser written from the productions; the Python reader is held to the same file.
-const freezeHTTPVectorsSHA256 = "7d191888e372878735e19534c0afc398c741c72b0b98ac731a3498e01638bc71"
+const freezeHTTPVectorsSHA256 = "daf5e79f9893370e738eb0b5d15a9057caa2a36008fb5e1135aed940ddeaa5f5"
 
 type httpVector struct {
 	Name  string `json:"name"`
@@ -57,10 +60,12 @@ type timingVector struct {
 }
 
 type byteClass struct {
-	Name   string `json:"name"`
-	Prefix string `json:"prefix"`
-	Suffix string `json:"suffix"`
-	Accept string `json:"accept"`
+	Name            string   `json:"name"`
+	Base            string   `json:"base"`
+	Positions       []int    `json:"positions"`
+	Replace         []string `json:"replace"`
+	InsertPositions []int    `json:"insert_positions"`
+	Insert          []string `json:"insert"`
 }
 
 type httpVectorFile struct {
@@ -79,29 +84,80 @@ func loadHTTPVectorFile(t *testing.T) httpVectorFile {
 	return parsed
 }
 
-// TestHTTPByteClasses puts every byte value at each position of a valid response:
-// the reader has to agree with the recogniser on all 256.
+// TestHTTPByteClasses puts every byte value at every position of a valid response
+// that is not strictly inside the body data. Replace overwrites byte k; insert
+// places a byte before k. The reader has to agree with the recogniser on all 256.
 func TestHTTPByteClasses(t *testing.T) {
 	file := loadHTTPVectorFile(t)
-	if len(file.ByteClasses) < 45 {
-		t.Fatalf("byte-class positions %d", len(file.ByteClasses))
-	}
-	for _, pos := range file.ByteClasses {
-		prefix, err1 := hex.DecodeString(pos.Prefix)
-		suffix, err2 := hex.DecodeString(pos.Suffix)
-		mask, err3 := hex.DecodeString(pos.Accept)
-		if err1 != nil || err2 != nil || err3 != nil || len(mask) != 32 {
-			t.Fatalf("%s: bad entry", pos.Name)
+	n := 0
+	var detail []string
+	for _, base := range file.ByteClasses {
+		raw, err := hex.DecodeString(base.Base)
+		if err != nil {
+			t.Fatalf("%s: base %v", base.Name, err)
 		}
-		for v := 0; v < 256; v++ {
-			raw := append(append(append([]byte{}, prefix...), byte(v)), suffix...)
-			want := mask[v>>3]>>(v&7)&1 == 1
-			if got := readFromMemory(raw); got != want {
-				t.Errorf("%s / 0x%02x: clear %v, want %v", pos.Name, v, got, want)
+		if len(base.Positions) != len(base.Replace) || len(base.InsertPositions) != len(base.Insert) {
+			t.Fatalf("%s: mask count", base.Name)
+		}
+		if len(base.Positions) == 0 || base.Positions[0] != 0 {
+			t.Fatalf("%s: the first byte of the status line is not a position", base.Name)
+		}
+		n += len(base.Positions) + len(base.InsertPositions)
+		detail = append(detail, fmt.Sprintf("%s replace %d insert %d", base.Name, len(base.Positions), len(base.InsertPositions)))
+		compare := func(mode string, positions []int, masks []string, insert bool) {
+			t.Helper()
+			for i, k := range positions {
+				mask, err := hex.DecodeString(masks[i])
+				if err != nil || len(mask) != 32 {
+					t.Fatalf("%s %s %d: bad mask", base.Name, mode, k)
+				}
+				for v := 0; v < 256; v++ {
+					trial := append(append([]byte{}, raw[:k]...), byte(v))
+					if insert {
+						trial = append(trial, raw[k:]...)
+					} else {
+						trial = append(trial, raw[k+1:]...)
+					}
+					want := mask[v>>3]>>(v&7)&1 == 1
+					if got := readFromMemory(trial); got != want {
+						t.Errorf("%s %s %d 0x%02x: clear %v, want %v", base.Name, mode, k, v, got, want)
+					}
+				}
 			}
 		}
+		compare("replace", base.Positions, base.Replace, false)
+		compare("insert", base.InsertPositions, base.Insert, true)
 	}
-	t.Logf("byte-class positions %d", len(file.ByteClasses))
+	if n < 400 {
+		t.Fatalf("byte-class positions %d", n)
+	}
+	t.Logf("byte-class positions %d; %s", n, strings.Join(detail, "; "))
+}
+
+// pauseFill returns bytes that are already available, then sleeps. The connection
+// stub honours no deadline, so only the check after a clear verdict can refuse it.
+type pauseFill struct{ *bytes.Reader }
+
+func (p pauseFill) Read(b []byte) (int, error) {
+	n, err := p.Reader.Read(b)
+	time.Sleep(120 * time.Millisecond)
+	return n, err
+}
+
+// TestSecondDeadlineHold is the case the per-read deadline does not see: every byte
+// is available at once, and the read itself is held past the deadline.
+func TestSecondDeadlineHold(t *testing.T) {
+	body := EmptyListBody()
+	raw := append([]byte("HTTP/1.1 200\r\nContent-Length: "+strconv.Itoa(len(body))+"\r\n\r\n"), body...)
+	fast, err := readHTTP(bufio.NewReader(bytes.NewReader(raw)), memConn{}, time.Now().Add(100*time.Millisecond), "t", Gate{}, context.Background(), nil)
+	if err != nil || fast.Verdict != VerdictClear {
+		t.Fatalf("undelayed: clear %v err %v", fast.Verdict, err)
+	}
+	start := time.Now()
+	slow, err := readHTTP(bufio.NewReader(pauseFill{bytes.NewReader(raw)}), memConn{}, start.Add(100*time.Millisecond), "t", Gate{}, context.Background(), nil)
+	if err == nil && slow.Verdict == VerdictClear {
+		t.Fatalf("clear after the read slept past the deadline (%v)", time.Since(start))
+	}
 }
 
 // TestHTTPTiming delivers the same bytes at different moments over an in-memory
