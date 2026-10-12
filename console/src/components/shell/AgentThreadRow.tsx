@@ -7,7 +7,9 @@ function stateTag(thread: AgentThread) {
   if (thread.status === 'waiting_owner') {
     return <DenseTag variant="warning">Waiting for you</DenseTag>
   }
-  return <DenseTag variant="neutral">In turn</DenseTag>
+  if (thread.status === 'superseded') return <DenseTag variant="neutral">Superseded</DenseTag>
+  if (thread.status === 'in_turn') return <DenseTag variant="neutral">In turn</DenseTag>
+  return <DenseTag variant="neutral">{thread.status}</DenseTag>
 }
 
 function ageLine(thread: AgentThread): string {

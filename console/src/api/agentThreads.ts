@@ -1,7 +1,7 @@
 import { viewerRead } from '@/api/approvals'
 
-/** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended; waiting_owner: waiting for the person; host_lost: the host's heartbeat is too old. */
-export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle' | 'waiting_owner' | 'host_lost'
+/** in_turn: mid-turn and heard from; silent: mid-turn and quiet past its threshold; idle: turn ended; waiting_owner: waiting for the person; host_lost: the host's heartbeat is too old; superseded: quiet session replaced by a later sidebar turn. */
+export type AgentThreadStatus = 'in_turn' | 'silent' | 'idle' | 'waiting_owner' | 'host_lost' | 'superseded'
 
 /** One row of GET /api/v1/agent/threads (platform api/internal/agentthreads View). */
 export type AgentThread = {
@@ -139,6 +139,7 @@ const MID_TURN_RANK: Record<AgentThreadStatus, number> = {
   silent: 1,
   in_turn: 2,
   waiting_owner: 3,
+  superseded: 4,
   idle: 9,
 }
 
@@ -147,7 +148,7 @@ export function threadsMidTurn(threads: readonly AgentThread[]): AgentThread[] {
   return threads
     .filter(t => t.status !== 'idle')
     .sort((a, b) => {
-      const rank = MID_TURN_RANK[a.status] - MID_TURN_RANK[b.status]
+      const rank = (MID_TURN_RANK[a.status] ?? 8) - (MID_TURN_RANK[b.status] ?? 8)
       if (rank !== 0) return rank
       return b.in_turn_seconds - a.in_turn_seconds
     })

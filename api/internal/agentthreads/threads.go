@@ -62,6 +62,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -86,6 +87,8 @@ type Status string
 const (
 	// Idle: the last event was turn end.
 	Idle Status = "idle"
+	// Superseded is a quiet session replaced by another sidebar session turn.
+	Superseded Status = "superseded"
 	// InTurn: mid-turn and heard from recently enough.
 	InTurn Status = "in_turn"
 	// Silent: mid-turn and quiet for longer than its threshold.
@@ -158,8 +161,28 @@ type Beat struct {
 	TurnID        string `json:"turn_id"`
 	Seq           uint64 `json:"seq"`
 	Reason        string `json:"reason,omitempty"`
+	// Sidebar is the desktop thread id, when the client sends one. Empty for
+	// an old client. It is not listed.
+	Sidebar        string `json:"sidebar,omitempty"`
+	sidebarPresent bool
 	// keyHash is the server-side sha256 of ThreadKey. The client cannot set it.
 	keyHash string
+}
+
+// UnmarshalJSON distinguishes an omitted sidebar from an explicit empty/null value.
+func (b *Beat) UnmarshalJSON(raw []byte) error {
+	type plain Beat
+	var decoded plain
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return err
+	}
+	*b = Beat(decoded)
+	_, b.sidebarPresent = fields["sidebar"]
+	return nil
 }
 
 // Thread is the stored view of one session.
@@ -191,6 +214,14 @@ type Thread struct {
 	// PriorTurns are turn ids this thread has left. An event for one of them
 	// is refused even when its sequence is newer.
 	PriorTurns []string `json:"prior_turns,omitempty"`
+	// Sidebar is the desktop thread this session belongs to. Empty when the
+	// client did not send one. It stays in the statefile and is omitted from
+	// the list. Session identity is preserved.
+	Sidebar string `json:"sidebar,omitempty"`
+	// OpenedTurn is set once this session has sent turn_start. It is not listed.
+	OpenedTurn bool `json:"opened_turn,omitempty"`
+	// OpenedTurnAt is the last actual turn_start, independent of later events.
+	OpenedTurnAt time.Time `json:"opened_turn_at,omitempty"`
 	// NotifiedFor is At of the event whose silence was pushed. It is set
 	// only after the push returns. A new event moves At, so the next silence
 	// is a new one.
@@ -272,9 +303,12 @@ func (b *Beat) Validate() error {
 	b.Reason = strings.TrimSpace(b.Reason)
 	b.ThreadKey = strings.TrimSpace(b.ThreadKey)
 	b.RegisterNonce = strings.TrimSpace(b.RegisterNonce)
+	b.Sidebar = strings.TrimSpace(b.Sidebar)
 	switch {
 	case !idRe.MatchString(b.Thread):
 		return fmt.Errorf("thread: want 1-128 of [A-Za-z0-9._:-]")
+	case (b.sidebarPresent || b.Sidebar != "") && !idRe.MatchString(b.Sidebar):
+		return fmt.Errorf("sidebar: want 1-128 of [A-Za-z0-9._:-]")
 	case !vendRe.MatchString(b.Vendor):
 		return fmt.Errorf("vendor: want a lowercase name")
 	case !hostRe.MatchString(b.Host):
@@ -366,6 +400,13 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 		t.KeyHash = b.keyHash
 	}
 	t.TurnID, t.Seq = b.TurnID, b.Seq
+	if b.Sidebar != "" {
+		t.Sidebar = b.Sidebar
+	}
+	if b.Event == TurnStart {
+		t.OpenedTurn = true
+		t.OpenedTurnAt = at
+	}
 	t.At = at
 	// A new event is a different silence. A claim for the previous one must
 	// not block it, and must not be completed against the new timestamp.

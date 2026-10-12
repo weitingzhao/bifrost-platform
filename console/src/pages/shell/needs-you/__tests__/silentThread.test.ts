@@ -69,6 +69,12 @@ describe('resolveSilentThread', () => {
     })
     expect(resolveSilentThread('thread-no-link', threads)).toEqual({ title: 'Codex job', link: '' })
     expect(resolveSilentThread('missing', threads)).toBeUndefined()
+    // Planted violation: match only a transcript, so the sidebar id the list
+    // shows has no link.
+    expect(resolveSilentThread('local_s1', threads)).toEqual({
+      title: 'Heartbeat work',
+      link: 'https://claude.example/t/1',
+    })
     expect(resolveSilentThread('0b8e2f4a-1111-2222-3333-444455556666', undefined)).toBeUndefined()
   })
 })

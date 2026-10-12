@@ -136,7 +136,7 @@ func (w *Watcher) tick(ctx context.Context) bool {
 		if !claimed {
 			continue
 		}
-		subject, body := w.cfg.HostMessage(h, w.cfg.MidTurn(st, name), now)
+		subject, body := w.cfg.HostMessage(h, w.cfg.MidTurn(st, name, now), now)
 		slog.Info("agent_host_lost", "host", name, "quiet", now.Sub(h.At).String(), "claim", id)
 		// Retryable delivery, not exactly once. The relay has no dedup id:
 		// a crash after notify returns and before complete sends this again.
@@ -221,7 +221,7 @@ func (w *Watcher) claim(key string, at, now time.Time) (string, bool, error) {
 	err := w.store.Update(func(st *State) error {
 		claimed = false
 		t, found := st.Threads[key]
-		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) {
+		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) || headlessRun(t.Thread) || w.cfg.sessionStatus(*st, t, now) != Silent || w.cfg.silenceCovered(*st, t, now) {
 			return nil
 		}
 		t.SilenceClaimID = id
@@ -271,7 +271,7 @@ func (w *Watcher) mark(key string, at, now time.Time) (bool, error) {
 	err := w.store.Update(func(st *State) error {
 		marked = false
 		t, found := st.Threads[key]
-		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) {
+		if !found || !t.At.Equal(at) || t.Pushed() || t.silenceClaimed(now) || headlessRun(t.Thread) || w.cfg.sessionStatus(*st, t, now) != Silent || w.cfg.silenceCovered(*st, t, now) {
 			return nil
 		}
 		t.NotifiedFor, t.NotifiedAt = at, now
@@ -374,7 +374,7 @@ var (
 	hostPushes     = map[string]int64{PushSent: 0, PushFailed: 0, PushStale: 0}
 	refusedThreads int64
 	refusedHosts   int64
-	gaugeStatus    = []Status{InTurn, StatusWaiting, Silent, HostLost}
+	gaugeStatus    = []Status{InTurn, StatusWaiting, Silent, HostLost, Superseded}
 )
 
 func noteThreadRefused() {
@@ -399,9 +399,9 @@ func RegistrationRefusals() (threads, hosts int64) {
 
 func setGauges(cfg Config, st State, now time.Time) {
 	counts := map[Status]int{InTurn: 0, Silent: 0, StatusWaiting: 0, HostLost: 0}
-	for _, t := range st.Threads {
-		if s := cfg.StatusOf(t, cfg.HostDown(st, t.Host, now), now); s != Idle {
-			counts[s]++
+	for _, v := range cfg.Views(st, now) {
+		if v.Status != Idle {
+			counts[v.Status]++
 		}
 	}
 	metricsMu.Lock()

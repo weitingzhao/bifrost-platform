@@ -158,9 +158,10 @@ func headlessRun(id string) bool {
 // Due lists the keys of silent threads whose silence has not been pushed, and
 // whether each is fresh enough to push (false = mark only). A live claim is
 // left to the worker that holds it. A headless run is left out of both lists.
+// Superseded sessions remain listed but are never due.
 func (c Config) Due(st State, now time.Time) (push, mark []string) {
 	for k, t := range st.Threads {
-		if headlessRun(t.Thread) || c.StatusOf(t, c.HostDown(st, t.Host, now), now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
+		if headlessRun(t.Thread) || c.sessionStatus(st, t, now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
 			continue
 		}
 		if now.Sub(t.At.Add(c.Threshold(t))) > c.PushWithin {
@@ -194,10 +195,11 @@ func (c Config) HostsDue(st State, now time.Time) (push, mark []string) {
 }
 
 // MidTurn returns the host's threads that have not ended, sorted by id.
-func (c Config) MidTurn(st State, host string) []Thread {
+// Superseded sessions and wrapped runs are excluded from the host-loss message.
+func (c Config) MidTurn(st State, host string, now time.Time) []Thread {
 	out := make([]Thread, 0)
 	for _, t := range st.Threads {
-		if t.Host != host || t.Event == TurnEnd {
+		if t.Host != host || t.Event == TurnEnd || headlessRun(t.Thread) || c.sessionSuperseded(st, t, now) {
 			continue
 		}
 		out = append(out, t)

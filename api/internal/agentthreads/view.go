@@ -15,12 +15,39 @@ type View struct {
 	ThresholdSeconds int64  `json:"threshold_seconds"`
 }
 
-// Views classifies every thread, newest first.
+// sessionSuperseded requires another session of the same vendor to have
+// actually opened a turn after t's last event. A session whose turn has ended
+// is idle, not superseded. A session of another vendor that carries the same
+// sidebar id is a job started from that thread's shell, not its successor.
+// Wrapped runs do not participate in either direction.
+func (c Config) sessionSuperseded(st State, t Thread, now time.Time) bool {
+	if t.Sidebar == "" || t.Event == TurnEnd || headlessRun(t.Thread) || now.Sub(t.At) <= c.Threshold(t) {
+		return false
+	}
+	for _, o := range st.Threads {
+		if o.Sidebar != t.Sidebar || o.Vendor != t.Vendor || Key(o.Vendor, o.Thread) == Key(t.Vendor, t.Thread) || headlessRun(o.Thread) {
+			continue
+		}
+		if o.OpenedTurn && o.OpenedTurnAt.After(t.At) {
+			return true
+		}
+	}
+	return false
+}
+
+// sessionStatus classifies against the current state, before host-loss rules.
+func (c Config) sessionStatus(st State, t Thread, now time.Time) Status {
+	if c.sessionSuperseded(st, t, now) {
+		return Superseded
+	}
+	return c.StatusOf(t, c.HostDown(st, t.Host, now), now)
+}
+
+// Views preserves every session's identity and metadata, newest first.
 func (c Config) Views(st State, now time.Time) []View {
 	out := make([]View, 0, len(st.Threads))
 	for _, t := range st.Threads {
-		lost := c.HostDown(st, t.Host, now)
-		v := View{Thread: t, Status: c.StatusOf(t, lost, now), QuietSeconds: secs(now.Sub(t.At)), ThresholdSeconds: secs(c.Threshold(t))}
+		v := View{Thread: t, Status: c.sessionStatus(st, t, now), QuietSeconds: secs(now.Sub(t.At)), ThresholdSeconds: secs(c.Threshold(t))}
 		if v.Status != Idle {
 			v.InTurnSeconds = secs(now.Sub(t.TurnStartedAt))
 		}

@@ -48,14 +48,17 @@ export function transcriptMatchesThread(transcript: string, threadId: string): b
 
 export type SilentThreadMatch = { title: string; link: string }
 
-/** Title and link from the lineage thread whose transcripts contain this id. */
+/** Title and link from the lineage thread this id names: the sidebar session, or a transcript of it. */
 export function resolveSilentThread(
   threadId: string,
   threads: readonly LineageThread[] | undefined,
 ): SilentThreadMatch | undefined {
   if (threads == null) return undefined
-  const found = threads.find(thread =>
-    (thread.transcripts ?? []).some(transcript => transcriptMatchesThread(transcript, threadId)),
+  const id = threadId.trim()
+  const found = threads.find(
+    thread =>
+      thread.session === id ||
+      (thread.transcripts ?? []).some(transcript => transcriptMatchesThread(transcript, threadId)),
   )
   if (found == null) return undefined
   return { title: found.title?.trim() ?? '', link: found.link?.trim() ?? '' }

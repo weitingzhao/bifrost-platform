@@ -152,6 +152,19 @@ describe('AgentThreadsInProgress', () => {
     expect(within(region).getByText('waited 1m · permission_prompt')).toBeTruthy()
   })
 
+  // Planted violation: hide superseded rows or label an unknown state as In turn.
+  it('shows plain superseded and unknown labels without losing sessions', async () => {
+    stubThreads(() => json({ generated_at: '2026-10-10T07:05:00Z', silent_after_seconds: 600, tool_grace_seconds: 120,
+      threads: [thread({ thread: 'old', title: 'Old session', status: 'superseded' }),
+        thread({ thread: 'future', title: 'Future session', status: 'future' as AgentThread['status'] })] }))
+    render(wrapper(<AgentThreadsInProgress />))
+    const region = await screen.findByRole('region', { name: 'In progress' })
+    expect(await within(region).findByText('Superseded')).toBeTruthy()
+    expect(within(region).getByText('future')).toBeTruthy()
+    expect(region.querySelectorAll('[data-agent-thread]')).toHaveLength(2)
+    expect(within(region).queryByText('In turn')).toBeNull()
+  })
+
   it('shows a capacity refusal even when no thread is mid-turn', async () => {
     stubThreads(() =>
       json({
