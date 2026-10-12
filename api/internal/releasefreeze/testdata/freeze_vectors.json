@@ -1,0 +1,143 @@
+{
+  "cases": [
+    {
+      "name": "measured-lf",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"items\":[],\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"84135567\"}}\n",
+      "clear": true,
+      "first_line": "未冻结：0 条记录"
+    },
+    {
+      "name": "compact-d1",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"items\":[],\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"1\"}}",
+      "clear": true,
+      "first_line": "未冻结：0 条记录"
+    },
+    {
+      "name": "two-resourceVersion",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\",\"resourceVersion\":\"2\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "two-continue",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"continue\":\"\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "continue-rv-continue",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"1\",\"continue\":\"\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "rv-continue-rv",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\",\"continue\":\"\",\"resourceVersion\":\"2\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "only-continue",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "nan",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[],\"x\":NaN}",
+      "clear": false
+    },
+    {
+      "name": "infinity",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{},\"items\":[],\"x\":Infinity}",
+      "clear": false
+    },
+    {
+      "name": "remainingItemCount",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\",\"remainingItemCount\":1},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "fifth",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\"},\"items\":[],\"z\":\"\"}",
+      "clear": false
+    },
+    {
+      "name": "dup-member",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\"}}",
+      "clear": false
+    },
+    {
+      "name": "continue-nonempty",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"x\",\"resourceVersion\":\"1\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "digits-33",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"111111111111111111111111111111111\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "digits-0",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"\"},\"items\":[]}",
+      "clear": false
+    },
+    {
+      "name": "trailing",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\"},\"items\":[]}A",
+      "clear": false
+    },
+    {
+      "name": "http-404",
+      "status": 404,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"items\":[],\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"84135567\"}}\n",
+      "clear": false
+    },
+    {
+      "name": "http-403",
+      "status": 403,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"items\":[],\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"84135567\"}}\n",
+      "clear": false
+    },
+    {
+      "name": "http-500",
+      "status": 500,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"items\":[],\"kind\":\"FreezeList\",\"metadata\":{\"continue\":\"\",\"resourceVersion\":\"84135567\"}}\n",
+      "clear": false
+    },
+    {
+      "name": "empty",
+      "status": 200,
+      "body": "",
+      "clear": false
+    },
+    {
+      "name": "one-item",
+      "status": 200,
+      "body": "{\"apiVersion\":\"release.bifrost.io/v1\",\"kind\":\"FreezeList\",\"metadata\":{\"resourceVersion\":\"1\"},\"items\":[{\"metadata\":{\"name\":\"freeze-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"uid\":\"11111111-1111-1111-1111-111111111111\"},\"spec\":{\"who\":\"O\",\"reason\":\"r\",\"at\":\"2026-10-11T00:00:00Z\"}}]}",
+      "clear": false
+    },
+    {
+      "name": "ff",
+      "status": 200,
+      "body_base64": "/w==",
+      "clear": false
+    },
+    {
+      "name": "transport-timeout",
+      "transport": "timeout",
+      "clear": false
+    }
+  ]
+}
