@@ -556,6 +556,76 @@ func TestExpiredHostClaimIsRetried(t *testing.T) {
 	}
 }
 
+// A run- thread silent past the threshold stays on the list (status silent)
+// for the coordinator, and is not an Owner item: Due omits it and nothing is pushed.
+// A desktop thread in the same state is still pushed.
+func TestSilentHeadlessRunIsNotAnOwnerItem(t *testing.T) {
+	r := newRig(t, "")
+	const runID = "run-bc611f64-0000-4000-8000-000000000001"
+	const desktop = "7e939cd5-b3b1-4705-96e4-0a3b9e61648d"
+	r.beatOn(t, runID, "mbp", TurnStart, "", 0)
+	r.beatOn(t, desktop, "mbp", TurnStart, "", 0)
+	r.at(11 * time.Minute)
+	st := mustState(t, r)
+	cfg := DefaultConfig()
+	push, mark := cfg.Due(st, r.clk.at)
+	runKey := Key("claude", runID)
+	for _, k := range append(append([]string{}, push...), mark...) {
+		if k == runKey {
+			t.Fatalf("headless run is an owner item: push %v mark %v", push, mark)
+		}
+	}
+	views := cfg.Views(st, r.clk.at)
+	var listed View
+	found := false
+	for _, v := range views {
+		if v.Thread.Thread == runID {
+			listed = v
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("headless run missing from the thread list")
+	}
+	if listed.Status != Silent {
+		t.Fatalf("coordinator status %s, want silent", listed.Status)
+	}
+	r.tick(t)
+	if r.page.count() != 1 {
+		t.Fatalf("want one push, for the desktop thread only, got %d: %v", r.page.count(), r.page.sent)
+	}
+	if strings.Contains(r.page.sent[0], "run-") {
+		t.Fatalf("pushed a headless run: %s", r.page.sent[0])
+	}
+}
+
+// A tool declares 30 minutes, a progress beat arrives, eleven quiet minutes pass: not silent.
+func TestProgressBeatKeepsDeclaredToolTimeout(t *testing.T) {
+	r := newRig(t, "")
+	const id = "run-bc611f64-0000-4000-8000-000000000002"
+	r.beatOn(t, id, "mbp", BeforeTool, "Bash", 30*60)
+	r.at(time.Minute)
+	r.beatOn(t, id, "mbp", AfterTool, "headless-progress", 0)
+	r.at(time.Minute + 11*time.Minute)
+	st := mustState(t, r)
+	th := st.Threads[Key("claude", id)]
+	cfg := DefaultConfig()
+	if s := cfg.StatusOf(th, false, r.clk.at); s != InTurn {
+		t.Fatalf("eleven quiet minutes after a progress beat: %s, want in_turn", s)
+	}
+	if th.Event != BeforeTool || th.Tool != "Bash" || th.ToolTimeoutS != 30*60 {
+		t.Fatalf("progress beat erased the pending tool: event %s tool %s timeout %d", th.Event, th.Tool, th.ToolTimeoutS)
+	}
+	if got := cfg.Threshold(th); got != 32*time.Minute {
+		t.Fatalf("threshold %s, want 32m", got)
+	}
+	r.tick(t)
+	if r.page.count() != 0 {
+		t.Fatalf("pushed while the declared timeout is still pending: %v", r.page.sent)
+	}
+}
+
 func mustState(t *testing.T, r *rig) State {
 	t.Helper()
 	st, err := r.store.Load()

@@ -148,12 +148,19 @@ func claimPending(id string, exp, now time.Time) bool {
 	return id != "" && !exp.IsZero() && now.Before(exp)
 }
 
+// headlessRun is a wrapped background run (thread-heartbeat.js run). Its id
+// begins with run-. The thread list still returns it, including status
+// silent, for the coordinator. It is not an Owner item.
+func headlessRun(id string) bool {
+	return strings.HasPrefix(id, "run-")
+}
+
 // Due lists the keys of silent threads whose silence has not been pushed, and
 // whether each is fresh enough to push (false = mark only). A live claim is
-// left to the worker that holds it.
+// left to the worker that holds it. A headless run is left out of both lists.
 func (c Config) Due(st State, now time.Time) (push, mark []string) {
 	for k, t := range st.Threads {
-		if c.StatusOf(t, c.HostDown(st, t.Host, now), now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
+		if headlessRun(t.Thread) || c.StatusOf(t, c.HostDown(st, t.Host, now), now) != Silent || t.Pushed() || t.silenceClaimed(now) || c.silenceCovered(st, t, now) {
 			continue
 		}
 		if now.Sub(t.At.Add(c.Threshold(t))) > c.PushWithin {

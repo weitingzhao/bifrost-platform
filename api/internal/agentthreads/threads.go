@@ -335,6 +335,14 @@ func (st *State) Apply(b Beat, at time.Time) bool {
 	if b.keyHash != "" && t.KeyHash != "" && b.keyHash != t.KeyHash {
 		return false
 	}
+	// A headless wrapper's progress beat is not the end of a tool call whose
+	// declared timeout is still running. Keep the declared window.
+	if seen && b.Event == AfterTool && b.Tool == "headless-progress" && b.TurnID == t.TurnID &&
+		t.Event == BeforeTool && t.ToolTimeoutS > 0 && at.Sub(t.At) < time.Duration(t.ToolTimeoutS)*time.Second {
+		t.Seq = b.Seq
+		st.Threads[k] = t
+		return true
+	}
 	if seen && t.TurnID != "" && b.TurnID != t.TurnID {
 		t.PriorTurns = rememberTurn(t.PriorTurns, t.TurnID)
 	}

@@ -153,8 +153,9 @@ export function threadsMidTurn(threads: readonly AgentThread[]): AgentThread[] {
     })
 }
 
+/** Silent threads for Needs you. A wrapped run (id prefix `run-`) stays on the thread list and is not an Owner item. */
 export function silentThreads(threads: readonly AgentThread[]): AgentThread[] {
-  return threads.filter(t => t.status === 'silent')
+  return threads.filter(t => t.status === 'silent' && !t.thread.startsWith('run-'))
 }
 
 export function lostHosts(hosts: readonly AgentHost[] | undefined): AgentHost[] {
