@@ -187,13 +187,42 @@ export async function fetchClusterEvents(
   return r.json() as Promise<ClusterEventsResponse>
 }
 
-export async function fetchAuthCapabilities(): Promise<AuthCapabilities> {
-  const token = operatorToken()
+export async function fetchAuthCapabilities(token = operatorToken(), signal?: AbortSignal): Promise<AuthCapabilities> {
   const headers = new Headers()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch('/api/v1/auth/capabilities', { headers })
-  if (!r.ok) throw new Error(`auth capabilities: HTTP ${r.status}`)
-  return r.json() as Promise<AuthCapabilities>
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  signal?.addEventListener('abort', abort, { once: true })
+  if (signal?.aborted) abort()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let rejectAbort!: (error: Error) => void
+  const cancelled = new Promise<never>((_, reject) => { rejectAbort = reject })
+  const onAbort = () => rejectAbort(new Error('auth capabilities read cancelled'))
+  controller.signal.addEventListener('abort', onAbort, { once: true })
+  if (controller.signal.aborted) onAbort()
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error('auth capabilities read timed out'))
+      controller.abort()
+    }, 15_000)
+  })
+  try {
+    // The deadline covers the body as well as the headers, even if the transport
+    // does not settle its promise after cancellation.
+    return await Promise.race([
+      (async () => {
+        const r = await fetch('/api/v1/auth/capabilities', { headers, signal: controller.signal })
+        if (!r.ok) throw new Error(`auth capabilities: HTTP ${r.status}`)
+        return await r.json() as AuthCapabilities
+      })(),
+      deadline,
+      cancelled,
+    ])
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', abort)
+    controller.signal.removeEventListener('abort', onAbort)
+  }
 }
 
 export async function fetchAudit(): Promise<AuditResponse> {

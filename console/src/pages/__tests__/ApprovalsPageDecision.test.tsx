@@ -1,8 +1,19 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  APPROVAL_TOKEN_STORAGE_KEY,
-} from '@/api/approvals'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: true,
+      role: 'admin',
+      can_operate: true,
+      can_admin: true,
+    })),
+  }
+})
 import {
   buildApprovalListResponse,
   buildPlatformApproval,
@@ -23,7 +34,7 @@ describe('ApprovalsPage (deciding a request)', () => {
   approvalsPageHooks()
 
   function pendingPage(id = 'ap-1') {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     window.location.hash = `#approvals?id=${id}`
     return buildPlatformApproval({ id })
   }
@@ -165,7 +176,7 @@ describe('ApprovalsPage (deciding a request)', () => {
   it('retries a failed request read on the next interval', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
     vi.setSystemTime(new Date(2026, 9, 12, 21, 36, 8))
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     window.location.hash = '#approvals?id=ap-1'
     let reads = 0
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {

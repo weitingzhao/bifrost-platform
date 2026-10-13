@@ -6,6 +6,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ConsoleNavBadgeMark } from '@/components/shell/ConsoleNavSlotItem'
 import { QuestionPage } from '@/pages/QuestionPage'
@@ -62,7 +63,11 @@ function installStorage(): void {
 }
 
 function wrapper(children: ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>{children}</PlatformAuthProvider>
+    </QueryClientProvider>
+  )
 }
 
 function health(url: string): Response | null {

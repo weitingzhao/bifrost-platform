@@ -1,9 +1,31 @@
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
+import type { AuthCapabilities } from '@/api/matrixTypes'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+
+const ADMIN_CAPS: AuthCapabilities = {
+  authenticated: true,
+  role: 'admin',
+  can_operate: true,
+  can_admin: true,
+}
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: true,
+      role: 'admin',
+      can_operate: true,
+      can_admin: true,
+    })),
+  }
+})
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
 
 const checking = /Could not read this request\. Last attempt: .+Refresh this page/
@@ -20,11 +42,13 @@ beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value) },
+    removeItem: (key: string) => { values.delete(key) },
     clear: () => values.clear(),
   } })
-  window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'test-only')
+  window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'test-only')
   window.location.hash = '#approvals?id=ap-recovery'
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(['platform', 'auth', 'capabilities', 'test-only'], ADMIN_CAPS)
   reads = 0
   post = async () => json({ status: 'executed' })
   read = async () => json(pending())
@@ -44,7 +68,13 @@ afterEach(() => {
   window.localStorage.clear()
 })
 async function open() {
-  render(<QueryClientProvider client={client}><ApprovalsPage /></QueryClientProvider>)
+  render(
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>
+        <ApprovalsPage />
+      </PlatformAuthProvider>
+    </QueryClientProvider>,
+  )
   return screen.findByRole('button', { name: 'Approve gitops_sync_app' })
 }
 

@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchQuestion, type QuestionStatus } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { isQuestionId } from '@/lib/shell/consoleRoutes'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { decisionBlockReason } from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
@@ -52,8 +53,11 @@ function Frame({
  */
 function QuestionSession({ id }: { id: string }) {
   const send = useAnswerSend(id)
-  const [token, setToken] = useState(() => readApprovalToken())
+  const blocked = decisionBlockReason(usePlatformAuth())
   const acceptRef = send.acceptRef
+  useEffect(() => {
+    clearLegacyApprovalToken()
+  }, [])
   const readQuestion = useCallback(() => fetchQuestion(id).then(record => acceptRef.current(record)), [acceptRef, id])
 
   const itemQ = useQuery({
@@ -83,6 +87,7 @@ function QuestionSession({ id }: { id: string }) {
 
   return (
     <Frame state={state}>
+      {shown == null && blocked != null ? <p className="m-0 text-sm">{blocked}</p> : null}
       {state === 'loading' ? <p className="m-0 text-sm">{`Opening ${id}…`}</p> : null}
       {state === 'unreadable' ? (
         <p className="m-0 break-words text-sm text-destructive">
@@ -94,6 +99,9 @@ function QuestionSession({ id }: { id: string }) {
           {`Could not refresh this question: ${itemQ.error instanceof Error ? itemQ.error.message : 'request failed'}`}
         </p>
       ) : null}
+      {unreadable || stale ? (
+        <button type="button" disabled={itemQ.isFetching} onClick={() => { void itemQ.refetch() }}>Retry</button>
+      ) : null}
       {shown != null ? (
         <NowClock>
           <div className="flex w-full min-w-0 flex-col gap-3">
@@ -102,21 +110,14 @@ function QuestionSession({ id }: { id: string }) {
             {showClosed ? <ClosedLine question={shown} /> : null}
             <p className="m-0 text-sm">{SECRETS_LINE}</p>
             {showForm ? (
-              <>
-                {token === '' ? (
-                  <p className="m-0 text-sm">
-                    Confirm answer stays disabled until an approval token is saved in this browser.
-                  </p>
-                ) : null}
-                <ApprovalTokenField token={token} onSaved={setToken} />
-                <QuestionAnswerForm
-                  question={shown}
-                  phase={send.state.phase}
-                  onChoose={send.choose}
-                  onConfirm={send.confirm}
-                  onCheckAgain={send.checkAgain}
-                />
-              </>
+              <QuestionAnswerForm
+                question={shown}
+                phase={send.state.phase}
+                blocked={blocked}
+                onChoose={send.choose}
+                onConfirm={send.confirm}
+                onCheckAgain={send.checkAgain}
+              />
             ) : null}
           </div>
         </NowClock>

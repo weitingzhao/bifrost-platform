@@ -3,7 +3,21 @@ import { render, screen } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: false,
+      role: 'viewer',
+      can_operate: false,
+      can_admin: false,
+    })),
+  }
+})
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -39,7 +53,11 @@ function installStorage(): void {
 
 function wrapper(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  return (
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>{children}</PlatformAuthProvider>
+    </QueryClientProvider>
+  )
 }
 
 function route(itemId: string, item: unknown, approvals: unknown[]) {

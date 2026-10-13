@@ -6,6 +6,20 @@ import {
   formatWaited,
   recentClosed,
 } from '@/api/approvals'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: true,
+      role: 'admin',
+      can_operate: true,
+      can_admin: true,
+    })),
+  }
+})
 import {
   buildApprovalListResponse,
   buildPlatformApproval,
@@ -84,9 +98,9 @@ describe('ApprovalsPage (request page)', () => {
     expect(screen.queryByText('Decided at')).toBeNull()
     expect(screen.getByText(/"app": "rocket"/)).toBeTruthy()
     expect(
-      screen.getByText(/Approve and Reject stay disabled until an approval token is saved/),
+      await screen.findByText('Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'),
     ).toBeTruthy()
-    expect(screen.getByLabelText('Set approval token')).toBeTruthy()
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(
       true,
     )
@@ -95,8 +109,9 @@ describe('ApprovalsPage (request page)', () => {
     )
   })
 
-  it('reads the request with the saved approval token when no operator token is set', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+  it('reads the request with the top-right token and ignores the old field', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
+    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'legacy-not-used')
     window.location.hash = '#approvals?id=ap-1'
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
@@ -105,12 +120,11 @@ describe('ApprovalsPage (request page)', () => {
     })
     const { container } = render(wrapper(<ApprovalsPage />))
     await screen.findByText('sess-owner')
-    const input = document.getElementById('approval-token') as HTMLInputElement
-    expect(input.value).toBe('')
-    expect(input.outerHTML).not.toContain('admin-token')
+    expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(container.innerHTML).not.toContain('admin-token')
+    expect(container.innerHTML).not.toContain('legacy-not-used')
     expect(container.textContent ?? '').not.toContain('admin-token')
-    expect(screen.getByText('A token is saved. Type a new one to replace it.')).toBeTruthy()
+    await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
     const call = vi.mocked(fetch).mock.calls.find(entry => String(entry[0]).endsWith('/approvals/ap-1'))
     expect(new Headers(call?.[1]?.headers).get('Authorization')).toBe('Bearer admin-token')
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(
@@ -119,7 +133,7 @@ describe('ApprovalsPage (request page)', () => {
   })
 
   it('approves with the server line and params hash', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     window.location.hash = '#approvals?id=ap-1'
     const opened = buildPlatformApproval({
       id: 'ap-1',
@@ -460,7 +474,7 @@ describe('ApprovalsPage (request page)', () => {
     ['succeeded', 'It ran and succeeded', 'executed', 'it ran and succeeded'],
     ['failed', 'It ran and failed', 'failed', 'it ran and failed'],
   ] as const)('closes an unknown request as %s', async (outcome, choice, status, phrase) => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     const id = `appr-${outcome}`
     const at = '2026-10-10T19:22:16Z'
     window.location.hash = `#approvals?id=${id}`
@@ -507,7 +521,7 @@ describe('ApprovalsPage (request page)', () => {
   })
 
   it('shows a resolve error in place and leaves the form up', async () => {
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     const id = 'appr-err'
     window.location.hash = `#approvals?id=${id}`
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {

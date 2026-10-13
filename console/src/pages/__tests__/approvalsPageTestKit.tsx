@@ -2,8 +2,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
+import type { AuthCapabilities } from '@/api/matrixTypes'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 
 // Shared by the request-page tests, which are split over two files to stay under the file-size ratchet.
+
+export const ADMIN_CAPS: AuthCapabilities = {
+  authenticated: true,
+  role: 'admin',
+  can_operate: true,
+  can_admin: true,
+}
 
 export function installModuleScript(src: string): void {
   const el = document.createElement('script')
@@ -55,7 +65,13 @@ export function installStorage(): Storage {
 
 export function wrapper(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  const token = window.localStorage.getItem(PLATFORM_TOKEN_KEY) ?? ''
+  if (token !== '') client.setQueryData(['platform', 'auth', 'capabilities', token], ADMIN_CAPS)
+  return (
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>{children}</PlatformAuthProvider>
+    </QueryClientProvider>
+  )
 }
 
 /** The per-test environment of every request-page test: a fresh storage, a stubbed fetch, and a clean page after. */
@@ -69,6 +85,7 @@ export function approvalsPageHooks(): void {
     vi.useRealTimers()
     vi.unstubAllGlobals()
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     window.location.hash = ''
     document.querySelectorAll('script[data-console-build]').forEach(node => node.remove())
   })
