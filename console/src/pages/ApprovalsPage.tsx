@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
 import { authedFetch } from '@/api/client'
 import {
+  approvalFailureStatus,
   approvalIdFromHash,
+  clearLegacyApprovalToken,
   fetchApproval,
   fetchApprovalList,
   formatTimeRemaining,
@@ -11,7 +13,6 @@ import {
   isUnsetDecidedAt,
   postApprovalDecision,
   postApprovalResolve,
-  readApprovalToken,
   type ApprovalItem,
   type ResolveOutcome,
 } from '@/api/approvals'
@@ -44,14 +45,17 @@ import {
   siblingRequests,
   statusInPlainWords,
 } from '@/pages/approvalSiblings'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import {
+  DECISION_REJECTED,
+  decisionBlockReason,
+  scrubSecret,
+} from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
-
-const MISSING_TOKEN =
-  'Approve and Reject stay disabled until an approval token is saved in this browser. The console operator token is not used for these actions.'
 
 function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
   const [records, setRecords] = useState<Record<string, T>>({})
@@ -211,12 +215,12 @@ const CLOSE_CHOICES: readonly { outcome: ResolveOutcome; label: string }[] = [
 ]
 
 function CloseUnknownForm({
-  hasToken,
+  blocked,
   busy,
   error,
   onClose,
 }: {
-  hasToken: boolean
+  blocked: string | null
   busy: boolean
   error: string | null
   onClose: (outcome: ResolveOutcome, note: string) => void
@@ -224,16 +228,21 @@ function CloseUnknownForm({
   const [outcome, setOutcome] = useState<ResolveOutcome | ''>('')
   const [note, setNote] = useState('')
   const trimmed = note.trim()
-  const ready = hasToken && !busy && outcome !== '' && trimmed !== ''
+  const ready = blocked == null && !busy && outcome !== '' && trimmed !== ''
   return (
     <form
       className="flex w-full min-w-0 flex-col gap-2"
       onSubmit={event => {
         event.preventDefault()
-        if (outcome === '' || trimmed === '') return
+        if (blocked != null || outcome === '' || trimmed === '') return
         onClose(outcome, trimmed)
       }}
     >
+      {blocked != null ? (
+        <p role="status" className="m-0 text-sm">
+          {blocked}
+        </p>
+      ) : null}
       <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
         <legend className="text-sm">What happened</legend>
         {CLOSE_CHOICES.map(choice => (
@@ -312,7 +321,7 @@ function WhatIsKnown({ item, rows }: { item: ApprovalItem; rows: readonly Approv
 
 function ApprovalCard({
   item,
-  hasToken,
+  blocked,
   busy,
   sending,
   staleBuild,
@@ -325,7 +334,7 @@ function ApprovalCard({
   onClose,
 }: {
   item: ApprovalItem
-  hasToken: boolean
+  blocked: string | null
   busy: boolean
   sending: 'approve' | 'reject' | null
   staleBuild: boolean
@@ -339,7 +348,7 @@ function ApprovalCard({
 }) {
   const [reason, setReason] = useState('')
   const pending = item.status === 'pending'
-  const canDecide = pending && hasToken && !busy && !staleBuild
+  const canDecide = pending && blocked == null && !busy && !staleBuild
   const blockedReason = staleBuild ? NEWER_CONSOLE_BANNER : undefined
   const trimmed = reason.trim()
   const title = decisionTitle(item)
@@ -415,7 +424,7 @@ function ApprovalCard({
         )}
         {item.status === 'unknown' ? (
           <CloseUnknownForm
-            hasToken={hasToken}
+            blocked={blocked}
             busy={busy}
             error={closeError}
             onClose={(outcome, note) => onClose(item.id, outcome, note)}
@@ -456,6 +465,11 @@ function ApprovalCard({
       </article>
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
+          {blocked != null ? (
+            <p role="status" className="m-0 text-sm">
+              {blocked}
+            </p>
+          ) : null}
           <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor={`reject-${item.id}`}>
             Reject reason
             <input
@@ -563,9 +577,10 @@ function ApprovalCard({
 /** The request page, `#approvals?id=<id>`: the only place to approve or reject. */
 export function ApprovalsPage() {
   const qc = useQueryClient()
+  const auth = usePlatformAuth()
+  const blocked = decisionBlockReason(auth)
   const id = useDeepLinkId()
   const recordId = qc.getQueryData<ApprovalItem>(['approvals', 'item', id])?.id ?? id
-  const [token, setToken] = useState(() => readApprovalToken())
   const [busy, setBusy] = useRecordState(recordId, false)
   const [sending, setSending] = useRecordState<'approve' | 'reject' | null>(recordId, null)
   const locks = useRef(new Map<string | null, boolean>())
@@ -574,7 +589,12 @@ export function ApprovalsPage() {
   const [notice, setNotice] = useRecordState<string | null>(recordId, null)
   const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
-  const hasToken = token !== ''
+  const postsInFlight = useRef(0)
+  const [reloadHeld, setReloadHeld] = useState(false)
+
+  useEffect(() => {
+    clearLegacyApprovalToken()
+  }, [])
 
   const itemQ = useQuery({
     queryKey: ['approvals', 'item', id],
@@ -633,8 +653,11 @@ export function ApprovalsPage() {
   }, [checkingId, qc, recordId, id])
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
-    if (!hasToken || locks.current.get(recordId) || staleBuild) return
+    if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
+    const session = getPlatformOperatorToken()
     locks.current.set(recordId, true)
+    postsInFlight.current += 1
+    setReloadHeld(true)
     setSending(path)
     setBusy(true)
     setActionError(null)
@@ -644,7 +667,7 @@ export function ApprovalsPage() {
     try {
       const decision = await postApprovalDecision(
         requestId,
-        token,
+        session,
         path,
         path === 'approve'
           ? {
@@ -664,11 +687,20 @@ export function ApprovalsPage() {
       }
     } catch (err) {
       needsCheck = true
-      setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      const status = approvalFailureStatus(err)
+      if (status === 401 || status === 403) {
+        setActionError(DECISION_REJECTED)
+        auth.refreshCapabilities()
+      } else {
+        const raw = err instanceof Error ? err.message : 'Approval action failed'
+        setActionError(scrubSecret(raw, session))
+      }
       setNotice('Checking the decision result.')
       setCheckingId(id)
     } finally {
       clearTimeout(waitingTimer)
+      postsInFlight.current = Math.max(0, postsInFlight.current - 1)
+      setReloadHeld(postsInFlight.current > 0)
       setSending(null)
       // Reconciliation owns the lock until a record has actually been read.
       // State updates are asynchronous; the synchronous ref covers the same turn.
@@ -681,14 +713,22 @@ export function ApprovalsPage() {
   }
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
-    if (!hasToken) return
+    if (decisionBlockReason(auth) != null) return
+    const session = getPlatformOperatorToken()
     setBusy(true)
     setCloseError(null)
     try {
-      await postApprovalResolve(requestId, token, { outcome, note })
+      await postApprovalResolve(requestId, session, { outcome, note })
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
-      setCloseError(err instanceof Error ? err.message : 'Could not close this request')
+      const status = approvalFailureStatus(err)
+      if (status === 401 || status === 403) {
+        setCloseError(DECISION_REJECTED)
+        auth.refreshCapabilities()
+      } else {
+        const raw = err instanceof Error ? err.message : 'Could not close this request'
+        setCloseError(scrubSecret(raw, session))
+      }
     } finally {
       setBusy(false)
     }
@@ -696,25 +736,10 @@ export function ApprovalsPage() {
 
   return (
     <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
-      <ConsoleBuildBanner stale={staleBuild} />
+      <ConsoleBuildBanner stale={staleBuild} holdReload={reloadHeld} />
       <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
         ← Needs you
       </a>
-      {hasToken ? (
-        <details className="min-w-0 text-sm text-muted-foreground">
-          <summary className="cursor-pointer">Approval token saved in this browser.</summary>
-          <div className="mt-2">
-            <ApprovalTokenField token={token} onSaved={setToken} />
-          </div>
-        </details>
-      ) : (
-        <div className="flex w-full min-w-0 flex-col gap-2">
-          <p role="status" className="m-0 text-sm">
-            {MISSING_TOKEN}
-          </p>
-          <ApprovalTokenField token={token} onSaved={setToken} />
-        </div>
-      )}
       {id == null ? (
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
       ) : (
@@ -730,10 +755,10 @@ export function ApprovalsPage() {
             <ApprovalCard
               key={opened.id}
               item={opened}
-              hasToken={hasToken}
+              blocked={blocked}
               busy={busy}
               sending={sending}
-              staleBuild={staleBuild}
+              staleBuild={staleBuild && !reloadHeld}
               actionError={actionError}
               notice={notice}
               closeError={closeError}

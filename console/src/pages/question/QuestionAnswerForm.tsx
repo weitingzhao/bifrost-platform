@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import type { Question } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
   confirmIsSendable,
@@ -33,12 +32,15 @@ function rowSnapshot(phase: AnswerPhase): ConfirmSnapshot | null {
 export function QuestionAnswerForm({
   question,
   phase,
+  blocked,
   onChoose,
   onConfirm,
   onCheckAgain,
 }: {
   question: Question
   phase: AnswerPhase
+  /** Why Confirm answer stays off, from the same sign-in the top-right badge uses. */
+  blocked: string | null
   onChoose: (snapshot: ConfirmSnapshot) => void
   onConfirm: () => void
   onCheckAgain: () => void
@@ -51,11 +53,11 @@ export function QuestionAnswerForm({
   const selected = active?.letter ?? null
   const sendable = confirmIsSendable({ questionId: question.id, phase })
   const canConfirm =
+    blocked == null &&
     sendable &&
     !expired &&
     active != null &&
     active.id === question.id &&
-    readApprovalToken() !== '' &&
     (active.letter !== 'none' || active.text !== '')
 
   function choose(letter: string) {
@@ -70,6 +72,11 @@ export function QuestionAnswerForm({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2" data-question-form={expired ? 'disabled' : 'open'}>
+      {blocked != null ? (
+        <p role="status" className="m-0 text-sm">
+          {blocked}
+        </p>
+      ) : null}
       {question.options.map(choice => (
         <button
           key={choice.key}

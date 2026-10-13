@@ -1,17 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
+import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchLineage } from '@/api/lineage'
-import { readApprovalToken } from '@/api/approvals'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
-import { operatorToken } from '@/api/client'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
 import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { AnswerGroup } from '@/pages/shell/needs-you/AnswerGroup'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
-import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { SilentThreadRow } from '@/pages/shell/needs-you/SilentThreadRow'
 import { needsYouCountText, type NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import {
@@ -121,8 +119,6 @@ export function NeedsYouPage() {
     questionsStale,
     questionsReason,
     query,
-    handledQuery,
-    questionsQuery,
   } = useNeedsYou()
   const lineageQ = useQuery({
     queryKey: ['lineage', 'needs-you'],
@@ -137,8 +133,9 @@ export function NeedsYouPage() {
     retry: false,
   })
   const progressDoc = progressQ.data?.document ?? null
-  const [approvalToken, setApprovalToken] = useState(() => readApprovalToken())
-  const hasReadToken = operatorToken() !== '' || approvalToken !== ''
+  useEffect(() => {
+    clearLegacyApprovalToken()
+  }, [])
   const showRecent =
     recentCount.state === 'unknown' || (recentCount.state === 'known' && recentCount.count > 0)
 
@@ -149,19 +146,8 @@ export function NeedsYouPage() {
     openBody = (
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
-          {query.isPaused ? 'Could not read approvals — offline.' : hasReadToken
-            ? approvalsReadFailure(query.errorUpdatedAt)
-            : 'This device has no approval token. Save it once to see what waits for you here.'}
+          {query.isPaused ? 'Could not read approvals — offline.' : approvalsReadFailure(query.errorUpdatedAt)}
         </Note>
-        <ApprovalTokenField
-          token={approvalToken}
-          onSaved={next => {
-            setApprovalToken(next)
-            void query.refetch()
-            void handledQuery.refetch()
-            void questionsQuery.refetch()
-          }}
-        />
       </div>
     )
   }

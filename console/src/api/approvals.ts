@@ -1,4 +1,4 @@
-import { authHeaders, authedFetch, operatorToken, parseError } from '@/api/client'
+import { authHeaders, authedFetch, parseError } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
   type ApprovalResolution,
@@ -7,8 +7,20 @@ import {
 
 export type { ApprovalResolution }
 
-/** Browser-only admin token for approve / reject. Not the console operator token. */
+/**
+ * Retired browser field for approve / reject. Decisions use the top-right sign-in.
+ * The key is still named so a page load can delete a value saved by an older console.
+ */
 export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
+
+/** Remove the retired field once. Callers must not read it back. */
+export function clearLegacyApprovalToken(): void {
+  try {
+    window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+  } catch {
+    // private mode, or a test double without removeItem
+  }
+}
 
 export const APPROVAL_HISTORY_LIMIT = 50
 
@@ -42,26 +54,6 @@ export type ApprovalDecision = {
   status?: string
   result?: unknown
   error?: string
-}
-
-function approvalTokenStore(): Storage | null {
-  try {
-    return window.localStorage
-  } catch {
-    return null
-  }
-}
-
-export function readApprovalToken(): string {
-  return approvalTokenStore()?.getItem(APPROVAL_TOKEN_STORAGE_KEY)?.trim() ?? ''
-}
-
-export function writeApprovalToken(value: string): void {
-  const store = approvalTokenStore()
-  if (store == null) return
-  const next = value.trim()
-  if (next === '') store.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
-  else store.setItem(APPROVAL_TOKEN_STORAGE_KEY, next)
 }
 
 /** `#approvals?id=<id>` — the phone notification target. */
@@ -174,18 +166,22 @@ export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMI
 }
 
 /**
- * Reads need a viewer token. The console operator token wins; a device that only
- * saved the approval token (the phone home-screen app) reads with that one, so the
- * token is entered once.
+ * Reads use the top-right sign-in when there is one, and send no token when there
+ * is not. Same rule as the other console reads.
  */
 export async function viewerRead(prefix: string, path: string, signal?: AbortSignal): Promise<Response> {
-  if (operatorToken() !== '') return authedFetch(prefix, path, signal == null ? {} : { signal })
-  const headers = new Headers()
-  const token = readApprovalToken()
-  if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(path, signal == null ? { headers } : { headers, signal })
-  if (!r.ok) throw await parseError(prefix, r)
-  return r
+  return authedFetch(prefix, path, signal == null ? {} : { signal })
+}
+
+export function approvalFailureStatus(err: unknown): number | null {
+  if (typeof err !== 'object' || err == null || !('status' in err)) return null
+  const status = (err as { status?: unknown }).status
+  return typeof status === 'number' ? status : null
+}
+
+async function rejectApproval(response: Response): Promise<never> {
+  const error = await parseError('approvals', response)
+  throw Object.assign(error, { status: response.status })
 }
 
 function approvalsRead(path: string, signal: AbortSignal): Promise<Response> {
@@ -215,7 +211,7 @@ export async function fetchApproval(id: string): Promise<ApprovalItem> {
 
 export type ResolveOutcome = 'not_run' | 'succeeded' | 'failed'
 
-/** Close an unknown result. Uses the saved approval token, like approve and reject. */
+/** Close an unknown result. The bearer is the top-right sign-in, like approve and reject. */
 export async function postApprovalResolve(
   id: string,
   token: string,
@@ -229,7 +225,7 @@ export async function postApprovalResolve(
     headers,
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw await parseError('approvals', r)
+  if (!r.ok) await rejectApproval(r)
   return (await r.json()) as ApprovalDecision
 }
 
@@ -247,7 +243,7 @@ export async function postApprovalDecision(
     headers,
     body: JSON.stringify(body),
   })
-  if (!r.ok) throw await parseError('approvals', r)
+  if (!r.ok) await rejectApproval(r)
   return (await r.json()) as ApprovalDecision
 }
 

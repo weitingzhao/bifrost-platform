@@ -1,5 +1,4 @@
 import { actionLink, type ActionLinkView } from '@/api/agentProgress'
-import { readApprovalToken } from '@/api/approvals'
 import { operatorToken } from '@/api/client'
 
 /**
@@ -385,7 +384,7 @@ async function readError(response: Response): Promise<QuestionHttpError> {
 function readHeaders(): Headers {
   const headers = new Headers()
   headers.set('X-Bifrost-Session', QUESTION_SESSION)
-  const token = operatorToken() !== '' ? operatorToken() : readApprovalToken()
+  const token = operatorToken()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
   return headers
 }
@@ -444,9 +443,9 @@ export function parsePostedAnswer(value: unknown): { ok: true; posted: PostedAns
   return { ok: true, posted: { id: value.id, status: value.status as QuestionStatus, answer } }
 }
 
-/** Admin token from the approval-token field. Does not use the operator token. */
+/** Admin token from the top-right sign-in. */
 export async function postQuestionAnswer(id: string, option: string, text: string): Promise<PostedAnswer> {
-  const token = readApprovalToken()
+  const token = operatorToken()
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('X-Bifrost-Session', QUESTION_SESSION)

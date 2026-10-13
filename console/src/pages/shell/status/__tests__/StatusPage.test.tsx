@@ -91,6 +91,7 @@ function wrapper(children: ReactNode) {
           token: '',
           caps: undefined,
           capsLoading: false,
+          capsError: false,
           canOperate: false,
           canAdmin: false,
           setToken: () => undefined,

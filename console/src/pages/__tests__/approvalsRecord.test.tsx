@@ -3,8 +3,31 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
+import type { AuthCapabilities } from '@/api/matrixTypes'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
+
+const ADMIN_CAPS: AuthCapabilities = {
+  authenticated: true,
+  role: 'admin',
+  can_operate: true,
+  can_admin: true,
+}
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: true,
+      role: 'admin',
+      can_operate: true,
+      can_admin: true,
+    })),
+  }
+})
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 const row = (status = 'pending', id = 'record-a') => buildPlatformApproval({ id, number: id === 'record-a' ? 57 : 58, status })
@@ -17,13 +40,17 @@ let reads: string[]
 let moduleScript: HTMLScriptElement | undefined
 
 beforeEach(() => {
-  const values = new Map<string, string>([[APPROVAL_TOKEN_STORAGE_KEY, 'fixture-only']])
+  const values = new Map<string, string>([
+    [PLATFORM_TOKEN_KEY, 'fixture-only'],
+    [APPROVAL_TOKEN_STORAGE_KEY, 'legacy-not-used'],
+  ])
   Object.defineProperty(window, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => values.set(key, value),
     removeItem: (key: string) => values.delete(key),
   } })
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  client.setQueryData(['platform', 'auth', 'capabilities', 'fixture-only'], ADMIN_CAPS)
   reads = []
   read = async id => json(row('pending', id === '58' || id === 'record-b' ? 'record-b' : 'record-a'))
   post = async () => json({ status: 'executed' })
@@ -44,7 +71,13 @@ afterEach(() => {
 })
 async function open(id: string) {
   window.location.hash = `#approvals?id=${id}`
-  render(<QueryClientProvider client={client}><ApprovalsPage /></QueryClientProvider>)
+  render(
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>
+        <ApprovalsPage />
+      </PlatformAuthProvider>
+    </QueryClientProvider>,
+  )
   return screen.findByRole('button', { name: /Approve/ })
 }
 async function tick(ms = 30_000) { await act(async () => { await vi.advanceTimersByTimeAsync(ms) }) }
@@ -233,6 +266,29 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     expect(screen.queryByText(retry)).toBeNull()
     expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
     expect(client.getQueryData(['approvals', 'item', id])).toMatchObject({ id: 'record-a', status: 'approved' })
+  })
+
+  it('keeps A pending and retryable when its decision fails while B is open', async () => {
+    const button = await open(id)
+    clock()
+    let fail!: (error: Error) => void
+    post = () => new Promise((_resolve, reject) => { fail = reject })
+    fireEvent.click(button)
+    await navigate(id === '57' ? '58' : 'record-b')
+    read = async key => json(row('pending', key === id ? 'record-a' : 'record-b'))
+    await act(async () => { fail(new TypeError('A late failure')) })
+    await tick(1)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-b')
+    expect(screen.queryByText(retry)).toBeNull()
+    expect(screen.queryByText('A late failure')).toBeNull()
+    expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
+    await navigate(id)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-a')
+    expect(screen.getByText('Waiting for your decision.')).toBeTruthy()
+    expect(screen.getByText(retry)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
+    fireEvent.change(screen.getByLabelText('Reject reason'), { target: { value: 'try again' } })
+    expect(screen.getByRole('button', { name: /Reject/ }).hasAttribute('disabled')).toBe(false)
   })
 
   it('applies the same failure reconciliation and server reasons to reject', async () => {

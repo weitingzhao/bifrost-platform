@@ -6,8 +6,31 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
+import type { AuthCapabilities } from '@/api/matrixTypes'
 import { parseQuestion } from '@/api/questions'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { QuestionPage } from '@/pages/QuestionPage'
+
+const ADMIN_CAPS: AuthCapabilities = {
+  authenticated: true,
+  role: 'admin',
+  can_operate: true,
+  can_admin: true,
+}
+
+vi.mock('@/api/cluster', async () => {
+  const actual = await vi.importActual<typeof import('@/api/cluster')>('@/api/cluster')
+  return {
+    ...actual,
+    fetchAuthCapabilities: vi.fn(async () => ({
+      authenticated: true,
+      role: 'admin',
+      can_operate: true,
+      can_admin: true,
+    })),
+  }
+})
 import { resetAnswerSendStore } from '@/pages/question/answerSendStore'
 import { QuestionRow } from '@/pages/shell/needs-you/QuestionRow'
 
@@ -54,7 +77,13 @@ function installStorage(): void {
 }
 
 function wrapper(children: ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  const token = window.localStorage.getItem(PLATFORM_TOKEN_KEY) ?? ''
+  if (token !== '') client.setQueryData(['platform', 'auth', 'capabilities', token], ADMIN_CAPS)
+  return (
+    <QueryClientProvider client={client}>
+      <PlatformAuthProvider>{children}</PlatformAuthProvider>
+    </QueryClientProvider>
+  )
 }
 
 function posts(): number {
@@ -74,7 +103,7 @@ describe('QuestionPage', () => {
     vi.setSystemTime(new Date('2026-10-11T12:00:00Z'))
     resetAnswerSendStore()
     installStorage()
-    window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'admin-token')
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'admin-token')
     vi.stubGlobal('fetch', vi.fn())
   })
 
@@ -83,6 +112,7 @@ describe('QuestionPage', () => {
     resetAnswerSendStore()
     vi.unstubAllGlobals()
     window.localStorage.removeItem(APPROVAL_TOKEN_STORAGE_KEY)
+    window.localStorage.removeItem(PLATFORM_TOKEN_KEY)
     window.location.hash = ''
     vi.useRealTimers()
   })

@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchAuthCapabilities } from '@/api/cluster'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
@@ -7,6 +8,10 @@ import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platfo
 export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const [token, setTokenState] = useState(() => getPlatformOperatorToken())
+
+  useEffect(() => {
+    clearLegacyApprovalToken()
+  }, [])
 
   const capsQuery = useQuery({
     queryKey: ['platform', 'auth', 'capabilities', token],
@@ -44,13 +49,14 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
       token,
       caps: capsQuery.data,
       capsLoading: capsQuery.isLoading,
+      capsError: capsQuery.isError,
       canOperate: capsQuery.data?.can_operate === true,
       canAdmin: capsQuery.data?.can_admin === true,
       setToken,
       signOut,
       refreshCapabilities,
     }),
-    [token, capsQuery.data, capsQuery.isLoading, setToken, signOut, refreshCapabilities],
+    [token, capsQuery.data, capsQuery.isLoading, capsQuery.isError, setToken, signOut, refreshCapabilities],
   )
 
   return <PlatformAuthContext.Provider value={value}>{children}</PlatformAuthContext.Provider>

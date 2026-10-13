@@ -5,6 +5,8 @@ export interface PlatformAuthContextValue {
   token: string
   caps: AuthCapabilities | undefined
   capsLoading: boolean
+  /** The capabilities read failed. Stale data must not be treated as a role. */
+  capsError: boolean
   canOperate: boolean
   canAdmin: boolean
   setToken: (token: string) => void

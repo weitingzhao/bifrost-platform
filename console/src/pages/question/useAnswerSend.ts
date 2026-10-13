@@ -7,7 +7,9 @@ import {
   type Question,
   type QuestionAnswer,
 } from '@/api/questions'
-import { readApprovalToken } from '@/api/approvals'
+import { usePlatformAuth } from '@/hooks/usePlatformAuth'
+import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { DECISION_REJECTED, decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
 import {
   isTerminalPhase,
   presentedQuestion,
@@ -61,6 +63,9 @@ export function acceptQuestionRead(record: Question, queryClient: QueryClient): 
  */
 export function useAnswerSend(questionId: string) {
   const queryClient = useQueryClient()
+  const auth = usePlatformAuth()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const send = useSyncExternalStore(
     subscribeAnswerSend,
     () => answerSendSnapshot(questionId),
@@ -109,13 +114,24 @@ export function useAnswerSend(questionId: string) {
       }
       await reread(snap.id)
     } catch (err) {
+      if (err instanceof QuestionHttpError && (err.status === 401 || err.status === 403)) {
+        dispatchAnswerSend({
+          type: 'postRejected',
+          id: snap.id,
+          recordStatus: null,
+          answer: null,
+          message: DECISION_REJECTED,
+        })
+        authRef.current.refreshCapabilities()
+        return
+      }
       if (isParsedClientError(err)) {
         dispatchAnswerSend({
           type: 'postRejected',
           id: snap.id,
           recordStatus: err.recordStatus,
           answer: err.answer,
-          message: err.message,
+          message: scrubSecret(err.message, getPlatformOperatorToken()),
         })
         rememberRejection(snap.id, err.answer, err.recordStatus)
         return
@@ -134,12 +150,12 @@ export function useAnswerSend(questionId: string) {
   }
 
   function confirm(): void {
+    if (decisionBlockReason(authRef.current) != null) return
     const current = answerSendSnapshot(questionId)
     if (current.phase.kind !== 'confirming') return
     const snap = current.phase.snapshot
     if (snap.id !== questionId) return
     if (snap.letter === 'none' && snap.text === '') return
-    if (readApprovalToken() === '') return
     void runSend(snap)
   }
 
