@@ -36,7 +36,8 @@ var trackedGiteaRepos = []string{
 }
 
 // pipelineMirrorRepos maps a deliver pipeline to the Gitea repos it clones.
-// A multi-repo deploy requires the chosen revision to exist in every repo.
+// Platform delivery checks effective clone refs; other delivery retains the
+// legacy single-ref probe sets, including the retired socket entry.
 var pipelineMirrorRepos = map[string][]string{
 	"bifrost-ci-platform":           {"bifrost-platform"},
 	"bifrost-ci-frontend":           {"bifrost-trade-frontend"},
@@ -60,6 +61,16 @@ var pipelineMirrorRepos = map[string][]string{
 		"bifrost-trade-infra",
 		"bifrost-ui",
 	},
+}
+
+// pipelineRepoRefParams selects effective clone refs for platform delivery only.
+var pipelineRepoRefParams = map[string]map[string]string{
+	"bifrost-deliver-platform":      {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
+	"bifrost-deliver-platform-prod": {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
+}
+
+func isPlatformDelivery(name string) bool {
+	return name == "bifrost-deliver-platform" || name == "bifrost-deliver-platform-prod"
 }
 
 // reposForPipeline returns the clone repos for a pipeline, falling back to all

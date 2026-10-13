@@ -276,6 +276,18 @@ func TestNonCICreatedRunsUnchangedFromMain(t *testing.T) {
 	for key, want := range baseline {
 		parts := strings.Split(key, "/")
 		name := parts[0]
+		// Round 2 ruling 3 refuses these frozen cases: the same full SHA
+		// is used for both the platform and UI repository.
+		switch key {
+		case "bifrost-deliver-platform/empty": // STG, no image tag, identical SHAs.
+			continue
+		case "bifrost-deliver-platform/tagged": // STG, image tag, identical SHAs.
+			continue
+		case "bifrost-deliver-platform-prod/empty": // PROD, no image tag, identical SHAs.
+			continue
+		case "bifrost-deliver-platform-prod/tagged": // PROD, image tag, identical SHAs.
+			continue
+		}
 		// This name has never had a workspace case; it is intentionally now refused.
 		if name == "bifrost-clone-frontend-smoke" {
 			continue

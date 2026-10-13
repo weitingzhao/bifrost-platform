@@ -228,6 +228,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			return resp, empty, inputErr
 		}
 	}
+	if isPlatformDelivery(pipelineName) {
+		if err := platformRunInputs(revision, extra); err != nil {
+			resp.Message = err.Error()
+			return resp, empty, err
+		}
+	}
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
 		rev = "main"
@@ -245,22 +251,13 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, fmt.Errorf("%s", msg)
 	}
 
-	// Multi-repo guard: refuse to start if the revision is genuinely missing in
-	// any repo the pipeline clones — otherwise it fails halfway at a clone-*
-	// task. Only block when probes had full visibility (reachability ok); never
-	// block on network/probe uncertainty.
-	repos := reposForPipeline(pipelineName)
-	if ciRepo != "" {
-		repos = []string{ciRepo}
-	}
-	if pf := s.refPreflightForRepos(ctx, pipelineName, rev, repos); pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
-		resp.Message = fmt.Sprintf(
-			"revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)",
-			rev, strings.Join(pf.Missing, ", "))
-		if ciRepo != "" {
-			resp.Message = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", rev, ciRepo)
+	// Keep the original pre-build gate and single top-level revision for all
+	// non-platform, non-CI pipelines, including unknown pipeline fallback.
+	if !isPlatformDelivery(pipelineName) && !isCIPipeline(pipelineName) {
+		if msg := s.legacyRunRefPreflight(ctx, pipelineName, rev); msg != "" {
+			resp.Message = msg
+			return resp, empty, fmt.Errorf("%s", msg)
 		}
-		return resp, empty, fmt.Errorf("%s", resp.Message)
 	}
 
 	dyn, err := s.buildDynamicClient()
@@ -326,6 +323,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, err
 	}
 
+	if isPlatformDelivery(pipelineName) || isCIPipeline(pipelineName) {
+		if msg := s.runRefPreflight(ctx, pipelineName, rev, ciRepo, spec, pipe); msg != "" {
+			resp.Message = msg
+			return resp, empty, fmt.Errorf("%s", msg)
+		}
+	}
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
 	if _, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
 		uerr := actions.ObjectExists(ctx, ns, runName)

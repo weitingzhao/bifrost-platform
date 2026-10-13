@@ -1,0 +1,562 @@
+{
+  "bifrost-deliver-platform-prod/main": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform-prod"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "main"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform-prod/main-pinned-ui": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform-prod"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "2222222222222222222222222222222222222222"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform-prod/no-revision": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform-prod"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "main"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform-prod/shared-name": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "release-next",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform-prod"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "release-next"
+        },
+        {
+          "name": "uiRevision",
+          "value": "release-next"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform-prod"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/main": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "main"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/main-pinned-ui": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "2222222222222222222222222222222222222222"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/no-revision": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "main",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "main"
+        },
+        {
+          "name": "uiRevision",
+          "value": "main"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bifrost-deliver-platform/shared-name": {
+    "apiVersion": "tekton.dev/v1",
+    "kind": "PipelineRun",
+    "metadata": {
+      "labels": {
+        "bifrost.io/revision": "release-next",
+        "bifrost.io/trigger": "platform-api",
+        "tekton.dev/pipeline": "bifrost-deliver-platform"
+      },
+      "name": "timestamp-name",
+      "namespace": "cicd"
+    },
+    "spec": {
+      "params": [
+        {
+          "name": "revision",
+          "value": "release-next"
+        },
+        {
+          "name": "uiRevision",
+          "value": "release-next"
+        }
+      ],
+      "pipelineRef": {
+        "name": "bifrost-deliver-platform"
+      },
+      "taskRunSpecs": [
+        {
+          "pipelineTaskName": "rollout",
+          "serviceAccountName": "tekton-deliver"
+        },
+        {
+          "pipelineTaskName": "gitops-sync",
+          "serviceAccountName": "tekton-deliver"
+        }
+      ],
+      "taskRunTemplate": {
+        "podTemplate": {
+          "nodeSelector": {
+            "kubernetes.io/arch": "amd64"
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "node-role.kubernetes.io/control-plane",
+              "operator": "Exists"
+            }
+          ]
+        }
+      },
+      "workspaces": [
+        {
+          "name": "build-context",
+          "volumeClaimTemplate": {
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "5Gi"
+                }
+              },
+              "storageClassName": "local-path"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
