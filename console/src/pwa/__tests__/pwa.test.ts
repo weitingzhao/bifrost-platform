@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { syncAppBadge } from '@/pwa/appBadge'
+import { buildIdentity, buildsDiffer, moduleScriptSrc } from '@/pwa/consoleBuild'
 import { registerServiceWorker } from '@/pwa/serviceWorker'
 
 function badgingNavigator() {
@@ -21,6 +22,18 @@ describe('app badge', () => {
 
   it('does nothing without the Badging API', () => {
     expect(() => syncAppBadge(3, {} as Navigator)).not.toThrow()
+  })
+})
+
+describe('console build identity', () => {
+  it('reads the hashed module script from a fresh index.html', () => {
+    const html =
+      '<!doctype html><script type="module" crossorigin src="/assets/index-new.js"></script>'
+    expect(moduleScriptSrc(html)).toBe('/assets/index-new.js')
+    expect(moduleScriptSrc('<!doctype html><p>offline</p>')).toBeNull()
+    expect(buildIdentity('https://ops.example/assets/index-new.js')).toBe('/assets/index-new.js')
+    expect(buildsDiffer('/assets/index-old.js', '/assets/index-new.js')).toBe(true)
+    expect(buildsDiffer('/assets/index-same.js', 'https://ops.example/assets/index-same.js')).toBe(false)
   })
 })
 

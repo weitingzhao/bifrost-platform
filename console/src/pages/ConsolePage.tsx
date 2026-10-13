@@ -20,6 +20,8 @@ import {
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 import { syncAppBadge } from '@/pwa/appBadge'
+import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
+import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   HOME_ROUTE,
   formatShellHash,
@@ -64,6 +66,11 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
   }
   const entry = shellNavEntry(location.id)
   return { title: entry.label, description: entry.question }
+}
+
+function ShellBuildBanner() {
+  const stale = useConsoleBuildDrift()
+  return <ConsoleBuildBanner stale={stale} />
 }
 
 function ConsolePageInner() {
@@ -151,6 +158,7 @@ function ConsolePageInner() {
             />
           </div>
           <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
+            {location.kind !== 'approval' ? <ShellBuildBanner /> : null}
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}

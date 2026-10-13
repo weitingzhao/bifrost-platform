@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
+import { act, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentThread } from '@/api/agentThreads'
@@ -45,6 +45,23 @@ function wrapper(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
+
+it('reports offline when the list query pauses before fetch starts', async () => {
+  installStorage()
+  window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'test-only')
+  vi.stubGlobal('fetch', vi.fn())
+  onlineManager.setOnline(false)
+  const view = render(wrapper(<NeedsYouPage />))
+  try {
+    expect(await screen.findByText('Could not read approvals — offline.')).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now.')).toBeNull()
+    expect(fetch).not.toHaveBeenCalled()
+  } finally {
+    view.unmount()
+    onlineManager.setOnline(true)
+    vi.unstubAllGlobals()
+  }
+})
 
 /** Health sources as PROD returned them on 2026-10-10: one warning alert firing. */
 function healthResponse(url: string): Response | null {
@@ -153,6 +170,7 @@ describe('NeedsYouPage', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     window.location.hash = ''
   })
@@ -670,5 +688,28 @@ describe('NeedsYouPage', () => {
     expect(block?.textContent).toContain('Could not read handled requests')
     expect(block?.textContent).not.toContain('Recently handled · 0')
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+  })
+
+  it('shows a failed approvals read and recovers it on the next interval', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(2026, 9, 12, 21, 36, 8))
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    let openCalls = 0
+    stubFetch(() => {
+      openCalls += 1
+      if (openCalls === 1) return json({ error: 'boom' }, 500)
+      return json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })]))
+    })
+    render(wrapper(<NeedsYouPage />))
+    expect(await screen.findByText('Could not read approvals — last tried 21:36:08')).toBeTruthy()
+    expect(screen.getByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(await screen.findByRole('region', { name: 'Decide' })).toBeTruthy()
+    expect(screen.getByText('1 waiting for you')).toBeTruthy()
+    expect(openCalls).toBeGreaterThanOrEqual(2)
   })
 })

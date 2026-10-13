@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react'
 import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { fetchLineage } from '@/api/lineage'
 import { readApprovalToken } from '@/api/approvals'
+import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { operatorToken } from '@/api/client'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
@@ -148,8 +149,8 @@ export function NeedsYouPage() {
     openBody = (
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
-          {hasReadToken
-            ? `Could not read approvals: ${openCount.reason}`
+          {query.isPaused ? 'Could not read approvals — offline.' : hasReadToken
+            ? approvalsReadFailure(query.errorUpdatedAt)
             : 'This device has no approval token. Save it once to see what waits for you here.'}
         </Note>
         <ApprovalTokenField

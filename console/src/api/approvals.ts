@@ -12,6 +12,30 @@ export const APPROVAL_TOKEN_STORAGE_KEY = 'bifrost-ops-approval-token'
 
 export const APPROVAL_HISTORY_LIMIT = 50
 
+/** A hung approvals read is an error after this long. */
+export const APPROVAL_READ_DEADLINE_MS = 15_000
+
+async function runWithDeadline<T>(
+  ms: number,
+  onTimeout: () => Error,
+  run: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, ms)
+  try {
+    return await run(controller.signal)
+  } catch (err) {
+    if (timedOut) throw onTimeout()
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export type ApprovalItem = PlatformApprovalRecord
 
 export type ApprovalDecision = {
@@ -154,31 +178,39 @@ export function recentClosed(rows: ApprovalItem[], limit = APPROVAL_HISTORY_LIMI
  * saved the approval token (the phone home-screen app) reads with that one, so the
  * token is entered once.
  */
-export async function viewerRead(prefix: string, path: string): Promise<Response> {
-  if (operatorToken() !== '') return authedFetch(prefix, path)
+export async function viewerRead(prefix: string, path: string, signal?: AbortSignal): Promise<Response> {
+  if (operatorToken() !== '') return authedFetch(prefix, path, signal == null ? {} : { signal })
   const headers = new Headers()
   const token = readApprovalToken()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(path, { headers })
+  const r = await fetch(path, signal == null ? { headers } : { headers, signal })
   if (!r.ok) throw await parseError(prefix, r)
   return r
 }
 
-function approvalsRead(path: string): Promise<Response> {
-  return viewerRead('approvals', path)
+function approvalsRead(path: string, signal: AbortSignal): Promise<Response> {
+  return viewerRead('approvals', path, signal)
+}
+
+async function readApprovals<T>(path: string, parse: (response: Response) => Promise<T>): Promise<T> {
+  return runWithDeadline(
+    APPROVAL_READ_DEADLINE_MS,
+    () => new Error('approvals read timed out'),
+    async signal => parse(await approvalsRead(path, signal)),
+  )
 }
 
 /** `open` is pending, approved, running, and unknown. `all` is every status. */
 export async function fetchApprovalList(status: 'pending' | 'open' | 'all'): Promise<ApprovalItem[]> {
-  const r = await approvalsRead(`/api/v1/approvals?status=${status}`)
-  return parseApprovalList(await r.json())
+  return readApprovals(`/api/v1/approvals?status=${status}`, async response => parseApprovalList(await response.json()))
 }
 
 export async function fetchApproval(id: string): Promise<ApprovalItem> {
-  const r = await approvalsRead(`/api/v1/approvals/${encodeURIComponent(id)}`)
-  const body: unknown = await r.json()
-  if (!isItem(body)) throw new Error('approvals: unexpected item')
-  return body
+  return readApprovals(`/api/v1/approvals/${encodeURIComponent(id)}`, async response => {
+    const body: unknown = await response.json()
+    if (!isItem(body)) throw new Error('approvals: unexpected item')
+    return body
+  })
 }
 
 export type ResolveOutcome = 'not_run' | 'succeeded' | 'failed'
