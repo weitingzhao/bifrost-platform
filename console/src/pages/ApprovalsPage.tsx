@@ -16,6 +16,7 @@ import {
   type ResolveOutcome,
 } from '@/api/approvals'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
+import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
 import {
   closedByYou,
   commandText,
@@ -638,7 +639,7 @@ export function ApprovalsPage() {
     setBusy(true)
     setActionError(null)
     setNotice(null)
-    const waitingTimer = setTimeout(() => setNotice('Still waiting for the server. Keep this page open.'), 30_000)
+    const waitingTimer = setTimeout(() => setNotice(APPROVAL_WAITING_NOTICE), 30_000)
     let needsCheck = false
     try {
       const decision = await postApprovalDecision(

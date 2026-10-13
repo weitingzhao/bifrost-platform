@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 const row = (status = 'pending', id = 'record-a') => buildPlatformApproval({ id, number: id === 'record-a' ? 57 : 58, status })
-const waiting = 'Still waiting for the server. Keep this page open.'
+const waiting = APPROVAL_WAITING_NOTICE
 const retry = 'The request is still pending. That attempt did not take effect. Try again.'
 let client: QueryClient
 let read: (id: string) => Promise<Response>
@@ -89,6 +90,28 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     expect(reads).toHaveLength(count)
   })
 
+  it('keeps approved decisions polling every 30 seconds until executed, then stops', async () => {
+    const button = await open(id); clock()
+    post = async () => { throw new TypeError('connection lost') }
+    read = async () => json(row('approved'))
+    fireEvent.click(button); await tick(1)
+    expect(screen.getByText('Approved. Running now.')).toBeTruthy()
+    expect(reads).toEqual([id, id])
+    await tick(29_999)
+    expect(reads).toEqual([id, id])
+    await tick(1)
+    expect(reads).toEqual([id, id, id])
+    await tick(1)
+    expect(screen.getByText('Approved. Running now.')).toBeTruthy()
+    read = async () => json(row('executed'))
+    await tick()
+    await tick(1)
+    expect(reads).toEqual([id, id, id, id])
+    expect(screen.getByText('This has run.')).toBeTruthy()
+    await tick(600_000)
+    expect(reads).toEqual([id, id, id, id])
+  })
+
   it('keeps successful POST cached under the read key when refresh fails (review 2)', async () => {
     const button = await open(id)
     read = async () => json({ error: 'unavailable' }, 503)
@@ -165,6 +188,51 @@ describe.each(['record-a', '57'])('record opened as %s', id => {
     expect(screen.getByText('This has run.')).toBeTruthy()
     await navigate(id)
     expect(screen.getByText('This failed.')).toBeTruthy()
+  })
+
+  it('puts A waiting notice on A when its 30 second timer fires while viewing B', async () => {
+    const button = await open(id); clock()
+    post = () => new Promise(() => undefined)
+    fireEvent.click(button)
+    await navigate(id === '57' ? '58' : 'record-b')
+    await tick(29_999)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-b')
+    expect(screen.queryByText(waiting)).toBeNull()
+    expect(screen.queryByText(/Checking the decision result|Could not read this request/)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Sending…' })).toBeNull()
+    await navigate(id)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-a')
+    expect(screen.getByText(waiting)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('keeps A late POST failure off B and reconciles A from the server on return', async () => {
+    const button = await open(id); clock()
+    let fail!: (error: Error) => void
+    post = () => new Promise((_resolve, reject) => { fail = reject })
+    fireEvent.click(button)
+    await navigate(id === '57' ? '58' : 'record-b')
+    read = async key => json(row(key === id ? 'approved' : 'pending', key === id ? 'record-a' : 'record-b'))
+    await act(async () => { fail(new TypeError('A late failure')) })
+    await tick(1)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-b')
+    expect(screen.getByText('Waiting for your decision.')).toBeTruthy()
+    expect(screen.queryByText(/A late failure|Checking the decision result|Could not read this request/)).toBeNull()
+    expect(screen.queryByText(waiting)).toBeNull()
+    expect(screen.queryByText(retry)).toBeNull()
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Sending…' })).toBeNull()
+    await navigate(id)
+    expect(document.querySelector('[data-open="true"]')?.id).toBe('approval-record-a')
+    expect(screen.getByText('Approved. Running now.')).toBeTruthy()
+    expect(screen.getByText('A late failure')).toBeTruthy()
+    expect(screen.queryByText('Waiting for your decision.')).toBeNull()
+    expect(screen.queryByText(retry)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
+    expect(client.getQueryData(['approvals', 'item', id])).toMatchObject({ id: 'record-a', status: 'approved' })
   })
 
   it('applies the same failure reconciliation and server reasons to reject', async () => {

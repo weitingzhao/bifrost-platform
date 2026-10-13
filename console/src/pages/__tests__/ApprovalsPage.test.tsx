@@ -13,10 +13,10 @@ import {
   buildPlatformApproval,
 } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
-const POST_DEADLINE =
-  'Still waiting for the server. Keep this page open.'
+const POST_DEADLINE = APPROVAL_WAITING_NOTICE
 const POST_NETWORK =
   'The request is still pending. That attempt did not take effect. Try again.'
 const NEWER_CONSOLE = 'A newer Console has been deployed. Reload before approving.'

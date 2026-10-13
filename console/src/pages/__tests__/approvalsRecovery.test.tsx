@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
+import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
 
 const checking = /Could not read this request\. Last attempt: .+Refresh this page/
 const retry = 'The request is still pending. That attempt did not take effect. Try again.'
@@ -111,7 +112,7 @@ it('shows still waiting at 30 seconds while POST is still hanging', async () => 
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   fireEvent.click(button)
   await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
-  expect(screen.getByText('Still waiting for the server. Keep this page open.')).toBeTruthy()
+  expect(screen.getByText(APPROVAL_WAITING_NOTICE)).toBeTruthy()
   expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
 })
 it('restores the button only after confirmation reads pending', async () => {
