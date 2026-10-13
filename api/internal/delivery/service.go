@@ -228,6 +228,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 			return resp, empty, inputErr
 		}
 	}
+	if isPlatformDelivery(pipelineName) {
+		if err := platformRunInputs(revision, extra); err != nil {
+			resp.Message = err.Error()
+			return resp, empty, err
+		}
+	}
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
 		rev = "main"
@@ -243,6 +249,15 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if msg := s.releaseWindowMessage(ctx, pipelineName, who); msg != "" {
 		resp.Message = msg
 		return resp, empty, fmt.Errorf("%s", msg)
+	}
+
+	// Keep the original pre-build gate and single top-level revision for all
+	// non-platform, non-CI pipelines, including unknown pipeline fallback.
+	if !isPlatformDelivery(pipelineName) && !isCIPipeline(pipelineName) {
+		if msg := s.legacyRunRefPreflight(ctx, pipelineName, rev); msg != "" {
+			resp.Message = msg
+			return resp, empty, fmt.Errorf("%s", msg)
+		}
 	}
 
 	dyn, err := s.buildDynamicClient()
@@ -308,11 +323,12 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, err
 	}
 
-	if msg := s.runRefPreflight(ctx, pipelineName, rev, ciRepo, spec, pipe); msg != "" {
-		resp.Message = msg
-		return resp, empty, fmt.Errorf("%s", msg)
+	if isPlatformDelivery(pipelineName) || isCIPipeline(pipelineName) {
+		if msg := s.runRefPreflight(ctx, pipelineName, rev, ciRepo, spec, pipe); msg != "" {
+			resp.Message = msg
+			return resp, empty, fmt.Errorf("%s", msg)
+		}
 	}
-
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)
 	if _, gerr := res.Get(ctx, runName, metav1.GetOptions{}); gerr == nil {
 		uerr := actions.ObjectExists(ctx, ns, runName)

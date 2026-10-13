@@ -16,44 +16,42 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	dynfake "k8s.io/client-go/dynamic/fake"
 	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestPipelineRepoRefParamCoverage(t *testing.T) {
-	for pipeline, repos := range pipelineMirrorRepos {
-		for _, repo := range repos {
-			if pipelineRepoRefParams[pipeline][repo] == "" {
-				t.Errorf("%s/%s has no ref param", pipeline, repo)
-			}
-		}
-	}
-}
-
 type pinnedMirror struct {
-	refs    map[string]string
-	missing map[string]bool
-	posts   map[string]int
-	gets    map[string]int
-	mode    string
+	refs      map[string]string
+	missing   map[string]bool
+	posts     map[string]int
+	gets      map[string]int
+	mode      string
+	paths     []string
+	afterSync map[string]int
 }
 
 func pinnedService(t *testing.T, name string, refs map[string]string, missing []string, mode string) (*Service, *dynfake.FakeDynamicClient, *pinnedMirror) {
 	t.Helper()
 	pipe := baselinePipelines(t)[name]
+	if pipe == nil {
+		pipe = &unstructured.Unstructured{Object: map[string]any{"apiVersion": "tekton.dev/v1", "kind": "Pipeline", "metadata": map[string]any{"name": name, "namespace": "cicd"}, "spec": map[string]any{}}}
+	}
 	s, dyn, _ := contractService(t, pipe, "present")
 	repos := reposForPipeline(name)
 	s.SetPolicy(&actuationpolicy.Policy{Mirrors: actuationpolicy.Mirrors{Repos: repos}})
 	window, _ := json.Marshal(map[string]any{"who": "tester", "what": sortedKeys(requiredRepoSet(name))})
-	s.SetClientsetForTest(k8sfake.NewSimpleClientset(
-		&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "ci", Labels: map[string]string{"kubernetes.io/arch": "amd64"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}},
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"}, Data: map[string]string{releaseWindowDataKey: string(window)}},
-	))
-	m := &pinnedMirror{refs: refs, missing: map[string]bool{}, posts: map[string]int{}, gets: map[string]int{}, mode: mode}
+	objects := []runtime.Object{&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "ci", Labels: map[string]string{"kubernetes.io/arch": "amd64"}}, Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{Type: corev1.NodeReady, Status: corev1.ConditionTrue}}}}}
+	if _, known := requiredRepos(name); known {
+		objects = append(objects, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: releaseWindowConfigMap, Namespace: "cicd"}, Data: map[string]string{releaseWindowDataKey: string(window)}})
+	}
+	s.SetClientsetForTest(k8sfake.NewSimpleClientset(objects...))
+	m := &pinnedMirror{refs: refs, missing: map[string]bool{}, posts: map[string]int{}, gets: map[string]int{}, mode: mode, afterSync: map[string]int{}}
 	for _, repo := range missing {
 		m.missing[repo] = true
 	}
 	s.httpClient = &http.Client{Transport: contractTransport(func(r *http.Request) (*http.Response, error) {
+		m.paths = append(m.paths, r.Method+" "+r.URL.Path)
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/"), "/")
 		repo := parts[0]
 		if _, known := refs[repo]; !known {
@@ -77,12 +75,20 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 			}
 		} else {
 			m.gets[repo]++
+			if m.posts[repo] > 0 && (mode == "delayed branch" || mode == "delayed tag" || mode == "delayed commit") {
+				m.afterSync[repo]++
+				if m.afterSync[repo] >= 3 {
+					m.missing[repo] = false
+				}
+			}
 			if strings.Contains(r.URL.Path, "/git/commits/") {
 				ref := parts[len(parts)-1]
 				if ref != refs[repo] {
 					t.Fatalf("%s probed ref %s, want %s", repo, ref, refs[repo])
 				}
-				if mode == "unknown commit" {
+				if mode == "platform unknown" && repo == "bifrost-platform" {
+					code = http.StatusInternalServerError
+				} else if mode == "unknown commit" {
 					code = http.StatusServiceUnavailable
 				} else if m.missing[repo] {
 					code = http.StatusNotFound
@@ -90,12 +96,14 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 					body = `{"sha":"` + ref + `"}`
 				}
 			} else if strings.HasSuffix(r.URL.Path, "/branches") {
-				if !m.missing[repo] && !callerParamSHA.MatchString(refs[repo]) {
+				if !m.missing[repo] && !callerParamSHA.MatchString(refs[repo]) && mode != "delayed tag" {
 					body = fmt.Sprintf(`[{"name":%q,"commit":{"id":%q}}]`, refs[repo], factSHA1)
 				}
 				if mode == "partial" {
 					code = http.StatusServiceUnavailable
 				}
+			} else if strings.HasSuffix(r.URL.Path, "/tags") && mode == "delayed tag" && !m.missing[repo] {
+				body = fmt.Sprintf(`[{"name":%q,"commit":{"sha":%q}}]`, refs[repo], factSHA1)
 			} else if !strings.HasSuffix(r.URL.Path, "/tags") {
 				t.Fatalf("unexpected GET %s", r.URL.Path)
 			}
@@ -153,6 +161,7 @@ func TestPinnedPlatformDelivery(t *testing.T) {
 			{name: "pinned", revision: factSHA1, ui: factSHA2},
 			{name: "main with pinned UI", revision: "main", ui: factSHA2},
 			{name: "platform missing", revision: factSHA1, ui: factSHA2, missing: []string{"bifrost-platform"}, sentence: fmt.Sprintf("bifrost-platform (ref %q)", factSHA1)},
+			{name: "platform unknown UI missing", revision: factSHA1, ui: factSHA2, mode: "platform unknown", missing: []string{"bifrost-ui"}, sentence: fmt.Sprintf("bifrost-ui (ref %q)", factSHA2)},
 			{name: "UI missing", revision: factSHA1, ui: factSHA2, missing: []string{"bifrost-ui"}, sentence: fmt.Sprintf("bifrost-ui (ref %q)", factSHA2)},
 			{name: "both missing", revision: factSHA1, ui: factSHA2, missing: []string{"bifrost-platform", "bifrost-ui"}, sentence: fmt.Sprintf("bifrost-platform (ref %q), bifrost-ui (ref %q)", factSHA1, factSHA2)},
 			{name: "omit UI", revision: factSHA1, missing: []string{"bifrost-ui"}, sentence: fmt.Sprintf("bifrost-ui (ref %q) — pass uiRevision", factSHA1)},
@@ -175,43 +184,10 @@ func TestPinnedPlatformDelivery(t *testing.T) {
 					params["uiRevision"] = tc.ui
 				}
 				assertPinnedCall(t, s, dyn, name, tc.revision, params, tc.sentence)
-				assertPinnedSync(t, m, len(tc.missing) > 0 && tc.mode != "partial")
+				assertPinnedSync(t, m, len(tc.missing) > 0 && tc.mode != "partial" && tc.name != "omit UI")
 			})
 		}
 	}
-}
-
-func TestPinnedTradeProdDelivery(t *testing.T) {
-	const name = "bifrost-deliver-prod"
-	params := map[string]string{"coreRevision": strings.Repeat("a", 40), "workerRevision": strings.Repeat("b", 40), "apiRevision": strings.Repeat("c", 40), "frontendRevision": strings.Repeat("d", 40), "infraRevision": strings.Repeat("e", 40), "uiRevision": strings.Repeat("f", 40)}
-	refs := map[string]string{}
-	for _, repo := range reposForPipeline(name) {
-		refs[repo] = factSHA1
-		if value, ok := params[pipelineRepoRefParams[name][repo]]; ok {
-			refs[repo] = value
-		}
-	}
-	for _, repo := range append([]string{""}, reposForPipeline(name)...) {
-		t.Run("missing="+repo, func(t *testing.T) {
-			missing := []string{}
-			sentence := ""
-			if repo != "" {
-				missing = append(missing, repo)
-				sentence = fmt.Sprintf("%s (ref %q)", repo, refs[repo])
-			}
-			s, dyn, m := pinnedService(t, name, refs, missing, "")
-			assertPinnedCall(t, s, dyn, name, factSHA1, params, sentence)
-			assertPinnedSync(t, m, repo != "")
-		})
-	}
-}
-
-func TestMergedRevisionIsProbed(t *testing.T) {
-	const name = "bifrost-deliver-platform-prod"
-	// Legacy uiRevision defaults to the original revision, even when params.revision overrides it.
-	s, dyn, m := pinnedService(t, name, platformRefs(factSHA2, factSHA1), nil, "")
-	assertPinnedCall(t, s, dyn, name, factSHA1, map[string]string{"revision": factSHA2}, "")
-	assertPinnedSync(t, m, false)
 }
 
 func TestCommitProbeErrorsAreUnknown(t *testing.T) {
@@ -246,16 +222,7 @@ func TestPinnedRunBaseline(t *testing.T) {
 	for name, want := range baseline {
 		params := map[string]string{"uiRevision": factSHA2}
 		refs := platformRefs(factSHA1, factSHA2)
-		if name == "bifrost-deliver-prod" {
-			params = map[string]string{"coreRevision": strings.Repeat("a", 40), "workerRevision": strings.Repeat("b", 40), "apiRevision": strings.Repeat("c", 40), "frontendRevision": strings.Repeat("d", 40), "infraRevision": strings.Repeat("e", 40), "uiRevision": strings.Repeat("f", 40)}
-			refs = map[string]string{}
-			for _, repo := range reposForPipeline(name) {
-				refs[repo] = factSHA1
-				if value, ok := params[pipelineRepoRefParams[name][repo]]; ok {
-					refs[repo] = value
-				}
-			}
-		}
+
 		s, dyn, m := pinnedService(t, name, refs, nil, "")
 		assertPinnedCall(t, s, dyn, name, factSHA1, params, "")
 		run := createdContractRun(t, dyn)

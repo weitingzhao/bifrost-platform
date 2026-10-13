@@ -276,6 +276,12 @@ func TestNonCICreatedRunsUnchangedFromMain(t *testing.T) {
 	for key, want := range baseline {
 		parts := strings.Split(key, "/")
 		name := parts[0]
+		// The frozen baseline still contains identical platform/UI SHAs, now
+		// explicitly refused by ruling 3 (TestPlatformSameSHARefused). Keep
+		// the fixture unchanged; TestNonCIRunsUnchangedFromMain checks its spec.
+		if isPlatformDelivery(name) {
+			continue
+		}
 		// This name has never had a workspace case; it is intentionally now refused.
 		if name == "bifrost-clone-frontend-smoke" {
 			continue

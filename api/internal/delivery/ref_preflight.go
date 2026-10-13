@@ -70,6 +70,48 @@ func (s *Service) repoRefStatus(ctx context.Context, repo, ref, user, pass strin
 	return RepoRefStatus{Repo: repo, Exists: false, Kind: "missing"}
 }
 
+// Preserve main 26a10b5's listing order and commit-error semantics outside
+// platform delivery and CI. In particular, a commit lookup error alone is missing.
+func (s *Service) legacyRepoRefStatus(ctx context.Context, repo, ref, user, pass string) RepoRefStatus {
+	branches, branchErr := s.fetchGiteaBranches(ctx, repo, user, pass)
+	if branchErr == nil {
+		for _, b := range branches {
+			if b.Name == ref {
+				return RepoRefStatus{Repo: repo, Exists: true, Kind: "branch", Commit: b.Commit}
+			}
+		}
+	}
+
+	tags, tagErr := s.fetchGiteaTags(ctx, repo, user, pass)
+	if tagErr == nil {
+		for _, t := range tags {
+			if t.Name == ref {
+				return RepoRefStatus{Repo: repo, Exists: true, Kind: "tag", Commit: t.Commit}
+			}
+		}
+	}
+
+	if shaRefPattern.MatchString(ref) {
+		if sha, ok, _ := s.giteaCommitExists(ctx, repo, ref, user, pass); ok {
+			return RepoRefStatus{Repo: repo, Exists: true, Kind: "commit", Commit: sha}
+		}
+	}
+
+	// Could not confirm presence. If either listing failed we don't have a full
+	// view, so report "error" (unknown) rather than a false "missing".
+	if branchErr != nil || tagErr != nil {
+		detail := ""
+		if branchErr != nil {
+			detail = "branches: " + branchErr.Error()
+		} else if tagErr != nil {
+			detail = "tags: " + tagErr.Error()
+		}
+		return RepoRefStatus{Repo: repo, Exists: false, Kind: "error", Detail: detail}
+	}
+
+	return RepoRefStatus{Repo: repo, Exists: false, Kind: "missing"}
+}
+
 // giteaCommitExists checks whether a commit SHA resolves in the repo.
 func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass string) (string, bool, error) {
 	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/git/commits/%s", giteaBaseURL(), giteaOrg, repo, sha)
@@ -153,7 +195,12 @@ func (s *Service) refPreflightAtRefs(ctx context.Context, pipelineName, revision
 		if ref == "" {
 			ref = rev
 		}
-		st := s.repoRefStatus(ctx, repo, ref, user, pass)
+		var st RepoRefStatus
+		if isPlatformDelivery(pipelineName) || isCIPipeline(pipelineName) {
+			st = s.repoRefStatus(ctx, repo, ref, user, pass)
+		} else {
+			st = s.legacyRepoRefStatus(ctx, repo, ref, user, pass)
+		}
 		statuses = append(statuses, st)
 		switch {
 		case st.Kind == "error":
@@ -245,48 +292,88 @@ func missingRunRefs(pf RefPreflightResponse, refs map[string]string) string {
 	return "revision is missing in: " + strings.Join(parts, ", ")
 }
 
+// Legacy delivery checks intentionally ignore run params and never sync.
+func (s *Service) legacyRunRefPreflight(ctx context.Context, name, revision string) string {
+	pf := s.refPreflightForRepos(ctx, name, revision, reposForPipeline(name))
+	if pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
+		return fmt.Sprintf("revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)", revision, strings.Join(pf.Missing, ", "))
+	}
+	return ""
+}
+
+func platformRunInputs(revision string, extra map[string]string) error {
+	if value, ok := extra["revision"]; ok && revision != "" && revision != value {
+		return fmt.Errorf("revision %q and params.revision %q must match", revision, value)
+	}
+	refs := map[string]string{"revision": revision}
+	for key, value := range extra {
+		if callerMayOverride(strings.TrimSpace(key)) {
+			refs[key] = value
+		}
+	}
+	for _, key := range sortedKeysString(refs) {
+		value := strings.TrimSpace(refs[key])
+		if shaRefPattern.MatchString(value) && !callerParamSHA.MatchString(value) {
+			return fmt.Errorf("%s %q: use the full 40-character lowercase SHA", key, value)
+		}
+	}
+	return nil
+}
+
+func sortedKeysString(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo string, spec map[string]any, pipe *unstructured.Unstructured) string {
 	repos := reposForPipeline(name)
 	if ciRepo != "" {
 		repos = []string{ciRepo}
 	}
 	refs := runRepoRefs(name, revision, spec, pipe, repos)
+	// A platform commit cannot be the UI commit. Reject before any mirror request.
+	if isPlatformDelivery(name) && callerParamSHA.MatchString(refs["bifrost-platform"]) && refs["bifrost-ui"] == refs["bifrost-platform"] {
+		return fmt.Sprintf("bifrost-ui (ref %q) — pass uiRevision for bifrost-ui", refs["bifrost-ui"])
+	}
 	pf := s.refPreflightAtRefs(ctx, name, revision, repos, refs)
-	if pf.Reachability != probe.ReachOK || len(pf.Missing) == 0 {
+	if len(pf.Missing) == 0 {
 		return ""
 	}
 	if ciRepo != "" {
+		if pf.Reachability != probe.ReachOK {
+			return ""
+		}
 		return fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", revision, ciRepo)
 	}
 	missing := missingRunRefs(pf, refs)
-	if (name == "bifrost-deliver-platform" || name == "bifrost-deliver-platform-prod") && refs["bifrost-ui"] == refs["bifrost-platform"] {
-		for _, repo := range pf.Missing {
-			if repo == "bifrost-ui" {
-				missing += " — pass uiRevision for bifrost-ui"
-			}
-		}
-	}
-	// Reuse the mirror allow-list, credentials and bounded commit polling. Branch
-	// and tag refs are rechecked by the same preflight after sync is requested.
+	originalMissing := missing
+	// Request one sync per repository, then give branches, tags and commits the
+	// same bounded polling. SyncMirrors with no commits only enqueues the fetches.
 	syncCtx, cancel := context.WithTimeout(ctx, mirrorSyncWait)
 	defer cancel()
-	commits := map[string]string{}
-	for _, repo := range pf.Missing {
-		if callerParamSHA.MatchString(refs[repo]) {
-			commits[repo] = refs[repo]
-		}
-	}
-	synced, err := s.SyncMirrors(syncCtx, repos, commits)
+	synced, err := s.SyncMirrors(syncCtx, repos, nil)
 	if err != nil || !synced.OK || syncCtx.Err() != nil {
 		return missing + "; mirror sync did not complete"
 	}
-	retry := s.refPreflightAtRefs(ctx, name, revision, repos, refs)
-	if retry.Reachability == probe.ReachOK && len(retry.Missing) > 0 {
-		message := missingRunRefs(retry, refs)
-		if strings.Contains(missing, "pass uiRevision") {
-			message += " — pass uiRevision for bifrost-ui"
+	for {
+		if syncCtx.Err() != nil {
+			return originalMissing + "; mirror sync did not complete"
 		}
-		return message
+		retry := s.refPreflightAtRefs(syncCtx, name, revision, repos, refs)
+		if syncCtx.Err() != nil {
+			return originalMissing + "; mirror sync did not complete"
+		}
+		if len(retry.Missing) == 0 {
+			return ""
+		}
+		select {
+		case <-syncCtx.Done():
+			return originalMissing + "; mirror sync did not complete"
+		case <-time.After(2 * time.Second):
+		}
 	}
-	return ""
 }
