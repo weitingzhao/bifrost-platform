@@ -16,7 +16,7 @@ import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
 const POST_DEADLINE =
-  'The request is still pending. That attempt did not take effect. Try again.'
+  'Still waiting for the server. Keep this page open.'
 const POST_NETWORK =
   'The request is still pending. That attempt did not take effect. Try again.'
 const NEWER_CONSOLE = 'A newer Console has been deployed. Reload before approving.'
@@ -648,7 +648,7 @@ describe('ApprovalsPage (request page)', () => {
     }).length
   }
 
-  it('shows a deadline error and re-reads once when approve never answers', async () => {
+  it('keeps a hanging approve disabled without starting reconciliation', async () => {
     const opened = pendingPage()
     let posts = 0
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -675,12 +675,12 @@ describe('ApprovalsPage (request page)', () => {
     })
     const card = document.getElementById('approval-ap-1')
     expect(card?.textContent).toContain(POST_DEADLINE)
-    expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(false)
-    expect(itemReads()).toBe(readsAtClick + 1)
+    expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
+    expect(itemReads()).toBe(readsAtClick)
     expect(posts).toBe(1)
   })
 
-  it('shows the request decided when a hanging approve was already approved', async () => {
+  it('continues waiting for POST even if the server may already have approved', async () => {
     pendingPage()
     let itemGets = 0
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -705,13 +705,12 @@ describe('ApprovalsPage (request page)', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000)
     })
-    expect(screen.getByText('Approved. Running now.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
-    expect(screen.queryByText(POST_DEADLINE)).toBeNull()
-    expect(itemGets).toBe(2)
+    expect(screen.getByText(POST_DEADLINE)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
+    expect(itemGets).toBe(1)
   })
 
-  it('shows a not-sent error and re-reads once when approve fails on the network', async () => {
+  it('retains the network reason and re-reads once before restoring pending buttons', async () => {
     const opened = pendingPage()
     let posts = 0
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -730,6 +729,7 @@ describe('ApprovalsPage (request page)', () => {
     const card = document.getElementById('approval-ap-1')
     expect(await screen.findByText(POST_NETWORK)).toBeTruthy()
     expect(card?.textContent).toContain(POST_NETWORK)
+    expect(screen.getByText(/Failed to fetch/)).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(false)
     expect(itemReads()).toBe(readsAtClick + 1)
     expect(posts).toBe(1)
@@ -752,6 +752,7 @@ describe('ApprovalsPage (request page)', () => {
     expect(await screen.findByText('Approved. Running now.')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
     expect(screen.queryByText(POST_NETWORK)).toBeNull()
+    expect(screen.getByText(/Failed to fetch/)).toBeTruthy()
     expect(itemGets).toBe(2)
   })
 

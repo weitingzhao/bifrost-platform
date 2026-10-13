@@ -9,11 +9,9 @@ import {
   formatTimeRemaining,
   formatWaited,
   isUnsetDecidedAt,
-  isUnknownApprovalPost,
   postApprovalDecision,
   postApprovalResolve,
   readApprovalToken,
-  unknownApprovalPostMessage,
   type ApprovalItem,
   type ResolveOutcome,
 } from '@/api/approvals'
@@ -53,6 +51,26 @@ import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 
 const MISSING_TOKEN =
   'Approve and Reject stay disabled until an approval token is saved in this browser. The console operator token is not used for these actions.'
+
+function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
+  const [records, setRecords] = useState<Record<string, T>>({})
+  const key = id ?? ''
+  return [records[key] ?? initial, value => setRecords(previous => ({ ...previous, [key]: value }))]
+}
+
+function isFinished(item: ApprovalItem): boolean {
+  return ['executed', 'failed', 'rejected', 'expired'].includes(item.status) || item.resolution != null
+}
+
+function keepDecision(old: unknown, fresh: unknown): ApprovalItem {
+  const previous = old as ApprovalItem | undefined
+  const next = fresh as ApprovalItem
+  if (previous != null && (
+    (isFinished(previous) && (next.status !== previous.status || (previous.resolution != null && next.resolution == null))) ||
+    (previous.status !== 'pending' && next.status === 'pending')
+  )) return previous
+  return next
+}
 
 function useDeepLinkId(): string | null {
   const [id, setId] = useState(() => approvalIdFromHash(window.location.hash))
@@ -298,6 +316,7 @@ function ApprovalCard({
   sending,
   staleBuild,
   actionError,
+  notice,
   closeError,
   rows,
   onApprove,
@@ -310,6 +329,7 @@ function ApprovalCard({
   sending: 'approve' | 'reject' | null
   staleBuild: boolean
   actionError: string | null
+  notice: string | null
   closeError: string | null
   rows: readonly ApprovalItem[] | undefined
   onApprove: (id: string) => void
@@ -364,14 +384,14 @@ function ApprovalCard({
           data-decision-banner
           className="m-0 max-w-full break-words rounded-[var(--control-radius)] border border-[var(--card-border)] bg-[var(--field-fill)] px-3 py-2 text-sm"
         >
-          {pending && actionError === 'Result not confirmed — checking the request.'
-            ? 'Checking the decision result.' : decisionBanner(item)}
+          {decisionBanner(item)}
         </p>
         {actionError != null ? (
           <p role="alert" className="m-0 text-sm text-destructive">
             {actionError}
           </p>
         ) : null}
+        {pending && notice != null ? <p role="status">{notice}</p> : null}
         {closed != null ? (
           <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
             {closed}
@@ -543,38 +563,28 @@ function ApprovalCard({
 export function ApprovalsPage() {
   const qc = useQueryClient()
   const id = useDeepLinkId()
+  const recordId = qc.getQueryData<ApprovalItem>(['approvals', 'item', id])?.id ?? id
   const [token, setToken] = useState(() => readApprovalToken())
-  const [busy, setBusy] = useState(false)
-  const [sending, setSending] = useState<'approve' | 'reject' | null>(null)
-  const sendingRef = useRef(false)
-  const [checkingId, setCheckingId] = useState<string | null>(null)
-  const readEpoch = useRef(0)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [closeError, setCloseError] = useState<string | null>(null)
+  const [busy, setBusy] = useRecordState(recordId, false)
+  const [sending, setSending] = useRecordState<'approve' | 'reject' | null>(recordId, null)
+  const locks = useRef(new Map<string | null, boolean>())
+  const [checkingId, setCheckingId] = useRecordState<string | null>(recordId, null)
+  const [actionError, setActionError] = useRecordState<string | null>(recordId, null)
+  const [notice, setNotice] = useRecordState<string | null>(recordId, null)
+  const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
   const hasToken = token !== ''
 
   const itemQ = useQuery({
     queryKey: ['approvals', 'item', id],
-    queryFn: async () => {
-      const epoch = readEpoch.current
-      const fresh = await fetchApproval(id ?? '')
-      if (epoch !== readEpoch.current) {
-        return qc.getQueryData<ApprovalItem>(['approvals', 'item', id]) ?? fresh
-      }
-      return fresh
-    },
-    structuralSharing: (old, fresh) => {
-      const previous = old as ApprovalItem | undefined
-      const next = fresh as ApprovalItem
-      return previous != null && previous.status !== 'pending' && next.status === 'pending' ? previous : next
-    },
+    queryFn: () => fetchApproval(id ?? ''),
+    structuralSharing: keepDecision,
     enabled: id != null,
     retry: false,
     refetchInterval: query => {
       if (busy) return false
       const data = query.state.data
-      if (data == null || data.status === 'pending') return NEEDS_YOU_REFRESH_MS
+      if (data == null || !isFinished(data)) return NEEDS_YOU_REFRESH_MS
       return false
     },
   })
@@ -586,39 +596,50 @@ export function ApprovalsPage() {
     retry: false,
   })
 
+  function storeRecord(readId: string | null, fresh: ApprovalItem) {
+    qc.setQueryData(['approvals', 'item', readId], old => keepDecision(old, fresh))
+    // Already-opened aliases belong to the same record, but keep their read keys.
+    qc.setQueriesData<ApprovalItem>({ queryKey: ['approvals', 'item'] }, old =>
+      old?.id === fresh.id ? keepDecision(old, fresh) : old)
+  }
+
   useEffect(() => {
     if (checkingId == null) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const check = async () => {
       try {
-        const fresh = await fetchApproval(checkingId)
+        const readId = id ?? checkingId
+        const fresh = await fetchApproval(readId)
         if (cancelled) return
-        qc.setQueryData(['approvals', 'item', checkingId], fresh)
-        const confirmed = qc.getQueryData<ApprovalItem>(['approvals', 'item', checkingId])
-        setActionError(confirmed?.status === 'pending'
+        storeRecord(readId, fresh)
+        const confirmed = qc.getQueryData<ApprovalItem>(['approvals', 'item', readId])
+        setNotice(confirmed?.status === 'pending'
           ? 'The request is still pending. That attempt did not take effect. Try again.'
           : null)
         setCheckingId(null)
-        sendingRef.current = false
+        locks.current.set(recordId, false)
         setBusy(false)
       } catch {
-        if (!cancelled) timer = setTimeout(() => { void check() }, NEEDS_YOU_REFRESH_MS)
+        if (!cancelled) {
+          setNotice(`Could not read this request. Last attempt: ${new Date().toLocaleString()}. Refresh this page to check again.`)
+          timer = setTimeout(() => { void check() }, NEEDS_YOU_REFRESH_MS)
+        }
       }
     }
     void check()
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [checkingId, qc])
+  }, [checkingId, qc, recordId, id])
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
-    if (!hasToken || sendingRef.current || staleBuild) return
-    sendingRef.current = true
-    readEpoch.current += 1
-    void qc.cancelQueries({ queryKey: ['approvals', 'item', requestId] })
+    if (!hasToken || locks.current.get(recordId) || staleBuild) return
+    locks.current.set(recordId, true)
     setSending(path)
     setBusy(true)
     setActionError(null)
-    let isUnknownOutcome = false
+    setNotice(null)
+    const waitingTimer = setTimeout(() => setNotice('Still waiting for the server. Keep this page open.'), 30_000)
+    let needsCheck = false
     try {
       const decision = await postApprovalDecision(
         requestId,
@@ -633,27 +654,26 @@ export function ApprovalsPage() {
           : { reason: reason ?? '' },
       )
       if (decision.status != null && decision.status !== 'pending' && opened != null) {
-        qc.setQueryData(['approvals', 'item', requestId], { ...opened, ...decision })
+        storeRecord(id, { ...opened, ...decision })
         void qc.invalidateQueries({ queryKey: ['approvals'] })
       } else {
-        isUnknownOutcome = true
-        setActionError('Result not confirmed — checking the request.')
-        setCheckingId(requestId)
+        needsCheck = true
+        setNotice('Checking the decision result.')
+        setCheckingId(id)
       }
     } catch (err) {
-      if (isUnknownApprovalPost(err)) {
-        isUnknownOutcome = true
-        setActionError(unknownApprovalPostMessage(err))
-        setCheckingId(requestId)
-      } else {
-        setActionError(err instanceof Error ? err.message : 'Approval action failed')
-      }
+      needsCheck = true
+      setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      setNotice('Checking the decision result.')
+      setCheckingId(id)
     } finally {
+      clearTimeout(waitingTimer)
       setSending(null)
       // Reconciliation owns the lock until a record has actually been read.
       // State updates are asynchronous; the synchronous ref covers the same turn.
-      if (!isUnknownOutcome) {
-        sendingRef.current = false
+      if (!needsCheck) {
+        setNotice(null)
+        locks.current.set(recordId, false)
         setBusy(false)
       }
     }
@@ -714,6 +734,7 @@ export function ApprovalsPage() {
               sending={sending}
               staleBuild={staleBuild}
               actionError={actionError}
+              notice={notice}
               closeError={closeError}
               rows={allQ.data}
               onApprove={requestId => void decide(requestId, 'approve')}

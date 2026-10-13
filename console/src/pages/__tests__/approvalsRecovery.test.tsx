@@ -5,7 +5,7 @@ import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 
-const checking = 'Result not confirmed — checking the request.'
+const checking = /Could not read this request\. Last attempt: .+Refresh this page/
 const retry = 'The request is still pending. That attempt did not take effect. Try again.'
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 const pending = () => buildPlatformApproval({ id: 'ap-recovery' })
@@ -62,7 +62,7 @@ it('retains successful POST status after refresh returns 503', async () => {
   await screen.findByText('executed')
   expect(screen.queryByRole('button', { name: /Approve/ })).toBeNull()
 })
-it('keeps an unknown outcome locked after 503 and retries the record', async () => {
+it('keeps a failed POST locked after unreadable confirmation and retries the record', async () => {
   const button = await open()
   post = async () => { throw new TypeError('offline') }
   read = async () => json({ error: 'unavailable' }, 503)
@@ -99,7 +99,7 @@ it.each([409, 500])('immediately reconciles a %s response including a status fie
   await screen.findByText('Approved. Running now.')
   expect(reads).toBe(2)
 })
-it('shows checking at 30 seconds while the confirming GET is still hanging', async () => {
+it('shows still waiting at 30 seconds while POST is still hanging', async () => {
   const button = await open()
   vi.mocked(fetch).mockImplementation((input, init) => {
     if (init?.method === 'POST') return new Promise((_resolve, reject) => {
@@ -111,10 +111,8 @@ it('shows checking at 30 seconds while the confirming GET is still hanging', asy
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   fireEvent.click(button)
   await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
-  expect(screen.getByText(checking)).toBeTruthy()
-  expect(screen.queryByText('Waiting for your decision.')).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Sending…' })).toBeNull()
-  expect(screen.getByRole('button', { name: /Approve/ }).hasAttribute('disabled')).toBe(true)
+  expect(screen.getByText('Still waiting for the server. Keep this page open.')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Sending…' }).hasAttribute('disabled')).toBe(true)
 })
 it('restores the button only after confirmation reads pending', async () => {
   const button = await open()

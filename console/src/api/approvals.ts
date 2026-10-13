@@ -15,42 +15,6 @@ export const APPROVAL_HISTORY_LIMIT = 50
 /** A hung approvals read is an error after this long. */
 export const APPROVAL_READ_DEADLINE_MS = 15_000
 
-/** A hung approve / reject is an error after this long. */
-export const APPROVAL_POST_DEADLINE_MS = 30_000
-
-export const APPROVAL_POST_DEADLINE_MESSAGE =
-  'Result not confirmed — checking the request.'
-
-export const APPROVAL_POST_NETWORK_MESSAGE =
-  'Result not confirmed — checking the request.'
-
-/** The approve / reject POST reached its deadline. Nothing in the response says it was decided. */
-export class ApprovalDeadlineError extends Error {
-  constructor() {
-    super(APPROVAL_POST_DEADLINE_MESSAGE)
-    this.name = 'ApprovalDeadlineError'
-  }
-}
-
-class ApprovalPostResponseError extends Error {
-  constructor(message: string, readonly status: number) { super(message) }
-}
-
-/** A conflict or server error can follow a decision already made. */
-export function isUnknownApprovalPost(err: unknown): boolean {
-  if (err instanceof ApprovalPostResponseError) return err.status === 409 || err.status >= 500
-  if (err instanceof ApprovalDeadlineError) return true
-  if (err instanceof TypeError) return true
-  if (err instanceof SyntaxError) return true
-  if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NetworkError')) return true
-  return err instanceof Error && err.name === 'AbortError'
-}
-
-export function unknownApprovalPostMessage(err: unknown): string {
-  if (err instanceof ApprovalDeadlineError) return APPROVAL_POST_DEADLINE_MESSAGE
-  return APPROVAL_POST_NETWORK_MESSAGE
-}
-
 async function runWithDeadline<T>(
   ms: number,
   onTimeout: () => Error,
@@ -275,22 +239,16 @@ export async function postApprovalDecision(
   path: 'approve' | 'reject',
   body: { channel: 'console'; approval_line: string; params_hash: string } | { reason: string },
 ): Promise<ApprovalDecision> {
-  return runWithDeadline(APPROVAL_POST_DEADLINE_MS, () => new ApprovalDeadlineError(), async signal => {
-    const headers = new Headers()
-    headers.set('Content-Type', 'application/json')
-    headers.set('Authorization', `Bearer ${token}`)
-    const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal,
-    })
-    if (!r.ok) {
-      const error = await parseError('approvals', r)
-      throw new ApprovalPostResponseError(error.message, r.status)
-    }
-    return (await r.json()) as ApprovalDecision
+  const headers = new Headers()
+  headers.set('Content-Type', 'application/json')
+  headers.set('Authorization', `Bearer ${token}`)
+  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
   })
+  if (!r.ok) throw await parseError('approvals', r)
+  return (await r.json()) as ApprovalDecision
 }
 
 export type ApprovalCreateBody = {
