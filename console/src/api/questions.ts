@@ -1,5 +1,6 @@
 import { actionLink, type ActionLinkView } from '@/api/agentProgress'
 import { operatorToken } from '@/api/client'
+import { containsSignInData, signInSafeError } from '@/lib/signInError'
 
 /**
  * Owner questions. Shapes follow
@@ -368,7 +369,7 @@ export function storedAnswerWords(answer: QuestionAnswer): string {
   return 'an answer with no option and no text'
 }
 
-async function readError(response: Response): Promise<QuestionHttpError> {
+async function readError(response: Response, token: string): Promise<QuestionHttpError> {
   let body: unknown
   let parsed = false
   try {
@@ -378,20 +379,30 @@ async function readError(response: Response): Promise<QuestionHttpError> {
     body = null
   }
   const message = questionErrorMessage(body, response.status)
+  const rawError = `${JSON.stringify(body)} ${message.message}`
+  if (containsSignInData(rawError, token)) {
+    return new QuestionHttpError(signInSafeError(rawError, token, response.status), response.status, null, null, parsed)
+  }
   return new QuestionHttpError(message.message, response.status, message.answer, message.recordStatus, parsed)
 }
 
-function readHeaders(): Headers {
+function readHeaders(token: string): Headers {
   const headers = new Headers()
   headers.set('X-Bifrost-Session', QUESTION_SESSION)
-  const token = operatorToken()
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
   return headers
 }
 
 async function questionsRead(path: string): Promise<Response> {
-  const response = await fetch(path, { headers: readHeaders() })
-  if (!response.ok) throw await readError(response)
+  const token = operatorToken()
+  let response: Response
+  try {
+    response = await fetch(path, { headers: readHeaders(token) })
+  } catch (error) {
+    if (error instanceof Error) error.message = signInSafeError(error.message, token)
+    throw error
+  }
+  if (!response.ok) throw await readError(response, token)
   return response
 }
 
@@ -444,8 +455,7 @@ export function parsePostedAnswer(value: unknown): { ok: true; posted: PostedAns
 }
 
 /** Admin token from the top-right sign-in. */
-export async function postQuestionAnswer(id: string, option: string, text: string): Promise<PostedAnswer> {
-  const token = operatorToken()
+export async function postQuestionAnswer(id: string, option: string, text: string, token = operatorToken()): Promise<PostedAnswer> {
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('X-Bifrost-Session', QUESTION_SESSION)
@@ -455,7 +465,7 @@ export async function postQuestionAnswer(id: string, option: string, text: strin
     headers,
     body: JSON.stringify(answerRequestBody(option, text)),
   })
-  if (!response.ok) throw await readError(response)
+  if (!response.ok) throw await readError(response, token)
   const parsed = parsePostedAnswer(await response.json())
   if (!parsed.ok) throw new Error(parsed.reason)
   return parsed.posted

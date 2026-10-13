@@ -179,8 +179,8 @@ export function approvalFailureStatus(err: unknown): number | null {
   return typeof status === 'number' ? status : null
 }
 
-async function rejectApproval(response: Response): Promise<never> {
-  const error = await parseError('approvals', response)
+async function rejectApproval(response: Response, token: string): Promise<never> {
+  const error = await parseError('approvals', response, token)
   throw Object.assign(error, { status: response.status })
 }
 
@@ -225,7 +225,7 @@ export async function postApprovalResolve(
     headers,
     body: JSON.stringify(body),
   })
-  if (!r.ok) await rejectApproval(r)
+  if (!r.ok) await rejectApproval(r, token)
   return (await r.json()) as ApprovalDecision
 }
 
@@ -243,7 +243,7 @@ export async function postApprovalDecision(
     headers,
     body: JSON.stringify(body),
   })
-  if (!r.ok) await rejectApproval(r)
+  if (!r.ok) await rejectApproval(r, token)
   return (await r.json()) as ApprovalDecision
 }
 

@@ -87,6 +87,7 @@ function QuestionSession({ id }: { id: string }) {
 
   return (
     <Frame state={state}>
+      {shown == null && blocked != null ? <p className="m-0 text-sm">{blocked}</p> : null}
       {state === 'loading' ? <p className="m-0 text-sm">{`Opening ${id}…`}</p> : null}
       {state === 'unreadable' ? (
         <p className="m-0 break-words text-sm text-destructive">
@@ -97,6 +98,9 @@ function QuestionSession({ id }: { id: string }) {
         <p className="m-0 break-words text-sm text-destructive">
           {`Could not refresh this question: ${itemQ.error instanceof Error ? itemQ.error.message : 'request failed'}`}
         </p>
+      ) : null}
+      {unreadable || stale ? (
+        <button type="button" disabled={itemQ.isFetching} onClick={() => { void itemQ.refetch() }}>Retry</button>
       ) : null}
       {shown != null ? (
         <NowClock>

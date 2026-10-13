@@ -46,7 +46,6 @@ import {
   statusInPlainWords,
 } from '@/pages/approvalSiblings'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
 import {
   DECISION_REJECTED,
   decisionBlockReason,
@@ -654,7 +653,7 @@ export function ApprovalsPage() {
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
-    const session = getPlatformOperatorToken()
+    const session = auth.token
     locks.current.set(recordId, true)
     postsInFlight.current += 1
     setReloadHeld(true)
@@ -714,7 +713,7 @@ export function ApprovalsPage() {
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
     if (decisionBlockReason(auth) != null) return
-    const session = getPlatformOperatorToken()
+    const session = auth.token
     setBusy(true)
     setCloseError(null)
     try {
@@ -744,6 +743,7 @@ export function ApprovalsPage() {
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
       ) : (
         <section aria-label={`Approval ${id}`} className="flex w-full min-w-0 flex-col gap-2">
+          {opened == null && blocked != null ? <p className="m-0 text-sm">{blocked}</p> : null}
           {itemQ.isPaused ? <p role="alert">Could not read approvals — offline.</p> : null}
           {itemQ.isLoading && !itemQ.isPaused ? <p className="m-0 text-sm">Opening {id}…</p> : null}
           {itemQ.isError ? (

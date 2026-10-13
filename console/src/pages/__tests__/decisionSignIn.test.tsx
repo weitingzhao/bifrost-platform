@@ -23,7 +23,7 @@ const LEGACY = 'guard6-legacy-field-secret'
 const QUESTION_ID = 'q_0123456789abcdef'
 const CONTRACT = join(dirname(fileURLToPath(import.meta.url)), '../../../../api/internal/questions/testdata/contract')
 
-const ABSENT = 'Not signed in. Sign in at the top right with the admin token to decide.'
+const ABSENT = 'Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'
 const UNRECOGNIZED = 'This sign-in was not recognized. Sign in at the top right with the admin token to decide.'
 const OPERATOR = 'Signed in as operator, not admin. Sign in at the top right with the admin token to decide.'
 const CHECKING = 'Checking your sign-in…'

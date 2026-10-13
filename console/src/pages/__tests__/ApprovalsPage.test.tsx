@@ -98,7 +98,7 @@ describe('ApprovalsPage (request page)', () => {
     expect(screen.queryByText('Decided at')).toBeNull()
     expect(screen.getByText(/"app": "rocket"/)).toBeTruthy()
     expect(
-      await screen.findByText('Not signed in. Sign in at the top right with the admin token to decide.'),
+      await screen.findByText('Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'),
     ).toBeTruthy()
     expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(screen.getByRole('button', { name: 'Approve gitops_sync_app' }).hasAttribute('disabled')).toBe(

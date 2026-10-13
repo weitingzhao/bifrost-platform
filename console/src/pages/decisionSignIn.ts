@@ -1,4 +1,5 @@
 import type { PlatformAuthContextValue } from '@/hooks/platformAuthContext'
+import { signInSafeError } from '@/lib/signInError'
 
 /** Shown while the same capabilities read the top-right badge uses is still in flight. */
 export const SIGN_IN_CHECKING = 'Checking your sign-in…'
@@ -6,7 +7,7 @@ export const SIGN_IN_CHECKING = 'Checking your sign-in…'
 /** The capabilities read failed. This is not "signed out" and not "admin". */
 export const SIGN_IN_UNREADABLE = 'Could not read your sign-in. Decisions stay unavailable until it can be read.'
 
-export const SIGN_IN_ABSENT = 'Not signed in. Sign in at the top right with the admin token to decide.'
+export const SIGN_IN_ABSENT = 'Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'
 
 export const SIGN_IN_UNRECOGNIZED =
   'This sign-in was not recognized. Sign in at the top right with the admin token to decide.'
@@ -39,7 +40,5 @@ export function decisionBlockReason(auth: SignInAuth): string | null {
 
 /** Keep a saved token out of any sentence the page draws. */
 export function scrubSecret(text: string, secret: string): string {
-  const value = secret.trim()
-  if (value === '') return text
-  return text.split(value).join('')
+  return signInSafeError(text, secret)
 }

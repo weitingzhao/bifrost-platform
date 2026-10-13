@@ -8,8 +8,7 @@ import {
   type QuestionAnswer,
 } from '@/api/questions'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { getPlatformOperatorToken } from '@/lib/platformAuth'
-import { DECISION_REJECTED, decisionBlockReason, scrubSecret } from '@/pages/decisionSignIn'
+import { DECISION_REJECTED, decisionBlockReason } from '@/pages/decisionSignIn'
 import {
   isTerminalPhase,
   presentedQuestion,
@@ -97,10 +96,11 @@ export function useAnswerSend(questionId: string) {
   }
 
   async function runSend(snap: ConfirmSnapshot): Promise<void> {
+    const token = authRef.current.token
     dispatchAnswerSend({ type: 'confirm', id: snap.id })
     await clientRef.current.cancelQueries({ queryKey: questionItemKey(snap.id) })
     try {
-      const posted = await postQuestionAnswer(snap.id, snap.letter, snap.text)
+      const posted = await postQuestionAnswer(snap.id, snap.letter, snap.text, token)
       if (posted.id !== snap.id) {
         dispatchAnswerSend({ type: 'postFailed', id: snap.id })
         await reread(snap.id)
@@ -131,7 +131,8 @@ export function useAnswerSend(questionId: string) {
           id: snap.id,
           recordStatus: err.recordStatus,
           answer: err.answer,
-          message: scrubSecret(err.message, getPlatformOperatorToken()),
+          // HTTP error text was checked with the bearer captured by the API.
+          message: err.message,
         })
         rememberRejection(snap.id, err.answer, err.recordStatus)
         return

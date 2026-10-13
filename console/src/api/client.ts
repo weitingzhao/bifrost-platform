@@ -1,4 +1,5 @@
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
+import { containsSignInData, signInSafeError } from '@/lib/signInError'
 
 /** Current operator bearer token (empty string when unauthenticated). */
 export function operatorToken(): string {
@@ -6,7 +7,7 @@ export function operatorToken(): string {
 }
 
 /** Parse platform-api error JSON into a prefixed Error. */
-export async function parseError(prefix: string, r: Response): Promise<Error> {
+export async function parseError(prefix: string, r: Response, token = ''): Promise<Error> {
   let detail = `HTTP ${r.status}`
   try {
     const body = (await r.json()) as {
@@ -15,6 +16,8 @@ export async function parseError(prefix: string, r: Response): Promise<Error> {
       detail?: string
       hint?: string
     }
+    const raw = JSON.stringify(body)
+    if (containsSignInData(raw, token)) return new Error(signInSafeError(raw, token, r.status))
     const head = body.error ?? body.message ?? detail
     const parts = [head]
     if (body.detail != null && body.detail.trim() !== '' && body.detail !== head) {
@@ -27,7 +30,7 @@ export async function parseError(prefix: string, r: Response): Promise<Error> {
   } catch {
     // keep status detail
   }
-  return new Error(`${prefix}: ${detail}`)
+  return new Error(signInSafeError(`${prefix}: ${detail}`, token, r.status))
 }
 
 /**
@@ -43,8 +46,14 @@ export async function authedFetch(
   const headers = new Headers(init.headers)
   headers.set('Content-Type', 'application/json')
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(input, { ...init, headers })
-  if (!r.ok) throw await parseError(prefix, r)
+  let r: Response
+  try {
+    r = await fetch(input, { ...init, headers })
+  } catch (error) {
+    if (error instanceof Error) error.message = signInSafeError(error.message, token)
+    throw error
+  }
+  if (!r.ok) throw await parseError(prefix, r, token)
   return r
 }
 
