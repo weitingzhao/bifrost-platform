@@ -293,6 +293,34 @@ func TestApprovalDisconnectKeepsLeaseDuringSynchronousExecution(t *testing.T) {
 	}
 }
 
+// The lease test above renews by hand. This one leaves the ticker alone: only
+// the heartbeat that runPlatform starts can move the stored lease here.
+func TestApprovalHeartbeatRenewsLeaseWhileExecutorRuns(t *testing.T) {
+	s, _ := lifetimeService(t)
+	s.heartbeatTick = 5 * time.Millisecond
+	a := lifetimeApproval(t, s)
+	var calls atomic.Int32
+	actions.RegisterExecutor(a.Action, func(context.Context, map[string]any) (any, error) {
+		calls.Add(1)
+		stored, _ := s.find(a.ID)
+		// Past the first lease, inside the grace after it.
+		now := stored.Execution.LeaseExpiresAt.Add(time.Second)
+		s.SetClock(func() time.Time { return now })
+		want := now.Add(leaseFor)
+		for end := time.Now().Add(2 * time.Second); time.Now().Before(end); time.Sleep(2 * time.Millisecond) {
+			cur, _ := s.find(a.ID)
+			if cur.Status == StatusRunning && cur.Execution.LeaseExpiresAt.Equal(want) {
+				return nil, nil
+			}
+		}
+		t.Error("the heartbeat did not renew the lease while the executor was running")
+		return nil, nil
+	})
+	t.Cleanup(func() { actions.RegisterExecutor(a.Action, nil) })
+	out := s.approve(context.Background(), a.ID, "console")
+	assertLifetimeResult(t, s, a, out, StatusExecuted, calls.Load())
+}
+
 type disconnectedWriter struct{ *httptest.ResponseRecorder }
 
 func (w disconnectedWriter) Write([]byte) (int, error) {

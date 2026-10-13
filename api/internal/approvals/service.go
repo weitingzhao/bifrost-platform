@@ -37,6 +37,9 @@ type Service struct {
 	// held is a finish whose write failed, keyed by approval id. The action
 	// already ran; only the write is retried.
 	held map[string]heldFinish
+	// heartbeatTick replaces heartbeatEvery for a synchronous run; zero means the
+	// default. Tests shorten it to watch the lease move while an executor runs.
+	heartbeatTick time.Duration
 }
 
 // AutoApprover returns the id of a signed release policy that already covers

@@ -98,9 +98,10 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 	} else {
 		stop := make(chan struct{})
 		done := make(chan struct{})
+		every := s.heartbeatInterval()
 		safego.Go("approvals.lease", func() {
 			defer close(done)
-			t := time.NewTicker(heartbeatEvery)
+			t := time.NewTicker(every)
 			defer t.Stop()
 			for {
 				select {
@@ -123,6 +124,18 @@ func (s *Service) runPlatform(ctx context.Context, rec Approval) (Approval, []ev
 		<-done
 	}
 	return s.finishPlatform(rec.ID, lease, started, result, execErr)
+}
+
+// heartbeatInterval is how often a synchronous run renews its lease. A run
+// may now last until the record's deadline, far longer than the lease and the
+// grace after it, so the record stays running only while this heartbeat does.
+func (s *Service) heartbeatInterval() time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.heartbeatTick > 0 {
+		return s.heartbeatTick
+	}
+	return heartbeatEvery
 }
 
 // heldFinish is a result whose final write did not land. The action is not
