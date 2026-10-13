@@ -77,8 +77,8 @@ export function useNeedsYou() {
   const silentSectionCount = silent.length + lost.length + (capacityActive ? 1 : 0)
 
   const openCount = knownOrPending(
-    openQ.isError,
-    openQ.error,
+    openQ.isError || openQ.isPaused,
+    openQ.isPaused ? new Error('Could not read approvals — offline.') : openQ.error,
     openQ.data,
     'approvals request failed',
     waitingCount(groups, 0),
@@ -106,8 +106,8 @@ export function useNeedsYou() {
   const recent = mergeHandled([...approvalRows, ...threadRows, ...questionRows])
 
   let recentCount: NeedsYouCount
-  if (allQ.isError) {
-    recentCount = { state: 'unknown', reason: reasonOf(allQ.error, 'approvals request failed') }
+  if (allQ.isError || allQ.isPaused) {
+    recentCount = { state: 'unknown', reason: allQ.isPaused ? 'Could not read approvals — offline.' : reasonOf(allQ.error, 'approvals request failed') }
   } else if (allQ.data == null || (threadsQuery.data == null && !threadsQuery.isError)) {
     recentCount = { state: 'loading' }
   } else {

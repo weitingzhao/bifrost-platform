@@ -149,7 +149,7 @@ export function NeedsYouPage() {
     openBody = (
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
-          {hasReadToken
+          {query.isPaused ? 'Could not read approvals — offline.' : hasReadToken
             ? approvalsReadFailure(query.errorUpdatedAt)
             : 'This device has no approval token. Save it once to see what waits for you here.'}
         </Note>

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,6 +45,23 @@ function wrapper(children: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
+
+it('reports offline when the list query pauses before fetch starts', async () => {
+  installStorage()
+  window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, 'test-only')
+  vi.stubGlobal('fetch', vi.fn())
+  onlineManager.setOnline(false)
+  const view = render(wrapper(<NeedsYouPage />))
+  try {
+    expect(await screen.findByText('Could not read approvals — offline.')).toBeTruthy()
+    expect(screen.queryByText('Nothing needs you right now.')).toBeNull()
+    expect(fetch).not.toHaveBeenCalled()
+  } finally {
+    view.unmount()
+    onlineManager.setOnline(true)
+    vi.unstubAllGlobals()
+  }
+})
 
 /** Health sources as PROD returned them on 2026-10-10: one warning alert firing. */
 function healthResponse(url: string): Response | null {

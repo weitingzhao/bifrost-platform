@@ -364,7 +364,8 @@ function ApprovalCard({
           data-decision-banner
           className="m-0 max-w-full break-words rounded-[var(--control-radius)] border border-[var(--card-border)] bg-[var(--field-fill)] px-3 py-2 text-sm"
         >
-          {decisionBanner(item)}
+          {pending && actionError === 'Result not confirmed — checking the request.'
+            ? 'Checking the decision result.' : decisionBanner(item)}
         </p>
         {actionError != null ? (
           <p role="alert" className="m-0 text-sm text-destructive">
@@ -546,6 +547,8 @@ export function ApprovalsPage() {
   const [busy, setBusy] = useState(false)
   const [sending, setSending] = useState<'approve' | 'reject' | null>(null)
   const sendingRef = useRef(false)
+  const [checkingId, setCheckingId] = useState<string | null>(null)
+  const readEpoch = useRef(0)
   const [actionError, setActionError] = useState<string | null>(null)
   const [closeError, setCloseError] = useState<string | null>(null)
   const staleBuild = useConsoleBuildDrift()
@@ -553,7 +556,19 @@ export function ApprovalsPage() {
 
   const itemQ = useQuery({
     queryKey: ['approvals', 'item', id],
-    queryFn: () => fetchApproval(id ?? ''),
+    queryFn: async () => {
+      const epoch = readEpoch.current
+      const fresh = await fetchApproval(id ?? '')
+      if (epoch !== readEpoch.current) {
+        return qc.getQueryData<ApprovalItem>(['approvals', 'item', id]) ?? fresh
+      }
+      return fresh
+    },
+    structuralSharing: (old, fresh) => {
+      const previous = old as ApprovalItem | undefined
+      const next = fresh as ApprovalItem
+      return previous != null && previous.status !== 'pending' && next.status === 'pending' ? previous : next
+    },
     enabled: id != null,
     retry: false,
     refetchInterval: query => {
@@ -571,14 +586,41 @@ export function ApprovalsPage() {
     retry: false,
   })
 
+  useEffect(() => {
+    if (checkingId == null) return
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const check = async () => {
+      try {
+        const fresh = await fetchApproval(checkingId)
+        if (cancelled) return
+        qc.setQueryData(['approvals', 'item', checkingId], fresh)
+        const confirmed = qc.getQueryData<ApprovalItem>(['approvals', 'item', checkingId])
+        setActionError(confirmed?.status === 'pending'
+          ? 'The request is still pending. That attempt did not take effect. Try again.'
+          : null)
+        setCheckingId(null)
+        sendingRef.current = false
+        setBusy(false)
+      } catch {
+        if (!cancelled) timer = setTimeout(() => { void check() }, NEEDS_YOU_REFRESH_MS)
+      }
+    }
+    void check()
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [checkingId, qc])
+
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (!hasToken || sendingRef.current || staleBuild) return
     sendingRef.current = true
+    readEpoch.current += 1
+    void qc.cancelQueries({ queryKey: ['approvals', 'item', requestId] })
     setSending(path)
     setBusy(true)
     setActionError(null)
+    let isUnknownOutcome = false
     try {
-      await postApprovalDecision(
+      const decision = await postApprovalDecision(
         requestId,
         token,
         path,
@@ -590,22 +632,30 @@ export function ApprovalsPage() {
             }
           : { reason: reason ?? '' },
       )
-      await qc.invalidateQueries({ queryKey: ['approvals'] })
+      if (decision.status != null && decision.status !== 'pending' && opened != null) {
+        qc.setQueryData(['approvals', 'item', requestId], { ...opened, ...decision })
+        void qc.invalidateQueries({ queryKey: ['approvals'] })
+      } else {
+        isUnknownOutcome = true
+        setActionError('Result not confirmed — checking the request.')
+        setCheckingId(requestId)
+      }
     } catch (err) {
       if (isUnknownApprovalPost(err)) {
-        const fresh = await fetchApproval(requestId).catch(() => null)
-        if (fresh != null) {
-          qc.setQueryData(['approvals', 'item', requestId], fresh)
-          if (fresh.status !== 'pending') return
-        }
+        isUnknownOutcome = true
         setActionError(unknownApprovalPostMessage(err))
+        setCheckingId(requestId)
       } else {
         setActionError(err instanceof Error ? err.message : 'Approval action failed')
       }
     } finally {
-      sendingRef.current = false
       setSending(null)
-      setBusy(false)
+      // Reconciliation owns the lock until a record has actually been read.
+      // State updates are asynchronous; the synchronous ref covers the same turn.
+      if (!isUnknownOutcome) {
+        sendingRef.current = false
+        setBusy(false)
+      }
     }
   }
 
@@ -648,7 +698,8 @@ export function ApprovalsPage() {
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
       ) : (
         <section aria-label={`Approval ${id}`} className="flex w-full min-w-0 flex-col gap-2">
-          {itemQ.isLoading ? <p className="m-0 text-sm">Opening {id}…</p> : null}
+          {itemQ.isPaused ? <p role="alert">Could not read approvals — offline.</p> : null}
+          {itemQ.isLoading && !itemQ.isPaused ? <p className="m-0 text-sm">Opening {id}…</p> : null}
           {itemQ.isError ? (
             <p role="alert" className="m-0 text-sm text-destructive">
               {approvalsReadFailure(itemQ.errorUpdatedAt)}

@@ -16,9 +16,9 @@ import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 
 const POST_DEADLINE =
-  'Not sent — no answer from the platform after 30 s. Nothing was decided. Try again.'
+  'The request is still pending. That attempt did not take effect. Try again.'
 const POST_NETWORK =
-  'Not sent — the platform could not be reached. Nothing was decided. Try again.'
+  'The request is still pending. That attempt did not take effect. Try again.'
 const NEWER_CONSOLE = 'A newer Console has been deployed. Reload before approving.'
 
 function installModuleScript(src: string): void {

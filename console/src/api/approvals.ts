@@ -19,10 +19,10 @@ export const APPROVAL_READ_DEADLINE_MS = 15_000
 export const APPROVAL_POST_DEADLINE_MS = 30_000
 
 export const APPROVAL_POST_DEADLINE_MESSAGE =
-  'Not sent — no answer from the platform after 30 s. Nothing was decided. Try again.'
+  'Result not confirmed — checking the request.'
 
 export const APPROVAL_POST_NETWORK_MESSAGE =
-  'Not sent — the platform could not be reached. Nothing was decided. Try again.'
+  'Result not confirmed — checking the request.'
 
 /** The approve / reject POST reached its deadline. Nothing in the response says it was decided. */
 export class ApprovalDeadlineError extends Error {
@@ -32,10 +32,16 @@ export class ApprovalDeadlineError extends Error {
   }
 }
 
-/** Deadline, or the POST never produced an HTTP response. A 4xx/5xx is an answer. */
+class ApprovalPostResponseError extends Error {
+  constructor(message: string, readonly status: number) { super(message) }
+}
+
+/** A conflict or server error can follow a decision already made. */
 export function isUnknownApprovalPost(err: unknown): boolean {
+  if (err instanceof ApprovalPostResponseError) return err.status === 409 || err.status >= 500
   if (err instanceof ApprovalDeadlineError) return true
   if (err instanceof TypeError) return true
+  if (err instanceof SyntaxError) return true
   if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NetworkError')) return true
   return err instanceof Error && err.name === 'AbortError'
 }
@@ -279,7 +285,10 @@ export async function postApprovalDecision(
       body: JSON.stringify(body),
       signal,
     })
-    if (!r.ok) throw await parseError('approvals', r)
+    if (!r.ok) {
+      const error = await parseError('approvals', r)
+      throw new ApprovalPostResponseError(error.message, r.status)
+    }
     return (await r.json()) as ApprovalDecision
   })
 }
