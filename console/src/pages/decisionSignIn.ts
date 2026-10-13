@@ -4,8 +4,12 @@ import { signInSafeError } from '@/lib/signInError'
 /** Shown while the same capabilities read the top-right badge uses is still in flight. */
 export const SIGN_IN_CHECKING = 'Checking your sign-in…'
 
-/** The capabilities read failed. This is not "signed out" and not "admin". */
-export const SIGN_IN_UNREADABLE = 'Could not read your sign-in. Decisions stay unavailable until it can be read.'
+/**
+ * The capabilities read failed. This is not "signed out" and not "admin", whatever role was read before it.
+ * The page reads again on its own (PlatformAuthProvider), so the sentence says so.
+ */
+export const SIGN_IN_UNREADABLE =
+  'Could not read your sign-in. Retrying automatically; decisions stay unavailable until it can be read.'
 
 export const SIGN_IN_ABSENT = 'Not signed in. Sign in once at the top right with the admin token; this browser will remember it.'
 

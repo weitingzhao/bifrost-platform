@@ -27,7 +27,7 @@ const ABSENT = 'Not signed in. Sign in once at the top right with the admin toke
 const UNRECOGNIZED = 'This sign-in was not recognized. Sign in at the top right with the admin token to decide.'
 const OPERATOR = 'Signed in as operator, not admin. Sign in at the top right with the admin token to decide.'
 const CHECKING = 'Checking your sign-in…'
-const UNREADABLE = 'Could not read your sign-in. Decisions stay unavailable until it can be read.'
+const UNREADABLE = 'Could not read your sign-in. Retrying automatically; decisions stay unavailable until it can be read.'
 const REJECTED = 'The server did not accept this sign-in as admin. Sign in again at the top right with the current admin token.'
 const WAIT_RELOAD = 'A newer Console has been deployed. Wait for this decision to finish before reloading.'
 

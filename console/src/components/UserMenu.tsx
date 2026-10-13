@@ -32,12 +32,15 @@ export function UserMenu({
   const [open, setOpen] = useState(false)
   const [showTokenForm, setShowTokenForm] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
-  const { token, caps, capsLoading, setToken, signOut, refreshCapabilities } =
+  const { token, caps, capsLoading, capsError, setToken, signOut, refreshCapabilities } =
     usePlatformAuth()
 
   const role = (caps?.role ?? 'viewer').toLowerCase()
   const isAuthenticated = caps?.authenticated === true
-  const isInvalidToken = token !== '' && !isAuthenticated && !capsLoading
+  // The read failed and no role was read before it: the role is unknown. That is not a refused token. `Invalid` is
+  // only for a sign-in the server answered about and did not recognize.
+  const isUnreadable = capsError && caps == null
+  const isInvalidToken = token !== '' && !isAuthenticated && !capsLoading && !isUnreadable
 
   function handleConnect() {
     const next = tokenInput.trim()
@@ -79,9 +82,11 @@ export function UserMenu({
           title={
             isAuthenticated
               ? `User menu — ${role} · authenticated`
-              : isInvalidToken
-                ? 'User menu — invalid token'
-                : 'User menu — session and shell'
+              : isUnreadable
+                ? 'User menu — could not read the role; retrying'
+                : isInvalidToken
+                  ? 'User menu — invalid token'
+                  : 'User menu — session and shell'
           }
           aria-label="User menu"
         >
@@ -94,7 +99,7 @@ export function UserMenu({
                 : 'platform-auth-badge--warn',
             )}
           >
-            {capsLoading ? '…' : isAuthenticated ? role : isInvalidToken ? 'Invalid' : 'Guest'}
+            {capsLoading ? '…' : isAuthenticated ? role : isUnreadable ? 'Unknown' : isInvalidToken ? 'Invalid' : 'Guest'}
           </span>
         </Button>
       </DropdownMenuTrigger>
@@ -102,11 +107,15 @@ export function UserMenu({
         <DropdownMenuLabel>Session</DropdownMenuLabel>
         <DropdownMenuGroup>
           <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
-            <span className={`badge-ui ${platformAuthRoleBadgeClass(role)}`}>{role}</span>
+            <span className={`badge-ui ${platformAuthRoleBadgeClass(role)}`}>
+              {isUnreadable ? 'unknown' : role}
+            </span>
             {isAuthenticated ? (
               <span className={`badge-ui ${platformAuthAuthenticatedBadgeClass()}`}>
                 Authenticated
               </span>
+            ) : isUnreadable ? (
+              <span className="badge-ui platform-auth-badge--warn">Role unreadable</span>
             ) : isInvalidToken ? (
               <span className="badge-ui platform-auth-badge--warn">Invalid token</span>
             ) : (

@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
-import { fetchApproval, postApprovalDecision } from '@/api/approvals'
+import { fetchApproval, postApprovalDecision, postApprovalResolve } from '@/api/approvals'
 import { fetchQuestion, fetchQuestionList, postQuestionAnswer } from '@/api/questions'
+import { UserMenu } from '@/components/UserMenu'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
@@ -34,8 +35,19 @@ function Controls() {
   return <><button onClick={() => auth.setToken(A)}>Login A</button><button onClick={() => auth.setToken(B)}>Login B</button>
     <button onClick={auth.signOut}>Logout</button><button onClick={auth.refreshCapabilities}>Check role</button>
     <output data-testid="role">{auth.caps?.role ?? 'none'}</output>
+    <button disabled={!auth.canOperate}>Probe operator action</button>
+    <button disabled={!auth.canAdmin}>Probe admin action</button>
     <button disabled={decisionBlockReason(auth) != null}>Probe decision</button>
     <p>{decisionBlockReason(auth)}</p></>
+}
+/**
+ * A render below the provider that leaves the provider itself alone, as typing in the top-right field does. After
+ * one, saving a value that changes nothing does not render the provider again, so the role is read again only if
+ * the provider reads it itself.
+ */
+function RenderBelow() {
+  const [count, setCount] = useState(0)
+  return <button onClick={() => setCount(count + 1)}>Render below {count}</button>
 }
 function mount(page?: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -62,6 +74,37 @@ async function enabled(name: string) {
   return button
 }
 async function flush() { await act(async () => { await vi.advanceTimersByTimeAsync(10) }) }
+const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+const pause = () => act(async () => { await new Promise(done => setTimeout(done, 30)) })
+
+const GUEST = { authenticated: false, role: 'viewer', can_operate: false, can_admin: false }
+const CHECKING = 'Checking your sign-in…'
+const UNREADABLE = 'Could not read your sign-in. Retrying automatically; decisions stay unavailable until it can be read.'
+const UNRECOGNIZED = 'This sign-in was not recognized. Sign in at the top right with the admin token to decide.'
+const REJECTED = 'The server did not accept this sign-in as admin. Sign in again at the top right with the current admin token.'
+const STILL_PENDING = 'The request is still pending. That attempt did not take effect. Try again.'
+const topRight = <UserMenu opsApiHealthy onRefresh={() => undefined} />
+const roleReads = () => vi.mocked(fetch).mock.calls.filter(call => String(call[0]).includes('/auth/capabilities'))
+const posts = () => vi.mocked(fetch).mock.calls.filter(call => call[1]?.method === 'POST')
+// An open menu hides the rest of the page from the accessibility tree; these look past that.
+const approve = () => screen.getByRole('button', { name: 'Approve gitops_sync_app', hidden: true })
+const userMenu = () => screen.getByRole('button', { name: 'User menu', hidden: true })
+function openUserMenu() {
+  fireEvent.pointerDown(userMenu(), { button: 0, ctrlKey: false, pointerType: 'mouse', pointerId: 1 })
+  fireEvent.click(userMenu())
+}
+async function saveAtTopRight(value: string) {
+  openUserMenu()
+  fireEvent.click(await screen.findByRole('button', { name: 'Change token' }))
+  fireEvent.change(screen.getByPlaceholderText('Platform operator token…'), { target: { value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+}
+const unknownResult = () => json(buildPlatformApproval({ id: 'ap-recovery', status: 'unknown', error: 'lease lost' }))
+async function submitClose() {
+  fireEvent.click(await screen.findByLabelText('It did not run'))
+  fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'checked' } })
+  fireEvent.click(await enabled('Close this request'))
+}
 
 beforeEach(() => {
   const values = new Map<string, string>()
@@ -148,8 +191,9 @@ describe('roles belong to one sign-in', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(15_010) })
     expect(screen.getByText(/Could not read your sign-in/)).toBeTruthy()
     expect(signals[0]?.aborted).toBe(true)
-    await act(async () => { await vi.advanceTimersByTimeAsync(60_010) })
-    expect(reads).toBeGreaterThanOrEqual(2)
+    // After a failed read the next one comes ten seconds later, not a minute.
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_010) })
+    expect(reads).toBe(2)
     fireEvent.click(screen.getByText('Check role'))
     await flush()
     expect(reads).toBe(3)
@@ -168,6 +212,206 @@ describe('roles belong to one sign-in', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(60_010) })
     expect(reads).toBe(2)
     expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
+  })
+})
+
+describe('the same sign-in saved again', () => {
+  it('resets the role and reads it again when setToken gets the token already saved', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    let reads = 0
+    const next = deferred<Response>()
+    installFetch(url => url.includes('/auth/capabilities') ? (++reads === 1 ? json(caps(true)) : next.promise) : undefined)
+    const client = mount(<RenderBelow />)
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
+    fireEvent.click(screen.getByText(/Render below/))
+    const watched = client.getQueryCache().find({ queryKey: ['platform', 'auth', 'capabilities', B] })
+    fireEvent.click(screen.getByText('Login B'))
+    await screen.findByText(CHECKING)
+    expect(screen.getByTestId('role')).toHaveTextContent('none')
+    expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
+    expect(reads).toBe(2)
+    expect(bearer(roleReads().at(-1)?.[1])).toBe(`Bearer ${B}`)
+    // The role query the page watches was reset in place, not removed and built again.
+    expect(watched).toBeDefined()
+    expect(client.getQueryCache().find({ queryKey: ['platform', 'auth', 'capabilities', B] })).toBe(watched)
+    await act(async () => { next.resolve(json(caps(false))) })
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
+  })
+
+  it('reads the role again when the token already saved is saved again at the top right', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let known = true
+    installFetch((url, init) => {
+      if (url.includes('/auth/capabilities')) return json(known ? caps(true) : GUEST)
+      if (init?.method === 'POST') return json({ error: 'admin token required' }, 401)
+    })
+    mount(<>{topRight}<ApprovalsPage /></>)
+    await enabled('Approve gitops_sync_app')
+    known = false // the server stopped accepting this token; the page has not polled yet
+    const before = roleReads().length
+    await saveAtTopRight(B)
+    await waitFor(() => expect(approve()).toBeDisabled())
+    await waitFor(() => expect(screen.getAllByText(UNRECOGNIZED).length).toBeGreaterThan(0))
+    expect(userMenu().textContent).toBe('Invalid')
+    const fresh = roleReads().slice(before)
+    expect(fresh.length).toBeGreaterThan(0)
+    expect(fresh.every(call => bearer(call[1]) === `Bearer ${B}`)).toBe(true)
+    fireEvent.click(approve())
+    expect(posts()).toHaveLength(0)
+  })
+
+  it('after a refused approve, saving the same token again reads the role again and the button stays off with the reason', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let known = true
+    installFetch((url, init) => {
+      if (url.includes('/auth/capabilities')) return json(known ? caps(true) : GUEST)
+      if (init?.method === 'POST') return json({ error: 'admin token required' }, 401)
+    })
+    mount(<>{topRight}<ApprovalsPage /></>)
+    const button = await enabled('Approve gitops_sync_app')
+    known = false // the server starts refusing this token
+    fireEvent.click(button)
+    await screen.findByText(REJECTED)
+    await screen.findByText(STILL_PENDING)
+    await waitFor(() => expect(screen.getAllByText(UNRECOGNIZED).length).toBeGreaterThan(0))
+    const before = roleReads().length
+    await saveAtTopRight(B)
+    await waitFor(() => expect(roleReads().length).toBeGreaterThan(before))
+    expect(bearer(roleReads().at(-1)?.[1])).toBe(`Bearer ${B}`)
+    await waitFor(() => expect(screen.getAllByText(UNRECOGNIZED).length).toBeGreaterThan(0))
+    expect(approve()).toBeDisabled()
+    expect(posts()).toHaveLength(1)
+    // The role on the page is the live one: the next read is sent and its answer shows.
+    known = true
+    fireEvent.click(screen.getByText('Check role'))
+    await waitFor(() => expect(approve()).not.toBeDisabled())
+  })
+
+  it('reads an admin role at once when the same token is saved again after the role read had failed', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let up = false
+    installFetch(url => url.includes('/auth/capabilities') ? (up ? json(caps(true)) : json({ error: 'starting' }, 503)) : undefined)
+    mount(<>{topRight}<ApprovalsPage /></>)
+    expect(await screen.findByRole('button', { name: 'Approve gitops_sync_app' })).toBeDisabled()
+    await waitFor(() => expect(screen.getAllByText(UNREADABLE).length).toBeGreaterThan(0))
+    up = true // the platform is back; the page's own retry is still seconds away
+    await saveAtTopRight(B)
+    await waitFor(() => expect(approve()).not.toBeDisabled())
+    expect(userMenu().textContent).toBe('admin')
+    expect(screen.queryByText(UNREADABLE)).toBeNull()
+  })
+
+  it('refreshCapabilities sends one new read, also after the role query was removed from under the page', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    let admin = true
+    installFetch(url => url.includes('/auth/capabilities') ? json(caps(admin)) : undefined)
+    const client = mount()
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
+    let before = roleReads().length
+    fireEvent.click(screen.getByText('Check role'))
+    await pause()
+    expect(roleReads().length - before).toBe(1)
+    act(() => client.removeQueries({ queryKey: ['platform', 'auth', 'capabilities'] }))
+    admin = false
+    before = roleReads().length
+    fireEvent.click(screen.getByText('Check role'))
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
+    await pause()
+    expect(roleReads().length - before).toBe(1)
+    expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
+  })
+
+  it('refreshCapabilities still sends a read after a sign-out while already signed out', async () => {
+    let admin = false
+    installFetch(url => url.includes('/auth/capabilities') ? json(caps(admin)) : undefined)
+    mount(<RenderBelow />)
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('operator'))
+    fireEvent.click(screen.getByText(/Render below/))
+    fireEvent.click(screen.getByText('Logout'))
+    admin = true
+    const before = roleReads().length
+    fireEvent.click(screen.getByText('Check role'))
+    await waitFor(() => expect(screen.getByTestId('role')).toHaveTextContent('admin'))
+    expect(roleReads().length - before).toBe(1)
+  })
+})
+
+describe('role reads that are still running or failed', () => {
+  async function settle() { for (let i = 0; i < 5; i++) await advance(10) }
+
+  it('keeps Approve usable while a routine role re-read is in flight', async () => {
+    vi.useFakeTimers()
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let reads = 0
+    const second = deferred<Response>()
+    installFetch(url => url.includes('/auth/capabilities') ? (++reads === 2 ? second.promise : json(caps(true))) : undefined)
+    mount(<ApprovalsPage />)
+    await settle()
+    expect(approve()).not.toBeDisabled()
+    await advance(60_000)
+    expect(reads).toBe(2) // the routine re-read is out and has not answered
+    expect(approve()).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Probe decision' })).not.toBeDisabled()
+    expect(screen.queryByText(CHECKING)).toBeNull()
+    await act(async () => { second.resolve(json(caps(true))); await vi.advanceTimersByTimeAsync(10) })
+    expect(approve()).not.toBeDisabled()
+  })
+
+  it('after a routine re-read fails: decisions wait and say why, the badge and operator controls keep the last role, and a read ten seconds later restores decisions', async () => {
+    vi.useFakeTimers()
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let reads = 0
+    installFetch(url => url.includes('/auth/capabilities') ? (++reads === 2 ? json({ error: 'bad gateway' }, 502) : json(caps(true))) : undefined)
+    mount(<>{topRight}<ApprovalsPage /></>)
+    await settle()
+    expect(approve()).not.toBeDisabled()
+    await advance(60_000)
+    expect(reads).toBe(2)
+    expect(approve()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Probe decision' })).toBeDisabled()
+    expect(screen.getAllByText(UNREADABLE).length).toBeGreaterThan(0)
+    expect(userMenu().textContent).toBe('admin')
+    expect(userMenu().getAttribute('title')).toBe('User menu — admin · authenticated')
+    expect(screen.getByTestId('role')).toHaveTextContent('admin')
+    expect(screen.getByRole('button', { name: 'Probe operator action' })).not.toBeDisabled()
+    // The other admin controls (the cluster page) go on as on main; only decisions wait for a read that succeeds.
+    expect(screen.getByRole('button', { name: 'Probe admin action' })).not.toBeDisabled()
+    await advance(9_000)
+    expect(reads).toBe(2)
+    expect(approve()).toBeDisabled()
+    await advance(1_100)
+    expect(reads).toBe(3)
+    expect(approve()).not.toBeDisabled()
+    expect(screen.queryByText(UNREADABLE)).toBeNull()
+    await advance(50_000) // back to the routine minute
+    expect(reads).toBe(3)
+    await advance(10_100)
+    expect(reads).toBe(4)
+  })
+
+  it('calls a first role read that failed unknown, not an invalid token', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    installFetch(url => url.includes('/auth/capabilities') ? json({ error: 'starting' }, 503) : undefined)
+    mount(topRight)
+    await waitFor(() => expect(userMenu().textContent).toBe('Unknown'))
+    expect(userMenu().getAttribute('title')).toBe('User menu — could not read the role; retrying')
+    expect(screen.getByText(UNREADABLE)).toBeTruthy()
+    openUserMenu()
+    await screen.findByText('Role unreadable')
+    expect(document.body.textContent).not.toMatch(/invalid/i)
+  })
+
+  it('still calls a token the server does not recognize invalid', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    installFetch(url => url.includes('/auth/capabilities') ? json(GUEST) : undefined)
+    mount(topRight)
+    await waitFor(() => expect(userMenu().textContent).toBe('Invalid'))
+    expect(userMenu().getAttribute('title')).toBe('User menu — invalid token')
   })
 })
 
@@ -226,6 +470,7 @@ describe('errors never reflect the sending sign-in', () => {
       () => postQuestionAnswer(ID, 'a', ''),
       () => fetchApproval('ap-recovery'),
       () => postApprovalDecision('ap-recovery', B, 'reject', { reason: 'wait' }),
+      () => postApprovalResolve('ap-recovery', B, { outcome: 'not_run', note: 'checked' }),
     ]) {
       window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
       const response = deferred<Response>()
@@ -307,6 +552,53 @@ describe('errors never reflect the sending sign-in', () => {
     await act(async () => { response.resolve(json({ error: `reflected ${leak}` }, 400)) })
     await screen.findByText(/details are hidden/)
     expect(document.body.innerHTML).not.toContain(leak)
+  })
+
+  it.each(leaks)('hides %s in a Close this request error that arrives after logout', async leak => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    const response = deferred<Response>()
+    installFetch((url, init) => init?.method === 'POST' ? response.promise : url.includes('/approvals/') ? unknownResult() : undefined)
+    mount(<ApprovalsPage />)
+    await submitClose()
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    fireEvent.click(screen.getByText('Logout'))
+    await act(async () => { response.resolve(json({ error: `reflected ${leak}` }, 400)) })
+    await screen.findByText(/details are hidden/)
+    expect(document.body.innerHTML).not.toContain(leak)
+  })
+
+  it.each(leaks)('hides %s when Close this request fails without an answer from the server', async leak => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    installFetch((url, init) => {
+      if (init?.method === 'POST') return Promise.reject(new TypeError(`fetch failed for Bearer ${leak}`))
+      if (url.includes('/approvals/')) return unknownResult()
+    })
+    mount(<ApprovalsPage />)
+    await submitClose()
+    await screen.findByText(/details are hidden/)
+    expect(document.body.innerHTML).not.toContain(leak)
+  })
+
+  it.each([401, 403])('rereads the role and holds Close this request when the server refuses it with HTTP %s', async status => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, B)
+    window.location.hash = '#approvals?id=ap-recovery'
+    let reads = 0
+    const next = deferred<Response>()
+    installFetch((url, init) => {
+      if (url.includes('/auth/capabilities')) return ++reads === 1 ? json(caps(true)) : next.promise
+      if (init?.method === 'POST') return json({ error: 'admin token required' }, status)
+      if (url.includes('/approvals/')) return unknownResult()
+    })
+    mount(<ApprovalsPage />)
+    await submitClose()
+    await screen.findByText(REJECTED)
+    await waitFor(() => expect(reads).toBe(2))
+    expect(screen.getByRole('button', { name: 'Close this request' })).toBeDisabled()
+    expect(screen.getAllByText(CHECKING).length).toBeGreaterThan(0)
+    await act(async () => { next.resolve(json(caps(true))) })
+    await enabled('Close this request')
   })
 
   it.each([401, 403])('rereads roles when Confirm answer is refused with HTTP %s', async status => {
