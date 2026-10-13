@@ -81,12 +81,22 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 					m.missing[repo] = false
 				}
 			}
+			transient := false
+			if m.posts[repo] > 0 && repo == "bifrost-ui" && (mode == "poll error missing" || mode == "poll error recover") && strings.Contains(r.URL.Path, "/git/commits/") {
+				m.afterSync[repo]++
+				transient = m.afterSync[repo] == 1
+				if mode == "poll error recover" && m.afterSync[repo] >= 3 {
+					m.missing[repo] = false
+				}
+			}
 			if strings.Contains(r.URL.Path, "/git/commits/") {
 				ref := parts[len(parts)-1]
 				if ref != refs[repo] {
 					t.Fatalf("%s probed ref %s, want %s", repo, ref, refs[repo])
 				}
-				if mode == "platform unknown" && repo == "bifrost-platform" {
+				if transient {
+					code = http.StatusInternalServerError
+				} else if mode == "platform unknown" && repo == "bifrost-platform" {
 					code = http.StatusInternalServerError
 				} else if mode == "unknown commit" {
 					code = http.StatusServiceUnavailable

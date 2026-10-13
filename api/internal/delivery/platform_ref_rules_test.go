@@ -38,7 +38,7 @@ func TestPlatformRevisionFromParamsIsEffective(t *testing.T) {
 
 func TestPlatformInvalidInputsNoMirrorRequest(t *testing.T) {
 	for _, name := range []string{"bifrost-deliver-platform", "bifrost-deliver-platform-prod"} {
-		for _, ref := range []string{factSHA1[:7], factSHA1[:39], strings.Repeat("A", 40), strings.Repeat("A", 7)} {
+		for _, ref := range []string{strings.Repeat("a", 7), strings.Repeat("a", 39), strings.Repeat("A", 40), strings.Repeat("A", 7)} {
 			for _, param := range []string{"", "revision", "uiRevision"} {
 				t.Run(name+"/"+param+"/"+ref, func(t *testing.T) {
 					s, dyn, m := pinnedService(t, name, platformRefs(factSHA1, factSHA2), nil, "")
@@ -209,5 +209,54 @@ func TestPlatformCloneRefParamsFollowInfra(t *testing.T) {
 			seen[repo] = true
 		}
 		assertJSONEqual(t, seen, map[string]bool{"bifrost-platform": true, "bifrost-ui": true})
+	}
+}
+
+func TestPlatformPollingErrorRequiresSeenPresent(t *testing.T) {
+	for _, name := range []string{"bifrost-deliver-platform", "bifrost-deliver-platform-prod"} {
+		for _, mode := range []string{"poll error missing", "poll error recover"} {
+			t.Run(name+"/"+mode, func(t *testing.T) {
+				s, dyn, m := pinnedService(t, name, platformRefs(factSHA1, factSHA2), []string{"bifrost-ui"}, mode)
+				ctx, cancel := context.WithTimeout(context.Background(), 4500*time.Millisecond)
+				defer cancel()
+				resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "tester", map[string]string{"uiRevision": factSHA2})
+				if mode == "poll error missing" {
+					if err == nil || resp.OK || resp.Changed || !strings.Contains(resp.Message, "mirror was synced but the ref is still not present") || strings.Contains(resp.Message, "mirror sync did not complete") {
+						t.Fatal(resp, err)
+					}
+					assertNoContractCreate(t, dyn)
+				} else {
+					if err != nil || !resp.OK {
+						t.Fatal(resp, err)
+					}
+					createdContractRun(t, dyn)
+				}
+				if m.afterSync["bifrost-ui"] < 3 {
+					t.Fatal("did not poll past error and missing", m.paths)
+				}
+				assertPinnedSync(t, m, true)
+			})
+		}
+	}
+}
+
+func TestPlatformHexadecimalNames(t *testing.T) {
+	for _, name := range []string{"bifrost-deliver-platform", "bifrost-deliver-platform-prod"} {
+		for _, ref := range []string{"20261012", "deadbeef", "26A10B5"} {
+			t.Run(name+"/"+ref, func(t *testing.T) {
+				s, dyn, m := pinnedService(t, name, platformRefs(ref, ref), nil, "")
+				sentence := "use the full 40-character lowercase SHA"
+				if ref == "20261012" {
+					sentence = ""
+				}
+				assertPinnedCall(t, s, dyn, name, ref, nil, sentence)
+				if ref == "20261012" && len(m.paths) != 2 {
+					t.Fatal("digit name did not use branch lookup", m.paths)
+				}
+				if sentence != "" && len(m.paths) != 0 {
+					t.Fatal("invalid SHA reached mirror", m.paths)
+				}
+			})
+		}
 	}
 }

@@ -71,7 +71,7 @@ func (s *Service) repoRefStatus(ctx context.Context, repo, ref, user, pass strin
 }
 
 // Preserve main 26a10b5's listing order and commit-error semantics outside
-// platform delivery and CI. In particular, a commit lookup error alone is missing.
+// platform delivery, including CI. In particular, a commit lookup error alone is missing.
 func (s *Service) legacyRepoRefStatus(ctx context.Context, repo, ref, user, pass string) RepoRefStatus {
 	branches, branchErr := s.fetchGiteaBranches(ctx, repo, user, pass)
 	if branchErr == nil {
@@ -196,7 +196,7 @@ func (s *Service) refPreflightAtRefs(ctx context.Context, pipelineName, revision
 			ref = rev
 		}
 		var st RepoRefStatus
-		if isPlatformDelivery(pipelineName) || isCIPipeline(pipelineName) {
+		if isPlatformDelivery(pipelineName) {
 			st = s.repoRefStatus(ctx, repo, ref, user, pass)
 		} else {
 			st = s.legacyRepoRefStatus(ctx, repo, ref, user, pass)
@@ -313,7 +313,7 @@ func platformRunInputs(revision string, extra map[string]string) error {
 	}
 	for _, key := range sortedKeysString(refs) {
 		value := strings.TrimSpace(refs[key])
-		if shaRefPattern.MatchString(value) && !callerParamSHA.MatchString(value) {
+		if shaRefPattern.MatchString(value) && strings.ContainsAny(value, "abcdefABCDEF") && !callerParamSHA.MatchString(value) {
 			return fmt.Errorf("%s %q: use the full 40-character lowercase SHA", key, value)
 		}
 	}
@@ -351,6 +351,10 @@ func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo st
 	}
 	missing := missingRunRefs(pf, refs)
 	originalMissing := missing
+	unseen := map[string]bool{}
+	for _, repo := range pf.Missing {
+		unseen[repo] = true
+	}
 	// Request one sync per repository, then give branches, tags and commits the
 	// same bounded polling. SyncMirrors with no commits only enqueues the fetches.
 	syncCtx, cancel := context.WithTimeout(ctx, mirrorSyncWait)
@@ -361,18 +365,23 @@ func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo st
 	}
 	for {
 		if syncCtx.Err() != nil {
-			return originalMissing + "; mirror sync did not complete"
+			return originalMissing + "; mirror was synced but the ref is still not present"
 		}
 		retry := s.refPreflightAtRefs(syncCtx, name, revision, repos, refs)
 		if syncCtx.Err() != nil {
-			return originalMissing + "; mirror sync did not complete"
+			return originalMissing + "; mirror was synced but the ref is still not present"
 		}
-		if len(retry.Missing) == 0 {
+		for _, status := range retry.Repos {
+			if status.Exists {
+				delete(unseen, status.Repo)
+			}
+		}
+		if len(unseen) == 0 && len(retry.Missing) == 0 {
 			return ""
 		}
 		select {
 		case <-syncCtx.Done():
-			return originalMissing + "; mirror sync did not complete"
+			return originalMissing + "; mirror was synced but the ref is still not present"
 		case <-time.After(2 * time.Second):
 		}
 	}

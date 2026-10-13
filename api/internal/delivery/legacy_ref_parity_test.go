@@ -27,18 +27,34 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 	for name := range pipelineMirrorRepos {
 		names[name] = true
 	}
-	for name := range names {
-		if isCIPipeline(name) || isPlatformDelivery(name) {
+	names["bifrost-ci-platform"] = true
+	names["bifrost-ci-frontend"] = true
+	delete(names, "bifrost-ci-python")
+	for _, repo := range pythonCIRepos {
+		names["bifrost-ci-python/"+repo] = true
+	}
+	for call := range names {
+		name, ciRepo, _ := strings.Cut(call, "/")
+		if isPlatformDelivery(name) {
 			continue
 		}
 		repos := []string{"bifrost-trade-core", "bifrost-trade-worker", "bifrost-trade-socket", "bifrost-trade-api", "bifrost-trade-frontend", "bifrost-trade-infra", "bifrost-ui", "bifrost-platform"}
 		if name == "bifrost-deliver-stg" || name == "bifrost-deliver-prod" {
 			repos = repos[:7]
 		}
+		if isCIPipeline(name) {
+			switch name {
+			case "bifrost-ci-platform":
+				ciRepo = "bifrost-platform"
+			case "bifrost-ci-frontend":
+				ciRepo = "bifrost-trade-frontend"
+			}
+			repos = []string{ciRepo}
+		}
 		for _, mode := range []string{"branch", "tag", "commit", "missing", "unknown", "partial", "socket unknown", "commit error", "SHA branch"} {
-			t.Run(name+"/"+mode, func(t *testing.T) {
+			t.Run(call+"/"+mode, func(t *testing.T) {
 				revision := "main"
-				if requiresFullSHA(name) || mode == "commit" || mode == "commit error" || mode == "SHA branch" {
+				if isCIPipeline(name) || requiresFullSHA(name) || mode == "commit" || mode == "commit error" || mode == "SHA branch" {
 					revision = factSHA1
 				}
 				refs := map[string]string{}
@@ -74,12 +90,15 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 				// every declared per-repo pin to detect accidentally consuming any of them.
 				extra := map[string]string{}
 				pipe := baselinePipelines(t)[name]
-				if pipe != nil {
+				if pipe != nil && !isCIPipeline(name) {
 					for key := range declaredPipelineParams(pipe) {
 						if callerMayOverride(key) {
 							extra[key] = factSHA2
 						}
 					}
+				}
+				if name == "bifrost-ci-python" {
+					extra["repo"] = ciRepo
 				}
 				resp, _, err := s.StartPipelineRun(context.Background(), name, revision, "", "tester", extra)
 				expectedPaths := []string{}
@@ -95,10 +114,13 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 					}
 				}
 				assertJSONEqual(t, paths, expectedPaths)
-				if mode == "missing" || mode == "commit error" {
+				if mode == "missing" || mode == "commit error" || (isCIPipeline(name) && mode == "socket unknown") {
 					missing := append([]string{}, repos...)
 					sort.Strings(missing)
 					want := fmt.Sprintf("revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)", revision, strings.Join(missing, ", "))
+					if isCIPipeline(name) {
+						want = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", revision, ciRepo)
+					}
 					if err == nil || resp.OK || resp.Changed || resp.Message != want {
 						t.Fatal(resp, err, "want", want)
 					}
