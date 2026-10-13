@@ -36,7 +36,7 @@ var trackedGiteaRepos = []string{
 }
 
 // pipelineMirrorRepos maps a deliver pipeline to the Gitea repos it clones.
-// A multi-repo deploy requires the chosen revision to exist in every repo.
+// Each repository is checked at its effective clone ref.
 var pipelineMirrorRepos = map[string][]string{
 	"bifrost-ci-platform":           {"bifrost-platform"},
 	"bifrost-ci-frontend":           {"bifrost-trade-frontend"},
@@ -59,6 +59,26 @@ var pipelineMirrorRepos = map[string][]string{
 		"bifrost-trade-frontend",
 		"bifrost-trade-infra",
 		"bifrost-ui",
+	},
+}
+
+// pipelineRepoRefParams is the clone ref parameter for every mapped repository.
+// Retain the legacy socket entry and unknown-pipeline fallback until their own
+// cleanup; only platform delivery and Trade PROD select per-repository refs.
+var pipelineRepoRefParams = map[string]map[string]string{
+	"bifrost-ci-platform":           {"bifrost-platform": "revision"},
+	"bifrost-ci-frontend":           {"bifrost-trade-frontend": "revision"},
+	"bifrost-deliver-platform":      {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
+	"bifrost-deliver-platform-prod": {"bifrost-platform": "revision", "bifrost-ui": "uiRevision"},
+	"bifrost-deliver-stg": {
+		"bifrost-trade-core": "revision", "bifrost-trade-worker": "revision",
+		"bifrost-trade-socket": "revision", "bifrost-trade-api": "revision",
+		"bifrost-trade-frontend": "revision", "bifrost-trade-infra": "revision", "bifrost-ui": "revision",
+	},
+	"bifrost-deliver-prod": {
+		"bifrost-trade-core": "coreRevision", "bifrost-trade-worker": "workerRevision",
+		"bifrost-trade-socket": "revision", "bifrost-trade-api": "apiRevision",
+		"bifrost-trade-frontend": "frontendRevision", "bifrost-trade-infra": "infraRevision", "bifrost-ui": "uiRevision",
 	},
 }
 

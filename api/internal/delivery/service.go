@@ -245,24 +245,6 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 		return resp, empty, fmt.Errorf("%s", msg)
 	}
 
-	// Multi-repo guard: refuse to start if the revision is genuinely missing in
-	// any repo the pipeline clones — otherwise it fails halfway at a clone-*
-	// task. Only block when probes had full visibility (reachability ok); never
-	// block on network/probe uncertainty.
-	repos := reposForPipeline(pipelineName)
-	if ciRepo != "" {
-		repos = []string{ciRepo}
-	}
-	if pf := s.refPreflightForRepos(ctx, pipelineName, rev, repos); pf.Reachability == probe.ReachOK && len(pf.Missing) > 0 {
-		resp.Message = fmt.Sprintf(
-			"revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)",
-			rev, strings.Join(pf.Missing, ", "))
-		if ciRepo != "" {
-			resp.Message = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", rev, ciRepo)
-		}
-		return resp, empty, fmt.Errorf("%s", resp.Message)
-	}
-
 	dyn, err := s.buildDynamicClient()
 	if err != nil {
 		resp.Message = err.Error()
@@ -324,6 +306,11 @@ func (s *Service) StartPipelineRun(ctx context.Context, pipelineName, revision, 
 	if err := validateRunRequirements(pipe, obj); err != nil {
 		resp.Message = err.Error()
 		return resp, empty, err
+	}
+
+	if msg := s.runRefPreflight(ctx, pipelineName, rev, ciRepo, spec, pipe); msg != "" {
+		resp.Message = msg
+		return resp, empty, fmt.Errorf("%s", msg)
 	}
 
 	res := dyn.Resource(pipelineRunGVR).Namespace(ns)

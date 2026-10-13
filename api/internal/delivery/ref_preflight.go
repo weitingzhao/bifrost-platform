@@ -10,19 +10,29 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/probe"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var shaRefPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
 
 // repoRefStatus probes Gitea for the given ref in a single repo, checking
-// branches, then tags, then (for SHA-looking refs) a direct commit lookup.
+// full lowercase SHAs as commits; other refs use branches, tags and the legacy
+// abbreviated-SHA lookup.
 // Kind "error" means the probe could not reach Gitea (network/auth) — the ref's
 // presence is unknown and must NOT be treated as a genuine "missing".
 func (s *Service) repoRefStatus(ctx context.Context, repo, ref, user, pass string) RepoRefStatus {
+	fullSHA := callerParamSHA.MatchString(ref)
+	if fullSHA {
+		if sha, exists, err := s.giteaCommitExists(ctx, repo, ref, user, pass); exists {
+			return RepoRefStatus{Repo: repo, Exists: true, Kind: "commit", Commit: sha}
+		} else if err != nil {
+			return RepoRefStatus{Repo: repo, Kind: "error", Detail: err.Error()}
+		}
+	}
 	branches, branchErr := s.fetchGiteaBranches(ctx, repo, user, pass)
 	if branchErr == nil {
 		for _, b := range branches {
-			if b.Name == ref {
+			if !fullSHA && b.Name == ref {
 				return RepoRefStatus{Repo: repo, Exists: true, Kind: "branch", Commit: b.Commit}
 			}
 		}
@@ -31,15 +41,17 @@ func (s *Service) repoRefStatus(ctx context.Context, repo, ref, user, pass strin
 	tags, tagErr := s.fetchGiteaTags(ctx, repo, user, pass)
 	if tagErr == nil {
 		for _, t := range tags {
-			if t.Name == ref {
+			if !fullSHA && t.Name == ref {
 				return RepoRefStatus{Repo: repo, Exists: true, Kind: "tag", Commit: t.Commit}
 			}
 		}
 	}
 
-	if shaRefPattern.MatchString(ref) {
-		if sha, ok := s.giteaCommitExists(ctx, repo, ref, user, pass); ok {
+	if !fullSHA && shaRefPattern.MatchString(ref) {
+		if sha, ok, err := s.giteaCommitExists(ctx, repo, ref, user, pass); ok {
 			return RepoRefStatus{Repo: repo, Exists: true, Kind: "commit", Commit: sha}
+		} else if err != nil {
+			return RepoRefStatus{Repo: repo, Kind: "error", Detail: err.Error()}
 		}
 	}
 
@@ -59,24 +71,27 @@ func (s *Service) repoRefStatus(ctx context.Context, repo, ref, user, pass strin
 }
 
 // giteaCommitExists checks whether a commit SHA resolves in the repo.
-func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass string) (string, bool) {
+func (s *Service) giteaCommitExists(ctx context.Context, repo, sha, user, pass string) (string, bool, error) {
 	url := fmt.Sprintf("%s/api/v1/repos/%s/%s/git/commits/%s", giteaBaseURL(), giteaOrg, repo, sha)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	if user != "" && pass != "" {
 		req.SetBasicAuth(user, pass)
 	}
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusOK {
-		return sha, true
+		return sha, true, nil
 	}
-	return "", false
+	if resp.StatusCode == http.StatusNotFound {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("commit lookup status %d", resp.StatusCode)
 }
 
 // RefPreflight checks whether the chosen revision exists in every repo the
@@ -92,6 +107,14 @@ func (s *Service) RefPreflight(ctx context.Context, pipelineName, revision strin
 }
 
 func (s *Service) refPreflightForRepos(ctx context.Context, pipelineName, revision string, repos []string) RefPreflightResponse {
+	refs := map[string]string{}
+	for _, repo := range repos {
+		refs[repo] = revision
+	}
+	return s.refPreflightAtRefs(ctx, pipelineName, revision, repos, refs)
+}
+
+func (s *Service) refPreflightAtRefs(ctx context.Context, pipelineName, revision string, repos []string, refs map[string]string) RefPreflightResponse {
 	now := time.Now().UTC()
 	rev := strings.TrimSpace(revision)
 	if rev == "" {
@@ -126,7 +149,11 @@ func (s *Service) refPreflightForRepos(ctx context.Context, pipelineName, revisi
 	errored := []string{}
 	statuses := make([]RepoRefStatus, 0, len(repos))
 	for _, repo := range repos {
-		st := s.repoRefStatus(ctx, repo, rev, user, pass)
+		ref := refs[repo]
+		if ref == "" {
+			ref = rev
+		}
+		st := s.repoRefStatus(ctx, repo, ref, user, pass)
 		statuses = append(statuses, st)
 		switch {
 		case st.Kind == "error":
@@ -171,4 +198,95 @@ func (s *Service) refPreflightForRepos(ctx context.Context, pipelineName, revisi
 		out.Detail = fmt.Sprintf("%q present in all %d repo(s)", rev, len(repos))
 	}
 	return out
+}
+
+// Read the already merged run values, then declaration defaults for parameters
+// omitted from the run. Never re-merge caller input or change the built object.
+func runRepoRefs(name, revision string, spec map[string]any, pipe *unstructured.Unstructured, repos []string) map[string]string {
+	values := map[string]string{}
+	if params, ok := spec["params"].([]map[string]any); ok {
+		for _, param := range params {
+			key, _ := param["name"].(string)
+			value, _ := param["value"].(string)
+			values[key] = value
+		}
+	}
+	defaults, _, _ := unstructured.NestedSlice(pipe.Object, "spec", "params")
+	for _, raw := range defaults {
+		param, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		key, _ := param["name"].(string)
+		if _, supplied := values[key]; !supplied {
+			if value, ok := param["default"].(string); ok {
+				values[key] = value
+			}
+		}
+	}
+	refs := map[string]string{}
+	for _, repo := range repos {
+		ref := revision
+		if key := pipelineRepoRefParams[name][repo]; key != "" {
+			if value, exists := values[key]; exists {
+				ref = value
+			}
+		}
+		refs[repo] = ref
+	}
+	return refs
+}
+
+func missingRunRefs(pf RefPreflightResponse, refs map[string]string) string {
+	parts := make([]string, 0, len(pf.Missing))
+	for _, repo := range pf.Missing {
+		parts = append(parts, fmt.Sprintf("%s (ref %q)", repo, refs[repo]))
+	}
+	return "revision is missing in: " + strings.Join(parts, ", ")
+}
+
+func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo string, spec map[string]any, pipe *unstructured.Unstructured) string {
+	repos := reposForPipeline(name)
+	if ciRepo != "" {
+		repos = []string{ciRepo}
+	}
+	refs := runRepoRefs(name, revision, spec, pipe, repos)
+	pf := s.refPreflightAtRefs(ctx, name, revision, repos, refs)
+	if pf.Reachability != probe.ReachOK || len(pf.Missing) == 0 {
+		return ""
+	}
+	if ciRepo != "" {
+		return fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", revision, ciRepo)
+	}
+	missing := missingRunRefs(pf, refs)
+	if (name == "bifrost-deliver-platform" || name == "bifrost-deliver-platform-prod") && refs["bifrost-ui"] == refs["bifrost-platform"] {
+		for _, repo := range pf.Missing {
+			if repo == "bifrost-ui" {
+				missing += " — pass uiRevision for bifrost-ui"
+			}
+		}
+	}
+	// Reuse the mirror allow-list, credentials and bounded commit polling. Branch
+	// and tag refs are rechecked by the same preflight after sync is requested.
+	syncCtx, cancel := context.WithTimeout(ctx, mirrorSyncWait)
+	defer cancel()
+	commits := map[string]string{}
+	for _, repo := range pf.Missing {
+		if callerParamSHA.MatchString(refs[repo]) {
+			commits[repo] = refs[repo]
+		}
+	}
+	synced, err := s.SyncMirrors(syncCtx, repos, commits)
+	if err != nil || !synced.OK || syncCtx.Err() != nil {
+		return missing + "; mirror sync did not complete"
+	}
+	retry := s.refPreflightAtRefs(ctx, name, revision, repos, refs)
+	if retry.Reachability == probe.ReachOK && len(retry.Missing) > 0 {
+		message := missingRunRefs(retry, refs)
+		if strings.Contains(missing, "pass uiRevision") {
+			message += " — pass uiRevision for bifrost-ui"
+		}
+		return message
+	}
+	return ""
 }
