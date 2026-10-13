@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   buildApprovalListResponse,
   buildPlatformApproval,
 } from '@/api/approvalsApiFixture'
 import {
+  fetchApprovalList,
   formatDecidedAt,
   isUnsetDecidedAt,
   parseApprovalList,
@@ -44,6 +45,52 @@ describe('approvals API contract', () => {
   it('parseApprovalList rejects legacy items envelope', () => {
     const row = buildPlatformApproval({ id: 'ap-legacy' })
     expect(() => parseApprovalList({ items: [row] })).toThrow(/unexpected list shape/)
+  })
+})
+
+describe('approval read deadline', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('aborts a hanging approvals read after 15 seconds', async () => {
+    const mem = new Map<string, string>()
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: {
+        get length() {
+          return mem.size
+        },
+        clear: () => mem.clear(),
+        getItem: (key: string) => mem.get(key) ?? null,
+        key: (index: number) => [...mem.keys()][index] ?? null,
+        removeItem: (key: string) => mem.delete(key),
+        setItem: (key: string, value: string) => mem.set(key, String(value)),
+      },
+    })
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: unknown, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted', 'AbortError'))
+          })
+        })
+      }),
+    )
+    const pending = fetchApprovalList('open').then(
+      () => {
+        throw new Error('resolved')
+      },
+      (err: unknown) => err,
+    )
+    await vi.advanceTimersByTimeAsync(14_999)
+    await vi.advanceTimersByTimeAsync(1)
+    const err = await pending
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).toBe('approvals read timed out')
   })
 })
 

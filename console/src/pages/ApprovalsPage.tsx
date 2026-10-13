@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, DenseTag } from '@bifrost/ui'
 import { authedFetch } from '@/api/client'
 import {
@@ -9,12 +9,15 @@ import {
   formatTimeRemaining,
   formatWaited,
   isUnsetDecidedAt,
+  isUnknownApprovalPost,
   postApprovalDecision,
   postApprovalResolve,
   readApprovalToken,
+  unknownApprovalPostMessage,
   type ApprovalItem,
   type ResolveOutcome,
 } from '@/api/approvals'
+import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import {
   closedByYou,
   commandText,
@@ -44,6 +47,9 @@ import {
 } from '@/pages/approvalSiblings'
 import { ApprovalTokenField } from '@/pages/shell/needs-you/ApprovalTokenField'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
+import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
+import { NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
+import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 
 const MISSING_TOKEN =
   'Approve and Reject stay disabled until an approval token is saved in this browser. The console operator token is not used for these actions.'
@@ -289,6 +295,9 @@ function ApprovalCard({
   item,
   hasToken,
   busy,
+  sending,
+  staleBuild,
+  actionError,
   closeError,
   rows,
   onApprove,
@@ -298,6 +307,9 @@ function ApprovalCard({
   item: ApprovalItem
   hasToken: boolean
   busy: boolean
+  sending: 'approve' | 'reject' | null
+  staleBuild: boolean
+  actionError: string | null
   closeError: string | null
   rows: readonly ApprovalItem[] | undefined
   onApprove: (id: string) => void
@@ -306,7 +318,8 @@ function ApprovalCard({
 }) {
   const [reason, setReason] = useState('')
   const pending = item.status === 'pending'
-  const canDecide = pending && hasToken && !busy
+  const canDecide = pending && hasToken && !busy && !staleBuild
+  const blockedReason = staleBuild ? NEWER_CONSOLE_BANNER : undefined
   const trimmed = reason.trim()
   const title = decisionTitle(item)
   const env = decisionEnv(item)
@@ -353,6 +366,11 @@ function ApprovalCard({
         >
           {decisionBanner(item)}
         </p>
+        {actionError != null ? (
+          <p role="alert" className="m-0 text-sm text-destructive">
+            {actionError}
+          </p>
+        ) : null}
         {closed != null ? (
           <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
             {closed}
@@ -430,20 +448,24 @@ function ApprovalCard({
               type="button"
               className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide}
-              aria-label={`Approve ${item.action}`}
+              title={blockedReason}
+              aria-describedby={staleBuild ? 'console-build-reason' : undefined}
+              aria-label={sending === 'approve' ? 'Sending…' : `Approve ${item.action}`}
               onClick={() => onApprove(item.id)}
             >
-              Approve
+              {sending === 'approve' ? 'Sending…' : 'Approve'}
             </Button>
             <Button
               type="button"
               variant="outline"
               className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide || trimmed === ''}
-              aria-label={`Reject ${item.action}`}
+              title={blockedReason}
+              aria-describedby={staleBuild ? 'console-build-reason' : undefined}
+              aria-label={sending === 'reject' ? 'Sending…' : `Reject ${item.action}`}
               onClick={() => onReject(item.id, trimmed)}
             >
-              Reject
+              {sending === 'reject' ? 'Sending…' : 'Reject'}
             </Button>
           </div>
         </div>
@@ -522,8 +544,11 @@ export function ApprovalsPage() {
   const id = useDeepLinkId()
   const [token, setToken] = useState(() => readApprovalToken())
   const [busy, setBusy] = useState(false)
+  const [sending, setSending] = useState<'approve' | 'reject' | null>(null)
+  const sendingRef = useRef(false)
   const [actionError, setActionError] = useState<string | null>(null)
   const [closeError, setCloseError] = useState<string | null>(null)
+  const staleBuild = useConsoleBuildDrift()
   const hasToken = token !== ''
 
   const itemQ = useQuery({
@@ -531,7 +556,12 @@ export function ApprovalsPage() {
     queryFn: () => fetchApproval(id ?? ''),
     enabled: id != null,
     retry: false,
-    refetchInterval: query => (query.state.data?.status === 'pending' ? NEEDS_YOU_REFRESH_MS : false),
+    refetchInterval: query => {
+      if (busy) return false
+      const data = query.state.data
+      if (data == null || data.status === 'pending') return NEEDS_YOU_REFRESH_MS
+      return false
+    },
   })
   const opened = id == null ? null : (itemQ.data ?? null)
   const allQ = useQuery({
@@ -542,7 +572,9 @@ export function ApprovalsPage() {
   })
 
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
-    if (!hasToken) return
+    if (!hasToken || sendingRef.current || staleBuild) return
+    sendingRef.current = true
+    setSending(path)
     setBusy(true)
     setActionError(null)
     try {
@@ -560,8 +592,19 @@ export function ApprovalsPage() {
       )
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      if (isUnknownApprovalPost(err)) {
+        const fresh = await fetchApproval(requestId).catch(() => null)
+        if (fresh != null) {
+          qc.setQueryData(['approvals', 'item', requestId], fresh)
+          if (fresh.status !== 'pending') return
+        }
+        setActionError(unknownApprovalPostMessage(err))
+      } else {
+        setActionError(err instanceof Error ? err.message : 'Approval action failed')
+      }
     } finally {
+      sendingRef.current = false
+      setSending(null)
       setBusy(false)
     }
   }
@@ -582,6 +625,7 @@ export function ApprovalsPage() {
 
   return (
     <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
+      <ConsoleBuildBanner stale={staleBuild} />
       <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
         ← Needs you
       </a>
@@ -600,16 +644,14 @@ export function ApprovalsPage() {
           <ApprovalTokenField token={token} onSaved={setToken} />
         </div>
       )}
-      {actionError != null ? <p className="m-0 text-sm text-destructive">{actionError}</p> : null}
-
       {id == null ? (
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>
       ) : (
         <section aria-label={`Approval ${id}`} className="flex w-full min-w-0 flex-col gap-2">
           {itemQ.isLoading ? <p className="m-0 text-sm">Opening {id}…</p> : null}
-          {itemQ.error != null ? (
-            <p className="m-0 text-sm text-destructive">
-              {itemQ.error instanceof Error ? itemQ.error.message : 'Could not open this request'}
+          {itemQ.isError ? (
+            <p role="alert" className="m-0 text-sm text-destructive">
+              {approvalsReadFailure(itemQ.errorUpdatedAt)}
             </p>
           ) : null}
           {opened != null ? (
@@ -618,6 +660,9 @@ export function ApprovalsPage() {
               item={opened}
               hasToken={hasToken}
               busy={busy}
+              sending={sending}
+              staleBuild={staleBuild}
+              actionError={actionError}
               closeError={closeError}
               rows={allQ.data}
               onApprove={requestId => void decide(requestId, 'approve')}
