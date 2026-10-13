@@ -1,2 +1,2 @@
 export const APPROVAL_WAITING_NOTICE =
-  'Still waiting for the server. Do not reload or close this page: that can interrupt the action. This can take up to 5 minutes.'
+  'Still waiting for the server. Closing this page does not cancel a decision the server has already received; reopen this page to check that it was recorded. This can take up to 5 minutes.'

@@ -37,6 +37,9 @@ type Service struct {
 	// held is a finish whose write failed, keyed by approval id. The action
 	// already ran; only the write is retried.
 	held map[string]heldFinish
+	// heartbeatTick replaces heartbeatEvery for a synchronous run; zero means the
+	// default. Tests shorten it to watch the lease move while an executor runs.
+	heartbeatTick time.Duration
 }
 
 // AutoApprover returns the id of a signed release policy that already covers
@@ -432,9 +435,14 @@ func (s *Service) approveWith(ctx context.Context, ref string, in approveInput) 
 		return *refusal
 	}
 	if rec.Status == StatusRunning {
+		// The decision and lease are stored: disconnecting the approving client
+		// must not cancel precheck or execution. Keep request values, but use
+		// the persisted execution deadline rather than the request's lifetime.
+		execCtx, cancel := context.WithDeadline(context.WithoutCancel(ctx), rec.Execution.Deadline)
+		defer cancel()
 		var runEvs []event
 		var runErr error
-		rec, runEvs, runErr = s.runPlatform(ctx, rec)
+		rec, runEvs, runErr = s.runPlatform(execCtx, rec)
 		if runErr != nil {
 			// The action may have finished, but the status was not stored.
 			// Do not report executed and do not emit events for that transition.
