@@ -57,7 +57,7 @@ import {
 } from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
-import { NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
+import { DECISION_AFTER_RELOAD, NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 
 function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
@@ -255,6 +255,7 @@ function ApprovalCard({
   busy,
   sending,
   staleBuild,
+  reloadHeld,
   actionError,
   notice,
   closeError,
@@ -269,6 +270,7 @@ function ApprovalCard({
   busy: boolean
   sending: 'approve' | 'reject' | null
   staleBuild: boolean
+  reloadHeld: boolean
   actionError: string | null
   notice: string | null
   closeError: string | null
@@ -281,7 +283,9 @@ function ApprovalCard({
   const [reason, setReason] = useState('')
   const pending = item.status === 'pending'
   const canDecide = pending && blocked == null && !busy && !staleBuild
-  const blockedReason = staleBuild ? NEWER_CONSOLE_BANNER : undefined
+  const waitingForReload = staleBuild && reloadHeld
+  const blockedReason = staleBuild ? (waitingForReload ? DECISION_AFTER_RELOAD : NEWER_CONSOLE_BANNER) : undefined
+  const buildReasonId = waitingForReload ? `console-build-reason-${item.id}` : 'console-build-reason'
   const trimmed = reason.trim()
   const title = decisionTitle(item)
   const env = decisionEnv(item)
@@ -404,6 +408,11 @@ function ApprovalCard({
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
           <ServerContactStatus />
+          {waitingForReload ? (
+            <p id={buildReasonId} role="status" className="m-0 text-sm">
+              {blockedReason}
+            </p>
+          ) : null}
           {blocked != null ? (
             <p role="status" className="m-0 text-sm">
               {blocked}
@@ -424,7 +433,7 @@ function ApprovalCard({
               className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide}
               title={blockedReason}
-              aria-describedby={staleBuild ? 'console-build-reason' : undefined}
+              aria-describedby={staleBuild ? buildReasonId : undefined}
               aria-label={sending === 'approve' ? 'Sending…' : `Approve ${item.action}`}
               onClick={() => onApprove(item.id)}
             >
@@ -436,7 +445,7 @@ function ApprovalCard({
               className="h-11 w-full sm:h-auto sm:w-auto"
               disabled={!canDecide || trimmed === ''}
               title={blockedReason}
-              aria-describedby={staleBuild ? 'console-build-reason' : undefined}
+              aria-describedby={staleBuild ? buildReasonId : undefined}
               aria-label={sending === 'reject' ? 'Sending…' : `Reject ${item.action}`}
               onClick={() => onReject(item.id, trimmed)}
             >
@@ -602,7 +611,12 @@ export function ApprovalsPage() {
     return send()
   }
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
-    if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
+    if (decisionBlockReason(auth) != null || locks.current.get(recordId)) return
+    if (latest.current.staleBuild) {
+      // Say what the banner says: with no decision in flight the page can be reloaded now.
+      setNotice(postsInFlight.current > 0 ? DECISION_AFTER_RELOAD : NEWER_CONSOLE_BANNER)
+      return
+    }
     const session = auth.token
     locks.current.set(recordId, true)
     postsInFlight.current += 1
@@ -711,7 +725,8 @@ export function ApprovalsPage() {
               blocked={blocked}
               busy={busy}
               sending={sending}
-              staleBuild={staleBuild && !reloadHeld}
+              staleBuild={staleBuild && !(reloadHeld && sending != null)}
+              reloadHeld={reloadHeld}
               actionError={actionError}
               notice={notice}
               closeError={closeError}
