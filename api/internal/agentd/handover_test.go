@@ -555,18 +555,13 @@ func TestCheckpointWrittenBeforeSent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(a.Out, "log.txt"), []byte("working\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	dir := filepath.Dir(d.Registry.path)
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	// A write that fails (not a mode: CI runs as root, which no mode stops).
+	d.Registry.failWrite = func() error { return errors.New("disk full") }
 	d.checkpoint(bg, a, nil, &e)
 	if f.count("checkpoint") != 0 || e.Pending == nil {
 		t.Fatalf("sent with the registry unwritable: %v; pending %+v", f.log(), e.Pending)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	d.Registry.failWrite = nil
 	onDisk := false
 	f.before = func(action string) {
 		if action == "checkpoint" {
@@ -660,11 +655,7 @@ func TestRecoverReportsTheRegistry(t *testing.T) {
 	f := newFake()
 	d := fakeDaemon(t, f)
 	entryFor(t, d, "a1", "exited")
-	dir := filepath.Dir(d.Registry.path)
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	d.Registry.failWrite = func() error { return errors.New("disk full") }
 	if err := d.Recover(bg); !errors.Is(err, ErrRegistry) {
 		t.Fatalf("recover = %v", err)
 	}
@@ -754,17 +745,11 @@ func TestPrepareKeepsTheRegistryError(t *testing.T) {
 	f := newFake()
 	d := fakeDaemon(t, f)
 	entryFor(t, d, "a1", "lost")
-	dir := filepath.Dir(d.Registry.path)
-	if err := os.Chmod(dir, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	d.Registry.failWrite = func() error { return errors.New("disk full") }
 	if err := d.Recover(bg); !errors.Is(err, ErrRegistry) {
 		t.Fatalf("recover of a lost attempt = %v", err)
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
+	d.Registry.failWrite = nil
 	// One write fails, the next would work: the hand-over stops on the
 	// failure and is not ended (an end would be written and sent).
 	e, a := entryFor(t, d, "a2", "computed")

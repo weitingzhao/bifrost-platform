@@ -116,7 +116,42 @@ func groupMembers(pgid, except int) ([]int, error) {
 			pids = append(pids, pid)
 		}
 	}
-	return pids, nil
+	return running(pids), nil
+}
+
+// running keeps the processes of pids that still run: a zombie (dead, not
+// yet reaped by its parent) runs nothing and holds nothing but its id, so it
+// is not left of a group. Where nothing reaps orphans (a container whose
+// first process does not, as CI's), killed processes stay zombies. Each pid
+// is read on its own (one bad pid makes a whole ps fail on macOS); a pid
+// whose state cannot be read is kept: that it is gone is not known.
+func running(pids []int) []int {
+	var live []int
+	for _, pid := range pids {
+		out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+		state := strings.TrimSpace(string(out))
+		var exit *exec.ExitError
+		switch {
+		case err == nil && strings.HasPrefix(state, "Z"):
+			// a zombie
+		case err == nil && state != "":
+			live = append(live, pid)
+		case errors.As(err, &exit) && exit.ExitCode() == 1 && state == "":
+			// no such process
+		default:
+			live = append(live, pid)
+		}
+	}
+	return live
+}
+
+// groupGone: no process of the group runs (none at all, or zombies only).
+func groupGone(pgid int) (bool, error) {
+	if errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH) {
+		return true, nil
+	}
+	pids, err := groupMembers(pgid, 0)
+	return err == nil && len(pids) == 0, err
 }
 
 // GroupState is what agentd knows of a process group it ended.
@@ -151,6 +186,9 @@ func ClearGroup(pgid int, start string, died time.Time, grace time.Duration) (Gr
 	case err != nil:
 		return GroupUnknown, nil
 	}
+	if gone, err := groupGone(pgid); err == nil && gone {
+		return GroupCleared, nil
+	}
 	if !Alive(pgid, start) {
 		pids, err := groupMembers(pgid, 0)
 		switch {
@@ -164,7 +202,7 @@ func ClearGroup(pgid int, start string, died time.Time, grace time.Duration) (Gr
 	}
 	Terminate(pgid, grace)
 	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		if errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH) {
+		if gone, _ := groupGone(pgid); gone {
 			return GroupCleared, nil
 		}
 		if time.Now().After(deadline) {
@@ -192,8 +230,14 @@ func startedBefore(pids []int, t time.Time) bool {
 	return false
 }
 
-// GroupAlive reports whether any process of the group is left.
-func GroupAlive(pgid int) bool { return pgid > 1 && syscall.Kill(-pgid, 0) == nil }
+// GroupAlive reports whether any process of the group still runs.
+func GroupAlive(pgid int) bool {
+	if pgid <= 1 {
+		return false
+	}
+	gone, _ := groupGone(pgid)
+	return !gone
+}
 
 // Spawn is an executor to run: an argument array, never a shell line.
 type Spawn struct {
@@ -273,7 +317,7 @@ func Terminate(pgid int, grace time.Duration) {
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 	deadline := time.Now().Add(grace)
 	for time.Now().Before(deadline) {
-		if syscall.Kill(-pgid, 0) != nil {
+		if gone, _ := groupGone(pgid); gone {
 			return
 		}
 		time.Sleep(50 * time.Millisecond)

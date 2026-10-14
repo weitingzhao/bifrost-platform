@@ -1,7 +1,6 @@
 package agentd
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,7 +25,8 @@ func waitPID(t *testing.T, path string) int {
 	return 0
 }
 
-func gone(pid int) bool { return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) }
+// gone: the process does not run (none, or a zombie nothing reaped yet).
+func gone(pid int) bool { return len(running([]int{pid})) == 0 }
 
 func waitGone(t *testing.T, pid int, within time.Duration) {
 	t.Helper()
@@ -139,5 +139,29 @@ func TestGroupMembers(t *testing.T) {
 	defer func() { pgrep = "pgrep" }()
 	if _, err := groupMembers(syscall.Getpgrp(), 0); err == nil {
 		t.Fatal("a failed query read as an empty group")
+	}
+}
+
+// A zombie (dead, not reaped by its parent) is not a running process; where
+// nothing reaps orphans (CI's container) the processes a group leaves stay
+// zombies.
+func TestRunningSkipsZombies(t *testing.T) {
+	zombie, err := os.StartProcess("/bin/sh", []string{"sh", "-c", "exit 0"}, &os.ProcAttr{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _, _ = zombie.Wait() })
+	live, err := os.StartProcess("/bin/sleep", []string{"sleep", "30"}, &os.ProcAttr{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = live.Kill(); _, _ = live.Wait() })
+	for deadline := time.Now().Add(5 * time.Second); len(running([]int{zombie.Pid})) != 0; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the exited child never read as not running")
+		}
+	}
+	if got := running([]int{zombie.Pid, live.Pid, 999999}); len(got) != 1 || got[0] != live.Pid {
+		t.Fatalf("running = %v, want only %d", got, live.Pid)
 	}
 }

@@ -5,8 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 	"time"
 )
@@ -167,9 +165,8 @@ func TestTerminateEndsTheGroup(t *testing.T) {
 	if Alive(p.PGID, start) {
 		t.Fatal("the group outlived Terminate")
 	}
-	out, _ := exec.Command("pgrep", "-g", strconv.Itoa(p.PGID)).Output()
-	if len(strings.TrimSpace(string(out))) > 0 {
-		t.Fatalf("left in the group: %s", out)
+	if left, err := groupMembers(p.PGID, 0); err != nil || len(left) > 0 {
+		t.Fatalf("left in the group: %v %v", left, err)
 	}
 }
 

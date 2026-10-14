@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -349,10 +350,11 @@ func TestRunClearsTheGroup(t *testing.T) {
 	}
 	b, err := os.ReadFile(filepath.Join(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)+".out", "bg.pid"))
 	must(t, err)
-	pid := strings.TrimSpace(string(b))
-	if err := exec.Command("kill", "-0", pid).Run(); err == nil {
-		_ = exec.Command("kill", "-9", pid).Run()
-		t.Fatalf("the executor's background process %s outlived its attempt", pid)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	must(t, err)
+	if len(agentd.Running([]int{pid})) != 0 {
+		_ = exec.Command("kill", "-9", strconv.Itoa(pid)).Run()
+		t.Fatalf("the executor's background process %d outlived its attempt", pid)
 	}
 	var cleared string
 	must(t, pool.QueryRow(ctx, `SELECT COALESCE(body_json->>'group_cleared', '') FROM agentrt.event
