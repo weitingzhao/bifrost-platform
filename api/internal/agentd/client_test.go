@@ -37,8 +37,8 @@ func must(t *testing.T, err error) {
 func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 	t.Helper()
 	db := agentrttest.Migrated(t)
-	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
-	must(t, err)
+	_, seedErr := store.Seed(ctx, db.Connect(t, db.Owner))
+	must(t, seedErr)
 	pool := db.Pool(t, db.Runtime)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {
@@ -125,7 +125,7 @@ func TestClientPath(t *testing.T) {
 	if err != nil || stop || !expires.After(time.Now()) {
 		t.Fatalf("heartbeat = %v %v %v", stop, expires, err)
 	}
-	if _, _, err := c.Heartbeat(ctx, cl.AttemptID, cl.Epoch+1); !errors.Is(err, agentd.ErrFenced) {
+	if _, _, err = c.Heartbeat(ctx, cl.AttemptID, cl.Epoch+1); !errors.Is(err, agentd.ErrFenced) {
 		t.Fatalf("another epoch = %v", err)
 	}
 	log, err := c.PutArtifact(ctx, "log_tail", "text/plain", []byte("compiling\n"))
@@ -147,8 +147,8 @@ func TestClientPath(t *testing.T) {
 		t.Fatalf("task = %s", state)
 	}
 
-	if cl, err := c.Claim(ctx, 1, []agentd.Tool{cursor}); err != nil || cl != nil {
-		t.Fatalf("an empty queue = %+v %v", cl, err)
+	if none, claimErr := c.Claim(ctx, 1, []agentd.Tool{cursor}); claimErr != nil || none != nil {
+		t.Fatalf("an empty queue = %+v %v", none, claimErr)
 	}
 	other := &agentd.Client{Base: base, Host: "h1", Token: "fixture-agentd-h2"}
 	if _, err := other.Claim(ctx, 1, []agentd.Tool{cursor}); err == nil || !strings.Contains(err.Error(), "403") {

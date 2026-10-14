@@ -30,10 +30,10 @@ func TestHostLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LockHost(path); !errors.Is(err, ErrHeld) {
+	if _, err = LockHost(path); !errors.Is(err, ErrHeld) {
 		t.Fatalf("a second agentd took the lock: %v", err)
 	}
-	if err := first.Release(); err != nil {
+	if err = first.Release(); err != nil {
 		t.Fatal(err)
 	}
 	again, err := LockHost(path)
@@ -50,18 +50,18 @@ func TestRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m, err := r.Load(); err != nil || len(m) != 0 {
-		t.Fatalf("a new registry = %v, %v", m, err)
+	if m, loadErr := r.Load(); loadErr != nil || len(m) != 0 {
+		t.Fatalf("a new registry = %v, %v", m, loadErr)
 	}
 	for _, e := range []Entry{{AttemptID: "a_2", PGID: 22, Phase: "running"}, {AttemptID: "a_1", PGID: 11, Phase: "computed"}} {
-		if err := r.Put(e); err != nil {
+		if err = r.Put(e); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := r.Put(Entry{AttemptID: "a_2", PGID: 22, Phase: "running", CheckpointSeq: 3}); err != nil {
+	if err = r.Put(Entry{AttemptID: "a_2", PGID: 22, Phase: "running", CheckpointSeq: 3}); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.Delete("a_1"); err != nil {
+	if err = r.Delete("a_1"); err != nil {
 		t.Fatal(err)
 	}
 	again, _ := OpenRegistry(path)
@@ -96,7 +96,7 @@ func TestLaunchRecordsBeforeRelease(t *testing.T) {
 	if code := p.Wait(); code != 0 || !seen {
 		t.Fatalf("exit %d; the executor had not run when the group was recorded: %v", code, seen)
 	}
-	if _, err := os.Stat(mark); err != nil {
+	if _, err = os.Stat(mark); err != nil {
 		t.Fatal("the executor did not run after its release")
 	}
 
