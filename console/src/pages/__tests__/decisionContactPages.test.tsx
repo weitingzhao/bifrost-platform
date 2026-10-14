@@ -57,7 +57,7 @@ describe('decision page connection truth', () => {
     vi.mocked(fetch).mockResolvedValue(json({ status: 'approved' }))
     fireEvent.click(screen.getByRole('button', { name: /Approve gitops/ }))
     await waitFor(() => expect(posts()).toHaveLength(1))
-    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/self-health'))).toBe(false)
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/health'))).toBe(false)
   })
 
   it.each([200, 401, 500])('approve probes first and sends after HTTP %s', async status => {
@@ -65,7 +65,7 @@ describe('decision page connection truth', () => {
     oldContact()
     const order: string[] = []
     vi.mocked(fetch).mockImplementation(async (input, init) => {
-      if (String(input).endsWith('/self-health')) { order.push('probe'); return json({}, status) }
+      if (String(input).endsWith('/health')) { order.push('probe'); return json({}, status) }
       if (init?.method === 'POST') order.push('decision')
       return json({ status: 'approved' })
     })
@@ -143,7 +143,7 @@ describe('decision page connection truth', () => {
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
     vi.mocked(fetch).mockResolvedValue(json(buildPlatformApproval({ id: 'a' })))
     await act(async () => { (event === 'pageshow' ? window : document).dispatchEvent(new Event(event)) })
-    expect(vi.mocked(fetch).mock.calls.filter(call => String(call[0]).endsWith('/self-health'))).toHaveLength(1)
+    expect(vi.mocked(fetch).mock.calls.filter(call => String(call[0]).endsWith('/health'))).toHaveLength(1)
     expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).endsWith('/approvals/a'))).toBe(true)
   })
 

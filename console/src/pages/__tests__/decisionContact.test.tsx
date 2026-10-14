@@ -2,10 +2,11 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { authedFetch } from '@/api/client'
 import { getServerContact, recordServerContact, resetServerContact, serverFetch, subscribeServerContact } from '@/api/serverContact'
+import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
 import { ServerContactStatus } from '@/pages/ServerContactStatus'
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
-import { NEVER_REACHED, NOT_SENT, notHeardNotice, notSentNotice, sentNotice } from '@/pages/serverContactNotice'
+import { CHECKING_CONNECTION, NEVER_REACHED, NOT_SENT, localContactTime, notHeardNotice, notSentNotice, sentNotice } from '@/pages/serverContactNotice'
 
 describe('server contact and the decision gate', () => {
   beforeEach(() => {
@@ -80,6 +81,48 @@ describe('server contact and the decision gate', () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{}'))
     await withDecisionContact(send, notice)
     expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('checks /health without a sign-in header, and says it is checking until the check is answered', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'not-for-the-probe')
+    recordServerContact()
+    vi.setSystemTime(Date.now() + 10_001)
+    let answer!: (response: Response) => void
+    vi.mocked(fetch).mockImplementation(() => new Promise(resolve => { answer = resolve }))
+    const notice = vi.fn()
+    const send = vi.fn().mockResolvedValue('done')
+    const pending = withDecisionContact(send, notice)
+    await Promise.resolve()
+    expect(notice).toHaveBeenLastCalledWith(CHECKING_CONNECTION)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]
+    expect(String(url)).toBe('/health')
+    expect(init?.signal).toBeInstanceOf(AbortSignal)
+    expect(JSON.stringify(init)).not.toContain('not-for-the-probe')
+    expect(new Headers(init?.headers).has('Authorization')).toBe(false)
+    expect(send).not.toHaveBeenCalled()
+    answer(new Response('{}'))
+    expect(await pending).toBe('done')
+    expect(notice.mock.calls.map(call => call[0])).toEqual([null, CHECKING_CONNECTION, null, null])
+  })
+
+  it('counts a response that arrived while the check was out', async () => {
+    recordServerContact()
+    vi.setSystemTime(Date.now() + 11_000)
+    vi.mocked(fetch).mockImplementation(() => new Promise(() => undefined))
+    const send = vi.fn().mockResolvedValue('done')
+    const result = withDecisionContact(send, vi.fn())
+    await vi.advanceTimersByTimeAsync(3000)
+    recordServerContact()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(await result).toBe('done')
+    expect(send).toHaveBeenCalledOnce()
+  })
+
+  it('writes the browser-local time, with the date when it is not today', () => {
+    const now = new Date(2026, 9, 13, 12, 34, 56)
+    expect(localContactTime(now.getTime())).toBe('12:34:56')
+    expect(localContactTime(new Date(2026, 9, 12, 23, 5, 9).getTime())).toBe('2026-10-12 23:05:09')
+    expect(notSentNotice(new Date(2026, 9, 12, 23, 5, 9).getTime())).toContain('last reached at 2026-10-12 23:05:09')
   })
 
   it('says never reached when all reads and the first probe failed', async () => {

@@ -1,17 +1,20 @@
-import { authHeaders } from '@/api/client'
 import { getServerContact, serverFetch } from '@/api/serverContact'
 import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
-import { notSentNotice, sentNotice } from '@/pages/serverContactNotice'
+import { CHECKING_CONNECTION, notSentNotice, sentNotice } from '@/pages/serverContactNotice'
 
 export class ConnectionCheckError extends Error {}
 
-/** Only this GET has a deadline. A response of any HTTP status proves contact. */
+/**
+ * Only this GET has a deadline. /health is answered from memory and needs no
+ * sign-in, so it stays fast when the cluster behind the platform is slow.
+ * A response of any HTTP status proves contact.
+ */
 export async function probeServerContact(): Promise<void> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     await Promise.race([
-      serverFetch('/api/v1/self-health', { headers: authHeaders(), cache: 'no-store', signal: controller.signal }),
+      serverFetch('/health', { cache: 'no-store', signal: controller.signal }),
       new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           controller.abort()
@@ -30,11 +33,18 @@ export async function withDecisionContact<T>(send: () => Promise<T>, notice: (te
   notice(null)
   const last = getServerContact()
   if (last == null || Date.now() - last > 10_000) {
+    const startedAt = Date.now()
+    notice(CHECKING_CONNECTION)
     try { await probeServerContact() } catch {
-      const message = notSentNotice(getServerContact())
-      notice(message)
-      throw new ConnectionCheckError(message)
+      // Another request was answered while the check was out: the server is reachable.
+      const seen = getServerContact()
+      if (seen == null || seen < startedAt) {
+        const message = notSentNotice(seen)
+        notice(message)
+        throw new ConnectionCheckError(message)
+      }
     }
+    notice(null)
   }
   const sentAt = Date.now()
   const early = setTimeout(() => notice(sentNotice(sentAt)), 5000)

@@ -17,6 +17,7 @@ import {
   type ResolveOutcome,
 } from '@/api/approvals'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
+import { CloseUnknownForm } from '@/pages/CloseUnknownForm'
 import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
 import { ServerContactStatus } from '@/pages/ServerContactStatus'
 import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
@@ -210,79 +211,6 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
   )
 }
 
-const CLOSE_CHOICES: readonly { outcome: ResolveOutcome; label: string }[] = [
-  { outcome: 'not_run', label: 'It did not run' },
-  { outcome: 'succeeded', label: 'It ran and succeeded' },
-  { outcome: 'failed', label: 'It ran and failed' },
-]
-
-function CloseUnknownForm({
-  blocked,
-  busy,
-  error,
-  onClose,
-}: {
-  blocked: string | null
-  busy: boolean
-  error: string | null
-  onClose: (outcome: ResolveOutcome, note: string) => void
-}) {
-  const [outcome, setOutcome] = useState<ResolveOutcome | ''>('')
-  const [note, setNote] = useState('')
-  const trimmed = note.trim()
-  const ready = blocked == null && !busy && outcome !== '' && trimmed !== ''
-  return (
-    <form
-      className="flex w-full min-w-0 flex-col gap-2"
-      onSubmit={event => {
-        event.preventDefault()
-        if (blocked != null || outcome === '' || trimmed === '') return
-        onClose(outcome, trimmed)
-      }}
-    >
-      {blocked != null ? (
-        <p role="status" className="m-0 text-sm">
-          {blocked}
-        </p>
-      ) : null}
-      <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
-        <legend className="text-sm">What happened</legend>
-        {CLOSE_CHOICES.map(choice => (
-          <label key={choice.outcome} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="outcome"
-              value={choice.outcome}
-              checked={outcome === choice.outcome}
-              onChange={() => setOutcome(choice.outcome)}
-            />
-            {choice.label}
-          </label>
-        ))}
-      </fieldset>
-      <p className="m-0 text-sm">If the same command later ran as another request, this one did not run.</p>
-      <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor="close-note">
-        Note
-        <input
-          id="close-note"
-          required
-          value={note}
-          onChange={event => setNote(event.target.value)}
-          className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
-        />
-      </label>
-      <Button type="submit" className="h-11 w-full sm:h-auto sm:w-auto" disabled={!ready}>
-        Close this request
-      </Button>
-      {error != null ? (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </form>
-  )
-}
-
 function RelatedRequests({
   item,
   rows,
@@ -330,6 +258,7 @@ function ApprovalCard({
   actionError,
   notice,
   closeError,
+  closeNotice,
   rows,
   onApprove,
   onReject,
@@ -343,6 +272,7 @@ function ApprovalCard({
   actionError: string | null
   notice: string | null
   closeError: string | null
+  closeNotice: string | null
   rows: readonly ApprovalItem[] | undefined
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
@@ -403,7 +333,6 @@ function ApprovalCard({
             {actionError}
           </p>
         ) : null}
-        {(pending || item.status === 'unknown') && notice != null ? <p role="status">{notice}</p> : null}
         {closed != null ? (
           <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
             {closed}
@@ -425,13 +354,11 @@ function ApprovalCard({
           <RelatedRequests item={item} rows={rows} />
         )}
         {item.status === 'unknown' ? (
-          <ServerContactStatus />
-        ) : null}
-        {item.status === 'unknown' ? (
           <CloseUnknownForm
             blocked={blocked}
             busy={busy}
             error={closeError}
+            notice={closeNotice}
             onClose={(outcome, note) => onClose(item.id, outcome, note)}
           />
         ) : null}
@@ -466,6 +393,12 @@ function ApprovalCard({
               </p>
             ) : null}
           </div>
+        ) : null}
+        {/* Last in the card, so it sits directly above the decision buttons. */}
+        {pending && notice != null ? (
+          <p role="status" className="m-0 text-sm">
+            {notice}
+          </p>
         ) : null}
       </article>
       {pending ? (
@@ -595,6 +528,7 @@ export function ApprovalsPage() {
   const [actionError, setActionError] = useRecordState<string | null>(recordId, null)
   const [notice, setNotice] = useRecordState<string | null>(recordId, null)
   const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
+  const [closeNotice, setCloseNotice] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
   const latest = useRef({ auth, staleBuild })
   latest.current = { auth, staleBuild }
@@ -661,8 +595,10 @@ export function ApprovalsPage() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [checkingId, qc, recordId, id])
 
-  function sendWhileAllowed<T>(session: string, send: () => Promise<T>): Promise<T> {
-    if (decisionBlockReason(latest.current.auth) != null || latest.current.auth.token !== session || latest.current.staleBuild) return Promise.reject(new ConnectionCheckError(DECISION_CHANGED))
+  // The connection check takes up to five seconds: decide again on what is true when it ends.
+  function sendWhileAllowed<T>(session: string, send: () => Promise<T>, guardBuild = true): Promise<T> {
+    const now = latest.current
+    if (decisionBlockReason(now.auth) != null || now.auth.token !== session || (guardBuild && now.staleBuild)) return Promise.reject(new ConnectionCheckError(DECISION_CHANGED))
     return send()
   }
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
@@ -724,16 +660,18 @@ export function ApprovalsPage() {
   }
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
-    if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
+    // Closing an unknown request is not held back by a newer Console: only approve and reject are.
+    if (decisionBlockReason(auth) != null || locks.current.get(recordId)) return
     const session = auth.token
     locks.current.set(recordId, true)
     setBusy(true)
     setCloseError(null)
+    setCloseNotice(null)
     try {
-      await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalResolve(requestId, session, { outcome, note })), setNotice)
+      await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalResolve(requestId, session, { outcome, note }), false), setCloseNotice)
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
-      if (err instanceof ConnectionCheckError) { setNotice(err.message); return }
+      if (err instanceof ConnectionCheckError) { setCloseNotice(err.message); return }
       const status = approvalFailureStatus(err)
       if (status === 401 || status === 403) {
         setCloseError(DECISION_REJECTED)
@@ -777,6 +715,7 @@ export function ApprovalsPage() {
               actionError={actionError}
               notice={notice}
               closeError={closeError}
+              closeNotice={closeNotice}
               rows={allQ.data}
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}

@@ -108,6 +108,8 @@ export function useAnswerSend(questionId: string) {
           throw new ConnectionCheckError(DECISION_CHANGED)
         }
         dispatchAnswerSend({ type: 'confirm', id: snap.id })
+        // The lock covers the connection check only. From here the send state guards against a second click.
+        unlockQuestionContact(snap.id)
         await clientRef.current.cancelQueries({ queryKey: questionItemKey(snap.id) })
         return postQuestionAnswer(snap.id, snap.letter, snap.text, token)
       }, notice => setQuestionContactNotice(snap.id, notice))
