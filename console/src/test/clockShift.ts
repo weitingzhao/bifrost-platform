@@ -8,19 +8,44 @@
  * uses relative times. Tests that pin the clock are not affected: fake timers
  * replace this Date and restore it afterwards.
  */
+import { beforeEach, vi } from 'vitest'
+
 export const CLOCK_SHIFT_MS = 3650 * 86_400_000
 
-const RealDate = Date
+const SHIFTED = Symbol.for('bifrost.console.test.clockShift')
 
-class ShiftedDate extends RealDate {
-  constructor(...args: unknown[]) {
-    if (args.length === 0) super(RealDate.now() + CLOCK_SHIFT_MS)
-    else super(...(args as ConstructorParameters<typeof Date>))
-  }
+type Marked = DateConstructor & { [SHIFTED]?: true }
 
-  static now(): number {
-    return RealDate.now() + CLOCK_SHIFT_MS
+function install(): DateConstructor {
+  const current = globalThis.Date as Marked
+  // A second run of this file in the same realm must not shift twice.
+  if (current[SHIFTED]) return current
+
+  const RealDate = current
+  const shiftedNow = () => RealDate.now() + CLOCK_SHIFT_MS
+
+  // A function, not a class: Date() without new returns a string, as the real one does.
+  function ShiftedDate(this: unknown, ...args: unknown[]): Date | string {
+    if (new.target === undefined) return new RealDate(shiftedNow()).toString()
+    return Reflect.construct(RealDate, args.length === 0 ? [shiftedNow()] : args, new.target) as Date
   }
+  // The same prototype: a date made by the real Date (structuredClone, a library that kept its own reference) is still
+  // `instanceof Date`, and a date made here is one for them.
+  ShiftedDate.prototype = RealDate.prototype
+  Object.setPrototypeOf(ShiftedDate, RealDate)
+  ShiftedDate.now = shiftedNow
+  Object.defineProperty(ShiftedDate, SHIFTED, { value: true })
+
+  const shifted = ShiftedDate as unknown as DateConstructor
+  globalThis.Date = shifted
+  return shifted
 }
 
-globalThis.Date = ShiftedDate as DateConstructor
+const ShiftedDate = install()
+
+beforeEach(() => {
+  // vi.setSystemTime without fake timers, followed by vi.useRealTimers, puts back the Date vitest saw when it started:
+  // the real one. Without this the rest of that file would run on the real clock and nobody would notice.
+  if (vi.isFakeTimers() || vi.getMockedSystemTime() != null) return
+  if (globalThis.Date !== ShiftedDate) globalThis.Date = ShiftedDate
+})
