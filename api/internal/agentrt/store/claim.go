@@ -28,6 +28,7 @@ type ClaimRequest struct {
 // Claim is a leased attempt and what agentd needs to run it.
 type Claim struct {
 	TaskID, AttemptID, MissionID, Role, Repo, SpecArtifact, BaseCommit, PushedRef, Effect string
+	WorkID                                                                                string // the mission's, for the Work trailer
 	Tool                                                                                  Tool
 	AttemptNo                                                                             int
 	Epoch                                                                                 int64
@@ -316,6 +317,7 @@ func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, 
 	cl := &Claim{TaskID: c.id, AttemptID: id, MissionID: c.mission, Role: c.role, Repo: c.repo, SpecArtifact: c.spec,
 		BaseCommit: c.base, PushedRef: AttemptRef(c.id, n), Effect: c.effect, Tool: tl, AttemptNo: n, Epoch: epoch,
 		HardLimit: time.Duration(c.limitS) * time.Second}
-	err = tx.QueryRow(ctx, `SELECT lease_expires_at FROM agentrt.attempt WHERE attempt_id = $1`, id).Scan(&cl.LeaseExpiresAt)
+	err = tx.QueryRow(ctx, `SELECT a.lease_expires_at, COALESCE(m.work_id, '') FROM agentrt.attempt a
+	  JOIN agentrt.mission m ON m.mission_id = $2 WHERE a.attempt_id = $1`, id, c.mission).Scan(&cl.LeaseExpiresAt, &cl.WorkID)
 	return cl, err
 }

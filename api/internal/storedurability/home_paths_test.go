@@ -22,11 +22,11 @@ var homeDerived = regexp.MustCompile(`os\.Getenv\("HOME"\)|os\.UserHomeDir\(\)`)
 // removed from it.
 var homePathFiles = map[string]string{
 	// stores still resolving under $HOME when no env is set — TD-196 backlog
-	"agentdeploy/store.go":    "store; TD-196 moves it to a ConfigMap",
-	"cluster/data_clone.go":   "store; TD-196 moves it to a ConfigMap",
-	"codehealth/store.go":     "store; TD-196 moves it to a ConfigMap",
-	"patrol/store.go":             "store; TD-196 moves it to a ConfigMap",
-	"agentgovernance/outcome.go":  "skill-outcome archive; same $HOME fallback the retired runner job store used",
+	"agentdeploy/store.go":       "store; TD-196 moves it to a ConfigMap",
+	"cluster/data_clone.go":      "store; TD-196 moves it to a ConfigMap",
+	"codehealth/store.go":        "store; TD-196 moves it to a ConfigMap",
+	"patrol/store.go":            "store; TD-196 moves it to a ConfigMap",
+	"agentgovernance/outcome.go": "skill-outcome archive; same $HOME fallback the retired runner job store used",
 	// operator credentials and workstation files, not platform state
 	"cluster/metrics_server.go":        "default kubeconfig path",
 	"cluster/observability_install.go": "default kubeconfig path",
@@ -38,6 +38,8 @@ var homePathFiles = map[string]string{
 	"ibgateway/config.go":              "default kubeconfig path",
 	"launchd/list.go":                  "reads the operator-plane host LaunchAgents directory; not platform state",
 	"threadtitles/threadtitles.go":     "Claude transcripts on the workstation",
+	"agentd/local.go":                  "agentd's host lock on the agent host (design v5 §5.2 本地登记); not platform state",
+	"agentd/mcpguard.go":               "reads the agent host user's ~/.cursor/mcp.json to refuse an executor that would load MCP servers",
 }
 
 func TestNoNewStoreUnderHome(t *testing.T) {
