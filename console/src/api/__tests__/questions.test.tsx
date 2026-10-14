@@ -75,6 +75,8 @@ describe('question contract', () => {
       { requester_principal: 1 },
       { requester_thread: false },
       { work_id: 1 },
+      { owner_duty: 1 },
+      { task_id: false },
       { title: null },
       { recommended: 1 },
       { allow_text: null },
@@ -127,6 +129,34 @@ describe('question contract', () => {
     expect(conflict.message).toContain('already answered')
     expect(conflict.answer?.option).toBe('b')
     expect(conflict.message).toContain('b')
+  })
+})
+
+// Review 172 A2: a decision card's duty and task are read and shown; a
+// question without them reads and shows as before.
+describe('decision cards', () => {
+  it('reads and shows the duty and the task', () => {
+    const body = contract('question-open.json').body as Record<string, unknown>
+    const card = parseQuestion({ ...body, owner_duty: 'rule', task_id: 't_01M4XW5Z7AC7CTA9P0YDGACGPG' })
+    expect(card.ok).toBe(true)
+    if (!card.ok) return
+    expect(card.question.owner_duty).toBe('rule')
+    expect(card.question.task_id).toBe('t_01M4XW5Z7AC7CTA9P0YDGACGPG')
+    render(<QuestionBody question={card.question} />)
+    expect(screen.getByText('Your duty')).toBeTruthy()
+    expect(screen.getByText('Set a rule')).toBeTruthy()
+    expect(screen.getByText('t_01M4XW5Z7AC7CTA9P0YDGACGPG')).toBeTruthy()
+  })
+
+  it('shows nothing of a card for a plain question', () => {
+    const plain = parseQuestion(contract('question-open.json').body)
+    expect(plain.ok).toBe(true)
+    if (!plain.ok) return
+    expect(plain.question.owner_duty).toBeUndefined()
+    expect(plain.question.task_id).toBeUndefined()
+    render(<QuestionBody question={plain.question} />)
+    expect(screen.queryByText('Your duty')).toBeNull()
+    expect(screen.queryByText('Task')).toBeNull()
   })
 })
 

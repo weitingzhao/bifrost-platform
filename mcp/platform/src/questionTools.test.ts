@@ -127,6 +127,26 @@ const ask = {
 }
 
 describe('question tools', () => {
+  // Review 172 A1: a decision card's fields reach the server, and a card
+  // about another task is another request (another default key).
+  it('ask_owner sends a decision card', async () => {
+    const d = deps()
+    const task = 't_01M4XW5Z7AC7CTA9P0YDGACGPG'
+    await askOwner({ ...ask, owner_duty: 'rule', task_id: task }, d)
+    await askOwner({ ...ask, owner_duty: 'rule', task_id: 't_01M4XW5Z7SC6YN6KEN3JXF8CFV' }, d)
+    await askOwner({ ...ask, owner_duty: 'rule', task_id: task, idempotency_key: 'k'.repeat(16) }, d)
+    const bodies = d.calls.map((c) => c.body as Record<string, unknown>)
+    assert.equal(bodies[0].owner_duty, 'rule')
+    assert.equal(bodies[0].task_id, task)
+    assert.notEqual(bodies[0].idempotency_key, bodies[1].idempotency_key)
+    assert.equal(bodies[2].idempotency_key, 'k'.repeat(16))
+    const refused = (await askOwner({ ...ask, owner_duty: 'approve' }, d)) as { field?: string }
+    assert.equal(refused.field, 'owner_duty')
+    const badTask = (await askOwner({ ...ask, task_id: 't_81M4XW5Z7AC7CTA9P0YDGACGPG' }, d)) as { field?: string }
+    assert.equal(badTask.field, 'task_id')
+    assert.equal(d.calls.length, 3)
+  })
+
   it('ask_owner sends a 64-hex key and does not post the answer route', async () => {
     const d = deps()
     const got = (await askOwner(ask, d)) as { ok: boolean }

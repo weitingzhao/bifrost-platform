@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -42,6 +43,28 @@ func TestPrintVectors(t *testing.T) {
 		{"secret at end", map[string]any{"title": "note token=s3cr3tvalue", "urgency": "now", "meanwhile": "wait"}, ""},
 		{"nbsp inside value", map[string]any{"title": "token=s3cr3t\u00a0value", "urgency": "now", "meanwhile": "wait"}, ""},
 		{"word edge", map[string]any{"title": "mybearer abcdefgh", "urgency": "now", "meanwhile": "wait"}, ""},
+		// decision cards (design v5 §7 item 3; review 172 A1, B3)
+		{"card", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "rule", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPG"}, "thread-a"},
+		{"card other task", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "rule", "task_id": "t_01M4XW5Z7SC6YN6KEN3JXF8CFV"}, "thread-a"},
+		{"card goal", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": " goal "}, ""},
+		{"card irreversible", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "irreversible"}, ""},
+		{"card task only", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_71M4XW5Z7AC7CTA9P0YDGACGPG"}, ""},
+		{"card empty", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "  ", "task_id": nil}, ""},
+		{"card bad duty", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "approve"}, ""},
+		{"card duty not a string", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": 3}, ""},
+		{"card task over 128 bits", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_81M4XW5Z7AC7CTA9P0YDGACGPG"}, ""},
+		{"card task lower case", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01m4xw5z7ac7cta9p0ydgacgpg"}, ""},
+		{"card task short", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGP"}, ""},
+		{"card task with I", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPI"}, ""},
+		{"card task with L", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPL"}, ""},
+		{"card task with O", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPO"}, ""},
+		{"card task with U", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPU"}, ""},
+		{"card task long", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPGX"}, ""},
+		{"card task very long", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_" + strings.Repeat("0", 200)}, ""},
+		{"card task not a string", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": 123}, ""},
+		{"card duty with a control character", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "ru\u0007le"}, ""},
+		{"card duty only control characters", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "\u0007\u0000"}, ""},
+		{"card other duty", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "goal", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPG"}, "thread-a"},
 	}
 	var out []map[string]any
 	for _, c := range cases {
@@ -61,14 +84,27 @@ func TestPrintVectors(t *testing.T) {
 		}
 		out = append(out, row)
 	}
+	// The redaction section of the file is kept as it is.
+	path := filepath.Join("testdata", "canonical", "vectors.json")
+	var existing struct {
+		Redact json.RawMessage `json:"redact"`
+	}
+	if prev, err := os.ReadFile(path); err == nil {
+		if err = json.Unmarshal(prev, &existing); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := map[string]any{"vectors": out}
+	if len(existing.Redact) > 0 {
+		doc["redact"] = existing.Redact
+	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
-	if err := enc.Encode(map[string]any{"vectors": out}); err != nil {
+	if err := enc.Encode(doc); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join("testdata", "canonical", "vectors.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}

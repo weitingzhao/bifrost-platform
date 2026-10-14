@@ -561,6 +561,11 @@ reg(
     urgency: z.string(),
     meanwhile: z.string(),
     work_id: z.string().optional(),
+    owner_duty: z
+      .enum(['goal', 'rule', 'irreversible'])
+      .optional()
+      .describe("A decision card: which of the Owner's three duties this is"),
+    task_id: z.string().optional().describe('A decision card: the agent runtime task it is about (t_…)'),
     requester_thread: z.string().optional(),
     link: z.string().optional(),
     link_text: z.string().optional(),

@@ -28,6 +28,10 @@ export interface AskOwnerInput {
   urgency: string
   meanwhile: string
   work_id?: string
+  /** A decision card: goal, rule or irreversible. */
+  owner_duty?: string
+  /** A decision card: the agent runtime task it is about (t_…). */
+  task_id?: string
   requester_thread?: string
   link?: string
   link_text?: string
@@ -76,6 +80,8 @@ export async function askOwner(input: AskOwnerInput, d: QuestionDeps = defaultQu
   if (input.recommended != null) request.recommended = input.recommended
   if (input.allow_text != null) request.allow_text = input.allow_text
   if (input.work_id) request.work_id = input.work_id
+  if (input.owner_duty != null) request.owner_duty = input.owner_duty
+  if (input.task_id != null) request.task_id = input.task_id
   if (input.requester_thread) request.requester_thread = input.requester_thread
   if (input.link) request.link = input.link
   if (input.link_text) request.link_text = input.link_text

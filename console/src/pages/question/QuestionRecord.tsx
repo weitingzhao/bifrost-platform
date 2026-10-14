@@ -55,7 +55,14 @@ function LinkLine({ view, linkText }: { view: ActionLinkView; linkText: string }
   return <span className="whitespace-pre-wrap break-words text-sm">{view.text}</span>
 }
 
-/** Title, body, and the two labelled lines. Record text is text nodes only. */
+/** The words for a decision card's duty; one the page does not know is shown as sent. */
+const DUTY_WORDS: Record<string, string> = {
+  goal: 'Set a goal',
+  rule: 'Set a rule',
+  irreversible: 'Something irreversible',
+}
+
+/** Title, body, the two labelled lines, and a decision card's duty and task. Record text is text nodes only. */
 export function QuestionBody({ question }: { question: Question }) {
   const link = question.link != null && question.link !== '' ? questionLink(question.link, question.link_text) : null
   return (
@@ -64,6 +71,10 @@ export function QuestionBody({ question }: { question: Question }) {
       {question.body != null && question.body !== '' ? <Prose value={question.body} /> : null}
       <Field label="If you do not answer" value={question.urgency} />
       <Field label="Meanwhile the thread will" value={question.meanwhile} />
+      {question.owner_duty != null ? (
+        <Field label="Your duty" value={DUTY_WORDS[question.owner_duty] ?? question.owner_duty} />
+      ) : null}
+      {question.task_id != null ? <Field label="Task" value={question.task_id} /> : null}
       {link != null ? <LinkLine view={link} linkText={question.link_text ?? ''} /> : null}
     </div>
   )
