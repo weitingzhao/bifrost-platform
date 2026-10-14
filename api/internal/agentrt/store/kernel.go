@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -53,11 +54,13 @@ type DB interface {
 
 // testHook, set only by tests, runs at named points so a test can hold a
 // call there and observe or race it.
-var testHook func(point, arg string)
+// It is loaded atomically: a test may remove it while a call it staged on
+// another goroutine still passes a hook point.
+var testHook atomic.Pointer[func(point, arg string)]
 
 func hook(point, arg string) {
-	if testHook != nil {
-		testHook(point, arg)
+	if f := testHook.Load(); f != nil {
+		(*f)(point, arg)
 	}
 }
 

@@ -34,8 +34,8 @@ func ReplayRoute(inputs map[string]any) ([]string, []any, string, error) {
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
 func SetHook(f func(point, arg string)) func() {
-	testHook = f
-	return func() { testHook = nil }
+	testHook.Store(&f)
+	return func() { testHook.Store(nil) }
 }
 
 // MoveTaskForTest moves a task as the kernel does: the fixture that leases a

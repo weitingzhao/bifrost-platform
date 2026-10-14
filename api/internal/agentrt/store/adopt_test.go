@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -335,12 +336,11 @@ func TestAdoptLiveAttemptAppears(t *testing.T) {
 	w.finish(t, review, "h4", cursor, "done")
 	pool := w.db.Pool(t, w.db.Runtime)
 	var claimed *store.Claim
-	fired := false
+	var fired atomic.Bool
 	unhook := store.SetHook(func(point, arg string) {
-		if point != "adopting" || arg != task || fired {
+		if point != "adopting" || arg != task || !fired.CompareAndSwap(false, true) {
 			return
 		}
-		fired = true
 		var cerr error
 		claimed, cerr = store.ClaimFor(ctx, pool, store.ClaimRequest{HostID: "h5", FreeSlots: 1, Tools: []store.Tool{codex}}, store.LeaseTTL)
 		ok(t, cerr)
@@ -348,7 +348,7 @@ func TestAdoptLiveAttemptAppears(t *testing.T) {
 	did, err := store.Conclude(ctx, w.rt, review)
 	unhook()
 	ok(t, err)
-	if !fired || claimed == nil || claimed.TaskID != task || did != "" || w.state(t, "task", task) != "leased" {
+	if !fired.Load() || claimed == nil || claimed.TaskID != task || did != "" || w.state(t, "task", task) != "leased" {
 		t.Fatalf("did %q with a new attempt %+v; task %s", did, claimed, w.state(t, "task", task))
 	}
 	did, err = store.Conclude(ctx, w.rt, review)
@@ -581,12 +581,11 @@ func TestAdoptTwoPassesAtOnce(t *testing.T) {
 		var second string
 		var secondErr error
 		done := make(chan struct{})
-		fired := false
+		var fired atomic.Bool // the second call passes the same hook point, on another goroutine
 		unhook := store.SetHook(func(p, a string) {
-			if p != point || a != arg || fired {
+			if p != point || a != arg || !fired.CompareAndSwap(false, true) {
 				return
 			}
-			fired = true
 			go func() { defer close(done); second, secondErr = call(pool) }()
 			w.waitFor(t, fragment, time.Now().Add(20*time.Second))
 		})
@@ -598,7 +597,7 @@ func TestAdoptTwoPassesAtOnce(t *testing.T) {
 			t.Fatal("the second pass never returned")
 		}
 		ok(t, errors.Join(err, secondErr))
-		if !fired {
+		if !fired.Load() {
 			t.Fatal("the race was not staged")
 		}
 		out := []string{first, second}
