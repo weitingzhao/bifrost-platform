@@ -6,6 +6,16 @@
 -- closed vocabulary (0002) gets this one type and nothing else changes: the
 -- attempt table's guard already lets any attempt_* event write an attempt
 -- row, and 'cancelled' is already an attempt state.
+--
+-- Upgrading: run this before the platform that writes the event, and do not
+-- run an older acceptance controller beside a newer one. An older migrator
+-- refuses a database that has this file; an older platform still starts
+-- (it checks only the database's identity), but its controller finds no
+-- salvaged results and closes a salvage check it meets as a stale ordinary
+-- pin; once such a chain has its deterministic pass, the result is not
+-- checked again. So settle the salvage checks in flight before rolling the
+-- platform back (review 166 B2). The ALTER takes a strong lock on the event
+-- table while it checks the existing rows.
 ALTER TABLE agentrt.event DROP CONSTRAINT event_type_closed;
 ALTER TABLE agentrt.event ADD CONSTRAINT event_type_closed CHECK (event_type IN (
   'plan_node_created','plan_node_retitled','plan_node_state_changed','plan_change_proposed','plan_change_decided','plan_changed',

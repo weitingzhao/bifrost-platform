@@ -119,7 +119,15 @@ var errLiveMoved = errors.New("store: the subject's live attempt changed")
 
 // salvageStale says why a check of a salvaged result is no longer about what
 // the task can accept ("" when it still is), with the subject locked and
-// live its live attempt as locked before.
+// live its live attempt as locked before. The spec's salvage mark is only a
+// claim: every condition of discovery (salvagedOpen) is checked again here,
+// on the state at this moment, so a check proposed by hand, or one that
+// waited while the task moved on, is judged as the controller's own would
+// be (review 166 A1), as an ordinary pin is judged by the state alone: the
+// attempt is lost and persisted, the subject is in the round pinned and
+// ready, leased or running, no later attempt was submitted, and the
+// attempt's verifications are this chain's own (none before its
+// deterministic check; that check's pass alone before its review).
 func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd taskDetail, pinnedState, live string) (string, error) {
 	switch {
 	case pinnedState != "lost":
@@ -129,9 +137,26 @@ func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd 
 	case !slices.Contains(adoptable, s.state):
 		return "the subject is " + s.state + ": its own attempt's result goes first", nil
 	}
-	// A later attempt submitted since the check was proposed has moved the
-	// subject out of ready, leased and running, or (after a failed check and
-	// rework) into another round: the two cases above.
+	var persisted, later bool
+	var checks, chain int
+	if err := tx.QueryRow(ctx, `SELECT a.persisted_at IS NOT NULL,
+	  EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no AND b.state IN ('submitted','finished')),
+	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id),
+	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id AND v.verification_id = $2
+	     AND v.method = 'deterministic' AND v.verdict = 'pass')
+	  FROM agentrt.attempt a WHERE a.attempt_id = $1`, spec.attempt, spec.verification).Scan(&persisted, &later, &checks, &chain); err != nil {
+		return "", err
+	}
+	switch {
+	case !persisted:
+		return "the attempt's result was not salvaged", nil
+	case later:
+		return "a later attempt was submitted", nil
+	case spec.check == "verify" && checks != 0:
+		return "the attempt was checked before", nil
+	case spec.check == "review" && (checks != 1 || chain != 1):
+		return "the attempt's checks are not this review's deterministic pass alone", nil
+	}
 	now, err := liveAttempt(ctx, tx, s.id, "")
 	if err != nil {
 		return "", err

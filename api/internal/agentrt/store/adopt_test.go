@@ -3,11 +3,13 @@ package store_test
 import (
 	"errors"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -329,5 +331,169 @@ func TestNoSalvageCheckAfterALaterSubmit(t *testing.T) {
 	}
 	if id, serr := store.StartSalvageCheck(ctx, w.rt, old.AttemptID); serr != nil || id != "" {
 		t.Fatalf("a check of the late salvage: %q %v", id, serr)
+	}
+}
+
+// handSalvage proposes, by hand, a check of a salvaged result: a spec the
+// controller did not write, marked salvage.
+func (w *world) handSalvage(t *testing.T, check, subject, attempt string, round int, verification string) string {
+	t.Helper()
+	id := store.NewTaskID()
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		doc := map[string]any{"check": check, "subject_task": subject, "attempt": attempt, "round": round, "task_spec": w.spec,
+			"commit": commitA, "repo": "bifrost-platform", "salvage": true}
+		if verification != "" {
+			doc["verification"] = verification
+		}
+		b, err := canon.Encode(doc)
+		if err != nil {
+			return err
+		}
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", b)
+		if err != nil {
+			return err
+		}
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: s1, Subject: subject,
+			Role: check, Class: "go", Title: check, SpecArtifact: spec, Effect: "none", Repo: "bifrost-platform", BaseCommit: commitA}); err != nil {
+			return err
+		}
+		return store.MarkReady(ctx, tx, "controller", id)
+	}))
+	return id
+}
+
+// Review 166 A1: the salvage mark is only a claim. A check proposed by hand
+// is judged on the state at acceptance as discovery judges it: after a later
+// attempt was submitted (even pinned to the current round), after the
+// result failed a check, or as a review pinned to a deterministic pass that
+// is not the attempt's, it closes and moves nothing. (A review with no
+// deterministic pass at all is closed by the check every review meets.)
+func TestHandSalvagePins(t *testing.T) {
+	cases := map[string]func(t *testing.T, w *world) (task, check string){
+		"after a later submit": func(t *testing.T, w *world) (string, string) {
+			task := w.ready(t, store.Task{})
+			old := w.claim(t, "h1", -store.Grace-time.Second, codex)
+			_, _, err := store.SweepLeases(ctx, w.rt)
+			ok(t, err)
+			fresh := w.claim(t, "h2", store.LeaseTTL, codex)
+			f := fence(fresh, "h2")
+			ok(t, store.Start(ctx, w.rt, f, "", ""))
+			exit := 0
+			_, err = store.Computed(ctx, w.rt, f, &exit, "exit", "done")
+			ok(t, err)
+			calls := 0
+			_, err = store.Persist(ctx, w.rt, f, store.Result{Report: w.artifact(t, "report", "# new\n"), Ref: fresh.PushedRef, Commit: commitA},
+				heads(map[string]string{fresh.PushedRef: commitA}, &calls))
+			ok(t, err)
+			_, err = store.Submit(ctx, w.rt, f)
+			ok(t, err)
+			v, err := store.StartVerification(ctx, w.rt, task)
+			ok(t, err)
+			w.finish(t, v, "h3", deterministic, "failed")
+			_, err = store.Conclude(ctx, w.rt, v)
+			ok(t, err)
+			_, err = store.Salvage(ctx, w.rt, old.AttemptID, "h1", store.Result{Report: w.artifact(t, "report", "# late\n"), Ref: old.PushedRef, Commit: commitA},
+				heads(map[string]string{old.PushedRef: commitA}, &calls))
+			ok(t, err)
+			return task, w.handSalvage(t, "verify", task, old.AttemptID, 2, "")
+		},
+		"after a failed check": func(t *testing.T, w *world) (string, string) {
+			task, old, _ := w.salvagedTask(t, true)
+			v, err := store.StartSalvageCheck(ctx, w.rt, old)
+			ok(t, err)
+			w.finish(t, v, "h3", deterministic, "failed")
+			_, err = store.Conclude(ctx, w.rt, v)
+			ok(t, err)
+			return task, w.handSalvage(t, "verify", task, old, 1, "")
+		},
+		"a review whose pass is not its own": func(t *testing.T, w *world) (string, string) {
+			task, old, _ := w.salvagedTask(t, true)
+			v, err := store.StartSalvageCheck(ctx, w.rt, old)
+			ok(t, err)
+			w.finish(t, v, "h3", deterministic, "done")
+			did, err := store.Conclude(ctx, w.rt, v)
+			ok(t, err)
+			if did != "review" {
+				t.Fatalf("the deterministic check did %q", did)
+			}
+			return task, w.handSalvage(t, "review", task, old, 1, store.NewVerificationID())
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := newKernelWorld(t)
+			task, check := setup(t, w)
+			before := len(w.verifications(t, task))
+			state := w.state(t, "task", task)
+			w.finish(t, check, "h4", cursor, "done")
+			did, err := store.Conclude(ctx, w.rt, check)
+			ok(t, err)
+			if did != "closed" || len(w.verifications(t, task)) != before || w.state(t, "task", task) != state {
+				t.Fatalf("did %q; %d verifications (was %d); task %s (was %s)", did, len(w.verifications(t, task)), before, w.state(t, "task", task), state)
+			}
+		})
+	}
+}
+
+// A salvaged result whose review fails moves nothing: the new attempt runs
+// on, and nothing is accepted.
+func TestSalvageReviewFails(t *testing.T) {
+	w := newKernelWorld(t)
+	task, old, fresh := w.salvagedTask(t, true)
+	v, err := store.StartSalvageCheck(ctx, w.rt, old)
+	ok(t, err)
+	w.run(t, "h3", deterministic, "done")
+	_, err = store.Conclude(ctx, w.rt, v)
+	ok(t, err)
+	review := w.checker(t, task, "review")
+	w.run(t, "h4", cursor, "failed")
+	did, err := store.Conclude(ctx, w.rt, review)
+	ok(t, err)
+	if did != "closed" || w.state(t, "task", task) != "running" || w.state(t, "attempt", fresh.AttemptID) != "running" {
+		t.Fatalf("did %q; task %s, new attempt %s", did, w.state(t, "task", task), w.state(t, "attempt", fresh.AttemptID))
+	}
+	if got := w.verifications(t, task); len(got) != 2 || got[1].verdict != "fail" || got[1].accepts {
+		t.Fatalf("verifications = %+v", got)
+	}
+}
+
+// Two controller passes at once: one check of a salvaged result, one
+// acceptance, one cancelled attempt.
+func TestAdoptTwoPassesAtOnce(t *testing.T) {
+	w := newKernelWorld(t)
+	task, old, fresh := w.salvagedTask(t, true)
+	pool := w.db.Pool(t, w.db.Runtime)
+	both := func(f func() (string, error)) []string {
+		var wg sync.WaitGroup
+		out := make([]string, 2)
+		errs := make([]error, 2)
+		start := make(chan struct{})
+		for i := range out {
+			wg.Add(1)
+			go func() { defer wg.Done(); <-start; out[i], errs[i] = f() }()
+		}
+		close(start)
+		wg.Wait()
+		ok(t, errors.Join(errs...))
+		slices.Sort(out)
+		return out
+	}
+	ids := both(func() (string, error) { return store.StartSalvageCheck(ctx, pool, old) })
+	if ids[0] != "" || ids[1] == "" {
+		t.Fatalf("two starts made %q", ids)
+	}
+	w.run(t, "h3", deterministic, "done")
+	_, err := store.Conclude(ctx, w.rt, ids[1])
+	ok(t, err)
+	review := w.checker(t, task, "review")
+	w.run(t, "h4", cursor, "done")
+	dids := both(func() (string, error) { return store.Conclude(ctx, pool, review) })
+	if dids[0] != "" || dids[1] != "accepted" || w.events(t, "attempt_cancelled", fresh.AttemptID) != 1 {
+		t.Fatalf("two conclusions did %q; %d cancellations", dids, w.events(t, "attempt_cancelled", fresh.AttemptID))
+	}
+	var accepting int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.verification WHERE task_id = $1 AND accepts_attempt`, task).Scan(&accepting))
+	if accepting != 1 {
+		t.Fatalf("%d accepting verifications", accepting)
 	}
 }
