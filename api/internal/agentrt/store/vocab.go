@@ -60,7 +60,12 @@ var bodies = map[string][]field{
 	"pool_cooldown_set":       {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
 	"legacy_imported":         {{"source", kStr, false}, {"count", kInt, true}},
 	"rule_signed":             {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
-	"note":                    {{"text", kStr, false}},
+	"approval_seen":           {{"approval", kInt, false}, {"status", kStr, false}},
+	"question_seen":           {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}},
+	"ci_seen":                 {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
+	"deploy_seen":             {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
+	"owner_signoff":           {{"ref", kStr, false}},
+	"note":                    {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}},
 }
 
 func checkBody(eventType string, body map[string]any) error {
