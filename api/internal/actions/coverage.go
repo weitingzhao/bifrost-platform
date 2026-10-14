@@ -62,6 +62,11 @@ func init() {
 		"POST /api/v1/approvals/{id}/heartbeat",
 		"POST /api/v1/approvals/{id}/result",
 	)
+	exempt("agent runtime work queue (design v5 §5.2): agentd claims and hands results over for its own host; each route is one store function and one event, not a cluster write",
+		"POST /api/v1/agentrt/claim",
+		"POST /api/v1/agentrt/attempts/{id}/{action}",
+		"PUT /api/v1/agentrt/artifacts/{id}",
+	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",

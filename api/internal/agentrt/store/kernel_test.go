@@ -95,6 +95,9 @@ func (w *world) ready(t *testing.T, task store.Task) string {
 	if task.Effect == "" {
 		task.Effect = "branch"
 	}
+	if task.Repo == "" {
+		task.Repo = "bifrost-platform"
+	}
 	task.Class, task.Title, task.SpecArtifact = "go", "t", w.spec
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.ProposeTask(ctx, tx, "controller", task); err != nil {
@@ -206,7 +209,7 @@ func same(t *testing.T, got, want map[string]any) {
 
 func heads(m map[string]string, calls *int) store.BranchHead {
 	var mu sync.Mutex
-	return func(_ context.Context, ref string) (string, error) {
+	return func(_ context.Context, _, ref string) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		*calls++

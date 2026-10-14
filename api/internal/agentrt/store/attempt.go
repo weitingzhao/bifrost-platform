@@ -333,9 +333,13 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 	})
 }
 
-// BranchHead reads the commit a branch of the main repository points at. The
-// HTTP layer passes a Gitea reader, tests a fake.
-type BranchHead func(ctx context.Context, ref string) (string, error)
+// BranchHead reads the commit a branch of a repository on the main Git
+// server points at. The HTTP layer passes a Gitea reader, tests a fake.
+type BranchHead func(ctx context.Context, repo, ref string) (string, error)
+
+// ErrNoHead: no reader of branch heads is configured, so a pushed branch
+// cannot be checked yet; agentd tries again later.
+var ErrNoHead = errors.New("store: no reader of branch heads is configured")
 
 // Result is what agentd hands over: the report, other artifacts, and the
 // branch and commit it pushed, if it pushed one.
@@ -357,9 +361,10 @@ func (r Result) all() []string {
 	return append([]string{r.Report}, r.Artifacts...)
 }
 
-// checkHead is the Gitea half of the result check: the branch points at the
-// commit reported.
-func (r Result) checkHead(head BranchHead) func(context.Context) error {
+// checkHead is the Gitea half of the result check: the branch of the task's
+// repository (read from the task, not from the caller) points at the commit
+// reported.
+func (r Result) checkHead(db DB, attemptID string, head BranchHead) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if (r.Ref == "") != (r.Commit == "") {
 			return fmt.Errorf("%w: a pushed branch needs both its ref and its commit", ErrState)
@@ -367,7 +372,24 @@ func (r Result) checkHead(head BranchHead) func(context.Context) error {
 		if r.Ref == "" {
 			return nil
 		}
-		got, err := head(ctx, r.Ref)
+		if head == nil {
+			return ErrNoHead
+		}
+		var repo string
+		err := InTx(ctx, db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT COALESCE(t.repo, '') FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+			  WHERE a.attempt_id = $1`, attemptID).Scan(&repo)
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrFenced
+		}
+		if err != nil {
+			return err
+		}
+		if repo == "" {
+			return fmt.Errorf("%w: the task has no repository to push to", ErrState)
+		}
+		got, err := head(ctx, repo, r.Ref)
 		if err != nil {
 			return fmt.Errorf("store: read %s: %w", r.Ref, err)
 		}
@@ -415,7 +437,7 @@ func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (ma
 	if r.Report == "" {
 		return nil, fmt.Errorf("%w: a result has a report", ErrState)
 	}
-	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(head),
+	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(db, f.AttemptID, head),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockLive(ctx, tx, f, false)
 			if err != nil {
@@ -473,7 +495,7 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 // persisted, the attempt gets persisted_at, so a new verification task may
 // accept it. Neither the attempt's state nor the task's changes.
 func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, head BranchHead) (map[string]any, error) {
-	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(head),
+	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(db, attemptID, head),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockAttempt(ctx, tx, attemptID, false)
 			if err != nil {

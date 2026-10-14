@@ -44,3 +44,19 @@ func TestAnUnknownRoleIsTreatedAsViewer(t *testing.T) {
 		t.Fatal("an unrecognised role must not outrank viewer")
 	}
 }
+
+// agentd sits below viewer like executor, and an agentd token is bound to a
+// host by its name.
+func TestAgentdIsBelowViewerAndBoundToAHost(t *testing.T) {
+	if roleLevel(RoleAgentd) >= roleLevel(RoleViewer) {
+		t.Fatal("agentd must not pass a Require(viewer) route")
+	}
+	if host, ok := AgentdHost(Principal{Name: "agentd:mac-dev", Role: RoleAgentd}); !ok || host != "mac-dev" {
+		t.Fatalf("host %q %v", host, ok)
+	}
+	for _, p := range []Principal{{Name: "agentd:", Role: RoleAgentd}, {Name: "mac-dev", Role: RoleAgentd}, {Name: "agentd:x", Role: RoleViewer}} {
+		if _, ok := AgentdHost(p); ok {
+			t.Fatalf("%+v counted as bound", p)
+		}
+	}
+}

@@ -103,6 +103,7 @@ type Server struct {
 	releasePolicy   *releasepolicy.Engine
 	agentThreads    *agentthreads.Handler
 	agentProgress   *agentprogress.Handler
+	agentRuntime    *agentRuntime
 	authLoaded      bool
 	audit           *actuation.AuditLog
 	jobs            *actuation.JobStore
@@ -355,6 +356,7 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.wireReleasePolicy(releasesSvc, dataDir, role.RunsWorkers())
 	srv.wireAgentThreads(dataDir, role, titleStore)
 	srv.wireAgentProgress(dataDir, role)
+	srv.wireAgentRuntime(role)
 	srv.bindActionExecutors()
 	srv.startApprovalLoop(role.RunsWorkers())
 	return srv, nil
@@ -392,6 +394,7 @@ func (s *Server) Router() http.Handler {
 		s.mountPlane(r)
 		approvals.Mount(r, s.auth, s.approvals)
 		s.mountQuestions(r)
+		s.mountAgentRuntime(r)
 		r.With(s.auth.Require(actuation.RoleViewer)).Get("/release-policy", s.handleReleasePolicy)
 		r.Get("/environments", s.handleEnvironments)
 		r.Get("/matrix", s.handleMatrix)

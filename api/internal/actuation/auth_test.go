@@ -118,3 +118,16 @@ func TestRequireOperatorRejectsViewer(t *testing.T) {
 		t.Fatalf("status: got %d want %d", rec.Code, http.StatusUnauthorized)
 	}
 }
+
+// An agentd token that does not name its host is refused at load, so no
+// agentd principal exists without a host.
+func TestAgentdTokenMustNameItsHost(t *testing.T) {
+	path := writeAuthFile(t, "tokens:\n  - name: agentd\n    role: agentd\n    token: fixture-agentd-token-1\n")
+	if _, err := LoadAuth(path); err == nil {
+		t.Fatal("an agentd token without a host loaded")
+	}
+	path = writeAuthFile(t, "tokens:\n  - name: agentd:mac-dev\n    role: agentd\n    token: fixture-agentd-token-1\n")
+	if _, err := LoadAuth(path); err != nil {
+		t.Fatal(err)
+	}
+}
