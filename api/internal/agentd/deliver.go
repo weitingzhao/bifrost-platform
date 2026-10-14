@@ -183,6 +183,8 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			}
 		case errors.Is(err, ErrFenced):
 			return d.lost(ctx, a, ws, e)
+		case errors.Is(err, ErrRegistry):
+			return out, err // the journal cannot be kept: never ended as refused (review 171 B1)
 		case transient(err):
 			return out, fmt.Errorf("%w: %s at %s: %v", ErrPending, e.AttemptID, e.Phase, err)
 		default:
@@ -313,7 +315,7 @@ func (d *Daemon) lost(ctx context.Context, a *Attempt, ws *Workspace, e *Entry) 
 		}
 	}
 	if err := d.prepare(ctx, a, ws, e); err != nil {
-		return out, fmt.Errorf("%w: %s: %v", ErrPending, e.AttemptID, err)
+		return out, fmt.Errorf("%w: %s: %w", ErrPending, e.AttemptID, err) // ErrRegistry stays visible (review 171 B1)
 	}
 	if err := d.pushPrepared(ctx, ws, e); err != nil {
 		return out, fmt.Errorf("%w: %s: the branch is not pushed: %v", ErrPending, e.AttemptID, err)

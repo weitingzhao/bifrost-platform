@@ -697,3 +697,87 @@ func TestGitCutShortIsPending(t *testing.T) {
 		t.Fatalf("after git was cut short: %+v %v; calls %v", got, ok, f.log())
 	}
 }
+
+// fakeGit puts a git first on PATH whose diff leaves a helper holding its
+// stdout (and only its stdout) after git itself has exited.
+func fakeGit(t *testing.T) {
+	t.Helper()
+	bin := t.TempDir()
+	script := "#!/bin/sh\ncase \"$1\" in\n  diff) sleep 5 2>/dev/null & echo patch; exit 0 ;;\n  *) exit 0 ;;\nesac\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// Review 171 A1: reading the patch ends within gitWaitDelay of git's end,
+// though a helper git started still holds stdout; so does a takeover that
+// makes a restarted attempt's last checkpoint.
+func TestDiffBoundedWhenAHelperHoldsStdout(t *testing.T) {
+	fakeGit(t)
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	ws := &Workspace{Dir: dir, Base: "base", env: os.Environ()}
+	start := time.Now()
+	if _, _, err := ws.Diff(bg, patchLimit); time.Since(start) > gitWaitDelay+1500*time.Millisecond {
+		t.Fatalf("diff returned after %s (%v)", time.Since(start), err)
+	}
+
+	f := newFake()
+	d := fakeDaemon(t, f)
+	d.SampleLimit = time.Second
+	e, _ := entryFor(t, d, "a1", "running")
+	e.Repo, e.Base, e.Group = "r", "base", ""
+	if err := os.MkdirAll(filepath.Join(e.Workdir, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Registry.Put(e); err != nil {
+		t.Fatal(err)
+	}
+	start = time.Now()
+	if err := d.Recover(bg); err != nil || time.Since(start) > gitWaitDelay+3*time.Second {
+		t.Fatalf("recover = %v after %s", err, time.Since(start))
+	}
+	if _, ok := registered(t, d, "a1"); ok || f.count("ended") != 1 {
+		t.Fatalf("the restarted attempt was not ended: calls %v", f.log())
+	}
+}
+
+// Review 171 B1: a registry that cannot be written while a result is
+// prepared is reported, from a lost attempt's takeover and from a hand-over,
+// and never ends the attempt as refused.
+func TestPrepareKeepsTheRegistryError(t *testing.T) {
+	f := newFake()
+	d := fakeDaemon(t, f)
+	entryFor(t, d, "a1", "lost")
+	dir := filepath.Dir(d.Registry.path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if err := d.Recover(bg); !errors.Is(err, ErrRegistry) {
+		t.Fatalf("recover of a lost attempt = %v", err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// One write fails, the next would work: the hand-over stops on the
+	// failure and is not ended (an end would be written and sent).
+	e, a := entryFor(t, d, "a2", "computed")
+	failed := false
+	d.Registry.failWrite = func() error {
+		if failed {
+			return nil
+		}
+		failed = true
+		return errors.New("disk full")
+	}
+	if _, err := d.deliver(bg, a, nil, &e, nil); !errors.Is(err, ErrRegistry) || f.count("ended") != 0 {
+		t.Fatalf("deliver = %v; calls %v", err, f.log())
+	}
+	if got, ok := registered(t, d, "a2"); !ok || got.Phase != "computed" || got.EndRequest != nil {
+		t.Fatalf("journal = %+v %v", got, ok)
+	}
+}

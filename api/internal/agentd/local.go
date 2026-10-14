@@ -133,6 +133,8 @@ type EndRequest struct {
 type Registry struct {
 	path string
 	mu   sync.Mutex
+	// failWrite, in tests, fails a write before it is made.
+	failWrite func() error
 }
 
 // OpenRegistry uses the file at path; it need not exist yet.
@@ -193,6 +195,11 @@ func (r *Registry) change(fn func(map[string]Entry)) error {
 func (r *Registry) write(fn func(map[string]Entry)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.failWrite != nil {
+		if err := r.failWrite(); err != nil {
+			return err
+		}
+	}
 	m, err := r.load()
 	if err != nil {
 		return err

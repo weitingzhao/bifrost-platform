@@ -7,11 +7,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -89,33 +89,71 @@ func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge
 	if _, err = gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
 		return nil, false, err
 	}
+	// exec copies git's output into a bounded writer, so the wait for the
+	// output, like the wait for git, ends WaitDelay after git ended or was
+	// killed, even while a helper git started still holds stdout (review
+	// 171 A1). A patch over the limit stops the copy and git.
 	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--binary", w.Base)
 	cmd.Dir, cmd.Env, cmd.WaitDelay = w.Dir, env, gitWaitDelay
 	errb := &ring{max: tailBytes}
-	cmd.Stderr = errb
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, false, err
-	}
+	// stop reads cmd.Process when it is called: Start sets it before the
+	// goroutine that copies the output starts.
+	out := &capped{max: limit, stop: func() { _ = cmd.Process.Kill() }}
+	cmd.Stdout, cmd.Stderr = out, errb
 	if err = cmd.Start(); err != nil {
 		return nil, false, err
 	}
-	patch, err = io.ReadAll(io.LimitReader(out, int64(limit)+1))
-	if len(patch) > limit {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+	err = cmd.Wait()
+	if out.over() {
 		return nil, true, nil
 	}
-	if werr := cmd.Wait(); err == nil && werr != nil {
-		err = fmt.Errorf("agentd: git diff: %v: %s", werr, strings.TrimSpace(string(errb.bytes())))
-	}
-	if err != nil && ctx.Err() != nil {
-		err = fmt.Errorf("%w: git diff: %v", ctx.Err(), err)
-	}
 	if err != nil {
+		err = fmt.Errorf("agentd: git diff: %v: %s", err, strings.TrimSpace(string(errb.bytes())))
+		if ctx.Err() != nil {
+			err = fmt.Errorf("%w: %v", ctx.Err(), err)
+		}
 		return nil, false, err
 	}
-	return patch, false, nil
+	return out.bytes(), false, nil
+}
+
+// errCapped: the output went over its limit.
+var errCapped = errors.New("agentd: output over its limit")
+
+// capped keeps up to max bytes; past that it calls stop (once) and refuses
+// the rest.
+type capped struct {
+	mu   sync.Mutex
+	max  int
+	buf  []byte
+	full bool
+	stop func()
+}
+
+func (c *capped) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.full || len(c.buf)+len(p) > c.max {
+		if !c.full && c.stop != nil {
+			c.stop()
+		}
+		c.full = true
+		return 0, errCapped
+	}
+	c.buf = append(c.buf, p...)
+	return len(p), nil
+}
+
+func (c *capped) over() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.full
+}
+
+func (c *capped) bytes() []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.buf
 }
 
 // Lineage is what a commit agentd pushes carries (design v5 §3 lineage row):
