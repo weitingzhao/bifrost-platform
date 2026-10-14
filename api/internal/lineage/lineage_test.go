@@ -38,8 +38,42 @@ func TestParseMessage(t *testing.T) {
 	if _, tr := parseMessage("subject\n\nCo-Authored-By: Someone <a@b>"); tr.agent {
 		t.Fatal("non-Claude co-author counted as agent")
 	}
-	if _, tr := parseMessage("subject\n\nAgentrt-Task: t_bad\nAgentrt-Task: " + task + "\nAgentrt-Task: t_01M4XW5Z7SC6YN6KEN3JXF8CFV"); tr.task != task {
-		t.Fatalf("task = %q: a malformed id is skipped and the first well-formed one wins", tr.task)
+	for _, bad := range []string{"t_bad", "t_Z1M4XW5Z7AC7CTA9P0YDGACGPG", "t_01M4XW5Z7AC7CTA9P0YDGACGPI", "t_01M4XW5Z7AC7CTA9P0YDGACGP",
+		"t_01m4xw5z7ac7cta9p0ydgacgpg"} {
+		if _, tr := parseMessage("subject\n\nAgentrt-Task: " + bad + "\nAgentrt-Task: " + task + "\nAgentrt-Task: t_01M4XW5Z7SC6YN6KEN3JXF8CFV"); tr.task != task {
+			t.Fatalf("after %s, task = %q: a malformed id is skipped and the first well-formed one wins", bad, tr.task)
+		}
+	}
+	// A squash keeps one task, the first of its trailer block; tasks in the
+	// body are not read (the trailer block is the last paragraph).
+	if _, tr := parseMessage("batch: squash\n\n* a\n\nAgentrt-Task: t_01M4XW5Z7SC6YN6KEN3JXF8CFV\n\nAgentrt-Task: " + task); tr.task != task {
+		t.Fatalf("squash task = %q", tr.task)
+	}
+}
+
+// A commit that carries only its task (no session, no Change-Id) is listed,
+// on main and on a branch, in the thread list and in the graph.
+func TestTaskOnlyCommits(t *testing.T) {
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	onMain := giteaCommit{SHA: "t01", Msg: "agentrt: on main\n\nAgentrt-Task: " + task, At: at}
+	onLane := giteaCommit{SHA: "t02", Msg: "agentrt: on a lane\n\nAgentrt-Task: " + task, At: at.Add(time.Hour), Parents: []string{"t01"}}
+	sc := repoScan{repo: "r1", def: "main", main: []giteaCommit{onMain}, branches: map[string][]giteaCommit{lane: {onLane, onMain}}}
+	threads := map[string]*threadAcc{}
+	collect(sc, threads)
+	got := map[string]string{}
+	for _, th := range finish(threads) {
+		for _, rc := range th.Repos {
+			for _, c := range rc.Commits {
+				got[c.SHA] = c.Ref + "|" + c.Task
+			}
+		}
+	}
+	if got["t01"] != "main|"+task || got["t02"] != lane+"|"+task {
+		t.Fatalf("task-only commits = %v", got)
+	}
+	g := buildGraph([]repoScan{sc}, nil)
+	if len(g) != 1 || len(g[0].Main) != 1 || g[0].Main[0].Task != task {
+		t.Fatalf("graph main = %+v", g)
 	}
 }
 
@@ -235,6 +269,23 @@ func TestFilterByTask(t *testing.T) {
 	}
 	if got = filter(resp, "", "", "t_01M4XW5Z7SC6YN6KEN3JXF8CFV"); len(got.Threads) != 0 {
 		t.Fatalf("another task = %+v", got.Threads)
+	}
+	// with a session or a Change-Id the filters are an intersection
+	if got = filter(resp, "local_s1", "", task); len(got.Threads) != 0 {
+		t.Fatalf("task and another thread's session = %+v", got.Threads)
+	}
+	if got = filter(resp, "", cidK, task); len(got.Threads) != 1 || got.Threads[0].CommitCount != 1 {
+		t.Fatalf("task and its own Change-Id = %+v", got.Threads)
+	}
+	if got = filter(resp, "", cidX, task); len(got.Threads) != 0 {
+		t.Fatalf("task and another Change-Id = %+v", got.Threads)
+	}
+	// filtering leaves the cached response as it was, deep down
+	before, _ := json.Marshal(resp)
+	_ = filter(resp, "", "", task)
+	_ = filter(resp, "local_s1", cidX, "")
+	if after, _ := json.Marshal(resp); string(after) != string(before) {
+		t.Fatal("filter changed the response it was given")
 	}
 	rec := httptest.NewRecorder()
 	NewHandler(s).HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?days=14&task="+task, nil))
