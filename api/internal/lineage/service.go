@@ -208,11 +208,11 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 		if t.changeID != "" {
 			cov.WithChangeID++
 		}
-		if t.session == "" && t.changeID == "" {
+		if t.session == "" && t.changeID == "" && t.task == "" {
 			continue
 		}
 		add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-			Transcript: t.transcript, ChangeID: t.changeID, Ref: sc.def, Landed: true, LandedBy: "sha"})
+			Transcript: t.transcript, ChangeID: t.changeID, Task: t.task, Ref: sc.def, Landed: true, LandedBy: "sha"})
 	}
 
 	names := make([]string, 0, len(sc.branches))
@@ -227,7 +227,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			}
 			seen[gc.SHA] = true
 			subject, t := parseMessage(gc.Msg)
-			if t.session == "" && t.changeID == "" {
+			if t.session == "" && t.changeID == "" && t.task == "" {
 				continue
 			}
 			dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
@@ -235,7 +235,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 				continue // the same change, already listed from main
 			}
 			add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-				Transcript: t.transcript, ChangeID: t.changeID, Ref: b,
+				Transcript: t.transcript, ChangeID: t.changeID, Task: t.task, Ref: b,
 				Landed: landedBy != "", LandedSHA: landedSHA, LandedBy: landedBy})
 		}
 	}

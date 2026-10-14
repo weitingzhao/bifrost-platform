@@ -12,6 +12,7 @@ type GraphCommit struct {
 	At       time.Time `json:"at"`
 	Session  string    `json:"session,omitempty"`
 	ChangeID string    `json:"change_id,omitempty"`
+	Task     string    `json:"task,omitempty"`
 	// Agent: a Claude co-author line without a session trailer (pre-hook agent work).
 	Agent bool `json:"agent,omitempty"`
 	// Branch commits only: whether and how the change reached the default branch.
@@ -60,7 +61,7 @@ func buildGraph(scans []repoScan, rels []Release) []RepoGraph {
 			onMain[gc.SHA] = true
 			subject, t := parseMessage(gc.Msg)
 			g.Main = append(g.Main, GraphCommit{SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-				ChangeID: t.changeID, Agent: t.session == "" && t.agent})
+				ChangeID: t.changeID, Task: t.task, Agent: t.session == "" && t.agent})
 		}
 		mi := newMainIndex(sc)
 		names := make([]string, 0, len(sc.branches))
@@ -81,7 +82,7 @@ func buildGraph(scans []repoScan, rels []Release) []RepoGraph {
 					open = true
 				}
 				cs = append(cs, GraphCommit{SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-					ChangeID: t.changeID, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
+					ChangeID: t.changeID, Task: t.task, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
 			}
 			if open { // a branch whose every change landed is a leftover, not a lane
 				gb := GraphBranch{Name: b, Commits: cs}

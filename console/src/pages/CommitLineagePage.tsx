@@ -112,6 +112,7 @@ function matches(t: LineageThread, needle: string): LineageThread | null {
         c =>
           c.sha.startsWith(n) ||
           (c.change_id ?? '').toLowerCase().startsWith(n) ||
+          (c.task ?? '').toLowerCase().startsWith(n) ||
           c.subject.toLowerCase().includes(n) ||
           c.repo.toLowerCase().includes(n),
       ),
@@ -224,7 +225,7 @@ function LandedTag({ c }: { c: LineageCommit }) {
   )
 }
 
-function ThreadCommits({ thread }: { thread: LineageThread }) {
+function ThreadCommits({ thread, onTask }: { thread: LineageThread; onTask: (task: string) => void }) {
   const rows = thread.repos.flatMap(r => r.commits).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
   return (
     <div className="flex flex-col gap-1 py-1">
@@ -245,6 +246,7 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
             <DenseTableHead>Landed</DenseTableHead>
             <DenseTableHead>Reached</DenseTableHead>
             <DenseTableHead>Change-Id</DenseTableHead>
+            <DenseTableHead>Task</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
@@ -267,6 +269,20 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
               </DenseTableCell>
               <DenseTableCell className="font-mono-tabular" title={c.change_id}>
                 {c.change_id != null ? c.change_id.slice(0, 10) : '—'}
+              </DenseTableCell>
+              <DenseTableCell className="font-mono-tabular whitespace-nowrap">
+                {c.task != null ? (
+                  <button
+                    type="button"
+                    className="underline decoration-dotted"
+                    title={`${c.task} — show every commit of this task`}
+                    onClick={() => onTask(c.task ?? '')}
+                  >
+                    {c.task.slice(0, 12)}
+                  </button>
+                ) : (
+                  '—'
+                )}
               </DenseTableCell>
             </DenseTableRow>
           ))}
@@ -557,7 +573,7 @@ export function CommitLineagePage() {
                     {isOpen && (
                       <DenseTableDetailRow>
                         <DenseTableCell colSpan={6}>
-                          <ThreadCommits thread={t} />
+                          <ThreadCommits thread={t} onTask={setNeedle} />
                         </DenseTableCell>
                       </DenseTableDetailRow>
                     )}
