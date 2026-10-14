@@ -4,9 +4,11 @@ import (
 	"context"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -66,4 +68,25 @@ func (s *Server) mountQuestions(r chi.Router) {
 		return
 	}
 	questions.Mount(r, s.auth, s.questionRuntime.svc)
+}
+
+// agentRuntimeQuestion reads a question for the agent runtime's controller
+// (agentRuntimeSources) by Lookup, which writes nothing; nil without a
+// question store.
+func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) (store.Question, bool) {
+	if rt == nil || rt.svc == nil {
+		return nil
+	}
+	return func(ctx context.Context, id string) (store.Question, bool) {
+		q, ok, err := within(ctx, func() (questions.Question, bool, error) { return rt.svc.Lookup(id) })
+		if err != nil || !ok {
+			return store.Question{}, false
+		}
+		var option, text, by string
+		var at time.Time
+		if q.Answer != nil {
+			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
+		}
+		return questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
+	}
 }

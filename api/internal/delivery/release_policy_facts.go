@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -220,16 +221,33 @@ func (f PolicyFacts) ChangedFiles(ctx context.Context, repo, from, to string) ([
 // is ci_gate.py's: repo from the repo param or the bifrost.io/repo label, and
 // the revision param equal to sha.
 func (f PolicyFacts) Succeeded(ctx context.Context, repo, sha string) (bool, error) {
+	status, _, err := f.CIRun(ctx, repo, sha)
+	return status == CISucceeded, err
+}
+
+// The outcomes CIRun reports.
+const (
+	CISucceeded = "Succeeded"
+	CIFailed    = "Failed"
+	CIRunning   = "Running"
+)
+
+// CIRun reports the ci-* runs for repo at sha (matched as Succeeded does):
+// Succeeded and its run if any succeeded, else the newest run's outcome
+// (Failed, or Running while it has no verdict) and name; "" when there is
+// no such run.
+func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run string, err error) {
 	dyn, err := f.s.buildDynamicClient()
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
 	list, err := dyn.Resource(pipelineRunGVR).Namespace(f.s.PipelinesNamespace()).List(ctx, metav1.ListOptions{
 		LabelSelector: "tekton.dev/pipeline in (" + strings.Join(ciPipelines, ",") + ")",
 	})
 	if err != nil {
-		return false, err
+		return "", "", err
 	}
+	var newest time.Time
 	for _, item := range list.Items {
 		params := map[string]string{}
 		if ps, ok, _ := unstructured.NestedSlice(item.Object, "spec", "params"); ok {
@@ -247,15 +265,28 @@ func (f PolicyFacts) Succeeded(ctx context.Context, repo, sha string) (bool, err
 		if runRepo != repo || params["revision"] != sha {
 			continue
 		}
+		outcome := CIRunning
 		conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")
 		for _, c := range conds {
 			m, _ := c.(map[string]any)
-			if m["type"] == "Succeeded" && m["status"] == "True" {
-				return true, nil
+			if m["type"] != "Succeeded" {
+				continue
+			}
+			switch m["status"] {
+			case "True":
+				outcome = CISucceeded
+			case "False":
+				outcome = CIFailed
 			}
 		}
+		if outcome == CISucceeded {
+			return CISucceeded, item.GetName(), nil
+		}
+		if at := item.GetCreationTimestamp().Time; status == "" || at.After(newest) {
+			status, run, newest = outcome, item.GetName(), at
+		}
 	}
-	return false, nil
+	return status, run, nil
 }
 
 // HeldBy is "" when who holds an open window that covers pipeline. Unlike the

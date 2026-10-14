@@ -135,6 +135,22 @@ func (s *Service) due() bool {
 	return len(sweep(doc, now)) > 0
 }
 
+// Lookup reads one question (its q_ id or its number) without sweeping: a
+// read that writes nothing, for readers outside the question flow (the agent
+// runtime's controller). err is a store read failure; ok is false only after
+// a successful read that does not contain ref.
+func (s *Service) Lookup(ref string) (Question, bool, error) {
+	doc, err := s.load()
+	if err != nil {
+		return Question{}, false, err
+	}
+	i, ok := doc.find(ref)
+	if !ok {
+		return Question{}, false, nil
+	}
+	return doc.Questions[i], true, nil
+}
+
 func (s *Service) load() (*document, error) {
 	raw, err := s.store.readBytes()
 	if err != nil {
