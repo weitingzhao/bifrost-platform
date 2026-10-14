@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ServerContactStatus } from '@/pages/ServerContactStatus'
 import type { Question } from '@/api/questions'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
@@ -33,6 +34,7 @@ export function QuestionAnswerForm({
   question,
   phase,
   blocked,
+  contactNotice,
   onChoose,
   onConfirm,
   onCheckAgain,
@@ -41,6 +43,7 @@ export function QuestionAnswerForm({
   phase: AnswerPhase
   /** Why Confirm answer stays off, from the same sign-in the top-right badge uses. */
   blocked: string | null
+  contactNotice?: string | null
   onChoose: (snapshot: ConfirmSnapshot) => void
   onConfirm: () => void
   onCheckAgain: () => void
@@ -72,6 +75,8 @@ export function QuestionAnswerForm({
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2" data-question-form={expired ? 'disabled' : 'open'}>
+      <ServerContactStatus />
+      {contactNotice != null ? <p role="status" className="m-0 text-sm">{contactNotice}</p> : null}
       {blocked != null ? (
         <p role="status" className="m-0 text-sm">
           {blocked}

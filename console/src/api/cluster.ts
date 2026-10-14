@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import type { AuditResponse } from './auditTypes'
 import type { AuthCapabilities } from './matrixTypes'
 import type {
@@ -22,43 +23,43 @@ import type {
 import { authHeaders, authedFetch, operatorToken, parseError } from './client'
 
 export async function fetchCluster(): Promise<ClusterSummary> {
-  const r = await fetch('/api/v1/cluster')
+  const r = await serverFetch('/api/v1/cluster')
   if (!r.ok) throw new Error(`cluster: HTTP ${r.status}`)
   return r.json() as Promise<ClusterSummary>
 }
 
 export async function fetchClusterNodes(): Promise<ClusterNodesResponse> {
-  const r = await fetch('/api/v1/cluster/nodes')
+  const r = await serverFetch('/api/v1/cluster/nodes')
   if (!r.ok) throw new Error(`cluster nodes: HTTP ${r.status}`)
   return r.json() as Promise<ClusterNodesResponse>
 }
 
 export async function fetchClusterGovernance(): Promise<ClusterGovernanceResponse> {
-  const r = await fetch('/api/v1/cluster/governance')
+  const r = await serverFetch('/api/v1/cluster/governance')
   if (!r.ok) throw new Error(`cluster governance: HTTP ${r.status}`)
   return r.json() as Promise<ClusterGovernanceResponse>
 }
 
 export async function fetchClusterServiceReadiness(): Promise<ClusterServiceReadinessResponse> {
-  const r = await fetch('/api/v1/cluster/service-readiness')
+  const r = await serverFetch('/api/v1/cluster/service-readiness')
   if (!r.ok) throw new Error(`cluster service-readiness: HTTP ${r.status}`)
   return r.json() as Promise<ClusterServiceReadinessResponse>
 }
 
 export async function fetchClusterPostgresStatus(): Promise<ClusterPostgresStatusResponse> {
-  const r = await fetch('/api/v1/cluster/postgres')
+  const r = await serverFetch('/api/v1/cluster/postgres')
   if (!r.ok) throw new Error(`cluster postgres: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPostgresStatusResponse>
 }
 
 export async function fetchClusterPostgresBackupStatus(): Promise<ClusterPostgresBackupStatusResponse> {
-  const r = await fetch('/api/v1/cluster/postgres/backup-status')
+  const r = await serverFetch('/api/v1/cluster/postgres/backup-status')
   if (!r.ok) throw new Error(`cluster postgres backup-status: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPostgresBackupStatusResponse>
 }
 
 export async function fetchDataFreshness(): Promise<DataFreshnessResponse> {
-  const r = await fetch('/api/v1/cluster/data-freshness')
+  const r = await serverFetch('/api/v1/cluster/data-freshness')
   if (!r.ok) throw new Error(`cluster data-freshness: HTTP ${r.status}`)
   return r.json() as Promise<DataFreshnessResponse>
 }
@@ -71,7 +72,7 @@ export async function triggerDataClone(body: {
   confirmation_token: string
   confirm: boolean
 }): Promise<DataCloneJob> {
-  const r = await fetch('/api/v1/cluster/data-clone', {
+  const r = await serverFetch('/api/v1/cluster/data-clone', {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify(body),
@@ -104,13 +105,13 @@ export class DataCloneRefusedError extends Error {
 }
 
 export async function fetchDataCloneStatus(id: string): Promise<DataCloneJob> {
-  const r = await fetch(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)
+  const r = await serverFetch(`/api/v1/cluster/data-clone/${encodeURIComponent(id)}`)
   if (!r.ok) throw new Error(`data-clone status: HTTP ${r.status}`)
   return r.json() as Promise<DataCloneJob>
 }
 
 export async function fetchDataCloneSchedule(): Promise<DataCloneSchedule> {
-  const r = await fetch('/api/v1/cluster/data-clone/schedule')
+  const r = await serverFetch('/api/v1/cluster/data-clone/schedule')
   if (!r.ok) throw new Error(`data-clone schedule: HTTP ${r.status}`)
   return r.json() as Promise<DataCloneSchedule>
 }
@@ -131,31 +132,31 @@ export async function updateDataCloneSchedule(body: {
 }
 
 export async function fetchClusterRedisStatus(): Promise<ClusterRedisStatusResponse> {
-  const r = await fetch('/api/v1/cluster/redis')
+  const r = await serverFetch('/api/v1/cluster/redis')
   if (!r.ok) throw new Error(`cluster redis: HTTP ${r.status}`)
   return r.json() as Promise<ClusterRedisStatusResponse>
 }
 
 export async function fetchNodePower(nodeName: string): Promise<NodePowerResponse> {
-  const r = await fetch(`/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/power`)
+  const r = await serverFetch(`/api/v1/cluster/nodes/${encodeURIComponent(nodeName)}/power`)
   if (!r.ok) throw new Error(`node power: HTTP ${r.status}`)
   return r.json() as Promise<NodePowerResponse>
 }
 
 export async function fetchClusterPlacement(): Promise<ClusterPlacementResponse> {
-  const r = await fetch('/api/v1/cluster/placement')
+  const r = await serverFetch('/api/v1/cluster/placement')
   if (!r.ok) throw new Error(`cluster placement: HTTP ${r.status}`)
   return r.json() as Promise<ClusterPlacementResponse>
 }
 
 export async function fetchClusterMetrics(limit = 8): Promise<ClusterMetricsResponse> {
-  const r = await fetch(`/api/v1/cluster/metrics?limit=${limit}`)
+  const r = await serverFetch(`/api/v1/cluster/metrics?limit=${limit}`)
   if (!r.ok) throw new Error(`cluster metrics: HTTP ${r.status}`)
   return r.json() as Promise<ClusterMetricsResponse>
 }
 
 export async function fetchClusterObservability(): Promise<ClusterObservabilityResponse> {
-  const r = await fetch('/api/v1/cluster/observability')
+  const r = await serverFetch('/api/v1/cluster/observability')
   if (!r.ok) throw new Error(`cluster observability: HTTP ${r.status}`)
   return r.json() as Promise<ClusterObservabilityResponse>
 }
@@ -164,13 +165,13 @@ export async function fetchClusterNamespaces(
   watch?: 'bifrost' | '',
 ): Promise<ClusterNamespacesResponse> {
   const qs = watch === 'bifrost' ? '?watch=bifrost' : ''
-  const r = await fetch(`/api/v1/cluster/namespaces${qs}`)
+  const r = await serverFetch(`/api/v1/cluster/namespaces${qs}`)
   if (!r.ok) throw new Error(`cluster namespaces: HTTP ${r.status}`)
   return r.json() as Promise<ClusterNamespacesResponse>
 }
 
 export async function fetchClusterWorkloads(ns: string): Promise<ClusterWorkloadsResponse> {
-  const r = await fetch(`/api/v1/cluster/workloads?ns=${encodeURIComponent(ns)}`)
+  const r = await serverFetch(`/api/v1/cluster/workloads?ns=${encodeURIComponent(ns)}`)
   if (!r.ok) throw new Error(`cluster workloads: HTTP ${r.status}`)
   return r.json() as Promise<ClusterWorkloadsResponse>
 }
@@ -182,7 +183,7 @@ export async function fetchClusterEvents(
   const params = new URLSearchParams()
   if (ns) params.set('ns', ns)
   params.set('limit', String(limit))
-  const r = await fetch(`/api/v1/cluster/events?${params}`)
+  const r = await serverFetch(`/api/v1/cluster/events?${params}`)
   if (!r.ok) throw new Error(`cluster events: HTTP ${r.status}`)
   return r.json() as Promise<ClusterEventsResponse>
 }
@@ -211,7 +212,7 @@ export async function fetchAuthCapabilities(token = operatorToken(), signal?: Ab
     // does not settle its promise after cancellation.
     return await Promise.race([
       (async () => {
-        const r = await fetch('/api/v1/auth/capabilities', { headers, signal: controller.signal })
+        const r = await serverFetch('/api/v1/auth/capabilities', { headers, signal: controller.signal })
         if (!r.ok) throw new Error(`auth capabilities: HTTP ${r.status}`)
         return await r.json() as AuthCapabilities
       })(),
@@ -226,7 +227,7 @@ export async function fetchAuthCapabilities(token = operatorToken(), signal?: Ab
 }
 
 export async function fetchAudit(): Promise<AuditResponse> {
-  const r = await fetch('/api/v1/audit')
+  const r = await serverFetch('/api/v1/audit')
   if (!r.ok) throw new Error(`audit: HTTP ${r.status}`)
   return r.json() as Promise<AuditResponse>
 }

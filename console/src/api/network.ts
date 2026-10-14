@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import type {
   IbGatewayControlResponse,
   IbGatewaySelfHealResponse,
@@ -20,7 +21,7 @@ import type {
 import { authedFetch } from './client'
 
 async function fetchNetworkJson<T>(path: string): Promise<T> {
-  const r = await fetch(path)
+  const r = await serverFetch(path)
   const body = (await r.json()) as T
   if (!r.ok) {
     return {
@@ -32,7 +33,7 @@ async function fetchNetworkJson<T>(path: string): Promise<T> {
 }
 
 export async function fetchNetworkStatus(): Promise<NetworkStatusResponse> {
-  const r = await fetch('/api/v1/network/status')
+  const r = await serverFetch('/api/v1/network/status')
   const body = (await r.json()) as NetworkStatusResponse
   if (!r.ok) {
     return {
@@ -45,7 +46,7 @@ export async function fetchNetworkStatus(): Promise<NetworkStatusResponse> {
 }
 
 export async function fetchNetworkAudit(): Promise<NetworkAuditResponse> {
-  const r = await fetch('/api/v1/network/audit')
+  const r = await serverFetch('/api/v1/network/audit')
   const body = (await r.json()) as NetworkAuditResponse
   if (!r.ok) {
     return {
@@ -89,7 +90,7 @@ export async function fetchNetworkPolicies(): Promise<NetworkPoliciesResponse> {
 }
 
 export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
-  const r = await fetch('/api/v1/plugins/ib-gateway/status')
+  const r = await serverFetch('/api/v1/plugins/ib-gateway/status')
   const body = (await r.json()) as IbGatewayStatusResponse
   if (!r.ok) {
     return {
@@ -102,7 +103,7 @@ export async function fetchIbGatewayStatus(): Promise<IbGatewayStatusResponse> {
 }
 
 export async function fetchMarketDataStatus(): Promise<MarketDataStatusResponse> {
-  const r = await fetch('/api/v1/plugins/market-data/status')
+  const r = await serverFetch('/api/v1/plugins/market-data/status')
   const body = (await r.json()) as MarketDataStatusResponse
   if (!r.ok) {
     return {
@@ -115,7 +116,7 @@ export async function fetchMarketDataStatus(): Promise<MarketDataStatusResponse>
 }
 
 export async function fetchFlexQueryStatus(): Promise<MarketDataStatusResponse> {
-  const r = await fetch('/api/v1/plugins/flex-query/status')
+  const r = await serverFetch('/api/v1/plugins/flex-query/status')
   const body = (await r.json()) as MarketDataStatusResponse
   if (!r.ok) {
     return {
@@ -128,7 +129,7 @@ export async function fetchFlexQueryStatus(): Promise<MarketDataStatusResponse> 
 }
 
 export async function fetchIbGatewaySelfHeal(): Promise<IbGatewaySelfHealResponse> {
-  const r = await fetch('/api/v1/plugins/ib-gateway/self-heal')
+  const r = await serverFetch('/api/v1/plugins/ib-gateway/self-heal')
   const body = (await r.json()) as IbGatewaySelfHealResponse
   if (!r.ok) {
     return { ...body, error: body.error ?? `HTTP ${r.status}` }

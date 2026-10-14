@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import type { ActuationResponse, PodLogsResponse, RolloutRestartRequest, ScaleRequest } from './matrixTypes'
 import type { ClusterSyncResponse, DrainNodeRequest } from './clusterTypes'
 import { authHeaders, authedFetch, parseError } from './client'
@@ -116,7 +117,7 @@ export async function fetchPodLogs(
 ): Promise<PodLogsResponse> {
   const params = new URLSearchParams({ tailLines: String(tailLines) })
   // viewer or above: logs are not anonymous (TD-204)
-  const r = await fetch(
+  const r = await serverFetch(
     `/api/v1/cluster/workloads/pods/${encodeURIComponent(namespace)}/${encodeURIComponent(name)}/logs?${params}`,
     { headers: authHeaders() },
   )

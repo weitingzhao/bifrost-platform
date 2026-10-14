@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { authedFetch } from './client'
 
 /** GET /api/v1/lineage — agent threads and the commits they stamped (commit trailers on the Gitea mirror). */
@@ -139,7 +140,7 @@ export async function fetchLineage(days: number, refresh = false, graph = false)
   const q = new URLSearchParams({ days: String(days) })
   if (refresh) q.set('refresh', 'true')
   if (graph) q.set('graph', 'true')
-  const r = await fetch(`/api/v1/lineage?${q.toString()}`)
+  const r = await serverFetch(`/api/v1/lineage?${q.toString()}`)
   if (!r.ok) throw new Error(`lineage: HTTP ${r.status}`)
   return r.json() as Promise<LineageResponse>
 }
@@ -179,7 +180,7 @@ export type BranchesResponse = {
 }
 
 export async function fetchBranches(refresh = false): Promise<BranchesResponse> {
-  const r = await fetch(`/api/v1/lineage/branches${refresh ? '?refresh=true' : ''}`)
+  const r = await serverFetch(`/api/v1/lineage/branches${refresh ? '?refresh=true' : ''}`)
   if (!r.ok) throw new Error(`lineage branches: HTTP ${r.status}`)
   return r.json() as Promise<BranchesResponse>
 }

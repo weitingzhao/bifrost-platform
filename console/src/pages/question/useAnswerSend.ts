@@ -1,5 +1,8 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
+import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
+import { DECISION_CHANGED } from '@/pages/serverContactNotice'
+import { lockQuestionContact, setQuestionContactNotice, unlockQuestionContact, useQuestionContactNotice } from '@/pages/question/questionContactStore'
 import {
   fetchQuestion,
   postQuestionAnswer,
@@ -61,6 +64,7 @@ export function acceptQuestionRead(record: Question, queryClient: QueryClient): 
  * A POST or GET that finishes after unmount dispatches to that same entry.
  */
 export function useAnswerSend(questionId: string) {
+  const contactNotice = useQuestionContactNotice(questionId)
   const queryClient = useQueryClient()
   const auth = usePlatformAuth()
   const authRef = useRef(auth)
@@ -97,10 +101,16 @@ export function useAnswerSend(questionId: string) {
 
   async function runSend(snap: ConfirmSnapshot): Promise<void> {
     const token = authRef.current.token
-    dispatchAnswerSend({ type: 'confirm', id: snap.id })
-    await clientRef.current.cancelQueries({ queryKey: questionItemKey(snap.id) })
     try {
-      const posted = await postQuestionAnswer(snap.id, snap.letter, snap.text, token)
+      const posted = await withDecisionContact(async () => {
+        const current = answerSendSnapshot(snap.id)
+        if (decisionBlockReason(authRef.current) != null || authRef.current.token !== token || current.phase.kind !== 'confirming' || current.phase.snapshot !== snap) {
+          throw new ConnectionCheckError(DECISION_CHANGED)
+        }
+        dispatchAnswerSend({ type: 'confirm', id: snap.id })
+        await clientRef.current.cancelQueries({ queryKey: questionItemKey(snap.id) })
+        return postQuestionAnswer(snap.id, snap.letter, snap.text, token)
+      }, notice => setQuestionContactNotice(snap.id, notice))
       if (posted.id !== snap.id) {
         dispatchAnswerSend({ type: 'postFailed', id: snap.id })
         await reread(snap.id)
@@ -114,6 +124,7 @@ export function useAnswerSend(questionId: string) {
       }
       await reread(snap.id)
     } catch (err) {
+      if (err instanceof ConnectionCheckError) { setQuestionContactNotice(snap.id, err.message); return }
       if (err instanceof QuestionHttpError && (err.status === 401 || err.status === 403)) {
         dispatchAnswerSend({
           type: 'postRejected',
@@ -139,6 +150,8 @@ export function useAnswerSend(questionId: string) {
       }
       dispatchAnswerSend({ type: 'postFailed', id: snap.id })
       await reread(snap.id)
+    } finally {
+      unlockQuestionContact(snap.id)
     }
   }
 
@@ -157,6 +170,7 @@ export function useAnswerSend(questionId: string) {
     const snap = current.phase.snapshot
     if (snap.id !== questionId) return
     if (snap.letter === 'none' && snap.text === '') return
+    if (!lockQuestionContact(questionId)) return
     void runSend(snap)
   }
 
@@ -171,6 +185,7 @@ export function useAnswerSend(questionId: string) {
   }
 
   return {
+    contactNotice,
     state: send,
     acceptRef,
     choose,

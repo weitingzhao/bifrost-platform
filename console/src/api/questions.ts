@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { actionLink, type ActionLinkView } from '@/api/agentProgress'
 import { operatorToken } from '@/api/client'
 import { containsSignInData, signInSafeError } from '@/lib/signInError'
@@ -397,7 +398,7 @@ async function questionsRead(path: string): Promise<Response> {
   const token = operatorToken()
   let response: Response
   try {
-    response = await fetch(path, { headers: readHeaders(token) })
+    response = await serverFetch(path, { headers: readHeaders(token) })
   } catch (error) {
     if (error instanceof Error) error.message = signInSafeError(error.message, token)
     throw error
@@ -460,7 +461,7 @@ export async function postQuestionAnswer(id: string, option: string, text: strin
   headers.set('Content-Type', 'application/json')
   headers.set('X-Bifrost-Session', QUESTION_SESSION)
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(`/api/v1/questions/${encodeURIComponent(id)}/answer`, {
+  const response = await serverFetch(`/api/v1/questions/${encodeURIComponent(id)}/answer`, {
     method: 'POST',
     headers,
     body: JSON.stringify(answerRequestBody(option, text)),

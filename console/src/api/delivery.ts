@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import type { ActuationResponse } from './matrixTypes'
 import type { CompareResponse, DeliveryPipelinePreflightResponse, DeliveryPipelineRunsResponse, DeliveryPipelinesResponse, DeliveryRunLogsResponse, DeliveryStartRunResponse, PipelineRunStepsResponse, RefPreflightResponse, ReleaseWindowResponse, RevisionsResponse, SupplyChainActuationResponse, SupplyChainResponse } from './deliveryTypes'
 import { authedFetch } from './client'
@@ -9,7 +10,7 @@ export async function fetchReleaseWindow(): Promise<ReleaseWindowResponse> {
 }
 
 export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesResponse> {
-  const r = await fetch('/api/v1/delivery/pipelines')
+  const r = await serverFetch('/api/v1/delivery/pipelines')
   if (!r.ok) throw new Error(`delivery pipelines: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelinesResponse>
 }
@@ -17,26 +18,26 @@ export async function fetchDeliveryPipelines(): Promise<DeliveryPipelinesRespons
 export async function fetchPipelinePreflight(
   pipelineName: string,
 ): Promise<DeliveryPipelinePreflightResponse> {
-  const r = await fetch(`/api/v1/delivery/pipelines/${encodeURIComponent(pipelineName)}/preflight`)
+  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(pipelineName)}/preflight`)
   if (!r.ok) throw new Error(`delivery preflight: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelinePreflightResponse>
 }
 
 export async function fetchPipelineRuns(name: string): Promise<DeliveryPipelineRunsResponse> {
-  const r = await fetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)
+  const r = await serverFetch(`/api/v1/delivery/pipelines/${encodeURIComponent(name)}/runs`)
   if (!r.ok) throw new Error(`pipeline runs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryPipelineRunsResponse>
 }
 
 export async function fetchSupplyChain(): Promise<SupplyChainResponse> {
-  const r = await fetch('/api/v1/delivery/supply-chain')
+  const r = await serverFetch('/api/v1/delivery/supply-chain')
   if (!r.ok) throw new Error(`supply chain: HTTP ${r.status}`)
   return r.json() as Promise<SupplyChainResponse>
 }
 
 export async function fetchRevisions(repos?: string[]): Promise<RevisionsResponse> {
   const params = repos?.length ? `?repos=${repos.join(',')}` : ''
-  const r = await fetch(`/api/v1/delivery/revisions${params}`)
+  const r = await serverFetch(`/api/v1/delivery/revisions${params}`)
   if (!r.ok) throw new Error(`revisions: HTTP ${r.status}`)
   return r.json() as Promise<RevisionsResponse>
 }
@@ -48,7 +49,7 @@ export async function fetchCompare(
   to: string,
 ): Promise<CompareResponse> {
   const params = new URLSearchParams({ repo, from, to })
-  const r = await fetch(`/api/v1/delivery/compare?${params}`)
+  const r = await serverFetch(`/api/v1/delivery/compare?${params}`)
   if (!r.ok) throw new Error(`compare: HTTP ${r.status}`)
   return r.json() as Promise<CompareResponse>
 }
@@ -58,7 +59,7 @@ export async function fetchRefPreflight(
   revision: string,
 ): Promise<RefPreflightResponse> {
   const params = new URLSearchParams({ revision })
-  const r = await fetch(`/api/v1/delivery/pipelines/${pipeline}/ref-preflight?${params}`)
+  const r = await serverFetch(`/api/v1/delivery/pipelines/${pipeline}/ref-preflight?${params}`)
   if (!r.ok) throw new Error(`ref preflight: HTTP ${r.status}`)
   return r.json() as Promise<RefPreflightResponse>
 }
@@ -108,7 +109,7 @@ export async function fetchPipelineRunLogs(
   namespace?: string,
 ): Promise<DeliveryRunLogsResponse> {
   const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
-  const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs${qs}`)
+  const r = await serverFetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/logs${qs}`)
   if (!r.ok) throw new Error(`pipeline logs: HTTP ${r.status}`)
   return r.json() as Promise<DeliveryRunLogsResponse>
 }
@@ -118,7 +119,7 @@ export async function fetchPipelineRunSteps(
   namespace?: string,
 ): Promise<PipelineRunStepsResponse> {
   const qs = namespace != null && namespace !== '' ? `?ns=${encodeURIComponent(namespace)}` : ''
-  const r = await fetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/steps${qs}`)
+  const r = await serverFetch(`/api/v1/delivery/runs/${encodeURIComponent(runId)}/steps${qs}`)
   if (!r.ok) throw new Error(`pipeline steps: HTTP ${r.status}`)
   return r.json() as Promise<PipelineRunStepsResponse>
 }

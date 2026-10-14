@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import type { TelemetryAlertsResponse, TelemetryOverviewResponse, TelemetryTargetsResponse } from './clusterTypes'
 import { authedFetch, parseError } from './client'
 
@@ -32,7 +33,7 @@ export async function postAttentionMute(body: {
 
 export async function fetchTelemetryOverview(ns?: string): Promise<TelemetryOverviewResponse> {
   const query = ns != null && ns !== '' ? `?ns=${encodeURIComponent(ns)}` : ''
-  const r = await fetch(`/api/v1/telemetry/overview${query}`)
+  const r = await serverFetch(`/api/v1/telemetry/overview${query}`)
   if (!r.ok) {
     const detail = await r.text()
     throw new Error(`telemetry overview: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
@@ -41,7 +42,7 @@ export async function fetchTelemetryOverview(ns?: string): Promise<TelemetryOver
 }
 
 export async function fetchTelemetryAlerts(): Promise<TelemetryAlertsResponse> {
-  const r = await fetch('/api/v1/telemetry/alerts')
+  const r = await serverFetch('/api/v1/telemetry/alerts')
   if (!r.ok) {
     const detail = await r.text()
     throw new Error(`telemetry alerts: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
@@ -64,7 +65,7 @@ export type PromQLResponse = {
 /** Instant query. Param name matches platform-api HandlePromQL (`q`). */
 export async function fetchPromQL(query: string): Promise<PromQLResponse> {
   const params = new URLSearchParams({ q: query })
-  const r = await fetch(`/api/v1/telemetry/promql?${params.toString()}`)
+  const r = await serverFetch(`/api/v1/telemetry/promql?${params.toString()}`)
   if (!r.ok) {
     const detail = await r.text()
     throw new Error(`telemetry promql: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)
@@ -79,7 +80,7 @@ export async function fetchPromQL(query: string): Promise<PromQLResponse> {
 
 export async function fetchTelemetryTargets(state?: string): Promise<TelemetryTargetsResponse> {
   const query = state != null && state !== '' ? `?state=${encodeURIComponent(state)}` : ''
-  const r = await fetch(`/api/v1/telemetry/targets${query}`)
+  const r = await serverFetch(`/api/v1/telemetry/targets${query}`)
   if (!r.ok) {
     const detail = await r.text()
     throw new Error(`telemetry targets: HTTP ${r.status}${detail !== '' ? ` — ${detail}` : ''}`)

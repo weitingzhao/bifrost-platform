@@ -17,7 +17,10 @@ import {
   type ResolveOutcome,
 } from '@/api/approvals'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
-import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
+import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
+import { ServerContactStatus } from '@/pages/ServerContactStatus'
+import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
+import { DECISION_CHANGED } from '@/pages/serverContactNotice'
 import {
   closedByYou,
   commandText,
@@ -400,7 +403,7 @@ function ApprovalCard({
             {actionError}
           </p>
         ) : null}
-        {pending && notice != null ? <p role="status">{notice}</p> : null}
+        {(pending || item.status === 'unknown') && notice != null ? <p role="status">{notice}</p> : null}
         {closed != null ? (
           <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
             {closed}
@@ -421,6 +424,9 @@ function ApprovalCard({
         ) : (
           <RelatedRequests item={item} rows={rows} />
         )}
+        {item.status === 'unknown' ? (
+          <ServerContactStatus />
+        ) : null}
         {item.status === 'unknown' ? (
           <CloseUnknownForm
             blocked={blocked}
@@ -464,6 +470,7 @@ function ApprovalCard({
       </article>
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
+          <ServerContactStatus />
           {blocked != null ? (
             <p role="status" className="m-0 text-sm">
               {blocked}
@@ -575,6 +582,7 @@ function ApprovalCard({
 
 /** The request page, `#approvals?id=<id>`: the only place to approve or reject. */
 export function ApprovalsPage() {
+  useDecisionPageResume()
   const qc = useQueryClient()
   const auth = usePlatformAuth()
   const blocked = decisionBlockReason(auth)
@@ -588,6 +596,8 @@ export function ApprovalsPage() {
   const [notice, setNotice] = useRecordState<string | null>(recordId, null)
   const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
+  const latest = useRef({ auth, staleBuild })
+  latest.current = { auth, staleBuild }
   const postsInFlight = useRef(0)
   const [reloadHeld, setReloadHeld] = useState(false)
 
@@ -651,6 +661,10 @@ export function ApprovalsPage() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [checkingId, qc, recordId, id])
 
+  function sendWhileAllowed<T>(session: string, send: () => Promise<T>): Promise<T> {
+    if (decisionBlockReason(latest.current.auth) != null || latest.current.auth.token !== session || latest.current.staleBuild) return Promise.reject(new ConnectionCheckError(DECISION_CHANGED))
+    return send()
+  }
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
     const session = auth.token
@@ -661,10 +675,9 @@ export function ApprovalsPage() {
     setBusy(true)
     setActionError(null)
     setNotice(null)
-    const waitingTimer = setTimeout(() => setNotice(APPROVAL_WAITING_NOTICE), 30_000)
     let needsCheck = false
     try {
-      const decision = await postApprovalDecision(
+      const decision = await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalDecision(
         requestId,
         session,
         path,
@@ -675,7 +688,7 @@ export function ApprovalsPage() {
               params_hash: opened?.params_hash ?? '',
             }
           : { reason: reason ?? '' },
-      )
+      )), setNotice)
       if (decision.status != null && decision.status !== 'pending' && opened != null) {
         storeRecord(id, { ...opened, ...decision })
         void qc.invalidateQueries({ queryKey: ['approvals'] })
@@ -685,6 +698,7 @@ export function ApprovalsPage() {
         setCheckingId(id)
       }
     } catch (err) {
+      if (err instanceof ConnectionCheckError) { setNotice(err.message); return }
       needsCheck = true
       const status = approvalFailureStatus(err)
       if (status === 401 || status === 403) {
@@ -697,14 +711,12 @@ export function ApprovalsPage() {
       setNotice('Checking the decision result.')
       setCheckingId(id)
     } finally {
-      clearTimeout(waitingTimer)
       postsInFlight.current = Math.max(0, postsInFlight.current - 1)
       setReloadHeld(postsInFlight.current > 0)
       setSending(null)
       // Reconciliation owns the lock until a record has actually been read.
       // State updates are asynchronous; the synchronous ref covers the same turn.
       if (!needsCheck) {
-        setNotice(null)
         locks.current.set(recordId, false)
         setBusy(false)
       }
@@ -712,14 +724,16 @@ export function ApprovalsPage() {
   }
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
-    if (decisionBlockReason(auth) != null) return
+    if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
     const session = auth.token
+    locks.current.set(recordId, true)
     setBusy(true)
     setCloseError(null)
     try {
-      await postApprovalResolve(requestId, session, { outcome, note })
+      await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalResolve(requestId, session, { outcome, note })), setNotice)
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
+      if (err instanceof ConnectionCheckError) { setNotice(err.message); return }
       const status = approvalFailureStatus(err)
       if (status === 401 || status === 403) {
         setCloseError(DECISION_REJECTED)
@@ -729,6 +743,7 @@ export function ApprovalsPage() {
         setCloseError(scrubSecret(raw, session))
       }
     } finally {
+      locks.current.set(recordId, false)
       setBusy(false)
     }
   }

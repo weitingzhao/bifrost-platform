@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * Research Engine (bifrost-research :8795) — Ops Console client via platform proxy.
  *
@@ -88,7 +89,7 @@ export function isResearchProxyError(data: unknown): data is ResearchProxyError 
 }
 
 async function researchGet<T>(path: string): Promise<T | ResearchProxyError> {
-  const res = await fetch(`${RESEARCH_PROXY}${path}`, { credentials: 'same-origin' })
+  const res = await serverFetch(`${RESEARCH_PROXY}${path}`, { credentials: 'same-origin' })
   const body = (await res.json().catch(() => null)) as unknown
   if (!res.ok) {
     if (body && typeof body === 'object' && 'error' in body) {
@@ -112,7 +113,7 @@ export async function fetchResearchHealth(): Promise<ResearchHealth | ResearchPr
 }
 
 export async function fetchResearchStatus(): Promise<ResearchStatus> {
-  const res = await fetch(STATUS_URL, { credentials: 'same-origin' })
+  const res = await serverFetch(STATUS_URL, { credentials: 'same-origin' })
   if (!res.ok) {
     throw new Error(`research status HTTP ${res.status}`)
   }

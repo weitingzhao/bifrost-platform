@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { authedFetch, parseError } from './client'
 
 /**
@@ -71,7 +72,7 @@ export type CodeHealthRescanResult = {
 }
 
 export async function fetchCodeHealth(history = 10): Promise<CodeHealthResponse> {
-  const r = await fetch(`/api/v1/code-health?history=${encodeURIComponent(String(history))}`)
+  const r = await serverFetch(`/api/v1/code-health?history=${encodeURIComponent(String(history))}`)
   if (!r.ok) throw await parseError('code health', r)
   return r.json() as Promise<CodeHealthResponse>
 }

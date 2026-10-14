@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { authHeaders, authedFetch, parseError } from '@/api/client'
 import {
   GO_ZERO_DECIDED_AT,
@@ -220,7 +221,7 @@ export async function postApprovalResolve(
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/resolve`, {
+  const r = await serverFetch(`/api/v1/approvals/${encodeURIComponent(id)}/resolve`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -238,7 +239,7 @@ export async function postApprovalDecision(
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
-  const r = await fetch(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, {
+  const r = await serverFetch(`/api/v1/approvals/${encodeURIComponent(id)}/${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -273,7 +274,7 @@ function asRecord(value: unknown): Record<string, unknown> {
  * response — the tier lives in the body, not in a frontend table.
  */
 export async function createApprovalRequest(body: ApprovalCreateBody): Promise<ApprovalCreateResult> {
-  const r = await fetch('/api/v1/approvals', {
+  const r = await serverFetch('/api/v1/approvals', {
     method: 'POST',
     headers: authHeaders(true),
     body: JSON.stringify({

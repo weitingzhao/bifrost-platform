@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 export type HusbandryLaneView = {
   id: string
   label: string
@@ -15,7 +16,7 @@ export type DataHusbandrySnapshot = {
 }
 
 export async function fetchDataHusbandry(): Promise<DataHusbandrySnapshot> {
-  const r = await fetch('/api/v1/data-husbandry')
+  const r = await serverFetch('/api/v1/data-husbandry')
   if (!r.ok) throw new Error(`data-husbandry: HTTP ${r.status}`)
   return r.json() as Promise<DataHusbandrySnapshot>
 }
