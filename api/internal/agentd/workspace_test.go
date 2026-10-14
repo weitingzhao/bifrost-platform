@@ -53,20 +53,20 @@ func TestWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dirty, err := w.Dirty(ctx); err != nil || dirty {
-		t.Fatalf("a fresh checkout is dirty: %v %v", dirty, err)
+	if dirty, dirtyErr := w.Dirty(ctx); dirtyErr != nil || dirty {
+		t.Fatalf("a fresh checkout is dirty: %v %v", dirty, dirtyErr)
 	}
-	if commit, err := w.Commit(ctx, "nothing", Lineage{Task: "t_x", ChangeID: "Ix", Work: "W-31"}); err != nil || commit != "" {
-		t.Fatalf("an empty commit = %q %v", commit, err)
+	if empty, emptyErr := w.Commit(ctx, "nothing", Lineage{Task: "t_x", ChangeID: "Ix", Work: "W-31"}); emptyErr != nil || empty != "" {
+		t.Fatalf("an empty commit = %q %v", empty, emptyErr)
 	}
-	if _, err := Prepare(ctx, dir, bare, base, env); !errors.Is(err, ErrWorkspaceExists) {
+	if _, err = Prepare(ctx, dir, bare, base, env); !errors.Is(err, ErrWorkspaceExists) {
 		t.Fatalf("a second run of the attempt = %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "new.go"), []byte("package x\n"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(dir, "new.go"), []byte("package x\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# repo, changed\n"), 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(dir, "README.md"), []byte("# repo, changed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	patch, err := w.Diff(ctx)
@@ -77,7 +77,7 @@ func TestWorkspace(t *testing.T) {
 		t.Fatalf("the checkpoint left the index changed: %s", staged)
 	}
 
-	if _, err := w.Commit(ctx, "work", Lineage{Task: "t_x", ChangeID: "Ix"}); err == nil {
+	if _, err = w.Commit(ctx, "work", Lineage{Task: "t_x", ChangeID: "Ix"}); err == nil {
 		t.Fatal("a commit without Work")
 	}
 	cid, err := NewChangeID()
