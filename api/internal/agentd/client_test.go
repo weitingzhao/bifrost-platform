@@ -36,13 +36,20 @@ func must(t *testing.T, err error) {
 // none, and the agentrt routes behind the platform's authentication.
 func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 	t.Helper()
+	return platformWith(t, store.Task{Effect: "none"}, nil)
+}
+
+// platformWith is platform with the task's effect, repository and base
+// commit as given, and a branch head reader for persist.
+func platformWith(t *testing.T, shape store.Task, head store.BranchHead) (*pgxpool.Pool, string, string) {
+	t.Helper()
 	db := agentrttest.Migrated(t)
 	_, seedErr := store.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, seedErr)
 	pool := db.Pool(t, db.Runtime)
 	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
 	tx(func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-1", WorkID: "W-31", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
 			return err
 		}
 		return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test")
@@ -84,7 +91,7 @@ func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 			return err
 		}
 		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "t", SpecArtifact: spec, Effect: "none"}); err != nil {
+			Class: "go", Title: "t", SpecArtifact: spec, Effect: shape.Effect, Repo: shape.Repo, BaseCommit: shape.BaseCommit}); err != nil {
 			return err
 		}
 		return store.MarkReady(ctx, tx, "controller", task)
@@ -94,7 +101,7 @@ func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 	must(t, os.WriteFile(path, []byte("tokens:\n  - name: agentd:h1\n    role: agentd\n    token: fixture-agentd-h1\n  - name: agentd:h2\n    role: agentd\n    token: fixture-agentd-h2\n"), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
-	api := &agentrtapi.API{DB: pool, ClaimWait: 300 * time.Millisecond, ClaimPoll: 50 * time.Millisecond}
+	api := &agentrtapi.API{DB: pool, ClaimWait: 300 * time.Millisecond, ClaimPoll: 50 * time.Millisecond, Head: head}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })
 	s := httptest.NewServer(r)

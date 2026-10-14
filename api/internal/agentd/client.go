@@ -54,6 +54,7 @@ type Claimed struct {
 	BaseCommit     string    `json:"base_commit"`
 	PushedRef      string    `json:"pushed_ref"`
 	EffectClass    string    `json:"effect_class"`
+	WorkID         string    `json:"work_id"`
 	Epoch          int64     `json:"lease_epoch"`
 	LeaseExpiresAt time.Time `json:"lease_expires_at"`
 	HardLimitS     int       `json:"hard_limit_s"`
