@@ -14,8 +14,12 @@ import (
 
 // The kernel: the state machine of missions, tasks and attempts that the
 // HTTP routes of design v5 §5.2 call. Every change is an event plus the row
-// it names, in one transaction; there is no function that sets an arbitrary
-// state (T25).
+// it names, in one transaction; missions, tasks and steps move only along
+// their transition tables (T25).
+//
+// Lock order, everywhere: attempt, then task, then mission, then the event
+// stream (Append). Claims start at the task and never lock an existing
+// attempt; a candidate a claim does not take is released at once.
 
 // Lease timing (v5 §5.2, §6.2): a lease lasts LeaseTTL from the last
 // heartbeat; once it lapses the attempt is stale and its host may still renew
@@ -42,6 +46,16 @@ type DB interface {
 	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }
 
+// testHook, set only by tests, runs at named points so a test can hold a
+// call there and observe or race it.
+var testHook func(point, arg string)
+
+func hook(point, arg string) {
+	if testHook != nil {
+		testHook(point, arg)
+	}
+}
+
 func timeText(t time.Time) string { return t.UTC().Truncate(time.Microsecond).Format(timeLayout) }
 
 // AttemptRef is the only branch an attempt may push to.
@@ -58,7 +72,9 @@ var missionMoves = map[string][]string{
 	"paused":         {"active", "stopped", "expired"},
 }
 
-// MoveMission changes a mission's state with mission_state_changed.
+// MoveMission changes a mission's state with mission_state_changed. It holds
+// the mission row exclusively, so a claim of one of its tasks either commits
+// first or sees the new state.
 func MoveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason string) error {
 	var from string
 	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`, missionID).Scan(&from); err != nil {
@@ -162,12 +178,8 @@ func MoveTask(ctx context.Context, tx pgx.Tx, actor, taskID, to, reason string) 
 // releaseTask moves a task whose live attempt is gone (§6.2): none and branch
 // back to ready, where the next claim is a new attempt (a duplicate
 // computation is the accepted cost; only one attempt can be accepted);
-// external to blocked, never re-dispatched by itself.
-func releaseTask(ctx context.Context, tx pgx.Tx, actor, taskID, reason string) error {
-	t, err := readTask(ctx, tx, taskID, true)
-	if err != nil {
-		return err
-	}
+// external to blocked, never re-dispatched by itself. t must be locked.
+func releaseTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, reason string) error {
 	if t.state != "leased" && t.state != "running" {
 		return nil
 	}
@@ -260,26 +272,38 @@ type Claim struct {
 	LeaseExpiresAt                                                                        time.Time
 }
 
+// dispatched are the effect classes round 2 hands out. External work is not
+// dispatched in round 2 (v5 §6.2); its takeover rules are in place for when
+// it is (review 148 A4).
+var dispatched = []string{"none", "branch"}
+
+type claimOpts struct {
+	ttl     time.Duration
+	effects []string
+}
+
 type candidate struct {
 	id, mission, role, spec, subject, base, repo, effect string
 	core                                                 bool
 	needs                                                []string
 	limitS                                               int
+	created                                              time.Time
 }
+
+const candidatePage = 100
 
 // ClaimNext leases the oldest ready task of an active mission that one of the
 // host's tools may take, or returns nil. It records the poll on the host (a
 // liveness column) whatever the outcome. Routing in 2.2 is v5 §5.1.2
 // 「分流顺序」②–④ only: hard capability facts, the core rule and
-// independence from the author; scores and quota are 2.4. Rows other claimers
-// hold are skipped, never waited for, and only the task taken is locked.
+// independence from the author; scores and quota are 2.4. Candidates are
+// read in pages until one is taken or none is left, so tasks no tool here may
+// take never hide the ones it may (review 148 B2).
 func ClaimNext(ctx context.Context, db DB, r ClaimRequest) (*Claim, error) {
-	return claimNext(ctx, db, r, LeaseTTL)
+	return claimNext(ctx, db, r, claimOpts{ttl: LeaseTTL, effects: dispatched})
 }
 
-// claimNext takes the lease length as a parameter so tests can make leases
-// that have already lapsed.
-func claimNext(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*Claim, error) {
+func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim, error) {
 	for _, tl := range r.Tools {
 		if tl.Executor == "" || tl.Provider == "" {
 			return nil, errors.New("store: every tool names its executor and its model provider")
@@ -297,6 +321,10 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*
 		if err != nil || state != "active" || r.FreeSlots <= 0 || len(r.Tools) == 0 {
 			return err
 		}
+		// A global control takes this lock exclusively (SetControl).
+		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(742105)`); err != nil {
+			return err
+		}
 		var live int
 		if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.attempt WHERE host_id = $1 AND state IN ('leased','running','stale')`,
 			r.HostID).Scan(&live); err != nil || live >= slots {
@@ -306,49 +334,122 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, ttl time.Duration) (*
 		if err != nil || stop {
 			return err
 		}
-		rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
-		  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class, t.core,
-		  ARRAY(SELECT jsonb_array_elements_text(t.needs_json)), t.hard_limit_s
-		  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
-		  WHERE t.state = 'ready' AND m.state = 'active' ORDER BY t.created_at, t.task_id LIMIT 100`)
-		if err != nil {
-			return err
-		}
-		cands, err := pgx.CollectRows(rows, scanCandidate)
-		if err != nil {
-			return err
-		}
-		for _, c := range cands {
-			if stop, err := held(ctx, tx, []scope{{"mission", c.mission}, {"task", c.id}}, "stop", "pause"); err != nil {
-				return err
-			} else if stop {
-				continue
-			}
-			tool, found, err := pickTool(ctx, tx, r.Tools, c)
+		var after *candidate
+		for {
+			cands, err := candidates(ctx, tx, o.effects, after)
 			if err != nil {
 				return err
 			}
-			if !found {
-				continue
+			for i := range cands {
+				if claim, err = tryCandidate(ctx, tx, r, cands[i], o.ttl); err != nil || claim != nil {
+					return err
+				}
 			}
-			got, err := takeReady(ctx, tx, c)
-			if err != nil {
-				return err
+			if len(cands) < candidatePage {
+				return nil
 			}
-			if got {
-				claim, err = lease(ctx, tx, r.HostID, tool, c, ttl)
-				return err
-			}
+			after = &cands[len(cands)-1]
 		}
-		return nil
 	})
 	return claim, err
 }
 
+// candidates reads one page of ready tasks of active missions, oldest first,
+// after the cursor. A review or verification of core work is core work
+// (review 148 B4).
+func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candidate) ([]candidate, error) {
+	var at any
+	var id string
+	if after != nil {
+		at, id = after.created, after.id
+	}
+	rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
+	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
+	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)), t.hard_limit_s, t.created_at
+	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id
+	  WHERE t.state = 'ready' AND m.state = 'active' AND t.effect_class = ANY($1)
+	    AND ($2::timestamptz IS NULL OR (t.created_at, t.task_id) > ($2::timestamptz, $3::text))
+	  ORDER BY t.created_at, t.task_id LIMIT $4`, effects, at, id, candidatePage)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, scanCandidate)
+}
+
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
-	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.limitS)
+	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.limitS, &c.created)
 	return c, err
+}
+
+// tryCandidate leases c to the first tool that may take it, or returns nil.
+// What it locks for a candidate it does not take is released at once by
+// rolling back to a savepoint, so a skipped candidate holds nothing until the
+// claim commits (review 148 B1).
+func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, c candidate, ttl time.Duration) (*Claim, error) {
+	tool, found, err := pickTool(ctx, tx, r.Tools, c)
+	if err != nil || !found {
+		return nil, err
+	}
+	sp, err := tx.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	cl, err := take(ctx, sp, r.HostID, tool, c, ttl)
+	if err != nil || cl == nil {
+		if rerr := sp.Rollback(ctx); err == nil {
+			err = rerr
+		}
+		return nil, err
+	}
+	if err := sp.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return cl, nil
+}
+
+// take locks the candidate if no one holds it and it is still ready, then
+// its mission, and leases it if the mission is still active and no control
+// holds it. The mission row is shared by claims and taken exclusively by
+// MoveMission and by a control on the mission, and the task row by a control
+// on the task, so these checks are exact: a pause or stop either commits
+// before the claim or is seen by it (review 148 A2). A plan task takes the
+// mission row exclusively, so two plan tasks of one mission never lease
+// together (task_one_live_plan).
+func take(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration) (*Claim, error) {
+	var state string
+	err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR UPDATE SKIP LOCKED`, c.id).Scan(&state)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	mode := "FOR SHARE"
+	if c.role == "plan" {
+		mode = "FOR NO KEY UPDATE"
+	}
+	var mission string
+	if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+mode, c.mission).Scan(&mission); err != nil {
+		return nil, err
+	}
+	if mission != "active" {
+		return nil, nil
+	}
+	stop, err := held(ctx, tx, []scope{{"mission", c.mission}, {"task", c.id}}, "stop", "pause")
+	if err != nil || stop {
+		return nil, err
+	}
+	if c.role == "plan" {
+		var busy bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = $1 AND role = 'plan' AND state IN ('leased','running'))`,
+			c.mission).Scan(&busy); err != nil || busy {
+			return nil, err
+		}
+	}
+	hook("taken", c.id)
+	return lease(ctx, tx, hostID, tl, c, ttl)
 }
 
 func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, c candidate) (Tool, bool, error) {
@@ -396,31 +497,6 @@ func eligible(ctx context.Context, tx pgx.Tx, tl Tool, c candidate) (bool, error
 	return !excluded, err
 }
 
-// takeReady locks the candidate if no one else holds it and it is still
-// ready. A plan task also takes its mission's row, so two plan tasks of one
-// mission are never leased together (task_one_live_plan) and the second
-// claimer moves on instead of failing.
-func takeReady(ctx context.Context, tx pgx.Tx, c candidate) (bool, error) {
-	var state string
-	err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 FOR UPDATE SKIP LOCKED`, c.id).Scan(&state)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil || state != "ready" {
-		return false, err
-	}
-	if c.role != "plan" {
-		return true, nil
-	}
-	if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`, c.mission); err != nil {
-		return false, err
-	}
-	var busy bool
-	err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE mission_id = $1 AND role = 'plan' AND state IN ('leased','running'))`,
-		c.mission).Scan(&busy)
-	return !busy, err
-}
-
 func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration) (*Claim, error) {
 	var n int
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(attempt_no), 0) + 1 FROM agentrt.attempt WHERE task_id = $1`, c.id).Scan(&n); err != nil {
@@ -460,14 +536,17 @@ type attemptRow struct {
 	epoch                        int64
 	expires, now                 time.Time
 	started, computed, persisted bool
+	t                            taskRow // locked, when the caller asked for the task
 }
 
 func liveState(s string) bool { return s == "leased" || s == "running" || s == "stale" }
 
-// lockAttempt locks the attempt row and then reads the database clock in a
-// statement of its own: a clock value computed by the locking statement may
-// predate its wait for the lock (T22 ⑤).
-func lockAttempt(ctx context.Context, tx pgx.Tx, id string) (attemptRow, error) {
+// lockAttempt locks the attempt row and, with withTask, then its task's row
+// (attempt before task, as everywhere). The database clock is read after
+// every lock is held, in a statement of its own: a clock value read before
+// or during a lock wait may predate the end of the wait (T22 ⑤, review 148
+// A3).
+func lockAttempt(ctx context.Context, tx pgx.Tx, id string, withTask bool) (attemptRow, error) {
 	var a attemptRow
 	var host *string
 	err := tx.QueryRow(ctx, `SELECT attempt_id, task_id, attempt_no, host_id, state, lease_epoch, lease_expires_at,
@@ -483,16 +562,22 @@ func lockAttempt(ctx context.Context, tx pgx.Tx, id string) (attemptRow, error) 
 	if host != nil {
 		a.host = *host
 	}
+	if withTask {
+		if a.t, err = readTask(ctx, tx, a.task, true); err != nil {
+			return a, err
+		}
+	}
 	err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&a.now)
 	return a, err
 }
 
 // lockLive is the write-time fence of v5 §5.2 「写入时的隔离检查」 ③: with
-// the row locked, the attempt's host is the caller's, its state is live, its
-// epoch is the caller's, and the database time after the lock is before
+// the attempt row (and, for routes that move the task, the task row) locked,
+// the attempt's host is the caller's, its state is live, its epoch is the
+// caller's, and the database time after the locks is before
 // lease_expires_at plus the grace. It does not rely on the lease loop.
-func lockLive(ctx context.Context, tx pgx.Tx, f Fence) (attemptRow, error) {
-	a, err := lockAttempt(ctx, tx, f.AttemptID)
+func lockLive(ctx context.Context, tx pgx.Tx, f Fence, withTask bool) (attemptRow, error) {
+	a, err := lockAttempt(ctx, tx, f.AttemptID, withTask)
 	if err != nil {
 		return a, err
 	}
@@ -524,7 +609,7 @@ type Beat struct {
 func Heartbeat(ctx context.Context, db DB, f Fence) (Beat, error) {
 	var b Beat
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		a, err := lockLive(ctx, tx, f)
+		a, err := lockLive(ctx, tx, f, false)
 		if err != nil {
 			return err
 		}
@@ -565,7 +650,7 @@ func Heartbeat(ctx context.Context, db DB, f Fence) (Beat, error) {
 // against it. Starting an attempt that already started does nothing.
 func Start(ctx context.Context, db DB, f Fence, model, provider string) error {
 	return InTx(ctx, db, func(tx pgx.Tx) error {
-		a, err := lockLive(ctx, tx, f)
+		a, err := lockLive(ctx, tx, f, true)
 		if err != nil {
 			return err
 		}
@@ -597,11 +682,7 @@ func Start(ctx context.Context, db DB, f Fence, model, provider string) error {
 		  model = COALESCE(model, NULLIF($2, '')) WHERE attempt_id = $1`, a.id, model); err != nil {
 			return err
 		}
-		t, err := readTask(ctx, tx, a.task, true)
-		if err != nil {
-			return err
-		}
-		return moveTask(ctx, tx, hostActor(f.HostID), t, "running", "")
+		return moveTask(ctx, tx, hostActor(f.HostID), a.t, "running", "")
 	})
 }
 
@@ -612,7 +693,8 @@ func Start(ctx context.Context, db DB, f Fence, model, provider string) error {
 // gets ErrConflict. Otherwise pre runs outside any transaction (a read of
 // another system), then op runs in a transaction that holds a lock on the key
 // and looks it up again, so concurrent retries of one request run one at a
-// time and the later ones find the first one's answer.
+// time and the later ones find the first one's answer. A failed op stores
+// nothing.
 func idempotent(ctx context.Context, db DB, actor, route, key string, request any,
 	pre func(context.Context) error, op func(pgx.Tx) (map[string]any, error)) (map[string]any, error) {
 	sum, err := canon.Sum(request)
@@ -649,6 +731,7 @@ func keyed(ctx context.Context, db DB, id, route, sum string,
 	}); err != nil || found {
 		return out, err
 	}
+	hook("missed", id)
 	if pre != nil {
 		if err := pre(ctx); err != nil {
 			return nil, err
@@ -705,11 +788,11 @@ func Checkpoint(ctx context.Context, db DB, f Fence, seq int, artifacts []string
 	req := map[string]any{"epoch": f.Epoch, "seq": seq, "artifacts": nonNil(artifacts), "too_large": tooLarge}
 	return idempotent(ctx, db, hostActor(f.HostID), "checkpoint", fmt.Sprintf("%s:%d", f.AttemptID, seq), req, nil,
 		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f)
+			a, err := lockLive(ctx, tx, f, false)
 			if err != nil {
 				return nil, err
 			}
-			if err := haveArtifacts(ctx, tx, artifacts); err != nil {
+			if err = haveArtifacts(ctx, tx, artifacts); err != nil {
 				return nil, err
 			}
 			body := map[string]any{"checkpoint_seq": seq}
@@ -719,7 +802,7 @@ func Checkpoint(ctx context.Context, db DB, f Fence, seq int, artifacts []string
 			if tooLarge {
 				body["too_large"] = true
 			}
-			if err := attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_checkpointed", body); err != nil {
+			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_checkpointed", body); err != nil {
 				return nil, err
 			}
 			return map[string]any{"checkpoint_seq": seq}, nil
@@ -740,17 +823,17 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 		req["exit_code"], body["exit_code"] = *exitCode, *exitCode
 	}
 	return idempotent(ctx, db, hostActor(f.HostID), "computed", f.AttemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		a, err := lockLive(ctx, tx, f)
+		a, err := lockLive(ctx, tx, f, false)
 		if err != nil {
 			return nil, err
 		}
 		if !a.started || a.computed {
 			return nil, fmt.Errorf("%w: attempt %s is not started-and-uncomputed", ErrState, a.id)
 		}
-		if err := attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_computed", body); err != nil {
+		if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_computed", body); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET computed_at = clock_timestamp(), exit_code = $2, end_how = $3, conclusion = $4
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET computed_at = clock_timestamp(), exit_code = $2, end_how = $3, conclusion = $4
 		  WHERE attempt_id = $1`, a.id, exitCode, endHow, conclusion); err != nil {
 			return nil, err
 		}
@@ -842,20 +925,20 @@ func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (ma
 	}
 	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(head),
 		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f)
+			a, err := lockLive(ctx, tx, f, false)
 			if err != nil {
 				return nil, err
 			}
 			if !a.computed || a.persisted {
 				return nil, fmt.Errorf("%w: attempt %s is not computed-and-unpersisted", ErrState, a.id)
 			}
-			if err := r.fits(ctx, tx, a); err != nil {
+			if err = r.fits(ctx, tx, a); err != nil {
 				return nil, err
 			}
-			if err := attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_persisted", r.body()); err != nil {
+			if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_persisted", r.body()); err != nil {
 				return nil, err
 			}
-			if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
+			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
 			  pushed_ref = NULLIF($3, ''), pushed_commit = NULLIF($4, '') WHERE attempt_id = $1`, a.id, r.Report, r.Ref, r.Commit); err != nil {
 				return nil, err
 			}
@@ -869,7 +952,7 @@ func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (ma
 func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 	return idempotent(ctx, db, hostActor(f.HostID), "submit", f.AttemptID, map[string]any{"epoch": f.Epoch}, nil,
 		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockLive(ctx, tx, f)
+			a, err := lockLive(ctx, tx, f, true)
 			if err != nil {
 				return nil, err
 			}
@@ -882,11 +965,7 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'submitted' WHERE attempt_id = $1`, a.id); err != nil {
 				return nil, err
 			}
-			t, err := readTask(ctx, tx, a.task, true)
-			if err != nil {
-				return nil, err
-			}
-			if err := moveTask(ctx, tx, hostActor(f.HostID), t, "submitted", ""); err != nil {
+			if err = moveTask(ctx, tx, hostActor(f.HostID), a.t, "submitted", ""); err != nil {
 				return nil, err
 			}
 			return map[string]any{"submitted": true}, nil
@@ -894,8 +973,9 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 }
 
 // Salvage keeps the result of an attempt that lost its lease (v5 §5.2,
-// §6.2). Only the attempt's host may salvage it, and only once the grace has
-// passed: before that the answer is ErrInGrace and agentd tries again later.
+// §6.2). Only the attempt's host may salvage it, and only once its lease plus
+// the grace has passed, whatever state the attempt is in (review 148 A1):
+// before that the answer is ErrInGrace and agentd tries again later.
 // Attempts that were submitted have nothing to salvage. The result is checked
 // as persist checks it; when it holds a report and the attempt was not
 // persisted, the attempt gets persisted_at, so a new verification task may
@@ -903,7 +983,7 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, head BranchHead) (map[string]any, error) {
 	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(head),
 		func(tx pgx.Tx) (map[string]any, error) {
-			a, err := lockAttempt(ctx, tx, attemptID)
+			a, err := lockAttempt(ctx, tx, attemptID, false)
 			if err != nil {
 				return nil, err
 			}
@@ -913,18 +993,18 @@ func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, hea
 			if a.state == "submitted" || a.state == "finished" {
 				return nil, fmt.Errorf("%w: attempt %s was %s", ErrState, a.id, a.state)
 			}
-			if liveState(a.state) && a.now.Before(a.expires.Add(Grace)) {
+			if a.now.Before(a.expires.Add(Grace)) {
 				return nil, ErrInGrace
 			}
-			if err := r.fits(ctx, tx, a); err != nil {
+			if err = r.fits(ctx, tx, a); err != nil {
 				return nil, err
 			}
-			if err := attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_salvaged", r.body()); err != nil {
+			if err = attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_salvaged", r.body()); err != nil {
 				return nil, err
 			}
 			persisted := a.persisted
 			if !persisted && r.Report != "" {
-				if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
+				if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET persisted_at = clock_timestamp(), report_artifact_id = $2,
 				  pushed_ref = NULLIF($3, ''), pushed_commit = NULLIF($4, '') WHERE attempt_id = $1`, a.id, r.Report, r.Ref, r.Commit); err != nil {
 					return nil, err
 				}
@@ -944,25 +1024,25 @@ func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCl
 	}
 	req := map[string]any{"end_how": endHow, "group_cleared": groupCleared}
 	return idempotent(ctx, db, hostActor(hostID), "ended", attemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		a, err := lockAttempt(ctx, tx, attemptID)
+		a, err := lockAttempt(ctx, tx, attemptID, true)
 		if err != nil {
 			return nil, err
 		}
 		if a.host != hostID {
 			return nil, ErrFenced
 		}
-		if err := attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_ended",
+		if err = attemptEvent(ctx, tx, hostActor(hostID), a, "attempt_ended",
 			map[string]any{"end_how": endHow, "group_cleared": groupCleared}); err != nil {
 			return nil, err
 		}
 		if !liveState(a.state) {
 			return map[string]any{"state": a.state}, nil
 		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'failed', ended_at = clock_timestamp(),
+		if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'failed', ended_at = clock_timestamp(),
 		  end_how = COALESCE(end_how, $2) WHERE attempt_id = $1`, a.id, endHow); err != nil {
 			return nil, err
 		}
-		if err := releaseTask(ctx, tx, hostActor(hostID), a.task, "attempt ended on its host: "+endHow); err != nil {
+		if err = releaseTask(ctx, tx, hostActor(hostID), a.t, "attempt ended on its host: "+endHow); err != nil {
 			return nil, err
 		}
 		return map[string]any{"state": "failed"}, nil
@@ -971,14 +1051,17 @@ func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCl
 
 // SweepLeases is one pass of the lease loop (v5 §5.2 控制器「租约」): live
 // attempts past their expiry become stale; past the grace they become lost
-// and their task moves by effect class. It only changes state; the write-time
-// fence is what stops late writes. It returns how many attempts it moved.
+// and their task moves by effect class. It reads only attempts that need one
+// of these moves, so stale attempts within their grace never crowd out the
+// rest (review 148 B3). It only changes state; the write-time fence is what
+// stops late writes. It returns how many attempts it moved.
 func SweepLeases(ctx context.Context, db DB) (int, int, error) {
 	var stale, lost int
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT attempt_id FROM agentrt.attempt
-		  WHERE state IN ('leased','running','stale') AND lease_expires_at < clock_timestamp()
-		  ORDER BY lease_expires_at LIMIT 100 FOR UPDATE SKIP LOCKED`)
+		  WHERE (state IN ('leased','running') AND lease_expires_at < clock_timestamp())
+		     OR (state = 'stale' AND lease_expires_at + make_interval(secs => $1) <= clock_timestamp())
+		  ORDER BY lease_expires_at LIMIT 100 FOR UPDATE SKIP LOCKED`, Grace.Seconds())
 		if err != nil {
 			return err
 		}
@@ -987,30 +1070,30 @@ func SweepLeases(ctx context.Context, db DB) (int, int, error) {
 			return err
 		}
 		for _, id := range ids {
-			a, err := lockAttempt(ctx, tx, id)
+			a, err := lockAttempt(ctx, tx, id, true)
 			if err != nil {
 				return err
 			}
 			switch {
 			case !a.now.Before(a.expires.Add(Grace)):
-				if err := attemptEvent(ctx, tx, "controller", a, "attempt_lost",
+				if err = attemptEvent(ctx, tx, "controller", a, "attempt_lost",
 					map[string]any{"reason": "lease expired at " + timeText(a.expires) + " and the grace passed"}); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(),
+				if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(),
 				  end_how = COALESCE(end_how, 'lease_lost') WHERE attempt_id = $1`, a.id); err != nil {
 					return err
 				}
-				if err := releaseTask(ctx, tx, "controller", a.task, "attempt lost"); err != nil {
+				if err = releaseTask(ctx, tx, "controller", a.t, "attempt lost"); err != nil {
 					return err
 				}
 				lost++
 			case a.state != "stale":
-				if err := attemptEvent(ctx, tx, "controller", a, "attempt_stale",
+				if err = attemptEvent(ctx, tx, "controller", a, "attempt_stale",
 					map[string]any{"lease_expires_at": timeText(a.expires)}); err != nil {
 					return err
 				}
-				if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'stale' WHERE attempt_id = $1`, a.id); err != nil {
+				if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'stale' WHERE attempt_id = $1`, a.id); err != nil {
 					return err
 				}
 				stale++

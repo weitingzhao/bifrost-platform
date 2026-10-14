@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -100,13 +102,26 @@ func CreatePlanNode(ctx context.Context, tx pgx.Tx, actor string, n PlanNode) (A
 	return ev, err
 }
 
-// SetStepState moves a step's state with its plan_node_state_changed event.
+// stepMoves is every step state change there is: a done step goes back to
+// active when a standing condition lapses; a dropped step is final.
+var stepMoves = map[string][]string{
+	"planned": {"active", "done", "stopped", "dropped"},
+	"active":  {"done", "stopped", "dropped"},
+	"done":    {"active", "dropped"},
+	"stopped": {"active", "dropped"},
+}
+
+// SetStepState moves a step's state with its plan_node_state_changed event,
+// along stepMoves only.
 func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause string) (Appended, error) {
 	var from string
 	var mission *string
 	if err := tx.QueryRow(ctx, `SELECT state, mission_id FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`,
 		stepID).Scan(&from, &mission); err != nil {
 		return Appended{}, err
+	}
+	if !slices.Contains(stepMoves[from], to) {
+		return Appended{}, fmt.Errorf("%w: step %s %s -> %s", ErrState, stepID, from, to)
 	}
 	m := ""
 	if mission != nil {

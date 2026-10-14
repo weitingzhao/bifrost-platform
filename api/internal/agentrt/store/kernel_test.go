@@ -73,6 +73,32 @@ func (w *world) claim(t *testing.T, host string, ttl time.Duration, tools ...sto
 	return c
 }
 
+func (w *world) claimExternal(t *testing.T, host string, ttl time.Duration, tools ...store.Tool) *store.Claim {
+	t.Helper()
+	c, err := store.ClaimExternalFor(ctx, w.rt, store.ClaimRequest{HostID: host, FreeSlots: 1, Tools: tools}, ttl)
+	ok(t, err)
+	return c
+}
+
+// waitFor returns once a backend of this database waits for a lock in a
+// statement containing fragment, and fails the test if that has not happened
+// by the deadline: a race the test means to stage did not happen.
+func (w *world) waitFor(t *testing.T, fragment string, deadline time.Time) {
+	t.Helper()
+	for {
+		var n int
+		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
+		  AND wait_event_type = 'Lock' AND position($1 in query) > 0`, fragment).Scan(&n))
+		if n > 0 {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("nothing waited for a lock in %q in time; the case proves nothing", fragment)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func fence(c *store.Claim, host string) store.Fence {
 	return store.Fence{AttemptID: c.AttemptID, HostID: host, Epoch: c.Epoch}
 }
@@ -397,6 +423,7 @@ func TestFenceAndLeaseClock(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	holder, err := pool.Begin(ctx)
 	ok(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
 	_, err = holder.Exec(ctx, `SELECT 1 FROM agentrt.attempt WHERE attempt_id = $1 FOR UPDATE`, edge.AttemptID)
 	ok(t, err)
 	if !time.Now().Before(deadline) {
@@ -407,13 +434,7 @@ func TestFenceAndLeaseClock(t *testing.T) {
 		_, err := store.Heartbeat(ctx, pool, fence(edge, "h5"))
 		done <- err
 	}()
-	for waiting := 0; waiting == 0; {
-		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity
-		  WHERE datname = current_database() AND wait_event_type = 'Lock'`).Scan(&waiting))
-		if !time.Now().Before(deadline) {
-			t.Fatal("the heartbeat was not waiting for the row before the deadline; the case proves nothing")
-		}
-	}
+	w.waitFor(t, "FROM agentrt.attempt WHERE attempt_id = $1 FOR UPDATE", deadline)
 	time.Sleep(time.Until(deadline) + time.Second)
 	ok(t, holder.Commit(ctx))
 	is(t, <-done, store.ErrFenced)
@@ -440,7 +461,7 @@ func TestLeaseSweep(t *testing.T) {
 	branch := w.ready(t, store.Task{})
 	b1 := w.claim(t, "h2", -store.Grace-time.Second, codex)
 	external := w.ready(t, store.Task{Effect: "external"})
-	e1 := w.claim(t, "h3", -store.Grace-time.Second, codex)
+	e1 := w.claimExternal(t, "h3", -store.Grace-time.Second, codex)
 	if b1.TaskID != branch || e1.TaskID != external {
 		t.Fatal("claimed the wrong tasks")
 	}
@@ -525,10 +546,19 @@ func TestResultPath(t *testing.T) {
 		t.Fatalf("the retry read Gitea %d times; %d persisted events", calls-before, w.events(t, "attempt_persisted", c.AttemptID))
 	}
 
-	// The submit's answer is lost and three retries race.
+	// The submit's answer is lost and three retries race: each misses the key
+	// before any of them runs the operation.
 	pool := w.db.Pool(t, w.db.Runtime)
 	answers := make([]map[string]any, 3)
 	errs := make([]error, 3)
+	var missed sync.WaitGroup
+	missed.Add(len(answers))
+	unhook := store.SetHook(func(point, _ string) {
+		if point == "missed" {
+			missed.Done()
+			missed.Wait()
+		}
+	})
 	var wg sync.WaitGroup
 	for i := range answers {
 		wg.Add(1)
@@ -538,6 +568,7 @@ func TestResultPath(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+	unhook()
 	for i := range answers {
 		ok(t, errs[i])
 		same(t, answers[i], answers[0])
@@ -592,18 +623,29 @@ func TestSalvage(t *testing.T) {
 		t.Fatalf("after the sweep: %+v", fresh)
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("pass"))
-		if err != nil {
-			return err
+		ev, putErr := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("pass"))
+		if putErr != nil {
+			return putErr
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
+		_, putErr = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
 		  evidence_artifact_id, accepts_attempt, subject_commit) VALUES ($1,$2,$3,'deterministic','pass',$4,true,$5)`,
 			store.NewVerificationID(), task, old.AttemptID, ev, commitA)
-		return err
+		return putErr
 	}))
 	if w.state(t, "attempt", old.AttemptID) != "lost" {
 		t.Fatal("acceptance changed the lost attempt's state")
 	}
+
+	// Review 148 A1: an attempt that ended (failed) is still within its
+	// lease and grace; the grace holds whatever the state.
+	w.ready(t, store.Task{})
+	ended := w.claim(t, "h5", store.LeaseTTL, codex)
+	ok(t, store.Start(ctx, w.rt, fence(ended, "h5"), "", ""))
+	_, err = store.Ended(ctx, w.rt, ended.AttemptID, "h5", "daemon_restart", true)
+	ok(t, err)
+	endedHead := heads(map[string]string{ended.PushedRef: commitA}, &calls)
+	_, err = store.Salvage(ctx, w.rt, ended.AttemptID, "h5", store.Result{Report: report, Ref: ended.PushedRef, Commit: commitA}, endedHead)
+	is(t, err, store.ErrInGrace)
 	w.chainHolds(t, "mission:M-1")
 }
 
@@ -636,7 +678,7 @@ func TestEnded(t *testing.T) {
 	if next := w.claim(t, "h1", store.LeaseTTL, codex); next == nil || next.TaskID != branch {
 		t.Fatalf("the released branch task was not claimed again: %+v", next)
 	}
-	e := w.claim(t, "h2", store.LeaseTTL, codex)
+	e := w.claimExternal(t, "h2", store.LeaseTTL, codex)
 	if e == nil || e.TaskID != external {
 		t.Fatalf("external claim = %+v", e)
 	}

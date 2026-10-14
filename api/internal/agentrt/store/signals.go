@@ -74,8 +74,22 @@ func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
 	return err
 }
 
-// SetControl records a stop, pause or drain and broadcasts it.
+// SetControl records a stop, pause or drain and broadcasts it. It first takes
+// the lock a claim takes for the same scope (the global advisory lock, the
+// mission, task or host row), so a claim either commits before the control
+// or sees it (review 148 A2).
 func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRef, kind, reason string) error {
+	lock := map[string]string{
+		"global":  `SELECT pg_advisory_xact_lock(742105) WHERE $1::text IS NOT NULL`,
+		"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`,
+		"task":    `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR UPDATE`,
+		"host":    `SELECT 1 FROM agentrt.host WHERE host_id = $1 FOR NO KEY UPDATE`,
+	}[scope]
+	if lock != "" {
+		if _, err := tx.Exec(ctx, lock, scopeRef); err != nil {
+			return err
+		}
+	}
 	body := map[string]any{"control_id": controlID, "scope": scope, "kind": kind, "reason": reason}
 	if scopeRef != "" {
 		body["scope_ref"] = scopeRef
