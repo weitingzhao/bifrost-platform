@@ -2,6 +2,7 @@ package agentd
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,7 +23,7 @@ func TestAgentExecutors(t *testing.T) {
 	a := &Attempt{Claim: &Claimed{Tool: Tool{Model: "gpt-5"}}, Spec: TaskSpec{Text: "# do it"}, Dir: dir, Out: out}
 	ex := Executors("/usr/local/bin/agentd", []string{"PATH=/bin", "SOME_ADMIN_TOKEN=x"})
 	sp, err := ex["exec:codex"](a)
-	if err != nil || sp.Argv[0] != "codex" || !slices.Contains(sp.Argv, "mcp_servers={}") || !slices.Contains(sp.Argv, filepath.Join(out, "report.md")) ||
+	if err != nil || sp.Argv[0] != "codex" || !slices.Contains(sp.Argv, filepath.Join(out, "report.md")) ||
 		!slices.Contains(sp.Argv, "gpt-5") || !strings.Contains(sp.Argv[len(sp.Argv)-1], "# do it") || slices.Contains(sp.Env, "SOME_ADMIN_TOKEN=x") {
 		t.Fatalf("codex = %+v %v", sp, err)
 	}
@@ -85,5 +86,61 @@ func TestDeterministicExecutor(t *testing.T) {
 func TestRunVerifyUsage(t *testing.T) {
 	if RunVerify(nil) != 2 || RunVerify([]string{"--spec", filepath.Join(t.TempDir(), "none"), "--out", "x"}) != 2 {
 		t.Fatal("bad arguments did not exit 2")
+	}
+}
+
+// Review 163 A2: a review passes only on its verdict line.
+func TestReviewVerdict(t *testing.T) {
+	a := &Attempt{Claim: &Claimed{Role: "review"}, Spec: TaskSpec{Check: "review"}}
+	for report, want := range map[string]string{
+		"# looks right\n\n" + VerdictPass + "\n":                  "done",
+		"# wrong\n" + VerdictFail:                                 "failed",
+		"FAIL: changes are incorrect; request changes":            "none",
+		"# ok\n" + VerdictPass + "\nbut one more thing":           "none",
+		"all good, ship it":                                       "none",
+		"# mixed\n" + VerdictFail + "\n" + VerdictPass + "  \n\n": "done",
+	} {
+		if got := a.conclusion("exit", 0, results{reportBody: []byte(report), reportKind: "review"}); got != want {
+			t.Errorf("%q = %s, want %s", report, got, want)
+		}
+	}
+	if !strings.Contains(Prompt(a), VerdictPass) || strings.Contains(Prompt(&Attempt{Claim: &Claimed{}, Spec: TaskSpec{}}), VerdictPass) {
+		t.Fatal("only a review's prompt asks for the verdict line")
+	}
+}
+
+// Review 163 A8: an agent executor is offered only where the user has no MCP
+// server it would load, and never when that cannot be checked.
+func TestIsolated(t *testing.T) {
+	ex := map[string]Executor{"exec:deterministic": nil, "exec:codex": nil, "exec:cursor": nil}
+	kept, why := Isolated(ex, map[string]MCPCheck{
+		"exec:codex":  func() (int, error) { return 3, nil },
+		"exec:cursor": func() (int, error) { return 0, errors.New("unreadable") },
+	})
+	if len(kept) != 1 || len(why) != 2 {
+		t.Fatalf("kept %v, why %v", kept, why)
+	}
+	if _, ok := kept["exec:deterministic"]; !ok {
+		t.Fatal("the deterministic executor needs no MCP check")
+	}
+	kept, _ = Isolated(ex, map[string]MCPCheck{"exec:codex": func() (int, error) { return 0, nil }, "exec:cursor": func() (int, error) { return 0, nil }})
+	if len(kept) != 3 {
+		t.Fatalf("with no MCP server: %v", kept)
+	}
+	t.Setenv("HOME", t.TempDir())
+	if n, err := CursorMCP(); n != 0 || err != nil {
+		t.Fatalf("no ~/.cursor/mcp.json = %d %v", n, err)
+	}
+	must := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	home, _ := os.UserHomeDir()
+	must(os.MkdirAll(filepath.Join(home, ".cursor"), 0o700))
+	must(os.WriteFile(filepath.Join(home, ".cursor", "mcp.json"), []byte(`{"mcpServers":{"a":{},"b":{}}}`), 0o600))
+	if n, err := CursorMCP(); n != 2 || err != nil {
+		t.Fatalf("two servers = %d %v", n, err)
 	}
 }

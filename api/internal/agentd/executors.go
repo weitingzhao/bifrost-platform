@@ -18,9 +18,9 @@ import (
 // spec's verify commands, run by agentd itself), codex and cursor, with the
 // flags their --help gives on the host (10-13). Each runs with an
 // environment rebuilt from an allow list: no admin kubeconfig, no operator or
-// admin token, no business key reaches a task. The agent executors get no
-// MCP server from the host's own configuration (codex: mcp_servers emptied;
-// cursor: MCP servers are not approved in print mode without --approve-mcps).
+// admin token, no business key reaches a task. Neither agent CLI can be told
+// to leave the host user's MCP servers out, so an agent executor is offered
+// only where that user has none (mcpguard.go).
 
 // allowedEnv are the variables an executor may see.
 var allowedEnv = map[string]bool{"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true, "LANG": true,
@@ -52,6 +52,10 @@ func Prompt(a *Attempt) string {
 		}
 	}
 	b.WriteString("\n\n---\nWork only in this directory. Your final message is your report, in markdown: what you did, what you ran and how it ended, and what is left. Do not write paths of this machine into the report.\n")
+	if a.Spec.Check == "review" {
+		fmt.Fprintf(&b, "End the report with exactly one line: %q if the work is correct and complete as its spec asks, or %q if anything must change. A report without that line counts as no verdict.\n",
+			VerdictPass, VerdictFail)
+	}
 	return b.String()
 }
 
@@ -86,7 +90,7 @@ func deterministicExecutor(self string, env []string) Executor {
 func codexExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
 		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write",
-			"-c", "mcp_servers={}", "-o", filepath.Join(a.Out, "report.md")}
+			"-o", filepath.Join(a.Out, "report.md")}
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "-m", m)
 		}

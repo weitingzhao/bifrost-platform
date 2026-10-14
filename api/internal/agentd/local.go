@@ -70,10 +70,11 @@ type Entry struct {
 	PushedRef string `json:"pushed_ref,omitempty"`
 	WorkID    string `json:"work_id,omitempty"`
 	Workdir   string `json:"workdir"`
+	Base      string `json:"base,omitempty"` // the commit the workspace was checked out at
 	PGID      int    `json:"pgid"`
 	Start     string `json:"start"`
-	// Phase: running (the executor runs), computed (it exited; the result is
-	// here), persisted, submitted, ended.
+	// Phase: launching, running (the executor runs), exited (it exited; the
+	// result is here), computed, persisted, submitted; lost (salvage only).
 	Phase string `json:"phase"`
 	// CheckpointSeq is the last checkpoint number issued; Confirmed the last
 	// the platform confirmed (review 142 R2): a retry of one sample reuses
@@ -82,6 +83,15 @@ type Entry struct {
 	Confirmed     int    `json:"confirmed"`
 	ExitCode      *int   `json:"exit_code,omitempty"`
 	EndHow        string `json:"end_how,omitempty"`
+	// The hand-over's journal (review 163 A3–A5): the conclusion sent with
+	// computed, and the result sent with persist or salvage, written before
+	// they are sent.
+	Conclusion   string   `json:"conclusion,omitempty"`
+	Prepared     bool     `json:"prepared,omitempty"`
+	Report       string   `json:"report,omitempty"`
+	Artifacts    []string `json:"artifacts,omitempty"`
+	PushedCommit string   `json:"pushed_commit,omitempty"`
+	ChangeID     string   `json:"change_id,omitempty"`
 }
 
 // Registry is the file of entries, by attempt. Every change is written to a

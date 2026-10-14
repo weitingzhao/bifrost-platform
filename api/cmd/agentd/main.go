@@ -76,22 +76,39 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ()), agentd.MCPChecks)
+	for _, why := range refused {
+		log.Printf("agentd: %s", why)
+	}
+	var offered []agentd.Tool
+	for _, tl := range cfg.tools {
+		if _, ok := executors[tl.Executor]; ok {
+			offered = append(offered, tl)
+		}
+	}
+	if len(offered) == 0 {
+		return errors.New("no executor of AGENTD_TOOLS can be offered on this host")
+	}
+	cfg.tools = offered
 	d := &agentd.Daemon{
 		Client:    &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token},
 		Registry:  reg,
 		Root:      cfg.root,
 		Self:      self,
-		Executors: agentd.Executors(self, os.Environ()),
+		Executors: executors,
 		Remote:    func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" },
 		GitEnv:    cfg.gitEnv,
 		Logf:      log.Printf,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
-	if err := d.Recover(ctx); err != nil {
-		log.Printf("agentd: takeover: %v", err)
-	}
 	for ctx.Err() == nil {
+		// what a previous run left, and hand-overs that waited for the platform
+		if err := d.Recover(ctx); err != nil {
+			log.Printf("agentd: takeover: %v", err)
+			sleep(ctx, 15*time.Second)
+			continue
+		}
 		free := 1
 		if overloaded() {
 			free = 0

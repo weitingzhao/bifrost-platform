@@ -104,15 +104,30 @@ func NewChangeID() (string, error) {
 	return "I" + hex.EncodeToString(b), nil
 }
 
-// Commit records every change in the workspace as one commit with the
-// lineage trailers and returns it; "" when there is nothing to commit.
+// Commit records every change in the workspace against the base as one
+// commit with the lineage trailers and returns it; "" when nothing differs
+// from the base. Commits the executor made itself are folded into it (their
+// content kept, review 163 A3), so every commit agentd pushes carries the
+// trailers.
 func (w *Workspace) Commit(ctx context.Context, subject string, l Lineage) (string, error) {
+	if l.Task == "" || l.ChangeID == "" || l.Work == "" {
+		return "", errors.New("agentd: a commit carries Agentrt-Task, Change-Id and Work")
+	}
+	if w.Base == "" {
+		return "", errors.New("agentd: the workspace's base is not known")
+	}
+	head, err := w.git(ctx, w.Dir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	if head != w.Base {
+		if _, err = w.git(ctx, w.Dir, "reset", "--quiet", "--soft", w.Base); err != nil {
+			return "", err
+		}
+	}
 	dirty, err := w.Dirty(ctx)
 	if err != nil || !dirty {
 		return "", err
-	}
-	if l.Task == "" || l.ChangeID == "" || l.Work == "" {
-		return "", errors.New("agentd: a commit carries Agentrt-Task, Change-Id and Work")
 	}
 	if _, err = w.git(ctx, w.Dir, "add", "--all", "--", "."); err != nil {
 		return "", err
