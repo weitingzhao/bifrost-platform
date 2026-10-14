@@ -88,23 +88,58 @@ func UploadArtifact(ctx context.Context, db DB, actor, uploadedBy, kind, mediaTy
 	return id, created, err
 }
 
-// Mission is the part of a mission row the store writes at creation.
+// Mission is the part of a mission row the store writes at creation. The
+// success criteria, repos and budget are optional here (an empty list or a
+// zero is left out of the row's JSON); MaxAction defaults to branch and
+// Tenant to dev.
 type Mission struct {
 	ID, WorkID, Title, Goal string
 	Deadline                time.Time
+	Tenant, MaxAction       string
+	Success, Repos          []string
+	MaxAttempts             int
+	MaxWallHours            int
 }
 
 // CreateMission writes mission_proposed and the mission row.
 func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
+	if m.Tenant == "" {
+		m.Tenant = "dev"
+	}
+	if m.MaxAction == "" {
+		m.MaxAction = "branch"
+	}
+	success := map[string]any{}
+	if len(m.Success) > 0 {
+		success["criteria"] = m.Success
+	}
+	scope := map[string]any{"max_action": m.MaxAction}
+	if len(m.Repos) > 0 {
+		scope["repos"] = m.Repos
+	}
+	budget := map[string]any{}
+	if m.MaxAttempts > 0 {
+		budget["max_attempts"] = m.MaxAttempts
+	}
+	if m.MaxWallHours > 0 {
+		budget["max_wall_hours"] = m.MaxWallHours
+	}
+	var docs [3][]byte
+	for i, v := range []any{success, scope, budget} {
+		var err error
+		if docs[i], err = canon.Encode(v); err != nil {
+			return Appended{}, err
+		}
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(m.ID), Type: "mission_proposed", Actor: actor,
 		MissionID: m.ID, Body: map[string]any{"title": m.Title}})
 	if err != nil {
 		return ev, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.mission (mission_id, work_id, title, goal, success_json, scope_json,
-	  state, deadline_at, budget_json, created_by_actor_id)
-	  VALUES ($1,$2,$3,$4,'{}','{"max_action":"branch"}','proposed',$5,'{}',$6)`,
-		m.ID, nullable(m.WorkID), m.Title, m.Goal, m.Deadline, actor)
+	  tenant, state, deadline_at, budget_json, created_by_actor_id)
+	  VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,'proposed',$8,$9::jsonb,$10)`,
+		m.ID, nullable(m.WorkID), m.Title, m.Goal, string(docs[0]), string(docs[1]), m.Tenant, m.Deadline, string(docs[2]), actor)
 	return ev, err
 }
 

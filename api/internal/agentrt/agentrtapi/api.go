@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -40,12 +41,14 @@ const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
 // Mount adds the routes under /agentrt of r (r is the /api/v1 router). Who
 // may call what (v5 §5.2 鉴权): agentd, whose token is bound to one host,
-// claims, keeps its leases and hands results over; agentd and reporters
-// upload artifacts; every role reads.
+// claims, keeps its leases and hands results over; threads and seats
+// (reporter and operator tokens) and the Owner (admin) propose missions and
+// tasks; they and agentd upload artifacts; every role reads.
 func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	read := auth.RequireAny(actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd)
 	agentd := auth.RequireAny(actuation.RoleAgentd)
-	upload := auth.RequireAny(actuation.RoleAgentd, actuation.RoleReporter)
+	propose := auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
+	upload := auth.RequireAny(actuation.RoleAgentd, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
 	// Authentication first, so an anonymous write is refused as such even
 	// when the database is not configured.
 	cfg := a.configured
@@ -55,6 +58,10 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
+		r.With(propose, cfg).Post("/missions", a.proposeMission)
+		r.With(read, cfg).Get("/missions/{id}", a.getMission)
+		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
+		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)
 		r.With(read, cfg).Get("/events", a.getEvents)
@@ -99,9 +106,16 @@ func (a *API) logf(format string, args ...any) {
 
 // fail maps a store error to a status: a lease not held, a reused key, a
 // salvage still in grace and a state that does not fit are 409 with a code
-// agentd acts on; a missing row is 404; anything else is 500 and logged.
+// agentd acts on; a proposal that breaks its own rules or a guard of the
+// database is 422 with the rule it broke (T32 through the interface); a
+// missing row is 404; anything else is 500 and logged.
 func (a *API) fail(w http.ResponseWriter, err error) {
+	var pg *pgconn.PgError
 	switch {
+	case errors.Is(err, store.ErrInvalid):
+		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
+	case errors.As(err, &pg) && constraintCodes[pg.Code]:
+		writeError(w, http.StatusUnprocessableEntity, "constraint", pg.Message)
 	case errors.Is(err, store.ErrFenced):
 		writeError(w, http.StatusConflict, "fenced", err.Error())
 	case errors.Is(err, store.ErrConflict):
@@ -119,6 +133,11 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, "internal", "internal error")
 	}
 }
+
+// constraintCodes are the database errors that say a write broke a rule:
+// not null, foreign key, unique and check violations, and what the guard
+// triggers raise.
+var constraintCodes = map[string]bool{"23502": true, "23503": true, "23505": true, "23514": true, "P0001": true}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")

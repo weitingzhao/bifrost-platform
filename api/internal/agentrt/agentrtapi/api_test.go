@@ -96,13 +96,15 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 
 // Tokens of the fixture auth file, by caller name.
 var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "viewer": "fixture-viewer-1",
-	"reporter": "fixture-reporter-1"}
+	"reporter": "fixture-reporter-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
+	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2"}
 
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
 
 // server serves the API behind the platform's own authentication, loaded
-// from a fixture file: two agentd tokens bound to h1 and h2, and a viewer.
+// from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
+// reporter, an operator, an admin and two seat tokens (one registered).
 func server(t *testing.T, db store.DB) *httptest.Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "auth.yaml")
@@ -119,6 +121,18 @@ func server(t *testing.T, db store.DB) *httptest.Server {
   - name: reporter
     role: reporter
     token: fixture-reporter-1
+  - name: operator
+    role: operator
+    token: fixture-operator-1
+  - name: admin
+    role: admin
+    token: fixture-admin-1
+  - name: seat:chief_of_staff
+    role: reporter
+    token: fixture-seat-1
+  - name: seat:ghost
+    role: reporter
+    token: fixture-seat-2
 `), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
