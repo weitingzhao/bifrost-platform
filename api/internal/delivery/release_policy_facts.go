@@ -232,22 +232,36 @@ const (
 	CIRunning   = "Running"
 )
 
+// CIOutcome is what the ci-* runs of one repo at one commit came to.
+type CIOutcome struct {
+	Status, Run string
+	at          time.Time
+}
+
 // CIRun reports the ci-* runs for repo at sha (matched as Succeeded does):
 // Succeeded and its run if any succeeded, else the newest run's outcome
 // (Failed, or Running while it has no verdict) and name; "" when there is
 // no such run.
 func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run string, err error) {
+	idx, err := f.CIIndex(ctx)
+	o := idx[repo+"@"+sha]
+	return o.Status, o.Run, err
+}
+
+// CIIndex lists the ci-* runs once and keeps, for each repo@revision,
+// CIRun's outcome: so a reader with many commits to look at lists once.
+func (f PolicyFacts) CIIndex(ctx context.Context) (map[string]CIOutcome, error) {
 	dyn, err := f.s.buildDynamicClient()
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	list, err := dyn.Resource(pipelineRunGVR).Namespace(f.s.PipelinesNamespace()).List(ctx, metav1.ListOptions{
 		LabelSelector: "tekton.dev/pipeline in (" + strings.Join(ciPipelines, ",") + ")",
 	})
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
-	var newest time.Time
+	idx := map[string]CIOutcome{}
 	for _, item := range list.Items {
 		params := map[string]string{}
 		if ps, ok, _ := unstructured.NestedSlice(item.Object, "spec", "params"); ok {
@@ -262,10 +276,10 @@ func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run s
 		if runRepo == "" {
 			runRepo = item.GetLabels()["bifrost.io/repo"]
 		}
-		if runRepo != repo || params["revision"] != sha {
+		if runRepo == "" || params["revision"] == "" {
 			continue
 		}
-		outcome := CIRunning
+		o := CIOutcome{Status: CIRunning, Run: item.GetName(), at: item.GetCreationTimestamp().Time}
 		conds, _, _ := unstructured.NestedSlice(item.Object, "status", "conditions")
 		for _, c := range conds {
 			m, _ := c.(map[string]any)
@@ -274,19 +288,21 @@ func (f PolicyFacts) CIRun(ctx context.Context, repo, sha string) (status, run s
 			}
 			switch m["status"] {
 			case "True":
-				outcome = CISucceeded
+				o.Status = CISucceeded
 			case "False":
-				outcome = CIFailed
+				o.Status = CIFailed
 			}
 		}
-		if outcome == CISucceeded {
-			return CISucceeded, item.GetName(), nil
-		}
-		if at := item.GetCreationTimestamp().Time; status == "" || at.After(newest) {
-			status, run, newest = outcome, item.GetName(), at
+		key := runRepo + "@" + params["revision"]
+		prev, seen := idx[key]
+		switch {
+		case !seen, o.Status == CISucceeded && prev.Status != CISucceeded:
+			idx[key] = o
+		case prev.Status != CISucceeded && o.at.After(prev.at):
+			idx[key] = o
 		}
 	}
-	return status, run, nil
+	return idx, nil
 }
 
 // HeldBy is "" when who holds an open window that covers pipeline. Unlike the

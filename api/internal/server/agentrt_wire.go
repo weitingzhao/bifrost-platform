@@ -127,8 +127,8 @@ func identityFits(user, db, env string) error {
 func (s *Server) agentRuntimeSources() controller.Sources {
 	var (
 		ap  approvalReader
-		ci  ciReader
-		rel releaseLister
+		ci  ciIndexer
+		rel currentDeployment
 	)
 	if s.approvals != nil {
 		ap = s.approvals

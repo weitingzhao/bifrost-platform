@@ -2,12 +2,15 @@ package server
 
 import (
 	"context"
+	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/approvals"
+	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releases"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
@@ -21,28 +24,26 @@ const (
 	agentrtDeployRepo = "bifrost-platform"
 )
 
-// agentRuntimeSources reads the records the runtime does not own from the
-// platform's own stores (design v5 §5.2 外部事实), each without side effects:
-// approvals and questions by Lookup (no sweep), CI runs from Tekton, and
-// deployments from the release records. A read that fails, or a record not
-// there, is ok=false: the controller records nothing for it and a standing
-// condition on it stays unknown.
 // The readers agentRuntimeSources takes; a nil one reads nothing.
 type (
 	approvalReader interface {
 		Lookup(ref string) (approvals.Approval, bool, error)
 	}
-	ciReader interface {
-		CIRun(ctx context.Context, repo, sha string) (status, run string, err error)
+	ciIndexer interface {
+		CIIndex(ctx context.Context) (map[string]delivery.CIOutcome, error)
 	}
-	releaseLister interface {
-		List(ctx context.Context) ([]releases.Record, error)
+	currentDeployment interface {
+		Current(ctx context.Context, lane, env string) (releases.Record, error)
 	}
 )
 
-// question is the question reader of questions_wire.go (the one server file
-// that names the questions package).
-func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci ciReader, rel releaseLister) controller.Sources {
+// agentRuntimeSources reads the records the runtime does not own from the
+// platform's own stores (design v5 §5.2 外部事实), each without side effects:
+// approvals and questions by Lookup (no sweep), CI runs from Tekton, and the
+// deployment from the release records. A record that cannot be read now is
+// ok=false: the controller records nothing for it, a fact seen before stays
+// seen, and gates_passed on the deployment is unknown.
+func agentRuntimeSources(ap approvalReader, question func(context.Context, string) (store.Question, bool), ci ciIndexer, rel currentDeployment) controller.Sources {
 	src := controller.Sources{
 		Approval: func(context.Context, int64) (string, bool) { return "", false },
 		Question: func(context.Context, string) (store.Question, bool) { return store.Question{}, false },
@@ -50,8 +51,9 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
 	}
 	if ap != nil {
+		reads := newBoundedReads(2)
 		src.Approval = func(ctx context.Context, number int64) (string, bool) {
-			a, ok, err := within(ctx, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
+			a, ok, err := within(ctx, reads, func() (approvals.Approval, bool, error) { return ap.Lookup(strconv.FormatInt(number, 10)) })
 			if err != nil || !ok || a.Status == "" {
 				return "", false
 			}
@@ -62,34 +64,68 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 		src.Question = question
 	}
 	if ci != nil {
+		snap := &ciSnapshot{index: ci.CIIndex, ttl: 5 * time.Second}
 		src.CI = func(ctx context.Context, repo, commit string) (string, string, bool) {
-			status, run, err := ci.CIRun(ctx, repo, commit)
-			if err != nil || status == "" {
+			o, err := snap.get(ctx, repo+"@"+commit)
+			if err != nil || o.Status == "" {
 				return "", "", false
 			}
-			return status, run, true
+			return o.Status, o.Run, true
 		}
 	}
 	if rel != nil {
 		src.Deployed = func(ctx context.Context, env string) (string, map[string]any, bool) {
-			recs, err := rel.List(ctx)
+			rec, err := rel.Current(ctx, agentrtDeployLane, env)
 			if err != nil {
 				return "", nil, false
 			}
-			return deployedFrom(recs, env)
+			return deployedFrom(rec)
 		}
 	}
 	return src
 }
 
-// questionFact is a question as the runtime records it. An answer the plan
-// cannot use as a fact (no option chosen, or no one who answered) is not
-// read: question_seen refuses a partial answer (review 151 B2), so it stays
-// unknown rather than refused on every pass.
+// ciSnapshot lists the CI runs once for every read within ttl, so one facts
+// pass over many commits lists once (review 161 B3).
+type ciSnapshot struct {
+	index func(context.Context) (map[string]delivery.CIOutcome, error)
+	ttl   time.Duration
+	now   func() time.Time
+
+	mu  sync.Mutex
+	at  time.Time
+	idx map[string]delivery.CIOutcome
+}
+
+func (s *ciSnapshot) get(ctx context.Context, key string) (delivery.CIOutcome, error) {
+	now := time.Now
+	if s.now != nil {
+		now = s.now
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.idx == nil || now().Sub(s.at) >= s.ttl {
+		idx, err := s.index(ctx)
+		if err != nil {
+			return delivery.CIOutcome{}, err
+		}
+		s.idx, s.at = idx, now()
+	}
+	return s.idx[key], nil
+}
+
+// questionFact is a question as the runtime records it. An answer given as
+// text only is recorded with the option "none", the question store's own
+// word for it ("none" needs text), the text kept. An answer without who or
+// when is not read: question_seen refuses a partial answer (review 151 B2),
+// so it stays unseen rather than refused on every pass.
 func questionFact(id, status string, answered bool, option, text, by string, at time.Time) (store.Question, bool) {
 	f := store.Question{ID: id, Status: status}
 	if !answered {
 		return f, true
+	}
+	if option == "" && text != "" {
+		option = "none"
 	}
 	if option == "" || by == "" || at.IsZero() {
 		return store.Question{}, false
@@ -98,29 +134,41 @@ func questionFact(id, status string, answered bool, option, text, by string, at 
 	return f, true
 }
 
-// deployedFrom is what env runs now in the runtime's lane: the newest
-// deploying record of that lane and environment (records come newest first)
-// and its repository's commit. The reference is the delivery run alone: no
-// image digest is recorded anywhere yet, and gates_passed compares the
-// reference exactly, so it holds only what a gate check can read the same
-// way. DEV has no deploying record.
-func deployedFrom(recs []releases.Record, env string) (string, map[string]any, bool) {
-	for _, r := range recs {
-		if !r.Deploys || r.Lane != agentrtDeployLane || r.Env != env {
-			continue
-		}
-		b, ok := r.Repos[agentrtDeployRepo]
-		if !ok || len(b.SHA) != 40 {
-			return "", nil, false
-		}
-		return b.SHA, map[string]any{"delivery_run": r.Run}, true
+// deployedFrom is what the record says the environment runs: its
+// repository's commit, and the delivery run as the reference. The reference
+// holds the run alone, so a gate check records it the same way and
+// gates_passed compares it exactly; no image digest is recorded anywhere
+// yet, so an image that changes under the same run (a pod pulling a new
+// image under the same tag) is not seen (a lowered guarantee of T33, kept in
+// TECH_DEBT).
+func deployedFrom(rec releases.Record) (string, map[string]any, bool) {
+	b, ok := rec.Repos[agentrtDeployRepo]
+	if !ok || len(b.SHA) != 40 || rec.Run == "" {
+		return "", nil, false
 	}
-	return "", nil, false
+	return b.SHA, map[string]any{"delivery_run": rec.Run}, true
 }
 
+// errBusy: as many reads of this store as allowed are still running.
+var errBusy = errors.New("agentrt source: earlier reads have not returned")
+
+// boundedReads caps the reads of one store in flight: a read that never
+// returns keeps its slot, so a stuck store holds a bounded number of
+// goroutines, and further reads answer unknown at once (review 161 B1).
+type boundedReads struct{ slots chan struct{} }
+
+func newBoundedReads(n int) *boundedReads { return &boundedReads{slots: make(chan struct{}, n)} }
+
 // within runs a read that does not take a context (the approval and question
-// stores read their files with their own timeout) and gives up when ctx ends.
-func within[T any](ctx context.Context, read func() (T, bool, error)) (T, bool, error) {
+// stores read their files themselves) and gives up when ctx ends; the read's
+// slot is freed only when the read returns.
+func within[T any](ctx context.Context, reads *boundedReads, read func() (T, bool, error)) (T, bool, error) {
+	var zero T
+	select {
+	case reads.slots <- struct{}{}:
+	default:
+		return zero, false, errBusy
+	}
 	type result struct {
 		v   T
 		ok  bool
@@ -128,6 +176,7 @@ func within[T any](ctx context.Context, read func() (T, bool, error)) (T, bool, 
 	}
 	out := make(chan result, 1)
 	safego.Go("agentrt-source-read", func() {
+		defer func() { <-reads.slots }()
 		v, ok, err := read()
 		out <- result{v, ok, err}
 	})
@@ -135,7 +184,6 @@ func within[T any](ctx context.Context, read func() (T, bool, error)) (T, bool, 
 	case r := <-out:
 		return r.v, r.ok, r.err
 	case <-ctx.Done():
-		var zero T
 		return zero, false, ctx.Err()
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -17,14 +18,19 @@ import (
 // This sweep used to fire immediately; the runtime owns its cancellation.
 type questionRuntime struct {
 	svc    *questions.Service
+	reads  *boundedReads // the agent runtime's reads (agentRuntimeQuestion)
 	cancel context.CancelFunc
 	done   chan struct{}
 	stop   sync.Once
 }
 
+func newQuestionRuntime(path string, audit *actuation.AuditLog) *questionRuntime {
+	return &questionRuntime{svc: questions.New(path, audit), reads: newBoundedReads(2)}
+}
+
 func (s *Server) wireQuestions(dataDir string, workers bool) {
-	svc := questions.New(filepath.Join(dataDir, "questions"), s.audit)
-	rt := &questionRuntime{svc: svc}
+	rt := newQuestionRuntime(filepath.Join(dataDir, "questions"), s.audit)
+	svc := rt.svc
 	s.questionRuntime = rt
 	if !workers || svc == nil {
 		return
@@ -74,11 +80,11 @@ func (s *Server) mountQuestions(r chi.Router) {
 // (agentRuntimeSources) by Lookup, which writes nothing; nil without a
 // question store.
 func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) (store.Question, bool) {
-	if rt == nil || rt.svc == nil {
+	if rt == nil || rt.svc == nil || rt.reads == nil {
 		return nil
 	}
 	return func(ctx context.Context, id string) (store.Question, bool) {
-		q, ok, err := within(ctx, func() (questions.Question, bool, error) { return rt.svc.Lookup(id) })
+		q, ok, err := within(ctx, rt.reads, func() (questions.Question, bool, error) { return rt.svc.Lookup(id) })
 		if err != nil || !ok {
 			return store.Question{}, false
 		}
