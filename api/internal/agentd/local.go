@@ -52,7 +52,13 @@ func (l *HostLock) Release() error { return l.f.Close() }
 type Entry struct {
 	AttemptID string `json:"attempt_id"`
 	TaskID    string `json:"task_id"`
+	AttemptNo int    `json:"attempt_no"`
 	Epoch     int64  `json:"lease_epoch"`
+	Role      string `json:"role"`
+	Repo      string `json:"repo,omitempty"`
+	Effect    string `json:"effect_class"`
+	PushedRef string `json:"pushed_ref,omitempty"`
+	WorkID    string `json:"work_id,omitempty"`
 	Workdir   string `json:"workdir"`
 	PGID      int    `json:"pgid"`
 	Start     string `json:"start"`

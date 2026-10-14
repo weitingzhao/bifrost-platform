@@ -128,7 +128,8 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	defer func() { _ = logf.Close() }()
 	sp.Stdout, sp.Stderr = logf, logf
-	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, Epoch: cl.Epoch, Workdir: a.Dir, Phase: "running"}
+	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
+		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Phase: "running"}
 	proc, err := Launch(d.Self, sp, func(pgid int, start string) error {
 		entry.PGID, entry.Start = pgid, start
 		return d.Registry.Put(entry)
@@ -345,16 +346,26 @@ func (d *Daemon) finish(ctx context.Context, a *Attempt, ws *Workspace, entry En
 	if err := d.Registry.Put(entry); err != nil {
 		return out, err
 	}
-	res := d.upload(ctx, r)
+	submitted, err := d.handOver(ctx, a, ws, entry)
+	out.Submitted = submitted
+	return out, err
+}
+
+// handOver uploads what a computed attempt left, pushes its branch, and
+// persists, submits and ends it: the step agentd resumes after a restart.
+func (d *Daemon) handOver(ctx context.Context, a *Attempt, ws *Workspace, entry Entry) (bool, error) {
+	cl := a.Claim
+	submitted := false
+	res := d.upload(ctx, a.results())
 	if err := d.push(ctx, a, ws, &res); err != nil {
 		d.logf("agentd: %s not pushed: %v", cl.AttemptID, err)
 	}
 	if err := d.retry(ctx, func() error { return d.Client.Persist(ctx, cl.AttemptID, cl.Epoch, res) }); err != nil {
 		d.logf("agentd: %s not persisted: %v", cl.AttemptID, err)
 	} else if err := d.retry(ctx, func() error { return d.Client.Submit(ctx, cl.AttemptID, cl.Epoch) }); err == nil {
-		out.Submitted = true
+		submitted = true
 	}
-	return out, d.end(ctx, entry, endHow)
+	return submitted, d.end(ctx, entry, entry.EndHow)
 }
 
 // lost hands over, by salvage only, what an attempt whose lease is gone
@@ -412,4 +423,42 @@ func (d *Daemon) retry(ctx context.Context, step func() error) error {
 		}
 	}
 	return err
+}
+
+// Recover takes over, before the first claim, what a previous agentd left
+// on this host (design v5 §5.2 本地登记; T01): a process group still running
+// is ended and reported as daemon_restart, never run on; an attempt whose
+// executor had finished hands its result over from where it stopped; one
+// whose lease was lost goes on with salvage.
+func (d *Daemon) Recover(ctx context.Context) error {
+	entries, err := d.Registry.Load()
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, e := range entries {
+		a := &Attempt{Claim: &Claimed{TaskID: e.TaskID, AttemptID: e.AttemptID, AttemptNo: e.AttemptNo, Role: e.Role, Repo: e.Repo,
+			EffectClass: e.Effect, PushedRef: e.PushedRef, WorkID: e.WorkID, Epoch: e.Epoch}, Dir: e.Workdir, Out: e.Workdir + ".out"}
+		var ws *Workspace
+		if e.Repo != "" {
+			ws = &Workspace{Dir: e.Workdir, env: d.GitEnv}
+		}
+		switch e.Phase {
+		case "running":
+			if e.PGID > 1 && Alive(e.PGID, e.Start) {
+				Terminate(e.PGID, orDefault(d.KillGrace, 10*time.Second))
+			}
+			err = d.end(ctx, e, "daemon_restart")
+		case "computed":
+			_, err = d.handOver(ctx, a, ws, e)
+		case "lost":
+			_, err = d.lost(ctx, a, ws, e, e.EndHow)
+		default:
+			err = d.end(ctx, e, "daemon_restart")
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("agentd: take over %s: %w", e.AttemptID, err))
+		}
+	}
+	return errors.Join(errs...)
 }

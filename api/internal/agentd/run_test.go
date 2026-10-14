@@ -217,3 +217,73 @@ func TestRunLosesItsLease(t *testing.T) {
 		})
 	}
 }
+
+// T01, takeover: what a previous agentd left is taken over before the first
+// claim: a group still running is ended and reported, never run on; an
+// attempt whose executor had finished hands its result over.
+func TestRecover(t *testing.T) {
+	pool, task, base := platform(t)
+	d := daemon(t, base, nil, "", nil)
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	must(t, d.Client.Start(ctx, cl.AttemptID, cl.Epoch, "", cursor.Provider))
+	dir := agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
+	entry := agentd.Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role,
+		Effect: cl.EffectClass, Workdir: dir, Phase: "running"}
+	p, err := agentd.Launch(os.Args[0], agentd.Spawn{Argv: []string{"sleep", "30"}, Env: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")},
+		func(pgid int, start string) error {
+			entry.PGID, entry.Start = pgid, start
+			return d.Registry.Put(entry)
+		})
+	must(t, err)
+	exited := make(chan int, 1)
+	go func() { exited <- p.Wait() }()
+
+	// the previous agentd is gone; a new one starts on the same registry
+	next := daemon(t, base, nil, "", nil)
+	next.Registry, next.Root = d.Registry, d.Root
+	start := time.Now()
+	must(t, next.Recover(ctx))
+	select {
+	case <-exited:
+	case <-time.After(15 * time.Second):
+		t.Fatal("the left process group outlived the takeover")
+	}
+	if time.Since(start) > 30*time.Second || agentd.Alive(entry.PGID, entry.Start) {
+		t.Fatal("the group is still there")
+	}
+	var astate, endHow string
+	must(t, pool.QueryRow(ctx, `SELECT state, COALESCE(end_how, '') FROM agentrt.attempt WHERE attempt_id = $1`, cl.AttemptID).Scan(&astate, &endHow))
+	if state, _ := taskState(t, pool, task); state != "ready" || astate == "running" {
+		t.Fatalf("task %s, attempt %s %s", state, astate, endHow)
+	}
+	if m, loadErr := next.Registry.Load(); loadErr != nil || len(m) != 0 {
+		t.Fatalf("registry = %v %v", m, loadErr)
+	}
+
+	// the task is claimed again; this agentd's executor finishes and it dies
+	// before handing over: the next one hands the result over
+	cl2, err := next.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl2 == nil || cl2.TaskID != task || cl2.AttemptNo != 2 {
+		t.Fatalf("second claim = %+v %v", cl2, err)
+	}
+	must(t, next.Client.Start(ctx, cl2.AttemptID, cl2.Epoch, "", cursor.Provider))
+	exit := 0
+	must(t, next.Client.Computed(ctx, cl2.AttemptID, cl2.Epoch, &exit, "exit", "done"))
+	dir2 := agentd.WorkspaceDir(next.Root, cl2.TaskID, cl2.AttemptNo)
+	must(t, os.MkdirAll(dir2+".out", 0o700))
+	must(t, os.WriteFile(filepath.Join(dir2+".out", "report.md"), []byte("# done before the restart\n"), 0o600))
+	must(t, next.Registry.Put(agentd.Entry{AttemptID: cl2.AttemptID, TaskID: cl2.TaskID, AttemptNo: cl2.AttemptNo, Epoch: cl2.Epoch,
+		Role: cl2.Role, Effect: cl2.EffectClass, Workdir: dir2, Phase: "computed", EndHow: "exit", ExitCode: &exit}))
+	third := daemon(t, base, nil, "", nil)
+	third.Registry, third.Root = next.Registry, next.Root
+	must(t, third.Recover(ctx))
+	if state, report := taskState(t, pool, task); state != "submitted" || report == "" {
+		t.Fatalf("after the takeover: task %s, report %q", state, report)
+	}
+	if m, loadErr := third.Registry.Load(); loadErr != nil || len(m) != 0 {
+		t.Fatalf("registry = %v %v", m, loadErr)
+	}
+}
