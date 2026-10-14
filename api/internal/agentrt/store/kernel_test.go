@@ -95,6 +95,9 @@ func (w *world) ready(t *testing.T, task store.Task) string {
 	if task.Effect == "" {
 		task.Effect = "branch"
 	}
+	if task.Repo == "" {
+		task.Repo = "bifrost-platform"
+	}
 	task.Class, task.Title, task.SpecArtifact = "go", "t", w.spec
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.ProposeTask(ctx, tx, "controller", task); err != nil {
@@ -206,7 +209,7 @@ func same(t *testing.T, got, want map[string]any) {
 
 func heads(m map[string]string, calls *int) store.BranchHead {
 	var mu sync.Mutex
-	return func(_ context.Context, ref string) (string, error) {
+	return func(_ context.Context, _, ref string) (string, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		*calls++
@@ -667,6 +670,18 @@ func TestSalvage(t *testing.T) {
 	_, err = store.Salvage(ctx, w.rt, old.AttemptID, "h2", store.Result{Report: report, Ref: "refs/heads/agent/" + task + "/a7", Commit: commitA},
 		heads(map[string]string{"refs/heads/agent/" + task + "/a7": commitA}, &calls))
 	is(t, err, store.ErrState)
+	// Review 157 B1: salvage binds a report as persist does: a clean log
+	// tail is not a report, and a report with a local path is refused.
+	for _, bad := range []string{w.artifact(t, "log_tail", "compiling\n"), w.artifact(t, "review", "see /tmp/out\n")} {
+		_, err = store.Salvage(ctx, w.rt, old.AttemptID, "h2", store.Result{Report: bad, Ref: old.PushedRef, Commit: commitA}, head)
+		is(t, err, store.ErrState)
+	}
+	var unbound bool
+	ok(t, w.rt.QueryRow(ctx, `SELECT persisted_at IS NULL AND report_artifact_id IS NULL FROM agentrt.attempt WHERE attempt_id = $1`,
+		old.AttemptID).Scan(&unbound))
+	if !unbound {
+		t.Fatal("a refused salvage bound its result")
+	}
 	got, err := store.Salvage(ctx, w.rt, old.AttemptID, "h2", store.Result{Report: report, Ref: old.PushedRef, Commit: commitA}, head)
 	ok(t, err)
 	if got["persisted"] != true || w.state(t, "attempt", old.AttemptID) != "leased" || w.state(t, "task", task) != "leased" {

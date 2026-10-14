@@ -55,6 +55,39 @@ func PutArtifact(ctx context.Context, tx pgx.Tx, actor, kind, mediaType string, 
 	return id, nil
 }
 
+// ArtifactStream is the event stream of uploaded artifacts.
+const ArtifactStream = "artifacts"
+
+// UploadArtifact stores an uploaded body (PUT /artifacts, v5 §5.2) and, the
+// first time this body is stored, records artifact_put in the same
+// transaction: who uploaded it, its kind and size (review 156 A3). Uploading
+// the same body again stores and records nothing. Artifacts that other events
+// create and name (a task spec with task_proposed, a message with
+// message_posted) go through PutArtifact.
+func UploadArtifact(ctx context.Context, db DB, actor, uploadedBy, kind, mediaType string, body []byte) (string, bool, error) {
+	if len(body) > 1<<20 {
+		return "", false, errors.New("store: an artifact is at most 1 MiB")
+	}
+	h := sha256.Sum256(body)
+	id := "sha256:" + hex.EncodeToString(h[:])
+	var created bool
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `INSERT INTO agentrt.artifact (artifact_id, artifact_kind, media_type, size_bytes, created_by_actor_id)
+		  VALUES ($1,$2,$3,$4,$5) ON CONFLICT (artifact_id) DO NOTHING`, id, kind, mediaType, len(body), actor)
+		if err != nil || tag.RowsAffected() == 0 {
+			return err
+		}
+		created = true
+		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.artifact_blob (artifact_id, body) VALUES ($1,$2)`, id, body); err != nil {
+			return err
+		}
+		_, err = Append(ctx, tx, Event{Stream: ArtifactStream, Type: "artifact_put", Actor: actor,
+			Body: map[string]any{"artifact_id": id, "artifact_kind": kind, "size_bytes": len(body), "uploaded_by": uploadedBy}})
+		return err
+	})
+	return id, created, err
+}
+
 // Mission is the part of a mission row the store writes at creation.
 type Mission struct {
 	ID, WorkID, Title, Goal string

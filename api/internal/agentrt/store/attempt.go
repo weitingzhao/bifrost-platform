@@ -333,9 +333,13 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 	})
 }
 
-// BranchHead reads the commit a branch of the main repository points at. The
-// HTTP layer passes a Gitea reader, tests a fake.
-type BranchHead func(ctx context.Context, ref string) (string, error)
+// BranchHead reads the commit a branch of a repository on the main Git
+// server points at. The HTTP layer passes a Gitea reader, tests a fake.
+type BranchHead func(ctx context.Context, repo, ref string) (string, error)
+
+// ErrNoHead: no reader of branch heads is configured, so a pushed branch
+// cannot be checked yet; agentd tries again later.
+var ErrNoHead = errors.New("store: no reader of branch heads is configured")
 
 // Result is what agentd hands over: the report, other artifacts, and the
 // branch and commit it pushed, if it pushed one.
@@ -357,9 +361,10 @@ func (r Result) all() []string {
 	return append([]string{r.Report}, r.Artifacts...)
 }
 
-// checkHead is the Gitea half of the result check: the branch points at the
-// commit reported.
-func (r Result) checkHead(head BranchHead) func(context.Context) error {
+// checkHead is the Gitea half of the result check: the branch of the task's
+// repository (read from the task, not from the caller) points at the commit
+// reported.
+func (r Result) checkHead(db DB, attemptID string, head BranchHead) func(context.Context) error {
 	return func(ctx context.Context) error {
 		if (r.Ref == "") != (r.Commit == "") {
 			return fmt.Errorf("%w: a pushed branch needs both its ref and its commit", ErrState)
@@ -367,7 +372,24 @@ func (r Result) checkHead(head BranchHead) func(context.Context) error {
 		if r.Ref == "" {
 			return nil
 		}
-		got, err := head(ctx, r.Ref)
+		if head == nil {
+			return ErrNoHead
+		}
+		var repo string
+		err := InTx(ctx, db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT COALESCE(t.repo, '') FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+			  WHERE a.attempt_id = $1`, attemptID).Scan(&repo)
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrFenced
+		}
+		if err != nil {
+			return err
+		}
+		if repo == "" {
+			return fmt.Errorf("%w: the task has no repository to push to", ErrState)
+		}
+		got, err := head(ctx, repo, r.Ref)
 		if err != nil {
 			return fmt.Errorf("store: read %s: %w", r.Ref, err)
 		}
@@ -379,8 +401,8 @@ func (r Result) checkHead(head BranchHead) func(context.Context) error {
 }
 
 // fits checks the result against the attempt and the database: the branch is
-// the attempt's own, a branch task pushed one and a none task did not, and
-// every artifact is stored here.
+// the attempt's own, a branch task pushed one and a none task did not, every
+// artifact is stored here, and the report is one (reportFits).
 func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
 	var effect string
 	if err := tx.QueryRow(ctx, `SELECT effect_class FROM agentrt.task WHERE task_id = $1`, a.task).Scan(&effect); err != nil {
@@ -394,7 +416,36 @@ func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
 	case effect == "none" && r.Ref != "":
 		return fmt.Errorf("%w: a task of effect none pushes nothing", ErrState)
 	}
-	return haveArtifacts(ctx, tx, r.all())
+	if err := haveArtifacts(ctx, tx, r.all()); err != nil {
+		return err
+	}
+	return reportFits(ctx, tx, r.Report)
+}
+
+// reportKinds are the kinds a result's report may be stored as.
+var reportKinds = map[string]bool{"report": true, "verify": true, "review": true}
+
+// reportFits checks the artifact a result names as its report: stored as a
+// report, a verification or a review, and with no local path in it (H8),
+// whatever kind it was uploaded as. A log tail or a patch, which H8 lets
+// through as raw output, cannot take the report's place (review 156 A1).
+func reportFits(ctx context.Context, tx pgx.Tx, id string) error {
+	if id == "" {
+		return nil
+	}
+	var kind string
+	var body []byte
+	if err := tx.QueryRow(ctx, `SELECT a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+	  WHERE a.artifact_id = $1`, id).Scan(&kind, &body); err != nil {
+		return err
+	}
+	if !reportKinds[kind] {
+		return fmt.Errorf("%w: the report %s is stored as %s, not as a report, a verification or a review", ErrState, id, kind)
+	}
+	if p, found := LocalPath(kind, body); found {
+		return fmt.Errorf("%w: the report %s has a local path in it: %s", ErrState, id, p)
+	}
+	return nil
 }
 
 func (r Result) body() map[string]any {
@@ -415,7 +466,7 @@ func Persist(ctx context.Context, db DB, f Fence, r Result, head BranchHead) (ma
 	if r.Report == "" {
 		return nil, fmt.Errorf("%w: a result has a report", ErrState)
 	}
-	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(head),
+	return idempotent(ctx, db, hostActor(f.HostID), "persist", f.AttemptID, r.request(f.Epoch), r.checkHead(db, f.AttemptID, head),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockLive(ctx, tx, f, false)
 			if err != nil {
@@ -473,7 +524,7 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 // persisted, the attempt gets persisted_at, so a new verification task may
 // accept it. Neither the attempt's state nor the task's changes.
 func Salvage(ctx context.Context, db DB, attemptID, hostID string, r Result, head BranchHead) (map[string]any, error) {
-	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(head),
+	return idempotent(ctx, db, hostActor(hostID), "salvage", attemptID, r.request(0), r.checkHead(db, attemptID, head),
 		func(tx pgx.Tx) (map[string]any, error) {
 			a, err := lockAttempt(ctx, tx, attemptID, false)
 			if err != nil {

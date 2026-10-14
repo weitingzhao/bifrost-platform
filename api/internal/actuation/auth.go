@@ -31,7 +31,25 @@ const (
 	// viewer, so no Require(min) route accepts it, and only RequireAny routes
 	// that name it do.
 	RoleExecutor Role = "executor"
+	// RoleAgentd is an Agent host's daemon (design v5 §5.2 鉴权): its token is
+	// bound to one host, named in the principal as "agentd:<host_id>", and
+	// may only claim work, renew leases, hand results over and upload
+	// artifacts, for that host. Like executor it sits below viewer.
+	RoleAgentd Role = "agentd"
 )
+
+// AgentdPrefix starts the principal name of an agentd token; the host id
+// follows it.
+const AgentdPrefix = "agentd:"
+
+// AgentdHost is the host an agentd principal is bound to.
+func AgentdHost(p Principal) (string, bool) {
+	host, ok := strings.CutPrefix(p.Name, AgentdPrefix)
+	if p.Role != RoleAgentd || !ok || host == "" {
+		return "", false
+	}
+	return host, true
+}
 
 type Principal struct {
 	Name string `json:"name"`
@@ -101,6 +119,11 @@ func LoadAuth(path string) (*AuthService, error) {
 		name := t.Name
 		if name == "" {
 			name = string(role)
+		}
+		if role == RoleAgentd {
+			if _, ok := AgentdHost(Principal{Name: name, Role: role}); !ok {
+				return nil, fmt.Errorf("platform auth: agentd token %q must be named %s<host_id>", name, AgentdPrefix)
+			}
 		}
 		if prev, dup := auth.principals[token]; dup {
 			return nil, fmt.Errorf("platform auth: %q and %q resolve to the same token", prev.Name, name)
@@ -194,7 +217,7 @@ func roleLevel(role Role) int {
 		return 3
 	case RoleReporter:
 		return 2
-	case RoleExecutor:
+	case RoleExecutor, RoleAgentd:
 		return 0
 	default:
 		return 1

@@ -39,6 +39,7 @@ func (s *Server) wireQuestions(dataDir string, workers bool) {
 // Close cancels approval result flushing without waiting on storage I/O,
 // then stops the questions sweep. Other background loops are unchanged.
 func (s *Server) Close() {
+	s.closeAgentRuntime()
 	if s.approvalsCancel != nil {
 		s.approvalsCancel()
 	}
