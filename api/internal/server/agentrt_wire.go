@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -53,7 +54,11 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
 		return
 	}
-	pool, err := openAgentRuntime(context.Background(), dsn, strings.TrimSpace(os.Getenv("AGENTRT_ENV")))
+	// A database that does not answer delays the platform's start by at most
+	// this much (review 156).
+	openCtx, openCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	pool, err := openAgentRuntime(openCtx, dsn, strings.TrimSpace(os.Getenv("AGENTRT_ENV")))
+	openCancel()
 	if err != nil {
 		slog.Error("agentrt: not connected; its routes answer 503", "err", err)
 		return
@@ -78,8 +83,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 // openAgentRuntime opens the pool and refuses an identity or a database that
 // is not the environment's runtime ones.
 func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, error) {
-	want, err := migrate.RuntimeRole(env)
-	if err != nil {
+	if _, err := migrate.RuntimeRole(env); err != nil {
 		return nil, err
 	}
 	cfg, err := pgxpool.ParseConfig(dsn)
@@ -98,11 +102,24 @@ func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, erro
 		pool.Close()
 		return nil, err
 	}
-	if user != want || db != agentrtDatabase[env] {
+	if err = identityFits(user, db, env); err != nil {
 		pool.Close()
-		return nil, fmt.Errorf("connected as %s to %s; want %s to %s", user, db, want, agentrtDatabase[env])
+		return nil, err
 	}
 	return pool, nil
+}
+
+// identityFits accepts only the environment's runtime role on the
+// environment's database.
+func identityFits(user, db, env string) error {
+	want, err := migrate.RuntimeRole(env)
+	if err != nil {
+		return err
+	}
+	if user != want || db != agentrtDatabase[env] {
+		return fmt.Errorf("connected as %s to %s; want %s to %s", user, db, want, agentrtDatabase[env])
+	}
+	return nil
 }
 
 // unreadableSources read nothing yet: approvals, questions, CI runs and

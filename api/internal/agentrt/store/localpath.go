@@ -7,14 +7,20 @@ import "regexp"
 // precedes it, so "http://" and "foo:/" do not.
 var localPath = regexp.MustCompile(`/Users/|/home/|/private/|/var/folders/|/tmp/|~/|(?:^|[^A-Za-z])[A-Za-z]:[/\\]`)
 
-// scannedKinds are the artifact kinds that are inputs to a later step or a
-// record for people: a local path in them is refused. Log tails and patches
-// are raw output and are not scanned (v5 §5.2 「PUT /artifacts」).
-var scannedKinds = map[string]bool{"report": true, "verify": true, "review": true, "handover": true, "other": true}
+// ArtifactKinds are the artifact kinds the schema allows (0001_core.sql).
+var ArtifactKinds = map[string]bool{"task_spec": true, "mission_spec": true, "report": true, "verify": true, "review": true,
+	"log_tail": true, "checkpoint_patch": true, "handover": true, "brief": true, "message": true, "exam": true, "other": true}
 
-// LocalPath reports the first local path in body, when kind is scanned.
+// unscannedKinds are the kinds H8 lets through: task specs and briefs (the
+// inherited exceptions of H8) and raw output, log tails and patches (v5 §5.2
+// 「PUT /artifacts」). Every other kind is scanned, so a kind added later is
+// scanned until it is named here (review 156 A2).
+var unscannedKinds = map[string]bool{"task_spec": true, "brief": true, "log_tail": true, "checkpoint_patch": true}
+
+// LocalPath reports the first local path in body, unless kind is one H8 lets
+// through.
 func LocalPath(kind string, body []byte) (string, bool) {
-	if !scannedKinds[kind] {
+	if unscannedKinds[kind] {
 		return "", false
 	}
 	loc := localPath.FindIndex(body)

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,7 +95,11 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 }
 
 // Tokens of the fixture auth file, by caller name.
-var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "viewer": "fixture-viewer-1"}
+var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "viewer": "fixture-viewer-1",
+	"reporter": "fixture-reporter-1"}
+
+// heads records the branch heads the API asked for, as repo|ref.
+var heads []string
 
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, and a viewer.
@@ -111,11 +116,17 @@ func server(t *testing.T, db store.DB) *httptest.Server {
   - name: viewer
     role: viewer
     token: fixture-viewer-1
+  - name: reporter
+    role: reporter
+    token: fixture-reporter-1
 `), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
 	api := &agentrtapi.API{DB: db, ClaimWait: 300 * time.Millisecond, ClaimPoll: 50 * time.Millisecond,
-		Head: func(context.Context, string, string) (string, error) { return commitA, nil }}
+		Head: func(_ context.Context, repo, ref string) (string, error) {
+			heads = append(heads, repo+"|"+ref)
+			return commitA, nil
+		}}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })
 	s := httptest.NewServer(r)
@@ -171,6 +182,10 @@ func TestAgentdPath(t *testing.T) {
 	if code, out := call(t, s, "agentd:h2", "POST", "claim", claimBody); code != http.StatusForbidden || out["error"] != "wrong_host" {
 		t.Fatalf("a token of h2 claimed for h1: %d %v", code, out)
 	}
+	if code, _ := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1,
+		"tools": []any{map[string]any{"executor": "exec:cursor"}}}); code != http.StatusBadRequest {
+		t.Fatalf("a tool without its provider was answered %d", code)
+	}
 	status, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody)
 	if status != http.StatusOK || claim["task_id"] != task || claim["base_commit"] != commitA || claim["repo"] != "bifrost-platform" {
 		t.Fatalf("claim: %d %v", status, claim)
@@ -188,7 +203,7 @@ func TestAgentdPath(t *testing.T) {
 		body   map[string]any
 	}{
 		{"start", fence(map[string]any{"model_provider": "cursor-mix"})},
-		{"heartbeat", fence(map[string]any{"phase": "running", "line": "compiling"})},
+		{"heartbeat", fence(nil)},
 	} {
 		if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body); code != http.StatusOK {
 			t.Fatalf("%s: %d %v", step.action, code, out)
@@ -197,6 +212,9 @@ func TestAgentdPath(t *testing.T) {
 	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat",
 		map[string]any{"host_id": "h1", "lease_epoch": 999}); code != http.StatusConflict || out["error"] != "fenced" {
 		t.Fatalf("an old epoch: %d %v", code, out)
+	}
+	if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"phase": "running"})); code != http.StatusBadRequest {
+		t.Fatalf("a phase nothing keeps was answered %d", code)
 	}
 
 	report := []byte("# done\nall tests pass\n")
@@ -213,6 +231,21 @@ func TestAgentdPath(t *testing.T) {
 	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "report", "Content-Type", "text/markdown"); code != http.StatusOK {
 		t.Fatalf("upload: %d %v", code, out)
 	}
+	// A3: the first upload of a body is recorded once; uploading it again is not.
+	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "report"); code != http.StatusOK || out["created"] != false {
+		t.Fatalf("a second upload: %d %v", code, out)
+	}
+	var puts int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'artifact_put' AND body_json->>'artifact_id' = $1
+	  AND body_json->>'uploaded_by' = 'agentd:h1' AND actor_id = 'host:h1'`, artifactID(report)).Scan(&puts))
+	if puts != 1 {
+		t.Fatalf("%d artifact_put events for one body", puts)
+	}
+	// A1: raw output H8 lets through cannot take the report's place.
+	log := []byte("compiling in /Users/someone/work\n")
+	if code, _ := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(log), log, "X-Artifact-Kind", "log_tail"); code != http.StatusOK {
+		t.Fatalf("a log tail: %d", code)
+	}
 	exit := 0
 	for _, step := range []struct {
 		action string
@@ -220,7 +253,36 @@ func TestAgentdPath(t *testing.T) {
 	}{
 		{"checkpoint", fence(map[string]any{"checkpoint_seq": 1, "artifacts": []string{artifactID(report)}})},
 		{"computed", fence(map[string]any{"exit_code": exit, "end_how": "exit", "conclusion": "done"})},
-		{"persist", fence(map[string]any{"report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})},
+	} {
+		if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body); code != http.StatusOK {
+			t.Fatalf("%s: %d %v", step.action, code, out)
+		}
+	}
+	heads = nil
+	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
+		fence(map[string]any{"report": artifactID(log), "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})); code != http.StatusConflict || out["error"] != "state" {
+		t.Fatalf("a log tail as the report: %d %v", code, out)
+	}
+	if fmt.Sprint(heads) != fmt.Sprintf("[bifrost-platform|%s]", claim["pushed_ref"]) {
+		t.Fatalf("branch heads read: %v", heads)
+	}
+	// A report stored by another path (not an upload) is scanned when it is bound.
+	var planted string
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		var err error
+		planted, err = store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("# done\nsee C:\\work\n"))
+		return err
+	}))
+	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
+		fence(map[string]any{"report": planted, "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})); code != http.StatusConflict || out["error"] != "state" {
+		t.Fatalf("a report with a local path: %d %v", code, out)
+	}
+	for _, step := range []struct {
+		action string
+		body   map[string]any
+	}{
+		{"persist", fence(map[string]any{"report": artifactID(report), "artifacts": []string{artifactID(log)},
+			"pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})},
 		{"submit", fence(nil)},
 		{"submit", fence(nil)},
 	} {
@@ -245,5 +307,32 @@ func TestNotConfigured(t *testing.T) {
 	s := server(t, nil)
 	if code, out := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1"}); code != http.StatusServiceUnavailable {
 		t.Fatalf("%d %v", code, out)
+	}
+}
+
+// Uploads: every kind but the four H8 lets through is scanned, whoever
+// uploads it; a kind the schema does not have is refused (review 156 A2, B3).
+func TestUploadKinds(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	leaky := []byte("input at /home/ci/private-input\n")
+	for _, kind := range []string{"mission_spec", "message", "exam", "report"} {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusUnprocessableEntity {
+			t.Errorf("a reporter's %s with a local path: %d", kind, code)
+		}
+	}
+	for _, kind := range []string{"", "notes"} {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusBadRequest {
+			t.Errorf("kind %q: %d", kind, code)
+		}
+	}
+	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief"); code != http.StatusOK || out["created"] != true {
+		t.Errorf("a brief, which H8 lets through: %d %v", code, out)
+	}
+	var by string
+	must(t, pool.QueryRow(ctx, `SELECT body_json->>'uploaded_by' FROM agentrt.event WHERE event_type = 'artifact_put'
+	  AND body_json->>'artifact_id' = $1`, artifactID(leaky)).Scan(&by))
+	if by != "reporter" {
+		t.Errorf("uploaded_by = %q", by)
 	}
 }

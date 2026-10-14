@@ -62,7 +62,7 @@ func init() {
 		"POST /api/v1/approvals/{id}/heartbeat",
 		"POST /api/v1/approvals/{id}/result",
 	)
-	exempt("agent runtime work queue (design v5 §5.2): agentd claims and hands results over for its own host; each route is one store function and one event, not a cluster write",
+	exempt("agent runtime work queue (design v5 §5.2): a protocol for its own role, agentd, bound to one host; state changes and results are recorded by the store in one transaction; not a cluster write",
 		"POST /api/v1/agentrt/claim",
 		"POST /api/v1/agentrt/attempts/{id}/{action}",
 		"PUT /api/v1/agentrt/artifacts/{id}",

@@ -56,6 +56,27 @@ func TestAgentRuntimeRoutesWithoutDatabase(t *testing.T) {
 	}
 }
 
+// Each half of the identity is checked on its own, and an environment that
+// does not exist is refused (review 156 B2); no database needed.
+func TestAgentRuntimeIdentity(t *testing.T) {
+	for _, c := range []struct {
+		user, db, env string
+		ok            bool
+	}{
+		{"platform_agentrt_dev", "bifrost_platform_dev", "dev", true},
+		{"platform_agentrt_prod", "bifrost_platform", "prod", true},
+		{"platform_agentrt_stg", "bifrost_platform_dev", "dev", false},
+		{"platform_agentrt_dev", "bifrost_platform", "dev", false},
+		{"postgres", "bifrost_platform_dev", "dev", false},
+		{"platform_agentrt_qa", "bifrost_platform_qa", "qa", false},
+		{"platform_agentrt_", "", "", false},
+	} {
+		if err := identityFits(c.user, c.db, c.env); (err == nil) != c.ok {
+			t.Errorf("%s on %s for %q: %v", c.user, c.db, c.env, err)
+		}
+	}
+}
+
 // The pool is refused unless it is the environment's runtime role on the
 // environment's database.
 func TestAgentRuntimeRefusesAnotherIdentity(t *testing.T) {

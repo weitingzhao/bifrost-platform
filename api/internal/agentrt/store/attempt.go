@@ -401,8 +401,8 @@ func (r Result) checkHead(db DB, attemptID string, head BranchHead) func(context
 }
 
 // fits checks the result against the attempt and the database: the branch is
-// the attempt's own, a branch task pushed one and a none task did not, and
-// every artifact is stored here.
+// the attempt's own, a branch task pushed one and a none task did not, every
+// artifact is stored here, and the report is one (reportFits).
 func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
 	var effect string
 	if err := tx.QueryRow(ctx, `SELECT effect_class FROM agentrt.task WHERE task_id = $1`, a.task).Scan(&effect); err != nil {
@@ -416,7 +416,36 @@ func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
 	case effect == "none" && r.Ref != "":
 		return fmt.Errorf("%w: a task of effect none pushes nothing", ErrState)
 	}
-	return haveArtifacts(ctx, tx, r.all())
+	if err := haveArtifacts(ctx, tx, r.all()); err != nil {
+		return err
+	}
+	return reportFits(ctx, tx, r.Report)
+}
+
+// reportKinds are the kinds a result's report may be stored as.
+var reportKinds = map[string]bool{"report": true, "verify": true, "review": true}
+
+// reportFits checks the artifact a result names as its report: stored as a
+// report, a verification or a review, and with no local path in it (H8),
+// whatever kind it was uploaded as. A log tail or a patch, which H8 lets
+// through as raw output, cannot take the report's place (review 156 A1).
+func reportFits(ctx context.Context, tx pgx.Tx, id string) error {
+	if id == "" {
+		return nil
+	}
+	var kind string
+	var body []byte
+	if err := tx.QueryRow(ctx, `SELECT a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+	  WHERE a.artifact_id = $1`, id).Scan(&kind, &body); err != nil {
+		return err
+	}
+	if !reportKinds[kind] {
+		return fmt.Errorf("%w: the report %s is stored as %s, not as a report, a verification or a review", ErrState, id, kind)
+	}
+	if p, found := LocalPath(kind, body); found {
+		return fmt.Errorf("%w: the report %s has a local path in it: %s", ErrState, id, p)
+	}
+	return nil
 }
 
 func (r Result) body() map[string]any {

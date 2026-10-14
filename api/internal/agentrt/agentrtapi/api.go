@@ -1,8 +1,9 @@
 // Package agentrtapi is the HTTP face of the agent runtime's kernel (design
 // v5 §5.2 「路由草图」, /api/v1/agentrt/…): the routes agentd calls to claim
 // work and hand results over, artifact upload and download, and reads. Every
-// write route maps to one store function, which writes its event and the
-// state it names in one transaction; there is no route that sets a state.
+// write route maps to one store function, which writes the state it changes
+// and its events in one transaction (a heartbeat only renews the lease, a
+// liveness column, without an event); there is no route that sets a state.
 package agentrtapi
 
 import (
@@ -167,6 +168,10 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	cr := store.ClaimRequest{HostID: req.HostID, FreeSlots: req.FreeSlots}
 	for _, t := range req.Tools {
+		if t.Executor == "" || t.Provider == "" {
+			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
+			return
+		}
 		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
 	}
 	wait, poll := a.ClaimWait, a.ClaimPoll
@@ -204,12 +209,13 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 }
 
 // attemptBody holds every field an attempt route takes; each route reads
-// its own.
+// its own. A heartbeat's phase and last line (v5 §5.2) are not taken yet:
+// nothing keeps them until the progress bus (2.3) gives them a place, and a
+// body that sends them is refused rather than answered as if they were kept
+// (review 156 B1).
 type attemptBody struct {
 	hostBody
 	Epoch         int64    `json:"lease_epoch"`
-	Phase         string   `json:"phase"`
-	Line          string   `json:"line"`
 	Model         string   `json:"model"`
 	Provider      string   `json:"model_provider"`
 	CheckpointSeq int      `json:"checkpoint_seq"`
@@ -274,8 +280,10 @@ var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true
 
 // putArtifact stores a body under its sha256 (PUT /artifacts/{sha256}): the
 // id in the path must be the hash of the body; the kind comes in the
-// X-Artifact-Kind header; a report or a handover with a local path in it is
-// refused (H8). Uploading the same body again is harmless.
+// X-Artifact-Kind header and must be one the schema has; an artifact with a
+// local path in it is refused unless its kind is one H8 lets through
+// (store.LocalPath). The first upload of a body records artifact_put;
+// uploading it again is harmless.
 func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p := actuation.PrincipalFromContext(r.Context())
@@ -283,6 +291,10 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	kind := r.Header.Get("X-Artifact-Kind")
 	if p.Role == actuation.RoleAgentd && !isAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
+		return
+	}
+	if !store.ArtifactKinds[kind] {
+		writeError(w, http.StatusBadRequest, "kind", fmt.Sprintf("X-Artifact-Kind %q is not an artifact kind", kind))
 		return
 	}
 	if isAgentd && !agentdKinds[kind] {
@@ -311,15 +323,12 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	if isAgentd {
 		actor = "host:" + host
 	}
-	err = store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
-		_, putErr := store.PutArtifact(r.Context(), tx, actor, kind, media, body)
-		return putErr
-	})
+	_, created, err := store.UploadArtifact(r.Context(), a.DB, actor, p.Name, kind, media, body)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id})
+	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "created": created})
 }
 
 func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {

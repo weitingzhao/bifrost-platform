@@ -1,8 +1,12 @@
 package store_test
 
 import (
+	"regexp"
+	"sort"
+	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrations"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -24,9 +28,42 @@ func TestLocalPath(t *testing.T) {
 			t.Errorf("%q matched %q", miss, p)
 		}
 	}
-	for _, kind := range []string{"log_tail", "checkpoint_patch", "task_spec", "brief"} {
-		if _, found := store.LocalPath(kind, []byte("/Users/someone")); found {
-			t.Errorf("kind %s was scanned", kind)
+	// Every kind the schema has is scanned except the four H8 lets through;
+	// a kind not named anywhere is scanned too (review 156 A2).
+	through := map[string]bool{"log_tail": true, "checkpoint_patch": true, "task_spec": true, "brief": true}
+	for kind := range store.ArtifactKinds {
+		if _, found := store.LocalPath(kind, []byte("/Users/someone")); found == through[kind] {
+			t.Errorf("kind %s: scanned %v", kind, found)
 		}
+	}
+	if len(store.ArtifactKinds) != 12 {
+		t.Errorf("%d artifact kinds; the schema has 12", len(store.ArtifactKinds))
+	}
+	if _, found := store.LocalPath("a_kind_added_later", []byte("/home/ci")); !found {
+		t.Error("an unnamed kind was not scanned")
+	}
+}
+
+// ArtifactKinds is the schema's list, read from the migration itself.
+func TestArtifactKindsAreTheSchemas(t *testing.T) {
+	sql, err := migrations.FS.ReadFile("0001_core.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?s)artifact_kind\s+text NOT NULL CHECK \(artifact_kind IN \((.*?)\)\)`).FindSubmatch(sql)
+	if m == nil {
+		t.Fatal("no artifact_kind CHECK in 0001_core.sql")
+	}
+	var schema, ours []string
+	for _, k := range regexp.MustCompile(`'([a-z_]+)'`).FindAllSubmatch(m[1], -1) {
+		schema = append(schema, string(k[1]))
+	}
+	for k := range store.ArtifactKinds {
+		ours = append(ours, k)
+	}
+	sort.Strings(schema)
+	sort.Strings(ours)
+	if strings.Join(schema, ",") != strings.Join(ours, ",") {
+		t.Fatalf("schema %v, store %v", schema, ours)
 	}
 }
