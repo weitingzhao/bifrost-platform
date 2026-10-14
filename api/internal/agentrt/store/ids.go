@@ -35,3 +35,4 @@ func NewTaskID() string         { return "t_" + newULID(time.Now()) }
 func NewAttemptID() string      { return "a_" + newULID(time.Now()) }
 func NewMessageID() string      { return "m_" + newULID(time.Now()) }
 func NewVerificationID() string { return "v_" + newULID(time.Now()) }
+func NewControlID() string      { return "c_" + newULID(time.Now()) }

@@ -194,13 +194,13 @@ func ensureWriter(ctx context.Context, tx pgx.Tx, actor string) error {
 // it within the batch; DependsOn holds refs of the batch or ids of tasks of
 // the same mission.
 type TaskProposal struct {
-	Ref                                     string
-	PlanNode, OffPlanReason, Subject        string
-	Role, Class, Title, SpecArtifact        string
-	Effect, Repo, BaseCommit                string
-	Core                                    bool
-	Needs, DependsOn                        []string
-	HardLimit                               time.Duration
+	Ref                              string
+	PlanNode, OffPlanReason, Subject string
+	Role, Class, Title, SpecArtifact string
+	Effect, Repo, BaseCommit         string
+	Core                             bool
+	Needs, DependsOn                 []string
+	HardLimit                        time.Duration
 }
 
 // The roles a proposal may give: verification and review tasks are the

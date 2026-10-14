@@ -39,16 +39,39 @@ type API struct {
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
-// Mount adds the routes under /agentrt of r (r is the /api/v1 router). Who
-// may call what (v5 §5.2 鉴权): agentd, whose token is bound to one host,
-// claims, keeps its leases and hands results over; threads and seats
-// (reporter and operator tokens) and the Owner (admin) propose missions and
-// tasks; they and agentd upload artifacts; every role reads.
+// abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
+// whoami both read them. agentd, whose token is bound to one host, claims,
+// keeps its leases and hands results over; threads and seats (reporter and
+// operator tokens) and the Owner (admin) propose missions and tasks; they and
+// agentd upload artifacts; anyone authenticated reads and may stop, pause or
+// drain; operators and the Owner drain hosts; only the Owner lifts a control.
+var abilities = []struct {
+	name  string
+	roles []actuation.Role
+}{
+	{"read", []actuation.Role{actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd}},
+	{"claim", []actuation.Role{actuation.RoleAgentd}},
+	{"propose", []actuation.Role{actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin}},
+	{"upload", []actuation.Role{actuation.RoleAgentd, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin}},
+	{"stop", []actuation.Role{actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd}},
+	{"drain", []actuation.Role{actuation.RoleOperator, actuation.RoleAdmin}},
+	{"lift", []actuation.Role{actuation.RoleAdmin}},
+}
+
+func may(name string) []actuation.Role {
+	for _, ab := range abilities {
+		if ab.name == name {
+			return ab.roles
+		}
+	}
+	panic("agentrtapi: no ability " + name)
+}
+
+// Mount adds the routes under /agentrt of r (r is the /api/v1 router), each
+// behind the roles of its ability.
 func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
-	read := auth.RequireAny(actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd)
-	agentd := auth.RequireAny(actuation.RoleAgentd)
-	propose := auth.RequireAny(actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
-	upload := auth.RequireAny(actuation.RoleAgentd, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin)
+	gate := func(name string) func(http.Handler) http.Handler { return auth.RequireAny(may(name)...) }
+	read, agentd, propose, upload := gate("read"), gate("claim"), gate("propose"), gate("upload")
 	// Authentication first, so an anonymous write is refused as such even
 	// when the database is not configured.
 	cfg := a.configured
@@ -65,6 +88,13 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)
 		r.With(read, cfg).Get("/events", a.getEvents)
+		r.With(read, cfg).Get("/plan", a.getPlan)
+		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
+		r.With(read, cfg).Get("/controls", a.listControls)
+		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
+		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
+		r.With(read, cfg).Get("/hosts", a.listHosts)
+		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 	})
 }
 
@@ -76,12 +106,6 @@ func (a *API) configured(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
-	p := actuation.PrincipalFromContext(r.Context())
-	host, _ := actuation.AgentdHost(p)
-	writeJSON(w, http.StatusOK, map[string]any{"name": p.Name, "role": p.Role, "host_id": host})
 }
 
 // boundHost is the host of the calling agentd token; the body must name it.
