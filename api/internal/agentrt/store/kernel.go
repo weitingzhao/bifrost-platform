@@ -146,7 +146,13 @@ func readTask(ctx context.Context, tx pgx.Tx, id string, lock bool) (taskRow, er
 // moveTask writes task_state_changed and the new state. t must be locked. A
 // task that becomes ready gets its route (route_decided) and wakes the hosts.
 func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string) error {
-	if !slices.Contains(taskMoves[t.state], to) {
+	return moveTaskBy(ctx, tx, actor, t, to, reason, taskMoves)
+}
+
+// moveTaskBy moves a task by the given table of moves (a path with moves of
+// its own, as accepting a salvaged result, keeps them out of taskMoves).
+func moveTaskBy(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string, moves map[string][]string) error {
+	if !slices.Contains(moves[t.state], to) {
 		return fmt.Errorf("%w: task %s %s -> %s", ErrState, t.id, t.state, to)
 	}
 	body := map[string]any{"from": t.state, "to": to}

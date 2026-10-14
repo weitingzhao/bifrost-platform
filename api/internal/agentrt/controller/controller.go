@@ -151,8 +151,9 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 }
 
 // Accept is one pass of the acceptance loop (v5 §5.2 控制器「验收编排」):
-// every submitted implementation goes to verification and every submitted
-// verification or review result is used. One that fails does not stop the
+// every submitted implementation goes to verification, every submitted
+// verification or review result is used, and every salvaged result still to
+// be checked gets its verification. One that fails does not stop the
 // others. It returns how many tasks it moved.
 func (c *Controller) Accept(ctx context.Context) (int, error) {
 	implementations, checks, err := store.Pending(ctx, c.DB)
@@ -176,6 +177,20 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
 		}
 		if did != "" {
+			moved++
+		}
+	}
+	// Salvaged results of lost attempts get a check of their own (T34 case 8).
+	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
+	if perr != nil {
+		errs = append(errs, perr)
+	}
+	for _, id := range salvaged {
+		v, err := store.StartSalvageCheck(ctx, c.DB, id)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("attempt %s: %w", id, err))
+		}
+		if v != "" {
 			moved++
 		}
 	}

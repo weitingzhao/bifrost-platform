@@ -282,3 +282,50 @@ func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
 		t.Fatalf("moved %d after %v", moved, time.Since(start))
 	}
 }
+
+// Accept also checks salvaged results (T34 case 8): a lost attempt whose
+// result was persisted gets a deterministic verification pinned to it, once.
+func TestAcceptChecksSalvagedResults(t *testing.T) {
+	pool := setup(t)
+	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+	task, attempt := store.NewTaskID(), store.NewAttemptID()
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# the work\n"))
+		if err != nil {
+			return err
+		}
+		report, err := store.PutArtifact(ctx, tx, "controller", "report", "text/markdown", []byte("# salvaged\n"))
+		if err != nil {
+			return err
+		}
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
+			Class: "go", Title: "t", SpecArtifact: spec, Effect: "none"}); err != nil {
+			return err
+		}
+		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
+			return err
+		}
+		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: a lost attempt whose result was salvaged"}}); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, host_id, lease_epoch,
+		  lease_expires_at, heartbeat_at, persisted_at, state, report_artifact_id)
+		  VALUES ($1, $2, 1, 'exec:codex', 'h1', nextval('agentrt.lease_epoch_seq'), now() - interval '1 hour', now() - interval '1 hour',
+		  now(), 'lost', $3)`, attempt, task, report)
+		return err
+	}))
+	c := &controller.Controller{DB: pool, Sources: (&world{}).sources()}
+	moved, err := c.Accept(ctx)
+	if err != nil || moved != 1 {
+		t.Fatalf("accept moved %d (%v)", moved, err)
+	}
+	var checks int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'verify' AND state = 'ready'`, task).Scan(&checks))
+	if checks != 1 {
+		t.Fatalf("%d verifications of the salvaged result", checks)
+	}
+	if moved, err = c.Accept(ctx); err != nil || moved != 0 {
+		t.Fatalf("a second pass moved %d (%v)", moved, err)
+	}
+}

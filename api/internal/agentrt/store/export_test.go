@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // ClaimFor is ClaimNext with a lease of the test's choosing, so a test can
@@ -34,4 +36,14 @@ func ReplayRoute(inputs map[string]any) ([]string, []any, string, error) {
 func SetHook(f func(point, arg string)) func() {
 	testHook = f
 	return func() { testHook = nil }
+}
+
+// MoveTaskForTest moves a task as the kernel does: the fixture that leases a
+// given task directly (LeaseAttempt) moves it to leased with it.
+func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) error {
+	t, err := readTask(ctx, tx, taskID, true)
+	if err != nil {
+		return err
+	}
+	return moveTask(ctx, tx, actor, t, to, "test")
 }
