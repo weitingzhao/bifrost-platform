@@ -31,7 +31,7 @@ var scopeRows = map[string]string{
 // RequestControl sets a control (SetControl) with a new id, after checking
 // its scope, kind and reference. The idempotency key is the writer's: a
 // retry gets the same control.
-func RequestControl(ctx context.Context, db DB, actor, key, scope, ref, kind, reason string) (map[string]any, error) {
+func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind, reason string) (map[string]any, error) {
 	if key == "" {
 		return nil, invalid("an idempotency key is required")
 	}
@@ -47,8 +47,8 @@ func RequestControl(ctx context.Context, db DB, actor, key, scope, ref, kind, re
 		return nil, invalid("a global control has no scope_ref; any other names its %s", scope)
 	}
 	req := map[string]any{"scope": scope, "scope_ref": ref, "kind": kind, "reason": reason}
-	return idempotent(ctx, db, actor, "controls", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, actor); err != nil {
+	return idempotent(ctx, db, w.Actor, "controls", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+		if err := ensureWriter(ctx, tx, w); err != nil {
 			return nil, err
 		}
 		if q := scopeRows[scope]; q != "" {
@@ -61,7 +61,7 @@ func RequestControl(ctx context.Context, db DB, actor, key, scope, ref, kind, re
 			}
 		}
 		id := NewControlID()
-		if err := SetControl(ctx, tx, actor, id, scope, ref, kind, reason); err != nil {
+		if err := SetControl(ctx, tx, w.Actor, id, scope, ref, kind, reason); err != nil {
 			return nil, err
 		}
 		return map[string]any{"control_id": id, "scope": scope, "scope_ref": ref, "kind": kind}, nil

@@ -1,6 +1,7 @@
 package agentrtapi
 
 import (
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -24,15 +25,19 @@ const SessionHeader = "X-Bifrost-Session"
 // thread:<session>, registered on its first write. The session is what the
 // thread says it is: it attributes the write, it grants nothing (the role
 // does).
-func writer(r *http.Request) (string, error) {
+func writer(r *http.Request) (store.Writer, error) {
 	p := actuation.PrincipalFromContext(r.Context())
+	w := store.Writer{Token: p.Name}
+	var err error
 	switch {
 	case p.Role == actuation.RoleAdmin:
-		return "owner", nil
+		w.Actor = "owner"
 	case strings.HasPrefix(p.Name, "seat:"):
-		return p.Name, nil
+		w.Actor = p.Name
+	default:
+		w.Actor, err = store.ThreadActor(r.Header.Get(SessionHeader))
 	}
-	return store.ThreadActor(r.Header.Get(SessionHeader))
+	return w, err
 }
 
 type budgetBody struct {
@@ -61,7 +66,7 @@ func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	actor, err := writer(r)
+	who, err := writer(r)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -74,7 +79,7 @@ func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 	if b.Budget != nil {
 		p.MaxAttempts, p.MaxWallHours = b.Budget.MaxAttempts, b.Budget.MaxWallHours
 	}
-	out, err := store.ProposeMission(r.Context(), a.DB, actor, b.IdempotencyKey, p)
+	out, err := store.ProposeMission(r.Context(), a.DB, who, b.IdempotencyKey, p)
 	if err != nil {
 		a.fail(w, err)
 		return
@@ -112,19 +117,26 @@ func (a *API) proposeTasks(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
-	actor, err := writer(r)
+	who, err := writer(r)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 	tasks := make([]store.TaskProposal, 0, len(b.Tasks))
 	for _, t := range b.Tasks {
+		// Bounded before it becomes a duration, which a large number would
+		// wrap (review 175 B5).
+		if t.HardLimitS < 0 || t.HardLimitS > int(store.MaxHardLimit/time.Second) {
+			writeError(w, http.StatusUnprocessableEntity, "invalid",
+				fmt.Sprintf("task %s: hard_limit_s is from 0 to %d", t.Ref, int(store.MaxHardLimit/time.Second)))
+			return
+		}
 		tasks = append(tasks, store.TaskProposal{Ref: t.Ref, PlanNode: t.PlanNodeID, OffPlanReason: t.OffPlanReason,
 			Subject: t.SubjectTaskID, Role: t.Role, Class: t.TaskClass, Title: t.Title, SpecArtifact: t.SpecArtifactID,
 			Effect: t.EffectClass, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core, Needs: t.Needs,
 			DependsOn: t.DependsOn, HardLimit: time.Duration(t.HardLimitS) * time.Second})
 	}
-	out, err := store.ProposeTasks(r.Context(), a.DB, actor, b.IdempotencyKey, chi.URLParam(r, "id"), tasks)
+	out, err := store.ProposeTasks(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), tasks)
 	if err != nil {
 		a.fail(w, err)
 		return

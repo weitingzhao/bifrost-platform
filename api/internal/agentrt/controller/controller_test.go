@@ -257,7 +257,7 @@ func TestStartDispatches(t *testing.T) {
 		spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# t\n"))
 		return err
 	}))
-	out, err := store.ProposeTasks(ctx, pool, "thread:s1", "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
+	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
 		Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch"}})
 	must(t, err)
 	task := out["tasks"].([]any)[0].(map[string]any)["task_id"].(string)

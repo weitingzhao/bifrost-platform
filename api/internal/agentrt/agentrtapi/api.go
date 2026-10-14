@@ -325,12 +325,13 @@ var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true
 // id in the path must be the hash of the body; the kind comes in the
 // X-Artifact-Kind header and must be one the schema has; an artifact with a
 // local path in it is refused unless its kind is one H8 lets through
-// (store.LocalPath). The first upload of a body records artifact_put;
-// uploading it again is harmless.
+// (store.LocalPath). The first upload of a body records artifact_put, as
+// the writer (agentd as its host, others as for proposals); uploading it
+// again is harmless.
 func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p := actuation.PrincipalFromContext(r.Context())
-	host, isAgentd := actuation.AgentdHost(p)
+	_, isAgentd := actuation.AgentdHost(p)
 	kind := r.Header.Get("X-Artifact-Kind")
 	if p.Role == actuation.RoleAgentd && !isAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
@@ -362,11 +363,12 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	if media == "" {
 		media = "application/octet-stream"
 	}
-	actor := "controller"
-	if isAgentd {
-		actor = "host:" + host
+	who, err := actorOf(r)
+	if err != nil {
+		a.fail(w, err)
+		return
 	}
-	_, created, err := store.UploadArtifact(r.Context(), a.DB, actor, p.Name, kind, media, body)
+	_, created, err := store.UploadArtifact(r.Context(), a.DB, who, kind, media, body)
 	if err != nil {
 		a.fail(w, err)
 		return

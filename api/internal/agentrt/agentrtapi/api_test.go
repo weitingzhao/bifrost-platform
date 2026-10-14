@@ -335,16 +335,16 @@ func TestUploadKinds(t *testing.T) {
 	s := server(t, pool)
 	leaky := []byte("input at /home/ci/private-input\n")
 	for _, kind := range []string{"mission_spec", "message", "exam", "report"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusUnprocessableEntity {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusUnprocessableEntity {
 			t.Errorf("a reporter's %s with a local path: %d", kind, code)
 		}
 	}
 	for _, kind := range []string{"", "notes"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusBadRequest {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusBadRequest {
 			t.Errorf("kind %q: %d", kind, code)
 		}
 	}
-	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief"); code != http.StatusOK || out["created"] != true {
+	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief", "X-Bifrost-Session", "s-rep"); code != http.StatusOK || out["created"] != true {
 		t.Errorf("a brief, which H8 lets through: %d %v", code, out)
 	}
 	var by string
@@ -371,6 +371,7 @@ func TestUploadRace(t *testing.T) {
 			}
 			req.Header.Set("Authorization", "Bearer "+tokens[who])
 			req.Header.Set("X-Artifact-Kind", "report")
+			req.Header.Set("X-Bifrost-Session", "s-race")
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				created <- err

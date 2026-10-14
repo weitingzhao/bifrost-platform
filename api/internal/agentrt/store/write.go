@@ -60,18 +60,28 @@ const ArtifactStream = "artifacts"
 
 // UploadArtifact stores an uploaded body (PUT /artifacts, v5 §5.2) and, the
 // first time this body is stored, records artifact_put in the same
-// transaction: who uploaded it, its kind and size (review 156 A3). Uploading
-// the same body again stores and records nothing. Artifacts that other events
-// create and name (a task spec with task_proposed, a message with
-// message_posted) go through PutArtifact.
-func UploadArtifact(ctx context.Context, db DB, actor, uploadedBy, kind, mediaType string, body []byte) (string, bool, error) {
+// transaction: the writer it is recorded as (a thread registered on its
+// first write, as for proposals; review 175 B4), the token that uploaded it,
+// its kind and size (review 156 A3). Uploading the same body again stores
+// and records nothing. Artifacts that other events create and name (a task
+// spec with task_proposed, a message with message_posted) go through
+// PutArtifact.
+func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string, body []byte) (string, bool, error) {
 	if len(body) > 1<<20 {
 		return "", false, errors.New("store: an artifact is at most 1 MiB")
 	}
 	h := sha256.Sum256(body)
 	id := "sha256:" + hex.EncodeToString(h[:])
+	actor, uploadedBy := w.Actor, w.Token
 	var created bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var have bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.artifact WHERE artifact_id = $1)`, id).Scan(&have); err != nil || have {
+			return err
+		}
+		if err := ensureWriter(ctx, tx, w); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `INSERT INTO agentrt.artifact (artifact_id, artifact_kind, media_type, size_bytes, created_by_actor_id)
 		  VALUES ($1,$2,$3,$4,$5) ON CONFLICT (artifact_id) DO NOTHING`, id, kind, mediaType, len(body), actor)
 		if err != nil || tag.RowsAffected() == 0 {
@@ -273,13 +283,22 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 }
 
 // AddDependency records that taskID waits for dependsOn. It takes the
-// dependency-graph lock and both tasks, in id order, before the event's
-// stream (review 149 B1).
+// dependency-graph lock, then the waiting task as Dispatch does (exclusively)
+// and the one waited for, before the event's stream (review 149 B1). Only a
+// proposed task takes a new dependency: once Dispatch has readied it (or
+// holds it to decide) an edge added after would not be seen (review 175 A1).
 func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dependsOn string) (Appended, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000001)`); err != nil {
 		return Appended{}, err
 	}
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id IN ($1, $2) ORDER BY task_id FOR KEY SHARE`, taskID, dependsOn); err != nil {
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID).Scan(&state); err != nil {
+		return Appended{}, err
+	}
+	if state != "proposed" {
+		return Appended{}, fmt.Errorf("%w: task %s is %s; a dependency is added only while a task is proposed", ErrState, taskID, state)
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR KEY SHARE`, dependsOn); err != nil {
 		return Appended{}, err
 	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "task_dependency_added", Actor: actor,

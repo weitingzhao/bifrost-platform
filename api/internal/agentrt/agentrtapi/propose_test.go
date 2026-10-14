@@ -1,6 +1,7 @@
 package agentrtapi_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -79,7 +80,7 @@ func TestProposeTasksRoute(t *testing.T) {
 	pool, existing := world(t)
 	s := server(t, pool)
 	spec := []byte("# implement x\n")
-	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec"); code != http.StatusOK {
+	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
 		t.Fatalf("an operator uploads a spec: %d %v", code, out)
 	}
 	task := func(ref, step string, deps ...string) map[string]any {
@@ -133,5 +134,91 @@ func TestProposeTasksRoute(t *testing.T) {
 	counts, _ := m["task_counts"].(map[string]any)
 	if status != http.StatusOK || counts["proposed"] != float64(2) || counts["ready"] != float64(1) {
 		t.Fatalf("mission: %d %v", status, m)
+	}
+}
+
+// Review 175 B4: an upload is recorded as its writer, like a proposal; one
+// whose writer may not write leaves nothing, not even a thread.
+func TestUploadAttribution(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	for i, c := range []struct{ who, session, actor string }{
+		{"operator", "s1", "thread:s1"},
+		{"reporter", "s2", "thread:s2"},
+		{"admin", "", "owner"},
+		{"seat:chief_of_staff", "", "seat:chief_of_staff"},
+		{"agentd:h1", "", "host:h1"},
+	} {
+		body := []byte(fmt.Sprintf("# upload %d\n", i))
+		header := []string{"X-Artifact-Kind", "report"}
+		if c.session != "" {
+			header = append(header, session, c.session)
+		}
+		if code, out := call(t, s, c.who, "PUT", "artifacts/"+artifactID(body), body, header...); code != http.StatusOK || out["created"] != true {
+			t.Fatalf("%s: %d %v", c.who, code, out)
+		}
+		var by, actor, token string
+		must(t, pool.QueryRow(ctx, `SELECT a.created_by_actor_id, e.actor_id, e.body_json->>'uploaded_by' FROM agentrt.artifact a
+		  JOIN agentrt.event e ON e.event_type = 'artifact_put' AND e.body_json->>'artifact_id' = a.artifact_id
+		  WHERE a.artifact_id = $1`, artifactID(body)).Scan(&by, &actor, &token))
+		if by != c.actor || actor != c.actor || token != c.who {
+			t.Errorf("%s: artifact by %s, event by %s, uploaded_by %s", c.who, by, actor, token)
+		}
+	}
+	var actors, events int
+	count := func() {
+		must(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event)`).Scan(&actors, &events))
+	}
+	count()
+	before := [2]int{actors, events}
+	body := []byte("# refused\n")
+	for _, c := range []struct{ who, session string }{{"reporter", ""}, {"seat:ghost", ""}, {"operator", "not a session!"}} {
+		if code, out := call(t, s, c.who, "PUT", "artifacts/"+artifactID(body), body, "X-Artifact-Kind", "report", session, c.session); code != http.StatusUnprocessableEntity {
+			t.Errorf("%s/%q: %d %v", c.who, c.session, code, out)
+		}
+	}
+	count()
+	if [2]int{actors, events} != before {
+		t.Fatalf("refused uploads left actors or events: %v -> %v", before, [2]int{actors, events})
+	}
+}
+
+// Review 175 B5: hard_limit_s is bounded before it becomes a duration.
+func TestHardLimitBounds(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	spec := []byte("# spec\n")
+	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
+		t.Fatalf("spec: %d %v", code, out)
+	}
+	for i, c := range []struct {
+		limit any
+		code  int
+		want  float64
+	}{
+		{-1, http.StatusUnprocessableEntity, 0},
+		{86401, http.StatusUnprocessableEntity, 0},
+		{2147483648, http.StatusUnprocessableEntity, 0},
+		{18446744074, http.StatusUnprocessableEntity, 0},
+		// 2^55 + 60 seconds wraps, as nanoseconds, to exactly 60 seconds:
+		// only the bound before the conversion refuses it.
+		{36028797018964028, http.StatusUnprocessableEntity, 0},
+		{0, http.StatusOK, 3600},
+		{86400, http.StatusOK, 86400},
+	} {
+		body := map[string]any{"idempotency_key": fmt.Sprint("k", i), "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1",
+			"role": "implement", "task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec), "effect_class": "branch",
+			"hard_limit_s": c.limit}}}
+		code, out := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1")
+		if code != c.code {
+			t.Errorf("hard_limit_s %v: %d %v", c.limit, code, out)
+			continue
+		}
+		if code == http.StatusOK {
+			_, task := call(t, s, "viewer", "GET", "tasks/"+out["tasks"].([]any)[0].(map[string]any)["task_id"].(string), nil)
+			if task["hard_limit_s"] != c.want {
+				t.Errorf("hard_limit_s %v stored as %v", c.limit, task["hard_limit_s"])
+			}
+		}
 	}
 }

@@ -16,9 +16,10 @@ import (
 
 // actorOf is who a write is recorded as: an agentd token is its host;
 // anyone else as writer says.
-func actorOf(r *http.Request) (string, error) {
-	if host, ok := actuation.AgentdHost(actuation.PrincipalFromContext(r.Context())); ok {
-		return "host:" + host, nil
+func actorOf(r *http.Request) (store.Writer, error) {
+	p := actuation.PrincipalFromContext(r.Context())
+	if host, ok := actuation.AgentdHost(p); ok {
+		return store.Writer{Actor: "host:" + host, Token: p.Name}, nil
 	}
 	return writer(r)
 }
@@ -32,9 +33,10 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 	if host, ok := actuation.AgentdHost(p); ok {
 		out["host_id"] = host
 	}
-	if actor, err := actorOf(r); err != nil {
+	if who, err := actorOf(r); err != nil {
 		out["actor_error"] = err.Error()
 	} else {
+		actor := who.Actor
 		out["actor"] = actor
 		var kind string
 		err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
@@ -86,12 +88,12 @@ func (a *API) setControl(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) control(w http.ResponseWriter, r *http.Request, b controlBody) {
-	actor, err := actorOf(r)
+	who, err := actorOf(r)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.RequestControl(r.Context(), a.DB, actor, b.IdempotencyKey, b.Scope, b.ScopeRef, b.Kind, b.Reason)
+	out, err := store.RequestControl(r.Context(), a.DB, who, b.IdempotencyKey, b.Scope, b.ScopeRef, b.Kind, b.Reason)
 	if err != nil {
 		a.fail(w, err)
 		return
