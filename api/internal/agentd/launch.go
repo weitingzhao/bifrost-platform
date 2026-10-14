@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,11 +16,14 @@ import (
 // The launcher (v5 §5.2 本地登记, rule R1). agentd never starts an executor
 // directly: it starts itself as the launcher (LaunchArg) in a new process
 // group, and the launcher waits on file descriptor 3 for one release byte
-// before it replaces itself with the executor. agentd records the group (its
-// id and the leader's start time) in the registry, synced, and only then
-// writes the byte. If agentd dies in between, the pipe closes, the launcher
-// reads end of file and exits: no process group runs that the registry does
-// not know.
+// before it starts the executor. agentd records the group (its id and the
+// leader's start time) in the registry, synced, and only then writes the
+// byte. If agentd dies in between, the pipe closes, the launcher reads end
+// of file and exits: no process group runs that the registry does not know.
+// The launcher stays the group's leader while the executor runs and, once it
+// exits, ends whatever else is left in the group before it exits with the
+// executor's code, so the leader gone means the group is empty (review 163
+// A6).
 
 // LaunchArg is the first argument that makes agentd the launcher.
 const LaunchArg = "launch"
@@ -39,15 +44,63 @@ func RunLauncher(argv []string) int {
 	if n != 1 || b[0] != releaseByte || len(argv) == 0 {
 		return 125
 	}
-	bin, err := exec.LookPath(argv[0])
-	if err != nil {
+	// A TERM to the group ends the executor; the launcher stays to clear
+	// the rest (a caught signal is reset for the executor, an ignored one
+	// would not be).
+	terms := make(chan os.Signal, 1)
+	signal.Notify(terms, syscall.SIGTERM)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "agentd launcher:", err)
 		return 127
 	}
-	err = syscall.Exec(bin, argv, os.Environ())
-	fmt.Fprintln(os.Stderr, "agentd launcher:", err)
-	return 126
+	_ = cmd.Wait()
+	code := -1
+	if cmd.ProcessState != nil {
+		code = cmd.ProcessState.ExitCode()
+	}
+	clearGroup(syscall.Getpgrp(), os.Getpid(), 2*time.Second)
+	if code < 0 {
+		return 128
+	}
+	return code
 }
+
+// clearGroup ends every process of the group but self: TERM, then KILL to
+// whatever is left after grace.
+func clearGroup(pgid, self int, grace time.Duration) {
+	_ = syscall.Kill(-pgid, syscall.SIGTERM)
+	deadline := time.Now().Add(grace)
+	for {
+		others := groupMembers(pgid, self)
+		if len(others) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			for _, pid := range others {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// groupMembers lists the processes of a group, but not except.
+func groupMembers(pgid, except int) []int {
+	out, _ := exec.Command("pgrep", "-g", strconv.Itoa(pgid)).Output()
+	var pids []int
+	for _, f := range strings.Fields(string(out)) {
+		if pid, err := strconv.Atoi(f); err == nil && pid != except {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
+}
+
+// GroupAlive reports whether any process of the group is left.
+func GroupAlive(pgid int) bool { return pgid > 1 && syscall.Kill(-pgid, 0) == nil }
 
 // Spawn is an executor to run: an argument array, never a shell line.
 type Spawn struct {

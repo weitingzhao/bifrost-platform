@@ -333,3 +333,31 @@ func TestRunTakesCheckpoints(t *testing.T) {
 		}
 	}
 }
+
+// Review 163 A6: a process the executor leaves behind in its group is ended
+// with it, and the platform is told the group is gone only when it is.
+func TestRunClearsTheGroup(t *testing.T) {
+	pool, _, base := platform(t)
+	d := daemon(t, base, script(`sleep 30 >/dev/null 2>&1 & echo $! > "$OUT/bg.pid"; printf '# done\n' > "$OUT/report.md"`), "", nil)
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	out, err := d.Run(ctx, cl)
+	if err != nil || !out.Submitted {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	b, err := os.ReadFile(filepath.Join(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)+".out", "bg.pid"))
+	must(t, err)
+	pid := strings.TrimSpace(string(b))
+	if err := exec.Command("kill", "-0", pid).Run(); err == nil {
+		_ = exec.Command("kill", "-9", pid).Run()
+		t.Fatalf("the executor's background process %s outlived its attempt", pid)
+	}
+	var cleared string
+	must(t, pool.QueryRow(ctx, `SELECT COALESCE(body_json->>'group_cleared', '') FROM agentrt.event
+	  WHERE event_type = 'attempt_ended' AND attempt_id = $1`, cl.AttemptID).Scan(&cleared))
+	if cleared != "true" {
+		t.Fatalf("group_cleared = %q", cleared)
+	}
+}

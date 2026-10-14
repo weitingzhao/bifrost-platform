@@ -67,3 +67,18 @@ func TestVerify(t *testing.T) {
 }
 
 func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "?") == s }
+
+// Review 163 B1: a descendant that keeps the output open does not hold the
+// command past its time, and the output kept is bounded.
+func TestVerifyEndsDescendantsAndBoundsOutput(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Now()
+	v := Verify(context.Background(), dir, os.Environ(), [][]string{{"sh", "-c", "sleep 30 & wait"}}, 200*time.Millisecond)
+	if v.Pass || !v.Commands[0].TimedOut || time.Since(start) > 5*time.Second {
+		t.Fatalf("over the limit = %+v after %s", v, time.Since(start))
+	}
+	v = Verify(context.Background(), dir, os.Environ(), [][]string{{"sh", "-c", "head -c 10000000 /dev/zero | tr '\\\\0' x; echo end"}}, time.Minute)
+	if !v.Pass || len(v.Commands[0].Tail) > tailBytes || !strings.HasSuffix(v.Commands[0].Tail, "end\n") {
+		t.Fatalf("large output = %d bytes, pass %v", len(v.Commands[0].Tail), v.Pass)
+	}
+}

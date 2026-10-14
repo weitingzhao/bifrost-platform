@@ -172,3 +172,24 @@ func TestTerminateEndsTheGroup(t *testing.T) {
 		t.Fatalf("left in the group: %s", out)
 	}
 }
+
+// Review 163 A9: the host lock is in one place whatever root agentd uses.
+func TestHostLockPathIsFixed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	path, err := HostLockPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := LockHost(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = first.Release() }()
+	again, err := HostLockPath()
+	if err != nil || again != path {
+		t.Fatalf("the lock moved: %s %v", again, err)
+	}
+	if _, err := LockHost(again); !errors.Is(err, ErrHeld) {
+		t.Fatalf("a second agentd = %v", err)
+	}
+}

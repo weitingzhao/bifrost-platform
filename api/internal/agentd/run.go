@@ -25,8 +25,11 @@ type Attempt struct {
 	Claim   *Claimed
 	Spec    TaskSpec
 	Subject *TaskSpec // a check's subject spec
-	Dir     string    // the workspace
-	Out     string    // where the executor writes report.md or verify.json
+	// VerifyReport is the verify.json of the deterministic check a review
+	// follows.
+	VerifyReport []byte
+	Dir          string // the workspace
+	Out          string // where the executor writes report.md or verify.json
 }
 
 // An Executor turns an attempt into the command agentd launches.
@@ -95,6 +98,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		}
 		a.Subject = &subject
 		repo, base = a.Spec.Repo, a.Spec.Commit
+		if a.Spec.VerifyReport != "" {
+			if a.VerifyReport, err = d.Client.GetArtifact(ctx, a.Spec.VerifyReport); err != nil {
+				return Outcome{}, err
+			}
+		}
 	}
 	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
 	a.Out = a.Dir + ".out"
@@ -412,9 +420,17 @@ func (d *Daemon) lost(ctx context.Context, a *Attempt, ws *Workspace, entry Entr
 	return out, d.end(ctx, entry, endHow)
 }
 
-// end tells the platform the attempt is over on this host and forgets it.
+// end tells the platform the attempt is over on this host, and whether its
+// process group is really gone, and forgets it.
 func (d *Daemon) end(ctx context.Context, entry Entry, endHow string) error {
-	if err := d.retry(ctx, func() error { return d.Client.Ended(ctx, entry.AttemptID, endHow, true) }); err != nil {
+	cleared := true
+	if entry.PGID > 1 && GroupAlive(entry.PGID) {
+		if entry.Start != "" && Alive(entry.PGID, entry.Start) {
+			Terminate(entry.PGID, orDefault(d.KillGrace, 10*time.Second))
+		}
+		cleared = !GroupAlive(entry.PGID)
+	}
+	if err := d.retry(ctx, func() error { return d.Client.Ended(ctx, entry.AttemptID, endHow, cleared) }); err != nil {
 		return err
 	}
 	return d.Registry.Delete(entry.AttemptID)

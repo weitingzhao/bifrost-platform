@@ -24,6 +24,16 @@ var ErrHeld = errors.New("agentd: another agentd runs on this host")
 // The kernel drops it when the process dies, however it dies.
 type HostLock struct{ f *os.File }
 
+// HostLockPath is the host lock's one place, whatever root a run of agentd
+// uses (review 163 A9): ~/.config/bifrost/agentd.lock.
+func HostLockPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".config", "bifrost", "agentd.lock"), nil
+}
+
 // LockHost takes the lock at path, or returns ErrHeld at once.
 func LockHost(path string) (*HostLock, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"syscall"
 	"time"
 	"unicode/utf8"
 )
@@ -34,6 +35,10 @@ type TaskSpec struct {
 	SubjectSpec string `json:"task_spec,omitempty"`
 	Commit      string `json:"commit,omitempty"`
 	Repo        string `json:"repo,omitempty"`
+	// A review's spec also names the deterministic check that passed before
+	// it and that check's verify.json (store.checkSpec, review 163 A1).
+	Verification string `json:"verification,omitempty"`
+	VerifyReport string `json:"verify_report,omitempty"`
 }
 
 // ParseSpec reads a spec: JSON when it is a JSON object, else markdown text.
@@ -97,12 +102,17 @@ func Verify(ctx context.Context, dir string, env []string, cmds [][]string, limi
 	ctx, cancel := context.WithTimeout(ctx, limit)
 	defer cancel()
 	for _, argv := range cmds {
-		var out bytes.Buffer
+		out := &ring{max: tailBytes}
 		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-		cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, env, &out, &out
+		cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, env, out, out
+		// Its own process group, all of it killed when the time is up, and a
+		// bounded wait for pipes a descendant still holds (review 163 B1).
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.WaitDelay = 2 * time.Second
 		start := time.Now()
 		err := cmd.Run()
-		tr := CommandTrace{Argv: argv, ExitCode: -1, Seconds: time.Since(start).Seconds(), Tail: tail(out.Bytes())}
+		tr := CommandTrace{Argv: argv, ExitCode: -1, Seconds: time.Since(start).Seconds(), Tail: tail(out.bytes())}
 		if cmd.ProcessState != nil {
 			tr.ExitCode = cmd.ProcessState.ExitCode()
 		}
@@ -131,3 +141,19 @@ func tail(b []byte) string {
 	}
 	return string(b)
 }
+
+// ring keeps the last max bytes written to it.
+type ring struct {
+	max int
+	buf []byte
+}
+
+func (r *ring) Write(p []byte) (int, error) {
+	r.buf = append(r.buf, p...)
+	if len(r.buf) > r.max {
+		r.buf = append(r.buf[:0], r.buf[len(r.buf)-r.max:]...)
+	}
+	return len(p), nil
+}
+
+func (r *ring) bytes() []byte { return r.buf }

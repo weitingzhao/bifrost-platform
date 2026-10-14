@@ -59,7 +59,11 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	lock, err := agentd.LockHost(filepath.Join(cfg.root, "agentd.lock"))
+	lockPath, err := agentd.HostLockPath()
+	if err != nil {
+		return err
+	}
+	lock, err := agentd.LockHost(lockPath)
 	if err != nil {
 		return err
 	}
