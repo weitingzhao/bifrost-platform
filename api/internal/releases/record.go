@@ -32,6 +32,11 @@ type Record struct {
 	StartedAt   time.Time            `json:"started_at"`
 	CompletedAt time.Time            `json:"completed_at"`
 	Repos       map[string]RepoBuild `json:"repos"`
+	// Images are the digests the run's build tasks pushed, by image (the
+	// build task's name without "build-": platform-api, platform-console),
+	// read from each build task's digest result (TD-343). A pipeline whose
+	// builds report no digest records none.
+	Images map[string]string `json:"images,omitempty"`
 	// Missing lists clone tasks whose commit could not be read (runs older
 	// than the commit result, cloned at a moving ref).
 	Missing    []string  `json:"missing,omitempty"`
@@ -48,12 +53,14 @@ const (
 	labelComplete = "bifrost.io/release-complete"
 	dataKey       = "record.json"
 	namePrefix    = "release-"
-	// recordVersion bumps when Record changes shape.
-	recordVersion = "v1"
+	// recordVersion bumps when Record changes shape; a record of another
+	// version is built again while its run still exists. v2: images.
+	recordVersion = "v2"
 )
 
 var (
 	fullSHA   = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	digestRE  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	repoInURL = regexp.MustCompile(`/([^/]+?)(?:\.git)?/?$`)
 	labelSafe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 )
@@ -143,6 +150,23 @@ func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha, rev string
 	return pipelineTask, repo, sha, rev, hasRev, repo != ""
 }
 
+// builtImage reads one TaskRun as an image build: a pipeline task named
+// build-<image> whose digest result is a registry digest.
+func builtImage(tr *unstructured.Unstructured) (image, digest string, ok bool) {
+	image, isBuild := strings.CutPrefix(tr.GetLabels()["tekton.dev/pipelineTask"], "build-")
+	if !isBuild || image == "" {
+		return "", "", false
+	}
+	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		if v, isStr := m["value"].(string); isStr && m["name"] == "digest" && digestRE.MatchString(strings.TrimSpace(v)) {
+			return image, strings.TrimSpace(v), true
+		}
+	}
+	return "", "", false
+}
+
 // buildRecord assembles a Record from a finished run and its TaskRuns.
 func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructured.Unstructured, now time.Time) Record {
 	rec := Record{
@@ -167,6 +191,13 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 		paramSHA = rec.Revision
 	}
 	for i := range taskRuns {
+		if image, digest, ok := builtImage(&taskRuns[i]); ok {
+			if rec.Images == nil {
+				rec.Images = map[string]string{}
+			}
+			rec.Images[image] = digest
+			continue
+		}
 		task, repo, sha, rev, hasRev, ok := cloneOf(&taskRuns[i])
 		if !ok {
 			continue

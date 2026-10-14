@@ -24,6 +24,16 @@ const (
 	agentrtDeployRepo = "bifrost-platform"
 )
 
+// agentrtWorkloads are the platform's own workloads, the container each
+// runs and the image the delivery built for it, as the delivery's rollout
+// check verifies them (bifrost-trade-infra task-rollout-verify-platform:
+// the workers run the API image). They live in bifrost-platform-<env>.
+var agentrtWorkloads = []struct{ deployment, container, image string }{
+	{"platform-api", "platform-api", "platform-api"},
+	{"platform-workers", "platform-api", "platform-api"},
+	{"platform-console", "platform-console", "platform-console"},
+}
+
 // The readers agentRuntimeSources takes; a nil one reads nothing.
 type (
 	approvalReader interface {
@@ -34,6 +44,7 @@ type (
 	}
 	currentDeployment interface {
 		Current(ctx context.Context, lane, env string) (releases.Record, error)
+		PodDigests(ctx context.Context, namespace, deployment, container string) ([]string, error)
 	}
 )
 
@@ -79,7 +90,11 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 			if err != nil {
 				return "", nil, false
 			}
-			return deployedFrom(rec)
+			commit, ref, ok := deployedFrom(rec)
+			if !ok || !runsRecorded(ctx, rel, env, rec) {
+				return "", nil, false
+			}
+			return commit, ref, true
 		}
 	}
 	return src
@@ -163,18 +178,44 @@ func questionFact(id, status string, answered bool, option, text, by string, at 
 }
 
 // deployedFrom is what the record says the environment runs: its
-// repository's commit, and the delivery run as the reference. The reference
-// holds the run alone, so a gate check records it the same way and
-// gates_passed compares it exactly; no image digest is recorded anywhere
-// yet, so an image that changes under the same run (a pod pulling a new
-// image under the same tag) is not seen (a lowered guarantee of T33, kept in
-// TECH_DEBT).
+// repository's commit, and as the reference the delivery run and the image
+// digests it built (TD-343), so a gate check records exactly what ran and
+// gates_passed compares it whole. A record without the digests of every
+// workload's image (one older than the digests, or a pipeline that reports
+// none) is not a known deployment.
 func deployedFrom(rec releases.Record) (string, map[string]any, bool) {
 	b, ok := rec.Repos[agentrtDeployRepo]
 	if !ok || len(b.SHA) != 40 || rec.Run == "" {
 		return "", nil, false
 	}
-	return b.SHA, map[string]any{"delivery_run": rec.Run}, true
+	images := map[string]any{}
+	for _, w := range agentrtWorkloads {
+		d, has := rec.Images[w.image]
+		if !has || d == "" {
+			return "", nil, false
+		}
+		images[w.image] = d
+	}
+	return b.SHA, map[string]any{"delivery_run": rec.Run, "images": images}, true
+}
+
+// runsRecorded: every pod of every workload runs the digest the record says
+// was delivered. A pod that pulled another image under the same tag, a
+// rollout under way, or a pod that cannot be read makes the deployment not
+// known (TD-343; the Owner chose this on 2026-10-14).
+func runsRecorded(ctx context.Context, rel currentDeployment, env string, rec releases.Record) bool {
+	for _, w := range agentrtWorkloads {
+		digests, err := rel.PodDigests(ctx, "bifrost-platform-"+env, w.deployment, w.container)
+		if err != nil {
+			return false
+		}
+		for _, d := range digests {
+			if d != rec.Images[w.image] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // errBusy: as many reads of this store as allowed are still running.

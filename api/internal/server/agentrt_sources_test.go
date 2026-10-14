@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -71,13 +72,30 @@ func (f fakeCurrent) Current(_ context.Context, lane, env string) (releases.Reco
 	return r, nil
 }
 
+// PodDigests: the pods run what the env's record says, but in "drift",
+// where the workers pulled another image, and "podless", where no pod reads.
+func (f fakeCurrent) PodDigests(_ context.Context, namespace, deployment, container string) ([]string, error) {
+	env := strings.TrimPrefix(namespace, "bifrost-platform-")
+	switch {
+	case env == "drift" && deployment == "platform-workers":
+		return []string{digestA, digestOther}, nil
+	case env == "podless":
+		return nil, errors.New("no pod")
+	}
+	return []string{f[env].Images[container]}, nil
+}
+
 var (
-	sha1 = "1111111111111111111111111111111111111111"
-	sha2 = "2222222222222222222222222222222222222222"
+	sha1        = "1111111111111111111111111111111111111111"
+	sha2        = "2222222222222222222222222222222222222222"
+	digestA     = "sha256:" + strings.Repeat("a", 64)
+	digestC     = "sha256:" + strings.Repeat("c", 64)
+	digestOther = "sha256:" + strings.Repeat("e", 64)
 )
 
 func platformRec(run, sha string) releases.Record {
-	r := releases.Record{Run: run, Lane: "platform", Deploys: true, Repos: map[string]releases.RepoBuild{}}
+	r := releases.Record{Run: run, Lane: "platform", Deploys: true, Repos: map[string]releases.RepoBuild{},
+		Images: map[string]string{"platform-api": digestA, "platform-console": digestC}}
 	if sha != "" {
 		r.Repos["bifrost-platform"] = releases.RepoBuild{SHA: sha}
 	}
@@ -92,7 +110,9 @@ func TestAgentRuntimeSources(t *testing.T) {
 		question,
 		ci,
 		fakeCurrent{"stg": platformRec("deliver-platform-2", sha2), "prod": platformRec("deliver-platform-prod-1", sha1),
-			"short": platformRec("deliver-short", "abc"), "norepo": platformRec("deliver-norepo", ""), "norun": platformRec("", sha1)},
+			"short": platformRec("deliver-short", "abc"), "norepo": platformRec("deliver-norepo", ""), "norun": platformRec("", sha1),
+			"drift": platformRec("deliver-drift", sha1), "podless": platformRec("deliver-podless", sha1),
+			"noimages": {Run: "deliver-old", Lane: "platform", Deploys: true, Repos: map[string]releases.RepoBuild{"bifrost-platform": {SHA: sha1}}}},
 	)
 	ctx := context.Background()
 
@@ -133,13 +153,16 @@ func TestAgentRuntimeSources(t *testing.T) {
 		t.Errorf("ten CI reads within the snapshot listed %d times", n)
 	}
 
-	for env, want := range map[string]string{"stg": sha2 + " map[delivery_run:deliver-platform-2]", "prod": sha1 + " map[delivery_run:deliver-platform-prod-1]"} {
+	images := " images:map[platform-api:" + digestA + " platform-console:" + digestC + "]]"
+	for env, want := range map[string]string{"stg": sha2 + " map[delivery_run:deliver-platform-2" + images, "prod": sha1 + " map[delivery_run:deliver-platform-prod-1" + images} {
 		commit, ref, ok := src.Deployed(ctx, env)
 		if got := commit + " " + fmt.Sprint(ref); !ok || got != want {
 			t.Errorf("deployed %s = %s %v", env, got, ok)
 		}
 	}
-	for _, env := range []string{"dev", "qa", "short", "norepo", "norun"} {
+	// TD-343: a pod running another digest than the record's, pods that
+	// cannot be read, and a record without digests are all not known.
+	for _, env := range []string{"dev", "qa", "short", "norepo", "norun", "drift", "podless", "noimages"} {
 		if commit, _, ok := src.Deployed(ctx, env); ok {
 			t.Errorf("deployed %s = %s, read", env, commit)
 		}

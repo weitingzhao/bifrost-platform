@@ -161,7 +161,8 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 		}
 		res.Matched++
 		prev := have[recordName(run.GetName())]
-		if (prev != nil && prev.Labels[labelComplete] != "false") || !succeeded(run) {
+		current := prev != nil && prev.Labels[labelRecord] == recordVersion
+		if (current && prev.Labels[labelComplete] != "false") || !succeeded(run) {
 			continue
 		}
 		trs, err := dyn.Resource(taskRunGVR).Namespace(ns).List(ctx, metav1.ListOptions{
@@ -172,7 +173,7 @@ func (s *Service) Tick(ctx context.Context) TickResult {
 			continue
 		}
 		rec := buildRecord(run, rule, trs.Items, s.now())
-		if prev != nil && !fewerMissing(prev, rec) {
+		if current && !fewerMissing(prev, rec) {
 			continue
 		}
 		if err := s.write(ctx, core, ns, rec, prev); err != nil {

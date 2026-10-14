@@ -2,12 +2,14 @@ package releases
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -261,5 +263,59 @@ func TestRecorderWanted(t *testing.T) {
 		if got := RecorderWanted(); got != c.want {
 			t.Errorf("flag=%q k8s=%q: got %v want %v", c.flag, c.k8s, got, c.want)
 		}
+	}
+}
+
+func buildTaskRun(run, task, digest string) *unstructured.Unstructured {
+	st := map[string]any{}
+	if digest != "" {
+		st["results"] = []any{map[string]any{"name": "digest", "type": "string", "value": digest + "\n"}}
+	}
+	return &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "tekton.dev/v1", "kind": "TaskRun",
+		"metadata": map[string]any{"name": run + "-" + task, "namespace": "cicd", "labels": map[string]any{
+			"tekton.dev/pipelineRun": run, "tekton.dev/pipelineTask": task}},
+		"spec":   map[string]any{},
+		"status": st,
+	}}
+}
+
+// TD-343: a record carries the digests its build tasks pushed; a record of
+// an older version is built again while its run exists, so it gains them.
+func TestRecordImages(t *testing.T) {
+	done := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	api, console := "sha256:"+strings.Repeat("a", 64), "sha256:"+strings.Repeat("c", 64)
+	run := pipelineRun("deliver-platform-9", "deliver-platform", true, done, nil, nil)
+	rec := buildRecord(run, Rule{Lane: "platform", Env: "stg"}, []unstructured.Unstructured{
+		*cloneTaskRun("deliver-platform-9", "clone-platform", "bifrost-platform", shaA),
+		*buildTaskRun("deliver-platform-9", "build-platform-api", api),
+		*buildTaskRun("deliver-platform-9", "build-platform-console", console),
+		*buildTaskRun("deliver-platform-9", "build-nodigest", ""),
+		*buildTaskRun("deliver-platform-9", "build-bad", "sha256:short"),
+	}, done)
+	if len(rec.Images) != 2 || rec.Images["platform-api"] != api || rec.Images["platform-console"] != console ||
+		rec.Repos["bifrost-platform"].SHA != shaA || len(rec.Missing) != 0 {
+		t.Fatalf("record = %+v", rec)
+	}
+
+	s, core := newFakeService(t, pipelineRun("deliver-stg-9", "deliver-stg", true, done, nil, nil),
+		cloneTaskRun("deliver-stg-9", "clone-platform", "bifrost-platform", shaA), buildTaskRun("deliver-stg-9", "build-platform-api", api))
+	old, _ := encode(Record{Run: "deliver-stg-9", Lane: "app", Env: "stg", Repos: map[string]RepoBuild{"bifrost-platform": {SHA: shaA}}})
+	if _, err := core.CoreV1().ConfigMaps("cicd").Create(context.Background(), &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: recordName("deliver-stg-9"), Labels: map[string]string{labelRecord: "v1", labelComplete: "true"}},
+		Data:       map[string]string{dataKey: old},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 1 {
+		t.Fatalf("tick = %+v", r)
+	}
+	cm, _ := core.CoreV1().ConfigMaps("cicd").Get(context.Background(), recordName("deliver-stg-9"), metav1.GetOptions{})
+	var got Record
+	if err := json.Unmarshal([]byte(cm.Data[dataKey]), &got); err != nil || cm.Labels[labelRecord] != recordVersion || got.Images["platform-api"] != api {
+		t.Fatalf("rebuilt = %+v %v (labels %v)", got, err, cm.Labels)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 0 {
+		t.Fatalf("a current record was built again: %+v", r)
 	}
 }
