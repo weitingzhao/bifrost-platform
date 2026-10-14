@@ -141,7 +141,7 @@ func readTask(ctx context.Context, tx pgx.Tx, id string, lock bool) (taskRow, er
 }
 
 // moveTask writes task_state_changed and the new state. t must be locked. A
-// task that becomes ready wakes the hosts.
+// task that becomes ready gets its route (route_decided) and wakes the hosts.
 func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string) error {
 	if !slices.Contains(taskMoves[t.state], to) {
 		return fmt.Errorf("%w: task %s %s -> %s", ErrState, t.id, t.state, to)
@@ -160,6 +160,9 @@ func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reaso
 		return err
 	}
 	if to == "ready" {
+		if err := decideRoute(ctx, tx, t); err != nil {
+			return err
+		}
 		return Enqueue(ctx, tx, ev.EventID, TopicWake, map[string]any{"kind": "task_ready", "task_id": t.id, "role": t.role, "task_class": t.class})
 	}
 	return nil

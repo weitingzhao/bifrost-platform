@@ -48,7 +48,7 @@ type claimOpts struct {
 type candidate struct {
 	id, mission, role, spec, subject, base, repo, effect string
 	core                                                 bool
-	needs                                                []string
+	needs, route                                         []string
 	limitS                                               int
 	created                                              time.Time
 }
@@ -126,11 +126,7 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 	if after != nil {
 		at, id = after.created, after.id
 	}
-	rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
-	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
-	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)), t.hard_limit_s, t.created_at
-	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
-	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id
+	rows, err := tx.Query(ctx, candidateColumns+`
 	  WHERE t.state = 'ready' AND m.state = 'active' AND t.effect_class = ANY($1)
 	    AND ($2::timestamptz IS NULL OR (t.created_at, t.task_id) > ($2::timestamptz, $3::text))
 	  ORDER BY t.created_at, t.task_id LIMIT $4`, effects, at, id, candidatePage)
@@ -140,10 +136,27 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 	return pgx.CollectRows(rows, scanCandidate)
 }
 
+const candidateColumns = `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
+	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
+	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)),
+	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at
+	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id`
+
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
-	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.limitS, &c.created)
+	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.route,
+		&c.limitS, &c.created)
 	return c, err
+}
+
+// candidateOf reads one task as a candidate, whatever its state.
+func candidateOf(ctx context.Context, tx pgx.Tx, taskID string) (candidate, error) {
+	rows, err := tx.Query(ctx, candidateColumns+` WHERE t.task_id = $1`, taskID)
+	if err != nil {
+		return candidate{}, err
+	}
+	return pgx.CollectExactlyOneRow(rows, scanCandidate)
 }
 
 // tryCandidate leases c to the first tool that may take it, or returns nil.
@@ -240,17 +253,48 @@ func take(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, t
 	return lease(ctx, tx, hostID, tl, c, ttl)
 }
 
+// pickTool walks the task's route (route_json, written when it became ready)
+// in order and returns the first of the host's tools that matches a
+// candidate still active or on probation and still passes the hard checks.
+// A task with an empty route goes to nobody.
 func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, c candidate) (Tool, bool, error) {
-	for _, tl := range tools {
-		ok, err := eligible(ctx, tx, tl, c)
-		if err != nil || ok {
-			return tl, ok, err
+	if len(c.route) == 0 {
+		return Tool{}, false, nil
+	}
+	live, err := jobCandidates(ctx, tx, jobOfRole[c.role], c.route)
+	if err != nil {
+		return Tool{}, false, err
+	}
+	byID := map[string]jobCandidate{}
+	for _, jc := range live {
+		byID[jc.id] = jc
+	}
+	for _, id := range c.route {
+		jc, ok := byID[id]
+		if !ok {
+			continue
+		}
+		for _, tl := range tools {
+			if !jc.fits(tl) {
+				continue
+			}
+			ok, err := eligible(ctx, tx, tl, c)
+			if err != nil || ok {
+				return tl, ok, err
+			}
 		}
 	}
 	return Tool{}, false, nil
 }
 
-// eligible applies the hard checks to one tool. Restrictions (cannot,
+// eligible applies the hard checks to one tool (see exclusion).
+func eligible(ctx context.Context, tx pgx.Tx, tl Tool, c candidate) (bool, error) {
+	reason, err := exclusion(ctx, tx, tl, c)
+	return reason == "", err
+}
+
+// exclusion applies the hard checks to one tool and says which one, if any,
+// excludes it. Restrictions (cannot,
 // must_not, only) bind whether or not the Owner has signed them yet: a
 // restriction is a tightening, and tightening needs no signature.
 //   - a cannot or must_not fact on any need of the task excludes the tool;
@@ -260,7 +304,7 @@ func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, c candidate) (Tool, 
 //   - a review or verification never goes to an executor or a model provider
 //     that made an attempt of its subject, nor to anyone when an attempt of
 //     the subject has no recorded provider (independence cannot be shown).
-func eligible(ctx context.Context, tx pgx.Tx, tl Tool, c candidate) (bool, error) {
+func exclusion(ctx context.Context, tx pgx.Tx, tl Tool, c candidate) (string, error) {
 	subjects := append([]string{}, c.needs...)
 	core := ""
 	if c.core {
@@ -270,19 +314,31 @@ func eligible(ctx context.Context, tx pgx.Tx, tl Tool, c candidate) (bool, error
 		}
 		subjects = append(subjects, core)
 	}
-	var excluded bool
+	var restricted, onlyOthers, noCoreHolder, dependent bool
 	err := tx.QueryRow(ctx, `SELECT
 	  EXISTS (SELECT 1 FROM agentrt.capability_fact WHERE retired_at IS NULL AND fact_kind IN ('cannot','must_not')
-	          AND executor_actor_id = $1 AND (model_provider IS NULL OR model_provider = $2) AND subject = ANY($3))
-	  OR EXISTS (SELECT 1 FROM agentrt.capability_fact f WHERE f.retired_at IS NULL AND f.fact_kind = 'only' AND f.subject = ANY($3)
+	          AND executor_actor_id = $1 AND (model_provider IS NULL OR model_provider = $2) AND subject = ANY($3)),
+	  EXISTS (SELECT 1 FROM agentrt.capability_fact f WHERE f.retired_at IS NULL AND f.fact_kind = 'only' AND f.subject = ANY($3)
 	          AND NOT EXISTS (SELECT 1 FROM agentrt.capability_fact g WHERE g.retired_at IS NULL AND g.fact_kind = 'only'
-	                  AND g.subject = f.subject AND g.executor_actor_id = $1 AND (g.model_provider IS NULL OR g.model_provider = $2)))
-	  OR ($4::text <> '' AND NOT EXISTS (SELECT 1 FROM agentrt.capability_fact WHERE retired_at IS NULL AND fact_kind = 'only'
-	          AND subject = $4 AND executor_actor_id = $1 AND (model_provider IS NULL OR model_provider = $2)))
-	  OR ($5::text <> '' AND EXISTS (SELECT 1 FROM agentrt.attempt WHERE task_id = $5
-	          AND (executor_actor_id = $1 OR model_provider IS NULL OR model_provider = $2)))`,
-		tl.Executor, tl.Provider, subjects, core, c.subject).Scan(&excluded)
-	return !excluded, err
+	                  AND g.subject = f.subject AND g.executor_actor_id = $1 AND (g.model_provider IS NULL OR g.model_provider = $2))),
+	  $4::text <> '' AND NOT EXISTS (SELECT 1 FROM agentrt.capability_fact WHERE retired_at IS NULL AND fact_kind = 'only'
+	          AND subject = $4 AND executor_actor_id = $1 AND (model_provider IS NULL OR model_provider = $2)),
+	  $5::text <> '' AND EXISTS (SELECT 1 FROM agentrt.attempt WHERE task_id = $5
+	          AND (executor_actor_id = $1 OR model_provider IS NULL OR model_provider = $2))`,
+		tl.Executor, tl.Provider, subjects, core, c.subject).Scan(&restricted, &onlyOthers, &noCoreHolder, &dependent)
+	switch {
+	case err != nil:
+		return "", err
+	case restricted:
+		return "cannot or must_not on a need", nil
+	case onlyOthers:
+		return "a need only others may take", nil
+	case noCoreHolder:
+		return "core work needs only " + core, nil
+	case dependent:
+		return "not independent of the subject's attempts", nil
+	}
+	return "", nil
 }
 
 func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration) (*Claim, error) {
