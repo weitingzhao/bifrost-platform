@@ -227,13 +227,17 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		if err != nil {
 			return err
 		}
-		var pinnedState string
+		var pinnedState, pinnedCommit string
 		if pinned {
-			err = tx.QueryRow(ctx, `SELECT state FROM agentrt.attempt WHERE attempt_id = $1 AND task_id = $2 FOR SHARE`,
-				spec.attempt, subject).Scan(&pinnedState)
+			err = tx.QueryRow(ctx, `SELECT state, COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE attempt_id = $1 AND task_id = $2 FOR SHARE`,
+				spec.attempt, subject).Scan(&pinnedState, &pinnedCommit)
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
+		}
+		current, _, _, _, err := submittedAttempt(ctx, tx, subject, "FOR SHARE")
+		if err != nil && !errors.Is(err, errNoSubmitted) {
+			return err
 		}
 		s, err := readTask(ctx, tx, subject, true)
 		if err != nil {
@@ -250,15 +254,34 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		if err != nil {
 			return err
 		}
+		vd, err := readDetail(ctx, tx, v.id)
+		if err != nil {
+			return err
+		}
+		// A check that is not about the attempt under verification closes and
+		// moves nothing; when it was the subject's only check, a new pinned
+		// verification takes its place (review 152 A2).
 		closeCheck := func(reason string) error {
 			did = "closed"
-			return moveTask(ctx, tx, "controller", v, "accepted", reason)
+			if moveErr := moveTask(ctx, tx, "controller", v, "accepted", reason); moveErr != nil {
+				return moveErr
+			}
+			return ensureCheck(ctx, tx, s, sd, v.id)
+		}
+		base := pinnedCommit
+		if base == "" {
+			base = sd.base
 		}
 		switch {
 		case !pinned || spec.check != v.role || spec.subject != s.id:
 			return closeCheck("the check pins no attempt of its subject")
-		case pinnedState != "submitted" || s.state != "verifying" || int64(sd.round) != spec.round:
+		case pinnedState != "submitted" || spec.attempt != current || s.state != "verifying" || int64(sd.round) != spec.round:
 			return closeCheck(fmt.Sprintf("stale: about attempt %s of round %d; the subject is %s in round %d", spec.attempt, spec.round, s.state, sd.round))
+		// The check ran on what it pins, and pins what the attempt is (review
+		// 152 A1): the attempt's own commit, the subject's repo and task
+		// spec, and a checkout of that repo at that commit.
+		case spec.commit != pinnedCommit || spec.repo != sd.repo || spec.taskSpec != sd.spec || vd.repo != sd.repo || vd.base != base:
+			return closeCheck("the check's version is not the attempt's")
 		case v.role == "review":
 			var passed bool
 			if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.verification WHERE attempt_id = $1
@@ -317,6 +340,31 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		return moveTask(ctx, tx, "controller", s, "ready", fmt.Sprintf("round %d", sd.round+1))
 	})
 	return did, err
+}
+
+// ensureCheck proposes a pinned verification of the subject's attempt under
+// verification when the subject is verifying and no other check of it is
+// still open (except is the one being closed).
+func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, except string) error {
+	if s.state != "verifying" {
+		return nil
+	}
+	var open bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
+	  AND role IN ('verify','review') AND state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused'))`,
+		s.id, except).Scan(&open); err != nil || open {
+		return err
+	}
+	sa, _, _, commit, err := submittedAttempt(ctx, tx, s.id, "FOR SHARE")
+	if errors.Is(err, errNoSubmitted) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	_, err = proposeChecker(ctx, tx, s, sd, checkSpec{check: "verify", subject: s.id, attempt: sa, round: int64(sd.round),
+		commit: commit, repo: sd.repo, taskSpec: sd.spec})
+	return err
 }
 
 // Pending lists the tasks the acceptance pass has to look at: submitted

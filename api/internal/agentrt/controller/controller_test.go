@@ -243,3 +243,22 @@ func TestStart(t *testing.T) {
 		t.Fatalf("the loops still read after cancel: %d -> %d", before, after)
 	}
 }
+
+// Review 152 B2: a source that does not answer is cut off after the read
+// timeout; the pass goes on and records nothing for it.
+func TestSlowSourceIsCutOff(t *testing.T) {
+	pool := setup(t)
+	setRule(t, pool, "R2:1-1", `{"approval_executed":16}`, [2]string{"approval", "16"})
+	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
+		Approval: func(ctx context.Context, _ int64) (string, bool) {
+			<-ctx.Done()
+			return "", false
+		},
+	}}
+	start := time.Now()
+	n, err := c.Facts(ctx)
+	must(t, err)
+	if n != 0 || time.Since(start) > 5*time.Second {
+		t.Fatalf("recorded %d after %v", n, time.Since(start))
+	}
+}

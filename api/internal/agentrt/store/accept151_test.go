@@ -169,20 +169,32 @@ func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
 
 // handCheck proposes a verification or review of subject the way the
 // controller pins one, without the controller: a duplicate or an early one.
-func (w *world) handCheck(t *testing.T, check, subject, attempt string, round int) string {
+// pins are the spec's commit and repo; base is the check's own checkout.
+func (w *world) handCheck(t *testing.T, check, subject, attempt string, round int, pins ...string) string {
 	t.Helper()
 	id := store.NewTaskID()
+	commit, repo, base := "", "", ""
+	if len(pins) == 3 {
+		commit, repo, base = pins[0], pins[1], pins[2]
+	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		doc, err := canon.Encode(map[string]any{"check": check, "subject_task": subject, "attempt": attempt, "round": round, "task_spec": w.spec})
+		doc := map[string]any{"check": check, "subject_task": subject, "attempt": attempt, "round": round, "task_spec": w.spec}
+		if commit != "" {
+			doc["commit"] = commit
+		}
+		if repo != "" {
+			doc["repo"] = repo
+		}
+		b, err := canon.Encode(doc)
 		if err != nil {
 			return err
 		}
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", doc)
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", b)
 		if err != nil {
 			return err
 		}
 		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: s1, Subject: subject,
-			Role: check, Class: "go", Title: check, SpecArtifact: spec, Effect: "none"}); err != nil {
+			Role: check, Class: "go", Title: check, SpecArtifact: spec, Effect: "none", Repo: repo, BaseCommit: base}); err != nil {
 			return err
 		}
 		return store.MarkReady(ctx, tx, "controller", id)
@@ -335,5 +347,108 @@ func TestAnswerIsCopiedWhole(t *testing.T) {
 		if copy[k] != v {
 			t.Fatalf("copy = %v", copy)
 		}
+	}
+}
+
+// Review 152 A1: a check counts only when it pins the attempt under
+// verification and ran on that attempt's version: its commit, the subject's
+// repo and task spec, and a checkout of that repo at that commit. A check
+// bound right counts whoever proposed it.
+func TestCheckVersionIsTheAttempts(t *testing.T) {
+	w := newKernelWorld(t)
+	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
+	first := w.run(t, "h1", cursor, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	if c := w.claim(t, "h2", store.LeaseTTL, deterministic); c == nil || c.TaskID != v {
+		t.Fatalf("claim = %+v", c)
+	}
+	wrongBase := w.handCheck(t, "verify", impl, first.AttemptID, 1, commitA, "bifrost-platform", commitB)
+	right := w.handCheck(t, "verify", impl, first.AttemptID, 1, commitA, "bifrost-platform", commitA)
+	if c := w.run(t, "h3", deterministic, "done"); c.TaskID != wrongBase {
+		t.Fatalf("took %s", c.TaskID)
+	}
+	did, concludeErr := store.Conclude(ctx, w.rt, wrongBase)
+	if concludeErr != nil || did != "closed" {
+		t.Fatalf("a check on another checkout: %q (%v)", did, concludeErr)
+	}
+	if c := w.run(t, "h4", deterministic, "done"); c.TaskID != right {
+		t.Fatalf("took %s", c.TaskID)
+	}
+	did, concludeErr = store.Conclude(ctx, w.rt, right)
+	if concludeErr != nil || did != "review" {
+		t.Fatalf("a check bound right: %q (%v)", did, concludeErr)
+	}
+}
+
+// Review 152 A1: an attempt of an earlier round, still submitted, cannot
+// stand in for the current one by naming the current round.
+func TestOldAttemptCannotPoseAsCurrent(t *testing.T) {
+	w := newKernelWorld(t)
+	impl := w.ready(t, store.Task{})
+	first := w.run(t, "h1", cursor, "done")
+	v1, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	w.run(t, "h2", deterministic, "failed")
+	did, concludeErr := store.Conclude(ctx, w.rt, v1)
+	if concludeErr != nil || did != "rework" {
+		t.Fatalf("round 1: %q (%v)", did, concludeErr)
+	}
+	w.run(t, "h3", cursor, "done")
+	_, err = store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	posing := w.handCheck(t, "verify", impl, first.AttemptID, 2, commitA, "", commitA)
+	w.claim(t, "h4", store.LeaseTTL, deterministic) // the controller's own round 2 check
+	if c := w.run(t, "h5", deterministic, "done"); c.TaskID != posing {
+		t.Fatalf("took %s", c.TaskID)
+	}
+	did, concludeErr = store.Conclude(ctx, w.rt, posing)
+	if concludeErr != nil || did != "closed" || len(w.verifications(t, impl)) != 1 {
+		t.Fatalf("an old attempt posing as round 2: %q (%v)", did, concludeErr)
+	}
+}
+
+// Review 152 A2: when the only check of a subject under verification is
+// closed, a pinned verification takes its place; with another check open,
+// none is added.
+func TestClosedOnlyCheckIsReplaced(t *testing.T) {
+	w := newKernelWorld(t)
+	impl := w.ready(t, store.Task{})
+	first := w.run(t, "h1", cursor, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	unpinned := w.handCheck(t, "verify", impl, first.AttemptID, 1)
+	if c := w.run(t, "h2", deterministic, "done"); c.TaskID != v {
+		t.Fatalf("took %s", c.TaskID)
+	}
+	// v is submitted, still open: closing the unpinned one adds nothing.
+	if c := w.run(t, "h3", deterministic, "done"); c.TaskID != unpinned {
+		t.Fatalf("took %s", c.TaskID)
+	}
+	did, concludeErr := store.Conclude(ctx, w.rt, unpinned)
+	if concludeErr != nil || did != "closed" {
+		t.Fatalf("%q (%v)", did, concludeErr)
+	}
+	var checks int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'verify'`, impl).Scan(&checks))
+	if checks != 2 {
+		t.Fatalf("%d verification tasks; none should have been added", checks)
+	}
+
+	w2 := newKernelWorld(t)
+	impl2 := w2.ready(t, store.Task{})
+	a := w2.run(t, "h1", cursor, "done")
+	v2, err := store.StartVerification(ctx, w2.rt, impl2)
+	ok(t, err)
+	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", v2, "cancelled", "test") }))
+	lone := w2.handCheck(t, "verify", impl2, a.AttemptID, 1)
+	w2.run(t, "h2", deterministic, "done")
+	did, concludeErr = store.Conclude(ctx, w2.rt, lone)
+	if concludeErr != nil || did != "closed" {
+		t.Fatalf("%q (%v)", did, concludeErr)
+	}
+	replacement := w2.checker(t, impl2, "verify")
+	if pin := w2.checkSpec(t, replacement); pin["attempt"] != a.AttemptID {
+		t.Fatalf("the replacement pins %v", pin)
 	}
 }

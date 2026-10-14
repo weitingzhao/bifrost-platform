@@ -20,7 +20,9 @@ import (
 
 // Sources read the records the runtime does not own. ok is false when a
 // record cannot be read now: nothing is recorded for it, and a standing
-// condition that depends on it is unknown.
+// condition that depends on it is unknown. A source is read under the
+// record's lock, so it must return when its context ends: each read gets
+// ReadTimeout (review 152 B2).
 type Sources struct {
 	Approval func(ctx context.Context, number int64) (status string, ok bool)
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
@@ -31,11 +33,23 @@ type Sources struct {
 // Controller holds what the loops need. Zero intervals take the design's
 // values: leases every 10 seconds, facts and rules every 15.
 type Controller struct {
-	DB         store.DB
-	Sources    Sources
-	Logf       func(format string, args ...any)
-	LeaseEvery time.Duration
-	FactsEvery time.Duration
+	DB          store.DB
+	Sources     Sources
+	Logf        func(format string, args ...any)
+	LeaseEvery  time.Duration
+	FactsEvery  time.Duration
+	ReadTimeout time.Duration // per source read; zero means 10 seconds
+}
+
+// bounded runs a source read with the per-read timeout.
+func bounded[T any](c *Controller, ctx context.Context, read func(context.Context) T) T {
+	d := c.ReadTimeout
+	if d <= 0 {
+		d = 10 * time.Second
+	}
+	rctx, cancel := context.WithTimeout(ctx, d)
+	defer cancel()
+	return read(rctx)
 }
 
 func (c *Controller) logf(format string, args ...any) {
@@ -88,14 +102,46 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (string, bool) { return c.Sources.Approval(ctx, n) })
+		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (string, bool) {
+			type r struct {
+				s  string
+				ok bool
+			}
+			x := bounded(c, ctx, func(ctx context.Context) r { s, ok := c.Sources.Approval(ctx, n); return r{s, ok} })
+			return x.s, x.ok
+		})
 	case plan.WatchQuestion:
-		return store.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (store.Question, bool) { return c.Sources.Question(ctx, w.ID) })
+		return store.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (store.Question, bool) {
+			type r struct {
+				q  store.Question
+				ok bool
+			}
+			x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, w.ID); return r{q, ok} })
+			return x.q, x.ok
+		})
 	case plan.WatchCI:
 		repo, commit, _ := strings.Cut(w.ID, "@")
-		return store.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) { return c.Sources.CI(ctx, repo, commit) })
+		return store.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) {
+			type r struct {
+				s, run string
+				ok     bool
+			}
+			x := bounded(c, ctx, func(ctx context.Context) r { s, run, ok := c.Sources.CI(ctx, repo, commit); return r{s, run, ok} })
+			return x.s, x.run, x.ok
+		})
 	case plan.WatchDeploy:
-		return store.SeeDeploy(ctx, c.DB, w.ID, c.Sources.Deployed)
+		return store.SeeDeploy(ctx, c.DB, w.ID, func(ctx context.Context, env string) (string, map[string]any, bool) {
+			type r struct {
+				commit string
+				ref    map[string]any
+				ok     bool
+			}
+			x := bounded(c, ctx, func(ctx context.Context) r {
+				commit, ref, ok := c.Sources.Deployed(ctx, env)
+				return r{commit, ref, ok}
+			})
+			return x.commit, x.ref, x.ok
+		})
 	}
 	return false, nil
 }
