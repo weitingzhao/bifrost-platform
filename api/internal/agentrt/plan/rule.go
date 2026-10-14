@@ -319,10 +319,10 @@ func eval(n *node, f Facts) Result {
 		res := Result{Value: True}
 		for _, c := range n.children {
 			cr := eval(c, f)
-			switch {
-			case cr.Value == False:
+			switch cr.Value {
+			case False:
 				return Result{Value: False}
-			case cr.Value == Unknown:
+			case Unknown:
 				res.Value = Unknown
 			}
 			res.Manual = res.Manual || cr.Manual
