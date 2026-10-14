@@ -1,9 +1,12 @@
 package unifi
 
 import (
-	"fmt"
+	"errors"
 	"os"
 )
+
+// ErrNotConfigured proves no controller request can have started.
+var ErrNotConfigured = errors.New("UNIFI_USER and UNIFI_PASS required (bifrost-agent local Super Admin)")
 
 // Config matches scripts/unifi_firewall_setup.py env (Session v2 primary path).
 type Config struct {
@@ -29,7 +32,7 @@ func ConfigFromEnv() (Config, error) {
 		Site:   envOrDefault("UNIFI_SITE", defaultSite),
 	}
 	if cfg.User == "" || cfg.Pass == "" {
-		return Config{}, fmt.Errorf("UNIFI_USER and UNIFI_PASS required (bifrost-agent local Super Admin)")
+		return Config{}, ErrNotConfigured
 	}
 	return cfg, nil
 }
