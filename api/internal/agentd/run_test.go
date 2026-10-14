@@ -287,3 +287,49 @@ func TestRecover(t *testing.T) {
 		t.Fatalf("registry = %v %v", m, loadErr)
 	}
 }
+
+// Checkpoints while the executor runs (design v5 §5.2 检查点): the log's tail
+// and the workspace's patch, numbered, confirmed by the platform; a patch
+// over 1 MiB is recorded as too large, not kept.
+func TestRunTakesCheckpoints(t *testing.T) {
+	env := gitEnvT(t.TempDir())
+	bare, baseCommit := bareRemote(t, env)
+	head := func(_ context.Context, _, ref string) (string, error) {
+		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+		first, _, _ := strings.Cut(string(out), "\t")
+		return strings.TrimSpace(first), err
+	}
+	pool, _, base := platformWith(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head)
+	d := daemon(t, base, script(`echo 'package x' > x.go; echo working; sleep 1; head -c 2097152 /dev/urandom > big.bin; sleep 1; rm big.bin; printf '# done\n' > "$OUT/report.md"`), bare, env)
+	d.CheckpointEvery = 300 * time.Millisecond
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	out, err := d.Run(ctx, cl)
+	if err != nil || !out.Submitted {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	var samples, patches, tooLarge int
+	must(t, pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE (body_json->>'too_large')::boolean)
+	  FROM agentrt.event WHERE event_type = 'attempt_checkpointed' AND attempt_id = $1`, cl.AttemptID).Scan(&samples, &tooLarge))
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+	  WHERE a.artifact_kind = 'checkpoint_patch' AND position('x.go' in convert_from(b.body, 'UTF8')) > 0`).Scan(&patches))
+	if samples < 3 || patches < 1 || tooLarge < 1 {
+		t.Fatalf("%d checkpoints, %d patches with x.go, %d too large", samples, patches, tooLarge)
+	}
+	var seqs []int
+	rows, err := pool.Query(ctx, `SELECT (body_json->>'checkpoint_seq')::int FROM agentrt.event
+	  WHERE event_type = 'attempt_checkpointed' AND attempt_id = $1 ORDER BY event_id`, cl.AttemptID)
+	must(t, err)
+	for rows.Next() {
+		var n int
+		must(t, rows.Scan(&n))
+		seqs = append(seqs, n)
+	}
+	for i, n := range seqs {
+		if n != i+1 {
+			t.Fatalf("checkpoint numbers %v", seqs)
+		}
+	}
+}

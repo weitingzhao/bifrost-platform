@@ -43,11 +43,12 @@ type Daemon struct {
 	GitEnv    []string
 	Logf      func(format string, args ...any)
 
-	Beat         time.Duration // heartbeat; 30 s
-	MaxFails     int           // heartbeats failing in a row before the lease counts as lost; 3
-	KillGrace    time.Duration // TERM to KILL; 10 s
-	SalvageEvery time.Duration // salvage retry while in grace; 60 s
-	Retry        time.Duration // pause between retries of a step the platform could not take; 5 s
+	Beat            time.Duration // heartbeat; 30 s
+	MaxFails        int           // heartbeats failing in a row before the lease counts as lost; 3
+	KillGrace       time.Duration // TERM to KILL; 10 s
+	SalvageEvery    time.Duration // salvage retry while in grace; 60 s
+	CheckpointEvery time.Duration // log tail and patch while the executor runs; 5 min
+	Retry           time.Duration // pause between retries of a step the platform could not take; 5 s
 }
 
 func (d *Daemon) logf(format string, args ...any) {
@@ -143,7 +144,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		return d.lost(ctx, a, ws, entry, "lease_lost")
 	}
 
-	endHow, code := d.supervise(ctx, a, proc)
+	endHow, code := d.supervise(ctx, a, proc, ws, &entry)
 	if sp.After != nil {
 		if err := sp.After(); err != nil {
 			d.logf("agentd: after %s: %v", cl.AttemptID, err)
@@ -156,12 +157,14 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 }
 
 // supervise keeps the lease while the executor runs and returns how it ended.
-func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc) (string, int) {
+func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Workspace, entry *Entry) (string, int) {
 	cl := a.Claim
 	exited := make(chan int, 1)
 	safego.Go("agentd-attempt-wait", func() { exited <- proc.Wait() })
 	beat := time.NewTicker(orDefault(d.Beat, 30*time.Second))
 	defer beat.Stop()
+	sample := time.NewTicker(orDefault(d.CheckpointEvery, 5*time.Minute))
+	defer sample.Stop()
 	var hard <-chan time.Time
 	if cl.HardLimitS > 0 {
 		t := time.NewTimer(time.Duration(cl.HardLimitS) * time.Second)
@@ -191,6 +194,10 @@ func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc) (string,
 			if end == "" {
 				end = "daemon_restart"
 				Terminate(proc.PGID, grace)
+			}
+		case <-sample.C:
+			if end == "" {
+				d.checkpoint(ctx, a, ws, entry)
 			}
 		case <-beat.C:
 			if end != "" {
@@ -453,6 +460,10 @@ func (d *Daemon) Recover(ctx context.Context) error {
 			if e.PGID > 1 && Alive(e.PGID, e.Start) {
 				Terminate(e.PGID, orDefault(d.KillGrace, 10*time.Second))
 			}
+			if ws != nil {
+				ws.Base = d.base(ctx, ws)
+			}
+			d.checkpoint(ctx, a, ws, &e) // the last sample, then the end
 			err = d.end(ctx, e, "daemon_restart")
 		case "computed":
 			_, err = d.handOver(ctx, a, ws, e)
@@ -466,4 +477,57 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// patchLimit: a checkpoint's patch over 1 MiB is recorded as too large, not
+// kept (design v5 §5.2 检查点).
+const patchLimit = 1 << 20
+
+// checkpoint samples a running attempt (design v5 §5.2 检查点): the log's
+// tail and, when the workspace changed, its patch against the base. The new
+// sample's number is recorded here before anything is uploaded, so a retry
+// of one sample reuses its number; the platform's confirmation is recorded
+// after (review 142 R2). A failed sample is left for the next one.
+func (d *Daemon) checkpoint(ctx context.Context, a *Attempt, ws *Workspace, entry *Entry) {
+	entry.CheckpointSeq++
+	if err := d.Registry.Put(*entry); err != nil {
+		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
+		return
+	}
+	var ids []string
+	tooLarge := false
+	if tail := a.results().logTail; len(tail) > 0 {
+		if id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", tail); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	if ws != nil {
+		if dirty, err := ws.Dirty(ctx); err == nil && dirty {
+			if patch, err := ws.Diff(ctx); err == nil && len(patch) > patchLimit {
+				tooLarge = true
+			} else if err == nil && len(patch) > 0 {
+				if id, err := d.Client.PutArtifact(ctx, "checkpoint_patch", "text/x-diff", patch); err == nil {
+					ids = append(ids, id)
+				}
+			}
+		}
+	}
+	if err := d.Client.Checkpoint(ctx, entry.AttemptID, entry.Epoch, entry.CheckpointSeq, ids, tooLarge); err != nil {
+		d.logf("agentd: checkpoint %s #%d: %v", entry.AttemptID, entry.CheckpointSeq, err)
+		return
+	}
+	entry.Confirmed = entry.CheckpointSeq
+	if err := d.Registry.Put(*entry); err != nil {
+		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
+	}
+}
+
+// base is the commit a running attempt's workspace was checked out at: its
+// HEAD, since agentd commits only after the executor has exited.
+func (d *Daemon) base(ctx context.Context, ws *Workspace) string {
+	head, err := ws.git(ctx, ws.Dir, "rev-parse", "HEAD")
+	if err != nil {
+		return ""
+	}
+	return head
 }
