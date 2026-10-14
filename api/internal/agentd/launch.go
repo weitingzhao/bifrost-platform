@@ -55,6 +55,9 @@ type Spawn struct {
 	Env            []string // the whole environment; nothing is inherited
 	Dir            string
 	Stdout, Stderr io.Writer
+	// After runs once the executor has exited, before its results are read
+	// (cursor's report is the last event of its output).
+	After func() error
 }
 
 // Proc is a launched process group.

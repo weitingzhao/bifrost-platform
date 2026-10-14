@@ -144,6 +144,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 
 	endHow, code := d.supervise(ctx, a, proc)
+	if sp.After != nil {
+		if err := sp.After(); err != nil {
+			d.logf("agentd: after %s: %v", cl.AttemptID, err)
+		}
+	}
 	if endHow == "lease_lost" {
 		return d.lost(ctx, a, ws, entry, endHow)
 	}
