@@ -18,10 +18,13 @@ import (
 // Lock order, everywhere: attempt, then task (a review or verification
 // before its subject), then mission, then the event stream (Append): every
 // write takes the row locks it needs before it appends (review 149 B1).
-// Claims start at the host row and the shared global lock, then the task,
-// and never lock an existing attempt; a candidate a claim does not take is
-// released at once. Task rows are locked FOR NO KEY UPDATE, which foreign
-// key checks (KEY SHARE) never wait for.
+// Claims start at the host row and the shared global and capability locks,
+// then the task, and never lock an existing attempt; a candidate a claim
+// does not take is released at once. A write of job candidates or
+// capability facts takes the capability lock exclusively before anything
+// else (LockCapabilities); nothing takes it after a row or stream lock.
+// Task rows are locked FOR NO KEY UPDATE, which foreign key checks (KEY
+// SHARE) never wait for.
 
 // Lease timing (v5 §5.2, §6.2): a lease lasts LeaseTTL from the last
 // heartbeat; once it lapses the attempt is stale and its host may still renew

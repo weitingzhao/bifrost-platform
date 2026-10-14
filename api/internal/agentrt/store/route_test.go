@@ -31,6 +31,9 @@ func (w *world) lastRoute(t *testing.T, task string) map[string]any {
 func (w *world) retire(t *testing.T, candidate string) {
 	t.Helper()
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: demote"}}); err != nil {
 			return err
