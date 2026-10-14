@@ -90,10 +90,11 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 	if _, err = store.Seed(ctx, conn); err != nil {
 		t.Fatal(err)
 	}
+	// Every event, every column, in stream order (review 169 B2).
 	var before, after int
-	var sumBefore, sumAfter string
-	count := `SELECT count(*), COALESCE(string_agg(sha256, ',' ORDER BY event_stream_id, seq), '') FROM agentrt.event`
-	if err = conn.QueryRow(ctx, count).Scan(&before, &sumBefore); err != nil || before == 0 {
+	var rowsBefore, rowsAfter string
+	rows := `SELECT count(*), COALESCE(string_agg(to_jsonb(e)::text, E'\n' ORDER BY event_stream_id, seq), '') FROM agentrt.event e`
+	if err = conn.QueryRow(ctx, rows).Scan(&before, &rowsBefore); err != nil || before == 0 {
 		t.Fatalf("events before = %d %v", before, err)
 	}
 	var defBefore string
@@ -104,8 +105,8 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 	if err != nil || len(applied) != len(files)-4 || applied[0] != 5 {
 		t.Fatalf("applied %v %v", applied, err)
 	}
-	if err = conn.QueryRow(ctx, count).Scan(&after, &sumAfter); err != nil || after != before || sumAfter != sumBefore {
-		t.Fatalf("events after = %d (was %d) %v", after, before, err)
+	if err = conn.QueryRow(ctx, rows).Scan(&after, &rowsAfter); err != nil || after != before || rowsAfter != rowsBefore {
+		t.Fatalf("events after = %d (was %d) %v; changed: %v", after, before, err, rowsAfter != rowsBefore)
 	}
 	var def string
 	if err = conn.QueryRow(ctx, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'event_type_closed'`).Scan(&def); err != nil {
@@ -132,5 +133,8 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 	}
 	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files); rerr != nil || len(again) != 0 {
 		t.Fatalf("a second run applied %v %v", again, rerr)
+	}
+	if err = conn.QueryRow(ctx, rows).Scan(&after, &rowsAfter); err != nil || after != before || rowsAfter != rowsBefore {
+		t.Fatalf("events after a second run = %d (was %d) %v; changed: %v", after, before, err, rowsAfter != rowsBefore)
 	}
 }
