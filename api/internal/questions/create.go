@@ -61,6 +61,8 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 			RequesterPrincipal: c.principal,
 			RequesterThread:    canon.Thread,
 			WorkID:             canon.WorkID,
+			OwnerDuty:          canon.OwnerDuty,
+			TaskID:             canon.TaskID,
 			Title:              canon.Title,
 			Body:               canon.Body,
 			Options:            canon.Options,

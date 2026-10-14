@@ -29,6 +29,8 @@ type Canonical struct {
 	Urgency     string
 	Meanwhile   string
 	WorkID      string
+	OwnerDuty   string
+	TaskID      string
 	Thread      string
 	Link        string
 	LinkText    string
@@ -36,7 +38,9 @@ type Canonical struct {
 }
 
 var (
-	workIDPattern  = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
+	workIDPattern = regexp.MustCompile(`^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$`)
+	// taskIDPattern is an agent runtime task id: t_ and a 128-bit ULID.
+	taskIDPattern  = regexp.MustCompile(`^t_[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
 	keyPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{16,64}$`)
 	sessionPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{1,128}$`)
 )
@@ -62,6 +66,8 @@ type createJSON struct {
 	Urgency         json.RawMessage `json:"urgency"`
 	Meanwhile       json.RawMessage `json:"meanwhile"`
 	WorkID          json.RawMessage `json:"work_id"`
+	OwnerDuty       json.RawMessage `json:"owner_duty"`
+	TaskID          json.RawMessage `json:"task_id"`
 	RequesterThread json.RawMessage `json:"requester_thread"`
 	Link            json.RawMessage `json:"link"`
 	LinkText        json.RawMessage `json:"link_text"`
@@ -210,6 +216,20 @@ func buildCanonical(in createJSON, requireKey bool) (Canonical, error) {
 	}
 	c.WorkID = work
 
+	// A decision card (design v5 §7 item 3): which of the Owner's three
+	// duties the question is (set a goal, set a rule, something
+	// irreversible) and the agent runtime task it is about.
+	duty, _, err := cleanedString(in.OwnerDuty, false)
+	if err != nil || (duty != "" && !OwnerDuties[duty]) {
+		return Canonical{}, fieldErr("owner_duty", "owner_duty is goal, rule or irreversible")
+	}
+	c.OwnerDuty = duty
+	task, _, err := cleanedString(in.TaskID, false)
+	if err != nil || (task != "" && !taskIDPattern.MatchString(task)) {
+		return Canonical{}, fieldErr("task_id", "task_id is not an agent runtime task id")
+	}
+	c.TaskID = task
+
 	thread, _, err := cleanedString(in.RequesterThread, false)
 	if err != nil {
 		return Canonical{}, fieldErr("requester_thread", "requester_thread must be a string")
@@ -277,6 +297,12 @@ func buildCanonical(in createJSON, requireKey bool) (Canonical, error) {
 	if c.WorkID != "" {
 		m["work_id"] = c.WorkID
 	}
+	if c.OwnerDuty != "" {
+		m["owner_duty"] = c.OwnerDuty
+	}
+	if c.TaskID != "" {
+		m["task_id"] = c.TaskID
+	}
 	if c.Link != "" {
 		m["link"] = c.Link
 	}
@@ -299,6 +325,12 @@ func buildCanonical(in createJSON, requireKey bool) (Canonical, error) {
 	}
 	if optJSON != nil {
 		q["options"] = optJSON
+	}
+	if c.OwnerDuty != "" {
+		q["owner_duty"] = c.OwnerDuty
+	}
+	if c.TaskID != "" {
+		q["task_id"] = c.TaskID
 	}
 	qraw, err := marshalJSON(q)
 	if err != nil {

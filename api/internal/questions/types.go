@@ -51,6 +51,8 @@ type Question struct {
 	RequesterPrincipal string      `json:"requester_principal"`
 	RequesterThread    string      `json:"requester_thread,omitempty"`
 	WorkID             string      `json:"work_id,omitempty"`
+	OwnerDuty          string      `json:"owner_duty,omitempty"` // goal, rule or irreversible
+	TaskID             string      `json:"task_id,omitempty"`    // the agent runtime task it is about
 	Title              string      `json:"title"`
 	Body               string      `json:"body,omitempty"`
 	Options            []Option    `json:"options,omitempty"`
@@ -209,3 +211,7 @@ func itoa(n int) string {
 	}
 	return string(b[i:])
 }
+
+// OwnerDuties are the Owner's three duties a decision card names: set a
+// goal, set a rule, do something irreversible.
+var OwnerDuties = map[string]bool{"goal": true, "rule": true, "irreversible": true}
