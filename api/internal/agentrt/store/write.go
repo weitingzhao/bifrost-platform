@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // InTx runs fn in one transaction and commits it; any error rolls back.
@@ -120,9 +122,13 @@ func SetStepState(ctx context.Context, tx pgx.Tx, actor, root, stepID, to, cause
 	return ev, err
 }
 
-// Task is a task to propose.
+// Task is a task to propose. Core and Needs decide who may take it (v5
+// §5.1.2 「分流顺序」); Repo and BaseCommit are where agentd starts from.
 type Task struct {
 	ID, MissionID, PlanNode, OffPlanReason, Subject, Role, Class, Title, SpecArtifact, Effect string
+	Repo, BaseCommit                                                                          string
+	Core                                                                                      bool
+	Needs                                                                                     []string
 	HardLimit                                                                                 time.Duration
 }
 
@@ -136,6 +142,22 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	if t.OffPlanReason != "" {
 		body["off_plan_reason"] = t.OffPlanReason
 	}
+	if t.Core {
+		body["core"] = true
+	}
+	if len(t.Needs) > 0 {
+		body["needs"] = t.Needs
+	}
+	if t.Repo != "" {
+		body["repo"] = t.Repo
+	}
+	if t.BaseCommit != "" {
+		body["base_commit"] = t.BaseCommit
+	}
+	needs, err := canon.Encode(nonNil(t.Needs))
+	if err != nil {
+		return Appended{}, err
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(t.MissionID), Type: "task_proposed", Actor: actor,
 		MissionID: t.MissionID, PlanNode: t.PlanNode, TaskID: t.ID, Body: body})
 	if err != nil {
@@ -146,10 +168,12 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 		limit = 3600
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, off_plan, off_plan_reason,
-	  subject_task_id, role, task_class, title, spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id)
-	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'proposed',$12,$13)`,
+	  subject_task_id, role, task_class, title, spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id,
+	  core, needs_json, repo, base_commit)
+	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'proposed',$12,$13,$14,$15::jsonb,$16,$17)`,
 		t.ID, t.MissionID, nullable(t.PlanNode), t.PlanNode == "", nullable(t.OffPlanReason), nullable(t.Subject),
-		t.Role, t.Class, t.Title, t.SpecArtifact, t.Effect, limit, actor)
+		t.Role, t.Class, t.Title, t.SpecArtifact, t.Effect, limit, actor,
+		t.Core, string(needs), nullable(t.Repo), nullable(t.BaseCommit))
 	return ev, err
 }
 
@@ -167,22 +191,34 @@ func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dep
 // LeaseAttempt opens attempt n of a task for an executor with a fresh
 // fencing epoch.
 func LeaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, executor, hostID string, n int, lease time.Duration) (string, int64, error) {
+	return leaseAttempt(ctx, tx, actor, missionID, taskID, Tool{Executor: executor}, hostID, n, lease)
+}
+
+// leaseAttempt also records the model and provider the attempt is for:
+// independence is checked against them.
+func leaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration) (string, int64, error) {
 	var epoch int64
 	if err := tx.QueryRow(ctx, `SELECT nextval('agentrt.lease_epoch_seq')`).Scan(&epoch); err != nil {
 		return "", 0, err
 	}
 	id := NewAttemptID()
-	body := map[string]any{"attempt_no": n, "lease_epoch": epoch, "executor": executor}
+	body := map[string]any{"attempt_no": n, "lease_epoch": epoch, "executor": tl.Executor}
 	if hostID != "" {
 		body["host_id"] = hostID
+	}
+	if tl.Model != "" {
+		body["model"] = tl.Model
+	}
+	if tl.Provider != "" {
+		body["model_provider"] = tl.Provider
 	}
 	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "attempt_leased", Actor: actor,
 		TaskID: taskID, AttemptID: id, Body: body}); err != nil {
 		return "", 0, err
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, host_id,
-	  lease_epoch, lease_expires_at, heartbeat_at, state)
-	  VALUES ($1,$2,$3,$4,$5,$6, clock_timestamp() + make_interval(secs => $7), clock_timestamp(), 'leased')`,
-		id, taskID, n, executor, nullable(hostID), epoch, lease.Seconds())
+	  model, model_provider, lease_epoch, lease_expires_at, heartbeat_at, state)
+	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8, clock_timestamp() + make_interval(secs => $9), clock_timestamp(), 'leased')`,
+		id, taskID, n, tl.Executor, nullable(hostID), nullable(tl.Model), nullable(tl.Provider), epoch, lease.Seconds())
 	return id, epoch, err
 }

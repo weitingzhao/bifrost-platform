@@ -32,28 +32,10 @@ func Enqueue(ctx context.Context, tx pgx.Tx, eventID int64, topic string, payloa
 	return err
 }
 
-// MarkReady moves a proposed task to ready and wakes the hosts.
+// MarkReady moves a task to ready (one of the controller's moves) and wakes
+// the hosts.
 func MarkReady(ctx context.Context, tx pgx.Tx, actor, taskID string) error {
-	var mission, from, role, class string
-	var step *string
-	if err := tx.QueryRow(ctx, `SELECT mission_id, plan_node_id, state, role, task_class FROM agentrt.task WHERE task_id = $1 FOR UPDATE`,
-		taskID).Scan(&mission, &step, &from, &role, &class); err != nil {
-		return err
-	}
-	s := ""
-	if step != nil {
-		s = *step
-	}
-	ev, err := Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "task_state_changed", Actor: actor,
-		MissionID: mission, PlanNode: s, TaskID: taskID, Body: map[string]any{"from": from, "to": "ready"}})
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = 'ready', version = version + 1, updated_at = clock_timestamp()
-	  WHERE task_id = $1`, taskID); err != nil {
-		return err
-	}
-	return Enqueue(ctx, tx, ev.EventID, TopicWake, map[string]any{"kind": "task_ready", "task_id": taskID, "role": role, "task_class": class})
+	return MoveTask(ctx, tx, actor, taskID, "ready", "")
 }
 
 // PostMessage stores a message (its body as an artifact, data only) and

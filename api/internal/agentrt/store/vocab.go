@@ -10,11 +10,12 @@ import (
 type kind int
 
 const (
-	kStr kind = iota // a non-empty string
-	kID              // a non-empty string naming a row
-	kInt             // an integer
-	kIDs             // a non-empty list of row ids
-	kAny             // any canonical JSON value
+	kStr  kind = iota // a non-empty string
+	kID               // a non-empty string naming a row
+	kInt              // an integer
+	kIDs              // a non-empty list of row ids
+	kAny              // any canonical JSON value
+	kBool             // true or false
 )
 
 type field struct {
@@ -35,11 +36,22 @@ var bodies = map[string][]field{
 	"plan_changed":            {{"change", kStr, false}, {"decided_event_id", kInt, true}, {"nodes", kAny, true}, {"bindings", kAny, true}, {"note", kStr, true}},
 	"mission_proposed":        {{"title", kStr, false}},
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
-	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}},
+	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
-	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}},
-	"attempt_persisted":       {{"pushed_commit", kStr, false}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}},
+	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}, {"model", kStr, true}, {"model_provider", kStr, true}},
+	"attempt_started":         {{"model", kStr, true}, {"model_provider", kStr, true}},
+	"attempt_checkpointed":    {{"checkpoint_seq", kInt, false}, {"artifacts", kIDs, true}, {"too_large", kBool, true}},
+	"attempt_stale":           {{"lease_expires_at", kStr, false}},
+	"attempt_renewed":         {{"lease_expires_at", kStr, false}},
+	"attempt_computed":        {{"end_how", kStr, false}, {"conclusion", kStr, false}, {"exit_code", kInt, true}},
+	"attempt_submitted":       {},
+	"attempt_lost":            {{"reason", kStr, false}},
+	"attempt_ended":           {{"end_how", kStr, false}, {"group_cleared", kBool, false}},
+	"attempt_salvaged":        {{"artifacts", kIDs, true}, {"pushed_ref", kStr, true}, {"pushed_commit", kStr, true}},
+	"host_registered":         {{"host_id", kID, false}, {"actor_id", kID, false}, {"host_kind", kStr, false}},
+	"host_state_changed":      {{"host_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}},
+	"attempt_persisted":       {{"pushed_commit", kStr, true}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}},
 	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}},
 	"message_posted":          {{"message_id", kID, false}, {"to", kID, false}, {"kind", kStr, false}},
 	"message_acked":           {{"message_id", kID, false}},
@@ -121,6 +133,9 @@ func ofKind(v any, k kind) bool {
 			return true
 		}
 		return false
+	case kBool:
+		_, ok := v.(bool)
+		return ok
 	}
 	return true
 }
