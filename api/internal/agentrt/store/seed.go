@@ -61,6 +61,9 @@ func Seed(ctx context.Context, conn interface {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000002)`); err != nil {
 		return false, err
 	}
+	if err := LockCapabilities(ctx, tx); err != nil {
+		return false, err
+	}
 	var have bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = 'controller')`).Scan(&have); err != nil {
 		return false, err

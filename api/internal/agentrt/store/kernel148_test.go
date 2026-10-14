@@ -335,6 +335,9 @@ func TestKernelBranches(t *testing.T) {
 	// Facts scoped to a provider bind only that provider; retired ones bind
 	// nothing.
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: provider-scoped facts"}}); err != nil {
 			return err
@@ -361,6 +364,9 @@ func TestKernelBranches(t *testing.T) {
 		t.Fatalf("codex/openai claim = %+v", c)
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: retire"}}); err != nil {
 			return err

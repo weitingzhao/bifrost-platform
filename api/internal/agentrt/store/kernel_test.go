@@ -27,7 +27,8 @@ const (
 	noSuch  = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 )
 
-// newKernelWorld is a world with mission M-1 active and hosts h1–h8.
+// newKernelWorld is a world with mission M-1 active, hosts h1–h8, and every
+// tool the tests use a candidate for every job.
 func newKernelWorld(t *testing.T) *world {
 	t.Helper()
 	w := newWorld(t)
@@ -35,7 +36,45 @@ func newKernelWorld(t *testing.T) *world {
 	for i := 1; i <= 8; i++ {
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", fmt.Sprintf("h%d", i), "dev"))
 	}
+	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, store.Tool{Executor: "exec:claude", Provider: "other"},
+		store.Tool{Executor: "exec:codex", Provider: "other"}, store.Tool{Executor: "exec:codex", Provider: "cursor-mix"},
+		store.Tool{Executor: "exec:claude", Provider: "cursor-mix"})
 	return w
+}
+
+// jobs writes the jobs and makes each tool a candidate for every job with
+// the given status and model pattern. The Owner's signed initial rule writes
+// these (O19); a test writes them with the import event, under a rule of its
+// own.
+func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) {
+	t.Helper()
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: jobs and candidates"}}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
+		  VALUES ('job:test', 1, '{}', 'test', 'tighten', now(), now() + interval '1 year') ON CONFLICT DO NOTHING`); err != nil {
+			return err
+		}
+		for _, job := range []string{"planner", "implementer", "verifier", "reviewer", "chief_of_staff"} {
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ($1, 'dev', 'job:test', 1)
+			  ON CONFLICT DO NOTHING`, job); err != nil {
+				return err
+			}
+			for _, tl := range tools {
+				if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider,
+				  model_pattern, status) VALUES ($1, $2, $3, $4, $5, $6)`, job+"/"+tl.Executor+"/"+tl.Provider+"/"+pattern, job,
+					tl.Executor, tl.Provider, pattern, status); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}))
 }
 
 // ready proposes a task, defaults filled in, and moves it to ready.
@@ -291,6 +330,9 @@ func TestClaimRouting(t *testing.T) {
 
 	// Core work with no holder of only author_core left goes to nobody.
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: retire the core author fact"}}); err != nil {
 			return err

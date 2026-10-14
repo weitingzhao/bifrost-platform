@@ -18,10 +18,13 @@ import (
 // Lock order, everywhere: attempt, then task (a review or verification
 // before its subject), then mission, then the event stream (Append): every
 // write takes the row locks it needs before it appends (review 149 B1).
-// Claims start at the host row and the shared global lock, then the task,
-// and never lock an existing attempt; a candidate a claim does not take is
-// released at once. Task rows are locked FOR NO KEY UPDATE, which foreign
-// key checks (KEY SHARE) never wait for.
+// Claims start at the host row and the shared global and capability locks,
+// then the task, and never lock an existing attempt; a candidate a claim
+// does not take is released at once. A write of job candidates or
+// capability facts takes the capability lock exclusively before anything
+// else (LockCapabilities); nothing takes it after a row or stream lock.
+// Task rows are locked FOR NO KEY UPDATE, which foreign key checks (KEY
+// SHARE) never wait for.
 
 // Lease timing (v5 §5.2, §6.2): a lease lasts LeaseTTL from the last
 // heartbeat; once it lapses the attempt is stale and its host may still renew
@@ -108,7 +111,7 @@ var taskMoves = map[string][]string{
 	"ready":          {"leased", "paused", "blocked", "cancelled"},
 	"leased":         {"running", "ready", "blocked"},
 	"running":        {"submitted", "ready", "blocked"},
-	"submitted":      {"verifying", "blocked"},
+	"submitted":      {"verifying", "accepted", "blocked"}, // accepted: a verification or review task once its result is used
 	"verifying":      {"accepted", "rework", "rejected", "blocked"},
 	"rework":         {"ready", "cancelled"},
 	"blocked":        {"ready", "cancelled"},
@@ -141,7 +144,7 @@ func readTask(ctx context.Context, tx pgx.Tx, id string, lock bool) (taskRow, er
 }
 
 // moveTask writes task_state_changed and the new state. t must be locked. A
-// task that becomes ready wakes the hosts.
+// task that becomes ready gets its route (route_decided) and wakes the hosts.
 func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reason string) error {
 	if !slices.Contains(taskMoves[t.state], to) {
 		return fmt.Errorf("%w: task %s %s -> %s", ErrState, t.id, t.state, to)
@@ -160,6 +163,9 @@ func moveTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, to, reaso
 		return err
 	}
 	if to == "ready" {
+		if err := decideRoute(ctx, tx, t); err != nil {
+			return err
+		}
 		return Enqueue(ctx, tx, ev.EventID, TopicWake, map[string]any{"kind": "task_ready", "task_id": t.id, "role": t.role, "task_class": t.class})
 	}
 	return nil

@@ -39,6 +39,7 @@ var bodies = map[string][]field{
 	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}},
 	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
 	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
+	"route_decided":           {{"job", kStr, false}, {"candidates", kAny, false}, {"excluded", kAny, false}, {"inputs", kAny, false}, {"fingerprint", kStr, false}},
 	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}, {"model", kStr, true}, {"model_provider", kStr, true}},
 	"attempt_started":         {{"model", kStr, true}, {"model_provider", kStr, true}},
 	"attempt_checkpointed":    {{"checkpoint_seq", kInt, false}, {"artifacts", kIDs, true}, {"too_large", kBool, true}},
@@ -60,7 +61,12 @@ var bodies = map[string][]field{
 	"pool_cooldown_set":       {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
 	"legacy_imported":         {{"source", kStr, false}, {"count", kInt, true}},
 	"rule_signed":             {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
-	"note":                    {{"text", kStr, false}},
+	"approval_seen":           {{"approval", kInt, false}, {"status", kStr, false}},
+	"question_seen":           {{"question", kID, false}, {"status", kStr, false}, {"option", kStr, true}, {"text", kStr, true}, {"answered_by", kStr, true}, {"answered_at", kStr, true}},
+	"ci_seen":                 {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
+	"deploy_seen":             {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
+	"owner_signoff":           {{"ref", kStr, false}},
+	"note":                    {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}},
 }
 
 func checkBody(eventType string, body map[string]any) error {

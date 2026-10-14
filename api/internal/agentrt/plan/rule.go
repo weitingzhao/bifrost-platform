@@ -303,6 +303,58 @@ func (r Rule) Refs() []Ref {
 	return out
 }
 
+// Kinds of outside record a rule depends on.
+const (
+	WatchApproval = "approval"
+	WatchQuestion = "question"
+	WatchCI       = "ci"
+	WatchDeploy   = "deploy"
+)
+
+// Watch is an outside record a rule depends on: an approval number, a
+// question id, a CI run of repo@commit, or what an environment runs now. The
+// controller's external facts loop reads each one and records its changes
+// (design v5 §5.2 控制器「外部事实」).
+type Watch struct {
+	Kind string
+	ID   string
+}
+
+// Watches lists the outside records the rule depends on, sorted, each once.
+func (r Rule) Watches() []Watch {
+	seen := map[Watch]bool{}
+	var walk func(*node)
+	walk = func(n *node) {
+		switch n.kind {
+		case kApproval:
+			seen[Watch{WatchApproval, fmt.Sprint(n.n)}] = true
+		case kQuestion:
+			seen[Watch{WatchQuestion, n.s1}] = true
+		case kCI:
+			seen[Watch{WatchCI, n.s1 + "@" + n.s2}] = true
+		case kGates:
+			seen[Watch{WatchDeploy, n.s1}] = true
+		}
+		for _, c := range n.children {
+			walk(c)
+		}
+	}
+	if r.node != nil {
+		walk(r.node)
+	}
+	out := make([]Watch, 0, len(seen))
+	for w := range seen {
+		out = append(out, w)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
 // Eval evaluates the rule with Kleene logic: all is false if any child is
 // false, else unknown if any is unknown; any is true if any child is true,
 // else unknown if any is unknown. An empty rule is never true. One rule over

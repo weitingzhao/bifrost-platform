@@ -220,6 +220,9 @@ func TestKernelBranches149(t *testing.T) {
 		t.Fatalf("core claim = %+v", c)
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test: retire the core reviewer fact"}}); err != nil {
 			return err
