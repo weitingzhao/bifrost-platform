@@ -119,4 +119,18 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 			t.Fatalf("0005 dropped %s", typ)
 		}
 	}
+	// The constraint itself, on a table of its own: the new type and an old
+	// one are taken, a type outside the vocabulary is refused (review 168 B2).
+	if _, err = conn.Exec(ctx, `CREATE TEMP TABLE vocab (event_type text, CONSTRAINT event_type_closed `+def+`)`); err != nil {
+		t.Fatal(err)
+	}
+	for typ, want := range map[string]bool{"attempt_cancelled": true, "attempt_salvaged": true, "attempt_vanished": false} {
+		_, err = conn.Exec(ctx, `INSERT INTO vocab VALUES ($1)`, typ)
+		if (err == nil) != want {
+			t.Errorf("%s taken = %v (%v)", typ, err == nil, err)
+		}
+	}
+	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files); rerr != nil || len(again) != 0 {
+		t.Fatalf("a second run applied %v %v", again, rerr)
+	}
 }

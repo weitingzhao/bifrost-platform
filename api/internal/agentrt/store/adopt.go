@@ -78,11 +78,11 @@ func StartSalvageCheck(ctx context.Context, db DB, attemptID string) (string, er
 		if err = tx.QueryRow(ctx, `SELECT pushed_commit FROM agentrt.attempt WHERE attempt_id = $1 FOR SHARE`, attemptID).Scan(&commit); err != nil {
 			return err
 		}
-		hook("salvage-check", taskID)
 		t, err := readTask(ctx, tx, taskID, true)
 		if err != nil || t.step != step {
 			return err
 		}
+		hook("salvage-check", taskID)
 		var open bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
 		  WHERE a.attempt_id = $1 AND `+salvagedOpen+`)`, attemptID).Scan(&open); err != nil || !open {
@@ -123,13 +123,16 @@ var errLiveMoved = errors.New("store: the subject's live attempt changed")
 // claim: every condition of discovery (salvagedOpen) is checked again here,
 // on the state at this moment, so a check proposed by hand, or one that
 // waited while the task moved on, is judged as the controller's own would
-// be (review 166 A1), as an ordinary pin is judged by the state alone: the
-// attempt is lost and persisted, the subject is in the round pinned and
-// ready, leased or running, no later attempt was submitted, and the
-// attempt's verifications are this chain's own (none before its
-// deterministic check; that check's pass alone before its review).
-func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd taskDetail, pinnedState, live string) (string, error) {
+// be (reviews 166 A1, 168 A1), as an ordinary pin is judged by the state
+// alone: the subject is an implementation in the round pinned and ready,
+// leased or running; the attempt is lost and persisted; no later attempt
+// was submitted; no other check of the subject is open (checker is this
+// one); and the attempt's verifications are this chain's own (none before
+// its deterministic check; that check's pass alone before its review).
+func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd taskDetail, checker, pinnedState, live string) (string, error) {
 	switch {
+	case s.role != "implement":
+		return "the subject is a " + s.role + " task, not an implementation", nil
 	case pinnedState != "lost":
 		return fmt.Sprintf("the salvaged attempt %s is %q, not lost", spec.attempt, pinnedState), nil
 	case int64(sd.round) != spec.round:
@@ -137,14 +140,16 @@ func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd 
 	case !slices.Contains(adoptable, s.state):
 		return "the subject is " + s.state + ": its own attempt's result goes first", nil
 	}
-	var persisted, later bool
+	var persisted, later, other bool
 	var checks, chain int
 	if err := tx.QueryRow(ctx, `SELECT a.persisted_at IS NOT NULL,
 	  EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no AND b.state IN ('submitted','finished')),
+	  EXISTS (SELECT 1 FROM agentrt.task c WHERE c.subject_task_id = a.task_id AND c.task_id <> $3 AND c.role IN ('verify','review')
+	          AND c.state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused')),
 	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id),
 	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id AND v.verification_id = $2
 	     AND v.method = 'deterministic' AND v.verdict = 'pass')
-	  FROM agentrt.attempt a WHERE a.attempt_id = $1`, spec.attempt, spec.verification).Scan(&persisted, &later, &checks, &chain); err != nil {
+	  FROM agentrt.attempt a WHERE a.attempt_id = $1`, spec.attempt, spec.verification, checker).Scan(&persisted, &later, &other, &checks, &chain); err != nil {
 		return "", err
 	}
 	switch {
@@ -152,6 +157,8 @@ func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd 
 		return "the attempt's result was not salvaged", nil
 	case later:
 		return "a later attempt was submitted", nil
+	case other:
+		return "another check of the subject is open", nil
 	case spec.check == "verify" && checks != 0:
 		return "the attempt was checked before", nil
 	case spec.check == "review" && (checks != 1 || chain != 1):
@@ -178,6 +185,7 @@ func adopt(ctx context.Context, tx pgx.Tx, s taskRow, accepted, live string) err
 		if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'cancelled' WHERE attempt_id = $1`, live); err != nil {
 			return err
 		}
+		hook("cancelled", live)
 	}
 	return moveTaskBy(ctx, tx, "controller", s, "accepted", "the salvaged result of attempt "+accepted+" passed review", adoptMoves)
 }

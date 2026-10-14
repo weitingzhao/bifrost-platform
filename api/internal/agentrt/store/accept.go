@@ -291,7 +291,7 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		}
 		stale := ""
 		if pinned && spec.salvage && spec.check == v.role && spec.subject == s.id {
-			stale, err = salvageStale(ctx, tx, spec, s, sd, pinnedState, live)
+			stale, err = salvageStale(ctx, tx, spec, s, sd, v.id, pinnedState, live)
 			if errors.Is(err, errLiveMoved) {
 				return nil
 			}

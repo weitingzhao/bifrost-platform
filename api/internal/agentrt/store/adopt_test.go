@@ -1,9 +1,9 @@
 package store_test
 
 import (
+	"context"
 	"errors"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
@@ -129,10 +129,74 @@ func TestAdoptSalvagedResult(t *testing.T) {
 	if len(got) != 2 || got[0].attempt != old || got[0].accepts || got[1].attempt != old || !got[1].accepts {
 		t.Fatalf("verifications = %+v", got)
 	}
-	_, err = store.Heartbeat(ctx, w.rt, fence(fresh, "h2"))
+	// What the cancelled attempt's host sees next: every live call fenced;
+	// salvage waits for the lease and its grace like any other; ended is
+	// taken.
+	ff := fence(fresh, "h2")
+	_, err = store.Heartbeat(ctx, w.rt, ff)
 	is(t, err, store.ErrFenced)
-	_, err = store.Submit(ctx, w.rt, fence(fresh, "h2"))
+	exit := 0
+	_, err = store.Computed(ctx, w.rt, ff, &exit, "exit", "done")
 	is(t, err, store.ErrFenced)
+	calls := 0
+	_, err = store.Persist(ctx, w.rt, ff, store.Result{Report: w.artifact(t, "report", "# late new\n"), Ref: fresh.PushedRef, Commit: commitA},
+		heads(map[string]string{fresh.PushedRef: commitA}, &calls))
+	is(t, err, store.ErrFenced)
+	_, err = store.Submit(ctx, w.rt, ff)
+	is(t, err, store.ErrFenced)
+	_, err = store.Salvage(ctx, w.rt, fresh.AttemptID, "h2", store.Result{Report: w.artifact(t, "report", "# late new\n")}, heads(nil, &calls))
+	is(t, err, store.ErrInGrace)
+	_, err = store.Ended(ctx, w.rt, fresh.AttemptID, "h2", "lease_lost", true)
+	ok(t, err)
+	if w.state(t, "attempt", fresh.AttemptID) != "cancelled" || w.state(t, "task", task) != "accepted" {
+		t.Fatalf("after the host's calls: attempt %s, task %s", w.state(t, "attempt", fresh.AttemptID), w.state(t, "task", task))
+	}
+	w.chainHolds(t, "mission:M-1")
+}
+
+// cancellations counts attempt_cancelled events.
+func (w *world) cancellations(t *testing.T) int {
+	t.Helper()
+	var n int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'attempt_cancelled'`).Scan(&n))
+	return n
+}
+
+// The acceptance is one transaction: a failure after the cancellation was
+// written leaves nothing of it, and the next pass accepts.
+func TestAdoptRollsBackWhole(t *testing.T) {
+	w := newKernelWorld(t)
+	task, old, fresh := w.salvagedTask(t, true)
+	v, err := store.StartSalvageCheck(ctx, w.rt, old)
+	ok(t, err)
+	w.run(t, "h3", deterministic, "done")
+	_, err = store.Conclude(ctx, w.rt, v)
+	ok(t, err)
+	review := w.checker(t, task, "review")
+	w.run(t, "h4", cursor, "done")
+	unhook := store.SetHook(func(point, arg string) {
+		if point == "cancelled" {
+			panic("injected failure after the cancellation")
+		}
+	})
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = store.Conclude(ctx, w.rt, review)
+		t.Error("the injected failure did not happen")
+	}()
+	unhook()
+	var accepting int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.verification WHERE task_id = $1`, task).Scan(&accepting))
+	if w.cancellations(t) != 0 || w.state(t, "attempt", fresh.AttemptID) != "running" || w.state(t, "task", task) != "running" ||
+		w.state(t, "task", review) != "submitted" || accepting != 1 {
+		t.Fatalf("after the failure: %d cancellations, attempt %s, task %s, review %s, %d verifications", w.cancellations(t),
+			w.state(t, "attempt", fresh.AttemptID), w.state(t, "task", task), w.state(t, "task", review), accepting)
+	}
+	did, err := store.Conclude(ctx, w.rt, review)
+	ok(t, err)
+	if did != "accepted" || w.cancellations(t) != 1 || w.state(t, "attempt", fresh.AttemptID) != "cancelled" {
+		t.Fatalf("the next pass did %q", did)
+	}
 	w.chainHolds(t, "mission:M-1")
 }
 
@@ -406,17 +470,46 @@ func TestHandSalvagePins(t *testing.T) {
 			ok(t, err)
 			return task, w.handSalvage(t, "verify", task, old, 1, "")
 		},
-		"a review whose pass is not its own": func(t *testing.T, w *world) (string, string) {
-			task, old, _ := w.salvagedTask(t, true)
-			v, err := store.StartSalvageCheck(ctx, w.rt, old)
-			ok(t, err)
-			w.finish(t, v, "h3", deterministic, "done")
-			did, err := store.Conclude(ctx, w.rt, v)
-			ok(t, err)
-			if did != "review" {
-				t.Fatalf("the deterministic check did %q", did)
-			}
+		"a review pinned to no pass": func(t *testing.T, w *world) (string, string) {
+			task, old := w.passedSalvage(t)
 			return task, w.handSalvage(t, "review", task, old, 1, store.NewVerificationID())
+		},
+		"a review pinned to another attempt's pass": func(t *testing.T, w *world) (string, string) {
+			task, old := w.passedSalvage(t)
+			other := w.ready(t, store.Task{})
+			w.run(t, "h5", codex, "done")
+			v, err := store.StartVerification(ctx, w.rt, other)
+			ok(t, err)
+			w.finish(t, v, "h6", deterministic, "done")
+			_, err = store.Conclude(ctx, w.rt, v)
+			ok(t, err)
+			var pass string
+			ok(t, w.rt.QueryRow(ctx, `SELECT verification_id FROM agentrt.verification WHERE task_id = $1 AND method = 'deterministic'`, other).Scan(&pass))
+			return task, w.handSalvage(t, "review", task, old, 1, pass)
+		},
+		"another check open": func(t *testing.T, w *world) (string, string) {
+			task, old, _ := w.salvagedTask(t, true)
+			if v, err := store.StartSalvageCheck(ctx, w.rt, old); err != nil || v == "" {
+				t.Fatalf("the controller's check = %q %v", v, err)
+			}
+			return task, w.handSalvage(t, "verify", task, old, 1, "")
+		},
+		"a brief task": func(t *testing.T, w *world) (string, string) {
+			task := w.ready(t, store.Task{Role: "brief"})
+			old := w.claim(t, "h1", -store.Grace-time.Second, codex)
+			if old == nil || old.TaskID != task {
+				t.Fatalf("claim = %+v", old)
+			}
+			_, _, err := store.SweepLeases(ctx, w.rt)
+			ok(t, err)
+			calls := 0
+			_, err = store.Salvage(ctx, w.rt, old.AttemptID, "h1", store.Result{Report: w.artifact(t, "report", "# brief\n"), Ref: old.PushedRef, Commit: commitA},
+				heads(map[string]string{old.PushedRef: commitA}, &calls))
+			ok(t, err)
+			if pending, perr := store.PendingSalvaged(ctx, w.rt); perr != nil || len(pending) != 0 {
+				t.Fatalf("discovery took a brief task: %v %v", pending, perr)
+			}
+			return task, w.handSalvage(t, "verify", task, old.AttemptID, 1, "")
 		},
 	}
 	for name, setup := range cases {
@@ -428,7 +521,7 @@ func TestHandSalvagePins(t *testing.T) {
 			w.finish(t, check, "h4", cursor, "done")
 			did, err := store.Conclude(ctx, w.rt, check)
 			ok(t, err)
-			if did != "closed" || len(w.verifications(t, task)) != before || w.state(t, "task", task) != state {
+			if did != "closed" || len(w.verifications(t, task)) != before || w.state(t, "task", task) != state || w.cancellations(t) != 0 {
 				t.Fatalf("did %q; %d verifications (was %d); task %s (was %s)", did, len(w.verifications(t, task)), before, w.state(t, "task", task), state)
 			}
 		})
@@ -452,33 +545,69 @@ func TestSalvageReviewFails(t *testing.T) {
 	if did != "closed" || w.state(t, "task", task) != "running" || w.state(t, "attempt", fresh.AttemptID) != "running" {
 		t.Fatalf("did %q; task %s, new attempt %s", did, w.state(t, "task", task), w.state(t, "attempt", fresh.AttemptID))
 	}
-	if got := w.verifications(t, task); len(got) != 2 || got[1].verdict != "fail" || got[1].accepts {
-		t.Fatalf("verifications = %+v", got)
+	if got := w.verifications(t, task); len(got) != 2 || got[1].verdict != "fail" || got[1].accepts || w.cancellations(t) != 0 {
+		t.Fatalf("verifications = %+v; %d cancellations", got, w.cancellations(t))
 	}
 }
 
-// Two controller passes at once: one check of a salvaged result, one
-// acceptance, one cancelled attempt.
+// passedSalvage is a salvaged result whose deterministic check passed, the
+// review the controller then proposed withdrawn, so no other check is open.
+func (w *world) passedSalvage(t *testing.T) (task, old string) {
+	t.Helper()
+	task, old, _ = w.salvagedTask(t, true)
+	v, err := store.StartSalvageCheck(ctx, w.rt, old)
+	ok(t, err)
+	w.finish(t, v, "h3", deterministic, "done")
+	did, err := store.Conclude(ctx, w.rt, v)
+	ok(t, err)
+	if did != "review" {
+		t.Fatalf("the deterministic check did %q", did)
+	}
+	review := w.checker(t, task, "review")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", review, "cancelled", "test") }))
+	return task, old
+}
+
+// Two controller passes at once: the first holds its lock at the point the
+// second must wait on, and lets go once the second waits there: one check
+// of a salvaged result, one acceptance, one cancelled attempt.
 func TestAdoptTwoPassesAtOnce(t *testing.T) {
 	w := newKernelWorld(t)
 	task, old, fresh := w.salvagedTask(t, true)
 	pool := w.db.Pool(t, w.db.Runtime)
-	both := func(f func() (string, error)) []string {
-		var wg sync.WaitGroup
-		out := make([]string, 2)
-		errs := make([]error, 2)
-		start := make(chan struct{})
-		for i := range out {
-			wg.Add(1)
-			go func() { defer wg.Done(); <-start; out[i], errs[i] = f() }()
+	tctx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	staged := func(point, arg, fragment string, call func(store.DB) (string, error)) []string {
+		var second string
+		var secondErr error
+		done := make(chan struct{})
+		fired := false
+		unhook := store.SetHook(func(p, a string) {
+			if p != point || a != arg || fired {
+				return
+			}
+			fired = true
+			go func() { defer close(done); second, secondErr = call(pool) }()
+			w.waitFor(t, fragment, time.Now().Add(20*time.Second))
+		})
+		first, err := call(pool)
+		unhook()
+		select {
+		case <-done:
+		case <-tctx.Done():
+			t.Fatal("the second pass never returned")
 		}
-		close(start)
-		wg.Wait()
-		ok(t, errors.Join(errs...))
+		ok(t, errors.Join(err, secondErr))
+		if !fired {
+			t.Fatal("the race was not staged")
+		}
+		out := []string{first, second}
 		slices.Sort(out)
 		return out
 	}
-	ids := both(func() (string, error) { return store.StartSalvageCheck(ctx, pool, old) })
+	ids := staged("salvage-check", task, "WHERE task_id = $1 FOR NO KEY UPDATE", func(db store.DB) (string, error) {
+		return store.StartSalvageCheck(tctx, db, old)
+	})
 	if ids[0] != "" || ids[1] == "" {
 		t.Fatalf("two starts made %q", ids)
 	}
@@ -487,7 +616,9 @@ func TestAdoptTwoPassesAtOnce(t *testing.T) {
 	ok(t, err)
 	review := w.checker(t, task, "review")
 	w.run(t, "h4", cursor, "done")
-	dids := both(func() (string, error) { return store.Conclude(ctx, pool, review) })
+	dids := staged("adopting", task, "state = 'submitted' ORDER BY attempt_no DESC LIMIT 1 FOR UPDATE", func(db store.DB) (string, error) {
+		return store.Conclude(tctx, db, review)
+	})
 	if dids[0] != "" || dids[1] != "accepted" || w.events(t, "attempt_cancelled", fresh.AttemptID) != 1 {
 		t.Fatalf("two conclusions did %q; %d cancellations", dids, w.events(t, "attempt_cancelled", fresh.AttemptID))
 	}
