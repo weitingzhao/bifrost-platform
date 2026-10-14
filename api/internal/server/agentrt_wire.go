@@ -54,8 +54,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
 		return
 	}
-	// A database that does not answer delays the platform's start by at most
-	// this much (review 156).
+	// The connection and the identity query at start have this budget; on
+	// failure the pool is closed (review 156, 157 B3).
 	openCtx, openCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	pool, err := openAgentRuntime(openCtx, dsn, strings.TrimSpace(os.Getenv("AGENTRT_ENV")))
 	openCancel()

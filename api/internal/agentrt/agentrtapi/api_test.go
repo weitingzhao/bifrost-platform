@@ -182,9 +182,11 @@ func TestAgentdPath(t *testing.T) {
 	if code, out := call(t, s, "agentd:h2", "POST", "claim", claimBody); code != http.StatusForbidden || out["error"] != "wrong_host" {
 		t.Fatalf("a token of h2 claimed for h1: %d %v", code, out)
 	}
-	if code, _ := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1,
-		"tools": []any{map[string]any{"executor": "exec:cursor"}}}); code != http.StatusBadRequest {
-		t.Fatalf("a tool without its provider was answered %d", code)
+	for _, half := range []map[string]any{{"executor": "exec:cursor"}, {"provider": "cursor-mix"}} {
+		if code, _ := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1,
+			"tools": []any{half}}); code != http.StatusBadRequest {
+			t.Fatalf("a tool %v was answered %d", half, code)
+		}
 	}
 	status, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody)
 	if status != http.StatusOK || claim["task_id"] != task || claim["base_commit"] != commitA || claim["repo"] != "bifrost-platform" {
@@ -213,8 +215,10 @@ func TestAgentdPath(t *testing.T) {
 		map[string]any{"host_id": "h1", "lease_epoch": 999}); code != http.StatusConflict || out["error"] != "fenced" {
 		t.Fatalf("an old epoch: %d %v", code, out)
 	}
-	if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"phase": "running"})); code != http.StatusBadRequest {
-		t.Fatalf("a phase nothing keeps was answered %d", code)
+	for _, field := range []string{"phase", "line"} {
+		if code, _ := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{field: "x"})); code != http.StatusBadRequest {
+			t.Fatalf("a %s nothing keeps was answered %d", field, code)
+		}
 	}
 
 	report := []byte("# done\nall tests pass\n")
@@ -334,5 +338,41 @@ func TestUploadKinds(t *testing.T) {
 	  AND body_json->>'artifact_id' = $1`, artifactID(leaky)).Scan(&by))
 	if by != "reporter" {
 		t.Errorf("uploaded_by = %q", by)
+	}
+}
+
+// Review 157 B1: the same body uploaded twice at once is stored and
+// recorded once.
+func TestUploadRace(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	body := []byte("# race\n")
+	created := make(chan any, 2)
+	for _, who := range []string{"agentd:h1", "reporter"} {
+		go func() {
+			req, err := http.NewRequest("PUT", s.URL+"/api/v1/agentrt/artifacts/"+artifactID(body), bytes.NewReader(body))
+			if err != nil {
+				created <- err
+				return
+			}
+			req.Header.Set("Authorization", "Bearer "+tokens[who])
+			req.Header.Set("X-Artifact-Kind", "report")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				created <- err
+				return
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var out map[string]any
+			_ = json.NewDecoder(resp.Body).Decode(&out)
+			created <- out["created"]
+		}()
+	}
+	got := fmt.Sprint(<-created, " ", <-created)
+	var puts int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'artifact_put' AND body_json->>'artifact_id' = $1`,
+		artifactID(body)).Scan(&puts))
+	if (got != "true false" && got != "false true") || puts != 1 {
+		t.Fatalf("created %s, %d artifact_put", got, puts)
 	}
 }

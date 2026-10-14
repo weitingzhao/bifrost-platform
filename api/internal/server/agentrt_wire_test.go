@@ -65,6 +65,7 @@ func TestAgentRuntimeIdentity(t *testing.T) {
 	}{
 		{"platform_agentrt_dev", "bifrost_platform_dev", "dev", true},
 		{"platform_agentrt_prod", "bifrost_platform", "prod", true},
+		{"platform_agentrt_stg", "bifrost_platform_stg", "stg", true},
 		{"platform_agentrt_stg", "bifrost_platform_dev", "dev", false},
 		{"platform_agentrt_dev", "bifrost_platform", "dev", false},
 		{"postgres", "bifrost_platform_dev", "dev", false},
