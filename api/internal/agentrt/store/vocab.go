@@ -1,0 +1,126 @@
+package store
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+)
+
+// A body field's kind. Values are what canon.Parse or a Go caller produce.
+type kind int
+
+const (
+	kStr kind = iota // a non-empty string
+	kID              // a non-empty string naming a row
+	kInt             // an integer
+	kIDs             // a non-empty list of row ids
+	kAny             // any canonical JSON value
+)
+
+type field struct {
+	name     string
+	kind     kind
+	optional bool
+}
+
+// bodies is the closed body of each event type the store writes so far
+// (design v5 §5.1.3): every required field present with a value of its kind,
+// no other field. The database checks the type against the full vocabulary;
+// a type with no body here is refused rather than written with a guessed shape.
+var bodies = map[string][]field{
+	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}},
+	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},
+	"plan_node_retitled":      {{"title", kStr, false}, {"label", kStr, true}},
+	"plan_node_state_changed": {{"from", kStr, false}, {"to", kStr, false}, {"cause", kStr, false}},
+	"plan_changed":            {{"change", kStr, false}, {"decided_event_id", kInt, true}, {"nodes", kAny, true}, {"bindings", kAny, true}, {"note", kStr, true}},
+	"mission_proposed":        {{"title", kStr, false}},
+	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
+	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}},
+	"task_state_changed":      {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
+	"task_dependency_added":   {{"depends_on_task_id", kID, false}},
+	"attempt_leased":          {{"attempt_no", kInt, false}, {"lease_epoch", kInt, false}, {"executor", kID, false}, {"host_id", kID, true}},
+	"attempt_persisted":       {{"pushed_commit", kStr, false}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}},
+	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}},
+	"message_posted":          {{"message_id", kID, false}, {"to", kID, false}, {"kind", kStr, false}},
+	"message_acked":           {{"message_id", kID, false}},
+	"control_set":             {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}},
+	"control_cleared":         {{"control_id", kID, false}},
+	"pool_cooldown_set":       {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
+	"legacy_imported":         {{"source", kStr, false}, {"count", kInt, true}},
+	"rule_signed":             {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
+	"note":                    {{"text", kStr, false}},
+}
+
+func checkBody(eventType string, body map[string]any) error {
+	spec, ok := bodies[eventType]
+	if !ok {
+		return fmt.Errorf("store: event type %q has no body defined yet", eventType)
+	}
+	allowed := map[string]bool{}
+	for _, f := range spec {
+		allowed[f.name] = true
+		v, present := body[f.name]
+		if !present {
+			if f.optional {
+				continue
+			}
+			return fmt.Errorf("store: %s needs %q", eventType, f.name)
+		}
+		if !ofKind(v, f.kind) {
+			return fmt.Errorf("store: %s field %q has the wrong kind of value", eventType, f.name)
+		}
+	}
+	var extra []string
+	for k := range body {
+		if !allowed[k] {
+			extra = append(extra, k)
+		}
+	}
+	if len(extra) > 0 {
+		sort.Strings(extra)
+		return fmt.Errorf("store: %s does not take %v", eventType, extra)
+	}
+	return nil
+}
+
+func ofKind(v any, k kind) bool {
+	switch k {
+	case kStr, kID:
+		s, ok := v.(string)
+		return ok && s != ""
+	case kInt:
+		switch n := v.(type) {
+		case int, int32, int64, uint32:
+			return true
+		case json.Number:
+			_, err := n.Int64()
+			return err == nil
+		}
+		return false
+	case kIDs:
+		switch l := v.(type) {
+		case []any:
+			if len(l) == 0 {
+				return false
+			}
+			for _, e := range l {
+				if s, ok := e.(string); !ok || s == "" {
+					return false
+				}
+			}
+			return true
+		case []string:
+			if len(l) == 0 {
+				return false
+			}
+			for _, s := range l {
+				if s == "" {
+					return false
+				}
+			}
+			return true
+		}
+		return false
+	}
+	return true
+}
