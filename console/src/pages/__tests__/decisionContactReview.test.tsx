@@ -70,8 +70,13 @@ describe('decision pages: what the first review found unguarded', () => {
   // A request a test leaves unanswered is answered before the test ends, so no late timer writes into the next test.
   const hanging: Array<(response: Response) => void> = []
   const hang = () => new Promise<Response>(resolve => { hanging.push(resolve) })
+  // Answering one request can start the next (the check, then the POST, then the re-read): repeat until none is left.
+  // setImmediate, because one test replaces setTimeout with a fake.
   async function answerHanging(body: unknown = {}) {
-    await act(async () => { hanging.splice(0).forEach(resolve => resolve(json(body))); await Promise.resolve() })
+    for (let round = 0; round < 20 && hanging.length > 0; round += 1) {
+      await act(async () => { hanging.splice(0).forEach(resolve => resolve(json(body))); await new Promise(resolve => setImmediate(resolve)) })
+    }
+    expect(hanging).toHaveLength(0)
   }
   async function openRecord(id: string) {
     await act(async () => { window.location.hash = `#approvals?id=${id}`; window.dispatchEvent(new Event('hashchange')) })
