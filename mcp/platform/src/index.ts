@@ -24,6 +24,18 @@ import { registerPrometheusBridge } from './prometheusBridge.js'
 import { registerApproveBridge } from './registerApprove.js'
 import { registerLocalBridge } from './registerLocal.js'
 import { focusAllowList } from './focusBridges.js'
+import {
+  RUNTIME_DATA_NOTE,
+  getArtifact,
+  getMission,
+  getPlan,
+  getTask,
+  listTasks,
+  proposeTasks,
+  putArtifact,
+  requestStop,
+  whoami,
+} from './runtimeTools.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -611,6 +623,100 @@ reg(
   'Withdraw this thread\'s own open question. reason is required, for example answered in thread.',
   { id: z.string(), reason: z.string() },
   async ({ id, reason }) => jsonResult(await withdrawQuestion(id, reason)),
+)
+
+// The agent runtime (design v5 §5.2 「MCP 工具」). Writes are recorded as
+// this thread; see runtimeTools.ts.
+reg('whoami', 'Agent runtime: who this caller is, who its writes are recorded as and what it may do', {}, async () =>
+  jsonResult(await whoami()),
+)
+
+reg(
+  'get_plan',
+  `Agent runtime plan: the roots; with root, that subtree (each step's state and the event it came from); with node, one node in full. ${RUNTIME_DATA_NOTE}`,
+  { root: z.string().optional(), node: z.string().optional() },
+  async (input) => jsonResult(await getPlan(input)),
+)
+
+reg(
+  'get_mission',
+  `Agent runtime mission (M-n) with its tasks counted by state. ${RUNTIME_DATA_NOTE}`,
+  { id: z.string() },
+  async ({ id }) => jsonResult(await getMission(id)),
+)
+
+reg(
+  'list_tasks',
+  `Agent runtime tasks, oldest first, at most 500; filter by mission (M-n) and state. ${RUNTIME_DATA_NOTE}`,
+  { mission: z.string().optional(), state: z.string().optional() },
+  async (input) => jsonResult(await listTasks(input)),
+)
+
+reg(
+  'get_task',
+  `Agent runtime task (t_…). ${RUNTIME_DATA_NOTE}`,
+  { id: z.string() },
+  async ({ id }) => jsonResult(await getTask(id)),
+)
+
+reg(
+  'propose_tasks',
+  'Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime\'s). depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them.',
+  {
+    mission_id: z.string(),
+    tasks: z.array(
+      z.object({
+        ref: z.string(),
+        plan_node_id: z.string().optional(),
+        off_plan_reason: z.string().optional(),
+        subject_task_id: z.string().optional(),
+        role: z.enum(['plan', 'implement', 'brief', 'other']),
+        task_class: z.string(),
+        title: z.string(),
+        spec_artifact_id: z.string(),
+        effect_class: z.enum(['none', 'branch']),
+        repo: z.string().optional(),
+        base_commit: z.string().optional(),
+        core: z.boolean().optional(),
+        needs: z.array(z.string()).optional(),
+        depends_on: z.array(z.string()).optional(),
+        hard_limit_s: z.number().int().min(0).max(86400).optional(),
+      }),
+    ),
+    idempotency_key: z.string().optional(),
+  },
+  async (input) => jsonResult(await proposeTasks(input)),
+)
+
+reg(
+  'put_artifact',
+  'Upload text to the agent runtime as an artifact (addressed by its sha256; uploading it again is harmless). A local path in it is refused for most kinds.',
+  {
+    kind: z.string().describe('task_spec, mission_spec, brief, report, message, …'),
+    content: z.string(),
+    media_type: z.string().optional().describe('Default text/markdown'),
+  },
+  async (input) => jsonResult(await putArtifact(input)),
+)
+
+reg(
+  'get_artifact',
+  `Read an agent runtime artifact (sha256:…). ${RUNTIME_DATA_NOTE}`,
+  { id: z.string() },
+  async ({ id }) => jsonResult(await getArtifact(id)),
+)
+
+reg(
+  'request_stop',
+  'Stop or pause agent runtime work: global, a mission (M-n), a task (t_…) or a host. Anyone may set one; only the Owner lifts it.',
+  {
+    scope: z.enum(['global', 'mission', 'task', 'host']),
+    scope_ref: z.string().optional().describe('The mission, task or host; none for global'),
+    kind: z.enum(['stop', 'pause']),
+    reason: z.string(),
+    idempotency_key: z.string().optional(),
+  },
+  async (input) => jsonResult(await requestStop(input)),
 )
 
 } // end platform tools (non-prometheus focus)

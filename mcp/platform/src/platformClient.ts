@@ -157,6 +157,27 @@ export async function platformDelete(path: string): Promise<unknown> {
   return sendWrite('DELETE', path)
 }
 
+/**
+ * PUT a raw body (an agent runtime artifact). Not through the write gate:
+ * runtime state is not a cluster action; runtimeTools refuses writes itself
+ * the way the question tools do.
+ */
+export async function platformUpload(path: string, body: string, contentType: string, headers: Record<string, string>): Promise<unknown> {
+  const all = { ...requestHeaders(false), ...headers, 'Content-Type': contentType }
+  const r = await fetch(`${apiBase()}${path}`, { method: 'PUT', headers: all, body })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`PUT ${path}: HTTP ${r.status} ${text}`)
+  return text === '' ? {} : (JSON.parse(text) as unknown)
+}
+
+/** GET a raw body as text, with its media type. */
+export async function platformGetText(path: string): Promise<{ media_type: string; text: string }> {
+  const r = await fetch(`${apiBase()}${path}`, { method: 'GET', headers: requestHeaders(false) })
+  const text = await r.text()
+  if (!r.ok) throw new Error(`GET ${path}: HTTP ${r.status} ${text}`)
+  return { media_type: r.headers.get('Content-Type') ?? '', text }
+}
+
 export function jsonResult(data: unknown) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],

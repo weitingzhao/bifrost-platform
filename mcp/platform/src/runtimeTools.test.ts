@@ -1,0 +1,164 @@
+import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { describe, it } from 'node:test'
+import {
+  RUNTIME_DATA_NOTE,
+  RUNTIME_SESSION_REFUSAL,
+  RUNTIME_WRITES_OFF,
+  getArtifact,
+  getMission,
+  getPlan,
+  getTask,
+  listTasks,
+  proposeTasks,
+  putArtifact,
+  requestStop,
+  runtimeKey,
+  stableJson,
+  whoami,
+  type RuntimeDeps,
+} from './runtimeTools.js'
+import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
+import type { WritesMode } from './writeGate.js'
+
+type Call = { kind: string; path: string; body?: unknown; contentType?: string; headers?: Record<string, string> }
+
+function deps(over: { fellBack?: boolean; mode?: WritesMode; session?: string } = {}): { d: RuntimeDeps; calls: Call[] } {
+  const calls: Call[] = []
+  const d: RuntimeDeps = {
+    get: async (path) => {
+      calls.push({ kind: 'get', path })
+      return { ok: true }
+    },
+    getText: async (path) => {
+      calls.push({ kind: 'getText', path })
+      return { media_type: 'text/markdown', text: '# spec\n' }
+    },
+    send: async (_method, path, body) => {
+      calls.push({ kind: 'send', path, body })
+      return { sent: true }
+    },
+    upload: async (path, body, contentType, headers) => {
+      calls.push({ kind: 'upload', path, body, contentType, headers })
+      return { created: true }
+    },
+    session: () => over.session ?? 'local_s1',
+    fellBack: () => over.fellBack ?? false,
+    mode: () => over.mode ?? 'on',
+  }
+  return { d, calls }
+}
+
+const task = {
+  ref: 'a',
+  plan_node_id: 'R2:1-1',
+  role: 'implement',
+  task_class: 'go',
+  title: 'a',
+  spec_artifact_id: 'sha256:' + 'ab'.repeat(32),
+  effect_class: 'branch',
+}
+
+describe('agent runtime reads', () => {
+  it('reads the routes it names and marks agent text as data', async () => {
+    const { d, calls } = deps()
+    await whoami(d)
+    assert.deepEqual(await getPlan({}, d), { ok: true, note: RUNTIME_DATA_NOTE })
+    await getPlan({ root: 'R2' }, d)
+    await getPlan({ node: 'R2:1-1', root: 'R2' }, d)
+    await getMission('M-1', d)
+    await listTasks({}, d)
+    await listTasks({ mission: 'M-1', state: 'ready' }, d)
+    await getTask('t_x', d)
+    assert.deepEqual(
+      calls.map((c) => c.path),
+      [
+        '/api/v1/agentrt/whoami',
+        '/api/v1/agentrt/plan',
+        '/api/v1/agentrt/plan?root=R2',
+        '/api/v1/agentrt/plan/R2%3A1-1',
+        '/api/v1/agentrt/missions/M-1',
+        '/api/v1/agentrt/tasks',
+        '/api/v1/agentrt/tasks?mission=M-1&state=ready',
+        '/api/v1/agentrt/tasks/t_x',
+      ],
+    )
+    const art = await getArtifact('sha256:' + 'cd'.repeat(32), d)
+    assert.deepEqual(art, { artifact_id: 'sha256:' + 'cd'.repeat(32), media_type: 'text/markdown', content: '# spec\n', note: RUNTIME_DATA_NOTE })
+  })
+})
+
+describe('agent runtime writes', () => {
+  it('propose_tasks sends the batch with a key of this thread and request', async () => {
+    const { d, calls } = deps()
+    await proposeTasks({ mission_id: 'M-1', tasks: [task] }, d)
+    const reordered = Object.fromEntries(Object.entries(task).reverse())
+    await proposeTasks({ mission_id: 'M-1', tasks: [reordered as typeof task] }, d)
+    await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'mine' }, d)
+    const keys = calls.map((c) => (c.body as { idempotency_key: string }).idempotency_key)
+    assert.equal(calls[0].path, '/api/v1/agentrt/missions/M-1/tasks')
+    assert.deepEqual((calls[0].body as { tasks: unknown[] }).tasks, [task])
+    assert.equal(keys[0], runtimeKey('local_s1', '/api/v1/agentrt/missions/M-1/tasks', [task]))
+    assert.equal(keys[0], keys[1], 'the same request in another key order is the same key')
+    assert.equal(keys[2], 'mine')
+    const other = deps({ session: 'local_s2' })
+    await proposeTasks({ mission_id: 'M-1', tasks: [task] }, other.d)
+    assert.notEqual((other.calls[0].body as { idempotency_key: string }).idempotency_key, keys[0], 'another thread, another key')
+  })
+
+  it('put_artifact addresses the content by its sha256 and names its kind', async () => {
+    const { d, calls } = deps()
+    await putArtifact({ kind: 'task_spec', content: '# implement x\n' }, d)
+    const sum = createHash('sha256').update('# implement x\n', 'utf8').digest('hex')
+    assert.equal(calls[0].path, `/api/v1/agentrt/artifacts/sha256:${sum}`)
+    assert.equal(calls[0].body, '# implement x\n')
+    assert.equal(calls[0].contentType, 'text/markdown')
+    assert.deepEqual(calls[0].headers, { 'X-Artifact-Kind': 'task_spec' })
+    await putArtifact({ kind: 'brief', content: '{}', media_type: 'application/json' }, d)
+    assert.equal(calls[1].contentType, 'application/json')
+  })
+
+  it('request_stop sends the control with a key', async () => {
+    const { d, calls } = deps()
+    await requestStop({ scope: 'global', kind: 'pause', reason: 'look first' }, d)
+    await requestStop({ scope: 'task', scope_ref: 't_x', kind: 'stop', reason: 'wrong', idempotency_key: 'k' }, d)
+    assert.equal(calls[0].path, '/api/v1/agentrt/controls')
+    const first = calls[0].body as Record<string, string>
+    assert.deepEqual({ ...first, idempotency_key: '' }, { scope: 'global', scope_ref: '', kind: 'pause', reason: 'look first', idempotency_key: '' })
+    assert.equal(first.idempotency_key, runtimeKey('local_s1', '/api/v1/agentrt/controls', { scope: 'global', scope_ref: '', kind: 'pause', reason: 'look first' }))
+    assert.equal((calls[1].body as Record<string, string>).idempotency_key, 'k')
+  })
+
+  for (const [name, over, hint] of [
+    ['a fallen-back session', { fellBack: true }, RUNTIME_SESSION_REFUSAL],
+    ['MCP_WRITES=off', { mode: 'off' as WritesMode }, RUNTIME_WRITES_OFF],
+  ] as const) {
+    it(`sends no write under ${name}`, async () => {
+      const { d, calls } = deps(over)
+      for (const got of [
+        await proposeTasks({ mission_id: 'M-1', tasks: [task] }, d),
+        await putArtifact({ kind: 'task_spec', content: 'x' }, d),
+        await requestStop({ scope: 'global', kind: 'stop', reason: 'x' }, d),
+      ]) {
+        assert.equal((got as { hint: string }).hint, hint)
+      }
+      assert.equal(calls.length, 0)
+    })
+  }
+})
+
+describe('agent runtime tools are served', () => {
+  it('stableJson sorts keys at every level', () => {
+    assert.equal(stableJson({ b: [{ d: 1, c: 2 }], a: 'x', u: undefined }), '{"a":"x","b":[{"c":2,"d":1}]}')
+  })
+
+  it('every runtime tool is registered and listed', () => {
+    const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+    const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_tasks', 'put_artifact', 'get_artifact', 'request_stop']) {
+      assert.equal(listed.has(name), true, name)
+      assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
+    }
+  })
+})
