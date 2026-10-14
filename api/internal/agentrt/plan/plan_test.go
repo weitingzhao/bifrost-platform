@@ -177,3 +177,45 @@ func TestCountSteps(t *testing.T) {
 		}
 	}
 }
+
+// changingFacts returns a different gate reading on each call, like a
+// delivery record that cannot be read and then can (review 145 A4).
+type changingFacts struct {
+	facts
+	readings []Tri
+	calls    int
+}
+
+func (c *changingFacts) GatePassed(string, string, string) Tri {
+	v := c.readings[min(c.calls, len(c.readings)-1)]
+	c.calls++
+	return v
+}
+
+func TestGateIsReadOncePerEvaluation(t *testing.T) {
+	gate := `{"gates_passed":[{"test":"T19","spec_sha256":"` + spec + `"}],"env":"prod"}`
+	accepted := `{"task_accepted":"` + taskA + `"}`
+	for _, c := range []struct {
+		name     string
+		doc      string
+		readings []Tri
+		want     Tri
+	}{
+		{"unknown_then_false", `{"any":[` + accepted + `,` + gate + `]}`, []Tri{Unknown, False}, Unknown},
+		{"unknown_then_true", `{"any":[` + accepted + `,` + gate + `]}`, []Tri{Unknown, True}, Unknown},
+		{"gate_first", `{"any":[` + gate + `,` + accepted + `]}`, []Tri{Unknown, False}, Unknown},
+		{"nested", `{"all":[` + accepted + `,{"any":[` + accepted + `,` + gate + `]}]}`, []Tri{Unknown, False}, Unknown},
+		{"false_then_unknown", `{"any":[` + accepted + `,` + gate + `]}`, []Tri{False, Unknown}, True},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := &changingFacts{facts: facts{accepted: map[string]bool{taskA: true}}, readings: c.readings}
+			got := mustParse(t, c.doc).Eval(f)
+			if got.Value != c.want {
+				t.Fatalf("Eval = %v, want %v", got.Value, c.want)
+			}
+			if f.calls != 1 {
+				t.Fatalf("the gate was read %d times in one evaluation, want 1", f.calls)
+			}
+		})
+	}
+}

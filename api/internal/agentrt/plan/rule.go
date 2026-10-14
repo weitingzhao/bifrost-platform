@@ -309,15 +309,37 @@ func (r Rule) Refs() []Ref {
 // it, from design v5 §5.1.2: when the delivery record behind a gate cannot be
 // read, the whole rule is not done, even if another branch of an any holds
 // (review 144 A4). A false gate does not have that effect; only unknown.
+//
+// Each gate is read once per evaluation and that reading is used for both
+// the value and the cap, so a delivery record that cannot be read and then
+// can be read within one evaluation still keeps the rule from done (review
+// 145 A4).
 func (r Rule) Eval(f Facts) Result {
 	if r.node == nil {
 		return Result{Value: False}
 	}
-	res := eval(r.node, f)
-	if res.Value == True && gateUnknown(r.node, f) {
+	once := &onceFacts{Facts: f, gates: map[[3]string]Tri{}}
+	res := eval(r.node, once)
+	if res.Value == True && gateUnknown(r.node, once) {
 		return Result{Value: Unknown}
 	}
 	return res
+}
+
+// onceFacts remembers each gate reading for the length of one evaluation.
+type onceFacts struct {
+	Facts
+	gates map[[3]string]Tri
+}
+
+func (o *onceFacts) GatePassed(env, test, specSHA256 string) Tri {
+	k := [3]string{env, test, specSHA256}
+	if v, ok := o.gates[k]; ok {
+		return v
+	}
+	v := o.Facts.GatePassed(env, test, specSHA256)
+	o.gates[k] = v
+	return v
 }
 
 func gateUnknown(n *node, f Facts) bool {
