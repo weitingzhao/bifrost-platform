@@ -22,10 +22,15 @@ var (
 // Current is the newest deploying record of lane and env, for a reader that
 // must not take an older deployment for the current one (the agent
 // runtime's gates_passed, design v5 T33). Unlike List, which skips a record
-// it cannot parse, it fails on one; and it fails while a delivery run of the
-// lane and environment newer than that record exists, so the recorder's lag
-// and a delivery in flight read as unsettled, never as the previous
-// deployment.
+// it cannot parse, it fails on one, or on one the labels chose that lacks
+// its run, lane, environment, times or deploying mark, or names another
+// lane or environment (review 162 A3). It also fails while another delivery
+// run of the lane and environment may have changed the environment after
+// that record: one not finished (whenever it started), or one that finished
+// at or after the record's completion (review 162 A2). So the recorder's
+// lag and a delivery in flight read as unsettled, never as the previous
+// deployment. A delivery that failed or went unrecorded and was then pruned
+// from Tekton is not seen (review 162 A1, the Owner's decision).
 func (s *Service) Current(ctx context.Context, lane, env string) (Record, error) {
 	core, dyn, err := s.clients()
 	if err != nil {
@@ -44,8 +49,8 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 		if perr := json.Unmarshal([]byte(cm.Data[dataKey]), &rec); perr != nil {
 			return Record{}, fmt.Errorf("%w: %s is unreadable: %v", ErrUnsettled, cm.Name, perr)
 		}
-		if rec.Lane != lane || rec.Env != env || !rec.Deploys {
-			continue
+		if rec.Run == "" || rec.Lane != lane || rec.Env != env || !rec.Deploys || rec.StartedAt.IsZero() || rec.CompletedAt.IsZero() {
+			return Record{}, fmt.Errorf("%w: %s does not read as a deployment of %s/%s", ErrUnsettled, cm.Name, lane, env)
 		}
 		if newest == nil || rec.CompletedAt.After(newest.CompletedAt) {
 			r := rec
@@ -65,12 +70,9 @@ func (s *Service) Current(ctx context.Context, lane, env string) (Record, error)
 		if !ok || !rule.Deploys || rule.Lane != lane || rule.Env != env || run.GetName() == newest.Run {
 			continue
 		}
-		started := nestedTime(run.Object, "status", "startTime")
-		if started.IsZero() {
-			started = run.GetCreationTimestamp().Time
-		}
-		if started.IsZero() || started.After(newest.StartedAt) {
-			return Record{}, fmt.Errorf("%w: run %s is newer than the record of %s", ErrUnsettled, run.GetName(), newest.Run)
+		completed := nestedTime(run.Object, "status", "completionTime")
+		if completed.IsZero() || !completed.Before(newest.CompletedAt) {
+			return Record{}, fmt.Errorf("%w: run %s may have changed %s/%s after the record of %s", ErrUnsettled, run.GetName(), lane, env, newest.Run)
 		}
 	}
 	return *newest, nil

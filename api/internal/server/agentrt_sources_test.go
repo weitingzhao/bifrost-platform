@@ -195,6 +195,52 @@ func TestCISnapshot(t *testing.T) {
 	if _, err := s.get(ctx, "r@c"); err == nil {
 		t.Fatal("a failed list read as an old snapshot")
 	}
+	fail = false
+	if o, err := s.get(ctx, "r@c"); err != nil || o.Run != "run-4" {
+		t.Fatalf("after a failed list = %+v %v; it lists again", o, err)
+	}
+}
+
+// A caller waiting for another's list gives up with its own context, and
+// the list, once done, serves the rest (review 162 B1).
+func TestCISnapshotWaitEndsWithTheCaller(t *testing.T) {
+	release := make(chan struct{})
+	var lists atomic.Int32
+	s := &ciSnapshot{ttl: time.Minute, index: func(context.Context) (map[string]delivery.CIOutcome, error) {
+		lists.Add(1)
+		<-release
+		return map[string]delivery.CIOutcome{"r@c": {Status: "Succeeded", Run: "ci-1"}}, nil
+	}}
+	first := make(chan error, 1)
+	go func() { _, err := s.get(context.Background(), "r@c"); first <- err }()
+	for lists.Load() == 0 {
+		time.Sleep(5 * time.Millisecond)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	waited := make(chan error, 1)
+	go func() { _, err := s.get(ctx, "r@c"); waited <- err }()
+	select {
+	case err := <-waited:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("a waiter = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("a waiter outlived its context")
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if o, err := s.get(context.Background(), "r@c"); err != nil || o.Run != "ci-1" || lists.Load() != 1 {
+		t.Fatalf("after the list = %+v %v, %d lists", o, err, lists.Load())
+	}
+	done, cancelDone := context.WithCancel(context.Background())
+	cancelDone()
+	if _, err := s.get(done, "r@c"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled caller read the snapshot: %v", err)
+	}
 }
 
 // A store read that does not take a context still ends with it, and reads
@@ -204,6 +250,8 @@ func TestSourceReadsAreBounded(t *testing.T) {
 	release := make(chan struct{})
 	var started atomic.Int32
 	stuck := func() (int, bool, error) { started.Add(1); <-release; return 1, true, nil }
+	watchdog := time.AfterFunc(10*time.Second, func() { panic("a source read did not return") })
+	defer watchdog.Stop()
 	for i := 0; i < 2; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 		start := time.Now()
@@ -225,6 +273,13 @@ func TestSourceReadsAreBounded(t *testing.T) {
 		t.Fatalf("%d reads started; two slots", n)
 	}
 	close(release)
+	// both slots come back once the stuck reads return
+	for deadline := time.Now().Add(5 * time.Second); len(reads.slots) != 0; {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d slots still held after the reads returned", len(reads.slots))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		if v, ok, err := within(context.Background(), reads, func() (int, bool, error) { return 7, true, nil }); err == nil {
@@ -269,8 +324,10 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 	}
 	answer("1", map[string]any{"option": "b", "channel": "console"})
 	answer("2", map[string]any{"text": "neither, wait for the data", "channel": "console"})
-	if q, ok := read(ctx, "1"); !ok || q.Status != "answered" || q.Option != "b" || q.AnsweredBy == "" || q.AnsweredAt == "" {
-		t.Fatalf("answered = %+v %v", q, ok)
+	q, ok := read(ctx, "1")
+	at, err := time.Parse(time.RFC3339, q.AnsweredAt)
+	if !ok || q.Status != "answered" || q.Option != "b" || q.AnsweredBy != "admin" || err != nil || time.Since(at) > time.Minute || at.Location() != time.UTC {
+		t.Fatalf("answered = %+v %v %v", q, ok, err)
 	}
 	if q, ok := read(ctx, "2"); !ok || q.Option != "none" || q.Text != "neither, wait for the data" {
 		t.Fatalf("answered by text = %+v %v", q, ok)

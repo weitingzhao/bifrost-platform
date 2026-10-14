@@ -85,16 +85,20 @@ func agentRuntimeSources(ap approvalReader, question func(context.Context, strin
 	return src
 }
 
-// ciSnapshot lists the CI runs once for every read within ttl, so one facts
-// pass over many commits lists once (review 161 B3).
+// ciSnapshot lists the CI runs once and answers every read from that list
+// for ttl (five seconds; a facts pass over many commits mostly lists once,
+// review 161 B3). One caller lists at a time; the others wait for it, each
+// for no longer than its own context (review 162 B1). A failed list is not
+// kept: the next read lists again.
 type ciSnapshot struct {
 	index func(context.Context) (map[string]delivery.CIOutcome, error)
 	ttl   time.Duration
 	now   func() time.Time
 
-	mu  sync.Mutex
-	at  time.Time
-	idx map[string]delivery.CIOutcome
+	mu      sync.Mutex
+	at      time.Time
+	idx     map[string]delivery.CIOutcome
+	listing chan struct{} // closed when the list in progress ends
 }
 
 func (s *ciSnapshot) get(ctx context.Context, key string) (delivery.CIOutcome, error) {
@@ -102,16 +106,40 @@ func (s *ciSnapshot) get(ctx context.Context, key string) (delivery.CIOutcome, e
 	if s.now != nil {
 		now = s.now
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.idx == nil || now().Sub(s.at) >= s.ttl {
+	for {
+		if err := ctx.Err(); err != nil {
+			return delivery.CIOutcome{}, err
+		}
+		s.mu.Lock()
+		if s.idx != nil && now().Sub(s.at) < s.ttl {
+			o := s.idx[key]
+			s.mu.Unlock()
+			return o, nil
+		}
+		if wait := s.listing; wait != nil {
+			s.mu.Unlock()
+			select {
+			case <-wait:
+				continue
+			case <-ctx.Done():
+				return delivery.CIOutcome{}, ctx.Err()
+			}
+		}
+		done := make(chan struct{})
+		s.listing = done
+		s.mu.Unlock()
 		idx, err := s.index(ctx)
+		s.mu.Lock()
+		if err == nil {
+			s.idx, s.at = idx, now()
+		}
+		s.listing = nil
+		close(done)
+		s.mu.Unlock()
 		if err != nil {
 			return delivery.CIOutcome{}, err
 		}
-		s.idx, s.at = idx, now()
 	}
-	return s.idx[key], nil
 }
 
 // questionFact is a question as the runtime records it. An answer given as

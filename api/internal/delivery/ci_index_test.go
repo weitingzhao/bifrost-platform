@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	dynfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
@@ -44,18 +45,24 @@ func TestCIRunOrder(t *testing.T) {
 		ciRunAt("ci-b-run", factSHA2, "Unknown", t2),
 		ciRunAt("ci-c-run", factSHA3, "Unknown", t1),
 		ciRunAt("ci-c-fail", factSHA3, "False", t2),
+		// listed older first: the newer Failed must replace the older Running
+		ciRunAt("ci-d1-run", factSHA4, "Unknown", t1),
+		ciRunAt("ci-d2-fail", factSHA4, "False", t2),
+		noVerdict(ciRunAt("ci-e-new", factSHA5, "True", t1)),
 	)
 	for _, tc := range []struct{ sha, status, run string }{
 		{factSHA1, CISucceeded, "ci-a-ok"},
 		{factSHA2, CIRunning, "ci-b-run"},
 		{factSHA3, CIFailed, "ci-c-fail"},
+		{factSHA4, CIFailed, "ci-d2-fail"},
+		{factSHA5, CIRunning, "ci-e-new"},
 	} {
 		if status, run, err := f.CIRun(context.Background(), "repo-p", tc.sha); err != nil || status != tc.status || run != tc.run {
 			t.Errorf("%s = %q %q %v; want %q %q", tc.sha[:4], status, run, err, tc.status, tc.run)
 		}
 	}
 	idx, err := f.CIIndex(context.Background())
-	if err != nil || len(idx) != 3 {
+	if err != nil || len(idx) != 5 {
 		t.Fatalf("index = %v %v", idx, err)
 	}
 }
@@ -66,4 +73,24 @@ func TestCIRunListError(t *testing.T) {
 	if _, _, err := s.PolicyFacts().CIRun(context.Background(), "repo-p", factSHA1); err == nil {
 		t.Fatal("a cluster it cannot reach read as no run")
 	}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR: "PipelineRunList",
+	})
+	dyn.PrependReactor("list", "pipelineruns", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("list failed")
+	})
+	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
+	if _, _, err := s.PolicyFacts().CIRun(context.Background(), "repo-p", factSHA1); err == nil {
+		t.Fatal("a failed list read as no run")
+	}
 }
+
+func noVerdict(u *unstructured.Unstructured) *unstructured.Unstructured {
+	u.Object["status"] = map[string]any{}
+	return u
+}
+
+const (
+	factSHA4 = "4444444444444444444444444444444444444444"
+	factSHA5 = "5555555555555555555555555555555555555555"
+)
