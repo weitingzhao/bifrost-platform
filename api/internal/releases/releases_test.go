@@ -266,10 +266,13 @@ func TestRecorderWanted(t *testing.T) {
 	}
 }
 
-func buildTaskRun(run, task, digest string) *unstructured.Unstructured {
+func buildTaskRun(run, task, digest string, declared bool) *unstructured.Unstructured {
 	st := map[string]any{}
 	if digest != "" {
 		st["results"] = []any{map[string]any{"name": "digest", "type": "string", "value": digest + "\n"}}
+	}
+	if declared {
+		st["taskSpec"] = map[string]any{"results": []any{map[string]any{"name": "digest", "type": "string"}}}
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "tekton.dev/v1", "kind": "TaskRun",
@@ -288,18 +291,18 @@ func TestRecordImages(t *testing.T) {
 	run := pipelineRun("deliver-platform-9", "deliver-platform", true, done, nil, nil)
 	rec := buildRecord(run, Rule{Lane: "platform", Env: "stg"}, []unstructured.Unstructured{
 		*cloneTaskRun("deliver-platform-9", "clone-platform", "bifrost-platform", shaA),
-		*buildTaskRun("deliver-platform-9", "build-platform-api", api),
-		*buildTaskRun("deliver-platform-9", "build-platform-console", console),
-		*buildTaskRun("deliver-platform-9", "build-nodigest", ""),
-		*buildTaskRun("deliver-platform-9", "build-bad", "sha256:short"),
+		*buildTaskRun("deliver-platform-9", "build-platform-api", api, true),
+		*buildTaskRun("deliver-platform-9", "build-platform-console", console, true),
+		*buildTaskRun("deliver-platform-9", "build-nodigest", "", false),
+		*buildTaskRun("deliver-platform-9", "build-bad", "sha256:short", false),
 	}, done)
 	if len(rec.Images) != 2 || rec.Images["platform-api"] != api || rec.Images["platform-console"] != console ||
-		rec.Repos["bifrost-platform"].SHA != shaA || len(rec.Missing) != 0 {
+		rec.Repos["bifrost-platform"].SHA != shaA || strings.Join(rec.Missing, ",") != "build-bad (digest)" {
 		t.Fatalf("record = %+v", rec)
 	}
 
 	s, core := newFakeService(t, pipelineRun("deliver-stg-9", "deliver-stg", true, done, nil, nil),
-		cloneTaskRun("deliver-stg-9", "clone-platform", "bifrost-platform", shaA), buildTaskRun("deliver-stg-9", "build-platform-api", api))
+		cloneTaskRun("deliver-stg-9", "clone-platform", "bifrost-platform", shaA), buildTaskRun("deliver-stg-9", "build-platform-api", api, true))
 	old, _ := encode(Record{Run: "deliver-stg-9", Lane: "app", Env: "stg", Repos: map[string]RepoBuild{"bifrost-platform": {SHA: shaA}}})
 	if _, err := core.CoreV1().ConfigMaps("cicd").Create(context.Background(), &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: recordName("deliver-stg-9"), Labels: map[string]string{labelRecord: "v1", labelComplete: "true"}},
@@ -317,5 +320,36 @@ func TestRecordImages(t *testing.T) {
 	}
 	if r := s.Tick(context.Background()); r.Recorded != 0 {
 		t.Fatalf("a current record was built again: %+v", r)
+	}
+
+	// Review 167 B1: a build that declares a digest and has not given it (or
+	// gave a malformed one) leaves the record incomplete; once the digest is
+	// there the record is completed. A build that declares none owes none.
+	run10 := pipelineRun("deliver-stg-10", "deliver-stg", true, done, nil, nil)
+	clone10 := cloneTaskRun("deliver-stg-10", "clone-platform", "bifrost-platform", shaA)
+	rec = buildRecord(run10, Rule{Lane: "app", Env: "stg"}, []unstructured.Unstructured{*clone10,
+		*buildTaskRun("deliver-stg-10", "build-platform-api", "", true), *buildTaskRun("deliver-stg-10", "build-platform-console", "sha256:short", true),
+		*buildTaskRun("deliver-stg-10", "build-other", "", false)}, done)
+	if strings.Join(rec.Missing, ",") != "build-platform-api (digest),build-platform-console (digest)" || len(rec.Images) != 0 {
+		t.Fatalf("owed digests = %+v", rec)
+	}
+	s, core = newFakeService(t, run10, clone10, buildTaskRun("deliver-stg-10", "build-platform-api", "", true))
+	if r := s.Tick(context.Background()); r.Recorded != 1 {
+		t.Fatalf("tick = %+v", r)
+	}
+	cm, _ = core.CoreV1().ConfigMaps("cicd").Get(context.Background(), recordName("deliver-stg-10"), metav1.GetOptions{})
+	if cm.Labels[labelComplete] != "false" {
+		t.Fatalf("a record owing a digest is complete: %v", cm.Labels)
+	}
+	dyn := dynfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		pipelineRunGVR: "PipelineRunList", taskRunGVR: "TaskRunList",
+	}, run10, clone10, buildTaskRun("deliver-stg-10", "build-platform-api", api, true))
+	s.clients = func() (kubernetes.Interface, dynamic.Interface, error) { return core, dyn, nil }
+	if r := s.Tick(context.Background()); r.Recorded != 1 {
+		t.Fatalf("completing tick = %+v", r)
+	}
+	cm, _ = core.CoreV1().ConfigMaps("cicd").Get(context.Background(), recordName("deliver-stg-10"), metav1.GetOptions{})
+	if err := json.Unmarshal([]byte(cm.Data[dataKey]), &got); err != nil || cm.Labels[labelComplete] != "true" || got.Images["platform-api"] != api {
+		t.Fatalf("completed = %+v %v (labels %v)", got, err, cm.Labels)
 	}
 }

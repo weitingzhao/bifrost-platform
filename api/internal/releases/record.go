@@ -38,7 +38,8 @@ type Record struct {
 	// builds report no digest records none.
 	Images map[string]string `json:"images,omitempty"`
 	// Missing lists clone tasks whose commit could not be read (runs older
-	// than the commit result, cloned at a moving ref).
+	// than the commit result, cloned at a moving ref), and build tasks that
+	// declare a digest result but gave no digest ("build-x (digest)").
 	Missing    []string  `json:"missing,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
 }
@@ -151,20 +152,32 @@ func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha, rev string
 }
 
 // builtImage reads one TaskRun as an image build: a pipeline task named
-// build-<image> whose digest result is a registry digest.
-func builtImage(tr *unstructured.Unstructured) (image, digest string, ok bool) {
+// build-<image>. declared: its task declares a digest result (in the
+// resolved spec the TaskRun's status carries) or gave one; digest is the
+// result when it is a registry digest, "" when it is missing or malformed.
+func builtImage(tr *unstructured.Unstructured) (image, digest string, declared, ok bool) {
 	image, isBuild := strings.CutPrefix(tr.GetLabels()["tekton.dev/pipelineTask"], "build-")
 	if !isBuild || image == "" {
-		return "", "", false
+		return "", "", false, false
+	}
+	decl, _, _ := unstructured.NestedSlice(tr.Object, "status", "taskSpec", "results")
+	for _, r := range decl {
+		if m, _ := r.(map[string]any); m["name"] == "digest" {
+			declared = true
+		}
 	}
 	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
 	for _, r := range results {
 		m, _ := r.(map[string]any)
-		if v, isStr := m["value"].(string); isStr && m["name"] == "digest" && digestRE.MatchString(strings.TrimSpace(v)) {
-			return image, strings.TrimSpace(v), true
+		if m["name"] != "digest" {
+			continue
+		}
+		declared = true
+		if v, isStr := m["value"].(string); isStr && digestRE.MatchString(strings.TrimSpace(v)) {
+			digest = strings.TrimSpace(v)
 		}
 	}
-	return "", "", false
+	return image, digest, declared, true
 }
 
 // buildRecord assembles a Record from a finished run and its TaskRuns.
@@ -191,11 +204,19 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 		paramSHA = rec.Revision
 	}
 	for i := range taskRuns {
-		if image, digest, ok := builtImage(&taskRuns[i]); ok {
-			if rec.Images == nil {
-				rec.Images = map[string]string{}
+		if image, digest, declared, ok := builtImage(&taskRuns[i]); ok {
+			switch {
+			case digest != "":
+				if rec.Images == nil {
+					rec.Images = map[string]string{}
+				}
+				rec.Images[image] = digest
+			case declared:
+				// The build owes a digest it has not given (yet): the record
+				// stays incomplete and is built again while its run exists
+				// (review 167 B1). A build that declares none owes none.
+				rec.Missing = append(rec.Missing, taskRuns[i].GetLabels()["tekton.dev/pipelineTask"]+" (digest)")
 			}
-			rec.Images[image] = digest
 			continue
 		}
 		task, repo, sha, rev, hasRev, ok := cloneOf(&taskRuns[i])
