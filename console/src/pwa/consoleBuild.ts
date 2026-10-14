@@ -3,6 +3,9 @@ export const CONSOLE_BUILD_CHECK_MS = 3 * 60_000
 
 export const NEWER_CONSOLE_BANNER = 'A newer Console has been deployed. Reload before approving.'
 
+export const DECISION_AFTER_RELOAD =
+  'A newer Console has been deployed. Wait for the in-flight decision to finish and reload before making another decision.'
+
 /** The module script a fresh index.html names, or null when the page does not say. */
 export function moduleScriptSrc(html: string): string | null {
   const re = /<script\b([^>]*)>/gi
