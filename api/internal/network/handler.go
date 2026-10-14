@@ -3,10 +3,11 @@ package network
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/network/unifi"
 )
 
 type Handler struct {
@@ -114,7 +115,7 @@ func (h *Handler) writeService(w http.ResponseWriter, r *http.Request, fn func(c
 func (h *Handler) writeError(w http.ResponseWriter, err error) {
 	msg := err.Error()
 	status := http.StatusBadGateway
-	if strings.Contains(msg, "UNIFI_USER") || strings.Contains(msg, "required") {
+	if errors.Is(err, unifi.ErrNotConfigured) || errors.Is(err, ErrApplyNotStarted) {
 		status = http.StatusServiceUnavailable
 	}
 	writeJSON(w, status, map[string]any{

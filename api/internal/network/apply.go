@@ -2,11 +2,17 @@ package network
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/network/unifi"
 )
+
+// ErrApplyNotStarted is a refusal before the apply executor is invoked.
+var ErrApplyNotStarted = errors.New("firewall apply not started")
 
 func (s *Service) ApplyFirewall(ctx context.Context, includeDefaultDeny bool) (map[string]any, error) {
 	if s.applyFirewall != nil {
@@ -18,7 +24,15 @@ func (s *Service) ApplyFirewall(ctx context.Context, includeDefaultDeny bool) (m
 func runFirewallApplyScript(ctx context.Context, includeDefaultDeny bool) (map[string]any, error) {
 	scriptPath := resolvePlatformScript("scripts/unifi_firewall_setup.py")
 	if _, err := os.Stat(scriptPath); err != nil {
-		return nil, fmt.Errorf("firewall apply script not found at %s", scriptPath)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("%w: firewall apply script not found at %s", ErrApplyNotStarted, scriptPath)
+		}
+		return nil, fmt.Errorf("firewall apply script at %s: %w", scriptPath, err)
+	}
+	// Validate configuration here, before starting a script whose output is
+	// untrusted for deciding whether an approval may be executed again.
+	if _, err := unifi.ConfigFromEnv(); err != nil {
+		return nil, err
 	}
 
 	args := []string{scriptPath, "apply"}
