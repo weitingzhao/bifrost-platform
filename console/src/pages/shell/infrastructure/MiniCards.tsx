@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { useQuery } from '@tanstack/react-query'
 import { DenseTag, StatusLamp } from '@bifrost/ui'
 import { fetchAgentBridge, fetchAgentDeployStatus } from '@/api/agentOps'
@@ -11,7 +12,7 @@ type PlatformHealth = {
 }
 
 async function fetchPlatformHealthDetail(): Promise<PlatformHealth> {
-  const r = await fetch('/health')
+  const r = await serverFetch('/health')
   if (!r.ok) throw new Error(`health: HTTP ${r.status}`)
   return (await r.json()) as PlatformHealth
 }

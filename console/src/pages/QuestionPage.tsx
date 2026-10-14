@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchQuestion, type QuestionStatus } from '@/api/questions'
@@ -52,6 +53,7 @@ function Frame({
  * is not kept here: a late POST or GET still lands on that id's store entry.
  */
 function QuestionSession({ id }: { id: string }) {
+  useDecisionPageResume()
   const send = useAnswerSend(id)
   const blocked = decisionBlockReason(usePlatformAuth())
   const acceptRef = send.acceptRef
@@ -114,6 +116,7 @@ function QuestionSession({ id }: { id: string }) {
                 question={shown}
                 phase={send.state.phase}
                 blocked={blocked}
+                contactNotice={send.contactNotice}
                 onChoose={send.choose}
                 onConfirm={send.confirm}
                 onCheckAgain={send.checkAgain}

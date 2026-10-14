@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * Market Data Plugin API client — via platform-api proxy.
  * Paths: /api/v1/plugins/market-data/api/market/* → Plugin :8790/market/*
@@ -23,7 +24,7 @@ export type MarketDataProxyError = {
 async function proxyGet<T>(pluginPath: string): Promise<T | MarketDataProxyError> {
   const path = `${PROXY_BASE}${pluginPath.startsWith('/') ? pluginPath : `/${pluginPath}`}`
   try {
-    const r = await fetch(path)
+    const r = await serverFetch(path)
     const text = await r.text()
     let body: T & { error?: string; detail?: string }
     try {

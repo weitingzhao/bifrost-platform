@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * GET /market/coverage/dimensions — breadth, depth and freshness for every
  * dataset that has a contract, each against the denominator that contract
@@ -239,7 +240,7 @@ export type CoverageDimensions = {
 };
 
 export async function fetchCoverageDimensions(): Promise<CoverageDimensions> {
-  const r = await fetch(
+  const r = await serverFetch(
     "/api/v1/plugins/market-data/api/market/coverage/dimensions",
   );
   if (!r.ok) throw new Error(`coverage dimensions: HTTP ${r.status}`);

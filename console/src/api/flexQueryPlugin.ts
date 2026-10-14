@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * IB Flex Query Plugin API client — via platform-api proxy.
  * Paths: /api/v1/plugins/flex-query/api/flex/* → Plugin :8791/flex/*
@@ -18,7 +19,7 @@ export type FlexQueryProxyError = {
 async function proxyGet<T>(pluginPath: string): Promise<T | FlexQueryProxyError> {
   const path = `${PROXY_BASE}${pluginPath.startsWith('/') ? pluginPath : `/${pluginPath}`}`
   try {
-    const r = await fetch(path)
+    const r = await serverFetch(path)
     const body = (await r.json()) as T & { error?: string; detail?: string }
     if (!r.ok) {
       return {

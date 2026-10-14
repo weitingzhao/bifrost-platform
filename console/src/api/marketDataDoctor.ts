@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * GET /market/doctor · POST /market/doctor/heal — check now, fix now.
  *
@@ -115,7 +116,7 @@ export type HealResponse = {
 const BASE = '/api/v1/plugins/market-data/api/market/doctor'
 
 export async function fetchMarketDataDoctor(probes = true): Promise<DoctorResponse> {
-  const r = await fetch(probes ? BASE : `${BASE}?probes=false`)
+  const r = await serverFetch(probes ? BASE : `${BASE}?probes=false`)
   if (!r.ok) throw new Error(`market doctor: HTTP ${r.status}`)
   return (await r.json()) as DoctorResponse
 }

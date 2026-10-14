@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { parseError } from './client'
 
 export type ChecklistItemSignalDto = {
@@ -47,13 +48,13 @@ export type ChecklistKPIsResponse = {
 }
 
 export async function fetchChecklistSignals(): Promise<ChecklistSignalsResponse> {
-  const r = await fetch('/api/v1/checklist/signals')
+  const r = await serverFetch('/api/v1/checklist/signals')
   if (!r.ok) throw await parseError('checklist signals', r)
   return r.json() as Promise<ChecklistSignalsResponse>
 }
 
 export async function fetchChecklistKPIs(): Promise<ChecklistKPIsResponse> {
-  const r = await fetch('/api/v1/checklist/kpis')
+  const r = await serverFetch('/api/v1/checklist/kpis')
   if (!r.ok) throw await parseError('checklist kpis', r)
   return r.json() as Promise<ChecklistKPIsResponse>
 }

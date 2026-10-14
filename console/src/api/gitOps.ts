@@ -1,9 +1,10 @@
+import { serverFetch } from '@/api/serverContact'
 import type { ActuationResponse } from './matrixTypes'
 import type { GitOpsAppsResponse } from './deliveryTypes'
 import { authedFetch } from './client'
 
 export async function fetchGitOpsApps(): Promise<GitOpsAppsResponse> {
-  const r = await fetch('/api/v1/gitops/apps')
+  const r = await serverFetch('/api/v1/gitops/apps')
   if (!r.ok) throw new Error(`gitops apps: HTTP ${r.status}`)
   return r.json() as Promise<GitOpsAppsResponse>
 }

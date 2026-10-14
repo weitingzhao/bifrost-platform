@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { authedFetch } from './client'
 
 export type PatrolTrustLevel = 'L0' | 'L1' | 'L2'
@@ -52,19 +53,19 @@ export type PatrolTriggerResponse = {
 }
 
 export async function fetchPatrolSkills(): Promise<PatrolSkillsResponse> {
-  const r = await fetch('/api/v1/patrol/skills')
+  const r = await serverFetch('/api/v1/patrol/skills')
   if (!r.ok) throw new Error(`patrol skills: HTTP ${r.status}`)
   return r.json() as Promise<PatrolSkillsResponse>
 }
 
 export async function fetchPatrolSkill(id: string): Promise<PatrolSkill> {
-  const r = await fetch(`/api/v1/patrol/skills/${encodeURIComponent(id)}`)
+  const r = await serverFetch(`/api/v1/patrol/skills/${encodeURIComponent(id)}`)
   if (!r.ok) throw new Error(`patrol skill: HTTP ${r.status}`)
   return r.json() as Promise<PatrolSkill>
 }
 
 export async function fetchPatrolRuns(limit = 50): Promise<PatrolRunsResponse> {
-  const r = await fetch(`/api/v1/patrol/runs?limit=${limit}`)
+  const r = await serverFetch(`/api/v1/patrol/runs?limit=${limit}`)
   if (!r.ok) throw new Error(`patrol runs: HTTP ${r.status}`)
   return r.json() as Promise<PatrolRunsResponse>
 }

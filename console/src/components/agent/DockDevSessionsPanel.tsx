@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -146,7 +147,7 @@ function ReconnectingOverlay({ onCancel }: { onCancel: () => void }) {
         return
       }
       try {
-        const res = await fetch('/api/v1/dev-sessions', { signal: AbortSignal.timeout(2000) })
+        const res = await serverFetch('/api/v1/dev-sessions', { signal: AbortSignal.timeout(2000) })
         if (res.ok) {
           setStatus('recovered')
           clearInterval(interval)

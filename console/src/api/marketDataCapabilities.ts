@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * GET /market/capabilities — what the current Massive subscriptions cover.
  * Read-only; bare fetch through the platform-api proxy like the other GETs.
@@ -38,7 +39,7 @@ export type CapabilityMatrix = {
 }
 
 export async function fetchMarketDataCapabilities(): Promise<CapabilityMatrix> {
-  const r = await fetch('/api/v1/plugins/market-data/api/market/capabilities')
+  const r = await serverFetch('/api/v1/plugins/market-data/api/market/capabilities')
   if (!r.ok) throw new Error(`market capabilities: HTTP ${r.status}`)
   return (await r.json()) as CapabilityMatrix
 }

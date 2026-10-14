@@ -17,7 +17,11 @@ import {
   type ResolveOutcome,
 } from '@/api/approvals'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
-import { APPROVAL_WAITING_NOTICE } from '@/pages/approvalWaitingNotice'
+import { CloseUnknownForm } from '@/pages/CloseUnknownForm'
+import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
+import { ServerContactStatus } from '@/pages/ServerContactStatus'
+import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
+import { DECISION_CHANGED } from '@/pages/serverContactNotice'
 import {
   closedByYou,
   commandText,
@@ -207,79 +211,6 @@ function ActuationDetail({ item }: { item: ApprovalItem }) {
   )
 }
 
-const CLOSE_CHOICES: readonly { outcome: ResolveOutcome; label: string }[] = [
-  { outcome: 'not_run', label: 'It did not run' },
-  { outcome: 'succeeded', label: 'It ran and succeeded' },
-  { outcome: 'failed', label: 'It ran and failed' },
-]
-
-function CloseUnknownForm({
-  blocked,
-  busy,
-  error,
-  onClose,
-}: {
-  blocked: string | null
-  busy: boolean
-  error: string | null
-  onClose: (outcome: ResolveOutcome, note: string) => void
-}) {
-  const [outcome, setOutcome] = useState<ResolveOutcome | ''>('')
-  const [note, setNote] = useState('')
-  const trimmed = note.trim()
-  const ready = blocked == null && !busy && outcome !== '' && trimmed !== ''
-  return (
-    <form
-      className="flex w-full min-w-0 flex-col gap-2"
-      onSubmit={event => {
-        event.preventDefault()
-        if (blocked != null || outcome === '' || trimmed === '') return
-        onClose(outcome, trimmed)
-      }}
-    >
-      {blocked != null ? (
-        <p role="status" className="m-0 text-sm">
-          {blocked}
-        </p>
-      ) : null}
-      <fieldset className="m-0 flex min-w-0 flex-col gap-1 border-0 p-0">
-        <legend className="text-sm">What happened</legend>
-        {CLOSE_CHOICES.map(choice => (
-          <label key={choice.outcome} className="flex items-center gap-2 text-sm">
-            <input
-              type="radio"
-              name="outcome"
-              value={choice.outcome}
-              checked={outcome === choice.outcome}
-              onChange={() => setOutcome(choice.outcome)}
-            />
-            {choice.label}
-          </label>
-        ))}
-      </fieldset>
-      <p className="m-0 text-sm">If the same command later ran as another request, this one did not run.</p>
-      <label className="flex min-w-0 flex-col gap-1 text-sm" htmlFor="close-note">
-        Note
-        <input
-          id="close-note"
-          required
-          value={note}
-          onChange={event => setNote(event.target.value)}
-          className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
-        />
-      </label>
-      <Button type="submit" className="h-11 w-full sm:h-auto sm:w-auto" disabled={!ready}>
-        Close this request
-      </Button>
-      {error != null ? (
-        <p role="alert" className="m-0 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </form>
-  )
-}
-
 function RelatedRequests({
   item,
   rows,
@@ -327,6 +258,7 @@ function ApprovalCard({
   actionError,
   notice,
   closeError,
+  closeNotice,
   rows,
   onApprove,
   onReject,
@@ -340,6 +272,7 @@ function ApprovalCard({
   actionError: string | null
   notice: string | null
   closeError: string | null
+  closeNotice: string | null
   rows: readonly ApprovalItem[] | undefined
   onApprove: (id: string) => void
   onReject: (id: string, reason: string) => void
@@ -400,7 +333,6 @@ function ApprovalCard({
             {actionError}
           </p>
         ) : null}
-        {pending && notice != null ? <p role="status">{notice}</p> : null}
         {closed != null ? (
           <p data-closed-by-you className="m-0 max-w-full break-words text-sm">
             {closed}
@@ -426,6 +358,7 @@ function ApprovalCard({
             blocked={blocked}
             busy={busy}
             error={closeError}
+            notice={closeNotice}
             onClose={(outcome, note) => onClose(item.id, outcome, note)}
           />
         ) : null}
@@ -461,9 +394,16 @@ function ApprovalCard({
             ) : null}
           </div>
         ) : null}
+        {/* Last in the card, so it sits directly above the decision buttons. */}
+        {pending && notice != null ? (
+          <p role="status" className="m-0 text-sm">
+            {notice}
+          </p>
+        ) : null}
       </article>
       {pending ? (
         <div className="flex w-full min-w-0 flex-col gap-2">
+          <ServerContactStatus />
           {blocked != null ? (
             <p role="status" className="m-0 text-sm">
               {blocked}
@@ -575,6 +515,7 @@ function ApprovalCard({
 
 /** The request page, `#approvals?id=<id>`: the only place to approve or reject. */
 export function ApprovalsPage() {
+  useDecisionPageResume()
   const qc = useQueryClient()
   const auth = usePlatformAuth()
   const blocked = decisionBlockReason(auth)
@@ -587,7 +528,10 @@ export function ApprovalsPage() {
   const [actionError, setActionError] = useRecordState<string | null>(recordId, null)
   const [notice, setNotice] = useRecordState<string | null>(recordId, null)
   const [closeError, setCloseError] = useRecordState<string | null>(recordId, null)
+  const [closeNotice, setCloseNotice] = useRecordState<string | null>(recordId, null)
   const staleBuild = useConsoleBuildDrift()
+  const latest = useRef({ auth, staleBuild })
+  latest.current = { auth, staleBuild }
   const postsInFlight = useRef(0)
   const [reloadHeld, setReloadHeld] = useState(false)
 
@@ -651,6 +595,12 @@ export function ApprovalsPage() {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [checkingId, qc, recordId, id])
 
+  // The connection check takes up to five seconds: decide again on what is true when it ends.
+  function sendWhileAllowed<T>(session: string, send: () => Promise<T>, guardBuild = true): Promise<T> {
+    const now = latest.current
+    if (decisionBlockReason(now.auth) != null || now.auth.token !== session || (guardBuild && now.staleBuild)) return Promise.reject(new ConnectionCheckError(DECISION_CHANGED))
+    return send()
+  }
   async function decide(requestId: string, path: 'approve' | 'reject', reason?: string) {
     if (decisionBlockReason(auth) != null || locks.current.get(recordId) || staleBuild) return
     const session = auth.token
@@ -661,10 +611,9 @@ export function ApprovalsPage() {
     setBusy(true)
     setActionError(null)
     setNotice(null)
-    const waitingTimer = setTimeout(() => setNotice(APPROVAL_WAITING_NOTICE), 30_000)
     let needsCheck = false
     try {
-      const decision = await postApprovalDecision(
+      const decision = await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalDecision(
         requestId,
         session,
         path,
@@ -675,7 +624,7 @@ export function ApprovalsPage() {
               params_hash: opened?.params_hash ?? '',
             }
           : { reason: reason ?? '' },
-      )
+      )), setNotice)
       if (decision.status != null && decision.status !== 'pending' && opened != null) {
         storeRecord(id, { ...opened, ...decision })
         void qc.invalidateQueries({ queryKey: ['approvals'] })
@@ -685,6 +634,7 @@ export function ApprovalsPage() {
         setCheckingId(id)
       }
     } catch (err) {
+      if (err instanceof ConnectionCheckError) { setNotice(err.message); return }
       needsCheck = true
       const status = approvalFailureStatus(err)
       if (status === 401 || status === 403) {
@@ -697,14 +647,12 @@ export function ApprovalsPage() {
       setNotice('Checking the decision result.')
       setCheckingId(id)
     } finally {
-      clearTimeout(waitingTimer)
       postsInFlight.current = Math.max(0, postsInFlight.current - 1)
       setReloadHeld(postsInFlight.current > 0)
       setSending(null)
       // Reconciliation owns the lock until a record has actually been read.
       // State updates are asynchronous; the synchronous ref covers the same turn.
       if (!needsCheck) {
-        setNotice(null)
         locks.current.set(recordId, false)
         setBusy(false)
       }
@@ -712,14 +660,18 @@ export function ApprovalsPage() {
   }
 
   async function closeUnknown(requestId: string, outcome: ResolveOutcome, note: string) {
-    if (decisionBlockReason(auth) != null) return
+    // Closing an unknown request is not held back by a newer Console: only approve and reject are.
+    if (decisionBlockReason(auth) != null || locks.current.get(recordId)) return
     const session = auth.token
+    locks.current.set(recordId, true)
     setBusy(true)
     setCloseError(null)
+    setCloseNotice(null)
     try {
-      await postApprovalResolve(requestId, session, { outcome, note })
+      await withDecisionContact(() => sendWhileAllowed(session, () => postApprovalResolve(requestId, session, { outcome, note }), false), setCloseNotice)
       await qc.invalidateQueries({ queryKey: ['approvals'] })
     } catch (err) {
+      if (err instanceof ConnectionCheckError) { setCloseNotice(err.message); return }
       const status = approvalFailureStatus(err)
       if (status === 401 || status === 403) {
         setCloseError(DECISION_REJECTED)
@@ -729,6 +681,7 @@ export function ApprovalsPage() {
         setCloseError(scrubSecret(raw, session))
       }
     } finally {
+      locks.current.set(recordId, false)
       setBusy(false)
     }
   }
@@ -762,6 +715,7 @@ export function ApprovalsPage() {
               actionError={actionError}
               notice={notice}
               closeError={closeError}
+              closeNotice={closeNotice}
               rows={allQ.data}
               onApprove={requestId => void decide(requestId, 'approve')}
               onReject={(requestId, reason) => void decide(requestId, 'reject', reason)}

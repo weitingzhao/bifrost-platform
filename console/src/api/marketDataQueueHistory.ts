@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /**
  * GET /market/ingest/queue-history — what the queue did, over time.
  *
@@ -33,7 +34,7 @@ export async function fetchQueueHistory(
 ): Promise<QueueHistory> {
   const q = new URLSearchParams({ hours: String(hours) });
   if (kind) q.set("kind", kind);
-  const r = await fetch(
+  const r = await serverFetch(
     `/api/v1/plugins/market-data/api/market/ingest/queue-history?${q}`,
   );
   if (!r.ok) throw new Error(`queue history: HTTP ${r.status}`);

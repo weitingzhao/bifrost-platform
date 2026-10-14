@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 /** GET /api/v1/releases — finished delivery runs and the commits they built. */
 
 export type ReleaseRepoBuild = {
@@ -49,7 +50,7 @@ export type RunningImagesResponse = {
 }
 
 export async function fetchRunningImages(): Promise<RunningImagesResponse> {
-  const r = await fetch('/api/v1/releases/running-images')
+  const r = await serverFetch('/api/v1/releases/running-images')
   if (!r.ok) throw new Error(`running images: HTTP ${r.status}`)
   const body = (await r.json()) as Partial<RunningImagesResponse>
   return {
@@ -59,7 +60,7 @@ export async function fetchRunningImages(): Promise<RunningImagesResponse> {
 }
 
 export async function fetchReleaseRecords(limit = 100): Promise<ReleaseListResponse> {
-  const r = await fetch(`/api/v1/releases?limit=${limit}`)
+  const r = await serverFetch(`/api/v1/releases?limit=${limit}`)
   if (!r.ok) throw new Error(`releases: HTTP ${r.status}`)
   const body = (await r.json()) as Partial<ReleaseListResponse>
   return {

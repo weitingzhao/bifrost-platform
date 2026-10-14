@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { authedFetch } from './client'
 
 export interface DevSession {
@@ -47,7 +48,7 @@ interface LogResponse {
 }
 
 export async function fetchDevSessions(): Promise<DevSession[]> {
-  const r = await fetch('/api/v1/dev-sessions')
+  const r = await serverFetch('/api/v1/dev-sessions')
   if (!r.ok) throw new Error(`dev-sessions: HTTP ${r.status}`)
   return r.json() as Promise<DevSession[]>
 }
@@ -69,7 +70,7 @@ export async function fetchDevSessionLogs(
   lines = 200,
 ): Promise<string[]> {
   const params = new URLSearchParams({ lines: String(lines) })
-  const r = await fetch(`/api/v1/dev-sessions/${encodeURIComponent(name)}/logs?${params}`)
+  const r = await serverFetch(`/api/v1/dev-sessions/${encodeURIComponent(name)}/logs?${params}`)
   if (!r.ok) throw new Error(`dev-session logs: HTTP ${r.status}`)
   const data = (await r.json()) as LogResponse
   return data.lines

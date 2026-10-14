@@ -1,3 +1,4 @@
+import { serverFetch } from '@/api/serverContact'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 import { containsSignInData, signInSafeError } from '@/lib/signInError'
 
@@ -48,7 +49,7 @@ export async function authedFetch(
   if (token !== '') headers.set('Authorization', `Bearer ${token}`)
   let r: Response
   try {
-    r = await fetch(input, { ...init, headers })
+    r = await serverFetch(input, { ...init, headers })
   } catch (error) {
     if (error instanceof Error) error.message = signInSafeError(error.message, token)
     throw error

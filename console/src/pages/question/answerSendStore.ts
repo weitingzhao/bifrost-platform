@@ -1,3 +1,4 @@
+import { resetQuestionContactStore } from '@/pages/question/questionContactStore'
 import {
   initialAnswerSend,
   reduceAnswerSend,
@@ -87,6 +88,7 @@ export function dispatchAnswerSend(event: AnswerSendEvent): AnswerSendState {
 }
 
 export function resetAnswerSendStore(): void {
+  resetQuestionContactStore()
   entries.clear()
   blanks.clear()
   emit()
