@@ -12,9 +12,7 @@ import (
 )
 
 // questionRuntime is the only server-package holder of the questions service.
-// The approvals retry loop is not a model for stopping this one: it is started
-// with context.Background and a ticker that waits out the first interval, so
-// a short test never enters it. This sweep used to fire immediately.
+// This sweep used to fire immediately; the runtime owns its cancellation.
 type questionRuntime struct {
 	svc    *questions.Service
 	cancel context.CancelFunc
@@ -38,9 +36,12 @@ func (s *Server) wireQuestions(dataDir string, workers bool) {
 	})
 }
 
-// Close stops the questions sweep and waits until that goroutine has returned.
-// Other background loops are unchanged.
+// Close cancels approval result flushing without waiting on storage I/O,
+// then stops the questions sweep. Other background loops are unchanged.
 func (s *Server) Close() {
+	if s.approvalsCancel != nil {
+		s.approvalsCancel()
+	}
 	rt := s.questionRuntime
 	if rt == nil {
 		return

@@ -95,6 +95,8 @@ type Server struct {
 	devSession    *devsession.Handler
 	auth          *actuation.AuthService
 	approvals     *approvals.Service
+	// approvalsCancel stops this process's sole approval result loop.
+	approvalsCancel context.CancelFunc
 	// questionRuntime is the Owner-question record. The type lives next to
 	// Mount so this file does not name the questions package.
 	questionRuntime *questionRuntime
@@ -354,12 +356,7 @@ func New(cfg *config.Config) (*Server, error) {
 	srv.wireAgentThreads(dataDir, role, titleStore)
 	srv.wireAgentProgress(dataDir, role)
 	srv.bindActionExecutors()
-	if role.RunsWorkers() {
-		approvalsSvc := srv.approvals
-		safego.Go("approvals.retries", func() {
-			approvalsSvc.RunRetries(context.Background(), approvalRetryInterval)
-		})
-	}
+	srv.startApprovalLoop(role.RunsWorkers())
 	return srv, nil
 }
 
