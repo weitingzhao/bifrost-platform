@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // The attempt's workspace (design v5 §5.2 「工作区」): a fresh clone of the
@@ -89,7 +90,7 @@ func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge
 		return nil, false, err
 	}
 	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--binary", w.Base)
-	cmd.Dir, cmd.Env = w.Dir, env
+	cmd.Dir, cmd.Env, cmd.WaitDelay = w.Dir, env, gitWaitDelay
 	errb := &ring{max: tailBytes}
 	cmd.Stderr = errb
 	out, err := cmd.StdoutPipe()
@@ -107,6 +108,9 @@ func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge
 	}
 	if werr := cmd.Wait(); err == nil && werr != nil {
 		err = fmt.Errorf("agentd: git diff: %v: %s", werr, strings.TrimSpace(string(errb.bytes())))
+	}
+	if err != nil && ctx.Err() != nil {
+		err = fmt.Errorf("%w: git diff: %v", ctx.Err(), err)
 	}
 	if err != nil {
 		return nil, false, err
@@ -185,12 +189,22 @@ func (w *Workspace) git(ctx context.Context, dir string, args ...string) (string
 	return gitIn(ctx, dir, w.env, args...)
 }
 
+// gitWaitDelay bounds the wait for git's output once git itself has ended,
+// or been killed when its context ended: a helper it started that still
+// holds the pipes does not hold up agentd (review 165 A2).
+const gitWaitDelay = 2 * time.Second
+
 func gitIn(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env = dir, env
+	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, env, gitWaitDelay
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
+		// git cut short by its context is a step to try again, not a refusal
+		// (review 165 A3).
+		if cerr := ctx.Err(); cerr != nil {
+			return "", fmt.Errorf("%w: agentd: git %s: %v", cerr, args[0], err)
+		}
 		return "", fmt.Errorf("agentd: git %s: %v: %s", args[0], err, strings.TrimSpace(tail(errb.Bytes())))
 	}
 	return strings.TrimSpace(out.String()), nil

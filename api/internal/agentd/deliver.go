@@ -412,8 +412,10 @@ func sortedIDs(m map[string]Entry) []string {
 // group whose state was not known is looked at again (review 164 A8). Then
 // each hand-over goes on from its journal, a bounded step each: one that
 // waits for the platform stays in the registry, is tried again after
-// SalvageEvery, and holds up neither the others nor the next claim. It
-// returns an error only when the registry cannot be used.
+// SalvageEvery, and holds up neither the others nor the next claim: each
+// step runs within TakeOverLimit, so a push that never ends is cut off and
+// left pending (review 165 A3). It returns an error only when the registry
+// cannot be used (review 165 B1).
 func (d *Daemon) Recover(ctx context.Context) error {
 	entries, err := d.Registry.Load()
 	if err != nil {
@@ -451,7 +453,13 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		if !ok || e.Phase == "uncleared" || time.Now().Before(d.next[id]) {
 			continue
 		}
-		if err := d.takeOver(ctx, &e); err != nil {
+		tctx, cancel := context.WithTimeout(ctx, orDefault(d.TakeOverLimit, 5*time.Minute))
+		err := d.takeOver(tctx, &e)
+		cancel()
+		if errors.Is(err, ErrRegistry) {
+			return err
+		}
+		if err != nil {
 			d.next[id] = time.Now().Add(orDefault(d.SalvageEvery, 60*time.Second))
 			d.logf("agentd: take over %s: %v", id, err)
 		} else {

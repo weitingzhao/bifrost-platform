@@ -17,6 +17,10 @@ import (
 	"syscall"
 )
 
+// ErrRegistry: the registry cannot be read or written; a takeover stops
+// on it rather than going on without its journal (review 165 B1).
+var ErrRegistry = errors.New("agentd: the registry cannot be used")
+
 // ErrHeld: another agentd holds this host's lock.
 var ErrHeld = errors.New("agentd: another agentd runs on this host")
 
@@ -143,7 +147,11 @@ func OpenRegistry(path string) (*Registry, error) {
 func (r *Registry) Load() (map[string]Entry, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.load()
+	m, err := r.load()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrRegistry, err)
+	}
+	return m, nil
 }
 
 func (r *Registry) load() (map[string]Entry, error) {
@@ -176,6 +184,13 @@ func (r *Registry) Delete(attemptID string) error {
 }
 
 func (r *Registry) change(fn func(map[string]Entry)) error {
+	if err := r.write(fn); err != nil {
+		return fmt.Errorf("%w: %v", ErrRegistry, err)
+	}
+	return nil
+}
+
+func (r *Registry) write(fn func(map[string]Entry)) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	m, err := r.load()

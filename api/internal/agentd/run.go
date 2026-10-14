@@ -53,6 +53,7 @@ type Daemon struct {
 	SalvageEvery    time.Duration // salvage retry while in grace; 60 s
 	CheckpointEvery time.Duration // log tail and patch while the executor runs; 5 min
 	SampleLimit     time.Duration // how long one checkpoint may take; 2 min
+	TakeOverLimit   time.Duration // how long one takeover step may take; 5 min
 	Retry           time.Duration // pause between retries of a step the platform could not take; 5 s
 
 	next map[string]time.Time // when a pending hand-over is tried again
@@ -258,15 +259,21 @@ func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Work
 	for {
 		select {
 		case code := <-exited:
+			// The group is cleared first, on a copy, while a sample may still
+			// be finishing: a sample that is slow to stop never holds up the
+			// end of what the attempt left running (review 165 A2). The
+			// group's state goes into the entry once the sample is done.
 			died := time.Now()
 			cancelSample()
-			if sampling != nil {
-				<-sampling
-			}
 			if terminated != nil {
 				<-terminated
 			}
-			d.clear(entry, died)
+			cleared := Entry{AttemptID: entry.AttemptID, PGID: entry.PGID, Start: entry.Start} // fields no sample writes
+			d.clear(&cleared, died)
+			if sampling != nil {
+				<-sampling
+			}
+			entry.Group = cleared.Group
 			if end == "" {
 				end = "exit"
 			}
@@ -461,10 +468,12 @@ func (d *Daemon) checkpoint(ctx context.Context, a *Attempt, ws *Workspace, entr
 			}
 		}
 		entry.Pending, entry.CheckpointSeq = p, p.Seq
-		if err := d.Registry.Put(*entry); err != nil {
-			d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
-			return
-		}
+	}
+	// The request is on disk before it is sent, every time: a pending one
+	// whose first write failed is written again first (review 165 A1).
+	if err := d.Registry.Put(*entry); err != nil {
+		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
+		return
 	}
 	p := entry.Pending
 	if err := d.Client.Checkpoint(ctx, entry.AttemptID, entry.Epoch, p.Seq, p.Artifacts, p.TooLarge); err != nil {

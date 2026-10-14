@@ -38,6 +38,9 @@ type TaskSpec struct {
 	// it and that check's verify.json (store.checkSpec, review 163 A1).
 	Verification string `json:"verification,omitempty"`
 	VerifyReport string `json:"verify_report,omitempty"`
+	// Salvage: the check is of a lost attempt's salvaged result (platform
+	// store/adopt.go, T34 case 8); it runs as any other check.
+	Salvage bool `json:"salvage,omitempty"`
 }
 
 // ParseSpec reads a spec: JSON when it is a JSON object, else markdown text.

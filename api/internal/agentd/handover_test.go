@@ -31,11 +31,14 @@ type fakePlatform struct {
 	rule      map[string]func(n int) (status int, body string)
 	// before, when set, runs as each request arrives.
 	before func(action string)
+	// hang holds a request for its time whatever its context does (a peer
+	// that keeps the connection open).
+	hang map[string]time.Duration
 }
 
 func newFake() *fakePlatform {
 	return &fakePlatform{bodies: map[string][][]byte{}, artifacts: map[string][]byte{}, delay: map[string]time.Duration{},
-		rule: map[string]func(int) (int, string){}}
+		rule: map[string]func(int) (int, string){}, hang: map[string]time.Duration{}}
 }
 
 func (f *fakePlatform) set(action string, rule func(n int) (int, string)) {
@@ -90,8 +93,9 @@ func (f *fakePlatform) RoundTrip(r *http.Request) (*http.Response, error) {
 	n := len(f.bodies[action])
 	f.calls = append(f.calls, action)
 	f.bodies[action] = append(f.bodies[action], body)
-	delay, rule := f.delay[action], f.rule[action]
+	delay, rule, hang := f.delay[action], f.rule[action], f.hang[action]
 	f.mu.Unlock()
+	time.Sleep(hang)
 	if delay > 0 {
 		select {
 		case <-time.After(delay):
@@ -539,5 +543,157 @@ func TestUnclearedBlocksTheHost(t *testing.T) {
 	}
 	if id, _ := d.Blocked(); id != "" {
 		t.Fatalf("still blocked by %s", id)
+	}
+}
+
+// Review 165 A1: a checkpoint's request is sent only once it is on disk: a
+// first write that failed is written again before anything is sent.
+func TestCheckpointWrittenBeforeSent(t *testing.T) {
+	f := newFake()
+	d := fakeDaemon(t, f)
+	e, a := entryFor(t, d, "a1", "running")
+	if err := os.WriteFile(filepath.Join(a.Out, "log.txt"), []byte("working\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Dir(d.Registry.path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	d.checkpoint(bg, a, nil, &e)
+	if f.count("checkpoint") != 0 || e.Pending == nil {
+		t.Fatalf("sent with the registry unwritable: %v; pending %+v", f.log(), e.Pending)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	onDisk := false
+	f.before = func(action string) {
+		if action == "checkpoint" {
+			got, _ := registered(t, d, e.AttemptID)
+			onDisk = got.Pending != nil && got.Pending.Seq == 1
+		}
+	}
+	d.checkpoint(bg, a, nil, &e)
+	if f.count("checkpoint") != 1 || !onDisk || e.Confirmed != 1 {
+		t.Fatalf("sent %d, on disk when sent %v, confirmed %d", f.count("checkpoint"), onDisk, e.Confirmed)
+	}
+}
+
+// Review 165 A2: once the leader is gone the group is cleared at once, even
+// while a sample is still finishing (one that ignores its cancellation).
+func TestGroupClearedBeforeASlowSample(t *testing.T) {
+	f := newFake()
+	f.hang["put:log_tail"] = 6 * time.Second
+	d := fakeDaemon(t, f)
+	d.CheckpointEvery, d.SampleLimit = 20*time.Millisecond, time.Hour
+	e, a := entryFor(t, d, "a1", "running")
+	if err := os.WriteFile(filepath.Join(a.Out, "log.txt"), []byte("working\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pidPath := filepath.Join(a.Out, "executor.pid")
+	p, err := Launch(os.Args[0], Spawn{Argv: []string{"sh", "-c", "echo $$ > " + pidPath + "; exec sleep 60"}, Env: launcherEnv()},
+		func(pgid int, start string) error { e.PGID, e.Start = pgid, start; return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	executor := waitPID(t, pidPath)
+	t.Cleanup(func() { _ = syscall.Kill(executor, syscall.SIGKILL) })
+	l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: func() {}, done: make(chan struct{})}
+	res := make(chan string, 1)
+	go func() { how, _ := d.supervise(bg, a, p, nil, &e, l); res <- how }()
+	for start := time.Now(); f.count("put:log_tail") == 0; time.Sleep(10 * time.Millisecond) {
+		if time.Since(start) > 5*time.Second {
+			t.Fatal("no sample started")
+		}
+	}
+	time.Sleep(1100 * time.Millisecond)                          // the executor's start, in seconds, before the leader's death
+	if err = syscall.Kill(p.PGID, syscall.SIGKILL); err != nil { // the leader alone
+		t.Fatal(err)
+	}
+	waitGone(t, executor, 1500*time.Millisecond)
+	select {
+	case how := <-res:
+		if e.Group != GroupCleared {
+			t.Fatalf("ended %s, group %s", how, e.Group)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("still supervising")
+	}
+}
+
+// Review 165 A3: a takeover step that never ends (a push to a peer that
+// keeps the connection open) is cut off within TakeOverLimit; the attempt
+// stays pending and is not tried again before SalvageEvery.
+func TestTakeOverIsBounded(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	f := newFake()
+	d := fakeDaemon(t, f)
+	d.GitEnv = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=protocol.ext.allow", "GIT_CONFIG_VALUE_0=always")
+	d.TakeOverLimit, d.Retry = 500*time.Millisecond, 50*time.Millisecond
+	e, _ := entryFor(t, d, "a1", "lost")
+	e.Effect, e.Repo, e.WorkID, e.PushedRef, e.Base = "branch", "r", "W-31", "refs/heads/agent/t_a1/a1", base
+	if _, err := Prepare(bg, e.Workdir, bare, base, env); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Registry.Put(e); err != nil {
+		t.Fatal(err)
+	}
+	d.Remote = func(string) string { return "ext::sleep 30" }
+	start := time.Now()
+	if err := d.Recover(bg); err != nil || time.Since(start) > 6*time.Second {
+		t.Fatalf("recover = %v after %s", err, time.Since(start))
+	}
+	got, ok := registered(t, d, "a1")
+	if !ok || got.Phase != "lost" || !got.Prepared || f.count("salvage") != 0 {
+		t.Fatalf("after a cut-off push: %+v %v; calls %v", got, ok, f.log())
+	}
+	start = time.Now()
+	if err := d.Recover(bg); err != nil || time.Since(start) > time.Second {
+		t.Fatalf("tried again before SalvageEvery: %v after %s", err, time.Since(start))
+	}
+}
+
+// Review 165 B1: a takeover that cannot write the registry says so.
+func TestRecoverReportsTheRegistry(t *testing.T) {
+	f := newFake()
+	d := fakeDaemon(t, f)
+	entryFor(t, d, "a1", "exited")
+	dir := filepath.Dir(d.Registry.path)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if err := d.Recover(bg); !errors.Is(err, ErrRegistry) {
+		t.Fatalf("recover = %v", err)
+	}
+}
+
+// Review 165 A3: git cut short by the step's deadline (here: a context
+// already ended when the attempt's commit is made) is a step to try again:
+// the hand-over stays where it was, never ended.
+func TestGitCutShortIsPending(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	f := newFake()
+	d := fakeDaemon(t, f)
+	d.GitEnv = env
+	e, a := entryFor(t, d, "a1", "computed")
+	e.Effect, e.Repo, e.WorkID, e.PushedRef, e.Base, e.LogTailDone, e.ReportDone = "branch", "r", "W-31", "refs/heads/agent/t_a1/a1", base, true, true
+	ws, err := Prepare(bg, e.Workdir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(e.Workdir, "x.go"), []byte("package x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ended, cancel := context.WithCancel(bg)
+	cancel()
+	if _, err = d.deliver(ended, a, ws, &e, nil); !errors.Is(err, ErrPending) {
+		t.Fatalf("deliver = %v", err)
+	}
+	if got, ok := registered(t, d, "a1"); !ok || got.Phase != "computed" || got.Prepared || f.count("ended") != 0 {
+		t.Fatalf("after git was cut short: %+v %v; calls %v", got, ok, f.log())
 	}
 }

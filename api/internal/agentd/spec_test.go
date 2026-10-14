@@ -150,3 +150,15 @@ func allocated(fn func()) uint64 {
 	runtime.ReadMemStats(&after)
 	return after.TotalAlloc - before.TotalAlloc
 }
+
+// A check of a salvaged result carries salvage (the platform's adopt.go);
+// the spec reads it, and still refuses a field it does not know.
+func TestParseSpecSalvage(t *testing.T) {
+	s, err := ParseSpec([]byte(`{"text":"","check":"verify","subject_task":"t1","attempt":"a1","round":1,"task_spec":"sha256:x","salvage":true}`))
+	if err != nil || !s.Salvage || s.Check != "verify" {
+		t.Fatalf("spec = %+v %v", s, err)
+	}
+	if _, err = ParseSpec([]byte(`{"text":"","salvaged":true}`)); err == nil {
+		t.Fatal("an unknown field read")
+	}
+}
