@@ -169,7 +169,7 @@ func TestPasses(t *testing.T) {
 	}
 	w.set(func() {
 		w.approvals[16] = store.ApprovalExecuted
-		w.questions["Q3"] = store.Question{Status: store.QuestionAnswered, Option: "A"}
+		w.questions["Q3"] = store.Question{Status: store.QuestionAnswered, Option: "A", AnsweredBy: "owner", AnsweredAt: "2026-10-14T12:00:00Z"}
 		w.ci["bifrost-platform@"+commitA] = store.CISucceeded
 	})
 	if n, err = c.Facts(ctx); err != nil || n != 3 {

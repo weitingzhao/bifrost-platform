@@ -80,29 +80,22 @@ func (c *Controller) Facts(ctx context.Context) (int, error) {
 }
 
 func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
+	// Each source is read under the record's lock in the store, so reads from
+	// two controllers are recorded in the order they were made.
 	switch w.Kind {
 	case plan.WatchApproval:
 		n, err := strconv.ParseInt(w.ID, 10, 64)
 		if err != nil {
 			return false, err
 		}
-		if status, ok := c.Sources.Approval(ctx, n); ok {
-			return store.SeeApproval(ctx, c.DB, n, status)
-		}
+		return store.SeeApproval(ctx, c.DB, n, func(ctx context.Context) (string, bool) { return c.Sources.Approval(ctx, n) })
 	case plan.WatchQuestion:
-		if q, ok := c.Sources.Question(ctx, w.ID); ok {
-			q.ID = w.ID
-			return store.SeeQuestion(ctx, c.DB, q)
-		}
+		return store.SeeQuestion(ctx, c.DB, w.ID, func(ctx context.Context) (store.Question, bool) { return c.Sources.Question(ctx, w.ID) })
 	case plan.WatchCI:
 		repo, commit, _ := strings.Cut(w.ID, "@")
-		if status, run, ok := c.Sources.CI(ctx, repo, commit); ok {
-			return store.SeeCI(ctx, c.DB, repo, commit, status, run)
-		}
+		return store.SeeCI(ctx, c.DB, repo, commit, func(ctx context.Context) (string, string, bool) { return c.Sources.CI(ctx, repo, commit) })
 	case plan.WatchDeploy:
-		if commit, ref, ok := c.Sources.Deployed(ctx, w.ID); ok {
-			return store.SeeDeploy(ctx, c.DB, w.ID, commit, ref)
-		}
+		return store.SeeDeploy(ctx, c.DB, w.ID, c.Sources.Deployed)
 	}
 	return false, nil
 }

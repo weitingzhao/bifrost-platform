@@ -28,33 +28,44 @@ const (
 // ExternalStream is the event stream of external facts.
 const ExternalStream = "external"
 
-// seen records an outside record's state when it differs from the last one
-// recorded under the same key, and reports whether it recorded. Calls for one
-// key run one at a time, so two controllers never record one change twice.
-func seen(ctx context.Context, db DB, typ string, key, body map[string]any) (bool, error) {
+// read reads an outside record and returns the body to record for it; ok is
+// false when it cannot be read now.
+type read func(ctx context.Context) (body map[string]any, ok bool, err error)
+
+// seen reads an outside record and records its state when it differs from
+// the last one recorded under the same key, and reports whether it recorded.
+// The read happens under the key's lock, after the last record is known, so
+// two controllers record changes in the order they were read and a read
+// that a newer one overtook is never recorded as a change back (review 151
+// A5). A record that cannot be read records nothing.
+func seen(ctx context.Context, db DB, typ string, key map[string]any, r read) (bool, error) {
 	keyDoc, err := canon.Encode(key)
-	if err != nil {
-		return false, err
-	}
-	want, err := canon.Encode(body)
 	if err != nil {
 		return false, err
 	}
 	var recorded bool
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		var e error
-		recorded, e = recordIfChanged(ctx, tx, typ, string(keyDoc), string(want), body)
+		recorded, e = recordIfChanged(ctx, tx, typ, string(keyDoc), r)
 		return e
 	})
 	return recorded, err
 }
 
-func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc, want string, body map[string]any) (bool, error) {
+func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc string, r read) (bool, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742104, hashtext($1))`, typ+"|"+keyDoc); err != nil {
 		return false, err
 	}
+	body, ok, err := r(ctx)
+	if err != nil || !ok {
+		return false, err
+	}
+	want, err := canon.Encode(body)
+	if err != nil {
+		return false, err
+	}
 	var last string
-	err := tx.QueryRow(ctx, `SELECT body_json::text FROM agentrt.event WHERE event_type = $1 AND body_json @> $2::jsonb
+	err = tx.QueryRow(ctx, `SELECT body_json::text FROM agentrt.event WHERE event_type = $1 AND body_json @> $2::jsonb
 	  ORDER BY event_id DESC LIMIT 1`, typ, keyDoc).Scan(&last)
 	hook("seen", typ)
 	switch {
@@ -70,7 +81,7 @@ func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc, want string, b
 		if err != nil {
 			return false, err
 		}
-		if string(had) == want {
+		if string(had) == string(want) {
 			return false, nil
 		}
 	}
@@ -80,44 +91,65 @@ func recordIfChanged(ctx context.Context, tx pgx.Tx, typ, keyDoc, want string, b
 	return true, nil
 }
 
-// SeeApproval records an approval's status (approval_seen).
-func SeeApproval(ctx context.Context, db DB, number int64, status string) (bool, error) {
-	return seen(ctx, db, "approval_seen", map[string]any{"approval": number},
-		map[string]any{"approval": number, "status": status})
+// SeeApproval reads an approval's status and records a change
+// (approval_seen).
+func SeeApproval(ctx context.Context, db DB, number int64, status func(context.Context) (string, bool)) (bool, error) {
+	return seen(ctx, db, "approval_seen", map[string]any{"approval": number}, func(ctx context.Context) (map[string]any, bool, error) {
+		s, ok := status(ctx)
+		return map[string]any{"approval": number, "status": s}, ok, nil
+	})
 }
 
 // Question is a question as read from its store. An answered one carries the
-// option, the text, who answered and when.
+// option, who answered and when, and the text when there is one.
 type Question struct {
 	ID, Status, Option, Text, AnsweredBy, AnsweredAt string
 }
 
-// SeeQuestion records a question's status and, once answered, the answer
-// (question_seen).
-func SeeQuestion(ctx context.Context, db DB, q Question) (bool, error) {
-	body := map[string]any{"question": q.ID, "status": q.Status}
-	for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt} {
-		if v != "" {
-			body[k] = v
+// SeeQuestion reads a question and records a change of its status and, once
+// answered, the answer (question_seen): the copy the plan keeps after the
+// question store trims the question. An answer without its option, who
+// answered or when is refused, so the copy is never partial (review 151 B2).
+func SeeQuestion(ctx context.Context, db DB, id string, question func(context.Context) (Question, bool)) (bool, error) {
+	return seen(ctx, db, "question_seen", map[string]any{"question": id}, func(ctx context.Context) (map[string]any, bool, error) {
+		q, ok := question(ctx)
+		if !ok {
+			return nil, false, nil
 		}
-	}
-	return seen(ctx, db, "question_seen", map[string]any{"question": q.ID}, body)
+		if q.Status == QuestionAnswered && (q.Option == "" || q.AnsweredBy == "" || q.AnsweredAt == "") {
+			return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
+		}
+		body := map[string]any{"question": id, "status": q.Status}
+		for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt} {
+			if v != "" {
+				body[k] = v
+			}
+		}
+		return body, true, nil
+	})
 }
 
-// SeeCI records the status of the CI run of a commit (ci_seen).
-func SeeCI(ctx context.Context, db DB, repo, commit, status, run string) (bool, error) {
-	body := map[string]any{"repo": repo, "commit": commit, "status": status}
-	if run != "" {
-		body["run"] = run
-	}
-	return seen(ctx, db, "ci_seen", map[string]any{"repo": repo, "commit": commit}, body)
+// SeeCI reads the status of the CI run of a commit and records a change
+// (ci_seen).
+func SeeCI(ctx context.Context, db DB, repo, commit string, status func(context.Context) (string, string, bool)) (bool, error) {
+	return seen(ctx, db, "ci_seen", map[string]any{"repo": repo, "commit": commit}, func(ctx context.Context) (map[string]any, bool, error) {
+		s, run, ok := status(ctx)
+		body := map[string]any{"repo": repo, "commit": commit, "status": s}
+		if run != "" {
+			body["run"] = run
+		}
+		return body, ok, nil
+	})
 }
 
-// SeeDeploy records what an environment runs now (deploy_seen): the commit
-// and the deploy reference (delivery run and image digests).
-func SeeDeploy(ctx context.Context, db DB, env, commit string, ref map[string]any) (bool, error) {
-	return seen(ctx, db, "deploy_seen", map[string]any{"env": env},
-		map[string]any{"env": env, "commit": commit, "deploy_ref": ref})
+// SeeDeploy reads what an environment runs now and records a change
+// (deploy_seen): the commit and the deploy reference (delivery run and image
+// digests).
+func SeeDeploy(ctx context.Context, db DB, env string, deployed Deployed) (bool, error) {
+	return seen(ctx, db, "deploy_seen", map[string]any{"env": env}, func(ctx context.Context) (map[string]any, bool, error) {
+		commit, ref, ok := deployed(ctx, env)
+		return map[string]any{"env": env, "commit": commit, "deploy_ref": ref}, ok, nil
+	})
 }
 
 // stepRoot is the round a step belongs to, which names its event stream.
@@ -209,7 +241,29 @@ type stepFacts struct {
 	tx       pgx.Tx
 	step     string
 	deployed Deployed
+	deploys  map[string]deployment
 	err      error
+}
+
+type deployment struct {
+	commit string
+	ref    map[string]any
+	ok     bool
+}
+
+// deployment reads what env runs once per evaluation: every gate of the
+// environment is checked against the same deployment (review 151 A1).
+func (f *stepFacts) deployment(env string) deployment {
+	if d, ok := f.deploys[env]; ok {
+		return d
+	}
+	var d deployment
+	d.commit, d.ref, d.ok = f.deployed(f.ctx, env)
+	if f.deploys == nil {
+		f.deploys = map[string]deployment{}
+	}
+	f.deploys[env] = d
+	return d
 }
 
 func (f *stepFacts) exists(q string, args ...any) bool {
@@ -263,11 +317,12 @@ func (f *stepFacts) GatePassed(env, test, specSHA256 string) plan.Tri {
 	if f.err != nil {
 		return plan.Unknown
 	}
-	commit, ref, ok := f.deployed(f.ctx, env)
-	if !ok {
+	d := f.deployment(env)
+	if !d.ok {
 		return plan.Unknown
 	}
-	refDoc, err := canon.Encode(ref)
+	commit := d.commit
+	refDoc, err := canon.Encode(d.ref)
 	if err != nil {
 		return plan.Unknown
 	}

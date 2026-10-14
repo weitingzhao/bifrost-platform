@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -46,20 +47,29 @@ func (w *world) checker(t *testing.T, subject, role string) string {
 }
 
 type verificationRow struct {
-	method, verdict, attempt, verifier string
-	accepts                            bool
+	method, verdict, attempt, verifier, commit string
+	accepts                                    bool
+}
+
+// checkSpec reads the spec of a verification or review task.
+func (w *world) checkSpec(t *testing.T, task string) map[string]any {
+	t.Helper()
+	var doc map[string]any
+	ok(t, w.rt.QueryRow(ctx, `SELECT convert_from(b.body, 'UTF8')::jsonb FROM agentrt.task t
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id WHERE t.task_id = $1`, task).Scan(&doc))
+	return doc
 }
 
 func (w *world) verifications(t *testing.T, task string) []verificationRow {
 	t.Helper()
-	rows, err := w.rt.Query(ctx, `SELECT method, verdict, attempt_id, COALESCE(verifier_attempt_id, ''), accepts_attempt
-	  FROM agentrt.verification WHERE task_id = $1 ORDER BY created_at, verification_id`, task)
+	rows, err := w.rt.Query(ctx, `SELECT method, verdict, attempt_id, COALESCE(verifier_attempt_id, ''), COALESCE(subject_commit, ''),
+	  accepts_attempt FROM agentrt.verification WHERE task_id = $1 ORDER BY created_at, verification_id`, task)
 	ok(t, err)
 	defer rows.Close()
 	var out []verificationRow
 	for rows.Next() {
 		var v verificationRow
-		ok(t, rows.Scan(&v.method, &v.verdict, &v.attempt, &v.verifier, &v.accepts))
+		ok(t, rows.Scan(&v.method, &v.verdict, &v.attempt, &v.verifier, &v.commit, &v.accepts))
 		out = append(out, v)
 	}
 	ok(t, rows.Err())
@@ -71,7 +81,7 @@ func (w *world) verifications(t *testing.T, task string) []verificationRow {
 // its own, accepted once its result is used.
 func TestAcceptanceFlow(t *testing.T) {
 	w := newKernelWorld(t)
-	impl := w.ready(t, store.Task{})
+	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
 	ic := w.run(t, "h1", cursor, "done")
 
 	v, err := store.StartVerification(ctx, w.rt, impl)
@@ -79,11 +89,12 @@ func TestAcceptanceFlow(t *testing.T) {
 	if v == "" || w.state(t, "task", impl) != "verifying" || w.state(t, "task", v) != "ready" {
 		t.Fatalf("verification task %q; implementation %s", v, w.state(t, "task", impl))
 	}
-	var spec, implSpec string
-	ok(t, w.rt.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, v).Scan(&spec))
+	var implSpec string
 	ok(t, w.rt.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, impl).Scan(&implSpec))
-	if spec != implSpec {
-		t.Fatal("the verification does not carry the implementation's task spec")
+	pin := w.checkSpec(t, v)
+	if pin["check"] != "verify" || pin["subject_task"] != impl || pin["attempt"] != ic.AttemptID || pin["commit"] != commitA ||
+		pin["task_spec"] != implSpec || fmt.Sprint(pin["round"]) != "1" || pin["repo"] != "bifrost-platform" {
+		t.Fatalf("the verification's spec pins %v", pin)
 	}
 	again, err := store.StartVerification(ctx, w.rt, impl)
 	if err != nil || again != "" {
@@ -91,8 +102,8 @@ func TestAcceptanceFlow(t *testing.T) {
 	}
 
 	vc := w.run(t, "h2", deterministic, "done")
-	if vc.TaskID != v {
-		t.Fatalf("the deterministic executor took %s", vc.TaskID)
+	if vc.TaskID != v || vc.Repo != "bifrost-platform" || vc.BaseCommit != commitA {
+		t.Fatalf("the verification's claim = %+v; want the subject's repository at its commit", vc)
 	}
 	did, err := store.Conclude(ctx, w.rt, v)
 	ok(t, err)
@@ -105,8 +116,8 @@ func TestAcceptanceFlow(t *testing.T) {
 	review := w.checker(t, impl, "review")
 
 	rc := w.run(t, "h3", codex, "done")
-	if rc.TaskID != review {
-		t.Fatalf("codex took %s", rc.TaskID)
+	if rc.TaskID != review || rc.Repo != "bifrost-platform" || rc.BaseCommit != commitA || w.checkSpec(t, review)["attempt"] != ic.AttemptID {
+		t.Fatalf("review claim = %+v", rc)
 	}
 	did, err = store.Conclude(ctx, w.rt, review)
 	ok(t, err)
@@ -114,7 +125,8 @@ func TestAcceptanceFlow(t *testing.T) {
 		t.Fatalf("conclude did %q; implementation %s", did, w.state(t, "task", impl))
 	}
 	got := w.verifications(t, impl)
-	want := []verificationRow{{"deterministic", "pass", ic.AttemptID, vc.AttemptID, false}, {"review", "pass", ic.AttemptID, rc.AttemptID, true}}
+	want := []verificationRow{{"deterministic", "pass", ic.AttemptID, vc.AttemptID, commitA, false},
+		{"review", "pass", ic.AttemptID, rc.AttemptID, commitA, true}}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("verifications = %+v", got)
 	}

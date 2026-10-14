@@ -50,6 +50,29 @@ func (w *world) stepState(t *testing.T, id string) string {
 	return s
 }
 
+// Readers of outside records that always return the given value.
+func approvalIs(status string) func(context.Context) (string, bool) {
+	return func(context.Context) (string, bool) { return status, true }
+}
+
+func questionIs(q store.Question) func(context.Context) (store.Question, bool) {
+	return func(context.Context) (store.Question, bool) { return q, true }
+}
+
+func ciIs(status, run string) func(context.Context) (string, string, bool) {
+	return func(context.Context) (string, string, bool) { return status, run, true }
+}
+
+func deployedIs(commit string, ref map[string]any) store.Deployed {
+	return func(context.Context, string) (string, map[string]any, bool) { return commit, ref, true }
+}
+
+// answered is a full answer: option, who, when.
+func answered(id, option string) store.Question {
+	return store.Question{ID: id, Status: store.QuestionAnswered, Option: option, Text: "yes", AnsweredBy: "owner",
+		AnsweredAt: "2026-10-14T12:00:00Z"}
+}
+
 // deployments is a fake delivery record: what each environment runs, or
 // that it cannot be read.
 type deployments struct {
@@ -97,29 +120,37 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 		see  func() (bool, error)
 		want bool
 	}{
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, "pending") }, true},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, "pending") }, false},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, store.ApprovalExecuted) }, true},
-		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 160, "pending") }, true},
-		{func() (bool, error) { return store.SeeQuestion(ctx, w.rt, store.Question{ID: "Q3", Status: "pending"}) }, true},
+		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, true},
+		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs("pending")) }, false},
+		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 16, approvalIs(store.ApprovalExecuted)) }, true},
+		{func() (bool, error) { return store.SeeApproval(ctx, w.rt, 160, approvalIs("pending")) }, true},
 		{func() (bool, error) {
-			return store.SeeQuestion(ctx, w.rt, store.Question{ID: "Q3", Status: store.QuestionAnswered, Option: "A", Text: "yes",
-				AnsweredBy: "owner", AnsweredAt: "2026-10-14T12:00:00Z"})
+			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(store.Question{ID: "Q3", Status: "pending"}))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeQuestion(ctx, w.rt, store.Question{ID: "Q3", Status: store.QuestionAnswered, Option: "A", Text: "yes",
-				AnsweredBy: "owner", AnsweredAt: "2026-10-14T12:00:00Z"})
-		}, false},
-		{func() (bool, error) { return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, "Running", "ci-1") }, true},
-		{func() (bool, error) {
-			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, store.CISucceeded, "ci-1")
+			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 		}, true},
 		{func() (bool, error) {
-			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, store.CISucceeded, "ci-1")
+			return store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 		}, false},
-		{func() (bool, error) { return store.SeeDeploy(ctx, w.rt, "stg", commitA, map[string]any{"run": "d-1"}) }, true},
-		{func() (bool, error) { return store.SeeDeploy(ctx, w.rt, "stg", commitA, map[string]any{"run": "d-1"}) }, false},
-		{func() (bool, error) { return store.SeeDeploy(ctx, w.rt, "stg", commitA, map[string]any{"run": "d-2"}) }, true},
+		{func() (bool, error) {
+			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs("Running", "ci-1"))
+		}, true},
+		{func() (bool, error) {
+			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, "ci-1"))
+		}, true},
+		{func() (bool, error) {
+			return store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, "ci-1"))
+		}, false},
+		{func() (bool, error) {
+			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
+		}, true},
+		{func() (bool, error) {
+			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-1"}))
+		}, false},
+		{func() (bool, error) {
+			return store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, map[string]any{"run": "d-2"}))
+		}, true},
 	} {
 		got, err := c.see()
 		ok(t, err)
@@ -153,7 +184,7 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			_, errs[i] = store.SeeApproval(ctx, pool, 18, store.ApprovalExecuted)
+			_, errs[i] = store.SeeApproval(ctx, pool, 18, approvalIs(store.ApprovalExecuted))
 		}(i)
 	}
 	wg.Wait()
@@ -179,16 +210,16 @@ func TestStepRules(t *testing.T) {
 	if w.evaluate(t, s1, d) != "" {
 		t.Fatal("a rule with no facts moved the step")
 	}
-	_, err := store.SeeApproval(ctx, w.rt, 16, store.ApprovalExecuted)
+	_, err := store.SeeApproval(ctx, w.rt, 16, approvalIs(store.ApprovalExecuted))
 	ok(t, err)
-	_, err = store.SeeQuestion(ctx, w.rt, store.Question{ID: "Q3", Status: store.QuestionAnswered, Option: "B"})
+	_, err = store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "B")))
 	ok(t, err)
-	_, err = store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, store.CISucceeded, "")
+	_, err = store.SeeCI(ctx, w.rt, "bifrost-platform", commitA, ciIs(store.CISucceeded, ""))
 	ok(t, err)
 	if w.evaluate(t, s1, d) != "" {
 		t.Fatal("option B answered option A's atom")
 	}
-	_, err = store.SeeQuestion(ctx, w.rt, store.Question{ID: "Q3", Status: store.QuestionAnswered, Option: "A"})
+	_, err = store.SeeQuestion(ctx, w.rt, "Q3", questionIs(answered("Q3", "A")))
 	ok(t, err)
 	if got := w.evaluate(t, s1, d); got != "done" || w.stepState(t, s1) != "done" {
 		t.Fatalf("moved to %q", got)
