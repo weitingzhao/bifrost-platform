@@ -438,7 +438,16 @@ func take(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, t
 		return nil, err
 	}
 	if c.subject != "" {
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, c.subject); err != nil {
+		// Skipped, not waited for, when someone holds the subject (an author
+		// claim, a plan change moving subject and review): waiting here while
+		// holding the review could close a cycle with a change that moves the
+		// review next (review 150 B1). The next poll tries again.
+		var held string
+		err = tx.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE task_id = $1 FOR SHARE SKIP LOCKED`, c.subject).Scan(&held)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
 			return nil, err
 		}
 		var still bool
@@ -1075,40 +1084,67 @@ func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCl
 const sweepable = `((state IN ('leased','running') AND lease_expires_at < clock_timestamp())
      OR (state = 'stale' AND lease_expires_at + make_interval(secs => $1) <= clock_timestamp()))`
 
+// Sweep pages: a pass reads at most sweepPages pages of sweepPage attempts.
+const (
+	sweepPage  = 100
+	sweepPages = 10
+)
+
 // SweepLeases is one pass of the lease loop (v5 §5.2 控制器「租约」): live
 // attempts past their expiry become stale; past the grace they become lost
 // and their task moves by effect class. Each attempt moves in a transaction
 // of its own, so a sweep never holds one mission's event stream while it
-// waits for another's (review 149 B2); one that fails does not stop the
-// rest. It only changes state; the write-time fence is what stops late
-// writes. It returns how many attempts it moved.
+// waits for another's (review 149 B2); one that fails or that a writer holds
+// does not stop the rest, and the pass reads on past them page by page
+// (review 150 B2). It only changes state; the write-time fence is what stops
+// late writes. It returns how many attempts it moved.
 func SweepLeases(ctx context.Context, db DB) (int, int, error) {
-	var ids []string
-	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE `+sweepable+`
-		  ORDER BY lease_expires_at LIMIT 100`, Grace.Seconds())
-		if err != nil {
-			return err
-		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	}); err != nil {
-		return 0, 0, err
-	}
 	var stale, lost int
 	var errs []error
-	for _, id := range ids {
-		moved, err := sweepOne(ctx, db, id)
-		switch {
-		case err != nil:
-			errs = append(errs, fmt.Errorf("attempt %s: %w", id, err))
-		case moved == "stale":
-			stale++
-		case moved == "lost":
-			lost++
+	var at any
+	var after string
+	for page := 0; page < sweepPages; page++ {
+		var rows []sweepRow
+		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			q, err := tx.Query(ctx, `SELECT attempt_id, lease_expires_at FROM agentrt.attempt WHERE `+sweepable+`
+			  AND ($2::timestamptz IS NULL OR (lease_expires_at, attempt_id) > ($2::timestamptz, $3::text))
+			  ORDER BY lease_expires_at, attempt_id LIMIT $4`, Grace.Seconds(), at, after, sweepPage)
+			if err != nil {
+				return err
+			}
+			rows, err = pgx.CollectRows(q, scanSweepRow)
+			return err
+		}); err != nil {
+			return stale, lost, errors.Join(append(errs, err)...)
 		}
+		for _, r := range rows {
+			moved, err := sweepOne(ctx, db, r.id)
+			switch {
+			case err != nil:
+				errs = append(errs, fmt.Errorf("attempt %s: %w", r.id, err))
+			case moved == "stale":
+				stale++
+			case moved == "lost":
+				lost++
+			}
+		}
+		if len(rows) < sweepPage {
+			break
+		}
+		at, after = rows[len(rows)-1].expires, rows[len(rows)-1].id
 	}
 	return stale, lost, errors.Join(errs...)
+}
+
+type sweepRow struct {
+	id      string
+	expires time.Time
+}
+
+func scanSweepRow(r pgx.CollectableRow) (sweepRow, error) {
+	var x sweepRow
+	err := r.Scan(&x.id, &x.expires)
+	return x, err
 }
 
 // sweepOne moves one attempt if it still needs it and no one holds it.
@@ -1157,6 +1193,9 @@ func sweepOne(ctx context.Context, db DB, id string) (string, error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	if moved != "" {
+		hook("committed", id)
 	}
 	return moved, nil
 }

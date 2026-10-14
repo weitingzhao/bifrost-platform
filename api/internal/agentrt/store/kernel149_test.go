@@ -166,7 +166,21 @@ func TestSweepHoldsOneStreamAtATime(t *testing.T) {
 	}
 	other := make(chan swept, 1)
 	ran := false
+	var released error
+	probed := false
 	unhook := store.SetHook(func(point, arg string) {
+		if point == "committed" && arg == first && !probed {
+			// Review 150 B3: once its attempt is done, a sweep holds no stream.
+			probed = true
+			tx, err := pool.Begin(ctx)
+			if err != nil {
+				released = err
+				return
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, released = tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = 'mission:M-1' FOR UPDATE NOWAIT`)
+			return
+		}
 		if point != "swept" || arg != first || ran {
 			return
 		}
@@ -185,9 +199,10 @@ func TestSweepHoldsOneStreamAtATime(t *testing.T) {
 	stale, _, err := store.SweepLeases(ctx, w.rt)
 	unhook()
 	ok(t, err)
-	if !ran {
-		t.Fatal("the first sweep never reached its first attempt")
+	if !ran || !probed {
+		t.Fatalf("the first sweep reached its first attempt %v, committed it %v", ran, probed)
 	}
+	ok(t, released)
 	s := <-other
 	ok(t, s.err)
 	if !ran || stale != 1 || s.stale != 1 || w.state(t, "attempt", first) != "stale" || w.state(t, "attempt", second) != "stale" {
