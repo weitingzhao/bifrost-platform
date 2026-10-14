@@ -101,6 +101,13 @@ export function useAnswerSend(questionId: string) {
 
   async function runSend(snap: ConfirmSnapshot): Promise<void> {
     const token = authRef.current.token
+    // confirm() took the lock for this send. Release it once: a later click may hold its own by then.
+    let held = true
+    const release = () => {
+      if (!held) return
+      held = false
+      unlockQuestionContact(snap.id)
+    }
     try {
       const posted = await withDecisionContact(async () => {
         const current = answerSendSnapshot(snap.id)
@@ -109,7 +116,7 @@ export function useAnswerSend(questionId: string) {
         }
         dispatchAnswerSend({ type: 'confirm', id: snap.id })
         // The lock covers the connection check only. From here the send state guards against a second click.
-        unlockQuestionContact(snap.id)
+        release()
         await clientRef.current.cancelQueries({ queryKey: questionItemKey(snap.id) })
         return postQuestionAnswer(snap.id, snap.letter, snap.text, token)
       }, notice => setQuestionContactNotice(snap.id, notice))
@@ -153,7 +160,7 @@ export function useAnswerSend(questionId: string) {
       dispatchAnswerSend({ type: 'postFailed', id: snap.id })
       await reread(snap.id)
     } finally {
-      unlockQuestionContact(snap.id)
+      release()
     }
   }
 
