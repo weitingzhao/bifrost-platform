@@ -9,6 +9,7 @@ import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { DECISION_AFTER_RELOAD, NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
 import { DECISION_IN_FLIGHT_BANNER } from '@/pwa/ConsoleBuildBanner'
+import { CHECKING_CONNECTION, DECISION_CHANGED } from '@/pages/serverContactNotice'
 import { ADMIN_CAPS, htmlWithModule, installModuleScript, installStorage, json } from './approvalsPageTestKit'
 
 // Keep the real buttons (including disabled semantics), but retain their callbacks
@@ -35,6 +36,8 @@ describe('approvals: a newer Console while another decision is in flight', () =>
   let serveNew: boolean
   let failPost: boolean
   const hanging: Array<(response: Response) => void> = []
+  let holdHealth: boolean
+  const healthHanging: Array<(response: Response) => void> = []
   const posts = () => vi.mocked(fetch).mock.calls.filter(call => call[1]?.method === 'POST')
   const approve = () => screen.getByRole('button', { name: /Approve gitops/ })
   const reject = () => screen.getByRole('button', { name: /Reject gitops/ })
@@ -50,6 +53,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     callbacks.clear()
     serveNew = false
     failPost = false
+    holdHealth = false
     installModuleScript('/assets/index-old.js')
     client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchOnWindowFocus: false } } })
     client.setQueryData(['platform', 'auth', 'capabilities', 'test-admin'], ADMIN_CAPS)
@@ -65,7 +69,9 @@ describe('approvals: a newer Console while another decision is in flight', () =>
           return response
         })
       }
-      if (String(input).endsWith('/health')) return Promise.resolve(json({}))
+      if (String(input).endsWith('/health')) {
+        return holdHealth ? new Promise<Response>(resolve => healthHanging.push(resolve)) : Promise.resolve(json({}))
+      }
       if (String(input).includes('?status=')) return Promise.resolve(json(buildApprovalListResponse([])))
       const id = String(input).split('/').at(-1) ?? 'a'
       return Promise.resolve(json(buildPlatformApproval({ id })))
@@ -73,6 +79,7 @@ describe('approvals: a newer Console while another decision is in flight', () =>
   })
   afterEach(async () => {
     // Do not leave unanswered requests or their contact timers in the next test.
+    healthHanging.splice(0).forEach(resolve => resolve(json({})))
     await answerHanging({ status: 'executed' })
     cleanup()
     client.clear()
@@ -116,6 +123,13 @@ describe('approvals: a newer Console while another decision is in flight', () =>
       })
     }
     expect(hanging).toHaveLength(0)
+    await settle()
+  }
+  async function answerFirst(body: unknown) {
+    await act(async () => {
+      hanging.shift()?.(json(body))
+      await new Promise(resolve => setImmediate(resolve))
+    })
     await settle()
   }
   function expectBuildReason(button: HTMLElement, text: string) {
@@ -192,24 +206,24 @@ describe('approvals: a newer Console while another decision is in flight', () =>
   })
 
   // Before: GREEN. Once the POST settles, reloadHeld already releases for all outcomes.
-  it.each(['success', 'failure', 'unconfirmed', 'unknown'])('restores ordinary stale-build controls after A %s and reconciliation', async outcome => {
+  it.each(['executed', 'still pending', 'failure', 'unconfirmed', 'unknown'])('restores ordinary stale-build controls after A %s and reconciliation', async outcome => {
     await page()
     await sendA()
     await drift()
     await openRecord('b')
     failPost = outcome === 'failure'
-    await answerHanging(outcome === 'success' ? { status: 'pending' } : outcome === 'unknown' ? { status: 'unknown' } : {})
+    await answerHanging(outcome === 'executed' ? { status: 'executed' } : outcome === 'still pending' ? { status: 'pending' } : outcome === 'unknown' ? { status: 'unknown' } : {})
     expect(screen.queryByText(DECISION_IN_FLIGHT_BANNER)).toBeNull()
     expect(screen.queryByText(DECISION_AFTER_RELOAD)).toBeNull()
     expect(screen.getByText(NEWER_CONSOLE_BANNER)).toBeTruthy()
     expect(disabled(reload())).toBe(false)
     for (const id of ['a', 'b']) {
       await openRecord(id)
-      if (id === 'a' && outcome === 'unknown') {
+      if (id === 'a' && (outcome === 'unknown' || outcome === 'executed')) {
         // Unknown cards keep their existing close form and have no decision buttons.
         expect(screen.queryByRole('button', { name: /Approve gitops/ })).toBeNull()
         expect(screen.queryByRole('button', { name: /Reject gitops/ })).toBeNull()
-        expect(screen.getByRole('button', { name: 'Close this request' })).toBeTruthy()
+        if (outcome === 'unknown') expect(screen.getByRole('button', { name: 'Close this request' })).toBeTruthy()
         continue
       }
       await waitFor(() => expectBuildReason(approve(), NEWER_CONSOLE_BANNER))
@@ -243,6 +257,60 @@ describe('approvals: a newer Console while another decision is in flight', () =>
     expect(document.getElementById('approval-a')?.lastElementChild?.textContent).toBe(NEWER_CONSOLE_BANNER)
     expect(document.getElementById('approval-a')?.lastElementChild?.getAttribute('role')).toBe('status')
     expect(screen.queryByText(DECISION_AFTER_RELOAD)).toBeNull()
+  })
+
+  // Before: RED for C (it was clickable and silent). Two decisions in flight when the build drifts: each keeps its own
+  // in-flight view, a third request waits, and the reload guard holds until the last one is answered.
+  it('two decisions in flight when a newer Console lands: each keeps sending, a third waits, the guard holds to the last', async () => {
+    client.setQueryData(['approvals', 'item', 'c'], buildPlatformApproval({ id: 'c' }))
+    await page()
+    await sendA()
+    await openRecord('b')
+    recordServerContact()
+    fireEvent.click(approve())
+    await waitFor(() => expect(posts()).toHaveLength(2))
+    await drift()
+    await openRecord('c')
+    expectBuildReason(approve(), DECISION_AFTER_RELOAD)
+    expect(approve().getAttribute('aria-describedby')).toBe('console-build-reason-c')
+    for (const id of ['a', 'b']) {
+      await openRecord(id)
+      expect(screen.getByRole('button', { name: 'Sending…' })).toBeTruthy()
+      expect(screen.queryByText(DECISION_AFTER_RELOAD)).toBeNull()
+    }
+    await answerFirst({ status: 'executed' })
+    expect(screen.getByText(DECISION_IN_FLIGHT_BANNER)).toBeTruthy()
+    expect(disabled(reload())).toBe(true)
+    await openRecord('c')
+    expectBuildReason(approve(), DECISION_AFTER_RELOAD)
+    await answerHanging({ status: 'executed' })
+    expect(screen.getByText(NEWER_CONSOLE_BANNER)).toBeTruthy()
+    expect(disabled(reload())).toBe(false)
+    await openRecord('c')
+    await waitFor(() => expectBuildReason(approve(), NEWER_CONSOLE_BANNER))
+    expect(posts()).toHaveLength(2)
+  })
+
+  // Before: GREEN (the send-time guard existed). A newer Console that lands while the connection check runs stops the
+  // send, says so on the card, and leaves the page in the ordinary stale state.
+  it('a newer Console landing during the connection check sends nothing, says the decision changed and frees Reload', async () => {
+    await page()
+    holdHealth = true
+    vi.setSystemTime(new Date('2026-10-13T12:00:30Z')) // the last contact is now 30 seconds old: the click checks first
+    fireEvent.click(approve())
+    await waitFor(() => expect(screen.getByText(CHECKING_CONNECTION)).toBeTruthy())
+    await drift()
+    await act(async () => {
+      healthHanging.splice(0).forEach(resolve => resolve(json({})))
+      await new Promise(resolve => setImmediate(resolve))
+    })
+    await settle()
+    expect(posts()).toHaveLength(0)
+    expect(document.getElementById('approval-a')?.lastElementChild?.textContent).toBe(DECISION_CHANGED)
+    expect(screen.getByText(NEWER_CONSOLE_BANNER)).toBeTruthy()
+    expect(disabled(reload())).toBe(false)
+    await openRecord('b')
+    await waitFor(() => expectBuildReason(approve(), NEWER_CONSOLE_BANNER))
   })
 
   // Before: GREEN. A's lock belongs to A; a fresh Console can still send B concurrently.
