@@ -11,5 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     css: false,
+    // The real clock is moved ten years ahead for every test file (TD-318).
+    setupFiles: ['./src/test/clockShift.ts'],
   },
 })
