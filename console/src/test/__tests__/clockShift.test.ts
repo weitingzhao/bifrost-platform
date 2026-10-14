@@ -17,6 +17,7 @@ const atImport = { now: Date.now(), real: vi.getRealSystemTime() }
 afterEach(() => { vi.useRealTimers() })
 
 it('the suite runs with the clock one shift ahead: not the real clock, and not two shifts', () => {
+  expect(CLOCK_SHIFT_MS).toBe(315_360_000_000)
   expect(CLOCK_SHIFT_MS).toBeGreaterThan(NINE_YEARS)
   expectShifted(Date.now())
   expectShifted(new Date().getTime())
@@ -114,6 +115,13 @@ it('a date pinned without fake timers, then fake timers that leave Date alone: s
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
   expectShifted(Date.now())
   vi.useRealTimers()
+  expectShifted(Date.now())
+})
+
+it('a switch to fake timers that fails still leaves the shifted clock, not the real one', () => {
+  vi.setSystemTime(new Date('2026-10-11T12:00:00Z'))
+  // vitest drops the pin first; the install then refuses the start time.
+  expect(() => vi.useFakeTimers({ now: 'not a time' as never })).toThrow()
   expectShifted(Date.now())
 })
 

@@ -68,9 +68,12 @@ function wrap<K extends 'useRealTimers' | 'useFakeTimers'>(name: K): void {
   if (original[RECORD]) return
   const call = original.bind(vi) as (...args: unknown[]) => unknown
   const wrapped = ((...args: unknown[]) => {
-    const result = call(...args)
-    shiftAgain()
-    return result
+    // finally: vitest drops a pinned date before it installs fake timers, and the install can still throw.
+    try {
+      return call(...args)
+    } finally {
+      shiftAgain()
+    }
   }) as unknown as Wrapped<(typeof vi)[K]>
   wrapped[RECORD] = true
   vi[name] = wrapped
