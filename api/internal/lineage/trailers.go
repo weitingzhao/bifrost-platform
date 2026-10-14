@@ -9,17 +9,22 @@ const (
 	keySession    = "Claude-Session"
 	keyTranscript = "Claude-Transcript"
 	keyChangeID   = "Change-Id"
+	keyTask       = "Agentrt-Task"
 )
 
 var (
 	trailerLine  = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9-]*):\s*(.*\S)\s*$`)
 	changeIDLine = regexp.MustCompile(`(?m)^Change-Id:\s*(I[0-9a-f]{40})\s*$`)
+	// taskID is an agent runtime task id: t_ and a ULID (store.NewTaskID), 26
+	// Crockford base32 characters of 128 bits, so the first is 0–7.
+	taskID = regexp.MustCompile(`^t_[0-7][0-9A-HJKMNP-TV-Z]{25}$`)
 )
 
 // trailers holds the lineage keys of one commit message.
 type trailers struct {
 	session, transcript, changeID string
-	agent                         bool // a Co-Authored-By line names Claude
+	task                          string // Agentrt-Task: the agent runtime task an agentd attempt pushed it for
+	agent                         bool   // a Co-Authored-By line names Claude
 }
 
 // parseMessage reads the trailer block (the last paragraph, as git does) for the
@@ -51,6 +56,8 @@ func parseMessage(msg string) (subject string, t trailers) {
 			t.transcript = val
 		case strings.EqualFold(key, keyChangeID) && t.changeID == "":
 			t.changeID = val
+		case strings.EqualFold(key, keyTask) && t.task == "" && taskID.MatchString(val):
+			t.task = val
 		case strings.EqualFold(key, "Co-Authored-By") && strings.Contains(strings.ToLower(val), "claude"):
 			t.agent = true
 		}

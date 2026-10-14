@@ -32,6 +32,8 @@ export type LineageCommit = {
   session?: string
   transcript?: string
   change_id?: string
+  /** Agentrt-Task: the agent runtime task an agentd attempt pushed it for. */
+  task?: string
   /** "main" (default branch) or the branch the commit was found on. */
   ref: string
   landed: boolean
@@ -83,6 +85,7 @@ export type LineageGraphCommit = {
   at: string
   session?: string
   change_id?: string
+  task?: string
   /** Claude co-author line but no session trailer (agent work before the hooks). */
   agent?: boolean
   /** branch commits: how the change reached the default branch ("" / absent = not yet) */

@@ -16,6 +16,9 @@ const (
 	cidZ = "I3333333333333333333333333333333333333333"
 	cidG = "I4444444444444444444444444444444444444444"
 	cidB = "I5555555555555555555555555555555555555555"
+	cidK = "I6666666666666666666666666666666666666666"
+	task = "t_01M4XW5Z7AC7CTA9P0YDGACGPG"
+	lane = "agent/" + task + "/a1"
 )
 
 func TestParseMessage(t *testing.T) {
@@ -34,6 +37,43 @@ func TestParseMessage(t *testing.T) {
 	}
 	if _, tr := parseMessage("subject\n\nCo-Authored-By: Someone <a@b>"); tr.agent {
 		t.Fatal("non-Claude co-author counted as agent")
+	}
+	for _, bad := range []string{"t_bad", "t_Z1M4XW5Z7AC7CTA9P0YDGACGPG", "t_01M4XW5Z7AC7CTA9P0YDGACGPI", "t_01M4XW5Z7AC7CTA9P0YDGACGP",
+		"t_01m4xw5z7ac7cta9p0ydgacgpg"} {
+		if _, tr := parseMessage("subject\n\nAgentrt-Task: " + bad + "\nAgentrt-Task: " + task + "\nAgentrt-Task: t_01M4XW5Z7SC6YN6KEN3JXF8CFV"); tr.task != task {
+			t.Fatalf("after %s, task = %q: a malformed id is skipped and the first well-formed one wins", bad, tr.task)
+		}
+	}
+	// A squash keeps one task, the first of its trailer block; tasks in the
+	// body are not read (the trailer block is the last paragraph).
+	if _, tr := parseMessage("batch: squash\n\n* a\n\nAgentrt-Task: t_01M4XW5Z7SC6YN6KEN3JXF8CFV\n\nAgentrt-Task: " + task); tr.task != task {
+		t.Fatalf("squash task = %q", tr.task)
+	}
+}
+
+// A commit that carries only its task (no session, no Change-Id) is listed,
+// on main and on a branch, in the thread list and in the graph.
+func TestTaskOnlyCommits(t *testing.T) {
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+	onMain := giteaCommit{SHA: "t01", Msg: "agentrt: on main\n\nAgentrt-Task: " + task, At: at}
+	onLane := giteaCommit{SHA: "t02", Msg: "agentrt: on a lane\n\nAgentrt-Task: " + task, At: at.Add(time.Hour), Parents: []string{"t01"}}
+	sc := repoScan{repo: "r1", def: "main", main: []giteaCommit{onMain}, branches: map[string][]giteaCommit{lane: {onLane, onMain}}}
+	threads := map[string]*threadAcc{}
+	collect(sc, threads)
+	got := map[string]string{}
+	for _, th := range finish(threads) {
+		for _, rc := range th.Repos {
+			for _, c := range rc.Commits {
+				got[c.SHA] = c.Ref + "|" + c.Task
+			}
+		}
+	}
+	if got["t01"] != "main|"+task || got["t02"] != lane+"|"+task {
+		t.Fatalf("task-only commits = %v", got)
+	}
+	g := buildGraph([]repoScan{sc}, nil)
+	if len(g) != 1 || len(g[0].Main) != 1 || g[0].Main[0].Task != task {
+		t.Fatalf("graph main = %+v", g)
 	}
 }
 
@@ -71,11 +111,13 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	E := fakeCommit{"eee", "fix: e\n\nClaude-Session: local_s1\nClaude-Transcript: t2\nChange-Id: " + cidY, day(6)}
 	F := fakeCommit{"fff", "feat: f\n\nClaude-Session: local_s2\nChange-Id: " + cidZ, day(2)}
 	H := fakeCommit{"hhh", "chore: c\n\nClaude-Session: https://claude.ai/code/session_x", day(3)}
+	K := fakeCommit{"kkk", "agentrt: the task's work\n\nAgentrt-Task: " + task + "\nChange-Id: " + cidK + "\nWork: W-31", day(1)}
 	history := map[string][]fakeCommit{
 		"main":    {A, B, C, G, Old},
 		"lane-1":  {D, E, A, B, C, G, Old},
 		"lane-2":  {F, A, B, C, G, Old},
 		"lane-3":  {H, A, B, C, G, Old},
+		lane:      {K, A, B, C, G, Old},
 		"stale":   {Old},
 		"ancient": {Anc},
 	}
@@ -93,7 +135,7 @@ func fakeGitea(t *testing.T, now time.Time) *httptest.Server {
 	})
 	mux.HandleFunc("/api/v1/repos/bifrost/r1/branches", func(w http.ResponseWriter, r *http.Request) {
 		var out []map[string]any
-		for _, b := range []string{"main", "lane-1", "lane-2", "lane-3", "stale", "ancient"} {
+		for _, b := range []string{"main", "lane-1", "lane-2", "lane-3", lane, "stale", "ancient"} {
 			out = append(out, map[string]any{"name": b, "commit": map[string]any{"id": history[b][0].sha, "timestamp": history[b][0].at}})
 		}
 		write(w, out)
@@ -184,14 +226,18 @@ func TestBuildGroupsThreadsAndLanding(t *testing.T) {
 		t.Fatalf("pre-trailer commit should land by subject: %+v", h)
 	}
 	none := byID[""]
-	if none.CommitCount != 2 || none.Link != "" { // G (Cursor) and B (squash with its own Change-Id)
+	// G (Cursor), B (squash with its own Change-Id) and K (agentd, on its attempt's branch, with its task)
+	if none.CommitCount != 3 || none.Link != "" {
 		t.Fatalf("no-session bucket = %+v", none)
+	}
+	if k := none.Repos[0].Commits[0]; k.SHA != "kkk" || k.Task != task || k.Ref != lane || k.Landed {
+		t.Fatalf("agentd commit = %+v", k)
 	}
 
 	cov := resp.Coverage[0]
-	// main in window: A B C G (Old is outside); stale branch moved before the window
+	// main in window: A B C G (Old is outside); stale branch moved before the window; agentd's lane counts
 	if cov.Repo != "r1" || cov.MainCommits != 4 || cov.WithSession != 1 || cov.WithChangeID != 3 ||
-		cov.AgentNoLineage != 2 || cov.Branches != 3 {
+		cov.AgentNoLineage != 2 || cov.Branches != 4 {
 		t.Fatalf("coverage = %+v", cov)
 	}
 }
@@ -200,16 +246,86 @@ func TestFilterByChangeIDAndSession(t *testing.T) {
 	s, _ := newTestService(t)
 	resp := s.Build(context.Background(), 14)
 
-	got := filter(resp, "", cidZ)
+	got := filter(resp, "", cidZ, "")
 	if len(got.Threads) != 1 || got.Threads[0].Session != "local_s2" || got.Threads[0].Landed != 0 {
 		t.Fatalf("change_id filter = %+v", got.Threads)
 	}
-	got = filter(resp, "local_s1", "")
+	got = filter(resp, "local_s1", "", "")
 	if len(got.Threads) != 1 || got.Threads[0].CommitCount != 2 {
 		t.Fatalf("session filter = %+v", got.Threads)
 	}
 	if len(resp.Threads) != 4 {
 		t.Fatal("filter mutated the cached response")
+	}
+}
+
+// T36: a commit agentd pushed carries its task; the lineage answers by task.
+func TestFilterByTask(t *testing.T) {
+	s, _ := newTestService(t)
+	resp := s.Build(context.Background(), 14)
+	before, _ := json.Marshal(resp)
+	got := filter(resp, "", "", task)
+	if len(got.Threads) != 1 || got.Threads[0].CommitCount != 1 || got.Threads[0].Repos[0].Commits[0].SHA != "kkk" {
+		t.Fatalf("task filter = %+v", got.Threads)
+	}
+	if got = filter(resp, "", "", "t_01M4XW5Z7SC6YN6KEN3JXF8CFV"); len(got.Threads) != 0 {
+		t.Fatalf("another task = %+v", got.Threads)
+	}
+	// with a session or a Change-Id the filters are an intersection
+	if got = filter(resp, "local_s1", "", task); len(got.Threads) != 0 {
+		t.Fatalf("task and another thread's session = %+v", got.Threads)
+	}
+	if got = filter(resp, "", cidK, task); len(got.Threads) != 1 || got.Threads[0].CommitCount != 1 {
+		t.Fatalf("task and its own Change-Id = %+v", got.Threads)
+	}
+	if got = filter(resp, "", cidX, task); len(got.Threads) != 0 {
+		t.Fatalf("task and another Change-Id = %+v", got.Threads)
+	}
+	// filtering left the response it was given as it was, deep down
+	if after, _ := json.Marshal(resp); string(after) != string(before) {
+		t.Fatal("filter changed the response it was given")
+	}
+	// a session, a Change-Id and a task together: every one must hold
+	both := Response{Threads: []Thread{{Session: "local_s5", Repos: []RepoCommits{{Repo: "r1", Commits: []Commit{
+		{SHA: "m1", Session: "local_s5", ChangeID: cidK, Task: task},
+		{SHA: "m2", Session: "local_s5", ChangeID: cidX, Task: task},
+		{SHA: "m3", Session: "local_s5", ChangeID: cidK},
+	}}}}}}
+	for _, c := range []struct {
+		session, changeID, task, want string
+	}{
+		{"local_s5", "", task, "m1,m2"},
+		{"local_s5", cidK, task, "m1"},
+		{"local_s5", cidK, "", "m1,m3"},
+		{"local_s6", cidK, task, ""},
+	} {
+		var shas []string
+		for _, th := range filter(both, c.session, c.changeID, c.task).Threads {
+			for _, rc := range th.Repos {
+				for _, cm := range rc.Commits {
+					shas = append(shas, cm.SHA)
+				}
+			}
+		}
+		if strings.Join(shas, ",") != c.want {
+			t.Errorf("%s %s %s = %v, want %s", c.session, c.changeID, c.task, shas, c.want)
+		}
+	}
+	// one handler, its cache read three times: the unfiltered answers match
+	h := NewHandler(s)
+	get := func(q string) []byte {
+		rec := httptest.NewRecorder()
+		h.HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?days=14"+q, nil))
+		return rec.Body.Bytes()
+	}
+	first := string(get(""))
+	var body Response
+	if err := json.Unmarshal(get("&task="+task), &body); err != nil || len(body.Threads) != 1 ||
+		body.Threads[0].Repos[0].Commits[0].Task != task {
+		t.Fatalf("GET ?task= = %+v (%v)", body.Threads, err)
+	}
+	if third := string(get("")); third != first {
+		t.Fatal("a filtered read changed the cached answer")
 	}
 }
 
@@ -287,7 +403,7 @@ func TestReachFromReleaseRecords(t *testing.T) {
 		t.Fatalf("thread counts = %+v", cloud.Reached)
 	}
 	// a filtered thread keeps its counters consistent
-	if f := filter(resp, "", cidZ); len(f.Threads) != 1 || len(f.Threads[0].Reached) != 0 {
+	if f := filter(resp, "", cidZ, ""); len(f.Threads) != 1 || len(f.Threads[0].Reached) != 0 {
 		t.Fatalf("filtered = %+v", f.Threads)
 	}
 }
@@ -327,10 +443,13 @@ func TestGraphLanesAndMarkers(t *testing.T) {
 	if !g.Main[2].Agent || g.Main[0].Agent || g.Main[0].Session != "local_s1" {
 		t.Fatalf("node flags = %+v", g.Main)
 	}
-	// lane-1 (re-landed + squashed) and lane-3 (landed by subject) are leftovers; lane-2 is open
+	// lane-1 (re-landed + squashed) and lane-3 (landed by subject) are leftovers; lane-2 and agentd's lane are open
 	// lane-2 = F on top of A: it forked from aaa
-	if len(g.Branches) != 1 || g.Branches[0].Name != "lane-2" || g.Branches[0].Commits[0].LandedBy != "" || g.Branches[0].ForkSHA != "aaa" {
+	if len(g.Branches) != 2 || g.Branches[1].Name != "lane-2" || g.Branches[1].Commits[0].LandedBy != "" || g.Branches[1].ForkSHA != "aaa" {
 		t.Fatalf("branches = %+v", g.Branches)
+	}
+	if b := g.Branches[0]; b.Name != lane || len(b.Commits) != 1 || b.Commits[0].Task != task {
+		t.Fatalf("agentd's lane = %+v", b)
 	}
 	if len(g.Markers) != 2 || g.Markers[0].Run != "prod-1" || g.Markers[0].SHA != "aaa" || g.Markers[1].SHA != "ccc" {
 		t.Fatalf("markers = %+v", g.Markers)
@@ -435,7 +554,10 @@ func TestBranchesStatusAheadBehind(t *testing.T) {
 	for _, b := range resp.Branches {
 		order = append(order, b.Status)
 	}
-	if got := strings.Join(order, ","); got != "open,stale,landed,landed,even" {
+	if b := by[lane]; b.Status != "open" || b.Open != 1 || len(b.Commits) != 1 || b.Commits[0].Task != task {
+		t.Fatalf("agentd's lane = %+v", b)
+	}
+	if got := strings.Join(order, ","); got != "open,open,stale,landed,landed,even" {
 		t.Fatalf("status order = %s", got)
 	}
 }

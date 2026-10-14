@@ -201,7 +201,7 @@ func measureRepo(ctx context.Context, g *gitea, r giteaRepo, now time.Time) ([]B
 			}
 			if len(h.Commits) < branchCommitsShown {
 				h.Commits = append(h.Commits, GraphCommit{SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
-					ChangeID: t.changeID, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
+					ChangeID: t.changeID, Task: t.task, Agent: t.session == "" && t.agent, LandedSHA: landedSHA, LandedBy: landedBy})
 			}
 		}
 		for _, s := range order {

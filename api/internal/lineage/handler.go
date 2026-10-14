@@ -36,6 +36,7 @@ func NewHandler(svc *Service) *Handler {
 //	?days=14        window (1–90)
 //	?session=local_…  only this thread
 //	?change_id=I…   only commits with this Change-Id (did this change land?)
+//	?task=t_…       only commits agentd pushed for this agent runtime task
 //	?refresh=true   bypass the 5-minute cache
 //	?graph=true     include every repo's commit graph (default branch, open branches, release markers)
 func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +44,7 @@ func (h *Handler) HandleGet(w http.ResponseWriter, r *http.Request) {
 	days, _ := strconv.Atoi(q.Get("days"))
 	days = clampDays(days)
 	resp := h.get(r, days, q.Get("refresh") == "true")
-	resp = filter(resp, strings.TrimSpace(q.Get("session")), strings.TrimSpace(q.Get("change_id")))
+	resp = filter(resp, strings.TrimSpace(q.Get("session")), strings.TrimSpace(q.Get("change_id")), strings.TrimSpace(q.Get("task")))
 	if q.Get("graph") != "true" {
 		resp.Graph = nil
 	}
@@ -74,8 +75,8 @@ func (h *Handler) get(r *http.Request, days int, refresh bool) Response {
 }
 
 // filter narrows a cached response without mutating it.
-func filter(resp Response, session, changeID string) Response {
-	if session == "" && changeID == "" {
+func filter(resp Response, session, changeID, task string) Response {
+	if session == "" && changeID == "" && task == "" {
 		return resp
 	}
 	threads := make([]Thread, 0)
@@ -83,7 +84,7 @@ func filter(resp Response, session, changeID string) Response {
 		if session != "" && t.Session != session {
 			continue
 		}
-		if changeID == "" {
+		if changeID == "" && task == "" {
 			threads = append(threads, t)
 			continue
 		}
@@ -92,7 +93,7 @@ func filter(resp Response, session, changeID string) Response {
 		for _, rc := range t.Repos {
 			var keep []Commit
 			for _, c := range rc.Commits {
-				if c.ChangeID == changeID {
+				if (changeID == "" || c.ChangeID == changeID) && (task == "" || c.Task == task) {
 					keep = append(keep, c)
 				}
 			}

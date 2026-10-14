@@ -28,6 +28,7 @@ import { OpsVerdictStrip, type OpsVerdictLamp, type OpsVerdictTagVariant } from 
 import { PageToolbar } from '@/components/layout/PageToolbar'
 import { BranchesPanel } from '@/components/lineage/BranchesPanel'
 import { LineageGraph } from '@/components/lineage/LineageGraph'
+import { matches, onlyTask } from '@/components/lineage/threadFilter'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 
 const WINDOWS = [7, 14, 30, 90] as const
@@ -90,7 +91,7 @@ function mirrorSummary(data: LineageResponse): string {
 }
 
 function threadLabel(session: string): string {
-  if (session === '') return 'No session (Cursor / manual)'
+  if (session === '') return 'No session (Cursor / agentd / manual)'
   if (session.startsWith('local_')) return session.slice(0, 14)
   const cloud = /session_[A-Za-z0-9]+/.exec(session)
   if (cloud != null) return `cloud ${cloud[0].slice(0, 16)}`
@@ -99,29 +100,6 @@ function threadLabel(session: string): string {
 
 function shortRepo(repo: string): string {
   return repo.replace(/^bifrost-/, '')
-}
-
-function matches(t: LineageThread, needle: string): LineageThread | null {
-  if (needle === '') return t
-  const n = needle.toLowerCase()
-  if (t.session.toLowerCase().includes(n) || t.transcripts.some(x => x.toLowerCase().includes(n))) return t
-  const repos = t.repos
-    .map(r => ({
-      repo: r.repo,
-      commits: r.commits.filter(
-        c =>
-          c.sha.startsWith(n) ||
-          (c.change_id ?? '').toLowerCase().startsWith(n) ||
-          c.subject.toLowerCase().includes(n) ||
-          c.repo.toLowerCase().includes(n),
-      ),
-    }))
-    .filter(r => r.commits.length > 0)
-  if (repos.length === 0) return null
-  const commits = repos.flatMap(r => r.commits)
-  const reached: Record<string, number> = {}
-  for (const c of commits) for (const r of c.reached ?? []) reached[`${r.lane}/${r.env}`] = (reached[`${r.lane}/${r.env}`] ?? 0) + 1
-  return { ...t, repos, commit_count: commits.length, landed: commits.filter(c => c.landed).length, reached }
 }
 
 /** Thread name for display: its title when one is known, else a short id. */
@@ -224,7 +202,7 @@ function LandedTag({ c }: { c: LineageCommit }) {
   )
 }
 
-function ThreadCommits({ thread }: { thread: LineageThread }) {
+function ThreadCommits({ thread, onTask }: { thread: LineageThread; onTask: (task: string) => void }) {
   const rows = thread.repos.flatMap(r => r.commits).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))
   return (
     <div className="flex flex-col gap-1 py-1">
@@ -245,6 +223,7 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
             <DenseTableHead>Landed</DenseTableHead>
             <DenseTableHead>Reached</DenseTableHead>
             <DenseTableHead>Change-Id</DenseTableHead>
+            <DenseTableHead>Task</DenseTableHead>
           </DenseTableHeadRow>
         </DenseTableHeader>
         <DenseTableBody>
@@ -268,6 +247,20 @@ function ThreadCommits({ thread }: { thread: LineageThread }) {
               <DenseTableCell className="font-mono-tabular" title={c.change_id}>
                 {c.change_id != null ? c.change_id.slice(0, 10) : '—'}
               </DenseTableCell>
+              <DenseTableCell className="font-mono-tabular whitespace-nowrap">
+                {c.task != null ? (
+                  <button
+                    type="button"
+                    className="underline decoration-dotted"
+                    title={`${c.task} — show only the commits of this task`}
+                    onClick={() => onTask(c.task ?? '')}
+                  >
+                    {c.task.slice(0, 12)}
+                  </button>
+                ) : (
+                  '—'
+                )}
+              </DenseTableCell>
             </DenseTableRow>
           ))}
         </DenseTableBody>
@@ -288,6 +281,7 @@ function verdict(data: LineageResponse | undefined, isError: boolean, isLoading:
 export function CommitLineagePage() {
   const [days, setDays] = useState<number>(14)
   const [needle, setNeedle] = useState('')
+  const [task, setTask] = useState<string | null>(null)
   const [open, setOpen] = useState<Set<string>>(new Set())
   const qc = useQueryClient()
   const { canOperate } = usePlatformAuth()
@@ -327,8 +321,12 @@ export function CommitLineagePage() {
   const data = q.data
   const lanes = useMemo(() => (data?.graph ?? []).reduce((n, g) => n + g.branches.length, 0), [data])
   const threads = useMemo(
-    () => (data?.threads ?? []).map(t => matches(t, needle.trim())).filter((t): t is LineageThread => t != null),
-    [data, needle],
+    () =>
+      (data?.threads ?? [])
+        .map(t => matches(t, needle.trim()))
+        .map(t => (t != null && task != null ? onlyTask(t, task) : t))
+        .filter((t): t is LineageThread => t != null),
+    [data, needle, task],
   )
   const v = verdict(data, q.isError, q.isLoading)
   const deployedRepos = useMemo(() => prodRepos(data), [data])
@@ -397,9 +395,14 @@ export function CommitLineagePage() {
           <Input
             value={needle}
             onChange={e => setNeedle(e.target.value)}
-            placeholder="Filter threads: session, Change-Id, sha, subject, repo"
+            placeholder="Filter threads: session, Change-Id, task, sha, subject, repo"
             className="h-6 w-[340px] text-[var(--text-dense-caption)]"
           />
+          {task != null && (
+            <Button type="button" size="xs" variant="default" onClick={() => setTask(null)} title={`Only the commits of ${task}; click to clear the task filter`}>
+              task {task.slice(0, 12)} ×
+            </Button>
+          )}
           <Button type="button" size="xs" variant={help ? 'default' : 'ghost'} onClick={toggleHelp} title="Show or hide the explanations on this page">
             {help ? 'Hide how to read' : 'How to read'}
           </Button>
@@ -445,7 +448,7 @@ export function CommitLineagePage() {
           <p className={`py-4 text-center ${meta}`}>Lineage API unavailable — {(q.error as Error).message}</p>
         ) : threads.length === 0 ? (
           <p className={`py-4 text-center ${meta}`}>
-            {needle !== '' ? 'No thread matches the filter.' : 'No commit in this window carries a lineage trailer.'}
+            {needle.trim() !== '' || task != null ? 'No thread matches the filter.' : 'No commit in this window carries a lineage trailer.'}
           </p>
         ) : (
           <DenseDataTable>
@@ -557,7 +560,7 @@ export function CommitLineagePage() {
                     {isOpen && (
                       <DenseTableDetailRow>
                         <DenseTableCell colSpan={6}>
-                          <ThreadCommits thread={t} />
+                          <ThreadCommits thread={t} onTask={setTask} />
                         </DenseTableCell>
                       </DenseTableDetailRow>
                     )}
