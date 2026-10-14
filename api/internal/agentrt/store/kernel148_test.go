@@ -84,7 +84,7 @@ func TestClaimSeesAControlThatLandsMidway(t *testing.T) {
 func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	const taskLock = "FROM agentrt.task WHERE task_id = $1 FOR UPDATE"
+	const taskLock = "FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE"
 	hold := func(taskID string) pgx.Tx {
 		tx, err := pool.Begin(ctx)
 		ok(t, err)

@@ -85,11 +85,17 @@ func (w *world) claimExternal(t *testing.T, host string, ttl time.Duration, tool
 // by the deadline: a race the test means to stage did not happen.
 func (w *world) waitFor(t *testing.T, fragment string, deadline time.Time) {
 	t.Helper()
+	w.waitForN(t, fragment, 1, deadline)
+}
+
+// waitForN is waitFor for at least n backends.
+func (w *world) waitForN(t *testing.T, fragment string, want int, deadline time.Time) {
+	t.Helper()
 	for {
 		var n int
 		ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()
 		  AND wait_event_type = 'Lock' AND position($1 in query) > 0`, fragment).Scan(&n))
-		if n > 0 {
+		if n >= want {
 			return
 		}
 		if !time.Now().Before(deadline) {
@@ -546,9 +552,15 @@ func TestResultPath(t *testing.T) {
 		t.Fatalf("the retry read Gitea %d times; %d persisted events", calls-before, w.events(t, "attempt_persisted", c.AttemptID))
 	}
 
-	// The submit's answer is lost and three retries race: each misses the key
-	// before any of them runs the operation.
+	// The submit's answer is lost and three retries race. A fourth
+	// connection holds the key's lock while all three miss the key, and all
+	// three must then wait for that lock (review 149 B3).
 	pool := w.db.Pool(t, w.db.Runtime)
+	holder, err := pool.Begin(ctx)
+	ok(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742103, hashtext($1))`, "host:h1|submit|"+c.AttemptID)
+	ok(t, err)
 	answers := make([]map[string]any, 3)
 	errs := make([]error, 3)
 	var missed sync.WaitGroup
@@ -556,7 +568,6 @@ func TestResultPath(t *testing.T) {
 	unhook := store.SetHook(func(point, _ string) {
 		if point == "missed" {
 			missed.Done()
-			missed.Wait()
 		}
 	})
 	var wg sync.WaitGroup
@@ -567,6 +578,9 @@ func TestResultPath(t *testing.T) {
 			answers[i], errs[i] = store.Submit(ctx, pool, f)
 		}(i)
 	}
+	missed.Wait()
+	w.waitForN(t, "pg_advisory_xact_lock(742103", len(answers), time.Now().Add(10*time.Second))
+	ok(t, holder.Commit(ctx))
 	wg.Wait()
 	unhook()
 	for i := range answers {

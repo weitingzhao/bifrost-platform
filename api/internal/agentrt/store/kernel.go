@@ -17,9 +17,13 @@ import (
 // it names, in one transaction; missions, tasks and steps move only along
 // their transition tables (T25).
 //
-// Lock order, everywhere: attempt, then task, then mission, then the event
-// stream (Append). Claims start at the task and never lock an existing
-// attempt; a candidate a claim does not take is released at once.
+// Lock order, everywhere: attempt, then task (a review or verification
+// before its subject), then mission, then the event stream (Append): every
+// write takes the row locks it needs before it appends (review 149 B1).
+// Claims start at the host row and the shared global lock, then the task,
+// and never lock an existing attempt; a candidate a claim does not take is
+// released at once. Task rows are locked FOR NO KEY UPDATE, which foreign
+// key checks (KEY SHARE) never wait for.
 
 // Lease timing (v5 §5.2, §6.2): a lease lasts LeaseTTL from the last
 // heartbeat; once it lapses the attempt is stale and its host may still renew
@@ -131,7 +135,7 @@ type taskRow struct {
 func readTask(ctx context.Context, tx pgx.Tx, id string, lock bool) (taskRow, error) {
 	q := `SELECT task_id, mission_id, COALESCE(plan_node_id, ''), state, effect_class, role, task_class FROM agentrt.task WHERE task_id = $1`
 	if lock {
-		q += ` FOR UPDATE`
+		q += ` FOR NO KEY UPDATE`
 	}
 	var t taskRow
 	err := tx.QueryRow(ctx, q, id).Scan(&t.id, &t.mission, &t.step, &t.state, &t.effect, &t.role, &t.class)
@@ -388,10 +392,12 @@ func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 // rolling back to a savepoint, so a skipped candidate holds nothing until the
 // claim commits (review 148 B1).
 func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, c candidate, ttl time.Duration) (*Claim, error) {
+	hook("candidate", c.id)
 	tool, found, err := pickTool(ctx, tx, r.Tools, c)
 	if err != nil || !found {
 		return nil, err
 	}
+	hook("picked", c.id)
 	sp, err := tx.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -409,32 +415,46 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, c candidate, t
 	return cl, nil
 }
 
-// take locks the candidate if no one holds it and it is still ready, then
-// its mission, and leases it if the mission is still active and no control
-// holds it. The mission row is shared by claims and taken exclusively by
-// MoveMission and by a control on the mission, and the task row by a control
-// on the task, so these checks are exact: a pause or stop either commits
-// before the claim or is seen by it (review 148 A2). A plan task takes the
-// mission row exclusively, so two plan tasks of one mission never lease
-// together (task_one_live_plan).
+// take locks the candidate if no one holds it and it is still ready and
+// still of the mission it was read with (a plan change may have moved it;
+// the next poll reads it afresh, review 149 A1). A review or verification
+// then holds its subject, so no author attempt of the subject is leased
+// meanwhile, and its tool is checked again under that lock (review 149 A2).
+// Then the mission: the claim leases only if it is still active and no
+// control holds the task. The mission row is shared by claims and taken
+// exclusively by MoveMission and by a control on the mission, and the task
+// row by a control on the task, so these checks are exact: a pause or stop
+// either commits before the claim or is seen by it (review 148 A2). A plan
+// task takes the mission row exclusively, so two plan tasks of one mission
+// never lease together (task_one_live_plan).
 func take(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration) (*Claim, error) {
-	var state string
-	err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR UPDATE SKIP LOCKED`, c.id).Scan(&state)
+	var mission string
+	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR NO KEY UPDATE SKIP LOCKED`,
+		c.id).Scan(&mission)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
-	if err != nil {
+	if err != nil || mission != c.mission {
 		return nil, err
+	}
+	if c.subject != "" {
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, c.subject); err != nil {
+			return nil, err
+		}
+		var still bool
+		if still, err = eligible(ctx, tx, tl, c); err != nil || !still {
+			return nil, err
+		}
 	}
 	mode := "FOR SHARE"
 	if c.role == "plan" {
 		mode = "FOR NO KEY UPDATE"
 	}
-	var mission string
-	if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+mode, c.mission).Scan(&mission); err != nil {
+	var missionState string
+	if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+mode, c.mission).Scan(&missionState); err != nil {
 		return nil, err
 	}
-	if mission != "active" {
+	if missionState != "active" {
 		return nil, nil
 	}
 	stop, err := held(ctx, tx, []scope{{"mission", c.mission}, {"task", c.id}}, "stop", "pause")
@@ -1049,61 +1069,96 @@ func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCl
 	})
 }
 
+// sweepable is the condition for an attempt the lease loop moves: live and
+// past its expiry, or stale and past the grace. Stale attempts within their
+// grace never crowd out the rest (review 148 B3).
+const sweepable = `((state IN ('leased','running') AND lease_expires_at < clock_timestamp())
+     OR (state = 'stale' AND lease_expires_at + make_interval(secs => $1) <= clock_timestamp()))`
+
 // SweepLeases is one pass of the lease loop (v5 §5.2 控制器「租约」): live
 // attempts past their expiry become stale; past the grace they become lost
-// and their task moves by effect class. It reads only attempts that need one
-// of these moves, so stale attempts within their grace never crowd out the
-// rest (review 148 B3). It only changes state; the write-time fence is what
-// stops late writes. It returns how many attempts it moved.
+// and their task moves by effect class. Each attempt moves in a transaction
+// of its own, so a sweep never holds one mission's event stream while it
+// waits for another's (review 149 B2); one that fails does not stop the
+// rest. It only changes state; the write-time fence is what stops late
+// writes. It returns how many attempts it moved.
 func SweepLeases(ctx context.Context, db DB) (int, int, error) {
-	var stale, lost int
+	var ids []string
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT attempt_id FROM agentrt.attempt
-		  WHERE (state IN ('leased','running') AND lease_expires_at < clock_timestamp())
-		     OR (state = 'stale' AND lease_expires_at + make_interval(secs => $1) <= clock_timestamp())
-		  ORDER BY lease_expires_at LIMIT 100 FOR UPDATE SKIP LOCKED`, Grace.Seconds())
+		rows, err := tx.Query(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE `+sweepable+`
+		  ORDER BY lease_expires_at LIMIT 100`, Grace.Seconds())
 		if err != nil {
 			return err
 		}
-		ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			return err
-		}
-		for _, id := range ids {
-			a, err := lockAttempt(ctx, tx, id, true)
-			if err != nil {
-				return err
-			}
-			switch {
-			case !a.now.Before(a.expires.Add(Grace)):
-				if err = attemptEvent(ctx, tx, "controller", a, "attempt_lost",
-					map[string]any{"reason": "lease expired at " + timeText(a.expires) + " and the grace passed"}); err != nil {
-					return err
-				}
-				if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(),
-				  end_how = COALESCE(end_how, 'lease_lost') WHERE attempt_id = $1`, a.id); err != nil {
-					return err
-				}
-				if err = releaseTask(ctx, tx, "controller", a.t, "attempt lost"); err != nil {
-					return err
-				}
-				lost++
-			case a.state != "stale":
-				if err = attemptEvent(ctx, tx, "controller", a, "attempt_stale",
-					map[string]any{"lease_expires_at": timeText(a.expires)}); err != nil {
-					return err
-				}
-				if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'stale' WHERE attempt_id = $1`, a.id); err != nil {
-					return err
-				}
-				stale++
-			}
-		}
-		return nil
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
 	}); err != nil {
 		return 0, 0, err
 	}
-	return stale, lost, nil
+	var stale, lost int
+	var errs []error
+	for _, id := range ids {
+		moved, err := sweepOne(ctx, db, id)
+		switch {
+		case err != nil:
+			errs = append(errs, fmt.Errorf("attempt %s: %w", id, err))
+		case moved == "stale":
+			stale++
+		case moved == "lost":
+			lost++
+		}
+	}
+	return stale, lost, errors.Join(errs...)
+}
+
+// sweepOne moves one attempt if it still needs it and no one holds it.
+func sweepOne(ctx context.Context, db DB, id string) (string, error) {
+	var moved string
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var got string
+		err := tx.QueryRow(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE attempt_id = $2 AND `+sweepable+`
+		  FOR UPDATE SKIP LOCKED`, Grace.Seconds(), id).Scan(&got)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		a, err := lockAttempt(ctx, tx, id, true)
+		if err != nil {
+			return err
+		}
+		switch {
+		case !a.now.Before(a.expires.Add(Grace)):
+			if err = attemptEvent(ctx, tx, "controller", a, "attempt_lost",
+				map[string]any{"reason": "lease expired at " + timeText(a.expires) + " and the grace passed"}); err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'lost', ended_at = clock_timestamp(),
+			  end_how = COALESCE(end_how, 'lease_lost') WHERE attempt_id = $1`, a.id); err != nil {
+				return err
+			}
+			if err = releaseTask(ctx, tx, "controller", a.t, "attempt lost"); err != nil {
+				return err
+			}
+			moved = "lost"
+		case a.state != "stale":
+			if err = attemptEvent(ctx, tx, "controller", a, "attempt_stale",
+				map[string]any{"lease_expires_at": timeText(a.expires)}); err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'stale' WHERE attempt_id = $1`, a.id); err != nil {
+				return err
+			}
+			moved = "stale"
+		}
+		hook("swept", id)
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return moved, nil
 }
 
 func haveArtifacts(ctx context.Context, tx pgx.Tx, ids []string) error {

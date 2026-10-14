@@ -173,6 +173,18 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	if err != nil {
 		return Appended{}, err
 	}
+	// The locks the insert's guard takes, taken before the event's stream
+	// (review 149 B1): the step, then the subject.
+	if t.PlanNode != "" {
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, t.PlanNode); err != nil {
+			return Appended{}, err
+		}
+	}
+	if t.Subject != "" {
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, t.Subject); err != nil {
+			return Appended{}, err
+		}
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(t.MissionID), Type: "task_proposed", Actor: actor,
 		MissionID: t.MissionID, PlanNode: t.PlanNode, TaskID: t.ID, Body: body})
 	if err != nil {
@@ -192,8 +204,16 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	return ev, err
 }
 
-// AddDependency records that taskID waits for dependsOn.
+// AddDependency records that taskID waits for dependsOn. It takes the
+// dependency-graph lock and both tasks, in id order, before the event's
+// stream (review 149 B1).
 func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dependsOn string) (Appended, error) {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000001)`); err != nil {
+		return Appended{}, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id IN ($1, $2) ORDER BY task_id FOR KEY SHARE`, taskID, dependsOn); err != nil {
+		return Appended{}, err
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "task_dependency_added", Actor: actor,
 		MissionID: missionID, TaskID: taskID, Body: map[string]any{"depends_on_task_id": dependsOn}})
 	if err != nil {
@@ -212,6 +232,10 @@ func LeaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, exec
 // leaseAttempt also records the model and provider the attempt is for:
 // independence is checked against them.
 func leaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration) (string, int64, error) {
+	// The task before the event's stream (review 149 B1).
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID); err != nil {
+		return "", 0, err
+	}
 	var epoch int64
 	if err := tx.QueryRow(ctx, `SELECT nextval('agentrt.lease_epoch_seq')`).Scan(&epoch); err != nil {
 		return "", 0, err
