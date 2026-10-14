@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
-	"syscall"
 	"time"
 	"unicode/utf8"
 )
@@ -105,10 +104,12 @@ func Verify(ctx context.Context, dir string, env []string, cmds [][]string, limi
 		out := &ring{max: tailBytes}
 		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 		cmd.Dir, cmd.Env, cmd.Stdout, cmd.Stderr = dir, env, out, out
-		// Its own process group, all of it killed when the time is up, and a
-		// bounded wait for pipes a descendant still holds (review 163 B1).
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		// The command stays in the attempt's process group, so whatever ends
+		// the attempt (stop, hard limit, a lost lease, a restart) ends it and
+		// its descendants too (review 164 A1). When its own time is up only
+		// the command is killed; what it started is cleared with the group
+		// once the check exits, and the wait for pipes a descendant still
+		// holds is bounded (review 163 B1).
 		cmd.WaitDelay = 2 * time.Second
 		start := time.Now()
 		err := cmd.Run()
@@ -149,11 +150,16 @@ type ring struct {
 }
 
 func (r *ring) Write(p []byte) (int, error) {
-	r.buf = append(r.buf, p...)
-	if len(r.buf) > r.max {
-		r.buf = append(r.buf[:0], r.buf[len(r.buf)-r.max:]...)
+	n := len(p)
+	if n >= r.max {
+		r.buf = append(r.buf[:0], p[n-r.max:]...)
+		return n, nil
 	}
-	return len(p), nil
+	if keep := r.max - n; len(r.buf) > keep {
+		r.buf = append(r.buf[:0], r.buf[len(r.buf)-keep:]...)
+	}
+	r.buf = append(r.buf, p...)
+	return n, nil
 }
 
 func (r *ring) bytes() []byte { return r.buf }

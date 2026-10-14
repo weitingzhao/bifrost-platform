@@ -74,24 +74,53 @@ type Entry struct {
 	PGID      int    `json:"pgid"`
 	Start     string `json:"start"`
 	// Phase: launching, running (the executor runs), exited (it exited; the
-	// result is here), computed, persisted, submitted; lost (salvage only).
+	// result is here), computed, persisted, submitting (the submit is being
+	// sent; it is resent as it is), submitted; lost (salvage only);
+	// restarted (a previous agentd's group, ended at takeover); ending (the
+	// ended request is written); uncleared (ended was reported, but the
+	// group is not gone: kept until it is, and the host takes no new work).
 	Phase string `json:"phase"`
 	// CheckpointSeq is the last checkpoint number issued; Confirmed the last
-	// the platform confirmed (review 142 R2): a retry of one sample reuses
-	// its number.
-	CheckpointSeq int    `json:"checkpoint_seq"`
-	Confirmed     int    `json:"confirmed"`
-	ExitCode      *int   `json:"exit_code,omitempty"`
-	EndHow        string `json:"end_how,omitempty"`
+	// the platform confirmed (review 142 R2). Pending is the sample issued
+	// and not yet confirmed: its request is resent as it is until it is, and
+	// only then is the next sample taken (review 164 A6).
+	CheckpointSeq int                `json:"checkpoint_seq"`
+	Confirmed     int                `json:"confirmed"`
+	Pending       *PendingCheckpoint `json:"pending_checkpoint,omitempty"`
+	ExitCode      *int               `json:"exit_code,omitempty"`
+	EndHow        string             `json:"end_how,omitempty"`
+	// Group is what is known of the process group once it was ended (review
+	// 164 A2).
+	Group GroupState `json:"group,omitempty"`
 	// The hand-over's journal (review 163 A3–A5): the conclusion sent with
 	// computed, and the result sent with persist or salvage, written before
-	// they are sent.
+	// they are sent. LogTailDone and ReportDone: that upload was taken, or
+	// refused for good (review 164 A4).
 	Conclusion   string   `json:"conclusion,omitempty"`
+	LogTailDone  bool     `json:"log_tail_done,omitempty"`
+	ReportDone   bool     `json:"report_done,omitempty"`
 	Prepared     bool     `json:"prepared,omitempty"`
 	Report       string   `json:"report,omitempty"`
 	Artifacts    []string `json:"artifacts,omitempty"`
 	PushedCommit string   `json:"pushed_commit,omitempty"`
 	ChangeID     string   `json:"change_id,omitempty"`
+	// EndRequest is the ended request, written before it is first sent and
+	// resent as it is (review 164 A2).
+	EndRequest *EndRequest `json:"end_request,omitempty"`
+}
+
+// PendingCheckpoint is a checkpoint request: its number, the artifacts it
+// names and whether the patch was too large.
+type PendingCheckpoint struct {
+	Seq       int      `json:"seq"`
+	Artifacts []string `json:"artifacts,omitempty"`
+	TooLarge  bool     `json:"too_large,omitempty"`
+}
+
+// EndRequest is the ended request.
+type EndRequest struct {
+	EndHow  string `json:"end_how"`
+	Cleared bool   `json:"group_cleared"`
 }
 
 // Registry is the file of entries, by attempt. Every change is written to a

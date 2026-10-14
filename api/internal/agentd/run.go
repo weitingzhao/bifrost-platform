@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -51,7 +52,10 @@ type Daemon struct {
 	KillGrace       time.Duration // TERM to KILL; 10 s
 	SalvageEvery    time.Duration // salvage retry while in grace; 60 s
 	CheckpointEvery time.Duration // log tail and patch while the executor runs; 5 min
+	SampleLimit     time.Duration // how long one checkpoint may take; 2 min
 	Retry           time.Duration // pause between retries of a step the platform could not take; 5 s
+
+	next map[string]time.Time // when a pending hand-over is tried again
 }
 
 func (d *Daemon) logf(format string, args ...any) {
@@ -141,9 +145,25 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	sp.Stdout, sp.Stderr = logf, logf
 	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
 		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching"}
+	// A lost lease or a stop that came while the workspace was prepared, or
+	// while the start was reported, is acted on before the executor is
+	// released (review 164 A7).
 	if l.isLost() {
 		return d.lost(ctx, a, ws, &entry)
 	}
+	if l.isStopped() {
+		return d.unlaunched(ctx, a, ws, &entry, l)
+	}
+	sctx, scancel := context.WithCancel(ctx)
+	defer scancel()
+	safego.Go("agentd-start-watch", func() {
+		select {
+		case <-l.lost:
+		case <-l.stop:
+		case <-sctx.Done():
+		}
+		scancel()
+	})
 	// The group is recorded and the start reported before the executor is
 	// released: an executor never runs unrecorded, nor before the platform
 	// knows it started (review 163 A7).
@@ -152,16 +172,25 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		if perr := d.Registry.Put(entry); perr != nil {
 			return perr
 		}
-		return d.retry(ctx, func() error { return d.Client.Start(ctx, cl.AttemptID, cl.Epoch, cl.Tool.Model, cl.Tool.Provider) })
+		if serr := d.retry(sctx, func() error { return d.Client.Start(sctx, cl.AttemptID, cl.Epoch, cl.Tool.Model, cl.Tool.Provider) }); serr != nil {
+			return serr
+		}
+		if l.isLost() || l.isStopped() {
+			return errors.New("agentd: the lease was lost or the attempt stopped before its release")
+		}
+		return nil
 	})
 	if err != nil {
 		if entry.PGID == 0 {
 			return Outcome{}, err
 		}
-		if errors.Is(err, ErrFenced) || l.isLost() {
+		switch {
+		case errors.Is(err, ErrFenced) || l.isLost():
 			return d.lost(ctx, a, ws, &entry)
+		case l.isStopped():
+			return d.unlaunched(ctx, a, ws, &entry, l)
 		}
-		return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, entry, "exit"))
+		return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, &entry, "exit"))
 	}
 
 	endHow, code := d.supervise(ctx, a, proc, ws, &entry, l)
@@ -182,10 +211,23 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	return d.deliver(ctx, a, ws, &entry, l)
 }
 
+// unlaunched hands over an attempt stopped before its executor was released:
+// cancelled, concluding nothing.
+func (d *Daemon) unlaunched(ctx context.Context, a *Attempt, ws *Workspace, entry *Entry, l *lease) (Outcome, error) {
+	entry.Phase, entry.EndHow, entry.Conclusion = "exited", "cancelled", "none"
+	if err := d.Registry.Put(*entry); err != nil {
+		return Outcome{}, err
+	}
+	return d.deliver(ctx, a, ws, entry, l)
+}
+
 // supervise watches the executor under its lease and returns how it ended:
 // exit, hard_limit (the task's limit from the release), cancelled (the
 // platform asked it to stop), lease_lost, or daemon_restart (agentd shuts
-// down). Whatever ends it ends its whole group.
+// down). Whatever ends it ends its whole group, and supervise returns only
+// once the end is done and the group checked (entry.Group). Checkpoints run
+// beside it, one at a time and each within SampleLimit, so a slow upload
+// never holds up a stop, a lost lease or the hard limit (review 164 A7).
 func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Workspace, entry *Entry, l *lease) (string, int) {
 	cl := a.Claim
 	exited := make(chan int, 1)
@@ -199,38 +241,63 @@ func (d *Daemon) supervise(ctx context.Context, a *Attempt, proc *Proc, ws *Work
 	sample := time.NewTicker(orDefault(d.CheckpointEvery, 5*time.Minute))
 	defer sample.Stop()
 	grace := orDefault(d.KillGrace, 10*time.Second)
+	done, lost, stopped := ctx.Done(), l.lost, l.stop
 	end := ""
+	var terminated chan struct{}
 	stop := func(why string) {
+		done, lost, stopped, hard = nil, nil, nil, nil // each fires once
 		if end == "" {
 			end = why
-			safego.Go("agentd-terminate", func() { Terminate(proc.PGID, grace) })
+			t := make(chan struct{})
+			terminated = t
+			safego.Go("agentd-terminate", func() { defer close(t); Terminate(proc.PGID, grace) })
 		}
 	}
+	var sampling chan struct{}
+	cancelSample := func() {}
 	for {
 		select {
 		case code := <-exited:
+			died := time.Now()
+			cancelSample()
+			if sampling != nil {
+				<-sampling
+			}
+			if terminated != nil {
+				<-terminated
+			}
+			d.clear(entry, died)
 			if end == "" {
 				end = "exit"
 			}
 			return end, code
 		case <-hard:
 			stop("hard_limit")
-		case <-ctx.Done():
+		case <-done:
 			stop("daemon_restart")
-		case <-l.lost:
+		case <-lost:
 			stop("lease_lost")
-		case <-l.stop:
+		case <-stopped:
 			stop("cancelled")
 		case <-sample.C:
-			if end == "" {
-				d.checkpoint(ctx, a, ws, entry)
+			if end != "" || (sampling != nil && !closed(sampling)) {
+				continue
 			}
+			sctx, cancel := context.WithTimeout(ctx, orDefault(d.SampleLimit, 2*time.Minute))
+			s := make(chan struct{})
+			sampling, cancelSample = s, cancel
+			safego.Go("agentd-checkpoint", func() {
+				defer close(s)
+				defer cancel()
+				d.checkpoint(sctx, a, ws, entry)
+			})
 		}
 	}
 }
 
 // results reads what the executor left: the report (verify.json for a
-// verification) and the tail of its log.
+// verification) and the tail of its log. Neither file is read further than
+// what is kept (review 164 B1).
 type results struct {
 	report, reportKind string
 	reportBody         []byte
@@ -249,16 +316,58 @@ func (a *Attempt) results() results {
 	default:
 		r.reportKind, r.report = "report", "report.md"
 	}
-	if b, err := os.ReadFile(filepath.Join(a.Out, r.report)); err == nil && len(b) > 0 && len(b) <= maxBody {
+	if b, err := readAtMost(filepath.Join(a.Out, r.report), maxBody); err == nil && len(b) > 0 {
 		r.reportBody = b
 	}
-	if b, err := os.ReadFile(filepath.Join(a.Out, "log.txt")); err == nil {
-		if len(b) > logTailBytes {
-			b = b[len(b)-logTailBytes:]
-		}
-		r.logTail = b
-	}
+	r.logTail, _ = readTail(filepath.Join(a.Out, "log.txt"), logTailBytes)
 	return r
+}
+
+// errTooLarge: a file over what is read of it.
+var errTooLarge = errors.New("agentd: the file is over its limit")
+
+// readAtMost reads a file of at most n bytes; a longer one is not read (one
+// that grows while it is read, not past n+1).
+func readAtMost(path string, n int) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > int64(n) {
+		return nil, errTooLarge
+	}
+	b, err := io.ReadAll(io.LimitReader(f, int64(n)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > n {
+		return nil, errTooLarge
+	}
+	return b, nil
+}
+
+// readTail reads the last n bytes of a file, and nothing before them.
+func readTail(path string, n int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if off := info.Size() - n; off > 0 {
+		if _, err = f.Seek(off, io.SeekStart); err != nil {
+			return nil, err
+		}
+	}
+	return io.ReadAll(io.LimitReader(f, n))
 }
 
 // conclusion is the attempt's own verdict: a verification by its verify.json,
@@ -313,39 +422,56 @@ func (d *Daemon) retry(ctx context.Context, step func() error) error {
 const patchLimit = 1 << 20
 
 // checkpoint samples a running attempt (design v5 §5.2 检查点): the log's
-// tail and, when the workspace changed, its patch against the base. The new
-// sample's number is recorded here before anything is uploaded, so a retry
-// of one sample reuses its number; the platform's confirmation is recorded
-// after (review 142 R2). A failed sample is left for the next one.
+// tail and the workspace's patch against the base, which is its net change,
+// the executor's own commits included. A sample's request (its number, the
+// artifacts it names, whether the patch was too large) is written to the
+// registry before it is sent and resent as it is, until the platform
+// confirms it; only then is the next sample taken (review 164 A6). A sample
+// that cannot be taken now is left for the next tick.
 func (d *Daemon) checkpoint(ctx context.Context, a *Attempt, ws *Workspace, entry *Entry) {
-	entry.CheckpointSeq++
-	if err := d.Registry.Put(*entry); err != nil {
-		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
-		return
-	}
-	var ids []string
-	tooLarge := false
-	if tail := a.results().logTail; len(tail) > 0 {
-		if id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", tail); err == nil {
-			ids = append(ids, id)
+	if entry.Pending == nil {
+		p := &PendingCheckpoint{Seq: entry.CheckpointSeq + 1}
+		if tail, _ := readTail(filepath.Join(a.Out, "log.txt"), logTailBytes); len(tail) > 0 {
+			id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", tail)
+			switch {
+			case err == nil:
+				p.Artifacts = append(p.Artifacts, id)
+			case transient(err):
+				d.logf("agentd: checkpoint %s: log tail: %v", entry.AttemptID, err)
+				return
+			}
 		}
-	}
-	if ws != nil {
-		if dirty, err := ws.Dirty(ctx); err == nil && dirty {
-			if patch, err := ws.Diff(ctx); err == nil && len(patch) > patchLimit {
-				tooLarge = true
-			} else if err == nil && len(patch) > 0 {
-				if id, err := d.Client.PutArtifact(ctx, "checkpoint_patch", "text/x-diff", patch); err == nil {
-					ids = append(ids, id)
+		if ws != nil {
+			patch, tooLarge, err := ws.Diff(ctx, patchLimit)
+			switch {
+			case err != nil:
+				d.logf("agentd: checkpoint %s: patch: %v", entry.AttemptID, err)
+				return
+			case tooLarge:
+				p.TooLarge = true
+			case len(patch) > 0:
+				id, err := d.Client.PutArtifact(ctx, "checkpoint_patch", "text/x-diff", patch)
+				switch {
+				case err == nil:
+					p.Artifacts = append(p.Artifacts, id)
+				case transient(err):
+					d.logf("agentd: checkpoint %s: patch: %v", entry.AttemptID, err)
+					return
 				}
 			}
 		}
+		entry.Pending, entry.CheckpointSeq = p, p.Seq
+		if err := d.Registry.Put(*entry); err != nil {
+			d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
+			return
+		}
 	}
-	if err := d.Client.Checkpoint(ctx, entry.AttemptID, entry.Epoch, entry.CheckpointSeq, ids, tooLarge); err != nil {
-		d.logf("agentd: checkpoint %s #%d: %v", entry.AttemptID, entry.CheckpointSeq, err)
+	p := entry.Pending
+	if err := d.Client.Checkpoint(ctx, entry.AttemptID, entry.Epoch, p.Seq, p.Artifacts, p.TooLarge); err != nil {
+		d.logf("agentd: checkpoint %s #%d: %v", entry.AttemptID, p.Seq, err)
 		return
 	}
-	entry.Confirmed = entry.CheckpointSeq
+	entry.Confirmed, entry.Pending = p.Seq, nil
 	if err := d.Registry.Put(*entry); err != nil {
 		d.logf("agentd: checkpoint %s: %v", entry.AttemptID, err)
 	}

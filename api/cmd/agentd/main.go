@@ -76,6 +76,22 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	d := &agentd.Daemon{
+		Client:   &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token},
+		Registry: reg,
+		Root:     cfg.root,
+		Self:     self,
+		Remote:   func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" },
+		GitEnv:   cfg.gitEnv,
+		Logf:     log.Printf,
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	// What a previous run left is ended first, whatever this host can offer
+	// now (review 164 A8).
+	if err = d.Recover(ctx); err != nil {
+		return err
+	}
 	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ()), agentd.MCPChecks)
 	for _, why := range refused {
 		log.Printf("agentd: %s", why)
@@ -87,21 +103,9 @@ func run() error {
 		}
 	}
 	if len(offered) == 0 {
-		return errors.New("no executor of AGENTD_TOOLS can be offered on this host")
+		log.Printf("agentd: no executor of AGENTD_TOOLS can be offered on this host: it takes no work, and goes on handing over what it has")
 	}
-	cfg.tools = offered
-	d := &agentd.Daemon{
-		Client:    &agentd.Client{Base: cfg.platform, Host: cfg.host, Token: cfg.token},
-		Registry:  reg,
-		Root:      cfg.root,
-		Self:      self,
-		Executors: executors,
-		Remote:    func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" },
-		GitEnv:    cfg.gitEnv,
-		Logf:      log.Printf,
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
+	d.Executors = executors
 	for ctx.Err() == nil {
 		// what a previous run left, and hand-overs that waited for the platform
 		if err := d.Recover(ctx); err != nil {
@@ -109,11 +113,18 @@ func run() error {
 			sleep(ctx, 15*time.Second)
 			continue
 		}
+		if id, err := d.Blocked(); err != nil || id != "" || len(offered) == 0 {
+			if id != "" {
+				log.Printf("agentd: the process group of %s is not gone; no new work until it is", id)
+			}
+			sleep(ctx, time.Minute)
+			continue
+		}
 		free := 1
 		if overloaded() {
 			free = 0
 		}
-		cl, err := d.Client.Claim(ctx, free, cfg.tools)
+		cl, err := d.Client.Claim(ctx, free, offered)
 		if err != nil {
 			log.Printf("agentd: claim: %v", err)
 			sleep(ctx, 15*time.Second)

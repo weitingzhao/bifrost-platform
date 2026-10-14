@@ -184,7 +184,7 @@ func fencingProxy(t *testing.T, base string) (string, *atomic.Int32) {
 // The dead man's switch: once the platform says the lease is not ours, or
 // heartbeats fail three times running, the process group is ended and what
 // it left goes only to salvage, which the platform refuses while the
-// lease's grace runs.
+// lease's grace runs: the attempt is then pending in the registry.
 func TestRunLosesItsLease(t *testing.T) {
 	for _, code := range []int32{http.StatusConflict, http.StatusServiceUnavailable} {
 		t.Run(fmt.Sprint(code), func(t *testing.T) {
@@ -200,7 +200,7 @@ func TestRunLosesItsLease(t *testing.T) {
 			defer cancel()
 			start := time.Now()
 			out, err := d.Run(runCtx, cl)
-			if out.EndHow != "lease_lost" || out.Submitted || out.Salvaged || !errors.Is(err, context.DeadlineExceeded) {
+			if out.EndHow != "lease_lost" || out.Submitted || out.Salvaged || !errors.Is(err, agentd.ErrPending) {
 				t.Fatalf("run = %+v %v", out, err)
 			}
 			if time.Since(start) > 10*time.Second {

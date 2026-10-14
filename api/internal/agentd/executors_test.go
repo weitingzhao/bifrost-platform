@@ -144,3 +144,28 @@ func TestIsolated(t *testing.T) {
 		t.Fatalf("two servers = %d %v", n, err)
 	}
 }
+
+// Review 164 B1: cursor's output is read a line at a time; a line over the
+// limit is skipped, and the result after it is still found.
+func TestCursorReportSkipsLongLines(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log.txt")
+	long := `{"type":"assistant","message":"` + strings.Repeat("x", 2*maxBody) + `"}`
+	body := `{"type":"result","result":"first"}` + "\n" + long + "\n" + `{"type":"result","result":"# last\nok"}` + "\n"
+	if err := os.WriteFile(log, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := cursorReport(log, filepath.Join(dir, "report.md")); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "report.md")); string(b) != "# last\nok" {
+		t.Fatalf("report = %q", b)
+	}
+	var lines []string
+	if err := eachLine(strings.NewReader("a\n"+strings.Repeat("b", 50)+"\nc"), 10, func(l []byte) { lines = append(lines, string(l)) }); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(lines, ",") != "a,c" {
+		t.Fatalf("lines = %q", lines)
+	}
+}

@@ -69,9 +69,12 @@ func TestWorkspace(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(dir, "README.md"), []byte("# repo, changed\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	patch, err := w.Diff(ctx)
-	if err != nil || !strings.Contains(string(patch), "new.go") || !strings.Contains(string(patch), "changed") {
-		t.Fatalf("checkpoint patch = %s %v", patch, err)
+	patch, tooLarge, err := w.Diff(ctx, patchLimit)
+	if err != nil || tooLarge || !strings.Contains(string(patch), "new.go") || !strings.Contains(string(patch), "changed") {
+		t.Fatalf("checkpoint patch = %s %v %v", patch, tooLarge, err)
+	}
+	if _, tooLarge, err = w.Diff(ctx, 10); err != nil || !tooLarge {
+		t.Fatalf("a patch over its limit = %v %v", tooLarge, err)
 	}
 	if staged := run(t, dir, env, "git", "diff", "--cached", "--name-only"); staged != "" {
 		t.Fatalf("the checkpoint left the index changed: %s", staged)

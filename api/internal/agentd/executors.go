@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,28 +111,62 @@ func cursorExecutor(env []string) Executor {
 }
 
 // cursorReport writes the result of cursor's stream-json output (its last
-// result event) as the report.
+// result event) as the report. The output is read a line at a time and a
+// line over maxBody is skipped, never held (review 164 B1).
 func cursorReport(logPath, reportPath string) error {
-	b, err := os.ReadFile(logPath)
+	f, err := os.Open(logPath)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = f.Close() }()
 	var result string
-	sc := bufio.NewScanner(bytes.NewReader(b))
-	sc.Buffer(make([]byte, 64<<10), maxBody)
-	for sc.Scan() {
+	err = eachLine(f, maxBody, func(line []byte) {
 		var ev struct {
 			Type   string `json:"type"`
 			Result string `json:"result"`
 		}
-		if json.Unmarshal(sc.Bytes(), &ev) == nil && ev.Type == "result" && ev.Result != "" {
+		if json.Unmarshal(line, &ev) == nil && ev.Type == "result" && ev.Result != "" {
 			result = ev.Result
 		}
+	})
+	if err != nil {
+		return fmt.Errorf("agentd: cursor's output: %w", err)
 	}
 	if result == "" {
 		return errors.New("agentd: cursor left no result")
 	}
 	return os.WriteFile(reportPath, []byte(result), 0o600)
+}
+
+// eachLine calls fn with each line of r up to max bytes long; longer lines
+// are skipped without being kept.
+func eachLine(r io.Reader, max int, fn func([]byte)) error {
+	br := bufio.NewReaderSize(r, 64<<10)
+	var line []byte
+	skip := false
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !skip {
+			if len(line)+len(chunk) > max {
+				skip, line = true, line[:0]
+			} else {
+				line = append(line, chunk...)
+			}
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
+		if !skip && len(line) > 0 {
+			fn(bytes.TrimRight(line, "\r\n"))
+		}
+		line, skip = line[:0], false
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // RunVerify is the deterministic executor (agentd verify --spec <file> --out

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,19 +75,43 @@ func (w *Workspace) Dirty(ctx context.Context) (bool, error) {
 }
 
 // Diff is the patch of the workspace against the base, untracked files
-// included (a checkpoint, §5.2 检查点); the index is left as it was.
-func (w *Workspace) Diff(ctx context.Context) ([]byte, error) {
+// included (a checkpoint, §5.2 检查点): the net change, commits the executor
+// made itself included (review 164 A6); the index is left as it was. A patch
+// over limit is not read past it: tooLarge (review 164 B1).
+func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge bool, err error) {
 	idx := filepath.Join(w.Dir, ".git", "agentd-checkpoint-index")
 	defer func() { _ = os.Remove(idx) }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
-	if _, err := gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
-		return nil, err
+	if _, err = gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
+		return nil, false, err
 	}
-	if _, err := gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
-		return nil, err
+	if _, err = gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
+		return nil, false, err
 	}
-	out, err := gitIn(ctx, w.Dir, env, "diff", "--cached", "--binary", w.Base)
-	return []byte(out), err
+	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--binary", w.Base)
+	cmd.Dir, cmd.Env = w.Dir, env
+	errb := &ring{max: tailBytes}
+	cmd.Stderr = errb
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, false, err
+	}
+	if err = cmd.Start(); err != nil {
+		return nil, false, err
+	}
+	patch, err = io.ReadAll(io.LimitReader(out, int64(limit)+1))
+	if len(patch) > limit {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return nil, true, nil
+	}
+	if werr := cmd.Wait(); err == nil && werr != nil {
+		err = fmt.Errorf("agentd: git diff: %v: %s", werr, strings.TrimSpace(string(errb.bytes())))
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return patch, false, nil
 }
 
 // Lineage is what a commit agentd pushes carries (design v5 §3 lineage row):

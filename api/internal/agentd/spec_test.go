@@ -1,8 +1,13 @@
 package agentd
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -69,8 +74,9 @@ func TestVerify(t *testing.T) {
 func utf8Valid(s string) bool { return strings.ToValidUTF8(s, "?") == s }
 
 // Review 163 B1: a descendant that keeps the output open does not hold the
-// command past its time, and the output kept is bounded.
-func TestVerifyEndsDescendantsAndBoundsOutput(t *testing.T) {
+// command past its time (the descendant itself is ended with the attempt's
+// group, TestVerifyStaysInTheAttemptGroup), and the output kept is bounded.
+func TestVerifyReturnsOnTimeAndBoundsOutput(t *testing.T) {
 	dir := t.TempDir()
 	start := time.Now()
 	v := Verify(context.Background(), dir, os.Environ(), [][]string{{"sh", "-c", "sleep 30 & wait"}}, 200*time.Millisecond)
@@ -81,4 +87,66 @@ func TestVerifyEndsDescendantsAndBoundsOutput(t *testing.T) {
 	if !v.Pass || len(v.Commands[0].Tail) > tailBytes || !strings.HasSuffix(v.Commands[0].Tail, "end\n") {
 		t.Fatalf("large output = %d bytes, pass %v", len(v.Commands[0].Tail), v.Pass)
 	}
+}
+
+// Review 164 B1: the ring holds only its tail, whatever the writes.
+func TestRingKeepsOnlyItsTail(t *testing.T) {
+	r := &ring{max: 100}
+	var all []byte
+	for i := 0; i < 10000; i++ {
+		chunk := []byte(fmt.Sprintf("%06d;", i))
+		all = append(all, chunk...)
+		if _, err := r.Write(chunk); err != nil {
+			t.Fatal(err)
+		}
+		if len(r.buf) > r.max || cap(r.buf) > 2*r.max {
+			t.Fatalf("after %d writes the ring holds %d bytes (cap %d)", i+1, len(r.buf), cap(r.buf))
+		}
+	}
+	if string(r.bytes()) != string(all[len(all)-100:]) {
+		t.Fatal("the ring does not hold the tail")
+	}
+	big := bytes.Repeat([]byte("x"), 1000)
+	big[999] = 'y'
+	if _, err := r.Write(big); err != nil || len(r.buf) != 100 || r.buf[99] != 'y' || cap(r.buf) > 2*r.max {
+		t.Fatalf("a large write: %d bytes, cap %d", len(r.buf), cap(r.buf))
+	}
+}
+
+// Review 164 B1: a report over its limit is not read, a log only by its tail.
+func TestBoundedReads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big")
+	body := bytes.Repeat([]byte("a"), 3<<20)
+	copy(body[len(body)-5:], "tail!")
+	if err := os.WriteFile(path, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := readAtMost(path, maxBody); !errors.Is(err, errTooLarge) || b != nil {
+		t.Fatalf("over the limit = %d bytes, %v", len(b), err)
+	}
+	if b, err := readAtMost(path, len(body)); err != nil || len(b) != len(body) {
+		t.Fatalf("at the limit = %d bytes, %v", len(b), err)
+	}
+	if b, err := readTail(path, logTailBytes); err != nil || len(b) != logTailBytes || !bytes.HasSuffix(b, []byte("tail!")) {
+		t.Fatalf("tail = %d bytes, %v", len(b), err)
+	}
+	if b, err := readTail(path, int64(len(body))*2); err != nil || len(b) != len(body) {
+		t.Fatalf("a tail longer than the file = %d bytes, %v", len(b), err)
+	}
+	// What is read is what is kept: the bytes allocated, not only the result.
+	if n := allocated(func() { _, _ = readTail(path, logTailBytes) }); n > 1<<20 {
+		t.Fatalf("reading a 64 KiB tail allocated %d bytes", n)
+	}
+	if n := allocated(func() { _, _ = readAtMost(path, maxBody) }); n > 1<<20 {
+		t.Fatalf("refusing a 3 MiB report allocated %d bytes", n)
+	}
+}
+
+func allocated(fn func()) uint64 {
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	fn()
+	runtime.ReadMemStats(&after)
+	return after.TotalAlloc - before.TotalAlloc
 }

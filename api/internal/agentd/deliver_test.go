@@ -142,7 +142,10 @@ func TestHandOverWaitsForThePlatform(t *testing.T) {
 	}
 }
 
-// Review 163 A5: a lease lost during the hand-over goes to salvage.
+// Review 163 A5: a lease lost during the hand-over goes to salvage, which
+// waits while the attempt is in its grace: pending, kept in the journal for
+// the next takeover, not retried in a loop that holds up the host (review
+// 164 A8).
 func TestHandOverLosesItsLease(t *testing.T) {
 	_, _, base := platform(t)
 	proxied, f := faultProxy(t, base)
@@ -156,7 +159,7 @@ func TestHandOverLosesItsLease(t *testing.T) {
 	defer cancel()
 	out, err := d.Run(runCtx, cl)
 	m, _ := d.Registry.Load()
-	if out.EndHow != "lease_lost" || out.Submitted || !errors.Is(err, context.DeadlineExceeded) || m[cl.AttemptID].Phase != "lost" ||
+	if out.EndHow != "lease_lost" || out.Submitted || !errors.Is(err, agentd.ErrPending) || m[cl.AttemptID].Phase != "lost" ||
 		m[cl.AttemptID].Report == "" {
 		t.Fatalf("run = %+v %v; journal %+v", out, err, m[cl.AttemptID])
 	}

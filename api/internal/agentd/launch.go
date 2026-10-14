@@ -22,8 +22,10 @@ import (
 // of file and exits: no process group runs that the registry does not know.
 // The launcher stays the group's leader while the executor runs and, once it
 // exits, ends whatever else is left in the group before it exits with the
-// executor's code, so the leader gone means the group is empty (review 163
-// A6).
+// executor's code (review 163 A6). That is best effort: a launcher killed on
+// its own leaves the executor running, so agentd never takes the leader gone
+// to mean the group is empty; it checks the group itself (ClearGroup, review
+// 164 A2).
 
 // LaunchArg is the first argument that makes agentd the launcher.
 const LaunchArg = "launch"
@@ -68,13 +70,14 @@ func RunLauncher(argv []string) int {
 }
 
 // clearGroup ends every process of the group but self: TERM, then KILL to
-// whatever is left after grace.
+// whatever is left after grace. When the group cannot be listed it stops:
+// agentd, which watches the launcher, clears the group itself.
 func clearGroup(pgid, self int, grace time.Duration) {
 	_ = syscall.Kill(-pgid, syscall.SIGTERM)
 	deadline := time.Now().Add(grace)
 	for {
-		others := groupMembers(pgid, self)
-		if len(others) == 0 {
+		others, err := groupMembers(pgid, self)
+		if err != nil || len(others) == 0 {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -87,16 +90,106 @@ func clearGroup(pgid, self int, grace time.Duration) {
 	}
 }
 
-// groupMembers lists the processes of a group, but not except.
-func groupMembers(pgid, except int) []int {
-	out, _ := exec.Command("pgrep", "-g", strconv.Itoa(pgid)).Output()
+// pgrep is the program that lists a group (a variable for the test of a
+// failing query).
+var pgrep = "pgrep"
+
+// groupMembers lists the processes of a group, but not except. A query that
+// fails is an error, never an empty group (review 164 A2): pgrep exits 1 for
+// no match and otherwise for a failure.
+func groupMembers(pgid, except int) ([]int, error) {
+	out, err := exec.Command(pgrep, "-g", strconv.Itoa(pgid)).Output()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("agentd: list group %d: %w", pgid, err)
+	}
 	var pids []int
 	for _, f := range strings.Fields(string(out)) {
-		if pid, err := strconv.Atoi(f); err == nil && pid != except {
+		pid, perr := strconv.Atoi(f)
+		if perr != nil {
+			return nil, fmt.Errorf("agentd: list group %d: %q", pgid, f)
+		}
+		if pid != except {
 			pids = append(pids, pid)
 		}
 	}
-	return pids
+	return pids, nil
+}
+
+// GroupState is what agentd knows of a process group it ended.
+type GroupState string
+
+const (
+	// GroupCleared: no process of the group is left.
+	GroupCleared GroupState = "cleared"
+	// GroupRemains: processes are left after KILL.
+	GroupRemains GroupState = "remains"
+	// GroupUnknown: processes are there that cannot be shown to be the
+	// attempt's, or the group cannot be listed. Nothing is killed; the host
+	// takes no new work until the group is gone (someone ends them).
+	GroupUnknown GroupState = "unknown"
+)
+
+// ClearGroup ends what is left of the attempt's group pgid, whose leader
+// started at start, and says whether it is gone. While the leader is the
+// recorded one the group is the attempt's. Once the leader is gone the group
+// id could in principle have gone to another process, but the system never
+// hands out a process id a group still has: so the group is still the
+// attempt's when one of its processes started before the leader died (died,
+// when agentd saw it die; zero after a restart, when that cannot be told).
+// Otherwise nothing is killed and the state is unknown.
+func ClearGroup(pgid int, start string, died time.Time, grace time.Duration) (GroupState, []int) {
+	if pgid <= 1 {
+		return GroupCleared, nil
+	}
+	switch err := syscall.Kill(-pgid, 0); {
+	case errors.Is(err, syscall.ESRCH):
+		return GroupCleared, nil
+	case err != nil:
+		return GroupUnknown, nil
+	}
+	if !Alive(pgid, start) {
+		pids, err := groupMembers(pgid, 0)
+		switch {
+		case err != nil:
+			return GroupUnknown, nil
+		case len(pids) == 0:
+			return GroupCleared, nil
+		case died.IsZero() || !startedBefore(pids, died):
+			return GroupUnknown, pids
+		}
+	}
+	Terminate(pgid, grace)
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		if errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH) {
+			return GroupCleared, nil
+		}
+		if time.Now().After(deadline) {
+			pids, err := groupMembers(pgid, 0)
+			if err != nil {
+				return GroupUnknown, nil
+			}
+			return GroupRemains, pids
+		}
+	}
+}
+
+// startedBefore: one of pids started in a second before t's.
+func startedBefore(pids []int, t time.Time) bool {
+	for _, pid := range pids {
+		s, err := StartTime(pid)
+		if err != nil {
+			continue
+		}
+		at, err := time.ParseInLocation("Mon Jan 2 15:04:05 2006", s, time.Local)
+		if err == nil && at.Before(t.Truncate(time.Second)) {
+			return true
+		}
+	}
+	return false
 }
 
 // GroupAlive reports whether any process of the group is left.
