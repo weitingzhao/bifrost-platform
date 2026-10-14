@@ -699,11 +699,13 @@ func TestGitCutShortIsPending(t *testing.T) {
 }
 
 // fakeGit puts a git first on PATH whose diff leaves a helper holding its
-// stdout (and only its stdout) after git itself has exited.
+// stdout (and only its stdout) for 30 s after git itself has exited; the
+// bounds below are far under that and far over gitWaitDelay, so a loaded
+// machine does not turn them red.
 func fakeGit(t *testing.T) {
 	t.Helper()
 	bin := t.TempDir()
-	script := "#!/bin/sh\ncase \"$1\" in\n  diff) sleep 5 2>/dev/null & echo patch; exit 0 ;;\n  *) exit 0 ;;\nesac\n"
+	script := "#!/bin/sh\ncase \"$1\" in\n  diff) sleep 30 2>/dev/null & echo patch; exit 0 ;;\n  *) exit 0 ;;\nesac\n"
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -721,7 +723,7 @@ func TestDiffBoundedWhenAHelperHoldsStdout(t *testing.T) {
 	}
 	ws := &Workspace{Dir: dir, Base: "base", env: os.Environ()}
 	start := time.Now()
-	if _, _, err := ws.Diff(bg, patchLimit); time.Since(start) > gitWaitDelay+1500*time.Millisecond {
+	if _, _, err := ws.Diff(bg, patchLimit); time.Since(start) > gitWaitDelay+8*time.Second {
 		t.Fatalf("diff returned after %s (%v)", time.Since(start), err)
 	}
 
@@ -737,7 +739,7 @@ func TestDiffBoundedWhenAHelperHoldsStdout(t *testing.T) {
 		t.Fatal(err)
 	}
 	start = time.Now()
-	if err := d.Recover(bg); err != nil || time.Since(start) > gitWaitDelay+3*time.Second {
+	if err := d.Recover(bg); err != nil || time.Since(start) > gitWaitDelay+10*time.Second {
 		t.Fatalf("recover = %v after %s", err, time.Since(start))
 	}
 	if _, ok := registered(t, d, "a1"); ok || f.count("ended") != 1 {
