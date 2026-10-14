@@ -142,10 +142,16 @@ func (b *ChainBreak) Error() string {
 
 // VerifyStream recomputes every hash of a stream from the stored rows and
 // checks each link, seq continuity and the head (T20, T23b).
-func VerifyStream(ctx context.Context, q interface {
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
+// It reads the events and the head in one repeatable-read snapshot, so a
+// write committed meanwhile is not reported as a break (review 144 B3).
+func VerifyStream(ctx context.Context, db interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }, stream string) (int64, error) {
+	q, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = q.Rollback(context.WithoutCancel(ctx)) }()
 	rows, err := q.Query(ctx, `SELECT seq, event_type, actor_id, COALESCE(mission_id,''), COALESCE(plan_node_id,''),
 	  COALESCE(task_id,''), COALESCE(attempt_id,''), COALESCE(cause_event_id,0), body_json::text, prev_sha256, sha256, at
 	  FROM agentrt.event WHERE event_stream_id = $1 ORDER BY seq`, stream)

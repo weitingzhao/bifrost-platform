@@ -394,3 +394,115 @@ func waitFor(t *testing.T, cond func() bool) {
 	}
 	t.Fatal("condition not met within 10 seconds")
 }
+
+// T15a and review 144 B7: the lock is taken away after the snapshot; the old
+// rebuild stops at its next write, and a new holder rebuilds completely.
+func TestLockLostMidRebuild(t *testing.T) {
+	f := setup(t)
+	f.readyTask(t)
+	f.post(t, "exec:codex", 2)
+	old, err := f.relay.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cur *Lease
+	f.relay.afterSnapshot = func() {
+		f.rc.Del(ctx, f.pre+"relay:lock")
+
+		if cur, err = f.relay.Acquire(ctx); err != nil {
+			t.Error(err)
+		}
+	}
+	if _, err = old.Rebuild(ctx); !errors.Is(err, ErrFenced) {
+		t.Fatalf("old rebuild after losing the lock: %v", err)
+	}
+	f.relay.afterSnapshot = nil
+	epoch, err := cur.Rebuild(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := f.rc.Get(ctx, f.pre+"meta:epoch").Result(); got != fmt.Sprint(epoch) {
+		t.Fatalf("epoch %q, want the new holder's %d", got, epoch)
+	}
+	if n, _ := f.rc.XLen(ctx, f.pre+"mbox:exec:codex").Result(); n != 2 {
+		t.Fatalf("mailbox has %d signals, want 2", n)
+	}
+}
+
+// Review 144 B2: a rebuild that dies before writing its epoch leaves the
+// rebuilding flag; the next holder rebuilds even though an older epoch exists.
+func TestUnfinishedRebuildIsRedone(t *testing.T) {
+	f := setup(t)
+	l, err := f.relay.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := l.Rebuild(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.readyTask(t)
+	f.relay.beforeEpoch = func() { f.rc.Del(ctx, f.pre+"relay:lock") }
+	if _, err := l.Rebuild(ctx); !errors.Is(err, ErrFenced) {
+		t.Fatalf("rebuild that lost the lock before its epoch: %v", err)
+	}
+	f.relay.beforeEpoch = nil
+	if n, _ := f.rc.Exists(ctx, f.pre+"meta:rebuilding").Result(); n != 1 {
+		t.Fatal("the unfinished rebuild left no flag")
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- f.relay.Run(runCtx) }()
+	defer func() { cancel(); <-done }()
+	waitFor(t, func() bool {
+		flag, _ := f.rc.Exists(ctx, f.pre+"meta:rebuilding").Result()
+		e, _ := f.rc.Get(ctx, f.pre+"meta:epoch").Int64()
+		return flag == 0 && e > first
+	})
+}
+
+// Review 144 B1: a rebuild slower than the lock's TTL keeps the lock, because
+// the lease is renewed in the background for the whole hold.
+func TestSlowRebuildKeepsTheLock(t *testing.T) {
+	f := setup(t)
+	f.readyTask(t)
+	f.relay.LockTTL = 600 * time.Millisecond
+	f.relay.afterSnapshot = func() { time.Sleep(1500 * time.Millisecond) }
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- f.relay.Run(runCtx) }()
+	defer func() { cancel(); <-done }()
+	waitFor(t, func() bool { n, _ := f.rc.Exists(ctx, f.pre+"meta:epoch").Result(); return n == 1 })
+	if n, _ := f.rc.Get(ctx, f.pre+"relay:fence").Int64(); n != 1 {
+		t.Fatalf("the relay took the lock %d times; a slow rebuild should not lose it", n)
+	}
+}
+
+// T31 with a new holder: the first relay dies after XADD; a different holder
+// sends the signal again.
+func TestNewHolderResendsAfterCrash(t *testing.T) {
+	f := setup(t)
+	f.readyTask(t)
+	l, err := f.relay.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.relay.afterXAdd = func(int64) error { return errors.New("killed") }
+	if _, err = l.DeliverOnce(ctx); err == nil {
+		t.Fatal("the simulated crash did not stop delivery")
+	}
+	f.relay.afterXAdd = nil
+	f.rc.Del(ctx, f.pre+"relay:lock") // the dead relay's lock expires
+	next, err := f.relay.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Token() == l.Token() {
+		t.Fatal("the new holder has the old token")
+	}
+	deliverAll(t, next)
+	ids := f.streamEventIDs(t, "wake")
+	if len(ids) != 2 || ids[0] != ids[1] {
+		t.Fatalf("wake %v, want the same event twice", ids)
+	}
+}

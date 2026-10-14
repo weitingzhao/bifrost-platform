@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Run holds the lock while it can and delivers until ctx ends. When the
@@ -33,16 +35,28 @@ func (r *Relay) Run(ctx context.Context) error {
 }
 
 func (r *Relay) hold(ctx context.Context, lease *Lease) error {
+	// The lease is renewed in the background for the whole time it is held,
+	// rebuild included; if a renewal fails, everything under ctx stops
+	// (review 144 B1).
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	safego.Go("agentrt.relay.keepalive", func() { lease.keepAlive(ctx, cancel) })
+
+	// Rebuild when the epoch is missing (a new or wiped Redis) or a rebuild
+	// was left unfinished (review 144 B2).
 	_, gerr := r.Redis.Get(ctx, r.key("meta:epoch")).Result()
+	flag, ferr := r.Redis.Exists(ctx, r.key("meta:rebuilding")).Result()
 	switch {
-	case errors.Is(gerr, redis.Nil):
+	case gerr != nil && !errors.Is(gerr, redis.Nil):
+		return gerr
+	case ferr != nil:
+		return ferr
+	case errors.Is(gerr, redis.Nil) || flag == 1:
 		epoch, err := lease.Rebuild(ctx)
 		if err != nil {
-			return err
+			return errors.Join(err, context.Cause(ctx))
 		}
 		slog.Info("agentrt relay: rebuilt redis-agents from PostgreSQL", "epoch", epoch)
-	case gerr != nil:
-		return gerr
 	}
 	conn, err := r.PG.Acquire(ctx)
 	if err != nil {
@@ -52,36 +66,44 @@ func (r *Relay) hold(ctx context.Context, lease *Lease) error {
 	if _, err := conn.Exec(ctx, `LISTEN agrt_outbox`); err != nil {
 		return err
 	}
-	renewEvery := r.ttl() / 3
-	nextRenew := time.Now().Add(renewEvery)
 	for ctx.Err() == nil {
-		for {
+		for ctx.Err() == nil {
 			n, err := lease.DeliverOnce(ctx)
 			if err != nil {
-				return err
+				return errors.Join(err, context.Cause(ctx))
 			}
 			if n == 0 {
 				break
 			}
 		}
-		if time.Now().After(nextRenew) {
-			if err := lease.Renew(ctx); err != nil {
-				return err
-			}
-			nextRenew = time.Now().Add(renewEvery)
-		}
-		wait := time.Until(nextRenew)
-		if wait > 2*time.Second {
-			wait = 2 * time.Second
-		}
-		wctx, cancel := context.WithTimeout(ctx, wait)
+		wctx, wcancel := context.WithTimeout(ctx, 2*time.Second)
 		_, err := conn.Conn().WaitForNotification(wctx)
-		cancel()
+		wcancel()
 		if err != nil && !errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
 			return err
 		}
 	}
-	return ctx.Err()
+	return context.Cause(ctx)
+}
+
+// keepAlive renews the lease every third of its TTL until ctx ends; a failed
+// renewal cancels ctx with the reason.
+func (l *Lease) keepAlive(ctx context.Context, cancel context.CancelCauseFunc) {
+	t := time.NewTicker(l.r.ttl() / 3)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := l.Renew(ctx); err != nil {
+				if ctx.Err() == nil {
+					cancel(err)
+				}
+				return
+			}
+		}
+	}
 }
 
 func sleep(ctx context.Context, d time.Duration) {

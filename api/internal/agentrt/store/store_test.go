@@ -206,7 +206,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 	reader := w.db.Connect(t, w.db.Reader)
 	var n int
 	ok(t, reader.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&n))
-	wantErr(t, exec(reader, `INSERT INTO agentrt.note VALUES (1)`), "")
+	wantErr(t, exec(reader, `INSERT INTO agentrt.control (control_id, scope, control_kind, reason, set_by_actor_id) VALUES ('c', 'global', 'stop', 'x', 'owner')`), "permission denied")
 	wantErr(t, exec(reader, `UPDATE agentrt.task SET title = 'x'`), "permission denied")
 	if _, err := pgx.Connect(ctx, w.db.Foreign); err == nil {
 		t.Fatal("platform_agentrt_stg connected to a dev database")
@@ -251,13 +251,17 @@ func planChange(w *world, fn func(tx pgx.Tx) error) error {
 // T30: numbering never changes, nodes are never deleted.
 func TestPlanNumberingIsFixed(t *testing.T) {
 	w := newWorld(t)
-	for _, q := range []string{
-		`UPDATE agentrt.plan_node SET ordinal = 9 WHERE plan_node_id = 'R2:2.1-1'`,
-		`UPDATE agentrt.plan_node SET parent_plan_node_id = 'R2' WHERE plan_node_id = 'R2:2.1-1'`,
-		`UPDATE agentrt.plan_node SET plan_node_id = 'R2:2.1-9' WHERE plan_node_id = 'R2:2.1-1'`,
+	for q, want := range map[string]string{
+		`UPDATE agentrt.plan_node SET ordinal = 9 WHERE plan_node_id = 'R2:2.1-1'`:                                "keeps its id",
+		`UPDATE agentrt.plan_node SET parent_plan_node_id = 'R2' WHERE plan_node_id = 'R2:2.1-1'`:                 "keeps its id",
+		`UPDATE agentrt.plan_node SET created_at = created_at - interval '1 day' WHERE plan_node_id = 'R2:2.1-1'`: "keeps its id",
+		`UPDATE agentrt.plan_node SET plan_node_id = 'R2:2.1-9' WHERE plan_node_id = 'R2:2.1-1'`:                  "never changes",
 	} {
-		wantErr(t, planChange(w, func(tx pgx.Tx) error { _, err := tx.Exec(ctx, q); return err }), "keeps its id")
+		wantErr(t, planChange(w, func(tx pgx.Tx) error { _, err := tx.Exec(ctx, q); return err }), want)
 	}
+	// The owner meets the deletion guard, not just a missing privilege.
+	_, err := w.db.Connect(t, w.db.Owner).Exec(ctx, `DELETE FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1-2'`)
+	wantErr(t, err, "not allowed")
 	wantErr(t, planChange(w, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx, `DELETE FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1-2'`)
 		return err

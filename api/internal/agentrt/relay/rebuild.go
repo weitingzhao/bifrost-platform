@@ -99,6 +99,9 @@ func (l *Lease) Rebuild(ctx context.Context) (int64, error) {
 			return 0, err
 		}
 	}
+	if l.r.beforeEpoch != nil {
+		l.r.beforeEpoch()
+	}
 	if err := l.do(ctx, "SET", l.r.key("meta:epoch"), strconv.FormatInt(snap.epoch, 10)); err != nil {
 		return 0, err
 	}

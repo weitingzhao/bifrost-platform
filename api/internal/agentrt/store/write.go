@@ -12,9 +12,11 @@ import (
 
 // InTx runs fn in one transaction and commits it; any error rolls back.
 func InTx(ctx context.Context, conn interface {
-	Begin(context.Context) (pgx.Tx, error)
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }, fn func(pgx.Tx) error) error {
-	tx, err := conn.Begin(ctx)
+	// The database refuses state writes under any other isolation level:
+	// its locks rely on each statement reading what was committed before it.
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return err
 	}

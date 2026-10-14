@@ -52,6 +52,9 @@ type Relay struct {
 	// afterSnapshot, when set, runs between reading PostgreSQL and writing
 	// Redis during a rebuild; tests use it to write concurrently (T15a).
 	afterSnapshot func()
+	// beforeEpoch, when set, runs just before a rebuild writes the epoch;
+	// tests take the lock away there (review 144 B2, T15a).
+	beforeEpoch func()
 }
 
 func (r *Relay) key(s string) string { return r.Prefix + s }

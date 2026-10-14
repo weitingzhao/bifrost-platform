@@ -109,7 +109,11 @@ func TestEvalKleene(t *testing.T) {
 		{gateRule, Unknown, false},
 		{`{"all":[{"task_accepted":"` + taskA + `"},` + gateRule + `]}`, Unknown, false},
 		{`{"all":[{"task_accepted":"` + taskB + `"},` + gateRule + `]}`, False, false},
-		{`{"any":[{"task_accepted":"` + taskA + `"},` + gateRule + `]}`, True, false},
+		// An unreadable delivery record keeps the whole rule from done, even
+		// beside a branch that holds (v5 §5.1.2, review 144 A4).
+		{`{"any":[{"task_accepted":"` + taskA + `"},` + gateRule + `]}`, Unknown, false},
+		{`{"any":[` + gateRule + `,{"task_accepted":"` + taskA + `"}]}`, Unknown, false},
+		{`{"all":[{"approval_executed":17},{"any":[{"task_accepted":"` + taskA + `"},` + gateRule + `]}]}`, Unknown, false},
 		{`{"any":[{"task_accepted":"` + taskB + `"},` + gateRule + `]}`, Unknown, false},
 		{`{"all":[{"approval_executed":17},{"manual":"drill done by hand"}]}`, True, true},
 		{`{"any":[{"approval_executed":17},{"manual":"drill done by hand"}]}`, True, false},

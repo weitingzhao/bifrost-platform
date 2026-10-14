@@ -49,13 +49,18 @@ var seedFacts = []seedFact{
 // deferred foreign key checks it at commit. It does nothing on a database
 // that already has the controller.
 func Seed(ctx context.Context, conn interface {
-	Begin(context.Context) (pgx.Tx, error)
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 }) (bool, error) {
-	tx, err := conn.Begin(ctx)
+	tx, err := conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return false, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	// Two migrators starting on an empty database: the second waits here and
+	// then sees the controller (review 144 B5).
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000002)`); err != nil {
+		return false, err
+	}
 	var have bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.actor WHERE actor_id = 'controller')`).Scan(&have); err != nil {
 		return false, err
@@ -67,11 +72,15 @@ func Seed(ctx context.Context, conn interface {
 	for _, a := range seedActors {
 		ids = append(ids, a.id)
 	}
+	facts := make([]any, 0, len(seedFacts))
+	for _, f := range seedFacts {
+		facts = append(facts, f.id)
+	}
 	if _, err := Append(ctx, tx, Event{
 		Stream: "system",
 		Type:   "actor_registered",
 		Actor:  "controller",
-		Body:   map[string]any{"actors": ids, "note": "seed"},
+		Body:   map[string]any{"actors": ids, "capability_facts": facts, "note": "seed"},
 	}); err != nil {
 		return false, err
 	}

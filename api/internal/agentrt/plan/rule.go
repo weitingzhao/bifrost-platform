@@ -305,12 +305,36 @@ func (r Rule) Refs() []Ref {
 
 // Eval evaluates the rule with Kleene logic: all is false if any child is
 // false, else unknown if any is unknown; any is true if any child is true,
-// else unknown if any is unknown. An empty rule is never true.
+// else unknown if any is unknown. An empty rule is never true. One rule over
+// it, from design v5 §5.1.2: when the delivery record behind a gate cannot be
+// read, the whole rule is not done, even if another branch of an any holds
+// (review 144 A4). A false gate does not have that effect; only unknown.
 func (r Rule) Eval(f Facts) Result {
 	if r.node == nil {
 		return Result{Value: False}
 	}
-	return eval(r.node, f)
+	res := eval(r.node, f)
+	if res.Value == True && gateUnknown(r.node, f) {
+		return Result{Value: Unknown}
+	}
+	return res
+}
+
+func gateUnknown(n *node, f Facts) bool {
+	if n.kind == kGates {
+		for _, g := range n.gates {
+			if f.GatePassed(n.s1, g.test, g.spec) == Unknown {
+				return true
+			}
+		}
+		return false
+	}
+	for _, c := range n.children {
+		if gateUnknown(c, f) {
+			return true
+		}
+	}
+	return false
 }
 
 func eval(n *node, f Facts) Result {
