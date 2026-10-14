@@ -90,10 +90,14 @@ type checkSpec struct {
 	check, subject, attempt, commit, repo, taskSpec string
 	round                                           int64
 	verification, verifyReport                      string // a review's deterministic pass
+	salvage                                         bool   // the attempt is a lost one whose result was salvaged (adopt.go)
 }
 
 func (c checkSpec) put(ctx context.Context, tx pgx.Tx) (string, error) {
 	doc := map[string]any{"check": c.check, "subject_task": c.subject, "attempt": c.attempt, "round": c.round, "task_spec": c.taskSpec}
+	if c.salvage {
+		doc["salvage"] = true
+	}
 	for k, v := range map[string]string{"commit": c.commit, "repo": c.repo, "verification": c.verification, "verify_report": c.verifyReport} {
 		if v != "" {
 			doc[k] = v
@@ -125,6 +129,7 @@ func readCheckSpec(ctx context.Context, tx pgx.Tx, artifactID string) (checkSpec
 	var c checkSpec
 	c.check, c.subject, c.attempt, c.commit, c.repo, c.taskSpec = str("check"), str("subject_task"), str("attempt"), str("commit"), str("repo"), str("task_spec")
 	c.verification, c.verifyReport = str("verification"), str("verify_report")
+	c.salvage, _ = m["salvage"].(bool)
 	n, ok := m["round"].(interface{ Int64() (int64, error) })
 	if !ok || c.check == "" || c.subject == "" || c.attempt == "" {
 		return checkSpec{}, false, nil
@@ -198,7 +203,9 @@ func StartVerification(ctx context.Context, db DB, taskID string) (string, error
 // Conclude uses the result of a verification or review task whose attempt
 // was submitted. A result about the subject's current attempt and round
 // records the verification (verification_recorded) and moves the subject
-// on; any other closes the check and moves nothing. It returns what it did:
+// on; any other closes the check and moves nothing. A check of a salvaged
+// result goes by adopt.go: a pass of its review accepts the lost attempt and
+// cancels the live one; a failure moves nothing. It returns what it did:
 // "review" (a review task was proposed), "accepted", "rework", "blocked",
 // "closed", or "" when there was nothing to do.
 func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
@@ -234,6 +241,16 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 				return err
 			}
+		}
+		// Accepting a salvaged result cancels the subject's live attempt:
+		// it is locked here, with the subject's attempts, and checked again
+		// once the subject is locked (adopt.go).
+		var live string
+		if pinned && spec.salvage {
+			if live, err = liveAttempt(ctx, tx, subject, "FOR UPDATE"); err != nil {
+				return err
+			}
+			hook("adopting", subject)
 		}
 		current, _, _, _, err := submittedAttempt(ctx, tx, subject, "FOR SHARE")
 		if err != nil && !errors.Is(err, errNoSubmitted) {
@@ -272,10 +289,22 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		if base == "" {
 			base = sd.base
 		}
+		stale := ""
+		if pinned && spec.salvage && spec.check == v.role && spec.subject == s.id {
+			stale, err = salvageStale(ctx, tx, spec, s, sd, pinnedState, live)
+			if errors.Is(err, errLiveMoved) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+		}
 		switch {
 		case !pinned || spec.check != v.role || spec.subject != s.id:
 			return closeCheck("the check pins no attempt of its subject")
-		case pinnedState != "submitted" || spec.attempt != current || s.state != "verifying" || int64(sd.round) != spec.round:
+		case spec.salvage && stale != "":
+			return closeCheck(stale)
+		case !spec.salvage && (pinnedState != "submitted" || spec.attempt != current || s.state != "verifying" || int64(sd.round) != spec.round):
 			return closeCheck(fmt.Sprintf("stale: about attempt %s of round %d; the subject is %s in round %d", spec.attempt, spec.round, s.state, sd.round))
 		// The check ran on what it pins, and pins what the attempt is (review
 		// 152 A1): the attempt's own commit, the subject's repo and task
@@ -315,6 +344,9 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 			return err
 		}
 		switch {
+		case accepts && spec.salvage:
+			did = "accepted"
+			return adopt(ctx, tx, s, spec.attempt, live)
 		case accepts:
 			did = "accepted"
 			return moveTask(ctx, tx, "controller", s, "accepted", "review passed")
@@ -324,6 +356,9 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 			review.check, review.verification, review.verifyReport = "review", vid, report
 			_, err = proposeChecker(ctx, tx, s, sd, review)
 			return err
+		case spec.salvage:
+			did = "closed" // a salvaged result that fails moves nothing: the task goes on with its own attempts
+			return nil
 		}
 		if sd.round+1 > sd.maxRounds {
 			did = "blocked"

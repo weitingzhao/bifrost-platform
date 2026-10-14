@@ -499,6 +499,7 @@ func Submit(ctx context.Context, db DB, f Fence) (map[string]any, error) {
 			if err != nil {
 				return nil, err
 			}
+			hook("submitting", a.id)
 			if !a.persisted {
 				return nil, fmt.Errorf("%w: attempt %s is not persisted", ErrState, a.id)
 			}

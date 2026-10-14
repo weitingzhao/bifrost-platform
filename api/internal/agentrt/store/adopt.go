@@ -1,0 +1,158 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+
+	"github.com/jackc/pgx/v5"
+)
+
+// Accepting a salvaged result (design v5 §5.2 /salvage, T34 case 8; review
+// 152 A3; the Owner chose option A on 2026-10-14). An attempt that lost its
+// lease stays lost; once the grace has passed its host may salvage its
+// result, which persists it (Salvage). The controller checks that result as
+// it checks a submitted one: a deterministic verification pinned to the lost
+// attempt, then a review, their specs marked salvage. A passing review
+// accepts the lost attempt, and the same transaction cancels the task's live
+// new attempt, if there is one (attempt_cancelled), and accepts the task:
+// one accepted attempt, nothing left running for it. The task does not move
+// to verifying meanwhile: its new attempt keeps running, and a salvaged
+// result that fails its check moves nothing.
+//
+// A salvaged result is checked only while it can still be the task's result:
+// the task is ready, leased or running (not paused or blocked, and not past a
+// submit), no later attempt was submitted, the attempt has no verification
+// yet, and it is checked in the round it was pinned in. Whichever comes first
+// wins: a new attempt that submits before the acceptance closes the salvage
+// check; an acceptance that comes first fences the new attempt, whose next
+// call is refused, and its host ends it.
+
+// adoptMoves are the task moves of accepting a salvaged result.
+var adoptMoves = map[string][]string{"ready": {"accepted"}, "leased": {"accepted"}, "running": {"accepted"}}
+
+var adoptable = []string{"ready", "leased", "running"}
+
+// salvagedOpen is the condition on attempt a (and its task t) under which its
+// salvaged result is still to be checked.
+const salvagedOpen = `a.state = 'lost' AND a.persisted_at IS NOT NULL AND t.role = 'implement' AND t.state IN ('ready','leased','running')
+  AND NOT EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no
+                  AND b.state IN ('submitted','finished'))
+  AND NOT EXISTS (SELECT 1 FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id)
+  AND NOT EXISTS (SELECT 1 FROM agentrt.task c WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review')
+                  AND c.state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused'))`
+
+// PendingSalvaged lists the lost attempts whose salvaged result the
+// acceptance pass is to check.
+func PendingSalvaged(ctx context.Context, db DB) ([]string, error) {
+	var ids []string
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT a.attempt_id FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+		  WHERE `+salvagedOpen+` ORDER BY a.persisted_at, a.attempt_id`)
+		if err != nil {
+			return err
+		}
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	return ids, err
+}
+
+// StartSalvageCheck proposes the deterministic verification of a lost
+// attempt's salvaged result, pinned to that attempt and marked salvage. It
+// returns the new task's id, or "" when the result is no longer to be checked
+// (or another pass did it).
+func StartSalvageCheck(ctx context.Context, db DB, attemptID string) (string, error) {
+	var id string
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var taskID string
+		if err := tx.QueryRow(ctx, `SELECT task_id FROM agentrt.attempt WHERE attempt_id = $1`, attemptID).Scan(&taskID); err != nil {
+			return err
+		}
+		step, err := lockStep(ctx, tx, taskID)
+		if err != nil {
+			return err
+		}
+		var commit *string
+		if err = tx.QueryRow(ctx, `SELECT pushed_commit FROM agentrt.attempt WHERE attempt_id = $1 FOR SHARE`, attemptID).Scan(&commit); err != nil {
+			return err
+		}
+		hook("salvage-check", taskID)
+		t, err := readTask(ctx, tx, taskID, true)
+		if err != nil || t.step != step {
+			return err
+		}
+		var open bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+		  WHERE a.attempt_id = $1 AND `+salvagedOpen+`)`, attemptID).Scan(&open); err != nil || !open {
+			return err
+		}
+		d, err := readDetail(ctx, tx, taskID)
+		if err != nil {
+			return err
+		}
+		spec := checkSpec{check: "verify", subject: t.id, attempt: attemptID, round: int64(d.round), repo: d.repo, taskSpec: d.spec, salvage: true}
+		if commit != nil {
+			spec.commit = *commit
+		}
+		id, err = proposeChecker(ctx, tx, t, d, spec)
+		return err
+	})
+	return id, err
+}
+
+// liveAttempt is the task's live attempt ("" when it has none), with lock.
+func liveAttempt(ctx context.Context, tx pgx.Tx, taskID, lock string) (string, error) {
+	var id string
+	err := tx.QueryRow(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE task_id = $1 AND state IN ('leased','running','stale') `+lock,
+		taskID).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+// errLiveMoved: the subject's live attempt is not the one locked before the
+// subject was; the next pass looks again, with the new one locked in order.
+var errLiveMoved = errors.New("store: the subject's live attempt changed")
+
+// salvageStale says why a check of a salvaged result is no longer about what
+// the task can accept ("" when it still is), with the subject locked and
+// live its live attempt as locked before.
+func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd taskDetail, pinnedState, live string) (string, error) {
+	switch {
+	case pinnedState != "lost":
+		return fmt.Sprintf("the salvaged attempt %s is %q, not lost", spec.attempt, pinnedState), nil
+	case int64(sd.round) != spec.round:
+		return fmt.Sprintf("stale: about round %d; the subject is in round %d", spec.round, sd.round), nil
+	case !slices.Contains(adoptable, s.state):
+		return "the subject is " + s.state + ": its own attempt's result goes first", nil
+	}
+	// A later attempt submitted since the check was proposed has moved the
+	// subject out of ready, leased and running, or (after a failed check and
+	// rework) into another round: the two cases above.
+	now, err := liveAttempt(ctx, tx, s.id, "")
+	if err != nil {
+		return "", err
+	}
+	if now != live {
+		return "", errLiveMoved
+	}
+	return "", nil
+}
+
+// adopt accepts the salvaged attempt: the subject's live attempt (locked
+// before the subject) is cancelled, and the subject is accepted.
+func adopt(ctx context.Context, tx pgx.Tx, s taskRow, accepted, live string) error {
+	if live != "" {
+		if err := attemptEvent(ctx, tx, "controller", attemptRow{id: live, task: s.id}, "attempt_cancelled",
+			map[string]any{"reason": "the salvaged result of attempt " + accepted + " was accepted", "accepted_attempt": accepted}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'cancelled' WHERE attempt_id = $1`, live); err != nil {
+			return err
+		}
+	}
+	return moveTaskBy(ctx, tx, "controller", s, "accepted", "the salvaged result of attempt "+accepted+" passed review", adoptMoves)
+}
