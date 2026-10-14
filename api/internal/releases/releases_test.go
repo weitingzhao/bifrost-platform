@@ -353,3 +353,32 @@ func TestRecordImages(t *testing.T) {
 		t.Fatalf("completed = %+v %v (labels %v)", got, err, cm.Labels)
 	}
 }
+
+// Review 170 B1: a v2 record marked complete without the digests its builds
+// owed is built again once, and gains them; the next tick leaves it alone.
+func TestCompleteV2RecordGainsItsDigests(t *testing.T) {
+	done := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	api := "sha256:" + strings.Repeat("a", 64)
+	run := pipelineRun("deliver-stg-11", "deliver-stg", true, done, nil, nil)
+	clone := cloneTaskRun("deliver-stg-11", "clone-platform", "bifrost-platform", shaA)
+	s, core := newFakeService(t, run, clone, buildTaskRun("deliver-stg-11", "build-platform-api", api, true))
+	old, _ := encode(Record{Run: "deliver-stg-11", Lane: "app", Env: "stg", Deploys: true, Repos: map[string]RepoBuild{"bifrost-platform": {SHA: shaA}}})
+	if _, err := core.CoreV1().ConfigMaps("cicd").Create(context.Background(), &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: recordName("deliver-stg-11"), Labels: map[string]string{labelRecord: "v2", labelComplete: "true"}},
+		Data:       map[string]string{dataKey: old},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 1 {
+		t.Fatalf("tick = %+v", r)
+	}
+	cm, _ := core.CoreV1().ConfigMaps("cicd").Get(context.Background(), recordName("deliver-stg-11"), metav1.GetOptions{})
+	var got Record
+	if err := json.Unmarshal([]byte(cm.Data[dataKey]), &got); err != nil || cm.Labels[labelRecord] != recordVersion ||
+		cm.Labels[labelComplete] != "true" || got.Images["platform-api"] != api {
+		t.Fatalf("rebuilt = %+v %v (labels %v)", got, err, cm.Labels)
+	}
+	if r := s.Tick(context.Background()); r.Recorded != 0 {
+		t.Fatalf("a current record was built again: %+v", r)
+	}
+}

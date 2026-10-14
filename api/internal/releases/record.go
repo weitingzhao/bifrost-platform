@@ -49,14 +49,17 @@ const (
 	labelLane   = "bifrost.io/release-lane"
 	labelEnv    = "bifrost.io/release-env"
 	labelRun    = "bifrost.io/release-run"
-	// labelComplete is "false" while some clone's commit is unknown; such a record
-	// is rebuilt while its run still exists.
+	// labelComplete is "false" while some clone's commit, or some build's
+	// digest, is unknown; such a record is rebuilt while its run still exists.
 	labelComplete = "bifrost.io/release-complete"
 	dataKey       = "record.json"
 	namePrefix    = "release-"
-	// recordVersion bumps when Record changes shape; a record of another
-	// version is built again while its run still exists. v2: images.
-	recordVersion = "v2"
+	// recordVersion bumps when Record changes shape or what a complete
+	// record means; a record of another version is built again once while
+	// its run still exists. v2: images. v3: a build that owes a digest is
+	// missing (review 170 B1), so a v2 record marked complete without its
+	// digests is built again.
+	recordVersion = "v3"
 )
 
 var (
