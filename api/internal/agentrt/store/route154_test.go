@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -294,19 +295,14 @@ func TestReroutePassScales(t *testing.T) {
 		}
 		return nil
 	}))
-	opened := 0
-	unhook := store.SetHook(func(point, _ string) {
-		if point == "rerouting" {
-			opened++
-		}
-	})
+	db := &countingDB{DB: w.rt}
 	start := time.Now()
-	decided := w.reroute(t)
+	decided, err := store.Reroute(ctx, db)
 	took := time.Since(start)
-	unhook()
+	ok(t, err)
 	t.Logf("a pass over %d unchanged ready tasks took %s", n, took)
-	if decided != 0 || opened != 0 {
-		t.Fatalf("decided %d, opened a transaction for %d tasks", decided, opened)
+	if decided != 0 || db.n != 1 {
+		t.Fatalf("decided %d in %d transactions; want 0 in the one scan", decided, db.n)
 	}
 	if took > 5*time.Second {
 		t.Fatalf("a pass over %d ready tasks took %s", n, took)
@@ -328,5 +324,99 @@ func TestClaimTakesOnlyTheRoute(t *testing.T) {
 	}
 	if c := w.claim(t, "h1", store.LeaseTTL, claude); c == nil || c.TaskID != task {
 		t.Fatalf("claim = %+v", c)
+	}
+}
+
+// countingDB counts the transactions begun through it.
+type countingDB struct {
+	store.DB
+	n int
+}
+
+func (c *countingDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	c.n++
+	return c.DB.BeginTx(ctx, o)
+}
+
+// 155 B2: a task that went ready again after the controller's scan has its
+// route from that move; the controller records nothing more.
+func TestRerouteAfterTheTaskWentReadyAgain(t *testing.T) {
+	w := newRoutedWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	task := w.ready(t, store.Task{})
+	w.jobs(t, "active", "*", claude)
+	moved := false
+	unhook := store.SetHook(func(point, arg string) {
+		if point != "rerouting" || arg != task || moved {
+			return
+		}
+		moved = true
+		for _, to := range []string{"paused", "ready"} {
+			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", task, to, "test") }))
+		}
+	})
+	n, err := store.Reroute(ctx, pool)
+	unhook()
+	ok(t, err)
+	if !moved || n != 0 || w.routes(t, task) != 2 {
+		t.Fatalf("moved %v, rerouted %d, %d decisions", moved, n, w.routes(t, task))
+	}
+	if r := fmt.Sprint(w.lastRoute(t, task)["candidates"]); r != "["+claudeImpl+"]" {
+		t.Fatalf("route = %s", r)
+	}
+}
+
+// 155 B2: each field of a candidate is part of the input on its own.
+func TestRerouteSeesEachCandidateField(t *testing.T) {
+	w := newRoutedWorld(t)
+	w.jobs(t, "active", "*", claude)
+	task := w.ready(t, store.Task{})
+	for _, change := range []string{
+		`status = 'probation'`,
+		`model_provider = 'anthropic-eu'`,
+		`version = version + 1`,
+	} {
+		ok(t, w.capabilityWrite(change, `UPDATE agentrt.job_candidate SET `+change+` WHERE job_candidate_id = '`+claudeImpl+`'`))
+		if n := w.reroute(t); n != 1 {
+			t.Fatalf("%s rerouted %d", change, n)
+		}
+	}
+	if n := w.reroute(t); n != 0 {
+		t.Fatalf("nothing changed and %d rerouted", n)
+	}
+	c := w.lastRoute(t, task)["inputs"].(map[string]any)["candidates"].([]any)[0].(map[string]any)
+	if c["status"] != "probation" || c["provider"] != "anthropic-eu" || c["version"] != float64(1) {
+		t.Fatalf("recorded candidate = %v", c)
+	}
+}
+
+// 155 A1 follow-up: the claim reads the task's needs again under its lock.
+func TestClaimRereadsNeedsUnderItsLock(t *testing.T) {
+	w := newRoutedWorld(t)
+	w.jobs(t, "active", "*", claude)
+	ok(t, w.capabilityWrite("restrict", `INSERT INTO agentrt.capability_fact
+	  (capability_fact_id, executor_actor_id, fact_kind, subject, source_kind, source)
+	  VALUES ('claude-cannot-gpu', 'exec:claude', 'cannot', 'gpu', 'measured', 'test')`))
+	task := w.ready(t, store.Task{})
+	changed := false
+	unhook := store.SetHook(func(point, arg string) {
+		if point != "picked" || arg != task || changed {
+			return
+		}
+		changed = true
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+				Body: map[string]any{"source": "test: the task now needs gpu"}}); err != nil {
+				return err
+			}
+			_, err := tx.Exec(ctx, `UPDATE agentrt.task SET needs_json = '["gpu"]' WHERE task_id = $1`, task)
+			return err
+		}))
+	})
+	c, err := store.ClaimNext(ctx, w.db.Pool(t, w.db.Runtime), store.ClaimRequest{HostID: "h1", FreeSlots: 1, Tools: []store.Tool{claude}})
+	unhook()
+	ok(t, err)
+	if !changed || c != nil {
+		t.Fatalf("changed %v: a task that now needs gpu went to %+v", changed, c)
 	}
 }

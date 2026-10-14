@@ -54,7 +54,29 @@ var jobOfRole = map[string]string{
 type jobCandidate struct {
 	id, status, executor, provider, pattern string
 	version                                 int
+	rule                                    ruleRef
 }
+
+// ruleRef is the signed rule a candidate or a fact came from, if any.
+type ruleRef struct {
+	id      *string
+	version *int
+}
+
+func (r ruleRef) record() any {
+	if r.id == nil {
+		return nil
+	}
+	m := map[string]any{"id": *r.id}
+	if r.version != nil {
+		m["version"] = *r.version
+	}
+	return m
+}
+
+// routeAlgorithm names the hard checks and the input format below; a recorded
+// input of another algorithm is not replayed by this one (review 155 B1).
+const routeAlgorithm = 1
 
 // fits reports whether a host's tool is this candidate: same executor, same
 // model provider, and a model the pattern matches.
@@ -71,6 +93,7 @@ func (jc jobCandidate) fits(tl Tool) bool {
 type restriction struct {
 	id, executor, kind, subject string
 	provider                    *string
+	rule                        ruleRef
 }
 
 func (f restriction) holds(tl Tool) bool {
@@ -94,7 +117,8 @@ type capabilities struct {
 
 func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	cp := capabilities{candidates: map[string][]jobCandidate{}}
-	rows, err := tx.Query(ctx, `SELECT job_id, job_candidate_id, status, executor_actor_id, model_provider, model_pattern, version
+	rows, err := tx.Query(ctx, `SELECT job_id, job_candidate_id, status, executor_actor_id, model_provider, model_pattern, version,
+	  rule_id, rule_version
 	  FROM agentrt.job_candidate WHERE status IN ('active','probation')
 	  ORDER BY job_id, status = 'probation', job_candidate_id`)
 	if err != nil {
@@ -102,20 +126,22 @@ func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	}
 	var job string
 	var jc jobCandidate
-	if _, err = pgx.ForEachRow(rows, []any{&job, &jc.id, &jc.status, &jc.executor, &jc.provider, &jc.pattern, &jc.version}, func() error {
+	if _, err = pgx.ForEachRow(rows, []any{&job, &jc.id, &jc.status, &jc.executor, &jc.provider, &jc.pattern, &jc.version,
+		&jc.rule.id, &jc.rule.version}, func() error {
 		cp.candidates[job] = append(cp.candidates[job], jc)
 		return nil
 	}); err != nil {
 		return cp, err
 	}
-	rows, err = tx.Query(ctx, `SELECT capability_fact_id, executor_actor_id, fact_kind, subject, model_provider FROM agentrt.capability_fact
+	rows, err = tx.Query(ctx, `SELECT capability_fact_id, executor_actor_id, fact_kind, subject, model_provider, rule_id, rule_version
+	  FROM agentrt.capability_fact
 	  WHERE retired_at IS NULL AND fact_kind IN ('cannot','must_not','only') ORDER BY capability_fact_id`)
 	if err != nil {
 		return cp, err
 	}
 	cp.facts, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (restriction, error) {
 		var f restriction
-		scanErr := r.Scan(&f.id, &f.executor, &f.kind, &f.subject, &f.provider)
+		scanErr := r.Scan(&f.id, &f.executor, &f.kind, &f.subject, &f.provider, &f.rule.id, &f.rule.version)
 		return f, scanErr
 	})
 	return cp, err
@@ -270,11 +296,12 @@ func (in routeInput) record() map[string]any {
 	cands := []any{}
 	for _, jc := range in.candidates {
 		cands = append(cands, map[string]any{"id": jc.id, "status": jc.status, "executor": jc.executor, "provider": jc.provider,
-			"pattern": jc.pattern, "version": jc.version})
+			"pattern": jc.pattern, "version": jc.version, "rule": jc.rule.record()})
 	}
 	facts := []any{}
 	for _, f := range in.facts {
-		facts = append(facts, map[string]any{"id": f.id, "executor": f.executor, "provider": opt(f.provider), "kind": f.kind, "subject": f.subject})
+		facts = append(facts, map[string]any{"id": f.id, "executor": f.executor, "provider": opt(f.provider), "kind": f.kind, "subject": f.subject,
+			"rule": f.rule.record()})
 	}
 	attempts := []any{}
 	for _, a := range in.attempts {
@@ -284,7 +311,7 @@ func (in routeInput) record() map[string]any {
 	for _, n := range in.needs {
 		needs = append(needs, n)
 	}
-	return map[string]any{"job": in.job, "core": in.core, "subject": in.subject, "needs": needs,
+	return map[string]any{"algorithm": routeAlgorithm, "job": in.job, "core": in.core, "subject": in.subject, "needs": needs,
 		"candidates": cands, "facts": facts, "attempts": attempts}
 }
 
@@ -334,6 +361,21 @@ func replayInput(rec map[string]any) (routeInput, error) {
 		}
 		return out, nil
 	}
+	if a := num(rec, "algorithm"); a != routeAlgorithm {
+		return routeInput{}, fmt.Errorf("store: a route input of algorithm %d; this build replays %d", a, routeAlgorithm)
+	}
+	rule := func(m map[string]any) ruleRef {
+		r, ok := m["rule"].(map[string]any)
+		if !ok {
+			return ruleRef{}
+		}
+		ref := ruleRef{id: opt(r, "id")}
+		if _, ok := r["version"]; ok {
+			v := num(r, "version")
+			ref.version = &v
+		}
+		return ref
+	}
 	in := routeInput{job: str(rec, "job"), core: str(rec, "core"), subject: str(rec, "subject")}
 	if l, ok := rec["needs"].([]any); ok {
 		for _, n := range l {
@@ -348,7 +390,7 @@ func replayInput(rec map[string]any) (routeInput, error) {
 	}
 	for _, m := range cands {
 		in.candidates = append(in.candidates, jobCandidate{id: str(m, "id"), status: str(m, "status"), executor: str(m, "executor"),
-			provider: str(m, "provider"), pattern: str(m, "pattern"), version: num(m, "version")})
+			provider: str(m, "provider"), pattern: str(m, "pattern"), version: num(m, "version"), rule: rule(m)})
 	}
 	facts, err := list("facts")
 	if err != nil {
@@ -356,7 +398,7 @@ func replayInput(rec map[string]any) (routeInput, error) {
 	}
 	for _, m := range facts {
 		in.facts = append(in.facts, restriction{id: str(m, "id"), executor: str(m, "executor"), kind: str(m, "kind"),
-			subject: str(m, "subject"), provider: opt(m, "provider")})
+			subject: str(m, "subject"), provider: opt(m, "provider"), rule: rule(m)})
 	}
 	attempts, err := list("attempts")
 	if err != nil {
