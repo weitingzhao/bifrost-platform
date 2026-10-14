@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.bifrost.agentd</string>
+
+  <!-- agentd, the agent runtime's host daemon (design v5 §5.2). It opens no
+       port. install-agentd.sh fills the __NAMES__ in; tokens stay in their own
+       files (mode 0600) and only their paths are here. launchd starts it again
+       whenever it exits: a restarted agentd takes over what the last one left
+       (T01). -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__AGENTD__</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__ROOT__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>AGENTD_PLATFORM</key>
+    <string>__PLATFORM__</string>
+    <key>AGENTD_HOST</key>
+    <string>__HOST__</string>
+    <key>AGENTD_TOKEN_FILE</key>
+    <string>__TOKEN_FILE__</string>
+    <key>AGENTD_TOOLS</key>
+    <string>__TOOLS__</string>
+    <key>AGENTD_GIT_BASE</key>
+    <string>__GIT_BASE__</string>
+    <key>AGENTD_GIT_TOKEN_FILE</key>
+    <string>__GIT_TOKEN_FILE__</string>
+    <key>AGENTD_ROOT</key>
+    <string>__ROOT__</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>__ROOT__/agentd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__ROOT__/agentd.log</string>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+</dict>
+</plist>
