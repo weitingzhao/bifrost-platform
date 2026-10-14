@@ -108,7 +108,7 @@ var taskMoves = map[string][]string{
 	"ready":          {"leased", "paused", "blocked", "cancelled"},
 	"leased":         {"running", "ready", "blocked"},
 	"running":        {"submitted", "ready", "blocked"},
-	"submitted":      {"verifying", "blocked"},
+	"submitted":      {"verifying", "accepted", "blocked"}, // accepted: a verification or review task once its result is used
 	"verifying":      {"accepted", "rework", "rejected", "blocked"},
 	"rework":         {"ready", "cancelled"},
 	"blocked":        {"ready", "cancelled"},

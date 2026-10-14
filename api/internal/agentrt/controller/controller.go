@@ -107,6 +107,38 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 	return false, nil
 }
 
+// Accept is one pass of the acceptance loop (v5 §5.2 控制器「验收编排」):
+// every submitted implementation goes to verification and every submitted
+// verification or review result is used. One that fails does not stop the
+// others. It returns how many tasks it moved.
+func (c *Controller) Accept(ctx context.Context) (int, error) {
+	implementations, checks, err := store.Pending(ctx, c.DB)
+	if err != nil {
+		return 0, err
+	}
+	moved := 0
+	var errs []error
+	for _, id := range implementations {
+		v, err := store.StartVerification(ctx, c.DB, id)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+		}
+		if v != "" {
+			moved++
+		}
+	}
+	for _, id := range checks {
+		did, err := store.Conclude(ctx, c.DB, id)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+		}
+		if did != "" {
+			moved++
+		}
+	}
+	return moved, errors.Join(errs...)
+}
+
 // Rules is one pass of the done-rule loop: every live step with a rule is
 // evaluated, standing conditions against what is deployed now. One step that
 // fails does not stop the others. It returns how many steps moved.
@@ -133,8 +165,8 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 }
 
 // Start runs the loops until ctx ends and returns a function that waits for
-// them to stop, for a clean shutdown. Facts run before rules in the same
-// pass, so a change seen is evaluated at once.
+// them to stop, for a clean shutdown. In one pass facts and acceptance run
+// before rules, so a change seen or a task accepted is evaluated at once.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -147,8 +179,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	c.every(ctx, &wg, "agentrt-leases", lease, func() error { return c.Sweep(ctx) })
 	c.every(ctx, &wg, "agentrt-facts-rules", facts, func() error {
 		_, ferr := c.Facts(ctx)
+		_, aerr := c.Accept(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, rerr)
+		return errors.Join(ferr, aerr, rerr)
 	})
 	return wg.Wait
 }
