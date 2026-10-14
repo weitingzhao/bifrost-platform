@@ -316,6 +316,12 @@ func (s *Service) find(ref string) (Approval, bool) {
 	return a, ok
 }
 
+// Lookup reads one record ("57", "#57" or its id) without sweeping: a read
+// that writes nothing, for readers outside the approvals flow (the agent
+// runtime's controller). err is a store read failure; ok is false only after
+// a successful read that does not contain ref.
+func (s *Service) Lookup(ref string) (Approval, bool, error) { return s.load(ref) }
+
 // load reads one record without sweeping. err is a store read failure.
 // ok is false only after a successful read that does not contain ref.
 func (s *Service) load(ref string) (Approval, bool, error) {

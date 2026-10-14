@@ -85,6 +85,8 @@ func newFactsService(t *testing.T, cms ...*corev1.ConfigMap) PolicyFacts {
 		ciRun("ci-fe-1", "bifrost-ci-frontend", "", "repo-ui", factSHA2, "True"),
 		ciRun("ci-py-2", "bifrost-ci-python", "repo-app", "", factSHA3, "False"),
 		ciRun("deliver-1", "bifrost-deliver-stg", "repo-app", "", factSHA2, "True"),
+		ciRun("ci-py-3", "bifrost-ci-python", "repo-app", "", factSHA2, "Unknown"),
+		ciRun("ci-py-4", "bifrost-ci-python", "repo-app", "", factSHA1, "False"),
 	)
 	s.SetDynamicFactoryForTest(func() (dynamic.Interface, error) { return dyn, nil })
 	return s.PolicyFacts()
@@ -201,5 +203,25 @@ func TestPolicyFactsReadFilesAndWriteConfigMaps(t *testing.T) {
 	data, found, err := f.ConfigMap(ctx, "bifrost-release-freeze")
 	if err != nil || !found || data["frozen"] != "false" || len(data) != 1 {
 		t.Fatalf("ConfigMap after two writes = %v %v %v", data, found, err)
+	}
+}
+
+// CIRun (for the agent runtime's ci_seen): a success wins over a failure of
+// the same commit, a run with no verdict is Running, a deliver run is not a
+// CI run, and no run is "".
+func TestPolicyFactsCIRun(t *testing.T) {
+	f := newFactsService(t)
+	ctx := context.Background()
+	for _, tc := range []struct{ repo, sha, status, run string }{
+		{"repo-app", factSHA1, CISucceeded, "ci-py-1"},
+		{"repo-app", factSHA3, CIFailed, "ci-py-2"},
+		{"repo-app", factSHA2, CIRunning, "ci-py-3"},
+		{"repo-ui", factSHA2, CISucceeded, "ci-fe-1"},
+		{"repo-ui", factSHA1, "", ""},
+	} {
+		status, run, err := f.CIRun(ctx, tc.repo, tc.sha)
+		if err != nil || status != tc.status || run != tc.run {
+			t.Errorf("%s@%s = %q %q %v; want %q %q", tc.repo, tc.sha[:4], status, run, err, tc.status, tc.run)
+		}
 	}
 }

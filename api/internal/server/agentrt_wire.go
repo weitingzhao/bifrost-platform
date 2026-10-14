@@ -14,7 +14,6 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 )
 
@@ -40,10 +39,11 @@ type agentRuntime struct {
 // process the controller loops. Without it the routes answer 503 and nothing
 // runs, so the code ships before the database is wired into the Deployment.
 //
-// The controller reads no outside record yet (approvals, questions, CI runs,
-// deployments): every rule atom that needs one stays unknown, so nothing is
-// judged done on facts it cannot see. Pushed branches cannot be checked until a
-// Gitea reader is configured; persist and salvage of a branch answer 503.
+// The controller reads approvals, questions, CI runs and deployments from the
+// platform's own stores (agentRuntimeSources); a record it cannot read leaves
+// the rule atoms on it unknown, so nothing is judged done on facts it cannot
+// see. Pushed branches cannot be checked until a Gitea reader is configured;
+// persist and salvage of a branch answer 503.
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
@@ -69,7 +69,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &controller.Controller{DB: pool, Sources: unreadableSources(), Logf: func(format string, args ...any) {
+	c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Logf: func(format string, args ...any) {
 		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 	}}
 	wait := c.Start(ctx)
@@ -122,15 +122,24 @@ func identityFits(user, db, env string) error {
 	return nil
 }
 
-// unreadableSources read nothing yet: approvals, questions, CI runs and
-// deployments are wired in a later step.
-func unreadableSources() controller.Sources {
-	return controller.Sources{
-		Approval: func(context.Context, int64) (string, bool) { return "", false },
-		Question: func(context.Context, string) (store.Question, bool) { return store.Question{}, false },
-		CI:       func(context.Context, string, string) (string, string, bool) { return "", "", false },
-		Deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false },
+// agentRuntimeSources are the server's stores as the controller's sources.
+// A nil store is passed as a nil reader, never as a typed nil.
+func (s *Server) agentRuntimeSources() controller.Sources {
+	var (
+		ap  approvalReader
+		ci  ciIndexer
+		rel currentDeployment
+	)
+	if s.approvals != nil {
+		ap = s.approvals
 	}
+	if s.delivery != nil {
+		ci = s.delivery.PolicyFacts()
+	}
+	if s.releases != nil && s.releases.Service() != nil {
+		rel = s.releases.Service()
+	}
+	return agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
 }
 
 func (s *Server) mountAgentRuntime(r chi.Router) {

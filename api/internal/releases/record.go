@@ -32,8 +32,14 @@ type Record struct {
 	StartedAt   time.Time            `json:"started_at"`
 	CompletedAt time.Time            `json:"completed_at"`
 	Repos       map[string]RepoBuild `json:"repos"`
+	// Images are the digests the run's build tasks pushed, by image (the
+	// build task's name without "build-": platform-api, platform-console),
+	// read from each build task's digest result (TD-343). A pipeline whose
+	// builds report no digest records none.
+	Images map[string]string `json:"images,omitempty"`
 	// Missing lists clone tasks whose commit could not be read (runs older
-	// than the commit result, cloned at a moving ref).
+	// than the commit result, cloned at a moving ref), and build tasks that
+	// declare a digest result but gave no digest ("build-x (digest)").
 	Missing    []string  `json:"missing,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
 }
@@ -43,17 +49,22 @@ const (
 	labelLane   = "bifrost.io/release-lane"
 	labelEnv    = "bifrost.io/release-env"
 	labelRun    = "bifrost.io/release-run"
-	// labelComplete is "false" while some clone's commit is unknown; such a record
-	// is rebuilt while its run still exists.
+	// labelComplete is "false" while some clone's commit, or some build's
+	// digest, is unknown; such a record is rebuilt while its run still exists.
 	labelComplete = "bifrost.io/release-complete"
 	dataKey       = "record.json"
 	namePrefix    = "release-"
-	// recordVersion bumps when Record changes shape.
-	recordVersion = "v1"
+	// recordVersion bumps when Record changes shape or what a complete
+	// record means; a record of another version is built again once while
+	// its run still exists. v2: images. v3: a build that owes a digest is
+	// missing (review 170 B1), so a v2 record marked complete without its
+	// digests is built again.
+	recordVersion = "v3"
 )
 
 var (
 	fullSHA   = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	digestRE  = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	repoInURL = regexp.MustCompile(`/([^/]+?)(?:\.git)?/?$`)
 	labelSafe = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 )
@@ -143,6 +154,35 @@ func cloneOf(tr *unstructured.Unstructured) (pipelineTask, repo, sha, rev string
 	return pipelineTask, repo, sha, rev, hasRev, repo != ""
 }
 
+// builtImage reads one TaskRun as an image build: a pipeline task named
+// build-<image>. declared: its task declares a digest result (in the
+// resolved spec the TaskRun's status carries) or gave one; digest is the
+// result when it is a registry digest, "" when it is missing or malformed.
+func builtImage(tr *unstructured.Unstructured) (image, digest string, declared, ok bool) {
+	image, isBuild := strings.CutPrefix(tr.GetLabels()["tekton.dev/pipelineTask"], "build-")
+	if !isBuild || image == "" {
+		return "", "", false, false
+	}
+	decl, _, _ := unstructured.NestedSlice(tr.Object, "status", "taskSpec", "results")
+	for _, r := range decl {
+		if m, _ := r.(map[string]any); m["name"] == "digest" {
+			declared = true
+		}
+	}
+	results, _, _ := unstructured.NestedSlice(tr.Object, "status", "results")
+	for _, r := range results {
+		m, _ := r.(map[string]any)
+		if m["name"] != "digest" {
+			continue
+		}
+		declared = true
+		if v, isStr := m["value"].(string); isStr && digestRE.MatchString(strings.TrimSpace(v)) {
+			digest = strings.TrimSpace(v)
+		}
+	}
+	return image, digest, declared, true
+}
+
 // buildRecord assembles a Record from a finished run and its TaskRuns.
 func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructured.Unstructured, now time.Time) Record {
 	rec := Record{
@@ -167,6 +207,21 @@ func buildRecord(run *unstructured.Unstructured, rule Rule, taskRuns []unstructu
 		paramSHA = rec.Revision
 	}
 	for i := range taskRuns {
+		if image, digest, declared, ok := builtImage(&taskRuns[i]); ok {
+			switch {
+			case digest != "":
+				if rec.Images == nil {
+					rec.Images = map[string]string{}
+				}
+				rec.Images[image] = digest
+			case declared:
+				// The build owes a digest it has not given (yet): the record
+				// stays incomplete and is built again while its run exists
+				// (review 167 B1). A build that declares none owes none.
+				rec.Missing = append(rec.Missing, taskRuns[i].GetLabels()["tekton.dev/pipelineTask"]+" (digest)")
+			}
+			continue
+		}
 		task, repo, sha, rev, hasRev, ok := cloneOf(&taskRuns[i])
 		if !ok {
 			continue
