@@ -1,6 +1,7 @@
 package questions
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -41,28 +42,55 @@ func TestDecisionCardFields(t *testing.T) {
 		!strings.Contains(fmt.Sprint(res.Body), "idempotency key reused with different content") {
 		t.Fatalf("a reused key with another task = %d %v", res.Code, res.Body)
 	}
-	// the same key with the same task is the same request: replayed
-	if res := ask(t, s, "thread-a", "0123456789abcdef", map[string]any{"owner_duty": "rule", "task_id": task, "options": twoOptions()}); res.Code != http.StatusCreated && res.Code != http.StatusOK {
-		t.Fatalf("a replay = %d %v", res.Code, res.Body)
+	// the same key with the same task is the same request: the first answer,
+	// replayed, and no new question (review 174 B3)
+	before := count(t, s)
+	replay := ask(t, s, "thread-a", "0123456789abcdef", map[string]any{"owner_duty": "rule", "task_id": task, "options": twoOptions()})
+	body, _ := replay.Body.(map[string]any)
+	if replay.Code != http.StatusOK || body["replayed"] != true || body["number"] != q.Number || body["id"] != q.ID || count(t, s) != before {
+		t.Fatalf("a replay = %d %v (%d questions, was %d)", replay.Code, replay.Body, count(t, s), before)
+	}
+	// the same task with another duty is another question
+	if res := ask(t, s, "thread-a", "3333333333333333", map[string]any{"owner_duty": "goal", "task_id": task, "options": twoOptions()}); res.Code != http.StatusCreated {
+		t.Fatalf("another duty about the same task = %d %v", res.Code, res.Body)
 	}
 	// a plain question still has neither
 	if res := ask(t, s, "thread-b", "2222222222222222", nil); res.Code != http.StatusCreated {
 		t.Fatalf("plain = %d %v", res.Code, res.Body)
 	}
-	plain, ok := byNumber(t, s, "3")
+	plain, ok := byNumber(t, s, "4")
 	if !ok || plain.OwnerDuty != "" || plain.TaskID != "" {
 		t.Fatalf("plain question = %+v %v", plain, ok)
 	}
 	if b, err := json.Marshal(plain); err != nil || strings.Contains(string(b), "owner_duty") || strings.Contains(string(b), "task_id") {
 		t.Fatalf("a plain question shows the card fields: %s %v", b, err)
 	}
-	// an answer keeps them (it is still not an approval)
+	// what readers get: the card fields in GET and in the list
+	for name, res := range map[string]Result{
+		"get":  s.Get(context.Background(), "owner-console", "admin", "admin", "1"),
+		"list": s.List(context.Background(), "owner-console", "admin", "admin", "all", false),
+	} {
+		b, err := json.Marshal(res.Body)
+		if err != nil || res.Code != http.StatusOK || !strings.Contains(string(b), `"owner_duty":"rule"`) || !strings.Contains(string(b), `"task_id":"`+task+`"`) {
+			t.Fatalf("%s = %d %s %v", name, res.Code, b, err)
+		}
+	}
+	// an answer keeps them, and is still not an approval
 	if res := answer(t, s, "1", map[string]any{"option": "a", "channel": "console"}); res.Code != http.StatusOK {
 		t.Fatalf("answer = %d %v", res.Code, res.Body)
 	}
-	if q, ok = byNumber(t, s, "1"); !ok || q.OwnerDuty != "rule" || q.TaskID != task || q.Status != "answered" {
+	if q, ok = byNumber(t, s, "1"); !ok || q.OwnerDuty != "rule" || q.TaskID != task || q.Status != "answered" || q.Answer == nil || q.Answer.Approval {
 		t.Fatalf("after the answer = %+v %v", q, ok)
 	}
+}
+
+func count(t *testing.T, s *Service) int {
+	t.Helper()
+	doc, err := s.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(doc.Questions)
 }
 
 func byNumber(t *testing.T, s *Service, ref string) (Question, bool) {

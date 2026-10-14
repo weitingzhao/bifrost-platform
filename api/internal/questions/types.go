@@ -44,33 +44,46 @@ const (
 // Question is one Owner question. IdempotencyKey and the two fingerprints are
 // stored and never returned. Recommended is the option key, empty when none.
 type Question struct {
-	ID                 string      `json:"id"`
-	Number             int         `json:"number"`
-	Status             string      `json:"status"`
-	Requester          string      `json:"requester"`
-	RequesterPrincipal string      `json:"requester_principal"`
-	RequesterThread    string      `json:"requester_thread,omitempty"`
-	WorkID             string      `json:"work_id,omitempty"`
-	OwnerDuty          string      `json:"owner_duty,omitempty"` // goal, rule or irreversible
-	TaskID             string      `json:"task_id,omitempty"`    // the agent runtime task it is about
-	Title              string      `json:"title"`
-	Body               string      `json:"body,omitempty"`
-	Options            []Option    `json:"options,omitempty"`
-	Recommended        string      `json:"recommended,omitempty"`
-	AllowText          bool        `json:"allow_text"`
-	Urgency            string      `json:"urgency"`
-	Meanwhile          string      `json:"meanwhile"`
-	Link               string      `json:"link,omitempty"`
-	LinkText           string      `json:"link_text,omitempty"`
-	CreatedAt          time.Time   `json:"created_at"`
-	ExpiresAt          time.Time   `json:"expires_at"`
-	IdempotencyKey     string      `json:"idempotency_key,omitempty"`
-	RequestFP          string      `json:"request_fp,omitempty"`
-	QuestionFP         string      `json:"question_fp,omitempty"`
-	Answer             *Answer     `json:"answer,omitempty"`
-	Withdrawal         *Withdrawal `json:"withdrawal,omitempty"`
-	Deliveries         []Delivery  `json:"deliveries,omitempty"`
-	Mine               bool        `json:"mine,omitempty"`
+	ID                 string `json:"id"`
+	Number             int    `json:"number"`
+	Status             string `json:"status"`
+	Requester          string `json:"requester"`
+	RequesterPrincipal string `json:"requester_principal"`
+	RequesterThread    string `json:"requester_thread,omitempty"`
+	WorkID             string `json:"work_id,omitempty"`
+	// A decision card (design v5 §7 item 3): which of the Owner's three
+	// duties the question is, and the agent runtime task it is about.
+	//
+	// Upgrading and rolling back (review 172 B1, 174 B1): a platform older
+	// than these fields decodes the store into its own types and writes the
+	// whole store back, dropping both fields from every card while keeping
+	// fingerprints that include them. So no card is created until every
+	// process that writes the questions store runs a platform that knows
+	// them; and once a card exists the platform is not rolled back past them
+	// while it can write the store. If a rollback cannot be avoided: stop
+	// every writer, copy the whole store aside, roll back, and accept that
+	// the cards become plain questions (their answers stay; only the two
+	// labels are lost; the copy is the record of what they were).
+	OwnerDuty      string      `json:"owner_duty,omitempty"` // goal, rule or irreversible
+	TaskID         string      `json:"task_id,omitempty"`    // the agent runtime task it is about
+	Title          string      `json:"title"`
+	Body           string      `json:"body,omitempty"`
+	Options        []Option    `json:"options,omitempty"`
+	Recommended    string      `json:"recommended,omitempty"`
+	AllowText      bool        `json:"allow_text"`
+	Urgency        string      `json:"urgency"`
+	Meanwhile      string      `json:"meanwhile"`
+	Link           string      `json:"link,omitempty"`
+	LinkText       string      `json:"link_text,omitempty"`
+	CreatedAt      time.Time   `json:"created_at"`
+	ExpiresAt      time.Time   `json:"expires_at"`
+	IdempotencyKey string      `json:"idempotency_key,omitempty"`
+	RequestFP      string      `json:"request_fp,omitempty"`
+	QuestionFP     string      `json:"question_fp,omitempty"`
+	Answer         *Answer     `json:"answer,omitempty"`
+	Withdrawal     *Withdrawal `json:"withdrawal,omitempty"`
+	Deliveries     []Delivery  `json:"deliveries,omitempty"`
+	Mine           bool        `json:"mine,omitempty"`
 }
 
 // Option is one server-lettered choice.

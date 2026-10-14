@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -55,6 +56,15 @@ func TestPrintVectors(t *testing.T) {
 		{"card task lower case", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01m4xw5z7ac7cta9p0ydgacgpg"}, ""},
 		{"card task short", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGP"}, ""},
 		{"card task with I", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPI"}, ""},
+		{"card task with L", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPL"}, ""},
+		{"card task with O", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPO"}, ""},
+		{"card task with U", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPU"}, ""},
+		{"card task long", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPGX"}, ""},
+		{"card task very long", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": "t_" + strings.Repeat("0", 200)}, ""},
+		{"card task not a string", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "task_id": 123}, ""},
+		{"card duty with a control character", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "ru\u0007le"}, ""},
+		{"card duty only control characters", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "\u0007\u0000"}, ""},
+		{"card other duty", map[string]any{"title": "Hello", "urgency": "now", "meanwhile": "wait", "owner_duty": "goal", "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPG"}, "thread-a"},
 	}
 	var out []map[string]any
 	for _, c := range cases {

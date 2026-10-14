@@ -574,6 +574,102 @@
         "urgency": "now"
       },
       "name": "card task with I"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPL",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task with L"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPO",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task with O"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPU",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task with U"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPGX",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task long"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task very long"
+    },
+    {
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": 123,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task not a string"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"rule\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "ru\u0007le",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card duty with a control character",
+      "sha256": "a9fe44d5f24af20c0edc2481574f04215d3baa5d7cf8729ca7d2e4c6c68f4240"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "\u0007\u0000",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card duty only control characters",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
+    },
+    {
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"goal\",\"task_id\":\"t_01M4XW5Z7AC7CTA9P0YDGACGPG\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "idempotency_key": "87d15710c7ff89cd1766a14b62e4495ca7a6788c8ee987de79a8718333a6f22e",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "goal",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPG",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card other duty",
+      "session": "thread-a",
+      "sha256": "3ebeb63d1d069c6dd0c83a4bb2fd8913700192d4773a9a6aa94aa09b569b8082"
     }
   ]
 }
