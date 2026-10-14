@@ -41,6 +41,21 @@ type Controller struct {
 	ReadTimeout time.Duration // per source read; zero means 10 seconds
 }
 
+// boundedDeployed reads a deployment with the per-read timeout, for the done
+// rules, which read it while they hold the step (review 153 B1).
+func (c *Controller) boundedDeployed(ctx context.Context, env string) (string, map[string]any, bool) {
+	type r struct {
+		commit string
+		ref    map[string]any
+		ok     bool
+	}
+	x := bounded(c, ctx, func(ctx context.Context) r {
+		commit, ref, ok := c.Sources.Deployed(ctx, env)
+		return r{commit, ref, ok}
+	})
+	return x.commit, x.ref, x.ok
+}
+
 // bounded runs a source read with the per-read timeout.
 func bounded[T any](c *Controller, ctx context.Context, read func(context.Context) T) T {
 	d := c.ReadTimeout
@@ -130,18 +145,7 @@ func (c *Controller) see(ctx context.Context, w plan.Watch) (bool, error) {
 			return x.s, x.run, x.ok
 		})
 	case plan.WatchDeploy:
-		return store.SeeDeploy(ctx, c.DB, w.ID, func(ctx context.Context, env string) (string, map[string]any, bool) {
-			type r struct {
-				commit string
-				ref    map[string]any
-				ok     bool
-			}
-			x := bounded(c, ctx, func(ctx context.Context) r {
-				commit, ref, ok := c.Sources.Deployed(ctx, env)
-				return r{commit, ref, ok}
-			})
-			return x.commit, x.ref, x.ok
-		})
+		return store.SeeDeploy(ctx, c.DB, w.ID, c.boundedDeployed)
 	}
 	return false, nil
 }
@@ -192,7 +196,7 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 		if n.Kind != "step" {
 			continue
 		}
-		to, err := store.EvaluateStep(ctx, c.DB, n.ID, c.Sources.Deployed)
+		to, err := store.EvaluateStep(ctx, c.DB, n.ID, c.boundedDeployed)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("step %s: %w", n.ID, err))
 		}

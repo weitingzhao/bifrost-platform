@@ -262,3 +262,23 @@ func TestSlowSourceIsCutOff(t *testing.T) {
 		t.Fatalf("recorded %d after %v", n, time.Since(start))
 	}
 }
+
+// Review 153 B1: a done rule's read of what is deployed, made while the step
+// is held, is cut off after the read timeout too; the gate is unknown and
+// nothing moves.
+func TestSlowDeploymentReadInRulesIsCutOff(t *testing.T) {
+	pool := setup(t)
+	setRule(t, pool, "R2:1-1", `{"gates_passed":[{"test":"T19","spec_sha256":"`+strings.Repeat("ab", 32)+`"}],"env":"stg"}`)
+	c := &controller.Controller{DB: pool, ReadTimeout: 100 * time.Millisecond, Sources: controller.Sources{
+		Deployed: func(ctx context.Context, _ string) (string, map[string]any, bool) {
+			<-ctx.Done()
+			return "", nil, false
+		},
+	}}
+	start := time.Now()
+	moved, err := c.Rules(ctx)
+	must(t, err)
+	if moved != 0 || time.Since(start) > 5*time.Second {
+		t.Fatalf("moved %d after %v", moved, time.Since(start))
+	}
+}
