@@ -424,6 +424,9 @@ func (s *Service) RunRetries(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if ctx.Err() != nil {
+				return
+			}
 			s.retryDue(ctx)
 			s.remindDue(ctx)
 		}
@@ -441,6 +444,11 @@ func (s *Service) retryDue(ctx context.Context) {
 	}
 	now := s.clock()
 	for _, a := range doc.Approvals {
+		// A stopped loop claims nothing more: an approval claimed now would run on a
+		// cancelled context and be recorded failed without having run.
+		if ctx.Err() != nil {
+			return
+		}
 		if !retryable(a, now) {
 			continue
 		}
@@ -448,7 +456,8 @@ func (s *Service) retryDue(ctx context.Context) {
 		if !ok {
 			continue
 		}
-		_, evs, err := s.runPlatform(ctx, rec)
+		// The loop's context ends at shutdown; the action it already claimed does not.
+		_, evs, err := s.runPlatform(context.WithoutCancel(ctx), rec)
 		if err != nil {
 			continue
 		}
