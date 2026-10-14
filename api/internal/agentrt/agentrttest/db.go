@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 )
@@ -114,4 +116,62 @@ func (db *DB) Connect(t testing.TB, dsn string) *pgx.Conn {
 	}
 	t.Cleanup(func() { _ = c.Close(context.Background()) })
 	return c
+}
+
+// Redis returns a client and a key prefix of its own, so tests share one
+// server without seeing each other's keys. AGENTRT_TEST_REDIS is a
+// redis:// or unix:// URL; the skip and require rules are those of the
+// database. The prefix's keys are removed when the test ends.
+func Redis(t testing.TB) (*redis.Client, string) {
+	t.Helper()
+	url := os.Getenv("AGENTRT_TEST_REDIS")
+	if url == "" {
+		if os.Getenv("AGENTRT_TEST_REQUIRED") == "1" {
+			t.Fatal("AGENTRT_TEST_REDIS is not set but AGENTRT_TEST_REQUIRED=1")
+		}
+		t.Skip("set AGENTRT_TEST_REDIS to run the agentrt Redis tests")
+	}
+	opt, err := redis.ParseURL(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := redis.NewClient(opt)
+	var r [6]byte
+	_, _ = rand.Read(r[:])
+	prefix := "agrt-test-" + hex.EncodeToString(r[:]) + ":"
+	t.Cleanup(func() {
+		DropPrefix(t, c, prefix)
+		_ = c.Close()
+	})
+	return c, prefix
+}
+
+// DropPrefix deletes every key under prefix, the test's FLUSH.
+func DropPrefix(t testing.TB, c *redis.Client, prefix string) {
+	t.Helper()
+	ctx := context.Background()
+	iter := c.Scan(ctx, 0, prefix+"*", 500).Iterator()
+	var keys []string
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+	if err := iter.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) > 0 {
+		if err := c.Del(ctx, keys...).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Pool opens a pgx pool closed when the test ends.
+func (db *DB) Pool(t testing.TB, dsn string) *pgxpool.Pool {
+	t.Helper()
+	p, err := pgxpool.New(context.Background(), dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(p.Close)
+	return p
 }
