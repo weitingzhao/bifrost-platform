@@ -399,7 +399,7 @@ export function CommitLineagePage() {
             className="h-6 w-[340px] text-[var(--text-dense-caption)]"
           />
           {task != null && (
-            <Button type="button" size="xs" variant="default" onClick={() => setTask(null)} title={`Only the commits of ${task}; click to show every commit again`}>
+            <Button type="button" size="xs" variant="default" onClick={() => setTask(null)} title={`Only the commits of ${task}; click to clear the task filter`}>
               task {task.slice(0, 12)} ×
             </Button>
           )}
@@ -448,7 +448,7 @@ export function CommitLineagePage() {
           <p className={`py-4 text-center ${meta}`}>Lineage API unavailable — {(q.error as Error).message}</p>
         ) : threads.length === 0 ? (
           <p className={`py-4 text-center ${meta}`}>
-            {needle !== '' ? 'No thread matches the filter.' : 'No commit in this window carries a lineage trailer.'}
+            {needle.trim() !== '' || task != null ? 'No thread matches the filter.' : 'No commit in this window carries a lineage trailer.'}
           </p>
         ) : (
           <DenseDataTable>

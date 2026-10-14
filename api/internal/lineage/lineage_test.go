@@ -263,6 +263,7 @@ func TestFilterByChangeIDAndSession(t *testing.T) {
 func TestFilterByTask(t *testing.T) {
 	s, _ := newTestService(t)
 	resp := s.Build(context.Background(), 14)
+	before, _ := json.Marshal(resp)
 	got := filter(resp, "", "", task)
 	if len(got.Threads) != 1 || got.Threads[0].CommitCount != 1 || got.Threads[0].Repos[0].Commits[0].SHA != "kkk" {
 		t.Fatalf("task filter = %+v", got.Threads)
@@ -280,19 +281,51 @@ func TestFilterByTask(t *testing.T) {
 	if got = filter(resp, "", cidX, task); len(got.Threads) != 0 {
 		t.Fatalf("task and another Change-Id = %+v", got.Threads)
 	}
-	// filtering leaves the cached response as it was, deep down
-	before, _ := json.Marshal(resp)
-	_ = filter(resp, "", "", task)
-	_ = filter(resp, "local_s1", cidX, "")
+	// filtering left the response it was given as it was, deep down
 	if after, _ := json.Marshal(resp); string(after) != string(before) {
 		t.Fatal("filter changed the response it was given")
 	}
-	rec := httptest.NewRecorder()
-	NewHandler(s).HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?days=14&task="+task, nil))
+	// a session, a Change-Id and a task together: every one must hold
+	both := Response{Threads: []Thread{{Session: "local_s5", Repos: []RepoCommits{{Repo: "r1", Commits: []Commit{
+		{SHA: "m1", Session: "local_s5", ChangeID: cidK, Task: task},
+		{SHA: "m2", Session: "local_s5", ChangeID: cidX, Task: task},
+		{SHA: "m3", Session: "local_s5", ChangeID: cidK},
+	}}}}}}
+	for _, c := range []struct {
+		session, changeID, task, want string
+	}{
+		{"local_s5", "", task, "m1,m2"},
+		{"local_s5", cidK, task, "m1"},
+		{"local_s5", cidK, "", "m1,m3"},
+		{"local_s6", cidK, task, ""},
+	} {
+		var shas []string
+		for _, th := range filter(both, c.session, c.changeID, c.task).Threads {
+			for _, rc := range th.Repos {
+				for _, cm := range rc.Commits {
+					shas = append(shas, cm.SHA)
+				}
+			}
+		}
+		if strings.Join(shas, ",") != c.want {
+			t.Errorf("%s %s %s = %v, want %s", c.session, c.changeID, c.task, shas, c.want)
+		}
+	}
+	// one handler, its cache read three times: the unfiltered answers match
+	h := NewHandler(s)
+	get := func(q string) []byte {
+		rec := httptest.NewRecorder()
+		h.HandleGet(rec, httptest.NewRequest(http.MethodGet, "/api/v1/lineage?days=14"+q, nil))
+		return rec.Body.Bytes()
+	}
+	first := string(get(""))
 	var body Response
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil || len(body.Threads) != 1 ||
+	if err := json.Unmarshal(get("&task="+task), &body); err != nil || len(body.Threads) != 1 ||
 		body.Threads[0].Repos[0].Commits[0].Task != task {
-		t.Fatalf("GET ?task= = %d %+v (%v)", rec.Code, body.Threads, err)
+		t.Fatalf("GET ?task= = %+v (%v)", body.Threads, err)
+	}
+	if third := string(get("")); third != first {
+		t.Fatal("a filtered read changed the cached answer")
 	}
 }
 

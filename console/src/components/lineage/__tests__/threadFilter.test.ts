@@ -5,8 +5,12 @@ import { matches, onlyTask } from '../threadFilter'
 const X = 't_01M4XW5Z7AC7CTA9P0YDGACGPG'
 const Y = 't_01M4XW5Z7SC6YN6KEN3JXF8CFV'
 
-function commit(sha: string, subject: string, task?: string, landed = false): LineageCommit {
-  return { repo: 'bifrost-platform', sha, subject, at: '2026-10-14T12:00:00Z', ref: 'main', landed, task }
+function commit(sha: string, subject: string, task?: string, landed = false, reached: LineageCommit['reached'] = []): LineageCommit {
+  return { repo: 'bifrost-platform', sha, subject, at: '2026-10-14T12:00:00Z', ref: 'main', landed, task, reached }
+}
+
+function reach(env: string) {
+  return { lane: 'platform', env, run: `run-${env}`, at: '2026-10-14T12:00:00Z', deploys: true }
 }
 
 function thread(session: string, transcripts: string[], commits: LineageCommit[]): LineageThread {
@@ -39,6 +43,22 @@ describe('lineage thread filters', () => {
   it('the search box is wider than the task filter', () => {
     expect(matches(none, X)?.commit_count).toBe(2)
     expect(matches(other, X)?.commit_count).toBe(1)
+  })
+
+  it('recounts landed and reached and leaves its input as it was (review 159 B2)', () => {
+    const t = thread('', [], [
+      commit('aaa', 'x', X, true, [reach('prod')]),
+      commit('bbb', 'y', Y, true, [reach('prod'), reach('stg')]),
+      commit('ccc', 'y2', Y, false, [reach('stg')]),
+    ])
+    t.reached = { 'platform/prod': 2, 'platform/stg': 2 }
+    const before = JSON.stringify(t)
+    const got = onlyTask(t, Y)
+    expect(got?.commit_count).toBe(2)
+    expect(got?.landed).toBe(1)
+    expect(got?.reached).toEqual({ 'platform/prod': 1, 'platform/stg': 2 })
+    expect(onlyTask(t, X)?.reached).toEqual({ 'platform/prod': 1 })
+    expect(JSON.stringify(t)).toBe(before)
   })
 
   it('threads with no task are left out, not broken', () => {
