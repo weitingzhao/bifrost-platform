@@ -2,6 +2,7 @@ package plan
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -217,5 +218,85 @@ func TestGateIsReadOncePerEvaluation(t *testing.T) {
 				t.Fatalf("the gate was read %d times in one evaluation, want 1", f.calls)
 			}
 		})
+	}
+}
+
+// keyedFacts returns, per gate, a sequence of readings and counts the calls.
+type keyedFacts struct {
+	facts
+	reads map[[3]string][]Tri
+	calls map[[3]string]int
+}
+
+func (f *keyedFacts) GatePassed(env, test, sha string) Tri {
+	k := [3]string{env, test, sha}
+	i := f.calls[k]
+	f.calls[k]++
+	vs := f.reads[k]
+	if len(vs) == 0 {
+		panic(fmt.Sprintf("unexpected key %v", k))
+	}
+	return vs[min(i, len(vs)-1)]
+}
+
+// Read-once paths from confirmation review 146: a gate repeated in a rule,
+// an all that stops early inside an any, a gate list whose first gate is
+// false, the three fields of the cache key, and a fresh read on the next
+// evaluation.
+func TestGateReadOncePaths(t *testing.T) {
+	g := `{"gates_passed":[{"test":"T19","spec_sha256":"` + spec + `"}],"env":"prod"}`
+	yes := `{"task_accepted":"` + taskA + `"}`
+	no := `{"task_accepted":"` + taskB + `"}`
+	m := `{"manual":"note"}`
+	key := [3]string{"prod", "T19", spec}
+	for _, first := range []Tri{False, True, Unknown} {
+		for _, c := range []struct {
+			name, doc string
+			want      Result
+			calls     int
+		}{
+			{"duplicate_any", `{"any":[` + g + `,` + g + `]}`, Result{Value: first}, 1},
+			{"duplicate_all", `{"all":[` + g + `,` + g + `]}`, Result{Value: first}, 1},
+			{"nested_duplicate", `{"any":[` + yes + `,{"all":[` + g + `,{"any":[` + no + `,` + g + `]}]}]}`, Result{Value: True}, 1},
+			{"skipped_all_in_any", `{"any":[` + yes + `,{"all":[` + no + `,` + g + `,` + g + `]}]}`, Result{Value: True}, 1},
+			{"outer_all_false", `{"all":[` + no + `,` + g + `]}`, Result{Value: False}, 0},
+			{"manual_cap", `{"any":[` + m + `,` + g + `]}`, Result{Value: True, Manual: first != True}, 1},
+		} {
+			t.Run(c.name+"/"+first.String(), func(t *testing.T) {
+				if first == Unknown && (c.name == "nested_duplicate" || c.name == "skipped_all_in_any" || c.name == "manual_cap") {
+					c.want = Result{Value: Unknown}
+				}
+				f := &keyedFacts{facts: facts{accepted: map[string]bool{taskA: true}, manual: map[string]bool{"note": true}}, reads: map[[3]string][]Tri{key: {first, True, False, Unknown}}, calls: map[[3]string]int{}}
+				got := mustParse(t, c.doc).Eval(f)
+				if got != c.want || f.calls[key] != c.calls {
+					t.Fatalf("got %+v calls %d; want %+v calls %d", got, f.calls[key], c.want, c.calls)
+				}
+			})
+		}
+	}
+	// A false first gate stops the gate list; the cap must still read T21.
+	g2 := `{"gates_passed":[{"test":"T19","spec_sha256":"` + spec + `"},{"test":"T21","spec_sha256":"` + spec + `"}],"env":"prod"}`
+	k2 := [3]string{"prod", "T21", spec}
+	f := &keyedFacts{facts: facts{accepted: map[string]bool{taskA: true}}, reads: map[[3]string][]Tri{key: {False, True}, k2: {Unknown, True}}, calls: map[[3]string]int{}}
+	if got := mustParse(t, `{"any":[`+yes+`,`+g2+`]}`).Eval(f); got != (Result{Value: Unknown}) || f.calls[key] != 1 || f.calls[k2] != 1 {
+		t.Fatalf("gate list cap: %+v %v", got, f.calls)
+	}
+	// Cache keys must distinguish all three fields.
+	gs := []string{g, strings.Replace(g, "prod", "stg", 1), strings.Replace(g, "T19", "T21", 1), strings.Replace(g, spec, strings.Repeat("a", 64), 1)}
+	f = &keyedFacts{facts: facts{}, reads: map[[3]string][]Tri{}, calls: map[[3]string]int{}}
+	for _, k := range [][3]string{key, {"stg", "T19", spec}, k2, {"prod", "T19", strings.Repeat("a", 64)}} {
+		f.reads[k] = []Tri{False, True}
+	}
+	r := mustParse(t, `{"any":[`+strings.Join(gs, ",")+`]}`)
+	if got := r.Eval(f); got.Value != False {
+		t.Fatalf("first Eval: %+v", got)
+	}
+	if got := r.Eval(f); got.Value != True {
+		t.Fatalf("second Eval retained cache: %+v", got)
+	}
+	for k, n := range f.calls {
+		if n != 2 {
+			t.Fatalf("key %v calls=%d", k, n)
+		}
 	}
 }
