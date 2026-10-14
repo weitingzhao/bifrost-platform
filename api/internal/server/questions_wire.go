@@ -42,6 +42,10 @@ func (s *Server) Close() {
 	if s.approvalsCancel != nil {
 		s.approvalsCancel()
 	}
+	if s.approvals != nil {
+		// A result held by this process gets one last write before it exits.
+		s.approvals.FlushHeldFinishes()
+	}
 	rt := s.questionRuntime
 	if rt == nil {
 		return

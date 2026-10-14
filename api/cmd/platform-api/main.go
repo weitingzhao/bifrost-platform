@@ -39,12 +39,14 @@ func main() {
 	safego.Go("server.shutdown", func() {
 		defer close(done)
 		<-ctx.Done()
-		srv.Close()
+		// Stop taking requests and let the ones in flight finish first; then stop the
+		// background loops and flush what this process still holds.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("server shutdown: %v", err)
 		}
+		srv.Close()
 	})
 	serveErr := httpServer.ListenAndServe()
 	stop()

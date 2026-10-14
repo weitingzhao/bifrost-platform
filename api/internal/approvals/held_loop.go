@@ -23,3 +23,9 @@ func (s *Service) RunHeldFinishes(ctx context.Context, every time.Duration) {
 		}
 	}
 }
+
+// FlushHeldFinishes writes, once, any result this process computed but could
+// not store. The server calls it on shutdown after the loop has stopped.
+func (s *Service) FlushHeldFinishes() {
+	s.flushHeld()
+}

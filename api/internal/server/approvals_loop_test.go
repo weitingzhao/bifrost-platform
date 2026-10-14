@@ -41,3 +41,17 @@ func TestCloseCancelsApprovalLoop(t *testing.T) {
 		t.Fatal("Close did not cancel approval loop")
 	}
 }
+
+// The review found that deleting the startApprovalLoop call in New left every
+// test green. This builds the server the way production does, per role.
+func TestNewStartsTheApprovalLoopInEveryRole(t *testing.T) {
+	for _, role := range []string{"api", "all"} {
+		t.Run(role, func(t *testing.T) {
+			t.Setenv(config.RoleEnv, role)
+			srv := newTestServer(t, newTestConfig(t))
+			if srv.approvalsCancel == nil {
+				t.Fatal("New did not start the approval loop")
+			}
+		})
+	}
+}
