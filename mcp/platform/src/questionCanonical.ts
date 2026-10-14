@@ -96,6 +96,9 @@ export interface Canonical {
   key: string
 }
 
+/** The Owner's three duties a decision card can name. */
+export const OWNER_DUTIES = new Set(['goal', 'rule', 'irreversible'])
+
 export function canonicalizeObject(input: unknown): Canonical {
   if (input == null || typeof input !== 'object' || Array.isArray(input)) {
     throw new CanonicalError('body', 'invalid json body')
@@ -103,7 +106,7 @@ export function canonicalizeObject(input: unknown): Canonical {
   const raw = input as Record<string, unknown>
   const known = new Set([
     'idempotency_key', 'title', 'body', 'options', 'recommended', 'allow_text', 'urgency', 'meanwhile',
-    'work_id', 'requester_thread', 'link', 'link_text', 'ttl_hours',
+    'work_id', 'owner_duty', 'task_id', 'requester_thread', 'link', 'link_text', 'ttl_hours',
   ])
   for (const key of Object.keys(raw)) {
     if (!known.has(key)) throw new CanonicalError(key, `unknown field ${key}`)
@@ -126,6 +129,15 @@ export function canonicalizeObject(input: unknown): Canonical {
   if (work && !/^(W-[0-9]+|TD-[0-9]+|LANE-[A-Za-z0-9-]+)$/.test(work)) {
     throw new CanonicalError('work_id', 'work_id is invalid')
   }
+  // A decision card (design v5 §7 item 3; the server's canonical.go): which
+  // of the Owner's three duties the question is, and the agent runtime task
+  // it is about.
+  const duty = optionalLine(raw.owner_duty, 'owner_duty', 40)
+  if (duty && !OWNER_DUTIES.has(duty)) throw new CanonicalError('owner_duty', 'owner_duty is goal, rule or irreversible')
+  const task = optionalLine(raw.task_id, 'task_id', 40)
+  if (task && !/^t_[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(task)) {
+    throw new CanonicalError('task_id', 'task_id is not an agent runtime task id')
+  }
   const thread = optionalLine(raw.requester_thread, 'requester_thread', 120)
   const link = optionalLine(raw.link, 'link', 300)
   if (linkForbidden(link)) throw new CanonicalError('link', 'link is not allowed')
@@ -147,6 +159,8 @@ export function canonicalizeObject(input: unknown): Canonical {
   if (recommended > 0) doc.recommended = recommended
   if (thread) doc.requester_thread = thread
   if (work) doc.work_id = work
+  if (duty) doc.owner_duty = duty
+  if (task) doc.task_id = task
   if (link) doc.link = link
   if (linkText) doc.link_text = linkText
   const json = canonicalJSON(doc)

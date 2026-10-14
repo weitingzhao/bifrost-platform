@@ -59,6 +59,10 @@ export type Question = {
   requester_principal?: string
   requester_thread?: string
   work_id?: string
+  /** A decision card: which of the Owner's three duties this is (goal, rule, irreversible). */
+  owner_duty?: string
+  /** A decision card: the agent runtime task it is about. */
+  task_id?: string
   title: string
   body?: string
   options: QuestionOption[]
@@ -262,6 +266,10 @@ export function parseQuestion(value: unknown): QuestionRecordResult {
   if (isFailure(thread)) return thread
   const workId = optionalString(value, 'work_id')
   if (isFailure(workId)) return workId
+  const ownerDuty = optionalString(value, 'owner_duty')
+  if (isFailure(ownerDuty)) return ownerDuty
+  const taskId = optionalString(value, 'task_id')
+  if (isFailure(taskId)) return taskId
   const body = optionalString(value, 'body')
   if (isFailure(body)) return body
   const recommended = optionalString(value, 'recommended')
@@ -303,6 +311,8 @@ export function parseQuestion(value: unknown): QuestionRecordResult {
   if (principal != null && principal !== '') question.requester_principal = principal
   if (thread != null && thread !== '') question.requester_thread = thread
   if (workId != null && workId !== '') question.work_id = workId
+  if (ownerDuty != null && ownerDuty !== '') question.owner_duty = ownerDuty
+  if (taskId != null && taskId !== '') question.task_id = taskId
   if (body != null && body !== '') question.body = body
   if (recommended != null && recommended !== '') question.recommended = recommended
   if (link != null && link !== '') question.link = link

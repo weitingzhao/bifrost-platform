@@ -1,4 +1,187 @@
 {
+  "redact": [
+    {
+      "name": "adjacent aws space",
+      "input": "AKIAAAAAAAAAAAAAAAAA ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key] [redacted aws key]",
+      "secrets": [
+        "AKIAAAAAAAAAAAAAAAAA",
+        "ASIABBBBBBBBBBBBBBBB"
+      ]
+    },
+    {
+      "name": "adjacent aws newline",
+      "input": "AKIAAAAAAAAAAAAAAAAA\nASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key]\n[redacted aws key]",
+      "secrets": [
+        "AKIAAAAAAAAAAAAAAAAA",
+        "ASIABBBBBBBBBBBBBBBB"
+      ]
+    },
+    {
+      "name": "adjacent aws comma",
+      "input": "AKIAAAAAAAAAAAAAAAAA,ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key],[redacted aws key]",
+      "secrets": [
+        "AKIAAAAAAAAAAAAAAAAA",
+        "ASIABBBBBBBBBBBBBBBB"
+      ]
+    },
+    {
+      "name": "adjacent aws punctuation",
+      "input": "AKIAAAAAAAAAAAAAAAAA!!!ASIABBBBBBBBBBBBBBBB",
+      "output": "[redacted aws key]!!![redacted aws key]",
+      "secrets": [
+        "AKIAAAAAAAAAAAAAAAAA",
+        "ASIABBBBBBBBBBBBBBBB"
+      ]
+    },
+    {
+      "name": "aws key at start",
+      "input": "AKIAAAAAAAAAAAAAAAAA is first",
+      "output": "[redacted aws key] is first",
+      "secrets": [
+        "AKIAAAAAAAAAAAAAAAAA"
+      ]
+    },
+    {
+      "name": "aws key at end",
+      "input": "ends with ASIABBBBBBBBBBBBBBBB",
+      "output": "ends with [redacted aws key]",
+      "secrets": [
+        "ASIABBBBBBBBBBBBBBBB"
+      ]
+    },
+    {
+      "name": "two token assignments",
+      "input": "token=s3cr3tvalue token=othersecret",
+      "output": "token=[redacted] token=[redacted]",
+      "secrets": [
+        "s3cr3tvalue",
+        "othersecret"
+      ]
+    },
+    {
+      "name": "two bearers",
+      "input": "bearer abcdefgh bearer ijklmnop",
+      "output": "bearer [redacted] bearer [redacted]",
+      "secrets": [
+        "abcdefgh",
+        "ijklmnop"
+      ]
+    },
+    {
+      "name": "mixed case",
+      "input": "BeArEr AbCdEfGh ToKeN=s3cr3tvalue",
+      "output": "BeArEr [redacted] ToKeN=[redacted]",
+      "secrets": [
+        "AbCdEfGh",
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "basic long s",
+      "input": "Ba\u017fic abcdefgh",
+      "output": "Ba\u017fic [redacted]",
+      "secrets": [
+        "abcdefgh"
+      ]
+    },
+    {
+      "name": "bearer kelvin in secret",
+      "input": "Bearer abcdefg\u212a",
+      "output": "Bearer [redacted]",
+      "secrets": [
+        "abcdefg\u212a"
+      ]
+    },
+    {
+      "name": "token long s suffix",
+      "input": "token\u017fuffix=s3cr3tvalue",
+      "output": "token\u017fuffix=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "long s secret hides more",
+      "input": "\u017fecret=abcdefgh12345678",
+      "output": "\u017fecret=[redacted]",
+      "secrets": []
+    },
+    {
+      "name": "password long s",
+      "input": "pa\u017fsword=s3cr3tvalue",
+      "output": "pa\u017fsword=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "passwd long s",
+      "input": "pa\u017fswd=s3cr3tvalue",
+      "output": "pa\u017fswd=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "pwd long s suffix",
+      "input": "pwd\u017fuffix=s3cr3tvalue",
+      "output": "pwd\u017fuffix=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "secret long s",
+      "input": "x\u017fecret=s3cr3tvalue",
+      "output": "x\u017fecret=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "token kelvin",
+      "input": "to\u212aen=s3cr3tvalue",
+      "output": "to\u212aen=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "api key kelvin",
+      "input": "api_\u212aey=s3cr3tvalue",
+      "output": "api_\u212aey=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "access key folds",
+      "input": "acce\u017fs_\u212aey=s3cr3tvalue",
+      "output": "acce\u017fs_\u212aey=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "private key kelvin",
+      "input": "private_\u212aey=s3cr3tvalue",
+      "output": "private_\u212aey=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    },
+    {
+      "name": "credential long s suffix",
+      "input": "credential\u017f=s3cr3tvalue",
+      "output": "credential\u017f=[redacted]",
+      "secrets": [
+        "s3cr3tvalue"
+      ]
+    }
+  ],
   "vectors": [
     {
       "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
@@ -258,140 +441,139 @@
       },
       "name": "word edge",
       "sha256": "8de1d24275f030f27f75568ec11179171e5179da175418ca413734fb9b06816e"
-    }
-  ],
-  "redact": [
-    {
-      "name": "adjacent aws space",
-      "input": "AKIAAAAAAAAAAAAAAAAA ASIABBBBBBBBBBBBBBBB",
-      "output": "[redacted aws key] [redacted aws key]",
-      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
     },
     {
-      "name": "adjacent aws newline",
-      "input": "AKIAAAAAAAAAAAAAAAAA\nASIABBBBBBBBBBBBBBBB",
-      "output": "[redacted aws key]\n[redacted aws key]",
-      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"rule\",\"task_id\":\"t_01M4XW5Z7AC7CTA9P0YDGACGPG\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "idempotency_key": "56ccfa2f1d6eb0911607e3bf75a90fa0ea7b5537f0d30d86d7580a8f4c331858",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "rule",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPG",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card",
+      "session": "thread-a",
+      "sha256": "12de8ded5fc923906427f04ea8766b816341238a0ed80a9800671a31e8f17147"
     },
     {
-      "name": "adjacent aws comma",
-      "input": "AKIAAAAAAAAAAAAAAAAA,ASIABBBBBBBBBBBBBBBB",
-      "output": "[redacted aws key],[redacted aws key]",
-      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"rule\",\"task_id\":\"t_01M4XW5Z7SC6YN6KEN3JXF8CFV\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "idempotency_key": "c74a1dfa54f02d679e1179039aa9167f01bfb4d93e94b08b082c7b531229b7fb",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "rule",
+        "task_id": "t_01M4XW5Z7SC6YN6KEN3JXF8CFV",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card other task",
+      "session": "thread-a",
+      "sha256": "a3214779f4e75c9682a1f9046b4376ed851c09c9fecc3ea1f52e4d5e7cefac26"
     },
     {
-      "name": "adjacent aws punctuation",
-      "input": "AKIAAAAAAAAAAAAAAAAA!!!ASIABBBBBBBBBBBBBBBB",
-      "output": "[redacted aws key]!!![redacted aws key]",
-      "secrets": ["AKIAAAAAAAAAAAAAAAAA", "ASIABBBBBBBBBBBBBBBB"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"goal\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": " goal ",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card goal",
+      "sha256": "33dfacfe16bf4579b3b9bfa2e140d4e4345224032aa2d0f4a94f4222e5eac609"
     },
     {
-      "name": "aws key at start",
-      "input": "AKIAAAAAAAAAAAAAAAAA is first",
-      "output": "[redacted aws key] is first",
-      "secrets": ["AKIAAAAAAAAAAAAAAAAA"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"owner_duty\":\"irreversible\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "irreversible",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card irreversible",
+      "sha256": "c2969ca950ab62eb3eb9c0208b2228b8f8d69651325f67a8e68d2ded016c1ce2"
     },
     {
-      "name": "aws key at end",
-      "input": "ends with ASIABBBBBBBBBBBBBBBB",
-      "output": "ends with [redacted aws key]",
-      "secrets": ["ASIABBBBBBBBBBBBBBBB"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"task_id\":\"t_71M4XW5Z7AC7CTA9P0YDGACGPG\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_71M4XW5Z7AC7CTA9P0YDGACGPG",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task only",
+      "sha256": "3653055857e0a25c947b0bbf4500f34041daaa92b0fb7b2878616f4b2d5b49b5"
     },
     {
-      "name": "two token assignments",
-      "input": "token=s3cr3tvalue token=othersecret",
-      "output": "token=[redacted] token=[redacted]",
-      "secrets": ["s3cr3tvalue", "othersecret"]
+      "canonical": "{\"allow_text\":true,\"meanwhile\":\"wait\",\"title\":\"Hello\",\"ttl_hours\":24,\"urgency\":\"now\"}",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "  ",
+        "task_id": null,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card empty",
+      "sha256": "6a4b8f601e9b03ef99fee022ef68d8bf44c65fa0e5d40472cb54d2bb79a7e042"
     },
     {
-      "name": "two bearers",
-      "input": "bearer abcdefgh bearer ijklmnop",
-      "output": "bearer [redacted] bearer [redacted]",
-      "secrets": ["abcdefgh", "ijklmnop"]
+      "error_field": "owner_duty",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": "approve",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card bad duty"
     },
     {
-      "name": "mixed case",
-      "input": "BeArEr AbCdEfGh ToKeN=s3cr3tvalue",
-      "output": "BeArEr [redacted] ToKeN=[redacted]",
-      "secrets": ["AbCdEfGh", "s3cr3tvalue"]
+      "error_field": "owner_duty",
+      "input": {
+        "meanwhile": "wait",
+        "owner_duty": 3,
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card duty not a string"
     },
     {
-      "name": "basic long s",
-      "input": "Ba\u017fic abcdefgh",
-      "output": "Ba\u017fic [redacted]",
-      "secrets": ["abcdefgh"]
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_81M4XW5Z7AC7CTA9P0YDGACGPG",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task over 128 bits"
     },
     {
-      "name": "bearer kelvin in secret",
-      "input": "Bearer abcdefg\u212a",
-      "output": "Bearer [redacted]",
-      "secrets": ["abcdefg\u212a"]
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01m4xw5z7ac7cta9p0ydgacgpg",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task lower case"
     },
     {
-      "name": "token long s suffix",
-      "input": "token\u017fuffix=s3cr3tvalue",
-      "output": "token\u017fuffix=[redacted]",
-      "secrets": ["s3cr3tvalue"]
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGP",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task short"
     },
     {
-      "name": "long s secret hides more",
-      "input": "\u017fecret=abcdefgh12345678",
-      "output": "\u017fecret=[redacted]",
-      "secrets": []
-    },
-    {
-      "name": "password long s",
-      "input": "pa\u017fsword=s3cr3tvalue",
-      "output": "pa\u017fsword=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "passwd long s",
-      "input": "pa\u017fswd=s3cr3tvalue",
-      "output": "pa\u017fswd=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "pwd long s suffix",
-      "input": "pwd\u017fuffix=s3cr3tvalue",
-      "output": "pwd\u017fuffix=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "secret long s",
-      "input": "x\u017fecret=s3cr3tvalue",
-      "output": "x\u017fecret=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "token kelvin",
-      "input": "to\u212aen=s3cr3tvalue",
-      "output": "to\u212aen=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "api key kelvin",
-      "input": "api_\u212aey=s3cr3tvalue",
-      "output": "api_\u212aey=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "access key folds",
-      "input": "acce\u017fs_\u212aey=s3cr3tvalue",
-      "output": "acce\u017fs_\u212aey=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "private key kelvin",
-      "input": "private_\u212aey=s3cr3tvalue",
-      "output": "private_\u212aey=[redacted]",
-      "secrets": ["s3cr3tvalue"]
-    },
-    {
-      "name": "credential long s suffix",
-      "input": "credential\u017f=s3cr3tvalue",
-      "output": "credential\u017f=[redacted]",
-      "secrets": ["s3cr3tvalue"]
+      "error_field": "task_id",
+      "input": {
+        "meanwhile": "wait",
+        "task_id": "t_01M4XW5Z7AC7CTA9P0YDGACGPI",
+        "title": "Hello",
+        "urgency": "now"
+      },
+      "name": "card task with I"
     }
   ]
 }
