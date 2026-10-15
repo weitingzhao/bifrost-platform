@@ -116,6 +116,15 @@ render "$tmp"
 chown root:wheel "$tmp"
 chmod 644 "$tmp"
 launchctl bootout "system/$label" 2>/dev/null || true
+# bootout returns before a busy agentd and its executors have gone, and a
+# bootstrap then fails and leaves no agentd at all (10-15). Wait until
+# launchd no longer has the service.
+waited=0
+while launchctl print "system/$label" >/dev/null 2>&1; do
+  [ "$waited" -lt 60 ] || die "launchd still has $label 60 seconds after bootout; the plist was not replaced (when it is gone: launchctl bootstrap system $plist)"
+  sleep 1
+  waited=$((waited + 1))
+done
 mv -f "$tmp" "$plist"
 trap - EXIT
 launchctl bootstrap system "$plist"
