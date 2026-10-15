@@ -12,7 +12,9 @@
 # git token, if any, in <config>/agentd-git.token: regular files the user
 # owns, mode 0600. <config> is ~<user>/.config/bifrost and the workspaces and
 # the log go to ~<user>/agent-work/agentd (AGENTD_CONFIG_DIR and
-# AGENTD_ROOT_DIR override them). <PATH> is where agentd finds git, codex and
+# AGENTD_ROOT_DIR override them). AGENTD_GIT_PUSH_BASE, when set, is where
+# attempt branches go (<git base> is then where work is cloned from, a mirror
+# that takes no push). <PATH> is where agentd finds git, codex and
 # cursor-agent; by default ~<user>/.local/bin, then Homebrew's and the
 # system's. Every value goes into the plist through plutil, one key at a
 # time: no text substitution, so no character in a path or URL can change
@@ -43,6 +45,7 @@ home=$(dscl . -read "/Users/$user" NFSHomeDirectory 2>/dev/null | sed -n 's/^NFS
 [ -n "$home" ] || die "no user $user"
 path=${7:-"$home/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"}
 config=${AGENTD_CONFIG_DIR:-"$home/.config/bifrost"}
+push_base=${AGENTD_GIT_PUSH_BASE:-}
 root=${AGENTD_ROOT_DIR:-"$home/agent-work/agentd"}
 
 # The binary by its absolute path: launchd starts it from another directory.
@@ -78,7 +81,7 @@ render() {
   plutil -insert EnvironmentVariables -dictionary "$f"
   for kv in "PATH=$path" "HOME=$home" "USER=$user" "LOGNAME=$user" \
     "AGENTD_PLATFORM=$platform" "AGENTD_HOST=$host" "AGENTD_TOKEN_FILE=$token" "AGENTD_TOOLS=$tools" \
-    "AGENTD_GIT_BASE=$git_base" "AGENTD_GIT_TOKEN_FILE=$git_token" "AGENTD_ROOT=$root"; do
+    "AGENTD_GIT_BASE=$git_base" "AGENTD_GIT_PUSH_BASE=$push_base" "AGENTD_GIT_TOKEN_FILE=$git_token" "AGENTD_ROOT=$root"; do
     plutil -insert "EnvironmentVariables.${kv%%=*}" -string "${kv#*=}" "$f"
   done
   plutil -insert RunAtLoad -bool true "$f"

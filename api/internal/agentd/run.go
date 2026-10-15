@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -43,9 +44,12 @@ type Daemon struct {
 	Root      string // tasks/<task>/a<n> live here
 	Self      string // agentd's executable: the launcher
 	Executors map[string]Executor
-	Remote    func(repo string) string // a repository's git remote
-	GitEnv    []string
-	Logf      func(format string, args ...any)
+	Remote    func(repo string) string // a repository's git remote, where work is cloned from
+	// PushRemote is where attempt branches go, and where a check finds the
+	// commit it checks; nil is Remote (a repository that takes pushes).
+	PushRemote func(repo string) string
+	GitEnv     []string
+	Logf       func(format string, args ...any)
 
 	Beat            time.Duration // heartbeat; 30 s
 	MaxFails        int           // heartbeats failing in a row before the lease counts as lost; 3
@@ -63,6 +67,32 @@ func (d *Daemon) logf(format string, args ...any) {
 	if d.Logf != nil {
 		d.Logf(format, args...)
 	}
+}
+
+func (d *Daemon) pushRemote(repo string) string {
+	if d.PushRemote != nil {
+		return d.PushRemote(repo)
+	}
+	return d.Remote(repo)
+}
+
+// taskName is what a task id may be in a refspec agentd builds.
+var taskName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+
+// checkout prepares the attempt's workspace at its base. A check's base is
+// the commit the checked attempt pushed: when the clone does not have it, the
+// checked task's branches are fetched from where branches go, and nothing
+// else.
+func (d *Daemon) checkout(ctx context.Context, a *Attempt, repo, base string) (*Workspace, error) {
+	if a.Subject == nil || d.PushRemote == nil {
+		return Prepare(ctx, a.Dir, d.Remote(repo), base, d.GitEnv)
+	}
+	task := a.Spec.SubjectTask
+	if !taskName.MatchString(task) {
+		return nil, fmt.Errorf("agentd: the checked task %q is not a task id", task)
+	}
+	return PrepareFetching(ctx, a.Dir, d.Remote(repo), base, d.GitEnv, Fetch{Remote: d.PushRemote(repo),
+		Refspec: "+refs/heads/agent/" + task + "/*:refs/remotes/agents/" + task + "/*"})
 }
 
 func orDefault(v, def time.Duration) time.Duration {
@@ -116,7 +146,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	var ws *Workspace
 	switch {
 	case repo != "" && base != "":
-		if ws, err = Prepare(ctx, a.Dir, d.Remote(repo), base, d.GitEnv); err != nil {
+		if ws, err = d.checkout(ctx, a, repo, base); err != nil {
 			return Outcome{}, err
 		}
 	default:

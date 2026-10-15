@@ -11,6 +11,8 @@
 //	AGENTD_TOKEN_FILE      a file holding the host's agentd token (mode 0600)
 //	AGENTD_TOOLS           executors here: exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto,exec:deterministic=local
 //	AGENTD_GIT_BASE        where repositories live: <base>/<repo>.git
+//	AGENTD_GIT_PUSH_BASE   optional: where attempt branches go, <base>/<repo>.git, when the
+//	                       repositories work is cloned from take no push (a mirror)
 //	AGENTD_GIT_TOKEN_FILE  optional: a token git sends to that base (as an http header, never on a command line)
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
 //
@@ -85,6 +87,7 @@ func run() error {
 		GitEnv:   cfg.gitEnv,
 		Logf:     log.Printf,
 	}
+	d.PushRemote = remoteAt(cfg.pushBase)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	// What a previous run left is ended first, whatever this host can offer
@@ -140,15 +143,23 @@ func run() error {
 	return nil
 }
 
+// remoteAt is <base>/<repo>.git, or nil for no base.
+func remoteAt(base string) func(string) string {
+	if base == "" {
+		return nil
+	}
+	return func(repo string) string { return strings.TrimRight(base, "/") + "/" + repo + ".git" }
+}
+
 type settings struct {
-	platform, host, token, gitBase, root string
-	gitEnv                               []string
-	tools                                []agentd.Tool
+	platform, host, token, gitBase, pushBase, root string
+	gitEnv                                         []string
+	tools                                          []agentd.Tool
 }
 
 func config() (settings, error) {
 	s := settings{platform: os.Getenv("AGENTD_PLATFORM"), host: os.Getenv("AGENTD_HOST"), gitBase: os.Getenv("AGENTD_GIT_BASE"),
-		root: os.Getenv("AGENTD_ROOT")}
+		pushBase: strings.TrimSpace(os.Getenv("AGENTD_GIT_PUSH_BASE")), root: os.Getenv("AGENTD_ROOT")}
 	if s.platform == "" || s.host == "" {
 		return s, errors.New("AGENTD_PLATFORM and AGENTD_HOST are required")
 	}

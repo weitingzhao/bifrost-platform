@@ -40,6 +40,20 @@ func WorkspaceDir(root, task string, n int) string {
 
 // Prepare clones remote into a new workspace and checks out base, detached.
 func Prepare(ctx context.Context, dir, remote, base string, env []string) (*Workspace, error) {
+	return PrepareFetching(ctx, dir, remote, base, env, Fetch{})
+}
+
+// Fetch is where else a base may be: the branches Refspec names on Remote.
+// A check's base is the commit the checked attempt pushed, which is on the
+// repository agent branches go to, not on the one work is cloned from (a
+// mirror of the main repository that takes no push).
+type Fetch struct {
+	Remote, Refspec string
+}
+
+// PrepareFetching is Prepare that, when base is not in the clone, fetches
+// also's branches and looks again.
+func PrepareFetching(ctx context.Context, dir, remote, base string, env []string, also Fetch) (*Workspace, error) {
 	if _, err := os.Stat(dir); err == nil {
 		return nil, ErrWorkspaceExists
 	}
@@ -49,6 +63,11 @@ func Prepare(ctx context.Context, dir, remote, base string, env []string) (*Work
 	w := &Workspace{Dir: dir, Base: base, env: env}
 	if _, err := w.git(ctx, filepath.Dir(dir), "clone", "--quiet", "--no-checkout", remote, dir); err != nil {
 		return nil, err
+	}
+	if _, err := w.git(ctx, dir, "cat-file", "-e", base+"^{commit}"); err != nil && also.Remote != "" {
+		if _, err = w.git(ctx, dir, "fetch", "--quiet", "--no-tags", also.Remote, also.Refspec); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := w.git(ctx, dir, "checkout", "--quiet", "--detach", base); err != nil {
 		return nil, err

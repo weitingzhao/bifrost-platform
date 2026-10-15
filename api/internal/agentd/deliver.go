@@ -274,7 +274,7 @@ func (d *Daemon) pushPrepared(ctx context.Context, ws *Workspace, e *Entry) erro
 	var head string
 	err := d.retry(ctx, func() error {
 		var perr error
-		head, perr = ws.Push(ctx, d.Remote(e.Repo), e.PushedCommit, e.PushedRef)
+		head, perr = ws.Push(ctx, d.pushRemote(e.Repo), e.PushedCommit, e.PushedRef)
 		if perr != nil {
 			return fmt.Errorf("%w: %v", ErrUnavailable, perr)
 		}

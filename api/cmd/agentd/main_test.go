@@ -36,3 +36,26 @@ func TestSecretRefusesAnOpenFile(t *testing.T) {
 		t.Fatal("no file read as a token")
 	}
 }
+
+func TestConfigReadsWhereBranchesGo(t *testing.T) {
+	token := filepath.Join(t.TempDir(), "agentd.token")
+	if err := os.WriteFile(token, []byte("fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]string{"AGENTD_PLATFORM": "https://p.example/api/v1/agentrt", "AGENTD_HOST": "h1",
+		"AGENTD_TOKEN_FILE": token, "AGENTD_TOOLS": "exec:codex=openai", "AGENTD_GIT_BASE": "https://g.example/bifrost",
+		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_GIT_PUSH_BASE": " https://g.example/bifrost-agents/ "} {
+		t.Setenv(k, v)
+	}
+	cfg, err := config()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := remoteAt(cfg.pushBase)("bifrost-platform"); got != "https://g.example/bifrost-agents/bifrost-platform.git" {
+		t.Fatalf("push remote = %q", got)
+	}
+	t.Setenv("AGENTD_GIT_PUSH_BASE", "")
+	if cfg, err = config(); err != nil || remoteAt(cfg.pushBase) != nil {
+		t.Fatalf("no push base: %q %v", cfg.pushBase, err)
+	}
+}

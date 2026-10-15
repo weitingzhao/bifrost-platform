@@ -82,6 +82,19 @@ func TestInstallScriptRenders(t *testing.T) {
 	if value("EnvironmentVariables.AGENTD_GIT_TOKEN_FILE") != "" {
 		t.Error("no git token file, yet one is named")
 	}
+	if value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE") != "" {
+		t.Error("no push base given, yet one is named")
+	}
+	// Branches go elsewhere when the git base is a mirror: the push base
+	// goes in as it came.
+	push := exec.Command("bash", script, "--render", plist, me.Username, bin, platform, "h1", "exec:codex=openai", "https://git.example/x&y")
+	push.Env = append(os.Environ(), "AGENTD_CONFIG_DIR="+config, "AGENTD_ROOT_DIR="+root, "AGENTD_GIT_PUSH_BASE=https://git.example/agents & <z>")
+	if out, perr := push.CombinedOutput(); perr != nil {
+		t.Fatalf("render with a push base: %v\n%s", perr, out)
+	}
+	if got := value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE"); got != "https://git.example/agents & <z>" {
+		t.Errorf("AGENTD_GIT_PUSH_BASE = %q", got)
+	}
 
 	// A credential another can read, a link, or none: refused, the plist
 	// left as it was.
