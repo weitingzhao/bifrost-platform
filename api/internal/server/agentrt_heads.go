@@ -191,7 +191,8 @@ func advertisedName(name, oid string, n int) bool {
 		return true
 	}
 	if peeled, ok := strings.CutSuffix(name, "^{}"); ok {
-		return strings.HasPrefix(peeled, "refs/") && refName(peeled)
+		// HEAD itself may point at an annotated tag (review 207 B).
+		return peeled == "HEAD" || strings.HasPrefix(peeled, "refs/") && refName(peeled)
 	}
 	return strings.HasPrefix(name, "refs/") && refName(name)
 }

@@ -177,6 +177,13 @@ func TestGiteaBranchHeadReadsWhatGitAdvertises(t *testing.T) {
 	if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a2"); !errors.Is(err, store.ErrState) {
 		t.Fatalf("a branch git does not advertise: err = %v, want ErrState", err)
 	}
+	// HEAD pointing at an annotated tag: git advertises HEAD^{} right after
+	// HEAD (review 207 B).
+	git("symbolic-ref", "HEAD", "refs/tags/v1")
+	f = &fakeGitea{adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + git("upload-pack", "--advertise-refs", "--stateless-rpc", dir))}
+	if got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); err != nil || got != want {
+		t.Fatalf("HEAD at a tag: head = %q, %v; want %s", got, err, want)
+	}
 	// An empty repository as git advertises it.
 	dir = t.TempDir()
 	git("init", "-q", "-b", "main")
