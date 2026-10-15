@@ -42,6 +42,9 @@ type API struct {
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
 	// signed rule.
 	Anchor string
+	// MainHead reads a repository's main where agentd clones it, the base of
+	// a goal's task; nil answers POST /goals 503.
+	MainHead MainHead
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -93,6 +96,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(propose, cfg).Post("/missions", a.proposeMission)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)
 		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
+		r.With(propose, cfg).Post("/goals", a.proposeGoal)
 		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)

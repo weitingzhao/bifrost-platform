@@ -112,6 +112,14 @@ var (
 	anchor   string
 )
 
+// mains records the repositories whose main a goal read; mainFails makes the
+// reads fail, as an unreachable Gitea would; noMain serves without a reader.
+var (
+	mains     []string
+	mainFails bool
+	noMain    bool
+)
+
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin and two seat tokens (one registered).
@@ -163,6 +171,15 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
 		}, Anchor: anchor}
+	if !noMain {
+		api.MainHead = func(_ context.Context, repo string) (string, error) {
+			mains = append(mains, repo)
+			if mainFails {
+				return "", fmt.Errorf("gitea: unreachable")
+			}
+			return commitA, nil
+		}
+	}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })
 	s := httptest.NewServer(r)

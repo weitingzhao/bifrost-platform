@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/delivery"
 )
@@ -32,6 +33,25 @@ func (s *Server) agentRuntimeHeads() store.BranchHead {
 		return nil
 	}
 	return giteaBranchHead(s.delivery.GiteaAccess, org, &http.Client{Timeout: 10 * time.Second})
+}
+
+// agentRuntimeMains reads the head of a repository's main where agentd clones
+// it from: the organization the releases clone from (the delivery service's
+// Gitea organization, what agentd's AGENTD_GIT_BASE names), the base of a
+// goal's task (W-31 2.2b). Without the delivery service there is none.
+func (s *Server) agentRuntimeMains() agentrtapi.MainHead {
+	if s.delivery == nil {
+		return nil
+	}
+	access := s.delivery.GiteaAccess
+	client := &http.Client{Timeout: 10 * time.Second}
+	return func(ctx context.Context, repo string) (string, error) {
+		acc, err := access(ctx)
+		if err != nil {
+			return "", fmt.Errorf("gitea access: %w", err)
+		}
+		return giteaBranchHead(access, acc.Org, client)(ctx, repo, "refs/heads/main")
+	}
 }
 
 var (
