@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +120,28 @@ func TestConfigReadsCursorsKeyFile(t *testing.T) {
 	t.Setenv("AGENTD_CURSOR_KEY_FILE", filepath.Join(dir, "missing"))
 	if _, err := config(); err == nil {
 		t.Fatal("a missing key file was taken")
+	}
+}
+
+// Review 196 B2: a link or an empty file is not a credential.
+func TestSecretRefusesALinkAndAnEmptyFile(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	if err := os.WriteFile(real, []byte("fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := secret(link); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("a link: %v", err)
+	}
+	empty := filepath.Join(dir, "empty")
+	if err := os.WriteFile(empty, []byte(" \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := secret(empty); err == nil || !strings.Contains(err.Error(), "is empty") {
+		t.Fatalf("an empty file: %v", err)
 	}
 }

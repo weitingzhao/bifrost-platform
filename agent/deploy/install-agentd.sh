@@ -64,6 +64,7 @@ credential() {
   { [ -f "$1" ] && [ ! -L "$1" ]; } || die "$1 is not a regular file"
   [ "$(stat -f %Su "$1")" = "$user" ] || die "$1 is not owned by $user"
   [ "$(stat -f %Lp "$1")" = 600 ] || die "$1 must be mode 0600"
+  [ -s "$1" ] || die "$1 is empty"
 }
 token="$config/agentd.token"
 credential "$token" required

@@ -105,6 +105,15 @@ func TestInstallScriptRenders(t *testing.T) {
 	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "must be mode 0600") {
 		t.Fatalf("a cursor key readable by others: %v %s", rerr, out)
 	}
+	if err = os.WriteFile(cursorKey, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(cursorKey, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "is empty") {
+		t.Fatalf("an empty cursor key (review 196 B2): %v %s", rerr, out)
+	}
 	if err = os.Remove(cursorKey); err != nil {
 		t.Fatal(err)
 	}

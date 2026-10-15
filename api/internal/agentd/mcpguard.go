@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 )
 
@@ -22,7 +21,9 @@ type MCPCheck func() (int, error)
 
 // CodexMCP counts the enabled servers codex lists for this user.
 func CodexMCP() (int, error) {
-	out, err := exec.Command("codex", "mcp", "list", "--json").Output()
+	// The probe gets no more of agentd's environment than a task does (review
+	// 196 A1): a secret of the host must not reach codex this way either.
+	out, err := helper("codex", "mcp", "list", "--json").Output()
 	if err != nil {
 		return 0, fmt.Errorf("codex mcp list: %w", err)
 	}

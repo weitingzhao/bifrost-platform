@@ -98,7 +98,7 @@ var pgrep = "pgrep"
 // fails is an error, never an empty group (review 164 A2): pgrep exits 1 for
 // no match and otherwise for a failure.
 func groupMembers(pgid, except int) ([]int, error) {
-	out, err := exec.Command(pgrep, "-g", strconv.Itoa(pgid)).Output()
+	out, err := helper(pgrep, "-g", strconv.Itoa(pgid)).Output()
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && exit.ExitCode() == 1 {
 		return nil, nil
@@ -128,7 +128,7 @@ func groupMembers(pgid, except int) ([]int, error) {
 func running(pids []int) []int {
 	var live []int
 	for _, pid := range pids {
-		out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
+		out, err := helper("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 		state := strings.TrimSpace(string(out))
 		var exit *exec.ExitError
 		switch {
@@ -240,6 +240,16 @@ func GroupAlive(pgid int) bool {
 }
 
 // Spawn is an executor to run: an argument array, never a shell line.
+// helper runs a tool agentd or the launcher needs (codex's MCP list, pgrep,
+// ps) with the allowed environment only: the launcher holds an executor's
+// whole environment, a cursor key among it, and no helper needs it (review
+// 196 A1, B1).
+func helper(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	cmd.Env = AllowedEnv(os.Environ())
+	return cmd
+}
+
 type Spawn struct {
 	Argv           []string
 	Env            []string // the whole environment; nothing is inherited
@@ -341,7 +351,7 @@ func Alive(pgid int, start string) bool {
 
 // StartTime is when process pid started, as ps prints it.
 func StartTime(pid int) (string, error) {
-	out, err := exec.Command("ps", "-o", "lstart=", "-p", fmt.Sprint(pid)).Output()
+	out, err := helper("ps", "-o", "lstart=", "-p", fmt.Sprint(pid)).Output()
 	if err != nil {
 		return "", fmt.Errorf("agentd: start time of %d: %w", pid, err)
 	}

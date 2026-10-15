@@ -219,15 +219,25 @@ func secret(path string) (string, error) {
 	if path == "" {
 		return "", errors.New("not set")
 	}
-	info, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err != nil {
 		return "", err
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("%s is not a regular file", path)
 	}
 	if info.Mode().Perm()&0o077 != 0 {
 		return "", fmt.Errorf("%s is readable by others (mode %o)", path, info.Mode().Perm())
 	}
 	b, err := os.ReadFile(path)
-	return strings.TrimSpace(string(b)), err
+	if err != nil {
+		return "", err
+	}
+	s := strings.TrimSpace(string(b))
+	if s == "" {
+		return "", fmt.Errorf("%s is empty", path) // review 196 B2
+	}
+	return s, nil
 }
 
 // tools parses exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto.
