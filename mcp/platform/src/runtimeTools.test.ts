@@ -81,7 +81,7 @@ describe('agent runtime reads', () => {
         '/api/v1/agentrt/whoami',
         '/api/v1/agentrt/plan',
         '/api/v1/agentrt/plan?root=R2',
-        '/api/v1/agentrt/plan/R2%3A1-1',
+        '/api/v1/agentrt/plan/R2:1-1',
         '/api/v1/agentrt/missions/M-1',
         '/api/v1/agentrt/tasks',
         '/api/v1/agentrt/tasks?mission=M-1&state=ready',
@@ -90,6 +90,8 @@ describe('agent runtime reads', () => {
     )
     const art = await getArtifact('sha256:' + 'cd'.repeat(32), d)
     assert.deepEqual(art, { artifact_id: 'sha256:' + 'cd'.repeat(32), media_type: 'text/markdown', content: '# spec\n', note: RUNTIME_DATA_NOTE })
+    // The id as the platform stores it, ':' unescaped (10-15: %3A named no record).
+    assert.equal(calls.at(-1)?.path, '/api/v1/agentrt/artifacts/sha256:' + 'cd'.repeat(32))
   })
 })
 

@@ -55,7 +55,11 @@ function note(body: unknown): unknown {
   return { ...(body as Record<string, unknown>), note: RUNTIME_DATA_NOTE }
 }
 
-const id = (s: string) => encodeURIComponent(s)
+// A path segment, escaped except for ':': artifact ids (sha256:…) and plan
+// nodes (R2:1-1) carry one, and the platform routes on the raw path, so an
+// escaped one names no record (10-15: get_artifact answered 404 for every
+// artifact). ':' is legal in a path segment.
+const id = (s: string) => encodeURIComponent(s).replace(/%3A/gi, ':')
 
 export async function whoami(d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   return d.get(`${BASE}/whoami`)
