@@ -47,3 +47,27 @@ func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) e
 	}
 	return moveTask(ctx, tx, actor, t, to, "test")
 }
+
+// LiveForTest is a live attempt as the projection reads one: its state,
+// whether its host is known, when the host last polled, and its elapsed
+// seconds.
+func LiveForTest(id, state string, hostKnown bool, polled *time.Time, elapsed *int64, started time.Time) *ProgressAttempt {
+	a := &ProgressAttempt{AttemptID: id, HostID: "h1", State: state, hostKnown: hostKnown, hostPolled: polled, ElapsedS: elapsed, started: started}
+	if !started.IsZero() {
+		a.StartedAt = started.UTC().Format(time.RFC3339Nano)
+	}
+	return a
+}
+
+// SortLiveForTest is the projection's order of live attempts.
+func SortLiveForTest(list []*ProgressAttempt) []string {
+	m := map[string]*ProgressAttempt{}
+	for _, a := range list {
+		m[a.AttemptID] = a
+	}
+	var ids []string
+	for _, a := range sortedLive(m) {
+		ids = append(ids, a.AttemptID)
+	}
+	return ids
+}

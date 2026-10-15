@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -512,7 +513,7 @@ func TestPlanTreeOrder(t *testing.T) {
 }
 
 // GET /progress: any role reads the projection, computed now; no token
-// reads nothing.
+// reads nothing; a read that fails is 503 and nothing else (review 181 B1).
 func TestProgressRoute(t *testing.T) {
 	pool, task := world(t)
 	s := server(t, pool)
@@ -520,15 +521,24 @@ func TestProgressRoute(t *testing.T) {
 		t.Fatalf("no token: %d", code)
 	}
 	code, out := call(t, s, "viewer", "GET", "progress", nil)
-	if code != http.StatusOK || out["generated_at"] == nil {
+	if code != http.StatusOK || out["generated_at"] == nil || out["as_of_event_id"] == nil {
 		t.Fatalf("progress: %d %v", code, out)
 	}
-	work, _ := out["work"].([]any)
-	if len(work) != 1 || work[0].(map[string]any)["mission_id"] != "M-1" {
+	work, _ := out["work"].(map[string]any)
+	missions, _ := work["missions"].([]any)
+	if len(missions) != 1 || missions[0].(map[string]any)["mission_id"] != "M-1" {
 		t.Fatalf("work: %v", out["work"])
 	}
-	tasks := work[0].(map[string]any)["tasks"].([]any)
+	tasks := missions[0].(map[string]any)["tasks"].([]any)
 	if len(tasks) != 1 || tasks[0].(map[string]any)["task_id"] != task || tasks[0].(map[string]any)["status"] != "queued" {
 		t.Fatalf("tasks: %v", tasks)
+	}
+	db := agentrttest.Migrated(t)
+	closed := db.Pool(t, db.Runtime)
+	closed.Close()
+	down := server(t, closed)
+	code, out = call(t, down, "viewer", "GET", "progress", nil)
+	if code != http.StatusServiceUnavailable || out["error"] != "unavailable" || out["work"] != nil {
+		t.Fatalf("a read that fails: %d %v", code, out)
 	}
 }

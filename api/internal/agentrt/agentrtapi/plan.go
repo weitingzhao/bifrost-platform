@@ -95,11 +95,13 @@ func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 
 // progress is GET /progress: the projection of
 // SPEC-agentrt-progress-2026-10-14.md, computed on every read. A read that
-// fails is an error, never an old copy.
+// fails is 503, never an old copy (review 181 B1).
 func (a *API) progress(w http.ResponseWriter, r *http.Request) {
 	out, err := store.Progress(r.Context(), a.DB)
 	if err != nil {
-		a.fail(w, err)
+		// Unknown, never an old copy or half of one (SPEC §1).
+		a.logf("agentrt progress: %v", err)
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "the runtime's state cannot be read now")
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

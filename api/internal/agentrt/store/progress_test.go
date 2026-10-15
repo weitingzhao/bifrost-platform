@@ -12,9 +12,140 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// The projection from real rows (SPEC-agentrt-progress-2026-10-14.md): each
-// task status from what the runtime records, needs-you with its one count,
-// recent results with the failed one kept, the plan's counts.
+// ended seeds a finished task of M-1 on s1 with its attempts, as the runtime
+// leaves them: each attempt's rows, its computed and submitted events, a
+// verification accepting the last attempt when the task is accepted, and the
+// event that ended the task. outcomes are the attempts' conclusions, the
+// last one deciding the task (done: accepted, failed: rejected).
+func (w *world) ended(t *testing.T, outcomes ...string) (string, []string) {
+	t.Helper()
+	final := "accepted"
+	if outcomes[len(outcomes)-1] == "failed" {
+		final = "rejected"
+	}
+	return w.endedAs(t, final, outcomes...)
+}
+
+// endedAs is ended with the task's end given: a task rejected after an
+// attempt that ended done (its verification failed) has no attempt
+// accepted.
+func (w *world) endedAs(t *testing.T, final string, outcomes ...string) (string, []string) {
+	t.Helper()
+	task := store.NewTaskID()
+	var attempts []string
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: an ended task"}}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, role, task_class, title, spec_artifact_id,
+		  effect_class, state, hard_limit_s, created_by_actor_id) VALUES ($1, 'M-1', $2, 'implement', 'go', 'ended', $3, 'branch', $4, 3600, 'controller')`,
+			task, s1, w.spec, final); err != nil {
+			return err
+		}
+		legacy := func() error {
+			_, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+				Body: map[string]any{"source": "test: an ended task"}})
+			return err
+		}
+		for i, outcome := range outcomes {
+			a := store.NewAttemptID()
+			attempts = append(attempts, a)
+			if err := legacy(); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch,
+			  lease_expires_at, heartbeat_at, state, started_at, computed_at, persisted_at, ended_at, conclusion)
+			  VALUES ($1, $2, $3, 'exec:codex', nextval('agentrt.lease_epoch_seq'), now(), now(), 'finished',
+			    clock_timestamp() - interval '100 seconds', clock_timestamp(), clock_timestamp(), clock_timestamp(), $4)`, a, task, i+1, outcome); err != nil {
+				return err
+			}
+			for _, ev := range []store.Event{
+				{Type: "attempt_computed", Body: map[string]any{"end_how": "exit", "conclusion": outcome}},
+				{Type: "attempt_submitted", Body: map[string]any{}},
+			} {
+				ev.Stream, ev.Actor, ev.MissionID, ev.TaskID, ev.AttemptID = "mission:M-1", "controller", "M-1", task, a
+				if _, err := store.Append(ctx, tx, ev); err != nil {
+					return err
+				}
+			}
+		}
+		if final == "accepted" {
+			if err := legacy(); err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
+			  evidence_artifact_id, accepts_attempt) VALUES ($1, $2, $3, 'deterministic', 'pass', $4, true)`,
+				store.NewVerificationID(), task, attempts[len(attempts)-1], w.spec); err != nil {
+				return err
+			}
+		}
+		_, err := store.Append(ctx, tx, store.Event{Stream: "mission:M-1", Type: "task_state_changed", Actor: "controller", MissionID: "M-1",
+			TaskID: task, Body: map[string]any{"from": "verifying", "to": final}})
+		return err
+	}))
+	return task, attempts
+}
+
+type progressDoc struct {
+	AsOf     int64 `json:"as_of_event_id"`
+	NeedsYou struct {
+		Count int              `json:"count"`
+		Items []map[string]any `json:"items"`
+	} `json:"needs_you"`
+	Work struct {
+		Missions []struct {
+			MissionID string         `json:"mission_id"`
+			Status    string         `json:"status"`
+			Reason    string         `json:"reason"`
+			WaitingOn string         `json:"waiting_on"`
+			Slices    map[string]any `json:"slices"`
+			NextSteps []any          `json:"next_steps"`
+			ETA       map[string]any `json:"eta"`
+			Tasks     []struct {
+				TaskID    string   `json:"task_id"`
+				Status    string   `json:"status"`
+				Reason    string   `json:"reason"`
+				Since     string   `json:"since"`
+				UsualS    *int64   `json:"usual_s"`
+				DependsOn []string `json:"depends_on"`
+				OffPlan   bool     `json:"off_plan"`
+			} `json:"tasks"`
+		} `json:"missions"`
+		Truncated bool `json:"truncated"`
+	} `json:"work"`
+	Live   []map[string]any `json:"live"`
+	Recent struct {
+		Tasks          []map[string]any `json:"tasks"`
+		FailedAttempts []map[string]any `json:"failed_attempts"`
+	} `json:"recent"`
+	Plan []struct {
+		PlanNodeID string           `json:"plan_node_id"`
+		Kind       string           `json:"kind"`
+		Count      map[string]any   `json:"count"`
+		Rows       []map[string]any `json:"rows"`
+		Items      []struct {
+			PlanNodeID  string         `json:"plan_node_id"`
+			Count       map[string]any `json:"count"`
+			ActiveSteps []string       `json:"active_steps"`
+		} `json:"items"`
+	} `json:"plan"`
+	Hosts []map[string]any `json:"hosts"`
+}
+
+func (w *world) progress(t *testing.T) progressDoc {
+	t.Helper()
+	out, err := store.Progress(ctx, w.rt)
+	ok(t, err)
+	raw, err := json.Marshal(out)
+	ok(t, err)
+	var doc progressDoc
+	ok(t, json.Unmarshal(raw, &doc))
+	return doc
+}
+
+// The projection from real rows (SPEC-agentrt-progress-2026-10-14.md, second
+// version).
 func TestProgress(t *testing.T) {
 	w := newKernelWorld(t)
 	tools := []store.Tool{codex}
@@ -27,6 +158,16 @@ func TestProgress(t *testing.T) {
 		}
 		return id, c
 	}
+	// Three accepted implementations make the usual time (100 s); one task
+	// failed once and then was accepted: only the accepted attempt counts,
+	// and the failed one stays in the recent failures (T06); one rejected.
+	var accepted []string
+	for range 3 {
+		task, _ := w.ended(t, "done")
+		accepted = append(accepted, task)
+	}
+	retried, retriedAttempts := w.ended(t, "failed", "done")
+	rejected, rejectedAttempts := w.ended(t, "failed")
 	working, _ := claimOne("h1", time.Hour)
 	stuck, _ := claimOne("h2", time.Millisecond)
 	time.Sleep(20 * time.Millisecond)
@@ -38,7 +179,7 @@ func TestProgress(t *testing.T) {
 	blocked := w.ready(t, store.Task{})
 	review := w.ready(t, store.Task{})
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-		if merr := store.MoveTaskForTest(ctx, tx, "controller", blocked, "blocked"); merr != nil {
+		if merr := store.MoveTask(ctx, tx, "controller", blocked, "blocked", "the executor cannot reach Gitea"); merr != nil {
 			return merr
 		}
 		for _, to := range []string{"leased", "running", "submitted"} {
@@ -48,96 +189,57 @@ func TestProgress(t *testing.T) {
 		}
 		return nil
 	}))
-	// Three accepted implementations of 100 seconds make the usual time;
-	// one rejected with a failed attempt is a result to keep.
-	var seed []string
-	for i := range 3 {
-		task, attempt := store.NewTaskID(), store.NewAttemptID()
-		seed = append(seed, fmt.Sprintf(`INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, role, task_class, title, spec_artifact_id,
-		  effect_class, state, hard_limit_s, created_by_actor_id) VALUES ('%s', 'M-1', '%s', 'implement', 'go', 'done %d', '%s', 'branch', 'accepted', 3600, 'controller')`,
-			task, s1, i, w.spec),
-			fmt.Sprintf(`INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch, lease_expires_at,
-		  heartbeat_at, state, started_at, computed_at, ended_at, conclusion) VALUES ('%s', '%s', 1, 'exec:codex', %d, now(), now(), 'finished',
-		  now() - interval '100 seconds', now(), now(), 'done')`, attempt, task, 900+i))
-	}
-	failedTask, failedAttempt := store.NewTaskID(), store.NewAttemptID()
-	seed = append(seed, fmt.Sprintf(`INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, role, task_class, title, spec_artifact_id,
-	  effect_class, state, hard_limit_s, created_by_actor_id) VALUES ('%s', 'M-1', '%s', 'implement', 'go', 'an experiment', '%s', 'branch', 'rejected', 3600, 'controller')`,
-		failedTask, s1, w.spec),
-		fmt.Sprintf(`INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch, lease_expires_at,
-	  heartbeat_at, state, started_at, computed_at, ended_at, conclusion) VALUES ('%s', '%s', 1, 'exec:codex', 999, now(), now(), 'finished',
-	  now() - interval '50 seconds', now(), now(), 'failed')`, failedAttempt, failedTask),
+	w.legacy(t,
 		`UPDATE agentrt.host SET last_poll_at = clock_timestamp() - interval '10 minutes' WHERE host_id = 'h3'`,
 		fmt.Sprintf(`UPDATE agentrt.attempt SET started_at = clock_timestamp() - interval '200 seconds' WHERE attempt_id = '%s'`, slowClaim.AttemptID))
-	w.legacy(t, seed...)
-	// Waiting for the Owner: a proposed mission with a task, a plan change
-	// on a card.
+	var blockedSince string
+	ok(t, w.rt.QueryRow(ctx, `SELECT to_char(max(at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') FROM agentrt.event
+	  WHERE task_id = $1 AND event_type = 'task_state_changed'`, blocked).Scan(&blockedSince))
+	// A plan change later moves updated_at of the blocked task and of an
+	// accepted one: neither when it started waiting nor when it ended moves.
+	time.Sleep(1100 * time.Millisecond)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
+			Body: map[string]any{"change": "test: touch"}}); aerr != nil {
+			return aerr
+		}
+		_, uerr := tx.Exec(ctx, `UPDATE agentrt.task SET updated_at = clock_timestamp() WHERE task_id IN ($1, $2)`, blocked, accepted[0])
+		return uerr
+	}))
+	// Waiting for the Owner: a proposed mission with a task (no action of his
+	// yet: not in needs-you); a plan change on a card (in needs-you).
 	idle, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-2", []store.TaskProposal{offPlan(proposal("e", w.spec))})
 	ok(t, err)
 	waiting := taskIDs(idle)["e"]
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "c", root, "a new item", []store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "x"}},
+	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "c", root, "rename the item", []store.PlanChange{{Op: "retitle", Node: item, Title: "x"}},
 		func(context.Context, store.Card) (string, error) { return "q_7", nil })
 	ok(t, err)
 	w.activate(t, s1)
-
-	out, err := store.Progress(ctx, w.rt)
-	ok(t, err)
-	raw, err := json.Marshal(out)
-	ok(t, err)
-	var doc struct {
-		NeedsYou struct {
-			Count int `json:"count"`
-			Items []struct {
-				Kind   string         `json:"kind"`
-				Ref    string         `json:"ref"`
-				Action map[string]any `json:"action"`
-			} `json:"items"`
-		} `json:"needs_you"`
-		Work []struct {
-			MissionID string         `json:"mission_id"`
-			Status    string         `json:"status"`
-			Slices    map[string]int `json:"slices"`
-			Tasks     []struct {
-				TaskID  string `json:"task_id"`
-				Status  string `json:"status"`
-				UsualS  *int64 `json:"usual_s"`
-				Attempt *struct {
-					HostID string `json:"host_id"`
-				} `json:"attempt"`
-			} `json:"tasks"`
-		} `json:"work"`
-		Live   []map[string]any `json:"live"`
-		Recent []map[string]any `json:"recent"`
-		Plan   []struct {
-			PlanNodeID string         `json:"plan_node_id"`
-			Count      map[string]any `json:"count"`
-			Items      []struct {
-				PlanNodeID  string         `json:"plan_node_id"`
-				Count       map[string]any `json:"count"`
-				ActiveSteps []string       `json:"active_steps"`
-			} `json:"items"`
-		} `json:"plan"`
-		Hosts []map[string]any `json:"hosts"`
+	// An architecture root with a row.
+	for _, n := range []store.PlanNode{
+		{ID: "ARCH", Kind: "arch_root", Label: "A", Title: "architecture", Root: "ARCH"},
+		{ID: "ARCH:state-db", Parent: "ARCH", Kind: "arch_row", Label: "state-db", Title: "state in PG", Root: "ARCH"},
+	} {
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { _, cerr := store.CreatePlanNode(ctx, tx, "controller", n); return cerr }))
 	}
-	ok(t, json.Unmarshal(raw, &doc))
 
+	doc := w.progress(t)
+	if doc.AsOf == 0 {
+		t.Error("no event cursor")
+	}
 	status := map[string]string{}
-	var m1, m2 string
-	for _, m := range doc.Work {
+	reasons := map[string]string{}
+	missions := map[string]int{}
+	for i, m := range doc.Work.Missions {
+		missions[m.MissionID] = i
 		for _, task := range m.Tasks {
-			status[task.TaskID] = task.Status
-			if task.TaskID == working && (task.UsualS == nil || *task.UsualS != 100 || task.Attempt == nil || task.Attempt.HostID != "h1") {
-				t.Errorf("the working task: %+v", task)
+			status[task.TaskID], reasons[task.TaskID] = task.Status, task.Reason
+			if task.TaskID == working && (task.UsualS == nil || *task.UsualS < 99 || *task.UsualS > 101) {
+				t.Errorf("the working task's usual time: %v; want 100 s from the three accepted attempts and the retried one's last", task.UsualS)
 			}
-		}
-		switch m.MissionID {
-		case "M-1":
-			m1 = m.Status
-			if m.Slices["done"] != 3 || m.Slices["total"] != 10 {
-				t.Errorf("M-1 slices %v; want 3 of 10 (three accepted, seven open, the rejected one out)", m.Slices)
+			if task.TaskID == blocked && (len(task.Since) < 19 || task.Since[:19] != blockedSince) {
+				t.Errorf("the blocked task waits since %s; want %s, when it was blocked", task.Since, blockedSince)
 			}
-		case "M-2":
-			m2 = m.Status
 		}
 	}
 	for task, want := range map[string]string{working: store.StatusWorking, stuck: store.StatusMaybeStuck, lost: store.StatusHostLost,
@@ -147,52 +249,187 @@ func TestProgress(t *testing.T) {
 			t.Errorf("task %s is %q; want %q", task, status[task], want)
 		}
 	}
-	if m1 != store.StatusHostLost || m2 != store.StatusWaitingOwner {
-		t.Errorf("missions: M-1 %q, M-2 %q", m1, m2)
+	if reasons[blocked] != "the task is blocked: the executor cannot reach Gitea" {
+		t.Errorf("the blocked task's reason: %q", reasons[blocked])
+	}
+	m1 := doc.Work.Missions[missions["M-1"]]
+	m2 := doc.Work.Missions[missions["M-2"]]
+	if m1.Status != store.StatusHostLost || m1.WaitingOn != "coordinator" || m2.Status != store.StatusWaitingOwner || m2.WaitingOn != "owner" {
+		t.Errorf("missions: M-1 %s/%s, M-2 %s/%s", m1.Status, m1.WaitingOn, m2.Status, m2.WaitingOn)
+	}
+	// Slices are M-1's steps (s1 active, s3 planned), not its tasks.
+	if m1.Slices["total"] != float64(2) || m1.Slices["done"] != float64(0) || m1.Slices["state"] != "active" || len(m1.NextSteps) != 1 {
+		t.Errorf("M-1 slices %v, next %v", m1.Slices, m1.NextSteps)
+	}
+	if m1.ETA["state"] != "unknown" || m1.ETA["reason"] == "" {
+		t.Errorf("eta %v; want unknown with its reason", m1.ETA)
+	}
+	if doc.NeedsYou.Count != 1 || len(doc.NeedsYou.Items) != 1 || doc.NeedsYou.Items[0]["id"] != "question:q_7" {
+		t.Errorf("needs you: %d %v; want the plan change on its card only", doc.NeedsYou.Count, doc.NeedsYou.Items)
+	} else if blocks, _ := doc.NeedsYou.Items[0]["blocks"].(map[string]any); fmt.Sprint(blocks["missions"]) != "[M-1]" {
+		t.Errorf("the plan change holds up %v; want M-1, whose steps sit under the item it renames", doc.NeedsYou.Items[0]["blocks"])
 	}
 	if len(doc.Live) != 4 {
 		t.Errorf("%d live attempts; want 4", len(doc.Live))
 	}
-	kinds := map[string]string{}
-	for _, it := range doc.NeedsYou.Items {
-		kinds[it.Kind+":"+it.Ref] = fmt.Sprint(it.Action["where"])
+	failed := map[any]bool{}
+	for _, a := range doc.Recent.FailedAttempts {
+		failed[a["attempt_id"]] = true
 	}
-	if doc.NeedsYou.Count != 1 || kinds["mission:M-2"] != "none" || kinds["task_blocked:"+blocked] != "none" {
-		t.Errorf("needs you: %d %v; want 1 to act on (the plan change), the mission and the blocked task listed without an action",
-			doc.NeedsYou.Count, kinds)
+	if !failed[retriedAttempts[0]] || !failed[rejectedAttempts[0]] || len(failed) != 2 {
+		t.Errorf("failed attempts %v; want the retried task's first and the rejected one's", doc.Recent.FailedAttempts)
 	}
-	var failedKept bool
-	for _, r := range doc.Recent {
-		if r["task_id"] == failedTask && r["conclusion"] == "failed" && r["state"] == "rejected" {
-			failedKept = true
+	endedAt := map[any]string{}
+	for _, r := range doc.Recent.Tasks {
+		endedAt[r["task_id"]] = fmt.Sprint(r["ended_at"])
+	}
+	if len(doc.Recent.Tasks) != 5 || endedAt[retried] == "" || endedAt[rejected] == "" {
+		t.Errorf("recent tasks %v", doc.Recent.Tasks)
+	}
+	if len(doc.Recent.Tasks) > 0 && doc.Recent.Tasks[0]["task_id"] == accepted[0] {
+		t.Error("a plan change brought an old ended task to the top of recent")
+	}
+	var round, arch bool
+	for _, r := range doc.Plan {
+		switch r.Kind {
+		case "round":
+			round = len(r.Items) == 1 && fmt.Sprint(r.Items[0].ActiveSteps) == "["+s1+"]" && r.Items[0].Count["total"] == float64(3)
+		case "arch_root":
+			arch = len(r.Rows) == 1 && r.Rows[0]["tick"] == "unknown" && r.Rows[0]["reason"] != ""
 		}
 	}
-	if !failedKept || len(doc.Recent) != 4 {
-		t.Errorf("recent %v; want the three accepted and the failed experiment", doc.Recent)
-	}
-	if len(doc.Plan) != 1 || doc.Plan[0].PlanNodeID != root || len(doc.Plan[0].Items) != 1 ||
-		fmt.Sprint(doc.Plan[0].Items[0].ActiveSteps) != "["+s1+"]" || doc.Plan[0].Items[0].Count["state"] != "active" ||
-		doc.Plan[0].Items[0].Count["total"] != float64(3) {
+	if !round || !arch {
 		t.Errorf("plan %+v", doc.Plan)
 	}
-	if len(doc.Hosts) != 8 {
-		t.Errorf("%d hosts", len(doc.Hosts))
+	for _, h := range doc.Hosts {
+		if _, has := h["live_attempts"]; !has {
+			t.Errorf("host without live_attempts: %v", h)
+		}
+		if _, has := h["controls"]; !has {
+			t.Errorf("host without controls: %v", h)
+		}
 	}
 }
 
-// Task statuses decided in order (SPEC §3.1).
-func TestTaskStatusOrder(t *testing.T) {
-	if got := store.TaskStatus("ready", "active", nil, nil); got != store.StatusQueued {
-		t.Errorf("ready: %s", got)
+// A mission without tasks: proposed waits for the Owner (with what for);
+// active with steps not done is idle (the coordinator's turn).
+func TestProgressMissionWithoutTasks(t *testing.T) {
+	w := newWorld(t)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	doc := w.progress(t)
+	got := map[string]string{}
+	for _, m := range doc.Work.Missions {
+		got[m.MissionID] = m.Status + "/" + m.WaitingOn
 	}
-	for state, want := range map[string]string{"submitted": store.StatusWaitingRole, "verifying": store.StatusWaitingRole,
-		"rework": store.StatusWaitingRole, "blocked": store.StatusBlocked, "paused": store.StatusBlocked,
-		"awaiting_owner": store.StatusWaitingOwner, "proposed": store.StatusQueued} {
-		if got := store.TaskStatus(state, "active", nil, nil); got != want {
-			t.Errorf("%s: %s; want %s", state, got, want)
+	if got["M-1"] != "idle/coordinator" || got["M-2"] != "waiting_owner/owner" {
+		t.Fatalf("missions %v", got)
+	}
+}
+
+// Task statuses where two hold at once (SPEC §3.1): the first in the order
+// wins.
+func TestTaskStatusOrder(t *testing.T) {
+	now := time.Now()
+	fresh, old := now.Add(-time.Second), now.Add(-10*time.Minute)
+	long, short := int64(400), int64(10)
+	usual := 100 * time.Second
+	live := func(state string, known bool, polled *time.Time, elapsed *int64) *store.ProgressAttempt {
+		return store.LiveForTest("a_1", state, known, polled, elapsed, now)
+	}
+	for name, c := range map[string]struct {
+		in   store.StatusInput
+		want string
+	}{
+		"host lost over stale":          {store.StatusInput{TaskState: "running", Attempt: live("stale", true, &old, &short)}, store.StatusHostLost},
+		"host never polled":             {store.StatusInput{TaskState: "running", Attempt: live("running", true, nil, &short)}, store.StatusHostLost},
+		"unknown host over all":         {store.StatusInput{TaskState: "running", Attempt: live("running", false, nil, &short)}, store.StatusUnknown},
+		"stale over a waiting mission":  {store.StatusInput{TaskState: "running", MissionState: "proposed", Attempt: live("stale", true, &fresh, &short)}, store.StatusMaybeStuck},
+		"waiting owner over blocked":    {store.StatusInput{TaskState: "awaiting_owner"}, store.StatusWaitingOwner},
+		"a proposed mission's task":     {store.StatusInput{TaskState: "ready", MissionState: "proposed"}, store.StatusWaitingOwner},
+		"blocked over working":          {store.StatusInput{TaskState: "paused", Attempt: live("running", true, &fresh, &short)}, store.StatusBlocked},
+		"slow past 1.5 times":           {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long), Usual: &usual}, store.StatusSlow},
+		"not slow without a usual time": {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long)}, store.StatusWorking},
+		"working":                       {store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &short), Usual: &usual}, store.StatusWorking},
+		"submitted":                     {store.StatusInput{TaskState: "submitted"}, store.StatusWaitingRole},
+		"rework":                        {store.StatusInput{TaskState: "rework"}, store.StatusWaitingRole},
+		"ready":                         {store.StatusInput{TaskState: "ready"}, store.StatusQueued},
+		"proposed with dependencies":    {store.StatusInput{TaskState: "proposed", WaitingDeps: 2}, store.StatusQueued},
+	} {
+		c.in.Now = now
+		if got, reason := store.TaskStatus(c.in); got != c.want || reason == "" {
+			t.Errorf("%s: %s (%q); want %s", name, got, reason, c.want)
 		}
 	}
-	if got := store.TaskStatus("ready", "proposed", nil, nil); got != store.StatusWaitingOwner {
-		t.Errorf("a task of a proposed mission: %s", got)
+	at := 15 * time.Second
+	if _, reason := store.TaskStatus(store.StatusInput{TaskState: "running", Attempt: live("running", true, &fresh, &long), Usual: &at, Now: now}); reason != "running 400 s, usually 15 s" {
+		t.Errorf("a slow task's reason: %q", reason)
+	}
+}
+
+// Live attempts in start order by time, not by the text of the time (a
+// fraction of a second sorts after the whole second).
+func TestLiveOrder(t *testing.T) {
+	base := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
+	// The ids sort the other way round from the times; as text,
+	// "…00.1Z" sorts before "…00Z".
+	got := store.SortLiveForTest([]*store.ProgressAttempt{
+		store.LiveForTest("a_a_late", "running", true, nil, nil, base.Add(100*time.Millisecond)),
+		store.LiveForTest("a_b_first", "running", true, nil, nil, base),
+		store.LiveForTest("a_0_none", "leased", true, nil, nil, time.Time{}),
+	})
+	if fmt.Sprint(got) != "[a_b_first a_a_late a_0_none]" {
+		t.Fatalf("order %v", got)
+	}
+}
+
+// Review 181 B2: the usual time is read from accepted attempts only: done
+// attempts of tasks that were then rejected give none.
+func TestUsualCountsAcceptedAttemptsOnly(t *testing.T) {
+	w := newKernelWorld(t)
+	for range 3 {
+		w.endedAs(t, "rejected", "done")
+	}
+	id := w.ready(t, store.Task{})
+	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.TaskID != id {
+		t.Fatalf("claim: %+v", c)
+	}
+	doc := w.progress(t)
+	for _, m := range doc.Work.Missions {
+		for _, task := range m.Tasks {
+			if task.TaskID == id && task.UsualS != nil {
+				t.Fatalf("a usual time of %d s from attempts nobody accepted", *task.UsualS)
+			}
+		}
+	}
+}
+
+// Review 181 B3: the recent ended tasks are picked by when they ended, not
+// by updated_at, which a plan change moves: of 21 ended tasks the oldest is
+// not among the 20, even after a later change touches it.
+func TestRecentPicksByEndTime(t *testing.T) {
+	w := newKernelWorld(t)
+	var first string
+	for i := range 21 {
+		task, _ := w.ended(t, "done")
+		if i == 0 {
+			first = task
+		}
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
+			Body: map[string]any{"change": "test: touch"}}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET updated_at = clock_timestamp() WHERE task_id = $1`, first)
+		return err
+	}))
+	doc := w.progress(t)
+	if len(doc.Recent.Tasks) != 20 {
+		t.Fatalf("%d recent tasks; want 20", len(doc.Recent.Tasks))
+	}
+	for _, r := range doc.Recent.Tasks {
+		if r["task_id"] == first {
+			t.Fatal("the oldest ended task is among the recent 20 because a plan change touched it")
+		}
 	}
 }
