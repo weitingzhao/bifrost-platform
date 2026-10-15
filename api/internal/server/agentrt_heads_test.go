@@ -152,15 +152,22 @@ func TestGiteaBranchHeadReadsWhatGitAdvertises(t *testing.T) {
 		if err != nil {
 			t.Fatalf("git %v: %v", args, err)
 		}
-		return strings.TrimSpace(string(out))
+		return string(out) // as git wrote it: an advertisement is bytes, not text
 	}
+	trim := func(out string) string { return strings.TrimSpace(out) }
 	git("init", "-q", "-b", "main")
 	git("commit", "-q", "--allow-empty", "-m", "one")
 	git("tag", "-a", "-m", "v1", "v1")
 	git("branch", "agent/T-7/a10")
 	git("commit", "-q", "--allow-empty", "-m", "two")
 	git("branch", "agent/T-7/a1")
-	want := git("rev-parse", "agent/T-7/a1")
+	want := trim(git("rev-parse", "agent/T-7/a1"))
+	// Any ref may point at an annotated tag, and git advertises its peeled
+	// line (review 206 A2).
+	git("update-ref", "refs/pull/9/head", trim(git("rev-parse", "v1")))
+	if !strings.Contains(git("upload-pack", "--advertise-refs", "--stateless-rpc", dir), " refs/pull/9/head^{}\n") {
+		t.Fatal("git did not advertise refs/pull/9/head^{}")
+	}
 	refs := git("upload-pack", "--advertise-refs", "--stateless-rpc", dir)
 	f := &fakeGitea{adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + refs)}
 	head := headReader(t, f)
@@ -273,14 +280,17 @@ func TestGiteaBranchHeadNeedsAWholeWellFormedAdvertisement(t *testing.T) {
 			"cut short after the last flush":  {adverts: agentsRepo(advert(branch)), extraLength: 10},
 			"more than the bound":             {adverts: agentsRepo(advert(append([]string{branch}, bigRefs...)...))},
 			// A2: every line is a ref line.
-			"a NUL after the first line": {adverts: agentsRepo(advert(otherSHA+" refs/heads/main", branch+"\x00bad"))},
-			"a name with a space":        {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/bad name"))},
-			"a zero id on a branch":      {adverts: agentsRepo(advert(branch, zeroSHA+" refs/heads/gone"))},
-			"another ref twice":          {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x", otherSHA+" refs/heads/x"))},
-			"a peeled branch":            {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x^{}"))},
-			"not under refs/":            {adverts: agentsRepo(advert(branch, otherSHA+" heads/x"))},
-			"the empty line late":        {adverts: agentsRepo(advert(branch, zeroSHA+" capabilities^{}"))},
-			"no refs at all":             {adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + "0000")},
+			"a NUL after the first line":    {adverts: agentsRepo(advert(otherSHA+" refs/heads/main", branch+"\x00bad"))},
+			"a name with a space":           {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/bad name"))},
+			"a zero id on a branch":         {adverts: agentsRepo(advert(branch, zeroSHA+" refs/heads/gone"))},
+			"another ref twice":             {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x", otherSHA+" refs/heads/x"))},
+			"a peeled line without its ref": {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x^{}"))},
+			"a peeled line after another":   {adverts: agentsRepo(advert(otherSHA+" refs/tags/v1", branch, otherSHA+" refs/tags/v1^{}"))},
+			// Review 206 A2: an empty repository's line is its only one.
+			"the empty line, then refs": {adverts: agentsRepo(advert(zeroSHA+" capabilities^{}", branch))},
+			"not under refs/":           {adverts: agentsRepo(advert(branch, otherSHA+" heads/x"))},
+			"the empty line late":       {adverts: agentsRepo(advert(branch, zeroSHA+" capabilities^{}"))},
+			"no refs at all":            {adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + "0000")},
 		}
 		if !there {
 			delete(cases, "no refs at all") // the same answer either way: run once
@@ -292,6 +302,34 @@ func TestGiteaBranchHeadNeedsAWholeWellFormedAdvertisement(t *testing.T) {
 					t.Fatalf("head = %q, err = %v; want an error that is not ErrState", got, err)
 				}
 			})
+		}
+	}
+}
+
+// Review 206 A1: the last flush ending where a 4096-byte read buffer would
+// end, then more. Nothing may follow it, wherever it falls.
+func TestGiteaBranchHeadSeesWhatFollowsTheLastFlushAnywhere(t *testing.T) {
+	for _, there := range []bool{true, false} {
+		branch := otherSHA + " refs/heads/main"
+		if there {
+			branch = headSHA + " refs/heads/agent/T-7/a1"
+		}
+		var body string
+		for pad := 0; ; pad++ {
+			body = advert(branch, otherSHA+" refs/heads/filler/"+strings.Repeat("x", 3800+pad))
+			if len(body) >= 4096 {
+				break
+			}
+		}
+		if len(body) != 4096 {
+			t.Fatalf("the advertisement is %d bytes, want it to end at 4096", len(body))
+		}
+		for name, more := range map[string]string{"bytes": "garbage", "a ref": pkt(otherSHA + " refs/heads/late\n")} {
+			f := &fakeGitea{adverts: agentsRepo(body + more)}
+			got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
+			if err == nil || errors.Is(err, store.ErrState) {
+				t.Fatalf("%s after the flush at 4096 (branch there: %v): head = %q, err = %v", name, there, got, err)
+			}
 		}
 	}
 }

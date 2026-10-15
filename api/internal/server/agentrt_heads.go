@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"errors"
@@ -126,7 +125,9 @@ const (
 // well-formed advertisement leaves it out; one cut off, followed by more, or
 // with a line that is not a ref (review 204 A2) is an error.
 func advertisedRef(body []byte, ref string) (string, bool, error) {
-	br := bufio.NewReader(bytes.NewReader(body))
+	// No buffer between the body and the parser: what is left after the last
+	// flush is what the body has left (review 206 A1).
+	br := bytes.NewReader(body)
 	line, flush, err := pktLine(br)
 	if err != nil {
 		return "", false, err
@@ -138,7 +139,7 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 		return "", false, errors.Join(errors.New("no flush after the service line"), err)
 	}
 	var got string
-	found, seen := false, map[string]bool{}
+	found, empty, seen, prev := false, false, map[string]bool{}, ""
 	for n := 0; ; n++ {
 		line, flush, err := pktLine(br)
 		if err != nil {
@@ -148,7 +149,7 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 			if n == 0 {
 				return "", false, errors.New("no refs, not even an empty repository's")
 			}
-			if br.Buffered() > 0 {
+			if br.Len() > 0 {
 				return "", false, errors.New("more after the last flush")
 			}
 			return got, found, nil
@@ -158,10 +159,16 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 			text, _, _ = strings.Cut(text, "\x00")
 		}
 		oid, name, ok := strings.Cut(text, " ")
-		if !ok || !commitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] {
+		// An empty repository's line is its only one (review 206 A2).
+		if !ok || !commitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] || empty {
 			return "", false, fmt.Errorf("not a ref line: %q", line)
 		}
-		seen[name] = true
+		// git writes a peeled line right after the ref it peels.
+		if peeled, ok := strings.CutSuffix(name, "^{}"); ok && name != "capabilities^{}" && peeled != prev {
+			return "", false, fmt.Errorf("a peeled line not after its ref: %q", line)
+		}
+		seen[name], prev = true, name
+		empty = name == "capabilities^{}"
 		if name == ref {
 			got, found = oid, true
 		}
@@ -169,9 +176,10 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 }
 
 // advertisedName is whether name may stand in an advertisement with oid, at
-// line n of its refs: HEAD; a ref by git's rules (check-ref-format); a tag's
-// peeled line (^{}); or the one line of an empty repository. Only that line
-// has the zero object id.
+// line n of its refs: HEAD; a ref by git's rules (check-ref-format); the
+// peeled line (^{}) of an annotated tag, which any ref may point at (review
+// 206 A2: refs/pull/9/head^{} from real git); or the one line of an empty
+// repository. Only that line has the zero object id.
 func advertisedName(name, oid string, n int) bool {
 	zero := oid == strings.Repeat("0", 40)
 	switch {
@@ -183,7 +191,7 @@ func advertisedName(name, oid string, n int) bool {
 		return true
 	}
 	if peeled, ok := strings.CutSuffix(name, "^{}"); ok {
-		return strings.HasPrefix(peeled, "refs/tags/") && refName(peeled)
+		return strings.HasPrefix(peeled, "refs/") && refName(peeled)
 	}
 	return strings.HasPrefix(name, "refs/") && refName(name)
 }
@@ -208,7 +216,7 @@ func refName(name string) bool {
 }
 
 // pktLine reads one pkt-line: its payload, or flush for "0000".
-func pktLine(r *bufio.Reader) ([]byte, bool, error) {
+func pktLine(r io.Reader) ([]byte, bool, error) {
 	var size [4]byte
 	if _, err := io.ReadFull(r, size[:]); err != nil {
 		return nil, false, fmt.Errorf("the advertisement is cut off: %w", err)
