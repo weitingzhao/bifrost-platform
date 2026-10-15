@@ -25,6 +25,7 @@ import { registerApproveBridge } from './registerApprove.js'
 import { registerLocalBridge } from './registerLocal.js'
 import { focusAllowList } from './focusBridges.js'
 import {
+  PROPOSAL_KEY_RULE,
   RUNTIME_DATA_NOTE,
   STOP_KEY_RULE,
   getArtifact,
@@ -662,7 +663,7 @@ reg(
 
 reg(
   'propose_tasks',
-  'Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime\'s). depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them.',
+  `Propose tasks to a mission, all or nothing. Upload each spec first (put_artifact, kind task_spec). A task names its plan_node_id or, off the plan, its off_plan_reason. Roles: plan, implement, brief, other (verification and review are the runtime's). depends_on: refs of this proposal or tasks of the mission. Tasks start proposed; the runtime readies them. ${PROPOSAL_KEY_RULE}`,
   {
     mission_id: z.string(),
     tasks: z.array(
@@ -684,7 +685,7 @@ reg(
         hard_limit_s: z.number().int().min(0).max(86400).optional(),
       }),
     ),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
   },
   async (input) => jsonResult(await proposeTasks(input)),
 )

@@ -49,24 +49,6 @@ function refuseWrite(d: RuntimeDeps): { error: string; hint: string } | undefine
   return undefined
 }
 
-/** JSON with object keys sorted at every level: the same request is the same text. */
-export function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
-  if (value != null && typeof value === 'object') {
-    const rec = value as Record<string, unknown>
-    const keys = Object.keys(rec)
-      .filter((k) => rec[k] !== undefined)
-      .sort()
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${stableJson(rec[k])}`).join(',')}}`
-  }
-  return JSON.stringify(value)
-}
-
-/** The key a write gets when the caller gives none: this thread and this request, so a retry is answered from it. */
-export function runtimeKey(session: string, route: string, request: unknown): string {
-  return createHash('sha256').update(`${session}\n${route}\n${stableJson(request)}`).digest('hex')
-}
-
 function note(body: unknown): unknown {
   if (body == null || typeof body !== 'object' || Array.isArray(body)) return { note: RUNTIME_DATA_NOTE, body }
   return { ...(body as Record<string, unknown>), note: RUNTIME_DATA_NOTE }
@@ -118,15 +100,23 @@ export interface ProposedTask {
   hard_limit_s?: number
 }
 
+export const PROPOSAL_KEY_RULE =
+  'idempotency_key names this one proposal: reuse it only to retry the same request; proposing the same again (for example after the tasks were cancelled) needs a new key, or the platform answers with the old proposal.'
+
+/**
+ * Propose tasks. The key is the caller's, never derived: the same tasks
+ * proposed again after the first were cancelled are a new proposal (review
+ * 178 A1, as review 177 A1 for stops).
+ */
 export async function proposeTasks(
-  input: { mission_id: string; tasks: ProposedTask[]; idempotency_key?: string },
+  input: { mission_id: string; tasks: ProposedTask[]; idempotency_key: string },
   d: RuntimeDeps = defaultRuntimeDeps(),
 ): Promise<unknown> {
   const refused = refuseWrite(d)
   if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
   const route = `${BASE}/missions/${id(input.mission_id)}/tasks`
-  const key = input.idempotency_key || runtimeKey(d.session(), route, input.tasks)
-  return d.send('POST', route, { idempotency_key: key, tasks: input.tasks })
+  return d.send('POST', route, { idempotency_key: input.idempotency_key, tasks: input.tasks })
 }
 
 /** Upload text as an artifact, addressed by its sha256; uploading it again is harmless. */

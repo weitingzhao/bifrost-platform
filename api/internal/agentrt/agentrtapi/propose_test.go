@@ -5,6 +5,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 const session = "X-Bifrost-Session"
@@ -241,5 +245,33 @@ func TestBusyIs503(t *testing.T) {
 		"spec_artifact_id": artifactID(spec), "effect_class": "branch"}}}, session, "s1")
 	if code != http.StatusServiceUnavailable || out["error"] != "busy" {
 		t.Fatalf("a batch on a held step: %d %v", code, out)
+	}
+}
+
+// Review 178 A1: the same tasks proposed again with a new key, after the
+// first were cancelled, are new tasks; a retry with the old key is answered
+// with the old ones.
+func TestProposeAgainAfterCancel(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	spec := []byte("# again\n")
+	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
+		t.Fatalf("spec: %d %v", code, out)
+	}
+	body := map[string]any{"idempotency_key": "p-1", "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement",
+		"task_class": "go", "title": "a", "spec_artifact_id": artifactID(spec), "effect_class": "branch"}}}
+	_, first := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1")
+	old := first["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", old, "cancelled", "test") }))
+	if _, again := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1"); again["tasks"].([]any)[0].(map[string]any)["task_id"] != old {
+		t.Fatalf("a retry of the first proposal: %v", again)
+	}
+	body["idempotency_key"] = "p-2"
+	_, second := call(t, s, "operator", "POST", "missions/M-1/tasks", body, session, "s1")
+	fresh := second["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
+	var state string
+	must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, fresh).Scan(&state))
+	if fresh == old || state != "proposed" {
+		t.Fatalf("the proposal made again: %s (%s), the first was %s", fresh, state, old)
 	}
 }

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
 import {
+  PROPOSAL_KEY_RULE,
   RUNTIME_DATA_NOTE,
   RUNTIME_SESSION_REFUSAL,
   RUNTIME_WRITES_OFF,
@@ -15,8 +16,6 @@ import {
   proposeTasks,
   putArtifact,
   requestStop,
-  runtimeKey,
-  stableJson,
   whoami,
   type RuntimeDeps,
 } from './runtimeTools.js'
@@ -91,21 +90,16 @@ describe('agent runtime reads', () => {
 })
 
 describe('agent runtime writes', () => {
-  it('propose_tasks sends the batch with a key of this thread and request', async () => {
+  it('propose_tasks sends the batch with the caller\'s key, and none without one', async () => {
     const { d, calls } = deps()
-    await proposeTasks({ mission_id: 'M-1', tasks: [task] }, d)
-    const reordered = Object.fromEntries(Object.entries(task).reverse())
-    await proposeTasks({ mission_id: 'M-1', tasks: [reordered as typeof task] }, d)
-    await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'mine' }, d)
-    const keys = calls.map((c) => (c.body as { idempotency_key: string }).idempotency_key)
+    const missing = await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: '' }, d)
+    assert.deepEqual(missing, { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE })
+    assert.equal(calls.length, 0)
+    await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'p-1' }, d)
+    await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'p-2' }, d)
     assert.equal(calls[0].path, '/api/v1/agentrt/missions/M-1/tasks')
-    assert.deepEqual((calls[0].body as { tasks: unknown[] }).tasks, [task])
-    assert.equal(keys[0], runtimeKey('local_s1', '/api/v1/agentrt/missions/M-1/tasks', [task]))
-    assert.equal(keys[0], keys[1], 'the same request in another key order is the same key')
-    assert.equal(keys[2], 'mine')
-    const other = deps({ session: 'local_s2' })
-    await proposeTasks({ mission_id: 'M-1', tasks: [task] }, other.d)
-    assert.notEqual((other.calls[0].body as { idempotency_key: string }).idempotency_key, keys[0], 'another thread, another key')
+    assert.deepEqual(calls[0].body, { idempotency_key: 'p-1', tasks: [task] })
+    assert.equal((calls[1].body as { idempotency_key: string }).idempotency_key, 'p-2', 'the same tasks again are another proposal')
   })
 
   it('put_artifact addresses the content by its sha256 and names its kind', async () => {
@@ -139,7 +133,7 @@ describe('agent runtime writes', () => {
     it(`sends no write under ${name}`, async () => {
       const { d, calls } = deps(over)
       for (const got of [
-        await proposeTasks({ mission_id: 'M-1', tasks: [task] }, d),
+        await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'k' }, d),
         await putArtifact({ kind: 'task_spec', content: 'x' }, d),
         await requestStop({ scope: 'global', kind: 'stop', reason: 'x', idempotency_key: 'k' }, d),
       ]) {
@@ -151,10 +145,6 @@ describe('agent runtime writes', () => {
 })
 
 describe('agent runtime tools are served', () => {
-  it('stableJson sorts keys at every level', () => {
-    assert.equal(stableJson({ b: [{ d: 1, c: 2 }], a: 'x', u: undefined }), '{"a":"x","b":[{"c":2,"d":1}]}')
-  })
-
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
