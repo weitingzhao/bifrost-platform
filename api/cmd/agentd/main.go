@@ -280,8 +280,12 @@ func overloaded() bool {
 	return err == nil && load > float64(runtime.NumCPU())
 }
 
+// execOutput runs a tool agentd needs (sysctl) with the allowed environment
+// only, as every helper does (review 197 A1).
 func execOutput(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	cmd := exec.Command(name, args...)
+	cmd.Env = agentd.AllowedEnv(os.Environ())
+	return cmd.Output()
 }
 
 func sleep(ctx context.Context, d time.Duration) {

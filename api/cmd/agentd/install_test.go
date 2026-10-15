@@ -114,6 +114,12 @@ func TestInstallScriptRenders(t *testing.T) {
 	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "is empty") {
 		t.Fatalf("an empty cursor key (review 196 B2): %v %s", rerr, out)
 	}
+	if err = os.WriteFile(cursorKey, []byte(" \n\t\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "is empty") {
+		t.Fatalf("a cursor key of blanks only (review 197 B2): %v %s", rerr, out)
+	}
 	if err = os.Remove(cursorKey); err != nil {
 		t.Fatal(err)
 	}

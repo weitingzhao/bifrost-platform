@@ -145,3 +145,30 @@ func TestSecretRefusesALinkAndAnEmptyFile(t *testing.T) {
 		t.Fatalf("an empty file: %v", err)
 	}
 }
+
+// Review 197 A1: the load check's sysctl gets the allowed environment, not
+// agentd's.
+func TestExecOutputGetsNoHostSecret(t *testing.T) {
+	bin, dump := t.TempDir(), filepath.Join(t.TempDir(), "env")
+	if err := os.WriteFile(filepath.Join(bin, "sysctl"), []byte("#!/bin/sh\nenv > '"+dump+"'\necho '{ 1.00 1.00 1.00 }'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	t.Setenv("CURSOR_API_KEY", "host-cursor-key")
+	t.Setenv("HOST_SECRET_FIXTURE", "host-secret")
+	if _, err := execOutput("sysctl", "-n", "vm.loadavg"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"host-cursor-key", "host-secret"} {
+		if strings.Contains(string(b), secret) {
+			t.Fatalf("sysctl saw %q", secret)
+		}
+	}
+	if !strings.Contains(string(b), "PATH="+bin) {
+		t.Fatalf("sysctl lost its PATH:\n%s", b)
+	}
+}
