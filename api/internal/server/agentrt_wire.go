@@ -115,6 +115,13 @@ func connectAgentRuntime(ctx context.Context, open func(context.Context) (*pgxpo
 			}
 			return pool
 		}
+		if errors.Is(err, errMisconfigured) {
+			// Retrying cannot mend the environment, the connection string or
+			// the identity: the routes stay 503 until it is fixed and the
+			// platform restarted (review 191 B2).
+			slog.Error("agentrt: not connected and not retrying: the configuration is wrong; its routes answer 503", "err", err)
+			return nil
+		}
 		if time.Since(logged) >= time.Minute {
 			slog.Error("agentrt: not connected yet; its routes answer 503 and the platform keeps trying", "attempt", attempt, "err", err)
 			logged = time.Now()
@@ -131,9 +138,13 @@ func connectAgentRuntime(ctx context.Context, open func(context.Context) (*pgxpo
 // lateDB is the runtime's database before and after it is connected.
 type lateDB struct{ pool atomic.Pointer[pgxpool.Pool] }
 
-// errNotConnected is a use of the database before it is connected; the
-// routes check Ready first, so it is only a race at the moment it connects.
+// errNotConnected is a use of the database before it is connected (the
+// routes check Ready first).
 var errNotConnected = errors.New("agentrt: the database is not connected yet")
+
+// errMisconfigured is a failure no retry mends: an unknown environment, a
+// connection string that does not parse, the wrong role or database.
+var errMisconfigured = errors.New("agentrt: misconfigured")
 
 func (l *lateDB) Ready() bool { return l.pool.Load() != nil }
 
@@ -149,11 +160,11 @@ func (l *lateDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
 // is not the environment's runtime ones.
 func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, error) {
 	if _, err := migrate.RuntimeRole(env); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
 	}
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
 	}
 	if pw := os.Getenv("AGENTRT_DB_PASSWORD"); pw != "" {
 		cfg.ConnConfig.Password = pw
@@ -169,7 +180,7 @@ func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, erro
 	}
 	if err = identityFits(user, db, env); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", errMisconfigured, err)
 	}
 	return pool, nil
 }

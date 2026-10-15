@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -114,12 +115,27 @@ func TestAgentRuntimeKeepsConnecting(t *testing.T) {
 		t.Fatalf("pool %v after %d attempts; want one on the third", pool, attempts)
 	}
 	pool.Close()
+}
+
+// No database needed: cancelling ends the attempts with no pool, and a
+// configuration no retry mends is tried once (review 191 B1, B2).
+func TestAgentRuntimeStopsConnecting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
 	if p := connectAgentRuntime(ctx, func(context.Context) (*pgxpool.Pool, error) {
 		return nil, errors.New("connect: connection refused")
 	}, [2]time.Duration{time.Millisecond, 5 * time.Millisecond}); p != nil {
 		t.Fatal("a pool after the context ended")
+	}
+	attempts := 0
+	if p := connectAgentRuntime(context.Background(), func(context.Context) (*pgxpool.Pool, error) {
+		attempts++
+		return nil, fmt.Errorf("%w: the role is not the environment's", errMisconfigured)
+	}, [2]time.Duration{time.Millisecond, 5 * time.Millisecond}); p != nil || attempts != 1 {
+		t.Fatalf("a misconfiguration: pool %v after %d attempts; want none after one", p, attempts)
+	}
+	if _, err := openAgentRuntime(context.Background(), "host=x", "qa"); !errors.Is(err, errMisconfigured) {
+		t.Fatalf("an unknown environment: %v; want misconfigured", err)
 	}
 }
 
