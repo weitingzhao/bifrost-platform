@@ -2,13 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
@@ -16,6 +19,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // agentrtDatabase is the state database of each environment (design v5
@@ -55,30 +59,90 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
 		return
 	}
-	// The connection and the identity query at start have this budget; on
-	// failure the pool is closed (review 156, 157 B3).
-	openCtx, openCancel := context.WithTimeout(context.Background(), 15*time.Second)
-	pool, err := openAgentRuntime(openCtx, dsn, strings.TrimSpace(os.Getenv("AGENTRT_ENV")))
-	openCancel()
-	if err != nil {
-		slog.Error("agentrt: not connected; its routes answer 503", "err", err)
-		return
-	}
-	rt.api.DB = pool
-	rt.stop = pool.Close
-	if !role.RunsWorkers() {
-		return
-	}
+	// The routes answer 503 until the database is connected; the platform
+	// keeps connecting in the background, so a refusal at start (a new pod
+	// the network policy does not know yet, a database restarting) heals by
+	// itself instead of leaving the runtime off until the next restart.
+	late := &lateDB{}
+	rt.api.DB = late
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Logf: func(format string, args ...any) {
-		slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
-	}}
-	wait := c.Start(ctx)
-	rt.stop = func() {
-		cancel()
+	done := make(chan struct{})
+	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
+	safego.Go("agentrt-connect", func() {
+		defer close(done)
+		pool := connectAgentRuntime(ctx, func(ctx context.Context) (*pgxpool.Pool, error) {
+			return openAgentRuntime(ctx, dsn, env)
+		}, agentrtRetry)
+		if pool == nil {
+			return
+		}
+		late.pool.Store(pool)
+		if !role.RunsWorkers() {
+			<-ctx.Done()
+			pool.Close()
+			return
+		}
+		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Logf: func(format string, args ...any) {
+			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
+		}}
+		wait := c.Start(ctx)
+		<-ctx.Done()
 		wait()
 		pool.Close()
+	})
+	rt.stop = func() {
+		cancel()
+		<-done
 	}
+}
+
+// agentrtRetry is how long connectAgentRuntime waits between attempts at
+// first, and at most.
+var agentrtRetry = [2]time.Duration{2 * time.Second, time.Minute}
+
+// connectAgentRuntime opens until it can (or ctx ends: nil), each attempt
+// with the start budget of review 156, waiting a little longer after each
+// failure, and saying so in the log once a minute at most.
+func connectAgentRuntime(ctx context.Context, open func(context.Context) (*pgxpool.Pool, error), retry [2]time.Duration) *pgxpool.Pool {
+	wait, logged := retry[0], time.Time{}
+	for attempt := 1; ; attempt++ {
+		openCtx, openCancel := context.WithTimeout(ctx, 15*time.Second)
+		pool, err := open(openCtx)
+		openCancel()
+		if err == nil {
+			if attempt > 1 {
+				slog.Info("agentrt: connected", "attempts", attempt)
+			}
+			return pool
+		}
+		if time.Since(logged) >= time.Minute {
+			slog.Error("agentrt: not connected yet; its routes answer 503 and the platform keeps trying", "attempt", attempt, "err", err)
+			logged = time.Now()
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(wait):
+		}
+		wait = min(2*wait, retry[1])
+	}
+}
+
+// lateDB is the runtime's database before and after it is connected.
+type lateDB struct{ pool atomic.Pointer[pgxpool.Pool] }
+
+// errNotConnected is a use of the database before it is connected; the
+// routes check Ready first, so it is only a race at the moment it connects.
+var errNotConnected = errors.New("agentrt: the database is not connected yet")
+
+func (l *lateDB) Ready() bool { return l.pool.Load() != nil }
+
+func (l *lateDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	p := l.pool.Load()
+	if p == nil {
+		return nil, errNotConnected
+	}
+	return p.BeginTx(ctx, o)
 }
 
 // openAgentRuntime opens the pool and refuses an identity or a database that

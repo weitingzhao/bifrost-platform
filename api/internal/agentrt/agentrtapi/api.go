@@ -114,10 +114,18 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	})
 }
 
+// Ready is a database that may not be connected yet: the platform keeps
+// connecting in the background, and until it has, the routes answer 503.
+type Ready interface{ Ready() bool }
+
 func (a *API) configured(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if a.DB == nil {
 			writeError(w, http.StatusServiceUnavailable, "not_configured", "the agent runtime database is not configured")
+			return
+		}
+		if late, ok := a.DB.(Ready); ok && !late.Ready() {
+			writeError(w, http.StatusServiceUnavailable, "not_connected", "the agent runtime database is not connected yet; the platform keeps trying")
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -411,3 +411,21 @@ func TestUploadRace(t *testing.T) {
 		t.Fatalf("created %s, %d artifact_put", got, puts)
 	}
 }
+
+// notYet is a database the platform has not connected yet.
+type notYet struct{}
+
+func (notYet) Ready() bool { return false }
+
+func (notYet) BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error) {
+	return nil, fmt.Errorf("not connected")
+}
+
+// Until the platform has connected the database, the routes answer 503
+// not_connected (it keeps connecting in the background).
+func TestNotConnected(t *testing.T) {
+	s := server(t, notYet{})
+	if code, out := call(t, s, "viewer", "GET", "progress", nil); code != http.StatusServiceUnavailable || out["error"] != "not_connected" {
+		t.Fatalf("%d %v", code, out)
+	}
+}

@@ -2,11 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 )
@@ -91,4 +96,53 @@ func TestAgentRuntimeRefusesAnotherIdentity(t *testing.T) {
 	if _, err := openAgentRuntime(context.Background(), db.Runtime, "qa"); err == nil {
 		t.Fatal("accepted an environment that does not exist")
 	}
+}
+
+// A refusal at start (a pod the network policy does not know yet) heals by
+// itself: the runtime keeps opening until it can, and stops when told to.
+func TestAgentRuntimeKeepsConnecting(t *testing.T) {
+	db := agentrttest.Migrated(t)
+	attempts := 0
+	pool := connectAgentRuntime(context.Background(), func(ctx context.Context) (*pgxpool.Pool, error) {
+		attempts++
+		if attempts < 3 {
+			return nil, errors.New("connect: connection refused")
+		}
+		return pgxpool.New(ctx, db.Runtime)
+	}, [2]time.Duration{time.Millisecond, 5 * time.Millisecond})
+	if pool == nil || attempts != 3 {
+		t.Fatalf("pool %v after %d attempts; want one on the third", pool, attempts)
+	}
+	pool.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+	if p := connectAgentRuntime(ctx, func(context.Context) (*pgxpool.Pool, error) {
+		return nil, errors.New("connect: connection refused")
+	}, [2]time.Duration{time.Millisecond, 5 * time.Millisecond}); p != nil {
+		t.Fatal("a pool after the context ended")
+	}
+}
+
+// Until the database is connected the routes answer 503 not_connected; once
+// it is, they work.
+func TestAgentRuntimeRoutesWaitForTheConnection(t *testing.T) {
+	db := agentrttest.Migrated(t)
+	late := &lateDB{}
+	if late.Ready() {
+		t.Fatal("ready before connecting")
+	}
+	if _, err := late.BeginTx(context.Background(), pgx.TxOptions{}); !errors.Is(err, errNotConnected) {
+		t.Fatalf("BeginTx before connecting: %v", err)
+	}
+	pool, err := pgxpool.New(context.Background(), db.Runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	late.pool.Store(pool)
+	tx, err := late.BeginTx(context.Background(), pgx.TxOptions{})
+	if err != nil || !late.Ready() {
+		t.Fatalf("after connecting: %v", err)
+	}
+	_ = tx.Rollback(context.Background())
 }
