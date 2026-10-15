@@ -238,6 +238,11 @@ func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, an
 	}
 	actor := hostActor(hostID)
 	return InTx(ctx, db, func(tx pgx.Tx) error {
+		// One registration of a host at a time: a second first claim waits,
+		// then finds it registered (review 190 B5).
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742112, hashtext($1))`, hostID); err != nil {
+			return err
+		}
 		var have string
 		err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, hostID).Scan(&have)
 		if err == nil {

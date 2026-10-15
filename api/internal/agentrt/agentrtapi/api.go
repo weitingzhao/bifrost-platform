@@ -240,11 +240,6 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) || !boundHost(w, r, req.HostID) {
 		return
 	}
-	// The first claim of a token registers the host it is bound to.
-	if err := store.RegisterAgentdHost(r.Context(), a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
-		a.fail(w, err)
-		return
-	}
 	cr := store.ClaimRequest{HostID: req.HostID, FreeSlots: req.FreeSlots}
 	for _, t := range req.Tools {
 		if t.Executor == "" || t.Provider == "" {
@@ -252,6 +247,11 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
+	}
+	// The first valid claim of a token registers the host it is bound to.
+	if err := store.RegisterAgentdHost(r.Context(), a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
+		a.fail(w, err)
+		return
 	}
 	wait, poll := a.ClaimWait, a.ClaimPoll
 	if wait <= 0 || wait > 25*time.Second {

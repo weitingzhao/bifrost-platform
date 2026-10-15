@@ -36,3 +36,37 @@ func TestFirstClaimRegistersTheHost(t *testing.T) {
 		t.Fatalf("agentd:h2 claiming for h3: %d %v", code, out)
 	}
 }
+
+// Review 190 B5: a claim refused as malformed registers nothing; two first
+// claims at once both succeed, and the host is registered once.
+func TestFirstClaimRegistrationEdges(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	bad := map[string]any{"host_id": "h3", "free_slots": 1, "tools": []any{map[string]any{"executor": "exec:cursor"}}}
+	if code, _ := call(t, s, "agentd:h3", "POST", "claim", bad); code != http.StatusBadRequest {
+		t.Fatalf("a tool without its provider: %d", code)
+	}
+	var hosts int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.host WHERE host_id = 'h3'`).Scan(&hosts))
+	if hosts != 0 {
+		t.Fatal("a malformed claim registered h3")
+	}
+	body := map[string]any{"host_id": "h3", "free_slots": 1, "tools": []any{map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}}}
+	codes := make(chan int, 2)
+	for range 2 {
+		go func() {
+			code, _ := call(t, s, "agentd:h3", "POST", "claim", body)
+			codes <- code
+		}()
+	}
+	for range 2 {
+		if code := <-codes; code != http.StatusOK && code != http.StatusNoContent {
+			t.Fatalf("a first claim at the same time: %d", code)
+		}
+	}
+	var events int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'host_registered' AND body_json->>'host_id' = 'h3'`).Scan(&events))
+	if events != 1 {
+		t.Fatalf("%d registrations of h3; want one", events)
+	}
+}
