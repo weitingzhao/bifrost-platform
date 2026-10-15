@@ -47,12 +47,13 @@ type agentRuntime struct {
 // The controller reads approvals, questions, CI runs and deployments from the
 // platform's own stores (agentRuntimeSources); a record it cannot read leaves
 // the rule atoms on it unknown, so nothing is judged done on facts it cannot
-// see. Pushed branches cannot be checked until a Gitea reader is configured;
-// persist and salvage of a branch answer 503.
+// see. Pushed branches are checked on Gitea in the organization
+// AGENTRT_GIT_ORG (agentrt_heads.go); without it, persist and salvage of a
+// branch answer 503.
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint}}
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads()}}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
