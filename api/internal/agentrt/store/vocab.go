@@ -53,7 +53,7 @@ var bodies = map[string][]field{
 	"attempt_ended":            {{"end_how", kStr, false}, {"group_cleared", kBool, false}},
 	"attempt_salvaged":         {{"artifacts", kIDs, true}, {"pushed_ref", kStr, true}, {"pushed_commit", kStr, true}},
 	"attempt_cancelled":        {{"reason", kStr, false}, {"accepted_attempt", kID, true}},
-	"host_registered":          {{"host_id", kID, false}, {"actor_id", kID, false}, {"host_kind", kStr, false}},
+	"host_registered":          {{"host_id", kID, false}, {"actor_id", kID, false}, {"host_kind", kStr, false}, {"token", kStr, true}},
 	"host_state_changed":       {{"host_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}},
 	"attempt_persisted":        {{"pushed_commit", kStr, true}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}},
 	"verification_recorded":    {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}},

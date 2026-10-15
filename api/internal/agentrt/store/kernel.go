@@ -221,6 +221,18 @@ func releaseTask(ctx context.Context, tx pgx.Tx, actor string, t taskRow, reason
 // RegisterHost records an Agent host and its actor (host:<id>) with one
 // event. Registering the same host again with the same kind does nothing.
 func RegisterHost(ctx context.Context, db DB, by, hostID, kind string) error {
+	return registerHost(ctx, db, by, hostID, kind, "", false)
+}
+
+// RegisterAgentdHost registers, on its first claim, the host an agentd token
+// is bound to (Owner 2026-10-14 「主机登记 A」: adding the token, bound to the
+// host, is the authorization). A host registered already, in any state, is
+// left as it is; the event names the token.
+func RegisterAgentdHost(ctx context.Context, db DB, hostID, token string) error {
+	return registerHost(ctx, db, "controller", hostID, "dev", token, true)
+}
+
+func registerHost(ctx context.Context, db DB, by, hostID, kind, token string, anyKind bool) error {
 	if kind != "dev" && kind != "vm" {
 		return fmt.Errorf("%w: host kind %q is not dev or vm", ErrState, kind)
 	}
@@ -229,7 +241,7 @@ func RegisterHost(ctx context.Context, db DB, by, hostID, kind string) error {
 		var have string
 		err := tx.QueryRow(ctx, `SELECT host_kind FROM agentrt.host WHERE host_id = $1`, hostID).Scan(&have)
 		if err == nil {
-			if have == kind {
+			if have == kind || anyKind {
 				return nil
 			}
 			return fmt.Errorf("%w: host %s is registered as %s", ErrState, hostID, have)
@@ -237,8 +249,11 @@ func RegisterHost(ctx context.Context, db DB, by, hostID, kind string) error {
 		if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
-		if _, err = Append(ctx, tx, Event{Stream: "host:" + hostID, Type: "host_registered", Actor: by,
-			Body: map[string]any{"host_id": hostID, "actor_id": actor, "host_kind": kind}}); err != nil {
+		body := map[string]any{"host_id": hostID, "actor_id": actor, "host_kind": kind}
+		if token != "" {
+			body["token"] = token
+		}
+		if _, err = Append(ctx, tx, Event{Stream: "host:" + hostID, Type: "host_registered", Actor: by, Body: body}); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ($1, 'host', $2)`,
