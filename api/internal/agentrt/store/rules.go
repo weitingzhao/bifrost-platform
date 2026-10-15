@@ -33,6 +33,10 @@ var ErrUnsigned = errors.New("store: the rule needs the Owner's signature")
 // ruleLock serializes the versions of one rule.
 const ruleLock = 742111
 
+// RuleStream is the event stream of one rule's versions and the rows they
+// write.
+func RuleStream(id string) string { return "rule:" + id }
+
 // StoredRule is a version of a rule as the table has it, read again from its
 // text.
 type StoredRule struct {
@@ -229,20 +233,20 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 	signature, signedBy string) (map[string]any, error) {
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		// The writer's lock first: a control holds it and then waits for a
-		// host row a claim holds while it waits for the capability lock, so
-		// a rule write waiting for it must not hold the capability lock
-		// (review 187 R1). Then the capability lock, as every write of
-		// candidates or facts (route.go): a claim reads every rule it acts on
-		// under it shared, so it sees a rule and the rows it writes whole,
-		// before or after (review 186 A1).
-		if err := writerLock(ctx, tx, w.Actor); err != nil {
+		// The writer first, registration and all: a control holds the
+		// writer's lock, and a new thread's control the registration lock and
+		// the system stream, and then waits for a host row a claim holds while
+		// it waits for the capability lock; so nothing a rule write waits for
+		// after taking the capability lock may be held by them (review 187
+		// R1, 188 R1). Its events go to the rule's own stream, never the
+		// system one. Then the capability lock, as every write of candidates
+		// or facts (route.go): a claim reads every rule it acts on under it
+		// shared, so it sees a rule and the rows it writes whole, before or
+		// after (review 186 A1).
+		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return err
 		}
 		if err := LockCapabilities(ctx, tx); err != nil {
-			return err
-		}
-		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, ruleLock, r.ID); err != nil {
@@ -328,7 +332,7 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	if len(plan.factIDs()) > 0 {
 		evBody["capability_facts"] = plan.factIDs()
 	}
-	ev, err := Append(ctx, tx, Event{Stream: "system", Type: eventType, Actor: w.Actor, Body: evBody})
+	ev, err := Append(ctx, tx, Event{Stream: RuleStream(r.ID), Type: eventType, Actor: w.Actor, Body: evBody})
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +404,7 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		if w.Token != "" {
 			body["token"] = w.Token
 		}
-		ev, err := Append(ctx, tx, Event{Stream: "system", Type: "rule_proposed", Actor: w.Actor, Body: body})
+		ev, err := Append(ctx, tx, Event{Stream: RuleStream(id), Type: "rule_proposed", Actor: w.Actor, Body: body})
 		if err != nil {
 			return nil, err
 		}

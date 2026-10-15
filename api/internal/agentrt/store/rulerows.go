@@ -207,7 +207,7 @@ func (p ruleRows) write(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, 
 	}
 	for _, c := range p.candidates {
 		if !signed {
-			if _, err := Append(ctx, tx, Event{Stream: "system", Type: "candidate_status_changed", Actor: w.Actor,
+			if _, err := Append(ctx, tx, Event{Stream: RuleStream(r.ID), Type: "candidate_status_changed", Actor: w.Actor,
 				Body: map[string]any{"job_candidate_id": c.id, "from": c.from, "to": c.to, "rule_id": r.ID, "rule_version": r.Version}}); err != nil {
 				return err
 			}
