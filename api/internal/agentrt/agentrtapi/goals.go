@@ -9,6 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -37,6 +39,9 @@ var GoalRepos = map[string]GoalRepo{
 	"bifrost-platform": {Verify: [][]string{{"go", "-C", "api", "build", "./..."}, {"go", "-C", "api", "vet", "./..."}}},
 }
 
+// GoalSuccess is a goal's mission's success criterion.
+const GoalSuccess = "the implementation task is accepted: its checks pass and a reviewer of another provider passes it"
+
 const (
 	maxGoalRunes  = 2000 // what one sentence (or a short paragraph) needs
 	maxTitleRunes = 80
@@ -49,11 +54,19 @@ type goalBody struct {
 	Repo           string `json:"repo"`
 }
 
-// proposeGoal is POST /goals. It proposes the mission, uploads the spec and
-// proposes the task, each under its own key derived from the caller's, so a
-// retry after any of the three finishes what is left and answers the same
-// ids. A retry after main moved proposes the task on the new base and is
-// refused as a reused key (409): the first base was the request.
+// proposeGoal is POST /goals. It uploads the spec, proposes the mission and
+// proposes the task, the two proposals under keys derived from the caller's,
+// so a retry after any step finishes what is left and answers the same ids.
+// The base is main as read on each try: a retry after a try that stopped
+// before the task was proposed puts the task on main as it is then; once the
+// task was proposed, a retry after main moved is another task request under
+// the same key and is refused as a reused key (409).
+//
+// The spec goes first and must be stored as a task spec: an artifact is kept
+// by its bytes, so the same bytes uploaded before as another kind (a report)
+// would let the mission be proposed and every try of its task be refused,
+// leaving a mission no retry can finish (review 213 A1). Such a goal is
+// refused before anything is proposed.
 func (a *API) proposeGoal(w http.ResponseWriter, r *http.Request) {
 	var b goalBody
 	if !decode(w, r, &b) {
@@ -85,19 +98,30 @@ func (a *API) proposeGoal(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	m, err := store.ProposeMission(r.Context(), a.DB, who, "goal:"+b.IdempotencyKey+":mission", store.MissionProposal{
-		Title: title, Goal: goal, Repos: []string{repo},
-		Success: []string{"the implementation task is accepted: its checks pass and a reviewer of another provider passes it"}})
-	if err != nil {
-		a.fail(w, err)
-		return
-	}
-	mission, _ := m["mission_id"].(string)
 	specID, _, err := store.UploadArtifact(r.Context(), a.DB, who, "task_spec", "application/json", spec)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
+	var kind string
+	if err = store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+		return tx.QueryRow(r.Context(), `SELECT artifact_kind FROM agentrt.artifact WHERE artifact_id = $1`, specID).Scan(&kind)
+	}); err != nil {
+		a.fail(w, err)
+		return
+	}
+	if kind != "task_spec" {
+		writeError(w, http.StatusConflict, "spec_kind", fmt.Sprintf(
+			"this goal's spec is already stored as %s, not as a task spec; word the goal differently", kind))
+		return
+	}
+	m, err := store.ProposeMission(r.Context(), a.DB, who, "goal:"+b.IdempotencyKey+":mission", store.MissionProposal{
+		Title: title, Goal: goal, Repos: []string{repo}, Success: []string{GoalSuccess}})
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	mission, _ := m["mission_id"].(string)
 	t, err := store.ProposeTasks(r.Context(), a.DB, who, "goal:"+b.IdempotencyKey+":task", mission, []store.TaskProposal{{
 		Ref: "goal", OffPlanReason: "a goal from the Console; the runtime has no plan tree yet", Role: "implement",
 		Class: "goal", Title: title, SpecArtifact: specID, Effect: "branch", Repo: repo, BaseCommit: base}})

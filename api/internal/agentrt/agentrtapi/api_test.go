@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -112,10 +113,14 @@ var (
 	anchor   string
 )
 
-// mains records the repositories whose main a goal read; mainFails makes the
-// reads fail, as an unreachable Gitea would; noMain serves without a reader.
+// mains records the repositories whose main a goal read (under mainsMu: the
+// goal tests send concurrent requests); mainAt is the commit main is at;
+// mainFails makes the reads fail, as an unreachable Gitea would; noMain
+// serves without a reader.
 var (
+	mainsMu   sync.Mutex
 	mains     []string
+	mainAt    = commitA
 	mainFails bool
 	noMain    bool
 )
@@ -173,11 +178,13 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 		}, Anchor: anchor}
 	if !noMain {
 		api.MainHead = func(_ context.Context, repo string) (string, error) {
+			mainsMu.Lock()
+			defer mainsMu.Unlock()
 			mains = append(mains, repo)
 			if mainFails {
 				return "", fmt.Errorf("gitea: unreachable")
 			}
-			return commitA, nil
+			return mainAt, nil
 		}
 	}
 	r := chi.NewRouter()
