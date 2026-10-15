@@ -69,6 +69,10 @@ func envelope(ev Event, seq int64, prev string, at time.Time) map[string]any {
 	}
 }
 
+// eventClock gives an event its time; a test freezes it to write events at
+// one moment.
+var eventClock = time.Now
+
 func nullable(s string) any {
 	if s == "" {
 		return nil
@@ -100,7 +104,7 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 		ev.Stream).Scan(&lastSeq, &lastSHA); err != nil {
 		return Appended{}, err
 	}
-	at := time.Now().UTC().Truncate(time.Microsecond)
+	at := eventClock().UTC().Truncate(time.Microsecond)
 	seq := lastSeq + 1
 	sum, err := canon.Sum(envelope(ev, seq, lastSHA, at))
 	if err != nil {

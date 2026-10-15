@@ -38,6 +38,13 @@ func SetHook(f func(point, arg string)) func() {
 	return func() { testHook.Store(nil) }
 }
 
+// FreezeEventClock makes every event written from now on carry the time at,
+// and returns the function that undoes it.
+func FreezeEventClock(at time.Time) func() {
+	eventClock = func() time.Time { return at }
+	return func() { eventClock = time.Now }
+}
+
 // MoveTaskForTest moves a task as the kernel does: the fixture that leases a
 // given task directly (LeaseAttempt) moves it to leased with it.
 func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) error {
@@ -70,4 +77,27 @@ func SortLiveForTest(list []*ProgressAttempt) []string {
 		ids = append(ids, a.AttemptID)
 	}
 	return ids
+}
+
+// LimitPendingChangesForTest lowers the most plan changes needs_you lists,
+// and returns the function that restores it.
+func LimitPendingChangesForTest(n int) func() {
+	old := pendingChangeLimit
+	pendingChangeLimit = n
+	return func() { pendingChangeLimit = old }
+}
+
+// WorstForTest is the status a mission shows of its tasks' statuses.
+func WorstForTest(statuses ...string) string { return worst(statuses) }
+
+// ChangeBlocksForTest is what changes would hold up, read in a transaction
+// of their own.
+func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any, error) {
+	var out any
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var err error
+		out, err = changeBlocks(ctx, tx, changes)
+		return err
+	})
+	return out, err
 }

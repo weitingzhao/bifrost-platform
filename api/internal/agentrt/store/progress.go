@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -16,8 +15,9 @@ import (
 // SPEC-agentrt-progress-2026-10-14.md under agent-config/work/multi-agent,
 // second version): computed on every read from the runtime's own rows, in one
 // read-only snapshot at one moment, never stored. What cannot be computed is
-// unknown with its reason, never a value that looks normal. Every query is
-// bounded and served by an index the schema has.
+// unknown with its reason, never a value that looks normal. The lists the spec
+// bounds are bounded; the other reads are sized for the runtime's scale, and
+// the spec's §4 says up to what size and who measures them before 2.5.
 
 // Task statuses, in the order a mission shows the one most worth seeing.
 const (
@@ -57,6 +57,10 @@ const (
 	pendingChangeWindow = 8 * 24 * time.Hour
 )
 
+// pendingChangeLimit is the most plan changes needs_you lists (a test lowers
+// it).
+var pendingChangeLimit = 50
+
 // ProgressAttempt is a live attempt.
 type ProgressAttempt struct {
 	AttemptID     string `json:"attempt_id"`
@@ -94,23 +98,27 @@ type ProgressTask struct {
 	Reason               string           `json:"reason"`
 	Since                string           `json:"since,omitempty"`
 	DependsOn            []string         `json:"depends_on"`
+	WaitingRoles         []string         `json:"waiting_roles,omitempty"`
 	Attempt              *ProgressAttempt `json:"attempt,omitempty"`
 	UsualS               *int64           `json:"usual_s,omitempty"`
 	ComputedNotPersisted bool             `json:"computed_not_persisted"`
 	class                string
 	stateReason          string
+	checkers             []string
 }
 
 // StatusInput is what a task's status is decided from.
 type StatusInput struct {
-	TaskState, MissionState, StateReason string
-	Attempt                              *ProgressAttempt
-	Usual                                *time.Duration
-	WaitingDeps                          int
-	Now                                  time.Time
+	TaskState, MissionState, StateReason, MissionReason string
+	Attempt                                             *ProgressAttempt
+	Usual                                               *time.Duration
+	WaitingDeps                                         int
+	Now                                                 time.Time
 }
 
-// TaskStatus decides a task's status and its reason (SPEC §3.1).
+// TaskStatus decides a task's status and its reason (SPEC §3.1). An attempt
+// whose host the runtime does not know is unknown before anything else: what
+// its host does cannot be told.
 func TaskStatus(in StatusInput) (string, string) {
 	if a := in.Attempt; a != nil {
 		switch {
@@ -142,6 +150,13 @@ func TaskStatus(in StatusInput) (string, string) {
 		}
 		return StatusWorking, "attempt " + a.AttemptID + " on " + a.HostID
 	}
+	if in.MissionState == "paused" {
+		reason := "the mission is paused"
+		if in.MissionReason != "" {
+			reason += ": " + in.MissionReason
+		}
+		return StatusBlocked, reason
+	}
 	switch in.TaskState {
 	case "submitted", "verifying":
 		return StatusWaitingRole, "waits for its verification or review"
@@ -156,6 +171,18 @@ func TaskStatus(in StatusInput) (string, string) {
 		return StatusQueued, "ready for a host to claim"
 	}
 	return StatusUnknown, "state " + in.TaskState + " has no status"
+}
+
+// byMission says the mission's state, not the task's, decided status: the
+// wait then started when the mission came into its state.
+func byMission(status, taskState string) bool {
+	switch status {
+	case StatusWaitingOwner:
+		return taskState != "awaiting_owner"
+	case StatusBlocked:
+		return taskState != "blocked" && taskState != "paused"
+	}
+	return false
 }
 
 // worst is the status most worth seeing among statuses.
@@ -333,14 +360,29 @@ func countDoc(c plan.Count) map[string]any {
 
 type progressMission struct {
 	id, title, goal, state, deadline, work string
-	steps                                  []plan.Step
-	next                                   []any
-	tasks                                  []*ProgressTask
+	// The event that put the mission in its state (when, why, by whom) and
+	// the mission's last event (when anything last happened in it).
+	stateAt, stateReason, stateBy, lastAt string
+	steps                                 []plan.Step
+	next                                  []any
+	tasks                                 []*ProgressTask
+}
+
+func stamp(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339Nano)
 }
 
 func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]time.Duration) (map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT mission_id, title, goal, state, deadline_at, COALESCE(work_id, '') FROM agentrt.mission
-	  WHERE state IN ('proposed','awaiting_owner','active','paused') ORDER BY substr(mission_id, 3)::int LIMIT $1`, progressMissions+1)
+	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, m.goal, m.state, m.deadline_at, COALESCE(m.work_id, ''),
+	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), l.at
+	  FROM agentrt.mission m
+	  LEFT JOIN LATERAL (SELECT e.at, e.body_json, e.actor_id FROM agentrt.event e WHERE e.mission_id = m.mission_id
+	    AND e.event_type IN ('mission_proposed','mission_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true
+	  LEFT JOIN LATERAL (SELECT e.at FROM agentrt.event e WHERE e.mission_id = m.mission_id ORDER BY e.event_id DESC LIMIT 1) l ON true
+	  WHERE m.state IN ('proposed','awaiting_owner','active','paused') ORDER BY substr(m.mission_id, 3)::int LIMIT $1`, progressMissions+1)
 	if err != nil {
 		return nil, err
 	}
@@ -349,11 +391,13 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	for rows.Next() {
 		m := &progressMission{}
 		var deadline time.Time
-		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work); err != nil {
+		var stateAt, lastAt *time.Time
+		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work, &stateAt, &m.stateReason, &m.stateBy, &lastAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		m.deadline = deadline.UTC().Format(time.RFC3339)
+		m.stateAt, m.lastAt = stamp(stateAt), stamp(lastAt)
 		missions = append(missions, m)
 	}
 	rows.Close()
@@ -397,13 +441,16 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		return nil, err
 	}
 	// The unfinished tasks, with when they came into their state (the event,
-	// not updated_at, which a plan migration moves) and why.
+	// not updated_at, which a plan migration moves), why, and the roles of
+	// the unfinished verifications and reviews of them.
 	trows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, t.role, COALESCE(t.plan_node_id, ''), t.off_plan,
 	    COALESCE(t.off_plan_reason, ''), t.round_no, t.max_rounds, t.state, t.task_class, s.at, COALESCE(s.body_json->>'reason', ''),
 	    ARRAY(SELECT d.depends_on_task_id FROM agentrt.task_dependency d JOIN agentrt.task o ON o.task_id = d.depends_on_task_id
 	      WHERE d.task_id = t.task_id AND o.state <> 'accepted' ORDER BY d.depends_on_task_id),
 	    COALESCE((SELECT a.computed_at IS NOT NULL AND a.persisted_at IS NULL FROM agentrt.attempt a WHERE a.task_id = t.task_id
-	      ORDER BY a.attempt_no DESC LIMIT 1), false)
+	      ORDER BY a.attempt_no DESC LIMIT 1), false),
+	    ARRAY(SELECT DISTINCT c.role FROM agentrt.task c WHERE c.subject_task_id = t.task_id
+	      AND c.state NOT IN ('accepted','rejected','cancelled') ORDER BY c.role)
 	  FROM agentrt.task t
 	  LEFT JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.task_id = t.task_id
 	    AND e.event_type IN ('task_proposed','task_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true
@@ -418,13 +465,11 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		var missionID string
 		var since *time.Time
 		if err = trows.Scan(&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
-			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason, &t.DependsOn, &t.ComputedNotPersisted); err != nil {
+			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason, &t.DependsOn, &t.ComputedNotPersisted, &t.checkers); err != nil {
 			return nil, err
 		}
 		m := byID[missionID]
-		if since != nil {
-			t.Since = since.UTC().Format(time.RFC3339Nano)
-		}
+		t.Since = stamp(since)
 		t.Attempt = live[t.TaskID]
 		u := usualOf(usual, t.Role, t.class)
 		if u != nil {
@@ -432,7 +477,20 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 			t.UsualS = &s
 		}
 		t.Status, t.Reason = TaskStatus(StatusInput{TaskState: t.State, MissionState: m.state, StateReason: t.stateReason,
-			Attempt: t.Attempt, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
+			MissionReason: m.stateReason, Attempt: t.Attempt, Usual: u, WaitingDeps: len(t.DependsOn), Now: now})
+		if byMission(t.Status, t.State) {
+			t.Since = m.stateAt
+		}
+		if t.Status == StatusWaitingRole {
+			switch {
+			case t.State == "rework":
+				t.WaitingRoles = []string{t.Role}
+			case len(t.checkers) > 0:
+				t.WaitingRoles = t.checkers
+			default:
+				t.Reason += "; none is proposed yet"
+			}
+		}
 		if t.Attempt != nil {
 			t.Attempt.Status, t.Attempt.Reason = t.Status, t.Reason
 		}
@@ -464,10 +522,11 @@ func missionDoc(m *progressMission) map[string]any {
 	}
 	count := plan.CountSteps(m.steps)
 	status, reason, since, waiting := worst(statuses), "", "", "none"
+	var roles []string
 	if status != "" {
 		for _, t := range m.tasks {
 			if t.Status == status {
-				reason, since = t.Reason, t.Since
+				reason, since, roles = t.Reason, t.Since, t.WaitingRoles
 				break
 			}
 		}
@@ -476,23 +535,35 @@ func missionDoc(m *progressMission) map[string]any {
 			waiting = "owner"
 		case StatusWaitingRole:
 			waiting = "role"
+			if len(roles) == 0 {
+				waiting = "coordinator"
+			}
 		case StatusHostLost, StatusMaybeStuck, StatusUnknown, StatusBlocked, StatusQueued:
 			waiting = "coordinator"
 		}
 	} else {
 		switch {
 		case m.state == "proposed" || m.state == "awaiting_owner":
-			status, waiting = StatusWaitingOwner, "owner"
+			status, waiting, since = StatusWaitingOwner, "owner", m.stateAt
 			reason = "the mission is " + m.state + ": it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet"
+		case m.state == "paused":
+			status, waiting, since = StatusBlocked, "coordinator", m.stateAt
+			reason = "the mission is paused"
+			if m.stateBy != "" {
+				reason += " by " + m.stateBy
+			}
+			if m.stateReason != "" {
+				reason += ": " + m.stateReason
+			}
 		case count.Total > count.Done:
-			status, waiting, reason = "idle", "coordinator", "no task proposed for the next step"
+			status, waiting, reason, since = "idle", "coordinator", "no task proposed for the next step", m.lastAt
 		default:
-			status, reason = "done", "every step is done"
+			status, reason, since = "done", "every step is done", m.lastAt
 		}
 	}
 	return map[string]any{"mission_id": m.id, "title": m.title, "goal": m.goal, "state": m.state, "deadline_at": m.deadline,
 		"work_id": m.work, "slices": countDoc(count), "status": status, "reason": reason, "since": since, "waiting_on": waiting,
-		"tasks": tasks, "next_steps": nonNilAny(m.next),
+		"waiting_roles": nonNil(roles), "tasks": tasks, "next_steps": nonNilAny(m.next),
 		"eta": map[string]any{"state": "unknown", "reason": "no history of slice times yet; the runtime gives times once Gate A has run"}}
 }
 
@@ -501,91 +572,6 @@ func nonNilAny(s []any) []any {
 		return []any{}
 	}
 	return s
-}
-
-// needsYou lists what the Owner can act on (SPEC §2.1): plan changes on a
-// decision card. Waits he cannot act on are the missions' statuses.
-func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT p.event_id, substr(p.event_stream_id, 6), p.body_json->>'reason', p.at,
-	    p.body_json->>'question_id', (p.body_json->'changes')::text
-	  FROM agentrt.event p
-	  WHERE p.event_type = 'plan_change_proposed' AND p.at > $1::timestamptz - make_interval(secs => $2) AND p.body_json ? 'question_id'
-	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.at >= p.at
-	      AND d.event_stream_id = p.event_stream_id AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.at`, now, pendingChangeWindow.Seconds())
-	if err != nil {
-		return nil, err
-	}
-	type pending struct {
-		event                  int64
-		root, reason, question string
-		at                     time.Time
-		changes                []PlanChange
-	}
-	var list []pending
-	for rows.Next() {
-		var p pending
-		var doc string
-		if err = rows.Scan(&p.event, &p.root, &p.reason, &p.at, &p.question, &doc); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		if err = json.Unmarshal([]byte(doc), &p.changes); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		list = append(list, p)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-	items := make([]any, 0, len(list))
-	for _, p := range list {
-		blocks, err := changeBlocks(ctx, tx, p.changes)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, map[string]any{"id": "question:" + p.question, "kind": "plan_change", "ref": fmt.Sprint(p.event),
-			"title": "Plan change to " + p.root + ": " + firstLine(p.reason), "since": p.at.UTC().Format(time.RFC3339Nano),
-			"waiting_min": int64(now.Sub(p.at) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": p.question, "options": []string{CardApply, CardRefuse}},
-			"can_act_now": true, "deadline": nil, "blocks": blocks,
-			"after": "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."})
-	}
-	return map[string]any{"count": len(items), "items": items}, nil
-}
-
-// changeBlocks is what a waiting plan change holds up, from the steps it
-// touches: their missions and the unfinished tasks on them; unknown when it
-// touches no step a mission's work sits on.
-func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, error) {
-	var nodes, tasks []string
-	for _, c := range changes {
-		switch c.Op {
-		case "add_node":
-			nodes = append(nodes, c.Parent)
-		case "move_task":
-			nodes = append(nodes, c.Node)
-			tasks = append(tasks, c.Task)
-		default:
-			nodes = append(nodes, c.Node)
-		}
-	}
-	var missions []string
-	var open int
-	err := tx.QueryRow(ctx, `SELECT
-	    ARRAY(SELECT DISTINCT mission_id FROM agentrt.plan_node WHERE mission_id IS NOT NULL
-	      AND (plan_node_id = ANY($1) OR parent_plan_node_id = ANY($1)) ORDER BY 1),
-	    (SELECT count(*) FROM agentrt.task WHERE state NOT IN ('accepted','rejected','cancelled')
-	      AND (plan_node_id = ANY($1) OR task_id = ANY($2)))`, nodes, tasks).Scan(&missions, &open)
-	if err != nil {
-		return nil, err
-	}
-	if len(missions) == 0 {
-		return map[string]any{"unknown": "the change touches no step a mission's work sits on"}, nil
-	}
-	return map[string]any{"missions": missions, "unfinished_tasks": open}, nil
 }
 
 // planView is each round with its count and its items' counts, and each
@@ -674,45 +660,56 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 	return out, nil
 }
 
-// hostsView is GET /hosts's document, at the projection's moment.
-func hostsView(ctx context.Context, tx pgx.Tx, now time.Time) ([]byte, error) {
-	var doc []byte
-	err := tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
-	    'poll_age_s', floor(extract(epoch FROM $1::timestamptz - h.last_poll_at)),
-	    'online', COALESCE($1::timestamptz - h.last_poll_at <= make_interval(secs => $2), false),
+// HostsSQL is the hosts document at the moment the SQL expression now names,
+// with $1 HostLostAfter in seconds: GET /hosts and the projection both read
+// it, so a host is online in one exactly when it is in the other (a host is
+// lost past HostLostAfter, as TaskStatus has it).
+func HostsSQL(now string) string {
+	return `SELECT COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
+	    'poll_age_s', floor(extract(epoch FROM ` + now + ` - h.last_poll_at)),
+	    'online', COALESCE(` + now + ` - h.last_poll_at <= make_interval(secs => $1), false),
 	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
 	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
 	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb))
 	  ORDER BY h.host_id), '[]'::jsonb)
-	  FROM agentrt.host h`, now, HostLostAfter.Seconds()).Scan(&doc)
+	  FROM agentrt.host h`
+}
+
+// hostsView is GET /hosts's document, at the projection's moment.
+func hostsView(ctx context.Context, tx pgx.Tx, now time.Time) ([]byte, error) {
+	var doc []byte
+	err := tx.QueryRow(ctx, HostsSQL("$2::timestamptz"), HostLostAfter.Seconds(), now).Scan(&doc)
 	return doc, err
 }
 
 // recentView is the last ended tasks, by the event that ended them, and the
 // last failed attempts, whatever came of their tasks (SPEC §2.6, T06). Both
-// read the events newest first through the (event_type, at) index.
+// read the events newest first through the (event_type, at) index, and break
+// ties of time by event id at every step, so the same events always give the
+// same lists.
 func recentView(ctx context.Context, tx pgx.Tx) (map[string]any, error) {
 	var tasks, failed []byte
-	err := tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.task_id), '[]'::jsonb) FROM (
-	    SELECT t.task_id, t.mission_id, t.title, t.role, t.state, e.at AS ended_at, a.conclusion, a.report_artifact_id
-	    FROM (SELECT task_id, max(at) AS at FROM (
-	        (SELECT task_id, at FROM agentrt.event WHERE event_type = 'task_state_changed'
-	          AND body_json->>'to' IN ('accepted','rejected','cancelled') ORDER BY at DESC LIMIT $1 * 2)
+	err := tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.ended_event_id DESC), '[]'::jsonb) FROM (
+	    SELECT t.task_id, t.mission_id, t.title, t.role, t.state, e.at AS ended_at, e.event_id AS ended_event_id, a.conclusion,
+	      a.report_artifact_id
+	    FROM (SELECT DISTINCT ON (task_id) task_id, at, event_id FROM (
+	        (SELECT task_id, at, event_id FROM agentrt.event WHERE event_type = 'task_state_changed'
+	          AND body_json->>'to' IN ('accepted','rejected','cancelled') ORDER BY at DESC, event_id DESC LIMIT $1 * 2)
 	        UNION ALL
-	        (SELECT task_id, at FROM agentrt.event WHERE event_type = 'task_cancelled' ORDER BY at DESC LIMIT $1 * 2)) x
-	      GROUP BY task_id) e
+	        (SELECT task_id, at, event_id FROM agentrt.event WHERE event_type = 'task_cancelled' ORDER BY at DESC, event_id DESC LIMIT $1 * 2)) x
+	      ORDER BY task_id, at DESC, event_id DESC) e
 	    JOIN agentrt.task t ON t.task_id = e.task_id AND t.state IN ('accepted','rejected','cancelled')
 	    LEFT JOIN LATERAL (SELECT conclusion, report_artifact_id FROM agentrt.attempt WHERE task_id = t.task_id
 	      ORDER BY attempt_no DESC LIMIT 1) a ON true
-	    ORDER BY e.at DESC, t.task_id LIMIT $1) r`, progressRecent).Scan(&tasks)
+	    ORDER BY e.at DESC, e.event_id DESC LIMIT $1) r`, progressRecent).Scan(&tasks)
 	if err != nil {
 		return nil, err
 	}
-	err = tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.attempt_id), '[]'::jsonb) FROM (
-	    SELECT a.attempt_id, a.task_id, t.mission_id, e.at AS ended_at, a.report_artifact_id
+	err = tx.QueryRow(ctx, `SELECT COALESCE(jsonb_agg(r ORDER BY r.ended_at DESC, r.ended_event_id DESC), '[]'::jsonb) FROM (
+	    SELECT a.attempt_id, a.task_id, t.mission_id, e.at AS ended_at, e.event_id AS ended_event_id, a.report_artifact_id
 	    FROM agentrt.event e JOIN agentrt.attempt a ON a.attempt_id = e.attempt_id JOIN agentrt.task t ON t.task_id = a.task_id
 	    WHERE e.event_type = 'attempt_computed' AND e.body_json->>'conclusion' = 'failed'
-	    ORDER BY e.at DESC, a.attempt_id LIMIT $1) r`, progressRecent).Scan(&failed)
+	    ORDER BY e.at DESC, e.event_id DESC LIMIT $1) r`, progressRecent).Scan(&failed)
 	if err != nil {
 		return nil, err
 	}

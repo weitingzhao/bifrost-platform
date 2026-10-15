@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -153,22 +152,13 @@ func (a *API) listControls(w http.ResponseWriter, r *http.Request) {
 	    WHERE $1 OR x.cleared_at IS NULL ORDER BY x.set_at DESC, x.control_id LIMIT $2 + 1) c`, all, listLimit)
 }
 
-// HostOfflineAfter is how long since its last poll a host counts as gone
-// (v5 §5.2: online is not stored, it is read from last_poll_at; T24 wants a
-// host shown lost within 3 to 4 minutes).
-const HostOfflineAfter = 3 * time.Minute
-
 // listHosts is GET /hosts: every host with how long since it last polled,
-// whether that counts as online, its live attempts and the controls on it.
+// whether that counts as online (v5 §5.2: online is not stored, it is read
+// from last_poll_at; T24 wants a host shown lost within 3 to 4 minutes), its
+// live attempts and the controls on it. The document is the progress
+// projection's, at the statement's moment.
 func (a *API) listHosts(w http.ResponseWriter, r *http.Request) {
-	a.list(w, r, `SELECT jsonb_build_object('hosts', COALESCE(jsonb_agg(to_jsonb(h) || jsonb_build_object(
-	    'poll_age_s', floor(extract(epoch FROM clock_timestamp() - h.last_poll_at)),
-	    'online', COALESCE(h.last_poll_at > clock_timestamp() - make_interval(secs => $1), false),
-	    'live_attempts', (SELECT count(*) FROM agentrt.attempt t WHERE t.host_id = h.host_id AND t.state IN ('leased','running','stale')),
-	    'controls', COALESCE((SELECT jsonb_agg(jsonb_build_object('control_id', c.control_id, 'kind', c.control_kind, 'reason', c.reason)
-	      ORDER BY c.set_at) FROM agentrt.control c WHERE c.cleared_at IS NULL AND (c.scope = 'global' OR (c.scope = 'host' AND c.scope_ref = h.host_id))), '[]'::jsonb))
-	  ORDER BY h.host_id), '[]'::jsonb))
-	  FROM agentrt.host h`, HostOfflineAfter.Seconds())
+	a.list(w, r, `SELECT jsonb_build_object('hosts', (`+store.HostsSQL("statement_timestamp()")+`))`, store.HostLostAfter.Seconds())
 }
 
 // list answers the one JSON document a query returns.
