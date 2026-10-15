@@ -108,7 +108,9 @@ const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]
 
 /**
  * Whether s is a date and time Go's time.Time reads from JSON (RFC 3339): a
- * real calendar day, a colon in the offset (review 200 A1).
+ * real calendar day, a colon in the offset (review 200 A1). It is a strict
+ * subset: Go also takes a comma before the fraction, a one-digit hour, an
+ * offset hour of 24 or minute of 60 (review 201); none needs to be written so.
  */
 export function isRFC3339(s: string): boolean {
   const m = RFC3339.exec(s)

@@ -179,7 +179,7 @@ describe('propose_mission input', () => {
   const base = { title: 't', goal: 'g', success: ['s'], idempotency_key: 'k' }
   const ok = (over: Record<string, unknown>) => schema.safeParse({ ...base, ...over }).success
 
-  it('takes a deadline only as a date and time Go\'s time.Time reads (review 200 A1)', () => {
+  it('takes a deadline only in a strict subset of what Go\'s time.Time reads (review 200 A1)', () => {
     for (const v of ['2026-10-20T12:00:00Z', '2026-10-20T12:00:00-05:00', '2026-10-20T12:00:00.123456+08:00', '2028-02-29T00:00:00Z']) {
       assert.equal(ok({ deadline_at: v }), true, v)
     }
