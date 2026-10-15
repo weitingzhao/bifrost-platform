@@ -220,6 +220,14 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 	  FOR NO KEY UPDATE NOWAIT`, moved, rebound); err != nil {
 		return err
 	}
+	// And their subjects, which the task trigger locks FOR SHARE when a
+	// verification or review moves (review 183 A3): taken here, NOWAIT, so
+	// the trigger never waits for one while this holds the moved task.
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id IN (SELECT subject_task_id FROM agentrt.task
+	  WHERE (task_id = ANY($1) OR plan_node_id = ANY($2)) AND subject_task_id IS NOT NULL) ORDER BY task_id FOR SHARE NOWAIT`,
+		moved, rebound); err != nil {
+		return err
+	}
 	// Each moved task is still where it was read (another tree may have
 	// moved it in between; review 182 A2); if not, the step locks taken are
 	// the wrong ones: try again whole.
@@ -245,7 +253,16 @@ var errMoved = errors.New("store: a task moved while the change locked it")
 
 // retryable: a change that met a held row or a moved task; nothing was
 // written and it may simply be tried again.
-func retryable(err error) bool { return lockNotAvailable(err) || errors.Is(err, errMoved) }
+func retryable(err error) bool {
+	return lockNotAvailable(err) || errors.Is(err, errMoved) || deadlocked(err)
+}
+
+// deadlocked: PostgreSQL broke a lock cycle by ending this transaction;
+// nothing it wrote stays, and it may be tried again.
+func deadlocked(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "40P01"
+}
 
 // rootOf is the root of a node's tree, along its parents.
 func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {

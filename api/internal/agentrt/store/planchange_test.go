@@ -584,3 +584,45 @@ func TestChangeMeetsAHeldTask(t *testing.T) {
 		t.Fatalf("the next pass: %d %v", n, derr)
 	}
 }
+
+// Review 183 A3: moving a verification also takes its subject's lock NOWAIT
+// (the task trigger locks it): with the subject held, as Conclude holds it,
+// the change is busy at once instead of waiting holding the verification;
+// once free, the move is refused by the rules (a verification sits with its
+// subject).
+func TestMoveVerificationMeetsItsHeldSubject(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	var subject, check string
+	ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		subject, check = store.NewTaskID(), store.NewTaskID()
+		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: subject, MissionID: "M-1", OffPlanReason: "test", Role: "implement",
+			Class: "go", Title: "s", SpecArtifact: w.spec, Effect: "branch"}); err != nil {
+			return err
+		}
+		_, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: check, MissionID: "M-1", OffPlanReason: "test", Subject: subject,
+			Role: "verify", Class: "go", Title: "v", SpecArtifact: w.spec, Effect: "none"})
+		return err
+	}))
+	tx, err := pool.Begin(ctx)
+	ok(t, err)
+	_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, subject)
+	ok(t, err)
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(3 * time.Second)
+		_ = tx.Rollback(ctx)
+		close(released)
+	}()
+	start := time.Now()
+	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
+	took := time.Since(start)
+	<-released
+	if !errors.Is(err, store.ErrBusy) || took > 2*time.Second {
+		t.Fatalf("a move of a verification whose subject is held: %v after %s; want busy at once", err, took)
+	}
+	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
+	if err == nil || errors.Is(err, store.ErrBusy) || !containsFold(err.Error(), "must sit where its subject") {
+		t.Fatalf("the move once the subject is free: %v", err)
+	}
+}
