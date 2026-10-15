@@ -2,11 +2,16 @@ import { readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-/** Keys a server may read from the mode-0600 token file. TD-225 still pins each server to one of them. */
+/**
+ * Keys a server may read from the mode-0600 token file. TD-225 still pins each server to one of them.
+ * PLATFORM_STG_OPERATOR_TOKEN is the STG operator's, for the coordinator's bifrost-platform-stg server
+ * (the agent runtime runs on STG first; Owner 2026-10-15 「STG 工具 一」).
+ */
 export const MCP_TOKEN_FILE_KEYS = [
   'PLATFORM_VIEWER_TOKEN',
   'PLATFORM_OPERATOR_TOKEN',
   'PLATFORM_ADMIN_TOKEN',
+  'PLATFORM_STG_OPERATOR_TOKEN',
 ] as const
 
 export type McpTokenFileKey = (typeof MCP_TOKEN_FILE_KEYS)[number]

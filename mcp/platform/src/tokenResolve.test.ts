@@ -60,4 +60,18 @@ describe('mcp token file', () => {
     assert.equal(readMcpTokenFile(path, 'PLATFORM_OPERATOR_TOKEN'), 'operator-from-file')
     assert.equal(readMcpTokenFile(path, 'OTHER_SECRET'), '')
   })
+
+  it('reads the STG operator key for a server pinned to it, and only that key', () => {
+    const path = tokenFile(0o600, 'PLATFORM_OPERATOR_TOKEN=prod-operator\nPLATFORM_STG_OPERATOR_TOKEN=stg-operator\n')
+    const seen: string[] = []
+    const got = resolveTokenFrom({ PLATFORM_TOKEN_ENV_KEY: 'PLATFORM_STG_OPERATOR_TOKEN' }, (key) => {
+      seen.push(key)
+      return readMcpTokenFile(path, key)
+    })
+    assert.deepEqual(seen, ['PLATFORM_STG_OPERATOR_TOKEN'])
+    assert.equal(got, 'stg-operator')
+    // Without the STG key the pinned server gets nothing: the PROD operator token never stands in.
+    const noStg = tokenFile(0o600, 'PLATFORM_OPERATOR_TOKEN=prod-operator\n')
+    assert.equal(resolveTokenFrom({ PLATFORM_TOKEN_ENV_KEY: 'PLATFORM_STG_OPERATOR_TOKEN' }, (key) => readMcpTokenFile(noStg, key)), '')
+  })
 })
