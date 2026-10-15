@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
+import { z } from 'zod'
 import {
   PROPOSAL_KEY_RULE,
+  PROPOSE_MISSION_INPUT,
   RUNTIME_DATA_NOTE,
   RUNTIME_SESSION_REFUSAL,
   RUNTIME_WRITES_OFF,
@@ -172,6 +174,42 @@ describe('agent runtime writes', () => {
   }
 })
 
+describe('propose_mission input', () => {
+  const schema = z.object(PROPOSE_MISSION_INPUT)
+  const base = { title: 't', goal: 'g', success: ['s'], idempotency_key: 'k' }
+  const ok = (over: Record<string, unknown>) => schema.safeParse({ ...base, ...over }).success
+
+  it('takes a deadline only as a date and time Go\'s time.Time reads (review 200 A1)', () => {
+    for (const v of ['2026-10-20T12:00:00Z', '2026-10-20T12:00:00-05:00', '2026-10-20T12:00:00.123456+08:00', '2028-02-29T00:00:00Z']) {
+      assert.equal(ok({ deadline_at: v }), true, v)
+    }
+    for (const v of ['', '2026-10-20', '2026-10-20T12:00:00', '2026-10-20T12:00:00+0500', '2026-10-20 12:00:00Z',
+      '2026-02-30T00:00:00Z', '2026-13-01T00:00:00Z', '2026-10-20T24:00:00Z', '2026-10-20T12:60:00Z', '2026-10-20T12:00:60Z',
+      '2026-10-20T12:00:00+24:00']) {
+      assert.equal(ok({ deadline_at: v }), false, v)
+    }
+    assert.equal(ok({}), true, 'left out: the default')
+  })
+
+  it('takes a budget a Go int holds exactly (review 200 A2)', () => {
+    assert.equal(ok({ budget: { max_attempts: 2, max_wall_hours: 1 } }), true)
+    assert.equal(ok({ budget: { max_attempts: Number.MAX_SAFE_INTEGER, max_wall_hours: 0 } }), true)
+    assert.equal(ok({ budget: { max_attempts: 1e20, max_wall_hours: 1 } }), false)
+    assert.equal(ok({ budget: { max_attempts: 1, max_wall_hours: -1 } }), false)
+    assert.equal(ok({ budget: { max_attempts: 1.5, max_wall_hours: 1 } }), false)
+  })
+
+  it('needs what the route needs', () => {
+    assert.equal(ok({ success: [] }), false)
+    assert.equal(ok({ success: [''] }), false)
+    assert.equal(ok({ title: '' }), false)
+    assert.equal(ok({ idempotency_key: '' }), false)
+    assert.equal(ok({ repos: [''] }), false)
+    assert.equal(ok({ max_action: 'external' }), false)
+    assert.equal(ok({ tenant: 'ops' }), false)
+  })
+})
+
 describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
@@ -180,5 +218,7 @@ describe('agent runtime tools are served', () => {
       assert.equal(listed.has(name), true, name)
       assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
     }
+    // The schema the tests above check is the one served.
+    assert.match(index, /reg\(\s*'propose_mission',\s*`[^`]*`,\s*PROPOSE_MISSION_INPUT,/)
   })
 })

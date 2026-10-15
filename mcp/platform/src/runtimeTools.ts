@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 import { bifrostSessionId, sessionFellBack } from './sessionId.js'
 import { platformGet, platformGetText, platformSend, platformUpload } from './platformClient.js'
 import { writesMode, type WritesMode } from './writeGate.js'
@@ -103,17 +104,48 @@ export interface ProposedTask {
 export const PROPOSAL_KEY_RULE =
   'idempotency_key names this one proposal: reuse it only to retry the same request; proposing the same again (for example after the tasks were cancelled) needs a new key, or the platform answers with the old proposal.'
 
-export interface ProposedMission {
-  title: string
-  goal: string
-  success: string[]
-  work_id?: string
-  tenant?: 'dev' | 'business'
-  deadline_at?: string
-  repos?: string[]
-  max_action?: 'none' | 'branch'
-  budget?: { max_attempts: number; max_wall_hours: number }
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-](\d{2}):(\d{2}))$/
+
+/**
+ * Whether s is a date and time Go's time.Time reads from JSON (RFC 3339): a
+ * real calendar day, a colon in the offset (review 200 A1).
+ */
+export function isRFC3339(s: string): boolean {
+  const m = RFC3339.exec(s)
+  if (!m) return false
+  const [y, mo, d, h, mi, sec] = m.slice(1, 7).map(Number)
+  const day = new Date(Date.UTC(y, mo - 1, d))
+  if (mo < 1 || mo > 12 || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d) return false
+  if (h > 23 || mi > 59 || sec > 59) return false
+  return m[9] === undefined || (Number(m[9]) <= 23 && Number(m[10]) <= 59)
 }
+
+// A budget is a Go int on the route; a JS number is exact up to here (review
+// 200 A2).
+const count = () => z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
+
+/** The propose_mission input: what POST /missions decodes (agentrtapi missionBody). */
+export const PROPOSE_MISSION_INPUT = {
+  title: z.string().min(1),
+  goal: z.string().min(1),
+  success: z.array(z.string().min(1)).min(1).describe('Success criteria, none empty'),
+  work_id: z.string().optional().describe('The work it belongs to (W-n, TD-n, …)'),
+  tenant: z.enum(['dev', 'business']).optional(),
+  deadline_at: z
+    .string()
+    .refine(isRFC3339, 'an RFC 3339 date and time, as 2026-10-20T12:00:00-05:00')
+    .optional()
+    .describe('RFC 3339; seven days from now when left out'),
+  repos: z.array(z.string().min(1)).optional(),
+  max_action: z.enum(['none', 'branch']).optional(),
+  budget: z
+    .object({ max_attempts: count(), max_wall_hours: count() })
+    .optional()
+    .describe("Left out: the tenant's budget rule's"),
+  idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
+}
+
+export type ProposedMission = Omit<z.infer<z.ZodObject<typeof PROPOSE_MISSION_INPUT>>, 'idempotency_key'>
 
 /**
  * Propose a mission. The platform numbers it (M-n); inside the standing
