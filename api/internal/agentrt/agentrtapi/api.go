@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -38,14 +39,39 @@ type API struct {
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
-// Mount adds the routes under /agentrt of r (r is the /api/v1 router). Who
-// may call what (v5 §5.2 鉴权): agentd, whose token is bound to one host,
-// claims, keeps its leases and hands results over; agentd and reporters
-// upload artifacts; every role reads.
+// abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
+// whoami both read them. agentd, whose token is bound to one host, claims,
+// keeps its leases and hands results over; threads and seats (reporter and
+// operator tokens) and the Owner (admin) propose missions and tasks; they and
+// agentd upload artifacts; anyone authenticated reads and may stop, pause or
+// drain; operators and the Owner drain hosts; only the Owner lifts a control.
+var abilities = []struct {
+	name  string
+	roles []actuation.Role
+}{
+	{"read", []actuation.Role{actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd}},
+	{"claim", []actuation.Role{actuation.RoleAgentd}},
+	{"propose", []actuation.Role{actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin}},
+	{"upload", []actuation.Role{actuation.RoleAgentd, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin}},
+	{"stop", []actuation.Role{actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd}},
+	{"drain", []actuation.Role{actuation.RoleOperator, actuation.RoleAdmin}},
+	{"lift", []actuation.Role{actuation.RoleAdmin}},
+}
+
+func may(name string) []actuation.Role {
+	for _, ab := range abilities {
+		if ab.name == name {
+			return ab.roles
+		}
+	}
+	panic("agentrtapi: no ability " + name)
+}
+
+// Mount adds the routes under /agentrt of r (r is the /api/v1 router), each
+// behind the roles of its ability.
 func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
-	read := auth.RequireAny(actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd)
-	agentd := auth.RequireAny(actuation.RoleAgentd)
-	upload := auth.RequireAny(actuation.RoleAgentd, actuation.RoleReporter)
+	gate := func(name string) func(http.Handler) http.Handler { return auth.RequireAny(may(name)...) }
+	read, agentd, propose, upload := gate("read"), gate("claim"), gate("propose"), gate("upload")
 	// Authentication first, so an anonymous write is refused as such even
 	// when the database is not configured.
 	cfg := a.configured
@@ -55,9 +81,20 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
+		r.With(propose, cfg).Post("/missions", a.proposeMission)
+		r.With(read, cfg).Get("/missions/{id}", a.getMission)
+		r.With(propose, cfg).Post("/missions/{id}/tasks", a.proposeTasks)
+		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)
 		r.With(read, cfg).Get("/events", a.getEvents)
+		r.With(read, cfg).Get("/plan", a.getPlan)
+		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
+		r.With(read, cfg).Get("/controls", a.listControls)
+		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
+		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
+		r.With(read, cfg).Get("/hosts", a.listHosts)
+		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 	})
 }
 
@@ -69,12 +106,6 @@ func (a *API) configured(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
-}
-
-func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
-	p := actuation.PrincipalFromContext(r.Context())
-	host, _ := actuation.AgentdHost(p)
-	writeJSON(w, http.StatusOK, map[string]any{"name": p.Name, "role": p.Role, "host_id": host})
 }
 
 // boundHost is the host of the calling agentd token; the body must name it.
@@ -99,9 +130,19 @@ func (a *API) logf(format string, args ...any) {
 
 // fail maps a store error to a status: a lease not held, a reused key, a
 // salvage still in grace and a state that does not fit are 409 with a code
-// agentd acts on; a missing row is 404; anything else is 500 and logged.
+// agentd acts on; a proposal that breaks its own rules or a guard of the
+// database is 422 with the rule it broke (T32 through the interface); a
+// missing row is 404; anything else is 500 and logged.
 func (a *API) fail(w http.ResponseWriter, err error) {
+	var pg *pgconn.PgError
 	switch {
+	case errors.Is(err, store.ErrInvalid):
+		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
+	case errors.Is(err, store.ErrBusy):
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())
+	case errors.As(err, &pg) && constraintCodes[pg.Code]:
+		writeError(w, http.StatusUnprocessableEntity, "constraint", pg.Message)
 	case errors.Is(err, store.ErrFenced):
 		writeError(w, http.StatusConflict, "fenced", err.Error())
 	case errors.Is(err, store.ErrConflict):
@@ -119,6 +160,11 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, "internal", "internal error")
 	}
 }
+
+// constraintCodes are the database errors that say a write broke a rule:
+// not null, foreign key, unique and check violations, and what the guard
+// triggers raise.
+var constraintCodes = map[string]bool{"23502": true, "23503": true, "23505": true, "23514": true, "P0001": true}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -282,12 +328,13 @@ var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true
 // id in the path must be the hash of the body; the kind comes in the
 // X-Artifact-Kind header and must be one the schema has; an artifact with a
 // local path in it is refused unless its kind is one H8 lets through
-// (store.LocalPath). The first upload of a body records artifact_put;
-// uploading it again is harmless.
+// (store.LocalPath). The first upload of a body records artifact_put, as
+// the writer (agentd as its host, others as for proposals); uploading it
+// again is harmless.
 func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p := actuation.PrincipalFromContext(r.Context())
-	host, isAgentd := actuation.AgentdHost(p)
+	_, isAgentd := actuation.AgentdHost(p)
 	kind := r.Header.Get("X-Artifact-Kind")
 	if p.Role == actuation.RoleAgentd && !isAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
@@ -319,11 +366,12 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	if media == "" {
 		media = "application/octet-stream"
 	}
-	actor := "controller"
-	if isAgentd {
-		actor = "host:" + host
+	who, err := actorOf(r)
+	if err != nil {
+		a.fail(w, err)
+		return
 	}
-	_, created, err := store.UploadArtifact(r.Context(), a.DB, actor, p.Name, kind, media, body)
+	_, created, err := store.UploadArtifact(r.Context(), a.DB, who, kind, media, body)
 	if err != nil {
 		a.fail(w, err)
 		return

@@ -224,8 +224,10 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
-// tasks whose job's candidates changed, acceptance, then rules, so a change
-// seen or a task accepted is evaluated at once.
+// tasks whose job's candidates changed, acceptance, dispatch of proposed
+// tasks, then rules, so a change seen or a task accepted is evaluated at
+// once and a task whose last dependency was just accepted is ready in the
+// same pass.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -240,8 +242,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, ferr := c.Facts(ctx)
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
+		_, derr := store.Dispatch(ctx, c.DB)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, rerr)
+		return errors.Join(ferr, oerr, aerr, derr, rerr)
 	})
 	return wg.Wait
 }

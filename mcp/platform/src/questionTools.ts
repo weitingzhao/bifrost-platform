@@ -151,7 +151,7 @@ export async function withdrawQuestion(
 
 function annotate(body: unknown): unknown {
   if (body == null || typeof body !== 'object') return { note: QUESTION_DATA_NOTE, body }
-  const rec = { ...(body as Record<string, unknown>), note: QUESTION_DATA_NOTE }
+  const rec: Record<string, unknown> = { ...(body as Record<string, unknown>), note: QUESTION_DATA_NOTE }
   if (hasAnswer(rec)) rec.ack_note = ACK_ANSWER_NOTE
   return rec
 }

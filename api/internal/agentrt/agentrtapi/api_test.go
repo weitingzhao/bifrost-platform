@@ -95,14 +95,16 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 }
 
 // Tokens of the fixture auth file, by caller name.
-var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "viewer": "fixture-viewer-1",
-	"reporter": "fixture-reporter-1"}
+var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "agentd:h3": "fixture-agentd-h3", "viewer": "fixture-viewer-1",
+	"reporter": "fixture-reporter-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
+	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2"}
 
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
 
 // server serves the API behind the platform's own authentication, loaded
-// from a fixture file: two agentd tokens bound to h1 and h2, and a viewer.
+// from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
+// reporter, an operator, an admin and two seat tokens (one registered).
 func server(t *testing.T, db store.DB) *httptest.Server {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "auth.yaml")
@@ -113,12 +115,27 @@ func server(t *testing.T, db store.DB) *httptest.Server {
   - name: agentd:h2
     role: agentd
     token: fixture-agentd-h2
+  - name: agentd:h3
+    role: agentd
+    token: fixture-agentd-h3
   - name: viewer
     role: viewer
     token: fixture-viewer-1
   - name: reporter
     role: reporter
     token: fixture-reporter-1
+  - name: operator
+    role: operator
+    token: fixture-operator-1
+  - name: admin
+    role: admin
+    token: fixture-admin-1
+  - name: seat:chief_of_staff
+    role: reporter
+    token: fixture-seat-1
+  - name: seat:ghost
+    role: reporter
+    token: fixture-seat-2
 `), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
@@ -321,16 +338,16 @@ func TestUploadKinds(t *testing.T) {
 	s := server(t, pool)
 	leaky := []byte("input at /home/ci/private-input\n")
 	for _, kind := range []string{"mission_spec", "message", "exam", "report"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusUnprocessableEntity {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusUnprocessableEntity {
 			t.Errorf("a reporter's %s with a local path: %d", kind, code)
 		}
 	}
 	for _, kind := range []string{"", "notes"} {
-		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind); code != http.StatusBadRequest {
+		if code, _ := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", kind, "X-Bifrost-Session", "s-rep"); code != http.StatusBadRequest {
 			t.Errorf("kind %q: %d", kind, code)
 		}
 	}
-	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief"); code != http.StatusOK || out["created"] != true {
+	if code, out := call(t, s, "reporter", "PUT", "artifacts/"+artifactID(leaky), leaky, "X-Artifact-Kind", "brief", "X-Bifrost-Session", "s-rep"); code != http.StatusOK || out["created"] != true {
 		t.Errorf("a brief, which H8 lets through: %d %v", code, out)
 	}
 	var by string
@@ -357,6 +374,7 @@ func TestUploadRace(t *testing.T) {
 			}
 			req.Header.Set("Authorization", "Bearer "+tokens[who])
 			req.Header.Set("X-Artifact-Kind", "report")
+			req.Header.Set("X-Bifrost-Session", "s-race")
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				created <- err

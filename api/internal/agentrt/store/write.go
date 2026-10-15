@@ -60,18 +60,34 @@ const ArtifactStream = "artifacts"
 
 // UploadArtifact stores an uploaded body (PUT /artifacts, v5 §5.2) and, the
 // first time this body is stored, records artifact_put in the same
-// transaction: who uploaded it, its kind and size (review 156 A3). Uploading
-// the same body again stores and records nothing. Artifacts that other events
-// create and name (a task spec with task_proposed, a message with
-// message_posted) go through PutArtifact.
-func UploadArtifact(ctx context.Context, db DB, actor, uploadedBy, kind, mediaType string, body []byte) (string, bool, error) {
+// transaction: the writer it is recorded as (a thread registered on its
+// first write, as for proposals; review 175 B4), the token that uploaded it,
+// its kind and size (review 156 A3). Uploading the same body again stores
+// and records nothing. Artifacts that other events create and name (a task
+// spec with task_proposed, a message with message_posted) go through
+// PutArtifact.
+func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string, body []byte) (string, bool, error) {
 	if len(body) > 1<<20 {
 		return "", false, errors.New("store: an artifact is at most 1 MiB")
 	}
 	h := sha256.Sum256(body)
 	id := "sha256:" + hex.EncodeToString(h[:])
+	actor, uploadedBy := w.Actor, w.Token
 	var created bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		var have bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.artifact WHERE artifact_id = $1)`, id).Scan(&have); err != nil {
+			return err
+		}
+		if have {
+			// Nothing to store: the writer is still checked, without
+			// registering a thread for it (review 176 B3).
+			_, err := CheckWriter(ctx, tx, w)
+			return err
+		}
+		if err := ensureWriter(ctx, tx, w, true); err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `INSERT INTO agentrt.artifact (artifact_id, artifact_kind, media_type, size_bytes, created_by_actor_id)
 		  VALUES ($1,$2,$3,$4,$5) ON CONFLICT (artifact_id) DO NOTHING`, id, kind, mediaType, len(body), actor)
 		if err != nil || tag.RowsAffected() == 0 {
@@ -88,23 +104,63 @@ func UploadArtifact(ctx context.Context, db DB, actor, uploadedBy, kind, mediaTy
 	return id, created, err
 }
 
-// Mission is the part of a mission row the store writes at creation.
+// Mission is the part of a mission row the store writes at creation. The
+// success criteria, repos and budget are optional here (an empty list or a
+// zero is left out of the row's JSON); MaxAction defaults to branch and
+// Tenant to dev.
 type Mission struct {
 	ID, WorkID, Title, Goal string
 	Deadline                time.Time
+	Tenant, MaxAction       string
+	Success, Repos          []string
+	MaxAttempts             int
+	MaxWallHours            int
+	Token                   string // the token that proposed it, when a route did (review 176 B2)
 }
 
 // CreateMission writes mission_proposed and the mission row.
 func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
+	if m.Tenant == "" {
+		m.Tenant = "dev"
+	}
+	if m.MaxAction == "" {
+		m.MaxAction = "branch"
+	}
+	success := map[string]any{}
+	if len(m.Success) > 0 {
+		success["criteria"] = m.Success
+	}
+	scope := map[string]any{"max_action": m.MaxAction}
+	if len(m.Repos) > 0 {
+		scope["repos"] = m.Repos
+	}
+	budget := map[string]any{}
+	if m.MaxAttempts > 0 {
+		budget["max_attempts"] = m.MaxAttempts
+	}
+	if m.MaxWallHours > 0 {
+		budget["max_wall_hours"] = m.MaxWallHours
+	}
+	var docs [3][]byte
+	for i, v := range []any{success, scope, budget} {
+		var err error
+		if docs[i], err = canon.Encode(v); err != nil {
+			return Appended{}, err
+		}
+	}
+	body := map[string]any{"title": m.Title}
+	if m.Token != "" {
+		body["token"] = m.Token
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(m.ID), Type: "mission_proposed", Actor: actor,
-		MissionID: m.ID, Body: map[string]any{"title": m.Title}})
+		MissionID: m.ID, Body: body})
 	if err != nil {
 		return ev, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.mission (mission_id, work_id, title, goal, success_json, scope_json,
-	  state, deadline_at, budget_json, created_by_actor_id)
-	  VALUES ($1,$2,$3,$4,'{}','{"max_action":"branch"}','proposed',$5,'{}',$6)`,
-		m.ID, nullable(m.WorkID), m.Title, m.Goal, m.Deadline, actor)
+	  tenant, state, deadline_at, budget_json, created_by_actor_id)
+	  VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,'proposed',$8,$9::jsonb,$10)`,
+		m.ID, nullable(m.WorkID), m.Title, m.Goal, string(docs[0]), string(docs[1]), m.Tenant, m.Deadline, string(docs[2]), actor)
 	return ev, err
 }
 
@@ -178,6 +234,7 @@ type Task struct {
 	Core                                                                                      bool
 	Needs                                                                                     []string
 	HardLimit                                                                                 time.Duration
+	Token                                                                                     string // the proposing token, when a route did
 }
 
 // ProposeTask writes task_proposed and the task. A task outside the plan
@@ -201,6 +258,9 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	if t.BaseCommit != "" {
 		body["base_commit"] = t.BaseCommit
+	}
+	if t.Token != "" {
+		body["token"] = t.Token
 	}
 	needs, err := canon.Encode(nonNil(t.Needs))
 	if err != nil {
@@ -238,13 +298,22 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 }
 
 // AddDependency records that taskID waits for dependsOn. It takes the
-// dependency-graph lock and both tasks, in id order, before the event's
-// stream (review 149 B1).
+// dependency-graph lock, then the waiting task as Dispatch does (exclusively)
+// and the one waited for, before the event's stream (review 149 B1). Only a
+// proposed task takes a new dependency: once Dispatch has readied it (or
+// holds it to decide) an edge added after would not be seen (review 175 A1).
 func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dependsOn string) (Appended, error) {
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000001)`); err != nil {
 		return Appended{}, err
 	}
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id IN ($1, $2) ORDER BY task_id FOR KEY SHARE`, taskID, dependsOn); err != nil {
+	var state string
+	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID).Scan(&state); err != nil {
+		return Appended{}, err
+	}
+	if state != "proposed" {
+		return Appended{}, fmt.Errorf("%w: task %s is %s; a dependency is added only while a task is proposed", ErrState, taskID, state)
+	}
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR KEY SHARE`, dependsOn); err != nil {
 		return Appended{}, err
 	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "task_dependency_added", Actor: actor,

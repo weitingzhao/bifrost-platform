@@ -244,6 +244,40 @@ func TestStart(t *testing.T) {
 	}
 }
 
+// The loops dispatch: a task proposed to an active mission becomes ready
+// without anyone moving it.
+func TestStartDispatches(t *testing.T) {
+	pool := setup(t)
+	var spec string
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if err := store.MoveMission(ctx, tx, "controller", "M-1", "active", "test"); err != nil {
+			return err
+		}
+		var err error
+		spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# t\n"))
+		return err
+	}))
+	out, err := store.ProposeTasks(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "M-1", []store.TaskProposal{{Ref: "a", PlanNode: "R2:1-1",
+		Role: "implement", Class: "go", Title: "a", SpecArtifact: spec, Effect: "branch"}})
+	must(t, err)
+	task := out["tasks"].([]any)[0].(map[string]any)["task_id"].(string)
+	c := &controller.Controller{DB: pool, Sources: (&world{}).sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
+	run, cancel := context.WithCancel(ctx)
+	wait := c.Start(run)
+	defer wait()
+	defer cancel()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var s string
+		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, task).Scan(&s))
+		if s == "ready" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the loops left the task %s", s)
+		}
+	}
+}
+
 // Review 152 B2: a source that does not answer is cut off after the read
 // timeout; the pass goes on and records nothing for it.
 func TestSlowSourceIsCutOff(t *testing.T) {
