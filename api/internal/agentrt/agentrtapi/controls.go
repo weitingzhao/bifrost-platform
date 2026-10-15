@@ -36,28 +36,43 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 	if who, err := actorOf(r); err != nil {
 		out["actor_error"] = err.Error()
 	} else {
-		actor := who.Actor
-		out["actor"] = actor
-		var kind string
+		out["actor"] = who.Actor
+		// The same check a write makes, without writing (review 176 part 2
+		// B1): retired, of another kind, or not registered say so.
+		var registered bool
 		err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 			var err error
-			kind, err = store.ActorKind(r.Context(), tx, actor)
+			registered, err = store.CheckWriter(r.Context(), tx, who)
 			return err
 		})
 		switch {
-		case err == nil:
-			out["actor_kind"] = kind
-		case strings.HasPrefix(actor, "thread:") && errors.Is(err, pgx.ErrNoRows):
-			out["actor_kind"] = "thread (registered on its first write)"
-		case errors.Is(err, pgx.ErrNoRows):
-			out["actor_error"] = actor + " is not registered"
-		default:
+		case errors.Is(err, store.ErrInvalid):
+			out["actor_error"] = err.Error()
+		case err != nil:
 			a.fail(w, err)
 			return
+		case registered:
+			out["actor_kind"] = kindName(who.Actor)
+		default:
+			out["actor_kind"] = "thread (registered on its first write)"
 		}
 	}
 	out["may"] = abilitiesOf(p.Role)
 	writeJSON(w, http.StatusOK, out)
+}
+
+// kindName is the kind an actor's name says, which CheckWriter has
+// confirmed for a registered actor.
+func kindName(actor string) string {
+	for _, k := range []string{"thread", "seat", "host", "exec"} {
+		if strings.HasPrefix(actor, k+":") {
+			if k == "exec" {
+				return "executor"
+			}
+			return k
+		}
+	}
+	return actor
 }
 
 func abilitiesOf(role actuation.Role) []string {

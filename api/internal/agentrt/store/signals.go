@@ -79,6 +79,12 @@ func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
 // mission, task or host row), so a claim either commits before the control
 // or sees it (review 148 A2).
 func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRef, kind, reason string) error {
+	return setControl(ctx, tx, actor, "", controlID, scope, scopeRef, kind, reason)
+}
+
+// setControl is SetControl recording the token that asked for it (the
+// routes; review 176 B2).
+func setControl(ctx context.Context, tx pgx.Tx, actor, token, controlID, scope, scopeRef, kind, reason string) error {
 	lock := map[string]string{
 		"global":  `SELECT pg_advisory_xact_lock(742105) WHERE $1::text IS NOT NULL`,
 		"mission": `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`,
@@ -93,6 +99,9 @@ func SetControl(ctx context.Context, tx pgx.Tx, actor, controlID, scope, scopeRe
 	body := map[string]any{"control_id": controlID, "scope": scope, "kind": kind, "reason": reason}
 	if scopeRef != "" {
 		body["scope_ref"] = scopeRef
+	}
+	if token != "" {
+		body["token"] = token
 	}
 	ev, err := Append(ctx, tx, Event{Stream: "control", Type: "control_set", Actor: actor, Body: body})
 	if err != nil {

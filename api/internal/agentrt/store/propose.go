@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Proposals (v5 §5.2 「路由草图」): the missions and tasks that threads and
@@ -58,45 +59,72 @@ func kindOf(actor string) string {
 	return ""
 }
 
-// ThreadsPerDay bounds how many threads are registered in a day: a session
-// is what a caller says it is, so without a bound any token could grow the
-// actor table and the system stream without end (review 175 B3).
+// ThreadsPerDay bounds how many threads proposals and uploads register in a
+// day: a session is what a caller says it is, so without a bound any token
+// could grow the actor table and the system stream without end (review 175
+// B3). Controls are not bounded: anyone authenticated may stop or pause
+// (v5 §5.2), and a new session must not find that taken by proposals
+// (review 176 part 2 A1); each control is a row of its own anyway.
 const ThreadsPerDay = 200
 
-// ensureWriter checks the writer's actor in the caller's transaction: it is
-// of the kind its name says and not retired. A thread is registered the
-// first time it writes (actor_registered by the controller, naming the
-// token), within ThreadsPerDay; any other actor must be registered already.
-func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer) error {
+// CheckWriter checks a writer without writing: its actor is of the kind its
+// name says and not retired. It reports whether the actor is registered; a
+// thread that is not is fine (its first write registers it), any other
+// actor that is not is ErrInvalid.
+func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
 	want := kindOf(w.Actor)
 	if want == "" {
-		return invalid("%q is not an actor name", w.Actor)
-	}
-	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, w.Actor); err != nil {
-		return err
+		return false, invalid("%q is not an actor name", w.Actor)
 	}
 	var kind string
 	var retired bool
 	err := tx.QueryRow(ctx, `SELECT actor_kind, retired_at IS NOT NULL FROM agentrt.actor WHERE actor_id = $1`, w.Actor).Scan(&kind, &retired)
 	switch {
 	case err == nil && retired:
-		return invalid("actor %s is retired", w.Actor)
+		return true, invalid("actor %s is retired", w.Actor)
 	case err == nil && kind != want:
-		return invalid("actor %s is a %s, not a %s", w.Actor, kind, want)
+		return true, invalid("actor %s is a %s, not a %s", w.Actor, kind, want)
 	case err == nil:
-		return nil
+		return true, nil
 	case !errors.Is(err, pgx.ErrNoRows):
-		return err
+		return false, err
 	case want != "thread":
-		return invalid("actor %s is not registered", w.Actor)
+		return false, invalid("actor %s is not registered", w.Actor)
 	}
-	var recent int
-	if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'
-	  AND created_at > clock_timestamp() - interval '24 hours'`).Scan(&recent); err != nil {
+	return false, nil
+}
+
+// ensureWriter checks the writer in the caller's transaction and registers a
+// thread the first time it writes: actor_registered by the controller,
+// naming the token. Every write route calls it before any lock of the rows
+// it writes (review 176 A1): its locks are the writer's own, then, for a
+// registration, the registration lock and the system stream. bounded holds
+// a registration to ThreadsPerDay.
+func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error {
+	if kindOf(w.Actor) != "" {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, w.Actor); err != nil {
+			return err
+		}
+	}
+	registered, err := CheckWriter(ctx, tx, w)
+	if err != nil || registered {
 		return err
 	}
-	if recent >= ThreadsPerDay {
-		return invalid("%d threads were registered in the last day, the most there may be; %s must wait", recent, w.Actor)
+	// One registration at a time, so the count below is the count when it
+	// commits (review 176 B1).
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742109)`); err != nil {
+		return err
+	}
+	if bounded {
+		var recent int
+		if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'
+		  AND created_at > clock_timestamp() - interval '24 hours'`).Scan(&recent); err != nil {
+			return err
+		}
+		hook("counted", w.Actor)
+		if recent >= ThreadsPerDay {
+			return invalid("%d threads were registered in the last day, the most there may be; %s must wait", recent, w.Actor)
+		}
 	}
 	if _, err = Append(ctx, tx, Event{Stream: "system", Type: "actor_registered", Actor: "controller",
 		Body: map[string]any{"actors": []string{w.Actor}, "note": "first write of a thread, by token " + w.Token}}); err != nil {
@@ -201,7 +229,7 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 		} else if !deadline.After(now) {
 			return nil, invalid("the deadline %s has passed", deadline.Format(time.RFC3339))
 		}
-		if err := ensureWriter(ctx, tx, w); err != nil {
+		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742108)`); err != nil {
@@ -215,7 +243,7 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 		hook("numbered", id)
 		if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 			Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, MaxAction: p.MaxAction,
-			MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours}); err != nil {
+			MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
 			return nil, err
 		}
 		return map[string]any{"mission_id": id, "state": "proposed", "waiting": EnvelopePending}, nil
@@ -263,6 +291,8 @@ func checkBatch(tasks []TaskProposal) error {
 			return invalid("ref %q is used twice", t.Ref)
 		case !slices.Contains(proposableRoles, t.Role):
 			return invalid("task %s: role %q may not be proposed (one of %v)", t.Ref, t.Role, proposableRoles)
+		case t.Subject != "":
+			return invalid("task %s: only verification and review tasks have a subject, and the runtime makes those", t.Ref)
 		case t.Class == "" || t.Title == "" || t.SpecArtifact == "":
 			return invalid("task %s has a task_class, a title and a spec_artifact_id", t.Ref)
 		case (t.PlanNode == "") == (t.OffPlanReason == ""):
@@ -291,14 +321,17 @@ func batchRequest(missionID string, tasks []TaskProposal) map[string]any {
 
 // lockBatch takes, before the batch's first event (review 175 A2), every
 // lock its writes take: the dependency graph when it adds an edge, then its
-// steps, then the tasks it names outside itself (subjects and dependencies),
-// each set in id order. Without it the batch would hold the mission's stream
-// when its first dependency asks for the graph lock, the reverse of
-// AddDependency's order.
+// steps, then the tasks outside it that it depends on, each set in id order.
+// Without it the batch would hold the mission's stream when its first
+// dependency asks for the graph lock, the reverse of AddDependency's order.
+// The tasks it depends on are taken FOR KEY SHARE, which no state change
+// waits for or holds against (Conclude and Dispatch hold tasks FOR NO KEY
+// UPDATE; review 176 A2); steps are taken FOR SHARE NOWAIT, so the batch
+// never waits holding some of them: busy, it fails at once with
+// lock_not_available, and ProposeTasks tries the whole batch again.
 func lockBatch(ctx context.Context, tx pgx.Tx, tasks []TaskProposal) error {
 	refs := map[string]bool{}
-	var steps, named []string
-	edges := false
+	var steps, deps []string
 	for _, t := range tasks {
 		refs[t.Ref] = true
 	}
@@ -306,29 +339,38 @@ func lockBatch(ctx context.Context, tx pgx.Tx, tasks []TaskProposal) error {
 		if t.PlanNode != "" {
 			steps = append(steps, t.PlanNode)
 		}
-		if t.Subject != "" {
-			named = append(named, t.Subject)
-		}
 		for _, d := range t.DependsOn {
-			edges = true
 			if !refs[d] {
-				named = append(named, d)
+				deps = append(deps, d)
 			}
 		}
 	}
-	if edges {
+	if slices.ContainsFunc(tasks, func(t TaskProposal) bool { return len(t.DependsOn) > 0 }) {
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7421000001)`); err != nil {
 			return err
 		}
 	}
 	slices.Sort(steps)
-	slices.Sort(named)
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = ANY($1) ORDER BY plan_node_id FOR SHARE`,
+	slices.Sort(deps)
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = ANY($1) ORDER BY plan_node_id FOR SHARE NOWAIT`,
 		slices.Compact(steps)); err != nil {
 		return err
 	}
-	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) ORDER BY task_id FOR SHARE`, slices.Compact(named))
+	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) ORDER BY task_id FOR KEY SHARE`, slices.Compact(deps))
+	hook("batch locked", "")
 	return err
+}
+
+// ErrBusy: a write found the rows it needs locked, every time it tried.
+var ErrBusy = errors.New("store: busy, try again")
+
+// busyTries is how often a batch is tried when a row it needs is locked.
+const busyTries = 5
+
+// lockNotAvailable is NOWAIT's error.
+func lockNotAvailable(err error) bool {
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "55P03"
 }
 
 // ProposeTasks records a batch of tasks of one mission in one transaction:
@@ -345,12 +387,25 @@ func ProposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, t
 	if err := checkBatch(tasks); err != nil {
 		return nil, err
 	}
+	for try := 1; ; try++ {
+		out, err := proposeTasks(ctx, db, w, key, missionID, tasks)
+		if !lockNotAvailable(err) {
+			return out, err
+		}
+		if try == busyTries {
+			return nil, fmt.Errorf("%w: mission %s: %v", ErrBusy, missionID, err)
+		}
+		time.Sleep(time.Duration(try*try) * 20 * time.Millisecond)
+	}
+}
+
+func proposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, tasks []TaskProposal) (map[string]any, error) {
 	return idempotent(ctx, db, w.Actor, "missions/"+missionID+"/tasks", key, batchRequest(missionID, tasks), nil,
 		func(tx pgx.Tx) (map[string]any, error) {
-			if err := lockBatch(ctx, tx, tasks); err != nil {
+			if err := ensureWriter(ctx, tx, w, true); err != nil {
 				return nil, err
 			}
-			if err := ensureWriter(ctx, tx, w); err != nil {
+			if err := lockBatch(ctx, tx, tasks); err != nil {
 				return nil, err
 			}
 			var state string
@@ -387,7 +442,7 @@ func ProposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, t
 				if _, err := ProposeTask(ctx, tx, w.Actor, Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
 					OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
 					SpecArtifact: t.SpecArtifact, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
-					Needs: t.Needs, HardLimit: t.HardLimit}); err != nil {
+					Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}); err != nil {
 					return nil, err
 				}
 				hook("proposed", id)

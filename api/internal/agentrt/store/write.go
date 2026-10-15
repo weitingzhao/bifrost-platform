@@ -76,10 +76,16 @@ func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string
 	var created bool
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var have bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.artifact WHERE artifact_id = $1)`, id).Scan(&have); err != nil || have {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.artifact WHERE artifact_id = $1)`, id).Scan(&have); err != nil {
 			return err
 		}
-		if err := ensureWriter(ctx, tx, w); err != nil {
+		if have {
+			// Nothing to store: the writer is still checked, without
+			// registering a thread for it (review 176 B3).
+			_, err := CheckWriter(ctx, tx, w)
+			return err
+		}
+		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return err
 		}
 		tag, err := tx.Exec(ctx, `INSERT INTO agentrt.artifact (artifact_id, artifact_kind, media_type, size_bytes, created_by_actor_id)
@@ -109,6 +115,7 @@ type Mission struct {
 	Success, Repos          []string
 	MaxAttempts             int
 	MaxWallHours            int
+	Token                   string // the token that proposed it, when a route did (review 176 B2)
 }
 
 // CreateMission writes mission_proposed and the mission row.
@@ -141,8 +148,12 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (App
 			return Appended{}, err
 		}
 	}
+	body := map[string]any{"title": m.Title}
+	if m.Token != "" {
+		body["token"] = m.Token
+	}
 	ev, err := Append(ctx, tx, Event{Stream: MissionStream(m.ID), Type: "mission_proposed", Actor: actor,
-		MissionID: m.ID, Body: map[string]any{"title": m.Title}})
+		MissionID: m.ID, Body: body})
 	if err != nil {
 		return ev, err
 	}
@@ -223,6 +234,7 @@ type Task struct {
 	Core                                                                                      bool
 	Needs                                                                                     []string
 	HardLimit                                                                                 time.Duration
+	Token                                                                                     string // the proposing token, when a route did
 }
 
 // ProposeTask writes task_proposed and the task. A task outside the plan
@@ -246,6 +258,9 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	if t.BaseCommit != "" {
 		body["base_commit"] = t.BaseCommit
+	}
+	if t.Token != "" {
+		body["token"] = t.Token
 	}
 	needs, err := canon.Encode(nonNil(t.Needs))
 	if err != nil {

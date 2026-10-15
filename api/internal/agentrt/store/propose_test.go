@@ -21,15 +21,18 @@ func (w *world) count(t *testing.T, q string, args ...any) int {
 	return n
 }
 
-// footprint is what a write could leave: actors, events, stream heads,
-// idempotency keys, missions, tasks, dependencies, controls, artifacts.
+// footprint is what a write could leave: actors, events, streams and their
+// heads, outbox rows, idempotency keys, missions, tasks, dependencies,
+// controls, artifacts and their bodies.
 func (w *world) footprint(t *testing.T) string {
 	t.Helper()
 	var s string
 	ok(t, w.rt.QueryRow(ctx, `SELECT concat_ws(' ',
-	  (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event), (SELECT sum(last_seq) FROM agentrt.event_stream),
-	  (SELECT count(*) FROM agentrt.idempotency_key), (SELECT count(*) FROM agentrt.mission), (SELECT count(*) FROM agentrt.task),
-	  (SELECT count(*) FROM agentrt.task_dependency), (SELECT count(*) FROM agentrt.control), (SELECT count(*) FROM agentrt.artifact))`).Scan(&s))
+	  (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event), (SELECT count(*) FROM agentrt.event_stream),
+	  (SELECT string_agg(event_stream_id || '=' || last_seq || ':' || last_sha256, ',' ORDER BY event_stream_id) FROM agentrt.event_stream),
+	  (SELECT count(*) FROM agentrt.outbox), (SELECT count(*) FROM agentrt.idempotency_key), (SELECT count(*) FROM agentrt.mission),
+	  (SELECT count(*) FROM agentrt.task), (SELECT count(*) FROM agentrt.task_dependency), (SELECT count(*) FROM agentrt.control),
+	  (SELECT count(*) FROM agentrt.artifact), (SELECT count(*) FROM agentrt.artifact_blob))`).Scan(&s))
 	return s
 }
 
@@ -324,6 +327,7 @@ func TestProposeTasks(t *testing.T) {
 		// step): only the role rule refuses it (review 175 B6).
 		"review":           {edit(func(p *store.TaskProposal) { p.Role, p.Subject = "review", existing }), true},
 		"verify":           {edit(func(p *store.TaskProposal) { p.Role, p.Subject = "verify", existing }), true},
+		"a subject":        {edit(func(p *store.TaskProposal) { p.Subject = existing }), true},
 		"no title":         {edit(func(p *store.TaskProposal) { p.Title = "" }), true},
 		"step and reason":  {edit(func(p *store.TaskProposal) { p.OffPlanReason = "x" }), true},
 		"neither":          {edit(func(p *store.TaskProposal) { p.PlanNode = "" }), true},
@@ -561,5 +565,183 @@ func TestBatchAgainstDependency(t *testing.T) {
 	free()
 	if berr, eerr := <-batch, <-edge; berr != nil || eerr != nil {
 		t.Fatalf("batch: %v; dependency: %v", berr, eerr)
+	}
+}
+
+// Review 176 A1: a batch and a control of the same writer at once (the batch
+// depending on the task the control stops) both commit: each takes the
+// writer before any row.
+func TestBatchAndControlOfOneWriter(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	target := w.ready(t, store.Task{})
+	_, err := store.ProposeMission(ctx, pool, wr("thread:s1"), "register", mission)
+	ok(t, err)
+	hold, reached := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	var release sync.Once
+	free := func() { release.Do(func() { close(hold) }) }
+	defer free()
+	defer store.SetHook(func(point, _ string) {
+		if point == "batch locked" && first.CompareAndSwap(false, true) {
+			close(reached)
+			<-hold
+		}
+	})()
+	batch := make(chan error, 1)
+	go func() {
+		_, berr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.spec, target)})
+		batch <- berr
+	}()
+	<-reached
+	control := make(chan error, 1)
+	go func() {
+		_, cerr := store.RequestControl(ctx, pool, wr("thread:s1"), "c1", "task", target, "stop", "test")
+		control <- cerr
+	}()
+	w.waitFor(t, "", time.Now().Add(5*time.Second))
+	free()
+	if berr, cerr := <-batch, <-control; berr != nil || cerr != nil {
+		t.Fatalf("batch: %v; control: %v", berr, cerr)
+	}
+}
+
+// Review 176 A2: a batch depending on tasks a verification holds (subject
+// and check, in either id order) does not wait for them.
+func TestBatchAgainstHeldTasks(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	a, b := w.ready(t, store.Task{}), w.ready(t, store.Task{})
+	tx, err := pool.Begin(ctx)
+	ok(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, id := range []string{b, a} {
+		_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, id)
+		ok(t, err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, perr := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("n", w.spec, a, b)})
+		done <- perr
+	}()
+	select {
+	case perr := <-done:
+		ok(t, perr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the batch waited for tasks another transaction holds")
+	}
+}
+
+// Review 176 B1: the day's bound holds for registrations at once: with one
+// left, of two new threads at once one is registered.
+func TestThreadQuotaAtOnce(t *testing.T) {
+	w := newWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
+	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay-1))
+	hold, reached := make(chan struct{}), make(chan struct{})
+	var first atomic.Bool
+	var release sync.Once
+	free := func() { release.Do(func() { close(hold) }) }
+	defer free()
+	defer store.SetHook(func(point, _ string) {
+		if point == "counted" && first.CompareAndSwap(false, true) {
+			close(reached)
+			<-hold
+		}
+	})()
+	got := make(chan error, 2)
+	go func() {
+		_, perr := store.ProposeMission(ctx, pool, wr("thread:new1"), "k", mission)
+		got <- perr
+	}()
+	<-reached
+	go func() {
+		_, perr := store.ProposeMission(ctx, pool, wr("thread:new2"), "k", mission)
+		got <- perr
+	}()
+	// The second waits for the registration lock, or (without it) is done.
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
+		if w.count(t, `SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'
+		  AND position('742109' in query) > 0`) > 0 || len(got) > 0 {
+			break
+		}
+	}
+	free()
+	refused := 0
+	for range 2 {
+		if perr := <-got; errors.Is(perr, store.ErrInvalid) {
+			refused++
+		} else {
+			ok(t, perr)
+		}
+	}
+	if n := w.count(t, `SELECT count(*) FROM agentrt.actor WHERE actor_kind = 'thread'`); refused != 1 || n != store.ThreadsPerDay {
+		t.Fatalf("%d refused, %d threads; want 1 and %d", refused, n, store.ThreadsPerDay)
+	}
+}
+
+// Review 176 B2: every proposal and control names the token that made it,
+// not only the first write of a thread.
+func TestTokenOnEveryWrite(t *testing.T) {
+	w := newKernelWorld(t)
+	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "first"}, "k1", mission)
+	ok(t, err)
+	b := store.Writer{Actor: "thread:s", Token: "second"}
+	m, err := store.ProposeMission(ctx, w.rt, b, "k2", mission)
+	ok(t, err)
+	tasks, err := store.ProposeTasks(ctx, w.rt, b, "k3", "M-1", []store.TaskProposal{proposal("a", w.spec)})
+	ok(t, err)
+	c, err := store.RequestControl(ctx, w.rt, b, "k4", "global", "", "pause", "test")
+	ok(t, err)
+	for typ, where := range map[string]string{
+		"mission_proposed": fmt.Sprintf("mission_id = '%s'", m["mission_id"]),
+		"task_proposed":    fmt.Sprintf("task_id = '%s'", taskIDs(tasks)["a"]),
+		"control_set":      fmt.Sprintf("body_json->>'control_id' = '%s'", c["control_id"]),
+	} {
+		if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = $1 AND actor_id = 'thread:s'
+		  AND body_json->>'token' = 'second' AND `+where, typ); n != 1 {
+			t.Errorf("%s does not name the token that made it", typ)
+		}
+	}
+}
+
+// Review 176 part 2 A1: a full day of registrations does not keep a new
+// session from stopping work; it still keeps it from proposing.
+func TestControlsPastThreadQuota(t *testing.T) {
+	w := newKernelWorld(t)
+	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
+	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay))
+	_, err := store.RequestControl(ctx, w.rt, wr("thread:late"), "k1", "global", "", "stop", "stop everything")
+	ok(t, err)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:later"), "k1", mission)
+	is(t, err, store.ErrInvalid)
+}
+
+// A step held by another transaction: the batch fails fast and is tried
+// again, so a short hold costs a retry; a hold longer than the tries is
+// ErrBusy, with nothing written.
+func TestBatchRetriesBusyStep(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	hold := func(d time.Duration) {
+		tx, err := pool.Begin(ctx)
+		ok(t, err)
+		_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, s1)
+		ok(t, err)
+		go func() {
+			time.Sleep(d)
+			_ = tx.Rollback(ctx)
+		}()
+	}
+	hold(100 * time.Millisecond)
+	_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("a", w.spec)})
+	ok(t, err)
+	hold(3 * time.Second)
+	before := w.footprint(t)
+	_, err = store.ProposeTasks(ctx, pool, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{proposal("b", w.spec)})
+	is(t, err, store.ErrBusy)
+	if after := w.footprint(t); after != before {
+		t.Fatalf("a busy batch left something: %s -> %s", before, after)
 	}
 }

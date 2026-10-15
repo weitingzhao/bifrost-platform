@@ -138,6 +138,9 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
+	case errors.Is(err, store.ErrBusy):
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())
 	case errors.As(err, &pg) && constraintCodes[pg.Code]:
 		writeError(w, http.StatusUnprocessableEntity, "constraint", pg.Message)
 	case errors.Is(err, store.ErrFenced):

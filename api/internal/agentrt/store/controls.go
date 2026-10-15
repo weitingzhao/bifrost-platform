@@ -48,7 +48,7 @@ func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind,
 	}
 	req := map[string]any{"scope": scope, "scope_ref": ref, "kind": kind, "reason": reason}
 	return idempotent(ctx, db, w.Actor, "controls", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
-		if err := ensureWriter(ctx, tx, w); err != nil {
+		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return nil, err
 		}
 		if q := scopeRows[scope]; q != "" {
@@ -61,7 +61,7 @@ func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind,
 			}
 		}
 		id := NewControlID()
-		if err := SetControl(ctx, tx, w.Actor, id, scope, ref, kind, reason); err != nil {
+		if err := setControl(ctx, tx, w.Actor, w.Token, id, scope, ref, kind, reason); err != nil {
 			return nil, err
 		}
 		return map[string]any{"control_id": id, "scope": scope, "scope_ref": ref, "kind": kind}, nil

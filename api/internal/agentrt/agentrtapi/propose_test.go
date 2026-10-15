@@ -222,3 +222,24 @@ func TestHardLimitBounds(t *testing.T) {
 		}
 	}
 }
+
+// A batch whose step stays locked answers 503 with Retry-After, not 500.
+func TestBusyIs503(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	spec := []byte("# busy\n")
+	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
+		t.Fatalf("spec: %d %v", code, out)
+	}
+	tx, err := pool.Begin(ctx)
+	must(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = 'R2:1-1' FOR UPDATE`)
+	must(t, err)
+	code, out := call(t, s, "operator", "POST", "missions/M-1/tasks", map[string]any{"idempotency_key": "k", "tasks": []any{map[string]any{
+		"ref": "a", "plan_node_id": "R2:1-1", "role": "implement", "task_class": "go", "title": "a",
+		"spec_artifact_id": artifactID(spec), "effect_class": "branch"}}}, session, "s1")
+	if code != http.StatusServiceUnavailable || out["error"] != "busy" {
+		t.Fatalf("a batch on a held step: %d %v", code, out)
+	}
+}

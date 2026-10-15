@@ -16,9 +16,15 @@ import (
 // it names, in one transaction; missions, tasks and steps move only along
 // their transition tables (T25).
 //
-// Lock order, everywhere: attempt, then task (a review or verification
-// before its subject), then mission, then the event stream (Append): every
-// write takes the row locks it needs before it appends (review 149 B1).
+// Lock order, everywhere: the writer of a route (its own lock and, when this
+// write registers it, the registration lock and the system stream; review
+// 176 A1), then the dependency graph, then steps, then attempts, then tasks
+// (verification, Conclude, takes a subject before its check), then mission,
+// then the event stream (Append): every write takes the row locks it needs
+// before it appends (review 149 B1). A batch of proposals never waits while
+// it holds a task lock: it takes steps and subjects NOWAIT and the tasks it
+// depends on FOR KEY SHARE, which no state change conflicts with (review 176
+// A2).
 // Claims start at the host row and the shared global and capability locks,
 // then the task, and never lock an existing attempt; a candidate a claim
 // does not take is released at once. A write of job candidates or
