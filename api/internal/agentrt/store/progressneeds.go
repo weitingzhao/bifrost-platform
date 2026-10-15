@@ -102,7 +102,9 @@ func changeBlocks(ctx context.Context, tx pgx.Tx, changes []PlanChange) (any, er
 		default:
 			nodes = append(nodes, c.Node)
 		}
-		if c.MissionID != "" {
+		// Only these two bind a mission (planchange.go applyChanges); a
+		// mission_id on another op changes nothing.
+		if c.MissionID != "" && (c.Op == "rebind_step" || c.Op == "add_node") {
 			bound = append(bound, c.MissionID)
 		}
 	}
