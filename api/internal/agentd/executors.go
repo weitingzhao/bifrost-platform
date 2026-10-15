@@ -68,12 +68,19 @@ type Secrets struct {
 	CursorAPIKey string
 }
 
+// cursorMemoryStore keeps cursor from the keychain when it has a key: even
+// given one, cursor-agent (2026.10.01) saves the login the key buys in the
+// keychain by default and exits when it cannot (measured 10-15 as the
+// daemon's user: "couldn't save your login to the macOS keychain (security
+// exit code 154)"). Kept in memory, each run logs in with the key again.
+const cursorMemoryStore = "AGENT_CLI_CREDENTIAL_STORE=memory"
+
 // Executors are the executors this host runs, by actor id.
 func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	env := AllowedEnv(environ)
 	cursorEnv := env
 	if s.CursorAPIKey != "" {
-		cursorEnv = append(append([]string{}, env...), "CURSOR_API_KEY="+s.CursorAPIKey)
+		cursorEnv = append(append([]string{}, env...), "CURSOR_API_KEY="+s.CursorAPIKey, cursorMemoryStore)
 	}
 	return map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),

@@ -65,12 +65,19 @@ func TestCursorKeyReachesCursorAlone(t *testing.T) {
 		if got := slices.Contains(sp.Env, "CURSOR_API_KEY=k1"); got != (name == "exec:cursor") {
 			t.Fatalf("%s: has the cursor key = %v", name, got)
 		}
+		// With the key, cursor keeps the login it buys in memory, not in a
+		// keychain the daemon cannot write (10-15).
+		if got := slices.Contains(sp.Env, "AGENT_CLI_CREDENTIAL_STORE=memory"); got != (name == "exec:cursor") {
+			t.Fatalf("%s: has the memory credential store = %v", name, got)
+		}
 		if slices.ContainsFunc(sp.Argv, func(s string) bool { return strings.Contains(s, "k1") }) {
 			t.Fatalf("%s: the key is on the command line", name)
 		}
 	}
 	sp, err := Executors("/usr/local/bin/agentd", []string{"PATH=/bin"}, Secrets{})["exec:cursor"](a)
-	if err != nil || slices.ContainsFunc(sp.Env, func(s string) bool { return strings.HasPrefix(s, "CURSOR_API_KEY=") }) {
+	if err != nil || slices.ContainsFunc(sp.Env, func(s string) bool {
+		return strings.HasPrefix(s, "CURSOR_API_KEY=") || strings.HasPrefix(s, "AGENT_CLI_CREDENTIAL_STORE=")
+	}) {
 		t.Fatalf("no key, yet cursor's env = %v %v", sp.Env, err)
 	}
 }
