@@ -13,6 +13,7 @@ import {
   getPlan,
   getTask,
   listTasks,
+  proposeMission,
   proposePlanChange,
   proposeTasks,
   putArtifact,
@@ -91,6 +92,19 @@ describe('agent runtime reads', () => {
 })
 
 describe('agent runtime writes', () => {
+  it('propose_mission sends the mission with the caller\'s key, and none without one', async () => {
+    const { d, calls } = deps()
+    const mission = { title: 'Fix x', goal: 'x works', success: ['go test passes'], repos: ['bifrost-platform'], max_action: 'branch' as const }
+    const missing = await proposeMission({ ...mission, idempotency_key: '' }, d)
+    assert.deepEqual(missing, { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE })
+    assert.equal(calls.length, 0)
+    await proposeMission({ ...mission, idempotency_key: 'm-1' }, d)
+    await proposeMission({ ...mission, budget: { max_attempts: 2, max_wall_hours: 1 }, idempotency_key: 'm-2' }, d)
+    assert.equal(calls[0].path, '/api/v1/agentrt/missions')
+    assert.deepEqual(calls[0].body, { ...mission, idempotency_key: 'm-1' })
+    assert.deepEqual(calls[1].body, { ...mission, budget: { max_attempts: 2, max_wall_hours: 1 }, idempotency_key: 'm-2' })
+  })
+
   it('propose_tasks sends the batch with the caller\'s key, and none without one', async () => {
     const { d, calls } = deps()
     const missing = await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: '' }, d)
@@ -145,6 +159,7 @@ describe('agent runtime writes', () => {
     it(`sends no write under ${name}`, async () => {
       const { d, calls } = deps(over)
       for (const got of [
+        await proposeMission({ title: 't', goal: 'g', success: ['s'], idempotency_key: 'k' }, d),
         await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'k' }, d),
         await proposePlanChange({ root: 'R2', reason: 'r', changes: [{ op: 'retitle', node: 'R2', title: 't' }], idempotency_key: 'k' }, d),
         await putArtifact({ kind: 'task_spec', content: 'x' }, d),
@@ -161,7 +176,7 @@ describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop']) {
       assert.equal(listed.has(name), true, name)
       assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

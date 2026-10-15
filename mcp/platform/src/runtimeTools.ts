@@ -5,10 +5,10 @@ import { writesMode, type WritesMode } from './writeGate.js'
 
 // The agent runtime's tools (design v5 §5.2 「MCP 工具」): reads of the plan,
 // missions, tasks and artifacts, and the writes a thread may make — propose
-// tasks, upload an artifact, ask for a stop. Writes are runtime state, not
-// cluster actions: like the question tools they do not go through the
-// approvals write gate, and they refuse when the session id fell back or
-// MCP_WRITES=off. The platform records each write as this thread
+// a mission and its tasks, upload an artifact, ask for a stop. Writes are
+// runtime state, not cluster actions: like the question tools they do not go
+// through the approvals write gate, and they refuse when the session id fell
+// back or MCP_WRITES=off. The platform records each write as this thread
 // (thread:<X-Bifrost-Session>).
 
 const BASE = '/api/v1/agentrt'
@@ -102,6 +102,33 @@ export interface ProposedTask {
 
 export const PROPOSAL_KEY_RULE =
   'idempotency_key names this one proposal: reuse it only to retry the same request; proposing the same again (for example after the tasks were cancelled) needs a new key, or the platform answers with the old proposal.'
+
+export interface ProposedMission {
+  title: string
+  goal: string
+  success: string[]
+  work_id?: string
+  tenant?: 'dev' | 'business'
+  deadline_at?: string
+  repos?: string[]
+  max_action?: 'none' | 'branch'
+  budget?: { max_attempts: number; max_wall_hours: number }
+}
+
+/**
+ * Propose a mission. The platform numbers it (M-n); inside the standing
+ * envelope in force for its tenant it starts active, otherwise it stays
+ * proposed and the answer says why. The key is the caller's, as for tasks.
+ */
+export async function proposeMission(
+  input: ProposedMission & { idempotency_key: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
+  return d.send('POST', `${BASE}/missions`, input)
+}
 
 /**
  * Propose tasks. The key is the caller's, never derived: the same tasks

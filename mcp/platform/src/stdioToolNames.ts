@@ -67,6 +67,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'get_mission',
   'list_tasks',
   'get_task',
+  'propose_mission',
   'propose_tasks',
   'propose_plan_change',
   'put_artifact',

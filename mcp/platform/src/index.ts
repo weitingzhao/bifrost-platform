@@ -33,6 +33,7 @@ import {
   getPlan,
   getTask,
   listTasks,
+  proposeMission,
   proposePlanChange,
   proposeTasks,
   putArtifact,
@@ -660,6 +661,27 @@ reg(
   `Agent runtime task (t_…). ${RUNTIME_DATA_NOTE}`,
   { id: z.string() },
   async ({ id }) => jsonResult(await getTask(id)),
+)
+
+reg(
+  'propose_mission',
+  `Propose a mission; the platform numbers it (M-n). It names a title, a goal and its success criteria; tenant dev (the default) or business; the repos it works in; max_action none or branch (the default); a budget, or none to take the tenant's budget rule's. Inside the standing envelope in force for its tenant it starts active; otherwise it stays proposed and the answer says why. Then propose its tasks (propose_tasks). ${PROPOSAL_KEY_RULE}`,
+  {
+    title: z.string().min(1),
+    goal: z.string().min(1),
+    success: z.array(z.string().min(1)).min(1).describe('Success criteria, none empty'),
+    work_id: z.string().optional().describe('The work it belongs to (W-n, TD-n, …)'),
+    tenant: z.enum(['dev', 'business']).optional(),
+    deadline_at: z.string().optional().describe('RFC 3339; seven days from now when left out'),
+    repos: z.array(z.string().min(1)).optional(),
+    max_action: z.enum(['none', 'branch']).optional(),
+    budget: z
+      .object({ max_attempts: z.number().int().min(0), max_wall_hours: z.number().int().min(0) })
+      .optional()
+      .describe("Left out: the tenant's budget rule's"),
+    idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
+  },
+  async (input) => jsonResult(await proposeMission(input)),
 )
 
 reg(
