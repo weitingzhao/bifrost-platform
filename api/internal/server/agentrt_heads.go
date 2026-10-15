@@ -44,6 +44,11 @@ var (
 // credential that does not reach it) or a Gitea it cannot reach is an error
 // of the platform, which agentd retries later, so no result is lost to it.
 func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) store.BranchHead {
+	// A redirect would read another repository or branch than the one asked
+	// for: it is an answer of its own, an error of the platform (review 194 A2).
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client = &c
 	return func(ctx context.Context, repo, ref string) (string, error) {
 		branch, ok := strings.CutPrefix(ref, "refs/heads/")
 		if !ok || branch == "" || !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
@@ -62,6 +67,7 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 		}
 		repoURL := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo)
 		var b struct {
+			Name   string `json:"name"`
 			Commit struct {
 				ID string `json:"id"`
 			} `json:"commit"`
@@ -72,19 +78,24 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 		}
 		switch status {
 		case http.StatusOK:
-			if !commitID.MatchString(b.Commit.ID) {
-				return "", fmt.Errorf("gitea: %s/%s %s: no commit id in the answer", org, repo, ref)
+			if b.Name != branch || !commitID.MatchString(b.Commit.ID) {
+				return "", fmt.Errorf("gitea: %s/%s %s: the answer is not that branch with a commit id", org, repo, ref)
 			}
 			return b.Commit.ID, nil
 		case http.StatusNotFound:
 			// Gitea answers 404 for a branch that is not there and for a
 			// repository it does not show this credential: tell them apart.
-			rs, err := giteaGet(ctx, client, acc, repoURL, nil)
+			// Only that repository, read and named, makes the result refused
+			// (review 194 A1).
+			var r struct {
+				FullName string `json:"full_name"`
+			}
+			rs, err := giteaGet(ctx, client, acc, repoURL, &r)
 			if err != nil {
 				return "", err
 			}
-			if rs != http.StatusOK {
-				return "", fmt.Errorf("gitea: repository %s/%s: HTTP %d", org, repo, rs)
+			if rs != http.StatusOK || !strings.EqualFold(r.FullName, org+"/"+repo) {
+				return "", fmt.Errorf("gitea: repository %s/%s: HTTP %d, %q", org, repo, rs, r.FullName)
 			}
 			return "", fmt.Errorf("%w: %s is not on %s/%s", store.ErrState, ref, org, repo)
 		}

@@ -15,11 +15,18 @@ import (
 
 const headSHA = "0123456789abcdef0123456789abcdef01234567"
 
+var agentsRepoBody = map[string]string{"bifrost-agents/bifrost-platform": `{"full_name":"bifrost-agents/bifrost-platform"}`}
+
+func branchBody(name, commit string) string {
+	return `{"name":"` + name + `","commit":{"id":"` + commit + `"}}`
+}
+
 // fakeGitea answers the two reads the branch reader makes, by escaped path.
 type fakeGitea struct {
 	mu       sync.Mutex
 	branches map[string]string // escaped path after /branches/ -> body
-	repos    map[string]int    // "org/repo" -> status
+	repos    map[string]string // "org/repo" -> the body of its 200
+	redirect map[string]string // escaped path -> where a 302 sends it
 	status   int               // when set, every request gets it
 	paths    []string
 	auth     []string
@@ -35,6 +42,10 @@ func (f *fakeGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(f.status)
 		return
 	}
+	if to, ok := f.redirect[r.URL.EscapedPath()]; ok {
+		http.Redirect(w, r, to, http.StatusFound)
+		return
+	}
 	rest, ok := strings.CutPrefix(r.URL.EscapedPath(), "/api/v1/repos/")
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -42,15 +53,14 @@ func (f *fakeGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	repo, branch, isBranch := strings.Cut(rest, "/branches/")
 	if !isBranch {
-		if code, ok := f.repos[rest]; ok {
-			w.WriteHeader(code)
-			_, _ = w.Write([]byte(`{}`))
+		if body, ok := f.repos[rest]; ok {
+			_, _ = w.Write([]byte(body))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	if f.repos[repo] != http.StatusOK {
+	if _, ok := f.repos[repo]; !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -74,8 +84,8 @@ func headReader(t *testing.T, f *fakeGitea) store.BranchHead {
 
 func TestGiteaBranchHeadReadsTheAgentOrganization(t *testing.T) {
 	f := &fakeGitea{
-		repos:    map[string]int{"bifrost-agents/bifrost-platform": http.StatusOK},
-		branches: map[string]string{"agent/T-7/a1": `{"name":"agent/T-7/a1","commit":{"id":"` + headSHA + `"}}`},
+		repos:    agentsRepoBody,
+		branches: map[string]string{"agent/T-7/a1": branchBody("agent/T-7/a1", headSHA)},
 	}
 	got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
 	if err != nil || got != headSHA {
@@ -93,8 +103,8 @@ func TestGiteaBranchHeadReadsTheAgentOrganization(t *testing.T) {
 
 func TestGiteaBranchHeadEscapesEachSegment(t *testing.T) {
 	f := &fakeGitea{
-		repos:    map[string]int{"bifrost-agents/bifrost-platform": http.StatusOK},
-		branches: map[string]string{"agent/T%3F7/a1": `{"commit":{"id":"` + headSHA + `"}}`},
+		repos:    agentsRepoBody,
+		branches: map[string]string{"agent/T%3F7/a1": branchBody("agent/T?7/a1", headSHA)},
 	}
 	if got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T?7/a1"); err != nil || got != headSHA {
 		t.Fatalf("head = %q, %v", got, err)
@@ -102,7 +112,7 @@ func TestGiteaBranchHeadEscapesEachSegment(t *testing.T) {
 }
 
 func TestGiteaBranchHeadRefusesAMissingBranch(t *testing.T) {
-	f := &fakeGitea{repos: map[string]int{"bifrost-agents/bifrost-platform": http.StatusOK}, branches: map[string]string{}}
+	f := &fakeGitea{repos: agentsRepoBody, branches: map[string]string{}}
 	_, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
 	if !errors.Is(err, store.ErrState) {
 		t.Fatalf("err = %v, want ErrState", err)
@@ -116,15 +126,46 @@ func TestGiteaBranchHeadRefusesAMissingBranch(t *testing.T) {
 // platform's problem: not ErrState, so agentd retries and keeps the result.
 func TestGiteaBranchHeadRetriesWhatIsNotTheAgents(t *testing.T) {
 	cases := map[string]*fakeGitea{
-		"unseen repository": {repos: map[string]int{}, branches: map[string]string{}},
+		"unseen repository": {repos: map[string]string{}, branches: map[string]string{}},
 		"gitea failing":     {status: http.StatusBadGateway},
 		"no commit id": {
-			repos:    map[string]int{"bifrost-agents/bifrost-platform": http.StatusOK},
-			branches: map[string]string{"agent/T-7/a1": `{"commit":{"id":"main"}}`},
+			repos:    agentsRepoBody,
+			branches: map[string]string{"agent/T-7/a1": branchBody("agent/T-7/a1", "main")},
 		},
 		"unreadable answer": {
-			repos:    map[string]int{"bifrost-agents/bifrost-platform": http.StatusOK},
+			repos:    agentsRepoBody,
 			branches: map[string]string{"agent/T-7/a1": `{"commit":`},
+		},
+		// Review 194 A1: only that repository, read and named, refuses.
+		"unreadable repository answer": {
+			repos:    map[string]string{"bifrost-agents/bifrost-platform": `<html>unreadable</html>`},
+			branches: map[string]string{},
+		},
+		"another repository's answer": {
+			repos:    map[string]string{"bifrost-agents/bifrost-platform": `{"full_name":"bifrost/bifrost-platform"}`},
+			branches: map[string]string{},
+		},
+		// Review 194 A2: a redirect is not followed to another branch.
+		"a redirect to another branch": {
+			repos:    agentsRepoBody,
+			branches: map[string]string{"agent/T-7/a10": branchBody("agent/T-7/a10", headSHA)},
+			redirect: map[string]string{
+				"/api/v1/repos/bifrost-agents/bifrost-platform/branches/agent/T-7/a1": "/api/v1/repos/bifrost-agents/bifrost-platform/branches/agent/T-7/a10",
+			},
+		},
+		"a redirect to another repository": {
+			repos: map[string]string{
+				"bifrost-agents/bifrost-platform": `{"full_name":"bifrost-agents/bifrost-platform"}`,
+				"bifrost/bifrost-platform":        `{"full_name":"bifrost/bifrost-platform"}`,
+			},
+			branches: map[string]string{"agent/T-7/a1": branchBody("agent/T-7/a1", headSHA)},
+			redirect: map[string]string{
+				"/api/v1/repos/bifrost-agents/bifrost-platform/branches/agent/T-7/a1": "/api/v1/repos/bifrost/bifrost-platform/branches/agent/T-7/a1",
+			},
+		},
+		"the answer names another branch": {
+			repos:    agentsRepoBody,
+			branches: map[string]string{"agent/T-7/a1": branchBody("agent/T-7/a10", headSHA)},
 		},
 	}
 	for name, f := range cases {
@@ -143,6 +184,14 @@ func TestGiteaBranchHeadRetriesWhatIsNotTheAgents(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+// a1 is one branch: a10 next to it is not it.
+func TestGiteaBranchHeadReadsOneExactBranch(t *testing.T) {
+	f := &fakeGitea{repos: agentsRepoBody, branches: map[string]string{"agent/T-7/a10": branchBody("agent/T-7/a10", headSHA)}}
+	if _, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); !errors.Is(err, store.ErrState) {
+		t.Fatalf("err = %v, want ErrState", err)
+	}
 }
 
 func TestGiteaBranchHeadRefusesWhatIsNotABranchOfARepository(t *testing.T) {
