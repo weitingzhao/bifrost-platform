@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -45,6 +43,12 @@ func (a *asker) ask(_ context.Context, c store.Card) (string, error) {
 	}
 	a.cards = append(a.cards, c)
 	return "q_" + string(rune('a'+len(a.cards)-1)), nil
+}
+
+func (a *asker) lastID() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return "q_" + string(rune('a'+len(a.cards)-1))
 }
 
 func (a *asker) answer(id, status, option string) {
@@ -270,10 +274,10 @@ func TestPlanDecisions(t *testing.T) {
 	if n, err = store.DecidePlanChanges(ctx, w.rt, a.question, a.ack); err != nil || n != 0 {
 		t.Fatalf("a second pass decided %d (%v)", n, err)
 	}
-	// Review 180 B3: every answered card decided is acknowledged (again on
-	// each pass: it is idempotent); an expired one, never answered, is not.
+	// Review 180 B3, 182 B3: every answered card decided is acknowledged,
+	// once (recorded); an expired one, never answered, is not.
 	for _, q := range []string{applied, refused, failed} {
-		if a.acked[q] != 2 {
+		if a.acked[q] != 1 {
 			t.Errorf("card %s acknowledged %d times over two passes", q, a.acked[q])
 		}
 	}
@@ -431,25 +435,152 @@ func TestPlanChangeNumbering(t *testing.T) {
 	}
 }
 
-// Review 180 B2: a card the question store could not hold is refused at
-// once as invalid, with nothing written; a long title is cut on a
-// character, within the store's limit.
-func TestPlanChangeCardSize(t *testing.T) {
+// Review 180 B2, 182 B2: a card the question store refuses for its form is
+// refused as invalid, with nothing written (the store's own limits are
+// tested on the real store: TestPlanChangeCardOnTheStore).
+func TestPlanChangeCardRefused(t *testing.T) {
+	w := newKernelWorld(t)
+	before := w.footprint(t)
+	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "x",
+		[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, func(context.Context, store.Card) (string, error) {
+			return "", fmt.Errorf("%w: body exceeds 3000 bytes", store.ErrInvalid)
+		})
+	is(t, err, store.ErrInvalid)
+	if after := w.footprint(t); after != before {
+		t.Fatalf("a refused card left something: %s -> %s", before, after)
+	}
+}
+
+// Review 182 B3: an acknowledgement that fails is tried again next pass; a
+// card the store has dropped is recorded as gone and not asked about again.
+func TestPlanDecisionAcks(t *testing.T) {
 	w := newKernelWorld(t)
 	a := &asker{}
-	before := w.footprint(t)
-	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, strings.Repeat("x", 3001),
-		[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, a.ask)
-	if !errors.Is(err, store.ErrInvalid) || !containsFold(err.Error(), "a decision card holds") {
-		t.Fatalf("a reason past the card: %v", err)
+	var ids []string
+	for i := range 2 {
+		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), fmt.Sprint("k", i), root, "t",
+			[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: fmt.Sprint("i", i)}}, a.ask)
+		ok(t, err)
+		id := out["question_id"].(string)
+		ids = append(ids, id)
+		a.answer(id, store.QuestionAnswered, store.CardRefuseKey)
 	}
-	if after := w.footprint(t); after != before || len(a.cards) != 0 {
-		t.Fatalf("a refused card left something (%s -> %s) or asked", before, after)
+	calls := map[string]int{}
+	failing := true
+	ack := func(_ context.Context, id string) error {
+		calls[id]++
+		switch {
+		case id == ids[1]:
+			return fmt.Errorf("%w: %s", store.ErrQuestionGone, id)
+		case failing:
+			return fmt.Errorf("the store is busy")
+		}
+		return nil
 	}
-	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k2", root, strings.Repeat("计划", 200),
-		[]store.PlanChange{{Op: "add_node", Parent: root, Kind: "item", Title: "y"}}, a.ask)
+	if _, err := store.DecidePlanChanges(ctx, w.rt, a.question, ack); err == nil {
+		t.Fatal("a failed acknowledgement was not reported")
+	}
+	failing = false
+	for range 2 {
+		_, err := store.DecidePlanChanges(ctx, w.rt, a.question, ack)
+		ok(t, err)
+	}
+	if calls[ids[0]] != 2 || calls[ids[1]] != 1 {
+		t.Fatalf("acknowledgements %v; want the failed one twice and the gone one once", calls)
+	}
+	if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json->>'text' = $1`,
+		"question "+ids[1]+" is gone from the question store"); n != 1 {
+		t.Fatal("the gone card is not recorded")
+	}
+}
+
+// Review 182 A2: a task another tree moves between the change reading
+// where it is and locking it: the change is tried again and then sees it
+// in the other tree.
+func TestMoveSeesATaskMovedMeanwhile(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	for _, n := range []store.PlanNode{
+		{ID: "R3", Kind: "round", Label: "3", Title: "round 3", Ordinal: 1, Root: "R3"},
+		{ID: "R3:3.1", Parent: "R3", Kind: "item", Label: "3.1", Title: "other", Root: "R3"},
+		{ID: "R3:3.1-1", Parent: "R3:3.1", Kind: "step", Label: "3.1-1", Title: "other step", MissionID: "M-1", StepKind: "agent", Root: "R3"},
+	} {
+		ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err }))
+	}
+	task, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
-	if title := a.cards[0].Title; len(title) > 300 || !utf8.ValidString(title) {
-		t.Fatalf("title of %d bytes, valid %v", len(title), utf8.ValidString(title))
+	var once sync.Once
+	defer store.SetHook(func(point, _ string) {
+		if point == "change read" {
+			once.Do(func() {
+				ok(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+					if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R3"), Type: "plan_changed", Actor: "controller",
+						Body: map[string]any{"change": "test: move"}}); aerr != nil {
+						return aerr
+					}
+					_, uerr := tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = 'R3:3.1-1' WHERE task_id = $1`, task)
+					return uerr
+				}))
+			})
+		}
+	})()
+	mine := `SELECT concat_ws(' ', (SELECT last_seq FROM agentrt.event_stream WHERE event_stream_id = 'plan:R2'),
+	  (SELECT count(*) FROM agentrt.idempotency_key))`
+	var before, after string
+	ok(t, w.rt.QueryRow(ctx, mine).Scan(&before))
+	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, (&asker{}).ask)
+	if !errors.Is(err, store.ErrInvalid) || !containsFold(err.Error(), "in plan R3, not R2") {
+		t.Fatalf("a move of a task moved meanwhile: %v", err)
+	}
+	ok(t, w.rt.QueryRow(ctx, mine).Scan(&after))
+	if after != before || w.state(t, "task", task) == "" {
+		t.Fatalf("the refused move left something in R2: %s -> %s", before, after)
+	}
+	var step string
+	ok(t, w.rt.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&step))
+	if step != "R3:3.1-1" {
+		t.Fatalf("the task is on %s; the other tree's move stands", step)
+	}
+}
+
+// Review 182 A3: a change never waits holding tasks: a task held by another
+// transaction (Dispatch, Conclude) makes it try again, and past the tries it
+// is busy with nothing written; a decision meeting it waits for the next
+// pass.
+func TestChangeMeetsAHeldTask(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	task, err := w.task(t, "M-1", s1, "", "implement")
+	ok(t, err)
+	hold := func(d time.Duration) {
+		tx, herr := pool.Begin(ctx)
+		ok(t, herr)
+		_, herr = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, task)
+		ok(t, herr)
+		go func() {
+			time.Sleep(d)
+			_ = tx.Rollback(ctx)
+		}()
+	}
+	a := &asker{}
+	hold(100 * time.Millisecond)
+	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, a.ask)
+	ok(t, err)
+	hold(3 * time.Second)
+	before := w.footprint(t)
+	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, a.ask)
+	is(t, err, store.ErrBusy)
+	if after := w.footprint(t); after != before {
+		t.Fatalf("a busy change left something: %s -> %s", before, after)
+	}
+	time.Sleep(3 * time.Second)
+	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	hold(time.Second)
+	if n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil); derr != nil || n != 0 {
+		t.Fatalf("a decision on a held task: %d %v; want none this pass", n, derr)
+	}
+	time.Sleep(1200 * time.Millisecond)
+	if n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil); derr != nil || n != 1 {
+		t.Fatalf("the next pass: %d %v", n, derr)
 	}
 }

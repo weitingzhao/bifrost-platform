@@ -400,8 +400,24 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 	if err != nil || !ok || got.Answer == nil || got.Answer.Read == nil || got.Answer.Read.Session != agentRuntimeRequester {
 		t.Fatalf("the read receipt: %+v %v %v", got.Answer, ok, err)
 	}
-	_, err = ask(ctx, store.Card{Key: strings.Repeat("cd", 16), Title: "Plan change", Body: strings.Repeat("x", 3001)})
+	// Review 182 B2: the store's own limits, counted its way (JSON with the
+	// quotes, HTML not escaped): a body of 2998 characters fits, 2999 does
+	// not; a title is cut to fit, whatever it holds.
+	if _, err = ask(ctx, store.Card{Key: strings.Repeat("cd", 16), Title: "Plan change", Body: strings.Repeat("<", 2998)}); err != nil {
+		t.Fatalf("a body of 3000 encoded bytes: %v", err)
+	}
+	_, err = ask(ctx, store.Card{Key: strings.Repeat("ef", 16), Title: "Plan change", Body: strings.Repeat("x", 2999)})
 	if !errors.Is(err, store.ErrInvalid) {
-		t.Fatalf("a card past the body limit: %v", err)
+		t.Fatalf("a body of 3001 encoded bytes: %v", err)
+	}
+	// A fresh store for the titles: the runtime may have three cards open.
+	fresh := newQuestionRuntime(filepath.Join(t.TempDir(), "titles"), nil).agentRuntimeAsk()
+	for i, title := range []string{strings.Repeat("&", 298), strings.Repeat("a", 299), strings.Repeat("计", 150) + "\u0007tail"} {
+		if _, err = fresh(ctx, store.Card{Key: strings.Repeat(string(rune('g'+i)), 32), Title: title, Body: "b"}); err != nil {
+			t.Errorf("title %d: %v", i, err)
+		}
+	}
+	if err = ack(ctx, "q_not_there"); !errors.Is(err, store.ErrQuestionGone) {
+		t.Errorf("acknowledging a card the store dropped: %v", err)
 	}
 }

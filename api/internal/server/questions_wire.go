@@ -111,7 +111,7 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 	}
 	return func(ctx context.Context, card store.Card) (string, error) {
 		raw, err := json.Marshal(map[string]any{
-			"title":           card.Title,
+			"title":           questions.ClipTitle(card.Title),
 			"body":            card.Body,
 			"options":         []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}},
 			"urgency":         "when you can: only this change waits for you",
@@ -148,9 +148,12 @@ func (rt *questionRuntime) agentRuntimeAck() func(context.Context, string) error
 	}
 	return func(ctx context.Context, id string) error {
 		res := rt.svc.Ack(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", id, nil)
-		if res.Code != http.StatusOK {
-			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+		switch res.Code {
+		case http.StatusOK:
+			return nil
+		case http.StatusNotFound:
+			return fmt.Errorf("%w: %s", store.ErrQuestionGone, id)
 		}
-		return nil
+		return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 	}
 }

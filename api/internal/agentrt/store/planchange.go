@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -149,6 +150,7 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 		}
 	}
 	var moved, rebound []string
+	from := map[string]string{}
 	for _, c := range changes {
 		switch c.Op {
 		case "add_node":
@@ -172,19 +174,21 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 		case "move_task":
 			want(c.Node, "UPDATE")
 			moved = append(moved, c.Task)
-			var from *string
-			err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, c.Task).Scan(&from)
+			var step *string
+			err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, c.Task).Scan(&step)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return invalid("there is no task %s", c.Task)
 			}
 			if err != nil {
 				return err
 			}
-			if from != nil {
-				want(*from, "UPDATE")
+			if step != nil {
+				from[c.Task] = *step
+				want(*step, "UPDATE")
 			}
 		}
 	}
+	hook("change read", "")
 	ids := make([]string, 0, len(modes))
 	for id := range modes {
 		ids = append(ids, id)
@@ -207,11 +211,41 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 			return invalid("node %s is in plan %s, not %s", id, in, root)
 		}
 	}
+	// The tasks NOWAIT: Dispatch locks a task before the tasks it depends
+	// on, Conclude a subject before its check, so no one order of task locks
+	// fits them all (review 182 A3); a change that finds one held fails at
+	// once with lock_not_available and is tried again whole.
 	slices.Sort(moved)
-	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) OR plan_node_id = ANY($2) ORDER BY task_id FOR NO KEY UPDATE`,
-		moved, rebound)
-	return err
+	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) OR plan_node_id = ANY($2) ORDER BY task_id
+	  FOR NO KEY UPDATE NOWAIT`, moved, rebound); err != nil {
+		return err
+	}
+	// Each moved task is still where it was read (another tree may have
+	// moved it in between; review 182 A2); if not, the step locks taken are
+	// the wrong ones: try again whole.
+	for _, task := range moved {
+		var step *string
+		if err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&step); err != nil {
+			return err
+		}
+		now := ""
+		if step != nil {
+			now = *step
+		}
+		if now != from[task] {
+			return fmt.Errorf("%w: task %s moved from %q to %q while it was locked", errMoved, task, from[task], now)
+		}
+	}
+	return nil
 }
+
+// errMoved: a task a change moves was moved by someone else after it was
+// read; the change is tried again whole.
+var errMoved = errors.New("store: a task moved while the change locked it")
+
+// retryable: a change that met a held row or a moved task; nothing was
+// written and it may simply be tried again.
+func retryable(err error) bool { return lockNotAvailable(err) || errors.Is(err, errMoved) }
 
 // rootOf is the root of a node's tree, along its parents.
 func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
@@ -422,28 +456,6 @@ const (
 	CardRefuseKey = "b"
 )
 
-// The decision card's limits, the question store's (title and body, in JSON
-// encoded bytes; review 180 B2).
-const (
-	cardTitleLimit = 300
-	cardBodyLimit  = 3000
-)
-
-// encodedBytes is the length of s as a JSON string, without its quotes.
-func encodedBytes(s string) int {
-	b, _ := json.Marshal(s)
-	return len(b) - 2
-}
-
-// clip cuts s to at most limit encoded bytes on a character boundary.
-func clip(s string, limit int) string {
-	for encodedBytes(s) > limit {
-		r := []rune(s)
-		s = string(r[:len(r)-1])
-	}
-	return s
-}
-
 // ProposePlanChange records a proposal and, within the standing
 // authorization, its decision and the change; otherwise it tries the change
 // (and rolls it back), asks the Owner and records which question it is. The
@@ -460,6 +472,20 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		return nil, err
 	}
 	req := map[string]any{"root": root, "reason": reason, "changes": doc}
+	for try := 1; ; try++ {
+		out, err := proposePlanChange(ctx, db, w, key, root, reason, changes, doc, req, ask)
+		if !retryable(err) {
+			return out, err
+		}
+		if try == busyTries {
+			return nil, fmt.Errorf("%w: plan %s: %v", ErrBusy, root, err)
+		}
+		time.Sleep(time.Duration(try*try) * 20 * time.Millisecond)
+	}
+}
+
+func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason string, changes []PlanChange, doc any,
+	req map[string]any, ask Ask) (map[string]any, error) {
 	return idempotent(ctx, db, w.Actor, "plan/proposals", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
@@ -507,11 +533,10 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if err := tryChanges(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}
-		card := Card{Key: canonKey(w.Actor, key), Title: clip("Plan change to "+root+": "+firstLine(reason), cardTitleLimit),
+		// The question store cuts the title and checks the body by its own
+		// rules (review 182 B2); a card that does not fit comes back invalid.
+		card := Card{Key: canonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
 			Body: cardBody(root, reason, changes)}
-		if n := encodedBytes(card.Body); n > cardBodyLimit {
-			return nil, invalid("the reason and changes take %d bytes; a decision card holds %d: give a shorter reason or fewer changes at a time", n, cardBodyLimit)
-		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
@@ -594,30 +619,54 @@ func DecidePlanChanges(ctx context.Context, db DB, question func(context.Context
 	return n, errors.Join(err, ackDecided(ctx, db, ack))
 }
 
+// ErrQuestionGone: the question store no longer has the question (it trims
+// read and expired ones); there is nothing left to acknowledge.
+var ErrQuestionGone = errors.New("store: the question is gone from the question store")
+
 // ackDecided tells the question store the runtime has used the answer of
-// every card it decided in the store's protection window (review 180 B3):
-// an answered card nobody acknowledged counts against the runtime's quota
-// for a week. Acknowledging is idempotent, so a failed one is retried by the
-// next pass.
+// each card it decided and has not yet acknowledged (review 180 B3): an
+// answered card nobody acknowledged counts against the runtime's quota for a
+// week. Each acknowledgement is recorded as a note on the plan's stream, so
+// a pass acknowledges only what is left (review 182 B3); a card the store has
+// since dropped is recorded as gone and not asked about again. A failure is
+// tried again by the next pass.
 func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) error) error {
-	var ids []string
+	type card struct{ root, question string }
+	var cards []card
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT DISTINCT body_json->>'question_id' FROM agentrt.event
-		  WHERE event_type = 'plan_change_decided' AND body_json->>'decision' IN ('applied','refused','failed')
-		    AND body_json ? 'question_id' AND at > clock_timestamp() - interval '7 days'`)
+		rows, err := tx.Query(ctx, `SELECT DISTINCT substr(d.event_stream_id, 6), d.body_json->>'question_id' FROM agentrt.event d
+		  WHERE d.event_type = 'plan_change_decided' AND d.body_json->>'decision' IN ('applied','refused','failed')
+		    AND d.body_json ? 'question_id' AND d.at > clock_timestamp() - interval '7 days'
+		    AND NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.event_stream_id = d.event_stream_id
+		      AND n.body_json->>'text' IN ('acknowledged question ' || (d.body_json->>'question_id'),
+		                                  'question ' || (d.body_json->>'question_id') || ' is gone from the question store'))
+		  LIMIT 100`)
 		if err != nil {
 			return err
 		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		cards, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (card, error) {
+			var c card
+			return c, r.Scan(&c.root, &c.question)
+		})
 		return err
 	})
 	if err != nil {
 		return err
 	}
 	var errs []error
-	for _, id := range ids {
-		if aerr := ack(ctx, id); aerr != nil {
-			errs = append(errs, fmt.Errorf("acknowledge %s: %w", id, aerr))
+	for _, c := range cards {
+		text := "acknowledged question " + c.question
+		if aerr := ack(ctx, c.question); errors.Is(aerr, ErrQuestionGone) {
+			text = "question " + c.question + " is gone from the question store"
+		} else if aerr != nil {
+			errs = append(errs, fmt.Errorf("acknowledge %s: %w", c.question, aerr))
+			continue
+		}
+		if nerr := InTx(ctx, db, func(tx pgx.Tx) error {
+			_, err := Append(ctx, tx, Event{Stream: PlanStream(c.root), Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+			return err
+		}); nerr != nil {
+			errs = append(errs, nerr)
 		}
 	}
 	return errors.Join(errs...)
@@ -724,6 +773,10 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		did = true
 		return nil
 	})
+	if err != nil && decision == "applied" && retryable(err) {
+		// Busy or moved: nothing was written; the next pass tries again.
+		return false, nil
+	}
 	if err != nil && decision == "applied" && refusedByRules(err) {
 		return decide(ctx, db, p, "failed", err.Error())
 	}
