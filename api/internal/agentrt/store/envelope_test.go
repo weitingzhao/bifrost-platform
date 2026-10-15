@@ -23,11 +23,13 @@ func TestConcurrencyRule(t *testing.T) {
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h1", "dev"))
 	w.jobs(t, "active", "*", codex)
+	_, err := w.rt.Exec(ctx, agentrttest.DevBudgetRule)
+	ok(t, err)
 	first := w.ready(t, store.Task{})
 	if c := w.claim(t, "h1", time.Hour, codex); c != nil {
 		t.Fatalf("claimed %s without a concurrency rule", c.TaskID)
 	}
-	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
+	_, err = w.rt.Exec(ctx, agentrttest.ConcurrencyRule)
 	ok(t, err)
 	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.TaskID != first {
 		t.Fatalf("with one attempt a host: %+v", c)

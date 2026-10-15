@@ -31,6 +31,9 @@ func TestRuleWriteWaitsForAClaim(t *testing.T) {
 		}
 	})
 	defer unhook()
+	var freed sync.Once
+	free := func() { freed.Do(func() { close(release) }) }
+	defer free() // a failed wait still lets the held claim finish
 	claimDone := make(chan claimed, 1)
 	go func() {
 		c, err := store.ClaimFor(ctx, pool, store.ClaimRequest{HostID: "h1", FreeSlots: 1, Tools: []store.Tool{codex}}, time.Hour)
@@ -44,7 +47,7 @@ func TestRuleWriteWaitsForAClaim(t *testing.T) {
 		tightened <- err
 	}()
 	w.waitFor(t, "SELECT pg_advisory_xact_lock($1)", time.Now().Add(10*time.Second))
-	close(release)
+	free()
 	got := <-claimDone
 	ok(t, got.err)
 	if got.c == nil || got.c.TaskID != task {
@@ -146,6 +149,9 @@ func TestLastAttemptGoesToOneHost(t *testing.T) {
 		}
 	})
 	defer unhook()
+	var freed sync.Once
+	free := func() { freed.Do(func() { close(release) }) }
+	defer free()
 	claim := func(host string, out chan<- claimed) {
 		c, err := store.ClaimFor(ctx, pool, store.ClaimRequest{HostID: host, FreeSlots: 1, Tools: []store.Tool{codex}}, time.Hour)
 		out <- claimed{c, err}
@@ -155,7 +161,7 @@ func TestLastAttemptGoesToOneHost(t *testing.T) {
 	<-entered
 	go claim("h2", b)
 	w.waitFor(t, "COALESCE(envelope_rule_id, '') FROM agentrt.mission", time.Now().Add(10*time.Second))
-	close(release)
+	free()
 	ga, gb := <-a, <-b
 	ok(t, ga.err)
 	ok(t, gb.err)

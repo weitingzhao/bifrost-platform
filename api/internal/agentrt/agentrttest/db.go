@@ -176,20 +176,27 @@ func (db *DB) Pool(t testing.TB, dsn string) *pgxpool.Pool {
 	return p
 }
 
-// DispatchRules inserts the two rules the Owner signs that dispatch needs:
-// concurrency (one live attempt a host) and the dev tenant's budget (missions
-// that state none get 1000 attempts and 720 hours; an attempt at most a day).
-// Without them in force the runtime dispatches nothing. A test that claims
-// runs it as the runtime role; each row's text and body_json agree (store's
-// TestFixtureRule reads them back).
-const DispatchRules = `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
-    effective_at, expires_at)
-  VALUES ('concurrency', 1,
+// The two rules the Owner signs that dispatch needs, as rows a test inserts
+// as the runtime role: concurrency (one live attempt a host) and the dev
+// tenant's budget (missions that state none get 1000 attempts and 720 hours;
+// an attempt at most a day). Without both in force the runtime dispatches
+// nothing. Each row's text and body_json agree (store's TestFixtureRule reads
+// them back).
+const (
+	ConcurrencyRule = ruleInsert + concurrencyRow + ` ON CONFLICT DO NOTHING`
+	DevBudgetRule   = ruleInsert + devBudgetRow + ` ON CONFLICT DO NOTHING`
+	DispatchRules   = ruleInsert + concurrencyRow + ",\n" + devBudgetRow + ` ON CONFLICT DO NOTHING`
+)
+
+const ruleInsert = `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
+    effective_at, expires_at) VALUES `
+
+const concurrencyRow = `('concurrency', 1,
     '{"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","per_host":1,"rule_id":"concurrency","rule_version":1}',
     E'rule_id: concurrency\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\nper_host: 1\n',
-    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z'),
-  ('budget:dev', 1,
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
+
+const devBudgetRow = `('budget:dev', 1,
     '{"attempt_hard_limit_s":86400,"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","mission":{"max_attempts":1000,"max_wall_hours":720},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}',
     E'rule_id: budget:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 86400\n',
-    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
-  ON CONFLICT DO NOTHING`
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
