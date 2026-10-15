@@ -105,6 +105,7 @@ func TestParseRefuses(t *testing.T) {
 		"a key given twice":          concurrency + "per_host: 0\n",
 		"a number as a string":       strings.Replace(concurrency, "per_host: 1", `per_host: "1"`, 1),
 		"a number not in decimal":    strings.Replace(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: 0xE10", 1),
+		"a number with a sign":       strings.Replace(budget, "attempt_hard_limit_s: 3600", "attempt_hard_limit_s: +3600", 1),
 		"a string as a number":       strings.Replace(envelope, "max_action: branch", "max_action: 7", 1),
 		"a time without its offset":  strings.Replace(concurrency, "2026-10-15T00:00:00Z", "2026-10-15 00:00:00", 1),
 		"version 2 marked initial":   strings.Replace(concurrency, "rule_version: 1", "rule_version: 2", 1),

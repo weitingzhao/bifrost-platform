@@ -263,6 +263,12 @@ func TestCapabilityFactsRule(t *testing.T) {
 	if bound != 2 {
 		t.Errorf("%d seed facts bound to the rule; want 2", bound)
 	}
+	// And no other row: one live Owner fact for each the rule lists.
+	var owner int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.capability_fact WHERE source_kind = 'owner' AND retired_at IS NULL`).Scan(&owner))
+	if owner != 3 {
+		t.Errorf("%d live Owner facts; want the rule's 3", owner)
+	}
 	_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), "capability-facts", []byte(factsText(2, rules.Tighten,
 		`  - {executor: exec:cursor, kind: must_not, subject: fix_review_findings}
   - {executor: exec:claude, kind: only, subject: author_core, scope: {core: true}}
