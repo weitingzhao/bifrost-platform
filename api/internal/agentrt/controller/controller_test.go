@@ -375,7 +375,7 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	if out["question_id"] != "q_9" {
 		t.Fatalf("proposal: %v", out)
 	}
-	w := &world{questions: map[string]store.Question{"q_9": {ID: "q_9", Status: store.QuestionAnswered, Option: store.CardApply,
+	w := &world{questions: map[string]store.Question{"q_9": {ID: "q_9", Status: store.QuestionAnswered, Option: store.CardApplyKey,
 		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
 	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
 	run, cancel := context.WithCancel(ctx)
@@ -384,7 +384,7 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	defer cancel()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		var n int
-		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.2'`).Scan(&n))
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1'`).Scan(&n))
 		if n == 1 {
 			return
 		}

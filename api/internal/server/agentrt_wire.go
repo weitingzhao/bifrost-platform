@@ -139,7 +139,9 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	if s.releases != nil && s.releases.Service() != nil {
 		rel = s.releases.Service()
 	}
-	return agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
+	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
+	src.Ack = s.questionRuntime.agentRuntimeAck()
+	return src
 }
 
 func (s *Server) mountAgentRuntime(r chi.Router) {

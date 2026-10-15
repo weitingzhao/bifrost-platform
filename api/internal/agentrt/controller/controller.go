@@ -26,6 +26,9 @@ import (
 type Sources struct {
 	Approval func(ctx context.Context, number int64) (status string, ok bool)
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
+	// Ack tells the question store the runtime used the answer of a card it
+	// asked (a plan change's); nil acknowledges nothing.
+	Ack      func(ctx context.Context, id string) error
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
 }
@@ -205,6 +208,12 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil {
 		return 0, nil
 	}
+	var ack func(context.Context, string) error
+	if c.Sources.Ack != nil {
+		ack = func(ctx context.Context, id string) error {
+			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Ack(ctx, id) })
+		}
+	}
 	return store.DecidePlanChanges(ctx, c.DB, func(ctx context.Context, id string) (store.Question, bool) {
 		type r struct {
 			q  store.Question
@@ -212,7 +221,7 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 		}
 		x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })
 		return x.q, x.ok
-	})
+	}, ack)
 }
 
 // Rules is one pass of the done-rule loop: every live step with a rule is

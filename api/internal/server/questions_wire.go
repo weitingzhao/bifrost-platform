@@ -122,12 +122,35 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		if err != nil {
 			return "", err
 		}
-		res := rt.svc.Create(ctx, "agentrt", "agentrt", "operator", raw)
+		res := rt.svc.Create(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", raw)
 		body, _ := res.Body.(map[string]any)
 		id, _ := body["id"].(string)
-		if (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "" {
+		switch {
+		case res.Code == http.StatusBadRequest:
+			// The card itself does not fit: retrying will not help.
+			return "", fmt.Errorf("%w: the question store refused the card: %v", store.ErrInvalid, res.Body)
+		case (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "":
 			return "", fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 		}
 		return id, nil
+	}
+}
+
+// agentRuntimeRequester is the session the runtime asks the Owner as.
+const agentRuntimeRequester = "agentrt"
+
+// agentRuntimeAck acknowledges, as the runtime, the answer of a card it
+// asked: an answered card nobody acknowledged keeps counting against the
+// runtime's quota (review 180 B3). nil without a question store.
+func (rt *questionRuntime) agentRuntimeAck() func(context.Context, string) error {
+	if rt == nil || rt.svc == nil {
+		return nil
+	}
+	return func(ctx context.Context, id string) error {
+		res := rt.svc.Ack(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", id, nil)
+		if res.Code != http.StatusOK {
+			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+		}
+		return nil
 	}
 }

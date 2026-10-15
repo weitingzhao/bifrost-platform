@@ -134,6 +134,96 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange) (bool, error) {
 	return ok, err
 }
 
+// lockChanges takes, before any event of the tree's stream (review 180 A3),
+// every row the changes write or rest on: steps before tasks, each in id
+// order. The nodes they change, and the steps a task moves between, FOR
+// UPDATE; the parent a node is added under, and that parent's steps (which
+// prove an item in progress), FOR SHARE; then the tasks they move. It then
+// checks that every node is in the tree (review 180 A2). The standing check
+// and the changes read what these locks hold.
+func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChange) error {
+	modes := map[string]string{}
+	want := func(id, mode string) {
+		if id != "" && modes[id] != "UPDATE" {
+			modes[id] = mode
+		}
+	}
+	var moved, rebound []string
+	for _, c := range changes {
+		switch c.Op {
+		case "add_node":
+			want(c.Parent, "SHARE")
+			rows, err := tx.Query(ctx, `SELECT plan_node_id FROM agentrt.plan_node WHERE parent_plan_node_id = $1 AND node_kind = 'step'`, c.Parent)
+			if err != nil {
+				return err
+			}
+			steps, err := pgx.CollectRows(rows, pgx.RowTo[string])
+			if err != nil {
+				return err
+			}
+			for _, id := range steps {
+				want(id, "SHARE")
+			}
+		case "retitle", "set_done_rule":
+			want(c.Node, "UPDATE")
+		case "rebind_step":
+			want(c.Node, "UPDATE")
+			rebound = append(rebound, c.Node)
+		case "move_task":
+			want(c.Node, "UPDATE")
+			moved = append(moved, c.Task)
+			var from *string
+			err := tx.QueryRow(ctx, `SELECT plan_node_id FROM agentrt.task WHERE task_id = $1`, c.Task).Scan(&from)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return invalid("there is no task %s", c.Task)
+			}
+			if err != nil {
+				return err
+			}
+			if from != nil {
+				want(*from, "UPDATE")
+			}
+		}
+	}
+	ids := make([]string, 0, len(modes))
+	for id := range modes {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		var one int
+		err := tx.QueryRow(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR `+modes[id], id).Scan(&one)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return invalid("there is no node %s", id)
+		}
+		if err != nil {
+			return err
+		}
+		in, err := rootOf(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if in != root {
+			return invalid("node %s is in plan %s, not %s", id, in, root)
+		}
+	}
+	slices.Sort(moved)
+	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = ANY($1) OR plan_node_id = ANY($2) ORDER BY task_id FOR NO KEY UPDATE`,
+		moved, rebound)
+	return err
+}
+
+// rootOf is the root of a node's tree, along its parents.
+func rootOf(ctx context.Context, tx pgx.Tx, id string) (string, error) {
+	var root string
+	err := tx.QueryRow(ctx, `WITH RECURSIVE up AS (
+	    SELECT plan_node_id, parent_plan_node_id FROM agentrt.plan_node WHERE plan_node_id = $1
+	    UNION ALL
+	    SELECT p.plan_node_id, p.parent_plan_node_id FROM agentrt.plan_node p JOIN up ON p.plan_node_id = up.parent_plan_node_id)
+	  SELECT plan_node_id FROM up WHERE parent_plan_node_id IS NULL`, id).Scan(&root)
+	return root, err
+}
+
 // applyChanges writes the changes under one plan_changed event of the tree,
 // caused by the decision, and returns the ids of the nodes it added. Rows
 // are locked before the event's stream (review 149 B1). The database checks
@@ -159,23 +249,54 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 		if err != nil {
 			return nil, err
 		}
-		// Numbering (T30): one more than the largest sibling, counting the
-		// nodes this change adds to the same parent.
+		// Numbering (T30): the position is one past the largest sibling's;
+		// the number in the id and label is one past the largest number the
+		// siblings' labels carry after the parent's label, counting the nodes
+		// this proposal adds, skipping any id taken (review 180 B1).
 		var next int
 		if err = tx.QueryRow(ctx, `SELECT COALESCE(max(ordinal) + 1, 0) FROM agentrt.plan_node WHERE parent_plan_node_id = $1`, c.Parent).Scan(&next); err != nil {
 			return nil, err
-		}
-		for _, a := range adds {
-			if a.parent == c.Parent && a.ordinal >= next {
-				next = a.ordinal + 1
-			}
 		}
 		sep := "."
 		if c.Kind == "step" {
 			sep = "-"
 		}
-		label := parentLabel + sep + strconv.Itoa(next+1)
-		id := root + ":" + label
+		prefix := parentLabel + sep
+		rows, err := tx.Query(ctx, `SELECT label FROM agentrt.plan_node WHERE parent_plan_node_id = $1`, c.Parent)
+		if err != nil {
+			return nil, err
+		}
+		labels, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return nil, err
+		}
+		number := 0
+		for _, a := range adds {
+			if a.parent == c.Parent {
+				labels = append(labels, a.label)
+				if a.ordinal >= next {
+					next = a.ordinal + 1
+				}
+			}
+		}
+		for _, l := range labels {
+			if n, aerr := strconv.Atoi(strings.TrimPrefix(l, prefix)); aerr == nil && strings.HasPrefix(l, prefix) && n > number {
+				number = n
+			}
+		}
+		var label, id string
+		for {
+			number++
+			label = prefix + strconv.Itoa(number)
+			id = root + ":" + label
+			var taken bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1)`, id).Scan(&taken); err != nil {
+				return nil, err
+			}
+			if !taken && !slices.Contains(ids, id) {
+				break
+			}
+		}
 		adds = append(adds, newNode{id, c.Parent, c.Kind, label, c.Title, c.StepKind, c.MissionID, next})
 		ids = append(ids, id)
 	}
@@ -291,11 +412,37 @@ type Card struct {
 	Key, Title, Body string
 }
 
-// Options of a plan change's card; the controller applies the first.
+// Options of a plan change's card, as the Owner reads them, and the keys
+// the question store gives them in order, which an answer carries (review
+// 180 A1): the controller applies the change on the first.
 const (
-	CardApply  = "Apply the change"
-	CardRefuse = "Do not apply it"
+	CardApply     = "Apply the change"
+	CardRefuse    = "Do not apply it"
+	CardApplyKey  = "a"
+	CardRefuseKey = "b"
 )
+
+// The decision card's limits, the question store's (title and body, in JSON
+// encoded bytes; review 180 B2).
+const (
+	cardTitleLimit = 300
+	cardBodyLimit  = 3000
+)
+
+// encodedBytes is the length of s as a JSON string, without its quotes.
+func encodedBytes(s string) int {
+	b, _ := json.Marshal(s)
+	return len(b) - 2
+}
+
+// clip cuts s to at most limit encoded bytes on a character boundary.
+func clip(s string, limit int) string {
+	for encodedBytes(s) > limit {
+		r := []rune(s)
+		s = string(r[:len(r)-1])
+	}
+	return s
+}
 
 // ProposePlanChange records a proposal and, within the standing
 // authorization, its decision and the change; otherwise it tries the change
@@ -318,6 +465,9 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 			return nil, err
 		}
 		if err := lockTree(ctx, tx, root); err != nil {
+			return nil, err
+		}
+		if err := lockChanges(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}
 		var rootKind string
@@ -357,11 +507,18 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		if err := tryChanges(ctx, tx, root, changes); err != nil {
 			return nil, err
 		}
+		card := Card{Key: canonKey(w.Actor, key), Title: clip("Plan change to "+root+": "+firstLine(reason), cardTitleLimit),
+			Body: cardBody(root, reason, changes)}
+		if n := encodedBytes(card.Body); n > cardBodyLimit {
+			return nil, invalid("the reason and changes take %d bytes; a decision card holds %d: give a shorter reason or fewer changes at a time", n, cardBodyLimit)
+		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
-		q, err := ask(ctx, Card{Key: canonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
-			Body: cardBody(root, reason, changes)})
+		q, err := ask(ctx, card)
+		if errors.Is(err, ErrInvalid) {
+			return nil, err
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrAsk, err)
 		}
@@ -400,9 +557,6 @@ func canonKey(actor, key string) string {
 
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
-	if len(line) > 120 {
-		line = line[:120]
-	}
 	return line
 }
 
@@ -432,7 +586,44 @@ type pendingChange struct {
 // change that no longer fits when it is applied is decided failed, with
 // the database's reason. One that fails to be read does not stop the
 // others. It returns how many proposals it decided.
-func DecidePlanChanges(ctx context.Context, db DB, question func(context.Context, string) (Question, bool)) (int, error) {
+func DecidePlanChanges(ctx context.Context, db DB, question func(context.Context, string) (Question, bool), ack func(context.Context, string) error) (int, error) {
+	n, err := decidePending(ctx, db, question)
+	if ack == nil {
+		return n, err
+	}
+	return n, errors.Join(err, ackDecided(ctx, db, ack))
+}
+
+// ackDecided tells the question store the runtime has used the answer of
+// every card it decided in the store's protection window (review 180 B3):
+// an answered card nobody acknowledged counts against the runtime's quota
+// for a week. Acknowledging is idempotent, so a failed one is retried by the
+// next pass.
+func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) error) error {
+	var ids []string
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT DISTINCT body_json->>'question_id' FROM agentrt.event
+		  WHERE event_type = 'plan_change_decided' AND body_json->>'decision' IN ('applied','refused','failed')
+		    AND body_json ? 'question_id' AND at > clock_timestamp() - interval '7 days'`)
+		if err != nil {
+			return err
+		}
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, id := range ids {
+		if aerr := ack(ctx, id); aerr != nil {
+			errs = append(errs, fmt.Errorf("acknowledge %s: %w", id, aerr))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func decidePending(ctx context.Context, db DB, question func(context.Context, string) (Question, bool)) (int, error) {
 	decided := 0
 	var errs []error
 	// Every waiting proposal, a page at a time after a cursor, so ones still
@@ -488,7 +679,7 @@ func decideOne(ctx context.Context, db DB, p pendingChange, question func(contex
 	switch {
 	case !ok:
 		return false, nil
-	case q.Status == QuestionAnswered && q.Option == CardApply:
+	case q.Status == QuestionAnswered && q.Option == CardApplyKey:
 		return decide(ctx, db, p, "applied", "")
 	case q.Status == QuestionAnswered:
 		return decide(ctx, db, p, "refused", "")
@@ -506,6 +697,11 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		if err := lockTree(ctx, tx, p.root); err != nil {
 			return err
+		}
+		if decision == "applied" {
+			if err := lockChanges(ctx, tx, p.root, p.changes); err != nil {
+				return err
+			}
 		}
 		var done bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'plan_change_decided'
