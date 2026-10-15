@@ -95,7 +95,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 }
 
 // Tokens of the fixture auth file, by caller name.
-var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "viewer": "fixture-viewer-1",
+var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "fixture-agentd-h2", "agentd:h3": "fixture-agentd-h3", "viewer": "fixture-viewer-1",
 	"reporter": "fixture-reporter-1", "operator": "fixture-operator-1", "admin": "fixture-admin-1",
 	"seat:chief_of_staff": "fixture-seat-1", "seat:ghost": "fixture-seat-2"}
 
@@ -115,6 +115,9 @@ func server(t *testing.T, db store.DB) *httptest.Server {
   - name: agentd:h2
     role: agentd
     token: fixture-agentd-h2
+  - name: agentd:h3
+    role: agentd
+    token: fixture-agentd-h3
   - name: viewer
     role: viewer
     token: fixture-viewer-1

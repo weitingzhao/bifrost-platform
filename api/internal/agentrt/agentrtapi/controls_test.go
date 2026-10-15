@@ -254,17 +254,27 @@ func legacy(t *testing.T, pool *pgxpool.Pool, stmts ...string) {
 }
 
 // Review 176 part 2 B1: whoami says what a write would find, and writes
-// nothing.
+// nothing at all (review 177 B2: no registration either); an upload then
+// finds the same.
 func TestWhoamiTellsWhyNot(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
 	legacy(t, pool, `INSERT INTO agentrt.actor (actor_id, actor_kind, display_name, retired_at) VALUES ('thread:old', 'thread', 'old', now())`,
 		`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name) VALUES ('thread:odd', 'seat', 'odd')`)
-	others := `SELECT count(*) FROM agentrt.event WHERE event_type <> 'artifact_put' AND event_type <> 'actor_registered'`
-	var before, after int
-	must(t, pool.QueryRow(ctx, others).Scan(&before))
-	for sess, want := range map[string]string{"old": "retired", "odd": "is a seat, not a thread", "fresh": ""} {
+	footprint := func() string {
+		var fp string
+		must(t, pool.QueryRow(ctx, `SELECT concat_ws(' ', (SELECT count(*) FROM agentrt.actor), (SELECT count(*) FROM agentrt.event),
+		  (SELECT string_agg(event_stream_id || '=' || last_seq, ',' ORDER BY event_stream_id) FROM agentrt.event_stream),
+		  (SELECT count(*) FROM agentrt.outbox), (SELECT count(*) FROM agentrt.idempotency_key))`).Scan(&fp))
+		return fp
+	}
+	cases := map[string]string{"old": "retired", "odd": "is a seat, not a thread", "fresh": ""}
+	for sess, want := range cases {
+		before := footprint()
 		_, out := call(t, s, "operator", "GET", "whoami", nil, session, sess)
+		if after := footprint(); after != before {
+			t.Fatalf("whoami for %s wrote: %s -> %s", sess, before, after)
+		}
 		problem, _ := out["actor_error"].(string)
 		if (want == "") != (problem == "") || !strings.Contains(problem, want) {
 			t.Errorf("%s: %v", sess, out)
@@ -272,15 +282,18 @@ func TestWhoamiTellsWhyNot(t *testing.T) {
 		if want == "" && out["actor_kind"] != "thread (registered on its first write)" {
 			t.Errorf("%s: %v", sess, out)
 		}
+	}
+	var fresh int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.actor WHERE actor_id = 'thread:fresh'`).Scan(&fresh))
+	if fresh != 0 {
+		t.Fatal("whoami registered a thread")
+	}
+	for sess, want := range cases {
 		body := []byte("# " + sess + "\n")
 		code, _ := call(t, s, "operator", "PUT", "artifacts/"+artifactID(body), body, "X-Artifact-Kind", "report", session, sess)
 		if (want == "") != (code == http.StatusOK) {
-			t.Errorf("%s: whoami and an upload disagree: %v, %d", sess, problem, code)
+			t.Errorf("%s: whoami said %q, an upload answered %d", sess, want, code)
 		}
-	}
-	must(t, pool.QueryRow(ctx, others).Scan(&after))
-	if after != before {
-		t.Fatalf("whoami wrote %d events", after-before)
 	}
 }
 
@@ -311,11 +324,16 @@ func TestDuplicateUploadChecksWriter(t *testing.T) {
 	}
 }
 
-// Review 176 part 2 B2: what each control does to a claim and to a running
-// attempt's heartbeat. A stop ends running work and stops new work; a pause
-// and a drain only stop new work.
+// Review 176 part 2 B2, narrowed by review 177 B1: what each control does
+// to a claim (a host under it, or any host for the wider scopes, takes no
+// new work; another host still does) and to the heartbeat of a started
+// attempt (only a stop tells it to stop; agentd ending the work on that
+// signal is agentd's test, TestStopAndHardLimit).
 func TestControlMatrix(t *testing.T) {
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
+	claimOf := func(host string) map[string]any {
+		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
+	}
 	for _, c := range []struct {
 		scope, kind string
 		stopsWork   bool
@@ -328,42 +346,79 @@ func TestControlMatrix(t *testing.T) {
 		t.Run(c.scope+"-"+c.kind, func(t *testing.T) {
 			pool, task := world(t)
 			s := server(t, pool)
-			claimBody := map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}}
-			code, claim := call(t, s, "agentd:h1", "POST", "claim", claimBody)
+			for _, h := range []string{"h2", "h3"} {
+				must(t, store.RegisterHost(ctx, pool, "owner", h, "dev"))
+			}
+			code, claim := call(t, s, "agentd:h1", "POST", "claim", claimOf("h1"))
 			if code != http.StatusOK {
 				t.Fatalf("claim: %d %v", code, claim)
 			}
-			ref := map[string]string{"global": "", "mission": "M-1", "task": task, "host": "h1"}[c.scope]
-			// A second ready task, of the same mission and step, for the
-			// claim under the control.
+			attempt := claim["attempt_id"].(string)
+			fence := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"], "model_provider": "cursor-mix"}
+			if got, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/start", fence); got != http.StatusOK {
+				t.Fatalf("start: %d %v", got, out)
+			}
 			second := readyTask(t, pool)
-			if c.scope == "task" {
-				ref = second
-			}
-			if got, out := call(t, s, "operator", "POST", "controls", map[string]any{"idempotency_key": "k", "scope": c.scope,
-				"scope_ref": ref, "kind": c.kind, "reason": "test"}, session, "s1"); got != http.StatusOK {
-				t.Fatalf("control: %d %v", got, out)
-			}
-			// A host may run one attempt; a second host claims under the control.
-			must(t, store.RegisterHost(ctx, pool, "owner", "h2", "dev"))
-			code, _ = call(t, s, "agentd:h2", "POST", "claim", map[string]any{"host_id": "h2", "free_slots": 1, "tools": []any{cursor}})
-			blocked := c.scope != "host"
-			if blocked != (code == http.StatusNoContent) {
-				t.Errorf("a claim under a %s %s: %d", c.scope, c.kind, code)
-			}
-			if c.scope == "task" {
-				ref = task
-				if got, out := call(t, s, "operator", "POST", "controls", map[string]any{"idempotency_key": "k2", "scope": c.scope,
+			set := func(key, ref string) {
+				t.Helper()
+				if got, out := call(t, s, "operator", "POST", "controls", map[string]any{"idempotency_key": key, "scope": c.scope,
 					"scope_ref": ref, "kind": c.kind, "reason": "test"}, session, "s1"); got != http.StatusOK {
-					t.Fatalf("control on the running task: %d %v", got, out)
+					t.Fatalf("control on %s: %d %v", ref, got, out)
 				}
 			}
-			_, beat := call(t, s, "agentd:h1", "POST", "attempts/"+claim["attempt_id"].(string)+"/heartbeat",
+			// Under the control: the running attempt's own scope, and the
+			// one that would hand out the second task.
+			switch c.scope {
+			case "global":
+				set("k1", "")
+			case "mission":
+				set("k1", "M-1")
+			case "task":
+				set("k1", task)
+				set("k2", second)
+			case "host":
+				set("k1", "h1")
+				set("k2", "h2")
+			}
+			if got, _ := call(t, s, "agentd:h2", "POST", "claim", claimOf("h2")); got != http.StatusNoContent {
+				t.Errorf("a claim under a %s %s: %d", c.scope, c.kind, got)
+			}
+			if c.scope == "host" {
+				if got, out := call(t, s, "agentd:h3", "POST", "claim", claimOf("h3")); got != http.StatusOK || out["task_id"] != second {
+					t.Errorf("a host the %s does not name: %d %v", c.kind, got, out)
+				}
+			}
+			got, beat := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/heartbeat",
 				map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]})
-			if beat["stop"] != c.stopsWork {
-				t.Errorf("the running attempt's heartbeat under a %s %s: %v", c.scope, c.kind, beat)
+			if got != http.StatusOK || beat["stop"] != c.stopsWork {
+				t.Errorf("the started attempt's heartbeat under a %s %s: %d %v", c.scope, c.kind, got, beat)
 			}
 		})
+	}
+}
+
+// Review 177 A1: a stop the Owner lifted, asked for again with a new key,
+// is a new stop in force; a retry with the old key is answered with the old
+// (lifted) one.
+func TestStopAgainAfterLift(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	stop := map[string]any{"idempotency_key": "stop-1", "scope": "global", "kind": "stop", "reason": "look"}
+	_, first := call(t, s, "operator", "POST", "controls", stop, session, "s1")
+	if code, _ := call(t, s, "admin", "DELETE", "controls/"+first["control_id"].(string), nil); code != http.StatusOK {
+		t.Fatalf("lift: %d", code)
+	}
+	if _, again := call(t, s, "operator", "POST", "controls", stop, session, "s1"); again["control_id"] != first["control_id"] {
+		t.Fatalf("a retry of the first stop: %v", again)
+	}
+	stop["idempotency_key"] = "stop-2"
+	_, second := call(t, s, "operator", "POST", "controls", stop, session, "s1")
+	if second["control_id"] == first["control_id"] {
+		t.Fatalf("a new stop answered with the old: %v", second)
+	}
+	_, inForce := call(t, s, "viewer", "GET", "controls", nil)
+	if list := inForce["controls"].([]any); len(list) != 1 || list[0].(map[string]any)["control_id"] != second["control_id"] {
+		t.Fatalf("in force: %v", inForce)
 	}
 }
 

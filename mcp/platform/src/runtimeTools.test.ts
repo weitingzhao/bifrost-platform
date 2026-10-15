@@ -6,6 +6,7 @@ import {
   RUNTIME_DATA_NOTE,
   RUNTIME_SESSION_REFUSAL,
   RUNTIME_WRITES_OFF,
+  STOP_KEY_RULE,
   getArtifact,
   getMission,
   getPlan,
@@ -119,15 +120,16 @@ describe('agent runtime writes', () => {
     assert.equal(calls[1].contentType, 'application/json')
   })
 
-  it('request_stop sends the control with a key', async () => {
+  it('request_stop sends the control with the caller\'s key, and none without one', async () => {
     const { d, calls } = deps()
-    await requestStop({ scope: 'global', kind: 'pause', reason: 'look first' }, d)
-    await requestStop({ scope: 'task', scope_ref: 't_x', kind: 'stop', reason: 'wrong', idempotency_key: 'k' }, d)
+    const missing = await requestStop({ scope: 'global', kind: 'pause', reason: 'look first', idempotency_key: '' }, d)
+    assert.deepEqual(missing, { error: 'idempotency_key is required', hint: STOP_KEY_RULE })
+    assert.equal(calls.length, 0)
+    await requestStop({ scope: 'task', scope_ref: 't_x', kind: 'stop', reason: 'wrong', idempotency_key: 'stop-1' }, d)
+    await requestStop({ scope: 'task', scope_ref: 't_x', kind: 'stop', reason: 'wrong', idempotency_key: 'stop-2' }, d)
     assert.equal(calls[0].path, '/api/v1/agentrt/controls')
-    const first = calls[0].body as Record<string, string>
-    assert.deepEqual({ ...first, idempotency_key: '' }, { scope: 'global', scope_ref: '', kind: 'pause', reason: 'look first', idempotency_key: '' })
-    assert.equal(first.idempotency_key, runtimeKey('local_s1', '/api/v1/agentrt/controls', { scope: 'global', scope_ref: '', kind: 'pause', reason: 'look first' }))
-    assert.equal((calls[1].body as Record<string, string>).idempotency_key, 'k')
+    assert.deepEqual(calls[0].body, { scope: 'task', scope_ref: 't_x', kind: 'stop', reason: 'wrong', idempotency_key: 'stop-1' })
+    assert.equal((calls[1].body as Record<string, string>).idempotency_key, 'stop-2', 'the same stop again is another stop')
   })
 
   for (const [name, over, hint] of [
@@ -139,7 +141,7 @@ describe('agent runtime writes', () => {
       for (const got of [
         await proposeTasks({ mission_id: 'M-1', tasks: [task] }, d),
         await putArtifact({ kind: 'task_spec', content: 'x' }, d),
-        await requestStop({ scope: 'global', kind: 'stop', reason: 'x' }, d),
+        await requestStop({ scope: 'global', kind: 'stop', reason: 'x', idempotency_key: 'k' }, d),
       ]) {
         assert.equal((got as { hint: string }).hint, hint)
       }

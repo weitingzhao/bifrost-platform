@@ -147,14 +147,21 @@ export async function getArtifact(artifactId: string, d: RuntimeDeps = defaultRu
   return { artifact_id: artifactId, media_type: got.media_type, content: got.text, note: RUNTIME_DATA_NOTE }
 }
 
-/** Ask for a stop or pause: anyone may set one, only the Owner lifts it. */
+export const STOP_KEY_RULE =
+  'idempotency_key names this one stop: reuse it only to retry the same request; a new stop (for example after the Owner lifted the last one) needs a new key, or the platform answers with the old stop.'
+
+/**
+ * Ask for a stop or pause: anyone may set one, only the Owner lifts it. The
+ * key is the caller's, never derived: two stops with the same arguments,
+ * one after the Owner lifted the other, are two stops (review 177 A1).
+ */
 export async function requestStop(
-  input: { scope: string; scope_ref?: string; kind: string; reason: string; idempotency_key?: string },
+  input: { scope: string; scope_ref?: string; kind: string; reason: string; idempotency_key: string },
   d: RuntimeDeps = defaultRuntimeDeps(),
 ): Promise<unknown> {
   const refused = refuseWrite(d)
   if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: STOP_KEY_RULE }
   const request = { scope: input.scope, scope_ref: input.scope_ref ?? '', kind: input.kind, reason: input.reason }
-  const key = input.idempotency_key || runtimeKey(d.session(), `${BASE}/controls`, request)
-  return d.send('POST', `${BASE}/controls`, { ...request, idempotency_key: key })
+  return d.send('POST', `${BASE}/controls`, { ...request, idempotency_key: input.idempotency_key })
 }

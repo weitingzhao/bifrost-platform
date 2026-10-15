@@ -26,6 +26,7 @@ import { registerLocalBridge } from './registerLocal.js'
 import { focusAllowList } from './focusBridges.js'
 import {
   RUNTIME_DATA_NOTE,
+  STOP_KEY_RULE,
   getArtifact,
   getMission,
   getPlan,
@@ -708,13 +709,13 @@ reg(
 
 reg(
   'request_stop',
-  'Stop or pause agent runtime work: global, a mission (M-n), a task (t_…) or a host. Anyone may set one; only the Owner lifts it.',
+  `Stop or pause agent runtime work: global, a mission (M-n), a task (t_…) or a host. Anyone may set one; only the Owner lifts it. ${STOP_KEY_RULE}`,
   {
     scope: z.enum(['global', 'mission', 'task', 'host']),
     scope_ref: z.string().optional().describe('The mission, task or host; none for global'),
     kind: z.enum(['stop', 'pause']),
     reason: z.string(),
-    idempotency_key: z.string().optional(),
+    idempotency_key: z.string().min(1).describe('One key per stop; see the description'),
   },
   async (input) => jsonResult(await requestStop(input)),
 )
