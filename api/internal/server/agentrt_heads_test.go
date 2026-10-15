@@ -197,6 +197,8 @@ func TestGiteaBranchHeadRefusesAMissingBranch(t *testing.T) {
 	for name, body := range map[string]string{
 		"other branches":   advert(otherSHA+" refs/heads/main", otherSHA+" refs/heads/agent/T-7/a2"),
 		"empty repository": advert(),
+		// git before 2.41 advertises an empty repository with no refs at all.
+		"empty repository, older git": pkt("# service=git-upload-pack\n") + "0000" + "0000",
 		// a1 is one branch: a10 next to it is not it.
 		"a longer name": advert(headSHA + " refs/heads/agent/T-7/a10"),
 		"a tag":         advert(headSHA + " refs/tags/agent/T-7/a1"),
@@ -297,10 +299,6 @@ func TestGiteaBranchHeadNeedsAWholeWellFormedAdvertisement(t *testing.T) {
 			"the empty line, then refs": {adverts: agentsRepo(advert(zeroSHA+" capabilities^{}", branch))},
 			"not under refs/":           {adverts: agentsRepo(advert(branch, otherSHA+" heads/x"))},
 			"the empty line late":       {adverts: agentsRepo(advert(branch, zeroSHA+" capabilities^{}"))},
-			"no refs at all":            {adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + "0000")},
-		}
-		if !there {
-			delete(cases, "no refs at all") // the same answer either way: run once
 		}
 		for name, f := range cases {
 			t.Run(fmt.Sprintf("%s (branch there: %v)", name, there), func(t *testing.T) {

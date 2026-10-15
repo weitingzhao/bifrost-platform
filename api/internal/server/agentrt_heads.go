@@ -146,9 +146,9 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 			return "", false, err
 		}
 		if flush {
-			if n == 0 {
-				return "", false, errors.New("no refs, not even an empty repository's")
-			}
+			// No refs at all is an empty repository as git before 2.41 (the
+			// CI image's 2.39) advertises it; later git sends the one
+			// capabilities^{} line instead.
 			if br.Len() > 0 {
 				return "", false, errors.New("more after the last flush")
 			}
