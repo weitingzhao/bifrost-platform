@@ -40,20 +40,24 @@ type StoredRule struct {
 	SignedBy string
 }
 
+// errBadRule is a stored rule that does not read: the runtime acts as if
+// there were none.
+var errBadRule = errors.New("store: a stored rule does not read")
+
 // readRule parses a stored rule's text and checks the stored body_json is the
 // canonical JSON of what the text says: a row whose two disagree is no rule.
 func readRule(id string, version int, text string, body []byte, signedBy *string) (*StoredRule, error) {
 	r, err := rules.Parse([]byte(text))
 	if err != nil {
-		return nil, fmt.Errorf("store: rule %s v%d does not parse: %w", id, version, err)
+		return nil, fmt.Errorf("%w: rule %s v%d does not parse: %v", errBadRule, id, version, err)
 	}
 	want, err := r.BodyJSON()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: rule %s v%d: %v", errBadRule, id, version, err)
 	}
 	got, err := canon.Marshal(body)
 	if err != nil || !bytes.Equal(got, want) || r.ID != id || r.Version != version {
-		return nil, fmt.Errorf("store: rule %s v%d: body_json is not what its text says", id, version)
+		return nil, fmt.Errorf("%w: rule %s v%d: body_json is not what its text says", errBadRule, id, version)
 	}
 	s := &StoredRule{Rule: r}
 	if signedBy != nil {

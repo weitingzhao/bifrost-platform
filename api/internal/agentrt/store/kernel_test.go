@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -36,6 +37,8 @@ func newKernelWorld(t *testing.T) *world {
 	for i := 1; i <= 8; i++ {
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", fmt.Sprintf("h%d", i), "dev"))
 	}
+	_, err := w.rt.Exec(ctx, agentrttest.OneAttemptPerHost)
+	ok(t, err)
 	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, store.Tool{Executor: "exec:claude", Provider: "other"},
 		store.Tool{Executor: "exec:codex", Provider: "other"}, store.Tool{Executor: "exec:codex", Provider: "cursor-mix"},
 		store.Tool{Executor: "exec:claude", Provider: "cursor-mix"})

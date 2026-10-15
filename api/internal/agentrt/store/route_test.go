@@ -6,6 +6,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -17,6 +18,8 @@ func newRoutedWorld(t *testing.T) *world {
 	for i := 1; i <= 4; i++ {
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", fmt.Sprintf("h%d", i), "dev"))
 	}
+	_, err := w.rt.Exec(ctx, agentrttest.OneAttemptPerHost)
+	ok(t, err)
 	return w
 }
 

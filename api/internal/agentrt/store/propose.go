@@ -11,6 +11,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Proposals (v5 §5.2 「路由草图」): the missions and tasks that threads and
@@ -202,10 +204,10 @@ func (p MissionProposal) request() map[string]any {
 		"max_action": p.MaxAction, "max_attempts": p.MaxAttempts, "max_wall_hours": p.MaxWallHours}
 }
 
-// EnvelopePending is why a proposed mission stays proposed: no signed
-// standing envelope says it may start by itself (v5 §5.2: 落在
-// standing-envelope 内自动 active; the rule format waits on the Owner).
-const EnvelopePending = "no signed standing-envelope rule; the mission waits as proposed"
+// EnvelopePending is why a proposed mission stays proposed when no signed
+// standing envelope is in force for its tenant (v5 §5.2: 落在
+// standing-envelope 内自动 active).
+const EnvelopePending = "no standing-envelope rule is in force: the mission waits for the Owner"
 
 // ProposeMission records mission_proposed with a number the platform gives
 // (M-<n>, one more than the largest there is, under a lock two proposals
@@ -241,12 +243,38 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 		}
 		id := fmt.Sprintf("M-%d", n)
 		hook("numbered", id)
+		// A proposal stating no budget takes the tenant's budget rule's; one
+		// inside the standing envelope in force starts at once (proposal §2).
+		if p.MaxAttempts == 0 && p.MaxWallHours == 0 {
+			b, err := inForce(ctx, tx, rules.KindBudget+":"+p.Tenant)
+			if err != nil {
+				return nil, err
+			}
+			if b != nil {
+				p.MaxAttempts, p.MaxWallHours = b.Budget.Mission.MaxAttempts, b.Budget.Mission.MaxWallHours
+			}
+		}
+		env, err := inForce(ctx, tx, rules.KindEnvelope+":"+p.Tenant)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 			Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, MaxAction: p.MaxAction,
 			MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
 			return nil, err
 		}
-		return map[string]any{"mission_id": id, "state": "proposed", "waiting": EnvelopePending}, nil
+		inside, why := envelopeFit(env, p)
+		if !inside {
+			return map[string]any{"mission_id": id, "state": "proposed", "waiting": why}, nil
+		}
+		if err := MoveMission(ctx, tx, "controller", id, "active", fmt.Sprintf("inside %s v%d", env.ID, env.Version)); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE agentrt.mission SET envelope_rule_id = $2, envelope_rule_version = $3 WHERE mission_id = $1`,
+			id, env.ID, env.Version); err != nil {
+			return nil, err
+		}
+		return map[string]any{"mission_id": id, "state": "active", "envelope": map[string]any{"rule_id": env.ID, "rule_version": env.Version}}, nil
 	})
 }
 

@@ -35,6 +35,8 @@ func setup(t *testing.T) *pgxpool.Pool {
 	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, err)
 	pool := db.Pool(t, db.Runtime)
+	_, err = pool.Exec(ctx, agentrttest.OneAttemptPerHost)
+	must(t, err)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 		_, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-1", Title: "m", Goal: "g", Deadline: time.Now().Add(time.Hour)})
 		return err

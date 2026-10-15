@@ -175,3 +175,15 @@ func (db *DB) Pool(t testing.TB, dsn string) *pgxpool.Pool {
 	t.Cleanup(p.Close)
 	return p
 }
+
+// OneAttemptPerHost inserts the concurrency rule the Owner signs (one live
+// attempt a host): without a concurrency rule in force the runtime
+// dispatches nothing. A test that claims runs it as the runtime role; its
+// text and body_json agree (store's TestFixtureRule reads it back).
+const OneAttemptPerHost = `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
+    effective_at, expires_at)
+  VALUES ('concurrency', 1,
+    '{"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","per_host":1,"rule_id":"concurrency","rule_version":1}',
+    E'rule_id: concurrency\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\nper_host: 1\n',
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
+  ON CONFLICT DO NOTHING`

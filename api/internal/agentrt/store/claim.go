@@ -48,6 +48,7 @@ type claimOpts struct {
 
 type candidate struct {
 	id, mission, role, spec, subject, base, repo, effect string
+	envelope                                             string // the standing envelope its mission started under
 	core                                                 bool
 	needs, route                                         []string
 	limitS                                               int
@@ -90,6 +91,11 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock_shared(742105), pg_advisory_xact_lock_shared($1)`, capabilityLock); err != nil {
 			return err
 		}
+		// The concurrency rule caps the host's slots; without one nothing is
+		// dispatched (proposal §2).
+		if slots, err = perHost(ctx, tx, slots); err != nil || slots == 0 {
+			return err
+		}
 		var live int
 		if err = tx.QueryRow(ctx, `SELECT count(*) FROM agentrt.attempt WHERE host_id = $1 AND state IN ('leased','running','stale')`,
 			r.HostID).Scan(&live); err != nil || live >= slots {
@@ -106,13 +112,27 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 			return err
 		}
 		var after *candidate
+		envs := envelopes{}
 		for {
 			cands, err := candidates(ctx, tx, o.effects, after)
 			if err != nil {
 				return err
 			}
 			for i := range cands {
-				if claim, err = tryCandidate(ctx, tx, r, cp, cands[i], o.ttl); err != nil || claim != nil {
+				// A mission that started inside a standing envelope is worked
+				// only on its hosts, by its executors, while it is in force.
+				req := r
+				if cands[i].envelope != "" {
+					env, eerr := envs.get(ctx, tx, cands[i].envelope)
+					if eerr != nil {
+						return eerr
+					}
+					var fits bool
+					if req, fits = envelopeTools(env, r); !fits {
+						continue
+					}
+				}
+				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl); err != nil || claim != nil {
 					return err
 				}
 			}
@@ -147,14 +167,14 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 const candidateColumns = `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
 	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
 	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)),
-	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at
+	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, '')
 	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id`
 
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
 	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.route,
-		&c.limitS, &c.created)
+		&c.limitS, &c.created, &c.envelope)
 	return c, err
 }
 

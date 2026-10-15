@@ -58,6 +58,8 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		tx(func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err })
 	}
 	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
+	_, ferr := pool.Exec(ctx, agentrttest.OneAttemptPerHost)
+	must(t, ferr)
 	tx(func(tx pgx.Tx) error {
 		if err := store.LockCapabilities(ctx, tx); err != nil {
 			return err
