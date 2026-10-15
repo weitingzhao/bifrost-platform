@@ -102,6 +102,13 @@ var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "f
 // heads records the branch heads the API asked for, as repo|ref.
 var heads []string
 
+// cards records the decision cards the API asked the Owner; askFails makes
+// the next asks fail, as a full question store would.
+var (
+	cards    []store.Card
+	askFails bool
+)
+
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin and two seat tokens (one registered).
@@ -143,6 +150,13 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 		Head: func(_ context.Context, repo, ref string) (string, error) {
 			heads = append(heads, repo+"|"+ref)
 			return commitA, nil
+		},
+		Ask: func(_ context.Context, c store.Card) (string, error) {
+			if askFails {
+				return "", fmt.Errorf("store full")
+			}
+			cards = append(cards, c)
+			return fmt.Sprintf("q_%d", len(cards)), nil
 		}}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })

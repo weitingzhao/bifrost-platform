@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // The plan, read (v5 §5.2: GET /plan?root=R2, GET /plan/{plan_node_id}: the
@@ -61,4 +63,32 @@ func (a *API) getPlanNode(w http.ResponseWriter, r *http.Request) {
 	        'actor_id', e.actor_id, 'at', e.at, 'body', e.body_json) ORDER BY e.event_id)
 	      FROM (SELECT * FROM agentrt.event WHERE plan_node_id = n.plan_node_id ORDER BY event_id DESC LIMIT 50) e), '[]'::jsonb))
 	  FROM agentrt.plan_node n WHERE n.plan_node_id = $1`, chi.URLParam(r, "id"))
+}
+
+type planProposalBody struct {
+	IdempotencyKey string             `json:"idempotency_key"`
+	Root           string             `json:"root"`
+	Reason         string             `json:"reason"`
+	Changes        []store.PlanChange `json:"changes"`
+}
+
+// proposePlanChange is POST /plan/proposals: plan_change_proposed; within
+// the standing authorization decided and applied at once, otherwise tried,
+// rolled back, and put to the Owner as a decision card.
+func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
+	var b planProposalBody
+	if !decode(w, r, &b) {
+		return
+	}
+	who, err := writer(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	out, err := store.ProposePlanChange(r.Context(), a.DB, who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, a.Ask)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }

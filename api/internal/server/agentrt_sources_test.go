@@ -363,3 +363,61 @@ func TestQuestionReaderOnTheStore(t *testing.T) {
 		t.Fatal("no question store gave a reader")
 	}
 }
+
+// Review 180 A1, B2, B3: the runtime's decision card on the real question
+// store. An answer carries the option's key, which is what the runtime
+// compares; the runtime acknowledges as the requester; a card the store
+// cannot take for its size is refused as invalid, not as unreachable.
+func TestPlanChangeCardOnTheStore(t *testing.T) {
+	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	ctx := context.Background()
+	ask, read, ack := rt.agentRuntimeAsk(), rt.agentRuntimeQuestion(), rt.agentRuntimeAck()
+	id, err := ask(ctx, store.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := ask(ctx, store.Card{Key: strings.Repeat("ab", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"})
+	if err != nil || again != id {
+		t.Fatalf("a retry of the card: %s %v; want %s", again, err, id)
+	}
+	if err = ack(ctx, id); err == nil {
+		t.Fatal("acknowledged a card nobody answered")
+	}
+	raw, _ := json.Marshal(map[string]any{"option": "a", "channel": "console"})
+	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
+		t.Fatalf("answer = %d %v", res.Code, res.Body)
+	}
+	q, ok := read(ctx, id)
+	if !ok || q.Status != store.QuestionAnswered || q.Option != store.CardApplyKey {
+		t.Fatalf("the answer reads %+v; want option %q", q, store.CardApplyKey)
+	}
+	for range 2 {
+		if err = ack(ctx, id); err != nil {
+			t.Fatalf("acknowledge: %v", err)
+		}
+	}
+	got, ok, err := rt.svc.Lookup(id)
+	if err != nil || !ok || got.Answer == nil || got.Answer.Read == nil || got.Answer.Read.Session != agentRuntimeRequester {
+		t.Fatalf("the read receipt: %+v %v %v", got.Answer, ok, err)
+	}
+	// Review 182 B2: the store's own limits, counted its way (JSON with the
+	// quotes, HTML not escaped): a body of 2998 characters fits, 2999 does
+	// not; a title is cut to fit, whatever it holds.
+	if _, err = ask(ctx, store.Card{Key: strings.Repeat("cd", 16), Title: "Plan change", Body: strings.Repeat("<", 2998)}); err != nil {
+		t.Fatalf("a body of 3000 encoded bytes: %v", err)
+	}
+	_, err = ask(ctx, store.Card{Key: strings.Repeat("ef", 16), Title: "Plan change", Body: strings.Repeat("x", 2999)})
+	if !errors.Is(err, store.ErrInvalid) {
+		t.Fatalf("a body of 3001 encoded bytes: %v", err)
+	}
+	// A fresh store for the titles: the runtime may have three cards open.
+	fresh := newQuestionRuntime(filepath.Join(t.TempDir(), "titles"), nil).agentRuntimeAsk()
+	for i, title := range []string{strings.Repeat("&", 298), strings.Repeat("a", 299), strings.Repeat("计", 150) + "\u0007tail"} {
+		if _, err = fresh(ctx, store.Card{Key: strings.Repeat(string(rune('g'+i)), 32), Title: title, Body: "b"}); err != nil {
+			t.Errorf("title %d: %v", i, err)
+		}
+	}
+	if err = ack(ctx, "q_not_there"); !errors.Is(err, store.ErrQuestionGone) {
+		t.Errorf("acknowledging a card the store dropped: %v", err)
+	}
+}

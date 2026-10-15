@@ -102,6 +102,11 @@ func clipEncoded(s string, n int) string {
 	return string(r[:lo])
 }
 
+// ClipTitle cleans and cuts s to what a question's title holds, by the same
+// rule the store checks it with: for a caller that builds titles from text
+// it does not control (the agent runtime's decision cards).
+func ClipTitle(s string) string { return clipEncoded(s, titleLimit) }
+
 func clipPrincipal(s string) string {
 	return clipEncoded(s, principalLimit)
 }

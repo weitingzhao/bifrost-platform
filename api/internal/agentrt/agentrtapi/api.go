@@ -35,6 +35,9 @@ type API struct {
 	// 25 seconds, as the approvals executor); ClaimPoll how often it looks.
 	ClaimWait, ClaimPoll time.Duration
 	Logf                 func(format string, args ...any)
+	// Ask creates the Owner's decision card for a plan change outside the
+	// standing authorization; nil answers such a proposal 503.
+	Ask store.Ask
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -90,6 +93,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/events", a.getEvents)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
+		r.With(propose, cfg).Post("/plan/proposals", a.proposePlanChange)
 		r.With(read, cfg).Get("/controls", a.listControls)
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
 		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
@@ -138,6 +142,8 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
+	case errors.Is(err, store.ErrAsk):
+		writeError(w, http.StatusServiceUnavailable, "owner_unreachable", err.Error())
 	case errors.Is(err, store.ErrBusy):
 		w.Header().Set("Retry-After", "1")
 		writeError(w, http.StatusServiceUnavailable, "busy", err.Error())

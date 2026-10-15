@@ -363,3 +363,33 @@ func TestAcceptChecksSalvagedResults(t *testing.T) {
 		t.Fatalf("a second pass moved %d (%v)", moved, err)
 	}
 }
+
+// The loops decide plan changes: once the Owner answers a card with the
+// first option, the change lands.
+func TestStartDecidesPlanChanges(t *testing.T) {
+	pool := setup(t)
+	out, err := store.ProposePlanChange(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1", "R2", "a new item",
+		[]store.PlanChange{{Op: "add_node", Parent: "R2", Kind: "item", Title: "second"}},
+		func(context.Context, store.Card) (string, error) { return "q_9", nil })
+	must(t, err)
+	if out["question_id"] != "q_9" {
+		t.Fatalf("proposal: %v", out)
+	}
+	w := &world{questions: map[string]store.Question{"q_9": {ID: "q_9", Status: store.QuestionAnswered, Option: store.CardApplyKey,
+		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
+	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
+	run, cancel := context.WithCancel(ctx)
+	wait := c.Start(run)
+	defer wait()
+	defer cancel()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var n int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.plan_node WHERE plan_node_id = 'R2:2.1'`).Scan(&n))
+		if n == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the loops did not apply the answered change")
+		}
+	}
+}
