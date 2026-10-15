@@ -75,6 +75,12 @@ func init() {
 		"POST /api/v1/agentrt/hosts/{id}/drain",
 		"POST /api/v1/agentrt/plan/proposals",
 	)
+	exempt("agent runtime rules (design v5 §5.2): a rule takes effect only with the Owner's signature over its exact text, checked against the compiled-in key in the runtime's own namespace, or as a tightening the store proves by comparing it with the version before; check and proposals start nothing; runtime state the store writes with its events in one transaction; not a cluster write",
+		"POST /api/v1/agentrt/rules/{rule_id}/check",
+		"POST /api/v1/agentrt/rules/{rule_id}/proposals",
+		"POST /api/v1/agentrt/rules/{rule_id}/sign",
+		"POST /api/v1/agentrt/rules/{rule_id}/tighten",
+	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",

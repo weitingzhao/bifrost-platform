@@ -108,6 +108,14 @@ func SignerKeys(allowedSigners string) []ssh.PublicKey {
 	return out
 }
 
+// VerifyAnchored checks an armored signature over message in namespace and
+// that the key that made it has the fingerprint anchor (the compiled-in
+// OwnerKeyFingerprint in production). An empty anchor verifies nothing. The
+// agent runtime's rules use it with their own namespace (design v5 §5.2).
+func VerifyAnchored(armored, message []byte, namespace, anchor string) error {
+	return verifyAnchored(armored, message, namespace, anchor)
+}
+
 // verifyAnchored checks the signature and that the key that made it has the
 // compiled-in fingerprint.
 func verifyAnchored(armored, message []byte, namespace, anchor string) error {

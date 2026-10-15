@@ -15,6 +15,7 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 )
 
 // agentrtDatabase is the state database of each environment (design v5
@@ -47,7 +48,7 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk()}}
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint}}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {

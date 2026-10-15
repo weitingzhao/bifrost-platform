@@ -38,6 +38,10 @@ type API struct {
 	// Ask creates the Owner's decision card for a plan change outside the
 	// standing authorization; nil answers such a proposal 503.
 	Ask store.Ask
+	// Anchor is the fingerprint of the Owner's signing key a signed rule must
+	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every
+	// signed rule.
+	Anchor string
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -45,9 +49,11 @@ const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
 // whoami both read them. agentd, whose token is bound to one host, claims,
 // keeps its leases and hands results over; threads and seats (reporter and
-// operator tokens) and the Owner (admin) propose missions and tasks; they and
-// agentd upload artifacts; anyone authenticated reads and may stop, pause or
-// drain; operators and the Owner drain hosts; only the Owner lifts a control.
+// operator tokens) and the Owner (admin) propose missions, tasks and rules
+// (and hand in a rule the Owner signed: the signature is the authority); they
+// and agentd upload artifacts; anyone authenticated reads and may stop, pause,
+// drain or tighten a rule; operators and the Owner drain hosts; only the Owner
+// lifts a control.
 var abilities = []struct {
 	name  string
 	roles []actuation.Role
@@ -97,6 +103,11 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/controls", a.listControls)
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
 		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
+		r.With(read, cfg).Get("/rules/{rule_id}", a.getRule)
+		r.With(read, cfg).Post("/rules/{rule_id}/check", a.checkRule)
+		r.With(propose, cfg).Post("/rules/{rule_id}/proposals", a.proposeRule)
+		r.With(propose, cfg).Post("/rules/{rule_id}/sign", a.signRule)
+		r.With(gate("stop"), cfg).Post("/rules/{rule_id}/tighten", a.tightenRule)
 		r.With(read, cfg).Get("/hosts", a.listHosts)
 		r.With(read, cfg).Get("/progress", a.progress)
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
@@ -143,6 +154,8 @@ func (a *API) fail(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, store.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
+	case errors.Is(err, store.ErrUnsigned):
+		writeError(w, http.StatusForbidden, "unsigned", err.Error())
 	case errors.Is(err, store.ErrAsk):
 		writeError(w, http.StatusServiceUnavailable, "owner_unreachable", err.Error())
 	case errors.Is(err, store.ErrBusy):

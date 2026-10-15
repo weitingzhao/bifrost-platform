@@ -103,10 +103,12 @@ var tokens = map[string]string{"agentd:h1": "fixture-agentd-h1", "agentd:h2": "f
 var heads []string
 
 // cards records the decision cards the API asked the Owner; askFails makes
-// the next asks fail, as a full question store would.
+// the next asks fail, as a full question store would; anchor is the key a
+// signed rule must verify against.
 var (
 	cards    []store.Card
 	askFails bool
+	anchor   string
 )
 
 // server serves the API behind the platform's own authentication, loaded
@@ -157,7 +159,7 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 			}
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
-		}}
+		}, Anchor: anchor}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })
 	s := httptest.NewServer(r)

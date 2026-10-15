@@ -1,0 +1,64 @@
+package agentrtapi_test
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
+)
+
+// The rule routes: check writes nothing; the Owner's signed text is taken
+// only with the compiled-in key (403 unsigned otherwise) and only from a
+// writer; anyone may tighten, nobody may loosen unsigned; the rule in force
+// reads back; a proposal says it needs his signature.
+func TestRuleRoutes(t *testing.T) {
+	pool, _ := world(t)
+	key := rptest.NewKey(t)
+	anchor = key.Fingerprint
+	defer func() { anchor = "" }()
+	s := server(t, pool)
+	v1 := "rule_id: concurrency\nrule_version: 1\ndirection: initial\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2030-01-01T00:00:00Z\nper_host: 1\n"
+	next := func(version, direction, perHost string) string {
+		return strings.NewReplacer("rule_version: 1", "rule_version: "+version, "direction: initial", "direction: "+direction,
+			"per_host: 1", "per_host: "+perHost).Replace(v1)
+	}
+	signed := func(text string) map[string]any {
+		return map[string]any{"text": text, "signature": key.Sign(t, []byte(text), rules.Namespace)}
+	}
+	if code, out := call(t, s, "viewer", "GET", "rules/concurrency", nil); code != http.StatusOK || out["in_force"] != nil {
+		t.Fatalf("before any: %d %v", code, out)
+	}
+	if code, out := call(t, s, "viewer", "POST", "rules/concurrency/check", map[string]any{"text": v1}); code != http.StatusOK || out["needs_signature"] != true {
+		t.Fatalf("check: %d %v", code, out)
+	}
+	if code, _ := call(t, s, "viewer", "POST", "rules/concurrency/sign", signed(v1)); code != http.StatusUnauthorized {
+		t.Fatalf("a viewer handed in a signed rule: %d", code)
+	}
+	other := rptest.NewKey(t)
+	if code, out := call(t, s, "admin", "POST", "rules/concurrency/sign", map[string]any{"text": v1,
+		"signature": other.Sign(t, []byte(v1), rules.Namespace)}); code != http.StatusForbidden || out["error"] != "unsigned" {
+		t.Fatalf("signed by another key: %d %v", code, out)
+	}
+	if code, out := call(t, s, "admin", "POST", "rules/concurrency/sign", signed(v1)); code != http.StatusOK || out["signed"] != true {
+		t.Fatalf("sign: %d %v", code, out)
+	}
+	if code, out := call(t, s, "agentd:h1", "POST", "rules/concurrency/tighten", map[string]any{"text": next("2", "tighten", "0")}); code != http.StatusOK || out["signed"] != false {
+		t.Fatalf("agentd tightens: %d %v", code, out)
+	}
+	if code, out := call(t, s, "viewer", "POST", "rules/concurrency/tighten", map[string]any{"text": next("3", "tighten", "1")}, session, "s1"); code != http.StatusForbidden || out["error"] != "unsigned" {
+		t.Fatalf("loosening unsigned: %d %v", code, out)
+	}
+	if code, out := call(t, s, "viewer", "GET", "rules/concurrency", nil); code != http.StatusOK || out["in_force"].(map[string]any)["per_host"] != float64(0) {
+		t.Fatalf("in force: %d %v", code, out)
+	}
+	code, out := call(t, s, "operator", "POST", "rules/concurrency/proposals",
+		map[string]any{"idempotency_key": "p1", "text": next("3", "loosen", "1"), "reason": "one live attempt a host again"}, session, "s1")
+	if code != http.StatusOK || out["needs_signature"] != true {
+		t.Fatalf("proposal: %d %v", code, out)
+	}
+	if code, out := call(t, s, "admin", "POST", "rules/concurrency/sign", signed(next("3", "loosen", "1")+"note: x\n")); code != http.StatusUnprocessableEntity || out["error"] != "invalid" {
+		t.Fatalf("an unknown field: %d %v", code, out)
+	}
+}
