@@ -59,3 +59,22 @@ func TestConfigReadsWhereBranchesGo(t *testing.T) {
 		t.Fatalf("no push base: %q %v", cfg.pushBase, err)
 	}
 }
+
+func TestPushBaseStaysOnTheGitServer(t *testing.T) {
+	for _, c := range []struct {
+		git, push string
+		ok        bool
+	}{
+		{"https://g.example/bifrost", "", true},
+		{"https://g.example/bifrost", "https://G.example/bifrost-agents", true},
+		{"http://192.168.10.73:30300/bifrost", "http://192.168.10.73:30300/bifrost-agents", true},
+		{"https://g.example/bifrost", "https://evil.example/bifrost-agents", false},
+		{"https://g.example/bifrost", "http://g.example/bifrost-agents", false},
+		{"http://192.168.10.73:30300/bifrost", "http://192.168.10.73:30301/bifrost-agents", false},
+		{"https://g.example/bifrost", "/srv/agents", false},
+	} {
+		if err := sameServer(c.git, c.push); (err == nil) != c.ok {
+			t.Errorf("%q %q: %v", c.git, c.push, err)
+		}
+	}
+}

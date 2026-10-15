@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -184,10 +185,27 @@ func config() (settings, error) {
 		}
 		s.gitEnv = append(s.gitEnv, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: token "+gt)
 	}
+	if err = sameServer(s.gitBase, s.pushBase); err != nil {
+		return s, err
+	}
 	if s.tools, err = tools(os.Getenv("AGENTD_TOOLS")); err != nil {
 		return s, err
 	}
 	return s, nil
+}
+
+// sameServer: the git token goes to every remote (http.extraHeader), so the
+// push base must be on the server of the git base (review 195 B).
+func sameServer(gitBase, pushBase string) error {
+	if pushBase == "" {
+		return nil
+	}
+	g, gerr := url.Parse(gitBase)
+	p, perr := url.Parse(pushBase)
+	if gerr != nil || perr != nil || p.Host == "" || !strings.EqualFold(g.Scheme, p.Scheme) || !strings.EqualFold(g.Host, p.Host) {
+		return fmt.Errorf("AGENTD_GIT_PUSH_BASE %q is not on the server of AGENTD_GIT_BASE %q", pushBase, gitBase)
+	}
+	return nil
 }
 
 // secret reads a token file that only its owner may read.
