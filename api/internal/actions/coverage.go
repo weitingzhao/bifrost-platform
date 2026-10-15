@@ -67,12 +67,13 @@ func init() {
 		"POST /api/v1/agentrt/attempts/{id}/{action}",
 		"PUT /api/v1/agentrt/artifacts/{id}",
 	)
-	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it), a control only stops or pauses work, and only the Owner (admin) lifts one; not a cluster write",
+	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization for the Owner's decision card), a control only stops or pauses work, and only the Owner (admin) lifts one; not a cluster write",
 		"POST /api/v1/agentrt/missions",
 		"POST /api/v1/agentrt/missions/{id}/tasks",
 		"POST /api/v1/agentrt/controls",
 		"DELETE /api/v1/agentrt/controls/{id}",
 		"POST /api/v1/agentrt/hosts/{id}/drain",
+		"POST /api/v1/agentrt/plan/proposals",
 	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",

@@ -13,6 +13,7 @@ import {
   getPlan,
   getTask,
   listTasks,
+  proposePlanChange,
   proposeTasks,
   putArtifact,
   requestStop,
@@ -102,6 +103,17 @@ describe('agent runtime writes', () => {
     assert.equal((calls[1].body as { idempotency_key: string }).idempotency_key, 'p-2', 'the same tasks again are another proposal')
   })
 
+  it('propose_plan_change sends the changes with the caller\'s key, and none without one', async () => {
+    const { d, calls } = deps()
+    const changes = [{ op: 'add_node' as const, parent: 'R2:2.1', kind: 'step' as const, step_kind: 'agent', title: 'next' }]
+    const missing = await proposePlanChange({ root: 'R2', reason: 'r', changes, idempotency_key: '' }, d)
+    assert.deepEqual(missing, { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE })
+    assert.equal(calls.length, 0)
+    await proposePlanChange({ root: 'R2', reason: 'r', changes, idempotency_key: 'c-1' }, d)
+    assert.equal(calls[0].path, '/api/v1/agentrt/plan/proposals')
+    assert.deepEqual(calls[0].body, { idempotency_key: 'c-1', root: 'R2', reason: 'r', changes })
+  })
+
   it('put_artifact addresses the content by its sha256 and names its kind', async () => {
     const { d, calls } = deps()
     await putArtifact({ kind: 'task_spec', content: '# implement x\n' }, d)
@@ -134,6 +146,7 @@ describe('agent runtime writes', () => {
       const { d, calls } = deps(over)
       for (const got of [
         await proposeTasks({ mission_id: 'M-1', tasks: [task], idempotency_key: 'k' }, d),
+        await proposePlanChange({ root: 'R2', reason: 'r', changes: [{ op: 'retitle', node: 'R2', title: 't' }], idempotency_key: 'k' }, d),
         await putArtifact({ kind: 'task_spec', content: 'x' }, d),
         await requestStop({ scope: 'global', kind: 'stop', reason: 'x', idempotency_key: 'k' }, d),
       ]) {
@@ -148,7 +161,7 @@ describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_tasks', 'put_artifact', 'get_artifact', 'request_stop']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop']) {
       assert.equal(listed.has(name), true, name)
       assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

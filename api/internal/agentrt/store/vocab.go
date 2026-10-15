@@ -34,6 +34,8 @@ var bodies = map[string][]field{
 	"plan_node_retitled":      {{"title", kStr, false}, {"label", kStr, true}},
 	"plan_node_state_changed": {{"from", kStr, false}, {"to", kStr, false}, {"cause", kStr, false}},
 	"plan_changed":            {{"change", kStr, false}, {"decided_event_id", kInt, true}, {"nodes", kAny, true}, {"bindings", kAny, true}, {"note", kStr, true}},
+	"plan_change_proposed":    {{"changes", kAny, false}, {"reason", kStr, false}, {"standing", kBool, false}, {"token", kStr, true}, {"question_id", kStr, true}},
+	"plan_change_decided":     {{"proposal_event_id", kInt, false}, {"decision", kStr, false}, {"by", kStr, false}, {"question_id", kStr, true}, {"error", kStr, true}},
 	"mission_proposed":        {{"title", kStr, false}, {"token", kStr, true}},
 	"mission_state_changed":   {{"from", kStr, false}, {"to", kStr, false}, {"reason", kStr, true}},
 	"task_proposed":           {{"title", kStr, false}, {"role", kStr, false}, {"off_plan_reason", kStr, true}, {"core", kBool, true}, {"needs", kIDs, true}, {"repo", kStr, true}, {"base_commit", kStr, true}, {"token", kStr, true}},

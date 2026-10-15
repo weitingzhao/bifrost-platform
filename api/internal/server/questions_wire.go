@@ -2,6 +2,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
@@ -94,5 +97,37 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
 		}
 		return questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
+	}
+}
+
+// agentRuntimeAsk is how the agent runtime puts a plan change outside the
+// standing authorization to the Owner (design v5 §5.2 POST /plan/proposals):
+// a decision card of the runtime's own (session agentrt), owner_duty goal,
+// two options the controller reads back (apply, do not apply), keyed by the
+// proposal so a retry finds the same card. nil without a question store.
+func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
+	if rt == nil || rt.svc == nil {
+		return nil
+	}
+	return func(ctx context.Context, card store.Card) (string, error) {
+		raw, err := json.Marshal(map[string]any{
+			"title":           card.Title,
+			"body":            card.Body,
+			"options":         []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}},
+			"urgency":         "when you can: only this change waits for you",
+			"meanwhile":       "the plan stays as it is",
+			"owner_duty":      "goal",
+			"idempotency_key": card.Key,
+		})
+		if err != nil {
+			return "", err
+		}
+		res := rt.svc.Create(ctx, "agentrt", "agentrt", "operator", raw)
+		body, _ := res.Body.(map[string]any)
+		id, _ := body["id"].(string)
+		if (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "" {
+			return "", fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+		}
+		return id, nil
 	}
 }

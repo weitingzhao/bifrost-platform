@@ -275,3 +275,51 @@ func TestProposeAgainAfterCancel(t *testing.T) {
 		t.Fatalf("the proposal made again: %s (%s), the first was %s", fresh, state, old)
 	}
 }
+
+// POST /plan/proposals: within the standing authorization the change is
+// applied at once; outside it the Owner gets a card and nothing changes;
+// a change the database refuses is 422 with its reason; a question store
+// that cannot take the card is 503.
+func TestPlanProposalRoute(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	cards, askFails = nil, false
+	body := func(key string, changes ...map[string]any) map[string]any {
+		return map[string]any{"idempotency_key": key, "root": "R2", "reason": "test", "changes": changes}
+	}
+	step := map[string]any{"op": "add_node", "parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}
+	if code, _ := call(t, s, "viewer", "POST", "plan/proposals", body("k0", step), session, "s1"); code != http.StatusUnauthorized {
+		t.Fatalf("a viewer proposed a plan change: %d", code)
+	}
+	// R2:1 has no active step yet: outside the standing authorization.
+	code, out := call(t, s, "operator", "POST", "plan/proposals", body("k1", step), session, "s1")
+	if code != http.StatusOK || out["decision"] != "" || out["question_id"] != "q_1" || len(cards) != 1 {
+		t.Fatalf("outside: %d %v, %d cards", code, out, len(cards))
+	}
+	if !strings.Contains(cards[0].Body, "add_node") || !strings.HasPrefix(cards[0].Title, "Plan change to R2") {
+		t.Fatalf("the card: %+v", cards[0])
+	}
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		_, err := store.SetStepState(ctx, tx, "controller", "R2", "R2:1-1", "active", "test")
+		return err
+	}))
+	code, out = call(t, s, "operator", "POST", "plan/proposals", body("k2", step), session, "s1")
+	if nodes, _ := out["nodes"].([]any); code != http.StatusOK || out["decision"] != "applied" || len(nodes) != 1 || nodes[0] != "R2:1-2" {
+		t.Fatalf("standing: %d %v", code, out)
+	}
+	code, out = call(t, s, "operator", "POST", "plan/proposals",
+		body("k3", map[string]any{"op": "add_node", "parent": "R2", "kind": "step", "step_kind": "agent", "title": "x"}), session, "s1")
+	if code != http.StatusUnprocessableEntity || out["error"] != "constraint" || !strings.Contains(out["message"].(string), "cannot sit under") {
+		t.Fatalf("a step under a round: %d %v", code, out)
+	}
+	if code, out = call(t, s, "operator", "POST", "plan/proposals", body("k4", map[string]any{"op": "add_node", "parent": "R2", "kind": "item",
+		"title": "y", "surprise": 1}), session, "s1"); code != http.StatusBadRequest {
+		t.Fatalf("an unknown field in a change: %d %v", code, out)
+	}
+	askFails = true
+	defer func() { askFails = false }()
+	code, out = call(t, s, "operator", "POST", "plan/proposals", body("k5", map[string]any{"op": "add_node", "parent": "R2", "kind": "item", "title": "z"}), session, "s1")
+	if code != http.StatusServiceUnavailable || out["error"] != "owner_unreachable" {
+		t.Fatalf("a card the store refuses: %d %v", code, out)
+	}
+}

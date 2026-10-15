@@ -119,6 +119,40 @@ export async function proposeTasks(
   return d.send('POST', route, { idempotency_key: input.idempotency_key, tasks: input.tasks })
 }
 
+export interface PlanChange {
+  op: 'add_node' | 'retitle' | 'set_done_rule' | 'rebind_step' | 'move_task'
+  node?: string
+  parent?: string
+  kind?: 'item' | 'step'
+  step_kind?: string
+  title?: string
+  mission_id?: string
+  rule?: unknown
+  bind?: Array<{ kind: 'approval' | 'question'; ref: string }>
+  task?: string
+}
+
+/**
+ * Propose changes to a plan tree. Within the standing authorization (a step
+ * added to an item in progress, the title of a step not started) they land
+ * at once; otherwise the Owner decides on a card. The key is the caller's,
+ * as for tasks.
+ */
+export async function proposePlanChange(
+  input: { root: string; reason: string; changes: PlanChange[]; idempotency_key: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
+  return d.send('POST', `${BASE}/plan/proposals`, {
+    idempotency_key: input.idempotency_key,
+    root: input.root,
+    reason: input.reason,
+    changes: input.changes,
+  })
+}
+
 /** Upload text as an artifact, addressed by its sha256; uploading it again is harmless. */
 export async function putArtifact(
   input: { kind: string; content: string; media_type?: string },

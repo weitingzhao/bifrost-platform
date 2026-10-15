@@ -197,6 +197,24 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 	return moved, errors.Join(errs...)
 }
 
+// PlanDecisions is one pass of the plan decisions: proposals outside the
+// standing authorization whose decision card is answered are applied or
+// refused (store.DecidePlanChanges). Each question is read with the
+// per-read timeout.
+func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
+	if c.Sources.Question == nil {
+		return 0, nil
+	}
+	return store.DecidePlanChanges(ctx, c.DB, func(ctx context.Context, id string) (store.Question, bool) {
+		type r struct {
+			q  store.Question
+			ok bool
+		}
+		x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })
+		return x.q, x.ok
+	})
+}
+
 // Rules is one pass of the done-rule loop: every live step with a rule is
 // evaluated, standing conditions against what is deployed now. One step that
 // fails does not stop the others. It returns how many steps moved.
@@ -225,9 +243,9 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
 // tasks whose job's candidates changed, acceptance, dispatch of proposed
-// tasks, then rules, so a change seen or a task accepted is evaluated at
-// once and a task whose last dependency was just accepted is ready in the
-// same pass.
+// tasks, plan decisions, then rules, so a change seen or a task accepted is
+// evaluated at once, a task whose last dependency was just accepted is
+// ready in the same pass, and a step a decision added is evaluated with it.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
 	lease, facts := c.LeaseEvery, c.FactsEvery
 	if lease <= 0 {
@@ -243,8 +261,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
 		_, derr := store.Dispatch(ctx, c.DB)
+		_, perr := c.PlanDecisions(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, derr, rerr)
+		return errors.Join(ferr, oerr, aerr, derr, perr, rerr)
 	})
 	return wg.Wait
 }

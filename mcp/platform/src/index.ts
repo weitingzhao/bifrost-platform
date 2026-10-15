@@ -33,6 +33,7 @@ import {
   getPlan,
   getTask,
   listTasks,
+  proposePlanChange,
   proposeTasks,
   putArtifact,
   requestStop,
@@ -688,6 +689,31 @@ reg(
     idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
   },
   async (input) => jsonResult(await proposeTasks(input)),
+)
+
+reg(
+  'propose_plan_change',
+  `Propose changes to a plan tree (root R2, …). Ops: add_node (parent, kind item or step; a step needs step_kind and may name mission_id), retitle (node, title), set_done_rule (node, rule, bind: approvals and questions the rule names), rebind_step (node, mission_id: the step and its tasks move), move_task (task, node). Within the standing authorization (a step added to an item with an active step, the title of a step not started) the change lands at once; otherwise it is checked, rolled back, and the Owner decides on a card; a change the plan's rules refuse is refused with the reason. ${PROPOSAL_KEY_RULE}`,
+  {
+    root: z.string(),
+    reason: z.string(),
+    changes: z.array(
+      z.object({
+        op: z.enum(['add_node', 'retitle', 'set_done_rule', 'rebind_step', 'move_task']),
+        node: z.string().optional(),
+        parent: z.string().optional(),
+        kind: z.enum(['item', 'step']).optional(),
+        step_kind: z.string().optional(),
+        title: z.string().optional(),
+        mission_id: z.string().optional(),
+        rule: z.unknown().optional(),
+        bind: z.array(z.object({ kind: z.enum(['approval', 'question']), ref: z.string() })).optional(),
+        task: z.string().optional(),
+      }),
+    ),
+    idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
+  },
+  async (input) => jsonResult(await proposePlanChange(input)),
 )
 
 reg(
