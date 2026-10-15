@@ -149,7 +149,9 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 `), 0o600))
 	auth, err := actuation.LoadAuth(path)
 	must(t, err)
-	api := &agentrtapi.API{DB: db, ClaimWait: 300 * time.Millisecond, ClaimPoll: 50 * time.Millisecond,
+	// A claim reads and parses the rules it acts on; under a whole suite's
+	// load one pass can take longer than a few hundred milliseconds.
+	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
 		Head: func(_ context.Context, repo, ref string) (string, error) {
 			heads = append(heads, repo+"|"+ref)
 			return commitA, nil
