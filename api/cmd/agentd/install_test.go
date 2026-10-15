@@ -6,6 +6,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -170,5 +171,84 @@ func TestInstallScriptRenders(t *testing.T) {
 	}
 	if out, rerr := exec.Command("bash", script, "--render", plist, "no-such-user-agentd", bin, platform, "h1", "t", "g").CombinedOutput(); rerr == nil {
 		t.Fatalf("an unknown user: %s", out)
+	}
+}
+
+// 10-15: a reinstall booted out a busy agentd and bootstrapped before launchd
+// had let go of it; the bootstrap failed and the host had no agentd. The
+// installer's own lines from bootout to bootstrap, run against a stub
+// launchctl: the plist is replaced and bootstrapped only once print says the
+// service is not there (exit 113); still there for a minute, or a print that
+// fails otherwise, stops with the old plist in place (review 203 A1).
+func TestInstallWaitsForLaunchdToLetGo(t *testing.T) {
+	script, err := os.ReadFile("../../../agent/deploy/install-agentd.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(script)
+	// The commands at the start of a line, not their names in a message.
+	from := strings.Index(text, "\nlaunchctl bootout ") + 1
+	to := strings.Index(text, "\nlaunchctl bootstrap ") + 1
+	if from == 0 || to <= from {
+		t.Fatal("the installer has no bootout followed by a bootstrap")
+	}
+	end := strings.IndexByte(text[to:], '\n')
+	snippet := text[from : to+end+1]
+	stub := `#!/bin/sh
+echo "$*" >> "$DIR/calls"
+[ "$1" = print ] || exit 0
+n=$(cat "$DIR/n" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$DIR/n"
+[ "$n" -le "$LOADED_FOR" ] && exit 0
+echo "Could not find service" >&2
+exit "$GONE_RC"
+`
+	for _, c := range []struct {
+		name               string
+		loadedFor, goneRC  int
+		ok                 bool
+		prints, bootstraps int
+	}{
+		{"gone at once", 0, 113, true, 1, 1},
+		{"gone after three seconds", 3, 113, true, 4, 1},
+		{"never gone", 1000, 113, false, 61, 0},
+		{"print fails", 0, 5, false, 1, 0},
+		{"print fails after waiting", 2, 64, false, 3, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "launchctl"), []byte(stub), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			plist, tmp := filepath.Join(dir, "agentd.plist"), filepath.Join(dir, "new.plist")
+			if err := os.WriteFile(plist, []byte("old"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(tmp, []byte("new"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			harness := "set -euo pipefail\ndie() { echo \"$*\" >&2; exit 1; }\nsleep() { :; }\n" +
+				"label=com.bifrost.agentd plist=\"$PLIST\" tmp=\"$TMP\"\n" + snippet
+			cmd := exec.Command("bash", "-c", harness)
+			cmd.Env = append(os.Environ(), "PATH="+dir+":"+os.Getenv("PATH"), "DIR="+dir, "PLIST="+plist, "TMP="+tmp,
+				"LOADED_FOR="+strconv.Itoa(c.loadedFor), "GONE_RC="+strconv.Itoa(c.goneRC))
+			out, err := cmd.CombinedOutput()
+			if (err == nil) != c.ok {
+				t.Fatalf("err = %v, want ok %v\n%s", err, c.ok, out)
+			}
+			calls, _ := os.ReadFile(filepath.Join(dir, "calls"))
+			if got := strings.Count(string(calls), "print "); got != c.prints {
+				t.Errorf("prints = %d, want %d", got, c.prints)
+			}
+			if got := strings.Count(string(calls), "bootstrap "); got != c.bootstraps {
+				t.Errorf("bootstraps = %d, want %d", got, c.bootstraps)
+			}
+			want := "old"
+			if c.ok {
+				want = "new"
+			}
+			if got, _ := os.ReadFile(plist); string(got) != want {
+				t.Errorf("plist = %q, want %q", got, want)
+			}
+		})
 	}
 }

@@ -118,9 +118,18 @@ chmod 644 "$tmp"
 launchctl bootout "system/$label" 2>/dev/null || true
 # bootout returns before a busy agentd and its executors have gone, and a
 # bootstrap then fails and leaves no agentd at all (10-15). Wait until
-# launchd no longer has the service.
+# launchd says it no longer has the service: launchctl print exits 113,
+# "Could not find service" (measured on macOS 26.6). Any other failure
+# leaves that unknown, so nothing is replaced (review 203 A1).
 waited=0
-while launchctl print "system/$label" >/dev/null 2>&1; do
+while :; do
+  rc=0
+  why=$(launchctl print "system/$label" 2>&1 >/dev/null) || rc=$?
+  case $rc in
+    113) break ;;
+    0) ;;
+    *) die "cannot tell whether launchd has let go of $label (launchctl print exit $rc: $why); the plist was not replaced" ;;
+  esac
   [ "$waited" -lt 60 ] || die "launchd still has $label 60 seconds after bootout; the plist was not replaced (when it is gone: launchctl bootstrap system $plist)"
   sleep 1
   waited=$((waited + 1))
