@@ -49,8 +49,12 @@ func NewService(access AccessFunc) *Service {
 }
 
 type repoScan struct {
-	repo     string
-	def      string
+	repo string
+	def  string
+	// agent: a repository of the agent organization. Its main is the main of
+	// the delivery repository of the same name, only to tell whether a branch
+	// commit landed; its own commits are its branches'.
+	agent    bool
 	mirrored *time.Time
 	main     []giteaCommit
 	branches map[string][]giteaCommit
@@ -104,9 +108,10 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 		}(i, r)
 	}
 	wg.Wait()
+	agentScans, agentRepos := s.scanAgents(ctx, acc, scans, since)
 
 	threads := map[string]*threadAcc{}
-	for _, sc := range scans {
+	for _, sc := range append(append([]repoScan{}, scans...), agentScans...) {
 		if sc.err != nil {
 			out.Errors = append(out.Errors, sc.repo+": "+sc.err.Error())
 		}
@@ -119,7 +124,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 	switch {
 	case len(out.Errors) == 0:
 		out.Reachability = probe.ReachOK
-	case len(out.Errors) < len(repos):
+	case len(out.Errors) < len(repos)+agentRepos:
 		out.Reachability = probe.ReachDegraded
 	}
 	sort.Slice(out.Coverage, func(i, j int) bool { return out.Coverage[i].Repo < out.Coverage[j].Repo })
@@ -160,6 +165,58 @@ func scanRepo(ctx context.Context, g *gitea, r giteaRepo, since time.Time) repoS
 	return sc
 }
 
+// scanAgents scans the branches agentd pushed to the agent organization
+// (design v5 §5.2: agent branches go to an organization of their own, so a
+// commit agentd made, with its Agentrt-Task, is found by task; T36). Each is
+// read against the main of the delivery repository of the same name: an
+// agent commit that landed is found there, and the walk stops where a branch
+// joins it. The agent repository's own default branch is whatever was pushed
+// first, not a main, so every branch of it is a branch. It returns the scans
+// and how many repositories it read.
+func (s *Service) scanAgents(ctx context.Context, acc Access, delivery []repoScan, since time.Time) ([]repoScan, int) {
+	if acc.AgentOrg == "" || acc.AgentOrg == acc.Org {
+		return nil, 0
+	}
+	ag := acc
+	ag.Org = acc.AgentOrg
+	g := &gitea{acc: ag, client: s.client}
+	repos, err := g.repos(ctx)
+	if err != nil {
+		return []repoScan{{repo: acc.AgentOrg, agent: true, err: fmt.Errorf("list repos: %w", err)}}, 1
+	}
+	mains := map[string][]giteaCommit{}
+	for _, sc := range delivery {
+		mains[sc.repo] = sc.main
+	}
+	out := make([]repoScan, 0, len(repos))
+	for _, r := range repos {
+		sc := repoScan{repo: acc.AgentOrg + "/" + r.Name, agent: true, main: mains[r.Name], branches: map[string][]giteaCommit{}}
+		onMain := make(map[string]bool, len(sc.main))
+		for _, c := range sc.main {
+			onMain[c.SHA] = true
+		}
+		brs, err := g.branches(ctx, r.Name)
+		if err != nil {
+			sc.err = fmt.Errorf("branches: %w", err)
+			out = append(out, sc)
+			continue
+		}
+		for _, b := range brs {
+			if b.At.Before(since) {
+				continue
+			}
+			cs, err := g.commits(ctx, r.Name, b.Name, since, branchMaxPages, func(sha string) bool { return onMain[sha] })
+			if err != nil {
+				sc.err = fmt.Errorf("branch %s: %w", b.Name, err)
+				continue
+			}
+			sc.branches[b.Name] = cs
+		}
+		out = append(out, sc)
+	}
+	return out, len(repos)
+}
+
 type threadAcc struct {
 	t           Thread
 	transcripts map[string]bool
@@ -182,6 +239,9 @@ func (a *threadAcc) add(c Commit) {
 // collect adds one repo's lineage commits to threads and returns its coverage.
 func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 	cov := RepoCoverage{Repo: sc.repo, MainCommits: len(sc.main), Branches: len(sc.branches), MirrorUpdated: sc.mirrored}
+	if sc.agent {
+		cov.MainCommits = 0 // its main is the delivery repository's, counted there
+	}
 	add := func(c Commit) {
 		a := threads[c.Session]
 		if a == nil {
@@ -198,6 +258,9 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 	seen := map[string]bool{}
 	mi := newMainIndex(sc)
 	for _, gc := range sc.main {
+		if sc.agent {
+			break // listed from the delivery repository
+		}
 		seen[gc.SHA] = true
 		subject, t := parseMessage(gc.Msg)
 		if t.session != "" {

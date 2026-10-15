@@ -11,8 +11,10 @@ import (
 )
 
 // Access is the Gitea base URL, org and basic auth (delivery.GiteaAccess, adapted by the server).
+// AgentOrg is the organization agentd pushes its branches to (AGENTRT_GIT_ORG); empty, it is not scanned.
 type Access struct {
 	Base, Org, User, Pass string
+	AgentOrg              string
 }
 
 // AccessFunc resolves Access per refresh, so rotated credentials are picked up.

@@ -271,7 +271,9 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	srv.lineage = lineage.NewHandler(lineage.NewService(func(ctx context.Context) (lineage.Access, error) {
 		a, err := srv.delivery.GiteaAccess(ctx)
-		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, err
+		// The agent organization's branches too (T36), as the result check reads them.
+		return lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass,
+			AgentOrg: strings.TrimSpace(os.Getenv("AGENTRT_GIT_ORG"))}, err
 	}).WithReleases(func(ctx context.Context) ([]lineage.Release, error) {
 		recs, err := releasesSvc.List(ctx)
 		if err != nil {
