@@ -510,3 +510,25 @@ func TestPlanTreeOrder(t *testing.T) {
 		t.Fatalf("order %v", order)
 	}
 }
+
+// GET /progress: any role reads the projection, computed now; no token
+// reads nothing.
+func TestProgressRoute(t *testing.T) {
+	pool, task := world(t)
+	s := server(t, pool)
+	if code, _ := call(t, s, "", "GET", "progress", nil); code != http.StatusUnauthorized {
+		t.Fatalf("no token: %d", code)
+	}
+	code, out := call(t, s, "viewer", "GET", "progress", nil)
+	if code != http.StatusOK || out["generated_at"] == nil {
+		t.Fatalf("progress: %d %v", code, out)
+	}
+	work, _ := out["work"].([]any)
+	if len(work) != 1 || work[0].(map[string]any)["mission_id"] != "M-1" {
+		t.Fatalf("work: %v", out["work"])
+	}
+	tasks := work[0].(map[string]any)["tasks"].([]any)
+	if len(tasks) != 1 || tasks[0].(map[string]any)["task_id"] != task || tasks[0].(map[string]any)["status"] != "queued" {
+		t.Fatalf("tasks: %v", tasks)
+	}
+}

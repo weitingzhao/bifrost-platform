@@ -98,6 +98,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)
 		r.With(gate("lift"), cfg).Delete("/controls/{id}", a.liftControl)
 		r.With(read, cfg).Get("/hosts", a.listHosts)
+		r.With(read, cfg).Get("/progress", a.progress)
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 	})
 }
