@@ -200,3 +200,24 @@ const devBudgetRow = `('budget:dev', 1,
     '{"attempt_hard_limit_s":86400,"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","mission":{"max_attempts":1000,"max_wall_hours":720},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}',
     E'rule_id: budget:dev\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\nmission: {max_attempts: 1000, max_wall_hours: 720}\nattempt_hard_limit_s: 86400\n',
     'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z')`
+
+// TestJobRule is the job rule the test fixtures' candidates belong to
+// (job:test): routing counts a candidate only while its rule is in force and
+// reads.
+const TestJobRule = ruleInsert + `('job:test', 1,
+    '{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"}],"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","rule_id":"job:test","rule_version":1,"tenant":"dev","text":"Test fixture candidates."}',
+    E'rule_id: job:test\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\ntenant: dev\ntext: Test fixture candidates.\ncandidates:\n  - {executor: exec:codex, provider: openai, model_pattern: "*", status: active}\n',
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z') ON CONFLICT DO NOTHING`
+
+// OwnerFactsRule is the capability-facts rule with the seed's four Owner
+// facts, as if he had signed it; BindOwnerFacts binds the seed rows to it (run
+// it with an event of the transaction, the import event in tests). Until a
+// capability-facts rule binds them, an only fact grants nobody.
+const OwnerFactsRule = ruleInsert + `('capability-facts', 1,
+    '{"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","facts":[{"executor":"exec:claude","kind":"only","scope":{"core":true},"subject":"author_core"},{"executor":"exec:codex","kind":"only","scope":{"core":true,"sandbox":"read-only"},"subject":"review_core"},{"executor":"exec:cursor","kind":"must_not","subject":"fix_review_findings"},{"executor":"exec:deterministic","kind":"must_not","subject":"review_own_provider"}],"rule_id":"capability-facts","rule_version":1}',
+    E'rule_id: capability-facts\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\nfacts:\n  - {executor: exec:cursor, kind: must_not, subject: fix_review_findings}\n  - {executor: exec:claude, kind: only, subject: author_core, scope: {core: true}}\n  - {executor: exec:codex, kind: only, subject: review_core, scope: {core: true, sandbox: read-only}}\n  - {executor: exec:deterministic, kind: must_not, subject: review_own_provider}\n',
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z') ON CONFLICT DO NOTHING`
+
+// BindOwnerFacts binds the seed's Owner facts to OwnerFactsRule.
+const BindOwnerFacts = `UPDATE agentrt.capability_fact SET rule_id = 'capability-facts', rule_version = 1
+  WHERE source_kind = 'owner' AND rule_id IS NULL`

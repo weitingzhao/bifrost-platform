@@ -73,8 +73,7 @@ func platformWith(t *testing.T, shape store.Task, head store.BranchHead) (*pgxpo
 			return err
 		}
 		for _, q := range []string{
-			`INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
-			 VALUES ('job:test', 1, '{}', 'test', 'tighten', now(), now() + interval '1 year')`,
+			agentrttest.TestJobRule,
 			`INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('implementer', 'dev', 'job:test', 1)`,
 			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status, rule_id, rule_version)
 			 VALUES ('implementer/exec:cursor/cursor-mix', 'implementer', 'exec:cursor', 'cursor-mix', 'active', 'job:test', 1)`,

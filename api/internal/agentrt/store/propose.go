@@ -96,6 +96,18 @@ func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
 	return false, nil
 }
 
+// writerLock serializes the writes of one actor (and its registration). It
+// touches no row and no stream, so a transaction may take it before any other
+// lock (review 187 R1); taking it again later in the same transaction is a
+// no-op.
+func writerLock(ctx context.Context, tx pgx.Tx, actor string) error {
+	if kindOf(actor) == "" {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, actor)
+	return err
+}
+
 // ensureWriter checks the writer in the caller's transaction and registers a
 // thread the first time it writes: actor_registered by the controller,
 // naming the token. Every write route calls it before any lock of the rows
@@ -103,10 +115,8 @@ func CheckWriter(ctx context.Context, tx pgx.Tx, w Writer) (bool, error) {
 // registration, the registration lock and the system stream. bounded holds
 // a registration to ThreadsPerDay.
 func ensureWriter(ctx context.Context, tx pgx.Tx, w Writer, bounded bool) error {
-	if kindOf(w.Actor) != "" {
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, w.Actor); err != nil {
-			return err
-		}
+	if err := writerLock(ctx, tx, w.Actor); err != nil {
+		return err
 	}
 	registered, err := CheckWriter(ctx, tx, w)
 	if err != nil || registered {

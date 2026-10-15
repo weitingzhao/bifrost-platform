@@ -229,10 +229,16 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 	signature, signedBy string) (map[string]any, error) {
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		// Before anything else, as every write of candidates or facts
-		// (route.go): a claim reads every rule it acts on under this lock
-		// shared, so it sees a rule and the rows it writes whole, before or
-		// after (review 186 A1).
+		// The writer's lock first: a control holds it and then waits for a
+		// host row a claim holds while it waits for the capability lock, so
+		// a rule write waiting for it must not hold the capability lock
+		// (review 187 R1). Then the capability lock, as every write of
+		// candidates or facts (route.go): a claim reads every rule it acts on
+		// under it shared, so it sees a rule and the rows it writes whole,
+		// before or after (review 186 A1).
+		if err := writerLock(ctx, tx, w.Actor); err != nil {
+			return err
+		}
 		if err := LockCapabilities(ctx, tx); err != nil {
 			return err
 		}

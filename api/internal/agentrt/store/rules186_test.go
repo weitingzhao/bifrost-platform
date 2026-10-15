@@ -79,9 +79,10 @@ func TestExpiredRulesGrantNothing(t *testing.T) {
 		t.Fatalf("before: %+v", c)
 	}
 	core := w.ready(t, store.Task{Core: true})
+	// A later version of the capability-facts rule that has expired: the
+	// only facts bound to the rule grant nobody.
 	w.legacy(t, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signature, effective_at, expires_at)
-	  VALUES ('capability-facts', 1, '{}', 'expired', 'initial', 'x', '2026-01-01', '2026-02-01')`,
-		`UPDATE agentrt.capability_fact SET rule_id = 'capability-facts', rule_version = 1 WHERE capability_fact_id = 'core-author-claude'`)
+	  VALUES ('capability-facts', 2, '{}', 'expired', 'tighten', 'x', '2026-01-01', '2026-02-01')`)
 	if c := w.claim(t, "h2", time.Hour, claude); c != nil {
 		t.Fatalf("core work %s claimed under an expired only fact", c.TaskID)
 	}

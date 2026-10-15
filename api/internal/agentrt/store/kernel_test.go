@@ -39,6 +39,9 @@ func newKernelWorld(t *testing.T) *world {
 	}
 	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
 	ok(t, err)
+	// The seed's Owner facts as if he had signed capability-facts: core
+	// work needs its only facts to grant.
+	w.legacy(t, agentrttest.OwnerFactsRule, agentrttest.BindOwnerFacts)
 	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, store.Tool{Executor: "exec:claude", Provider: "other"},
 		store.Tool{Executor: "exec:codex", Provider: "other"}, store.Tool{Executor: "exec:codex", Provider: "cursor-mix"},
 		store.Tool{Executor: "exec:claude", Provider: "cursor-mix"})
@@ -59,8 +62,7 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 			Body: map[string]any{"source": "test: jobs and candidates"}}); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
-		  VALUES ('job:test', 1, '{}', 'test', 'tighten', now(), now() + interval '1 year') ON CONFLICT DO NOTHING`); err != nil {
+		if _, err := tx.Exec(ctx, agentrttest.TestJobRule); err != nil {
 			return err
 		}
 		for _, job := range []string{"planner", "implementer", "verifier", "reviewer", "chief_of_staff"} {

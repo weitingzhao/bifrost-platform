@@ -51,6 +51,7 @@ func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind,
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return nil, err
 		}
+		hook("control writer", w.Actor)
 		if q := scopeRows[scope]; q != "" {
 			var one int
 			if err := tx.QueryRow(ctx, q, ref).Scan(&one); err != nil {

@@ -342,9 +342,12 @@ func TestKernelBranches(t *testing.T) {
 			Body: map[string]any{"source": "test: provider-scoped facts"}}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO agentrt.capability_fact (capability_fact_id, executor_actor_id, model_provider, fact_kind, subject, source_kind, source)
-		  VALUES ('claude-anthropic-no-gpu', 'exec:claude', 'anthropic', 'cannot', 'gpu', 'measured', 'test'),
-		         ('codex-openai-only-vault', 'exec:codex', 'openai', 'only', 'vault', 'owner', 'test')`)
+		// The Owner's only fact is bound to the capability-facts rule in force
+		// (an only fact bound to no rule grants nobody, review 187 R3).
+		_, err := tx.Exec(ctx, `INSERT INTO agentrt.capability_fact (capability_fact_id, executor_actor_id, model_provider, fact_kind, subject,
+		    source_kind, source, rule_id, rule_version)
+		  VALUES ('claude-anthropic-no-gpu', 'exec:claude', 'anthropic', 'cannot', 'gpu', 'measured', 'test', NULL, NULL),
+		         ('codex-openai-only-vault', 'exec:codex', 'openai', 'only', 'vault', 'owner', 'test', 'capability-facts', 1)`)
 		return err
 	}))
 	otherClaude := store.Tool{Executor: "exec:claude", Provider: "other"}
