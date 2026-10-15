@@ -10,7 +10,9 @@
 # --render only writes the plist (to check it, and for the tests); it needs
 # no root. The user's agentd token must be in <config>/agentd.token and the
 # git token, if any, in <config>/agentd-git.token: regular files the user
-# owns, mode 0600. <config> is ~<user>/.config/bifrost and the workspaces and
+# owns, mode 0600, and so must cursor's API key, if any, in <config>/cursor-api.key
+# (cursor's own login lives in a keychain a daemon cannot unlock). <config> is
+# ~<user>/.config/bifrost and the workspaces and
 # the log go to ~<user>/agent-work/agentd (AGENTD_CONFIG_DIR and
 # AGENTD_ROOT_DIR override them). AGENTD_GIT_PUSH_BASE, when set, is where
 # attempt branches go (<git base> is then where work is cloned from, a mirror
@@ -67,6 +69,8 @@ token="$config/agentd.token"
 credential "$token" required
 git_token="$config/agentd-git.token"
 credential "$git_token" optional || git_token=""
+cursor_key="$config/cursor-api.key"
+credential "$cursor_key" optional || cursor_key=""
 
 label=com.bifrost.agentd
 render() {
@@ -81,7 +85,7 @@ render() {
   plutil -insert EnvironmentVariables -dictionary "$f"
   for kv in "PATH=$path" "HOME=$home" "USER=$user" "LOGNAME=$user" \
     "AGENTD_PLATFORM=$platform" "AGENTD_HOST=$host" "AGENTD_TOKEN_FILE=$token" "AGENTD_TOOLS=$tools" \
-    "AGENTD_GIT_BASE=$git_base" "AGENTD_GIT_PUSH_BASE=$push_base" "AGENTD_GIT_TOKEN_FILE=$git_token" "AGENTD_ROOT=$root"; do
+    "AGENTD_GIT_BASE=$git_base" "AGENTD_GIT_PUSH_BASE=$push_base" "AGENTD_GIT_TOKEN_FILE=$git_token" "AGENTD_CURSOR_KEY_FILE=$cursor_key" "AGENTD_ROOT=$root"; do
     plutil -insert "EnvironmentVariables.${kv%%=*}" -string "${kv#*=}" "$f"
   done
   plutil -insert RunAtLoad -bool true "$f"

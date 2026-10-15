@@ -21,7 +21,7 @@ func TestAllowedEnv(t *testing.T) {
 func TestAgentExecutors(t *testing.T) {
 	dir, out := t.TempDir(), t.TempDir()
 	a := &Attempt{Claim: &Claimed{Tool: Tool{Model: "gpt-5"}}, Spec: TaskSpec{Text: "# do it"}, Dir: dir, Out: out}
-	ex := Executors("/usr/local/bin/agentd", []string{"PATH=/bin", "SOME_ADMIN_TOKEN=x"})
+	ex := Executors("/usr/local/bin/agentd", []string{"PATH=/bin", "SOME_ADMIN_TOKEN=x"}, Secrets{})
 	sp, err := ex["exec:codex"](a)
 	if err != nil || sp.Argv[0] != "codex" || !slices.Contains(sp.Argv, filepath.Join(out, "report.md")) ||
 		!slices.Contains(sp.Argv, "gpt-5") || !strings.Contains(sp.Argv[len(sp.Argv)-1], "# do it") || slices.Contains(sp.Env, "SOME_ADMIN_TOKEN=x") {
@@ -46,6 +46,32 @@ func TestAgentExecutors(t *testing.T) {
 	}
 	if sp.After() == nil {
 		t.Fatal("a cursor run with no result made a report")
+	}
+}
+
+// The cursor key reaches cursor alone; the host's own CURSOR_API_KEY is not
+// passed through to anyone.
+func TestCursorKeyReachesCursorAlone(t *testing.T) {
+	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: t.TempDir()}
+	ex := Executors("/usr/local/bin/agentd", []string{"PATH=/bin", "CURSOR_API_KEY=from-host"}, Secrets{CursorAPIKey: "k1"})
+	for name, e := range ex {
+		sp, err := e(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.Contains(sp.Env, "CURSOR_API_KEY=from-host") {
+			t.Fatalf("%s got the host's CURSOR_API_KEY", name)
+		}
+		if got := slices.Contains(sp.Env, "CURSOR_API_KEY=k1"); got != (name == "exec:cursor") {
+			t.Fatalf("%s: has the cursor key = %v", name, got)
+		}
+		if slices.ContainsFunc(sp.Argv, func(s string) bool { return strings.Contains(s, "k1") }) {
+			t.Fatalf("%s: the key is on the command line", name)
+		}
+	}
+	sp, err := Executors("/usr/local/bin/agentd", []string{"PATH=/bin"}, Secrets{})["exec:cursor"](a)
+	if err != nil || slices.ContainsFunc(sp.Env, func(s string) bool { return strings.HasPrefix(s, "CURSOR_API_KEY=") }) {
+		t.Fatalf("no key, yet cursor's env = %v %v", sp.Env, err)
 	}
 }
 

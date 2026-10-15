@@ -85,6 +85,32 @@ func TestInstallScriptRenders(t *testing.T) {
 	if value("EnvironmentVariables.AGENTD_GIT_PUSH_BASE") != "" {
 		t.Error("no push base given, yet one is named")
 	}
+	if value("EnvironmentVariables.AGENTD_CURSOR_KEY_FILE") != "" {
+		t.Error("no cursor key file, yet one is named")
+	}
+	// Cursor's key, when there, is named; one others can read is refused.
+	cursorKey := filepath.Join(config, "cursor-api.key")
+	if err = os.WriteFile(cursorKey, []byte("fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr != nil {
+		t.Fatalf("render with a cursor key: %v\n%s", rerr, out)
+	}
+	if got := value("EnvironmentVariables.AGENTD_CURSOR_KEY_FILE"); got != cursorKey {
+		t.Errorf("AGENTD_CURSOR_KEY_FILE = %q, want %q", got, cursorKey)
+	}
+	if err = os.Chmod(cursorKey, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "must be mode 0600") {
+		t.Fatalf("a cursor key readable by others: %v %s", rerr, out)
+	}
+	if err = os.Remove(cursorKey); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr != nil {
+		t.Fatalf("render again: %v\n%s", rerr, out)
+	}
 	// Branches go elsewhere when the git base is a mirror: the push base
 	// goes in as it came.
 	push := exec.Command("bash", script, "--render", plist, me.Username, bin, platform, "h1", "exec:codex=openai", "https://git.example/x&y")

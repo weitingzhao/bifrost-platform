@@ -78,3 +78,46 @@ func TestPushBaseStaysOnTheGitServer(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigReadsCursorsKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	token := filepath.Join(dir, "agentd.token")
+	if err := os.WriteFile(token, []byte("fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range map[string]string{"AGENTD_PLATFORM": "https://p.example/api/v1/agentrt", "AGENTD_HOST": "h1",
+		"AGENTD_TOKEN_FILE": token, "AGENTD_TOOLS": "exec:cursor=cursor-mix", "AGENTD_GIT_BASE": "https://g.example/bifrost",
+		"AGENTD_GIT_TOKEN_FILE": "", "AGENTD_GIT_PUSH_BASE": "", "AGENTD_ROOT": t.TempDir(), "AGENTD_CURSOR_KEY_FILE": ""} {
+		t.Setenv(k, v)
+	}
+	if cfg, err := config(); err != nil || cfg.cursorKey != "" {
+		t.Fatalf("no key file: %q %v", cfg.cursorKey, err)
+	}
+	key := filepath.Join(dir, "cursor-api.key")
+	if err := os.WriteFile(key, []byte(" key_abc \n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTD_CURSOR_KEY_FILE", key)
+	if cfg, err := config(); err != nil || cfg.cursorKey != "key_abc" {
+		t.Fatalf("key file: %q %v", cfg.cursorKey, err)
+	}
+	if err := os.Chmod(key, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config(); err == nil {
+		t.Fatal("a key file others can read was taken")
+	}
+	if err := os.WriteFile(key, []byte("\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(key, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config(); err == nil {
+		t.Fatal("an empty key file was taken")
+	}
+	t.Setenv("AGENTD_CURSOR_KEY_FILE", filepath.Join(dir, "missing"))
+	if _, err := config(); err == nil {
+		t.Fatal("a missing key file was taken")
+	}
+}

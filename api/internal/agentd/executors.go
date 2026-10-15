@@ -60,13 +60,25 @@ func Prompt(a *Attempt) string {
 	return b.String()
 }
 
+// Secrets are credentials agentd gives one executor only.
+type Secrets struct {
+	// CursorAPIKey reaches cursor alone, as CURSOR_API_KEY: cursor keeps its
+	// login in the macOS keychain, which a user that never logged in to the
+	// desktop does not have, and a daemon has no session to unlock (10-15).
+	CursorAPIKey string
+}
+
 // Executors are the executors this host runs, by actor id.
-func Executors(self string, environ []string) map[string]Executor {
+func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	env := AllowedEnv(environ)
+	cursorEnv := env
+	if s.CursorAPIKey != "" {
+		cursorEnv = append(append([]string{}, env...), "CURSOR_API_KEY="+s.CursorAPIKey)
+	}
 	return map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),
 		"exec:codex":         codexExecutor(env),
-		"exec:cursor":        cursorExecutor(env),
+		"exec:cursor":        cursorExecutor(cursorEnv),
 	}
 }
 

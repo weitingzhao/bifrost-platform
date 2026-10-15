@@ -14,6 +14,7 @@
 //	AGENTD_GIT_PUSH_BASE   optional: where attempt branches go, <base>/<repo>.git, when the
 //	                       repositories work is cloned from take no push (a mirror)
 //	AGENTD_GIT_TOKEN_FILE  optional: a token git sends to that base (as an http header, never on a command line)
+//	AGENTD_CURSOR_KEY_FILE optional: cursor's API key (mode 0600), given to the cursor executor alone
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
 //
 // The first argument "launch" makes it the launcher of one executor, and
@@ -96,7 +97,7 @@ func run() error {
 	if err = d.Recover(ctx); err != nil {
 		return err
 	}
-	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ()), agentd.MCPChecks)
+	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ(), agentd.Secrets{CursorAPIKey: cfg.cursorKey}), agentd.MCPChecks)
 	for _, why := range refused {
 		log.Printf("agentd: %s", why)
 	}
@@ -153,9 +154,9 @@ func remoteAt(base string) func(string) string {
 }
 
 type settings struct {
-	platform, host, token, gitBase, pushBase, root string
-	gitEnv                                         []string
-	tools                                          []agentd.Tool
+	platform, host, token, gitBase, pushBase, root, cursorKey string
+	gitEnv                                                    []string
+	tools                                                     []agentd.Tool
 }
 
 func config() (settings, error) {
@@ -184,6 +185,11 @@ func config() (settings, error) {
 			return s, fmt.Errorf("AGENTD_GIT_TOKEN_FILE: %v", gerr)
 		}
 		s.gitEnv = append(s.gitEnv, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: token "+gt)
+	}
+	if path := os.Getenv("AGENTD_CURSOR_KEY_FILE"); path != "" {
+		if s.cursorKey, err = secret(path); err != nil || s.cursorKey == "" {
+			return s, fmt.Errorf("AGENTD_CURSOR_KEY_FILE: %v", err)
+		}
 	}
 	if err = sameServer(s.gitBase, s.pushBase); err != nil {
 		return s, err
