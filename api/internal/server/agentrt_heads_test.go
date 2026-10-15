@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -28,7 +29,8 @@ func pkt(s string) string { return fmt.Sprintf("%04x", len(s)+4) + s }
 // service line, a flush, the refs (the first with capabilities after a NUL),
 // a flush. No refs is an empty repository's advertisement.
 func advert(refs ...string) string {
-	b := pkt("# service=git-upload-pack\n") + "0000"
+	var b strings.Builder
+	b.WriteString(pkt("# service=git-upload-pack\n") + "0000")
 	if len(refs) == 0 {
 		refs = []string{zeroSHA + " capabilities^{}"}
 	}
@@ -36,9 +38,10 @@ func advert(refs ...string) string {
 		if i == 0 {
 			r += "\x00multi_ack thin-pack side-band side-band-64k ofs-delta agent=git/2.43.0"
 		}
-		b += pkt(r + "\n")
+		b.WriteString(pkt(r + "\n"))
 	}
-	return b + "0000"
+	b.WriteString("0000")
+	return b.String()
 }
 
 func agentsRepo(body string) map[string]string {
@@ -52,7 +55,9 @@ type fakeGitea struct {
 	contentType string            // when set, instead of the advertisement's
 	redirect    map[string]string // escaped path -> where a 302 sends it
 	status      int               // when set, every request gets it
+	extraLength int               // declared beyond the body: the answer is cut short
 	paths       []string
+	protocols   []string // Git-Protocol headers sent
 	queries     []string
 	auth        []string
 }
@@ -62,6 +67,7 @@ func (f *fakeGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.paths = append(f.paths, r.URL.EscapedPath())
 	f.queries = append(f.queries, r.URL.RawQuery)
+	f.protocols = append(f.protocols, r.Header.Get("Git-Protocol"))
 	u, p, _ := r.BasicAuth()
 	f.auth = append(f.auth, u+":"+p)
 	if f.status != 0 {
@@ -83,6 +89,9 @@ func (f *fakeGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ct = f.contentType
 	}
 	w.Header().Set("Content-Type", ct)
+	if f.extraLength > 0 {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)+f.extraLength))
+	}
 	_, _ = w.Write([]byte(body))
 }
 
@@ -110,6 +119,10 @@ func TestGiteaBranchHeadReadsTheAgentOrganization(t *testing.T) {
 	}
 	if f.queries[0] != "service=git-upload-pack" || f.auth[0] != "reader:secret" {
 		t.Fatalf("query = %q, auth = %q", f.queries[0], f.auth[0])
+	}
+	// No Git-Protocol header: the answer is protocol v0, the one parsed.
+	if f.protocols[0] != "" {
+		t.Fatalf("Git-Protocol = %q", f.protocols[0])
 	}
 }
 
@@ -156,6 +169,13 @@ func TestGiteaBranchHeadReadsWhatGitAdvertises(t *testing.T) {
 	}
 	if _, err := head(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a2"); !errors.Is(err, store.ErrState) {
 		t.Fatalf("a branch git does not advertise: err = %v, want ErrState", err)
+	}
+	// An empty repository as git advertises it.
+	dir = t.TempDir()
+	git("init", "-q", "-b", "main")
+	f = &fakeGitea{adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + git("upload-pack", "--advertise-refs", "--stateless-rpc", dir))}
+	if _, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1"); !errors.Is(err, store.ErrState) {
+		t.Fatalf("an empty repository: err = %v, want ErrState", err)
 	}
 }
 
@@ -230,6 +250,50 @@ func TestGiteaBranchHeadRetriesWhatIsNotTheAgents(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+}
+
+// Review 204: only a whole, well-formed advertisement, read to its end,
+// answers either way. Each of these is an error of the platform whether the
+// branch is in it or not: never a refusal, never a head.
+func TestGiteaBranchHeadNeedsAWholeWellFormedAdvertisement(t *testing.T) {
+	big := strings.Builder{}
+	for i := 0; big.Len() <= maxAdvertisement; i++ {
+		fmt.Fprintf(&big, "%s refs/heads/filler/%07d\n", otherSHA, i)
+	}
+	bigRefs := strings.Split(strings.TrimSuffix(big.String(), "\n"), "\n")
+	for _, there := range []bool{true, false} {
+		branch := otherSHA + " refs/heads/main"
+		if there {
+			branch = headSHA + " refs/heads/agent/T-7/a1"
+		}
+		cases := map[string]*fakeGitea{
+			// A1: the body after the last flush.
+			"a pkt-line after the last flush": {adverts: agentsRepo(advert(branch) + pkt(otherSHA+" refs/heads/late\n"))},
+			"bytes after the last flush":      {adverts: agentsRepo(advert(branch) + "garbage")},
+			"cut short after the last flush":  {adverts: agentsRepo(advert(branch)), extraLength: 10},
+			"more than the bound":             {adverts: agentsRepo(advert(append([]string{branch}, bigRefs...)...))},
+			// A2: every line is a ref line.
+			"a NUL after the first line": {adverts: agentsRepo(advert(otherSHA+" refs/heads/main", branch+"\x00bad"))},
+			"a name with a space":        {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/bad name"))},
+			"a zero id on a branch":      {adverts: agentsRepo(advert(branch, zeroSHA+" refs/heads/gone"))},
+			"another ref twice":          {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x", otherSHA+" refs/heads/x"))},
+			"a peeled branch":            {adverts: agentsRepo(advert(branch, otherSHA+" refs/heads/x^{}"))},
+			"not under refs/":            {adverts: agentsRepo(advert(branch, otherSHA+" heads/x"))},
+			"the empty line late":        {adverts: agentsRepo(advert(branch, zeroSHA+" capabilities^{}"))},
+			"no refs at all":             {adverts: agentsRepo(pkt("# service=git-upload-pack\n") + "0000" + "0000")},
+		}
+		if !there {
+			delete(cases, "no refs at all") // the same answer either way: run once
+		}
+		for name, f := range cases {
+			t.Run(fmt.Sprintf("%s (branch there: %v)", name, there), func(t *testing.T) {
+				got, err := headReader(t, f)(context.Background(), "bifrost-platform", "refs/heads/agent/T-7/a1")
+				if err == nil || errors.Is(err, store.ErrState) {
+					t.Fatalf("head = %q, err = %v; want an error that is not ErrState", got, err)
+				}
+			})
+		}
+	}
 }
 
 func TestGiteaBranchHeadRefusesWhatIsNotABranchOfARepository(t *testing.T) {

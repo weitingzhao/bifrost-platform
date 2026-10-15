@@ -93,7 +93,16 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 		if ct := resp.Header.Get("Content-Type"); ct != uploadPackAdvertisement {
 			return "", fmt.Errorf("gitea: %s/%s refs: %q is not an upload-pack advertisement", org, repo, ct)
 		}
-		commit, found, err := advertisedRef(io.LimitReader(resp.Body, maxAdvertisement), ref)
+		// The whole body, read to its end, or none of it (review 204 A1): an
+		// answer cut short or longer than the bound is not an advertisement.
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxAdvertisement+1))
+		if err != nil {
+			return "", fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
+		}
+		if len(body) > maxAdvertisement {
+			return "", fmt.Errorf("gitea: %s/%s refs: more than %d bytes", org, repo, maxAdvertisement)
+		}
+		commit, found, err := advertisedRef(body, ref)
 		if err != nil {
 			return "", fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
 		}
@@ -112,12 +121,12 @@ const (
 )
 
 // advertisedRef reads a smart-HTTP advertisement of git-upload-pack (protocol
-// v0: the service line, a flush, the refs, a flush) and returns the object
-// ref points at. It reads the advertisement to its end: a ref is not there
-// only when a whole advertisement leaves it out; a cut-off or malformed one
-// is an error.
-func advertisedRef(r io.Reader, ref string) (string, bool, error) {
-	br := bufio.NewReader(r)
+// v0: the service line, a flush, the refs, a flush, and nothing after) and
+// returns the object ref points at. A ref is not there only when a whole,
+// well-formed advertisement leaves it out; one cut off, followed by more, or
+// with a line that is not a ref (review 204 A2) is an error.
+func advertisedRef(body []byte, ref string) (string, bool, error) {
+	br := bufio.NewReader(bytes.NewReader(body))
 	line, flush, err := pktLine(br)
 	if err != nil {
 		return "", false, err
@@ -129,29 +138,73 @@ func advertisedRef(r io.Reader, ref string) (string, bool, error) {
 		return "", false, errors.Join(errors.New("no flush after the service line"), err)
 	}
 	var got string
-	found := false
-	for first := true; ; first = false {
+	found, seen := false, map[string]bool{}
+	for n := 0; ; n++ {
 		line, flush, err := pktLine(br)
 		if err != nil {
 			return "", false, err
 		}
 		if flush {
+			if n == 0 {
+				return "", false, errors.New("no refs, not even an empty repository's")
+			}
+			if br.Buffered() > 0 {
+				return "", false, errors.New("more after the last flush")
+			}
 			return got, found, nil
 		}
-		if first { // the first ref carries the capabilities after a NUL
-			line, _, _ = bytes.Cut(line, []byte{0})
+		text := strings.TrimSuffix(string(line), "\n")
+		if n == 0 { // the first ref carries the capabilities after a NUL
+			text, _, _ = strings.Cut(text, "\x00")
 		}
-		oid, name, ok := strings.Cut(strings.TrimSuffix(string(line), "\n"), " ")
-		if !ok || !commitID.MatchString(oid) || name == "" {
-			return "", false, fmt.Errorf("malformed ref line %q", line)
+		oid, name, ok := strings.Cut(text, " ")
+		if !ok || !commitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] {
+			return "", false, fmt.Errorf("not a ref line: %q", line)
 		}
+		seen[name] = true
 		if name == ref {
-			if found {
-				return "", false, fmt.Errorf("%s advertised twice", ref)
-			}
 			got, found = oid, true
 		}
 	}
+}
+
+// advertisedName is whether name may stand in an advertisement with oid, at
+// line n of its refs: HEAD; a ref by git's rules (check-ref-format); a tag's
+// peeled line (^{}); or the one line of an empty repository. Only that line
+// has the zero object id.
+func advertisedName(name, oid string, n int) bool {
+	zero := oid == strings.Repeat("0", 40)
+	switch {
+	case name == "capabilities^{}":
+		return zero && n == 0
+	case zero:
+		return false
+	case name == "HEAD":
+		return true
+	}
+	if peeled, ok := strings.CutSuffix(name, "^{}"); ok {
+		return strings.HasPrefix(peeled, "refs/tags/") && refName(peeled)
+	}
+	return strings.HasPrefix(name, "refs/") && refName(name)
+}
+
+// refName holds name to git's rules for a ref name (git check-ref-format).
+func refName(name string) bool {
+	if name == "" || strings.HasSuffix(name, "/") || strings.HasSuffix(name, ".") ||
+		strings.Contains(name, "..") || strings.Contains(name, "@{") || name == "@" {
+		return false
+	}
+	for _, c := range name {
+		if c < 0x20 || c == 0x7f || strings.ContainsRune(" ~^:?*[\\", c) {
+			return false
+		}
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if seg == "" || strings.HasPrefix(seg, ".") || strings.HasSuffix(seg, ".lock") {
+			return false
+		}
+	}
+	return true
 }
 
 // pktLine reads one pkt-line: its payload, or flush for "0000".
