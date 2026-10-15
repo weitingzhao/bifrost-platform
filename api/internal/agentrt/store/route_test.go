@@ -18,7 +18,7 @@ func newRoutedWorld(t *testing.T) *world {
 	for i := 1; i <= 4; i++ {
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", fmt.Sprintf("h%d", i), "dev"))
 	}
-	_, err := w.rt.Exec(ctx, agentrttest.OneAttemptPerHost)
+	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
 	ok(t, err)
 	return w
 }

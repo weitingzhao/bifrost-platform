@@ -134,6 +134,7 @@ func TestRuleSet(t *testing.T) {
 	other := rptest.NewKey(t)
 	for name, c := range map[string]struct{ sig, anchor string }{
 		"the release policy's namespace": {s.key.Sign(t, []byte(v3), releasepolicy.NamespacePolicy), s.key.Fingerprint},
+		"the unfreeze namespace":         {s.key.Sign(t, []byte(v3), releasepolicy.NamespaceUnfreeze), s.key.Fingerprint},
 		"another key":                    {other.Sign(t, []byte(v3), rules.Namespace), s.key.Fingerprint},
 		"no trust anchor":                {s.key.Sign(t, []byte(v3), rules.Namespace), ""},
 		"over other text":                {s.key.Sign(t, []byte(v3+"\n"), rules.Namespace), s.key.Fingerprint},

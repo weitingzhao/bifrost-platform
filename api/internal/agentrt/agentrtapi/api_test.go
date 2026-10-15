@@ -58,7 +58,7 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 		tx(func(tx pgx.Tx) error { _, err := store.CreatePlanNode(ctx, tx, "controller", n); return err })
 	}
 	must(t, store.RegisterHost(ctx, pool, "owner", "h1", "dev"))
-	_, ferr := pool.Exec(ctx, agentrttest.OneAttemptPerHost)
+	_, ferr := pool.Exec(ctx, agentrttest.DispatchRules)
 	must(t, ferr)
 	tx(func(tx pgx.Tx) error {
 		if err := store.LockCapabilities(ctx, tx); err != nil {
@@ -72,8 +72,8 @@ func world(t *testing.T) (*pgxpool.Pool, string) {
 			`INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, effective_at, expires_at)
 			 VALUES ('job:test', 1, '{}', 'test', 'tighten', now(), now() + interval '1 year')`,
 			`INSERT INTO agentrt.job (job_id, tenant, rule_id, rule_version) VALUES ('implementer', 'dev', 'job:test', 1)`,
-			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status)
-			 VALUES ('implementer/exec:cursor/cursor-mix', 'implementer', 'exec:cursor', 'cursor-mix', 'active')`,
+			`INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider, status, rule_id, rule_version)
+			 VALUES ('implementer/exec:cursor/cursor-mix', 'implementer', 'exec:cursor', 'cursor-mix', 'active', 'job:test', 1)`,
 		} {
 			if _, err := tx.Exec(ctx, q); err != nil {
 				return err

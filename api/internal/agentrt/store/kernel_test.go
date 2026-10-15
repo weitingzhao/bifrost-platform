@@ -37,7 +37,7 @@ func newKernelWorld(t *testing.T) *world {
 	for i := 1; i <= 8; i++ {
 		ok(t, store.RegisterHost(ctx, w.rt, "owner", fmt.Sprintf("h%d", i), "dev"))
 	}
-	_, err := w.rt.Exec(ctx, agentrttest.OneAttemptPerHost)
+	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
 	ok(t, err)
 	w.jobs(t, "active", "*", codex, claude, cursor, deterministic, store.Tool{Executor: "exec:claude", Provider: "other"},
 		store.Tool{Executor: "exec:codex", Provider: "other"}, store.Tool{Executor: "exec:codex", Provider: "cursor-mix"},
@@ -70,7 +70,7 @@ func (w *world) jobs(t *testing.T, status, pattern string, tools ...store.Tool) 
 			}
 			for _, tl := range tools {
 				if _, err := tx.Exec(ctx, `INSERT INTO agentrt.job_candidate (job_candidate_id, job_id, executor_actor_id, model_provider,
-				  model_pattern, status) VALUES ($1, $2, $3, $4, $5, $6)`, job+"/"+tl.Executor+"/"+tl.Provider+"/"+pattern, job,
+				  model_pattern, status, rule_id, rule_version) VALUES ($1, $2, $3, $4, $5, $6, 'job:test', 1)`, job+"/"+tl.Executor+"/"+tl.Provider+"/"+pattern, job,
 					tl.Executor, tl.Provider, pattern, status); err != nil {
 					return err
 				}

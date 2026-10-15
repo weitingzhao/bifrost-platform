@@ -26,9 +26,9 @@ func TestClaimSeesAControlThatLandsMidway(t *testing.T) {
 		name, waits string
 		set         func(tx pgx.Tx) error
 	}{
-		{"mission paused", "FROM agentrt.mission WHERE mission_id = $1 FOR SHARE",
+		{"mission paused", "COALESCE(envelope_rule_id, '') FROM agentrt.mission",
 			func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "paused", "test") }},
-		{"mission stop", "FROM agentrt.mission WHERE mission_id = $1 FOR SHARE",
+		{"mission stop", "COALESCE(envelope_rule_id, '') FROM agentrt.mission",
 			func(tx pgx.Tx) error {
 				return store.SetControl(ctx, tx, "owner", "c1", "mission", "M-1", "stop", "test")
 			}},

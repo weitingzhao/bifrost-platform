@@ -81,6 +81,9 @@ func envelopeTightens(p, n *Envelope) error {
 // jobTightens: the brief unchanged, no new candidate, none higher in status.
 // A candidate left out counts as retired.
 func jobTightens(p, n *Job) error {
+	if n.Tenant != p.Tenant {
+		return errors.New("the tenant changes")
+	}
 	if n.Text != p.Text {
 		return errors.New("the brief changes, which is not shown to be tighter")
 	}

@@ -46,7 +46,8 @@ var errBadRule = errors.New("store: a stored rule does not read")
 
 // readRule parses a stored rule's text and checks the stored body_json is the
 // canonical JSON of what the text says: a row whose two disagree is no rule.
-func readRule(id string, version int, text string, body []byte, signedBy *string) (*StoredRule, error) {
+func readRule(id string, version int, direction string, effective, expires time.Time, text string, body []byte,
+	signedBy *string) (*StoredRule, error) {
 	r, err := rules.Parse([]byte(text))
 	if err != nil {
 		return nil, fmt.Errorf("%w: rule %s v%d does not parse: %v", errBadRule, id, version, err)
@@ -59,6 +60,9 @@ func readRule(id string, version int, text string, body []byte, signedBy *string
 	if err != nil || !bytes.Equal(got, want) || r.ID != id || r.Version != version {
 		return nil, fmt.Errorf("%w: rule %s v%d: body_json is not what its text says", errBadRule, id, version)
 	}
+	if r.Direction != direction || !r.Effective.Equal(effective) || !r.Expires.Equal(expires) {
+		return nil, fmt.Errorf("%w: rule %s v%d: its columns are not what its text says", errBadRule, id, version)
+	}
 	s := &StoredRule{Rule: r}
 	if signedBy != nil {
 		s.SignedBy = *signedBy
@@ -70,18 +74,19 @@ func readRule(id string, version int, text string, body []byte, signedBy *string
 // when there is none.
 func latestRule(ctx context.Context, q pgx.Tx, id string) (*StoredRule, error) {
 	var version int
-	var text string
+	var direction, text string
 	var body []byte
 	var signedBy *string
-	err := q.QueryRow(ctx, `SELECT rule_version, body_text, body_json, signed_by FROM agentrt.rule WHERE rule_id = $1
-	  ORDER BY rule_version DESC LIMIT 1`, id).Scan(&version, &text, &body, &signedBy)
+	var effective, expires time.Time
+	err := q.QueryRow(ctx, `SELECT rule_version, direction, effective_at, expires_at, body_text, body_json, signed_by FROM agentrt.rule
+	  WHERE rule_id = $1 ORDER BY rule_version DESC LIMIT 1`, id).Scan(&version, &direction, &effective, &expires, &text, &body, &signedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return readRule(id, version, text, body, signedBy)
+	return readRule(id, version, direction, effective, expires, text, body, signedBy)
 }
 
 // CurrentRule is the rule in force at now: the last version that has taken
@@ -92,12 +97,13 @@ func CurrentRule(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, id string, now time.Time) (*StoredRule, error) {
 	var version int
-	var text string
+	var direction, text string
 	var body []byte
 	var signedBy *string
-	var expires time.Time
-	err := q.QueryRow(ctx, `SELECT rule_version, body_text, body_json, signed_by, expires_at FROM agentrt.rule
-	  WHERE rule_id = $1 AND effective_at <= $2 ORDER BY rule_version DESC LIMIT 1`, id, now).Scan(&version, &text, &body, &signedBy, &expires)
+	var effective, expires time.Time
+	err := q.QueryRow(ctx, `SELECT rule_version, direction, effective_at, expires_at, body_text, body_json, signed_by FROM agentrt.rule
+	  WHERE rule_id = $1 AND effective_at <= $2 ORDER BY rule_version DESC LIMIT 1`, id, now).Scan(&version, &direction, &effective,
+		&expires, &text, &body, &signedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
@@ -107,7 +113,7 @@ func CurrentRule(ctx context.Context, q interface {
 	if !expires.After(now) {
 		return nil, nil
 	}
-	return readRule(id, version, text, body, signedBy)
+	return readRule(id, version, direction, effective, expires, text, body, signedBy)
 }
 
 // ruleRequest parses a rule's text for the route that names id.
@@ -223,11 +229,27 @@ func writeRule(ctx context.Context, db DB, w Writer, r rules.Rule, text []byte, 
 	signature, signedBy string) (map[string]any, error) {
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		// Before anything else, as every write of candidates or facts
+		// (route.go): a claim reads every rule it acts on under this lock
+		// shared, so it sees a rule and the rows it writes whole, before or
+		// after (review 186 A1).
+		if err := LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, ruleLock, r.ID); err != nil {
 			return err
+		}
+		// The rows a job or capability-facts rule writes take effect when
+		// written, so such a rule may not wait to take effect (review 186 A2).
+		var now time.Time
+		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+			return err
+		}
+		if (r.Kind == rules.KindJob || r.Kind == rules.KindFacts) && r.Effective.After(now) {
+			return invalid("a %s rule takes effect when it is written: effective_at %s is in the future", r.Kind, r.Effective.Format(time.RFC3339))
 		}
 		prev, err := latestRule(ctx, tx, r.ID)
 		if err != nil {
@@ -289,7 +311,7 @@ func insertRule(ctx context.Context, tx pgx.Tx, w Writer, r rules.Rule, text []b
 	if !signed {
 		eventType = "rule_tightened"
 	}
-	plan, err := planRows(ctx, tx, r, signed)
+	plan, err := planRows(ctx, tx, r, signed, r.Direction == rules.Tighten)
 	if err != nil {
 		return nil, err
 	}

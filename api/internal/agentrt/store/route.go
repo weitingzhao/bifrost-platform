@@ -76,7 +76,7 @@ func (r ruleRef) record() any {
 
 // routeAlgorithm names the hard checks and the input format below; a recorded
 // input of another algorithm is not replayed by this one (review 155 B1).
-const routeAlgorithm = 1
+const routeAlgorithm = 2
 
 // fits reports whether a host's tool is this candidate: same executor, same
 // model provider, and a model the pattern matches.
@@ -94,6 +94,12 @@ type restriction struct {
 	id, executor, kind, subject string
 	provider                    *string
 	rule                        ruleRef
+	// grants: an only fact bound to a rule makes its holder eligible only
+	// while that rule is in force; once it is not, the fact still keeps
+	// everyone else out and nobody holds it (review 186 A2). A fact bound to
+	// no rule (the seed's, until the Owner signs capability-facts) grants as
+	// it always has.
+	grants bool
 }
 
 func (f restriction) holds(tl Tool) bool {
@@ -115,11 +121,21 @@ type capabilities struct {
 	facts      []restriction
 }
 
+// rulesInForce is the rule ids whose last version that has taken effect has
+// not expired, by the dates the table has (the rows a rule writes are checked
+// against its text when it is written).
+const rulesInForce = `SELECT l.rule_id FROM (SELECT DISTINCT ON (rule_id) rule_id, expires_at FROM agentrt.rule
+	  WHERE effective_at <= clock_timestamp() ORDER BY rule_id, rule_version DESC) l WHERE l.expires_at > clock_timestamp()`
+
+// readCapabilities reads the candidates of the job rules in force (a job
+// whose rule expired has none) and the restrictions: cannot and must_not
+// always hold, an only fact bound to a rule grants only while it is in
+// force.
 func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	cp := capabilities{candidates: map[string][]jobCandidate{}}
 	rows, err := tx.Query(ctx, `SELECT job_id, job_candidate_id, status, executor_actor_id, model_provider, model_pattern, version,
 	  rule_id, rule_version
-	  FROM agentrt.job_candidate WHERE status IN ('active','probation')
+	  FROM agentrt.job_candidate WHERE status IN ('active','probation') AND rule_id IN (`+rulesInForce+`)
 	  ORDER BY job_id, status = 'probation', job_candidate_id`)
 	if err != nil {
 		return cp, err
@@ -133,7 +149,8 @@ func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	}); err != nil {
 		return cp, err
 	}
-	rows, err = tx.Query(ctx, `SELECT capability_fact_id, executor_actor_id, fact_kind, subject, model_provider, rule_id, rule_version
+	rows, err = tx.Query(ctx, `SELECT capability_fact_id, executor_actor_id, fact_kind, subject, model_provider, rule_id, rule_version,
+	    rule_id IS NULL OR rule_id IN (`+rulesInForce+`)
 	  FROM agentrt.capability_fact
 	  WHERE retired_at IS NULL AND fact_kind IN ('cannot','must_not','only') ORDER BY capability_fact_id`)
 	if err != nil {
@@ -141,7 +158,7 @@ func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 	}
 	cp.facts, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (restriction, error) {
 		var f restriction
-		scanErr := r.Scan(&f.id, &f.executor, &f.kind, &f.subject, &f.provider, &f.rule.id, &f.rule.version)
+		scanErr := r.Scan(&f.id, &f.executor, &f.kind, &f.subject, &f.provider, &f.rule.id, &f.rule.version, &f.grants)
 		return f, scanErr
 	})
 	return cp, err
@@ -243,7 +260,7 @@ func (in routeInput) exclusion(tl Tool) []string {
 			restricted = restricted || f.holds(tl)
 		case "only":
 			onlySubjects[f.subject] = true
-			held[f.subject] = held[f.subject] || f.holds(tl)
+			held[f.subject] = held[f.subject] || (f.grants && f.holds(tl))
 		}
 	}
 	if restricted {
@@ -301,7 +318,7 @@ func (in routeInput) record() map[string]any {
 	facts := []any{}
 	for _, f := range in.facts {
 		facts = append(facts, map[string]any{"id": f.id, "executor": f.executor, "provider": opt(f.provider), "kind": f.kind, "subject": f.subject,
-			"rule": f.rule.record()})
+			"rule": f.rule.record(), "grants": f.grants})
 	}
 	attempts := []any{}
 	for _, a := range in.attempts {
@@ -397,8 +414,9 @@ func replayInput(rec map[string]any) (routeInput, error) {
 		return in, err
 	}
 	for _, m := range facts {
+		grants, _ := m["grants"].(bool)
 		in.facts = append(in.facts, restriction{id: str(m, "id"), executor: str(m, "executor"), kind: str(m, "kind"),
-			subject: str(m, "subject"), provider: opt(m, "provider"), rule: rule(m)})
+			subject: str(m, "subject"), provider: opt(m, "provider"), rule: rule(m), grants: grants})
 	}
 	attempts, err := list("attempts")
 	if err != nil {

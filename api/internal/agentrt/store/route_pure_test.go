@@ -20,8 +20,8 @@ func TestExclusionReasonsInOrder(t *testing.T) {
 	in := routeInput{job: "reviewer", core: "review_core", subject: "t_S", needs: []string{"gpu"},
 		facts: []restriction{
 			{id: "f1", executor: "exec:claude", kind: "cannot", subject: "gpu"},
-			{id: "f2", executor: "exec:codex", kind: "only", subject: "gpu", provider: ptr("openai")},
-			{id: "f3", executor: "exec:codex", kind: "only", subject: "review_core"},
+			{id: "f2", executor: "exec:codex", kind: "only", subject: "gpu", provider: ptr("openai"), grants: true},
+			{id: "f3", executor: "exec:codex", kind: "only", subject: "review_core", grants: true},
 		},
 		attempts: []priorAttempt{{id: "a1", executor: "exec:cursor", provider: ptr("anthropic")}}}
 	got := strings.Join(in.exclusion(claudeTool), "; ")
@@ -31,6 +31,14 @@ func TestExclusionReasonsInOrder(t *testing.T) {
 	}
 	if r := in.exclusion(codexTool); len(r) != 0 {
 		t.Fatalf("codex = %v", r)
+	}
+	// Review 186 A2: an only fact whose rule is no longer in force grants
+	// nobody, and still keeps everyone else out.
+	lapsed := in
+	lapsed.facts = []restriction{in.facts[0], {id: "f2", executor: "exec:codex", kind: "only", subject: "gpu", provider: ptr("openai")},
+		{id: "f3", executor: "exec:codex", kind: "only", subject: "review_core"}}
+	if got := strings.Join(lapsed.exclusion(codexTool), "; "); got != "a need only others may take; core work needs only review_core" {
+		t.Fatalf("codex under lapsed only facts: %s", got)
 	}
 	// The only fact on gpu binds openai only: codex through another provider is not a holder.
 	if r := in.exclusion(Tool{Executor: "exec:codex", Provider: "other"}); len(r) != 1 || r[0] != "a need only others may take" {
@@ -56,7 +64,7 @@ func TestInputKeepsOnlyFactsOnTheTask(t *testing.T) {
 		provider: "anthropic", pattern: "*"}}},
 		facts: []restriction{
 			{id: "elsewhere", executor: "exec:claude", kind: "cannot", subject: "gpu"},
-			{id: "core", executor: "exec:claude", kind: "only", subject: "author_core"},
+			{id: "core", executor: "exec:claude", kind: "only", subject: "author_core", grants: true},
 		}}
 	in := cp.input(candidate{role: "implement", needs: []string{"ui"}}, nil)
 	if len(in.facts) != 0 {

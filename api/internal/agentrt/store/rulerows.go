@@ -64,18 +64,20 @@ func candidateID(job string, c rules.Candidate) string {
 
 // planRows reads, under lock, the rows the rule touches and decides what to
 // write, so the event can name every one of them first.
-func planRows(ctx context.Context, tx pgx.Tx, r rules.Rule, signed bool) (ruleRows, error) {
+// A tightening, signed or not, never raises a candidate above the table's
+// status (review 186 A5): only a rule marked loosen (signed) may.
+func planRows(ctx context.Context, tx pgx.Tx, r rules.Rule, signed, tightening bool) (ruleRows, error) {
 	var p ruleRows
 	switch r.Kind {
 	case rules.KindJob:
-		return p, p.planJob(ctx, tx, r, signed)
+		return p, p.planJob(ctx, tx, r, signed, tightening)
 	case rules.KindFacts:
 		return p, p.planFacts(ctx, tx, r, signed)
 	}
 	return p, nil
 }
 
-func (p *ruleRows) planJob(ctx context.Context, tx pgx.Tx, r rules.Rule, signed bool) error {
+func (p *ruleRows) planJob(ctx context.Context, tx pgx.Tx, r rules.Rule, signed, tightening bool) error {
 	job := r.Job.JobID
 	rows, err := tx.Query(ctx, `SELECT job_candidate_id, executor_actor_id, model_provider, model_pattern, status
 	  FROM agentrt.job_candidate WHERE job_id = $1 ORDER BY job_candidate_id FOR UPDATE`, job)
@@ -108,7 +110,7 @@ func (p *ruleRows) planJob(ctx context.Context, tx pgx.Tx, r rules.Rule, signed 
 		row := candidateRow{id: k, c: c, to: to}
 		if h, ok := existing[k]; ok {
 			row.id, row.from = h.id, h.status
-			if !signed && slices.Index(candidateStatus, to) > slices.Index(candidateStatus, h.status) {
+			if tightening && slices.Index(candidateStatus, to) > slices.Index(candidateStatus, h.status) {
 				row.to = h.status // a tightening never raises what the table has
 			}
 		}

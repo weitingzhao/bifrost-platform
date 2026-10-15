@@ -27,7 +27,7 @@ func TestConcurrencyRule(t *testing.T) {
 	if c := w.claim(t, "h1", time.Hour, codex); c != nil {
 		t.Fatalf("claimed %s without a concurrency rule", c.TaskID)
 	}
-	_, err := w.rt.Exec(ctx, agentrttest.OneAttemptPerHost)
+	_, err := w.rt.Exec(ctx, agentrttest.DispatchRules)
 	ok(t, err)
 	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.TaskID != first {
 		t.Fatalf("with one attempt a host: %+v", c)
@@ -51,6 +51,9 @@ func TestFixtureRule(t *testing.T) {
 	if r == nil || *r.PerHost != 1 {
 		t.Fatalf("the fixture rule reads as %+v", r)
 	}
+	if b := inForce(t, w, "budget:dev", time.Now()); b == nil || b.Budget.Mission.MaxAttempts != 1000 || b.Budget.AttemptLimitSec != 86400 {
+		t.Fatalf("the fixture budget reads as %+v", b)
+	}
 }
 
 func envelopeRule(version int, direction, hosts string) string {
@@ -69,7 +72,7 @@ func TestEnvelopeStartsMission(t *testing.T) {
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1, h2"))))
-	ok(t, firstErr(s.sign(w, ruleText("budget:dev", 1, rules.Initial, since, until,
+	ok(t, firstErr(s.sign(w, ruleText("budget:dev", 2, rules.Tighten, since, until,
 		"tenant: dev\nmission: {max_attempts: 30, max_wall_hours: 24}\nattempt_hard_limit_s: 3600\n"))))
 	propose := func(key string, p store.MissionProposal) map[string]any {
 		t.Helper()

@@ -112,7 +112,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 			return err
 		}
 		var after *candidate
-		envs := envelopes{}
+		rc := ruleCache{}
 		for {
 			cands, err := candidates(ctx, tx, o.effects, after)
 			if err != nil {
@@ -123,7 +123,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 				// only on its hosts, by its executors, while it is in force.
 				req := r
 				if cands[i].envelope != "" {
-					env, eerr := envs.get(ctx, tx, cands[i].envelope)
+					env, eerr := rc.get(ctx, tx, cands[i].envelope)
 					if eerr != nil {
 						return eerr
 					}
@@ -132,7 +132,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 						continue
 					}
 				}
-				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl); err != nil || claim != nil {
+				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc); err != nil || claim != nil {
 					return err
 				}
 			}
@@ -191,7 +191,7 @@ func candidateOf(ctx context.Context, tx pgx.Tx, taskID string) (candidate, erro
 // What it locks for a candidate it does not take is released at once by
 // rolling back to a savepoint, so a skipped candidate holds nothing until the
 // claim commits (review 148 B1).
-func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration) (*Claim, error) {
+func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache) (*Claim, error) {
 	hook("candidate", c.id)
 	_, found, err := pickTool(ctx, tx, r.Tools, cp, c)
 	if err != nil || !found {
@@ -202,7 +202,7 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 	if err != nil {
 		return nil, err
 	}
-	cl, err := take(ctx, sp, r, cp, c, ttl)
+	cl, err := take(ctx, sp, r, cp, c, ttl, rc)
 	if err != nil || cl == nil {
 		if rerr := sp.Rollback(ctx); err == nil {
 			err = rerr
@@ -231,7 +231,7 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 // either commits before the claim or is seen by it (review 148 A2). A plan
 // task takes the mission row exclusively, so two plan tasks of one mission
 // never lease together (task_one_live_plan).
-func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration) (*Claim, error) {
+func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache) (*Claim, error) {
 	var mission string
 	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR NO KEY UPDATE SKIP LOCKED`,
 		c.id).Scan(&mission)
@@ -262,17 +262,22 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	if err != nil || !found {
 		return nil, err
 	}
-	mode := "FOR SHARE"
-	if c.role == "plan" {
-		mode = "FOR NO KEY UPDATE"
-	}
-	var missionState string
-	if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+mode, c.mission).Scan(&missionState); err != nil {
+	// Held exclusively, so the claims of one mission count its attempts one
+	// at a time and the last one its budget allows goes to one host (review
+	// 186 A3).
+	var m missionBudget
+	if err = tx.QueryRow(ctx, `SELECT state, tenant, budget_json, created_at, COALESCE(envelope_rule_id, '') FROM agentrt.mission
+	  WHERE mission_id = $1 FOR NO KEY UPDATE`, c.mission).Scan(&m.state, &m.tenant, &m.budget, &m.created, &m.envelope); err != nil {
 		return nil, err
 	}
-	if missionState != "active" {
+	if m.state != "active" {
 		return nil, nil
 	}
+	limit, fits, err := m.allows(ctx, tx, rc, c)
+	if err != nil || !fits {
+		return nil, err
+	}
+	c.limitS = limit
 	stop, err := held(ctx, tx, []scope{{"mission", c.mission}, {"task", c.id}}, "stop", "pause")
 	if err != nil || stop {
 		return nil, err

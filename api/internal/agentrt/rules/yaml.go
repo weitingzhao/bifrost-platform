@@ -178,8 +178,8 @@ func (o *object) at(key string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("%s.%s is a time", o.where, key)
 	}
 	t, err := time.Parse(time.RFC3339, n.Value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%s.%s is a time like 2026-10-15T00:00:00Z", o.where, key)
+	if err != nil || t.Nanosecond() != 0 {
+		return time.Time{}, fmt.Errorf("%s.%s is a time in whole seconds like 2026-10-15T00:00:00Z", o.where, key)
 	}
 	return t.UTC(), nil
 }

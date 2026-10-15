@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -50,7 +51,7 @@ func envelopeFit(env *StoredRule, p MissionProposal) (bool, string) {
 	switch e := env; {
 	case e == nil:
 		return false, EnvelopePending
-	case actionRank(p.MaxAction) > actionRank(e.Envelope.MaxAction):
+	case effectRank[p.MaxAction] > effectRank[e.Envelope.MaxAction]:
 		return false, fmt.Sprintf("max_action %s is above the envelope's %s", p.MaxAction, e.Envelope.MaxAction)
 	case p.MaxAttempts == 0 || p.MaxWallHours == 0:
 		return false, "the mission states no budget and no budget:" + p.Tenant + " rule gives one"
@@ -61,23 +62,72 @@ func envelopeFit(env *StoredRule, p MissionProposal) (bool, string) {
 	return true, ""
 }
 
-func actionRank(a string) int { return slices.Index([]string{"none", "branch"}, a) }
+// ruleCache is the rules one claim acts on, each read once (in force at the
+// database's clock, nil when none is).
+type ruleCache map[string]*StoredRule
 
-// envelopeFor is the standing envelope in force that a mission started
-// under, read once per claim; nil when the mission started without one, or
-// when it did and none is in force now (its tasks then wait).
-type envelopes map[string]*StoredRule
-
-func (es envelopes) get(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
-	if r, ok := es[id]; ok {
+func (rc ruleCache) get(ctx context.Context, tx pgx.Tx, id string) (*StoredRule, error) {
+	if r, ok := rc[id]; ok {
 		return r, nil
 	}
 	r, err := inForce(ctx, tx, id)
 	if err != nil {
 		return nil, err
 	}
-	es[id] = r
+	rc[id] = r
 	return r, nil
+}
+
+// missionBudget is a mission as a claim checks it, read under its lock.
+type missionBudget struct {
+	state, tenant, envelope string
+	budget                  []byte
+	created                 time.Time
+}
+
+// allows says whether a task of the mission may be leased now, and its hard
+// time limit (proposal §2, T10; review 186 A3, A4): the tenant's budget rule
+// is in force (none: nothing is dispatched) and caps the limit; the mission
+// states a budget, has attempts left and time left; and a mission that
+// started inside a standing envelope still fits the envelope in force, with
+// the task's effect too.
+func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c candidate) (int, bool, error) {
+	rule, err := rc.get(ctx, tx, rules.KindBudget+":"+m.tenant)
+	if err != nil || rule == nil {
+		return 0, false, err
+	}
+	// A mission that states no budget has the rule's, as a proposal that
+	// states none is given it.
+	var b rules.Budget
+	if err = json.Unmarshal(m.budget, &b); err != nil {
+		return 0, false, nil
+	}
+	if b.MaxAttempts == 0 && b.MaxWallHours == 0 {
+		b = rule.Budget.Mission
+	}
+	if b.MaxAttempts <= 0 || b.MaxWallHours <= 0 {
+		return 0, false, nil
+	}
+	var used int
+	var over bool
+	if err = tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id WHERE t.mission_id = $1),
+	    clock_timestamp() >= $2::timestamptz + make_interval(hours => $3)`, c.mission, m.created, b.MaxWallHours).Scan(&used, &over); err != nil {
+		return 0, false, err
+	}
+	if used >= b.MaxAttempts || over {
+		return 0, false, nil
+	}
+	if m.envelope != "" {
+		env, err := rc.get(ctx, tx, m.envelope)
+		if err != nil || env == nil {
+			return 0, false, err
+		}
+		e := env.Envelope
+		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts > e.Budget.MaxAttempts || b.MaxWallHours > e.Budget.MaxWallHours {
+			return 0, false, nil
+		}
+	}
+	return min(c.limitS, rule.Budget.AttemptLimitSec), true, nil
 }
 
 // envelopeTools narrows a claim to the envelope a mission started under: the
