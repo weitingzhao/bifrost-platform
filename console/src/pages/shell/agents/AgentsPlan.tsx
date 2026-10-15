@@ -1,0 +1,40 @@
+import { useQuery } from '@tanstack/react-query'
+import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
+import { OpsSection } from '@/components/layout/OpsSection'
+
+function checked(at?: number) {
+  return at === undefined ? 'Unknown' : new Date(at * 1000).toISOString()
+}
+export function AgentsPlan() {
+  const query = useQuery({ queryKey: ['agent-progress'], queryFn: fetchAgentProgress, refetchInterval: AGENT_PROGRESS_POLL_MS })
+  const roadmap = query.data?.document?.roadmap
+  const round = roadmap?.round, arch = roadmap?.arch
+  return <OpsSection title="Plan and architecture" bodyPadding="compact"
+    actions={<span className="text-xs text-muted-foreground">Generated: {query.data?.generated_at || 'Unknown'}</span>}>
+    {query.isPending && <p role="status">Loading plan and architecture…</p>}
+    {query.isError && <p role="alert">Could not load plan and architecture: {query.error.message}</p>}
+    {query.isSuccess && !round && !arch && <p>The plan is not published in this environment.</p>}
+    {round && <div className="flex flex-col gap-3">
+      <h4>Round {round.n ?? 'unknown'} · Checked: {checked(round.checked)}</h4>
+      {round.items.length === 0 && <p>No round items published.</p>}
+      {round.items.map((item, i) => <details key={`${item.key}-${i}`} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">
+        <summary className="cursor-pointer text-sm">{item.key} {item.name} · {item.done ?? '?'}/{item.total ?? '?'} · {item.state}</summary>
+        {item.steps.length === 0 && <p>No steps published.</p>}
+        <ol className="flex flex-col gap-2 pt-2 text-sm">
+          {item.steps.map((step, j) => <li key={`${step.id}-${j}`} className="break-words">
+            <strong>{step.state || 'Unknown'}</strong> · {step.t || 'Untitled step'}{step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
+          </li>)}
+        </ol>
+      </details>)}
+    </div>}
+    {!round && arch && <p>No round plan published.</p>}
+    {arch && <div className="mt-3 flex flex-col gap-3">
+      <h4>{arch.title || 'Architecture'} · Checked: {checked(arch.checked)}</h4>
+      {arch.rows.length === 0 && <p>No architecture rows published.</p>}
+      {arch.rows.map((row, i) => <div key={i} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 text-sm">
+        <strong>{row.state || 'Unknown'} · {row.what}</strong><p className="break-words">{row.now}</p>
+      </div>)}
+    </div>}
+    {round && !arch && <p>No architecture published.</p>}
+  </OpsSection>
+}

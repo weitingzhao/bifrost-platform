@@ -8,6 +8,7 @@ import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
 import { DevSessionsPage } from '@/pages/DevSessionsPage'
 import {
+  AgentsPage,
   DataPage,
   IbPage,
   InfrastructurePage,
@@ -43,6 +44,7 @@ const SHELL_PAGES: Record<ShellRouteId, ComponentType> = {
   releases: ReleasesPage,
   infrastructure: InfrastructurePage,
   progress: ProgressPage,
+  agents: AgentsPage,
   records: RecordsPage,
 }
 

@@ -15,7 +15,7 @@ import {
   resolveHashTab,
 } from '@/lib/shell/consoleRoutes'
 
-const LABELS = ['Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
+const LABELS = ['Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Agents', 'Records']
 
 describe('shell navigation', () => {
   it('puts Needs you first and Records last', () => {
@@ -28,6 +28,7 @@ describe('shell navigation', () => {
       'releases',
       'infrastructure',
       'progress',
+      'agents',
       'records',
     ])
     expect(shellSidebarItems().map(item => item.label)).toEqual(LABELS)

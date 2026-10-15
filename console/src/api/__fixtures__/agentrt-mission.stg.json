@@ -1,0 +1,38 @@
+{
+ "goal": "Walk one small task through the STG agent runtime to accepted: cursor implements it on a branch (the task needs tests that listen on a local port, which codex's sandbox cannot), the deterministic verification passes, and codex reviews it. The change itself is httptest tests for the UniFi client's V2Post and V2Delete.",
+ "state": "active",
+ "title": "2.2 walkthrough 2: Cursor writes, Codex reviews (UniFi client tests)",
+ "tenant": "dev",
+ "version": 1,
+ "work_id": "W-31",
+ "created_at": "2026-10-15T20:28:21.246818+00:00",
+ "mission_id": "M-2",
+ "scope_json": {
+  "repos": [
+   "bifrost-platform"
+  ],
+  "max_action": "branch"
+ },
+ "budget_json": {
+  "max_attempts": 8,
+  "max_wall_hours": 4
+ },
+ "deadline_at": "2026-10-22T20:28:21.248647+00:00",
+ "task_counts": {
+  "ready": 1,
+  "accepted": 5,
+  "verifying": 1
+ },
+ "success_json": {
+  "criteria": [
+   "the implement task's attempt is made by exec:cursor and its branch is persisted on the first try",
+   "the deterministic verification of that attempt passes",
+   "the review by exec:codex passes and the implement task is accepted",
+   "the change touches only api/internal/network/unifi/client_test.go"
+  ]
+ },
+ "envelope_rule_id": "standing-envelope:dev",
+ "spec_artifact_id": null,
+ "created_by_actor_id": "thread:local_1285bc1d-27df-44c8-90c9-532ae489920c",
+ "envelope_rule_version": 1
+}

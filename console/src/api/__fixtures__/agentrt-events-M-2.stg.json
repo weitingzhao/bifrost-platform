@@ -1,0 +1,2410 @@
+[
+ {
+  "at": "2026-10-15T20:28:21.259295+00:00",
+  "seq": 1,
+  "txid": 61467061,
+  "sha256": "2ce25458c7956d699983b80a099e035261324f6b99c51f0f74289387f0d90a07",
+  "task_id": null,
+  "actor_id": "thread:local_1285bc1d-27df-44c8-90c9-532ae489920c",
+  "event_id": 71,
+  "body_json": {
+   "title": "2.2 walkthrough 2: Cursor writes, Codex reviews (UniFi client tests)",
+   "token": "operator"
+  },
+  "attempt_id": null,
+  "event_type": "mission_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:21.262541+00:00",
+  "seq": 2,
+  "txid": 61467061,
+  "sha256": "e7a6410145c9dbcce57f39dc12ba99d8fb007f1fe76801870c7b6cedb4f30ce6",
+  "task_id": null,
+  "actor_id": "controller",
+  "event_id": 72,
+  "body_json": {
+   "to": "active",
+   "from": "proposed",
+   "reason": "inside standing-envelope:dev v1"
+  },
+  "attempt_id": null,
+  "event_type": "mission_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "2ce25458c7956d699983b80a099e035261324f6b99c51f0f74289387f0d90a07",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:41.850294+00:00",
+  "seq": 3,
+  "txid": 61467106,
+  "sha256": "355277e3ec6040911b43f5a4742e5a428a0659bff1129a71dd30091da49ff279",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "thread:local_1285bc1d-27df-44c8-90c9-532ae489920c",
+  "event_id": 74,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "implement",
+   "needs": [
+    "listen_port_tests"
+   ],
+   "title": "UniFi client V2Post/V2Delete tests",
+   "token": "operator",
+   "base_commit": "e370d397341f9eaa4505e97a550da69f4579d2f2",
+   "off_plan_reason": "2.2 acceptance walkthrough 2; STG has no plan tree yet"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "e7a6410145c9dbcce57f39dc12ba99d8fb007f1fe76801870c7b6cedb4f30ce6",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:43.44863+00:00",
+  "seq": 4,
+  "txid": 61467109,
+  "sha256": "3bd6bb7c01b15ddf6dabcdfa3a7d75c42a3a5ec2bb84afccdb5c204739144146",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 75,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "355277e3ec6040911b43f5a4742e5a428a0659bff1129a71dd30091da49ff279",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:43.461028+00:00",
+  "seq": 5,
+  "txid": 61467109,
+  "sha256": "5d2956520569b0e710ffa045d031d86beef038b4682234805e43aa47eb0c1fc3",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 76,
+  "body_json": {
+   "job": "implementer",
+   "inputs": {
+    "job": "implementer",
+    "core": "",
+    "facts": [
+     {
+      "id": "codex-sandbox-no-listen",
+      "kind": "cannot",
+      "rule": null,
+      "grants": false,
+      "subject": "listen_port_tests",
+      "executor": "exec:codex",
+      "provider": null
+     }
+    ],
+    "needs": [
+     "listen_port_tests"
+    ],
+    "subject": "",
+    "attempts": [],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "implementer/exec:codex/openai/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:codex",
+      "provider": "openai"
+     },
+     {
+      "id": "implementer/exec:cursor/cursor-mix/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "probation",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:cursor",
+      "provider": "cursor-mix"
+     }
+    ]
+   },
+   "excluded": [
+    {
+     "reason": "cannot or must_not on a need",
+     "reasons": [
+      "cannot or must_not on a need"
+     ],
+     "candidate": "implementer/exec:codex/openai/*"
+    }
+   ],
+   "candidates": [
+    "implementer/exec:cursor/cursor-mix/*"
+   ],
+   "fingerprint": "sha256:25eb915e66858a353ce01a8d5a2241598fe626ba8ff6e6cea2559a3a7305e611"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "3bd6bb7c01b15ddf6dabcdfa3a7d75c42a3a5ec2bb84afccdb5c204739144146",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:44.338821+00:00",
+  "seq": 6,
+  "txid": 61467110,
+  "sha256": "214be518c8636d49053edf3079c6c0969b305ac45379599d942d069e7900b9dd",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 77,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:cursor",
+   "attempt_no": 1,
+   "lease_epoch": 5,
+   "model_provider": "cursor-mix"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "5d2956520569b0e710ffa045d031d86beef038b4682234805e43aa47eb0c1fc3",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:44.342151+00:00",
+  "seq": 7,
+  "txid": 61467110,
+  "sha256": "8e25497bc3f123ca485f38e9781c489c54d8aacf3ddce8a53926ca5ef965116c",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 78,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "214be518c8636d49053edf3079c6c0969b305ac45379599d942d069e7900b9dd",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:46.217231+00:00",
+  "seq": 8,
+  "txid": 61467112,
+  "sha256": "07ad7e454d38e28ddae3df3dfaa4af2b82759b70f8f3d901d90f4b434f4c75f1",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 79,
+  "body_json": {
+   "model_provider": "cursor-mix"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "8e25497bc3f123ca485f38e9781c489c54d8aacf3ddce8a53926ca5ef965116c",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:28:46.220079+00:00",
+  "seq": 9,
+  "txid": 61467112,
+  "sha256": "4f63357bcb2d3430b4a10815b179a6ba3892186e55e8b6b8a96bd1cab5f2da2d",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 80,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "07ad7e454d38e28ddae3df3dfaa4af2b82759b70f8f3d901d90f4b434f4c75f1",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:30.814937+00:00",
+  "seq": 10,
+  "txid": 61467246,
+  "sha256": "097085b3b631ad5ad911ba0361e988306f8ffb45a28fa44bfb7ee3e5f7c3d45d",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 81,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "4f63357bcb2d3430b4a10815b179a6ba3892186e55e8b6b8a96bd1cab5f2da2d",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:31.54148+00:00",
+  "seq": 11,
+  "txid": 61467249,
+  "sha256": "2792ebe72b5bc9123f2a4c4ac06680df3f3758a66214305c7ffc25fe6d2ae633",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 84,
+  "body_json": {
+   "artifacts": [
+    "sha256:248fbc4747fd5b73f74feecf2056b41290a30b5063e7e7aaf5caae9fa4198bb2",
+    "sha256:28e6a23720a6f3e04190386c16298903338ae285b8831f10efaafc642c9f0e1d"
+   ],
+   "pushed_ref": "refs/heads/agent/t_01M50M1CZSDN8PNHRH8C2241RS/a1",
+   "pushed_commit": "f30cdd8a6077ece6248f70706f0562fb84791801"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "097085b3b631ad5ad911ba0361e988306f8ffb45a28fa44bfb7ee3e5f7c3d45d",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:31.56925+00:00",
+  "seq": 12,
+  "txid": 61467250,
+  "sha256": "d4b751a1a3bf84991c011bd0beaaf6db3b540be3cd70242a65988375fea24408",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 85,
+  "body_json": {},
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "2792ebe72b5bc9123f2a4c4ac06680df3f3758a66214305c7ffc25fe6d2ae633",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:31.571052+00:00",
+  "seq": 13,
+  "txid": 61467250,
+  "sha256": "56bc75927b3cadf91ecbf6c5a6705ce0d0fd33e24ec8be12b81fa57a39035c2e",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 86,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "d4b751a1a3bf84991c011bd0beaaf6db3b540be3cd70242a65988375fea24408",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:31.599406+00:00",
+  "seq": 14,
+  "txid": 61467251,
+  "sha256": "0714e3e33ab20804f206c2cd0076db5e9dc9cd8537db52beaa3b153b90118c21",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "host:mbp-dev",
+  "event_id": 87,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "56bc75927b3cadf91ecbf6c5a6705ce0d0fd33e24ec8be12b81fa57a39035c2e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.441566+00:00",
+  "seq": 15,
+  "txid": 61467273,
+  "sha256": "7d83b95475688e0c2e8d5bc98e338ddc26966534f0b790256a28c934f6a7e947",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 88,
+  "body_json": {
+   "to": "verifying",
+   "from": "submitted",
+   "reason": "deterministic verification"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "0714e3e33ab20804f206c2cd0076db5e9dc9cd8537db52beaa3b153b90118c21",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.448028+00:00",
+  "seq": 16,
+  "txid": 61467273,
+  "sha256": "ab342bcd980a9d040f30aabf0dcdae36cf09d0741c740a7175036582f7d5113f",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 89,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "verify",
+   "title": "verify t_01M50M1CZSDN8PNHRH8C2241RS",
+   "base_commit": "f30cdd8a6077ece6248f70706f0562fb84791801",
+   "off_plan_reason": "2.2 acceptance walkthrough 2; STG has no plan tree yet"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "7d83b95475688e0c2e8d5bc98e338ddc26966534f0b790256a28c934f6a7e947",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.450872+00:00",
+  "seq": 17,
+  "txid": 61467273,
+  "sha256": "7027adbe0c3ca904d9795afc5a576b062cf3dbd0e21ab8ed93d5e730ef242411",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 90,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "ab342bcd980a9d040f30aabf0dcdae36cf09d0741c740a7175036582f7d5113f",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.456019+00:00",
+  "seq": 18,
+  "txid": 61467273,
+  "sha256": "6d4af689ec4d5a3b21e5f94733f542dc8355ff5589b2e988c69ca783f662f02d",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 91,
+  "body_json": {
+   "job": "verifier",
+   "inputs": {
+    "job": "verifier",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "t_01M50M1CZSDN8PNHRH8C2241RS",
+    "attempts": [
+     {
+      "id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+      "executor": "exec:cursor",
+      "provider": "cursor-mix"
+     }
+    ],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "verifier/exec:deterministic/local/*",
+      "rule": {
+       "id": "job:verifier",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:deterministic",
+      "provider": "local"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "verifier/exec:deterministic/local/*"
+   ],
+   "fingerprint": "sha256:877ffdd66242e810b7f64723a3eb3a63498210c2ef1b9bada86cc62557d73ceb"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "7027adbe0c3ca904d9795afc5a576b062cf3dbd0e21ab8ed93d5e730ef242411",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.72413+00:00",
+  "seq": 19,
+  "txid": 61467274,
+  "sha256": "892e3ff1f79dfe0084b78cc5dadac15ff209731cea1eb0ec399930adcf1503b4",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 92,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:deterministic",
+   "attempt_no": 1,
+   "lease_epoch": 6,
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "6d4af689ec4d5a3b21e5f94733f542dc8355ff5589b2e988c69ca783f662f02d",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:43.725776+00:00",
+  "seq": 20,
+  "txid": 61467274,
+  "sha256": "e6fb7fc37f27c2d29bbfa4b2ee329a1ea3791f200ddffa3de7518991a0c79072",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 93,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "892e3ff1f79dfe0084b78cc5dadac15ff209731cea1eb0ec399930adcf1503b4",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:45.193011+00:00",
+  "seq": 21,
+  "txid": 61467276,
+  "sha256": "b39ef5db449cb3828990dce8a21360b8bb793bdefaf2914ec1e359f60aec8fea",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 94,
+  "body_json": {
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "e6fb7fc37f27c2d29bbfa4b2ee329a1ea3791f200ddffa3de7518991a0c79072",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:45.195291+00:00",
+  "seq": 22,
+  "txid": 61467276,
+  "sha256": "5e05d6ec0990df76c721553822aa8921a4d1636a3319df3711f27e33ba63c688",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 95,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "b39ef5db449cb3828990dce8a21360b8bb793bdefaf2914ec1e359f60aec8fea",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:56.22731+00:00",
+  "seq": 23,
+  "txid": 61467281,
+  "sha256": "3b577a1dcc5ea0f6f766d5622db83df97b9998d8dfe74aec144e0a828de31598",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 96,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "5e05d6ec0990df76c721553822aa8921a4d1636a3319df3711f27e33ba63c688",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:56.289441+00:00",
+  "seq": 24,
+  "txid": 61467283,
+  "sha256": "646729b0eb339d86a7fe1f2de4e80d8c17bd69fa0433fac1dcecde84ec4f25d3",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 98,
+  "body_json": {
+   "artifacts": [
+    "sha256:ccab7741353a00a8e06ed94e0e866e4fe85796e2affb4fb114b5c1808fdbed19",
+    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   ]
+  },
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "3b577a1dcc5ea0f6f766d5622db83df97b9998d8dfe74aec144e0a828de31598",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:56.322625+00:00",
+  "seq": 25,
+  "txid": 61467284,
+  "sha256": "7610c37c604cbcae6607dcb549382d5e259b2e84bda71683b2dbf4447b2babf4",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 99,
+  "body_json": {},
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "646729b0eb339d86a7fe1f2de4e80d8c17bd69fa0433fac1dcecde84ec4f25d3",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:56.324649+00:00",
+  "seq": 26,
+  "txid": 61467284,
+  "sha256": "8468c5641aba469a4e0a58521497dda8becb021678bd2d3b6883159caa27810a",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 100,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "7610c37c604cbcae6607dcb549382d5e259b2e84bda71683b2dbf4447b2babf4",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:56.353714+00:00",
+  "seq": 27,
+  "txid": 61467285,
+  "sha256": "905b7b753ed37e10cbef718d5d60969f17a4d9b7409bf64c9205cfeb0dee2df0",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "host:mbp-dev",
+  "event_id": 101,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50M540BBZD9DWQFEJ6NFYX4",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "8468c5641aba469a4e0a58521497dda8becb021678bd2d3b6883159caa27810a",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:58.440019+00:00",
+  "seq": 28,
+  "txid": 61467289,
+  "sha256": "d33902f7926e29db2e68d41efa4ab082256a92414910917bf92f18d05419c5dc",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 102,
+  "body_json": {
+   "method": "deterministic",
+   "verdict": "pass",
+   "verification_id": "v_01M50M5JC7A59XZG3H9VSVWGYF"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "verification_recorded",
+  "mission_id": "M-2",
+  "prev_sha256": "905b7b753ed37e10cbef718d5d60969f17a4d9b7409bf64c9205cfeb0dee2df0",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:58.442561+00:00",
+  "seq": 29,
+  "txid": 61467289,
+  "sha256": "ca3b28922945394ff5ac17f1fc29cde1e05b7d399b9e8808c76c0e3c1476b285",
+  "task_id": "t_01M50M53QQDND5GE09QAHGBANC",
+  "actor_id": "controller",
+  "event_id": 103,
+  "body_json": {
+   "to": "accepted",
+   "from": "submitted",
+   "reason": "result used: pass"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "d33902f7926e29db2e68d41efa4ab082256a92414910917bf92f18d05419c5dc",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:58.445942+00:00",
+  "seq": 30,
+  "txid": 61467289,
+  "sha256": "f8417c897e15ea6965e6b90f6decd640cd88367ecd1f6e8922c65b268e72b57e",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 104,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "review",
+   "title": "review t_01M50M1CZSDN8PNHRH8C2241RS",
+   "base_commit": "f30cdd8a6077ece6248f70706f0562fb84791801",
+   "off_plan_reason": "2.2 acceptance walkthrough 2; STG has no plan tree yet"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "ca3b28922945394ff5ac17f1fc29cde1e05b7d399b9e8808c76c0e3c1476b285",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:58.44803+00:00",
+  "seq": 31,
+  "txid": 61467289,
+  "sha256": "5a9a1c8356a4e4852ff06c1c2590d1c71833288cfcb75014f0ae685e5fb45ce8",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 105,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "f8417c897e15ea6965e6b90f6decd640cd88367ecd1f6e8922c65b268e72b57e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:58.452812+00:00",
+  "seq": 32,
+  "txid": 61467289,
+  "sha256": "a49399b51d6ed9dac2d41883ea887ce27de4180e15b49b62a468f7d496147acc",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 106,
+  "body_json": {
+   "job": "reviewer",
+   "inputs": {
+    "job": "reviewer",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "t_01M50M1CZSDN8PNHRH8C2241RS",
+    "attempts": [
+     {
+      "id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+      "executor": "exec:cursor",
+      "provider": "cursor-mix"
+     }
+    ],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "reviewer/exec:codex/openai/*",
+      "rule": {
+       "id": "job:reviewer",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:codex",
+      "provider": "openai"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "reviewer/exec:codex/openai/*"
+   ],
+   "fingerprint": "sha256:bd78375c4af2c809fb06ed6fccb82f32828ed1d4e1f31ce9d218e9fb7a3b0b67"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "5a9a1c8356a4e4852ff06c1c2590d1c71833288cfcb75014f0ae685e5fb45ce8",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:59.409446+00:00",
+  "seq": 33,
+  "txid": 61467290,
+  "sha256": "67e956f804d57ac566e5691dd06f177791dab3155a859860c1fb12a7a4f01e92",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 107,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:codex",
+   "attempt_no": 1,
+   "lease_epoch": 7,
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "a49399b51d6ed9dac2d41883ea887ce27de4180e15b49b62a468f7d496147acc",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:30:59.411328+00:00",
+  "seq": 34,
+  "txid": 61467290,
+  "sha256": "5002f05795b3ec5f54579b74c07d6442d7d4d80709b3d501a050c0abb760a326",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 108,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "67e956f804d57ac566e5691dd06f177791dab3155a859860c1fb12a7a4f01e92",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:31:01.392581+00:00",
+  "seq": 35,
+  "txid": 61467301,
+  "sha256": "3b42e6b38de7c841276b2c38a44e73515962571e22c9446dee0ef4be9b64ad6b",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 109,
+  "body_json": {
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "5002f05795b3ec5f54579b74c07d6442d7d4d80709b3d501a050c0abb760a326",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:31:01.394444+00:00",
+  "seq": 36,
+  "txid": 61467301,
+  "sha256": "9c873551a2a7845f02eba39434a21b7da6b609eca5b3ede2f287cf778b673e6c",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 110,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "3b42e6b38de7c841276b2c38a44e73515962571e22c9446dee0ef4be9b64ad6b",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:14.588657+00:00",
+  "seq": 37,
+  "txid": 61467358,
+  "sha256": "fcf2bf67f298e3925240f4d4cbe6e108716e03a8cfbbbf4e583cf4b0fe8642a3",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 111,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "9c873551a2a7845f02eba39434a21b7da6b609eca5b3ede2f287cf778b673e6c",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:14.697843+00:00",
+  "seq": 38,
+  "txid": 61467361,
+  "sha256": "ad3c541c2a9223115414bb613d9a69b539d5556ceb91997cf4c7b1b91bedcf0e",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 114,
+  "body_json": {
+   "artifacts": [
+    "sha256:35a692254ea8bcaf5c2497282f515a1924f2b61a0272fa684e469cbdc611933d",
+    "sha256:7a6e639f039880a85126c567c065aa9530246e2c0fd110bacdf22fe05df8297d"
+   ]
+  },
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "fcf2bf67f298e3925240f4d4cbe6e108716e03a8cfbbbf4e583cf4b0fe8642a3",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:14.728159+00:00",
+  "seq": 39,
+  "txid": 61467362,
+  "sha256": "de256740decb432e022eb9b56060ef9eb2c034fcb57e62df54517040cec55f97",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 115,
+  "body_json": {},
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "ad3c541c2a9223115414bb613d9a69b539d5556ceb91997cf4c7b1b91bedcf0e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:14.72969+00:00",
+  "seq": 40,
+  "txid": 61467362,
+  "sha256": "786d60d9c078426b2d40a58781036a49e61bb115deeb21b0286ddbb737587676",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 116,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "de256740decb432e022eb9b56060ef9eb2c034fcb57e62df54517040cec55f97",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:14.760682+00:00",
+  "seq": 41,
+  "txid": 61467363,
+  "sha256": "88ae9b3849c062ba26a63e650a763d78df32073a63fda44d3c54423d1105bebc",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "host:mbp-dev",
+  "event_id": 117,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50M5KAGDJS3CXJW9NTE72CM",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "786d60d9c078426b2d40a58781036a49e61bb115deeb21b0286ddbb737587676",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:28.439766+00:00",
+  "seq": 42,
+  "txid": 61467383,
+  "sha256": "09ea10395fa7cd5baa32ed58947e79779b03f12ca4b9b26bfeda14d2d83df560",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 118,
+  "body_json": {
+   "method": "review",
+   "verdict": "pass",
+   "verification_id": "v_01M50M8A8QANTVX3R3K23Q25MB"
+  },
+  "attempt_id": "a_01M50M1FDJVG8SDC39N32CKH7E",
+  "event_type": "verification_recorded",
+  "mission_id": "M-2",
+  "prev_sha256": "88ae9b3849c062ba26a63e650a763d78df32073a63fda44d3c54423d1105bebc",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:28.442208+00:00",
+  "seq": 43,
+  "txid": 61467383,
+  "sha256": "ea07d9c45102cc73cce5cb092395cec6019a02f53cf2631c04dd8ab405ce11cb",
+  "task_id": "t_01M50M5JCD8ST2GFC9ZKSPWJ62",
+  "actor_id": "controller",
+  "event_id": 119,
+  "body_json": {
+   "to": "accepted",
+   "from": "submitted",
+   "reason": "result used: pass"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "09ea10395fa7cd5baa32ed58947e79779b03f12ca4b9b26bfeda14d2d83df560",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T20:32:28.443844+00:00",
+  "seq": 44,
+  "txid": 61467383,
+  "sha256": "90d33512f0f2c8fbb0f1196f6225ead7be1f8aff8e94045f1697f814bd5c9dc6",
+  "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+  "actor_id": "controller",
+  "event_id": 120,
+  "body_json": {
+   "to": "accepted",
+   "from": "verifying",
+   "reason": "review passed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "ea07d9c45102cc73cce5cb092395cec6019a02f53cf2631c04dd8ab405ce11cb",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:26.863149+00:00",
+  "seq": 45,
+  "txid": 61472007,
+  "sha256": "a6ebb44a170c4f703bef3460bad3e35bfd06b713894d8c97213ef721b926569a",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+  "event_id": 138,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "implement",
+   "title": "Gate A T06 probe: a failed experiment",
+   "token": "operator",
+   "base_commit": "54a02e749877a662ce7ac4e3a75ec763194faf17",
+   "off_plan_reason": "2.2 acceptance T06"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "90d33512f0f2c8fbb0f1196f6225ead7be1f8aff8e94045f1697f814bd5c9dc6",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:28.448222+00:00",
+  "seq": 46,
+  "txid": 61472013,
+  "sha256": "307075cb3d2ac9d2f5639eb8942fba10a68d1524da3194fa8b283eb4662f1fdc",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 141,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "a6ebb44a170c4f703bef3460bad3e35bfd06b713894d8c97213ef721b926569a",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:28.452114+00:00",
+  "seq": 47,
+  "txid": 61472013,
+  "sha256": "83db620181d8c0b3b3ce6c6c83e294838339452fcb23884caa9a3d3222aa7a69",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 142,
+  "body_json": {
+   "job": "implementer",
+   "inputs": {
+    "job": "implementer",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "",
+    "attempts": [],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "implementer/exec:codex/openai/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:codex",
+      "provider": "openai"
+     },
+     {
+      "id": "implementer/exec:cursor/cursor-mix/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "probation",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:cursor",
+      "provider": "cursor-mix"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "implementer/exec:codex/openai/*",
+    "implementer/exec:cursor/cursor-mix/*"
+   ],
+   "fingerprint": "sha256:6b6913d3e052623cbe553d77d4227a47df152625ba558c1e12c6e6cd2db491f4"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "307075cb3d2ac9d2f5639eb8942fba10a68d1524da3194fa8b283eb4662f1fdc",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:50.397541+00:00",
+  "seq": 48,
+  "txid": 61472045,
+  "sha256": "a7fea2a6888cacec1571eac94baeb0a5e74b6f9368d6ec3df384422f655f0158",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 154,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:codex",
+   "attempt_no": 1,
+   "lease_epoch": 9,
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "83db620181d8c0b3b3ce6c6c83e294838339452fcb23884caa9a3d3222aa7a69",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:50.399231+00:00",
+  "seq": 49,
+  "txid": 61472045,
+  "sha256": "3ad5c2a0fe45c7bd38e9efda5edd39589087a09e5a6766583b0921fb462fe46a",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 155,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "a7fea2a6888cacec1571eac94baeb0a5e74b6f9368d6ec3df384422f655f0158",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:51.641893+00:00",
+  "seq": 50,
+  "txid": 61472047,
+  "sha256": "42be16ef774201c2177d1d6d64ac38f3c0e3f88fa15f6652ac6a9f01cfd620ea",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 156,
+  "body_json": {
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "3ad5c2a0fe45c7bd38e9efda5edd39589087a09e5a6766583b0921fb462fe46a",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:07:51.643377+00:00",
+  "seq": 51,
+  "txid": 61472047,
+  "sha256": "fc6ceb9dd615ffba5022e3dc2aa82ecd7eccf4e39a6fdec57520a09a470c7c8d",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 157,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "42be16ef774201c2177d1d6d64ac38f3c0e3f88fa15f6652ac6a9f01cfd620ea",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:02.932429+00:00",
+  "seq": 52,
+  "txid": 61472057,
+  "sha256": "1957a9f4836693007660a4e6448aefe3e7afdef5100e66f809a03e5672c713ab",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 162,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "fc6ceb9dd615ffba5022e3dc2aa82ecd7eccf4e39a6fdec57520a09a470c7c8d",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:03.903244+00:00",
+  "seq": 53,
+  "txid": 61472060,
+  "sha256": "f1cfe23023c2956d69d789e8a0ab97996b1a483ce8f85679fdd3126d2a527eec",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 165,
+  "body_json": {
+   "artifacts": [
+    "sha256:db73c260b578ae2ee231ba12ce1e1f6e7ae84d6206b96c03cf09e50b08b44037",
+    "sha256:0c5294e2c1d8be7f362cc87875badc48f755fa1375184e77f9ac965ac218c3e1"
+   ],
+   "pushed_ref": "refs/heads/agent/t_01M50P8BGEJWJV767MMT1G16ZP/a1",
+   "pushed_commit": "c07d318c0b2d2f0fbba4b01195d4bdb94b3af2b5"
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "1957a9f4836693007660a4e6448aefe3e7afdef5100e66f809a03e5672c713ab",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:03.934283+00:00",
+  "seq": 54,
+  "txid": 61472061,
+  "sha256": "b3fb2cb569e4459f8ac6a8dceea34fd22db33c1cbffd0a6203eab1356e2cebe4",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 166,
+  "body_json": {},
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "f1cfe23023c2956d69d789e8a0ab97996b1a483ce8f85679fdd3126d2a527eec",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:03.938112+00:00",
+  "seq": 55,
+  "txid": 61472061,
+  "sha256": "0ca63a0aa6d88852fadbf25ca7756378a15ced7e5a8c12df5822860a31397b57",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 167,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "b3fb2cb569e4459f8ac6a8dceea34fd22db33c1cbffd0a6203eab1356e2cebe4",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:03.963604+00:00",
+  "seq": 56,
+  "txid": 61472062,
+  "sha256": "91e58ff161d784c313bf8c0d4cff4895ded8a67a4353d82f631dc10ad9245bb9",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 168,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "0ca63a0aa6d88852fadbf25ca7756378a15ced7e5a8c12df5822860a31397b57",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.437403+00:00",
+  "seq": 57,
+  "txid": 61472087,
+  "sha256": "3b69355b3e63a10111ab99ac0ceeca8892dd85c3807ab6c278dc94b75508303b",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 179,
+  "body_json": {
+   "to": "verifying",
+   "from": "submitted",
+   "reason": "deterministic verification"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "91e58ff161d784c313bf8c0d4cff4895ded8a67a4353d82f631dc10ad9245bb9",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.439444+00:00",
+  "seq": 58,
+  "txid": 61472087,
+  "sha256": "339504acaa08ded61fd5050fc42a02d37a60d0b39af9591e89e45eb297eda726",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 180,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "verify",
+   "title": "verify t_01M50P8BGEJWJV767MMT1G16ZP",
+   "base_commit": "c07d318c0b2d2f0fbba4b01195d4bdb94b3af2b5",
+   "off_plan_reason": "2.2 acceptance T06"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "3b69355b3e63a10111ab99ac0ceeca8892dd85c3807ab6c278dc94b75508303b",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.441577+00:00",
+  "seq": 59,
+  "txid": 61472087,
+  "sha256": "2cb1eaec5801a2dc0d2ff396976bc1d31e14fd31ff276b5cb2846a86f3891b27",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 181,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "339504acaa08ded61fd5050fc42a02d37a60d0b39af9591e89e45eb297eda726",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.446143+00:00",
+  "seq": 60,
+  "txid": 61472087,
+  "sha256": "1ecd690d6bbdf95af1a66957395c4eba4a6db4bfcf38b2830c7182ff3c6fc163",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 182,
+  "body_json": {
+   "job": "verifier",
+   "inputs": {
+    "job": "verifier",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "t_01M50P8BGEJWJV767MMT1G16ZP",
+    "attempts": [
+     {
+      "id": "a_01M50P92FXWDPR3TWXR8BK1435",
+      "executor": "exec:codex",
+      "provider": "openai"
+     }
+    ],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "verifier/exec:deterministic/local/*",
+      "rule": {
+       "id": "job:verifier",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:deterministic",
+      "provider": "local"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "verifier/exec:deterministic/local/*"
+   ],
+   "fingerprint": "sha256:db4a75d7f1feaa9925f55d76b5e54336df091fbebc96b60b49feb5e3818a59f4"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "2cb1eaec5801a2dc0d2ff396976bc1d31e14fd31ff276b5cb2846a86f3891b27",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.887147+00:00",
+  "seq": 61,
+  "txid": 61472089,
+  "sha256": "24c3a8e2004a4ba82a3ef1823156573e4b9bd2dc047f4da0a3a024e85fe4e9f1",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 188,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:deterministic",
+   "attempt_no": 1,
+   "lease_epoch": 11,
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "1ecd690d6bbdf95af1a66957395c4eba4a6db4bfcf38b2830c7182ff3c6fc163",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:13.888792+00:00",
+  "seq": 62,
+  "txid": 61472089,
+  "sha256": "570f7293ec344927d2fb6e4ff9ba483f4a2b8d44f0562e3bf841ffa188f3964b",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 189,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "24c3a8e2004a4ba82a3ef1823156573e4b9bd2dc047f4da0a3a024e85fe4e9f1",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.418863+00:00",
+  "seq": 63,
+  "txid": 61472093,
+  "sha256": "485b69a7d55a75a764f14fe12a8585d28bc23a34f71dc8e8fc819d875d40855e",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 190,
+  "body_json": {
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "570f7293ec344927d2fb6e4ff9ba483f4a2b8d44f0562e3bf841ffa188f3964b",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.420508+00:00",
+  "seq": 64,
+  "txid": 61472093,
+  "sha256": "f33d7d5cfae5291f4086bc61add411f52f320fb990059d3061fbfaf7f168a022",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 191,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "485b69a7d55a75a764f14fe12a8585d28bc23a34f71dc8e8fc819d875d40855e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.494941+00:00",
+  "seq": 65,
+  "txid": 61472094,
+  "sha256": "1a0164db599a35149ea12f80792ef6819e5ef923dadc9831e6cffbd8bbdc9bba",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 192,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 1,
+   "conclusion": "failed"
+  },
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "f33d7d5cfae5291f4086bc61add411f52f320fb990059d3061fbfaf7f168a022",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.565882+00:00",
+  "seq": 66,
+  "txid": 61472096,
+  "sha256": "f491eab981bc0faca9d0e88c8d1009005dfaefddeea8a411d42f0b12f12ace92",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 194,
+  "body_json": {
+   "artifacts": [
+    "sha256:ee14f20e5ce92c4324e34777170e148859440a2cba3a46e16167777057756fbe",
+    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   ]
+  },
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "1a0164db599a35149ea12f80792ef6819e5ef923dadc9831e6cffbd8bbdc9bba",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.601195+00:00",
+  "seq": 67,
+  "txid": 61472097,
+  "sha256": "9b10447222b67cf5214204ae7da8f38439fde5f894d316151516eb4e41c52b25",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 195,
+  "body_json": {},
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "f491eab981bc0faca9d0e88c8d1009005dfaefddeea8a411d42f0b12f12ace92",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.604646+00:00",
+  "seq": 68,
+  "txid": 61472097,
+  "sha256": "6eeab2e0492db23a436db28f55ebf1ed394e237bbce42473da288f8b2dbb0c22",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 196,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "9b10447222b67cf5214204ae7da8f38439fde5f894d316151516eb4e41c52b25",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:16.636012+00:00",
+  "seq": 69,
+  "txid": 61472098,
+  "sha256": "87ae33e2e1ed7d64cffd106be399c129d336de070c0f5fc3f86c1efa6a09db68",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "host:mbp-dev",
+  "event_id": 197,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "6eeab2e0492db23a436db28f55ebf1ed394e237bbce42473da288f8b2dbb0c22",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.438695+00:00",
+  "seq": 70,
+  "txid": 61472134,
+  "sha256": "a87d78c40df575393800ce5186343e626c0f34a076d28851c0039d19320c0202",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 198,
+  "body_json": {
+   "method": "deterministic",
+   "verdict": "fail",
+   "verification_id": "v_01M50PA7MPBSVHWVN5G8ET7H27"
+  },
+  "attempt_id": "a_01M50P92FXWDPR3TWXR8BK1435",
+  "event_type": "verification_recorded",
+  "mission_id": "M-2",
+  "prev_sha256": "87ae33e2e1ed7d64cffd106be399c129d336de070c0f5fc3f86c1efa6a09db68",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.440187+00:00",
+  "seq": 71,
+  "txid": 61472134,
+  "sha256": "c85258c14b0e19238635497a188a017e84b035ec5b0511b8a542162d85dacc71",
+  "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+  "actor_id": "controller",
+  "event_id": 199,
+  "body_json": {
+   "to": "accepted",
+   "from": "submitted",
+   "reason": "result used: fail"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "a87d78c40df575393800ce5186343e626c0f34a076d28851c0039d19320c0202",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.441452+00:00",
+  "seq": 72,
+  "txid": 61472134,
+  "sha256": "0a205a88de95715c5f37545ff53420f5e51c075872cdc580593b0b4c099042d6",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 200,
+  "body_json": {
+   "to": "rework",
+   "from": "verifying",
+   "reason": "deterministic failed in round 1 of 2"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "c85258c14b0e19238635497a188a017e84b035ec5b0511b8a542162d85dacc71",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.443232+00:00",
+  "seq": 73,
+  "txid": 61472134,
+  "sha256": "67a8247f2784f6faa3a184b3c5c9729dcc5aa6b957665b2e057968fa0fbd0748",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 201,
+  "body_json": {
+   "to": "ready",
+   "from": "rework",
+   "reason": "round 2"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "0a205a88de95715c5f37545ff53420f5e51c075872cdc580593b0b4c099042d6",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.446999+00:00",
+  "seq": 74,
+  "txid": 61472134,
+  "sha256": "04e91a947d06b94e698e19c9734d5ce752fea88911b63186c0ecd2841a6ce949",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 202,
+  "body_json": {
+   "job": "implementer",
+   "inputs": {
+    "job": "implementer",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "",
+    "attempts": [],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "implementer/exec:codex/openai/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:codex",
+      "provider": "openai"
+     },
+     {
+      "id": "implementer/exec:cursor/cursor-mix/*",
+      "rule": {
+       "id": "job:implementer",
+       "version": 1
+      },
+      "status": "probation",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:cursor",
+      "provider": "cursor-mix"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "implementer/exec:codex/openai/*",
+    "implementer/exec:cursor/cursor-mix/*"
+   ],
+   "fingerprint": "sha256:6b6913d3e052623cbe553d77d4227a47df152625ba558c1e12c6e6cd2db491f4"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "67a8247f2784f6faa3a184b3c5c9729dcc5aa6b957665b2e057968fa0fbd0748",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.767689+00:00",
+  "seq": 75,
+  "txid": 61472135,
+  "sha256": "d25e7b29026c77cba6cfaaadc17867ca2e7fef14970ea12278acd5aaa283dc8e",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 203,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:codex",
+   "attempt_no": 2,
+   "lease_epoch": 12,
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "04e91a947d06b94e698e19c9734d5ce752fea88911b63186c0ecd2841a6ce949",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:28.769379+00:00",
+  "seq": 76,
+  "txid": 61472135,
+  "sha256": "a57d87cca104985fcea12d3f8696a2cc2b6d55e320e72323f37d21f72c460114",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 204,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "d25e7b29026c77cba6cfaaadc17867ca2e7fef14970ea12278acd5aaa283dc8e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:30.188773+00:00",
+  "seq": 77,
+  "txid": 61472139,
+  "sha256": "ce2866423da59f559af1574b77ffc0cc7015db51e6782d215fec0898352747e9",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 205,
+  "body_json": {
+   "model_provider": "openai"
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "a57d87cca104985fcea12d3f8696a2cc2b6d55e320e72323f37d21f72c460114",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:30.19103+00:00",
+  "seq": 78,
+  "txid": 61472139,
+  "sha256": "39113ca9237b68298b63842262a4cd1f3289b0affd6dbde6723dc092ef4e01e6",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 206,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "ce2866423da59f559af1574b77ffc0cc7015db51e6782d215fec0898352747e9",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:42.810832+00:00",
+  "seq": 79,
+  "txid": 61472154,
+  "sha256": "330bdaadce2eca0ccf58c498cab8e4bd25aee0e428a168f5ebb647d4adb5562c",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 207,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "39113ca9237b68298b63842262a4cd1f3289b0affd6dbde6723dc092ef4e01e6",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:43.740985+00:00",
+  "seq": 80,
+  "txid": 61472157,
+  "sha256": "506496080a96e89e07d8978b2d584c3ce79fbcde2db413b1af01e0d98cffc259",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 210,
+  "body_json": {
+   "artifacts": [
+    "sha256:b87c4704b9abb3e9833419b9b6d5f6becd62747ca8ebb49a79d16979d4391443",
+    "sha256:b85805119b7371a78ae1b1966dff480694bb09a3f95dd2cd851016eb57c1f287"
+   ],
+   "pushed_ref": "refs/heads/agent/t_01M50P8BGEJWJV767MMT1G16ZP/a2",
+   "pushed_commit": "667fe2abddb3901f69708ca9084f3879c345cd0b"
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "330bdaadce2eca0ccf58c498cab8e4bd25aee0e428a168f5ebb647d4adb5562c",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:43.779726+00:00",
+  "seq": 81,
+  "txid": 61472158,
+  "sha256": "f5313b6055ccc47d33804d9c43774b660afc816e552b325cfe90bad3109247d1",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 211,
+  "body_json": {},
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "506496080a96e89e07d8978b2d584c3ce79fbcde2db413b1af01e0d98cffc259",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:43.781513+00:00",
+  "seq": 82,
+  "txid": 61472158,
+  "sha256": "dff3e06cac5ace83ed9b956825d61515e9d7b3301845846376511c184b96b87d",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 212,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "f5313b6055ccc47d33804d9c43774b660afc816e552b325cfe90bad3109247d1",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:43.813887+00:00",
+  "seq": 83,
+  "txid": 61472159,
+  "sha256": "6ec5a646f711f29e4fa5912128ffcb7e4540c87ee462421fe97b7d85b44f7c9c",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "host:mbp-dev",
+  "event_id": 213,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "dff3e06cac5ace83ed9b956825d61515e9d7b3301845846376511c184b96b87d",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.439219+00:00",
+  "seq": 84,
+  "txid": 61472201,
+  "sha256": "bbb7c886634b170418d2e599d0530c0b6515c144ddee0dcc43bf075fa1fb1baf",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 214,
+  "body_json": {
+   "to": "verifying",
+   "from": "submitted",
+   "reason": "deterministic verification"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "6ec5a646f711f29e4fa5912128ffcb7e4540c87ee462421fe97b7d85b44f7c9c",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.441822+00:00",
+  "seq": 85,
+  "txid": 61472201,
+  "sha256": "ae1fbc813a3ad0eede5b1ecf29887625b187d2bd829a92875c1d54a5fe6d5c88",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 215,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "verify",
+   "title": "verify t_01M50P8BGEJWJV767MMT1G16ZP",
+   "base_commit": "667fe2abddb3901f69708ca9084f3879c345cd0b",
+   "off_plan_reason": "2.2 acceptance T06"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "bbb7c886634b170418d2e599d0530c0b6515c144ddee0dcc43bf075fa1fb1baf",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.443435+00:00",
+  "seq": 86,
+  "txid": 61472201,
+  "sha256": "325b67c77c90744ab8815906c01699f930779c5994973d4f58bbd95d39d7fdb7",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 216,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "ae1fbc813a3ad0eede5b1ecf29887625b187d2bd829a92875c1d54a5fe6d5c88",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.448647+00:00",
+  "seq": 87,
+  "txid": 61472201,
+  "sha256": "f385e1a409082828c67cdc30b35fa341cff92a6233decf9a7ec3c874ab702d21",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 217,
+  "body_json": {
+   "job": "verifier",
+   "inputs": {
+    "job": "verifier",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "t_01M50P8BGEJWJV767MMT1G16ZP",
+    "attempts": [
+     {
+      "id": "a_01M50P92FXWDPR3TWXR8BK1435",
+      "executor": "exec:codex",
+      "provider": "openai"
+     },
+     {
+      "id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+      "executor": "exec:codex",
+      "provider": "openai"
+     }
+    ],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "verifier/exec:deterministic/local/*",
+      "rule": {
+       "id": "job:verifier",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:deterministic",
+      "provider": "local"
+     }
+    ]
+   },
+   "excluded": [],
+   "candidates": [
+    "verifier/exec:deterministic/local/*"
+   ],
+   "fingerprint": "sha256:a8aba112767d2a93d09bf73d14bf94830f03407d4d54d8f30b75dd0904772d7e"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "325b67c77c90744ab8815906c01699f930779c5994973d4f58bbd95d39d7fdb7",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.990662+00:00",
+  "seq": 88,
+  "txid": 61472202,
+  "sha256": "759fb24ddf39ec3eb01626290ed5b3aa0a406b3023939a38ab9d083ee2061931",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 218,
+  "body_json": {
+   "host_id": "mbp-dev",
+   "executor": "exec:deterministic",
+   "attempt_no": 1,
+   "lease_epoch": 13,
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_leased",
+  "mission_id": null,
+  "prev_sha256": "f385e1a409082828c67cdc30b35fa341cff92a6233decf9a7ec3c874ab702d21",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:08:58.992263+00:00",
+  "seq": 89,
+  "txid": 61472202,
+  "sha256": "d2c6cc0102acfb3ee31c8d534e995a8458847e6990940c46c41bacaf619cda1a",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 219,
+  "body_json": {
+   "to": "leased",
+   "from": "ready",
+   "reason": "claimed by host mbp-dev"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "759fb24ddf39ec3eb01626290ed5b3aa0a406b3023939a38ab9d083ee2061931",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.396374+00:00",
+  "seq": 90,
+  "txid": 61472207,
+  "sha256": "f262418d89a7f3e24498a57579bb89d3d5be03ba56926bd30e52a6c41c7cdf66",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 220,
+  "body_json": {
+   "model_provider": "local"
+  },
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_started",
+  "mission_id": null,
+  "prev_sha256": "d2c6cc0102acfb3ee31c8d534e995a8458847e6990940c46c41bacaf619cda1a",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.397787+00:00",
+  "seq": 91,
+  "txid": 61472207,
+  "sha256": "e85016e8fadc71fabbec54eb234e0805bebba11179b54565458d66e741c4208e",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 221,
+  "body_json": {
+   "to": "running",
+   "from": "leased"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "f262418d89a7f3e24498a57579bb89d3d5be03ba56926bd30e52a6c41c7cdf66",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.505758+00:00",
+  "seq": 92,
+  "txid": 61472208,
+  "sha256": "3a738d557e48b301c57c1cdab1b2ad55098c405672609b9ebd0d8ed2361bd134",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 222,
+  "body_json": {
+   "end_how": "exit",
+   "exit_code": 0,
+   "conclusion": "done"
+  },
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_computed",
+  "mission_id": null,
+  "prev_sha256": "e85016e8fadc71fabbec54eb234e0805bebba11179b54565458d66e741c4208e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.575687+00:00",
+  "seq": 93,
+  "txid": 61472210,
+  "sha256": "35335a152d0b73da1a4c1e487c373f140a7ec7ad7b40371b0969116a66dae488",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 224,
+  "body_json": {
+   "artifacts": [
+    "sha256:3bae6fe55f35b39956e8813aaa75c3234e1ab7d615b2259de7a43f0726e67078",
+    "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   ]
+  },
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_persisted",
+  "mission_id": null,
+  "prev_sha256": "3a738d557e48b301c57c1cdab1b2ad55098c405672609b9ebd0d8ed2361bd134",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.607808+00:00",
+  "seq": 94,
+  "txid": 61472211,
+  "sha256": "79cbf49a8082854b0690143152258cbf348891542811c72dc33fbc0e3bea5a5e",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 225,
+  "body_json": {},
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_submitted",
+  "mission_id": null,
+  "prev_sha256": "35335a152d0b73da1a4c1e487c373f140a7ec7ad7b40371b0969116a66dae488",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.609532+00:00",
+  "seq": 95,
+  "txid": 61472211,
+  "sha256": "b355c8a1df7edcff20e6a4d3f1a0fc01a817e5e2f85abeabdcbe6b76761fee94",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 226,
+  "body_json": {
+   "to": "submitted",
+   "from": "running"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "79cbf49a8082854b0690143152258cbf348891542811c72dc33fbc0e3bea5a5e",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:03.6456+00:00",
+  "seq": 96,
+  "txid": 61472212,
+  "sha256": "546fb8780ce862b4e530ca201ae27e20befa0bf9e4ee09be79ec9fdd243f5b11",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "host:mbp-dev",
+  "event_id": 227,
+  "body_json": {
+   "end_how": "exit",
+   "group_cleared": true
+  },
+  "attempt_id": "a_01M50PB5FE0X3ZT1VRXGC1CJFH",
+  "event_type": "attempt_ended",
+  "mission_id": null,
+  "prev_sha256": "b355c8a1df7edcff20e6a4d3f1a0fc01a817e5e2f85abeabdcbe6b76761fee94",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:13.439701+00:00",
+  "seq": 97,
+  "txid": 61472242,
+  "sha256": "5e68241a04b3e6a2b4442be36ad99a29dbba5cd0efdb0a94f413f37fd2de69a0",
+  "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+  "actor_id": "controller",
+  "event_id": 228,
+  "body_json": {
+   "method": "deterministic",
+   "verdict": "pass",
+   "verification_id": "v_01M50PBKJZ06WR44VXYCT0CY3D"
+  },
+  "attempt_id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+  "event_type": "verification_recorded",
+  "mission_id": "M-2",
+  "prev_sha256": "546fb8780ce862b4e530ca201ae27e20befa0bf9e4ee09be79ec9fdd243f5b11",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:13.44128+00:00",
+  "seq": 98,
+  "txid": 61472242,
+  "sha256": "7daba34b34383e94c24e274183a38ed6f4be20e934a55651dcfc916c08815f23",
+  "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+  "actor_id": "controller",
+  "event_id": 229,
+  "body_json": {
+   "to": "accepted",
+   "from": "submitted",
+   "reason": "result used: pass"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "5e68241a04b3e6a2b4442be36ad99a29dbba5cd0efdb0a94f413f37fd2de69a0",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:13.443406+00:00",
+  "seq": 99,
+  "txid": 61472242,
+  "sha256": "bba6fe801cbd4664d2b55cad9cc3e52025adf970ec6f89d6ab658f5a2133f2f7",
+  "task_id": "t_01M50PBKK2XEQQQVE2NCG43452",
+  "actor_id": "controller",
+  "event_id": 230,
+  "body_json": {
+   "repo": "bifrost-platform",
+   "role": "review",
+   "title": "review t_01M50P8BGEJWJV767MMT1G16ZP",
+   "base_commit": "667fe2abddb3901f69708ca9084f3879c345cd0b",
+   "off_plan_reason": "2.2 acceptance T06"
+  },
+  "attempt_id": null,
+  "event_type": "task_proposed",
+  "mission_id": "M-2",
+  "prev_sha256": "7daba34b34383e94c24e274183a38ed6f4be20e934a55651dcfc916c08815f23",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:13.445007+00:00",
+  "seq": 100,
+  "txid": 61472242,
+  "sha256": "4ed3040a9a227c62ab17ebdf867586302d011c6871ab21e4890a9ded464be53a",
+  "task_id": "t_01M50PBKK2XEQQQVE2NCG43452",
+  "actor_id": "controller",
+  "event_id": 231,
+  "body_json": {
+   "to": "ready",
+   "from": "proposed"
+  },
+  "attempt_id": null,
+  "event_type": "task_state_changed",
+  "mission_id": "M-2",
+  "prev_sha256": "bba6fe801cbd4664d2b55cad9cc3e52025adf970ec6f89d6ab658f5a2133f2f7",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ },
+ {
+  "at": "2026-10-15T21:09:13.449553+00:00",
+  "seq": 101,
+  "txid": 61472242,
+  "sha256": "e5ccf6c2f159b2b104d39972777bb27e9a864c3b420a7d2ad3a03dbebb1c5490",
+  "task_id": "t_01M50PBKK2XEQQQVE2NCG43452",
+  "actor_id": "controller",
+  "event_id": 232,
+  "body_json": {
+   "job": "reviewer",
+   "inputs": {
+    "job": "reviewer",
+    "core": "",
+    "facts": [],
+    "needs": [],
+    "subject": "t_01M50P8BGEJWJV767MMT1G16ZP",
+    "attempts": [
+     {
+      "id": "a_01M50P92FXWDPR3TWXR8BK1435",
+      "executor": "exec:codex",
+      "provider": "openai"
+     },
+     {
+      "id": "a_01M50PA7YZVF1SCWS0173H1T1S",
+      "executor": "exec:codex",
+      "provider": "openai"
+     }
+    ],
+    "algorithm": 2,
+    "candidates": [
+     {
+      "id": "reviewer/exec:codex/openai/*",
+      "rule": {
+       "id": "job:reviewer",
+       "version": 1
+      },
+      "status": "active",
+      "pattern": "*",
+      "version": 0,
+      "executor": "exec:codex",
+      "provider": "openai"
+     }
+    ]
+   },
+   "excluded": [
+    {
+     "reason": "not independent of the subject's attempts",
+     "reasons": [
+      "not independent of the subject's attempts"
+     ],
+     "candidate": "reviewer/exec:codex/openai/*"
+    }
+   ],
+   "candidates": [],
+   "fingerprint": "sha256:6e81207123219fb6ffe8896b373a879cdbbe2058e3d74cd649d1ef3453a62388"
+  },
+  "attempt_id": null,
+  "event_type": "route_decided",
+  "mission_id": "M-2",
+  "prev_sha256": "4ed3040a9a227c62ab17ebdf867586302d011c6871ab21e4890a9ded464be53a",
+  "plan_node_id": null,
+  "cause_event_id": null,
+  "event_stream_id": "mission:M-2"
+ }
+]

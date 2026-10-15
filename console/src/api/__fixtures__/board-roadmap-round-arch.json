@@ -1,0 +1,1158 @@
+{
+ "round": {
+  "n": 2,
+  "checked": 1792106220.0,
+  "items": [
+   {
+    "key": "2.0",
+    "name": "设计对齐：v4 到 v5",
+    "src": "W-31",
+    "guard": false,
+    "steps": [
+     {
+      "t": "起草 v5：v4 对照第 1 轮已有的、厂商现成的、运行位置改为先开发机；每一步写验收测试（`work/multi-agent/DESIGN-agent-runtime-v5-2026-10-14.md`，834 行，Claude 子代理起草、统筹方通读）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-13 23:00",
+      "ts": 1791950400.0,
+      "timed": true,
+      "id": "2.0-1",
+      "ord": 1,
+      "after": 1
+     },
+     {
+      "t": "Codex 独立复核 v5（两轮 + 一轮确认，剩 1 项 A 交 Owner）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "第 1 轮（复核 141）23:42「先改」：8 项 A 类（结果收尾前只在主机上、旧执行者没隔离、计划关联可填错、架构勾选证据没绑版本、两项验收依赖外层、三环境角色、§7 漏项、一处事实），方向不用重写；统筹方定了每条的改法，Claude 子代理按定法改正文（`0a03a09`，835→967 行，§11 逐条对应），统筹方补了库和角色的实际建法；第 2 轮（复核 142，最后一轮）00:04 派出，00:10「先改」：A4、A6、A8 关，A1/A2/A3/A5/A7 部分关，新查出 6 项 A 类（R1–R6，见 `~/agent-work/codex-review-142/REPORT.md`，修法具体）。**按停线规矩停**；Owner 00:13 选 A：照复核的最小修法改完（修订 2），再做一轮只看改动的确认复核（复核 143）；确认复核再有 A 就原样交 Owner，不再修。修订 2 `42b2ae2`（997 行，§12 对 R1–R6、B1–B7；统筹方补了保全结果怎么被采纳），复核 143 00:23 派出，00:27 回：只剩 1 项 A（R3 余项：步骤迁移和新建任务并发时没有共同的锁，可错挂 mission），按 Owner 的 A 原样交他",
+      "ts": 1791952955.027792,
+      "timed": true,
+      "id": "2.0-2",
+      "ord": 2,
+      "lanes": 6,
+      "after": 2
+     },
+     {
+      "t": "（你）确认 v5 和 §7 八条",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "10-14 00:30：Owner「确认 v5，§7 八条都选 A，那一项照建议补」；R3 余项补进 5.1.1「步骤锁」，§7 第 8 条的七处 ADR 修订已改进 ADR",
+      "ts": 1791955800.0,
+      "timed": true,
+      "id": "2.0-3",
+      "ord": 3,
+      "after": 3
+     }
+    ],
+    "done": 3,
+    "total": 3,
+    "live": false,
+    "state": "done",
+    "owner_left": 0
+   },
+   {
+    "key": "2.1",
+    "name": "数据层：状态库和 redis-agents",
+    "src": "v5 §5.1；从内往外的第一层；Claude 写、Codex 复核",
+    "guard": false,
+    "steps": [
+     {
+      "t": "迁移器与存储包骨架：pgx 接入，`platform-api agentrt-migrate`（只往前、文件 sha256 不许变、`pg_advisory_lock`）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 01:09：平台分支 `w31/agentrt-21`（`a6a167c` `1b1a0db` `2c947df`）；pgx v5.11.0（你同意下载）；子命令只认本环境的库和属主角色",
+      "ts": 1791958140.0,
+      "timed": true,
+      "id": "2.1-1",
+      "ord": 1,
+      "after": 2
+     },
+     {
+      "t": "表、触发器、种子：5.1.2 的全部表；同事务事件、存活列例外、绑定固定、步骤锁、依赖图锁、只追加；空库种子",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 01:09：迁移 0001–0004；在本机 Postgres 17.11 上 T19、T23a、T23b、T25 数据库一半、T30、T32 全过；去掉步骤锁、依赖图锁、提交时重验任一处，对应测试变红",
+      "ts": 1791958140.0,
+      "timed": true,
+      "id": "2.1-2",
+      "ord": 2,
+      "after": 3
+     },
+     {
+      "t": "存储包：写事件的唯一路径、计数规则、`done_rule` 解释器、幂等键",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 01:09：`Append` + `VerifyStream`（哈希与 Python 记录器逐字节一致）；完成规则闭合语法、三值求值；幂等键的表和守卫在，用法随 2.2 的路由",
+      "ts": 1791958140.0,
+      "timed": true,
+      "id": "2.1-3",
+      "ord": 3,
+      "after": 4
+     },
+     {
+      "t": "中继与重建：outbox → Redis（持有者令牌），从 PG 重建；`redis-agents` 清单（PROD、STG）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "代码 `0a42164` + 复核修复 `7ac856c`；infra 半边 Codex 写、Claude 子代理复核一轮「先改」A1–A3 后由 Codex 按定法修（`54873f8`），统筹方在本机 PG 上从空库重验通过；角色矩阵与逻辑备份目标拆到 `w31/agentrt-21-infra-after`（`c946b8b`，三库迁完、矩阵 0 差异后才合）；迁移改为 Argo 之外的 Job（`k8s/agentrt-migrate/`），不用 v5 写的挂起 CronJob（Argo v3.4.3 会把它报 Suspended）；第 2 轮复核（Claude 子代理）10-14 10:22 剩 1 项 A（新建的六个登录会被 main 的角色矩阵报成意外角色，拦全部 Trade 交付）→ **停线，等你定**；修法已写：过渡分支 `w31/agentrt-21-infra-roles`（`55dfc6b`，六个角色 connect: []，建角色后同一窗口立即合），文档与合并条件 `07f6ea9`，后续分支重建为 `63c10d8`",
+      "ts": 1791958925.879092,
+      "timed": true,
+      "id": "2.1-4",
+      "ord": 4,
+      "lanes": 5,
+      "after": 6
+     },
+     {
+      "t": "Codex 复核（两轮 + 一轮确认）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "复核 144「先改」A1–A5 → 修 `7ac856c`；复核 145 剩 A4 余项 → 修 `7cb1fa0`（复核时的 `7cb1fa0` 只是提交说明不同，内容相同）；复核 146（确认，Owner 选 A）10-14 10:08「可以合并」，没有 A；它的 B 补了回归测试",
+      "ts": 1791958510.239991,
+      "timed": true,
+      "id": "2.1-5",
+      "ord": 5,
+      "lanes": 6,
+      "after": 5
+     },
+     {
+      "t": "（补强）复核 145 的 B6、B7：正文值的枚举和格式；测试缺口（T19 三环境身份、T20 事务中断线、T23b 单删链尾、T30 ordinal 与重复批量写、T31 反向完整性、T32 反向迁移与死锁夹具、host 存活正例）——2.2 写路由时一起补",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.1-6",
+      "ord": 6
+     },
+     {
+      "t": "（你）建 8 个 Secret；同意拉 postgres、redis 两个镜像；应用平台 CI 流水线（加 sidecar）（v5 O5、O8、O9）",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "Secret 6 个 + DEV pgpass；CI sidecar 10-14 11:23 应用并实跑通过",
+      "timed": false,
+      "id": "2.1-7",
+      "ord": 7,
+      "after": 1
+     },
+     {
+      "t": "（你）批三个库的清单和建六个角色的 db-step、`redis-agents` 清单（O6、O7）",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "10-14 11:06：redis-agents 两环境上线（infra `1226255`）；六个角色 + 密码；三个库 + 连接收紧 + 入站策略；过渡矩阵 `a496623`、完整矩阵 `9873ba8`（7 库 0 差异）已由你应用；逻辑备份加了 `bifrost_platform:agentrt`",
+      "ts": 1791993960.0,
+      "timed": true,
+      "id": "2.1-8",
+      "ord": 8,
+      "after": 7
+     },
+     {
+      "t": "测试环境：迁移作业跑通，T19–T23、T30–T32 在 STG 过",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 11:06：STG Job 成功（第二次空跑）；表、触发器、种子、哈希链核对过；T19–T32 的库测试在本机 PG 上跑过，CI 上要等 sidecar（O8/O9）",
+      "ts": 1791993960.0,
+      "timed": true,
+      "id": "2.1-9",
+      "ord": 9,
+      "after": 8
+     },
+     {
+      "t": "（你）批 PROD 迁移作业（正式 DDL 随单）和恢复演练（O10、O11）",
+      "state": "doing",
+      "owner": true,
+      "star": false,
+      "when": "O10 完成：10-14 11:06 你跑了 PROD Job，成功；DEV 由统筹方本机迁移。O11（物理恢复演练）另一张单；逻辑备份今晚 23:30 第一次带上新库，明早看结果再请你批一次逻辑恢复演练（验证带触发器的 dump 能恢复）｜**10-15 18:17**：O11 恢复演练归补强",
+      "timed": false,
+      "id": "2.1-10",
+      "ord": 10
+     },
+     {
+      "t": "（补强）★ PROD 库和 redis-agents 可用：T19 的 PROD 部分、T21 重建、T31 中继在 PROD 过",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.1-11",
+      "ord": 11
+     }
+    ],
+    "done": 8,
+    "total": 11,
+    "live": false,
+    "state": "doing",
+    "owner_left": 1
+   },
+   {
+    "key": "2.2",
+    "name": "接口层与 agentd",
+    "src": "v5 §5.2；从内往外的第二层；核心 Claude 写、Codex 复核；拆分于 10-14 11:07",
+    "guard": false,
+    "steps": [
+     {
+      "t": "CI 能跑库测试：平台 CI 加 postgres、redis 两个 sidecar（钉摘要）和 AGENTRT_TEST_*（O8 你同意拉镜像、O9 你应用流水线）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 11:23：infra `1919d2c` + `a9adae9`（复核 147「可以应用」）；你应用了流水线；CI 跑 b50d827：agentrt store 10.6s、relay 9.4s，必须跑模式",
+      "ts": 1791994980.0,
+      "timed": true,
+      "id": "2.2-1",
+      "ord": 1,
+      "lanes": 1,
+      "after": 22
+     },
+     {
+      "t": "内核写路径（存储层）：mission / 任务 / 尝试的状态机，领活（`FOR UPDATE SKIP LOCKED`）、心跳续租、检查点 / 算完 / 落到平台 / 提交 / 保全 / 结束，幂等键，同事务隔离检查",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 12:50 合进平台主线 `5b1583c`（不接线，运行时不变）：首版 `c5d8fe1`；复核 148「先改」→ `b91d4ac`；复核 149（第 2 轮）A1、A2 → `f981955`；确认复核 150 没有 A，三项 B → `03d8420`；共 20 个改坏版本各有测试变红。主线 CI 红在 code-health（kernel.go 1223 行，同一类第二次，TD-341）→ 拆三个文件 `e580c17`，CI 绿（库测试在集群 sidecar 上也过）",
+      "ts": 1792000200.0,
+      "timed": true,
+      "id": "2.2-2",
+      "ord": 2,
+      "after": 23
+     },
+     {
+      "t": "控制器循环（platform-workers）：租约过期 → stale → lost（按副作用类别）、任务挂步骤、完成规则求值（Facts 的实现）、外部事实、验收编排、发布前提",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "分支 `w31/agentrt-22-route`（工作树 `~/agent-work/agentrt-22d`）：三个循环 `676defc`、验收编排 `16e8648`、分流快照 `16562bb`（单独一条复核线）；复核 151「先改」A1–A5 → `d10a3a6`；复核 152（第 2 轮）A1（手工检查可伪造受验版本）、A2（唯一的检查被关后实现卡在 verifying）有最小修法 → `d5c7f63`（4 个改坏版本各红）；确认复核 153「可以合并」、没有 A，B1（规则求值读部署没有期限）→ `2245f2e`；**A3 停线等你定**（见下一行）。分流线：复核 154「先改」A1（领活在锁后没复核完整资格）、A2（候选同 ID 改状态或模式检测不到）、B1–B4 → 10-14 13:56 `8a311ad`：领活全程共享持有能力锁（742106），改候选和能力事实的写入先独占它；锁住任务后重读路由再选一次工具；路由改成「输入 → 结果」的纯函数，route_decided 记下输入和指纹，能回放，指纹变了才重算；15 个改坏版本各红；复核 155（第 2 轮）「可以合并」、没有 A，B1（回放没带算法版本）、B2（几处测试缺口）→ `02a5910`（8 个改坏版本各红）。**10-14 14:18 两条线一起合进平台主线 `5a6c98e`**（合并后的树整套 62 个包绿、code-health 过；只是存储和控制器包，平台运行时不变）；整套里撞上一个与本次无关的偶发测试，记 TD-342；外部来源（审批、提问、CI、部署从平台自己的存储读，不再一律未知）：分支 `w31/agentrt-22-sources`（工作树 `~/agent-work/agentrt-22h`）`cf30a42` → 复核 161「先改」A1（坏掉的最新发布记录被跳过、读成旧部署）、A2（新部署到记录之间的窗口）→ `e88a9ab`（严格读本线本环境的记录，有更新的交付 run 就算未知；10 个改坏版本各红），复核 162（第 2 轮）「先改」A2（早开始晚完成的交付被放过）、A3（结构坏的记录被跳过）有最小修法 → `69f1e94`（10 个改坏版本各红）；**A1 停线等你定**（见下一行）；两处设计没写、由统筹方先定可改：部署按 platform 这条线算，部署引用只含交付 run（镜像摘要现在哪里都没记，T33 的保证因此降低，记 TD-343）；还剩：发布前提（发布步骤要带哪个仓库、哪个提交，计划节点没有这两列，设计没写，到时再定）、决策卡｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-3",
+      "ord": 3,
+      "after": 1
+     },
+     {
+      "t": "（你）定：保全结果怎么被采纳",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 15:49 你回「A」**：新增 `attempt_cancelled`（迁移 0005，PROD 上随审批单），采纳时同一事务取消新尝试；统筹方在做｜分支 `w31/agentrt-22-adopt`（工作树 `~/agent-work/agentrt-22j`）`38f7c7d`：迁移 0005、发现保全结果并建验收、采纳时同一事务取消新尝试；两种先后顺序的竞态测试；7 个改坏版本各红；**10-14 16:49 派了第 1 轮复核 166**；166「先改」1 个 A（任务书里的 salvage 标记是自报的，手工验收能绕过资格检查）→ `366f959`（采纳时按当下状态重查全部资格；三个反例、两个并发、控制器接线、0005 存量升级各有测试；11 个改坏版本各红）；**10-14 17:03 派了第 2 轮复核 168**；168「先改」1 个 A（采纳时没重查「是实现任务」和「没有别的验收在途」）→ `fd59150`（照最小修法改；并发两处改成用钩子确定性排演；加采纳中途失败整体回滚、被取消尝试后续调用、0005 实测约束；14 个改坏版本各红、每个的 diff 和失败点留在复核目录）；按 10-14 签的规矩（两轮后照改 + 一轮确认），**10-14 17:11 派了确认复核 169**；169（确认）17:17 前回：**没有新增 A**，168 的两处都修好；两个 B（一个改坏版本其实是编译失败、迁移测试只比哈希）→ `c239c39` 补上（14 个改坏版本全是断言失败，证据在复核目录）；合并提交 `da81c9f`，在合并后的树上跑整套中｜原题：（T34 第八种；复核 152 A3）｜情形：旧尝试过了宽限被判 lost，主机醒来把结果保全上来（有 persisted_at，state 仍是 lost），而任务已经派给新尝试在跑。设计要求「验收通过后采纳记录指向那次 lost 尝试，同一事务里取消新尝试，只有一条采纳」。闭合事件词表里没有「取消尝试」这一类。**选项** A（推荐）：新增事件类型 `attempt_cancelled`（新迁移 0005，只改词表的 CHECK；PROD 上是一次 DDL，随单给你批），采纳时同一事务把新尝试标 cancelled、任务直接 accepted；B：不加事件，采纳前给任务设 stop 控制，新尝试下次心跳收到 stop、agentd 结束并经 /ended 报告，任务等它结束再 accepted——不动 DDL，但新尝试可能抢先提交，流程绕；C：第 2 轮不支持采纳保全结果，保全只留证据，任务照常重派，T34 第八种从 Gate A 拿掉、记入 TECH_DEBT。**怎么回**：在线程里回「A」「B」或「C」",
+      "timed": false,
+      "id": "2.2-4",
+      "ord": 4,
+      "after": 2
+     },
+     {
+      "t": "（你）定：交付失败或没记录、",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 15:49 你回「162 A」**：现在做 TD-343（交付记录带镜像摘要，读部署时核对正在跑的 Pod）；统筹方在做｜sources 分支 `bfccfac`：交付记录带各构建任务推送的镜像摘要（记录版本 v2，旧记录在运行还在时重建一次）、读部署时核对 platform-api / workers / console 每个 Pod 的摘要；6 个改坏版本各红；确认复核 167「先改」：1 个 A（见上面的规则）；按你签的规则改 → `fa56c27`、`ba9ba4c`，窄确认 170 **无 A**；**合进主线 `e5b5049`，CI 通过**；TD-343 转待你签收｜原题：又被 Tekton 清掉之后，旧部署和旧 gate PASS 会重新算数（复核 162 A1）｜情形：B 在 rollout 之后失败（或成功但记录器没记上），这时读部署是「未知」；7 天后 Tekton 把 B 的 run 清掉，平台就只看得到 A 的记录，A 的旧 PASS 重新成立，而环境里实际可能是 B。**选项** A（推荐）：现在就做 TD-343——交付记录写入镜像摘要，读部署时拿正在跑的 Pod 的镜像摘要去核对，对不上就是未知；不管 B 成败、记没记、清没清都挡得住，也顺带补上「同一 run 换镜像」那一半；只改平台代码（记录器加字段、控制器只读 Pod），约半天到一天，做完跑一轮确认复核；B：照复核的最小修法，交付流水线开头先写一条持久的「交付进行中」标记，后面的部署确认了才清——要改交付链（infra 流水线，要你应用），只挡这一种；C：接受，T33 的保证写明不覆盖这一种，记 TECH_DEBT，Gate A 前再看。**怎么回**：在线程里回「162 A」「162 B」或「162 C」",
+      "timed": false,
+      "id": "2.2-5",
+      "ord": 5,
+      "after": 3
+     },
+     {
+      "t": "接口与鉴权：`/api/v1/agentrt/*` 路由、新角色 `agentd`（令牌绑主机）、产物上传（本机路径扫描）、规则验签与收紧、`/progress`、平台连 PG 和 redis-agents 的接线",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-14 13:37：分支 `w31/agentrt-22-api`（工作树 `~/agent-work/agentrt-22e`）`7ca48e6`：agentd 角色（令牌名 `agentd:<主机>`，加载时不合规就拒）、领活长轮询与尝试各路由、产物上传（哈希核对、H8 本机路径拒收）、读路由；平台接线在 `AGENTRT_DSN` 设了才连库（核对是本环境的运行时角色和库），没设时路由回 503、循环不跑——所以能先合进主线、先部署而不生效；外部来源（审批、提问、CI、部署）和 Gitea 分支头读取还没接；还剩：规则验签与收紧、`/progress`、提议 mission 与任务、控制、主机；10-14 13:58 变基到分流修复上（`f1f98b5`）；复核 156「先改」A1（日志种类的产物能被引用成正式报告、绕过 H8）、A2（H8 只扫名单内的种类，reporter 的 mission_spec / message / exam 漏扫）、A3（上传不写 artifact_put）、B1–B3 → `7313164`（11 个改坏版本各红）；心跳的 phase / line 现在拒收：设计没写存哪，等 2.3 总线给落处；复核 157（第 2 轮）「可以合并」、没有 A，B（保全也拒日志冒充报告、并发上传只记一次、几处字段）→ `37b2e67`；**10-14 14:31 合进平台主线**（`c7f4de8`，紧跟 `e102125`：合并时 code-health 已报超标却经管道放行推了上去，`kernel_test.go` 812 行，6 分钟内把保全测试挪进单独文件修回，LESSONS 第 125 行）；**10-14 14:18 派了第 2 轮复核 157**｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "ts": 1792003020.0,
+      "timed": true,
+      "id": "2.2-6",
+      "ord": 6,
+      "after": 24
+     },
+     {
+      "t": "（你）定：Agent 执行者怎么和本",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 15:49 你回「A8 A」**：Agent 主机上给 agentd 单独建系统用户；要你做的步骤统筹方写成操作单｜原题：机的 MCP 隔开（复核 163 A8）｜情形：任务里的 codex / cursor 会加载本机用户配置里的全部 MCP 服务器（本机 codex 5 个、cursor 7 个，含平台写工具），两家 CLI 都没有能清掉它们的参数；agentd 现在在这种主机上不提供这两个执行者。**选项** A（推荐）：Agent 主机上给 agentd 单独建一个系统用户，它没有任何 MCP 配置，codex / cursor 在这个用户下各登录一次——和第 3 轮虚拟机里的干净用户是同一个做法；要你建用户、登录两家（各几分钟）；B：agentd 给执行者换一个隔离的配置目录（`CODEX_HOME`、cursor 的 `HOME`），把两家的登录凭据文件链接进去——程序会碰到凭据文件，要你同意；C：从你自己用户的 codex / cursor 配置里拿掉 MCP 服务器——会影响你自己的交互会话，不推荐。**怎么回**：在线程里回「A8 A」「A8 B」或「A8 C」",
+      "timed": false,
+      "id": "2.2-7",
+      "ord": 7,
+      "after": 4
+     },
+     {
+      "t": "MCP 工具、提问加 `owner_duty` / `task_id`、血缘认 `Agentrt-Task`",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "决策卡：分支 `w31/agentrt-22-cards` 变基到主线后第 1 轮复核 172「先改」2 个 A（MCP 发不出这两个字段、Console 看不到）→ `81c5d97`（MCP 工具、TS 规范化、Console 详情页「Your duty / Task」；共享向量加 12 例；4 个改坏版本各红），**10-14 17:55 派了第 2 轮复核 174**；174 **没有 A**，B 补上 → `808814c`；**10-14 18:09 合进平台主线 `36cb85d`**（合并后 Go 整套 65 包、Console 四项、MCP 测试全过）｜血缘（T36 的平台一半）：分支 `w31/agentrt-22-lineage`（工作树 `~/agent-work/agentrt-22f`）`8ca40cb`：解析 `Agentrt-Task`（格式不对的不认、第一个算数），接口返回 `task`、`?task=` 过滤，血缘页加 Task 列、点它筛出这个任务的全部提交（任务自己的页面在 2.5）；7 个改坏版本各红；复核 158「先改」（任务号首位只能 0–7；点任务走了全文搜索）→ `5e274b3`；复核 159（第 2 轮）「先改」A1（任务筛选无结果时说成窗口里没有血缘）有最小修法 → `b594344`（加了页面点击测试）；**10-14 14:31 派了确认复核 160**（规矩里唯一的一次确认）→「可以合并」；**10-14 14:36 合进平台主线 `c6ca5ec`**（合并树 Go 63 个包、Console lint / tsc / build / vitest 1087、code-health 各自退出码 0）；提问两个字段已写：分支 `w31/agentrt-22-cards`（`~/agent-work/agentrt-22i`）`c1aa1de`（`owner_duty` 取 goal / rule / irreversible，`task_id` 校验任务号格式，都进指纹）；复核未派；还剩 MCP 工具｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-8",
+      "ord": 8,
+      "after": 5
+     },
+     {
+      "t": "agentd 守护进程（`cmd/agentd`）：领活、本地登记（全机锁、进程组、放行字节）、工作区、执行者（deterministic / codex / cursor）、心跳与死人开关、检查点、收尾、保全",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "分支 `w31/agentrt-22-agentd`（工作树 `~/agent-work/agentrt-22g`）：`8051e15` 全机锁、本地登记（fsync）、启动器（先登记后放行，5 个改坏版本各红）；`6c7f374` 平台路由客户端（对真路由和真鉴权的集成测试）；`92fa353` 任务书格式与确定性验收——**任务书格式设计没写，统筹方先定**：规范 JSON `{text, verify: [[命令数组]], timeout_s}` 或纯 markdown（只有正文），验收任务按控制器写的 check spec 跑被验任务的 verify 命令；你要改就说；`b2e85b2` 工作区（按 base 全新克隆、检出必须干净、带三个尾注提交、只推本尝试分支）；`527c6e7` 跑一次尝试的主循环（心跳与死人开关：409 或连续三次失败就结束进程组、只走保全；收尾：computed、报告与日志尾部、推分支、persist、submit、ended；领活带上 mission 的 work_id 作 Work 尾注；对真路由的集成测试 3 个，5 个改坏版本各红）；`b548af1` 启动时接管上一个 agentd 留下的（T01：还在跑的进程组先清掉、报 daemon_restart，不续跑；已算完的接着交；失租的接着保全）；`65d2b23` 三个执行者（deterministic 是 agentd 自己的 verify 子命令；codex 用 `-o` 出报告、清空本机 MCP；cursor 从流式输出取结果；环境按允许清单重建，不带任何令牌）与 `cmd/agentd`（配置全走环境变量，令牌只从仅属主可读的文件读，git 令牌经 GIT_CONFIG_* 变量给，不进命令行）；**10-14 15:28 派了第 1 轮复核 163**；`b60896d` 每 5 分钟检查点（日志尾部 + 对 base 的补丁，先记号再上传，超 1 MiB 只记过大；4 个改坏版本各红）；`ffc2c71` launchd 模板与安装脚本（模板里没有任何本机路径，安装由你在 Agent 主机上跑）；复核 163（第 1 轮）「先改」A1–A9（评审任务书解析不了、负面评审当通过、提交后崩溃无法重放、平台不可用丢结果、收尾失租不转保全、组长退出不等于组清空、放行前后没人看着、cursor/codex 拿得到本机 MCP、全机锁随目录变）→ `30d2acd`、`167ecb9`（交付改成按阶段的本地日志；租约从领活就开始看；启动器改成监督者；12 个改坏版本各红）；**10-14 15:47 派了第 2 轮复核 164**；复核 164（第 2 轮）「先改」A1–A8（检查命令脱离了尝试的进程组；启动器被单独杀掉后剩下的进程被忘；提交前就停了续租；上传被取消当成拒绝；失租后推送失败仍去保全；检查点没存待确认的请求；同步检查点卡住停止和时限；恢复队列挡住清组）→ `3e59c92`（每条修法一个改坏版本，17 个各红；`-race` 干净；组长没了而组里还有进程、又证明不了是这个尝试的，就不杀、主机停止领活，等人处理）；按 10-14 签的规矩（每个 A 都有复核方的最小修法、不改方向）照改，**10-14 16:33 派了确认复核 165**；A8 你选了专用系统用户：安装脚本改成系统级 launchd 服务、以该用户运行，你的操作单 `agent-config/work/multi-agent/OWNER-STEPS-agentd-user.md`（前 3 步现在可做）；**A8 实测**：codex 的 `-c mcp_servers={}` 清不掉本机 MCP（本机 5 个，含平台写工具），cursor 也没有开关——现在 agentd 遇到这种主机就不提供这两个执行者（本机两个都不提供，只剩 deterministic），怎么让它们可用要你定（见下一行）；还剩：Gitea 凭据（O16）、多槽位（第 2 轮并发 1）；Gitea 克隆和推送要 O16；复核等主循环写完一起派｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-9",
+      "ord": 9,
+      "after": 6
+     },
+     {
+      "t": "Codex 复核（两轮，按 10-14 签的规矩可加一轮确认）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "163、164 两轮已做，确认复核 165 16:49 前回「先改」：164 的 A6、A7、A8 各剩一个缺口（检查点第一次落盘失败后下一轮发出没落盘的请求；组长退出后先等检查点、卡住的 git 子进程挡住清组；恢复交付没有总截止时间、卡住的推送挡住领活），三个都有最小修法、不改方向。**按规矩停线，等你定**（见下一行）｜按你签的规则改 → `6de4bca`（每次先落盘再发、组长退出先清组、恢复步骤有截止时间、登记错误返回；任务书认 salvage 字段；6 个改坏版本各由断言抓到），**10-14 17:39 派了窄确认复核 171**；171 **还剩 1 个 A**（读检查点补丁时 git 的子进程占着输出管道会一直等，重启接管补检查点也会被它卡住）+ 1 个 B → **按规则停线交你**；修法已在分支 `e5100fb` 备好（未合并：输出交给 exec 复制进有界缓冲、登记错误保留；3 个改坏版本各由断言抓到）｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-10",
+      "ord": 10,
+      "after": 7
+     },
+     {
+      "t": "（你）定：agentd 线窄确认后还剩 1 个 A",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 17:56 你回「agentd A」**：用 `e5100fb` 的修法，统筹方自己验收后合并，不再复核｜原题：**我的建议 A**：用分支上已备好的修法（`e5100fb`），统筹方自己验收后合并，不再复核——改动小、测试直接证明，agentd 在 Gate A 前不上任何环境，Gate A 还会实测 T01/T22/T34；B：再做一轮只看这 2 处的复核（约 20 分钟）再合；C：先不合、记进 TECH_DEBT。怎么回：线程里回「agentd A」「agentd B」或「agentd C」｜**10-14 18:09 合进平台主线**：合并后的树上整套暴露两处（agentd 的家目录用法要登记理由、一个计时测试在负载下超限）→ `e8ba178`；竞态检测暴露采纳测试的钩子竞争 → `cf0ff21`（钩子改原子）；主线 `cf0ff21`；**CI 在 `cf0ff21`、`36cb85d` 红**（agentd 的 10 个测试：CI 容器以 root 运行、改权限挡不住写盘，1 号进程不回收僵尸、清组把僵尸读成「还剩」；本机 macOS 普通用户全过）→ `a8027d4`（清组只数还在运行的进程；写盘失败改用测试开关）→ **10-14 18:22 CI `ci-platform-6rw8p` 全部 Succeeded，主线回绿**（红了约 1 小时；LESSONS 127）",
+      "timed": false,
+      "id": "2.2-11",
+      "ord": 11,
+      "after": 8
+     },
+     {
+      "t": "路由第二批",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "分支 `w31/agentrt-22-routes2`（工作树 `~/agent-work/agentrt-22k`，基于 `a8027d4`）：提议 mission（平台发 M-N）与任务、读 mission / 任务列表 / 计划、叫停、主机、`whoami`；控制器把满足条件的提议任务放进队列。**设计没写、统筹方先定**：写入记在谁名下——admin 令牌 = `owner`，名为 `seat:<x>` 的令牌 = 该席位，其余令牌按提问已有的 `X-Bifrost-Session` 头记成 `thread:<session>`（第一次写时登记）；mission 在常备授权规则签名前停在「已提议」；任务在 mission 生效、依赖全部验收后才可领，依赖被拒或取消就挡住。你要改就说｜`86d9c9a` 提议 mission / 任务、派发（20 个改坏版本各由断言抓到）；`e18f202` 计划读取、叫停（任何已认证身份可设、只有你能解除）、主机（3 分钟内轮询过算在线；排空 = 主机上的 drain 叫停）、whoami（能做什么与路由同一张表）；**复核 175（第 1 轮）「先改」4 个 A**（新依赖能绕过派发；批量提议锁顺序反了会死锁；派发只看最早 500 条；带截止时间的请求过期后重试被拒）+ 6 个 B → `eeb34da` 全修（17 个改坏版本各由断言抓到，其中死锁、重号都是真跑出来的）；新线程登记记下发起的令牌，每天最多 200 个；**10-14 18:50 派了复核 176**（提议线第 2 轮 + 计划/叫停/主机第 1 轮）→「先改」2 个新 A（批量提议与叫停对同一写入者会死锁；批量预锁与验收编排锁顺序冲突）+ 3 个 B，第二部分 1 个 A（线程配额满了新会话不能叫停）→ `8c2ba8a`（写入者先于业务行；依赖目标只拿 KEY SHARE、步骤 NOWAIT 加整笔重试；登记加公共锁；事件记令牌；叫停不受配额；12 个改坏版本各由断言抓到）；MCP 工具 `342a448`（whoami、计划、mission、任务、提议、产物、叫停）；复核 177：提议线窄确认通过、第二部分第 2 轮无 A、MCP 第 1 轮 1 个 A（叫停的默认键会把解除后的新叫停当成重试）→ `f29d34b`；复核 178（MCP 第 2 轮）同类 1 个 A（提议任务）→ `95575c0`（两者都要求调用方显式给键）；**窄确认 179「可以合并」**；合并时整套暴露写路由豁免清单缺 5 条 → `671fde2`；**10-14 19:22 合进平台主线 `bad7fa8`**（合并树 Go 65 包、agentrt/agentd 竞态检测、MCP 106、code-health 全过；全量 lint 的 20 处都在未改动的文件里）；TD-344 记了 MCP 包不做类型检查；计划变更与进展投影：分支 `w31/agentrt-22-planchange`（`~/agent-work/agentrt-22k`，基于 `bad7fa8`）。`864630d` 计划变更提议——**设计没写、统筹方先定**：五种改动（加项 / 加步、改标题、改完成规则并绑定、步骤连同任务迁到另一 mission、移任务）；常备授权 = 给有在做步骤的项加步、改未开始步骤的标题，当场落地；其余先在保存点里试做（延期检查当场跑）再回滚，规则不许的当场拒并写明原因（T32 经计划路由），许可的发决策卡给你（goal 类，选项「Apply the change / Do not apply it」），你答了由控制器落地；`propose_plan_change` 工具。复核 180（第 1 轮）「先改」3 个 A（回答里是选项键不是文字，「Apply」会被读成拒绝；没核对改动都在这棵树里；落地时先写流后锁行会和完成规则循环死锁、常备授权判定没锁住所读）+ 3 个 B（编号按序号推会错号撞号；卡片超出提问库上限时永远 503；决定后不确认已读会占满配额）→ `865ddc2` 全修（11 个改坏版本各由断言抓到，死锁是真跑出来的；真提问库上的卡片测试）。`5516407` `GET /progress`，接口规格 `agent-config/work/multi-agent/SPEC-agentrt-progress-2026-10-14.md`（你要改就说）：需要你（只计有动作的）、每件事（几片做完 / 共几片、任务状态：宿主失联 > 可能卡住 > 等你 > 挡住 > 慢 > 在做 > 等别的岗位 > 排队）、现场、计划计数、主机、叫停、最近结束（失败的实验保留）；预计时间和动作流水不在第一版。**10-14 19:41 派了复核 181（进展第 1 轮）、182（计划变更第 2 轮）**｜182「先改」：A2（任务被别的树在读和锁之间移走）、A3（任务锁顺序与派发、验收编排冲突）没关上 → `8e4ec4a`（任务锁 NOWAIT + 整笔重试；锁后重读；卡片计数交给提问库自己的规则；确认已读记成 note）；**窄确认 183「先改」**：A2、B2、B3 确认修好，A3 还剩一条路径（迁移验收任务时触发器会锁它的对象任务，不在 NOWAIT 集合里）→ **按规则停线交你**（见下一行）；修法已在分支 `3b40569` 备好（未合并：对象任务一并 NOWAIT 预锁、死锁也整笔重试；改坏版本证实改前会持锁等 3 秒）｜181（进展第 1 轮）「先改」：规格层 5 个 A（「需要你」不该列没有动作的；片不是任务数；失败的实验要按尝试留；缺「未知」和原因；2.5 要的几项数据）+ 实现层 9 个 B → 规格第二版已推（infra `1c675d7`）；实现第二版在分支 `w31/agentrt-22-progress` `9d69fce`（13 个改坏版本各由断言抓到），**10-14 20:09 派了第 2 轮复核 184**｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-12",
+      "ord": 12,
+      "after": 9
+     },
+     {
+      "t": "（你）定：计划变更线窄确认后还剩 1 个 A",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 20:10 你回「计划变更 A」**：用 `3b40569` 的修法，统筹方自己验收后合并，不再复核｜原题：**我的建议 A**：用分支上已备好的修法 `3b40569`，统筹方自己验收后合并，不再复核——改动只是把对象任务也放进 NOWAIT 集合（复核方给的最小修法），改坏版本直接证明；B：再做一轮只看这一处的复核（约 20 分钟）再合；C：先不合，记进 TECH_DEBT、Gate A 前修。合并时只挑计划变更的提交，不带进展投影｜怎么回：线程里回「计划变更 A」（或 B、C）",
+      "timed": false,
+      "id": "2.2-13",
+      "ord": 13,
+      "after": 10
+     },
+     {
+      "t": "（你）定：agentd 线确认复核后还剩 3 个 A 怎么办",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 17:20 由上面签的规则定（即 B）**｜原题：**我的建议 B**：照复核方的最小修法改这 3 个，再做一轮只看这 3 处的确认复核；A：照改，我自己验收后直接合，不再复核；C：先合，3 个记进 TECH_DEBT、Gate A 前修。怎么回：线程里回「A」「B」或「C」｜**10-14 17:03 同一情形第二次**（sources 线的确认复核 167 也还有 1 个 A），请你定规则，见下一行",
+      "timed": false,
+      "id": "2.2-14",
+      "ord": 14,
+      "after": 11
+     },
+     {
+      "t": "（你）定规则：确认复核还有 A 时怎么办",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 17:20 你回「签这条」**：照改，再做一轮只看这几处的确认复核；这一轮再有 A 才停线交你；统筹方在改两条线｜原题：**我的建议**：每个 A 都有复核方的最小修法、不改方向时，照改，再做一轮只看这几处的确认复核；这一轮再有 A 才停线交你。签了就同时适用 agentd 线（3 个 A）和 sources 线（1 个 A：Pod 读取要照交付核验的判据确认是当前已稳定的版本、拒绝多出的容器）。怎么回：线程里回「签这条」，或改了再签",
+      "timed": false,
+      "id": "2.2-15",
+      "ord": 15,
+      "after": 12
+     },
+     {
+      "t": "（你）定：运行时规则的正文怎么写（挡着 mission 自动成立、O19 签初始规则、规则路由与 T35）",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 20:10 你回「规则 A」**：YAML + `ssh-keygen -Y sign`（namespace `bifrost-agentrt-rule`），闭合解析；提案第 4 节的建议值（40 次尝试、48 小时、3 个月）照用，签前可改｜原题：**我的建议 A**：和发版策略同一种 YAML + `ssh-keygen -Y sign`（namespace `bifrost-agentrt-rule`），解析器只认列出的字段；各类规则写什么、最严默认、收紧怎么判在提案第 2 节｜提案 `agent-config/work/multi-agent/PROPOSAL-agentrt-rules-2026-10-14.md`｜怎么回：线程里回「规则 A」（或 B、C），字段有改动直接写",
+      "timed": false,
+      "id": "2.2-16",
+      "ord": 16,
+      "after": 13
+     },
+     {
+      "t": "（你）定：STG 平台接上运行时库谁来推",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-14 20:10 你回「STG 接线 A」**：统筹方写补丁、本地构建对比后推，再被 auto mode 拦就停下｜原题：**我的建议 A**：你回一句，我写补丁、本地构建对比后推（10-14 19:50 我自己推时被 auto mode 拦下：受保护范围的基础设施变更，没有绕过）；B：你加一条放行规则；C：先不接、Gate A 往后放｜操作单 `agent-config/work/multi-agent/OWNER-STEPS-gate-a-stg.md` 第 0 步（补丁全文在里面）｜怎么回：线程里回「STG 接线 A」（或 B、C）｜20:23 已推（infra `faa669c`），Argo 已同步，两个 Deployment 带上三个变量且就绪；但 STG 的平台镜像早于运行时接线代码（日志里一条 agentrt 都没有），要发一次平台 STG 才生效",
+      "timed": false,
+      "id": "2.2-17",
+      "ord": 17,
+      "after": 14
+     },
+     {
+      "t": "规则（你 20:10「规则 A」）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "分支 `w31/agentrt-22-rules`（工作树 `~/agent-work/agentrt-22`，变基到 `c68e11f`）：`365e154` 闭合解析器 + 签名 / 收紧 / 检查 / 提议路由 + 落地岗位、候选、能力事实；`36ed4b3` 运行时照规则办事（没有并发规则不派活、常备授权内的 mission 自动生效并只派给授权里的主机和执行者、默认预算）；`d806cd6` 补测。T35 在库里测过。**复核 186（第 1 轮）「先改」5 个 A**（写规则不拿能力锁；岗位候选和 only 事实不看规则有效期；预算与单次时限没执行；收紧授权管不到已生效 mission；签名收紧会抬高候选）+ 2 个 B → `85cd2f4` 全修 + `fcddda2` 测试（46 个改坏版本全被抓住）→ **复核 187（第 2 轮）「先改」3 个 A**（新锁序三方死锁；领活不校验规则正文；没签的种子 only 事实仍授予核心资格）都有最小修法 → `e6aed98` → **188 窄确认**：R2、R3 关闭，R1 剩首次登记经 system 流的环 → `1d093f6`（规则写入先确认写入者、事件改写 `rule:<id>` 流）→ 189「可以合并」→ **你 22:15「规则线合并」：已上平台主线 `299c056`**，CI 绿。连库重试 `c1e460b`…`d178527`（复核 191 可以合并；STG 上新 Pod 第一次连库被网络策略竞态拒，原来不再重试）已上主线。主机首次登记（你「主机登记 A」）单独拆出合并 `750263b`（190、192 两轮无 A）。**10-15 12:46 你签了 7 份规则，STG 库里核对生效**（新密钥 `28e63c1`；第一把密钥口令找不回已换；`rule.sh` 取编号的 bug 已修，教训 137）；常备授权要主机已登记，排到装 agentd 之后（教训 138）；**13:23 agentd 装好、主机 mbp-dev 登记；13:26 常备授权签上，8 份全部生效**。统筹方的 MCP 都连 PROD、没有 STG 的提交通道，问你「STG 工具 一/二/三」；**13:30 你回「STG 工具 一」**：共用 checkout 快进到主线（原来落后 178 个提交、没有运行时工具）；MCP 令牌文件允许 `PLATFORM_STG_OPERATOR_TOKEN`（平台 `6ce6e8e`，复核 199 合并后补跑）；`.mcp.json` 加 `bifrost-platform-stg` 的补丁由你应用、重开线程。｜**Cursor 账号会换**（你 13:35：接下来换到别的账号几天、再换一个，22 号后换回）：换账号 = 存新密钥 + `launchctl kickstart -k system/com.bifrost.agentd`；后续：agentd 每次起 cursor 时重读密钥文件（不用重启，验收前做）；2.4 设计里记下账号（额度和成绩按账号）还没做：`rule_expired` 与到期提醒（10-15 定：放到 Gate A 之后，规则 2027-01-15 才到期）。**10-15 10:36 改了两份草稿（你签之前）**：Gate A 基准题是「Cursor 写、Codex 复核」，原草稿 Cursor 实现者是「资格考核中」、路由不派，codex 写的活又没有不同家的评审者，走不通；改成 Cursor 实现者「试用」、常备授权执行者加 Cursor（8 份仍过解析器；教训 135）。`rule.sh` 与 STG 初始规则草稿（8 份，解析器已读通）在 infra；Owner 操作单 `OWNER-STEPS-rules-o18-o19.md`｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-18",
+      "ord": 18,
+      "after": 15
+     },
+     {
+      "t": "（你）定：授权外 mission 的决策卡这条线停在哪",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-15 14:45 前后你回「决策卡 A」**：提议时限住文字、建卡前算字节数，超了 422；排在 2.2 验收之后实现（不挡验收），改完做一轮只看这一处的确认｜**按签的规矩停线**：复核 190「先改」→ 修 → 192「先改」2 个 A → 修 → 193（最后一轮窄确认）又有 1 个 A：卡片正文变长后，正常长度的提议（目标七八百个中文字、列十来个仓库）会超过问题库 3000 字节上限，建卡失败。分支 `w31/agentrt-22-mission-card`（`~/agent-work/agentrt-22k`，`3418f2d`）没合并；主线现状是授权外的 mission 停在 proposed、没有卡（Gate A 用授权内的 mission，不受影响）｜**我的建议 A**：提议时就限住文字（标题 200 字节、目标 1200 字节、成功条件最多 10 条各 200 字节、仓库最多 12 个），并在建卡前按问题库同一套编码算正文字节数，超了直接 422「太长，细节写进 mission 的说明文件」，不悄悄截断；改完做一轮只看这一处的确认。B：卡片只放摘要和提议号，全文留在 mission 记录里（要 Console 能按提议号查到 mission，多一处改动）。C：这条线放到 Gate A 之后再做｜怎么回：线程里回「决策卡 A」（或 B、C）",
+      "timed": false,
+      "id": "2.2-19",
+      "ord": 19,
+      "after": 16
+     },
+     {
+      "t": "（补强）决策卡 A 的实现（分支 `w31/agentrt-22-mission-card` `3418f2d` 之上）",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "2.2 验收之后",
+      "timed": false,
+      "id": "2.2-20",
+      "ord": 20
+     },
+     {
+      "t": "（你）**接下来要做的五件事，按顺序**：`agent-config/work/multi-agent/OWNER-NEXT-gate-a.md`（STG 迁移补第 5 个、agentd 用户、agentd 令牌、Gitea、签名密钥指纹），每步末尾写了怎么回",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "10-15 10:00 第 1 步做完，迁移表 5 行、第 5 个指纹与主线 `0005_attempt_cancelled.sql` 一致；10:03 更正第 2 步（要登录 codex）和「之后」第 3 步（agentd 由你用 sudo 装）｜**10-15 18:17 核对**：五步都已做完（agentd 14:55 装好、令牌、Gitea、签名密钥、8 份规则签名）",
+      "ts": 1792076400.0,
+      "timed": true,
+      "id": "2.2-21",
+      "ord": 21,
+      "after": 26
+     },
+     {
+      "t": "（你）定：agent 的分支推到 Gitea 哪里",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-15 11:30 你回「Gitea A」；11:40 你指出 10-08 已定「Gitea 做主、GitHub 只做镜像」（方案甲），我出题时没说 B 就是这个终点（教训 136），重新问时机**｜**12:08 你回「时机甲」**：Gate A 先按 A 过渡（bifrost-agents 已由你建好）；Gate A 一过做方案甲，动工前统筹方出细节给你确认（GitHub 只同步 main、不同步 agent 分支；发布脚本改推 Gitea；之后 AGENTRT_GIT_ORG 改 bifrost、去掉推送地址）｜10-15 10:07 查出：Gitea 上 `bifrost/bifrost-platform` 是 GitHub 的拉取镜像（交付流水线每次调它的 `mirror-sync`，10-14 23:00 回 200；普通仓库会被拒），镜像只读、同步时删掉 GitHub 没有的分支；设计 v4 第 0 步的「Gitea 做主」一直没做，第 4 步照原单建账号也推不上去｜**我的建议 A**：Gitea 另建组织 `bifrost-agents`、空仓库 `bifrost-platform` 专收 agent 分支；agentd 从镜像克隆、往这里推，检查类任务基线不在镜像时从这里取 `agent/*`；平台核对分支读这里（`AGENTRT_GIT_ORG=bifrost-agents`）；镜像和发布链不动；第 4 步改成建这个组织和仓库、只给 `agentd-mbp-dev` 这一个仓库写权限。B：Gitea 改成做主、GitHub 改为下游（动发布链和所有人的推送方式）｜怎么回：线程里回「Gitea A」（或 B）；第 2、3、5 步不受影响｜**10-15 18:17 核对**：「时机甲」已定；方案甲（Gitea 做主）的实施归补强",
+      "timed": false,
+      "id": "2.2-22",
+      "ord": 22,
+      "after": 17
+     },
+     {
+      "t": "平台核对已推分支（结果检查的 Gitea 一半）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-15 查出生产接线没有分支头读取器，agentd 交任何带分支的结果都回 503 `no_head_reader`、无限重试｜分支 `w31/agentrt-22-rule-expiry`（`~/agent-work/agentrt-22m`，基于 `750263b`）`c30a8b8`：按 `AGENTRT_GIT_ORG` 读分支头，复用交付服务的 Gitea 凭证；分支没有而仓库在 → 409 拒收；仓库看不到、Gitea 出错 → 平台的错，agentd 重试、结果不丢；不配不变；5 个改坏版本各被抓住；**10-15 10:12 派了复核 194**「先改」A1（分支 404 后仓库探测只看状态码，不可读的 200 会把真结果永久拒掉）、A2（默认跟随重定向，可读到别的仓库或分支）→ `0d00147`（仓库要读出 `full_name` 等于该组织/仓库才拒；不跟随重定向；分支回答的 `name` 必须是所问的分支；6 个改坏版本各被抓住）；agentd 推送地址 `02dcae7`（`AGENTD_GIT_PUSH_BASE`，安装脚本写进 plist；检查类任务基线不在镜像时只取被检查任务的 `agent/<任务号>/*`；不配不变；8 个改坏版本各被抓住）；**复核 195「可以合并」**（第 1 部分第 2 轮、第 2 部分第 1 轮都没有 A），B：推送地址会收到 git 令牌 → `296468b`（推送地址必须与克隆地址同协议同主机，否则不启动）；**10-15 10:24 合进平台主线 `296468b`**（全仓 66 个包绿，push-main 的 code-health 过）；CI `ci-platform-8cf8r` 在跑。平台读分支要 STG 配 `AGENTRT_GIT_ORG`，等你回「Gitea A」｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "ts": 1792040400.0,
+      "timed": false,
+      "id": "2.2-23",
+      "ord": 23,
+      "after": 25
+     },
+     {
+      "t": "（你）定：STG 上的主机怎么登记",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**22:15 你回「主机登记 A」**；已合并 `750263b`｜10-14 21:20 发现：生产代码里没有任何地方登记主机（`RegisterHost` 只有测试在调），设计 v5 的路由表也没有入口；不补的话 STG 上 agentd 第一次领活会被拒（「host 未登记」），常备授权写 `mbp-dev` 也签不进去｜**我的建议 A**：agentd 令牌第一次领活时，平台按令牌绑定的主机名登记它（`host_registered`，类型 dev，记下是哪个令牌）——你在 O15 给 STG 加 `agentd:mbp-dev` 令牌那一步就是授权，不多一个入口、不多给你一步；退役仍走 drain。B：加一个只有你（admin）能调的 `POST /hosts/{id}`，你在终端多跑一条命令；C：签常备授权时把里面列的主机一并登记（换主机就要重签）｜怎么回：线程里回「主机登记 A」（或 B、C）；30 分钟没回我按 A 在分支上先做（不合并、可撤回）｜**22:00 没回，按等待规矩照 A 做了**：分支 `w31/agentrt-22-mission-card` 的 `0011790`（agentd 令牌第一次领活登记它绑定的主机，事件记令牌；两个改坏版本都被抓住），**没合并**，你看过再合；要 B 或 C 回一句，我撤掉改做",
+      "timed": false,
+      "id": "2.2-24",
+      "ord": 24,
+      "after": 18
+     },
+     {
+      "t": "（你）定：平台 STG 发版（主线最新的 CI 绿提交，现在是 `c68e11f`：计划变更 + 进度投影）这一次由谁起，以及以后 STG 的发版和清单改动要不要你点头",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**22:15 你回「STG 发布 A」**：22:25 发 `299c056`、22:47 发 `d178527`（运行时在 STG 上连上库）、23:01 发 `750263b`（主机首次登记；clone 结果核对一致，运行时第 2 次连上）；规则另起（STG 发版和清单改动由我做）：23:05 我直接改 CLAUDE.md 被 auto mode 判为改自己的权限（对的默认，没绕），改成补丁交你应用（CLAUDE.md §5 与 Cursor 侧同一段、parity-id 到 workspace-v25、auto mode 加一条 allow「Standing STG Releases」并改两条 soft_deny 的措辞；不含 Secret、RBAC、STG 库 DDL、D10 守卫、PROD），命令在本次汇总里｜10-14 20:25 我起发布时被 auto mode 拦下（「生产发布」），没有绕过，20:27 放开了我持有的窗口（LESSONS 128、129：你 10-10 说可回滚的 STG 发布由我做，CLAUDE.md §5 写 `start_pipeline_run` 仍要你点头，分类器也拦，三处不一致）｜**我的建议 A**：这一次你回「STG 发布 A」，我持窗口、钉 `f99e8e9` 起 `bifrost-deliver-platform`、核对 STG 跑的是它；以后的规则另起一条：STG 的发版和清单改动由我做、不用问，我把 CLAUDE.md §5 和 auto mode payload 改成一致后交你应用；B：这一次也由我起，但以后 STG 发版每次都问你（CLAUDE.md 不改，只改记忆）；C：先不发，Gate A 往后放｜怎么回：线程里回「STG 发布 A」（或 B、C）",
+      "timed": false,
+      "id": "2.2-25",
+      "ord": 25,
+      "after": 19
+     },
+     {
+      "t": "（你）（补强）agentd 令牌、Gitea 用户与分支保护、LaunchAgent、规则签名私钥、签初始规则、PROD 发布单（v5 O15–O20）",
+      "state": "doing",
+      "owner": true,
+      "star": false,
+      "when": "10-15：agentd 令牌、Gitea 用户、LaunchDaemon、签名密钥、8 份规则都已做完；14:5x 分支与标签保护设好（main 禁推、标签 * 无人可建，统筹方在 Gitea 页面核对过）；剩 PROD 发布单｜O15–O17 的操作单：同上文件第 1–3 步（命令原样可跑；令牌不进仓库、不进对话）；O18–O19：`agent-config/work/multi-agent/OWNER-STEPS-rules-o18-o19.md`（第 1 步现在就能做：生成签名密钥、把指纹贴进线程——发版策略 S0-8 也在等它；第 2 步等规则上 STG）；O20 在 2.2 做完后｜**10-15 18:17 核对**：除 PROD 发布单外都已做完；PROD 发布单归补强",
+      "timed": false,
+      "id": "2.2-26",
+      "ord": 26
+     },
+     {
+      "t": "STG 走查（2.2 验收前的一件小活）",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "**M-1**（14:01，`standing-envelope:dev` v1 内）：codex 实现 launchd.Parse 边界测试，第 3 次尝试交付 `ef22c980`（`agent/t_01M50FZ5…/a3`），确定性验收 14:24 pass；评审无人可领（codex 不独立、claude 在资格考核，合预期）。报告 `~/agent-work/stg-walk/REPORT.md`。走查查出三处并修：① 平台用 Gitea 分支 API 读刚推的分支会 404 → 第 1 次尝试的 persist 409 被拒、结果丢失 → 改读 git `info/refs`（分支 `w31/agentrt-22-heads-git` `~/agent-work/agentrt-22p`，复核 204→206→207 可以合并，CI 在 git 2.39 上红一次→e370d39 修、复核 208；15:24 STG 发到 e370d39 并核对）；② cursor 在后台用户下写不了钥匙串 → `AGENT_CLI_CREDENTIAL_STORE=memory`；③ 安装脚本 bootout 后立刻 bootstrap 会失败、主机没了 agentd（14:18 出过）→ 等 `launchctl print` 回 113 再加载（②③ 复核 202/203/205，已合主线 `3b4e372`，agentd 14:55 装上，指纹 `69c5cd8f…`）。另：MCP 补 `propose_mission`（`dbf30a9`，复核 200/201）。F2（被拒的 persist 不留痕）记 TD-349｜下一步：M-2「Cursor 写、Codex 评审」（任务带 needs listen_port_tests，codex 沙箱做不了，派给 cursor）走到 accepted；材料 `~/agent-work/stg-walk/m2/`，交给新会话「STG 走查 M-2」跑｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+      "timed": false,
+      "id": "2.2-27",
+      "ord": 27,
+      "after": 20
+     },
+     {
+      "t": "Gate A 在测试环境过：T01、T02、T05、T06、T08、T10、T22、T25、T32（经接口）、T33、T34、T35、T36、6 道基准题",
+      "state": "doing",
+      "owner": false,
+      "star": false,
+      "when": "10-15 10:38 跑法和要你参与的部分写在 `agent-config/work/multi-agent/PLAN-gate-a-stg-2026-10-15.md`｜**10-15 18:17 核对**：第一、二批过的项见 `work/multi-agent/RUN-gate-a-stg-2026-10-15.md`（T01、T02、T05、T06、T08、T10、T22 ①③、T32 接口、T34 五种、T36）；剩下的归补强",
+      "timed": true,
+      "id": "2.2-28",
+      "ord": 28
+     },
+     {
+      "t": "（你）定：Gate A 里要你参与的部分",
+      "state": "done",
+      "owner": true,
+      "star": false,
+      "when": "**10-15 14:45 前后你回「验收参与 一」**：一行 sudoers（只许给 bifrost-agentd 的进程发信号）、STG 测试身份 agentd:gate-b、验收期间允许缩放 STG platform-workers、合盖一次提前说，跑完全部撤掉；命令在 M-2 走到 accepted 之后原样给｜T01、T22、T34 要对以 `bifrost-agentd` 运行的 agentd 发信号（我没有 sudo），T02、T08、T34 要第二个 agentd 身份，T22 ③ 要暂停 STG 控制器，T22 ① 要合盖一次；另 TD-347：「全机锁」其实按用户｜**我的建议 A**：一行 sudoers 让我以 `bifrost-agentd` 身份运行 `/bin/kill`；STG 加测试主体 `agentd:gate-b`、令牌放我家目录 600；这次 Gate A 期间允许我缩放 STG 的 `platform-workers`；合盖一次我提前说；Gate A 后全部撤掉。B：信号由你按时跑 `sudo kill`（约 6 次），其余同 A。C：只跑不要你的部分，其余记「只在存储层测过」，Gate A 标部分通过｜怎么回：线程里回「Gate A 参与 A」（或 B、C）",
+      "timed": false,
+      "id": "2.2-29",
+      "ord": 29,
+      "after": 21
+     },
+     {
+      "t": "（补强）★ 正式环境：开发机上的 agentd 领正式环境的任务，6 道基准题从领到结论全程无人插手",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2-30",
+      "ord": 30
+     }
+    ],
+    "done": 26,
+    "total": 30,
+    "live": false,
+    "state": "doing",
+    "owner_left": 1
+   },
+   {
+    "key": "2.2b",
+    "name": "第一版拉通",
+    "src": "Owner 2026-10-15 18:1x 确认「草案 2」；`work/multi-agent/PLAN-round2-first-slice-2026-10-15.md`",
+    "guard": false,
+    "steps": [
+     {
+      "t": "台账对齐：2.2 勾掉已在 STG 跑通的步骤，架构对照按 STG / PROD 重核，补强的步骤原位标「（补强）」",
+      "state": "done",
+      "owner": false,
+      "star": false,
+      "when": "10-15 18:17",
+      "ts": 1792106220.0,
+      "timed": true,
+      "id": "2.2b-1",
+      "ord": 1,
+      "after": 1
+     },
+     {
+      "t": "评审岗位加 Cursor（试用期）：Codex、Cursor 都能实现、都能评审，谁写就由另一家评；Claude 等执行者做好再加",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-2",
+      "ord": 2
+     },
+     {
+      "t": "（你）签评审岗位的规则",
+      "state": "todo",
+      "owner": true,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-3",
+      "ord": 3
+     },
+     {
+      "t": "「一句目标」入口 `POST /api/v1/agentrt/goals`（10-15 你同意加这条路由）：建 mission 和一件实现任务，验收命令按仓库给默认值",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-4",
+      "ord": 4
+     },
+     {
+      "t": "STG Console 的 Agents 页：提目标、运行时现场、计划栏与架构对照",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-5",
+      "ord": 5
+     },
+     {
+      "t": "（你）在 STG Console 上提一句小目标",
+      "state": "todo",
+      "owner": true,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-6",
+      "ord": 6
+     },
+     {
+      "t": "你提的那一件走到 accepted，这期间这个 mission 里没有统筹线程的写入，页面上每一步看得到",
+      "state": "todo",
+      "owner": false,
+      "star": true,
+      "when": "",
+      "timed": false,
+      "id": "2.2b-7",
+      "ord": 7
+     }
+    ],
+    "done": 1,
+    "total": 7,
+    "live": false,
+    "state": "doing",
+    "owner_left": 2
+   },
+   {
+    "key": "2.3",
+    "name": "交互总线与叫停",
+    "src": "设计的阶段 1",
+    "guard": false,
+    "steps": [
+     {
+      "t": "（补强）实现：信箱、唤醒、在线状态、叫停广播；隔离、根目录只读、注入防护；本机文件迁进平台",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.3-1",
+      "ord": 1
+     },
+     {
+      "t": "（补强）独立复核",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.3-2",
+      "ord": 2
+     },
+     {
+      "t": "（你）（补强）批发布单",
+      "state": "todo",
+      "owner": true,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.3-3",
+      "ord": 3
+     },
+     {
+      "t": "（补强）★ Gate B",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.3-4",
+      "ord": 4
+     }
+    ],
+    "done": 0,
+    "total": 4,
+    "live": false,
+    "state": "todo",
+    "owner_left": 1
+   },
+   {
+    "key": "2.4",
+    "name": "多厂商与参谋长",
+    "src": "设计的阶段 2 前半",
+    "guard": false,
+    "steps": [
+     {
+      "t": "（补强）实现：Claude 执行者、按能力和额度分流（先看谁能胜任，按岗位用资格考试和历史成绩量；再在能胜任的里按额度挑）、并发 2 到 3、参谋长席位",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.4-1",
+      "ord": 1
+     },
+     {
+      "t": "（补强）独立复核",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.4-2",
+      "ord": 2
+     },
+     {
+      "t": "（你）（补强）批发布单",
+      "state": "todo",
+      "owner": true,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.4-3",
+      "ord": 3
+     },
+     {
+      "t": "（补强）★ 一件活从派出到验收，全程没有统筹线程手工插手",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.4-4",
+      "ord": 4
+     }
+    ],
+    "done": 0,
+    "total": 4,
+    "live": false,
+    "state": "todo",
+    "owner_left": 1
+   },
+   {
+    "key": "2.5",
+    "name": "界面：协作进展在正式环境，完全由接口生成",
+    "src": "从内往外的最后一层",
+    "guard": false,
+    "steps": [
+     {
+      "t": "（补强）实现：PROD Console 的 Progress 页从内核接口读计划栏、架构对照、现场、需要你做的事；本机看板退役",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.5-1",
+      "ord": 1
+     },
+     {
+      "t": "（补强）独立复核",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.5-2",
+      "ord": 2
+     },
+     {
+      "t": "（你）（补强）批发布单",
+      "state": "todo",
+      "owner": true,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.5-3",
+      "ord": 3
+     },
+     {
+      "t": "（补强）★ 停掉 Agent 主机上的看板程序，PROD Progress 页仍显示正确的计划和现场",
+      "state": "todo",
+      "owner": false,
+      "star": false,
+      "when": "",
+      "timed": false,
+      "id": "2.5-4",
+      "ord": 4
+     }
+    ],
+    "done": 0,
+    "total": 4,
+    "live": false,
+    "state": "todo",
+    "owner_left": 1
+   }
+  ],
+  "left": "**10-15 晚**：2.2b 第一版拉通估 2–3 天（不含等签名）；补强按界面上看到的问题再估。以下是 10-14 的原估：v5 已确认（2026-10-14）。按 v5 §5.7 粗估有效工作量 21–31 个工作日（约 4–6 周，不含等你决定和批准、不含演练失败重来）：2.1 数据层 4–5 天，2.2 接口与 agentd 8–11 天（最可能超期），2.3 3–5 天，2.4 4–6 天，2.5 2–4 天。2.2–2.5 的步骤在各自开工前按 v5 细化。之后是第 3 轮：把 agentd 从开发机搬到 mini 的虚拟机。",
+  "guards": {
+   "total": 0,
+   "done": 0,
+   "live": 0,
+   "untouched": 0
+  },
+  "steps": {
+   "done": 38,
+   "total": 63,
+   "doing": 3,
+   "today": 3,
+   "owner_left": 7,
+   "by_events": 0,
+   "by_probe": 0,
+   "failed": 0
+  },
+  "day": "10-15",
+  "moved": [
+   {
+    "t": "台账对齐：2.2 勾掉已在 STG 跑通的步骤，架构对照按 STG / PROD 重核，补强的步骤原位标「（补强）」",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-15 18:17",
+    "ts": 1792106220.0,
+    "timed": true,
+    "id": "2.2b-1",
+    "ord": 1,
+    "after": 1,
+    "key": "2.2b",
+    "total": 7,
+    "item": "第一版拉通"
+   },
+   {
+    "t": "（你）**接下来要做的五件事，按顺序**：`agent-config/work/multi-agent/OWNER-NEXT-gate-a.md`（STG 迁移补第 5 个、agentd 用户、agentd 令牌、Gitea、签名密钥指纹），每步末尾写了怎么回",
+    "state": "done",
+    "owner": true,
+    "star": false,
+    "when": "10-15 10:00 第 1 步做完，迁移表 5 行、第 5 个指纹与主线 `0005_attempt_cancelled.sql` 一致；10:03 更正第 2 步（要登录 codex）和「之后」第 3 步（agentd 由你用 sudo 装）｜**10-15 18:17 核对**：五步都已做完（agentd 14:55 装好、令牌、Gitea、签名密钥、8 份规则签名）",
+    "ts": 1792076400.0,
+    "timed": true,
+    "id": "2.2-21",
+    "ord": 21,
+    "after": 26,
+    "key": "2.2",
+    "total": 30,
+    "item": "接口层与 agentd"
+   },
+   {
+    "t": "平台核对已推分支（结果检查的 Gitea 一半）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-15 查出生产接线没有分支头读取器，agentd 交任何带分支的结果都回 503 `no_head_reader`、无限重试｜分支 `w31/agentrt-22-rule-expiry`（`~/agent-work/agentrt-22m`，基于 `750263b`）`c30a8b8`：按 `AGENTRT_GIT_ORG` 读分支头，复用交付服务的 Gitea 凭证；分支没有而仓库在 → 409 拒收；仓库看不到、Gitea 出错 → 平台的错，agentd 重试、结果不丢；不配不变；5 个改坏版本各被抓住；**10-15 10:12 派了复核 194**「先改」A1（分支 404 后仓库探测只看状态码，不可读的 200 会把真结果永久拒掉）、A2（默认跟随重定向，可读到别的仓库或分支）→ `0d00147`（仓库要读出 `full_name` 等于该组织/仓库才拒；不跟随重定向；分支回答的 `name` 必须是所问的分支；6 个改坏版本各被抓住）；agentd 推送地址 `02dcae7`（`AGENTD_GIT_PUSH_BASE`，安装脚本写进 plist；检查类任务基线不在镜像时只取被检查任务的 `agent/<任务号>/*`；不配不变；8 个改坏版本各被抓住）；**复核 195「可以合并」**（第 1 部分第 2 轮、第 2 部分第 1 轮都没有 A），B：推送地址会收到 git 令牌 → `296468b`（推送地址必须与克隆地址同协议同主机，否则不启动）；**10-15 10:24 合进平台主线 `296468b`**（全仓 66 个包绿，push-main 的 code-health 过）；CI `ci-platform-8cf8r` 在跑。平台读分支要 STG 配 `AGENTRT_GIT_ORG`，等你回「Gitea A」｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+    "ts": 1792040400.0,
+    "timed": false,
+    "id": "2.2-23",
+    "ord": 23,
+    "after": 25,
+    "key": "2.2",
+    "total": 30,
+    "item": "接口层与 agentd"
+   },
+   {
+    "t": "接口与鉴权：`/api/v1/agentrt/*` 路由、新角色 `agentd`（令牌绑主机）、产物上传（本机路径扫描）、规则验签与收紧、`/progress`、平台连 PG 和 redis-agents 的接线",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 13:37：分支 `w31/agentrt-22-api`（工作树 `~/agent-work/agentrt-22e`）`7ca48e6`：agentd 角色（令牌名 `agentd:<主机>`，加载时不合规就拒）、领活长轮询与尝试各路由、产物上传（哈希核对、H8 本机路径拒收）、读路由；平台接线在 `AGENTRT_DSN` 设了才连库（核对是本环境的运行时角色和库），没设时路由回 503、循环不跑——所以能先合进主线、先部署而不生效；外部来源（审批、提问、CI、部署）和 Gitea 分支头读取还没接；还剩：规则验签与收紧、`/progress`、提议 mission 与任务、控制、主机；10-14 13:58 变基到分流修复上（`f1f98b5`）；复核 156「先改」A1（日志种类的产物能被引用成正式报告、绕过 H8）、A2（H8 只扫名单内的种类，reporter 的 mission_spec / message / exam 漏扫）、A3（上传不写 artifact_put）、B1–B3 → `7313164`（11 个改坏版本各红）；心跳的 phase / line 现在拒收：设计没写存哪，等 2.3 总线给落处；复核 157（第 2 轮）「可以合并」、没有 A，B（保全也拒日志冒充报告、并发上传只记一次、几处字段）→ `37b2e67`；**10-14 14:31 合进平台主线**（`c7f4de8`，紧跟 `e102125`：合并时 code-health 已报超标却经管道放行推了上去，`kernel_test.go` 812 行，6 分钟内把保全测试挪进单独文件修回，LESSONS 第 125 行）；**10-14 14:18 派了第 2 轮复核 157**｜**10-15 18:17 核对**：分支已合进平台主线，STG 上跑通（M-1、M-2 走查，Gate A 两批）",
+    "ts": 1792003020.0,
+    "timed": true,
+    "id": "2.2-6",
+    "ord": 6,
+    "after": 24,
+    "key": "2.2",
+    "total": 30,
+    "item": "接口层与 agentd"
+   },
+   {
+    "t": "内核写路径（存储层）：mission / 任务 / 尝试的状态机，领活（`FOR UPDATE SKIP LOCKED`）、心跳续租、检查点 / 算完 / 落到平台 / 提交 / 保全 / 结束，幂等键，同事务隔离检查",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 12:50 合进平台主线 `5b1583c`（不接线，运行时不变）：首版 `c5d8fe1`；复核 148「先改」→ `b91d4ac`；复核 149（第 2 轮）A1、A2 → `f981955`；确认复核 150 没有 A，三项 B → `03d8420`；共 20 个改坏版本各有测试变红。主线 CI 红在 code-health（kernel.go 1223 行，同一类第二次，TD-341）→ 拆三个文件 `e580c17`，CI 绿（库测试在集群 sidecar 上也过）",
+    "ts": 1792000200.0,
+    "timed": true,
+    "id": "2.2-2",
+    "ord": 2,
+    "after": 23,
+    "key": "2.2",
+    "total": 30,
+    "item": "接口层与 agentd"
+   },
+   {
+    "t": "CI 能跑库测试：平台 CI 加 postgres、redis 两个 sidecar（钉摘要）和 AGENTRT_TEST_*（O8 你同意拉镜像、O9 你应用流水线）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 11:23：infra `1919d2c` + `a9adae9`（复核 147「可以应用」）；你应用了流水线；CI 跑 b50d827：agentrt store 10.6s、relay 9.4s，必须跑模式",
+    "ts": 1791994980.0,
+    "timed": true,
+    "id": "2.2-1",
+    "ord": 1,
+    "lanes": 1,
+    "after": 22,
+    "key": "2.2",
+    "total": 30,
+    "item": "接口层与 agentd"
+   },
+   {
+    "t": "测试环境：迁移作业跑通，T19–T23、T30–T32 在 STG 过",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 11:06：STG Job 成功（第二次空跑）；表、触发器、种子、哈希链核对过；T19–T32 的库测试在本机 PG 上跑过，CI 上要等 sidecar（O8/O9）",
+    "ts": 1791993960.0,
+    "timed": true,
+    "id": "2.1-9",
+    "ord": 9,
+    "after": 8,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "（你）批三个库的清单和建六个角色的 db-step、`redis-agents` 清单（O6、O7）",
+    "state": "done",
+    "owner": true,
+    "star": false,
+    "when": "10-14 11:06：redis-agents 两环境上线（infra `1226255`）；六个角色 + 密码；三个库 + 连接收紧 + 入站策略；过渡矩阵 `a496623`、完整矩阵 `9873ba8`（7 库 0 差异）已由你应用；逻辑备份加了 `bifrost_platform:agentrt`",
+    "ts": 1791993960.0,
+    "timed": true,
+    "id": "2.1-8",
+    "ord": 8,
+    "after": 7,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "中继与重建：outbox → Redis（持有者令牌），从 PG 重建；`redis-agents` 清单（PROD、STG）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "代码 `0a42164` + 复核修复 `7ac856c`；infra 半边 Codex 写、Claude 子代理复核一轮「先改」A1–A3 后由 Codex 按定法修（`54873f8`），统筹方在本机 PG 上从空库重验通过；角色矩阵与逻辑备份目标拆到 `w31/agentrt-21-infra-after`（`c946b8b`，三库迁完、矩阵 0 差异后才合）；迁移改为 Argo 之外的 Job（`k8s/agentrt-migrate/`），不用 v5 写的挂起 CronJob（Argo v3.4.3 会把它报 Suspended）；第 2 轮复核（Claude 子代理）10-14 10:22 剩 1 项 A（新建的六个登录会被 main 的角色矩阵报成意外角色，拦全部 Trade 交付）→ **停线，等你定**；修法已写：过渡分支 `w31/agentrt-21-infra-roles`（`55dfc6b`，六个角色 connect: []，建角色后同一窗口立即合），文档与合并条件 `07f6ea9`，后续分支重建为 `63c10d8`",
+    "ts": 1791958925.879092,
+    "timed": true,
+    "id": "2.1-4",
+    "ord": 4,
+    "lanes": 5,
+    "after": 6,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "Codex 复核（两轮 + 一轮确认）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "复核 144「先改」A1–A5 → 修 `7ac856c`；复核 145 剩 A4 余项 → 修 `7cb1fa0`（复核时的 `7cb1fa0` 只是提交说明不同，内容相同）；复核 146（确认，Owner 选 A）10-14 10:08「可以合并」，没有 A；它的 B 补了回归测试",
+    "ts": 1791958510.239991,
+    "timed": true,
+    "id": "2.1-5",
+    "ord": 5,
+    "lanes": 6,
+    "after": 5,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "存储包：写事件的唯一路径、计数规则、`done_rule` 解释器、幂等键",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 01:09：`Append` + `VerifyStream`（哈希与 Python 记录器逐字节一致）；完成规则闭合语法、三值求值；幂等键的表和守卫在，用法随 2.2 的路由",
+    "ts": 1791958140.0,
+    "timed": true,
+    "id": "2.1-3",
+    "ord": 3,
+    "after": 4,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "表、触发器、种子：5.1.2 的全部表；同事务事件、存活列例外、绑定固定、步骤锁、依赖图锁、只追加；空库种子",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 01:09：迁移 0001–0004；在本机 Postgres 17.11 上 T19、T23a、T23b、T25 数据库一半、T30、T32 全过；去掉步骤锁、依赖图锁、提交时重验任一处，对应测试变红",
+    "ts": 1791958140.0,
+    "timed": true,
+    "id": "2.1-2",
+    "ord": 2,
+    "after": 3,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "迁移器与存储包骨架：pgx 接入，`platform-api agentrt-migrate`（只往前、文件 sha256 不许变、`pg_advisory_lock`）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-14 01:09：平台分支 `w31/agentrt-21`（`a6a167c` `1b1a0db` `2c947df`）；pgx v5.11.0（你同意下载）；子命令只认本环境的库和属主角色",
+    "ts": 1791958140.0,
+    "timed": true,
+    "id": "2.1-1",
+    "ord": 1,
+    "after": 2,
+    "key": "2.1",
+    "total": 11,
+    "item": "数据层：状态库和 redis-agents"
+   },
+   {
+    "t": "（你）确认 v5 和 §7 八条",
+    "state": "done",
+    "owner": true,
+    "star": false,
+    "when": "10-14 00:30：Owner「确认 v5，§7 八条都选 A，那一项照建议补」；R3 余项补进 5.1.1「步骤锁」，§7 第 8 条的七处 ADR 修订已改进 ADR",
+    "ts": 1791955800.0,
+    "timed": true,
+    "id": "2.0-3",
+    "ord": 3,
+    "after": 3,
+    "key": "2.0",
+    "total": 3,
+    "item": "设计对齐：v4 到 v5"
+   },
+   {
+    "t": "Codex 独立复核 v5（两轮 + 一轮确认，剩 1 项 A 交 Owner）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "第 1 轮（复核 141）23:42「先改」：8 项 A 类（结果收尾前只在主机上、旧执行者没隔离、计划关联可填错、架构勾选证据没绑版本、两项验收依赖外层、三环境角色、§7 漏项、一处事实），方向不用重写；统筹方定了每条的改法，Claude 子代理按定法改正文（`0a03a09`，835→967 行，§11 逐条对应），统筹方补了库和角色的实际建法；第 2 轮（复核 142，最后一轮）00:04 派出，00:10「先改」：A4、A6、A8 关，A1/A2/A3/A5/A7 部分关，新查出 6 项 A 类（R1–R6，见 `~/agent-work/codex-review-142/REPORT.md`，修法具体）。**按停线规矩停**；Owner 00:13 选 A：照复核的最小修法改完（修订 2），再做一轮只看改动的确认复核（复核 143）；确认复核再有 A 就原样交 Owner，不再修。修订 2 `42b2ae2`（997 行，§12 对 R1–R6、B1–B7；统筹方补了保全结果怎么被采纳），复核 143 00:23 派出，00:27 回：只剩 1 项 A（R3 余项：步骤迁移和新建任务并发时没有共同的锁，可错挂 mission），按 Owner 的 A 原样交他",
+    "ts": 1791952955.027792,
+    "timed": true,
+    "id": "2.0-2",
+    "ord": 2,
+    "lanes": 6,
+    "after": 2,
+    "key": "2.0",
+    "total": 3,
+    "item": "设计对齐：v4 到 v5"
+   },
+   {
+    "t": "起草 v5：v4 对照第 1 轮已有的、厂商现成的、运行位置改为先开发机；每一步写验收测试（`work/multi-agent/DESIGN-agent-runtime-v5-2026-10-14.md`，834 行，Claude 子代理起草、统筹方通读）",
+    "state": "done",
+    "owner": false,
+    "star": false,
+    "when": "10-13 23:00",
+    "ts": 1791950400.0,
+    "timed": true,
+    "id": "2.0-1",
+    "ord": 1,
+    "after": 1,
+    "key": "2.0",
+    "total": 3,
+    "item": "设计对齐：v4 到 v5"
+   }
+  ],
+  "numbered": [
+   "2.0-2",
+   "2.1-4",
+   "2.1-5",
+   "2.2-1"
+  ],
+  "lag": {
+   "n": 0,
+   "names": []
+  }
+ },
+ "arch": {
+  "title": "设计 v4 → 现在",
+  "checked": 1792106220.0,
+  "principle": "原则：工欲善其事，必先利其器——这张表全部做完之前不做业务工作、不还其余技术债",
+  "rows": [
+   {
+    "state": "part",
+    "what": "你只做三件事：审批单、手机通知、提问入口",
+    "now": "审批单和手机通知（ntfy）在正式环境；提问入口的代码在，正式环境上一条记录都没有；授权外 mission 的决策卡归补强"
+   },
+   {
+    "state": "done",
+    "what": "发布护栏：CI 门禁、测试环境同一提交、按镜像摘要核对、冻结要信任锚",
+    "now": "在正式环境和集群（第 1 轮）"
+   },
+   {
+    "state": "part",
+    "what": "规则集：签名、放宽要你签、收紧随时生效、过期回到默认",
+    "now": "STG：有，8 份初始规则 10-15 签好，常备授权 v2 在用（放宽要签、收紧随时）；PROD：没有（补强）"
+   },
+   {
+    "state": "part",
+    "what": "状态库：平台 PG 里协作运行时的库，事件只追加、outbox 转发",
+    "now": "STG：有，迁移 0001–0005，运行时在用；PROD：库和表 10-14 迁好，平台没接（补强）"
+   },
+   {
+    "state": "part",
+    "what": "计划结构进运行时：轮、项、步的编号固定，状态只由事件推进，LLM 只能提议改计划",
+    "now": "STG：表和改计划的接口在，计划还没导入（0 个节点），计划栏仍由这份 markdown 生成；导入归补强（2.3）"
+   },
+   {
+    "state": "part",
+    "what": "产物存储：任务书、报告、验收记录、交接都在平台",
+    "now": "STG：任务书、报告、验收记录都在平台；交接还在本机；PROD 没有"
+   },
+   {
+    "state": "part",
+    "what": "预算与额度账本、能力成绩",
+    "now": "STG：每个 mission 的尝试预算生效（T10 过）；额度账本和能力成绩的表在，没用上（2.4，补强）"
+   },
+   {
+    "state": "part",
+    "what": "交互总线：redis-agents，每个 Agent 的信箱、唤醒、在线状态、额度冷却、叫停广播；Agent 不直连",
+    "now": "redis-agents 两个环境都部署了，平台没接线；信箱、唤醒、叫停广播没有（2.3，补强）"
+   },
+   {
+    "state": "part",
+    "what": "运行时内核：任务、租约、产物、验收、预算、规则、决策卡",
+    "now": "STG：任务、租约、产物、验收、预算、规则都在跑（Gate A 两批）；决策卡没有；PROD 没有"
+   },
+   {
+    "state": "part",
+    "what": "主机守护进程 agentd：主动来领任务；Agent 主机第 2 轮是开发机，第 3 轮是 mini 这样的外置服务器（不是你的电脑）",
+    "now": "开发机上装好（LaunchDaemon，系统用户 bifrost-agentd），领 STG 的活；PROD 没有；搬虚拟机是第 3 轮"
+   },
+   {
+    "state": "part",
+    "what": "派工记录",
+    "now": "STG：派活、领活、验收都由接口记成事件（哈希链）；统筹线程自己的派工还用本机的薄版"
+   },
+   {
+    "state": "part",
+    "what": "协作进展在正式环境：PROD Console 的 Progress 页由平台从运行时的状态生成，Agent 主机停了照常显示",
+    "now": "**10-15 晚 2.2b**：先在 STG Console 加 Agents 页读运行时现场和计划栏；PROD 与本机看板退役归补强｜Progress 页在，但内容由开发机上的看板程序算好、每 15 秒推上去；计划栏的「架构对照」和本轮步骤已经推到平台，但 Console 不解析这两块，所以不显示（v5 §2.1；2.5 改由接口生成）｜**10-15 11:07 Owner 定的终点**：架构完成后在 `https://ops.bifrost.lan/` 看到本机看板上的全部内容，本机看板退役。对照 `SPEC-agentrt-progress` 还缺三样，2.5 动工前要补进规格：① 预计时间与动作流水（规格写了第一版不做）；② **要 Owner 在终端跑命令的事**（装 agentd、存密钥这类）没有入口：运行时「需要你」第一版只收决策卡和审批单，而 PROD 上又会去掉命令；③ 额度与能力成绩（2.4）"
+   },
+   {
+    "state": "part",
+    "what": "岗位、参谋长席位、资格考试",
+    "now": "STG：实现、验收、评审三个岗位和候选人在规则里（Codex 在岗、Cursor 试用、Claude 资格考核中）；参谋长和资格考试没有（2.4，补强）"
+   },
+   {
+    "state": "part",
+    "what": "多厂商执行者与按能力和额度分流",
+    "now": "agentd 有 deterministic、codex、cursor 三个执行者，按硬规矩（能力、独立性）分流；Claude 执行者和按额度挑人没有（2.4，补强）"
+   },
+   {
+    "state": "none",
+    "what": "推理网关、GPU 杂活池、业务租户",
+    "now": "没有（第 2 轮之后）"
+   },
+   {
+    "state": "none",
+    "what": "发布队列、无人值守的正式环境发布",
+    "now": "没有（第 2 轮不做，v5 §8）"
+   },
+   {
+    "state": "none",
+    "what": "工作区即代码、Gitea 做主仓库",
+    "now": "没有：Gitea 仍在 ubt-k3s-01，每晚加密备份在跑（第 2 轮不做，v5 §8）"
+   }
+  ],
+  "count": {
+   "done": 1,
+   "part": 13,
+   "none": 3
+  }
+ }
+}

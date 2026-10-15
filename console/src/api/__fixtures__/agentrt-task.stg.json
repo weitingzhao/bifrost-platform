@@ -1,0 +1,32 @@
+{
+ "core": false,
+ "repo": "bifrost-platform",
+ "role": "implement",
+ "state": "accepted",
+ "title": "UniFi client V2Post/V2Delete tests",
+ "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+ "usual_s": null,
+ "version": 6,
+ "off_plan": true,
+ "round_no": 1,
+ "created_at": "2026-10-15T20:28:41.84562+00:00",
+ "max_rounds": 2,
+ "mission_id": "M-2",
+ "needs_json": [
+  "listen_port_tests"
+ ],
+ "route_json": [
+  "implementer/exec:cursor/cursor-mix/*"
+ ],
+ "task_class": "test",
+ "updated_at": "2026-10-15T20:32:28.443703+00:00",
+ "base_commit": "e370d397341f9eaa4505e97a550da69f4579d2f2",
+ "effect_class": "branch",
+ "hard_limit_s": 1800,
+ "plan_node_id": null,
+ "parent_task_id": null,
+ "off_plan_reason": "2.2 acceptance walkthrough 2; STG has no plan tree yet",
+ "subject_task_id": null,
+ "spec_artifact_id": "sha256:34c434d9c9fb2892647a6ce772079bc32c2316331efa039d1a50c7d5a0d19974",
+ "created_by_actor_id": "thread:local_1285bc1d-27df-44c8-90c9-532ae489920c"
+}

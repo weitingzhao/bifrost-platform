@@ -1,0 +1,1013 @@
+{
+ "as_of_event_id": 800,
+ "controls": [
+  {
+   "scope": "mission",
+   "reason": "Gate A probe mission is over; stop it so its stale reviews do not take a reviewer once Cursor may review (2.2b, 2026-10-15)",
+   "set_at": "2026-10-15T23:20:05.305149+00:00",
+   "scope_ref": "M-5",
+   "cleared_at": null,
+   "control_id": "c_01M50XV7DSJDB04568MAFHZDD3",
+   "control_kind": "stop",
+   "set_by_actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+   "cleared_by_actor_id": null
+  },
+  {
+   "scope": "mission",
+   "reason": "Gate A probe mission is over; stop it so its stale reviews do not take a reviewer once Cursor may review (2.2b, 2026-10-15)",
+   "set_at": "2026-10-15T23:20:05.156289+00:00",
+   "scope_ref": "M-4",
+   "cleared_at": null,
+   "control_id": "c_01M50XV793JSA7HYFXCJE2S2XZ",
+   "control_kind": "stop",
+   "set_by_actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+   "cleared_by_actor_id": null
+  },
+  {
+   "scope": "mission",
+   "reason": "Gate A probe mission is over; stop it so its stale reviews do not take a reviewer once Cursor may review (2.2b, 2026-10-15)",
+   "set_at": "2026-10-15T23:20:04.985907+00:00",
+   "scope_ref": "M-3",
+   "cleared_at": null,
+   "control_id": "c_01M50XV73SXDRS32C4P6PX7B6W",
+   "control_kind": "stop",
+   "set_by_actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+   "cleared_by_actor_id": null
+  },
+  {
+   "scope": "mission",
+   "reason": "Gate A walkthrough mission is over; stop it so its stale review does not take a reviewer once Cursor may review (2.2b, 2026-10-15)",
+   "set_at": "2026-10-15T23:20:04.703747+00:00",
+   "scope_ref": "M-2",
+   "cleared_at": null,
+   "control_id": "c_01M50XV6TZ2GPB4B6PP366SFWY",
+   "control_kind": "stop",
+   "set_by_actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+   "cleared_by_actor_id": null
+  },
+  {
+   "scope": "mission",
+   "reason": "Gate A walkthrough mission is over; stop it so its stale review does not take a reviewer once Cursor may review (2.2b, 2026-10-15)",
+   "set_at": "2026-10-15T23:20:04.382598+00:00",
+   "scope_ref": "M-1",
+   "cleared_at": null,
+   "control_id": "c_01M50XV6GYAE5HEMDM1TS4ADTB",
+   "control_kind": "stop",
+   "set_by_actor_id": "thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a",
+   "cleared_by_actor_id": null
+  }
+ ],
+ "generated_at": "2026-10-15T23:28:59.070525Z",
+ "hosts": [
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "gate-b",
+   "version": 0,
+   "actor_id": "host:gate-b",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": 2140,
+   "tools_json": {},
+   "last_poll_at": "2026-10-15T22:53:18.58158+00:00",
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": true,
+   "host_id": "mbp-dev",
+   "version": 0,
+   "actor_id": "host:mbp-dev",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": 0,
+   "tools_json": {},
+   "last_poll_at": "2026-10-15T23:28:58.614239+00:00",
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  }
+ ],
+ "live": [],
+ "needs_you": {
+  "count": 0,
+  "items": [],
+  "truncated": false
+ },
+ "plan": [],
+ "recent": {
+  "failed_attempts": [
+   {
+    "task_id": "t_01M50R9M9C5H0X6NR9C2D04VS6",
+    "ended_at": "2026-10-15T21:43:09.372736+00:00",
+    "attempt_id": "a_01M50R9N7A9Y506AE4T26BSXZA",
+    "mission_id": "M-3",
+    "ended_event_id": 293,
+    "report_artifact_id": "sha256:98d96efe6eb8699ba03f51dce6e766928a38306b325403d9eab3aac0fcea5dda"
+   },
+   {
+    "task_id": "t_01M50R6DR95BHWEFD7C54PDM7F",
+    "ended_at": "2026-10-15T21:42:18.678572+00:00",
+    "attempt_id": "a_01M50R85JCQ1CJZ5KA2TPNFXTD",
+    "mission_id": "M-3",
+    "ended_event_id": 263,
+    "report_artifact_id": "sha256:aa613abcf1f0f5fc16aceee9d79b948a2afb76be0cb446df482527118fa93ab1"
+   },
+   {
+    "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+    "ended_at": "2026-10-15T21:08:16.494941+00:00",
+    "attempt_id": "a_01M50P9SDY1DZYCZ05HVT8RV5V",
+    "mission_id": "M-2",
+    "ended_event_id": 192,
+    "report_artifact_id": "sha256:ee14f20e5ce92c4324e34777170e148859440a2cba3a46e16167777057756fbe"
+   },
+   {
+    "task_id": "t_01M50P9AB7AC8R0VM9BAZY9HTH",
+    "ended_at": "2026-10-15T21:08:06.647882+00:00",
+    "attempt_id": "a_01M50P9FRFE6H4VAQ9HD58K6VC",
+    "mission_id": "M-1",
+    "ended_event_id": 173,
+    "report_artifact_id": "sha256:d87a49b415ea4a2db95cbc8f595d98fcc3872037d246ad17d1f2127e3b3d9ef7"
+   }
+  ],
+  "tasks": [
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50V4YB75MMS2SE2R4ZC161T",
+    "task_id": "t_01M50WCZY2ST6AWD06PSQGADEJ",
+    "ended_at": "2026-10-15T22:55:05.30542+00:00",
+    "conclusion": "done",
+    "mission_id": "M-3",
+    "ended_event_id": 792,
+    "report_artifact_id": "sha256:ad8f2021e53ca27de2a8178393af0d947543501edfd2d00d0a7668d1f118b3e4"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50V4YB75MMS2SE2R4ZC161T",
+    "task_id": "t_01M50W8DEHSEXVWVZ83PDFRC6D",
+    "ended_at": "2026-10-15T22:53:35.307958+00:00",
+    "conclusion": "done",
+    "mission_id": "M-3",
+    "ended_event_id": 766,
+    "report_artifact_id": "sha256:8d6157c7705d3bbc0844d2b7f0e6d2462c666f6ff71f90d2d73bf646c0012ed7"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50V3GR2GXS8TCJX5FHR2A79",
+    "task_id": "t_01M50W71GQGCB66GG1BTEZ24SD",
+    "ended_at": "2026-10-15T22:53:20.308208+00:00",
+    "conclusion": "done",
+    "mission_id": "M-3",
+    "ended_event_id": 754,
+    "report_artifact_id": "sha256:25098fe978d3e8927cc9f35547a6314b57ceeecf22b0ee8d5e544a4a2eef901a"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50ST4M08FCR783MZ4J9NCWD",
+    "task_id": "t_01M50TXY47NV9C2MPASG6V2Q1B",
+    "ended_at": "2026-10-15T22:29:23.359873+00:00",
+    "conclusion": "done",
+    "mission_id": "M-5",
+    "ended_event_id": 689,
+    "report_artifact_id": "sha256:e5b25f764ce839bccee6f8a6814b32233aa1f14c16377a4867940b291dc95b81"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50ST4M08FCR783MZ4J9NCWD",
+    "task_id": "t_01M50TST9FSR6TJ2QC0SQRR75G",
+    "ended_at": "2026-10-15T22:29:08.368425+00:00",
+    "conclusion": "done",
+    "mission_id": "M-5",
+    "ended_event_id": 677,
+    "report_artifact_id": "sha256:9c2e9c770391fce9f0a863d8f58bb213d5ff4cdbaa67964eb1223fa90d06f300"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50SV96TAK7SPNKHH6R983DY",
+    "task_id": "t_01M50T5NRD3S7F207JF1HRWMKP",
+    "ended_at": "2026-10-15T22:16:08.359118+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 638,
+    "report_artifact_id": "sha256:93e11277ece3254468a3b487d5c80ccb210cf78a4162547d2bc2492d2d82a130"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50SP2C0464AJP3TDBJVCH8V",
+    "task_id": "t_01M50SRVKFF9YWX5MH8DAGJ2YQ",
+    "ended_at": "2026-10-15T22:09:08.359712+00:00",
+    "conclusion": "done",
+    "mission_id": "M-5",
+    "ended_event_id": 592,
+    "report_artifact_id": "sha256:ba50ff61d15510f142e1cb5b00da50aaad198f460ac2e8d3e8eac985cec01c2a"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RF26NG15N864JYC9TVR1E",
+    "task_id": "t_01M50SJX5RYD32JTXZHC2P6YSZ",
+    "ended_at": "2026-10-15T22:05:53.360883+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 554,
+    "report_artifact_id": "sha256:f27bd78bdaab53bfef4772818a478cd822a01242fd1c9fdedf172d238e20d792"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50S5AWEKN85XFCFQ98RWQPJ",
+    "task_id": "t_01M50SANG8G8MCPNTFKS9V6GSY",
+    "ended_at": "2026-10-15T22:01:23.359527+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 519,
+    "report_artifact_id": "sha256:5182b51a8391cf40e4d5d6f4b7b99c4c52628bc055e0522cf5628668195278d4"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RTHDY2Q41KY8X4VWWKBAD",
+    "task_id": "t_01M50RYRMQ4KTJ3V961VV31P64",
+    "ended_at": "2026-10-15T21:54:53.361419+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 476,
+    "report_artifact_id": "sha256:0091746d36ef142a5146c948dede16be7291c37b1163a2b58d959a565bc7bf70"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RPSFEZJK47C3MAKDXK29J",
+    "task_id": "t_01M50RQE8S2QM23EVQMYHAAGTD",
+    "ended_at": "2026-10-15T21:50:53.360746+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 442,
+    "report_artifact_id": "sha256:041c84e4451107923837c7c63efaeb58e6710cc33b379c27cdfbb034f2a2d625"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RF26T62FTZJDDP4S47MXJ",
+    "task_id": "t_01M50RGG0H7RP5NKYJN38ACQX2",
+    "ended_at": "2026-10-15T21:47:05.772929+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 404,
+    "report_artifact_id": "sha256:cfb8233d45db20a5982bb8bd70ecb0e5374e7c21a39e5e9ab43ad570640aa775"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RF26RKS3DWRF1H9SDWM0Y",
+    "task_id": "t_01M50RG1BX6JQH44R9MZD985YD",
+    "ended_at": "2026-10-15T21:46:50.784739+00:00",
+    "conclusion": "done",
+    "mission_id": "M-4",
+    "ended_event_id": 389,
+    "report_artifact_id": "sha256:54cca1b959f15ca09834a3c3a5831dd616399f4c43830ec26c22387443ab59b6"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50RBQBFCT1Y4YWHT1V1PNTQ",
+    "task_id": "t_01M50RCC5Z71H3C3M6V15KWTJG",
+    "ended_at": "2026-10-15T21:44:50.774668+00:00",
+    "conclusion": "done",
+    "mission_id": "M-3",
+    "ended_event_id": 330,
+    "report_artifact_id": "sha256:d2e28be3635804a05b3f1475b423208b487798923f64c25185b89b825ee40d14"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50R5AESM3Q8G56DAES5VFB1",
+    "task_id": "t_01M50R9M9C5H0X6NR9C2D04VS6",
+    "ended_at": "2026-10-15T21:43:20.772197+00:00",
+    "conclusion": "failed",
+    "mission_id": "M-3",
+    "ended_event_id": 300,
+    "report_artifact_id": "sha256:98d96efe6eb8699ba03f51dce6e766928a38306b325403d9eab3aac0fcea5dda"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50R5AESM3Q8G56DAES5VFB1",
+    "task_id": "t_01M50R6DR95BHWEFD7C54PDM7F",
+    "ended_at": "2026-10-15T21:42:20.774379+00:00",
+    "conclusion": "failed",
+    "mission_id": "M-3",
+    "ended_event_id": 270,
+    "report_artifact_id": "sha256:aa613abcf1f0f5fc16aceee9d79b948a2afb76be0cb446df482527118fa93ab1"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50P8BGEJWJV767MMT1G16ZP",
+    "task_id": "t_01M50PB4Y94J1EDW6A956S6HFT",
+    "ended_at": "2026-10-15T21:09:13.44128+00:00",
+    "conclusion": "done",
+    "mission_id": "M-2",
+    "ended_event_id": 229,
+    "report_artifact_id": "sha256:3bae6fe55f35b39956e8813aaa75c3234e1ab7d615b2259de7a43f0726e67078"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50P8BGEJWJV767MMT1G16ZP",
+    "task_id": "t_01M50P9RZYYEKX3H8HKEY3GTA3",
+    "ended_at": "2026-10-15T21:08:28.440187+00:00",
+    "conclusion": "failed",
+    "mission_id": "M-2",
+    "ended_event_id": 199,
+    "report_artifact_id": "sha256:ee14f20e5ce92c4324e34777170e148859440a2cba3a46e16167777057756fbe"
+   },
+   {
+    "role": "verify",
+    "state": "accepted",
+    "title": "verify t_01M50P8BBTT3PRZ9WT4RGP2784",
+    "task_id": "t_01M50P9AB7AC8R0VM9BAZY9HTH",
+    "ended_at": "2026-10-15T21:08:13.45371+00:00",
+    "conclusion": "failed",
+    "mission_id": "M-1",
+    "ended_event_id": 184,
+    "report_artifact_id": "sha256:d87a49b415ea4a2db95cbc8f595d98fcc3872037d246ad17d1f2127e3b3d9ef7"
+   },
+   {
+    "role": "implement",
+    "state": "accepted",
+    "title": "UniFi client V2Post/V2Delete tests",
+    "task_id": "t_01M50M1CZSDN8PNHRH8C2241RS",
+    "ended_at": "2026-10-15T20:32:28.443844+00:00",
+    "conclusion": "done",
+    "mission_id": "M-2",
+    "ended_event_id": 120,
+    "report_artifact_id": "sha256:248fbc4747fd5b73f74feecf2056b41290a30b5063e7e7aaf5caae9fa4198bb2"
+   }
+  ]
+ },
+ "work": {
+  "missions": [
+   {
+    "deadline_at": "2026-10-22T19:01:08Z",
+    "eta": {
+     "reason": "no history of slice times yet; the runtime gives times once Gate A has run",
+     "state": "unknown"
+    },
+    "goal": "Walk one small task through the STG agent runtime end to end: codex implements it on a branch, agentd pushes it, the platform checks the branch, and the deterministic verification runs. The change itself is edge-case tests for launchd.Parse.",
+    "mission_id": "M-1",
+    "next_steps": [],
+    "reason": "waits for its verification or review",
+    "since": "2026-10-15T19:24:05.156277Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "active",
+    "status": "waiting_role",
+    "tasks": [
+     {
+      "task_id": "t_01M50FZ523HZTGYJA0VB6BNE7N",
+      "title": "launchd.Parse edge-case tests",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance walkthrough; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T19:24:05.156277Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50GC0F41WYWCVCTS006SSCD",
+      "title": "review t_01M50FZ523HZTGYJA0VB6BNE7N",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance walkthrough; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T19:24:35.175374Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50P8BBTT3PRZ9WT4RGP2784",
+      "title": "Gate A T05 probe: a claim without evidence",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance T05 (and T10: M-1 has 2 of 6 attempts left)",
+      "round_no": 2,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:08:13.457157Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "2.2 walkthrough: launchd Parse edge-case tests",
+    "waiting_on": "role",
+    "waiting_roles": [
+     "review"
+    ],
+    "work_id": "W-31"
+   },
+   {
+    "deadline_at": "2026-10-22T20:28:21Z",
+    "eta": {
+     "reason": "no history of slice times yet; the runtime gives times once Gate A has run",
+     "state": "unknown"
+    },
+    "goal": "Walk one small task through the STG agent runtime to accepted: cursor implements it on a branch (the task needs tests that listen on a local port, which codex's sandbox cannot), the deterministic verification passes, and codex reviews it. The change itself is httptest tests for the UniFi client's V2Post and V2Delete.",
+    "mission_id": "M-2",
+    "next_steps": [],
+    "reason": "waits for its verification or review",
+    "since": "2026-10-15T21:08:58.439219Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "active",
+    "status": "waiting_role",
+    "tasks": [
+     {
+      "task_id": "t_01M50P8BGEJWJV767MMT1G16ZP",
+      "title": "Gate A T06 probe: a failed experiment",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance T06",
+      "round_no": 2,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:08:58.439219Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50PBKK2XEQQQVE2NCG43452",
+      "title": "review t_01M50P8BGEJWJV767MMT1G16ZP",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance T06",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:09:13.445007Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "2.2 walkthrough 2: Cursor writes, Codex reviews (UniFi client tests)",
+    "waiting_on": "role",
+    "waiting_roles": [
+     "review"
+    ],
+    "work_id": "W-31"
+   },
+   {
+    "deadline_at": "2026-10-22T21:38:46Z",
+    "eta": {
+     "reason": "no history of slice times yet; the runtime gives times once Gate A has run",
+     "state": "unknown"
+    },
+    "goal": "The author's provider claims its review and the author claims its own verification; both are refused with the reason in route_decided.",
+    "mission_id": "M-3",
+    "next_steps": [],
+    "reason": "the task is blocked: deterministic failed in round 2 of 2",
+    "since": "2026-10-15T21:43:20.773715Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "active",
+    "status": "blocked",
+    "tasks": [
+     {
+      "task_id": "t_01M50R5AESM3Q8G56DAES5VFB1",
+      "title": "T08 probe: gate-b authors as codex",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T08; STG has no plan tree yet",
+      "round_no": 2,
+      "max_rounds": 2,
+      "state": "blocked",
+      "status": "blocked",
+      "reason": "the task is blocked: deterministic failed in round 2 of 2",
+      "since": "2026-10-15T21:43:20.773715Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RBQBFCT1Y4YWHT1V1PNTQ",
+      "title": "T08 probe 2: gate-b authors as codex, review must exclude codex",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T08; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:44:35.772452Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RCTTRHPZ9HY7E1SSF3M0D",
+      "title": "review t_01M50RBQBFCT1Y4YWHT1V1PNTQ",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T08; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:44:50.778934Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50V3GR2GXS8TCJX5FHR2A79",
+      "title": "T22 probe 2: agentd stops past the grace, controller paused",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ①③ (run in the T08 mission for budget); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:51:35.314187Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50V4YB75MMS2SE2R4ZC161T",
+      "title": "T22 probe 3: renewal after expiry plus grace, controller paused",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ③ and T34 ⑧ (run in the T08 mission for budget); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:54:50.304104Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50WA81PYS2YHPQ2GCRS062M",
+      "title": "review t_01M50V3GR2GXS8TCJX5FHR2A79",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ①③ (run in the T08 mission for budget); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:53:20.312949Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50WAPPDGKACXJSN7R4W6S84",
+      "title": "review t_01M50V4YB75MMS2SE2R4ZC161T",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ③ and T34 ⑧ (run in the T08 mission for budget); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:53:35.31199Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50WDEJTPQF54DQJ1CDSCEVD",
+      "title": "review t_01M50V4YB75MMS2SE2R4ZC161T",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ③ and T34 ⑧ (run in the T08 mission for budget); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:55:05.30921Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "Gate A T08: no one checks their own work",
+    "waiting_on": "coordinator",
+    "waiting_roles": [],
+    "work_id": "W-31"
+   },
+   {
+    "deadline_at": "2026-10-22T21:38:47Z",
+    "eta": {
+     "reason": "no history of slice times yet; the runtime gives times once Gate A has run",
+     "state": "unknown"
+    },
+    "goal": "Stop agentd (SIGSTOP) past the lease and the grace, pause the controller, push at expiry; leases go stale or lost and old epochs are refused.",
+    "mission_id": "M-4",
+    "next_steps": [],
+    "reason": "waits for its verification or review",
+    "since": "2026-10-15T22:05:38.359211Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "active",
+    "status": "waiting_role",
+    "tasks": [
+     {
+      "task_id": "t_01M50RF26NG15N864JYC9TVR1E",
+      "title": "T02 probe a: one lease per task",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:05:38.359211Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RF26RKS3DWRF1H9SDWM0Y",
+      "title": "T02 probe b: one lease per task",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:46:35.770593Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RF26T62FTZJDDP4S47MXJ",
+      "title": "T02 probe c: one lease per task",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:46:50.768299Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RGG121J1VKFH2H38BCVS1",
+      "title": "review t_01M50RF26RKS3DWRF1H9SDWM0Y",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:46:50.78879Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RGYNGA1MZE7H78KBBJ8BY",
+      "title": "review t_01M50RF26T62FTZJDDP4S47MXJ",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:47:05.779899Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RPSFEZJK47C3MAKDXK29J",
+      "title": "T01 probe: agentd dies mid-attempt",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:50:38.359166Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RQWXHQ6ZAWMW3Y2CCXV7X",
+      "title": "review t_01M50RPSFEZJK47C3MAKDXK29J",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:50:53.363355Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RTHDY2Q41KY8X4VWWKBAD",
+      "title": "T01 probe 2: agentd dies mid-attempt",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T21:54:38.358576Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50RZ79MPHJYZEEX8P254A6N",
+      "title": "review t_01M50RTHDY2Q41KY8X4VWWKBAD",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T21:54:53.366235Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50S5AWEKN85XFCFQ98RWQPJ",
+      "title": "T01 probe 3: agentd dies mid-attempt",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:01:08.358545Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50SB4511W1MZHCJXBFJN8RF",
+      "title": "review t_01M50S5AWEKN85XFCFQ98RWQPJ",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T01 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:01:23.363105Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50SKBTJ1BT6M20X0X2TW8EW",
+      "title": "review t_01M50RF26NG15N864JYC9TVR1E",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T02 (run in the T22 mission); STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:05:53.363501Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50SV96TAK7SPNKHH6R983DY",
+      "title": "T22 probe 1: agentd stops for five minutes",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ①; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:15:53.356886Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50T64D8NYYWXP8RAAXGPR49",
+      "title": "review t_01M50SV96TAK7SPNKHH6R983DY",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T22 ①; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:16:08.361503Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "Gate A T22: a host goes away",
+    "waiting_on": "role",
+    "waiting_roles": [
+     "review"
+    ],
+    "work_id": "W-31"
+   },
+   {
+    "deadline_at": "2026-10-22T21:38:47Z",
+    "eta": {
+     "reason": "no history of slice times yet; the runtime gives times once Gate A has run",
+     "state": "unknown"
+    },
+    "goal": "Lost replies, retried uploads, restarts and a lost host; each result is persisted and submitted once.",
+    "mission_id": "M-5",
+    "next_steps": [],
+    "reason": "waits for its verification or review",
+    "since": "2026-10-15T22:08:53.358442Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "active",
+    "status": "waiting_role",
+    "tasks": [
+     {
+      "task_id": "t_01M50SP2C0464AJP3TDBJVCH8V",
+      "title": "T34 probe a: results survive lost replies",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T34; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:08:53.358442Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50SSA8818TCZMQRMB99WP35",
+      "title": "review t_01M50SP2C0464AJP3TDBJVCH8V",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T34; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:09:08.362012Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50ST4M08FCR783MZ4J9NCWD",
+      "title": "T34 probe b: the host goes away for good",
+      "role": "implement",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T34; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "verifying",
+      "status": "waiting_role",
+      "reason": "waits for its verification or review",
+      "since": "2026-10-15T22:29:08.35751Z",
+      "depends_on": [],
+      "waiting_roles": [
+       "review"
+      ],
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M50TYCS05ZX0XEZ3FNGMFQ48",
+      "title": "review t_01M50ST4M08FCR783MZ4J9NCWD",
+      "role": "review",
+      "off_plan": true,
+      "off_plan_reason": "2.2 acceptance Gate A T34; STG has no plan tree yet",
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-15T22:29:23.362095Z",
+      "depends_on": [],
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "Gate A T34: results survive failures",
+    "waiting_on": "role",
+    "waiting_roles": [
+     "review"
+    ],
+    "work_id": "W-31"
+   }
+  ],
+  "truncated": false
+ }
+}

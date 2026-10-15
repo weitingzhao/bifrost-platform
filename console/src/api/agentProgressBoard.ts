@@ -1,3 +1,4 @@
+import { parseRuntimeRound, parseRuntimeArchitecture, type RuntimeRound, type RuntimeArchitecture } from '@/api/agentRuntimePlan'
 import { parsePools, type ProgressPool } from '@/api/agentProgressExtra'
 
 /** Optional board fields the publisher adds. The server keeps them as-is. */
@@ -34,6 +35,8 @@ export type ProgressExit = {
 }
 
 export type ProgressRoadmap = {
+  round?: RuntimeRound
+  arch?: RuntimeArchitecture
   goal?: string
   note?: string
   generated_from?: string
@@ -133,6 +136,8 @@ function parseEvent(value: Record<string, unknown>): ProgressEvent {
 export function parseRoadmap(value: unknown): ProgressRoadmap | undefined {
   if (!isRecord(value)) return undefined
   const roadmap: ProgressRoadmap = {}
+  roadmap.round = parseRuntimeRound(value.round)
+  roadmap.arch = parseRuntimeArchitecture(value.arch)
   const strings: Record<string, string | undefined> = {}
   takeString(strings, 'goal', value.goal)
   takeString(strings, 'note', value.note)

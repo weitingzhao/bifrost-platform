@@ -42,6 +42,7 @@ export async function authedFetch(
   prefix: string,
   input: RequestInfo | URL,
   init: RequestInit = {},
+  errorParser: typeof parseError = parseError,
 ): Promise<Response> {
   const token = operatorToken()
   const headers = new Headers(init.headers)
@@ -54,7 +55,7 @@ export async function authedFetch(
     if (error instanceof Error) error.message = signInSafeError(error.message, token)
     throw error
   }
-  if (!r.ok) throw await parseError(prefix, r, token)
+  if (!r.ok) throw await errorParser(prefix, r, token)
   return r
 }
 

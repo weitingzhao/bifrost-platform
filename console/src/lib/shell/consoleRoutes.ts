@@ -20,6 +20,7 @@ export const SHELL_NAV = [
     question: 'How are the cluster, network, and machines?',
   },
   { id: 'progress', label: 'Progress', question: 'How far along is the project?' },
+  { id: 'agents', label: 'Agents', question: 'What are the agents doing, and what can I give them?' },
   {
     id: 'records',
     label: 'Records',

@@ -13,3 +13,5 @@ export { InfrastructurePage } from './infrastructure/InfrastructurePage'
 export { ProgressPage } from './progress/ProgressPage'
 
 export { RecordsPage } from './records/RecordsPage'
+
+export { AgentsPage } from './agents/AgentsPage'
