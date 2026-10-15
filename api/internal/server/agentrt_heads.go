@@ -1,8 +1,9 @@
 package server
 
 import (
+	"bufio"
+	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,14 +40,19 @@ var (
 	commitID  = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
-// giteaBranchHead reads the commit a branch of <org>/<repo> points at. A
-// branch that is not there, in a repository that is, is a refused result
-// (store.ErrState); a repository it cannot see (a wrong organization, a
-// credential that does not reach it) or a Gitea it cannot reach is an error
-// of the platform, which agentd retries later, so no result is lost to it.
+// giteaBranchHead reads the commit a branch of <org>/<repo> points at, from
+// the refs git itself advertises over smart HTTP (info/refs, what ls-remote
+// reads): the view agentd's push had. Gitea's branches API answered 404 for a
+// branch pushed the same second (10-15 on STG, attempt a1 of M-1's task), and
+// a done result was refused for it. A branch that is not in a whole
+// advertisement of that repository is a refused result (store.ErrState); a
+// repository it cannot see (a wrong organization, a credential that does not
+// reach it), an answer that is not an advertisement, or a Gitea it cannot
+// reach is an error of the platform, which agentd retries later, so no result
+// is lost to it.
 func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) store.BranchHead {
-	// A redirect would read another repository or branch than the one asked
-	// for: it is an answer of its own, an error of the platform (review 194 A2).
+	// A redirect would read another repository than the one asked for: it is
+	// an answer of its own, an error of the platform (review 194 A2).
 	c := *client
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	client = &c
@@ -54,77 +61,117 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 		if !ok || branch == "" || !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
 			return "", fmt.Errorf("%w: %q of %q is not a branch of a repository", store.ErrState, ref, repo)
 		}
-		segments := strings.Split(branch, "/")
-		for i, seg := range segments {
+		for _, seg := range strings.Split(branch, "/") {
 			if seg == "" || seg == "." || seg == ".." {
 				return "", fmt.Errorf("%w: %q is not a branch name", store.ErrState, ref)
 			}
-			segments[i] = url.PathEscape(seg)
 		}
 		acc, err := access(ctx)
 		if err != nil {
 			return "", fmt.Errorf("gitea access: %w", err)
 		}
-		repoURL := strings.TrimRight(acc.Base, "/") + "/api/v1/repos/" + url.PathEscape(org) + "/" + url.PathEscape(repo)
-		var b struct {
-			Name   string `json:"name"`
-			Commit struct {
-				ID string `json:"id"`
-			} `json:"commit"`
-		}
-		status, err := giteaGet(ctx, client, acc, repoURL+"/branches/"+strings.Join(segments, "/"), &b)
+		u := strings.TrimRight(acc.Base, "/") + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) +
+			".git/info/refs?service=git-upload-pack"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			return "", err
 		}
-		switch status {
-		case http.StatusOK:
-			if b.Name != branch || !commitID.MatchString(b.Commit.ID) {
-				return "", fmt.Errorf("gitea: %s/%s %s: the answer is not that branch with a commit id", org, repo, ref)
-			}
-			return b.Commit.ID, nil
-		case http.StatusNotFound:
-			// Gitea answers 404 for a branch that is not there and for a
-			// repository it does not show this credential: tell them apart.
-			// Only that repository, read and named, makes the result refused
-			// (review 194 A1).
-			var r struct {
-				FullName string `json:"full_name"`
-			}
-			rs, err := giteaGet(ctx, client, acc, repoURL, &r)
-			if err != nil {
-				return "", err
-			}
-			if rs != http.StatusOK || !strings.EqualFold(r.FullName, org+"/"+repo) {
-				return "", fmt.Errorf("gitea: repository %s/%s: HTTP %d, %q", org, repo, rs, r.FullName)
-			}
+		if acc.User != "" || acc.Pass != "" {
+			req.SetBasicAuth(acc.User, acc.Pass)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("gitea: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		// Gitea answers 401 or 404 for a repository it does not show this
+		// credential; only an advertisement of the one asked for refuses
+		// (review 194 A1).
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("gitea: %s/%s refs: HTTP %d", org, repo, resp.StatusCode)
+		}
+		if ct := resp.Header.Get("Content-Type"); ct != uploadPackAdvertisement {
+			return "", fmt.Errorf("gitea: %s/%s refs: %q is not an upload-pack advertisement", org, repo, ct)
+		}
+		commit, found, err := advertisedRef(io.LimitReader(resp.Body, maxAdvertisement), ref)
+		if err != nil {
+			return "", fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
+		}
+		if !found {
 			return "", fmt.Errorf("%w: %s is not on %s/%s", store.ErrState, ref, org, repo)
 		}
-		return "", fmt.Errorf("gitea: %s/%s %s: HTTP %d", org, repo, ref, status)
+		return commit, nil
 	}
 }
 
-// giteaGet sends one GET and decodes a 200's body into out (nil: ignore it).
-func giteaGet(ctx context.Context, client *http.Client, acc delivery.GiteaAccess, u string, out any) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+const (
+	uploadPackAdvertisement = "application/x-git-upload-pack-advertisement"
+	// maxAdvertisement bounds what is read: an agent repository's refs are
+	// its branches, far below this; more is an error, not a refusal.
+	maxAdvertisement = 16 << 20
+)
+
+// advertisedRef reads a smart-HTTP advertisement of git-upload-pack (protocol
+// v0: the service line, a flush, the refs, a flush) and returns the object
+// ref points at. It reads the advertisement to its end: a ref is not there
+// only when a whole advertisement leaves it out; a cut-off or malformed one
+// is an error.
+func advertisedRef(r io.Reader, ref string) (string, bool, error) {
+	br := bufio.NewReader(r)
+	line, flush, err := pktLine(br)
 	if err != nil {
-		return 0, err
+		return "", false, err
 	}
-	if acc.User != "" || acc.Pass != "" {
-		req.SetBasicAuth(acc.User, acc.Pass)
+	if flush || strings.TrimSuffix(string(line), "\n") != "# service=git-upload-pack" {
+		return "", false, errors.New("not an upload-pack advertisement")
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("gitea: %w", err)
+	if _, flush, err = pktLine(br); err != nil || !flush {
+		return "", false, errors.Join(errors.New("no flush after the service line"), err)
 	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return 0, fmt.Errorf("gitea: %w", err)
-	}
-	if resp.StatusCode == http.StatusOK && out != nil {
-		if err = json.Unmarshal(body, out); err != nil {
-			return 0, fmt.Errorf("gitea: %w", errors.Join(errors.New("unreadable answer"), err))
+	var got string
+	found := false
+	for first := true; ; first = false {
+		line, flush, err := pktLine(br)
+		if err != nil {
+			return "", false, err
+		}
+		if flush {
+			return got, found, nil
+		}
+		if first { // the first ref carries the capabilities after a NUL
+			line, _, _ = bytes.Cut(line, []byte{0})
+		}
+		oid, name, ok := strings.Cut(strings.TrimSuffix(string(line), "\n"), " ")
+		if !ok || !commitID.MatchString(oid) || name == "" {
+			return "", false, fmt.Errorf("malformed ref line %q", line)
+		}
+		if name == ref {
+			if found {
+				return "", false, fmt.Errorf("%s advertised twice", ref)
+			}
+			got, found = oid, true
 		}
 	}
-	return resp.StatusCode, nil
+}
+
+// pktLine reads one pkt-line: its payload, or flush for "0000".
+func pktLine(r *bufio.Reader) ([]byte, bool, error) {
+	var size [4]byte
+	if _, err := io.ReadFull(r, size[:]); err != nil {
+		return nil, false, fmt.Errorf("the advertisement is cut off: %w", err)
+	}
+	n, err := strconv.ParseUint(string(size[:]), 16, 16)
+	switch {
+	case err != nil:
+		return nil, false, fmt.Errorf("pkt-line length %q", size[:])
+	case n == 0:
+		return nil, true, nil
+	case n <= 4 || n > 65520:
+		return nil, false, fmt.Errorf("pkt-line length %d", n)
+	}
+	payload := make([]byte, n-4)
+	if _, err := io.ReadFull(r, payload); err != nil {
+		return nil, false, fmt.Errorf("the advertisement is cut off: %w", err)
+	}
+	return payload, false, nil
 }
