@@ -781,6 +781,28 @@ func TestAgentCommitSameChangeOnMain(t *testing.T) {
 			}
 		})
 	}
+	// Review 211 A1: landed at the commit whose trailer the id is, not at a
+	// newer one that only names it in its body; a trailer in lower case counts.
+	for name, main := range map[string][]giteaCommit{
+		"a newer body names it": {
+			{SHA: "n1", Msg: "batch: squash\n\n* test: x\n\nChange-Id: " + cidOpenX + "\n\nChange-Id: " + cidY},
+			{SHA: "m1", Msg: "test: x\n\nChange-Id: " + cidOpenX},
+		},
+		"a lower-case trailer": {{SHA: "m1", Msg: "test: x\n\nchange-id: " + cidOpenX}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			threads := map[string]*threadAcc{}
+			collect(repoScan{repo: "bifrost-agents/r1", agent: true, main: main,
+				branches: map[string][]giteaCommit{branch: {{SHA: "b1", Msg: agentMsg}}}}, threads)
+			got := filter(Response{Threads: finish(threads)}, "", "", tAgent)
+			if len(got.Threads) != 1 || len(got.Threads[0].Repos) != 1 {
+				t.Fatalf("threads = %+v", got.Threads)
+			}
+			if c := got.Threads[0].Repos[0].Commits[0]; c.SHA != "b1" || !c.Landed || c.LandedSHA != "m1" {
+				t.Fatalf("agent row = %+v, want landed at m1", c)
+			}
+		})
+	}
 	// the agent branch's head is itself on main: the walk adds nothing; the
 	// main row, with its task, is the one found
 	main := []giteaCommit{{SHA: "m2", Msg: "test: y\n\nAgentrt-Task: " + tAgent + "\nChange-Id: " + cidOpenX}}

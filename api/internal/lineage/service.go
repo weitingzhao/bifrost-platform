@@ -298,8 +298,10 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			case dup && sc.agent:
 				// An agent commit keeps its task, repository and branch: the
 				// main commit that carries its Change-Id may carry no task, or
-				// another (review 210 A1). It is the same change, landed there.
-				landedSHA, landedBy = mi.anyCID[t.changeID], "change_id"
+				// another (review 210 A1). It is the same change, landed at the
+				// commit whose trailer it is (review 211 A1: not wherever the id
+				// first appears, and as the trailer was parsed, in any case).
+				landedSHA, landedBy = mi.trailerCID[t.changeID], "change_id"
 			case dup:
 				continue // the same change, already listed from main
 			}
@@ -377,13 +379,13 @@ func (s *Service) annotateReach(ctx context.Context, out *Response, scans []repo
 
 // mainIndex answers, for a branch commit, whether and how its change reached the default branch.
 type mainIndex struct {
-	trailerCID map[string]bool   // Change-Id trailers of default-branch commits
+	trailerCID map[string]string // Change-Id trailer -> the default-branch commit that carries it (newest)
 	anyCID     map[string]string // Change-Id anywhere in a default-branch message -> that sha
 	subject    map[string]string // subject -> newest default-branch sha with it
 }
 
 func newMainIndex(sc repoScan) mainIndex {
-	mi := mainIndex{trailerCID: map[string]bool{}, anyCID: map[string]string{}, subject: map[string]string{}}
+	mi := mainIndex{trailerCID: map[string]string{}, anyCID: map[string]string{}, subject: map[string]string{}}
 	for _, gc := range sc.main {
 		subject, t := parseMessage(gc.Msg)
 		if _, ok := mi.subject[subject]; !ok {
@@ -395,7 +397,9 @@ func newMainIndex(sc repoScan) mainIndex {
 			}
 		}
 		if t.changeID != "" {
-			mi.trailerCID[t.changeID] = true
+			if _, ok := mi.trailerCID[t.changeID]; !ok {
+				mi.trailerCID[t.changeID] = gc.SHA
+			}
 		}
 	}
 	return mi
@@ -407,7 +411,7 @@ func newMainIndex(sc repoScan) mainIndex {
 // heuristic) or "" (not landed).
 func (mi mainIndex) branchLanding(subject, changeID string) (dup bool, landedSHA, landedBy string) {
 	if changeID != "" {
-		if mi.trailerCID[changeID] {
+		if _, ok := mi.trailerCID[changeID]; ok {
 			return true, "", ""
 		}
 		if sha, ok := mi.anyCID[changeID]; ok {
