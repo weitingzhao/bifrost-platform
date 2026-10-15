@@ -26,10 +26,13 @@ import (
 // depends on FOR KEY SHARE, which no state change conflicts with (review 176
 // A2).
 // Claims start at the host row and the shared global and capability locks,
-// then the task, and never lock an existing attempt; a candidate a claim
-// does not take is released at once. A write of job candidates or
-// capability facts takes the capability lock exclusively before anything
-// else (LockCapabilities); nothing takes it after a row or stream lock.
+// then the task, the mission row, and never lock an existing attempt; a
+// candidate a claim does not take is released at once. A write of job
+// candidates or capability facts takes the capability lock exclusively
+// (LockCapabilities) before any row lock and before the stream it appends to
+// (a rule write appends to its own rule:<id>); only the writer's lock and a
+// new thread's registration (lock 742109, the system stream) come before it,
+// and nothing that holds it waits for those (reviews 187 R1, 188 R1).
 // Task rows are locked FOR NO KEY UPDATE, which foreign key checks (KEY
 // SHARE) never wait for.
 

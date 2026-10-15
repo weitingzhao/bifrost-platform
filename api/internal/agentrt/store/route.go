@@ -35,7 +35,11 @@ import (
 const capabilityLock = 742106
 
 // LockCapabilities takes the capability lock exclusively. Every transaction
-// that writes job_candidate or capability_fact takes it before anything else.
+// that writes job_candidate or capability_fact takes it before any row lock
+// or the lock of a stream it appends to; a rule write first ensures its
+// writer (the writer's lock, and a new thread's registration lock and the
+// system stream), and while holding this lock waits for none of those
+// (reviews 187 R1, 188 R1).
 func LockCapabilities(ctx context.Context, tx pgx.Tx) error {
 	_, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, capabilityLock)
 	return err
