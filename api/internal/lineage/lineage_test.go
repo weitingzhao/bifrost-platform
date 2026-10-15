@@ -12,14 +12,15 @@ import (
 )
 
 const (
-	cidX = "I1111111111111111111111111111111111111111"
-	cidY = "I2222222222222222222222222222222222222222"
-	cidZ = "I3333333333333333333333333333333333333333"
-	cidG = "I4444444444444444444444444444444444444444"
-	cidB = "I5555555555555555555555555555555555555555"
-	cidK = "I6666666666666666666666666666666666666666"
-	task = "t_01M4XW5Z7AC7CTA9P0YDGACGPG"
-	lane = "agent/" + task + "/a1"
+	cidOpenX = "I9999999999999999999999999999999999999999"
+	cidX     = "I1111111111111111111111111111111111111111"
+	cidY     = "I2222222222222222222222222222222222222222"
+	cidZ     = "I3333333333333333333333333333333333333333"
+	cidG     = "I4444444444444444444444444444444444444444"
+	cidB     = "I5555555555555555555555555555555555555555"
+	cidK     = "I6666666666666666666666666666666666666666"
+	task     = "t_01M4XW5Z7AC7CTA9P0YDGACGPG"
+	lane     = "agent/" + task + "/a1"
 )
 
 func TestParseMessage(t *testing.T) {
@@ -602,6 +603,9 @@ func TestAgentOrgBranches(t *testing.T) {
 	open := fakeCommit{"k2", "test: the UniFi client\n\nAgentrt-Task: " + taskOpen + "\nChange-Id: " + cidOpen + "\nWork: W-31", day(1)}
 	landed := fakeCommit{"l3", "fix: e, agentd's\n\nAgentrt-Task: " + taskLanded + "\nChange-Id: " + cidY + "\nWork: W-31", day(1)}
 	openLane, landedLane := "agent/"+taskOpen+"/a1", "agent/"+taskLanded+"/a1"
+	const taskLone = "t_01M50P8BBTT3PRZ9WT4RGP2784"
+	loneLane := "agent/" + taskLone + "/a1"
+	lone := fakeCommit{"l9", "docs: a lone repository's\n\nAgentrt-Task: " + taskLone + "\nChange-Id: I8888888888888888888888888888888888888888\nWork: W-31", day(1)}
 	history := map[string][]fakeCommit{
 		openLane:                                {open, A, B},
 		landedLane:                              {landed, A, B},
@@ -615,19 +619,37 @@ func TestAgentOrgBranches(t *testing.T) {
 			http.Error(w, "down", http.StatusBadGateway)
 			return
 		}
-		// an agent repository's default branch is whatever was pushed first
-		write(w, []map[string]any{{"name": "r1", "default_branch": openLane}})
+		// an agent repository's default branch is whatever was pushed first;
+		// r9 has no delivery repository of its name
+		write(w, []map[string]any{{"name": "r1", "default_branch": openLane}, {"name": "r9", "default_branch": loneLane}})
 	})
-	mux.HandleFunc("/api/v1/repos/bifrost-agents/r1/branches", func(w http.ResponseWriter, r *http.Request) {
-		var out []map[string]any
-		for name, h := range history {
-			out = append(out, map[string]any{"name": name, "commit": map[string]any{"id": h[0].sha, "timestamp": h[0].at}})
+	agentRepos := map[string]map[string][]fakeCommit{"r1": history, "r9": {loneLane: {lone}}}
+	authed := func(w http.ResponseWriter, r *http.Request) bool {
+		if u, p, _ := r.BasicAuth(); u != "tok" || p != "pw" {
+			http.Error(w, "auth", http.StatusUnauthorized)
+			return false
 		}
-		write(w, out)
-	})
-	mux.HandleFunc("/api/v1/repos/bifrost-agents/r1/commits", func(w http.ResponseWriter, r *http.Request) {
+		return true
+	}
+	mux.HandleFunc("/api/v1/repos/bifrost-agents/", func(w http.ResponseWriter, r *http.Request) {
+		if !authed(w, r) {
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost-agents/")
+		repo, what, _ := strings.Cut(rest, "/")
+		hist := agentRepos[repo]
 		var out []map[string]any
-		if h, ok := history[r.URL.Query().Get("sha")]; ok && r.URL.Query().Get("page") == "1" {
+		switch what {
+		case "branches":
+			for name, h := range hist {
+				out = append(out, map[string]any{"name": name, "commit": map[string]any{"id": h[0].sha, "timestamp": h[0].at}})
+			}
+		case "commits":
+			h, ok := hist[r.URL.Query().Get("sha")]
+			if !ok || r.URL.Query().Get("page") != "1" {
+				break
+			}
+
 			for i, c := range h {
 				out = append(out, map[string]any{"sha": c.sha, "parents": parentOf(h, i), "commit": map[string]any{
 					"message": c.msg, "committer": map[string]any{"date": c.at}}})
@@ -690,6 +712,10 @@ func TestAgentOrgBranches(t *testing.T) {
 	if agentCommits != 2 {
 		t.Fatalf("%d commits under the agent repository, want the two agent ones", agentCommits)
 	}
+	// an agent repository with no delivery repository of its name: listed, not landed (review 210 B2)
+	if got := byTask(resp, taskLone); len(got) != 1 || got[0].Repo != "bifrost-agents/r9" || got[0].Landed {
+		t.Fatalf("the lone repository's commit = %+v", got)
+	}
 	var cov *RepoCoverage
 	for i := range resp.Coverage {
 		if resp.Coverage[i].Repo == "bifrost-agents/r1" {
@@ -717,5 +743,52 @@ func TestAgentOrgBranches(t *testing.T) {
 	r := service("bifrost-agents").Build(context.Background(), 14)
 	if len(r.Errors) != 1 || !strings.Contains(r.Errors[0], "bifrost-agents") || r.Reachability != "degraded" || len(r.Threads) == 0 {
 		t.Fatalf("agent org down: errors %v, reachability %s, %d threads", r.Errors, r.Reachability, len(r.Threads))
+	}
+}
+
+// Review 210 A1 and B2: an agent commit whose Change-Id a main commit carries
+// keeps its task, repository and branch, landed at that commit, whatever task
+// the main commit names; a branch whose head is on main adds no agent row.
+func TestAgentCommitSameChangeOnMain(t *testing.T) {
+	const tAgent, tOther = "t_01M50M1CZSDN8PNHRH8C2241RS", "t_01M50FZ523HZTGYJA0VB6BNE7N"
+	branch := "agent/" + tAgent + "/a1"
+	agentMsg := "test: x\n\nAgentrt-Task: " + tAgent + "\nChange-Id: " + cidOpenX + "\nWork: W-31"
+	for name, mainMsg := range map[string]string{
+		"main has the same task": "test: x\n\nAgentrt-Task: " + tAgent + "\nChange-Id: " + cidOpenX,
+		"main has no task":       "test: x (squashed)\n\nChange-Id: " + cidOpenX,
+		"main has another task":  "test: x\n\nAgentrt-Task: " + tOther + "\nChange-Id: " + cidOpenX,
+	} {
+		t.Run(name, func(t *testing.T) {
+			main := []giteaCommit{{SHA: "m1", Msg: mainMsg}}
+			threads := map[string]*threadAcc{}
+			collect(repoScan{repo: "r1", def: "main", main: main, branches: map[string][]giteaCommit{}}, threads)
+			collect(repoScan{repo: "bifrost-agents/r1", agent: true, main: main,
+				branches: map[string][]giteaCommit{branch: {{SHA: "b1", Msg: agentMsg}}}}, threads)
+			resp := Response{Threads: finish(threads)}
+			var agentRows []Commit
+			for _, th := range filter(resp, "", "", tAgent).Threads {
+				for _, rc := range th.Repos {
+					for _, c := range rc.Commits {
+						if rc.Repo == "bifrost-agents/r1" {
+							agentRows = append(agentRows, c)
+						}
+					}
+				}
+			}
+			if len(agentRows) != 1 || agentRows[0].SHA != "b1" || agentRows[0].Ref != branch || !agentRows[0].Landed ||
+				agentRows[0].LandedBy != "change_id" || agentRows[0].LandedSHA != "m1" {
+				t.Fatalf("agent rows = %+v", agentRows)
+			}
+		})
+	}
+	// the agent branch's head is itself on main: the walk adds nothing; the
+	// main row, with its task, is the one found
+	main := []giteaCommit{{SHA: "m2", Msg: "test: y\n\nAgentrt-Task: " + tAgent + "\nChange-Id: " + cidOpenX}}
+	threads := map[string]*threadAcc{}
+	collect(repoScan{repo: "r1", def: "main", main: main, branches: map[string][]giteaCommit{}}, threads)
+	collect(repoScan{repo: "bifrost-agents/r1", agent: true, main: main, branches: map[string][]giteaCommit{branch: {}}}, threads)
+	got := filter(Response{Threads: finish(threads)}, "", "", tAgent)
+	if len(got.Threads) != 1 || len(got.Threads[0].Repos) != 1 || got.Threads[0].Repos[0].Repo != "r1" {
+		t.Fatalf("a head on main = %+v", got.Threads)
 	}
 }

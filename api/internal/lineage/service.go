@@ -294,7 +294,13 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 				continue
 			}
 			dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
-			if dup {
+			switch {
+			case dup && sc.agent:
+				// An agent commit keeps its task, repository and branch: the
+				// main commit that carries its Change-Id may carry no task, or
+				// another (review 210 A1). It is the same change, landed there.
+				landedSHA, landedBy = mi.anyCID[t.changeID], "change_id"
+			case dup:
 				continue // the same change, already listed from main
 			}
 			add(Commit{Repo: sc.repo, SHA: gc.SHA, Subject: subject, At: gc.At, Session: t.session,
