@@ -34,7 +34,8 @@ import (
 // to its spec, as an implementation goes back for rework, until its rounds
 // run out (max_rounds, 2 by default); then the task is blocked with the
 // reason (review 216 A3). A mission that is no longer open blocks it at once.
-// Nothing else is written, and the cards a refused round made are withdrawn.
+// Nothing else is written, and the cards a refused round made are withdrawn
+// in the same pass, before the refusal is written (review 217 B1).
 //
 // Lock order: the planning task's attempt, the task, the mission's row, the
 // seat as a writer, the dependency graph and steps (lockBatch), then the
@@ -47,6 +48,12 @@ const Seat = "seat:chief_of_staff"
 // Withdraw withdraws a card the runtime asked, with a reason; a card that is
 // already answered, withdrawn or gone is not an error.
 type Withdraw func(ctx context.Context, questionID, reason string) error
+
+// ErrAsked: the question store holds this question already, open or
+// answered, under another key (a card of an earlier round, or another plan's).
+// The Owner has been asked; a plan goes on with its default and does not
+// count the card as its own (review 217 B2).
+var ErrAsked = errors.New("store: the Owner was already asked this question")
 
 // PendingPlans lists the planning tasks with a submitted plan.
 func PendingPlans(ctx context.Context, db DB) ([]string, error) {
@@ -76,9 +83,8 @@ func PendingPlans(ctx context.Context, db DB) ([]string, error) {
 // store already holds are found again by their keys on the next pass.
 func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Withdraw) (string, error) {
 	var did string
-	var made []string // cards this pass made, withdrawn when the round is refused
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		did, made = "", nil
+		did = ""
 		_, conclusion, report, _, err := submittedAttempt(ctx, tx, taskID, "FOR UPDATE")
 		if errors.Is(err, errNoSubmitted) {
 			return nil
@@ -129,16 +135,32 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if (p.Mission.MaxAttempts > 0 && p.Mission.MaxAttempts > maxAttempts) || (p.Mission.MaxWallHours > 0 && p.Mission.MaxWallHours > maxHours) {
 			return refuse(fmt.Sprintf("the plan raises the mission's budget (%d attempts, %d hours); a plan may only lower it", maxAttempts, maxHours))
 		}
+		var made, asked []string // cards this round made; questions asked before
 		for i, q := range p.Questions {
 			if ask == nil {
 				return fmt.Errorf("%w: no question store is configured", ErrAsk)
 			}
 			id, err := ask(ctx, Card{Key: planCardKey(taskID, d.round, i), Title: q.Question, Body: q.Body, Options: q.Options,
 				Recommended: q.Recommended, Meanwhile: q.Meanwhile, OwnerDuty: q.OwnerDuty, TaskID: taskID})
-			if errors.Is(err, ErrInvalid) {
+			switch {
+			case errors.Is(err, ErrAsked):
+				asked = append(asked, strings.TrimPrefix(err.Error(), ErrAsked.Error()+": "))
+				continue
+			case errors.Is(err, ErrInvalid):
+				// The cards this round made claim work that will not go on as
+				// they say: withdrawn here, so a withdrawal that fails leaves the
+				// plan submitted and the next pass does it all again (review
+				// 217 B1).
+				for _, m := range made {
+					if withdraw == nil {
+						break
+					}
+					if werr := withdraw(ctx, m, "the plan that asked this was not used; see its task "+taskID); werr != nil {
+						return fmt.Errorf("%w: withdraw %s: %v", ErrAsk, m, werr)
+					}
+				}
 				return refuse(fmt.Sprintf("questions[%d]: %v", i, err))
-			}
-			if err != nil {
+			case err != nil:
 				return fmt.Errorf("%w: %v", ErrAsk, err)
 			}
 			made = append(made, id)
@@ -197,18 +219,11 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if len(made) > 0 {
 			reason += ", questions " + strings.Join(made, ", ")
 		}
+		if len(asked) > 0 {
+			reason += ", asked before: " + strings.Join(asked, "; ")
+		}
 		return moveTask(ctx, tx, "controller", t, "accepted", reason)
 	})
-	if err == nil && did != "accepted" && len(made) > 0 && withdraw != nil {
-		// The round was refused after some of its cards were made: they claim
-		// work that will not go on as they say. A withdrawal that fails leaves
-		// the card open; the reason is on the task.
-		for _, id := range made {
-			if werr := withdraw(ctx, id, "the plan that asked this was not used; see its task "+taskID); werr != nil {
-				err = errors.Join(err, fmt.Errorf("withdraw %s: %w", id, werr))
-			}
-		}
-	}
 	return did, err
 }
 

@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -88,7 +89,9 @@ type cards struct {
 	asked     []store.Card
 	ids       map[string]string
 	refuse    map[int]bool // by place in the plan
+	before    map[int]bool // held under another key: already asked
 	down      error
+	failWith  int // withdrawals that fail before one works
 	withdrawn []string
 }
 
@@ -101,6 +104,9 @@ func (s *cards) ask(_ context.Context, c store.Card) (string, error) {
 	}
 	if s.refuse[len(s.asked)-1] {
 		return "", store.ErrInvalid
+	}
+	if s.before[len(s.asked)-1] {
+		return "", fmt.Errorf("%w: %s", store.ErrAsked, "already answered: #7") // as the server's Ask words it
 	}
 	if s.ids == nil {
 		s.ids = map[string]string{}
@@ -116,6 +122,10 @@ func (s *cards) withdraw(_ context.Context, id, reason string) error {
 	defer s.mu.Unlock()
 	if reason == "" {
 		return errors.New("no reason")
+	}
+	if s.failWith > 0 {
+		s.failWith--
+		return errors.New("the question store is down")
 	}
 	s.withdrawn = append(s.withdrawn, id)
 	return nil
@@ -335,6 +345,40 @@ func TestAcceptPlanWithdrawsARefusedRoundsCards(t *testing.T) {
 	}
 	if s.asked[2].Key == s.asked[0].Key {
 		t.Fatal("round 2's card has round 1's key")
+	}
+}
+
+// A withdrawal that fails leaves the plan submitted, nothing written, and
+// the next pass does it again: the same card made, withdrawn, the round
+// refused (review 217 B1).
+func TestAcceptPlanRetriesAFailedWithdrawal(t *testing.T) {
+	w := planWorld(t)
+	id := w.handIn(t, twoCards, "done")
+	s := cards{refuse: map[int]bool{1: true, 3: true}, failWith: 1}
+	if did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw); !errors.Is(err, store.ErrAsk) || did != "" ||
+		w.state(t, "task", id) != "submitted" || len(s.withdrawn) != 0 {
+		t.Fatalf("the withdrawal failed: %q %v %s %v", did, err, w.state(t, "task", id), s.withdrawn)
+	}
+	nothingWritten(t, w)
+	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+	if err != nil || did != "rework" || s.asked[2].Key != s.asked[0].Key || !slices.Equal(s.withdrawn, []string{s.ids[s.asked[0].Key]}) {
+		t.Fatalf("the next pass: %q %v, asked %d, withdrawn %v", did, err, len(s.asked), s.withdrawn)
+	}
+}
+
+// A question the store holds already under another key (an earlier round's,
+// answered): the plan goes on with its default, the card is not its own to
+// withdraw, and the task says it was asked before (review 217 B2).
+func TestAcceptPlanAskedBefore(t *testing.T) {
+	w := planWorld(t)
+	id := w.handIn(t, twoCards, "done")
+	s := cards{before: map[int]bool{0: true}}
+	did, err := store.AcceptPlan(ctx, w.rt, id, s.ask, s.withdraw)
+	var reason string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
+	  ORDER BY event_id DESC LIMIT 1`, id).Scan(&reason))
+	if err != nil || did != "accepted" || !strings.Contains(reason, "asked before: already answered: #7") || len(s.ids) != 1 {
+		t.Fatalf("%q %v %q (made %v)", did, err, reason, s.ids)
 	}
 }
 

@@ -421,3 +421,67 @@ func TestPlanChangeCardOnTheStore(t *testing.T) {
 		t.Errorf("acknowledging a card the store dropped: %v", err)
 	}
 }
+
+// A planner's card on the real question store (W-31 2.2b, review 217 B2):
+// its own options and default; withdrawn while open; the same question under
+// another key, open or answered, comes back as asked before, not as an error
+// a plan would wait on forever. A plan change's card keeps its old answer.
+func TestPlannerCardOnTheStore(t *testing.T) {
+	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	ctx := context.Background()
+	ask, read, withdraw := rt.agentRuntimeAsk(), rt.agentRuntimeQuestion(), rt.agentRuntimeWithdraw()
+	card := func(key, question string) store.Card {
+		return store.Card{Key: key, Title: question, Body: "why it matters", Options: []string{"Not now", "Yes"}, Recommended: 1,
+			Meanwhile: "the work goes on without it", OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV"}
+	}
+	id, err := ask(ctx, card(strings.Repeat("a1", 16), "Document the Console too?"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := rt.svc.Lookup(id)
+	if err != nil || !ok || len(got.Options) != 2 || got.Recommended != "a" || got.OwnerDuty != "goal" || got.TaskID == "" {
+		t.Fatalf("the card %+v %v %v", got, ok, err)
+	}
+	// Open, under another key: asked before.
+	if _, err = ask(ctx, card(strings.Repeat("b2", 16), "Document the Console too?")); !errors.Is(err, store.ErrAsked) || !strings.Contains(err.Error(), "duplicate of") {
+		t.Fatalf("an open duplicate: %v", err)
+	}
+	raw, _ := json.Marshal(map[string]any{"option": "b", "channel": "console"})
+	if res := rt.svc.Answer(ctx, "owner-console", "admin", "admin", id, raw); res.Code >= 300 {
+		t.Fatalf("answer = %d %v", res.Code, res.Body)
+	}
+	if q, ok := read(ctx, id); !ok || q.Status != store.QuestionAnswered {
+		t.Fatalf("the answer %+v", q)
+	}
+	// Answered: not withdrawn (that is not an error), asked before.
+	if err = withdraw(ctx, id, "the plan was not used"); err != nil {
+		t.Fatalf("withdrawing an answered card: %v", err)
+	}
+	if _, err = ask(ctx, card(strings.Repeat("c3", 16), "Document the Console too?")); !errors.Is(err, store.ErrAsked) || !strings.Contains(err.Error(), "already answered") {
+		t.Fatalf("an answered duplicate: %v", err)
+	}
+	// An open card withdrawn; one that is gone needs nothing.
+	other, err := ask(ctx, card(strings.Repeat("d4", 16), "Name the planner in the comments?"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = withdraw(ctx, other, "the plan was not used"); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if got, ok, _ = rt.svc.Lookup(other); !ok || got.Status != "withdrawn" {
+		t.Fatalf("after the withdrawal: %+v", got)
+	}
+	if err = withdraw(ctx, "q_not_there", "gone"); err != nil {
+		t.Fatalf("withdrawing a card the store dropped: %v", err)
+	}
+	// A plan change's card, the same question twice under two keys: as before,
+	// an error, not asked before.
+	pc := store.Card{Key: strings.Repeat("e5", 16), Title: "Plan change to R2: a new item", Body: "A thread proposes …"}
+	if _, err = ask(ctx, pc); err != nil {
+		t.Fatal(err)
+	}
+	pc.Key = strings.Repeat("f6", 16)
+	if _, err = ask(ctx, pc); err == nil || errors.Is(err, store.ErrAsked) {
+		t.Fatalf("a plan change's duplicate: %v", err)
+	}
+}

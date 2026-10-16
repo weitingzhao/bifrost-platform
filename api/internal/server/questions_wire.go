@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,10 +138,16 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		res := rt.svc.Create(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", raw)
 		body, _ := res.Body.(map[string]any)
 		id, _ := body["id"].(string)
+		msg, _ := body["error"].(string)
 		switch {
 		case res.Code == http.StatusBadRequest:
 			// The card itself does not fit: retrying will not help.
 			return "", fmt.Errorf("%w: the question store refused the card: %v", store.ErrInvalid, res.Body)
+		case len(card.Options) > 0 && res.Code == http.StatusConflict &&
+			(strings.HasPrefix(msg, "already answered: ") || strings.HasPrefix(msg, "duplicate of ")):
+			// A planner's question the store holds under another key, open or
+			// answered (review 217 B2): the Owner has it; the plan goes on.
+			return "", fmt.Errorf("%w: %s", store.ErrAsked, msg)
 		case (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "":
 			return "", fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 		}
