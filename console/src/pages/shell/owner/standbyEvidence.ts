@@ -93,7 +93,8 @@ export type StandbyVerdict = 'noise' | 'likely' | 'real'
 export function standbyVerdict(alert: MappedAlert, ev: StandbyEvidence | null): StandbyVerdict {
   if (!ev || ev.nodes.length === 0) return 'real'
   const l = alert.labels
-  if (NODE_ALERTS.test(alert.name)) return standbyNode(ev, l.node ?? '') || standbyHost(ev, l.instance ?? '') ? 'noise' : 'real'
+  // A named node decides; the address only when no node is named (review 223 A-223-1).
+  if (NODE_ALERTS.test(alert.name)) return (l.node ? standbyNode(ev, l.node) : standbyHost(ev, l.instance ?? '')) ? 'noise' : 'real'
   if (DAEMONSET_ALERTS.test(alert.name)) {
     const ns = l.namespace ?? '', ds = l.daemonset ?? ''
     const onStandby = ev.pods.filter(p => p.namespace === ns && p.daemonset === ds).length
@@ -105,8 +106,8 @@ export function standbyVerdict(alert: MappedAlert, ev: StandbyEvidence | null): 
       && (!l.instance || t.instance === l.instance))
     return down.length > 0 && down.every(t => standbyTarget(ev, t)) ? 'noise' : 'real'
   }
-  // A named node that is not on standby wins over anything else (review 222 A-R2).
-  if (l.node) return 'real'
+  // A named node that is not on standby wins over anything else (review 222 A-R2); a standby one still needs the pod's name (223 B-223-1).
+  if (l.node && !standbyNode(ev, l.node)) return 'real'
   // A pod-scoped alert names its pod; kube-state-metrics' own pod and instance labels are the exporter's.
   const subjectPod = alert.name.startsWith('KubePod') || l.container !== 'kube-state-metrics'
   return subjectPod && standbyPodNamed(ev, l.namespace ?? '', l.pod ?? '') ? 'noise' : 'real'

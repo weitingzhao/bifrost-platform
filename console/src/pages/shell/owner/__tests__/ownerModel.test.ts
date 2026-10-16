@@ -96,6 +96,20 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(splitAlerts([crash], ev, NOW).worth).toHaveLength(1)
   })
 
+  it.each(['KubeNodeNotReady', 'KubeNodeUnreachable', 'KubeletInstanceUnreachable'])('%s on a named active node is real even at a standby address (review 223 A-223-1)', name => {
+    const split = splitAlerts([alert({ alertname: name, node: 'ubt-k3s-02', instance: '192.168.10.60:10250' })], ev, NOW)
+    expect(split).toMatchObject({ noise: 0, warning: 1 })
+    expect(split.worth).toHaveLength(1)
+    expect(splitAlerts([alert({ alertname: name, instance: '192.168.10.60:10250' })], ev, NOW).noise).toBe(1)
+  })
+
+  it('a standby pod that also names its standby node stays noise (review 223 B-223-1)', () => {
+    const pod = alert({ alertname: 'KubePodNotReady', namespace: 'monitoring', pod: 'promtail-7fxmt', node: 'gpu-server', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([pod], ev, NOW).noise).toBe(1)
+    const otherPod = alert({ alertname: 'KubePodNotReady', namespace: 'monitoring', pod: 'promtail-zz', node: 'gpu-server', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([otherPod], ev, NOW).worth).toHaveLength(1)
+  })
+
   it('a named active node wins over a cached standby pod of the same name (review 222 A-R2)', () => {
     const moved = alert({ alertname: 'KubePodNotReady', namespace: 'monitoring', pod: 'promtail-7fxmt', node: 'ubt-k3s-02', container: 'kube-state-metrics', job: 'kube-state-metrics' })
     expect(splitAlerts([moved], ev, NOW).worth).toHaveLength(1)
