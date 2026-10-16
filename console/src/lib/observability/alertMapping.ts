@@ -164,12 +164,14 @@ const ELASTIC_STANDBY_ALERT_NAMES =
 /**
  * All-node DaemonSets that schedule on every worker — when one elastic standby
  * is off, kube-state-metrics emits Pod/DS alerts without a `node` label.
+ * node-reboot-required (monitoring) is ours and runs on every node too; with
+ * gpu-server on standby it fired as a real warning (PROD, 2026-10-10 on).
  */
 const STANDBY_NOISE_DAEMONSETS =
-  /^(kube-prometheus-stack-prometheus-node-exporter|promtail|loki-canary|svclb-traefik(?:-.+)?)$/i
+  /^(kube-prometheus-stack-prometheus-node-exporter|promtail|loki-canary|node-reboot-required|svclb-traefik(?:-.+)?)$/i
 
 const STANDBY_NOISE_POD_PREFIX =
-  /^(kube-prometheus-stack-prometheus-node-exporter-|promtail-|loki-canary-|svclb-traefik-)/i
+  /^(kube-prometheus-stack-prometheus-node-exporter-|promtail-|loki-canary-|node-reboot-required-|svclb-traefik-)/i
 
 export type StandbyDownTarget = {
   job?: string

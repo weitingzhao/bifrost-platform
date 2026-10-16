@@ -42,6 +42,8 @@ function ViewerEnvChip({
 
 /**
  * Shell top bar. The only live reading is the system verdict, the same sentence Status opens with.
+ * On a phone it is left out (it had about 60px and showed nothing whole); the page title gets the
+ * room, and the Owner Console and Status open with a verdict of their own.
  * Dev Sessions is mounted by the parent only on the local console.
  */
 export function ConsoleHeader({
@@ -76,7 +78,7 @@ export function ConsoleHeader({
     >
       <SidebarTrigger />
 
-      <nav aria-label="Breadcrumb" className="flex min-w-0 max-w-[min(16rem,28vw)] items-center gap-1">
+      <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1 sm:max-w-[min(16rem,28vw)] sm:flex-none">
         <span className="inline-flex min-w-0 items-center gap-1">
           <h1 className="m-0 truncate text-[var(--text-dense-label)] font-semibold tracking-tight text-foreground">
             {pageTitle}
@@ -101,7 +103,7 @@ export function ConsoleHeader({
       </nav>
 
       <p
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-[var(--text-dense-caption)] text-muted-foreground"
+        className="hidden min-w-0 flex-1 items-center gap-1.5 text-[var(--text-dense-caption)] text-muted-foreground sm:flex"
         title={statusLine}
         aria-live="polite"
         data-shell-status-line

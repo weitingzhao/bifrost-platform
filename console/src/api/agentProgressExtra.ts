@@ -113,6 +113,10 @@ export type ProgressPool = {
   runs_out_at?: string
   spare_pct?: number
   note?: string
+  /** When this pool was read (epoch seconds); a reading days old is stale. */
+  read_at?: number
+  /** A part of another pool's total (Claude's Fable share of the weekly limit). */
+  sublimit?: boolean
 }
 
 const POOL_STRINGS = ['vendor', 'role', 'id', 'label', 'resets_at', 'rate_basis', 'verdict', 'runs_out_at', 'note'] as const
@@ -126,6 +130,7 @@ const POOL_NUMBERS = [
   'rate_per_day',
   'projected',
   'spare_pct',
+  'read_at',
 ] as const
 
 function parsePool(value: Record<string, unknown>): ProgressPool {
@@ -138,6 +143,7 @@ function parsePool(value: Record<string, unknown>): ProgressPool {
     const n = asNumber(value[key])
     if (n !== undefined) pool[key] = n
   }
+  if (value.sublimit === true) pool.sublimit = true
   return pool
 }
 

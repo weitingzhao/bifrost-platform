@@ -5,6 +5,7 @@ import {
   Database,
   GitBranch,
   Inbox,
+  LayoutDashboard,
   Plug,
   Rocket,
   Server,
@@ -12,6 +13,7 @@ import {
 import { SHELL_NAV, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
+  owner: LayoutDashboard,
   'needs-you': Inbox,
   status: Activity,
   data: Database,

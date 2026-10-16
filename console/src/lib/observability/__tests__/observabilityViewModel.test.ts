@@ -490,6 +490,16 @@ describe('alert mapping', () => {
     expect(verdictAffectingAlerts(annotated)).toHaveLength(0)
   })
 
+  it('our node-reboot-required DaemonSet is standby noise too (PROD, gpu-server on standby since 2026-10-10)', () => {
+    const standby = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
+    const labels = { severity: 'warning', namespace: 'monitoring' }
+    const ds = mapAlert({ labels: { ...labels, alertname: 'KubeDaemonSetRolloutStuck', daemonset: 'node-reboot-required' }, state: 'firing' }, 0)
+    const pod = mapAlert({ labels: { ...labels, alertname: 'KubePodNotReady', pod: 'node-reboot-required-k7zk9' }, state: 'firing' }, 1)
+    expect(isElasticStandbyAlert(ds, standby)).toBe(true)
+    expect(isElasticStandbyAlert(pod, standby)).toBe(true)
+    expect(isElasticStandbyAlert(ds, [])).toBe(false)
+  })
+
   /**
    * Demand path: when ollama/minio want replicas, platform-api classifies the
    * node as elastic_mode=degraded (not standby). Observability only passes

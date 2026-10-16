@@ -1,10 +1,15 @@
 /**
- * Ops Console shell routes — one layer: Needs you first (home), the health and
- * delivery questions, then Records. Old bookmarks resolve through
+ * Ops Console shell routes — one layer: the Owner Console first (home), Needs
+ * you (every waiting item), the health and delivery questions, then Records. Old bookmarks resolve through
  * LEGACY_HASH_REDIRECTS. `#approvals?id=` is the request page; it has no nav row.
  */
 
 export const SHELL_NAV = [
+  {
+    id: 'owner',
+    label: 'Owner Console',
+    question: 'What is mine to do, and how are the work, the system and the data?',
+  },
   { id: 'needs-you', label: 'Needs you', question: 'What do I need to do right now?' },
   { id: 'status', label: 'Status', question: 'Is everything okay right now?' },
   { id: 'data', label: 'Data', question: "Has today's data arrived?" },
@@ -31,7 +36,10 @@ export type ShellRouteId = (typeof SHELL_NAV)[number]['id']
 
 export const SHELL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.map(item => item.id)
 
-export const HOME_ROUTE: ShellRouteId = 'needs-you'
+export const HOME_ROUTE: ShellRouteId = 'owner'
+
+/** Every waiting item. A request or question link without an id lands here. */
+export const NEEDS_YOU_ROUTE: ShellRouteId = 'needs-you'
 
 /** The request page. Phone notifications link here (`#approvals?id=<id>`). */
 export const APPROVAL_ROUTE = 'approvals'
@@ -263,7 +271,7 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
   if (tab === QUESTION_ROUTE) {
     const questionId = hashQueryParam(query, 'id')
     if (questionId == null) {
-      return { location: { kind: 'shell', id: HOME_ROUTE }, canonical: formatShellHash(HOME_ROUTE) }
+      return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
     }
     return { location: { kind: 'question' }, canonical: formatShellHash(QUESTION_ROUTE, query) }
   }
@@ -271,7 +279,7 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
     if (approvalId != null) {
       return { location: { kind: 'approval' }, canonical: formatShellHash(APPROVAL_ROUTE, query) }
     }
-    return { location: { kind: 'shell', id: HOME_ROUTE }, canonical: formatShellHash(HOME_ROUTE) }
+    return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
   }
   const resolved = resolveHashTab(tab)
   const id = locationId(resolved.location)

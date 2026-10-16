@@ -12,6 +12,7 @@ import {
   IbPage,
   InfrastructurePage,
   NeedsYouPage,
+  OwnerConsolePage,
   ProgressPage,
   RecordsPage,
   ReleasesPage,
@@ -24,6 +25,7 @@ import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   HOME_ROUTE,
+  NEEDS_YOU_ROUTE,
   formatShellHash,
   isShellRouteId,
   locationId,
@@ -36,6 +38,7 @@ import {
 import { showDevSessions } from '@/lib/shell/localConsole'
 
 const SHELL_PAGES: Record<ShellRouteId, ComponentType> = {
+  owner: OwnerConsolePage,
   'needs-you': NeedsYouPage,
   status: StatusPage,
   data: DataPage,
@@ -126,7 +129,7 @@ function ConsolePageInner() {
     location.kind === 'dev-sessions'
       ? 'dev-sessions'
       : location.kind === 'approval' || location.kind === 'question'
-        ? HOME_ROUTE
+        ? NEEDS_YOU_ROUTE
         : location.id
   const needsYouNavBadge = needsYouBadge(count)
 
@@ -138,9 +141,9 @@ function ConsolePageInner() {
           onSelect={select}
           viewerEnv={status.viewerEnv}
           viewerEnvLoading={status.viewerEnvLoading}
-          badges={needsYouNavBadge != null ? { [HOME_ROUTE]: needsYouNavBadge } : undefined}
+          badges={needsYouNavBadge != null ? { [NEEDS_YOU_ROUTE]: needsYouNavBadge } : undefined}
         />
-        <SidebarInset className={local ? 'min-w-0 overflow-x-hidden pb-14' : 'min-w-0 overflow-x-hidden'}>
+        <SidebarInset className={local ? 'min-w-0 overflow-x-clip pb-14' : 'min-w-0 overflow-x-clip'}>
           <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
             <ConsoleHeader
               pageTitle={title}

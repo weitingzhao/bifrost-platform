@@ -15,12 +15,13 @@ import {
   resolveHashTab,
 } from '@/lib/shell/consoleRoutes'
 
-const LABELS = ['Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
+const LABELS = ['Owner Console', 'Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
 
 describe('shell navigation', () => {
-  it('puts Needs you first and Records last', () => {
+  it('puts the Owner Console first, Needs you second and Records last', () => {
     expect(SHELL_NAV.map(item => item.label)).toEqual(LABELS)
     expect(SHELL_NAV.map(item => item.id)).toEqual([
+      'owner',
       'needs-you',
       'status',
       'data',
@@ -66,8 +67,8 @@ describe('legacy hash redirects', () => {
   it('drops the Agent Protocol redirect; the old hash lands on the home page', () => {
     expect(LEGACY_HASH_REDIRECTS['agent-protocol']).toBeUndefined()
     expect(resolveConsoleHash('agent-protocol')).toEqual({
-      location: { kind: 'shell', id: 'needs-you' },
-      canonical: '#needs-you',
+      location: { kind: 'shell', id: 'owner' },
+      canonical: '#owner',
     })
   })
 
@@ -83,9 +84,10 @@ describe('legacy hash redirects', () => {
     expect(formatShellHash('records', 'tab=audit')).toBe('#records?tab=audit')
   })
 
-  it('lands an empty hash on Needs you', () => {
-    expect(resolveHashTab('').location).toEqual({ kind: 'shell', id: 'needs-you' })
-    expect(resolveConsoleHash('').canonical).toBe('#needs-you')
+  it('lands an empty hash on the Owner Console, and keeps its tab', () => {
+    expect(resolveHashTab('').location).toEqual({ kind: 'shell', id: 'owner' })
+    expect(resolveConsoleHash('').canonical).toBe('#owner')
+    expect(resolveConsoleHash('owner?tab=work').canonical).toBe('#owner?tab=work')
   })
 })
 

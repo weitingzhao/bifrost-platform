@@ -6,6 +6,8 @@ export { IbPage } from './ib/IbPage'
 
 export { NeedsYouPage } from './needs-you/NeedsYouPage'
 
+export { OwnerConsolePage } from './owner/OwnerConsolePage'
+
 export { ReleasesPage } from './releases/ReleasesPage'
 
 export { InfrastructurePage } from './infrastructure/InfrastructurePage'

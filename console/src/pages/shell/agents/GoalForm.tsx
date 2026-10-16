@@ -3,9 +3,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { submitRuntimeGoal, type GoalResult } from '@/api/agentRuntime'
 import { OpsSection } from '@/components/layout/OpsSection'
 
-export function GoalForm({ onCreated }: { onCreated?: (result: GoalResult, goal: string) => void }) {
+/**
+ * `draft` fills the box once, when the form mounts (the Owner Console's "Make it a goal" remounts
+ * it with a new key); the Owner edits it and sends it himself.
+ */
+export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalResult, goal: string) => void; draft?: string }) {
   const client = useQueryClient()
-  const [goal, setGoal] = useState('')
+  const [goal, setGoal] = useState(draft)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<GoalResult | null>(null)
   const [error, setError] = useState('')
@@ -37,7 +41,7 @@ export function GoalForm({ onCreated }: { onCreated?: (result: GoalResult, goal:
     <form onSubmit={event => { void submit(event) }} className="flex flex-col gap-3">
       <label htmlFor="agent-goal">Goal</label>
       <textarea id="agent-goal" value={goal} maxLength={2000} rows={3} disabled={sending}
-        aria-describedby="agent-goal-count" className="w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 text-sm"
+        aria-describedby="agent-goal-count" className="w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 text-base sm:text-sm"
         placeholder="Describe one goal in a sentence."
         onChange={e => {
           setGoal(e.target.value)
@@ -52,7 +56,7 @@ export function GoalForm({ onCreated }: { onCreated?: (result: GoalResult, goal:
           <option value="bifrost-platform">bifrost-platform</option>
         </select>
         <button type="submit" disabled={sending || !goal.trim() || goal.length > 2000}
-          className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 py-2 text-sm disabled:opacity-50">{sending ? 'Submitting…' : 'Submit'}</button>
+          className="min-h-11 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 py-2 text-sm disabled:opacity-50 sm:min-h-0">{sending ? 'Submitting…' : 'Submit'}</button>
       </div>
       {error && <p role="alert">{error}</p>}
       {result && <div role="status">
