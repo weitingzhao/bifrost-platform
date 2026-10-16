@@ -458,9 +458,16 @@ type Ask func(ctx context.Context, card Card) (string, error)
 // the card: full, or over its hourly bound); nothing was written.
 var ErrAsk = errors.New("store: the Owner cannot be asked now")
 
-// Card is a decision card about a plan change.
+// Card is a decision card for the Owner. A plan change's names its key,
+// title and body only, and gets the two options below; a planner's names its
+// own options, the one it goes with when nobody answers (1-based), what
+// happens meanwhile, which of the Owner's duties it is and the task that asks
+// (planresult.go).
 type Card struct {
-	Key, Title, Body string
+	Key, Title, Body             string
+	Options                      []string
+	Recommended                  int
+	Meanwhile, OwnerDuty, TaskID string
 }
 
 // Options of a plan change's card, as the Owner reads them, and the keys

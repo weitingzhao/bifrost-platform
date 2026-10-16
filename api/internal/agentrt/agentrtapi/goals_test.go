@@ -8,13 +8,12 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// A goal over HTTP (W-31 2.2b): who may give one, what it becomes (a mission
-// and one implementation task on main, recorded as the caller), a spec agentd
-// reads with the repository's checks, a retry, a reused key, and refusals.
+// A goal over HTTP (W-31 2.2b; the Owner's D1 A): who may give one, what it
+// becomes (a mission and one planning task on main, recorded as the caller),
+// a spec agentd reads with the goal, the snapshot and the plan's format, a
+// retry, a reused key, and refusals.
 func TestGoalRoute(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
@@ -48,19 +47,22 @@ func TestGoalRoute(t *testing.T) {
 	must(t, pool.QueryRow(ctx, `SELECT t.role, t.task_class, t.effect_class, t.repo, t.base_commit, t.state, t.created_by_actor_id,
 	  t.off_plan_reason, b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
 	  WHERE t.task_id = $1 AND t.mission_id = 'M-2'`, out["task_id"]).Scan(&role, &class, &effect, &repo, &base, &state, &by, &offPlan, &spec))
-	if role != "implement" || class != "goal" || effect != "branch" || repo != "bifrost-platform" || base != commitA ||
+	if role != "plan" || class != "goal" || effect != "none" || repo != "bifrost-platform" || base != commitA ||
 		state != "proposed" || by != "owner" || offPlan == "" {
 		t.Fatalf("the task: %s %s %s %s %s %s %s %q", role, class, effect, repo, base, state, by, offPlan)
 	}
-	// The spec is what agentd runs: it parses there, carries the goal and the
-	// repository's checks, and names those checks to the implementer.
+	// The spec is what agentd runs: it parses there and has no checks (a plan
+	// is checked by the controller); it carries the goal, the snapshot with the
+	// repository's checks, and the plan's format.
 	ts, err := agentd.ParseSpec(spec)
 	must(t, err)
-	if !slices.EqualFunc(ts.Verify, agentrtapi.GoalRepos["bifrost-platform"].Verify, slices.Equal[[]string]) {
-		t.Fatalf("checks %v", ts.Verify)
+	if len(ts.Verify) != 0 {
+		t.Fatalf("a plan's spec has checks %v", ts.Verify)
 	}
-	if !strings.Contains(ts.Text, goal) || !strings.Contains(ts.Text, "go -C api build ./...") || ts.TimeoutS <= 0 {
-		t.Fatalf("spec text %q, timeout %d", ts.Text, ts.TimeoutS)
+	for _, want := range []string{goal, "Missions open besides this one", "go -C api build ./...", "```json", `"decisions"`} {
+		if !strings.Contains(ts.Text, want) {
+			t.Fatalf("spec text has no %q:\n%s", want, ts.Text)
+		}
 	}
 
 	// A retry answers the same ids and writes nothing more.
@@ -155,73 +157,29 @@ func TestGoalTitleIsCut(t *testing.T) {
 	}
 }
 
-// The spec's bytes stored before as another kind (review 213 A1): the goal is
-// refused before anything is proposed, again on a retry; the same bytes
-// stored as a task spec are simply used.
-func TestGoalSpecStoredAsAnotherKind(t *testing.T) {
-	pool, _ := world(t)
-	s := server(t, pool)
-	goal := "Tidy the comments of goals.go"
-	spec, err := agentrtapi.GoalSpecForTest(agentrtapi.GoalTitleForTest(goal), goal, agentrtapi.GoalRepos["bifrost-platform"])
-	must(t, err)
-	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec), spec, "X-Artifact-Kind", "report", session, "s1"); code != http.StatusOK {
-		t.Fatalf("the same bytes as a report: %d %v", code, out)
-	}
-	count := func() (m, k int) {
-		must(t, pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.mission), (SELECT count(*) FROM agentrt.task)`).Scan(&m, &k))
-		return m, k
-	}
-	m0, k0 := count()
-	body := map[string]any{"idempotency_key": "g1", "goal": goal, "repo": "bifrost-platform"}
-	for try := 1; try <= 2; try++ {
-		code, out := call(t, s, "admin", "POST", "goals", body)
-		if code != http.StatusConflict || out["error"] != "spec_kind" || !strings.Contains(out["message"].(string), "report") {
-			t.Fatalf("try %d: %d %v", try, code, out)
-		}
-		if m, k := count(); m != m0 || k != k0 {
-			t.Fatalf("try %d wrote: missions %d -> %d, tasks %d -> %d", try, m0, m, k0, k)
-		}
-	}
-	// The same bytes stored as a task spec are the spec.
-	goal2 := "Tidy the comments of propose.go"
-	spec2, err := agentrtapi.GoalSpecForTest(agentrtapi.GoalTitleForTest(goal2), goal2, agentrtapi.GoalRepos["bifrost-platform"])
-	must(t, err)
-	if code, out := call(t, s, "operator", "PUT", "artifacts/"+artifactID(spec2), spec2, "X-Artifact-Kind", "task_spec", session, "s1"); code != http.StatusOK {
-		t.Fatalf("the same bytes as a task spec: %d %v", code, out)
-	}
-	if code, out := call(t, s, "admin", "POST", "goals", map[string]any{"idempotency_key": "g2", "goal": goal2, "repo": "bifrost-platform"}); code != http.StatusOK || out["spec_artifact_id"] != artifactID(spec2) {
-		t.Fatalf("a stored task spec: %d %v", code, out)
-	}
-}
-
-// A retry after main moved (review 213 B2): a try that stopped after the
-// mission and before the task is finished on main as it is then; once the
-// task was proposed, a retry on a moved main is refused as a reused key.
+// A retry after main moved: the goal was written in one transaction on the
+// first try, so the retry gets that answer, its base among it, and writes
+// nothing (review 213 B2's case cannot leave a mission without its task).
 func TestGoalRetryAfterMainMoved(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
 	const commitB = "c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00"
 	t.Cleanup(func() { mainAt = commitA })
-	goal := "Name the default checks in the goal's report"
-	// A first try that proposed the mission and stopped: what the route writes
-	// first, under its key, as the Owner.
-	_, err := store.ProposeMission(ctx, pool, store.Writer{Actor: "owner", Token: "admin"}, "goal:g1:mission", store.MissionProposal{
-		Title: goal, Goal: goal, Repos: []string{"bifrost-platform"}, Success: []string{agentrtapi.GoalSuccess}})
-	must(t, err)
+	body := map[string]any{"idempotency_key": "g1", "goal": "Name the default checks in the goal's report", "repo": "bifrost-platform"}
+	code, first := call(t, s, "admin", "POST", "goals", body)
+	if code != http.StatusOK || first["base_commit"] != commitA {
+		t.Fatalf("a goal: %d %v", code, first)
+	}
 	mainAt = commitB
-	code, out := call(t, s, "admin", "POST", "goals", map[string]any{"idempotency_key": "g1", "goal": goal, "repo": "bifrost-platform"})
-	if code != http.StatusOK || out["mission_id"] != "M-2" || out["base_commit"] != commitB || out["task_id"] == "" {
-		t.Fatalf("finishing a try that stopped after the mission: %d %v", code, out)
+	code, again := call(t, s, "admin", "POST", "goals", body)
+	if code != http.StatusOK || again["mission_id"] != first["mission_id"] || again["task_id"] != first["task_id"] ||
+		again["base_commit"] != commitA || again["spec_artifact_id"] != first["spec_artifact_id"] {
+		t.Fatalf("a retry on a moved main: %d %v (first %v)", code, again, first)
 	}
-	var base string
-	must(t, pool.QueryRow(ctx, `SELECT base_commit FROM agentrt.task WHERE task_id = $1`, out["task_id"]).Scan(&base))
-	if base != commitB {
-		t.Fatalf("the task's base is %s", base)
-	}
-	// The task is proposed: main moving back is another task request.
-	mainAt = commitA
-	if code, out := call(t, s, "admin", "POST", "goals", map[string]any{"idempotency_key": "g1", "goal": goal, "repo": "bifrost-platform"}); code != http.StatusConflict || out["error"] != "key_conflict" {
-		t.Fatalf("a retry on a moved main after the task: %d %v", code, out)
+	var tasks int
+	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE mission_id = $1`, first["mission_id"]).Scan(&tasks))
+	if tasks != 1 {
+		t.Fatalf("tasks of the goal: %d", tasks)
 	}
 }
 

@@ -233,59 +233,66 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 		return nil, err
 	}
 	return idempotent(ctx, db, w.Actor, "missions", key, p.request(), nil, func(tx pgx.Tx) (map[string]any, error) {
-		// Only a new proposal is held to the clock (review 175 A4).
-		now := time.Now()
-		deadline := p.Deadline
-		if deadline.IsZero() {
-			deadline = now.Add(DefaultMissionDays * 24 * time.Hour)
-		} else if !deadline.After(now) {
-			return nil, invalid("the deadline %s has passed", deadline.Format(time.RFC3339))
-		}
-		if err := ensureWriter(ctx, tx, w, true); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742108)`); err != nil {
-			return nil, err
-		}
-		var n int
-		if err := tx.QueryRow(ctx, `SELECT COALESCE(max(substr(mission_id, 3)::int), 0) + 1 FROM agentrt.mission`).Scan(&n); err != nil {
-			return nil, err
-		}
-		id := fmt.Sprintf("M-%d", n)
-		hook("numbered", id)
-		// A proposal stating no budget takes the tenant's budget rule's; one
-		// inside the standing envelope in force starts at once (proposal §2).
-		if p.MaxAttempts == 0 && p.MaxWallHours == 0 {
-			b, err := inForce(ctx, tx, rules.KindBudget+":"+p.Tenant)
-			if err != nil {
-				return nil, err
-			}
-			if b != nil {
-				p.MaxAttempts, p.MaxWallHours = b.Budget.Mission.MaxAttempts, b.Budget.Mission.MaxWallHours
-			}
-		}
-		env, err := inForce(ctx, tx, rules.KindEnvelope+":"+p.Tenant)
+		return proposeMissionTx(ctx, tx, w, p)
+	})
+}
+
+// proposeMissionTx is ProposeMission's write, in a transaction its caller
+// holds (a goal proposes its mission and its plan task in one; goal.go). p
+// has been checked.
+func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposal) (map[string]any, error) {
+	// Only a new proposal is held to the clock (review 175 A4).
+	now := time.Now()
+	deadline := p.Deadline
+	if deadline.IsZero() {
+		deadline = now.Add(DefaultMissionDays * 24 * time.Hour)
+	} else if !deadline.After(now) {
+		return nil, invalid("the deadline %s has passed", deadline.Format(time.RFC3339))
+	}
+	if err := ensureWriter(ctx, tx, w, true); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742108)`); err != nil {
+		return nil, err
+	}
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(substr(mission_id, 3)::int), 0) + 1 FROM agentrt.mission`).Scan(&n); err != nil {
+		return nil, err
+	}
+	id := fmt.Sprintf("M-%d", n)
+	hook("numbered", id)
+	// A proposal stating no budget takes the tenant's budget rule's; one
+	// inside the standing envelope in force starts at once (proposal §2).
+	if p.MaxAttempts == 0 && p.MaxWallHours == 0 {
+		b, err := inForce(ctx, tx, rules.KindBudget+":"+p.Tenant)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
-			Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, MaxAction: p.MaxAction,
-			MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
-			return nil, err
+		if b != nil {
+			p.MaxAttempts, p.MaxWallHours = b.Budget.Mission.MaxAttempts, b.Budget.Mission.MaxWallHours
 		}
-		inside, why := envelopeFit(env, p)
-		if !inside {
-			return map[string]any{"mission_id": id, "state": "proposed", "waiting": why}, nil
-		}
-		if err := MoveMission(ctx, tx, "controller", id, "active", fmt.Sprintf("inside %s v%d", env.ID, env.Version)); err != nil {
-			return nil, err
-		}
-		if _, err := tx.Exec(ctx, `UPDATE agentrt.mission SET envelope_rule_id = $2, envelope_rule_version = $3 WHERE mission_id = $1`,
-			id, env.ID, env.Version); err != nil {
-			return nil, err
-		}
-		return map[string]any{"mission_id": id, "state": "active", "envelope": map[string]any{"rule_id": env.ID, "rule_version": env.Version}}, nil
-	})
+	}
+	env, err := inForce(ctx, tx, rules.KindEnvelope+":"+p.Tenant)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
+		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, MaxAction: p.MaxAction,
+		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
+		return nil, err
+	}
+	inside, why := envelopeFit(env, p)
+	if !inside {
+		return map[string]any{"mission_id": id, "state": "proposed", "waiting": why}, nil
+	}
+	if err := MoveMission(ctx, tx, "controller", id, "active", fmt.Sprintf("inside %s v%d", env.ID, env.Version)); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE agentrt.mission SET envelope_rule_id = $2, envelope_rule_version = $3 WHERE mission_id = $1`,
+		id, env.ID, env.Version); err != nil {
+		return nil, err
+	}
+	return map[string]any{"mission_id": id, "state": "active", "envelope": map[string]any{"rule_id": env.ID, "rule_version": env.Version}}, nil
 }
 
 // TaskProposal is one task of a POST /missions/{id}/tasks batch. Ref names
@@ -443,73 +450,80 @@ func proposeTasks(ctx context.Context, db DB, w Writer, key, missionID string, t
 			if err := ensureWriter(ctx, tx, w, true); err != nil {
 				return nil, err
 			}
-			if err := lockBatch(ctx, tx, tasks); err != nil {
-				return nil, err
-			}
-			var state string
-			var maxAction *string
-			err := tx.QueryRow(ctx, `SELECT state, scope_json->>'max_action' FROM agentrt.mission WHERE mission_id = $1`,
-				missionID).Scan(&state, &maxAction)
-			if err != nil {
-				return nil, err
-			}
-			if !slices.Contains([]string{"proposed", "awaiting_owner", "active", "paused"}, state) {
-				return nil, fmt.Errorf("%w: mission %s is %s and takes no new tasks", ErrState, missionID, state)
-			}
-			ceiling := "branch"
-			if maxAction != nil {
-				ceiling = *maxAction
-			}
-			ids := map[string]string{}
-			out := make([]any, 0, len(tasks))
-			for _, t := range tasks {
-				if effectRank[t.Effect] > effectRank[ceiling] {
-					return nil, invalid("task %s: effect_class %s is above the mission's max_action %s", t.Ref, t.Effect, ceiling)
-				}
-				var kind string
-				if err := tx.QueryRow(ctx, `SELECT artifact_kind FROM agentrt.artifact WHERE artifact_id = $1`, t.SpecArtifact).Scan(&kind); err != nil {
-					if errors.Is(err, pgx.ErrNoRows) {
-						return nil, invalid("task %s: spec %s is not stored (upload it first)", t.Ref, t.SpecArtifact)
-					}
-					return nil, err
-				}
-				if kind != "task_spec" {
-					return nil, invalid("task %s: spec %s is a %s, not a task_spec", t.Ref, t.SpecArtifact, kind)
-				}
-				id := NewTaskID()
-				if _, err := ProposeTask(ctx, tx, w.Actor, Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
-					OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
-					SpecArtifact: t.SpecArtifact, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
-					Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}); err != nil {
-					return nil, err
-				}
-				hook("proposed", id)
-				ids[t.Ref] = id
-				out = append(out, map[string]any{"ref": t.Ref, "task_id": id})
-			}
-			for _, t := range tasks {
-				for _, d := range t.DependsOn {
-					on, inBatch := ids[d]
-					if !inBatch {
-						var m string
-						if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, d).Scan(&m); err != nil {
-							if errors.Is(err, pgx.ErrNoRows) {
-								return nil, invalid("task %s depends on %q, which is neither a ref of this proposal nor a task", t.Ref, d)
-							}
-							return nil, err
-						}
-						if m != missionID {
-							return nil, invalid("task %s depends on %s of mission %s; dependencies stay within a mission", t.Ref, d, m)
-						}
-						on = d
-					}
-					if _, err := AddDependency(ctx, tx, w.Actor, missionID, ids[t.Ref], on); err != nil {
-						return nil, err
-					}
-				}
-			}
-			return map[string]any{"mission_id": missionID, "tasks": out}, nil
+			return proposeTasksTx(ctx, tx, w, missionID, tasks)
 		})
+}
+
+// proposeTasksTx is ProposeTasks's write, in a transaction its caller holds
+// with the writer ensured (a goal's plan task, goal.go; a plan's tasks,
+// planresult.go). tasks have passed checkBatch.
+func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, tasks []TaskProposal) (map[string]any, error) {
+	if err := lockBatch(ctx, tx, tasks); err != nil {
+		return nil, err
+	}
+	var state string
+	var maxAction *string
+	err := tx.QueryRow(ctx, `SELECT state, scope_json->>'max_action' FROM agentrt.mission WHERE mission_id = $1`,
+		missionID).Scan(&state, &maxAction)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains([]string{"proposed", "awaiting_owner", "active", "paused"}, state) {
+		return nil, fmt.Errorf("%w: mission %s is %s and takes no new tasks", ErrState, missionID, state)
+	}
+	ceiling := "branch"
+	if maxAction != nil {
+		ceiling = *maxAction
+	}
+	ids := map[string]string{}
+	out := make([]any, 0, len(tasks))
+	for _, t := range tasks {
+		if effectRank[t.Effect] > effectRank[ceiling] {
+			return nil, invalid("task %s: effect_class %s is above the mission's max_action %s", t.Ref, t.Effect, ceiling)
+		}
+		var kind string
+		if err := tx.QueryRow(ctx, `SELECT artifact_kind FROM agentrt.artifact WHERE artifact_id = $1`, t.SpecArtifact).Scan(&kind); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, invalid("task %s: spec %s is not stored (upload it first)", t.Ref, t.SpecArtifact)
+			}
+			return nil, err
+		}
+		if kind != "task_spec" {
+			return nil, invalid("task %s: spec %s is a %s, not a task_spec", t.Ref, t.SpecArtifact, kind)
+		}
+		id := NewTaskID()
+		if _, err := ProposeTask(ctx, tx, w.Actor, Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,
+			OffPlanReason: t.OffPlanReason, Subject: t.Subject, Role: t.Role, Class: t.Class, Title: t.Title,
+			SpecArtifact: t.SpecArtifact, Effect: t.Effect, Repo: t.Repo, BaseCommit: t.BaseCommit, Core: t.Core,
+			Needs: t.Needs, HardLimit: t.HardLimit, Token: w.Token}); err != nil {
+			return nil, err
+		}
+		hook("proposed", id)
+		ids[t.Ref] = id
+		out = append(out, map[string]any{"ref": t.Ref, "task_id": id})
+	}
+	for _, t := range tasks {
+		for _, d := range t.DependsOn {
+			on, inBatch := ids[d]
+			if !inBatch {
+				var m string
+				if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, d).Scan(&m); err != nil {
+					if errors.Is(err, pgx.ErrNoRows) {
+						return nil, invalid("task %s depends on %q, which is neither a ref of this proposal nor a task", t.Ref, d)
+					}
+					return nil, err
+				}
+				if m != missionID {
+					return nil, invalid("task %s depends on %s of mission %s; dependencies stay within a mission", t.Ref, d, m)
+				}
+				on = d
+			}
+			if _, err := AddDependency(ctx, tx, w.Actor, missionID, ids[t.Ref], on); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return map[string]any{"mission_id": missionID, "tasks": out}, nil
 }
 
 // dispatchPage is how many proposed tasks Dispatch reads at a time.

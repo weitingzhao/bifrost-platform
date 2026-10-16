@@ -218,6 +218,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	}
 	src := agentRuntimeSources(ap, s.questionRuntime.agentRuntimeQuestion(), ci, rel)
 	src.Ack = s.questionRuntime.agentRuntimeAck()
+	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	return src
 }
 

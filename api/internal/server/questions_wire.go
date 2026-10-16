@@ -110,7 +110,7 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		return nil
 	}
 	return func(ctx context.Context, card store.Card) (string, error) {
-		raw, err := json.Marshal(map[string]any{
+		req := map[string]any{
 			"title":           questions.ClipTitle(card.Title),
 			"body":            card.Body,
 			"options":         []map[string]string{{"label": store.CardApply}, {"label": store.CardRefuse}},
@@ -118,7 +118,19 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			"meanwhile":       "the plan stays as it is",
 			"owner_duty":      "goal",
 			"idempotency_key": card.Key,
-		})
+		}
+		// A planner's card (W-31 2.2b): its own options and default; the
+		// work goes on with the default meanwhile.
+		if len(card.Options) > 0 {
+			options := make([]map[string]string, 0, len(card.Options))
+			for _, o := range card.Options {
+				options = append(options, map[string]string{"label": o})
+			}
+			req["options"], req["recommended"], req["meanwhile"] = options, card.Recommended, card.Meanwhile
+			req["owner_duty"], req["task_id"] = card.OwnerDuty, card.TaskID
+			req["urgency"] = "when you can: the work goes on with the recommended option"
+		}
+		raw, err := json.Marshal(req)
 		if err != nil {
 			return "", err
 		}

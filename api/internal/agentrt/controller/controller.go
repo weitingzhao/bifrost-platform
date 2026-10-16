@@ -28,7 +28,10 @@ type Sources struct {
 	Question func(ctx context.Context, id string) (q store.Question, ok bool)
 	// Ack tells the question store the runtime used the answer of a card it
 	// asked (a plan change's); nil acknowledges nothing.
-	Ack      func(ctx context.Context, id string) error
+	Ack func(ctx context.Context, id string) error
+	// Ask puts a plan's decision cards to the Owner (store.AcceptPlan); nil
+	// leaves a plan with questions submitted until there is one.
+	Ask      store.Ask
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
 }
@@ -183,6 +186,20 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 			moved++
 		}
 	}
+	// Plans handed in by the chief of staff's seat (W-31 2.2b).
+	plans, perr := store.PendingPlans(ctx, c.DB)
+	if perr != nil {
+		errs = append(errs, perr)
+	}
+	for _, id := range plans {
+		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk())
+		if err != nil {
+			errs = append(errs, fmt.Errorf("plan %s: %w", id, err))
+		}
+		if did != "" {
+			moved++
+		}
+	}
 	// Salvaged results of lost attempts get a check of their own (T34 case 8).
 	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
 	if perr != nil {
@@ -198,6 +215,25 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 		}
 	}
 	return moved, errors.Join(errs...)
+}
+
+// boundedAsk is Sources.Ask with the per-read timeout: a card that is not
+// made in time is an error, and the plan waits for the next pass.
+func (c *Controller) boundedAsk() store.Ask {
+	if c.Sources.Ask == nil {
+		return nil
+	}
+	return func(ctx context.Context, card store.Card) (string, error) {
+		type r struct {
+			id  string
+			err error
+		}
+		x := bounded(c, ctx, func(ctx context.Context) r { id, err := c.Sources.Ask(ctx, card); return r{id, err} })
+		if x.id == "" && x.err == nil {
+			return "", errors.New("the question store did not answer in time")
+		}
+		return x.id, x.err
+	}
 }
 
 // PlanDecisions is one pass of the plan decisions: proposals outside the

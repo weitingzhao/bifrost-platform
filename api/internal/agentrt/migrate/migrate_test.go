@@ -138,3 +138,54 @@ func TestUpgradeTo0005KeepsEvents(t *testing.T) {
 		t.Fatalf("events after a second run = %d (was %d) %v; changed: %v", after, before, err, rowsAfter != rowsBefore)
 	}
 }
+
+// 0006 on a database that already has events: they stay as they were, the
+// vocabulary gains decision_recorded and keeps every type it had (W-31 2.2b,
+// the Owner's D2 A).
+func TestUpgradeTo0006KeepsEvents(t *testing.T) {
+	ctx := context.Background()
+	db := agentrttest.New(t)
+	conn := db.Connect(t, db.Owner)
+	files, err := migrate.Files()
+	if err != nil || len(files) < 6 || files[5].ID != 6 {
+		t.Fatalf("files = %d %v", len(files), err)
+	}
+	if _, err = migrate.RunFiles(ctx, conn, "dev", files[:5]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.Seed(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	var before, after int
+	var rowsBefore, rowsAfter string
+	rows := `SELECT count(*), COALESCE(string_agg(to_jsonb(e)::text, E'\n' ORDER BY event_stream_id, seq), '') FROM agentrt.event e`
+	if err = conn.QueryRow(ctx, rows).Scan(&before, &rowsBefore); err != nil || before == 0 {
+		t.Fatalf("events before = %d %v", before, err)
+	}
+	constraint := `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'event_type_closed'`
+	var defBefore, def string
+	if err = conn.QueryRow(ctx, constraint).Scan(&defBefore); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := migrate.RunFiles(ctx, conn, "dev", files)
+	if err != nil || len(applied) != len(files)-5 || applied[0] != 6 {
+		t.Fatalf("applied %v %v", applied, err)
+	}
+	if err = conn.QueryRow(ctx, rows).Scan(&after, &rowsAfter); err != nil || after != before || rowsAfter != rowsBefore {
+		t.Fatalf("events after = %d (was %d) %v; changed: %v", after, before, err, rowsAfter != rowsBefore)
+	}
+	if err = conn.QueryRow(ctx, constraint).Scan(&def); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(def, "'decision_recorded'") || strings.Contains(defBefore, "'decision_recorded'") {
+		t.Fatalf("constraint before %q, after %q", defBefore, def)
+	}
+	for _, typ := range strings.Split(strings.TrimSpace(defBefore[strings.Index(defBefore, "ARRAY[")+6:strings.LastIndex(defBefore, "]")]), ",") {
+		if !strings.Contains(def, strings.TrimSpace(typ)) {
+			t.Fatalf("0006 dropped %s", typ)
+		}
+	}
+	if again, rerr := migrate.RunFiles(ctx, conn, "dev", files); rerr != nil || len(again) != 0 {
+		t.Fatalf("a second run applied %v %v", again, rerr)
+	}
+}
