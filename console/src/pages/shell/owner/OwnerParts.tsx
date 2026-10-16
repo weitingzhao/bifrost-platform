@@ -12,7 +12,7 @@ export function Card({ title, more, children, label, accent = false }: {
   return <section aria-label={label} className={`flex min-w-0 flex-col gap-3 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${accent ? 'border-[var(--color-warning)]' : 'border-[var(--card-border)]'}`}>
     <header className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="m-0 text-base font-semibold">{title}</h3>
-      {more && <a href={more.href} className="text-sm underline-offset-2 hover:underline">{more.text} ›</a>}
+      {more && <a href={more.href} className="-my-2 inline-flex min-h-11 items-center text-sm underline-offset-2 hover:underline">{more.text} ›</a>}
     </header>
     {children}
   </section>

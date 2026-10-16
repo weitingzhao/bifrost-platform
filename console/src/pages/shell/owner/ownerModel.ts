@@ -3,15 +3,11 @@ import type { RuntimeProgress } from '@/api/agentRuntime'
 import { record, text } from '@/api/agentRuntime'
 import type { RuntimeRound } from '@/api/agentRuntimePlan'
 import type { ProgressPool } from '@/api/agentProgressExtra'
-import {
-  annotateExpectedNeutralAlerts,
-  annotateStandbyAlerts,
-  mapAlerts,
-  type StandbyNodeRef,
-} from '@/lib/observability/alertMapping'
+import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/alertMapping'
 import type { MappedAlert } from '@/lib/observability/types'
-import type { WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
+import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
+import { isStandbyNoise, type StandbyEvidence } from './standbyEvidence'
 
 /**
  * The Owner Console (Owner 2026-10-16): what is his to do first, then what is worth a look, the
@@ -103,34 +99,19 @@ function alertDetail(alert: MappedAlert, now: number): string {
 }
 
 /**
- * An aggregate TargetDown (no instance) whose down share is no more than the standby nodes'
- * share is the standby node's scrape loss (1 of 6 nodes = 16.7%), for any all-node job.
+ * Firing alerts only, like the shell's verdict; a pending alert has not fired yet. Standby noise
+ * needs the cluster's evidence (`standbyEvidence.ts`); without it every alert stays real.
  */
-function standbyShare(alert: MappedAlert, raw: TelemetryAlertEntry | undefined, standby: number, total: number): boolean {
-  if (alert.name !== 'TargetDown' || standby === 0 || total === 0 || alert.labels.instance) return false
-  const value = Number(raw?.value)
-  return Number.isFinite(value) && value > 0 && value <= (standby / total) * 100 + 0.5
-}
-
-export function splitAlerts(
-  alerts: readonly TelemetryAlertEntry[],
-  standby: readonly StandbyNodeRef[],
-  nodeTotal: number,
-  now: number,
-): AlertSplit {
+export function splitAlerts(alerts: readonly TelemetryAlertEntry[], evidence: StandbyEvidence | null, now: number): AlertSplit {
   const firing = alerts.filter(a => a.state === 'firing')
-  const mapped = annotateExpectedNeutralAlerts(annotateStandbyAlerts(mapAlerts([...firing]), [...standby]))
-  const standbyPods = new Set(mapped.filter(a => a.standbyNeutral && a.labels.pod).map(a => a.labels.pod))
+  const mapped = annotateExpectedNeutralAlerts(mapAlerts([...firing]))
   const out: AlertSplit = { yours: [], worth: [], noise: 0, merged: 0, critical: 0, warning: 0 }
   const real: MappedAlert[] = []
-  mapped.forEach((alert, i) => {
+  for (const alert of mapped) {
     const severe = alert.severity === 'critical' || alert.severity === 'warning'
-    const noise = !severe || alert.standbyNeutral || alert.expectedNeutral
-      || (alert.labels.pod != null && standbyPods.has(alert.labels.pod))
-      || standbyShare(alert, firing[i], standby.length, nodeTotal)
-    if (noise) out.noise += 1
+    if (!severe || alert.expectedNeutral || isStandbyNoise(alert, evidence)) out.noise += 1
     else real.push(alert)
-  })
+  }
   const ownerNames = new Set(real.filter(a => OWNER_ALERTS[a.name]).map(a => a.name))
   for (const alert of real) {
     if ([...ownerNames].some(name => SAME_EVENT[name]?.(alert))) {
@@ -163,26 +144,34 @@ export function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 /** The one sentence at the top: is anything mine, then the four facts behind "no". */
+/**
+ * Yours = Needs you's decision items (no silent threads) plus the alerts only the Owner can
+ * clear. Either source loading or unread makes the whole count so (review 221 A1): an alert
+ * list that could not be read may hold the TWS login, so it never adds up to "nothing".
+ */
+export function yoursCount(decisions: NeedsYouCount, ownerAlerts: NeedsYouCount): NeedsYouCount {
+  return mergedWaitingCount([decisions, ownerAlerts])
+}
+
 export function ownerVerdict(input: {
-  waiting: NeedsYouCount
-  ownerAlerts: number
-  approvals: number
+  yours: NeedsYouCount
+  approvals: number | null
   running: number | null
   lane: string
   nodes: { ready: number; total: number } | null
 }): Verdict {
   const facts = [
-    input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
+    input.approvals == null ? 'approvals unknown' : input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
     input.running == null ? 'agents unknown' : input.running > 0 ? `${plural(input.running, 'agent')} running` : 'agents idle',
     input.lane,
     input.nodes == null ? 'nodes unknown' : `${input.nodes.ready} of ${input.nodes.total} nodes ready`,
   ]
   const line = facts.join(' · ')
-  if (input.waiting.state === 'loading') return { tone: 'muted', headline: 'Checking what is yours…', line }
-  if (input.waiting.state === 'unknown') {
-    return { tone: 'unknown', headline: 'Could not read everything waiting for you', line: `${input.waiting.reason} · ${line}` }
+  if (input.yours.state === 'loading') return { tone: 'muted', headline: 'Checking what is yours…', line }
+  if (input.yours.state === 'unknown') {
+    return { tone: 'unknown', headline: 'Could not read everything waiting for you', line: `${input.yours.reason} · ${line}` }
   }
-  const n = input.waiting.count + input.ownerAlerts
+  const n = input.yours.count
   if (n === 0) return { tone: 'ok', headline: 'Nothing needs you', line }
   return { tone: 'attention', headline: `${plural(n, 'thing')} ${n === 1 ? 'is' : 'are'} yours`, line }
 }

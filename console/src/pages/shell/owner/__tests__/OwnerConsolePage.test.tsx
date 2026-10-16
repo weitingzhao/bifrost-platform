@@ -1,24 +1,33 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { splitAlerts } from '../ownerModel'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
+import evidenceFixture from './fixtures/standby-evidence.prod.json'
+import type { TelemetryTargetEntry } from '@/api/clusterTypes'
+import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const mobile = vi.hoisted(() => ({ value: false }))
 const standbyKnown = vi.hoisted(() => ({ value: true }))
-vi.mock('@bifrost/ui', async importOriginal => ({ ...(await importOriginal<object>()), useIsMobile: () => mobile.value }))
+vi.mock('../useNarrowScreen', () => ({ useNarrowScreen: () => mobile.value }))
 
 function fake(): OwnerConsoleData {
-  const alerts = splitAlerts(alertsFixture.alerts as TelemetryAlertEntry[], standbyKnown.value ? [{ name: 'gpu-server', internalIp: '192.168.10.60' }] : [], 6, NOW)
+  const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
+    gaps: parseDaemonSetGaps(evidenceFixture.gaps), down: parseDownTargets(evidenceFixture.targets as TelemetryTargetEntry[]) }
+  const alerts = splitAlerts(alertsFixture.alerts as TelemetryAlertEntry[], standbyKnown.value ? evidence : null, NOW)
   const coordinator = { id: 'coordinator-0', title: 'Look at the goal cards', href: '#progress', instruction: 'Open Progress', coordinator: {} }
   return {
     now: NOW,
     needsYou: { count: { state: 'known', count: 1 }, decisionItems: [coordinator], silentItems: [{ id: 't1', title: 'thread', href: '#needs-you', instruction: '', kind: 'silent_thread' }],
       decide: [], openQuestions: [], runtimeItems: [], recentCount: { state: 'known', count: 11 } },
+    yours: { state: 'known', count: 2 },
+    standbyEvidence: standbyKnown.value ? 'read' : 'unread',
+    runtimeError: false,
+    runsError: null,
     verdict: { tone: 'attention', headline: '2 things are yours', line: 'Nothing to approve · agents idle · release lane free · 5 of 5 nodes ready' },
     badges: { you: { text: '2', tone: 'attention' }, system: { text: '1', tone: 'fail' }, data: { text: '2', tone: 'muted' } },
     alerts, alertsError: null,
@@ -42,6 +51,8 @@ function fake(): OwnerConsoleData {
 }
 
 vi.mock('../useOwnerConsole', () => ({ useOwnerConsole: () => fake() }))
+const submit = vi.hoisted(() => vi.fn(async () => ({ mission_id: 'M-9', mission_state: 'active', waiting: '', task_id: 't', repo: 'bifrost-platform', base_commit: '', spec_artifact_id: '' })))
+vi.mock('@/api/agentRuntime', async importOriginal => ({ ...(await importOriginal<object>()), submitRuntimeGoal: submit }))
 
 const { OwnerConsolePage } = await import('../OwnerConsolePage')
 
@@ -51,6 +62,7 @@ function show() {
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
 
 beforeEach(() => {
+  submit.mockClear()
   mobile.value = false
   standbyKnown.value = true
   window.history.replaceState(null, '', '#owner')
@@ -123,6 +135,22 @@ describe('Owner Console', () => {
     fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
     expect(headings()).toEqual(['Chief of staff'])
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toContain('kube-prometheus-stack-grafana targets down')
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('a second draft replaces the first, and only Submit sends it', async () => {
+    window.history.replaceState(null, '', '#owner?tab=all')
+    show()
+    const worth = screen.getByRole('region', { name: 'Worth a look' })
+    fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
+    fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[1])
+    const box = screen.getByLabelText('Goal') as HTMLTextAreaElement
+    expect(box.value).toContain('Job logical-backup-drill-manual-1 failed')
+    expect(box.value).not.toContain('grafana')
+    expect(submit).not.toHaveBeenCalled()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(submit.mock.calls[0][0]).toContain('Job logical-backup-drill-manual-1 failed')
   })
 
   it('marks quota read days ago as stale and the plan as kept by hand', () => {

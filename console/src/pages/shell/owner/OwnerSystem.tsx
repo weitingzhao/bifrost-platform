@@ -14,23 +14,27 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
   const { alerts, lane, nodes, nodeCount, now } = data
   const yoursCritical = alerts?.yours.filter(r => r.tone === 'fail').length ?? 0
   const running = data.inFlight.filter(r => r.kind === 'running')
+  // Nothing delivering needs every run list read; a free window alone does not say it (review 221 A6).
+  const runsRead = !data.runsLoading && data.runsError == null
   const laneTone = lane.state === 'free' && running.length > 0 ? 'info' : LANE_TONE[lane.state] ?? 'unknown'
   const laneHead = lane.state === 'free' ? (running.length ? `${plural(running.length, 'run')} delivering` : 'Free') : lane.state === 'held' ? 'Held' : lane.text
-  const laneLine = lane.state === 'free' ? (running.length ? 'nobody holds the window' : 'nobody holds it; nothing delivering') : lane.detail
+  const laneLine = lane.state !== 'free' ? lane.detail
+    : running.length ? 'nobody holds the window' : runsRead ? 'nobody holds it; nothing delivering' : 'nobody holds the window; runs not read yet'
   return <section aria-label="System" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">System</h2>
     <div className="grid gap-4 @3xl:grid-cols-2">
       <Card label="Health" title="Health" more={{ href: '#status', text: 'Status' }}>
         {data.alertsError && <p role="alert" className="m-0 text-sm">Alerts could not be read: {data.alertsError}</p>}
         <div className="grid grid-cols-2 gap-2">
-          <Stat value={alerts?.critical ?? '…'} label={yoursCritical > 0 && yoursCritical === alerts?.critical ? 'critical · yours' : 'critical'} tone={alerts && alerts.critical > 0 ? 'fail' : undefined} />
-          <Stat value={alerts?.warning ?? '…'} label="warnings" tone={alerts && alerts.warning > 0 ? 'warn' : undefined} />
+          <Stat value={alerts?.critical ?? (data.alertsError ? '?' : '…')} label={yoursCritical > 0 && yoursCritical === alerts?.critical ? 'critical · yours' : 'critical'} tone={alerts && alerts.critical > 0 ? 'fail' : undefined} />
+          <Stat value={alerts?.warning ?? (data.alertsError ? '?' : '…')} label="warnings firing" tone={alerts && alerts.warning > 0 ? 'warn' : undefined} />
         </div>
         {alerts && <p className="m-0 text-sm text-muted-foreground">Plus {plural(alerts.noise, 'alert')} from planned standby, info and the watchdog{alerts.merged > 0 ? `, and ${alerts.merged} told with another` : ''}.</p>}
       </Card>
       <Card label="Release lane" title="Release lane" more={{ href: '#releases', text: 'Releases' }}>
         <div className="flex flex-wrap items-center gap-2 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5"><Dot tone={laneTone} size="size-3" /><strong>{laneHead}</strong><span className="text-sm text-muted-foreground">{laneLine}</span></div>
         {data.runsLoading && <p className="m-0 text-sm text-muted-foreground">Reading release runs…</p>}
+        {data.runsError && <p role="alert" className="m-0 text-sm">Release runs could not be read: {data.runsError}</p>}
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-sm">
           {data.inFlight.map(run => <li key={run.name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <span className="min-w-0 break-words">{run.pipeline} <span className="text-muted-foreground">· {run.started}</span></span>

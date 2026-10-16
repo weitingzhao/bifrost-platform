@@ -3,18 +3,28 @@ import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
-import type { TelemetryAlertEntry } from '@/api/clusterTypes'
+import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, dataBadge, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, QUOTA_STALE_MS } from '../ownerModel'
+import { ago, dataBadge, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
+import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import { defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash } from '../ownerTabs'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
+import evidenceFixture from './fixtures/standby-evidence.prod.json'
 
 const alerts = alertsFixture.alerts as TelemetryAlertEntry[]
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const STANDBY = [{ name: 'gpu-server', internalIp: '192.168.10.60' }]
 
+const ev: StandbyEvidence = {
+  nodes: STANDBY,
+  pods: parseStandbyPods(evidenceFixture.pods),
+  gaps: parseDaemonSetGaps(evidenceFixture.gaps),
+  down: parseDownTargets(evidenceFixture.targets as TelemetryTargetEntry[]),
+}
+const alert = (labels: Record<string, string>, value = '1') => ({ labels: { severity: 'warning', ...labels }, annotations: {}, state: 'firing', active_at: '2026-10-16T10:00:00Z', value })
+
 describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
-  const split = splitAlerts(alerts, STANDBY, 6, NOW)
+  const split = splitAlerts(alerts, ev, NOW)
 
   it('makes the TWS login the Owner\'s, and tells the IB plugin with it', () => {
     expect(split.yours.map(r => r.title)).toEqual(['Log in to TWS for the IB secondary slot'])
@@ -34,47 +44,78 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(split.worth[3].detail).toBe('warning · bifrost-platform-prod · since 15 h ago')
   })
 
-  it('counts planned standby, info and the watchdog as noise: 19 of 25 firing', () => {
+  it('puts the 19 standby, info and watchdog alerts in noise, each on the cluster\'s evidence', () => {
     expect(split.noise).toBe(19)
     expect(split.critical).toBe(1)
     expect(split.warning).toBe(4)
     expect(split.noise + split.merged + split.yours.length + split.worth.length).toBe(alerts.filter(a => a.state === 'firing').length)
   })
 
-  it('a pod already counted as standby noise stays noise under another alert name', () => {
-    expect(split.worth.some(r => r.title.includes('promtail-7fxmt'))).toBe(false)
-  })
-
-  it('without a standby node, the node alerts are worth a look', () => {
-    const none = splitAlerts(alerts, [], 6, NOW)
+  it('without the evidence, every standby alert stays real', () => {
+    const none = splitAlerts(alerts, null, NOW)
+    expect(none.noise).toBe(2) // the watchdog and the standby marker (info)
     expect(none.worth.map(r => r.title)).toContain('Node is unreachable.')
-    expect(none.noise).toBeLessThan(split.noise)
+    expect(none.worth.map(r => r.title)).toContain('Pod promtail-7fxmt not ready')
   })
 
-  it('a share of targets down larger than the standby share is not noise', () => {
-    const twoDown = alerts.map(a => a.labels.job === 'monitoring/promtail' && a.labels.alertname === 'TargetDown' ? { ...a, value: '33.3' } : a)
-    expect(splitAlerts(twoDown, STANDBY, 6, NOW).worth.map(r => r.title)).toContain('monitoring/promtail targets down')
+  it('a target down on an active pod is real, whatever its share (review 221 A2)', () => {
+    const app = { ...ev, down: [...ev.down, { job: 'my-app', instance: '10.42.3.9:8080', node: '', namespace: 'apps', pod: 'my-app-1' }] }
+    expect(splitAlerts([alert({ alertname: 'TargetDown', job: 'my-app', namespace: 'apps' }, '10')], app, NOW).worth).toHaveLength(1)
+    const activeNode = { ...ev, down: [...ev.down, { job: 'node-exporter', instance: '192.168.10.70:9100', node: '', namespace: 'monitoring', pod: '' }] }
+    expect(splitAlerts([alert({ alertname: 'TargetDown', job: 'node-exporter', namespace: 'monitoring' }, '16.7')], activeNode, NOW).worth).toHaveLength(1)
+  })
+
+  it('a pod or DaemonSet on an active node is real, whatever its name (review 221 A3)', () => {
+    const pod = alert({ alertname: 'KubePodNotReady', namespace: 'monitoring', pod: 'node-reboot-required-zz9', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([pod], ev, NOW).worth).toHaveLength(1)
+    const twoDown = { ...ev, gaps: ev.gaps.map(g => g.daemonset === 'node-reboot-required' ? { ...g, gap: 2 } : g) }
+    const ds = alert({ alertname: 'KubeDaemonSetRolloutStuck', namespace: 'monitoring', daemonset: 'node-reboot-required', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([ds], ev, NOW).noise).toBe(1)
+    expect(splitAlerts([ds], twoDown, NOW).worth).toHaveLength(1)
+  })
+
+  it('a pod of the same name in another namespace is real (review 221 B1)', () => {
+    const other = alert({ alertname: 'KubePodNotReady', namespace: 'apps', pod: 'promtail-7fxmt', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([other], ev, NOW).worth).toHaveLength(1)
+  })
+
+  it('reads kube-state-metrics\' own pod label as the exporter, not the subject', () => {
+    const job = alert({ alertname: 'KubeJobFailed', namespace: 'data', job_name: 'x', pod: 'kube-prometheus-stack-kube-state-metrics-647cd7788b-jsmcl', container: 'kube-state-metrics' })
+    const withExporter = { ...ev, pods: [...ev.pods, { namespace: 'data', pod: 'kube-prometheus-stack-kube-state-metrics-647cd7788b-jsmcl', ip: '', daemonset: '' }] }
+    expect(splitAlerts([job], withExporter, NOW).worth).toHaveLength(1)
+  })
+
+  it('ignores a pending alert, like the shell\'s verdict', () => {
+    expect(splitAlerts([{ ...alert({ alertname: 'X', severity: 'critical' }), state: 'pending' }], ev, NOW)).toMatchObject({ critical: 0, noise: 0, worth: [] })
+  })
+
+  it('asks for the standby node\'s pods by name', () => {
+    expect(standbyPodsQuery(STANDBY)).toBe('kube_pod_info{node=~"gpu-server"}')
   })
 })
 
 describe('the verdict', () => {
-  const base = { ownerAlerts: 0, approvals: 0, running: 0, lane: 'release lane free', nodes: { ready: 5, total: 5 } }
+  const base = { approvals: 0, running: 0, lane: 'release lane free', nodes: { ready: 5, total: 5 } }
   it('says nothing needs him, with the four facts behind it', () => {
-    expect(ownerVerdict({ ...base, waiting: { state: 'known', count: 0 } })).toEqual({
+    expect(ownerVerdict({ ...base, yours: { state: 'known', count: 0 } })).toEqual({
       tone: 'ok', headline: 'Nothing needs you', line: 'Nothing to approve · agents idle · release lane free · 5 of 5 nodes ready' })
   })
   it('counts his alerts with his waiting items', () => {
-    const v = ownerVerdict({ ...base, ownerAlerts: 1, approvals: 1, running: 2, waiting: { state: 'known', count: 1 } })
+    const v = ownerVerdict({ ...base, approvals: 1, running: 2, yours: yoursCount({ state: 'known', count: 1 }, { state: 'known', count: 1 }) })
     expect(v.headline).toBe('2 things are yours')
     expect(v.tone).toBe('attention')
     expect(v.line).toBe('1 request to approve · 2 agents running · release lane free · 5 of 5 nodes ready')
   })
-  it('never says nothing needs him when a source could not be read', () => {
-    const v = ownerVerdict({ ...base, running: null, nodes: null, waiting: { state: 'unknown', reason: 'questions request failed' } })
-    expect(v.tone).toBe('unknown')
-    expect(v.headline).toBe('Could not read everything waiting for you')
-    expect(v.line).toContain('agents unknown')
-    expect(ownerVerdict({ ...base, waiting: { state: 'loading' } }).headline).toBe('Checking what is yours…')
+  it('alerts not read, or still loading, never add up to nothing (review 221 A1)', () => {
+    const unread = yoursCount({ state: 'known', count: 0 }, { state: 'unknown', reason: 'Alerts could not be read: HTTP 503' })
+    expect(unread).toEqual({ state: 'unknown', reason: 'Alerts could not be read: HTTP 503' })
+    expect(ownerVerdict({ ...base, yours: unread })).toMatchObject({ tone: 'unknown', headline: 'Could not read everything waiting for you' })
+    expect(yoursCount({ state: 'known', count: 0 }, { state: 'loading' })).toEqual({ state: 'loading' })
+    expect(ownerVerdict({ ...base, yours: { state: 'loading' } }).headline).toBe('Checking what is yours…')
+  })
+  it('says what it could not read in the facts too', () => {
+    const v = ownerVerdict({ ...base, approvals: null, running: null, nodes: null, yours: { state: 'unknown', reason: 'questions request failed' } })
+    expect(v.line).toBe('questions request failed · approvals unknown · agents unknown · release lane free · nodes unknown')
   })
   it('marks a coordinator item as kept by hand', () => {
     expect(waitingRow({ id: 'c', title: 'Look', href: '#progress', instruction: 'Open Progress', coordinator: {} }).hand).toBe(true)
@@ -116,6 +157,10 @@ describe('data tiles', () => {
     expect(backupTile({ data: undefined, error: 'HTTP 503' }, NOW)).toMatchObject({ tone: 'unknown', state: 'Unknown', detail: 'HTTP 503' })
     expect(marketTile({ data: undefined, error: 'plugin did not answer' }, '2026-10-16').tone).toBe('unknown')
   })
+  it('has no session of its own: an unreadable session is Unknown, not today in UTC (review 221 A5)', () => {
+    expect(marketTile({ data: [{ last_run_at: '2026-10-16T21:00:00Z' }], error: null }, null)).toMatchObject({ tone: 'unknown', state: 'Unknown' })
+    expect(marketTile({ data: [{ last_run_at: '2026-10-16T21:00:00Z' }], error: null }, undefined)).toMatchObject({ state: 'Loading' })
+  })
   it('counts the session\'s feeds that ran', () => {
     const tile = marketTile({ data: [{ last_run_at: '2026-10-16T21:00:00Z' }, { last_run_at: '2026-10-15T21:00:00Z' }], error: null }, '2026-10-16')
     expect(tile).toMatchObject({ figure: '1/2 for session', state: 'Partly in', tone: 'warn' })
@@ -135,6 +180,9 @@ describe('data tiles', () => {
       databases: [{ name: 'bifrost_prod', environment: 'prod', verdict: 'reference' }, { name: 'bifrost_dev', environment: 'dev', verdict: 'stale', lag_vs_prod_days: 13.2 },
         { name: 'bifrost_stg', environment: 'stg', verdict: 'stale', lag_vs_prod_days: 12.8 }] }, error: null })
     expect(tile).toMatchObject({ tone: 'warn', state: 'Stale', figure: '13 days', detail: 'dev and stg copies of PROD, oldest' })
+    const partly = copiesTile({ data: { cluster_id: '', reference_db: 'bifrost_prod', cache_hit: false, generated_at: '', fresh_threshold_days: 3, stale_threshold_days: 7,
+      databases: [{ name: 'bifrost_dev', environment: 'dev', verdict: 'fresh', lag_vs_prod_days: 0 }, { name: 'bifrost_stg', environment: 'stg', verdict: 'unknown' }] }, error: null })
+    expect(partly).toMatchObject({ tone: 'unknown', state: 'Unknown', detail: 'stg not read' })
     expect(dataBadge([tile, { ...tile, tone: 'ok' }, { ...tile, tone: 'muted' }, { ...tile, tone: 'unknown' }])).toBe(2)
   })
   it('writes ages in minutes, hours, then days', () => {

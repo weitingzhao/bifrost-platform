@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useIsMobile } from '@bifrost/ui'
 import { GoalForm } from '@/pages/shell/agents/GoalForm'
 import { OwnerData } from './OwnerData'
 import { Dot } from './OwnerParts'
@@ -8,7 +7,11 @@ import { OwnerWork } from './OwnerWork'
 import { OwnerYou } from './OwnerYou'
 import { TONE_COLOR, ago, type TabBadge, type Verdict } from './ownerModel'
 import { OWNER_TABS, defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash, type OwnerTab } from './ownerTabs'
+import { useNarrowScreen } from './useNarrowScreen'
 import { useOwnerConsole, type OwnerConsoleData } from './useOwnerConsole'
+
+const FOOTER_LINKS = [['#needs-you', 'Needs you'], ['#progress', 'Goals in progress'], ['#records', 'Records'], ['#status', 'Status'],
+  ['#releases', 'Releases'], ['#infrastructure', 'Infrastructure'], ['#data', 'Data']] as const
 
 const BADGE_STYLE: Record<string, string> = {
   attention: 'bg-[var(--color-lamp-yellow)] text-black',
@@ -66,7 +69,7 @@ function OwnerChief({ data, draft, draftKey }: { data: OwnerConsoleData; draft: 
       <div className="flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
         {last ? <p className="m-0 break-words"><strong>{last.mission} done</strong> {ago(last.at, data.now)}{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
-          : <p className="m-0 text-muted-foreground">No goal finished recently.</p>}
+          : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No goal finished recently.' : 'Reading the agent runtime…'}</p>}
         {last && <a href={`#progress?goal=${encodeURIComponent(last.mission)}`}>What it wrote and did</a>}
         <p className="m-0 text-muted-foreground">Morning and evening briefings, and asking it a question, come with the agents' inbox (plan step 2.3).</p>
       </div>
@@ -80,11 +83,11 @@ function OwnerChief({ data, draft, draftKey }: { data: OwnerConsoleData; draft: 
  * the tabs show one block at a time, All stacks them. Details stay on their own pages.
  */
 export function OwnerConsolePage() {
-  const isMobile = useIsMobile()
+  const narrow = useNarrowScreen()
   const [picked, setPicked] = useState<OwnerTab | null>(() => (typeof window === 'undefined' ? null : ownerTabFromHash(window.location.hash)))
-  const tab = picked ?? defaultOwnerTab(isMobile === true)
+  const tab = picked ?? defaultOwnerTab(narrow)
   const blocks = ownerBlocks(tab)
-  const data = useOwnerConsole({ system: blocks.system, work: blocks.work })
+  const data = useOwnerConsole({ system: blocks.system, work: blocks.work, chief: blocks.chief })
   const [draft, setDraft] = useState({ text: '', key: 0 })
 
   useEffect(() => {
@@ -113,9 +116,8 @@ export function OwnerConsolePage() {
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <OwnerSystem data={data} />}
     {blocks.data && <OwnerData data={data} />}
-    <footer className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[var(--table-rule)] pt-3 text-sm text-muted-foreground">
-      <span>More:</span><a href="#needs-you">Needs you</a><a href="#progress">Goals in progress</a><a href="#records">Records</a><a href="#status">Status</a>
-      <a href="#releases">Releases</a><a href="#infrastructure">Infrastructure</a><a href="#data">Data</a>
+    <footer className="flex flex-wrap items-center gap-x-4 border-t border-[var(--table-rule)] pt-1 text-sm text-muted-foreground">
+      <span>More:</span>{FOOTER_LINKS.map(([href, text]) => <a key={href} href={href} className="inline-flex min-h-11 items-center">{text}</a>)}
     </footer>
   </div>
 }

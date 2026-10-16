@@ -56,7 +56,7 @@ export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalR
           <option value="bifrost-platform">bifrost-platform</option>
         </select>
         <button type="submit" disabled={sending || !goal.trim() || goal.length > 2000}
-          className="min-h-11 rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 py-2 text-sm disabled:opacity-50 sm:min-h-0">{sending ? 'Submitting…' : 'Submit'}</button>
+          className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 py-2 text-sm disabled:opacity-50 pointer-coarse:min-h-11">{sending ? 'Submitting…' : 'Submit'}</button>
       </div>
       {error && <p role="alert">{error}</p>}
       {result && <div role="status">
