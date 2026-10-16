@@ -89,6 +89,29 @@ func TestInstallScriptRenders(t *testing.T) {
 	if value("EnvironmentVariables.AGENTD_CURSOR_KEY_FILE") != "" {
 		t.Error("no cursor key file, yet one is named")
 	}
+	if value("EnvironmentVariables.AGENTD_CLAUDE_TOKEN_FILE") != "" {
+		t.Error("no claude token file, yet one is named")
+	}
+	// Claude's token, when there, is named; one others can read is refused.
+	claudeToken := filepath.Join(config, "claude-oauth.token")
+	if err = os.WriteFile(claudeToken, []byte("fixture\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr != nil {
+		t.Fatalf("render with a claude token: %v\n%s", rerr, out)
+	}
+	if got := value("EnvironmentVariables.AGENTD_CLAUDE_TOKEN_FILE"); got != claudeToken {
+		t.Errorf("AGENTD_CLAUDE_TOKEN_FILE = %q, want %q", got, claudeToken)
+	}
+	if err = os.Chmod(claudeToken, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out, rerr := render(bin); rerr == nil || !strings.Contains(out, "must be mode 0600") {
+		t.Fatalf("a claude token readable by others: %v %s", rerr, out)
+	}
+	if err = os.Remove(claudeToken); err != nil {
+		t.Fatal(err)
+	}
 	// Cursor's key, when there, is named; one others can read is refused.
 	cursorKey := filepath.Join(config, "cursor-api.key")
 	if err = os.WriteFile(cursorKey, []byte("fixture\n"), 0o600); err != nil {

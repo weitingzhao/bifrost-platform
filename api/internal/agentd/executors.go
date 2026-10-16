@@ -150,7 +150,10 @@ func claudeExecutor(env []string) Executor {
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
-		return Spawn{Argv: append(argv, Prompt(a)), Env: env, Dir: a.Dir,
+		// The tool lists take every word that follows, and a prompt that begins
+		// with "-" is refused as an unknown option; "--" ends both (measured
+		// 10-15, claude 2.1.295; review 215 B1, B2).
+		return Spawn{Argv: append(argv, "--", Prompt(a)), Env: env, Dir: a.Dir,
 			After: func() error {
 				return streamResultReport("claude", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
 			}}, nil

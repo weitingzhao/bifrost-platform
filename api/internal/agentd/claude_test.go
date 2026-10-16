@@ -16,8 +16,14 @@ func TestClaudeExecutor(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if sp.Argv[0] != "claude" || sp.Dir != a.Dir || sp.After == nil || sp.Argv[len(sp.Argv)-1] != Prompt(a) {
+			if sp.Argv[0] != "claude" || sp.Dir != a.Dir || sp.After == nil || sp.Argv[len(sp.Argv)-1] != Prompt(a) ||
+				sp.Argv[len(sp.Argv)-2] != "--" {
 				t.Fatalf("claude = %+v", sp)
+			}
+			// Nothing but "--" may stand between the variadic tool lists and the
+			// prompt's place: every flag comes before it (review 215 B1).
+			if slices.Index(sp.Argv, "--") != len(sp.Argv)-2 {
+				t.Fatalf("\"--\" must come once, right before the prompt: %v", sp.Argv)
 			}
 			for _, flag := range []string{"-p", "--verbose", "--strict-mcp-config"} {
 				if !slices.Contains(sp.Argv, flag) {
