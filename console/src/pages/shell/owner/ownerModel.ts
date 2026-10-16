@@ -7,7 +7,7 @@ import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/al
 import type { MappedAlert } from '@/lib/observability/types'
 import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
-import { isStandbyNoise, type StandbyEvidence } from './standbyEvidence'
+import { standbyVerdict, type StandbyEvidence } from './standbyEvidence'
 
 /**
  * The Owner Console (Owner 2026-10-16): what is his to do first, then what is worth a look, the
@@ -75,7 +75,7 @@ export function waitingRow(item: WaitingItem): OwnerRow {
 export type AlertSplit = {
   yours: OwnerRow[]
   worth: OwnerRow[]
-  /** Planned standby, catalog noise, info and the watchdog: counted, not listed. */
+  /** Planned standby (proven), catalog noise, info and the watchdog: counted, not listed. */
   noise: number
   /** Told once with an Owner alert (the IB plugin degraded with the TWS login). */
   merged: number
@@ -107,9 +107,12 @@ export function splitAlerts(alerts: readonly TelemetryAlertEntry[], evidence: St
   const mapped = annotateExpectedNeutralAlerts(mapAlerts([...firing]))
   const out: AlertSplit = { yours: [], worth: [], noise: 0, merged: 0, critical: 0, warning: 0 }
   const real: MappedAlert[] = []
+  const likely: MappedAlert[] = []
   for (const alert of mapped) {
     const severe = alert.severity === 'critical' || alert.severity === 'warning'
-    if (!severe || alert.expectedNeutral || isStandbyNoise(alert, evidence)) out.noise += 1
+    const standby = severe && !alert.expectedNeutral ? standbyVerdict(alert, evidence) : 'noise'
+    if (!severe || alert.expectedNeutral || standby === 'noise') out.noise += 1
+    else if (standby === 'likely') likely.push(alert)
     else real.push(alert)
   }
   const ownerNames = new Set(real.filter(a => OWNER_ALERTS[a.name]).map(a => a.name))
@@ -131,6 +134,20 @@ export function splitAlerts(alerts: readonly TelemetryAlertEntry[], evidence: St
     const title = alertTitle(alert)
     out.worth.push({ id: alert.id, title, detail: alertDetail(alert, now), tone, since: alert.activeAt, whose: 'No goal yet',
       goalDraft: `Find out why "${title}" (${alert.name}) has been firing since ${alert.activeAt?.slice(0, 16).replace('T', ' ') ?? 'it started'} UTC, and fix the cause or say why it should keep firing.` })
+  }
+  if (likely.length) {
+    // Listed, as one row: the counts fit the standby node, but nothing says which pod is short.
+    for (const alert of likely) {
+      if (alert.severity === 'critical') out.critical += 1
+      else out.warning += 1
+    }
+    const sets = [...new Set(likely.map(a => a.labels.daemonset).filter(Boolean))]
+    const nodes = (evidence?.nodes ?? []).map(n => n.name).join(', ')
+    const since = likely.map(a => a.activeAt ?? '').filter(Boolean).sort()[0]
+    out.worth.push({ id: 'standby-daemonsets', title: `${plural(likely.length, 'DaemonSet alert')} that fit ${nodes} being on standby`,
+      detail: `${sets.join(', ')} · since ${ago(since, now)}`, tone: likely.some(a => a.severity === 'critical') ? 'fail' : 'warn', since,
+      whose: 'Likely the planned standby; not proven',
+      goalDraft: `Check whether the DaemonSet alerts for ${sets.join(', ')} come only from ${nodes} being on standby; if so make them stop firing while it sleeps, otherwise fix the cause.` })
   }
   const order = (r: OwnerRow) => (r.tone === 'fail' ? 0 : 1)
   out.worth.sort((a, b) => order(a) - order(b) || (a.since ?? '').localeCompare(b.since ?? ''))

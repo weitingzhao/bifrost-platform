@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -52,6 +52,8 @@ beforeEach(() => {
   api.goal.mockResolvedValue({ mission: { goal: 'Add a comment' }, tasks: [], events: [] })
 })
 
+afterEach(() => onlineManager.setOnline(true))
+
 describe('useOwnerConsole', () => {
   it('nothing waiting and every source read: Nothing needs you', async () => {
     const { result } = run()
@@ -90,6 +92,23 @@ describe('useOwnerConsole', () => {
     expect(result.current.lane.state).toBe('free')
   })
 
+  it('a run list paused offline is unread, even with a good answer before it (review 222 A-R3)', async () => {
+    const { result, client } = run({ system: true, work: false, chief: false })
+    await waitFor(() => expect(result.current.runsRead).toBe(true))
+    onlineManager.setOnline(false)
+    void client.refetchQueries({ queryKey: ['delivery', 'runs', 'bifrost-deliver-platform'] })
+    await waitFor(() => expect(result.current.runsRead).toBe(false))
+    expect(result.current.runsError).toBe('offline')
+  })
+
+  it('opened offline, the run lists are unread, not empty', async () => {
+    onlineManager.setOnline(false)
+    const { result } = run({ system: true, work: false, chief: false })
+    await waitFor(() => expect(result.current.runsError).toBe('offline'))
+    expect(result.current.runsRead).toBe(false)
+    expect(result.current.inFlight).toEqual([])
+  })
+
   it('reads release runs only while System is shown', async () => {
     const { result } = run()
     await waitFor(() => expect(result.current.verdict.headline).toBe('Nothing needs you'))
@@ -114,7 +133,7 @@ describe('useOwnerConsole', () => {
     api.promql.mockImplementation(async (q: string) => ({ query: q, points: q.startsWith('kube_pod_info') ? evidenceFixture.pods : evidenceFixture.gaps }))
     api.targets.mockResolvedValue({ active_targets: evidenceFixture.targets })
     const read = run()
-    await waitFor(() => expect(read.result.current.alerts?.noise).toBe(19))
+    await waitFor(() => expect(read.result.current.alerts?.noise).toBe(13))
     expect(read.result.current.standbyEvidence).toBe('read')
     expect(api.promql).toHaveBeenCalledWith('kube_pod_info{node=~"gpu-server"}')
 

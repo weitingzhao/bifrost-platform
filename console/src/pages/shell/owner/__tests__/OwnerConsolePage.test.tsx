@@ -28,6 +28,7 @@ function fake(): OwnerConsoleData {
     standbyEvidence: standbyKnown.value ? 'read' : 'unread',
     runtimeError: false,
     runsError: null,
+    runsRead: true,
     verdict: { tone: 'attention', headline: '2 things are yours', line: 'Nothing to approve · agents idle · release lane free · 5 of 5 nodes ready' },
     badges: { you: { text: '2', tone: 'attention' }, system: { text: '1', tone: 'fail' }, data: { text: '2', tone: 'muted' } },
     alerts, alertsError: null,
@@ -112,6 +113,8 @@ describe('Owner Console', () => {
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)
+    expect(worth).toHaveTextContent('6 DaemonSet alerts that fit gpu-server being on standby')
+    expect(worth).toHaveTextContent('Likely the planned standby; not proven')
     expect(worth).toHaveTextContent('1 Claude thread went quiet mid-turn')
     expect(worth).toHaveTextContent('The coordinator checks them')
   })

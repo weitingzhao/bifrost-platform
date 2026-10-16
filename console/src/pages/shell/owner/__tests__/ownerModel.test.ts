@@ -6,7 +6,7 @@ import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
 import { ago, dataBadge, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
-import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
+import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import { defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash } from '../ownerTabs'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
@@ -33,22 +33,27 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(split.merged).toBe(1)
   })
 
-  it('lists the four real warnings, oldest first, each with no goal yet and a goal draft', () => {
+  it('lists the four real warnings, oldest first, and the standby-shaped DaemonSet alerts as one row', () => {
     expect(split.worth.map(r => r.title)).toEqual([
       'kube-prometheus-stack-grafana targets down',
       'Job logical-backup-drill-manual-1 failed',
+      '6 DaemonSet alerts that fit gpu-server being on standby',
       'PostgreSQL connection count high',
       'Bifrost API high P99 latency',
     ])
-    expect(split.worth.every(r => r.whose === 'No goal yet' && r.goalDraft?.includes('fix the cause'))).toBe(true)
-    expect(split.worth[3].detail).toBe('warning · bifrost-platform-prod · since 15 h ago')
+    expect(split.worth.filter(r => r.whose === 'No goal yet').length).toBe(4)
+    expect(split.worth.every(r => r.goalDraft?.includes('fix the cause'))).toBe(true)
+    expect(split.worth[2]).toMatchObject({ whose: 'Likely the planned standby; not proven',
+      detail: 'kube-prometheus-stack-prometheus-node-exporter, node-reboot-required, promtail, svclb-traefik-8df577f9 · since 6 days ago' })
+    expect(split.worth[4].detail).toBe('warning · bifrost-platform-prod · since 15 h ago')
   })
 
-  it('puts the 19 standby, info and watchdog alerts in noise, each on the cluster\'s evidence', () => {
-    expect(split.noise).toBe(19)
+  it('puts the 13 proven standby, info and watchdog alerts in noise; the DaemonSet ones stay counted', () => {
+    expect(split.noise).toBe(13)
     expect(split.critical).toBe(1)
-    expect(split.warning).toBe(4)
-    expect(split.noise + split.merged + split.yours.length + split.worth.length).toBe(alerts.filter(a => a.state === 'firing').length)
+    expect(split.warning).toBe(10)
+    // Every firing alert is counted once: noise, told with another, or critical / warning (the DaemonSet row stands for six).
+    expect(split.noise + split.merged + split.critical + split.warning).toBe(alerts.filter(a => a.state === 'firing').length)
   })
 
   it('without the evidence, every standby alert stays real', () => {
@@ -70,8 +75,30 @@ describe('alerts on the Owner Console (PROD, 2026-10-16 15:10 CDT)', () => {
     expect(splitAlerts([pod], ev, NOW).worth).toHaveLength(1)
     const twoDown = { ...ev, gaps: ev.gaps.map(g => g.daemonset === 'node-reboot-required' ? { ...g, gap: 2 } : g) }
     const ds = alert({ alertname: 'KubeDaemonSetRolloutStuck', namespace: 'monitoring', daemonset: 'node-reboot-required', container: 'kube-state-metrics', job: 'kube-state-metrics' })
-    expect(splitAlerts([ds], ev, NOW).noise).toBe(1)
-    expect(splitAlerts([ds], twoDown, NOW).worth).toHaveLength(1)
+    expect(splitAlerts([ds], twoDown, NOW).worth.map(r => r.title)).toEqual(['DaemonSet node-reboot-required rollout stuck'])
+  })
+
+  it('a DaemonSet short by one pod is never hidden: the count fits, but not which pod (review 222 A-R1)', () => {
+    const ds = alert({ alertname: 'KubeDaemonSetRolloutStuck', namespace: 'monitoring', daemonset: 'node-reboot-required', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    const split1 = splitAlerts([ds], ev, NOW)
+    expect(split1.noise).toBe(0)
+    expect(split1.worth).toHaveLength(1)
+    expect(split1.worth[0].whose).toBe('Likely the planned standby; not proven')
+    expect(split1.warning).toBe(1)
+  })
+
+  it('adds a DaemonSet\'s unavailable and mis-scheduled pods (review 222 A-R1)', () => {
+    expect(DAEMONSET_GAPS_QUERY).toBe('kube_daemonset_status_number_unavailable + kube_daemonset_status_number_misscheduled > 0')
+  })
+
+  it('a pod named in another namespace stays real even when its address is a standby pod\'s (review 222 A-R2)', () => {
+    const crash = alert({ alertname: 'KubePodCrashLooping', namespace: 'apps', pod: 'other-pod', instance: '10.42.4.163:8080' })
+    expect(splitAlerts([crash], ev, NOW).worth).toHaveLength(1)
+  })
+
+  it('a named active node wins over a cached standby pod of the same name (review 222 A-R2)', () => {
+    const moved = alert({ alertname: 'KubePodNotReady', namespace: 'monitoring', pod: 'promtail-7fxmt', node: 'ubt-k3s-02', container: 'kube-state-metrics', job: 'kube-state-metrics' })
+    expect(splitAlerts([moved], ev, NOW).worth).toHaveLength(1)
   })
 
   it('a pod of the same name in another namespace is real (review 221 B1)', () => {

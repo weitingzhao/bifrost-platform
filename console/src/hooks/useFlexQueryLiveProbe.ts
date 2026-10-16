@@ -7,7 +7,7 @@ import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 export type FlexQueryLiveProbeState = {
   status: MarketDataStatusResponse | undefined
   isLoading: boolean
-  /** The latest read failed; `probeReach` may still show the last answer that arrived. */
+  /** The latest read failed or is paused offline; `probeReach` may still show the last answer that arrived. */
   readFailed: boolean
   probeReach: 'ok' | 'degraded' | 'fail' | 'unknown'
   summary: string
@@ -61,7 +61,7 @@ export function useFlexQueryLiveProbe(refetchIntervalMs = 30_000): FlexQueryLive
   return {
     status,
     isLoading: statusQ.isLoading,
-    readFailed: statusQ.isError,
+    readFailed: statusQ.isError || statusQ.isPaused,
     probeReach: probeReach(status, statusQ.isError),
     summary:
       status?.summary ??

@@ -15,7 +15,7 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
   const yoursCritical = alerts?.yours.filter(r => r.tone === 'fail').length ?? 0
   const running = data.inFlight.filter(r => r.kind === 'running')
   // Nothing delivering needs every run list read; a free window alone does not say it (review 221 A6).
-  const runsRead = !data.runsLoading && data.runsError == null
+  const runsRead = data.runsRead
   const laneTone = lane.state === 'free' && running.length > 0 ? 'info' : LANE_TONE[lane.state] ?? 'unknown'
   const laneHead = lane.state === 'free' ? (running.length ? `${plural(running.length, 'run')} delivering` : 'Free') : lane.state === 'held' ? 'Held' : lane.text
   const laneLine = lane.state !== 'free' ? lane.detail

@@ -28,8 +28,8 @@ export function standbyPodsQuery(nodes: readonly StandbyNodeRef[]): string {
   return `kube_pod_info{node=~"${names}"}`
 }
 
-/** Each DaemonSet's pods that are unavailable or on a node they should not be on. */
-export const DAEMONSET_GAPS_QUERY = 'kube_daemonset_status_number_unavailable > 0 or kube_daemonset_status_number_misscheduled > 0'
+/** Each DaemonSet's pods that are unavailable plus those on a node they should not be on (`+`, not `or`: `or` keeps one of the two). */
+export const DAEMONSET_GAPS_QUERY = 'kube_daemonset_status_number_unavailable + kube_daemonset_status_number_misscheduled > 0'
 
 export function parseStandbyPods(points: readonly PromSamplePoint[]): StandbyPod[] {
   return points.map(p => p.labels ?? {}).filter(l => l.namespace && l.pod).map(l => ({
@@ -58,37 +58,56 @@ export function parseDownTargets(targets: readonly TelemetryTargetEntry[]): Down
 
 const host = (instance: string) => instance.trim().toLowerCase().replace(/:\d+$/, '')
 
-function onStandbyNode(ev: StandbyEvidence, node: string, instance: string): boolean {
-  const h = host(instance)
-  return ev.nodes.some(n => (node !== '' && node === n.name) || (h !== '' && (h === n.name.toLowerCase() || h === (n.internalIp ?? '').toLowerCase())))
+function standbyNode(ev: StandbyEvidence, node: string): boolean {
+  return ev.nodes.some(n => node === n.name)
 }
 
-function standbyPod(ev: StandbyEvidence, namespace: string, pod: string, instance = ''): boolean {
+function standbyHost(ev: StandbyEvidence, instance: string): boolean {
   const h = host(instance)
-  return ev.pods.some(p => (namespace !== '' && pod !== '' && p.namespace === namespace && p.pod === pod) || (h !== '' && p.ip !== '' && h === p.ip))
+  return h !== '' && ev.nodes.some(n => h === n.name.toLowerCase() || h === (n.internalIp ?? '').toLowerCase())
+}
+
+/** A pod is named by namespace and name; an IP never overrides a name (review 222 A-R2). */
+function standbyPodNamed(ev: StandbyEvidence, namespace: string, pod: string): boolean {
+  return namespace !== '' && pod !== '' && ev.pods.some(p => p.namespace === namespace && p.pod === pod)
+}
+
+/** A scrape target: by its node, else by its pod's name, else (nothing else to go on) by its address. */
+function standbyTarget(ev: StandbyEvidence, t: DownTarget): boolean {
+  if (t.node !== '') return standbyNode(ev, t.node)
+  if (t.pod !== '') return standbyPodNamed(ev, t.namespace, t.pod)
+  const h = host(t.instance)
+  return standbyHost(ev, t.instance) || (h !== '' && ev.pods.some(p => p.ip !== '' && p.ip === h))
 }
 
 const NODE_ALERTS = /^(KubeNodeNotReady|KubeNodeUnreachable|KubeletInstanceUnreachable)$/
 const DAEMONSET_ALERTS = /^KubeDaemonSet(RolloutStuck|MisScheduled|NotScheduled)$/
 
-/** True only when the evidence puts every failing part of this alert on a standby node. */
-export function isStandbyNoise(alert: MappedAlert, ev: StandbyEvidence | null): boolean {
-  if (!ev || ev.nodes.length === 0) return false
+/**
+ * `noise`: the evidence puts every failing part of the alert on a standby node. `likely`: a
+ * DaemonSet short by no more pods than it has on standby nodes; the metrics do not say which pod
+ * is short, so it is listed, not hidden (review 222 A-R1). `real`: anything else.
+ */
+export type StandbyVerdict = 'noise' | 'likely' | 'real'
+
+export function standbyVerdict(alert: MappedAlert, ev: StandbyEvidence | null): StandbyVerdict {
+  if (!ev || ev.nodes.length === 0) return 'real'
   const l = alert.labels
-  if (NODE_ALERTS.test(alert.name)) return onStandbyNode(ev, l.node ?? '', l.instance ?? '')
+  if (NODE_ALERTS.test(alert.name)) return standbyNode(ev, l.node ?? '') || standbyHost(ev, l.instance ?? '') ? 'noise' : 'real'
   if (DAEMONSET_ALERTS.test(alert.name)) {
     const ns = l.namespace ?? '', ds = l.daemonset ?? ''
     const onStandby = ev.pods.filter(p => p.namespace === ns && p.daemonset === ds).length
     const gap = ev.gaps.find(g => g.namespace === ns && g.daemonset === ds)?.gap ?? 0
-    return onStandby > 0 && gap > 0 && gap <= onStandby
+    return onStandby > 0 && gap > 0 && gap <= onStandby ? 'likely' : 'real'
   }
   if (alert.name === 'TargetDown') {
     const down = ev.down.filter(t => t.job === (l.job ?? '') && (!l.namespace || !t.namespace || t.namespace === l.namespace)
       && (!l.instance || t.instance === l.instance))
-    return down.length > 0 && down.every(t => onStandbyNode(ev, t.node, t.instance) || standbyPod(ev, t.namespace, t.pod, t.instance))
+    return down.length > 0 && down.every(t => standbyTarget(ev, t)) ? 'noise' : 'real'
   }
-  // A pod-scoped alert names its pod; kube-state-metrics' own pod label is the exporter's, not the subject's.
+  // A named node that is not on standby wins over anything else (review 222 A-R2).
+  if (l.node) return 'real'
+  // A pod-scoped alert names its pod; kube-state-metrics' own pod and instance labels are the exporter's.
   const subjectPod = alert.name.startsWith('KubePod') || l.container !== 'kube-state-metrics'
-  if (subjectPod && l.pod) return standbyPod(ev, l.namespace ?? '', l.pod, l.instance ?? '')
-  return false
+  return subjectPod && standbyPodNamed(ev, l.namespace ?? '', l.pod ?? '') ? 'noise' : 'real'
 }

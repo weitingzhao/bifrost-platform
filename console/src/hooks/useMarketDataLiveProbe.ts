@@ -5,7 +5,7 @@ import type { MarketDataStatusResponse } from '@/api/satelliteBusTypes'
 export type MarketDataLiveProbeState = {
   status: MarketDataStatusResponse | undefined
   isLoading: boolean
-  /** The latest read failed; `probeReach` may still show the last answer that arrived. */
+  /** The latest read failed or is paused offline; `probeReach` may still show the last answer that arrived. */
   readFailed: boolean
   isConfigured: boolean
   probeReach: 'ok' | 'degraded' | 'fail' | 'unknown'
@@ -44,7 +44,7 @@ export function useMarketDataLiveProbe(refetchIntervalMs = 30_000): MarketDataLi
   return {
     status,
     isLoading: statusQ.isLoading,
-    readFailed: statusQ.isError,
+    readFailed: statusQ.isError || statusQ.isPaused,
     isConfigured,
     probeReach: probeReach(status, statusQ.isError),
     summary:

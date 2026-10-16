@@ -5,7 +5,7 @@ import type { IbGatewayStatusResponse } from '@/api/satelliteBusTypes'
 export type IbGatewayLiveProbeState = {
   status: IbGatewayStatusResponse | undefined
   isLoading: boolean
-  /** The latest read failed; `probeReach` may still show the last answer that arrived. */
+  /** The latest read failed or is paused offline; `probeReach` may still show the last answer that arrived. */
   readFailed: boolean
   isConfigured: boolean
   probeReach: 'ok' | 'degraded' | 'fail' | 'unknown'
@@ -41,7 +41,7 @@ export function useIbGatewayLiveProbe(refetchIntervalMs = 30_000): IbGatewayLive
   return {
     status,
     isLoading: statusQ.isLoading,
-    readFailed: statusQ.isError,
+    readFailed: statusQ.isError || statusQ.isPaused,
     isConfigured,
     probeReach: probeReach(status, statusQ.isError),
     summary: status?.summary ?? (statusQ.isLoading ? 'Probing ib-gateway via platform-api…' : status?.hint ?? status?.error ?? '…'),

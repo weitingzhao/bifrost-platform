@@ -116,9 +116,11 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const laneText = lane.state === 'free' ? 'release lane free' : lane.state === 'held' ? 'release lane held' : 'release lane unknown'
   const records = current(recordsQ)?.records ?? []
   const runs = splitReleaseRuns(pipelineNames.map((pipeline, i) => ({ pipeline, runs: current(runQs[i])?.runs ?? [] })), records)
-  // "Nothing delivering" needs every run list read (review 221 A6).
-  const runsError = [pipelinesQ, recordsQ, ...runQs].map(q => (q.isError ? errorText(q.error) : null)).find(e => e != null) ?? null
-  const runsLoading = blocks.system && (pipelinesQ.isLoading || recordsQ.isLoading || runQs.some(q => q.isLoading))
+  // "Nothing delivering" needs every run list read now: an error, an offline pause or no answer yet is unread (review 221 A6, 222 A-R3).
+  const runSources = [pipelinesQ, recordsQ, ...runQs]
+  const runsRead = blocks.system && runSources.every(q => q.data !== undefined && !q.isError && !q.isPaused)
+  const runsError = runSources.map(q => (q.isError ? errorText(q.error) : q.isPaused ? 'offline' : null)).find(e => e != null) ?? null
+  const runsLoading = blocks.system && !runsRead && runsError == null
 
   const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null,
     running: work ? work.running : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
@@ -176,6 +178,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     lane,
     inFlight: runs.inProgress,
     records: records.slice(0, 4),
+    runsRead,
     runsLoading,
     runsError,
     tiles,
