@@ -9,12 +9,12 @@ import (
 )
 
 // MCP isolation, failing closed (review 163 A8). A task's agent must not get
-// the host user's MCP servers (the platform's tools among them). Neither CLI
-// on the host has a switch that clears them: codex's -c mcp_servers={} does
+// the host user's MCP servers (the platform's tools among them). Neither
+// codex nor cursor has a switch that clears them: codex's -c mcp_servers={} does
 // not (measured 10-14: it still lists the user's servers), and cursor loads
-// ~/.cursor/mcp.json whatever its flags. So agentd offers an agent executor
+// ~/.cursor/mcp.json whatever its flags. So agentd offers these two executors
 // only on a host whose user has no MCP server that executor would load, and
-// never offers one it could not check.
+// never offers one it could not check. Claude clears MCP configuration itself.
 
 // MCPCheck counts the MCP servers an executor would load for this user.
 type MCPCheck func() (int, error)
@@ -66,6 +66,8 @@ func CursorMCP() (int, error) {
 }
 
 // MCPChecks are the checks of the executors that need one.
+// Claude needs no check: --strict-mcp-config with an empty --mcp-config
+// excludes the host user's servers on every run.
 var MCPChecks = map[string]MCPCheck{"exec:codex": CodexMCP, "exec:cursor": CursorMCP}
 
 // Isolated keeps the executors whose MCP check finds nothing, and says why

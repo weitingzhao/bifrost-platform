@@ -16,12 +16,12 @@ import (
 )
 
 // The executors of round 2 (design v5 §5.2 「执行者」): deterministic (the
-// spec's verify commands, run by agentd itself), codex and cursor, with the
-// flags their --help gives on the host (10-13). Each runs with an
+// spec's verify commands, run by agentd itself), codex, cursor and claude, with the
+// flags their --help gives on the host (10-13; claude 10-15). Each runs with an
 // environment rebuilt from an allow list: no admin kubeconfig, no operator or
-// admin token, no business key reaches a task. Neither agent CLI can be told
-// to leave the host user's MCP servers out, so an agent executor is offered
-// only where that user has none (mcpguard.go).
+// admin token, no business key reaches a task. Codex and cursor are offered
+// only where the host user has no MCP servers (mcpguard.go); claude ignores
+// the host's MCP configuration and has only read-only tools.
 
 // allowedEnv are the variables an executor may see.
 var allowedEnv = map[string]bool{"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true, "LANG": true,
@@ -66,6 +66,9 @@ type Secrets struct {
 	// login in the macOS keychain, which a user that never logged in to the
 	// desktop does not have, and a daemon has no session to unlock (10-15).
 	CursorAPIKey string
+	// ClaudeOAuthToken reaches claude alone as CLAUDE_CODE_OAUTH_TOKEN,
+	// avoiding the daemon user's locked or absent macOS keychain as well.
+	ClaudeOAuthToken string
 }
 
 // cursorMemoryStore keeps cursor from the keychain when it has a key: even
@@ -82,10 +85,15 @@ func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	if s.CursorAPIKey != "" {
 		cursorEnv = append(append([]string{}, env...), "CURSOR_API_KEY="+s.CursorAPIKey, cursorMemoryStore)
 	}
+	claudeEnv := env
+	if s.ClaudeOAuthToken != "" {
+		claudeEnv = append(append([]string{}, env...), "CLAUDE_CODE_OAUTH_TOKEN="+s.ClaudeOAuthToken)
+	}
 	return map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),
 		"exec:codex":         codexExecutor(env),
 		"exec:cursor":        cursorExecutor(cursorEnv),
+		"exec:claude":        claudeExecutor(claudeEnv),
 	}
 }
 
@@ -125,36 +133,73 @@ func cursorExecutor(env []string) Executor {
 			argv = append(argv, "--model", m)
 		}
 		return Spawn{Argv: append(argv, Prompt(a)), Env: env, Dir: a.Dir,
-			After: func() error { return cursorReport(filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md")) }}, nil
+			After: func() error {
+				return streamResultReport("cursor", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
+			}}, nil
 	}
 }
 
-// cursorReport writes the result of cursor's stream-json output (its last
+func claudeExecutor(env []string) Executor {
+	return func(a *Attempt) (Spawn, error) {
+		argv := []string{"claude", "-p", "--output-format", "stream-json",
+			"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`,
+			"--allowedTools", "Read,Grep,Glob",
+			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
+			// allowedTools grants permission; tools limits the available built-ins.
+			"--tools", "Read,Grep,Glob", "--verbose"}
+		if m := a.Claim.Tool.Model; m != "" {
+			argv = append(argv, "--model", m)
+		}
+		return Spawn{Argv: append(argv, Prompt(a)), Env: env, Dir: a.Dir,
+			After: func() error {
+				return streamResultReport("claude", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
+			}}, nil
+	}
+}
+
+// streamResultReport writes the result of a vendor's stream-json output (its last
 // result event) as the report. The output is read a line at a time and a
 // line over maxBody is skipped, never held (review 164 B1).
-func cursorReport(logPath, reportPath string) error {
+func streamResultReport(vendor, logPath, reportPath string) error {
 	f, err := os.Open(logPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
 	var result string
+	var failed bool
 	err = eachLine(f, maxBody, func(line []byte) {
 		var ev struct {
-			Type   string `json:"type"`
-			Result string `json:"result"`
+			Type    string `json:"type"`
+			Result  string `json:"result"`
+			IsError bool   `json:"is_error"`
 		}
 		if json.Unmarshal(line, &ev) == nil && ev.Type == "result" && ev.Result != "" {
-			result = ev.Result
+			result, failed = ev.Result, ev.IsError
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("agentd: cursor's output: %w", err)
+		return fmt.Errorf("agentd: %s's output: %w", vendor, err)
 	}
 	if result == "" {
-		return errors.New("agentd: cursor left no result")
+		return fmt.Errorf("agentd: %s left no result", vendor)
+	}
+	// A run that ends in error puts the error in result (claude 2.1.295 with no
+	// login: "Failed to authenticate: …", is_error true, measured 10-15). That
+	// is a failed attempt, not a report.
+	if failed {
+		return fmt.Errorf("agentd: %s ended in error: %s", vendor, oneLine(result, 200))
 	}
 	return os.WriteFile(reportPath, []byte(result), 0o600)
+}
+
+// oneLine is s on one line, cut to at most max bytes.
+func oneLine(s string, max int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if len(s) > max {
+		s = s[:max]
+	}
+	return s
 }
 
 // eachLine calls fn with each line of r up to max bytes long; longer lines

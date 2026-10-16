@@ -9,12 +9,13 @@
 //	AGENTD_PLATFORM        the agentrt routes, e.g. https://platform.example/api/v1/agentrt
 //	AGENTD_HOST            this host's id (its token is bound to it)
 //	AGENTD_TOKEN_FILE      a file holding the host's agentd token (mode 0600)
-//	AGENTD_TOOLS           executors here: exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto,exec:deterministic=local
+//	AGENTD_TOOLS           executors here: exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto,exec:claude=anthropic:opus,exec:deterministic=local
 //	AGENTD_GIT_BASE        where repositories live: <base>/<repo>.git
 //	AGENTD_GIT_PUSH_BASE   optional: where attempt branches go, <base>/<repo>.git, when the
 //	                       repositories work is cloned from take no push (a mirror)
 //	AGENTD_GIT_TOKEN_FILE  optional: a token git sends to that base (as an http header, never on a command line)
 //	AGENTD_CURSOR_KEY_FILE optional: cursor's API key (mode 0600), given to the cursor executor alone
+//	AGENTD_CLAUDE_TOKEN_FILE optional: Claude's OAuth token (mode 0600), given to the claude executor alone
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
 //
 // The first argument "launch" makes it the launcher of one executor, and
@@ -97,7 +98,9 @@ func run() error {
 	if err = d.Recover(ctx); err != nil {
 		return err
 	}
-	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ(), agentd.Secrets{CursorAPIKey: cfg.cursorKey}), agentd.MCPChecks)
+	executors, refused := agentd.Isolated(agentd.Executors(self, os.Environ(), agentd.Secrets{
+		CursorAPIKey: cfg.cursorKey, ClaudeOAuthToken: cfg.claudeToken,
+	}), agentd.MCPChecks)
 	for _, why := range refused {
 		log.Printf("agentd: %s", why)
 	}
@@ -154,9 +157,9 @@ func remoteAt(base string) func(string) string {
 }
 
 type settings struct {
-	platform, host, token, gitBase, pushBase, root, cursorKey string
-	gitEnv                                                    []string
-	tools                                                     []agentd.Tool
+	platform, host, token, gitBase, pushBase, root, cursorKey, claudeToken string
+	gitEnv                                                                 []string
+	tools                                                                  []agentd.Tool
 }
 
 func config() (settings, error) {
@@ -189,6 +192,11 @@ func config() (settings, error) {
 	if path := os.Getenv("AGENTD_CURSOR_KEY_FILE"); path != "" {
 		if s.cursorKey, err = secret(path); err != nil || s.cursorKey == "" {
 			return s, fmt.Errorf("AGENTD_CURSOR_KEY_FILE: %v", err)
+		}
+	}
+	if path := os.Getenv("AGENTD_CLAUDE_TOKEN_FILE"); path != "" {
+		if s.claudeToken, err = secret(path); err != nil || s.claudeToken == "" {
+			return s, fmt.Errorf("AGENTD_CLAUDE_TOKEN_FILE: %v", err)
 		}
 	}
 	if err = sameServer(s.gitBase, s.pushBase); err != nil {
@@ -240,7 +248,7 @@ func secret(path string) (string, error) {
 	return s, nil
 }
 
-// tools parses exec:codex=openai:gpt-5,exec:cursor=cursor-mix:auto.
+// tools parses executor=provider[:model], e.g. exec:claude=anthropic:opus.
 func tools(spec string) ([]agentd.Tool, error) {
 	var out []agentd.Tool
 	for _, item := range strings.Split(spec, ",") {
