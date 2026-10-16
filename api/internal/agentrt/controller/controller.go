@@ -249,6 +249,14 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 	}
 }
 
+// Close is one pass of closing the missions whose goal is done: every task
+// accepted, an implementation among them, no plan step bound
+// (store.CloseMissions). It returns how many it closed.
+func (c *Controller) Close(ctx context.Context) (int, error) {
+	closed, err := store.CloseMissions(ctx, c.DB)
+	return len(closed), err
+}
+
 // PlanDecisions is one pass of the plan decisions: proposals outside the
 // standing authorization whose decision card is answered are applied or
 // refused (store.DecidePlanChanges). Each question is read with the
@@ -301,7 +309,8 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
 // tasks whose job's candidates changed, acceptance, dispatch of proposed
-// tasks, plan decisions, then rules, so a change seen or a task accepted is
+// tasks, the closing of missions whose goal is done, plan decisions, then
+// rules, so a change seen or a task accepted is
 // evaluated at once, a task whose last dependency was just accepted is
 // ready in the same pass, and a step a decision added is evaluated with it.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
@@ -319,9 +328,10 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
 		_, derr := store.Dispatch(ctx, c.DB)
+		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, derr, perr, rerr)
+		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, rerr)
 	})
 	return wg.Wait
 }
