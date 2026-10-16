@@ -151,6 +151,28 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 // agentRuntimeRequester is the session the runtime asks the Owner as.
 const agentRuntimeRequester = "agentrt"
 
+// agentRuntimeWithdraw withdraws, as the runtime, a card a plan asked whose
+// round was refused (W-31 2.2b, review 216 B2). A card that is no longer
+// open (answered, withdrawn) or gone needs nothing. nil without a question
+// store.
+func (rt *questionRuntime) agentRuntimeWithdraw() store.Withdraw {
+	if rt == nil || rt.svc == nil {
+		return nil
+	}
+	return func(ctx context.Context, id, reason string) error {
+		raw, err := json.Marshal(map[string]string{"reason": reason})
+		if err != nil {
+			return err
+		}
+		res := rt.svc.Withdraw(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", id, raw)
+		switch res.Code {
+		case http.StatusOK, http.StatusConflict, http.StatusNotFound:
+			return nil
+		}
+		return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+	}
+}
+
 // agentRuntimeAck acknowledges, as the runtime, the answer of a card it
 // asked: an answered card nobody acknowledged keeps counting against the
 // runtime's quota (review 180 B3). nil without a question store.

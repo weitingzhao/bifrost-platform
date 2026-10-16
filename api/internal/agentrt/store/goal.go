@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -29,11 +30,15 @@ import (
 // task are written together or not at all).
 
 // Goal is a goal to propose: its first line as the title, its text, the
-// repository it is about and the commit of that repository's main the plan
-// starts from.
+// repository it is about, and how to read the commit of that repository's
+// main the plan starts from.
 type Goal struct {
-	Title, Text, Repo, Base string
+	Title, Text, Repo string
+	Main              func(context.Context) (string, error)
 }
+
+// ErrNoMain: the repository's main could not be read for a new goal.
+var ErrNoMain = errors.New("store: the repository's main branch cannot be read")
 
 // GoalSuccess is a goal's mission's success criterion until its plan names
 // its own.
@@ -43,8 +48,10 @@ const GoalSuccess = "the goal's plan is accepted and every task it splits into i
 const PlanOffPlanReason = "a goal from the Console, planned by the chief of staff's seat; the runtime has no plan tree yet"
 
 // ProposeGoal records a goal's mission and its planning task. The key's
-// request is the goal and its repository: the base is main as read on the
-// first try, as the snapshot is.
+// request is the goal and its repository; a key that has an answer gets it
+// without main being read (review 216 B1). Main is read once for a new key,
+// outside the transaction, and is the base of the first answer, as the
+// snapshot is.
 func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[string]any, error) {
 	if key == "" {
 		return nil, invalid("an idempotency key is required")
@@ -52,15 +59,23 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 	if _, ok := Repos[g.Repo]; !ok {
 		return nil, invalid("a goal may name %s, not %q", strings.Join(RepoNames(), ", "), g.Repo)
 	}
-	if g.Title == "" || g.Text == "" || g.Base == "" {
-		return nil, invalid("a goal has a title, a text and a base commit")
+	if g.Title == "" || g.Text == "" || g.Main == nil {
+		return nil, invalid("a goal has a title, a text and a reader for main")
 	}
 	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: []string{g.Repo}, Success: []string{GoalSuccess}}.check()
 	if err != nil {
 		return nil, err
 	}
 	title := cutRunes("Plan: "+g.Title, maxTaskTitle)
-	return idempotent(ctx, db, w.Actor, "goals", key, map[string]any{"goal": g.Text, "repo": g.Repo}, nil,
+	var base string
+	readMain := func(ctx context.Context) error {
+		var err error
+		if base, err = g.Main(ctx); err != nil || base == "" {
+			return fmt.Errorf("%w: %s: %v", ErrNoMain, g.Repo, err)
+		}
+		return nil
+	}
+	return idempotent(ctx, db, w.Actor, "goals", key, map[string]any{"goal": g.Text, "repo": g.Repo}, readMain,
 		func(tx pgx.Tx) (map[string]any, error) {
 			m, err := proposeMissionTx(ctx, tx, w, mp)
 			if err != nil {
@@ -71,7 +86,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 			if err != nil {
 				return nil, err
 			}
-			spec, err := planSpec(g, mission, snap)
+			spec, err := planSpec(g, base, mission, snap)
 			if err != nil {
 				return nil, err
 			}
@@ -80,7 +95,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 				return nil, err
 			}
 			plan := []TaskProposal{{Ref: "plan", OffPlanReason: PlanOffPlanReason, Role: "plan", Class: "goal", Title: title,
-				SpecArtifact: specID, Effect: "none", Repo: g.Repo, BaseCommit: g.Base}}
+				SpecArtifact: specID, Effect: "none", Repo: g.Repo, BaseCommit: base}}
 			if err = checkBatch(plan); err != nil {
 				return nil, err
 			}
@@ -89,7 +104,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 				return nil, err
 			}
 			out := map[string]any{"mission_id": mission, "mission_state": m["state"], "task_id": firstTaskID(t),
-				"repo": g.Repo, "base_commit": g.Base, "spec_artifact_id": specID}
+				"repo": g.Repo, "base_commit": base, "spec_artifact_id": specID}
 			if why, ok := m["waiting"]; ok {
 				out["waiting"] = why
 			}
@@ -255,19 +270,19 @@ func oneLineRunes(s string, n int) string {
 // planSpec is a planning task's spec: the goal, the snapshot, the principles
 // and the format of the plan (ParsePlan reads it back), as canonical JSON with
 // no checks: a plan is checked by the controller, not by commands.
-func planSpec(g Goal, mission, snapshot string) ([]byte, error) {
+func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 	text := "# Plan: " + g.Title + "\n\nThe Owner's goal, typed in the Console (mission " + mission + ", repository " + g.Repo + "):\n\n" +
 		g.Text + "\n\n---\n## Your seat\n\n" +
 		"You are the chief of staff's planner. The Owner sets goals, sets rules and decides what cannot be undone; everything else is\n" +
 		"yours and the agents', and he audits it afterwards. Turn this goal into a plan the agents can carry out without him:\n" +
 		"what counts as done, what is out of scope, the tasks it splits into, the questions only he can answer and the choices you\n" +
-		"made. Read this repository as you need to (it is checked out here at " + g.Base + "); do not edit anything.\n\n" +
+		"made. Read this repository as you need to (it is checked out here at " + base + "); do not edit anything.\n\n" +
 		"## What the runtime knows now\n\n" + snapshot + "\n" +
 		"## How to plan\n\n" +
 		"- Each task is one change an implementer can make and hand in on its own: say what to change and why, where (files,\n" +
 		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
-		"- Every task runs the repository's checks listed above. Add a check only when it proves this task (a go test of the package\n" +
-		"  you change); checks start with `go`.\n" +
+		"- Every task runs the repository's checks listed above. Add a check only when it proves this task: a test of the package\n" +
+		"  you change, written exactly as `go -C api test [-run <pattern>] ./<package path>` (nothing else is taken).\n" +
 		"- Ask the Owner only what is his: a goal he left open, a rule, something that cannot be undone. Give 2 to 4 options and the\n" +
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +

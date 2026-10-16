@@ -2,6 +2,7 @@ package agentrtapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -45,9 +46,10 @@ type goalBody struct {
 	Repo           string `json:"repo"`
 }
 
-// proposeGoal is POST /goals. Main is read on every try; the mission, the
-// planning task and its spec are written together, so a retry gets the first
-// try's answer (its base among it) and no try leaves half a goal behind.
+// proposeGoal is POST /goals. A key with an answer gets it; a new key reads
+// main and writes the mission, the planning task and its spec together, so a
+// retry gets the first try's answer (its base among it), even while main
+// cannot be read, and no try leaves half a goal behind.
 func (a *API) proposeGoal(w http.ResponseWriter, r *http.Request) {
 	var b goalBody
 	if !decode(w, r, &b) {
@@ -67,13 +69,13 @@ func (a *API) proposeGoal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "no_main_reader", "the platform has no reader for the repositories' main branch")
 		return
 	}
-	base, err := a.MainHead(r.Context(), repo)
-	if err != nil {
-		a.logf("agentrt goals: main of %s: %v", repo, err)
+	out, err := store.ProposeGoal(r.Context(), a.DB, who, b.IdempotencyKey, store.Goal{Title: goalTitle(goal), Text: goal, Repo: repo,
+		Main: func(ctx context.Context) (string, error) { return a.MainHead(ctx, repo) }})
+	if errors.Is(err, store.ErrNoMain) {
+		a.logf("agentrt goals: %v", err)
 		writeError(w, http.StatusServiceUnavailable, "no_main", fmt.Sprintf("the main branch of %s cannot be read now; try again", repo))
 		return
 	}
-	out, err := store.ProposeGoal(r.Context(), a.DB, who, b.IdempotencyKey, store.Goal{Title: goalTitle(goal), Text: goal, Repo: repo, Base: base})
 	if err != nil {
 		a.fail(w, err)
 		return

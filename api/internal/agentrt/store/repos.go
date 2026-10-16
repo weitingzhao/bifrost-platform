@@ -10,16 +10,18 @@ import (
 
 // Repo is what a goal or a plan needs to know about a repository it may name:
 // the commands every implementation task's deterministic check runs on it,
-// from the repository root.
+// from the repository root, and the Go modules a plan's own checks may test
+// (checkTest).
 type Repo struct {
-	Verify [][]string
+	Verify   [][]string
+	TestDirs []string
 }
 
 // Repos are the repositories goals and plans may name. The platform only so
 // far; its checks build and vet the API module, which run in any checkout
 // (the full test suite needs databases agentd's workspace has not).
 var Repos = map[string]Repo{
-	"bifrost-platform": {Verify: [][]string{{"go", "-C", "api", "build", "./..."}, {"go", "-C", "api", "vet", "./..."}}},
+	"bifrost-platform": {Verify: [][]string{{"go", "-C", "api", "build", "./..."}, {"go", "-C", "api", "vet", "./..."}}, TestDirs: []string{"api"}},
 }
 
 // RepoNames are the names of Repos, sorted.

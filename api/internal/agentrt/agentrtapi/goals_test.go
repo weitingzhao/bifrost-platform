@@ -181,6 +181,21 @@ func TestGoalRetryAfterMainMoved(t *testing.T) {
 	if tasks != 1 {
 		t.Fatalf("tasks of the goal: %d", tasks)
 	}
+	// Main unreadable (review 216 B1): a key with an answer still gets it, a
+	// reused key with another goal is still a conflict, a new key waits.
+	mainFails = true
+	t.Cleanup(func() { mainFails = false })
+	if code, out := call(t, s, "admin", "POST", "goals", body); code != http.StatusOK || out["task_id"] != first["task_id"] {
+		t.Fatalf("a retry while main cannot be read: %d %v", code, out)
+	}
+	other := map[string]any{"idempotency_key": "g1", "goal": "another goal", "repo": "bifrost-platform"}
+	if code, out := call(t, s, "admin", "POST", "goals", other); code != http.StatusConflict || out["error"] != "key_conflict" {
+		t.Fatalf("a reused key while main cannot be read: %d %v", code, out)
+	}
+	other["idempotency_key"] = "g2"
+	if code, out := call(t, s, "admin", "POST", "goals", other); code != http.StatusServiceUnavailable || out["error"] != "no_main" {
+		t.Fatalf("a new goal while main cannot be read: %d %v", code, out)
+	}
 }
 
 // The same goal sent twice at once (review 213 B1): one mission, one task,

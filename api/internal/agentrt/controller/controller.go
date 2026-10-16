@@ -30,8 +30,11 @@ type Sources struct {
 	// asked (a plan change's); nil acknowledges nothing.
 	Ack func(ctx context.Context, id string) error
 	// Ask puts a plan's decision cards to the Owner (store.AcceptPlan); nil
-	// leaves a plan with questions submitted until there is one.
+	// leaves a plan with questions submitted until there is one. Withdraw
+	// takes back the cards of a plan's round that was refused; nil leaves
+	// them open.
 	Ask      store.Ask
+	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
 }
@@ -192,7 +195,7 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 		errs = append(errs, perr)
 	}
 	for _, id := range plans {
-		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk())
+		did, err := store.AcceptPlan(ctx, c.DB, id, c.boundedAsk(), c.boundedWithdraw())
 		if err != nil {
 			errs = append(errs, fmt.Errorf("plan %s: %w", id, err))
 		}
@@ -233,6 +236,16 @@ func (c *Controller) boundedAsk() store.Ask {
 			return "", errors.New("the question store did not answer in time")
 		}
 		return x.id, x.err
+	}
+}
+
+// boundedWithdraw is Sources.Withdraw with the per-read timeout.
+func (c *Controller) boundedWithdraw() store.Withdraw {
+	if c.Sources.Withdraw == nil {
+		return nil
+	}
+	return func(ctx context.Context, id, reason string) error {
+		return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Withdraw(ctx, id, reason) })
 	}
 }
 
