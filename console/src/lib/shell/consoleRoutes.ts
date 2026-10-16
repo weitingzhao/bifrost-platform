@@ -20,7 +20,6 @@ export const SHELL_NAV = [
     question: 'How are the cluster, network, and machines?',
   },
   { id: 'progress', label: 'Progress', question: 'How far along is the project?' },
-  { id: 'agents', label: 'Agents', question: 'What are the agents doing, and what can I give them?' },
   {
     id: 'records',
     label: 'Records',
@@ -110,6 +109,7 @@ export type ConsoleLocation =
  * - console → infrastructure (the old hash opened Network)
  */
 export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
+  agents: 'progress',
   maintenance: 'needs-you',
   'control-room': 'status',
   observability: 'status',

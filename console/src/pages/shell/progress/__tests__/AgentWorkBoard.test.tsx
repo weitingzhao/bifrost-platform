@@ -648,15 +648,14 @@ describe('AgentWorkBoard', () => {
     20_000,
   )
 
-  it('places Agent work above commit lineage and code health', async () => {
+  it('places the seven project blocks in the Owner question order, then lineage and code health', async () => {
     stubProgress(envelope(null))
     render(wrap(<ProgressPage />))
-    expect(await screen.findByText('No progress has been published.')).toBeTruthy()
-    const agent = screen.getByRole('region', { name: 'Agent work' })
-    const lineage = screen.getByRole('region', { name: 'Commit lineage' })
-    const health = screen.getByRole('region', { name: 'Code health' })
-    expect(agent.compareDocumentPosition(lineage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(lineage.compareDocumentPosition(health) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(agent.className).toContain('overflow-x-hidden')
+    expect(await screen.findAllByText('No progress has been published.')).not.toHaveLength(0)
+    const page = screen.getByTestId('merged-progress')
+    expect(Array.from(page.children).map(child => child.getAttribute('aria-label'))).toEqual([
+      'Needs you', 'Overview', 'Give the agents a goal', 'Running', 'Plan and architecture', 'Hosts', 'History',
+      'Commit lineage', 'Code health',
+    ])
   })
 })

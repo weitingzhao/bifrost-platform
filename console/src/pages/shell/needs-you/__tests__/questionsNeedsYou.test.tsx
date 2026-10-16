@@ -86,6 +86,8 @@ function stub(questions: () => Response, approvals?: () => Response) {
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
+      if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [], count: 0 } })
+      if (url.includes('/api/v1/agent/progress')) return json({ document: null })
       const probed = health(url)
       if (probed != null) return probed
       if (url.includes('/api/v1/questions')) return questions()
@@ -168,7 +170,7 @@ describe('Needs you questions', () => {
   it('says Needs you: Unknown, not 0, when the question list cannot be read', async () => {
     stub(() => json({ error: 'boom' }, 500), () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])))
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.getByText('Could not read questions: boom')).toBeTruthy()
     expect(screen.queryByText('0 waiting for you')).toBeNull()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
@@ -196,7 +198,7 @@ describe('Needs you questions', () => {
     const stale = await screen.findByText('Could not refresh questions: boom')
     expect(stale.getAttribute('data-questions-state')).toBe('stale')
     expect(screen.getByText('Q12 Where is the quota?')).toBeTruthy()
-    expect(screen.getByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.getByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
     expect(screen.queryByText('1 waiting for you')).toBeNull()
   })
@@ -270,6 +272,8 @@ describe('Needs you questions', () => {
     window.location.hash = `#questions?id=${String(question.id)}`
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input)
+      if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [], count: 0 } })
+      if (url.includes('/api/v1/agent/progress')) return json({ document: null })
       if (url.includes(`/api/v1/questions/${String(question.id)}`)) return json(question)
       return json({ questions: [] })
     })
@@ -321,7 +325,7 @@ describe('Needs you questions', () => {
     expect(badgeText()).toEqual(['1'])
     fail = true
     await client.refetchQueries({ queryKey: ['questions', 'all'] })
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(await screen.findByText('Could not refresh questions: boom')).toBeTruthy()
     expect(screen.getByText(/Q12 /)).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
@@ -337,7 +341,7 @@ describe('Needs you questions', () => {
     expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
     fail = true
     await client.refetchQueries({ queryKey: ['questions', 'all'] })
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.getByText('Could not refresh questions: boom')).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
   })

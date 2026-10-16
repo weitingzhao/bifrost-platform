@@ -151,6 +151,8 @@ function stubFetch(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
+      if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [], count: 0 } })
+      if (url.includes('/api/v1/agent/progress')) return json({ document: null })
       const health = healthResponse(url)
       if (health != null) return health
       if (url.includes('/api/v1/approvals?status=open')) return approvals(new Headers(init?.headers))
@@ -224,7 +226,7 @@ describe('NeedsYouPage', () => {
         : json(buildApprovalListResponse([])),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
     expect(screen.getByText(/Could not read approvals/)).toBeTruthy()
     expect(screen.queryByText(/This device has no approval token/)).toBeNull()
@@ -240,7 +242,7 @@ describe('NeedsYouPage', () => {
         : json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-7' })]))
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
   })
 
@@ -399,7 +401,7 @@ describe('NeedsYouPage', () => {
       () => json({ error: 'boom' }, 500),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Decide' })).getAllByRole('link')).toHaveLength(1)
     const silent = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(silent).getByText(/Could not read agent threads/)).toBeTruthy()
@@ -418,7 +420,7 @@ describe('NeedsYouPage', () => {
       },
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(seen.some(value => value === 'Bearer admin-token')).toBe(false)
     await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
   })
@@ -491,7 +493,7 @@ describe('NeedsYouPage', () => {
     window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, secret)
     stubFetch(() => json({ error: 'down' }, 500))
     const { container } = render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(container.innerHTML).not.toContain(secret)
     expect(container.textContent ?? '').not.toContain(secret)
@@ -659,7 +661,7 @@ describe('NeedsYouPage', () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(() => json({ error: 'boom' }, 500))
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.getByText(/Could not read approvals/)).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
     expect(screen.queryByText('0 waiting for you')).toBeNull()
@@ -697,7 +699,7 @@ describe('NeedsYouPage', () => {
     })
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Could not read approvals — last tried 21:36:08')).toBeTruthy()
-    expect(screen.getByText('Needs you: Unknown')).toBeTruthy()
+    expect(screen.getByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.queryByText('Nothing needs you right now')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
     await act(async () => {

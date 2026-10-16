@@ -2,11 +2,13 @@ import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => null }))
+vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => null }))
 import type { ReactNode } from 'react'
 import progress from '@/api/__fixtures__/agentrt-progress.stg.json'
 import events from '@/api/__fixtures__/agentrt-events-M-2.stg.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
-import { AgentsPage } from '../AgentsPage'
+import { ProgressPage } from '../../progress/ProgressPage'
 import { GoalForm } from '../GoalForm'
 import { TaskTimeline } from '../TaskTimeline'
 import { SHELL_NAV, resolveConsoleHash } from '@/lib/shell/consoleRoutes'
@@ -29,6 +31,9 @@ function mockPageFetch() {
     if (path.includes('/agentrt/events?')) return json(events)
     if (path.includes('/agentrt/artifacts/')) return new Response('# Report\nDone <script>unsafe()</script>', { headers: { 'Content-Type': 'text/markdown' } })
     if (path.includes('/agent/progress')) return json({ document: { roadmap }, generated_at: progress.generated_at })
+    if (path.includes('/approvals')) return json({ items: [] })
+    if (path.includes('/questions')) return json({ questions: [] })
+    if (path.includes('/agent/threads')) return json({ threads: [], hosts: [] })
     throw new Error(`Unexpected URL: ${path}`)
   })
 }
@@ -132,33 +137,28 @@ describe('runtime timeline', () => {
   })
 })
 
-describe('Agents page', () => {
-  it('registers the nav and renders missions, recent implementation tasks, hosts and the plan', async () => {
-    expect(SHELL_NAV.map(n => n.id).slice(-3)).toEqual(['progress', 'agents', 'records'])
-    expect(resolveConsoleHash('agents').location).toEqual({ kind: 'shell', id: 'agents' })
-    wrap(<AgentsPage />)
-    expect(await screen.findByText('M-2 · 2.2 walkthrough 2: Cursor writes, Codex reviews (UniFi client tests)')).toBeInTheDocument()
-    const titles = screen.getAllByRole('heading', { level: 4 }).map(h => h.textContent).filter(t => t?.startsWith('M-'))
-    expect(titles.map(t => t!.slice(0, 3))).toEqual(['M-5', 'M-4', 'M-3', 'M-2', 'M-1'])
-    expect(screen.getByText('mbp-dev')).toBeInTheDocument()
-    expect(screen.getByText('No attempts running.')).toBeInTheDocument()
-    expect(screen.getByText('Count: 0')).toBeInTheDocument()
+describe('Merged Progress page', () => {
+  it('redirects the former Agents route and renders hosts and the published plan', async () => {
+    expect(SHELL_NAV.map(n => n.id).slice(-2)).toEqual(['progress', 'records'])
+    expect(resolveConsoleHash('agents')).toEqual({ location: { kind: 'shell', id: 'progress' }, canonical: '#progress' })
+    wrap(<ProgressPage />)
+    expect(await screen.findByText(/mbp-dev · Online/)).toBeInTheDocument()
     expect(await screen.findByText(/Round 2 · Checked:/)).toBeInTheDocument()
     expect(screen.getByText(/2.0 设计对齐：v4 到 v5 · 3\/3/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /UniFi client V2Post\/V2Delete tests/ }))
-    expect(await screen.findByLabelText(`Timeline ${TASK}`)).toBeInTheDocument()
+    expect(screen.getByText('All on Needs you')).toHaveAttribute('href', '#needs-you')
+    expect(screen.getByRole('heading', { name: 'History' }).closest('details')).not.toHaveAttribute('open')
   })
-  it('shows failures independently for all read sections', async () => {
+  it('shows source failures and an incomplete count', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'unavailable' }, 503)))
-    wrap(<AgentsPage />)
-    await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(5))
-    expect(screen.getByText(/Could not load missions:/)).toBeInTheDocument()
-    expect(screen.getByText(/Could not load plan and architecture:/)).toBeInTheDocument()
+    wrap(<ProgressPage />)
+    expect(await screen.findByText(/Count is incomplete:/)).toBeInTheDocument()
+    expect(screen.getAllByText(/Could not load agent runtime:/).length).toBeGreaterThan(0)
+    expect(await screen.findByText(/Could not load plan and architecture:/)).toBeInTheDocument()
   })
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => json(String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
-    wrap(<AgentsPage />)
-    expect(await screen.findByText('No missions reported.')).toBeInTheDocument()
+    wrap(<ProgressPage />)
+    expect(await screen.findByText('No missions or attempts running.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()
     expect(await screen.findByText('The plan is not published in this environment.')).toBeInTheDocument()
   })

@@ -1,6 +1,6 @@
+import { actionLink } from '@/api/agentProgress'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
-import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchLineage } from '@/api/lineage'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
@@ -101,6 +101,7 @@ function RecentlyHandled({ count, rows }: { count: NeedsYouCount; rows: HandledR
 export function NeedsYouPage() {
   const {
     count,
+    runtimeItems, coordinatorItems, runtimeCount, coordinatorCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,
     recentCount,
@@ -126,13 +127,7 @@ export function NeedsYouPage() {
     staleTime: 60_000,
     retry: false,
   })
-  const progressQ = useQuery({
-    queryKey: ['agent-progress'],
-    queryFn: fetchAgentProgress,
-    refetchInterval: AGENT_PROGRESS_POLL_MS,
-    retry: false,
-  })
-  const progressDoc = progressQ.data?.document ?? null
+  const progressDoc = progressQuery.data?.document ?? null
   useEffect(() => {
     clearLegacyApprovalToken()
   }, [])
@@ -190,7 +185,7 @@ export function NeedsYouPage() {
           : count.state === 'known'
             ? `${count.count} waiting for you`
             : count.state === 'unknown'
-              ? 'Needs you: Unknown'
+              ? 'Needs you: Unknown — count is incomplete'
               : 'Checking what needs you…'}
       </p>
       {count.state === 'known' && count.count === 0 && recentCount.state === 'known' && recentCount.count > 0 ? (
@@ -250,6 +245,21 @@ export function NeedsYouPage() {
       <Group label="Silent threads" count={needsYouCountText(silentCount)} description={SILENT_THREAD_EXPLANATION}>
         {stalled}
       </Group>
+      {([
+        { label: 'Agent runtime', items: runtimeItems, state: runtimeCount, at: runtimeQuery.data?.generated_at },
+        { label: 'Written by the coordinator', items: coordinatorItems, state: coordinatorCount, at: progressQuery.data?.generated_at, coordinator: true },
+      ]).map(source => <Group key={source.label} label={source.label} count={needsYouCountText(source.state)}>
+        <Note>Generated: {source.at || 'Unknown'}</Note>
+        {source.coordinator && <Note>Commands are not published to the platform: run them from the coordinator's local board or its thread.</Note>}
+        {source.state.state === 'loading' && <Note>Loading…</Note>}
+        {source.state.state === 'unknown' && <Note>Could not load {source.label.toLowerCase()}: {source.state.reason}. Count is incomplete.</Note>}
+        {source.state.state === 'known' && source.items.length === 0 && <Note>No requests.</Note>}
+        <ul className="m-0 flex flex-col gap-2 p-0">{source.items.map(item => <li key={item.id} className="list-none text-sm">
+          <strong>{item.title}</strong>{item.kind && ` · ${item.kind}`} {item.since && <time>{item.since}</time>}
+          {item.coordinator ? <><p>{item.coordinator.urgency}</p>{item.coordinator.actions?.map((action, i) => <p key={i}>{actionLink(action).kind === 'anchor' ? <a className="underline" href={(actionLink(action) as { href: string }).href}>{action.text}</a> : action.text}</p>)}</>
+            : <p><a className="underline" href={item.href}>{item.instruction}</a></p>}
+        </li>)}</ul>
+      </Group>)}
       <Group label="Sign off" count="—">
         <Note>Not connected yet.</Note>
       </Group>

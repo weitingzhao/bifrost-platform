@@ -34,7 +34,7 @@ export function needsYouCountText(count: NeedsYouCount): string {
 export function needsYouBadge(count: NeedsYouCount): ConsoleNavBadge | undefined {
   if (count.state === 'loading') return undefined
   if (count.state === 'unknown') {
-    return { text: '?', title: `Needs you: Unknown — ${count.reason}`, tone: 'unknown' }
+    return { text: '?', title: `Needs you: Unknown — count is incomplete: ${count.reason}`, tone: 'unknown' }
   }
   if (count.count === 0) return undefined
   return {

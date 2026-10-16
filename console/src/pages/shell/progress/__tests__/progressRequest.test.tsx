@@ -88,6 +88,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) {
           return json(
             buildApprovalListResponse([
@@ -159,6 +160,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) return json(buildApprovalListResponse(approvals))
         return json(
           progressBody({
@@ -210,6 +212,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) {
           return json(
             buildApprovalListResponse([
@@ -267,6 +270,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) return json(buildApprovalListResponse([]))
         return json(
           progressBody({
@@ -297,6 +301,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) return json({ error: 'down' }, 500)
         return json(
           progressBody({
@@ -335,6 +340,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) {
           return json(
             buildApprovalListResponse([
@@ -387,6 +393,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) {
           approvalCalls += 1
           return json(
@@ -425,6 +432,7 @@ describe('a to-do opens its request', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         if (url.includes('/api/v1/approvals')) {
           return json(
             buildApprovalListResponse([
@@ -539,6 +547,7 @@ describe('Needs you names the progress work', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input)
+        if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [] } })
         const health = healthResponse(url)
         if (health != null) return health
         if (url.includes('/api/v1/approvals')) {
@@ -582,7 +591,7 @@ describe('Needs you names the progress work', () => {
   it('shows no part line when the document is absent or does not name the request', async () => {
     stub(null, true)
     const missing = render(wrap(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
     expect(screen.queryByText(/Agent-reported:/)).toBeNull()
     missing.unmount()
 

@@ -1,3 +1,7 @@
+import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
+import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
+import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
+import { coordinatorWaiting, mergedWaitingCount, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
 import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
@@ -42,6 +46,8 @@ function knownOrPending(
  */
 export function useNeedsYou() {
   const now = Date.now()
+  const runtimeQuery = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
+  const progressQuery = useQuery({ queryKey: ['agent-progress'], queryFn: fetchAgentProgress, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
   const openQ = useQuery({
     queryKey: ['approvals', 'open'],
     queryFn: () => fetchApprovalList('open'),
@@ -100,6 +106,25 @@ export function useNeedsYou() {
     count = { state: 'loading' }
   } else count = { state: 'known', count: waitingCount(groups, silentCount.count, openQuestions.length) }
 
+  const runtimeItems = runtimeWaiting(runtimeQuery.data?.needs_you.items ?? [], questions)
+  const coordinatorItems = coordinatorWaiting(progressQuery.data?.document?.owner_now ?? [])
+  const runtimeCount = knownOrPending(runtimeQuery.isError || runtimeQuery.isPaused || runtimeQuery.data?.needs_you.truncated === true,
+    runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length)
+  const coordinatorCount = knownOrPending(progressQuery.isError || progressQuery.isPaused, progressQuery.error,
+    progressQuery.data, 'Coordinator request failed; count is incomplete', coordinatorItems.length)
+  count = mergedWaitingCount([count, runtimeCount, coordinatorCount])
+  const waitingItems: WaitingItem[] = [
+    ...(['decide', 'terminal', 'check'] as const).flatMap(group => groups[group].map(item => ({
+      id: item.id, title: item.summary || item.id, href: approvalHref(item.id),
+      instruction: group === 'decide' ? 'Console request · Approve or reject' : group === 'terminal' ? 'Request page · Run in a terminal and report the result' : 'Request page · Check and report what happened',
+    }))),
+    ...openQuestions.map(q => ({ id: q.id, title: q.title, href: questionHref(q.id), instruction: 'Console question · Choose an option or write an answer' })),
+    ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: '#needs-you', instruction: 'Needs you · Check the silent thread' })),
+    ...lost.map(h => ({ id: h.host, title: h.host, href: '#needs-you', instruction: 'Needs you · Check the host heartbeat' })),
+    ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: '#needs-you', instruction: 'Needs you · Restore thread monitoring capacity' }] : []),
+    ...runtimeItems, ...coordinatorItems,
+  ]
+
   const approvalRows = allQ.data != null ? recentlyHandledApprovals(allQ.data, now) : []
   const threadRows = threadsQuery.data != null ? recentlyHandledThreads(threadsQuery.data.threads, now) : []
   const questionRows = questionsQ.data != null ? recentlyHandledQuestions(questionsQ.data, now) : []
@@ -116,6 +141,7 @@ export function useNeedsYou() {
 
   return {
     count,
+    waitingItems, runtimeItems, coordinatorItems, runtimeCount, coordinatorCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,
     recentCount,
