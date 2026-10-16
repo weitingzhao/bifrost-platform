@@ -26,6 +26,7 @@ import {
   dataBadge,
   ownerVerdict,
   planRows,
+  lastResult,
   quotaRows,
   splitAlerts,
   workNow,
@@ -82,7 +83,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const runtime = current(needsYou.runtimeQuery)
   const board = needsYou.progressQuery.data?.document ?? null
   const work = workNow(runtime)
-  const lastId = work?.lastFinished?.mission ?? ''
+  const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
     enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false })
 
@@ -166,6 +167,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     work,
     runtimeError: needsYou.runtimeQuery.isError,
     lastGoal: text(lastGoalQ.data?.mission.goal) || text(lastGoalQ.data?.mission.title),
+    last: lastResult(work, current(lastGoalQ) ? text(lastGoalQ.data?.mission.state) : ''),
     board,
     boardStale: needsYou.progressQuery.data?.stale === true,
     plan: planRows(board?.roadmap?.round),

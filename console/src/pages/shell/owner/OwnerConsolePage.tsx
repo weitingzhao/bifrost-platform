@@ -5,7 +5,7 @@ import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
 import { OwnerWork } from './OwnerWork'
 import { OwnerYou } from './OwnerYou'
-import { TONE_COLOR, ago, type TabBadge, type Verdict } from './ownerModel'
+import { TONE_COLOR, ago, lastResultLine, type TabBadge, type Verdict } from './ownerModel'
 import { OWNER_TABS, defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash, type OwnerTab } from './ownerTabs'
 import { useNarrowScreen } from './useNarrowScreen'
 import { useOwnerConsole, type OwnerConsoleData } from './useOwnerConsole'
@@ -61,15 +61,15 @@ function VerdictBanner({ verdict, compact, goYou, updatedAt, now }: { verdict: V
 }
 
 function OwnerChief({ data, draft, draftKey }: { data: OwnerConsoleData; draft: string; draftKey: number }) {
-  const last = data.work?.lastFinished
+  const last = data.last
   return <section id="owner-chief" aria-label="Chief of staff" className="flex scroll-mt-28 flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">Chief of staff</h2>
     <div className="grid gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <GoalForm key={draftKey} draft={draft} />
       <div className="flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
-        {last ? <p className="m-0 break-words"><strong>{last.mission} done</strong> {ago(last.at, data.now)}{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
-          : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No goal finished recently.' : 'Reading the agent runtime…'}</p>}
+        {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
+          : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}
         {last && <a href={`#progress?goal=${encodeURIComponent(last.mission)}`}>What it wrote and did</a>}
         <p className="m-0 text-muted-foreground">Morning and evening briefings, and asking it a question, come with the agents' inbox (plan step 2.3).</p>
       </div>
@@ -112,7 +112,8 @@ export function OwnerConsolePage() {
     <OwnerTabs tab={tab} pick={pick} badges={data.badges} />
     <VerdictBanner verdict={data.verdict} compact={tab !== 'all' && tab !== 'you'} goYou={() => pick('you')} updatedAt={data.updatedAt} now={data.now} />
     {blocks.you && <OwnerYou data={data} onGoal={makeGoal} />}
-    {blocks.chief && <OwnerChief data={data} draft={draft.text} draftKey={draft.key} />}
+    {/* Hidden, not unmounted, on other tabs: an edited draft and a goal just sent outlive a tab switch (review 224 B-224-1). */}
+    <div hidden={!blocks.chief} className={blocks.chief ? "contents" : "hidden"}><OwnerChief data={data} draft={draft.text} draftKey={draft.key} /></div>
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <OwnerSystem data={data} />}
     {blocks.data && <OwnerData data={data} />}

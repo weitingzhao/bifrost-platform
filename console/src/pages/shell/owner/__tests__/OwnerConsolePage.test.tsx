@@ -32,7 +32,8 @@ function fake(): OwnerConsoleData {
     verdict: { tone: 'attention', headline: '2 things are yours', line: 'Nothing to approve · agents idle · release lane free · 5 of 5 nodes ready' },
     badges: { you: { text: '2', tone: 'attention' }, system: { text: '1', tone: 'fail' }, data: { text: '2', tone: 'muted' } },
     alerts, alertsError: null,
-    work: { running: 0, stuck: 0, open: 0, lastFinished: { mission: 'M-2', at: '2026-10-16T04:17:22Z' } },
+    work: { running: 0, stuck: 0, open: 0, lastAccepted: { mission: 'M-2', at: '2026-10-16T04:17:22Z', openState: '' } },
+    last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
     board: { coordinator: { doing: 'Owner console, first version', next: '2.3 inbox' }, roadmap: { round: { n: 2, items: [] } } },
     boardStale: false,
@@ -154,6 +155,22 @@ describe('Owner Console', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
     expect(submit).toHaveBeenCalledTimes(1)
     expect(submit.mock.calls[0][0]).toContain('Job logical-backup-drill-manual-1 failed')
+  })
+
+  it('an edited draft and a goal just sent outlive a tab switch (review 224 B-224-1)', async () => {
+    window.history.replaceState(null, '', '#owner?tab=you')
+    show()
+    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'My own words' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chief of staff' }))
+    expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('My own words')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
+    expect(submit).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Chief of staff' }))
+    expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('')
+    expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
 
   it('marks quota read days ago as stale and the plan as kept by hand', () => {

@@ -22,12 +22,13 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <Stat value={work?.open ?? '?'} label="open goals" />
         </div>
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">Last finished</span>
-          {work?.lastFinished
-            ? <><div className="flex flex-wrap justify-between gap-2"><span className="min-w-0 break-words"><strong>{work.lastFinished.mission}</strong> {data.lastGoal.split('\n')[0]}</span>
-                <span className="font-semibold text-[var(--color-success)]" title={work.lastFinished.at}>Done {ago(work.lastFinished.at, now)}</span></div>
-              <a href={`#progress?goal=${encodeURIComponent(work.lastFinished.mission)}`} className="text-sm">Step by step</a></>
-            : <span className="text-sm text-muted-foreground">{work ? 'Nothing finished recently.' : 'Agent runtime not read yet.'}</span>}
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">Last result</span>
+          {data.last
+            ? <><div className="flex flex-wrap justify-between gap-2"><span className="min-w-0 break-words"><strong>{data.last.mission}</strong> {data.lastGoal.split('\n')[0]}</span>
+                <span className={`font-semibold ${data.last.status === 'done' ? 'text-[var(--color-success)]' : 'text-muted-foreground'}`} title={data.last.at}>
+                  {data.last.status === 'done' ? `Done ${ago(data.last.at, now)}` : `Implementation accepted ${ago(data.last.at, now)}${data.last.status === 'open' ? `; goal ${data.last.state}` : ''}`}</span></div>
+              <a href={`#progress?goal=${encodeURIComponent(data.last.mission)}`} className="inline-flex min-h-11 items-center text-sm">Step by step</a></>
+            : <span className="text-sm text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</span>}
         </div>
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Coordinator</span>

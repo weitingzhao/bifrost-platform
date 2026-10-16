@@ -127,6 +127,12 @@ describe('useOwnerConsole', () => {
     await waitFor(() => expect(result.current.lastGoal).toBe('Add a comment'))
   })
 
+  it('a goal whose mission is not done is not called done (review 224 A-224-1)', async () => {
+    api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'paused' }, tasks: [], events: [] })
+    const { result } = run({ system: false, work: true, chief: false })
+    await waitFor(() => expect(result.current.last).toMatchObject({ status: 'open', state: 'paused' }))
+  })
+
   it('with a node on standby, the cluster\'s evidence moves its alerts to noise; without it they stay', async () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })
     api.nodes.mockResolvedValue({ nodes: [ready('ubt-k3s-02', '192.168.10.70'), ready('gpu-server', '192.168.10.60', 'standby')] })

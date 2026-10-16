@@ -197,7 +197,8 @@ export type WorkNow = {
   running: number
   stuck: number
   open: number
-  lastFinished: { mission: string; at: string } | null
+  /** The latest accepted implementation, and its mission's state when the open list has it. Accepted is not done (review 224 A-224-1). */
+  lastAccepted: { mission: string; at: string; openState: string } | null
 }
 
 const STUCK_TASK = new Set(['blocked', 'rejected', 'failed'])
@@ -207,15 +208,39 @@ export function workNow(runtime: RuntimeProgress | undefined): WorkNow | null {
   if (!runtime) return null
   const missions = runtime.work.missions
   const stuck = missions.filter(m => STUCK_MISSION.has(m.state) || m.tasks.some(t => STUCK_TASK.has(t.state))).length
-  const done = runtime.recent.tasks
+  const accepted = runtime.recent.tasks
     .filter(t => text(t.role) === 'implement' && text(t.state) === 'accepted' && text(t.mission_id))
     .sort((a, b) => text(b.ended_at).localeCompare(text(a.ended_at)))[0]
+  const mission = text(accepted?.mission_id)
   return {
     running: runtime.live.length,
     stuck,
     open: missions.length,
-    lastFinished: done ? { mission: text(done.mission_id), at: text(done.ended_at) } : null,
+    lastAccepted: accepted ? { mission, at: text(accepted.ended_at), openState: missions.find(m => m.mission_id === mission)?.state ?? '' } : null,
   }
+}
+
+export type LastResult = { mission: string; at: string; status: 'done' | 'open' | 'unknown'; state: string }
+
+/**
+ * What became of the latest accepted implementation's goal. Done only when the mission says so
+ * (the goal read, `mission.state`); a mission still on the open list is open whatever its tasks
+ * say; otherwise all that is known is that the implementation was accepted.
+ */
+export function lastResult(work: WorkNow | null, missionState: string): LastResult | null {
+  const last = work?.lastAccepted
+  if (!last) return null
+  if (missionState === 'done') return { mission: last.mission, at: last.at, status: 'done', state: 'done' }
+  const open = missionState || last.openState
+  if (open) return { mission: last.mission, at: last.at, status: 'open', state: open }
+  return { mission: last.mission, at: last.at, status: 'unknown', state: '' }
+}
+
+/** One line for it: "M-2 done 15 h ago", "M-7 implementation accepted 2 h ago; the goal is paused". */
+export function lastResultLine(r: LastResult, now: number): string {
+  if (r.status === 'done') return `${r.mission} done ${ago(r.at, now)}`
+  const accepted = `${r.mission} implementation accepted ${ago(r.at, now)}`
+  return r.status === 'open' ? `${accepted}; the goal is ${r.state}` : accepted
 }
 
 export type PlanRow = { key: string; name: string; done: number; total: number; tone: Tone; tag: '' | 'now' | 'next' }

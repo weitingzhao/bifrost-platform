@@ -5,7 +5,7 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, dataBadge, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
+import { ago, dataBadge, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import { defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash } from '../ownerTabs'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -165,14 +165,25 @@ describe('the verdict', () => {
 })
 
 describe('work, plan and quota', () => {
-  it('reads running, stuck, open goals and the last finished goal from the runtime', () => {
+  it('reads running, stuck, open goals and the latest accepted implementation from the runtime', () => {
     const runtime = parseRuntimeProgress(progressFixture)
     const work = workNow(runtime)!
     expect(work.running).toBe(runtime.live.length)
     expect(work.open).toBe(runtime.work.missions.length)
-    expect(work.lastFinished?.mission).toMatch(/^M-\d+$/)
+    expect(work.lastAccepted?.mission).toMatch(/^M-\d+$/)
     expect(workNow(undefined)).toBeNull()
   })
+  it('calls a goal done only when its mission is done; an accepted implementation is not a done goal (review 224 A-224-1)', () => {
+    const work = { running: 0, stuck: 1, open: 1, lastAccepted: { mission: 'M-7', at: new Date(NOW - 2 * 3600_000).toISOString(), openState: 'paused' } }
+    expect(lastResult(work, '')).toMatchObject({ status: 'open', state: 'paused' })
+    expect(lastResultLine(lastResult(work, '')!, NOW)).toBe('M-7 implementation accepted 2 h ago; the goal is paused')
+    expect(lastResult(work, 'active')).toMatchObject({ status: 'open', state: 'active' })
+    expect(lastResultLine(lastResult(work, 'done')!, NOW)).toBe('M-7 done 2 h ago')
+    const gone = { ...work, lastAccepted: { ...work.lastAccepted, openState: '' } }
+    expect(lastResultLine(lastResult(gone, '')!, NOW)).toBe('M-7 implementation accepted 2 h ago')
+    expect(lastResult(null, 'done')).toBeNull()
+  })
+
   it('tags the first step not started as next', () => {
     const rows = planRows(parseRuntimeRound(roadmap.round))
     expect(rows.map(r => r.key)).toEqual(['2.0', '2.1', '2.2', '2.2b', '2.3', '2.4', '2.5'])
