@@ -5,7 +5,7 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, dataBadge, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
+import { ago, dataBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import { defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash } from '../ownerTabs'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -182,6 +182,18 @@ describe('work, plan and quota', () => {
     const gone = { ...work, lastAccepted: { ...work.lastAccepted, openState: '' } }
     expect(lastResultLine(lastResult(gone, '')!, NOW)).toBe('M-7 implementation accepted 2 h ago')
     expect(lastResult(null, 'done')).toBeNull()
+  })
+
+  it('reads a goal that is not done again, and stops once it is (review 225 B-225-1)', () => {
+    expect(goalRefreshMs('active')).toBe(30_000)
+    expect(goalRefreshMs('paused')).toBe(30_000)
+    expect(goalRefreshMs('')).toBe(30_000)
+    expect(goalRefreshMs('done')).toBe(false)
+  })
+
+  it('names the subject, not kube-state-metrics\' own pod, as where an alert is', () => {
+    const job = { labels: { alertname: 'KubeJobFailed', severity: 'warning', namespace: 'data', job_name: 'drill', pod: 'kube-state-metrics-x', container: 'kube-state-metrics' }, annotations: {}, state: 'firing', active_at: '2026-10-16T10:00:00Z' }
+    expect(splitAlerts([job], null, NOW).worth[0].detail).toBe('warning · data · since 10 h ago')
   })
 
   it('tags the first step not started as next', () => {

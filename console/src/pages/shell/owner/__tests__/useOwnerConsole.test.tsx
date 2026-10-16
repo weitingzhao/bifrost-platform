@@ -133,6 +133,23 @@ describe('useOwnerConsole', () => {
     await waitFor(() => expect(result.current.last).toMatchObject({ status: 'open', state: 'paused' }))
   })
 
+  it('a goal read as active becomes done on the next read, without a tab switch (review 225 B-225-1)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'active' }, tasks: [], events: [] })
+      const { result } = run({ system: false, work: true, chief: false })
+      await waitFor(() => expect(result.current.last).toMatchObject({ status: 'open', state: 'active' }))
+      api.goal.mockResolvedValue({ mission: { goal: 'Add a comment', state: 'done' }, tasks: [], events: [] })
+      await vi.advanceTimersByTimeAsync(31_000)
+      await waitFor(() => expect(result.current.last).toMatchObject({ status: 'done' }))
+      const calls = api.goal.mock.calls.length
+      await vi.advanceTimersByTimeAsync(61_000)
+      expect(api.goal.mock.calls.length).toBe(calls)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('with a node on standby, the cluster\'s evidence moves its alerts to noise; without it they stay', async () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })
     api.nodes.mockResolvedValue({ nodes: [ready('ubt-k3s-02', '192.168.10.70'), ready('gpu-server', '192.168.10.60', 'standby')] })

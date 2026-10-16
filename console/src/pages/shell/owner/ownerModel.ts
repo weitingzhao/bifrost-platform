@@ -94,7 +94,8 @@ function alertTitle(alert: MappedAlert): string {
 
 function alertDetail(alert: MappedAlert, now: number): string {
   const l = alert.labels
-  const where = [l.namespace, l.pod && alert.name !== 'KubePodNotReady' ? l.pod : ''].filter(Boolean).join(' · ')
+  // kube-state-metrics' own pod label is the exporter's, not where the trouble is.
+  const where = [l.namespace, l.pod && alert.name !== 'KubePodNotReady' && l.container !== 'kube-state-metrics' ? l.pod : ''].filter(Boolean).join(' · ')
   return [alert.severity, where, `since ${ago(alert.activeAt, now)}`].filter(Boolean).join(' · ')
 }
 
@@ -218,6 +219,13 @@ export function workNow(runtime: RuntimeProgress | undefined): WorkNow | null {
     open: missions.length,
     lastAccepted: accepted ? { mission, at: text(accepted.ended_at), openState: missions.find(m => m.mission_id === mission)?.state ?? '' } : null,
   }
+}
+
+/** A goal not yet done is read again every 30 s while its block is shown; a done one never changes (review 225 B-225-1). */
+export const GOAL_STATE_REFRESH_MS = 30_000
+
+export function goalRefreshMs(missionState: string): number | false {
+  return missionState === 'done' ? false : GOAL_STATE_REFRESH_MS
 }
 
 export type LastResult = { mission: string; at: string; status: 'done' | 'open' | 'unknown'; state: string }

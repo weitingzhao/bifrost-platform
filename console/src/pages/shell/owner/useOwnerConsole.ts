@@ -26,6 +26,7 @@ import {
   dataBadge,
   ownerVerdict,
   planRows,
+  goalRefreshMs,
   lastResult,
   quotaRows,
   splitAlerts,
@@ -85,7 +86,8 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const work = workNow(runtime)
   const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
-    enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false })
+    enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
+    refetchInterval: q => goalRefreshMs(text(q.state.data?.mission.state)) })
 
   const nodes = current(nodesQ)?.nodes ?? []
   const standby = nodes.filter(n => n.elastic_mode === 'standby').map(n => ({ name: n.name, internalIp: n.internal_ip }))
