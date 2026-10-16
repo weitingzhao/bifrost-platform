@@ -40,9 +40,12 @@ func (w *world) goalMission(t *testing.T, id string) {
 // not when it is bound to plan steps, and only once.
 func TestCloseMissions(t *testing.T) {
 	w := newKernelWorld(t)
-	for _, m := range []string{"M-3", "M-4", "M-5", "M-6"} {
+	for _, m := range []string{"M-3", "M-4", "M-5", "M-6", "M-7"} {
 		w.goalMission(t, m)
 	}
+	// M-7: every task accepted, but paused: only an active mission closes.
+	w.accept(t, w.ready(t, store.Task{MissionID: "M-7", OffPlanReason: "a goal"}))
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-7", "paused", "test") }))
 	// M-3: plan, implementation, its verification and review, all accepted.
 	w.accept(t, w.ready(t, store.Task{MissionID: "M-3", Role: "plan", OffPlanReason: "a goal", Effect: "none"}))
 	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
@@ -65,7 +68,7 @@ func TestCloseMissions(t *testing.T) {
 	if err != nil || !slices.Equal(closed, []string{"M-3"}) {
 		t.Fatalf("closed %v %v", closed, err)
 	}
-	for m, want := range map[string]string{"M-1": "active", "M-3": "done", "M-4": "active", "M-5": "active", "M-6": "active"} {
+	for m, want := range map[string]string{"M-1": "active", "M-3": "done", "M-4": "active", "M-5": "active", "M-6": "active", "M-7": "paused"} {
 		if got := w.state(t, "mission", m); got != want {
 			t.Errorf("%s is %s, want %s", m, got, want)
 		}

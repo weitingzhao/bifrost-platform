@@ -43,6 +43,33 @@ function verdicts(data: GoalData, method: string) {
   }
   return [...latest.values()]
 }
+// currentVerdict is the verdict of a check (deterministic or review) on an
+// implementation's current attempt. A verification or review task is
+// accepted once its result is used, pass or fail, so its state says nothing
+// of the implementation; a verdict on an older attempt says nothing of the
+// current one (review 219 A1).
+export function currentVerdict(data: GoalData, impl: GoalTask, method: 'deterministic' | 'review'): string {
+  const lease = latestLease(data, impl)
+  return text(data.events.filter(e => e.event_type === 'verification_recorded' && e.body_json.method === method && e.task_id === impl.task_id
+    && (!lease || e.attempt_id === lease.attempt_id)).at(-1)?.body_json.verdict)
+}
+function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageState; completed: number } {
+  const method = role === 'verify' ? 'deterministic' : 'review'
+  const impls = data.tasks.filter(t => t.role === 'implement')
+  const checks = data.tasks.filter(t => t.role === role)
+  let passed = 0, failed = false, running = false
+  for (const impl of impls) {
+    const verdict = currentVerdict(data, impl, method)
+    if (verdict === 'pass') passed++
+    else if (verdict === 'fail' && ['blocked', 'rejected'].includes(impl.state)) failed = true
+    else if (checks.some(c => c.subject_task_id === impl.task_id && ['ready', 'leased', 'running', 'submitted'].includes(c.state))) running = true
+    else if (impl.state === 'verifying' && !verdict && (role === 'verify' || currentVerdict(data, impl, 'deterministic') === 'pass')) running = true
+  }
+  if (checks.some(c => ['awaiting_owner', 'waiting_owner', 'paused'].includes(c.state) || c.status === 'waiting_owner')) return { state: 'waiting', completed: passed }
+  if (failed) return { state: 'failed', completed: passed }
+  if (impls.length && passed === impls.length) return { state: 'done', completed: passed }
+  return { state: running ? 'running' : 'future', completed: passed }
+}
 export function goalDone(data: GoalData): boolean {
   if (['stopped', 'failed', 'cancelled'].includes(text(data.mission.state))) return false
   if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail'))) return false
@@ -53,6 +80,11 @@ export function goalStages(data: GoalData): GoalStage[] {
   const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1 }]
   for (const [role, label] of [['plan', 'Plan'], ['implement', 'Implement'], ['verify', 'Verify'], ['review', 'Review']]) {
     const tasks = data.tasks.filter(t => t.role === role)
+    if (role === 'verify' || role === 'review') {
+      const check = checkStage(data, role)
+      stages.push({ label: label!, tasks, ...check })
+      continue
+    }
     const results = role === 'verify' || role === 'review' ? verdicts(data, role === 'verify' ? 'deterministic' : 'review') : []
     const completed = tasks.filter(t => t.state === 'accepted' || (role === 'implement' && ['submitted', 'verifying'].includes(t.state))).length
     let state: StageState = 'future'

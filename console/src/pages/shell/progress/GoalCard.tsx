@@ -7,7 +7,7 @@ import type { Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
 import { useNow } from './progressClock'
-import { duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
+import { currentVerdict, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 const stageColor = { done: 'var(--color-success)', running: 'var(--color-info)', waiting: 'var(--color-warning)', failed: 'var(--color-danger)', future: 'var(--border)', skipped: 'var(--border)' }
 function Lines({ value }: { value: unknown }) {
@@ -18,7 +18,7 @@ function GoalResult({ data }: { data: GoalData }) {
   const [artifact, setArtifact] = useState<string | null>(null)
   const accepted = new Set(data.tasks.filter(t => t.role === 'implement' && t.state === 'accepted').map(t => t.task_id))
   const persisted = data.events.filter(e => e.event_type === 'attempt_persisted' && accepted.has(e.task_id) && e.attempt_id === latestLease(data, data.tasks.find(t => t.task_id === e.task_id)!)?.attempt_id && text(e.body_json.pushed_commit))
-  const review = data.events.filter(e => e.event_type === 'verification_recorded' && e.body_json.method === 'review').at(-1)
+  const reviewed = data.tasks.filter(t => t.role === 'implement' && t.state === 'accepted').map(t => currentVerdict(data, t, 'review')).filter(Boolean)
   const reports = data.events.filter(e => e.event_type === 'attempt_persisted' && data.tasks.some(t => t.task_id === e.task_id && ['implement', 'review'].includes(t.role)))
     .flatMap(e => Array.isArray(e.body_json.artifacts) ? e.body_json.artifacts.filter((id): id is string => typeof id === 'string').map((id, i) => ({ id, label: `${data.tasks.find(t => t.task_id === e.task_id)?.role === 'review' ? 'Review' : 'Implementation'} report ${i + 1}` })) : [])
   return <section aria-label="Result" className="rounded border border-[var(--card-border)] p-3 text-sm">
@@ -28,7 +28,7 @@ function GoalResult({ data }: { data: GoalData }) {
       <details><summary>Details · branch and commit</summary><p className="break-all">Branch: {text(e.body_json.pushed_ref)}</p><p className="break-all">{text(e.body_json.pushed_commit)}</p></details>
     </div>)}
     {!persisted.length && <p>No implementation commit recorded.</p>}
-    <p>Review verdict: {text(review?.body_json.verdict) || 'Not recorded'}</p>
+    <p>Review verdict: {reviewed.join(', ') || 'Not recorded'}</p>
     <div className="flex flex-wrap gap-3">{reports.map((r, i) => <button key={`${r.id}-${i}`} className="underline" onClick={() => setArtifact(r.id)}>{r.label}</button>)}</div>
     {artifact && <ArtifactPanel id={artifact} label="Report" close={() => setArtifact(null)} />}
   </section>

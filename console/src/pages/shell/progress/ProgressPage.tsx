@@ -96,13 +96,17 @@ export function ProgressPage() {
   </div></NowClock>
 }
 
+// targeted: the location names this section (#<id>, or a redirect's ?section=<id>).
+function targeted(id: string): boolean {
+  return window.location.hash === `#${id}` || new URLSearchParams(window.location.hash.split('?')[1]).get('section') === id
+}
+
 function ProgressReference({ id, title, children }: { id: string; title: string; children: ReactNode }) {
-  const targeted = () => window.location.hash === `#${id}` || new URLSearchParams(window.location.hash.split('?')[1]).get('section') === id
-  const [open, setOpen] = useState(targeted)
+  const [open, setOpen] = useState(() => targeted(id))
   useEffect(() => {
-    const change = () => { if (targeted()) { setOpen(true); document.getElementById(id)?.scrollIntoView?.({ block: 'start' }) } }
+    const change = () => { if (targeted(id)) { setOpen(true); document.getElementById(id)?.scrollIntoView?.({ block: 'start' }) } }
     window.addEventListener('hashchange', change)
     return () => window.removeEventListener('hashchange', change)
-  })
+  }, [id])
   return <details id={id} open={open} onToggle={event => setOpen(event.currentTarget.open)} className="panel-elevated ops-section"><summary className="cursor-pointer p-3 text-sm font-medium">{title}</summary>{open && children}</details>
 }

@@ -70,12 +70,36 @@ describe('goal stages from the production stream', () => {
     expect(goalStatus(cut(46), false)).toBe('Reviewing')
   })
   it('marks a failed review and blocked planning task', () => {
-    const failed = { ...full, events: full.events.map(e => e.event_type === 'verification_recorded' && e.body_json.method === 'review' ? { ...e, body_json: { ...e.body_json, verdict: 'fail' } } : e) }
+    // A review that fails in the last round blocks the implementation.
+    const failed = { ...full, tasks: full.tasks.map(t => t.role === 'implement' ? { ...t, state: 'blocked' } : t),
+      events: full.events.map(e => e.event_type === 'verification_recorded' && e.body_json.method === 'review' ? { ...e, body_json: { ...e.body_json, verdict: 'fail' } } : e) }
     expect(goalStages(failed).find(s => s.label === 'Review')?.state).toBe('failed')
     expect(goalDone(failed)).toBe(false)
     const blocked = { ...cut(8), tasks: [{ ...full.tasks[0]!, state: 'blocked' }] }
     expect(goalStatus(blocked, false)).toBe('Blocked')
     expect(goalStages(blocked)[1]?.state).toBe('failed')
+  })
+  // Review 219 A1: the checks of round 1 are accepted once their result is
+  // used, pass or fail; while round 2 runs, Verify and Review are not done.
+  it('does not mark checks done from an earlier round', () => {
+    const impl = full.tasks.find(t => t.role === 'implement')!
+    const firstVerdict = full.events.find(e => e.event_type === 'verification_recorded' && e.body_json.method === 'deterministic')!
+    const lease = full.events.filter(e => e.event_type === 'attempt_leased' && e.task_id === impl.task_id).at(-1)!
+    const round1 = full.events.filter(e => (e.seq ?? 0) <= (firstVerdict.seq ?? 0))
+      .map(e => e === firstVerdict ? { ...e, body_json: { ...e.body_json, verdict: 'fail' } } : e)
+    const relet = { ...lease, seq: 900, attempt_id: 'a_round2', at: '2026-10-16T04:20:00Z' }
+    const running: GoalData = { ...full, events: [...round1, relet],
+      tasks: full.tasks.filter(t => t.role !== 'review').map(t => t === impl ? { ...t, state: 'running' } : t) }
+    const stages = goalStages(running)
+    expect(stages.find(s => s.label === 'Implement')?.state).toBe('running')
+    expect(stages.find(s => s.label === 'Verify')?.state).not.toBe('done')
+    expect(stages.find(s => s.label === 'Review')?.state).not.toBe('done')
+    expect(goalDone(running)).toBe(false)
+    expect(goalStatus(running, false)).toBe('Implementing')
+    // Round 2 passes both checks: done again.
+    const pass = (method: string, seq: number) => ({ ...firstVerdict, seq, attempt_id: 'a_round2', body_json: { ...firstVerdict.body_json, method, verdict: 'pass' } })
+    const passed: GoalData = { ...full, events: [...round1, relet, pass('deterministic', 901), pass('review', 902)], tasks: full.tasks }
+    expect(goalStages(passed).map(s => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
   })
   it('skips planning for a mission before the chief of staff', () => {
     expect(goalStages({ ...full, tasks: full.tasks.filter(t => t.role !== 'plan') })[1]?.state).toBe('skipped')
@@ -165,4 +189,22 @@ it('reads the next event page from the last sequence', async () => {
   vi.stubGlobal('fetch', fetch)
   expect(await fetchRuntimeEvents('M-2')).toHaveLength(501)
   expect(String(fetch.mock.calls[1]![0])).toContain('after_seq=500')
+})
+
+// Review 219 B3: a page that fails after a full one is an error, never a
+// shorter stream that looks whole; the card says it could not load.
+it('fails when a later event page fails, and the card says so', async () => {
+  const page = Array.from({ length: 500 }, (_, i) => ({ seq: i + 1, event_type: 'attempt_started' }))
+  vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('after_seq=500')
+    ? new Response(JSON.stringify({ error: 'unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+    : new Response(JSON.stringify(page), { headers: { 'Content-Type': 'application/json' } })))
+  await expect(fetchRuntimeEvents('M-2')).rejects.toThrow()
+  mockFetch()
+  const fetch = vi.mocked(globalThis.fetch)
+  fetch.mockImplementation(async (input: RequestInfo | URL) => String(input).includes('/agentrt/events?')
+    ? new Response(JSON.stringify({ error: 'unavailable' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
+    : new Response(JSON.stringify(String(input).includes('/agentrt/missions/') ? mission : tasks), { headers: { 'Content-Type': 'application/json' } }))
+  wrap(<GoalCard id="M-2" questions={[]} updatedAt={0} />)
+  expect(await screen.findByText(/could not|unavailable|failed/i)).toBeInTheDocument()
+  expect(screen.queryByText('Done')).not.toBeInTheDocument()
 })
