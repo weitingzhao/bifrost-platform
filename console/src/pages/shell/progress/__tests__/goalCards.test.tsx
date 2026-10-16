@@ -1,0 +1,168 @@
+import '@testing-library/jest-dom/vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import mission from '@/api/__fixtures__/agentrt-mission-M-2.prod.json'
+import tasks from '@/api/__fixtures__/agentrt-tasks-M-2.prod.json'
+import events from '@/api/__fixtures__/agentrt-events-mission-M-2.prod.json'
+import { fetchRuntimeEvents, parseRuntimeEvents, parseRuntimeProgress } from '@/api/agentRuntime'
+import { parseGoalTasks, type GoalData } from '@/api/agentRuntimeGoals'
+import type { Question } from '@/api/questions'
+import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
+import { GoalCard } from '../GoalCard'
+import { goalDone, goalStages, goalStatus, goalWaitingLinks, missionIds, relative, taskTiming } from '../goalCardModel'
+import { whoseMove } from '../mergedProgressModel'
+import { ProgressPage } from '../ProgressPage'
+vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => <p>Lineage content</p> }))
+vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p>Health content</p> }))
+const full: GoalData = { mission, tasks: parseGoalTasks(tasks), events: parseRuntimeEvents(events) }
+const clients: QueryClient[] = []
+function wrap(ui: React.ReactNode, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  clients.push(client)
+  return { ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>), client }
+}
+function cut(seq: number): GoalData {
+  const subset = events.filter(e => e.seq <= seq)
+  const at = subset.at(-1)!.at
+  return { mission, events: parseRuntimeEvents(subset), tasks: parseGoalTasks(tasks).filter(t => t.created_at <= at).map(t => {
+    const changes = subset.filter(e => e.task_id === t.task_id && e.event_type === 'task_state_changed')
+    const last = changes.at(-1)
+    return { ...t, state: String(last && 'to' in last.body_json ? last.body_json.to : 'proposed') }
+  }) }
+}
+function mockFetch() {
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    let data: unknown = {}
+    if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
+    else if (url.includes('/agentrt/tasks?')) data = tasks
+    else if (url.includes('/agentrt/events?')) data = events
+    else if (url.includes('/agentrt/artifacts/')) return new Response('Fixture implementation report')
+    else if (url.includes('/agentrt/goals') && init?.method === 'POST') data = { mission_id: 'M-20', mission_state: 'active', task_id: 't_new' }
+    else if (url.includes('/agentrt/progress')) data = { work: { missions: [{ mission_id: 'M-2' }] }, needs_you: { items: [] } }
+    else if (url.includes('/agent/progress')) data = { document: { coordinator: { state: 'idle' } } }
+    else if (url.includes('/questions')) data = { questions: [] }
+    else if (url.includes('/approvals')) data = { approvals: [] }
+    else if (url.includes('/agent/threads')) data = { threads: [], hosts: [] }
+    return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } })
+  })
+  vi.stubGlobal('fetch', fetch)
+  return fetch
+}
+beforeEach(() => {
+  const values = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value), removeItem: (key: string) => values.delete(key), clear: () => values.clear(),
+  } })
+})
+afterEach(() => { cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); vi.restoreAllMocks(); window.history.replaceState(null, '', '/') })
+
+describe('goal stages from the production stream', () => {
+  it('shows all stages done when older active missions have every task accepted', () => {
+    expect(goalDone(full)).toBe(true)
+    expect(goalStages(full).map(s => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
+    expect(goalStatus(full, false)).toBe('Done')
+  })
+  it('moves from the accepted plan to implementation, then from checks to review', () => {
+    const planAccepted = events.find(e => e.event_type === 'task_state_changed' && e.task_id === tasks.tasks[0]!.task_id && 'to' in e.body_json && e.body_json.to === 'accepted')!
+    expect(goalStatus(cut(planAccepted.seq), false)).toBe('Implementing')
+    expect(goalStages(cut(planAccepted.seq)).find(s => s.label === 'Implement')?.state).toBe('running')
+    expect(goalStatus(cut(46), false)).toBe('Reviewing')
+  })
+  it('marks a failed review and blocked planning task', () => {
+    const failed = { ...full, events: full.events.map(e => e.event_type === 'verification_recorded' && e.body_json.method === 'review' ? { ...e, body_json: { ...e.body_json, verdict: 'fail' } } : e) }
+    expect(goalStages(failed).find(s => s.label === 'Review')?.state).toBe('failed')
+    expect(goalDone(failed)).toBe(false)
+    const blocked = { ...cut(8), tasks: [{ ...full.tasks[0]!, state: 'blocked' }] }
+    expect(goalStatus(blocked, false)).toBe('Blocked')
+    expect(goalStages(blocked)[1]?.state).toBe('failed')
+  })
+  it('skips planning for a mission before the chief of staff', () => {
+    expect(goalStages({ ...full, tasks: full.tasks.filter(t => t.role !== 'plan') })[1]?.state).toBe('skipped')
+  })
+  it('uses attempt start to submission, relative dates and numeric mission order', () => {
+    expect(taskTiming(full, full.tasks[0]!, Date.now()).label).toMatch(/^took \d+ s$/)
+    expect(relative('2026-10-16T04:11:00Z', Date.parse('2026-10-16T04:14:00Z'))).toBe('3 min ago')
+    const runtime = parseRuntimeProgress({ work: { missions: [{ mission_id: 'M-2' }, { mission_id: 'M-12' }] }, recent: { tasks: [{ mission_id: 'M-10' }, { mission_id: 'M-2' }] } })
+    expect(missionIds(runtime)).toEqual(['M-12', 'M-10', 'M-2'])
+    expect(missionIds(runtime, 'M-20')[0]).toBe('M-20')
+  })
+})
+
+describe('goal cards and source links', () => {
+  it('shows four criteria, four exclusions, three decisions, commit, branch and the report', async () => {
+    mockFetch()
+    wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />)
+    expect(await screen.findByText('Done', { selector: 'strong.text-lg' })).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Done when')).getAllByRole('listitem', { hidden: true })).toHaveLength(4)
+    expect(within(screen.getByLabelText('Not doing')).getAllByRole('listitem', { hidden: true })).toHaveLength(4)
+    expect(within(screen.getByLabelText('Decisions')).getAllByRole('listitem', { hidden: true })).toHaveLength(3)
+    expect(screen.getByText('d7ce5db')).toBeInTheDocument()
+    expect(screen.getByText(/Branch: refs\/heads\/agent\//)).toBeInTheDocument()
+    expect(screen.getByText('Review verdict: pass')).toBeInTheDocument()
+    expect(screen.getByText('What the chief of staff wrote').closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Implementation report 1' }))
+    expect(await screen.findByText('Fixture implementation report')).toBeInTheDocument()
+  })
+  it('matches only planning questions and runtime blocks for this mission', () => {
+    const q = { id: 'q_123', title: 'Confirm scope', task_id: full.tasks[0]!.task_id, status: 'open' } as Question
+    const runtime = parseRuntimeProgress({ needs_you: { items: [{ title: 'Change plan', blocks: { missions: ['M-2'] }, action: {} }] } })
+    expect(goalWaitingLinks('M-2', full, [q], runtime)).toEqual([{ title: q.title, href: '#questions?id=q_123' }, { title: 'Change plan', href: '#needs-you' }])
+    expect(goalStatus(full, true)).toBe('Waiting for you')
+    expect(goalWaitingLinks('M-1', full, [{ ...q, task_id: 'unrelated' }], runtime)).toEqual([])
+  })
+  it('refreshes open cards with the runtime poll and stops after completion', async () => {
+    const fetch = mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['agent-runtime-goal', 'M-2'], cut(26))
+    const { rerender } = wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />, client)
+    rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={2} questions={[]} /></QueryClientProvider>)
+    await screen.findByText('Done', { selector: 'strong.text-lg' })
+    expect(fetch).toHaveBeenCalledTimes(3)
+    rerender(<QueryClientProvider client={client}><GoalCard id="M-2" updatedAt={3} questions={[]} /></QueryClientProvider>)
+    expect(fetch).toHaveBeenCalledTimes(3)
+  })
+  it('does not give the Owner the move for silent threads alone', () => {
+    expect(whoseMove({ state: 'known', count: 4 }, parseRuntimeProgress({ live: [{ task_id: 't' }] }), {}, false, 4)).toBe("Agents' move")
+    expect(whoseMove({ state: 'known', count: 5 }, parseRuntimeProgress({}), {}, false, 4)).toBe("Owner's move")
+  })
+})
+
+describe('Progress composition', () => {
+  it('collapses reference sections and opens legacy hash targets', async () => {
+    mockFetch()
+    window.history.replaceState(null, '', '#commit-lineage')
+    wrap(<ProgressPage />)
+    expect(document.getElementById('commit-lineage')).toHaveAttribute('open')
+    expect(document.getElementById('code-health')).not.toHaveAttribute('open')
+    expect(screen.getByText('History').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText('Plan and architecture').closest('details')).not.toHaveAttribute('open')
+    expect(resolveConsoleHash('commit-lineage').canonical).toBe('#progress?section=commit-lineage')
+    expect(resolveConsoleHash('code-health').canonical).toBe('#progress?section=code-health')
+    await act(async () => { window.location.hash = '#progress?section=code-health'; window.dispatchEvent(new Event('hashchange')) })
+    expect(document.getElementById('code-health')).toHaveAttribute('open')
+  })
+  it('puts a submitted card first, clears the form, links and scrolls to the card', async () => {
+    mockFetch()
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    wrap(<ProgressPage />)
+    await screen.findByLabelText('Goal M-2')
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'A new goal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await screen.findByLabelText('Goal M-20')
+    expect(screen.getByLabelText('Goal')).toHaveValue('')
+    expect(screen.getAllByRole('article')[0]).toHaveAttribute('id', 'goal-M-20')
+    expect(screen.getByRole('link', { name: 'M-20 created · View goal' })).toHaveAttribute('href', '#progress?goal=M-20')
+    expect(scroll).toHaveBeenCalled()
+    expect(screen.getByLabelText('Decisions for you')).toBeInTheDocument()
+    expect(screen.getByText('Silent threads · 0').closest('details')).not.toHaveAttribute('open')
+  })
+})
+
+it('reads the next event page from the last sequence', async () => {
+  const fetch = vi.fn(async (url: RequestInfo | URL) => new Response(JSON.stringify(String(url).includes('after_seq=500') ? [{ seq: 501, event_type: 'mission_amended' }] : Array.from({ length: 500 }, (_, i) => ({ seq: i + 1, event_type: 'attempt_started' })))))
+  vi.stubGlobal('fetch', fetch)
+  expect(await fetchRuntimeEvents('M-2')).toHaveLength(501)
+  expect(String(fetch.mock.calls[1]![0])).toContain('after_seq=500')
+})

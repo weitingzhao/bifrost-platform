@@ -15,7 +15,7 @@ export function AgentsPlan() {
   const query = useQuery({ queryKey: ['agent-progress'], queryFn: fetchAgentProgress, refetchInterval: AGENT_PROGRESS_POLL_MS })
   const roadmap = query.data?.document?.roadmap
   const round = roadmap?.round, arch = roadmap?.arch
-  return <OpsSection title="Plan and architecture" bodyPadding="compact"
+  return <OpsSection title="Plan and architecture" description="From the coordinator’s board · kept by hand" collapsible defaultCollapsed bodyPadding="compact"
     actions={<span className="text-xs text-muted-foreground">Generated: {query.data?.generated_at || 'Unknown'}</span>}>
     {query.isPending && <p role="status">Loading plan and architecture…</p>}
     {query.isError && <p role="alert">Could not load plan and architecture: {query.error.message}</p>}

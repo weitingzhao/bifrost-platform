@@ -24,7 +24,7 @@ export function TaskRow({ mission, task }: { mission: string; task: RuntimeTask 
       <span className="w-full break-words">{task.reason || 'No reason reported'} · Since {task.since || 'unknown'}</span>
     </button>
     {(task.state === 'awaiting_owner' || task.status === 'waiting_owner') && <a href="#needs-you" className="text-sm underline">Waiting for you · See Needs you</a>}
-    {open && <TaskTimeline mission={mission} task={task.task_id} />}
+    {open && <TaskTimeline mission={mission} task={task.task_id} finished={['accepted', 'cancelled', 'rejected', 'failed'].includes(task.state)} />}
   </div>
 }
 function missionTasks(mission: RuntimeMission, recent: RuntimeRecord[]): RuntimeTask[] {

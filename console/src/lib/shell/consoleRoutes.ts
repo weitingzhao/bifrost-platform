@@ -185,6 +185,8 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
 
 /** Records tab a legacy hash lands on. */
 export const LEGACY_HASH_QUERY: Record<string, string> = {
+  'commit-lineage': 'section=commit-lineage',
+  'code-health': 'section=code-health',
   defects: 'tab=audit',
   audit: 'tab=audit',
   'execution-log': 'tab=audit',

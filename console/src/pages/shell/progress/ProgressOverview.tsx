@@ -9,8 +9,8 @@ import { whoseMove, workRunning } from './mergedProgressModel'
 function Meter({ label, done, total }: { label: string; done: number; total: number }) {
   return <div><span>{done}/{total} {label}</span><progress aria-label={label} value={done} max={total || 1} className="block h-2 w-full" /></div>
 }
-export function ProgressOverview({ count, runtime, board, failed }: { count: NeedsYouCount; runtime?: RuntimeProgress; board?: ProgressDocument | null; failed: boolean }) {
-  const move = whoseMove(count, runtime, board, failed)
+export function ProgressOverview({ count, runtime, board, failed, silentThreads = 0 }: { count: NeedsYouCount; runtime?: RuntimeProgress; board?: ProgressDocument | null; failed: boolean; silentThreads?: number }) {
+  const move = whoseMove(count, runtime, board, failed, silentThreads)
   const items = board?.roadmap?.round?.items
   const rows = board?.roadmap?.arch?.rows
   const card = 'flex min-w-0 flex-col gap-2 rounded border border-[var(--card-border)] p-3 text-sm'

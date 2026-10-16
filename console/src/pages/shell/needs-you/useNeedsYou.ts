@@ -119,11 +119,14 @@ export function useNeedsYou() {
       instruction: group === 'decide' ? 'Console request · Approve or reject' : group === 'terminal' ? 'Request page · Run in a terminal and report the result' : 'Request page · Check and report what happened',
     }))),
     ...openQuestions.map(q => ({ id: q.id, title: q.title, href: questionHref(q.id), instruction: 'Console question · Choose an option or write an answer' })),
-    ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: '#needs-you', instruction: 'Needs you · Check the silent thread' })),
+    ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: '#needs-you', kind: 'silent_thread', instruction: 'Needs you · Check the silent thread' })),
     ...lost.map(h => ({ id: h.host, title: h.host, href: '#needs-you', instruction: 'Needs you · Check the host heartbeat' })),
     ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: '#needs-you', instruction: 'Needs you · Restore thread monitoring capacity' }] : []),
     ...runtimeItems, ...coordinatorItems,
   ]
+
+  const decisionItems = waitingItems.filter(item => item.kind !== 'silent_thread')
+  const silentItems = waitingItems.filter(item => item.kind === 'silent_thread')
 
   const approvalRows = allQ.data != null ? recentlyHandledApprovals(allQ.data, now) : []
   const threadRows = threadsQuery.data != null ? recentlyHandledThreads(threadsQuery.data.threads, now) : []
@@ -141,6 +144,7 @@ export function useNeedsYou() {
 
   return {
     count,
+    decisionItems, silentItems,
     waitingItems, runtimeItems, coordinatorItems, runtimeCount, coordinatorCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,

@@ -27,7 +27,9 @@ function Group({
   count,
   description,
   children,
+  collapsed = false,
 }: {
+  collapsed?: boolean
   label: string
   count: string
   description?: string
@@ -35,7 +37,7 @@ function Group({
 }) {
   return (
     <div role="region" aria-label={label}>
-      <OpsSection title={`${label} · ${count}`} description={description} bodyPadding="compact">
+      <OpsSection title={`${label} · ${count}`} description={description} collapsible={collapsed} defaultCollapsed={collapsed} bodyPadding="compact">
         {children}
       </OpsSection>
     </div>
@@ -242,9 +244,6 @@ export function NeedsYouPage() {
       {!questionsLoading && !questionsUnreadable ? (
         <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} />
       ) : null}
-      <Group label="Silent threads" count={needsYouCountText(silentCount)} description={SILENT_THREAD_EXPLANATION}>
-        {stalled}
-      </Group>
       {([
         { label: 'Agent runtime', items: runtimeItems, state: runtimeCount, at: runtimeQuery.data?.generated_at },
         { label: 'Written by the coordinator', items: coordinatorItems, state: coordinatorCount, at: progressQuery.data?.generated_at, coordinator: true },
@@ -260,6 +259,10 @@ export function NeedsYouPage() {
             : <p><a className="underline" href={item.href}>{item.instruction}</a></p>}
         </li>)}</ul>
       </Group>)}
+      <Group label="Silent threads" count={needsYouCountText(silentCount)} collapsed description={SILENT_THREAD_EXPLANATION}>
+        <Note>Claude sessions that went quiet.</Note>
+        {stalled}
+      </Group>
       <Group label="Sign off" count="—">
         <Note>Not connected yet.</Note>
       </Group>

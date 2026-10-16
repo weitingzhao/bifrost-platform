@@ -6,9 +6,9 @@ import type { NeedsYouCount } from '../needs-you/needsYouModel'
 // waiting on a verification, a review or the next implementation round (store.TaskStatus).
 const AGENT_MOVES = new Set(['proposed', 'ready', 'leased', 'running', 'submitted', 'verifying', 'rework'])
 
-export function whoseMove(count: NeedsYouCount, runtime: RuntimeProgress | undefined, board: ProgressDocument | null | undefined, failed = false): string {
+export function whoseMove(count: NeedsYouCount, runtime: RuntimeProgress | undefined, board: ProgressDocument | null | undefined, failed = false, silentThreads = 0): string {
   if (failed || count.state !== 'known' || !runtime) return 'Unknown'
-  if (count.count > 0) return "Owner's move"
+  if (count.count > silentThreads) return "Owner's move"
   if (runtime.live.length || runtime.work.missions.some(m => m.tasks.some(t => AGENT_MOVES.has(t.state)))) return "Agents' move"
   if (!board) return 'Unknown'
   if (['working', 'running', 'run', 'doing'].includes(board.coordinator?.state || '') || (!board.coordinator?.state && board.coordinator?.doing?.trim())) return "Coordinator's move"

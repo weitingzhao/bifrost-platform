@@ -32,7 +32,7 @@ export type RuntimeProgress = {
   controls: RuntimeRecord[]; plan: unknown[]
 }
 export type RuntimeEvent = {
-  event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
+  seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
 }
 export type GoalResult = {
   mission_id: string; mission_state: string; waiting: string; task_id: string; repo: string; base_commit: string; spec_artifact_id: string
@@ -67,7 +67,7 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
   }
 }
 export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
-  return records(v).map(e => ({ event_type: text(e.event_type), at: text(e.at), actor_id: text(e.actor_id),
+  return records(v).map(e => ({ seq: number(e.seq), event_type: text(e.event_type), at: text(e.at), actor_id: text(e.actor_id),
     task_id: text(e.task_id), attempt_id: text(e.attempt_id), body_json: record(e.body_json) }))
 }
 export function parseGoalResult(v: unknown): GoalResult {
@@ -80,8 +80,17 @@ export async function fetchRuntimeProgress(signal?: AbortSignal): Promise<Runtim
   return parseRuntimeProgress(await r.json())
 }
 export async function fetchRuntimeEvents(mission: string, signal?: AbortSignal): Promise<RuntimeEvent[]> {
-  const r = await authedFetch('Agent events', `/api/v1/agentrt/events?${new URLSearchParams({ stream: `mission:${mission}` })}`, { signal })
-  return parseRuntimeEvents(await r.json())
+  const events: RuntimeEvent[] = []
+  let after = 0
+  for (;;) {
+    const r = await authedFetch('Agent events', `/api/v1/agentrt/events?${new URLSearchParams({ stream: `mission:${mission}`, after_seq: String(after) })}`, { signal })
+    const page = parseRuntimeEvents(await r.json())
+    events.push(...page)
+    if (page.length < 500) return events
+    const last = page.at(-1)?.seq
+    if (last === undefined || last <= after) throw new Error('Agent events: invalid pagination cursor')
+    after = last
+  }
 }
 export async function fetchRuntimeArtifact(id: string, signal?: AbortSignal): Promise<string> {
   const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`, { signal })

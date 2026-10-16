@@ -79,7 +79,7 @@ describe('one Needs you list', () => {
     expect(screen.queryByText('Already an approval')).not.toBeInTheDocument()
     expect(screen.getByText(/Commands are not published to the platform/)).toBeInTheDocument()
     const blocks = Array.from(screen.getByTestId('merged-progress').children)
-    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Overview', 'Give the agents a goal', 'Running', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Goals', 'Overview', 'Coordinator', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
     const preview = within(blocks[0] as HTMLElement)
     expect(preview.getAllByRole('listitem')).toHaveLength(4)
     expect(preview.getByRole('link', { name: /Where is the quota/ })).toHaveAttribute('href', `#questions?id=${question.id}`)

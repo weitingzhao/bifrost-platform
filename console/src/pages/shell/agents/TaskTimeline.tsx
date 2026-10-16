@@ -8,10 +8,11 @@ function eventsForTask(events: RuntimeEvent[], task: string): RuntimeEvent[] {
   return events.filter(e => e.task_id === task || text(record(e.body_json.inputs).subject) === task)
 }
 
-function ArtifactPanel({ id, close }: { id: string; close: () => void }) {
+export function ArtifactPanel({ id, close, label }: { id: string; close: () => void; label?: string }) {
   const query = useQuery({ queryKey: ['agent-runtime-artifact', id], queryFn: ({ signal }) => fetchRuntimeArtifact(id, signal) })
   return <section aria-label={`Artifact ${id}`} className="my-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
-    <div className="flex flex-wrap justify-between gap-2"><strong className="break-all">{id}</strong><button type="button" onClick={close}>Close artifact</button></div>
+    <div className="flex flex-wrap justify-between gap-2"><strong className="break-all">{label || id}</strong><button type="button" onClick={close}>Close artifact</button></div>
+    {label && <details><summary>Details</summary><p className="break-all text-xs">{id}</p></details>}
     {query.isPending && <p role="status">Loading artifact…</p>}
     {query.isError && <p role="alert">Could not load artifact: {query.error.message}</p>}
     {query.data !== undefined && <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{query.data || 'Artifact is empty.'}</pre>}
@@ -29,13 +30,13 @@ function artifactIds(event: RuntimeEvent): string[] {
   const ids = Array.isArray(event.body_json.artifacts) ? event.body_json.artifacts : []
   return ids.filter((v): v is string => typeof v === 'string')
 }
-export function TaskTimeline({ mission, task }: { mission: string; task: string }) {
+export function TaskTimeline({ mission, task, events: supplied, finished = false }: { mission: string; task: string; events?: RuntimeEvent[]; finished?: boolean }) {
   const [artifact, setArtifact] = useState<string | null>(null)
   const query = useQuery({ queryKey: ['agent-runtime-events', mission],
-    queryFn: ({ signal }) => fetchRuntimeEvents(mission, signal), refetchInterval: AGENT_RUNTIME_POLL_MS })
-  const events = eventsForTask(query.data ?? [], task)
+    queryFn: ({ signal }) => fetchRuntimeEvents(mission, signal), enabled: supplied === undefined, refetchInterval: finished ? false : AGENT_RUNTIME_POLL_MS })
+  const events = eventsForTask(supplied ?? query.data ?? [], task)
   return <div aria-label={`Timeline ${task}`} className="min-w-0 border-t border-[var(--table-rule)] p-3">
-    {query.isPending && <p role="status">Loading timeline…</p>}
+    {supplied === undefined && query.isPending && <p role="status">Loading timeline…</p>}
     {query.isError && <p role="alert">Could not load timeline: {query.error.message}</p>}
     {query.isSuccess && events.length === 0 && <p>No events for this task.</p>}
     <ol className="flex flex-col gap-3">

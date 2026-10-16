@@ -71,7 +71,7 @@ describe('goal submission', () => {
     expect(screen.getByRole('button', { name: 'Submitting…' })).toBeDisabled()
     expect(screen.getByLabelText('Goal')).toBeDisabled()
     await act(async () => { resolve(json(goalResult)) })
-    expect(await screen.findByText('M-6 created (state active)')).toBeInTheDocument()
+    expect(await screen.findByText('M-6 created · View goal')).toBeInTheDocument()
     expect(screen.getByText('Task: t_new')).toBeInTheDocument()
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toMatchObject({ goal: 'Add the agent page', repo: 'bifrost-platform' })
   })
@@ -158,7 +158,7 @@ describe('Merged Progress page', () => {
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => json(String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
     wrap(<ProgressPage />)
-    expect(await screen.findByText('No missions or attempts running.')).toBeInTheDocument()
+    expect(await screen.findByText('No goals yet.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()
     expect(await screen.findByText('The plan is not published in this environment.')).toBeInTheDocument()
   })
