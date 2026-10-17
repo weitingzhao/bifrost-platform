@@ -57,9 +57,10 @@ func TestPrepareSibling(t *testing.T) {
 	creds := append(append([]string{}, env...), "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader",
 		"GIT_CONFIG_VALUE_0=Authorization: token fixture-not-a-secret")
 	bare, first := remote(t, env)
-	task := filepath.Join(t.TempDir(), "tasks", "t_1")
-	dir := filepath.Join(task, "bifrost-ui")
-	head, err := PrepareSibling(context.Background(), dir, bare, "main", creds)
+	root := t.TempDir()
+	rel := filepath.Join("tasks", "t_1", "bifrost-ui")
+	dir := filepath.Join(root, rel)
+	head, err := PrepareSibling(context.Background(), root, rel, bare, "main", creds)
 	if err != nil || head != first {
 		t.Fatalf("first = %q %v, want %s", head, err, first)
 	}
@@ -97,7 +98,7 @@ func TestPrepareSibling(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[core]\n\thooksPath = "+globalHooks+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if head, err = PrepareSibling(context.Background(), dir, bare, "main", creds); err != nil || head != second {
+	if head, err = PrepareSibling(context.Background(), root, rel, bare, "main", creds); err != nil || head != second {
 		t.Fatalf("again = %q %v, want %s from the remote it was given", head, err, second)
 	}
 	if b, rerr := os.ReadFile(leaked); rerr == nil {
@@ -113,37 +114,71 @@ func TestPrepareSibling(t *testing.T) {
 		t.Fatalf("origin = %s, want %s", got, bare)
 	}
 
-	// Symbolic links: the sibling, and the task directory.
+	// Symbolic links anywhere from agentd's root down to the sibling: the
+	// sibling itself, the task directory, tasks/ (review 228 A1), one that
+	// points inside the root. None is followed, and nothing outside is removed.
 	outside := t.TempDir()
+	sentinel := filepath.Join(outside, "t_1", "bifrost-ui", "not-agentd's")
+	if err = os.MkdirAll(filepath.Dir(sentinel), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(sentinel, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	refused := func(what, root, rel string) {
+		t.Helper()
+		if _, perr := PrepareSibling(context.Background(), root, rel, bare, "main", creds); perr == nil {
+			t.Fatalf("%s: prepared", what)
+		}
+		if _, serr := os.Stat(sentinel); serr != nil {
+			t.Fatalf("%s: a file outside agentd's directory went: %v", what, serr)
+		}
+	}
 	if err = os.RemoveAll(dir); err != nil {
 		t.Fatal(err)
 	}
-	if err = os.Symlink(outside, dir); err != nil {
+	if err = os.Symlink(filepath.Join(outside, "t_1", "bifrost-ui"), dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = PrepareSibling(context.Background(), dir, bare, "main", creds); err == nil {
-		t.Fatal("a sibling that is a symbolic link was prepared")
-	}
-	if _, err = os.Stat(outside); err != nil {
-		t.Fatalf("the link's target went: %v", err)
-	}
-	linked := filepath.Join(t.TempDir(), "t_2")
-	if err = os.Symlink(outside, linked); err != nil {
+	refused("the sibling is a link", root, rel)
+	linkedTask := t.TempDir()
+	if err = os.MkdirAll(filepath.Join(linkedTask, "tasks"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = PrepareSibling(context.Background(), filepath.Join(linked, "bifrost-ui"), bare, "main", creds); err == nil {
-		t.Fatal("a sibling in a linked task directory was prepared")
+	if err = os.Symlink(filepath.Join(outside, "t_1"), filepath.Join(linkedTask, "tasks", "t_1")); err != nil {
+		t.Fatal(err)
 	}
+	refused("the task directory is a link", linkedTask, rel)
+	linkedTasks := t.TempDir()
+	if err = os.Symlink(outside, filepath.Join(linkedTasks, "tasks")); err != nil {
+		t.Fatal(err)
+	}
+	refused("tasks/ is a link out of the root", linkedTasks, rel)
+	inside := t.TempDir()
+	if err = os.MkdirAll(filepath.Join(inside, "elsewhere", "t_1"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Relative: os.Root follows a link that stays inside it, so only the walk
+	// down from the root refuses this one (an absolute target it refuses itself).
+	if err = os.Symlink("elsewhere", filepath.Join(inside, "tasks")); err != nil {
+		t.Fatal(err)
+	}
+	refused("tasks/ is a link inside the root", inside, rel)
+	if _, err = os.Stat(filepath.Join(inside, "elsewhere", "t_1")); err != nil {
+		t.Fatalf("a directory a link inside the root pointed at went: %v", err)
+	}
+	refused("a path that leaves the root", root, filepath.Join("..", "x", "bifrost-ui"))
+	refused("an absolute path", root, filepath.Join(outside, "t_1", "bifrost-ui"))
 
-	if _, err = PrepareSibling(context.Background(), filepath.Join(t.TempDir(), "x"), bare, "--upload-pack=touch /tmp/x", env); err == nil {
+	if _, err = PrepareSibling(context.Background(), t.TempDir(), filepath.Join("tasks", "t_1", "x"), bare, "--upload-pack=touch /tmp/x", env); err == nil {
 		t.Fatal("an option for a ref was fetched")
 	}
 	for _, name := range []string{"a1", "A1", "A12"} {
-		if _, err = PrepareSibling(context.Background(), filepath.Join(t.TempDir(), name), bare, "main", env); err == nil {
+		if _, err = PrepareSibling(context.Background(), t.TempDir(), filepath.Join("tasks", "t_1", name), bare, "main", env); err == nil {
 			t.Fatalf("an attempt's directory (%s) was taken for a sibling", name)
 		}
 	}
-	if _, err = PrepareSibling(context.Background(), filepath.Join(t.TempDir(), "x"), bare, "no-such-branch", env); err == nil {
+	if _, err = PrepareSibling(context.Background(), t.TempDir(), filepath.Join("tasks", "t_1", "x"), bare, "no-such-branch", env); err == nil {
 		t.Fatal("a branch the remote has not was checked out")
 	}
 }

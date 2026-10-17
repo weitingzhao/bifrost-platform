@@ -88,35 +88,53 @@ func PrepareFetching(ctx context.Context, dir, remote, base string, env []string
 	return w, nil
 }
 
-// PrepareSibling makes dir, a repository beside an attempt's checkout, a fresh
-// clone of remote at the head of branch ref and returns that commit. Whatever
-// was at dir is removed first, never reused: an earlier attempt's setup ran
-// unsandboxed and may have left hooks or another origin in its .git, which a
-// fetch with the Gitea credentials would then run or follow (review 227 A1).
-// A dir or a task directory that is a symbolic link is refused, and the clone
-// reads neither the host user's global nor the system git configuration (the
-// same setup could have written them) and installs no template hooks.
-func PrepareSibling(ctx context.Context, dir, remote, ref string, env []string) (string, error) {
-	if err := (Sibling{Repo: filepath.Base(dir), Ref: ref}).check(); err != nil {
+// PrepareSibling makes <root>/<rel>, a repository beside an attempt's
+// checkout, a fresh clone of remote at the head of branch ref and returns that
+// commit. Whatever was there is removed first, never reused: an earlier
+// attempt's setup ran unsandboxed and may have left hooks or another origin in
+// its .git, which a fetch with the Gitea credentials would then run or follow
+// (review 227 A1). root is agentd's own directory, trusted; rel must stay in
+// it. Every directory from root down to the sibling, and the sibling itself,
+// must not be a symbolic link, and the removal and the directories made go
+// through an os.Root on root, which refuses to leave it: a link the same
+// setup put anywhere on the way cannot turn the removal onto something else
+// (review 228 A1). The clone reads neither the host user's global nor the
+// system git configuration (the setup could have written them) and installs
+// no template hooks. Nothing else runs on this host while a sibling is
+// prepared (the attempt before has ended and its process group is cleared;
+// this attempt's has not started), so the checked path is the one cloned to.
+func PrepareSibling(ctx context.Context, root, rel, remote, ref string, env []string) (string, error) {
+	if !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("agentd: sibling: %q is not a path inside agentd's directory", rel)
+	}
+	if err := (Sibling{Repo: filepath.Base(rel), Ref: ref}).check(); err != nil {
 		return "", fmt.Errorf("agentd: sibling: %w", err)
 	}
-	parent := filepath.Dir(dir)
-	if err := os.MkdirAll(parent, 0o700); err != nil {
+	r, err := os.OpenRoot(root)
+	if err != nil {
 		return "", err
 	}
-	for _, p := range []string{parent, dir} {
-		fi, err := os.Lstat(p)
+	defer func() { _ = r.Close() }()
+	parentRel := filepath.Dir(rel)
+	if err = r.MkdirAll(parentRel, 0o700); err != nil {
+		return "", fmt.Errorf("agentd: sibling: %w", err)
+	}
+	for p := rel; p != "."; p = filepath.Dir(p) {
+		fi, lerr := r.Lstat(p)
 		switch {
-		case errors.Is(err, os.ErrNotExist):
-		case err != nil:
-			return "", err
+		case errors.Is(lerr, os.ErrNotExist) && p == rel:
+		case lerr != nil:
+			return "", fmt.Errorf("agentd: sibling: %w", lerr)
 		case fi.Mode()&os.ModeSymlink != 0:
-			return "", fmt.Errorf("agentd: sibling: %s is a symbolic link", p)
+			return "", fmt.Errorf("agentd: sibling: %s is a symbolic link", filepath.Join(root, p))
+		case p != rel && !fi.IsDir():
+			return "", fmt.Errorf("agentd: sibling: %s is not a directory", filepath.Join(root, p))
 		}
 	}
-	if err := os.RemoveAll(dir); err != nil {
-		return "", err
+	if err = r.RemoveAll(rel); err != nil {
+		return "", fmt.Errorf("agentd: sibling: %w", err)
 	}
+	dir, parent := filepath.Join(root, rel), filepath.Join(root, parentRel)
 	isolated := append(append([]string{}, env...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 	w := &Workspace{Dir: dir, env: isolated}
 	if _, err := w.git(ctx, parent, "clone", "--quiet", "--no-checkout", "--template=", "--single-branch", "--branch", ref, "--", remote, dir); err != nil {

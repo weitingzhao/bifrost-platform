@@ -15,8 +15,9 @@ import (
 
 // A task's siblings and setup (CUT-agentd-console-checks-2026-10-16). The
 // siblings are git, with the Gitea credentials agentd keeps from executors, so
-// agentd brings them up to date itself, beside the checkout, before the
-// attempt starts: a failure there ends the run like a failed checkout. The
+// agentd clones them afresh itself, beside the checkout and inside its own
+// directory, before the attempt starts: a failure there ends the run like a
+// failed checkout. The
 // setup commands need no credentials but the network, so they run as the
 // attempt's first act, inside its process group under the launcher: agentd
 // setup runs them, writes setup.json and, when they pass, execs the executor
@@ -43,16 +44,20 @@ func (a *Attempt) prepare() TaskSpec {
 	return a.Spec
 }
 
-// siblings brings each sibling up to date beside the checkout and records the
-// commits in siblings.json in the attempt's output.
+// siblings makes each sibling a fresh clone beside the checkout, inside
+// agentd's own directory, and records the commits in siblings.json in the
+// attempt's output.
 func (d *Daemon) siblings(ctx context.Context, a *Attempt, sibs []Sibling) error {
 	if len(sibs) == 0 {
 		return nil
 	}
 	heads := map[string]string{}
 	for _, s := range sibs {
-		dir := filepath.Join(filepath.Dir(a.Dir), s.Repo)
-		head, err := PrepareSibling(ctx, dir, d.Remote(s.Repo), s.Ref, d.GitEnv)
+		rel, err := filepath.Rel(d.Root, filepath.Join(filepath.Dir(a.Dir), s.Repo))
+		if err != nil {
+			return fmt.Errorf("agentd: sibling %s: %w", s.Repo, err)
+		}
+		head, err := PrepareSibling(ctx, d.Root, rel, d.Remote(s.Repo), s.Ref, d.GitEnv)
 		if err != nil {
 			return fmt.Errorf("agentd: sibling %s at %s: %w", s.Repo, s.Ref, err)
 		}
