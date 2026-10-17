@@ -3,7 +3,6 @@ import {
   isTradeEnvId,
   tradeEnvSegmentActiveClass,
   tradeEnvTagVariant,
-  viewerSeatTagVariant,
 } from '@/lib/envVisual'
 
 describe('envVisual SSOT', () => {
@@ -11,8 +10,6 @@ describe('envVisual SSOT', () => {
     expect(tradeEnvTagVariant('dev')).toBe('info')
     expect(tradeEnvTagVariant('stg')).toBe('warning')
     expect(tradeEnvTagVariant('prod')).toBe('danger')
-    expect(viewerSeatTagVariant('dev-local')).toBe('info')
-    expect(viewerSeatTagVariant('prod')).toBe('danger')
   })
 
   it('exposes distinct active segment classes per env', () => {

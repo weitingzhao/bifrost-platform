@@ -3,7 +3,7 @@
   "short_name": "Bifrost Ops",
   "description": "What needs you, and whether the system is healthy.",
   "id": "/",
-  "start_url": "/#needs-you",
+  "start_url": "/#you",
   "scope": "/",
   "display": "standalone",
   "background_color": "#111720",

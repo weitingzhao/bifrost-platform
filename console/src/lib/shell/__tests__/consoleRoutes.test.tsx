@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { shellSidebarItems } from '@/lib/shell/shellNavItems'
+import { shellDetailItems, shellEntryItems, shellSidebarItems } from '@/lib/shell/shellNavItems'
 import {
+  ENTRY_ROUTE_IDS,
   FORMER_CONSOLE_TABS,
   LEGACY_HASH_REDIRECTS,
   SHELL_NAV,
   SHELL_ROUTE_IDS,
   approvalHref,
+  entryOf,
   formatShellHash,
   hashQueryWithoutTaskMode,
   isQuestionId,
@@ -15,23 +17,17 @@ import {
   resolveHashTab,
 } from '@/lib/shell/consoleRoutes'
 
-const LABELS = ['Owner Console', 'Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
+const ENTRIES = ['For you', 'Chief of staff', 'Work', 'System']
+const DETAILS = ['Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
 
 describe('shell navigation', () => {
-  it('puts the Owner Console first, Needs you second and Records last', () => {
-    expect(SHELL_NAV.map(item => item.label)).toEqual(LABELS)
-    expect(SHELL_NAV.map(item => item.id)).toEqual([
-      'owner',
-      'needs-you',
-      'status',
-      'data',
-      'ib',
-      'releases',
-      'infrastructure',
-      'progress',
-      'records',
-    ])
-    expect(shellSidebarItems().map(item => item.label)).toEqual(LABELS)
+  it('has four entries, For you first, then the detail pages with Records last', () => {
+    expect(SHELL_NAV.map(item => item.label)).toEqual([...ENTRIES, ...DETAILS])
+    expect(ENTRY_ROUTE_IDS).toEqual(['you', 'chief', 'work', 'system'])
+    expect(shellEntryItems().map(item => item.label)).toEqual(ENTRIES)
+    expect(shellDetailItems().map(item => item.label)).toEqual(DETAILS)
+    expect(shellSidebarItems().map(item => item.label)).toEqual([...ENTRIES, ...DETAILS])
+    expect(shellSidebarItems().every(item => item.icon != null)).toBe(true)
     const ids = new Set(shellSidebarItems().map(item => item.id))
     expect(ids.has('maintenance')).toBe(false)
     expect(ids.has('approvals')).toBe(false)
@@ -67,8 +63,8 @@ describe('legacy hash redirects', () => {
   it('drops the Agent Protocol redirect; the old hash lands on the home page', () => {
     expect(LEGACY_HASH_REDIRECTS['agent-protocol']).toBeUndefined()
     expect(resolveConsoleHash('agent-protocol')).toEqual({
-      location: { kind: 'shell', id: 'owner' },
-      canonical: '#owner',
+      location: { kind: 'shell', id: 'you' },
+      canonical: '#you',
     })
   })
 
@@ -84,10 +80,36 @@ describe('legacy hash redirects', () => {
     expect(formatShellHash('records', 'tab=audit')).toBe('#records?tab=audit')
   })
 
-  it('lands an empty hash on the Owner Console, and keeps its tab', () => {
-    expect(resolveHashTab('').location).toEqual({ kind: 'shell', id: 'owner' })
-    expect(resolveConsoleHash('').canonical).toBe('#owner')
-    expect(resolveConsoleHash('owner?tab=work').canonical).toBe('#owner?tab=work')
+  it('lands an empty hash on For you', () => {
+    expect(resolveHashTab('').location).toEqual({ kind: 'shell', id: 'you' })
+    expect(resolveConsoleHash('').canonical).toBe('#you')
+  })
+
+  it("lands the former one-page Owner Console's tabs on their entries", () => {
+    const cases: [string, string][] = [['owner', 'you'], ['owner?tab=all', 'you'], ['owner?tab=you', 'you'], ['owner?tab=chief', 'chief'],
+      ['owner?tab=work', 'work'], ['owner?tab=system', 'system'], ['owner?tab=data', 'system'], ['owner?tab=nope', 'you']]
+    for (const [from, to] of cases) {
+      expect(resolveConsoleHash(from), from).toEqual({ location: { kind: 'shell', id: to }, canonical: `#${to}` })
+    }
+  })
+
+  it('opens More, the list of detail pages, at its own hash', () => {
+    expect(resolveConsoleHash('more')).toEqual({ location: { kind: 'more' }, canonical: '#more' })
+  })
+})
+
+describe('which entry a place lights', () => {
+  it('lights the entry itself, For you for Needs you and a request, Work for Progress, System for the rest, none for More', () => {
+    expect(entryOf({ kind: 'shell', id: 'chief' })).toBe('chief')
+    expect(entryOf({ kind: 'shell', id: 'needs-you' })).toBe('you')
+    expect(entryOf({ kind: 'approval' })).toBe('you')
+    expect(entryOf({ kind: 'question' })).toBe('you')
+    expect(entryOf({ kind: 'shell', id: 'progress' })).toBe('work')
+    for (const id of ['status', 'data', 'ib', 'releases', 'infrastructure', 'records'] as const) {
+      expect(entryOf({ kind: 'shell', id }), id).toBe('system')
+    }
+    expect(entryOf({ kind: 'more' })).toBeNull()
+    expect(entryOf({ kind: 'dev-sessions' })).toBeNull()
   })
 })
 

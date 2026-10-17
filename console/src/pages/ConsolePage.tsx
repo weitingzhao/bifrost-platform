@@ -1,8 +1,11 @@
-import { PageShell, SidebarInset, SidebarProvider, TooltipProvider } from '@bifrost/ui'
+import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@bifrost/ui'
 import { useCallback, useEffect, useState, type ComponentType } from 'react'
-import { ConsoleHeader } from '@/components/ConsoleHeader'
+import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
+import { DetailPageLinks } from '@/components/shell/DetailPageLinks'
+import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
+import { ToolsMenu } from '@/components/ToolsMenu'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
@@ -18,27 +21,33 @@ import {
   ReleasesPage,
   StatusPage,
 } from '@/pages/shell/shellPages'
-import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
-import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
+import { yoursNavBadge } from '@/pages/shell/owner/ownerModel'
+import { useOwnerYours } from '@/pages/shell/owner/useOwnerYours'
 import { syncAppBadge } from '@/pwa/appBadge'
 import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   HOME_ROUTE,
+  MORE_ROUTE,
   NEEDS_YOU_ROUTE,
+  entryOf,
   formatShellHash,
+  isEntryRoute,
   isShellRouteId,
   locationId,
   resolveConsoleHash,
   resolveHashTab,
   shellNavEntry,
   type ConsoleLocation,
+  type EntryRouteId,
   type ShellRouteId,
 } from '@/lib/shell/consoleRoutes'
 import { showDevSessions } from '@/lib/shell/localConsole'
+import { useShellLayout } from '@/lib/shell/useShellLayout'
 
-const SHELL_PAGES: Record<ShellRouteId, ComponentType> = {
-  owner: OwnerConsolePage,
+type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
+
+const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
   'needs-you': NeedsYouPage,
   status: StatusPage,
   data: DataPage,
@@ -67,8 +76,24 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
   if (location.kind === 'question') {
     return { title: 'Question', description: 'Answer one question. Answering approves nothing.' }
   }
+  if (location.kind === 'more') {
+    return { title: 'More', description: 'Every detail page, with the question it answers.' }
+  }
   const entry = shellNavEntry(location.id)
   return { title: entry.label, description: entry.question }
+}
+
+/**
+ * Where the header's back link goes on a phone or a tablet: a request or a question back to Needs
+ * you, a detail page back to its entry. The entries and More have none (More takes its place).
+ */
+function backFor(location: ConsoleLocation): HeaderBack | undefined {
+  if (location.kind === 'approval' || location.kind === 'question') {
+    return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: formatShellHash(NEEDS_YOU_ROUTE) }
+  }
+  if (location.kind !== 'shell' || isEntryRoute(location.id)) return undefined
+  const entry = entryOf(location)
+  return entry == null ? undefined : { label: shellNavEntry(entry).label, href: formatShellHash(entry) }
 }
 
 function ShellBuildBanner() {
@@ -78,7 +103,8 @@ function ShellBuildBanner() {
 
 function ConsolePageInner() {
   const status = useShellStatusLine()
-  const needsYou = useNeedsYou()
+  const layout = useShellLayout()
+  const { yours } = useOwnerYours(Date.now())
   const local = showDevSessions({
     viewerEnv: status.viewerEnv,
     viewerEnvLoading: status.viewerEnvLoading,
@@ -108,8 +134,13 @@ function ConsolePageInner() {
     return () => window.removeEventListener('hashchange', applyHash)
   }, [applyHash])
 
-  const count = needsYou.count
-  const knownCount = count.state === 'known' ? count.count : null
+  // Another place starts at its top: the entries share one scroll, so the old position would carry over.
+  const here = locationId(location)
+  useEffect(() => {
+    document.scrollingElement?.scrollTo?.({ top: 0 })
+  }, [here])
+
+  const knownCount = yours.state === 'known' ? yours.count : null
   useEffect(() => {
     syncAppBadge(knownCount)
   }, [knownCount])
@@ -120,30 +151,49 @@ function ConsolePageInner() {
       return
     }
     const next = locationId(resolveHashTab(id).location)
-    window.location.hash = formatShellHash(isShellRouteId(next) ? next : HOME_ROUTE)
+    window.location.hash = formatShellHash(isShellRouteId(next) || next === MORE_ROUTE ? next : HOME_ROUTE)
   }, [])
 
-  const Page = location.kind === 'shell' ? SHELL_PAGES[location.id] : null
+  const entry = location.kind === 'shell' && isEntryRoute(location.id) ? location.id : null
+  const Page = location.kind === 'shell' && entry == null ? DETAIL_PAGES[location.id as DetailRouteId] : null
   const { title, description } = locationTitle(location)
   const activeTab =
     location.kind === 'dev-sessions'
       ? 'dev-sessions'
       : location.kind === 'approval' || location.kind === 'question'
         ? NEEDS_YOU_ROUTE
-        : location.id
-  const needsYouNavBadge = needsYouBadge(count)
+        : locationId(location)
+  const yoursBadge = yoursNavBadge(yours)
+  const back = layout === 'side' ? undefined : backFor(location)
+  const nav: EntryNavProps = {
+    active: entryOf(location),
+    onSelect: select,
+    yoursBadge,
+    systemTone: status.statusTone,
+    systemLine: status.statusLine,
+  }
 
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <ConsoleSidebar
-          activeTab={activeTab}
-          onSelect={select}
-          viewerEnv={status.viewerEnv}
-          viewerEnvLoading={status.viewerEnvLoading}
-          badges={needsYouNavBadge != null ? { [NEEDS_YOU_ROUTE]: needsYouNavBadge } : undefined}
-        />
-        <SidebarInset className={local ? 'min-w-0 overflow-x-clip pb-14' : 'min-w-0 overflow-x-clip'}>
+        {layout === 'side' ? (
+          <ConsoleSidebar
+            activeTab={activeTab}
+            onSelect={select}
+            viewerEnv={status.viewerEnv}
+            viewerEnvLoading={status.viewerEnvLoading}
+            badges={yoursBadge != null ? { you: yoursBadge } : undefined}
+          />
+        ) : null}
+        {layout === 'rail' ? <EntryRail {...nav} /> : null}
+        <SidebarInset
+          data-shell-layout={layout}
+          className={cn(
+            'min-w-0 overflow-x-clip',
+            local && layout !== 'tabs' && 'pb-14',
+            layout === 'tabs' && 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]',
+          )}
+        >
           <div className="console-shell-chrome sticky top-0 z-20 shrink-0 bg-card">
             <ConsoleHeader
               pageTitle={title}
@@ -158,6 +208,9 @@ function ConsolePageInner() {
               viewerEnvLoading={status.viewerEnvLoading}
               showDevSessions={local}
               onOpenDevSessions={() => select('dev-sessions')}
+              layout={layout}
+              back={back}
+              moreHref={back == null && location.kind !== 'more' ? formatShellHash(MORE_ROUTE) : undefined}
             />
           </div>
           <PageShell padding="compact" className="flex w-full min-w-0 flex-col gap-4">
@@ -165,10 +218,21 @@ function ConsolePageInner() {
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
-            {Page != null ? <Page /> : null}
+            {location.kind === 'more' ? (
+              <div className="flex flex-col gap-4">
+                <DetailPageLinks />
+                <div className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+                  External tools: Gitea, Grafana, Dagster <ToolsMenu />
+                </div>
+              </div>
+            ) : null}
+            {/* One slot for the four entries: moving between them keeps the Owner Console mounted. */}
+            {entry != null ? <OwnerConsolePage entry={entry} /> : Page != null ? <Page /> : null}
           </PageShell>
         </SidebarInset>
-        {local ? <LocalDevSessionsDock onOpenPage={() => select('dev-sessions')} /> : null}
+        {layout === 'tabs' ? <EntryTabBar {...nav} /> : null}
+        {/* With the tab bar the header's Dev Sessions indicator stands in for the dock (local console only). */}
+        {local && layout !== 'tabs' ? <LocalDevSessionsDock onOpenPage={() => select('dev-sessions')} /> : null}
       </SidebarProvider>
     </TooltipProvider>
   )

@@ -2,10 +2,13 @@ import type { ShellNavItem } from '@bifrost/ui'
 import {
   Activity,
   Archive,
+  Bell,
   Database,
+  Gauge,
   GitBranch,
   Inbox,
-  LayoutDashboard,
+  ListChecks,
+  MessageSquare,
   Plug,
   Rocket,
   Server,
@@ -13,9 +16,12 @@ import {
 import { SHELL_NAV, type ShellRouteId } from '@/lib/shell/consoleRoutes'
 
 const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
-  owner: LayoutDashboard,
-  'needs-you': Inbox,
-  status: Activity,
+  you: Inbox,
+  chief: MessageSquare,
+  work: ListChecks,
+  system: Activity,
+  'needs-you': Bell,
+  status: Gauge,
   data: Database,
   ib: Plug,
   releases: Rocket,
@@ -24,11 +30,21 @@ const ICONS: Record<ShellRouteId, ShellNavItem['icon']> = {
   records: Archive,
 }
 
-/** One layer. No System / Ops / Analysis lens, and no per-lens hiding. */
+function navItem(item: (typeof SHELL_NAV)[number]): ShellNavItem {
+  return { id: item.id, label: item.label, icon: ICONS[item.id] }
+}
+
+/** The four entries: For you, Chief of staff, Work, System. */
+export function shellEntryItems(): ShellNavItem[] {
+  return SHELL_NAV.filter(item => item.group === 'entry').map(navItem)
+}
+
+/** The detail pages, in the order "Detail pages" and More list them. */
+export function shellDetailItems(): ShellNavItem[] {
+  return SHELL_NAV.filter(item => item.group === 'detail').map(navItem)
+}
+
+/** Every row of the desktop side nav: the entries, then the detail pages. */
 export function shellSidebarItems(): ShellNavItem[] {
-  return SHELL_NAV.map(item => ({
-    id: item.id,
-    label: item.label,
-    icon: ICONS[item.id],
-  }))
+  return [...shellEntryItems(), ...shellDetailItems()]
 }

@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { splitAlerts } from '../ownerModel'
@@ -11,9 +12,7 @@ import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
-const mobile = vi.hoisted(() => ({ value: false }))
 const standbyKnown = vi.hoisted(() => ({ value: true }))
-vi.mock('../useNarrowScreen', () => ({ useNarrowScreen: () => mobile.value }))
 
 function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
@@ -57,56 +56,65 @@ const submit = vi.hoisted(() => vi.fn(async () => ({ mission_id: 'M-9', mission_
 vi.mock('@/api/agentRuntime', async importOriginal => ({ ...(await importOriginal<object>()), submitRuntimeGoal: submit }))
 
 const { OwnerConsolePage } = await import('../OwnerConsolePage')
+const { isEntryRoute } = await import('@/lib/shell/consoleRoutes')
 
-function show() {
-  return render(<QueryClientProvider client={new QueryClient()}><OwnerConsolePage /></QueryClientProvider>)
+function entryFromHash() {
+  const id = window.location.hash.replace(/^#/, '').split('?')[0] ?? ''
+  return isEntryRoute(id) ? id : 'you'
+}
+
+/** The shell's one slot for the entries: the hash picks the entry, the component stays mounted. */
+function Shell() {
+  const [entry, setEntry] = useState(entryFromHash)
+  useEffect(() => {
+    const sync = () => setEntry(entryFromHash())
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  return <OwnerConsolePage entry={entry} />
+}
+
+function show(hash = '#you') {
+  window.history.replaceState(null, '', hash)
+  return render(<QueryClientProvider client={new QueryClient()}><Shell /></QueryClientProvider>)
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
+async function go(hash: string, heading: string) {
+  window.location.hash = hash
+  await waitFor(() => expect(headings()[0]).toBe(heading))
+}
 
 beforeEach(() => {
   submit.mockClear()
-  mobile.value = false
   standbyKnown.value = true
-  window.history.replaceState(null, '', '#owner')
 })
 afterEach(cleanup)
 
-describe('Owner Console', () => {
-  it('opens on All on a desktop: the verdict, then every block in order', () => {
-    show()
+describe('Owner Console entries', () => {
+  it('For you: the whole verdict, then what is yours and what is worth a look', () => {
+    show('#you')
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')
-    expect(headings()).toEqual(['For you', 'Chief of staff', 'Work', 'System', 'Data'])
-    expect(screen.getByRole('button', { name: 'For you, 2' })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true')
-  })
-
-  it('opens on For you on a phone', () => {
-    mobile.value = true
-    show()
     expect(headings()).toEqual(['For you'])
   })
 
-  it('a tab shows its block alone, keeps the tab in the hash, and the verdict shrinks to one line', () => {
-    show()
-    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
+  it('each other entry shows its own block, and the verdict is one line that goes to For you', () => {
+    show('#work')
     expect(headings()).toEqual(['Work'])
-    expect(window.location.hash).toBe('#owner?tab=work')
     expect(screen.queryByRole('region', { name: 'Verdict' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /2 things are yours/ }))
-    expect(headings()).toEqual(['For you'])
+    expect(screen.getByRole('link', { name: /2 things are yours/ })).toHaveAttribute('href', '#you')
   })
 
-  it('opens the tab the hash names', () => {
-    window.history.replaceState(null, '', '#owner?tab=system')
-    show()
-    expect(headings()).toEqual(['System'])
+  it('System carries the data and the way into every detail page', () => {
+    show('#system')
+    expect(headings()).toEqual(['System', 'Data', 'Detail pages'])
     expect(screen.getByRole('region', { name: 'Release lane' })).toHaveTextContent('nobody holds it; nothing delivering')
     expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
+    const details = within(screen.getByRole('navigation', { name: 'Detail pages' })).getAllByRole('link')
+    expect(details.map(a => a.getAttribute('href'))).toEqual(['#needs-you', '#status', '#data', '#ib', '#releases', '#infrastructure', '#progress', '#records'])
   })
 
   it('lists what is his, then what is worth a look with whose it is', () => {
-    window.history.replaceState(null, '', '#owner?tab=you')
-    show()
+    show('#you')
     const yours = screen.getByRole('region', { name: 'Yours' })
     expect(within(yours).getAllByRole('listitem').map(li => li.querySelector('.font-semibold')?.textContent)).toEqual([
       'Log in to TWS for the IB secondary slot', 'Look at the goal cards'])
@@ -122,8 +130,7 @@ describe('Owner Console', () => {
 
   it('shows six rows worth a look, and the rest on request', () => {
     standbyKnown.value = false
-    window.history.replaceState(null, '', '#owner?tab=you')
-    show()
+    show('#you')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     const total = Number(/Worth a look · (\d+)/.exec(worth.textContent ?? '')?.[1])
     expect(total).toBeGreaterThan(6)
@@ -132,22 +139,23 @@ describe('Owner Console', () => {
     expect(within(worth).getAllByRole('listitem')).toHaveLength(total)
   })
 
-  it('Make it a goal puts a draft in the chief of staff\'s box; nothing is sent', () => {
-    window.history.replaceState(null, '', '#owner?tab=you')
-    show()
+  it('Make it a goal opens the chief of staff with a draft in its box; nothing is sent', async () => {
+    show('#you')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
-    expect(headings()).toEqual(['Chief of staff'])
+    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
+    expect(window.location.hash).toBe('#chief')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toContain('kube-prometheus-stack-grafana targets down')
     expect(submit).not.toHaveBeenCalled()
   })
 
   it('a second draft replaces the first, and only Submit sends it', async () => {
-    window.history.replaceState(null, '', '#owner?tab=all')
-    show()
-    const worth = screen.getByRole('region', { name: 'Worth a look' })
-    fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[0])
-    fireEvent.click(within(worth).getAllByRole('button', { name: 'Make it a goal' })[1])
+    show('#you')
+    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
+    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
+    await go('#you', 'For you')
+    fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[1])
+    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
     const box = screen.getByLabelText('Goal') as HTMLTextAreaElement
     expect(box.value).toContain('Job logical-backup-drill-manual-1 failed')
     expect(box.value).not.toContain('grafana')
@@ -157,25 +165,24 @@ describe('Owner Console', () => {
     expect(submit.mock.calls[0][0]).toContain('Job logical-backup-drill-manual-1 failed')
   })
 
-  it('an edited draft and a goal just sent outlive a tab switch (review 224 B-224-1)', async () => {
-    window.history.replaceState(null, '', '#owner?tab=you')
-    show()
+  it('an edited draft and a goal just sent outlive moving to another entry (review 224 B-224-1)', async () => {
+    show('#you')
     fireEvent.click(within(screen.getByRole('region', { name: 'Worth a look' })).getAllByRole('button', { name: 'Make it a goal' })[0])
+    await waitFor(() => expect(headings()).toEqual(['Chief of staff']))
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'My own words' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Chief of staff' }))
+    await go('#work', 'Work')
+    await go('#chief', 'Chief of staff')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('My own words')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Submit' })) })
     expect(submit).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Work' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Chief of staff' }))
+    await go('#work', 'Work')
+    await go('#chief', 'Chief of staff')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('')
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
 
   it('marks quota read days ago as stale and the plan as kept by hand', () => {
-    window.history.replaceState(null, '', '#owner?tab=work')
-    show()
+    show('#work')
     expect(screen.getByRole('region', { name: 'Quota' })).toHaveTextContent('stale')
     expect(screen.getByRole('region', { name: 'Quota' })).toHaveTextContent('read 5 days ago')
     expect(screen.getByRole('region', { name: 'The plan' })).toHaveTextContent('✎ by hand')

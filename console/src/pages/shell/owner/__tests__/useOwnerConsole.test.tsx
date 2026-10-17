@@ -7,7 +7,7 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 
-/** The real hook, with the network replaced: what each source's failure does to the verdict and the badges. */
+/** The real hook, with the network replaced: what each source's failure does to the verdict and the one count. */
 const api = vi.hoisted(() => ({
   alerts: vi.fn(), nodes: vi.fn(), promql: vi.fn(), targets: vi.fn(), pipelines: vi.fn(), runs: vi.fn(), window: vi.fn(), records: vi.fn(), goal: vi.fn(),
   probe: { probeReach: 'ok' as const, readFailed: false, isLoading: false },
@@ -32,6 +32,7 @@ vi.mock('@/pages/shell/needs-you/useNeedsYou', () => ({ useNeedsYou: () => ({
 }) }))
 
 const { useOwnerConsole } = await import('../useOwnerConsole')
+const { yoursNavBadge } = await import('../ownerModel')
 
 function run(blocks = { system: false, work: false, chief: false }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -58,7 +59,7 @@ describe('useOwnerConsole', () => {
   it('nothing waiting and every source read: Nothing needs you', async () => {
     const { result } = run()
     await waitFor(() => expect(result.current.verdict.headline).toBe('Nothing needs you'))
-    expect(result.current.badges.you).toBeNull()
+    expect(yoursNavBadge(result.current.yours)).toBeUndefined()
   })
 
   it('alerts that cannot be read make Yours unknown, never nothing (review 221 A1)', async () => {
@@ -66,8 +67,7 @@ describe('useOwnerConsole', () => {
     const { result } = run()
     await waitFor(() => expect(result.current.verdict.tone).toBe('unknown'))
     expect(result.current.yours).toEqual({ state: 'unknown', reason: 'Alerts could not be read: HTTP 503' })
-    expect(result.current.badges.you).toEqual({ text: '?', tone: 'unknown' })
-    expect(result.current.badges.system).toEqual({ text: '?', tone: 'unknown' })
+    expect(yoursNavBadge(result.current.yours)).toMatchObject({ text: '?', tone: 'unknown' })
   })
 
   it('alerts read once and then failing are unknown too, not the last answer', async () => {
@@ -82,7 +82,7 @@ describe('useOwnerConsole', () => {
     api.alerts.mockResolvedValue({ alerts: alertsFixture.alerts })
     const { result } = run()
     await waitFor(() => expect(result.current.verdict.headline).toBe('1 thing is yours'))
-    expect(result.current.badges.you).toEqual({ text: '1', tone: 'attention' })
+    expect(yoursNavBadge(result.current.yours)).toMatchObject({ text: '1', tone: 'attention' })
   })
 
   it('a run list that cannot be read is reported, so the lane never says nothing is delivering (review 221 A6)', async () => {

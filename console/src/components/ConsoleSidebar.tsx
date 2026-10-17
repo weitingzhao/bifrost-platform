@@ -4,12 +4,17 @@ import {
   SidebarMenuSub,
   ShellNavSidebar,
   shellNavSubItemIconClass,
+  type ShellNavItem,
 } from '@bifrost/ui'
 import { ConsoleNavSlotItem, type ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { TradeMonitoringPeerLinks } from '@/components/TradeMonitoringPeerLinks'
 import type { FleetViewerEnv } from '@/lib/control-room/fleetSnapshot'
-import { shellSidebarItems } from '@/lib/shell/shellNavItems'
+import { shellDetailItems, shellEntryItems } from '@/lib/shell/shellNavItems'
 
+/**
+ * The desktop side nav (1440 px and wider): the four entries, then "Detail pages" — the only place
+ * every detail page is listed by name. A detail page that is open lights its own row.
+ */
 export function ConsoleSidebar({
   activeTab,
   onSelect,
@@ -23,40 +28,45 @@ export function ConsoleSidebar({
   viewerEnvLoading?: boolean
   badges?: Partial<Record<string, ConsoleNavBadge>>
 }) {
-  const items = shellSidebarItems()
+  const entries = shellEntryItems()
+  const details = shellDetailItems()
+  const row = (item: ShellNavItem, collapsed: boolean) => (
+    <ConsoleNavSlotItem
+      key={item.id}
+      item={item}
+      activeId={activeTab}
+      onSelect={onSelect}
+      collapsed={collapsed || undefined}
+      badge={badges?.[item.id]}
+      renderItemIcon={
+        collapsed
+          ? undefined
+          : entry => {
+              const Icon = entry.icon
+              if (Icon == null) return null
+              return <Icon className={shellNavSubItemIconClass} aria-hidden />
+            }
+      }
+    />
+  )
   const seat = (collapsed: boolean): ReactNode => (
     <nav aria-label="Ops">
       {collapsed ? (
         <div className="flex flex-col gap-1 px-1 py-1.5">
-          {items.map(item => (
-            <ConsoleNavSlotItem
-              key={item.id}
-              item={item}
-              activeId={activeTab}
-              onSelect={onSelect}
-              collapsed
-              badge={badges?.[item.id]}
-            />
-          ))}
+          {entries.map(item => row(item, true))}
+          <hr aria-hidden className="mx-1 my-1.5 border-[var(--table-rule)]" />
+          {details.map(item => row(item, true))}
         </div>
       ) : (
         <SidebarMenu>
-          <SidebarMenuSub>
-            {items.map(item => (
-              <ConsoleNavSlotItem
-                key={item.id}
-                item={item}
-                activeId={activeTab}
-                onSelect={onSelect}
-                badge={badges?.[item.id]}
-                renderItemIcon={entry => {
-                  const Icon = entry.icon
-                  if (Icon == null) return null
-                  return <Icon className={shellNavSubItemIconClass} aria-hidden />
-                }}
-              />
-            ))}
-          </SidebarMenuSub>
+          <SidebarMenuSub>{entries.map(item => row(item, false))}</SidebarMenuSub>
+          <p
+            id="console-detail-pages"
+            className="m-0 mt-4 px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground"
+          >
+            Detail pages
+          </p>
+          <SidebarMenuSub aria-labelledby="console-detail-pages">{details.map(item => row(item, false))}</SidebarMenuSub>
         </SidebarMenu>
       )}
     </nav>

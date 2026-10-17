@@ -5,9 +5,8 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, dataBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
+import { ago, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
-import { defaultOwnerTab, ownerBlocks, ownerTabFromHash, ownerTabHash } from '../ownerTabs'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 
@@ -247,7 +246,6 @@ describe('data tiles', () => {
     const partly = copiesTile({ data: { cluster_id: '', reference_db: 'bifrost_prod', cache_hit: false, generated_at: '', fresh_threshold_days: 3, stale_threshold_days: 7,
       databases: [{ name: 'bifrost_dev', environment: 'dev', verdict: 'fresh', lag_vs_prod_days: 0 }, { name: 'bifrost_stg', environment: 'stg', verdict: 'unknown' }] }, error: null })
     expect(partly).toMatchObject({ tone: 'unknown', state: 'Unknown', detail: 'stg not read' })
-    expect(dataBadge([tile, { ...tile, tone: 'ok' }, { ...tile, tone: 'muted' }, { ...tile, tone: 'unknown' }])).toBe(2)
   })
   it('writes ages in minutes, hours, then days', () => {
     expect([ago(NOW - 30_000, NOW), ago(NOW - 5 * 60_000, NOW), ago(NOW - 15 * 3600_000, NOW), ago(NOW - 13 * 86_400_000, NOW), ago('', NOW)])
@@ -255,19 +253,13 @@ describe('data tiles', () => {
   })
 })
 
-describe('tabs', () => {
-  it('opens a phone on For you and anything wider on All', () => {
-    expect(defaultOwnerTab(true)).toBe('you')
-    expect(defaultOwnerTab(false)).toBe('all')
-  })
-  it('keeps the tab in the hash and ignores an unknown one', () => {
-    expect(ownerTabHash('work')).toBe('#owner?tab=work')
-    expect(ownerTabFromHash('#owner?tab=system')).toBe('system')
-    expect(ownerTabFromHash('#owner?tab=nope')).toBeNull()
-    expect(ownerTabFromHash('#owner')).toBeNull()
-  })
-  it('All shows every block; a tab shows its own', () => {
-    expect(Object.values(ownerBlocks('all')).every(Boolean)).toBe(true)
-    expect(ownerBlocks('data')).toEqual({ you: false, chief: false, work: false, system: false, data: true })
+describe('the one count', () => {
+  it('shows what is yours, nothing while loading or at zero, and "?" when a source could not be read', () => {
+    expect(yoursNavBadge({ state: 'known', count: 2 })).toEqual({ text: '2', title: 'Yours: 2', tone: 'attention' })
+    expect(yoursNavBadge({ state: 'known', count: 120 })?.text).toBe('99+')
+    expect(yoursNavBadge({ state: 'known', count: 0 })).toBeUndefined()
+    expect(yoursNavBadge({ state: 'loading' })).toBeUndefined()
+    expect(yoursNavBadge({ state: 'unknown', reason: 'Alerts could not be read: 502' }))
+      .toEqual({ text: '?', title: 'Yours: unknown — Alerts could not be read: 502', tone: 'unknown' })
   })
 })

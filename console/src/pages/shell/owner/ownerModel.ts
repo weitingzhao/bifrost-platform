@@ -7,6 +7,7 @@ import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/al
 import type { MappedAlert } from '@/lib/observability/types'
 import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
+import type { ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { standbyVerdict, type StandbyEvidence } from './standbyEvidence'
 
 /**
@@ -281,14 +282,13 @@ export function quotaRows(pools: readonly ProgressPool[] | undefined, now: numbe
 
 export type DataTile = { name: string; tone: Tone; state: string; figure: string; detail: string; href: string }
 
-/** How many data tiles are not OK (the Data tab badge). Unknown counts too: it is not known to be OK. */
-export function dataBadge(tiles: readonly DataTile[]): number {
-  return tiles.filter(t => t.tone === 'warn' || t.tone === 'fail' || t.tone === 'unknown').length
-}
-
-export type TabBadge = { text: string; tone: Tone } | null
-
-export function countBadge(n: number | null, tone: Tone): TabBadge {
-  if (n == null) return { text: '?', tone: 'unknown' }
-  return n > 0 ? { text: String(n), tone } : null
+/**
+ * The one count on the whole site (design system v2 §10.1): what is yours, on For you and the app
+ * badge. Loading shows nothing; a count that could not be read shows "?", never a zero.
+ */
+export function yoursNavBadge(count: NeedsYouCount): ConsoleNavBadge | undefined {
+  if (count.state === 'loading') return undefined
+  if (count.state === 'unknown') return { text: '?', title: `Yours: unknown — ${count.reason}`, tone: 'unknown' }
+  if (count.count === 0) return undefined
+  return { text: count.count > 99 ? '99+' : String(count.count), title: `Yours: ${count.count}`, tone: 'attention' }
 }

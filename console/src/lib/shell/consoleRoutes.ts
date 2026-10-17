@@ -1,45 +1,58 @@
 /**
- * Ops Console shell routes — one layer: the Owner Console first (home), Needs
- * you (every waiting item), the health and delivery questions, then Records. Old bookmarks resolve through
- * LEGACY_HASH_REDIRECTS. `#approvals?id=` is the request page; it has no nav row.
+ * Ops Console shell routes (Owner 2026-10-16, design system v2 §10): four entries — For you
+ * (home), Chief of staff, Work, System — then the detail pages, which hang off an entry and are
+ * listed under "Detail pages" (a desktop's side nav, a phone's More). Old bookmarks resolve through
+ * LEGACY_HASH_REDIRECTS; `#owner?tab=` lands on the matching entry. `#approvals?id=` is the request
+ * page; it has no nav row.
  */
 
 export const SHELL_NAV = [
-  {
-    id: 'owner',
-    label: 'Owner Console',
-    question: 'What is mine to do, and how are the work, the system and the data?',
-  },
-  { id: 'needs-you', label: 'Needs you', question: 'What do I need to do right now?' },
-  { id: 'status', label: 'Status', question: 'Is everything okay right now?' },
-  { id: 'data', label: 'Data', question: "Has today's data arrived?" },
-  { id: 'ib', label: 'IB', question: 'Is the IB connection healthy?' },
+  { id: 'you', label: 'For you', question: 'Is anything mine?', group: 'entry' },
+  { id: 'chief', label: 'Chief of staff', question: 'What do I ask the chief of staff, and what came back?', group: 'entry' },
+  { id: 'work', label: 'Work', question: 'Is the work moving?', group: 'entry' },
+  { id: 'system', label: 'System', question: 'Is the machine fine?', group: 'entry' },
+  { id: 'needs-you', label: 'Needs you', question: 'Everything waiting for you, and how to answer it.', group: 'detail' },
+  { id: 'status', label: 'Status', question: 'Is everything okay right now?', group: 'detail' },
+  { id: 'data', label: 'Data', question: "Has today's data arrived?", group: 'detail' },
+  { id: 'ib', label: 'IB', question: 'Is the IB connection healthy?', group: 'detail' },
   {
     id: 'releases',
     label: 'Releases',
     question: 'What version is running in each environment?',
+    group: 'detail',
   },
   {
     id: 'infrastructure',
     label: 'Infrastructure',
     question: 'How are the cluster, network, and machines?',
+    group: 'detail',
   },
-  { id: 'progress', label: 'Progress', question: 'How far along is the project?' },
+  { id: 'progress', label: 'Progress', question: 'How far along is the project?', group: 'detail' },
   {
     id: 'records',
     label: 'Records',
     question: 'History: closed requests, audit, and patrol runs.',
+    group: 'detail',
   },
 ] as const
 
 export type ShellRouteId = (typeof SHELL_NAV)[number]['id']
 
+export type EntryRouteId = Extract<(typeof SHELL_NAV)[number], { group: 'entry' }>['id']
+
 export const SHELL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.map(item => item.id)
 
-export const HOME_ROUTE: ShellRouteId = 'owner'
+export const ENTRY_ROUTE_IDS: readonly EntryRouteId[] = ['you', 'chief', 'work', 'system']
+
+export const DETAIL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.filter(item => item.group === 'detail').map(item => item.id)
+
+export const HOME_ROUTE: ShellRouteId = 'you'
 
 /** Every waiting item. A request or question link without an id lands here. */
 export const NEEDS_YOU_ROUTE: ShellRouteId = 'needs-you'
+
+/** The list of detail pages, for a phone or a tablet (a desktop lists them in the side nav). */
+export const MORE_ROUTE = 'more'
 
 /** The request page. Phone notifications link here (`#approvals?id=<id>`). */
 export const APPROVAL_ROUTE = 'approvals'
@@ -103,6 +116,7 @@ export type ConsoleLocation =
   | { kind: 'shell'; id: ShellRouteId }
   | { kind: 'approval' }
   | { kind: 'question' }
+  | { kind: 'more' }
   | { kind: 'dev-sessions' }
 
 /**
@@ -191,6 +205,16 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'analytics-pipeline': 'data',
 }
 
+/** The former one-page Owner Console's tabs (`#owner?tab=`) and the entry each became. */
+export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
+  all: 'you',
+  you: 'you',
+  chief: 'chief',
+  work: 'work',
+  system: 'system',
+  data: 'system',
+}
+
 /** Records tab a legacy hash lands on. */
 export const LEGACY_HASH_QUERY: Record<string, string> = {
   'commit-lineage': 'section=commit-lineage',
@@ -205,6 +229,24 @@ export const LEGACY_HASH_QUERY: Record<string, string> = {
 
 export function isShellRouteId(value: string): value is ShellRouteId {
   return (SHELL_ROUTE_IDS as readonly string[]).includes(value)
+}
+
+export function isEntryRoute(value: string): value is EntryRouteId {
+  return (ENTRY_ROUTE_IDS as readonly string[]).includes(value)
+}
+
+/**
+ * The entry a place belongs to, lit in the tab bar or the rail while it is open: Needs you and a
+ * request or a question under For you, Progress under Work, every other detail page under System.
+ * More belongs to none.
+ */
+export function entryOf(location: ConsoleLocation): EntryRouteId | null {
+  if (location.kind === 'more' || location.kind === 'dev-sessions') return null
+  if (location.kind === 'approval' || location.kind === 'question') return 'you'
+  if (isEntryRoute(location.id)) return location.id
+  if (location.id === 'needs-you') return 'you'
+  if (location.id === 'progress') return 'work'
+  return 'system'
 }
 
 export function shellNavEntry(id: ShellRouteId) {
@@ -251,6 +293,7 @@ export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy
   if (tab === 'dev-sessions') return { location: { kind: 'dev-sessions' }, legacy: false }
   if (tab === APPROVAL_ROUTE) return { location: { kind: 'approval' }, legacy: false }
   if (tab === QUESTION_ROUTE) return { location: { kind: 'question' }, legacy: false }
+  if (tab === MORE_ROUTE) return { location: { kind: 'more' }, legacy: false }
   if (isShellRouteId(tab)) return { location: { kind: 'shell', id: tab }, legacy: false }
   const target = LEGACY_HASH_REDIRECTS[tab]
   if (target != null) return { location: { kind: 'shell', id: target }, legacy: true }
@@ -281,6 +324,10 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
     }
     return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
   }
+  if (tab === 'owner') {
+    const entry = OWNER_TAB_ENTRY[hashQueryParam(query, 'tab') ?? ''] ?? HOME_ROUTE
+    return { location: { kind: 'shell', id: entry }, canonical: formatShellHash(entry) }
+  }
   const resolved = resolveHashTab(tab)
   const id = locationId(resolved.location)
   if (resolved.legacy || tab === '') {
@@ -293,5 +340,6 @@ export function locationId(location: ConsoleLocation): string {
   if (location.kind === 'dev-sessions') return 'dev-sessions'
   if (location.kind === 'approval') return APPROVAL_ROUTE
   if (location.kind === 'question') return QUESTION_ROUTE
+  if (location.kind === 'more') return MORE_ROUTE
   return location.id
 }

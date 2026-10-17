@@ -44,11 +44,3 @@ export function tradeEnvSegmentActiveClass(env: TradeEnvId): string {
   return TRADE_ENV_SEGMENT_ACTIVE[env]
 }
 
-/** Viewer seat chip (ConsoleHeader) — maps dev-local → same as Dev. */
-export function viewerSeatTagVariant(
-  env: 'dev' | 'stg' | 'prod' | 'dev-local',
-): DenseTagVariant {
-  if (env === 'prod') return TRADE_ENV_TAG_VARIANT.prod
-  if (env === 'stg') return TRADE_ENV_TAG_VARIANT.stg
-  return TRADE_ENV_TAG_VARIANT.dev
-}
