@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
 func TestAllowedEnv(t *testing.T) {
@@ -131,6 +133,68 @@ func TestDeterministicExecutor(t *testing.T) {
 func TestRunVerifyUsage(t *testing.T) {
 	if RunVerify(nil) != 2 || RunVerify([]string{"--spec", filepath.Join(t.TempDir(), "none"), "--out", "x"}) != 2 {
 		t.Fatal("bad arguments did not exit 2")
+	}
+}
+
+// STG walk M-9 (2026-10-17): ESLint printed the checkout's absolute path in
+// its warnings, and the platform refused every Console check's verify.json
+// (H8). What RunVerify writes names no path of this machine: the checkout is
+// ".", the task's directory "..", the home "$HOME", the rest masked.
+func TestRunVerifyHandsInNoLocalPath(t *testing.T) {
+	task := filepath.Join(t.TempDir(), "tasks", "t_1")
+	checkout := filepath.Join(task, "a1")
+	if err := os.MkdirAll(checkout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Chdir(checkout)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	print := strings.Join([]string{
+		`echo "` + wd + `/console/src/a.ts: warning"`,
+		`echo "` + filepath.Dir(wd) + `/bifrost-ui/src/b.ts"`,
+		`echo "` + home + `/.npm/_logs/c.log"`,
+		`echo /tmp/go-build1/b001`,
+		`echo "` + wd + `2/not-the-checkout"`,
+	}, "; ")
+	spec := map[string]any{"text": "t", "verify": [][]string{{"sh", "-c", print}, {"ls", wd}}}
+	body, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(t.TempDir(), "spec.json")
+	if err = os.WriteFile(specPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(t.TempDir(), "verify.json")
+	if rc := RunVerify([]string{"--spec", specPath, "--out", out}); rc != 0 {
+		t.Fatalf("RunVerify exited %d", rc)
+	}
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, found := localpath.Find(got); found {
+		t.Fatalf("verify.json still holds a local path: %q\n%s", p, got)
+	}
+	var v Verification
+	if err = json.Unmarshal(got, &v); err != nil {
+		t.Fatal(err)
+	}
+	tail := v.Commands[0].Tail
+	for _, want := range []string{"./console/src/a.ts: warning", "../bifrost-ui/src/b.ts", "$HOME/.npm/_logs/c.log", "<tmp>/go-build1/b001"} {
+		if !strings.Contains(tail, want) {
+			t.Errorf("the tail lacks %q:\n%s", want, tail)
+		}
+	}
+	if strings.Contains(tail, "./2/not-the-checkout") || strings.Contains(tail, ".2/not-the-checkout") {
+		t.Errorf("a sibling directory whose name starts like the checkout's was taken for it:\n%s", tail)
+	}
+	if v.Commands[1].Argv[1] != "." {
+		t.Errorf("the checkout in a command's argv was not made relative: %q", v.Commands[1].Argv)
 	}
 }
 

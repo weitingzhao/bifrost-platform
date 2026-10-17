@@ -1,11 +1,6 @@
 package store
 
-import "regexp"
-
-// localPath is the closed search rule H8 (DESIGN-host-minimal §H8): a path
-// that points into one machine. A drive letter counts only when no letter
-// precedes it, so "http://" and "foo:/" do not.
-var localPath = regexp.MustCompile(`/Users/|/home/|/private/|/var/folders/|/tmp/|~/|(?:^|[^A-Za-z])[A-Za-z]:[/\\]`)
+import "github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 
 // ArtifactKinds are the artifact kinds the schema allows (0001_core.sql).
 var ArtifactKinds = map[string]bool{"task_spec": true, "mission_spec": true, "report": true, "verify": true, "review": true,
@@ -23,13 +18,7 @@ func LocalPath(kind string, body []byte) (string, bool) {
 	if unscannedKinds[kind] {
 		return "", false
 	}
-	loc := localPath.FindIndex(body)
-	if loc == nil {
-		return "", false
-	}
-	end := loc[1] + 40
-	if end > len(body) {
-		end = len(body)
-	}
-	return string(body[loc[0]:end]), true
+	// The closed search rule H8 (DESIGN-host-minimal §H8), shared with
+	// agentd, which masks it in the verify output it hands in.
+	return localpath.Find(body)
 }
