@@ -27,10 +27,12 @@ function probeReach(status: IbGatewayStatusResponse | undefined, statusError: bo
   return 'unknown'
 }
 
-export function useIbGatewayLiveProbe(refetchIntervalMs = 30_000): IbGatewayLiveProbeState {
+/** `enabled` false reads nothing (a block that is not on screen). */
+export function useIbGatewayLiveProbe(refetchIntervalMs = 30_000, enabled = true): IbGatewayLiveProbeState {
   const statusQ = useQuery({
     queryKey: ['ib-gateway', 'live-probe', 'status'],
     queryFn: fetchIbGatewayStatus,
+    enabled,
     refetchInterval: refetchIntervalMs,
     retry: 1,
   })

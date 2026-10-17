@@ -30,10 +30,12 @@ function probeReach(
   return 'unknown'
 }
 
-export function useMarketDataLiveProbe(refetchIntervalMs = 30_000): MarketDataLiveProbeState {
+/** `enabled` false reads nothing (a block that is not on screen). */
+export function useMarketDataLiveProbe(refetchIntervalMs = 30_000, enabled = true): MarketDataLiveProbeState {
   const statusQ = useQuery({
     queryKey: ['market-data', 'live-probe', 'status'],
     queryFn: fetchMarketDataStatus,
+    enabled,
     refetchInterval: refetchIntervalMs,
     retry: 1,
   })

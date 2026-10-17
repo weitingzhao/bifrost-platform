@@ -15,6 +15,7 @@ import {
   questionHref,
   resolveConsoleHash,
   resolveHashTab,
+  shellNavEntry,
 } from '@/lib/shell/consoleRoutes'
 
 const ENTRIES = ['For you', 'Chief of staff', 'Work', 'System']
@@ -87,9 +88,13 @@ describe('legacy hash redirects', () => {
 
   it("lands the former one-page Owner Console's tabs on their entries", () => {
     const cases: [string, string][] = [['owner', 'you'], ['owner?tab=all', 'you'], ['owner?tab=you', 'you'], ['owner?tab=chief', 'chief'],
-      ['owner?tab=work', 'work'], ['owner?tab=system', 'system'], ['owner?tab=data', 'system'], ['owner?tab=nope', 'you']]
+      ['owner?tab=work', 'work'], ['owner?tab=system', 'system'], ['owner?tab=data', 'system'], ['owner?tab=nope', 'you'],
+      // inherited names are not tabs (review 226 C-226-4)
+      ['owner?tab=constructor', 'you'], ['owner?tab=toString', 'you'], ['owner?tab=__proto__', 'you'], ['owner?tab=hasOwnProperty', 'you']]
     for (const [from, to] of cases) {
-      expect(resolveConsoleHash(from), from).toEqual({ location: { kind: 'shell', id: to }, canonical: `#${to}` })
+      const resolved = resolveConsoleHash(from)
+      expect(resolved, from).toEqual({ location: { kind: 'shell', id: to }, canonical: `#${to}` })
+      if (resolved.location.kind === 'shell') expect(shellNavEntry(resolved.location.id).id).toBe(to)
     }
   })
 

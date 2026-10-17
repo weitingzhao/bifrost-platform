@@ -42,10 +42,12 @@ function probeReach(
   return 'unknown'
 }
 
-export function useFlexQueryLiveProbe(refetchIntervalMs = 30_000): FlexQueryLiveProbeState {
+/** `enabled` false reads nothing (a block that is not on screen). */
+export function useFlexQueryLiveProbe(refetchIntervalMs = 30_000, enabled = true): FlexQueryLiveProbeState {
   const statusQ = useQuery({
     queryKey: ['flex-query', 'live-probe', 'status'],
     queryFn: fetchFlexQueryStatus,
+    enabled,
     refetchInterval: refetchIntervalMs,
     retry: 1,
   })
@@ -53,6 +55,7 @@ export function useFlexQueryLiveProbe(refetchIntervalMs = 30_000): FlexQueryLive
   const husbandryQ = useQuery({
     queryKey: ['data-husbandry'],
     queryFn: fetchDataHusbandry,
+    enabled,
     refetchInterval: refetchIntervalMs,
     retry: 1,
   })

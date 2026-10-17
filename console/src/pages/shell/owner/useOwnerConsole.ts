@@ -45,15 +45,17 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const runQs = useQueries({ queries: pipelineNames.map(name => ({ queryKey: ['delivery', 'runs', name], queryFn: () => fetchPipelineRuns(name),
     enabled: blocks.system, refetchInterval: 15_000 })) })
 
-  const backupQ = useQuery({ queryKey: ['cluster', 'postgres', 'backup-status'], queryFn: fetchClusterPostgresBackupStatus, refetchInterval: 60_000, retry: false })
-  const copiesQ = useQuery({ queryKey: ['cluster', 'data-freshness'], queryFn: fetchDataFreshness, refetchInterval: 60_000, retry: false })
-  const researchQ = useQuery({ queryKey: ['research-engine-orchestration'], queryFn: fetchOrchestrationStatus, refetchInterval: 60_000, retry: 1 })
+  // The data tiles are on System only: nothing they read is fetched while another entry is open (review 226 B-226-2).
+  const tiles = blocks.system
+  const backupQ = useQuery({ queryKey: ['cluster', 'postgres', 'backup-status'], queryFn: fetchClusterPostgresBackupStatus, enabled: tiles, refetchInterval: 60_000, retry: false })
+  const copiesQ = useQuery({ queryKey: ['cluster', 'data-freshness'], queryFn: fetchDataFreshness, enabled: tiles, refetchInterval: 60_000, retry: false })
+  const researchQ = useQuery({ queryKey: ['research-engine-orchestration'], queryFn: fetchOrchestrationStatus, enabled: tiles, refetchInterval: 60_000, retry: 1 })
   // The session moves while the page stays open on a phone; read it again every minute (review 221 B6).
-  const dimsQ = useQuery({ queryKey: ['market-data', 'coverage', 'dimensions'], queryFn: fetchCoverageDimensions, staleTime: 60_000, refetchInterval: 60_000 })
-  const marketQ = useQuery({ queryKey: ['market-data', 'vitals', 'analytics'], queryFn: fetchMarketStatus, refetchInterval: 60_000, retry: 1 })
-  const ib = useIbGatewayLiveProbe()
-  const massive = useMarketDataLiveProbe()
-  const flex = useFlexQueryLiveProbe()
+  const dimsQ = useQuery({ queryKey: ['market-data', 'coverage', 'dimensions'], queryFn: fetchCoverageDimensions, enabled: tiles, staleTime: 60_000, refetchInterval: 60_000 })
+  const marketQ = useQuery({ queryKey: ['market-data', 'vitals', 'analytics'], queryFn: fetchMarketStatus, enabled: tiles, refetchInterval: 60_000, retry: 1 })
+  const ib = useIbGatewayLiveProbe(30_000, tiles)
+  const massive = useMarketDataLiveProbe(30_000, tiles)
+  const flex = useFlexQueryLiveProbe(30_000, tiles)
 
   // A failed refresh voids the last answer: agents idle, nodes ready and so on are not shown from a cache (review 221 A7).
   const runtime = current(needsYou.runtimeQuery)
@@ -91,7 +93,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const research = researchData != null && !isResearchProxyError(researchData) ? researchData.data : undefined
   const researchError = researchQ.isError ? errorText(researchQ.error) : researchData != null && isResearchProxyError(researchData) ? researchData.error : null
   const reach = (p: { probeReach: ProbeReach; readFailed: boolean }): ProbeReach => (p.readFailed ? 'unknown' : p.probeReach)
-  const tiles = [
+  const tileRows = [
     marketTile({ data: marketItems, error: marketError }, session),
     pluginsTile([
       { name: 'IB', reach: reach(ib), loading: ib.isLoading },
@@ -130,7 +132,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     runsRead,
     runsLoading,
     runsError,
-    tiles,
+    tiles: tileRows,
     updatedAt: Math.max(alertsQ.dataUpdatedAt, nodesQ.dataUpdatedAt, needsYou.query.dataUpdatedAt),
   }
 }

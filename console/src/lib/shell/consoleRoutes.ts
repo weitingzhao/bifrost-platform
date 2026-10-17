@@ -325,7 +325,9 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
     return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
   }
   if (tab === 'owner') {
-    const entry = OWNER_TAB_ENTRY[hashQueryParam(query, 'tab') ?? ''] ?? HOME_ROUTE
+    const tab = hashQueryParam(query, 'tab') ?? ''
+    // Own keys only: `constructor` or `__proto__` would otherwise read a property every object inherits (review 226 C-226-4).
+    const entry = Object.hasOwn(OWNER_TAB_ENTRY, tab) ? OWNER_TAB_ENTRY[tab] : HOME_ROUTE
     return { location: { kind: 'shell', id: entry }, canonical: formatShellHash(entry) }
   }
   const resolved = resolveHashTab(tab)

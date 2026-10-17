@@ -2,10 +2,9 @@ import { PageShell, SidebarInset, SidebarProvider, TooltipProvider, cn } from '@
 import { useCallback, useEffect, useState, type ComponentType } from 'react'
 import { ConsoleHeader, type HeaderBack } from '@/components/ConsoleHeader'
 import { ConsoleSidebar } from '@/components/ConsoleSidebar'
-import { DetailPageLinks } from '@/components/shell/DetailPageLinks'
 import { EntryRail, EntryTabBar, type EntryNavProps } from '@/components/shell/EntryNav'
 import { LocalDevSessionsDock } from '@/components/shell/LocalDevSessionsDock'
-import { ToolsMenu } from '@/components/ToolsMenu'
+import { MorePage } from '@/components/shell/MorePage'
 import { useShellStatusLine } from '@/hooks/useShellStatusLine'
 import { ApprovalsPage } from '@/pages/ApprovalsPage'
 import { QuestionPage } from '@/pages/QuestionPage'
@@ -218,14 +217,7 @@ function ConsolePageInner() {
             {location.kind === 'dev-sessions' && local ? <DevSessionsPage /> : null}
             {location.kind === 'approval' ? <ApprovalsPage /> : null}
             {location.kind === 'question' ? <QuestionPage /> : null}
-            {location.kind === 'more' ? (
-              <div className="flex flex-col gap-4">
-                <DetailPageLinks />
-                <div className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
-                  External tools: Gitea, Grafana, Dagster <ToolsMenu />
-                </div>
-              </div>
-            ) : null}
+            {location.kind === 'more' ? <MorePage viewerEnv={status.viewerEnv} viewerEnvLoading={status.viewerEnvLoading} /> : null}
             {/* One slot for the four entries: moving between them keeps the Owner Console mounted. */}
             {entry != null ? <OwnerConsolePage entry={entry} /> : Page != null ? <Page /> : null}
           </PageShell>
