@@ -119,7 +119,7 @@ func TestNonPlatformRefChecksMatchMain(t *testing.T) {
 					sort.Strings(missing)
 					want := fmt.Sprintf("revision %q is missing in: %s — create the same branch/tag in those repos (or deploy a ref present in all)", revision, strings.Join(missing, ", "))
 					if isCIPipeline(name) {
-						want = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", revision, ciRepo)
+						want = fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror (or, where Gitea is its primary, push it there) before starting CI", revision, ciRepo)
 					}
 					if err == nil || resp.OK || resp.Changed || resp.Message != want {
 						t.Fatal(resp, err, "want", want)

@@ -347,7 +347,7 @@ func (s *Service) runRefPreflight(ctx context.Context, name, revision, ciRepo st
 		if pf.Reachability != probe.ReachOK {
 			return ""
 		}
-		return fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", revision, ciRepo)
+		return fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror (or, where Gitea is its primary, push it there) before starting CI", revision, ciRepo)
 	}
 	missing := missingRunRefs(pf, refs)
 	originalMissing := missing

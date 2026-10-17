@@ -138,7 +138,7 @@ func TestCIKnownMissingNeverSyncs(t *testing.T) {
 				if name == "bifrost-ci-python" {
 					extra["repo"] = repo
 				}
-				assertContractRefused(t, s, dyn, name, factSHA1, extra, fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror before starting CI", factSHA1, repo))
+				assertContractRefused(t, s, dyn, name, factSHA1, extra, fmt.Sprintf("revision %q is missing in: %s — sync this repository's mirror (or, where Gitea is its primary, push it there) before starting CI", factSHA1, repo))
 				for _, path := range *paths {
 					if strings.Contains(path, "mirror-sync") || !strings.HasPrefix(path, "/api/v1/repos/bifrost/"+repo+"/") {
 						t.Fatal(*paths)

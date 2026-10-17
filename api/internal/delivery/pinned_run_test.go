@@ -51,6 +51,11 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 		m.missing[repo] = true
 	}
 	s.httpClient = &http.Client{Transport: contractTransport(func(r *http.Request) (*http.Response, error) {
+		// The repository itself: every one here is a pull mirror (mirror sync
+		// asks first, CUT-gitea-primary 0b). Not counted with the reads below.
+		if r.Method == http.MethodGet && !strings.Contains(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/"), "/") {
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"mirror":true}`)), Header: http.Header{}, Request: r}, nil
+		}
 		m.paths = append(m.paths, r.Method+" "+r.URL.Path)
 		parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/repos/bifrost/"), "/")
 		repo := parts[0]

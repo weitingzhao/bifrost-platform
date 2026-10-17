@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,9 +18,13 @@ const mirrorSyncWait = 90 * time.Second
 type MirrorRepoResult struct {
 	Repo          string `json:"repo"`
 	SyncRequested bool   `json:"sync_requested"`
-	Commit        string `json:"commit,omitempty"`
-	Present       bool   `json:"present"`
-	Error         string `json:"error,omitempty"`
+	// Primary: the repository is a regular Gitea repository, not a pull
+	// mirror, so there is nothing to fetch; its commit is waited for all the
+	// same (CUT-gitea-primary 0b).
+	Primary bool   `json:"primary,omitempty"`
+	Commit  string `json:"commit,omitempty"`
+	Present bool   `json:"present"`
+	Error   string `json:"error,omitempty"`
 }
 
 // MirrorSyncResult is the body of POST /api/v1/delivery/mirrors/sync.
@@ -47,8 +52,11 @@ func (h *Handler) SyncOne(ctx context.Context, repo, commit string) (MirrorRepoR
 	return res.Repos[0], nil
 }
 
-// SyncMirrors asks Gitea to fetch each repo, then polls git/commits/<sha>
-// until the commit is present or 90 seconds pass.
+// SyncMirrors asks Gitea to fetch each repo that is a pull mirror, then
+// polls git/commits/<sha> until the commit is present or 90 seconds pass. A
+// repository that is Gitea's own (the primary, not a mirror) is not asked to
+// fetch: Gitea answers 400 "Repository is not a mirror" to that; its commit is
+// waited for the same way (CUT-gitea-primary-2026-10-17 step 0b).
 func (s *Service) SyncMirrors(ctx context.Context, repos []string, commits map[string]string) (MirrorSyncResult, error) {
 	var out MirrorSyncResult
 	if len(repos) == 0 {
@@ -115,11 +123,20 @@ func (s *Service) giteaRoot() string {
 
 func (s *Service) syncOneRepo(ctx context.Context, repo, commit, user, pass string, deadline time.Time) MirrorRepoResult {
 	item := MirrorRepoResult{Repo: repo, Commit: commit}
-	if err := s.postMirrorSync(ctx, repo, user, pass); err != nil {
+	mirror, err := s.repoIsMirror(ctx, repo, user, pass)
+	if err != nil {
 		item.Error = err.Error()
 		return item
 	}
-	item.SyncRequested = true
+	if mirror {
+		if err := s.postMirrorSync(ctx, repo, user, pass); err != nil {
+			item.Error = err.Error()
+			return item
+		}
+		item.SyncRequested = true
+	} else {
+		item.Primary = true
+	}
 	if commit == "" {
 		item.Present = true
 		return item
@@ -144,6 +161,34 @@ func (s *Service) syncOneRepo(ctx context.Context, repo, commit, user, pass stri
 		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+// repoIsMirror reads Gitea's "mirror" field of the repository.
+func (s *Service) repoIsMirror(ctx context.Context, repo, user, pass string) (bool, error) {
+	url := fmt.Sprintf("%s/api/v1/repos/%s/%s", s.giteaRoot(), giteaOrg, repo)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false, err
+	}
+	if user != "" && pass != "" {
+		req.SetBasicAuth(user, pass)
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("repository %s: status %d: %s", repo, resp.StatusCode, strings.TrimSpace(string(body[:min(len(body), 256)])))
+	}
+	var info struct {
+		Mirror *bool `json:"mirror"`
+	}
+	if err := json.Unmarshal(body, &info); err != nil || info.Mirror == nil {
+		return false, fmt.Errorf("repository %s: Gitea did not say whether it is a mirror", repo)
+	}
+	return *info.Mirror, nil
 }
 
 func (s *Service) postMirrorSync(ctx context.Context, repo, user, pass string) error {
