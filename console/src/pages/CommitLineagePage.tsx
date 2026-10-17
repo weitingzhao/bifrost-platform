@@ -19,6 +19,7 @@ import {
   fetchLineage,
   setThreadTitle,
   type LineageCommit,
+  type LineageCoverage,
   type LineageReach,
   type LineageResponse,
   type LineageThread,
@@ -76,17 +77,29 @@ function mirrorAgeLabel(ms: number | null): string {
   return `${(ms / 3_600_000).toFixed(1)} h ago`
 }
 
+/**
+ * A delivery repository (its name has no organization) with no fetch time is
+ * Gitea's own, pushed to rather than fetched from GitHub (CUT-gitea-primary
+ * 0d); the agent organization's rows have no fetch time either.
+ */
+function isPrimary(c: LineageCoverage): boolean {
+  return !c.repo.includes('/') && !c.mirror_updated
+}
+
 function mirrorSummary(data: LineageResponse): string {
   const ages = data.coverage
     .map(c => ({ repo: c.repo, ms: mirrorAgeMs(c.mirror_updated, data.generated_at) }))
     .filter((a): a is { repo: string; ms: number } => a.ms != null)
-  if (ages.length === 0) return ' · Gitea mirror'
+  const primaries = data.coverage.filter(isPrimary).length
+  const tail = primaries > 0 ? ` · ${primaries} Gitea primary` : ''
+  if (ages.length === 0) return primaries > 0 ? ' · Gitea is the primary' : ' · Gitea mirror'
   const oldest = ages.reduce((a, b) => (b.ms > a.ms ? b : a))
   const pending = data.mirror_sync?.pending?.length ?? 0
-  if (oldest.ms < 5 * 60_000) return ' · mirrors fetched from GitHub just now'
+  if (oldest.ms < 5 * 60_000) return ' · mirrors fetched from GitHub just now' + tail
   return (
     ` · oldest mirror fetch ${mirrorAgeLabel(oldest.ms)} (${shortRepo(oldest.repo)})` +
-    (pending > 0 ? ` · ${pending} still fetching` : '')
+    (pending > 0 ? ` · ${pending} still fetching` : '') +
+    tail
   )
 }
 
@@ -623,7 +636,7 @@ export function CommitLineagePage() {
           title="Coverage"
           description={
             help
-              ? `Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run. "Mirror fetched" is when Gitea last pulled the repo from GitHub; each scan asks it to fetch first (at most every 2 min) and waits up to 10 s.`
+              ? `Main-branch commits in the window per repo. "Agent, no thread" has a Claude co-author line but no Claude-Session trailer — made before the hooks (2026-10-06) or where they did not run. "Mirror fetched" is when Gitea last pulled the repo from GitHub; each scan asks it to fetch first (at most every 2 min) and waits up to 10 s. A repository Gitea holds as its primary shows "primary": it is pushed to, not fetched.`
               : undefined
           }
           collapsible
@@ -656,7 +669,7 @@ export function CommitLineagePage() {
                       (mirrorAgeMs(c.mirror_updated, data.generated_at) ?? 0) > 2 * 3_600_000 ? 'text-warning' : ''
                     }`}
                   >
-                    {mirrorAgeLabel(mirrorAgeMs(c.mirror_updated, data.generated_at))}
+                    {isPrimary(c) ? 'primary' : mirrorAgeLabel(mirrorAgeMs(c.mirror_updated, data.generated_at))}
                   </DenseTableCell>
                 </DenseTableRow>
               ))}

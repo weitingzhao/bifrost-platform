@@ -92,3 +92,38 @@ describe('commit lineage page, task filter (reviews 158 A2, 159)', () => {
     }
   })
 })
+
+describe('commit lineage page, primary repositories (CUT-gitea-primary 0d)', () => {
+  it('a delivery repository without a fetch time is shown as Gitea’s primary, an agent row is not', async () => {
+    const { fetchLineage } = await import('@/api/lineage')
+    vi.mocked(fetchLineage).mockImplementation((days: number) =>
+      Promise.resolve({
+        ...response(days),
+        coverage: [
+          { repo: 'bifrost-platform', main_commits: 3, with_session: 3, with_change_id: 3, agent_no_lineage: 0, branches: 1 },
+          {
+            repo: 'bifrost-ui',
+            main_commits: 1,
+            with_session: 1,
+            with_change_id: 1,
+            agent_no_lineage: 0,
+            branches: 0,
+            mirror_updated: '2026-10-14T11:59:00Z',
+          },
+          { repo: 'bifrost-agents/bifrost-platform', main_commits: 0, with_session: 0, with_change_id: 0, agent_no_lineage: 0, branches: 2 },
+        ],
+      }),
+    )
+    page()
+    expect(await screen.findByText(/1 Gitea primary/)).toBeTruthy()
+    // Coverage is a native <details>: collapsed, its table is still in the DOM.
+    // The table lists coverage in the order given: platform, ui, the agent row.
+    const fetched = screen
+      .getAllByRole('row')
+      .map(r => within(r).queryAllByRole('cell'))
+      .filter(cells => cells.length === 7)
+      .map(cells => cells[6].textContent)
+    expect(fetched).toEqual(['primary', '1 min ago', '—'])
+  })
+})
+
