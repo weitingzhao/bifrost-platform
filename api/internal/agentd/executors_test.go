@@ -53,6 +53,25 @@ func TestAgentExecutors(t *testing.T) {
 
 // The cursor key reaches cursor alone; the host's own CURSOR_API_KEY is not
 // passed through to anyone.
+// PROD M-3 (2026-10-17): cursor runs read-only (ask mode) for an attempt
+// that pushes no branch, and with its tools for one that does.
+func TestCursorReadOnlyWithoutABranch(t *testing.T) {
+	for effect, want := range map[string]bool{"none": true, "": true, "branch": false} {
+		a := &Attempt{Claim: &Claimed{Role: "review", EffectClass: effect}, Spec: TaskSpec{Text: "# review it"}, Dir: t.TempDir(), Out: t.TempDir()}
+		sp, err := cursorExecutor(nil)(a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ask := slices.Contains(sp.Argv, "--mode") && sp.Argv[slices.Index(sp.Argv, "--mode")+1] == "ask"
+		if ask != want {
+			t.Errorf("effect %q: ask mode = %v, want %v (%q)", effect, ask, want, sp.Argv)
+		}
+		if p := Prompt(a); sp.Argv[len(sp.Argv)-1] != p {
+			t.Errorf("effect %q: the prompt is not the last argument: %q", effect, sp.Argv)
+		}
+	}
+}
+
 func TestCursorKeyReachesCursorAlone(t *testing.T) {
 	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: t.TempDir()}
 	ex := Executors("/usr/local/bin/agentd", []string{"PATH=/bin", "CURSOR_API_KEY=from-host", "AGENT_CLI_CREDENTIAL_STORE=file"},

@@ -324,3 +324,68 @@ func gitIn(ctx context.Context, dir string, env []string, args ...string) (strin
 	}
 	return strings.TrimSpace(out.String()), nil
 }
+
+// ChangedPaths lists the paths that differ between the workspace and the
+// base, untracked files and the executor's own commits included (the same
+// net change as Diff), in git's order.
+func (w *Workspace) ChangedPaths(ctx context.Context) ([]string, error) {
+	idx := filepath.Join(w.Dir, ".git", "agentd-changed-index")
+	defer func() { _ = os.Remove(idx) }()
+	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
+	if _, err := gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
+		return nil, err
+	}
+	if _, err := gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
+		return nil, err
+	}
+	out, err := gitIn(ctx, w.Dir, env, "diff", "--cached", "--name-only", "-z", w.Base)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
+// ExecutorConfig reports whether path is where an executor reads its own
+// settings or standing instructions: a .cursor, .codex, .claude or .gemini
+// directory at any depth, or cursor's and MCP's files at the top. An attempt
+// that writes one is changing how agents behave, which no task asks for
+// (2026-10-17, PROD M-3: a reviewer wrote .cursor/rules/allow-shell.mdc and
+// cli.json to allow itself the shell).
+func ExecutorConfig(path string) bool {
+	for _, part := range strings.Split(path, "/") {
+		switch part {
+		case ".cursor", ".codex", ".claude", ".gemini":
+			return true
+		}
+	}
+	switch path {
+	case "cli.json", ".cursorrules", ".cursorignore", ".mcp.json":
+		return true
+	}
+	return false
+}
+
+// ownConfigChanged says why the attempt must fail when it changed an
+// executor's configuration, or could not be checked; "" when it did not.
+func ownConfigChanged(ctx context.Context, ws *Workspace) string {
+	paths, err := ws.ChangedPaths(ctx)
+	if err != nil {
+		return "the checkout could not be checked for executor configuration: " + err.Error()
+	}
+	var bad []string
+	for _, p := range paths {
+		if ExecutorConfig(p) {
+			bad = append(bad, p)
+		}
+	}
+	if len(bad) == 0 {
+		return ""
+	}
+	return "the executor changed an executor's own configuration: " + strings.Join(bad, ", ")
+}

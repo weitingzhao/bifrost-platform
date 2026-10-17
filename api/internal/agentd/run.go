@@ -249,6 +249,14 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	exit := code
 	entry.Phase, entry.ExitCode, entry.EndHow = "exited", &exit, endHow
 	entry.Conclusion = a.conclusion(endHow, code, a.results())
+	if ws != nil && entry.Conclusion != "none" {
+		if why := ownConfigChanged(ctx, ws); why != "" {
+			// The reason goes into the log, whose tail the platform keeps.
+			_, _ = fmt.Fprintf(logf, "\nagentd: the attempt is failed: %s\n", why)
+			d.logf("agentd: %s: %s", cl.AttemptID, why)
+			entry.Conclusion = "failed"
+		}
+	}
 	if err := d.Registry.Put(entry); err != nil {
 		return Outcome{}, err
 	}

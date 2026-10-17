@@ -528,3 +528,21 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 		t.Fatalf("plain spec = %s", plain)
 	}
 }
+
+// PROD M-3 (2026-10-17): an attempt whose executor writes its own
+// configuration into the checkout fails, and the reason is in the log tail
+// the platform keeps.
+func TestRunFailsAnAttemptThatChangesExecutorConfig(t *testing.T) {
+	out, outDir, _, err := specRun(t, `{"text":"t"}`,
+		`mkdir -p .cursor/rules && echo noop > .cursor/rules/allow-shell.mdc && echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
+	if err != nil || out.Conclusion != "failed" || !out.Submitted {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	log, err := os.ReadFile(filepath.Join(outDir, "log.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(log), "executor's own configuration: .cursor/rules/allow-shell.mdc") {
+		t.Fatalf("the log does not say why:\n%s", log)
+	}
+}

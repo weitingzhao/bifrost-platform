@@ -116,3 +116,70 @@ func TestPrepareRefusesAnUnknownBase(t *testing.T) {
 		t.Fatal("checked out a commit the remote does not have")
 	}
 }
+
+// PROD M-3 (2026-10-17): a reviewer wrote .cursor/rules/allow-shell.mdc and
+// cli.json into the checkout to allow itself the shell. An attempt that
+// changes an executor's configuration fails, whether the change is left in
+// the tree or committed by the executor; other changes do not count.
+func TestOwnConfigChanged(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	ctx := context.Background()
+	dir := WorkspaceDir(t.TempDir(), "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+	w, err := Prepare(ctx, dir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	write := func(rel, body string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("api/x_test.go", "package x\n")
+	if why := ownConfigChanged(ctx, w); why != "" {
+		t.Fatalf("a test file counted as executor configuration: %s", why)
+	}
+	write(".cursor/rules/allow-shell.mdc", "noop\n")
+	write("cli.json", "{}\n")
+	why := ownConfigChanged(ctx, w)
+	for _, want := range []string{".cursor/rules/allow-shell.mdc", "cli.json"} {
+		if !strings.Contains(why, want) {
+			t.Fatalf("the reason lacks %s: %q", want, why)
+		}
+	}
+	if strings.Contains(why, "x_test.go") {
+		t.Fatalf("the reason names a file that is not configuration: %q", why)
+	}
+	// Committed by the executor and the tree left clean: still seen.
+	run(t, dir, env, "git", "add", "--all")
+	run(t, dir, env, "git", "commit", "--quiet", "-m", "executor's own commit")
+	if why := ownConfigChanged(ctx, w); !strings.Contains(why, "cli.json") {
+		t.Fatalf("a committed configuration file was not seen: %q", why)
+	}
+}
+
+func TestExecutorConfig(t *testing.T) {
+	for path, want := range map[string]bool{
+		".cursor/rules/a.mdc":       true,
+		"console/.cursor/cli.json":  true,
+		".codex/config.toml":        true,
+		".claude/settings.json":     true,
+		"pkg/.gemini/x":             true,
+		"cli.json":                  true,
+		".cursorrules":              true,
+		".mcp.json":                 true,
+		"api/cli.json":              false,
+		"CLAUDE.md":                 false,
+		"docs/cursor.md":            false,
+		"api/internal/x/x_test.go":  false,
+		"console/src/.cursorish.ts": false,
+	} {
+		if got := ExecutorConfig(path); got != want {
+			t.Errorf("ExecutorConfig(%q) = %v, want %v", path, got, want)
+		}
+	}
+}

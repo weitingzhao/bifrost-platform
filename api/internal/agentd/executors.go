@@ -133,6 +133,14 @@ func codexExecutor(env []string) Executor {
 func cursorExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
 		argv := []string{"cursor-agent", "-p", "--output-format", "stream-json", "--trust", "--workspace", a.Dir}
+		if a.Claim.EffectClass != "branch" {
+			// An attempt that pushes no branch (a review) changes nothing:
+			// cursor's ask mode writes no file and runs only read-only
+			// commands. Without it a reviewer on agent-06 whose commands were
+			// refused wrote .cursor/rules/allow-shell.mdc and cli.json into the
+			// checkout to allow itself the shell (2026-10-17, PROD M-3).
+			argv = append(argv, "--mode", "ask")
+		}
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
