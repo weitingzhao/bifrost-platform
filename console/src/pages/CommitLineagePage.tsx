@@ -78,12 +78,12 @@ function mirrorAgeLabel(ms: number | null): string {
 }
 
 /**
- * A delivery repository (its name has no organization) with no fetch time is
- * Gitea's own, pushed to rather than fetched from GitHub (CUT-gitea-primary
- * 0d); the agent organization's rows have no fetch time either.
+ * A delivery repository Gitea holds as its own, pushed to rather than fetched
+ * from GitHub (CUT-gitea-primary 0d). Said by the API: a mirror that has not
+ * been fetched yet has no fetch time either (review 242 B2).
  */
 function isPrimary(c: LineageCoverage): boolean {
-  return !c.repo.includes('/') && !c.mirror_updated
+  return c.primary === true
 }
 
 function mirrorSummary(data: LineageResponse): string {

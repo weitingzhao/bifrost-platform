@@ -68,6 +68,8 @@ export type LineageCoverage = {
   branches: number
   /** when Gitea last fetched this repo from GitHub (mirrors only) */
   mirror_updated?: string
+  /** a delivery repository Gitea holds as its own, not a pull mirror (CUT-gitea-primary 0d) */
+  primary?: boolean
 }
 
 /** the mirror fetch a build asked for before scanning (absent when one ran under 2 min ago) */

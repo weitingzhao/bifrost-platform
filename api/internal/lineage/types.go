@@ -114,6 +114,9 @@ type RepoCoverage struct {
 	Branches int `json:"branches"`
 	// MirrorUpdated is when Gitea last fetched this repo from GitHub (mirrors only).
 	MirrorUpdated *time.Time `json:"mirror_updated,omitempty"`
+	// Primary: a delivery repository Gitea holds as its own, not a pull
+	// mirror (CUT-gitea-primary 0d; review 242 B2).
+	Primary bool `json:"primary,omitempty"`
 }
 
 // Response is GET /api/v1/lineage.

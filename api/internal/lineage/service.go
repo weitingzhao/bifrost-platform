@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -56,7 +56,14 @@ type repoScan struct {
 	// agent: a repository of the agent organization. Its main is the main of
 	// the delivery repository of the same name, only to tell whether a branch
 	// commit landed; its own commits are its branches'.
-	agent    bool
+	agent bool
+	// agentsHere: agent branches are pushed to this delivery repository
+	// itself (AGENTRT_GIT_ORG is the delivery organization, once Gitea is
+	// the primary): its agent/<task>/a<n> branches are read as agent
+	// branches (CUT-gitea-primary 0c; review 242 B1: not before).
+	agentsHere bool
+	// primary: Gitea's own repository, not a pull mirror (review 242 B2).
+	primary  bool
 	mirrored *time.Time
 	main     []giteaCommit
 	branches map[string][]giteaCommit
@@ -107,6 +114,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			scans[i] = scanRepo(ctx, g, r, since)
+			scans[i].agentsHere = acc.AgentOrg != "" && acc.AgentOrg == acc.Org
 		}(i, r)
 	}
 	wg.Wait()
@@ -134,7 +142,7 @@ func (s *Service) Build(ctx context.Context, days int) Response {
 }
 
 func scanRepo(ctx context.Context, g *gitea, r giteaRepo, since time.Time) repoScan {
-	sc := repoScan{repo: r.Name, def: r.Default, branches: map[string][]giteaCommit{}}
+	sc := repoScan{repo: r.Name, def: r.Default, branches: map[string][]giteaCommit{}, primary: !r.Mirror}
 	if r.Mirror && r.MirrorUpdated.Year() > 1970 {
 		at := r.MirrorUpdated.UTC()
 		sc.mirrored = &at
@@ -161,7 +169,7 @@ func scanRepo(ctx context.Context, g *gitea, r giteaRepo, since time.Time) repoS
 		// a branch walk stops where it joins the default branch
 		cs, err := g.commits(ctx, r.Name, b.Name, since, branchMaxPages, func(sha string) bool { return onMain[sha] })
 		if err != nil {
-			sc.err = fmt.Errorf("branch %s: %w", b.Name, err)
+			sc.err = errors.Join(sc.err, fmt.Errorf("branch %s: %w", b.Name, err)) // a cut list stays reported (review 242 C)
 			continue
 		}
 		sc.branches[b.Name] = cs
@@ -213,7 +221,7 @@ func (s *Service) scanAgents(ctx context.Context, acc Access, delivery []repoSca
 			}
 			cs, err := g.commits(ctx, r.Name, b.Name, since, branchMaxPages, func(sha string) bool { return onMain[sha] })
 			if err != nil {
-				sc.err = fmt.Errorf("branch %s: %w", b.Name, err)
+				sc.err = errors.Join(sc.err, fmt.Errorf("branch %s: %w", b.Name, err)) // a cut list stays reported (review 242 C)
 				continue
 			}
 			sc.branches[b.Name] = cs
@@ -244,7 +252,8 @@ func (a *threadAcc) add(c Commit) {
 
 // collect adds one repo's lineage commits to threads and returns its coverage.
 func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
-	cov := RepoCoverage{Repo: sc.repo, MainCommits: len(sc.main), Branches: len(sc.branches), MirrorUpdated: sc.mirrored}
+	cov := RepoCoverage{Repo: sc.repo, MainCommits: len(sc.main), Branches: len(sc.branches), MirrorUpdated: sc.mirrored,
+		Primary: sc.primary && !sc.agent}
 	if sc.agent {
 		cov.MainCommits = 0 // its main is the delivery repository's, counted there
 	}
@@ -301,7 +310,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			}
 			dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
 			switch {
-			case dup && (sc.agent || agentBranch(b)):
+			case dup && (sc.agent || sc.agentsHere && agentBranch(b) && t.task != ""):
 				// An agent commit keeps its task, repository and branch: the
 				// main commit that carries its Change-Id may carry no task, or
 				// another (review 210 A1). It is the same change, landed at the
@@ -319,11 +328,13 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 	return cov
 }
 
-// agentBranch: a branch agentd pushes (refs/heads/agent/<task>/a<n>). Once
-// Gitea is the primary, agent branches live in the delivery repository
-// itself rather than in an organization of their own; they are read the
-// same way there (CUT-gitea-primary-2026-10-17 step 0c).
-func agentBranch(name string) bool { return strings.HasPrefix(name, "agent/") }
+// agentBranchName is a branch agentd pushes: refs/heads/agent/<task>/a<n>
+// (store/kernel.go). Once Gitea is the primary, agent branches live in the
+// delivery repository itself rather than in an organization of their own;
+// they are read the same way there (CUT-gitea-primary-2026-10-17 step 0c).
+var agentBranchName = regexp.MustCompile(`^agent/t_[0-9A-Za-z]+/a[0-9]+$`)
+
+func agentBranch(name string) bool { return agentBranchName.MatchString(name) }
 
 func finish(threads map[string]*threadAcc) []Thread {
 	out := make([]Thread, 0, len(threads))
