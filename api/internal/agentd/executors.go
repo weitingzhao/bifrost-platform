@@ -382,14 +382,21 @@ func (p *pathRewrite) rewrite(s string) string {
 	return s
 }
 
+// sgr is an ANSI colour or style sequence. Tools that colour their output
+// put one right before and after a path ("\x1b[4m/x/a1/a.ts\x1b[24m"), where
+// it would hide the path's boundaries from pathRewrite; nobody reads
+// verify.json in a terminal, so they are dropped (review 238 B).
+var sgr = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
 // withoutLocalPaths rewrites what a check hands in so that it names no path
 // of this machine: the directories paths knows by their aliases, then
-// whatever the platform's rule H8 still matches masked (localpath.Mask). The
+// whatever the platform's rule H8 still matches masked (localpath.Mask),
+// colour sequences dropped first. The
 // platform refuses a verify artifact that holds a local path, and tools print
 // absolute ones (2026-10-17, STG walk M-9: ESLint's warnings made every
 // Console check's verify.json refused).
 func withoutLocalPaths(v Verification, paths *pathRewrite) Verification {
-	clean := func(s string) string { return localpath.Mask(paths.rewrite(s)) }
+	clean := func(s string) string { return localpath.Mask(paths.rewrite(sgr.ReplaceAllString(s, ""))) }
 	v.Reason = clean(v.Reason)
 	for i := range v.Commands {
 		tr := &v.Commands[i]

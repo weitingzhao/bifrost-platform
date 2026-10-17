@@ -248,6 +248,14 @@ func TestPathRewriteTakesWholePathsOnly(t *testing.T) {
 			t.Errorf("rewrite(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
+	// Review 238 B: coloured output (ESLint --color, tsc) is aliased too,
+	// its colour sequences dropped.
+	v := withoutLocalPaths(Verification{Commands: []CommandTrace{{
+		Tail: "\x1b[4m" + wd + "/console/a.ts\x1b[24m\n\x1b[96m" + wd + "/console/b.ts\x1b[0m:3:1\n\x1b[1m" + wd + "\x1b[22m",
+	}}}, p)
+	if want := "./console/a.ts\n./console/b.ts:3:1\n."; v.Commands[0].Tail != want {
+		t.Errorf("coloured output: %q, want %q", v.Commands[0].Tail, want)
+	}
 }
 
 // Review 163 A2: a review passes only on its verdict line.
