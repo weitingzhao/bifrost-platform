@@ -18,6 +18,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == "verify" {
 		os.Exit(RunVerify(os.Args[2:]))
 	}
+	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == SetupArg {
+		os.Exit(RunSetup(os.Args[2:]))
+	}
 	os.Exit(m.Run())
 }
 

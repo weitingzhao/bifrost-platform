@@ -43,6 +43,12 @@ func platform(t *testing.T) (*pgxpool.Pool, string, string) {
 // commit as given, and a branch head reader for persist.
 func platformWith(t *testing.T, shape store.Task, head store.BranchHead) (*pgxpool.Pool, string, string) {
 	t.Helper()
+	return platformSpec(t, shape, head, "text/markdown", []byte("# task\n"))
+}
+
+// platformSpec is platformWith with the task's spec as given.
+func platformSpec(t *testing.T, shape store.Task, head store.BranchHead, media string, specBody []byte) (*pgxpool.Pool, string, string) {
+	t.Helper()
 	db := agentrttest.Migrated(t)
 	_, seedErr := store.Seed(ctx, db.Connect(t, db.Owner))
 	must(t, seedErr)
@@ -88,7 +94,7 @@ func platformWith(t *testing.T, shape store.Task, head store.BranchHead) (*pgxpo
 	var spec string
 	tx(func(tx pgx.Tx) error {
 		var err error
-		if spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task\n")); err != nil {
+		if spec, err = store.PutArtifact(ctx, tx, "controller", "task_spec", media, specBody); err != nil {
 			return err
 		}
 		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",

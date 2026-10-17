@@ -88,6 +88,38 @@ func PrepareFetching(ctx context.Context, dir, remote, base string, env []string
 	return w, nil
 }
 
+// PrepareSibling brings dir, a repository beside an attempt's checkout, to the
+// head of branch ref on remote and returns that commit: cloned the first time,
+// fetched and checked out again for every later attempt of the task, so each
+// starts from the branch as it is then. What a previous attempt installed in
+// it (ignored files: node_modules, dist) stays and is brought up to date by
+// the setup commands.
+func PrepareSibling(ctx context.Context, dir, remote, ref string, env []string) (string, error) {
+	if err := (Sibling{Repo: filepath.Base(dir), Ref: ref}).check(); err != nil {
+		return "", fmt.Errorf("agentd: sibling: %w", err)
+	}
+	w := &Workspace{Dir: dir, env: env}
+	switch _, err := os.Stat(dir); {
+	case errors.Is(err, os.ErrNotExist):
+		if err = os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+			return "", err
+		}
+		if _, err = w.git(ctx, filepath.Dir(dir), "clone", "--quiet", "--no-checkout", remote, dir); err != nil {
+			return "", err
+		}
+	case err != nil:
+		return "", err
+	}
+	track := "refs/remotes/origin/" + ref
+	if _, err := w.git(ctx, dir, "fetch", "--quiet", "--no-tags", "origin", "+refs/heads/"+ref+":"+track); err != nil {
+		return "", err
+	}
+	if _, err := w.git(ctx, dir, "checkout", "--quiet", "--force", "--detach", track); err != nil {
+		return "", err
+	}
+	return w.git(ctx, dir, "rev-parse", "HEAD")
+}
+
 // Dirty reports changes against the checkout, untracked files included.
 func (w *Workspace) Dirty(ctx context.Context) (bool, error) {
 	out, err := w.git(ctx, w.Dir, "status", "--porcelain", "--untracked-files=all")

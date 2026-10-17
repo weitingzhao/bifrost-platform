@@ -51,6 +51,8 @@ func main() {
 			os.Exit(agentd.RunLauncher(os.Args[3:]))
 		case "verify":
 			os.Exit(agentd.RunVerify(os.Args[2:]))
+		case agentd.SetupArg:
+			os.Exit(agentd.RunSetup(os.Args[2:]))
 		}
 	}
 	if err := run(); err != nil {

@@ -161,6 +161,81 @@ func TestRunPushesTheAttemptBranch(t *testing.T) {
 	}
 }
 
+// specRun is a branch task with spec as its spec, run by an executor running
+// body; it returns the outcome, the attempt's output directory, the task's
+// directory and the run's error (CUT-agentd-console-checks-2026-10-16).
+func specRun(t *testing.T, spec, body string) (agentd.Outcome, string, string, error) {
+	t.Helper()
+	env := gitEnvT(t.TempDir())
+	bare, baseCommit := bareRemote(t, env)
+	head := func(_ context.Context, _, ref string) (string, error) {
+		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+		first, _, _ := strings.Cut(string(out), "\t")
+		return strings.TrimSpace(first), err
+	}
+	_, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json", []byte(spec))
+	d := daemon(t, base, script(body), bare, env)
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	out, err := d.Run(ctx, cl)
+	dir := agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
+	return out, dir + ".out", filepath.Dir(dir), err
+}
+
+// The sibling is beside the checkout and the setup has run before the
+// executor starts: the executor finds both, and the attempt records them.
+func TestRunPreparesSiblingsAndSetup(t *testing.T) {
+	spec := `{"text":"t","siblings":[{"repo":"ui","ref":"main"}],` +
+		`"setup":[["sh","-c","test -f ../ui/README.md && touch \"$OUT/setup-ran\""]]}`
+	out, outDir, taskDir, err := specRun(t, spec,
+		`test -f "$OUT/setup-ran" && test -f ../ui/README.md && echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
+	if err != nil || out.Conclusion != "done" || !out.Submitted {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	if _, err = os.Stat(filepath.Join(taskDir, "ui", "README.md")); err != nil {
+		t.Fatalf("no sibling beside the checkout: %v", err)
+	}
+	for _, f := range []string{"siblings.json", "setup.json"} {
+		if b, rerr := os.ReadFile(filepath.Join(outDir, f)); rerr != nil || len(b) == 0 {
+			t.Fatalf("%s not recorded: %v", f, rerr)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(outDir, "setup.json")); !strings.Contains(string(b), `"pass": true`) {
+		t.Fatalf("setup.json = %s", b)
+	}
+}
+
+// A setup that fails ends the attempt before the executor starts: failed, as
+// an executor that handed in nothing.
+func TestRunEndsAnAttemptWhoseSetupFails(t *testing.T) {
+	spec := `{"text":"t","setup":[["sh","-c","echo registry down >&2; exit 9"]]}`
+	out, outDir, _, err := specRun(t, spec, `touch "$OUT/executor-ran"; printf '# done\n' > "$OUT/report.md"`)
+	if err != nil || out.Conclusion != "failed" || out.ExitCode != 3 {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	if _, err = os.Stat(filepath.Join(outDir, "executor-ran")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the executor ran after a failed setup: %v", err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(outDir, "log.txt")); !strings.Contains(string(b), "registry down") {
+		t.Fatalf("the log lacks the setup's output:\n%s", b)
+	}
+}
+
+// A sibling that cannot be had (no such branch) stops the run before any
+// executor: as a checkout that fails.
+func TestRunStopsWhenASiblingCannotBeHad(t *testing.T) {
+	spec := `{"text":"t","siblings":[{"repo":"ui","ref":"no-such-branch"}]}`
+	_, outDir, _, err := specRun(t, spec, `touch "$OUT/executor-ran"`)
+	if err == nil || !strings.Contains(err.Error(), "sibling ui") {
+		t.Fatalf("run err = %v", err)
+	}
+	if _, serr := os.Stat(filepath.Join(outDir, "executor-ran")); !errors.Is(serr, os.ErrNotExist) {
+		t.Fatalf("the executor ran without its sibling: %v", serr)
+	}
+}
+
 // fencingProxy forwards to the platform until told to answer heartbeats
 // itself: 409 fenced, or 503 as an unreachable platform would.
 func fencingProxy(t *testing.T, base string) (string, *atomic.Int32) {
@@ -361,5 +436,33 @@ func TestRunClearsTheGroup(t *testing.T) {
 	  WHERE event_type = 'attempt_ended' AND attempt_id = $1`, cl.AttemptID).Scan(&cleared))
 	if cleared != "true" {
 		t.Fatalf("group_cleared = %q", cleared)
+	}
+}
+
+// What the platform writes for an implementation is what agentd reads: the
+// platform repository's checks, setup and sibling all come through ParseSpec
+// (agentd ships first; CUT-agentd-console-checks-2026-10-16).
+func TestPlatformImplementSpecParses(t *testing.T) {
+	repo := store.Repos["bifrost-platform"]
+	body, err := store.ImplementSpec("title", "text", repo, repo.Verify)
+	must(t, err)
+	s, err := agentd.ParseSpec(body)
+	if err != nil {
+		t.Fatalf("agentd refuses the platform's spec: %v\n%s", err, body)
+	}
+	if len(s.Verify) != len(repo.Verify) || len(s.Setup) != len(repo.Setup) || len(s.Siblings) != 1 ||
+		s.Siblings[0] != (agentd.Sibling{Repo: "bifrost-ui", Ref: "main"}) || s.TimeoutS != store.SpecTimeoutS {
+		t.Fatalf("spec = %+v", s)
+	}
+	for _, want := range []string{"npm --prefix console test", "Dependencies were installed before you started", "npm --prefix ../bifrost-ui ci"} {
+		if !strings.Contains(s.Text, want) {
+			t.Fatalf("the instructions lack %q:\n%s", want, s.Text)
+		}
+	}
+	// A repository with no setup writes neither field (an older agentd reads it).
+	plain, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"go", "vet"}})
+	must(t, err)
+	if strings.Contains(string(plain), "setup") || strings.Contains(string(plain), "siblings") || strings.Contains(string(plain), "installed before") {
+		t.Fatalf("plain spec = %s", plain)
 	}
 }

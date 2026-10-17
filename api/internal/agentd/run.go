@@ -160,6 +160,14 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	if err = os.MkdirAll(a.Out, 0o700); err != nil {
 		return Outcome{}, err
 	}
+	// Siblings and setup belong with a checkout: a task with none has nothing
+	// for them to sit beside or install into (setup.go).
+	prep := a.prepare()
+	if ws != nil {
+		if err = d.siblings(ctx, a, prep.Siblings); err != nil {
+			return Outcome{}, err
+		}
+	}
 	exec, ok := d.Executors[cl.Tool.Executor]
 	if !ok {
 		return Outcome{}, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor)
@@ -167,6 +175,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	sp, err := exec(a)
 	if err != nil {
 		return Outcome{}, err
+	}
+	if ws != nil && len(prep.Setup) > 0 {
+		if sp, err = withSetup(d.Self, a.Out, prep.Setup, sp); err != nil {
+			return Outcome{}, err
+		}
 	}
 	logf, err := os.OpenFile(filepath.Join(a.Out, "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {

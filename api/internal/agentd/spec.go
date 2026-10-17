@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
+	"strings"
 	"time"
 	"unicode/utf8"
 )
@@ -22,10 +24,19 @@ import (
 // attempt, the round, the subject's own spec, and the commit and repository
 // the subject pushed; the deterministic checker runs the subject spec's
 // verify commands on that commit.
+//
+// A spec may also name siblings, repositories cloned next to the checkout
+// (at <root>/tasks/<task>/<repo>) at the head of a branch, and setup, commands
+// run in the checkout before the executor, as its first act in the attempt's
+// process group, with its environment and the network a sandboxed executor
+// lacks (the Console's dependencies, CUT-agentd-console-checks-2026-10-16). A
+// check's attempt prepares both from the subject's spec.
 type TaskSpec struct {
 	Text     string     `json:"text"`
 	Verify   [][]string `json:"verify,omitempty"`
 	TimeoutS int        `json:"timeout_s,omitempty"`
+	Setup    [][]string `json:"setup,omitempty"`
+	Siblings []Sibling  `json:"siblings,omitempty"`
 
 	Check       string `json:"check,omitempty"` // verify or review
 	SubjectTask string `json:"subject_task,omitempty"`
@@ -64,10 +75,57 @@ func ParseSpec(body []byte) (TaskSpec, error) {
 			return TaskSpec{}, fmt.Errorf("agentd: task spec: verify command %d is empty", i)
 		}
 	}
+	for i, c := range s.Setup {
+		if len(c) == 0 || c[0] == "" {
+			return TaskSpec{}, fmt.Errorf("agentd: task spec: setup command %d is empty", i)
+		}
+	}
 	if s.TimeoutS < 0 {
 		return TaskSpec{}, errors.New("agentd: task spec: timeout_s is negative")
 	}
+	if len(s.Siblings) > maxSiblings {
+		return TaskSpec{}, fmt.Errorf("agentd: task spec: at most %d siblings", maxSiblings)
+	}
+	seen := map[string]bool{}
+	for i, sib := range s.Siblings {
+		if err := sib.check(); err != nil {
+			return TaskSpec{}, fmt.Errorf("agentd: task spec: sibling %d: %w", i, err)
+		}
+		if seen[sib.Repo] {
+			return TaskSpec{}, fmt.Errorf("agentd: task spec: sibling %d: %s twice", i, sib.Repo)
+		}
+		seen[sib.Repo] = true
+	}
 	return s, nil
+}
+
+// Sibling is a repository a task's checkout needs beside it, at the head of a
+// branch: the Console's file:../../bifrost-ui dependency resolves to it.
+type Sibling struct {
+	Repo string `json:"repo"`
+	Ref  string `json:"ref"`
+}
+
+const maxSiblings = 4
+
+var (
+	// siblingRepo is a directory name next to the attempts, never an
+	// attempt's own (a<n>, a<n>.out) and never a path.
+	siblingRepo = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
+	attemptDir  = regexp.MustCompile(`^a[0-9]+$`)
+	// siblingRef is a branch name git takes in a refspec, never an option.
+	siblingRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+)
+
+func (s Sibling) check() error {
+	switch {
+	case !siblingRepo.MatchString(s.Repo) || attemptDir.MatchString(s.Repo):
+		return fmt.Errorf("repo %q is not a repository name", s.Repo)
+	case !siblingRef.MatchString(s.Ref) || strings.Contains(s.Ref, "..") || strings.Contains(s.Ref, "//") ||
+		strings.HasSuffix(s.Ref, "/") || strings.HasSuffix(s.Ref, ".lock"):
+		return fmt.Errorf("ref %q is not a branch name", s.Ref)
+	}
+	return nil
 }
 
 // Verification is verify.json: what the deterministic checker ran and how
