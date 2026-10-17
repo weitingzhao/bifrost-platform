@@ -3,6 +3,7 @@ package lineage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -125,10 +126,18 @@ func (g *gitea) repos(ctx context.Context) ([]giteaRepo, error) {
 	return out, nil
 }
 
+// branchPages bounds the branch list (2000 branches at 50 a page). Agent
+// branches cannot be deleted once Gitea is the primary (CUT-gitea-primary
+// 9.6), so the list grows; one that reaches the bound is returned with
+// errBranchesCut rather than cut silently (step 0c).
+const branchPages = 40
+
+var errBranchesCut = errors.New("the branch list reached its bound; branches after it were not read")
+
 // branches lists a repo's branches with their head commit time.
 func (g *gitea) branches(ctx context.Context, repo string) ([]giteaBranch, error) {
 	var out []giteaBranch
-	for page := 1; page <= 10; page++ {
+	for page := 1; page <= branchPages; page++ {
 		var raw []struct {
 			Name   string `json:"name"`
 			Commit struct {
@@ -144,10 +153,10 @@ func (g *gitea) branches(ctx context.Context, repo string) ([]giteaBranch, error
 			out = append(out, giteaBranch{Name: b.Name, SHA: b.Commit.ID, At: b.Commit.Timestamp})
 		}
 		if len(raw) < pageLimit {
-			break
+			return out, nil
 		}
 	}
-	return out, nil
+	return out, fmt.Errorf("%w (%d)", errBranchesCut, len(out))
 }
 
 // commits walks ref's history newest first and stops at the first commit older

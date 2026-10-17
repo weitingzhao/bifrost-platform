@@ -2,9 +2,11 @@ package lineage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -148,7 +150,9 @@ func scanRepo(ctx context.Context, g *gitea, r giteaRepo, since time.Time) repoS
 	brs, err := g.branches(ctx, r.Name)
 	if err != nil {
 		sc.err = fmt.Errorf("branches: %w", err)
-		return sc
+		if !errors.Is(err, errBranchesCut) {
+			return sc
+		}
 	}
 	for _, b := range brs {
 		if b.Name == r.Default || b.At.Before(since) {
@@ -198,8 +202,10 @@ func (s *Service) scanAgents(ctx context.Context, acc Access, delivery []repoSca
 		brs, err := g.branches(ctx, r.Name)
 		if err != nil {
 			sc.err = fmt.Errorf("branches: %w", err)
-			out = append(out, sc)
-			continue
+			if !errors.Is(err, errBranchesCut) {
+				out = append(out, sc)
+				continue
+			}
 		}
 		for _, b := range brs {
 			if b.At.Before(since) {
@@ -295,7 +301,7 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 			}
 			dup, landedSHA, landedBy := mi.branchLanding(subject, t.changeID)
 			switch {
-			case dup && sc.agent:
+			case dup && (sc.agent || agentBranch(b)):
 				// An agent commit keeps its task, repository and branch: the
 				// main commit that carries its Change-Id may carry no task, or
 				// another (review 210 A1). It is the same change, landed at the
@@ -312,6 +318,12 @@ func collect(sc repoScan, threads map[string]*threadAcc) RepoCoverage {
 	}
 	return cov
 }
+
+// agentBranch: a branch agentd pushes (refs/heads/agent/<task>/a<n>). Once
+// Gitea is the primary, agent branches live in the delivery repository
+// itself rather than in an organization of their own; they are read the
+// same way there (CUT-gitea-primary-2026-10-17 step 0c).
+func agentBranch(name string) bool { return strings.HasPrefix(name, "agent/") }
 
 func finish(threads map[string]*threadAcc) []Thread {
 	out := make([]Thread, 0, len(threads))

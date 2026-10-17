@@ -3,6 +3,8 @@ package lineage
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -242,5 +244,70 @@ func TestAgentCommitSameChangeOnMain(t *testing.T) {
 	got := filter(Response{Threads: finish(threads)}, "", "", tAgent)
 	if len(got.Threads) != 1 || len(got.Threads[0].Repos) != 1 || got.Threads[0].Repos[0].Repo != "r1" {
 		t.Fatalf("a head on main = %+v", got.Threads)
+	}
+}
+
+// CUT-gitea-primary 0c: once Gitea is the primary, agent branches live in the
+// delivery repository itself. An agent/ branch there keeps its task and is
+// found landed by Change-Id, as one in the agent organization is; any other
+// branch with the same change is still left to main's row.
+func TestAgentBranchInTheDeliveryRepository(t *testing.T) {
+	const tAgent = "t_01M50M1CZSDN8PNHRH8C2241RS"
+	branch := "agent/" + tAgent + "/a1"
+	main := []giteaCommit{{SHA: "m1", Msg: "test: x (squashed)\n\nChange-Id: " + cidOpenX}}
+	threads := map[string]*threadAcc{}
+	collect(repoScan{repo: "r1", def: "main", main: main, branches: map[string][]giteaCommit{
+		branch:  {{SHA: "b1", Msg: "test: x\n\nAgentrt-Task: " + tAgent + "\nChange-Id: " + cidOpenX + "\nWork: W-31"}},
+		"w31/x": {{SHA: "w1", Msg: "test: x\n\nChange-Id: " + cidOpenX}},
+	}}, threads)
+	var rows []Commit
+	for _, th := range filter(Response{Threads: finish(threads)}, "", "", tAgent).Threads {
+		for _, rc := range th.Repos {
+			rows = append(rows, rc.Commits...)
+		}
+	}
+	if len(rows) != 1 || rows[0].SHA != "b1" || rows[0].Ref != branch || rows[0].LandedBy != "change_id" || rows[0].LandedSHA != "m1" {
+		t.Fatalf("agent rows = %+v", rows)
+	}
+	for _, th := range finish(threads) {
+		for _, rc := range th.Repos {
+			for _, c := range rc.Commits {
+				if c.SHA == "w1" {
+					t.Fatalf("a human branch's copy of a landed change was listed: %+v", c)
+				}
+			}
+		}
+	}
+}
+
+// CUT-gitea-primary 0c: a branch list that reaches its bound is reported
+// (Coverage carries the error), and the branches read are still scanned.
+func TestBranchListCutIsReported(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/branches") {
+			_, _ = w.Write([]byte("[]"))
+			return
+		}
+		page := r.URL.Query().Get("page")
+		var b strings.Builder
+		b.WriteString("[")
+		for i := range pageLimit {
+			if i > 0 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"name":"agent/t_%s_%d/a1","commit":{"id":"c","timestamp":"2026-10-17T00:00:00Z"}}`, page, i)
+		}
+		b.WriteString("]")
+		_, _ = w.Write([]byte(b.String()))
+	}))
+	defer srv.Close()
+	g := &gitea{acc: Access{Base: srv.URL, Org: "bifrost"}, client: srv.Client()}
+	brs, err := g.branches(context.Background(), "r1")
+	if !errors.Is(err, errBranchesCut) || len(brs) != branchPages*pageLimit {
+		t.Fatalf("branches = %d, %v", len(brs), err)
+	}
+	sc := scanRepo(context.Background(), g, giteaRepo{Name: "r1", Default: "main"}, time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC))
+	if sc.err == nil || !errors.Is(sc.err, errBranchesCut) || len(sc.branches) == 0 {
+		t.Fatalf("scan: err %v, branches %d", sc.err, len(sc.branches))
 	}
 }
