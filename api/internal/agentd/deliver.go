@@ -146,10 +146,11 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 		var err error
 		switch e.Phase {
 		case "exited":
-			if err = d.checkChanges(ctx, ws, e); err != nil {
+			err = d.checkChanges(ctx, ws, e)
+			out.Conclusion = e.Conclusion // the check may have failed it (review 240 B6, 241)
+			if err != nil {
 				break
 			}
-			out.Conclusion = e.Conclusion // the check may have failed it (review 240 B6)
 			err = d.retry(ctx, func() error {
 				return d.Client.Computed(ctx, cl.AttemptID, cl.Epoch, e.ExitCode, e.EndHow, e.Conclusion)
 			})

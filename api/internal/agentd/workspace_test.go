@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func gitEnv(home string) []string {
@@ -350,5 +351,117 @@ func TestCheckChangesIsJournalled(t *testing.T) {
 	e.Conclusion = "done"
 	if err = d.checkChanges(cancelled, w, e); err != nil || e.Conclusion != "done" {
 		t.Fatalf("a checked entry was checked again: %v %s", err, e.Conclusion)
+	}
+}
+
+// Review 241 A1: configuration inside a nested repository, in an ignored
+// directory or added as a gitlink, is seen; a top-level directory named
+// cli.json is not configuration and its contents are not listed.
+func TestUnwantedChangesReview241(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	ctx := context.Background()
+	bare, base := remoteWith(t, env, map[string]string{".gitignore": "scratch/\n/cli.json/\n"})
+	dir := WorkspaceDir(t.TempDir(), "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+	w, err := Prepare(ctx, dir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := func(rel, body string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 2000 {
+		put(fmt.Sprintf("cli.json/f%d", i), "x\n")
+	}
+	if changed, ignoredConfig, err := w.Changes(ctx); err != nil || len(changed) != 0 || len(ignoredConfig) != 0 {
+		t.Fatalf("a top-level directory named cli.json: changed %d, ignored configuration %q, %v", len(changed), ignoredConfig, err)
+	}
+	put("scratch/dependency/README.md", "x\n")
+	run(t, filepath.Join(dir, "scratch/dependency"), env, "git", "init", "--quiet")
+	put("scratch/dependency/.cursor/rules/allow-shell.mdc", "noop\n")
+	put("vendored/lib/README.md", "x\n")
+	run(t, filepath.Join(dir, "vendored/lib"), env, "git", "init", "--quiet")
+	run(t, filepath.Join(dir, "vendored/lib"), env, "git", "add", "README.md")
+	run(t, filepath.Join(dir, "vendored/lib"), env, "git", "commit", "--quiet", "-m", "lib")
+	put("vendored/lib/.codex/config.toml", "x\n")
+	why, err := unwantedChanges(ctx, w, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"scratch/dependency/.cursor", "vendored/lib/.codex"} {
+		if !strings.Contains(why, want) {
+			t.Fatalf("configuration in a nested repository was not seen (%s): %q", want, why)
+		}
+	}
+	if strings.Contains(why, "cli.json/f") {
+		t.Fatalf("the contents of a directory named cli.json were taken for configuration: %q", why)
+	}
+}
+
+// Review 241 B5: indexes and locks a killed check left are removed once they
+// are old; a recent one, possibly a running check's, is kept.
+func TestChangesRemovesStaleIndexes(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	ctx := context.Background()
+	dir := WorkspaceDir(t.TempDir(), "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+	w, err := Prepare(ctx, dir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitDir := filepath.Join(dir, ".git")
+	old := time.Now().Add(-time.Hour)
+	for _, n := range []string{"agentd-changed-index-123", "agentd-changed-index-123.lock", "agentd-changed-index.lock", "agentd-changed-index-recent"} {
+		p := filepath.Join(gitDir, n)
+		if err = os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if n != "agentd-changed-index-recent" {
+			if err = os.Chtimes(p, old, old); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, _, err = w.Changes(ctx); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(gitDir, "agentd-changed-index*"))
+	if len(left) != 1 || filepath.Base(left[0]) != "agentd-changed-index-recent" {
+		t.Fatalf("left after a check: %q", left)
+	}
+}
+
+// Review 241 C: when the check's result cannot be journalled, the hand-over
+// stops before anything is sent, and the outcome it returns says what the
+// check found.
+func TestCheckOutcomeWhenTheJournalFails(t *testing.T) {
+	f := newFake()
+	d := fakeDaemon(t, f)
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	dir := WorkspaceDir(d.Root, "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+	ws, err := Prepare(bg, dir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(dir+".out", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "scripts-agent-ls"), []byte("x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code := 0
+	e := Entry{AttemptID: "a1", TaskID: "t_1", Workdir: dir, Base: base, Effect: "none", Executor: "exec:cursor",
+		Phase: "exited", ExitCode: &code, EndHow: "exit", Conclusion: "done"}
+	a := &Attempt{Claim: &Claimed{AttemptID: "a1", TaskID: "t_1", EffectClass: "none"}, Dir: dir, Out: dir + ".out"}
+	d.Registry.failWrite = func() error { return errors.New("disk full") }
+	out, err := d.deliver(bg, a, ws, &e, nil)
+	if !errors.Is(err, ErrRegistry) || out.Conclusion != "failed" || out.Submitted || f.count("computed") != 0 {
+		t.Fatalf("deliver = %+v %v; calls %v", out, err, f.log())
 	}
 }

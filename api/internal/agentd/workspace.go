@@ -7,8 +7,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -343,6 +345,7 @@ func gitRaw(ctx context.Context, dir string, env []string, args ...string) (stri
 // own, removed with its lock, so a call cut short leaves nothing in the way
 // of the next (review 240 B5).
 func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []string, err error) {
+	removeStaleIndexes(filepath.Join(w.Dir, ".git"))
 	f, err := os.CreateTemp(filepath.Join(w.Dir, ".git"), "agentd-changed-index-*")
 	if err != nil {
 		return nil, nil, err
@@ -363,21 +366,99 @@ func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []strin
 		return nil, nil, err
 	}
 	changed = nulSplit(out)
-	args := append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, configPathspecs...)
-	out, err = gitRaw(ctx, w.Dir, env, args...)
-	if err != nil {
-		return nil, nil, err
+	// The configuration directories at any depth, ignored parents walked;
+	// the top-level files with --directory, so that a directory of that
+	// name is one line, not its contents (review 241 A1).
+	var found []string
+	for _, q := range [][]string{
+		append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, configDirPathspecs...),
+		append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--"}, configTopFiles...),
+	} {
+		out, err = gitRaw(ctx, w.Dir, env, q...)
+		if err != nil {
+			return nil, nil, err
+		}
+		found = append(found, nulSplit(out)...)
 	}
-	return changed, nulSplit(out), nil
+	// git stops at a nested repository and names its directory: those, and
+	// the directories among the changed paths (a nested repository added as
+	// a gitlink), are walked here (review 241 A1).
+	var walk []string
+	for _, p := range found {
+		p = strings.TrimSuffix(p, "/")
+		info, lerr := os.Lstat(filepath.Join(w.Dir, p))
+		switch {
+		case lerr == nil && info.IsDir() && configDir(path.Base(p)):
+			ignoredConfig = append(ignoredConfig, p)
+		case lerr == nil && info.IsDir():
+			walk = append(walk, p) // a nested repository, or a top-level directory named like a file
+		case ExecutorConfig(p):
+			ignoredConfig = append(ignoredConfig, p)
+		}
+	}
+	for _, p := range changed {
+		if info, lerr := os.Lstat(filepath.Join(w.Dir, p)); lerr == nil && info.IsDir() {
+			walk = append(walk, p)
+		}
+	}
+	for _, p := range walk {
+		ignoredConfig = append(ignoredConfig, configUnder(w.Dir, p)...)
+	}
+	return changed, ignoredConfig, nil
 }
 
-// configPathspecs match what ExecutorConfig names, for git: a configuration
-// directory at any depth ("**/" matches the top as well) and the files at
-// the top.
-var configPathspecs = []string{
-	":(glob)**/.cursor", ":(glob)**/.codex", ":(glob)**/.claude", ":(glob)**/.gemini",
-	":(glob)**/.cursor/**", ":(glob)**/.codex/**", ":(glob)**/.claude/**", ":(glob)**/.gemini/**",
-	":(glob)cli.json", ":(glob).cursorrules", ":(glob).cursorignore", ":(glob).mcp.json",
+// configDirPathspecs match ExecutorConfig's directories at any depth for
+// git ("**/" matches the top as well), a file of that name included;
+// configTopFiles are its files at the top.
+var (
+	configDirPathspecs = []string{
+		":(glob)**/.cursor", ":(glob)**/.codex", ":(glob)**/.claude", ":(glob)**/.gemini",
+		":(glob)**/.cursor/**", ":(glob)**/.codex/**", ":(glob)**/.claude/**", ":(glob)**/.gemini/**",
+	}
+	configTopFiles = []string{":(literal)cli.json", ":(literal).cursorrules", ":(literal).cursorignore", ":(literal).mcp.json"}
+)
+
+// configUnder walks dir (relative to root) for what ExecutorConfig names,
+// without following symbolic links and skipping .git; a configuration
+// directory is named once, not walked. A directory that cannot be read is
+// named as it is, so that the attempt fails rather than passes unchecked.
+func configUnder(root, dir string) []string {
+	var hits []string
+	_ = filepath.WalkDir(filepath.Join(root, dir), func(path string, d fs.DirEntry, err error) error {
+		rel, rerr := filepath.Rel(root, path)
+		if rerr != nil {
+			return nil
+		}
+		rel = filepath.ToSlash(rel)
+		if err != nil {
+			hits = append(hits, rel+" (unreadable)")
+			return nil
+		}
+		switch {
+		case d.IsDir() && d.Name() == ".git":
+			return fs.SkipDir
+		case d.IsDir() && configDir(d.Name()):
+			hits = append(hits, rel)
+			return fs.SkipDir
+		case !d.IsDir() && ExecutorConfig(rel):
+			hits = append(hits, rel)
+		}
+		return nil
+	})
+	return hits
+}
+
+// removeStaleIndexes removes the indexes and locks a check left when its
+// agentd was killed (review 241 B5), and the fixed-name ones of the version
+// before; a check runs once per attempt at a time, so one older than ten
+// minutes is no running check's.
+func removeStaleIndexes(gitDir string) {
+	matches, _ := filepath.Glob(filepath.Join(gitDir, "agentd-changed-index*"))
+	for _, m := range matches {
+		if info, err := os.Lstat(m); err == nil && time.Since(info.ModTime()) > 10*time.Minute {
+			_ = os.Remove(m)
+		}
+	}
 }
 
 func nulSplit(out string) []string {
@@ -390,6 +471,16 @@ func nulSplit(out string) []string {
 	return paths
 }
 
+// configDir reports whether a directory of this name holds an executor's
+// configuration.
+func configDir(name string) bool {
+	switch name {
+	case ".cursor", ".codex", ".claude", ".gemini":
+		return true
+	}
+	return false
+}
+
 // ExecutorConfig reports whether path is where an executor reads its own
 // settings or standing instructions: a .cursor, .codex, .claude or .gemini
 // directory at any depth, or cursor's and MCP's files at the top. An attempt
@@ -398,8 +489,7 @@ func nulSplit(out string) []string {
 // cli.json to allow itself the shell).
 func ExecutorConfig(path string) bool {
 	for _, part := range strings.Split(path, "/") {
-		switch part {
-		case ".cursor", ".codex", ".claude", ".gemini":
+		if configDir(part) {
 			return true
 		}
 	}
