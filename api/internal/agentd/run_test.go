@@ -2,6 +2,8 @@ package agentd_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
@@ -188,9 +191,9 @@ func specRun(t *testing.T, spec, body string) (agentd.Outcome, string, string, e
 // executor starts: the executor finds both, and the attempt records them.
 func TestRunPreparesSiblingsAndSetup(t *testing.T) {
 	spec := `{"text":"t","siblings":[{"repo":"ui","ref":"main"}],` +
-		`"setup":[["sh","-c","test -f ../ui/README.md && touch \"$OUT/setup-ran\""]]}`
+		`"setup":[["sh","-c","test -f ../ui/README.md && touch ../setup-ran"]]}`
 	out, outDir, taskDir, err := specRun(t, spec,
-		`test -f "$OUT/setup-ran" && test -f ../ui/README.md && echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
+		`test -f ../setup-ran && test -f ../ui/README.md && echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
 	if err != nil || out.Conclusion != "done" || !out.Submitted {
 		t.Fatalf("run = %+v %v", out, err)
 	}
@@ -439,6 +442,47 @@ func TestRunClearsTheGroup(t *testing.T) {
 	}
 }
 
+// A check prepares its subject's siblings and setup, not its own (it has none),
+// and checks the subject's commit: the executor finds the sibling and the
+// setup's mark, for a verify and for a review (review 227 C1).
+func TestRunAChecksPreparationIsItsSubjects(t *testing.T) {
+	for _, kind := range []string{"verify", "review"} {
+		t.Run(kind, func(t *testing.T) {
+			env := gitEnvT(t.TempDir())
+			bare, baseCommit := bareRemote(t, env)
+			subject := []byte(`{"text":"t","verify":[["true"]],"siblings":[{"repo":"ui","ref":"main"}],` +
+				`"setup":[["sh","-c","test -f ../ui/README.md && touch ../setup-ran"]]}`)
+			sum := sha256.Sum256(subject)
+			subjectID := "sha256:" + hex.EncodeToString(sum[:])
+			check := fmt.Sprintf(`{"text":"","check":%q,"subject_task":"t_subject","attempt":"a_subject","round":1,"task_spec":%q,"commit":%q,"repo":"bifrost-platform"}`,
+				kind, subjectID, baseCommit)
+			head := func(_ context.Context, _, ref string) (string, error) {
+				out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+				first, _, _ := strings.Cut(string(out), "\t")
+				return strings.TrimSpace(first), err
+			}
+			pool, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json", []byte(check))
+			must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+				id, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", subject)
+				if err == nil && id != subjectID {
+					err = fmt.Errorf("subject spec stored as %s, not %s", id, subjectID)
+				}
+				return err
+			}))
+			d := daemon(t, base, script(`test "$(git rev-parse HEAD)" = "`+baseCommit+`" && test -f ../setup-ran && test -f ../ui/README.md && `+
+				`echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`), bare, env)
+			cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+			if err != nil || cl == nil {
+				t.Fatalf("claim = %+v %v", cl, err)
+			}
+			out, err := d.Run(ctx, cl)
+			if err != nil || out.Conclusion != "done" {
+				t.Fatalf("run = %+v %v", out, err)
+			}
+		})
+	}
+}
+
 // What the platform writes for an implementation is what agentd reads: the
 // platform repository's checks, setup and sibling all come through ParseSpec
 // (agentd ships first; CUT-agentd-console-checks-2026-10-16).
@@ -449,6 +493,24 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 	s, err := agentd.ParseSpec(body)
 	if err != nil {
 		t.Fatalf("agentd refuses the platform's spec: %v\n%s", err, body)
+	}
+	// The commands themselves, not only their count (review 227 C1): CI's checks.
+	want := [][]string{
+		{"go", "-C", "api", "build", "./..."},
+		{"go", "-C", "api", "vet", "./..."},
+		{"npm", "--prefix", "console", "run", "lint"},
+		{"npm", "--prefix", "console", "test"},
+		{"npm", "--prefix", "console", "run", "build"},
+	}
+	if fmt.Sprint(s.Verify) != fmt.Sprint(want) {
+		t.Fatalf("verify = %q, want %q", s.Verify, want)
+	}
+	wantSetup := [][]string{
+		{"npm", "--prefix", "../bifrost-ui", "ci", "--no-audit", "--no-fund"},
+		{"npm", "--prefix", "console", "ci", "--no-audit", "--no-fund"},
+	}
+	if fmt.Sprint(s.Setup) != fmt.Sprint(wantSetup) {
+		t.Fatalf("setup = %q, want %q", s.Setup, wantSetup)
 	}
 	if len(s.Verify) != len(repo.Verify) || len(s.Setup) != len(repo.Setup) || len(s.Siblings) != 1 ||
 		s.Siblings[0] != (agentd.Sibling{Repo: "bifrost-ui", Ref: "main"}) || s.TimeoutS != store.SpecTimeoutS {

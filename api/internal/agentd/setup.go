@@ -110,7 +110,12 @@ func RunSetup(args []string) int {
 	if limit <= 0 {
 		limit = SetupLimit
 	}
-	v := Verify(context.Background(), ".", os.Environ(), spec.Verify, limit)
+	// The setup sees the allow-listed environment only: a vendor key the
+	// executor's own environment carries (cursor's, claude's) is for the
+	// executor, not for the install scripts of the checkout's dependencies
+	// (review 227 A2). The executor gets its environment back when it is
+	// exec'd below.
+	v := Verify(context.Background(), ".", AllowedEnv(os.Environ()), spec.Verify, limit)
 	if out, merr := json.MarshalIndent(v, "", "  "); merr != nil {
 		err = merr
 	} else {

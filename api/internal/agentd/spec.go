@@ -112,7 +112,8 @@ var (
 	// siblingRepo is a directory name next to the attempts, never an
 	// attempt's own (a<n>, a<n>.out) and never a path.
 	siblingRepo = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
-	attemptDir  = regexp.MustCompile(`^a[0-9]+$`)
+	// Any case: macOS takes A1 for a1 (review 227 B1).
+	attemptDir = regexp.MustCompile(`(?i)^a[0-9]+$`)
 	// siblingRef is a branch name git takes in a refspec, never an option.
 	siblingRef = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 )
