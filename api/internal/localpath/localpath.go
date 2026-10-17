@@ -7,6 +7,8 @@
 package localpath
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"strings"
 )
@@ -34,8 +36,9 @@ func Find(body []byte) (string, bool) {
 // "/var/folders/" "<var-folders>/", "~/" "<~>/", "C:\" "<C:>\". The rest of
 // each path is kept. A marker's slash can join what follows into another
 // prefix ("/private/var/folders/" becomes "<private>/var/folders/"), so it
-// masks again until nothing is left. Each pass that changes s removes a
-// slash or a drive letter's colon-slash, so len(s)+1 passes always suffice.
+// masks again until nothing is left. Each pass that changes s lowers the
+// count of slashes, "~/" pairs and a drive letter's colon-slash pairs, which
+// starts at most at len(s), so len(s)+1 passes always suffice (review 237 C).
 func Mask(s string) string {
 	for range len(s) + 1 {
 		next := maskOnce(s)
@@ -56,4 +59,33 @@ func maskOnce(s string) string {
 		name := strings.ReplaceAll(strings.Trim(m, "/"), "/", "-")
 		return "<" + name + ">/"
 	})
+}
+
+// jsonDrive is H8's drive-letter form completed by a JSON escape: the encoder
+// writes "C:<" as "C:\u003c", a control character or an invalid byte after
+// the colon likewise starts with a backslash.
+var jsonDrive = regexp.MustCompile(`(?:^|[^A-Za-z])[A-Za-z]:\\`)
+
+// MaskJSON masks what H8 matches in body, a JSON document whose strings Mask
+// has already cleaned: what is left there is a drive letter's colon followed
+// by an escape the encoder wrote. It puts a space after that colon, which
+// leaves every escape whole, so the document stays valid. ok is false when
+// the result is not valid JSON or H8 still matches it.
+func MaskJSON(body []byte) (out []byte, ok bool) {
+	out = body
+	for range len(body) + 1 {
+		next := jsonDrive.ReplaceAllFunc(out, func(m []byte) []byte {
+			n := len(m)
+			r := make([]byte, 0, n+1)
+			r = append(r, m[:n-1]...)
+			r = append(r, ' ')
+			return append(r, m[n-1])
+		})
+		if bytes.Equal(next, out) {
+			break
+		}
+		out = next
+	}
+	_, found := Find(out)
+	return out, !found && json.Valid(out)
 }

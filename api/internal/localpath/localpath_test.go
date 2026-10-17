@@ -1,6 +1,10 @@
 package localpath
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestFind(t *testing.T) {
 	for _, c := range []struct {
@@ -60,5 +64,33 @@ func TestMaskLongChains(t *testing.T) {
 	in += "/x"
 	if p, found := Find([]byte(Mask(in))); found {
 		t.Fatalf("a long chain still holds a local path after Mask: %q", p)
+	}
+}
+
+// Review 237 A: the encoder's escapes can complete H8's drive-letter form in
+// strings Mask left alone. MaskJSON leaves no match and a valid document,
+// and changes nothing but a space after such a colon.
+func TestMaskJSON(t *testing.T) {
+	for _, in := range []string{"C:<", "C:>", "C:&", "a:\n", "x:\u2028", "C:\xff", `C:"`, "\x1a:<", "C:<D:<", "fine: text", "no colon"} {
+		body, err := json.Marshal(map[string]string{"reason": Mask(in)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, ok := MaskJSON(body)
+		if !ok {
+			t.Errorf("MaskJSON(%q) = %s, not ok", body, out)
+			continue
+		}
+		if p, found := Find(out); found {
+			t.Errorf("MaskJSON(%q) = %s still holds %q", body, out, p)
+		}
+		var got map[string]string
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("MaskJSON(%q) = %s: %v", body, out, err)
+		}
+		want := strings.ToValidUTF8(in, "\uFFFD")
+		if strings.ReplaceAll(got["reason"], ": ", ":") != strings.ReplaceAll(want, ": ", ":") {
+			t.Errorf("MaskJSON changed %q into %q", want, got["reason"])
+		}
 	}
 }

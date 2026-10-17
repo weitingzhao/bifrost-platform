@@ -263,8 +263,7 @@ func RunVerify(args []string) int {
 	}
 	limit := time.Duration(spec.TimeoutS) * time.Second
 	v := Verify(context.Background(), ".", os.Environ(), spec.Verify, limit)
-	v = withoutLocalPaths(v, pathAliases())
-	out, err := json.MarshalIndent(v, "", "  ")
+	out, err := handIn(v, newPathRewrite())
 	if err == nil {
 		err = os.WriteFile(*outPath, out, 0o600)
 	}
@@ -278,27 +277,52 @@ func RunVerify(args []string) int {
 	return 0
 }
 
-// pathAlias is a directory of this machine and how the output a check hands
-// in names it instead.
-type pathAlias struct {
-	re    *regexp.Regexp
-	alias string
+// handIn is verify.json as RunVerify writes it: v without local paths
+// (withoutLocalPaths), marshalled, and the JSON itself masked
+// (localpath.MaskJSON), since the platform scans the marshalled bytes and the
+// encoder's own escapes can complete H8's drive-letter form ("C:<" is written
+// "C:\u003c", review 237 A). When a local path is still left, the outputs are
+// withheld rather than refused for it.
+func handIn(v Verification, paths *pathRewrite) ([]byte, error) {
+	v = withoutLocalPaths(v, paths)
+	out, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	if masked, ok := localpath.MaskJSON(out); ok {
+		return masked, nil
+	}
+	v.Reason = withheld
+	for i := range v.Commands {
+		v.Commands[i].Argv = []string{withheld}
+		v.Commands[i].Tail = withheld
+	}
+	return json.MarshalIndent(v, "", "  ")
 }
 
-// pathAliases are the directories a check's output names most: the checkout
-// (".", the check runs in it), the task's directory with the siblings beside
-// the checkout (".."), and the home directory ("$HOME"), each also by its
-// resolved form, longest first so that the checkout wins over its parents.
-func pathAliases() []pathAlias {
-	type dir struct{ path, alias string }
-	var dirs []dir
-	add := func(p, alias string) {
-		if p == "" || p == "/" || !filepath.IsAbs(p) {
+const withheld = "(withheld: it still named a path of this machine after masking)"
+
+// pathRewrite names the directories a check's output names most by what
+// they are to the check: the checkout "." (the check runs in it), the task's
+// directory with the siblings beside the checkout "..", and the home directory
+// "$HOME", each also by its resolved form.
+type pathRewrite struct {
+	re    *regexp.Regexp
+	alias map[string]string
+}
+
+func newPathRewrite() *pathRewrite {
+	p := &pathRewrite{alias: map[string]string{}}
+	var dirs []string
+	add := func(d, alias string) {
+		if d == "" || !filepath.IsAbs(d) {
 			return
 		}
-		dirs = append(dirs, dir{filepath.Clean(p), alias})
-		if r, err := filepath.EvalSymlinks(p); err == nil && r != p {
-			dirs = append(dirs, dir{filepath.Clean(r), alias})
+		for _, d := range []string{filepath.Clean(d), resolved(d)} {
+			if _, seen := p.alias[d]; d != "" && d != "/" && !seen {
+				p.alias[d] = alias
+				dirs = append(dirs, d)
+			}
 		}
 	}
 	if wd, err := os.Getwd(); err == nil {
@@ -306,31 +330,66 @@ func pathAliases() []pathAlias {
 		add(filepath.Dir(wd), "..")
 	}
 	add(os.Getenv("HOME"), "$HOME")
-	sort.SliceStable(dirs, func(i, j int) bool { return len(dirs[i].path) > len(dirs[j].path) })
-	out := make([]pathAlias, 0, len(dirs))
-	for _, d := range dirs {
-		// The directory itself, or followed by a separator or anything that
-		// cannot continue its last name ("/home/u" is not "/home/u2").
-		// The alias is a replacement template: its own "$" ("$HOME") is
-		// escaped so that it is not read as a group.
-		out = append(out, pathAlias{regexp.MustCompile(regexp.QuoteMeta(d.path) + `(/|$|[^A-Za-z0-9._-])`), strings.ReplaceAll(d.alias, "$", "$$") + "${1}"})
+	if len(dirs) == 0 {
+		return p
 	}
-	return out
+	// Longest first, so that at one place the checkout wins over its parent.
+	sort.SliceStable(dirs, func(i, j int) bool { return len(dirs[i]) > len(dirs[j]) })
+	quoted := make([]string, len(dirs))
+	for i, d := range dirs {
+		quoted[i] = regexp.QuoteMeta(d)
+	}
+	// A directory counts only as a whole path: at the start of the text or
+	// after a character that cannot be part of a path (so "/vendor/x/a1" and
+	// "https://h/x/a1" are not the checkout "/x/a1"), and followed by a
+	// separator, the end, or a character that ends a path in a tool's output
+	// (so "/x/a12", "/x/a1+b" and "/x/a1é" are not it either; review 237 B).
+	p.re = regexp.MustCompile("(^|[\\s\"'`(\\[{<>=:,;|])(" + strings.Join(quoted, "|") + ")(/|$|[\\s\"'`)\\]}<>:,;|])")
+	return p
+}
+
+func resolved(d string) string {
+	r, err := filepath.EvalSymlinks(d)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(r)
+}
+
+// rewrite replaces each whole directory path in s by its alias. An alias
+// starts with "." or "$", never at a place a path can start, so a pass never
+// matches what an earlier one wrote; it passes again only for a path whose
+// leading character was taken as the previous path's end ("/x/a1:/x/a1/b").
+func (p *pathRewrite) rewrite(s string) string {
+	if p.re == nil {
+		return s
+	}
+	for range len(s) + 1 {
+		idx := p.re.FindAllStringSubmatchIndex(s, -1)
+		if idx == nil {
+			break
+		}
+		var b strings.Builder
+		last := 0
+		for _, m := range idx {
+			b.WriteString(s[last:m[4]])
+			b.WriteString(p.alias[s[m[4]:m[5]]])
+			last = m[5]
+		}
+		b.WriteString(s[last:])
+		s = b.String()
+	}
+	return s
 }
 
 // withoutLocalPaths rewrites what a check hands in so that it names no path
-// of this machine: the directories in aliases by their aliases, then
+// of this machine: the directories paths knows by their aliases, then
 // whatever the platform's rule H8 still matches masked (localpath.Mask). The
 // platform refuses a verify artifact that holds a local path, and tools print
 // absolute ones (2026-10-17, STG walk M-9: ESLint's warnings made every
 // Console check's verify.json refused).
-func withoutLocalPaths(v Verification, aliases []pathAlias) Verification {
-	clean := func(s string) string {
-		for _, a := range aliases {
-			s = a.re.ReplaceAllString(s, a.alias)
-		}
-		return localpath.Mask(s)
-	}
+func withoutLocalPaths(v Verification, paths *pathRewrite) Verification {
+	clean := func(s string) string { return localpath.Mask(paths.rewrite(s)) }
 	v.Reason = clean(v.Reason)
 	for i := range v.Commands {
 		tr := &v.Commands[i]

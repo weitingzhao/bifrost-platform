@@ -198,6 +198,58 @@ func TestRunVerifyHandsInNoLocalPath(t *testing.T) {
 	}
 }
 
+// Review 237 A: handIn's bytes, the ones the platform scans, hold no local
+// path even where the JSON encoder's escapes complete one, and stay valid.
+func TestHandInMasksWhatEscapesComplete(t *testing.T) {
+	v := Verification{Reason: "C:<", Commands: []CommandTrace{{Argv: []string{"x", "a:\n"}, Tail: "C:\xff and \x1a:< and C:\u2028"}}}
+	out, err := handIn(v, &pathRewrite{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, found := localpath.Find(out); found {
+		t.Fatalf("handIn still holds a local path: %q\n%s", p, out)
+	}
+	var back Verification
+	if err := json.Unmarshal(out, &back); err != nil {
+		t.Fatalf("handIn wrote invalid JSON: %v\n%s", err, out)
+	}
+	if back.Reason != "C: <" || back.Commands[0].Argv[1] != "a: \n" {
+		t.Errorf("handIn changed more than a space after the colon: %+v", back)
+	}
+}
+
+// Review 237 B: only a whole path is the checkout, its parent or the home.
+func TestPathRewriteTakesWholePathsOnly(t *testing.T) {
+	checkout := filepath.Join(t.TempDir(), "tasks", "t_1", "a1")
+	if err := os.MkdirAll(checkout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", t.TempDir())
+	t.Chdir(checkout)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := filepath.Dir(wd)
+	p := newPathRewrite()
+	for _, c := range []struct{ in, want string }{
+		{wd + "/console/a.ts:3:1", "./console/a.ts:3:1"},
+		{"at " + wd, "at ."},
+		{wd + ":" + wd + "/b", ".:./b"},
+		{"--dir=" + parent + "/bifrost-ui", "--dir=../bifrost-ui"},
+		{wd + "2/x", "../a12/x"},
+		{wd + "+backup/file", "../a1+backup/file"},
+		{wd + "é/file", "../a1é/file"},
+		{"/vendor" + wd + "/file", "/vendor" + wd + "/file"},
+		{"https://example.test" + wd + "/file", "https://example.test" + wd + "/file"},
+		{wd + parent + "/file", "." + parent + "/file"},
+	} {
+		if got := p.rewrite(c.in); got != c.want {
+			t.Errorf("rewrite(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 // Review 163 A2: a review passes only on its verdict line.
 func TestReviewVerdict(t *testing.T) {
 	a := &Attempt{Claim: &Claimed{Role: "review"}, Spec: TaskSpec{Check: "review"}}
