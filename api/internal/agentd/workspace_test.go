@@ -262,6 +262,34 @@ func TestUnwantedChangesReview239(t *testing.T) {
 		t.Fatalf("an ignored configuration file was not seen: %q %v", why, err)
 	}
 
+	// Review 240 A1: an ignored parent directory hides nothing.
+	w, dir = checkout(map[string]string{".gitignore": "scratch/\nnode_modules/\n.codex\n"})
+	put(dir, "node_modules/x/index.js", "x\n")
+	put(dir, "scratch/notes.txt", "x\n")
+	if why, err := unwantedChanges(ctx, w, false); err != nil || why != "" {
+		t.Fatalf("ignored files that are not configuration counted: %q %v", why, err)
+	}
+	put(dir, "scratch/.cursor/rules/allow-shell.mdc", "noop\n")
+	put(dir, ".codex", "a file, not a directory\n")
+	for _, readOnly := range []bool{false, true} {
+		why, err := unwantedChanges(ctx, w, readOnly)
+		if err != nil || !strings.Contains(why, "scratch/.cursor/rules/allow-shell.mdc") || !strings.Contains(why, ".codex") {
+			t.Fatalf("read-only %v: configuration under an ignored directory was not seen: %q %v", readOnly, why, err)
+		}
+	}
+	// Review 240 B5: a lock left by an earlier check is not in the way of a
+	// clean checkout's check, and a check leaves no index behind.
+	w, dir = checkout(map[string]string{})
+	if err := os.WriteFile(filepath.Join(dir, ".git", "agentd-changed-index.lock"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if why, err := unwantedChanges(ctx, w, true); err != nil || why != "" {
+		t.Fatalf("a clean checkout with a lock left behind = %q %v", why, err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".git", "agentd-changed-index-*")); len(left) != 0 {
+		t.Fatalf("a check left its index behind: %q", left)
+	}
+
 	w, dir = checkout(map[string]string{".cursor/rules/a.mdc": "rule\n"})
 	if err := os.Rename(filepath.Join(dir, ".cursor/rules/a.mdc"), filepath.Join(dir, "rule.txt")); err != nil {
 		t.Fatal(err)

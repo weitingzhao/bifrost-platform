@@ -335,12 +335,22 @@ func gitRaw(ctx context.Context, dir string, env []string, args ...string) (stri
 // Changes lists what differs between the workspace and the base: changed
 // are the paths git would commit (untracked files and the executor's own
 // commits included, a rename as a deletion and an addition, review 239 A2);
-// ignored are the untracked files and directories .gitignore hides, a
-// directory once with its trailing slash (review 239 A1). Paths are read
-// NUL-separated and untrimmed (review 239 B4).
-func (w *Workspace) Changes(ctx context.Context) (changed, ignored []string, err error) {
-	idx := filepath.Join(w.Dir, ".git", "agentd-changed-index")
-	defer func() { _ = os.Remove(idx) }()
+// ignoredConfig are the untracked files .gitignore hides that are where an
+// executor keeps its configuration, at any depth, an ignored parent
+// directory included (review 239 A1, review 240 A1): git lists only the
+// matches, so an ignored node_modules is walked, not printed. Paths are read
+// NUL-separated and untrimmed (review 239 B4). Each call has an index of its
+// own, removed with its lock, so a call cut short leaves nothing in the way
+// of the next (review 240 B5).
+func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []string, err error) {
+	f, err := os.CreateTemp(filepath.Join(w.Dir, ".git"), "agentd-changed-index-*")
+	if err != nil {
+		return nil, nil, err
+	}
+	idx := f.Name()
+	_ = f.Close()
+	_ = os.Remove(idx) // git writes the index itself; only the unique name is wanted
+	defer func() { _ = os.Remove(idx); _ = os.Remove(idx + ".lock") }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
 	if _, err = gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
 		return nil, nil, err
@@ -353,11 +363,21 @@ func (w *Workspace) Changes(ctx context.Context) (changed, ignored []string, err
 		return nil, nil, err
 	}
 	changed = nulSplit(out)
-	out, err = gitRaw(ctx, w.Dir, env, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+	args := append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, configPathspecs...)
+	out, err = gitRaw(ctx, w.Dir, env, args...)
 	if err != nil {
 		return nil, nil, err
 	}
 	return changed, nulSplit(out), nil
+}
+
+// configPathspecs match what ExecutorConfig names, for git: a configuration
+// directory at any depth ("**/" matches the top as well) and the files at
+// the top.
+var configPathspecs = []string{
+	":(glob)**/.cursor", ":(glob)**/.codex", ":(glob)**/.claude", ":(glob)**/.gemini",
+	":(glob)**/.cursor/**", ":(glob)**/.codex/**", ":(glob)**/.claude/**", ":(glob)**/.gemini/**",
+	":(glob)cli.json", ":(glob).cursorrules", ":(glob).cursorignore", ":(glob).mcp.json",
 }
 
 func nulSplit(out string) []string {
@@ -399,7 +419,7 @@ func ExecutorConfig(path string) bool {
 // short by its context returns the error, to be tried again (review 239 B3);
 // a checkout that cannot be read is a reason to fail.
 func unwantedChanges(ctx context.Context, ws *Workspace, readOnly bool) (string, error) {
-	changed, ignored, err := ws.Changes(ctx)
+	changed, ignoredConfig, err := ws.Changes(ctx)
 	if err != nil {
 		if transient(err) {
 			return "", err
@@ -410,7 +430,7 @@ func unwantedChanges(ctx context.Context, ws *Workspace, readOnly bool) (string,
 		return "an attempt that pushes no branch changed the checkout: " + listed(changed), nil
 	}
 	var bad []string
-	for _, p := range append(changed, ignored...) {
+	for _, p := range append(changed, ignoredConfig...) {
 		if ExecutorConfig(p) {
 			bad = append(bad, p)
 		}
