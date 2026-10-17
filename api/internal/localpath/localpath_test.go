@@ -12,7 +12,7 @@ func TestFind(t *testing.T) {
 		want bool
 	}{
 		{"see /home/u/x.go:3", true},
-		{"/Users/a/b", true},
+		{"/Users/x/b", true},
 		{"/private/var/x", true},
 		{"/var/folders/ab/T/x", true},
 		{"/tmp/go-build1/x", true},
@@ -34,7 +34,7 @@ func TestFind(t *testing.T) {
 func TestMaskLeavesNothingFindMatches(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"/home/u/agent-work/x.ts:3:1", "<home>/u/agent-work/x.ts:3:1"},
-		{"/Users/bifrost-agentd/x", "<Users>/bifrost-agentd/x"},
+		{"/Users/x/bifrost-agentd", "<Users>/x/bifrost-agentd"},
 		{"/private/var/folders/x", "<private><var-folders>/x"},
 		{"/private/tmp/a", "<private><tmp>/a"},
 		{"at /var/folders/ab/T/x", "at <var-folders>/ab/T/x"},
