@@ -169,6 +169,52 @@ func TestPrepareSibling(t *testing.T) {
 	}
 	refused("a path that leaves the root", root, filepath.Join("..", "x", "bifrost-ui"))
 	refused("an absolute path", root, filepath.Join(outside, "t_1", "bifrost-ui"))
+	// A relative link that leaves the root, its target there or not yet: nothing
+	// is made or removed outside (review 229 C).
+	for _, exists := range []bool{true, false} {
+		escRoot := t.TempDir()
+		escOut := filepath.Join(t.TempDir(), "outside")
+		if exists {
+			if err = os.MkdirAll(filepath.Join(escOut, "t_1"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+		} else if err = os.MkdirAll(escOut, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		relLink, rerr := filepath.Rel(escRoot, escOut)
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		if err = os.Symlink(relLink, filepath.Join(escRoot, "tasks")); err != nil {
+			t.Fatal(err)
+		}
+		refused("tasks/ is a relative link out of the root", escRoot, rel)
+		if _, serr := os.Stat(filepath.Join(escOut, "t_1")); exists == errors.Is(serr, os.ErrNotExist) {
+			t.Fatalf("outside the root, t_1 existed=%v, now: %v", exists, serr)
+		}
+	}
+	// An old sibling holding a link to a directory outside: the old sibling goes,
+	// the directory it pointed at stays.
+	nested := filepath.Join(t.TempDir(), "kept")
+	if err = os.MkdirAll(nested, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(nested, "file"), []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	nestRoot := t.TempDir()
+	if _, err = PrepareSibling(context.Background(), nestRoot, rel, bare, "main", creds); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink(nested, filepath.Join(nestRoot, rel, "node_modules")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = PrepareSibling(context.Background(), nestRoot, rel, bare, "main", creds); err != nil {
+		t.Fatalf("again over an old sibling with a link inside: %v", err)
+	}
+	if b, rerr := os.ReadFile(filepath.Join(nested, "file")); rerr != nil || string(b) != "keep" {
+		t.Fatalf("the directory an old sibling linked to went: %v", rerr)
+	}
 
 	if _, err = PrepareSibling(context.Background(), t.TempDir(), filepath.Join("tasks", "t_1", "x"), bare, "--upload-pack=touch /tmp/x", env); err == nil {
 		t.Fatal("an option for a ref was fetched")
