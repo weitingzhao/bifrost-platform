@@ -75,8 +75,13 @@ type Entry struct {
 	WorkID    string `json:"work_id,omitempty"`
 	Workdir   string `json:"workdir"`
 	Base      string `json:"base,omitempty"` // the commit the workspace was checked out at
-	PGID      int    `json:"pgid"`
-	Start     string `json:"start"`
+	// Executor ran the attempt; Checked: what it changed in the checkout was
+	// checked (unwantedChanges) and the conclusion holds the result. Both are
+	// journalled so that a restart between the exit and the check checks.
+	Executor string `json:"executor,omitempty"`
+	Checked  bool   `json:"checked,omitempty"`
+	PGID     int    `json:"pgid"`
+	Start    string `json:"start"`
 	// Phase: launching, running (the executor runs), exited (it exited; the
 	// result is here), computed, persisted, submitting (the submit is being
 	// sent; it is resent as it is), submitted; lost (salvage only);

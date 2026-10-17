@@ -188,7 +188,8 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	defer func() { _ = logf.Close() }()
 	sp.Stdout, sp.Stderr = logf, logf
 	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
-		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching"}
+		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching",
+		Executor: cl.Tool.Executor}
 	// A lost lease or a stop that came while the workspace was prepared, or
 	// while the start was reported, is acted on before the executor is
 	// released (review 164 A7).
@@ -249,14 +250,6 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	exit := code
 	entry.Phase, entry.ExitCode, entry.EndHow = "exited", &exit, endHow
 	entry.Conclusion = a.conclusion(endHow, code, a.results())
-	if ws != nil && entry.Conclusion != "none" {
-		if why := ownConfigChanged(ctx, ws); why != "" {
-			// The reason goes into the log, whose tail the platform keeps.
-			_, _ = fmt.Fprintf(logf, "\nagentd: the attempt is failed: %s\n", why)
-			d.logf("agentd: %s: %s", cl.AttemptID, why)
-			entry.Conclusion = "failed"
-		}
-	}
 	if err := d.Registry.Put(entry); err != nil {
 		return Outcome{}, err
 	}

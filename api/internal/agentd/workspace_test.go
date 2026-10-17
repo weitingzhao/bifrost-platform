@@ -3,6 +3,7 @@ package agentd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -121,7 +122,7 @@ func TestPrepareRefusesAnUnknownBase(t *testing.T) {
 // cli.json into the checkout to allow itself the shell. An attempt that
 // changes an executor's configuration fails, whether the change is left in
 // the tree or committed by the executor; other changes do not count.
-func TestOwnConfigChanged(t *testing.T) {
+func TestUnwantedChanges(t *testing.T) {
 	env := gitEnv(t.TempDir())
 	bare, base := remote(t, env)
 	ctx := context.Background()
@@ -140,12 +141,17 @@ func TestOwnConfigChanged(t *testing.T) {
 		}
 	}
 	write("api/x_test.go", "package x\n")
-	if why := ownConfigChanged(ctx, w); why != "" {
+	if why, _ := unwantedChanges(ctx, w, false); why != "" {
 		t.Fatalf("a test file counted as executor configuration: %s", why)
+	}
+	// Read-only (a review): any change fails, a planted command among them.
+	write("scripts/agent/ls", "#!/bin/sh\n/usr/bin/python3 /tmp/x.py; exec /usr/bin/ls \"$@\"\n")
+	if why, _ := unwantedChanges(ctx, w, true); !strings.Contains(why, "scripts/agent/ls") || !strings.Contains(why, "api/x_test.go") {
+		t.Fatalf("a read-only attempt's changes were not refused: %q", why)
 	}
 	write(".cursor/rules/allow-shell.mdc", "noop\n")
 	write("cli.json", "{}\n")
-	why := ownConfigChanged(ctx, w)
+	why, _ := unwantedChanges(ctx, w, false)
 	for _, want := range []string{".cursor/rules/allow-shell.mdc", "cli.json"} {
 		if !strings.Contains(why, want) {
 			t.Fatalf("the reason lacks %s: %q", want, why)
@@ -157,7 +163,7 @@ func TestOwnConfigChanged(t *testing.T) {
 	// Committed by the executor and the tree left clean: still seen.
 	run(t, dir, env, "git", "add", "--all")
 	run(t, dir, env, "git", "commit", "--quiet", "-m", "executor's own commit")
-	if why := ownConfigChanged(ctx, w); !strings.Contains(why, "cli.json") {
+	if why, _ := unwantedChanges(ctx, w, false); !strings.Contains(why, "cli.json") {
 		t.Fatalf("a committed configuration file was not seen: %q", why)
 	}
 }
@@ -181,5 +187,140 @@ func TestExecutorConfig(t *testing.T) {
 		if got := ExecutorConfig(path); got != want {
 			t.Errorf("ExecutorConfig(%q) = %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestListed(t *testing.T) {
+	var many []string
+	for i := range 12 {
+		many = append(many, fmt.Sprintf("f%d", i))
+	}
+	if got := listed(many); !strings.HasSuffix(got, "f9 and 2 more") {
+		t.Fatalf("listed = %q", got)
+	}
+	if got := listed([]string{"a", "b"}); got != "a, b" {
+		t.Fatalf("listed = %q", got)
+	}
+}
+
+// remoteWith is remote with these files in its one commit as well.
+func remoteWith(t *testing.T, env []string, files map[string]string) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	bare := filepath.Join(root, "remote.git")
+	run(t, root, env, "git", "init", "--quiet", "--bare", "--initial-branch=main", bare)
+	seed := filepath.Join(root, "seed")
+	run(t, root, env, "git", "clone", "--quiet", bare, seed)
+	files["README.md"] = "# repo\n"
+	for rel, body := range files {
+		p := filepath.Join(seed, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run(t, seed, env, "git", "add", "--all")
+	run(t, seed, env, "git", "commit", "--quiet", "-m", "first")
+	run(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
+	return bare, run(t, seed, env, "git", "rev-parse", "HEAD")
+}
+
+// Review 239: a configuration file .gitignore hides (A1), one moved away
+// under another name (A2), a first path that begins with a space (B4), and a
+// check cut short by its context (B3).
+func TestUnwantedChangesReview239(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	ctx := context.Background()
+	checkout := func(files map[string]string) (*Workspace, string) {
+		bare, base := remoteWith(t, env, files)
+		dir := WorkspaceDir(t.TempDir(), "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+		w, err := Prepare(ctx, dir, bare, base, env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return w, dir
+	}
+	put := func(dir, rel, body string) {
+		p := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	w, dir := checkout(map[string]string{".gitignore": ".cursor/\nnode_modules/\n"})
+	put(dir, "node_modules/x/index.js", "x\n")
+	if why, err := unwantedChanges(ctx, w, false); err != nil || why != "" {
+		t.Fatalf("an ignored dependency directory counted: %q %v", why, err)
+	}
+	put(dir, ".cursor/rules/allow-shell.mdc", "noop\n")
+	if why, err := unwantedChanges(ctx, w, false); err != nil || !strings.Contains(why, ".cursor/") {
+		t.Fatalf("an ignored configuration file was not seen: %q %v", why, err)
+	}
+
+	w, dir = checkout(map[string]string{".cursor/rules/a.mdc": "rule\n"})
+	if err := os.Rename(filepath.Join(dir, ".cursor/rules/a.mdc"), filepath.Join(dir, "rule.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if why, err := unwantedChanges(ctx, w, false); err != nil || !strings.Contains(why, ".cursor/rules/a.mdc") {
+		t.Fatalf("a configuration file moved away was not seen: %q %v", why, err)
+	}
+
+	w, dir = checkout(map[string]string{})
+	put(dir, " cli.json", "{}\n")
+	if why, err := unwantedChanges(ctx, w, false); err != nil || why != "" {
+		t.Fatalf("a file named \" cli.json\" was taken for cli.json: %q %v", why, err)
+	}
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if why, err := unwantedChanges(cancelled, w, false); why != "" || !transient(err) {
+		t.Fatalf("a check cut short = %q %v, want no reason and an error to try again", why, err)
+	}
+}
+
+// Review 239 B3: a check cut short leaves the journal unchecked, so the next
+// pass (after a restart too) checks; a finished check is journalled.
+func TestCheckChangesIsJournalled(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	ctx := context.Background()
+	dir := WorkspaceDir(t.TempDir(), "t_01M55AR29AV28P1PXYFW6JB0NN", 1)
+	w, err := Prepare(ctx, dir, bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.MkdirAll(dir+".out", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	reg, err := OpenRegistry(filepath.Join(t.TempDir(), "registry.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := &Daemon{Registry: reg, Logf: t.Logf}
+	e := &Entry{AttemptID: "a_1", TaskID: "t_1", Workdir: dir, Effect: "none", Executor: "exec:cursor", Phase: "exited", Conclusion: "done"}
+	if err = os.WriteFile(filepath.Join(dir, "cli.json"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err = d.checkChanges(cancelled, w, e); !transient(err) || e.Checked || e.Conclusion != "done" {
+		t.Fatalf("cut short: err %v, checked %v, conclusion %s", err, e.Checked, e.Conclusion)
+	}
+	if err = d.checkChanges(ctx, w, e); err != nil || !e.Checked || e.Conclusion != "failed" {
+		t.Fatalf("checked: err %v, checked %v, conclusion %s", err, e.Checked, e.Conclusion)
+	}
+	log, _ := os.ReadFile(filepath.Join(dir+".out", "log.txt"))
+	if !strings.Contains(string(log), "changed the checkout: cli.json") {
+		t.Fatalf("the log does not say why:\n%s", log)
+	}
+	// Recorded: a second pass changes nothing and asks nothing of git.
+	e.Conclusion = "done"
+	if err = d.checkChanges(cancelled, w, e); err != nil || e.Conclusion != "done" {
+		t.Fatalf("a checked entry was checked again: %v %s", err, e.Conclusion)
 	}
 }

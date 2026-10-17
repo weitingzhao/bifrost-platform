@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -144,6 +146,9 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 		var err error
 		switch e.Phase {
 		case "exited":
+			if err = d.checkChanges(ctx, ws, e); err != nil {
+				break
+			}
 			err = d.retry(ctx, func() error {
 				return d.Client.Computed(ctx, cl.AttemptID, cl.Epoch, e.ExitCode, e.EndHow, e.Conclusion)
 			})
@@ -192,6 +197,35 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			return out, d.end(ctx, e, e.EndHow)
 		}
 	}
+}
+
+// checkChanges fails an attempt for what its executor changed in the
+// checkout (unwantedChanges), once, before the conclusion is reported: the
+// result is journalled, and a check cut short (the daemon stopping) is left
+// for the next pass, after a restart too (review 239 B3). A model's attempt
+// that pushes no branch (a review) may change nothing; agentd's own
+// deterministic check runs the spec's commands, and a journal from before
+// the executor was recorded is held to the configuration rule alone. The
+// reason goes into the log, whose tail the platform keeps.
+func (d *Daemon) checkChanges(ctx context.Context, ws *Workspace, e *Entry) error {
+	if e.Checked || ws == nil || e.Conclusion == "none" {
+		return nil
+	}
+	readOnly := e.Effect != "branch" && e.Executor != "" && e.Executor != "exec:deterministic"
+	why, err := unwantedChanges(ctx, ws, readOnly)
+	if err != nil {
+		return err
+	}
+	if why != "" {
+		d.logf("agentd: %s: %s", e.AttemptID, why)
+		if f, ferr := os.OpenFile(filepath.Join(e.Workdir+".out", "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); ferr == nil {
+			_, _ = fmt.Fprintf(f, "\nagentd: the attempt is failed: %s\n", why)
+			_ = f.Close()
+		}
+		e.Conclusion = "failed"
+	}
+	e.Checked = true
+	return d.Registry.Put(*e)
 }
 
 // prepare uploads the report and the log tail and makes the attempt's commit,

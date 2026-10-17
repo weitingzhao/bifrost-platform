@@ -310,6 +310,13 @@ func (w *Workspace) git(ctx context.Context, dir string, args ...string) (string
 const gitWaitDelay = 2 * time.Second
 
 func gitIn(ctx context.Context, dir string, env []string, args ...string) (string, error) {
+	out, err := gitRaw(ctx, dir, env, args...)
+	return strings.TrimSpace(out), err
+}
+
+// gitRaw is gitIn without trimming the output: for -z lists, whose first
+// path may begin with a space (review 239 B4).
+func gitRaw(ctx context.Context, dir string, env []string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, env, gitWaitDelay
 	var out, errb bytes.Buffer
@@ -322,33 +329,45 @@ func gitIn(ctx context.Context, dir string, env []string, args ...string) (strin
 		}
 		return "", fmt.Errorf("agentd: git %s: %v: %s", args[0], err, strings.TrimSpace(tail(errb.Bytes())))
 	}
-	return strings.TrimSpace(out.String()), nil
+	return out.String(), nil
 }
 
-// ChangedPaths lists the paths that differ between the workspace and the
-// base, untracked files and the executor's own commits included (the same
-// net change as Diff), in git's order.
-func (w *Workspace) ChangedPaths(ctx context.Context) ([]string, error) {
+// Changes lists what differs between the workspace and the base: changed
+// are the paths git would commit (untracked files and the executor's own
+// commits included, a rename as a deletion and an addition, review 239 A2);
+// ignored are the untracked files and directories .gitignore hides, a
+// directory once with its trailing slash (review 239 A1). Paths are read
+// NUL-separated and untrimmed (review 239 B4).
+func (w *Workspace) Changes(ctx context.Context) (changed, ignored []string, err error) {
 	idx := filepath.Join(w.Dir, ".git", "agentd-changed-index")
 	defer func() { _ = os.Remove(idx) }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
-	if _, err := gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
-		return nil, err
+	if _, err = gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
+		return nil, nil, err
 	}
-	if _, err := gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
-		return nil, err
+	if _, err = gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
+		return nil, nil, err
 	}
-	out, err := gitIn(ctx, w.Dir, env, "diff", "--cached", "--name-only", "-z", w.Base)
+	out, err := gitRaw(ctx, w.Dir, env, "diff", "--cached", "--no-renames", "--name-only", "-z", w.Base)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	changed = nulSplit(out)
+	out, err = gitRaw(ctx, w.Dir, env, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
+	if err != nil {
+		return nil, nil, err
+	}
+	return changed, nulSplit(out), nil
+}
+
+func nulSplit(out string) []string {
 	var paths []string
 	for _, p := range strings.Split(out, "\x00") {
 		if p != "" {
 			paths = append(paths, p)
 		}
 	}
-	return paths, nil
+	return paths
 }
 
 // ExecutorConfig reports whether path is where an executor reads its own
@@ -371,21 +390,41 @@ func ExecutorConfig(path string) bool {
 	return false
 }
 
-// ownConfigChanged says why the attempt must fail when it changed an
-// executor's configuration, or could not be checked; "" when it did not.
-func ownConfigChanged(ctx context.Context, ws *Workspace) string {
-	paths, err := ws.ChangedPaths(ctx)
+// unwantedChanges says why the attempt must fail for what it changed in the
+// checkout, or "" when it may stand: no attempt may change an executor's
+// configuration, ignored files included, and a read-only one may change
+// nothing git would commit (2026-10-17, PROD M-3: besides the two
+// configuration files, the reviewer wrote scripts/agent/ls, a script named
+// like an allowed command that ran a program of its own first). A check cut
+// short by its context returns the error, to be tried again (review 239 B3);
+// a checkout that cannot be read is a reason to fail.
+func unwantedChanges(ctx context.Context, ws *Workspace, readOnly bool) (string, error) {
+	changed, ignored, err := ws.Changes(ctx)
 	if err != nil {
-		return "the checkout could not be checked for executor configuration: " + err.Error()
+		if transient(err) {
+			return "", err
+		}
+		return "the checkout could not be checked for what the executor changed: " + err.Error(), nil
+	}
+	if readOnly && len(changed) > 0 {
+		return "an attempt that pushes no branch changed the checkout: " + listed(changed), nil
 	}
 	var bad []string
-	for _, p := range paths {
+	for _, p := range append(changed, ignored...) {
 		if ExecutorConfig(p) {
 			bad = append(bad, p)
 		}
 	}
 	if len(bad) == 0 {
-		return ""
+		return "", nil
 	}
-	return "the executor changed an executor's own configuration: " + strings.Join(bad, ", ")
+	return "the executor changed an executor's own configuration: " + listed(bad), nil
+}
+
+// listed names up to ten paths and counts the rest.
+func listed(paths []string) string {
+	if len(paths) <= 10 {
+		return strings.Join(paths, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(paths[:10], ", "), len(paths)-10)
 }
