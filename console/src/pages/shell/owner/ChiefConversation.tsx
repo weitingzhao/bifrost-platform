@@ -21,8 +21,10 @@ export function ChiefConversation({ active }: { active: boolean }) {
     // Every message to the Owner that is shown is read, whatever its kind; a
     // failed acknowledgement is tried again on the next read, and a done one
     // is marked in the cache so a remount does not send it again.
-    const me = query.data?.actor || 'owner'
-    const ids = (messages ?? []).filter(m => m.to === me && !m.acked_at && !acknowledged.current.has(m.message_id)).map(m => m.message_id)
+    // Only the Owner's own: a seat's token in the Console must not read the
+    // seat's mail for it.
+    if (query.data?.actor !== 'owner') return
+    const ids = (messages ?? []).filter(m => m.to === 'owner' && !m.acked_at && !acknowledged.current.has(m.message_id)).map(m => m.message_id)
     if (!ids.length) return
     ids.forEach(id => acknowledged.current.add(id))
     ackMessages(ids).then(() => {
@@ -35,6 +37,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
       setAckError(e instanceof Error ? e.message : 'Could not acknowledge answers.')
     })
   }, [active, messages, query.isError, query.data?.actor, query.dataUpdatedAt, client])
+  const unread = (messages ?? []).some(m => m.to === 'owner' && !m.acked_at)
   const bytes = messageBytes(body)
   const lastAsk = messages?.reduce((last, m, i) => m.from === 'owner' && m.kind === 'ask' ? i : last, -1) ?? -1
   const waiting = lastAsk >= 0 && !messages?.slice(lastAsk + 1).some(m => m.from === 'seat:chief_of_staff' && m.kind === 'answer')
@@ -62,6 +65,6 @@ export function ChiefConversation({ active }: { active: boolean }) {
       <span className="text-xs" role={bytes > 8192 ? 'alert' : undefined}>{bytes} / 8192 bytes</span>
       <Button type="submit" disabled={pending || !body.trim() || bytes > 8192}>Send</Button>
     </form>
-    {(error || ackError) && <p role="alert" className="[overflow-wrap:anywhere]">{error || ackError}</p>}
+    {(error || (ackError && unread)) && <p role="alert" className="[overflow-wrap:anywhere]">{error || ackError}</p>}
   </Card>
 }

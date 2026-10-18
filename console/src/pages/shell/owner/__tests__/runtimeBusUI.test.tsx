@@ -8,7 +8,7 @@ vi.mock('@/api/agentRuntimeBus', async original => ({ ...await original<object>(
   fetchChiefThread: mocks.thread, ackMessages: mocks.ack, sendChiefMessage: mocks.send }))
 // The platform's own word on which environment it is; 'loading' never answers.
 vi.mock('@/api/core', async original => ({ ...await original<object>(),
-  fetchSelfHealth: () => mocks.env === 'loading' ? new Promise(() => {}) : Promise.resolve({ viewer_env: mocks.env }) }))
+  fetchSelfHealth: () => mocks.env === 'loading' ? new Promise(() => {}) : mocks.env === 'error' ? Promise.reject(new Error('down')) : Promise.resolve({ viewer_env: mocks.env }) }))
 import { AttemptActionLine } from '../AttemptActionLine'
 import { OwnerStop } from '../OwnerStop'
 import { ChiefConversation } from '../ChiefConversation'
@@ -58,6 +58,7 @@ it('fetches only while open, appends with next, and keeps the newest 200', async
   disclosure.open = true; fireEvent(disclosure, new Event('toggle'))
   expect(await screen.findByText('command-199')).toBeInTheDocument()
   await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-actions-stream', 'a_1'] }) })
+  expect(mocks.actions.mock.calls[0][1]).toEqual({ after: '', limit: 500 })
   expect(mocks.actions.mock.calls[1][1]).toEqual({ after: '199-0', limit: 200 })
   expect(screen.getAllByRole('listitem')).toHaveLength(200)
   await waitFor(() => expect(screen.queryByText('command-0')).not.toBeInTheDocument())
@@ -119,6 +120,25 @@ describe('global stop', () => {
     expect(screen.queryByRole('button', { name: 'Stop all work' })).not.toBeInTheDocument()
     expect(mocks.lift).not.toHaveBeenCalled(); expect(mocks.stop).not.toHaveBeenCalled()
   })
+  it('does what was pressed: Resume lifts only the stop that was in force when it was pressed', async () => {
+    const c = (id: string) => ({ control_id: id, scope: 'global', control_kind: 'stop', set_at: at, cleared_at: '' })
+    const { client, rerender } = show(<OwnerStop readable controls={[c('c_1')]} />)
+    const again = (controls: ReturnType<typeof c>[]) => rerender(<QueryClientProvider client={client}><OwnerStop readable controls={controls} /></QueryClientProvider>)
+    await enabled('Resume')
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
+    for (const controls of [[c('c_2')], []]) {
+      again(controls)
+      expect(screen.getByText('Work control changed while you were deciding; press again.')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Resume work' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Stop all work' })).not.toBeInTheDocument()
+    }
+    expect(mocks.lift).not.toHaveBeenCalled()
+  })
+  it('says why it is disabled when the environment cannot be read', async () => {
+    mocks.env = 'error'; show(<OwnerStop controls={[]} readable />)
+    expect(await screen.findByText('Environment unknown (self-health did not answer); Stop all is disabled')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop all' })).toBeDisabled()
+  })
 })
 describe('chief conversation', () => {
   const messages = [
@@ -149,6 +169,14 @@ describe('chief conversation', () => {
     render(<QueryClientProvider client={client}><ChiefConversation active /></QueryClientProvider>)
     await new Promise(r => setTimeout(r, 50))
     expect(mocks.ack).toHaveBeenCalledTimes(2)
+  })
+  it('acknowledges nothing for a seat whose token the Console holds', async () => {
+    mocks.thread.mockResolvedValue({ actor: 'seat:chief_of_staff', with: 'owner', messages: [
+      { message_id: 'm_9', from: 'owner', to: 'seat:chief_of_staff', kind: 'ask', body: 'Question', created_at: at }] })
+    show(<ChiefConversation active />)
+    expect(await screen.findByText('Question')).toBeInTheDocument()
+    await new Promise(r => setTimeout(r, 50))
+    expect(mocks.ack).not.toHaveBeenCalled()
   })
   it('does not read or ack while hidden', () => { show(<ChiefConversation active={false} />); expect(mocks.thread).not.toHaveBeenCalled(); expect(mocks.ack).not.toHaveBeenCalled() })
   it('counts UTF-8 bytes, refuses excess, sends and clears a valid body', async () => {

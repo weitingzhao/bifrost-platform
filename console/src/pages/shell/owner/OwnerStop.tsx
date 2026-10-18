@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { text, type RuntimeRecord } from '@/api/agentRuntime'
 import { liftControl, setGlobalStop } from '@/api/agentRuntimeBus'
-import { fetchSelfHealth } from '@/api/core'
+import { shellSelfHealthQuery } from '@/hooks/useShellStatusLine'
 import { Card } from './OwnerParts'
 
 // What the Owner pressed: stop all, or lift the stop that was in force then.
@@ -13,7 +13,7 @@ export function OwnerStop({ controls, readable }: { controls: RuntimeRecord[]; r
   // The shell polls self-health under this key already: reading it adds no
   // request (the fleet snapshot would add ten). Stop all works only where the
   // platform says it is STG or DEV; unknown, loading or PROD, it is disabled.
-  const health = useQuery({ queryKey: ['shell', 'self-health'], queryFn: fetchSelfHealth, refetchInterval: 20_000, staleTime: 10_000 })
+  const health = useQuery(shellSelfHealthQuery)
   const env = (health.data?.viewer_env ?? '').trim().toLowerCase()
   const client = useQueryClient()
   const [intent, setIntent] = useState<Intent | null>(null)
@@ -24,7 +24,7 @@ export function OwnerStop({ controls, readable }: { controls: RuntimeRecord[]; r
   const blocked = !['stg', 'dev', 'dev-local'].includes(env) || !readable
   // The confirmation does what was pressed, not what the card shows now: a
   // stop set or lifted elsewhere while it is open voids it (review of 4a, A1).
-  const changed = intent !== null && ('lift' in intent ? text(stop?.control_id) !== intent.lift : stop !== undefined)
+  const changed = readable && intent !== null && ('lift' in intent ? text(stop?.control_id) !== intent.lift : stop !== undefined)
   async function act() {
     if (busy.current || blocked || intent === null || changed) return
     busy.current = true
@@ -43,6 +43,7 @@ export function OwnerStop({ controls, readable }: { controls: RuntimeRecord[]; r
     {stop && <p>All work stopped since {new Date(text(stop.set_at)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</p>}
     {!readable && <p>Reading current work controls is required.</p>}
     {env === 'prod' && <p>Stop all and Resume are enabled on STG first</p>}
+    {!env && !health.isPending && <p>Environment unknown (self-health did not answer); Stop all is disabled</p>}
     {intent === null && <Button disabled={blocked || pending} onClick={() => setIntent(stop ? { lift: text(stop.control_id) } : { stop: true })}>{stop ? 'Resume' : 'Stop all'}</Button>}
     {/* The confirmation is in the card, not a dialog: @bifrost/ui's dialog
         brings a React of its own into the tests (W-31 2.3 slice 4). */}

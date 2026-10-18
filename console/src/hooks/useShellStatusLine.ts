@@ -14,13 +14,16 @@ function errorText(error: unknown, fallback: string): string | null {
  * The system verdict shown in the header and at the top of Status. Query keys are
  * shared with the Status page panels so both read the same responses.
  */
+/** The shell's self-health query; whoever else reads self-health shares it. */
+export const shellSelfHealthQuery = {
+  queryKey: ['shell', 'self-health'],
+  queryFn: fetchSelfHealth,
+  refetchInterval: 20_000,
+  staleTime: 10_000,
+}
+
 export function useSystemVerdict() {
-  const health = useQuery({
-    queryKey: ['shell', 'self-health'],
-    queryFn: fetchSelfHealth,
-    refetchInterval: 20_000,
-    staleTime: 10_000,
-  })
+  const health = useQuery(shellSelfHealthQuery)
   const checklist = useQuery({
     queryKey: ['status', 'checklist-signals'],
     queryFn: fetchChecklistSignals,

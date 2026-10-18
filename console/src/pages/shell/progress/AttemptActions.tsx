@@ -9,8 +9,9 @@ function ActionStream({ id }: { id: string }) {
   const actions = useRef<AttemptAction[]>([])
   const query = useQuery({ queryKey: ['agent-runtime-actions-stream', id],
     queryFn: async ({ signal }) => {
-      // The first read takes as much as the server gives (500), so the newest
-      // 200 show at once, not after a few polls.
+      // The first read takes as much as the server gives (500): the newest
+      // 200 show at once unless the stream holds more than that (its trim is
+      // approximate), and then by the next read.
       const page = await fetchAttemptActions(id, { after: cursor.current, limit: cursor.current ? 200 : 500 }, signal)
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
       const merged = new Map(actions.current.map(a => [a.id, a]))
