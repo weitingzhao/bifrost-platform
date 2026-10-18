@@ -189,6 +189,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	sp.Stdout, sp.Stderr = logf, logf
 	if t := newActionTail(cl.Tool.Executor, filepath.Join(a.Out, "log.txt"), a.Dir); t != nil {
 		l.tail.Store(t)
+		tctx, tcancel := context.WithCancel(ctx)
+		defer tcancel()
+		safego.Go("agentd-actions", func() { t.collect(tctx) })
 	}
 	entry := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
 		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching",
@@ -242,6 +245,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 
 	endHow, code := d.supervise(ctx, a, proc, ws, &entry, l)
+	if endHow != "lease_lost" {
+		d.lastActions(ctx, cl.AttemptID, cl.Epoch, l)
+	}
 	if sp.After != nil {
 		if err := sp.After(); err != nil {
 			d.logf("agentd: after %s: %v", cl.AttemptID, err)

@@ -204,8 +204,13 @@ func TestHeartbeatRenewsWhateverTheActions(t *testing.T) {
 			t.Errorf("%s: %d %v", name, code, out)
 		}
 	}
-	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after=abc", nil); code != http.StatusBadRequest {
-		t.Errorf("a cursor that is not a stream id (review 264 C6): %d %v", code, out)
+	for _, cursor := range []string{"abc", "18446744073709551616-0", "0-18446744073709551616"} {
+		if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after="+cursor, nil); code != http.StatusBadRequest {
+			t.Errorf("a cursor %q that is not a stream id (reviews 264 C6, 265 C7): %d %v", cursor, code, out)
+		}
+	}
+	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after=18446744073709551615-0", nil); code != http.StatusOK {
+		t.Errorf("the largest stream id: %d %v", code, out)
 	}
 }
 

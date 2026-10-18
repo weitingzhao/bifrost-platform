@@ -60,6 +60,9 @@ type lease struct {
 	// tail, once the executor's log is open, gives each heartbeat the
 	// actions found since the last one (W-31 2.3).
 	tail atomic.Pointer[actionTail]
+	// beat makes the keeper's heartbeats and the last one after the
+	// executor exits go one at a time (review 265 B12).
+	beat sync.Mutex
 }
 
 func (l *lease) markLost() { l.lostOnce.Do(func() { close(l.lost) }) }
@@ -109,8 +112,10 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 			case <-t.C:
 			}
 			hctx, hcancel := context.WithTimeout(ctx, timeout)
+			l.beat.Lock()
 			acts := l.tail.Load().take(actions.MaxPerBeat, time.Now())
 			stop, _, refused, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts)
+			l.beat.Unlock()
 			hcancel()
 			if refused != "" && refused != lastRefused {
 				d.logf("agentd: heartbeat %s: actions not kept: %s", attemptID, refused)
@@ -138,6 +143,35 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 		}
 	})
 	return l
+}
+
+// lastActions reads what the executor wrote since the last read and sends it
+// in one more heartbeat, so actions of its last seconds are not lost (review
+// 265 B12). It is bounded and best effort: observation, never a reason to
+// hold up the hand-over.
+func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64, l *lease) {
+	t := l.tail.Load()
+	if t == nil || l.isLost() {
+		return
+	}
+	done := make(chan struct{})
+	safego.Go("agentd-last-read", func() { defer close(done); t.readNow(time.Now()) })
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		return
+	}
+	acts := t.take(actions.MaxPerBeat, time.Now())
+	if len(acts) == 0 {
+		return
+	}
+	hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	l.beat.Lock()
+	defer l.beat.Unlock()
+	if _, _, _, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts); err != nil {
+		d.logf("agentd: last actions of %s not sent: %v", attemptID, err)
+	}
 }
 
 // deliver hands the result of an attempt that kept its lease over, phase by

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -88,7 +89,7 @@ func (a *API) attemptActions(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 	after := q.Get("after")
-	if after != "" && !streamID.MatchString(after) {
+	if after != "" && !validStreamID(after) {
 		writeError(w, http.StatusBadRequest, "bad_request", "after is a stream id from a previous answer (digits-digits)")
 		return
 	}
@@ -107,8 +108,19 @@ func (a *API) attemptActions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"attempt_id": id, "actions": es, "next": next})
 }
 
-// streamID is a Redis stream id, the cursor of an action stream.
+// streamID is a Redis stream id, the cursor of an action stream; each half
+// fits an unsigned 64-bit integer (review 265 C7).
 var streamID = regexp.MustCompile(`^[0-9]{1,20}-[0-9]{1,20}$`)
+
+func validStreamID(s string) bool {
+	if !streamID.MatchString(s) {
+		return false
+	}
+	ms, seq, _ := strings.Cut(s, "-")
+	_, e1 := strconv.ParseUint(ms, 10, 64)
+	_, e2 := strconv.ParseUint(seq, 10, 64)
+	return e1 == nil && e2 == nil
+}
 
 type messageBody struct {
 	To   string `json:"to"`
