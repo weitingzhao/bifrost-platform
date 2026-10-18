@@ -1,3 +1,4 @@
+import { OwnerStop } from './OwnerStop'
 import { useState } from 'react'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
 import { ActionLink, Card, Dot } from './OwnerParts'
@@ -40,6 +41,7 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">For you</h2>
     <div className="grid gap-4 @3xl:grid-cols-2">
+      <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
       <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: '#needs-you', text: 'Needs you' }}>
         {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
         {yours.length > 0

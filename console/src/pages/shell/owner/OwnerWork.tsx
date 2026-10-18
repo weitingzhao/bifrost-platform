@@ -1,4 +1,5 @@
 import { Bar, Card, HandMark, Stat } from './OwnerParts'
+import { AttemptActionLine } from './AttemptActionLine'
 import { ago } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
@@ -21,6 +22,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <Stat value={work?.stuck ?? '?'} label="stuck" tone={work && work.stuck > 0 ? 'fail' : undefined} />
           <Stat value={work?.open ?? '?'} label="open goals" />
         </div>
+        {(data.live ?? []).map(attempt => <AttemptActionLine key={attempt.attempt_id} attempt={attempt} now={now} />)}
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Last result</span>
           {data.last

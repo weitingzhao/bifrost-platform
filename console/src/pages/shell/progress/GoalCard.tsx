@@ -1,3 +1,4 @@
+import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { StatusLamp } from '@bifrost/ui'
@@ -95,7 +96,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
         {stage.state === 'skipped' && <p className="text-xs text-muted-foreground">Skipped</p>}
         {stage.tasks.map(t => { const timing = taskTiming(data, t, now), lease = latestLease(data, t)
           const live = runtime?.live.find(a => a.task_id === t.task_id)
-          return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p>{taskWho(data, t)}</p><p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}</div>
+          return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p>{taskWho(data, t)}</p><p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
         })}
       </li>)}</ol>
       {done && <GoalResult data={data} />}

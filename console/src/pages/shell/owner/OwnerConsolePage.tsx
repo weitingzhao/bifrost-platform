@@ -1,3 +1,4 @@
+import { ChiefConversation } from './ChiefConversation'
 import { useState } from 'react'
 import { DetailPageLinks } from '@/components/shell/DetailPageLinks'
 import { formatShellHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
@@ -33,10 +34,11 @@ function VerdictBanner({ verdict, compact, updatedAt, now }: { verdict: Verdict;
   </section>
 }
 
-function OwnerChief({ data, draft, draftKey }: { data: OwnerConsoleData; draft: string; draftKey: number }) {
+function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: OwnerConsoleData; draft: string; draftKey: number }) {
   const last = data.last
   return <section id="owner-chief" aria-label="Chief of staff" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">Chief of staff</h2>
+    <ChiefConversation active={active} />
     <div className="grid gap-4 @3xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
       <GoalForm key={draftKey} draft={draft} />
       <div className="flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
@@ -44,7 +46,6 @@ function OwnerChief({ data, draft, draftKey }: { data: OwnerConsoleData; draft: 
         {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
           : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}
         {last && <a href={`#progress?goal=${encodeURIComponent(last.mission)}`}>What it wrote and did</a>}
-        <p className="m-0 text-muted-foreground">Morning and evening briefings, and asking it a question, come with the agents' inbox (plan step 2.3).</p>
       </div>
     </div>
   </section>
@@ -71,7 +72,7 @@ export function OwnerConsolePage({ entry = 'you' }: { entry?: EntryRouteId }) {
     <VerdictBanner verdict={data.verdict} compact={entry !== 'you'} updatedAt={data.updatedAt} now={data.now} />
     {blocks.you && <OwnerYou data={data} onGoal={makeGoal} />}
     {/* Hidden, not unmounted, on the other entries: an edited draft and a goal just sent outlive moving away (review 224 B-224-1). */}
-    <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief data={data} draft={draft.text} draftKey={draft.key} /></div>
+    <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief active={blocks.chief} data={data} draft={draft.text} draftKey={draft.key} /></div>
     {blocks.work && <OwnerWork data={data} />}
     {blocks.system && <OwnerSystem data={data} />}
     {blocks.system && <OwnerData data={data} />}
