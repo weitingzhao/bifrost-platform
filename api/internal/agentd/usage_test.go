@@ -300,3 +300,28 @@ func TestCursorQuotingTheRefusalIsNoRefusal(t *testing.T) {
 		t.Fatalf("a quoting line read as refused: %+v", m.Pools)
 	}
 }
+
+// Review 275 B9: a log past the read bound keeps its thread id, read from its
+// start, and the session file's spent window still cools.
+func TestALongCodexLogKeepsItsThread(t *testing.T) {
+	const thread = "01a15031-53fc-7183-bce4-1bc9fbf576fb"
+	old := maxMeasured
+	maxMeasured = 4 << 10
+	t.Cleanup(func() { maxMeasured = old })
+	out := writeLog(t, `{"type":"thread.started","thread_id":"`+thread+`"}`,
+		`{"type":"item.completed","item":{"type":"agent_message","text":"`+strings.Repeat("x", 8<<10)+`"}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":2}}`)
+	home := t.TempDir()
+	day := filepath.Join(home, "sessions", "2026", "10", "18")
+	if err := os.MkdirAll(day, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	session := `{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":100.0,"window_minutes":300,"resets_at":1792874442},"rate_limit_reached_type":"primary"}}}` + "\n"
+	if err := os.WriteFile(filepath.Join(day, "rollout-x-"+thread+".jsonl"), []byte(session), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := measureCodex(filepath.Join(out, "log.txt"), home)
+	if len(m.Pools) != 1 || m.Pools[0].Pool != "codex:owner:short" || *m.Pools[0].UsedFraction != 1 || m.Usage == nil || *m.Usage.Tokens != 12 {
+		t.Fatalf("measured %+v %+v", m.Usage, m.Pools)
+	}
+}

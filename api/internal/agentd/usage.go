@@ -69,14 +69,21 @@ func measure(executor, outDir string) Measured {
 }
 
 // maxMeasured bounds what measure reads of one file; past it only the end is
-// read (the last turns and the result).
-const maxMeasured = 64 << 20
+// read (the last turns and the result). A variable so a test can lower it.
+var maxMeasured int64 = 64 << 20
+
+// maxHead bounds the start of a log read for what it says first (codex's
+// thread id), when the log is past maxMeasured (review 275 B9).
+const maxHead = 1 << 20
 
 // openRegular opens a regular file for reading and nothing else: not through
 // a symbolic link, and without waiting on a FIFO or a device the executor may
 // have left in its place (review 274 A3). A file over max is read from its
 // last max bytes on.
-func openRegular(path string, max int64) (io.ReadCloser, error) {
+func openRegular(path string, max int64) (io.ReadCloser, error) { return openBounded(path, max, true) }
+
+// openBounded is openRegular reading the first max bytes when tail is false.
+func openBounded(path string, max int64, tail bool) (io.ReadCloser, error) {
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
@@ -86,7 +93,7 @@ func openRegular(path string, max int64) (io.ReadCloser, error) {
 		_ = f.Close()
 		return nil, fmt.Errorf("agentd: %s is not a regular file", path)
 	}
-	if st.Size() > max {
+	if tail && st.Size() > max {
 		if _, err = f.Seek(st.Size()-max, io.SeekStart); err != nil {
 			_ = f.Close()
 			return nil, err
@@ -210,6 +217,9 @@ func measureCodex(logPath, home string) Measured {
 	}) {
 		return Measured{}
 	}
+	if thread == "" {
+		thread = codexThread(logPath)
+	}
 	m := Measured{Pools: codexLimits(home, thread)}
 	main := pool("codex", "weekly")
 	for _, r := range m.Pools {
@@ -236,6 +246,24 @@ func measureCodex(logPath, home string) Measured {
 		}
 	}
 	return m
+}
+
+// codexThread is the thread id from the start of a log too long to be read
+// whole: thread.started is its first event.
+func codexThread(logPath string) string {
+	f, err := openBounded(logPath, maxHead, false)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	var thread string
+	_ = eachLine(f, maxHead, func(line []byte) {
+		var ev map[string]any
+		if thread == "" && json.Unmarshal(line, &ev) == nil && ev["type"] == "thread.started" {
+			thread, _ = ev["thread_id"].(string)
+		}
+	})
+	return thread
 }
 
 var threadID = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
