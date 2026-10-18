@@ -18,4 +18,7 @@ export interface PlatformAuthContextValue {
   refreshCapabilities: () => void
 }
 
+/** The role read for each sign-in is cached under this key, then the token. */
+export const CAPABILITIES_QUERY_KEY = ['platform', 'auth', 'capabilities'] as const
+
 export const PlatformAuthContext = createContext<PlatformAuthContextValue | null>(null)

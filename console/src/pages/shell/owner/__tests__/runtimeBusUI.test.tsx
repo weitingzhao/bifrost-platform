@@ -3,9 +3,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
-const mocks = vi.hoisted(() => ({ actions: vi.fn(), stop: vi.fn(), lift: vi.fn(), thread: vi.fn(), ack: vi.fn(), send: vi.fn(), env: 'stg' }))
+const mocks = vi.hoisted(() => ({ actions: vi.fn(), stop: vi.fn(), lift: vi.fn(), thread: vi.fn(), ack: vi.fn(), send: vi.fn(), caps: vi.fn(), env: 'stg' }))
 vi.mock('@/api/agentRuntimeBus', async original => ({ ...await original<object>(), fetchAttemptActions: mocks.actions, setGlobalStop: mocks.stop, liftControl: mocks.lift,
   fetchChiefThread: mocks.thread, ackMessages: mocks.ack, sendChiefMessage: mocks.send }))
+vi.mock('@/api/cluster', async original => ({ ...await original<object>(), fetchAuthCapabilities: mocks.caps }))
 // The platform's own word on which environment it is; 'loading' never answers.
 vi.mock('@/api/core', async original => ({ ...await original<object>(),
   fetchSelfHealth: () => mocks.env === 'loading' ? new Promise(() => {}) : mocks.env === 'error' ? Promise.reject(new Error('down')) : Promise.resolve({ viewer_env: mocks.env }) }))
@@ -14,6 +15,9 @@ import { OwnerStop } from '../OwnerStop'
 import { ChiefConversation } from '../ChiefConversation'
 import { appendDictated } from '../dictation'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { SIGN_IN_REFUSED } from '@/api/agentRuntimeBus'
+import { setPlatformOperatorToken } from '@/lib/platformAuth'
 import { AttemptActions } from '../../progress/AttemptActions'
 const at = '2026-10-18T07:20:01.123Z'
 const attempt = parseRuntimeProgress({ live: [{ attempt_id: 'a_1', task_id: 't_1', mission_id: 'M-1', host_id: 'host', executor: 'exec:codex' }] }).live[0]
@@ -256,6 +260,36 @@ describe('chief conversation on every device (Owner 2026-10-18)', () => {
     const query = client.getQueryCache().find({ queryKey: ['agent-runtime-chief-thread'] })
     const interval = (query?.options as { refetchInterval?: (q: unknown) => unknown }).refetchInterval
     expect(typeof interval === 'function' ? interval(query) : interval).toBe(false)
+  })
+  describe('with the real sign-in (review 273 B8, B9)', () => {
+    const ownerCaps = { authenticated: true, role: 'admin', can_operate: true, can_admin: true }
+    beforeEach(() => {
+      // jsdom here has no working localStorage; the sign-in is kept in a map for the test
+      const mem = new Map<string, string>()
+      Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+        get length() { return mem.size }, clear: () => mem.clear(), key: (i: number) => [...mem.keys()][i] ?? null,
+        getItem: (k: string) => mem.get(k) ?? null, removeItem: (k: string) => { mem.delete(k) }, setItem: (k: string, v: string) => { mem.set(k, String(v)) } } })
+      setPlatformOperatorToken('owner-test')
+    })
+    afterEach(() => setPlatformOperatorToken(''))
+    const mount = () => show(<PlatformAuthProvider><ChiefConversation active /></PlatformAuthProvider>)
+    it('checks the sign-in again once when the conversation keeps refusing it, then stops at Try again', async () => {
+      mocks.caps.mockImplementation(() => new Promise(r => setTimeout(() => r(ownerCaps), 10)))
+      mocks.thread.mockRejectedValue(new Error(SIGN_IN_REFUSED))
+      mount()
+      expect(await screen.findByRole('button', { name: 'Try again' }, { timeout: 2000 })).toBeInTheDocument()
+      await new Promise(r => setTimeout(r, 1000))
+      expect(mocks.caps).toHaveBeenCalledTimes(2)
+      expect(mocks.thread.mock.calls.length).toBeLessThanOrEqual(3)
+    })
+    it('reads the conversation again once the sign-in is read back as the Owner, without waiting for the next poll', async () => {
+      mocks.caps.mockResolvedValue(ownerCaps)
+      mocks.thread.mockRejectedValueOnce(new Error(SIGN_IN_REFUSED)).mockResolvedValue({ actor: 'owner', with: 'seat:chief_of_staff', messages: [
+        { message_id: 'm_1', from: 'seat:chief_of_staff', to: 'owner', kind: 'answer', body: 'Back again', created_at: at, acked_at: at }] })
+      mount()
+      expect(await screen.findByText('Back again', undefined, { timeout: 2000 })).toBeInTheDocument()
+      expect(screen.queryByText(SIGN_IN_REFUSED)).not.toBeInTheDocument()
+    })
   })
   it('stops dictating when the entry is hidden, and drops a late phrase (review 271 A4)', () => {
     const made: { aborted: number; fire: ((e: unknown) => void) | null }[] = []

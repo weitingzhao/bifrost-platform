@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchAuthCapabilities } from '@/api/cluster'
-import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
+import { CAPABILITIES_QUERY_KEY, PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { getPlatformOperatorToken, setPlatformOperatorToken } from '@/lib/platformAuth'
 
 /** The routine role re-read. */
@@ -23,7 +23,7 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   const capsQuery = useQuery({
     // The role belongs to the sign-in that asked for it: the request uses the token in the key, never whatever is
     // in storage when it runs, and the result is cached under that same token.
-    queryKey: ['platform', 'auth', 'capabilities', token],
+    queryKey: [...CAPABILITIES_QUERY_KEY, token],
     queryFn: ({ queryKey, signal }) => fetchAuthCapabilities(queryKey[3] as string, signal),
     retry: false,
     refetchInterval: query => (query.state.status === 'error' ? ROLE_RETRY_MS : ROLE_REREAD_MS),
@@ -44,16 +44,16 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
   // cache late, and going back to an earlier sign-in reads its role again instead of finding the old answer.
   // Only for a change of sign-in: the render that follows reads the role of the new one.
   const discardCapabilities = useCallback(() => {
-    void qc.cancelQueries({ queryKey: ['platform', 'auth', 'capabilities'] })
-    qc.removeQueries({ queryKey: ['platform', 'auth', 'capabilities'] })
+    void qc.cancelQueries({ queryKey: CAPABILITIES_QUERY_KEY })
+    qc.removeQueries({ queryKey: CAPABILITIES_QUERY_KEY })
   }, [qc])
 
   // The role on the page is not to be trusted (the server refused a decision, or the same sign-in was saved again):
   // reset it (no data, so nothing can be decided) and read it again now. A request that hangs is cancelled first, so
   // this always sends a new one.
   const refreshCapabilities = useCallback(() => {
-    void qc.cancelQueries({ queryKey: ['platform', 'auth', 'capabilities'] }).then(() => {
-      void qc.resetQueries({ queryKey: ['platform', 'auth', 'capabilities'] })
+    void qc.cancelQueries({ queryKey: CAPABILITIES_QUERY_KEY }).then(() => {
+      void qc.resetQueries({ queryKey: CAPABILITIES_QUERY_KEY })
       // resetQueries reads again only through a query this provider is still watching. If that query was removed
       // under it (a sign-out while signed out, a cleared cache), reading through the observer puts it back and sends
       // the read; when the reset already started one, this joins it and sends nothing more. Skipped while a change

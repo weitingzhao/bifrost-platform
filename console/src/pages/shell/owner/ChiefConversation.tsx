@@ -3,9 +3,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
 import { SIGN_IN_REFUSED, ackMessages, fetchChiefThread, messageBytes, sendChiefMessage, type ChiefThread } from '@/api/agentRuntimeBus'
-import { PlatformAuthContext } from '@/hooks/platformAuthContext'
+import { CAPABILITIES_QUERY_KEY, PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { appendDictated, useDictation } from './dictation'
 import { Card } from './OwnerParts'
+
+const THREAD_KEY = ['agent-runtime-chief-thread']
 
 function isSignInRefusal(e: unknown): boolean { return e instanceof Error && e.message === SIGN_IN_REFUSED }
 
@@ -23,15 +25,39 @@ export function ChiefConversation({ active }: { active: boolean }) {
   const notOwner = auth != null && !auth.capsLoading && !auth.capsError && !auth.canAdmin
   const owner = auth == null || (!auth.capsLoading && !auth.capsError && auth.canAdmin)
   const reading = active && owner
-  const query = useQuery({ queryKey: ['agent-runtime-chief-thread'], queryFn: ({ signal }) => fetchChiefThread(signal),
+  const query = useQuery({ queryKey: THREAD_KEY, queryFn: ({ signal }) => fetchChiefThread(signal),
     enabled: reading, retry: false,
     // a refusal of the sign-in stops the polling until the sign-in is read again
     refetchInterval: q => reading && !isSignInRefusal(q.state.error) ? AGENT_RUNTIME_POLL_MS : false })
   useEffect(() => {
-    if (!owner) client.removeQueries({ queryKey: ['agent-runtime-chief-thread'] })
+    if (!owner) client.removeQueries({ queryKey: THREAD_KEY })
   }, [owner, client])
+  // A refusal is recovered from once (review 273 B8, B9): the sign-in is read again, and when that read comes back
+  // as the Owner's the conversation is read once more. The read's own result is watched: it can come back as the very
+  // same role object, with no loading state ever rendered between. A second refusal stops at Try again; a read that
+  // succeeds, or a new sign-in, starts over.
   const refused = reading && isSignInRefusal(query.error)
-  useEffect(() => { if (refused) auth?.refreshCapabilities() }, [refused, auth])
+  const [recovery, setRecovery] = useState<'none' | 'checking' | 'spent'>('none')
+  const stopWatching = useRef<(() => void) | null>(null)
+  useEffect(() => () => stopWatching.current?.(), [])
+  useEffect(() => { stopWatching.current?.(); stopWatching.current = null; setRecovery('none') }, [auth?.token])
+  useEffect(() => { if (query.isSuccess) setRecovery('none') }, [query.isSuccess, query.dataUpdatedAt])
+  useEffect(() => {
+    if (!refused || recovery !== 'none') return
+    if (!auth) { setRecovery('spent'); return }
+    setRecovery('checking')
+    stopWatching.current?.()
+    stopWatching.current = client.getQueryCache().subscribe(e => {
+      if (e.type !== 'updated' || !CAPABILITIES_QUERY_KEY.every((part, i) => e.query.queryKey[i] === part)) return
+      if (e.action.type !== 'success' && e.action.type !== 'error') return
+      stopWatching.current?.()
+      stopWatching.current = null
+      setRecovery('spent')
+      if (e.action.type === 'success' && (e.action.data as { can_admin?: unknown } | undefined)?.can_admin === true)
+        void client.refetchQueries({ queryKey: THREAD_KEY })
+    })
+    auth.refreshCapabilities()
+  }, [refused, recovery, auth, client])
   const [body, setBody] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -53,7 +79,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
     ackMessages(ids).then(() => {
       setAckError('')
       const now = new Date().toISOString()
-      client.setQueryData<ChiefThread>(['agent-runtime-chief-thread'], old => old && { ...old,
+      client.setQueryData<ChiefThread>(THREAD_KEY, old => old && { ...old,
         messages: old.messages.map(m => ids.includes(m.message_id) && !m.acked_at ? { ...m, acked_at: now } : m) })
     }, e => {
       ids.forEach(id => acknowledged.current.delete(id))
@@ -71,7 +97,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
     busy.current = true
     setPending(true)
     setError('')
-    try { await sendChiefMessage(body); setBody(''); await client.invalidateQueries({ queryKey: ['agent-runtime-chief-thread'] }) }
+    try { await sendChiefMessage(body); setBody(''); await client.invalidateQueries({ queryKey: THREAD_KEY }) }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not send message.') }
     finally { busy.current = false; setPending(false) }
   }
@@ -80,7 +106,8 @@ export function ChiefConversation({ active }: { active: boolean }) {
     {unchecked && <p role="alert" className="[overflow-wrap:anywhere]">Your sign-in could not be checked, so the conversation is not read until it is. <Button type="button" variant="outline" onClick={() => auth?.refreshCapabilities()}>Check again</Button></p>}
     {notOwner && <p role="status" className="[overflow-wrap:anywhere]">This browser is not signed in with the Owner token, so the conversation is not shown here. Each phone, tablet and computer keeps its own sign-in: sign in once on each (menu at the top right → Connect).</p>}
     {reading && query.isPending && <p>Reading conversation…</p>}
-    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}</p>}
+    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}
+      {refused && recovery === 'spent' && <> <Button type="button" variant="outline" onClick={() => { setRecovery('none'); void query.refetch() }}>Try again</Button></>}</p>}
     <ol className="min-w-0 space-y-3">{messages?.map(m => <li key={m.message_id} className="min-w-0 rounded bg-[var(--control-fill)] p-3">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><strong>{m.from === 'owner' ? 'You' : 'Chief of staff'}</strong><time dateTime={m.created_at}>{new Date(m.created_at).toLocaleString()}</time></div>
       <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.body}</p>
