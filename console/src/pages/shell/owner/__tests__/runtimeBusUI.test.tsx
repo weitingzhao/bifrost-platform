@@ -224,6 +224,62 @@ describe('chief conversation on every device (Owner 2026-10-18)', () => {
     show(<ChiefConversation active />)
     expect(screen.getByLabelText('Message')).toHaveClass('text-base')
   })
+  it('drops the conversation it showed once the browser is no longer signed in as the Owner (review 271 A1)', async () => {
+    mocks.thread.mockResolvedValue({ actor: 'owner', with: 'seat:chief_of_staff', messages: [
+      { message_id: 'm_1', from: 'seat:chief_of_staff', to: 'owner', kind: 'answer', body: 'An earlier answer', created_at: at, acked_at: at }] })
+    const { client, rerender } = show(signedIn(true))
+    expect(await screen.findByText('An earlier answer')).toBeInTheDocument()
+    rerender(<QueryClientProvider client={client}>{signedIn(false)}</QueryClientProvider>)
+    await waitFor(() => expect(screen.queryByText('An earlier answer')).not.toBeInTheDocument())
+    expect(screen.getByText(/not signed in with the Owner token/)).toBeInTheDocument()
+    expect(client.getQueryData(['agent-runtime-chief-thread'])).toBeUndefined()
+  })
+  it('says the sign-in could not be checked, offers to check again, and reads nothing on a stale role (review 271 B2, B3)', async () => {
+    const refresh = vi.fn()
+    show(<PlatformAuthContext.Provider value={{ ...auth(true), capsError: true, refreshCapabilities: refresh }}><ChiefConversation active /></PlatformAuthContext.Provider>)
+    expect(screen.getByText(/could not be checked/)).toBeInTheDocument()
+    expect(screen.queryByText(/not signed in with the Owner token/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+    expect(refresh).toHaveBeenCalled()
+    await new Promise(r => setTimeout(r, 30))
+    expect(mocks.thread).not.toHaveBeenCalled()
+  })
+  it('says it is checking while the sign-in is read', () => {
+    show(<PlatformAuthContext.Provider value={{ ...auth(true), capsLoading: true }}><ChiefConversation active /></PlatformAuthContext.Provider>)
+    expect(screen.getByText('Checking your sign-in…')).toBeInTheDocument()
+  })
+  it('stops reading and checks the sign-in again when the platform refuses it', async () => {
+    const refresh = vi.fn()
+    mocks.thread.mockRejectedValue(new Error('Connect with the Owner token to talk to the chief of staff.'))
+    const { client } = show(<PlatformAuthContext.Provider value={{ ...auth(true), refreshCapabilities: refresh }}><ChiefConversation active /></PlatformAuthContext.Provider>)
+    await waitFor(() => expect(refresh).toHaveBeenCalled())
+    const query = client.getQueryCache().find({ queryKey: ['agent-runtime-chief-thread'] })
+    const interval = (query?.options as { refetchInterval?: (q: unknown) => unknown }).refetchInterval
+    expect(typeof interval === 'function' ? interval(query) : interval).toBe(false)
+  })
+  it('stops dictating when the entry is hidden, and drops a late phrase (review 271 A4)', () => {
+    const made: { aborted: number; fire: ((e: unknown) => void) | null }[] = []
+    class FakeRecognition {
+      lang = ''; interimResults = true; continuous = false; onresult: ((e: unknown) => void) | null = null
+      onerror: ((e: unknown) => void) | null = null; onend: (() => void) | null = null
+      me = { aborted: 0, fire: null as ((e: unknown) => void) | null }
+      constructor() { made.push(this.me) }
+      start() { this.me.fire = e => this.onresult?.(e) }
+      stop() {}
+      abort() { this.me.aborted++ }
+    }
+    ;(window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition = FakeRecognition
+    const { client, rerender, unmount } = show(<ChiefConversation active />)
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+    rerender(<QueryClientProvider client={client}><ChiefConversation active={false} /></QueryClientProvider>)
+    expect(made[0].aborted).toBe(1)
+    act(() => { made[0].fire?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: 'late' } }] }) })
+    rerender(<QueryClientProvider client={client}><ChiefConversation active /></QueryClientProvider>)
+    expect(screen.getByLabelText('Message')).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+    unmount()
+    expect(made[1].aborted).toBe(1)
+  })
   it('dictates into the message, and stops', () => {
     const made: { started: number; stopped: number; onresult: ((e: unknown) => void) | null; onend: (() => void) | null }[] = []
     class FakeRecognition {
@@ -232,7 +288,7 @@ describe('chief conversation on every device (Owner 2026-10-18)', () => {
       me = { started: 0, stopped: 0, onresult: null as ((e: unknown) => void) | null, onend: null as (() => void) | null }
       constructor() { made.push(this.me) }
       start() { this.me.started++; this.me.onresult = this.onresult; this.me.onend = this.onend }
-      stop() { this.me.stopped++; this.onend?.() }
+      stop() { this.me.stopped++ }
       abort() {}
     }
     ;(window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition = FakeRecognition
@@ -244,6 +300,8 @@ describe('chief conversation on every device (Owner 2026-10-18)', () => {
     expect(screen.getByLabelText('Message')).toHaveValue('现在有哪些任务在跑')
     fireEvent.click(screen.getByRole('button', { name: 'Stop dictating' }))
     expect(made[0].stopped).toBe(1)
+    expect(screen.getByRole('button', { name: 'Stop dictating' })).toBeInTheDocument() // until the recognizer ends
+    act(() => { made[0].onend?.() })
     expect(screen.getByRole('button', { name: 'Speak' })).toBeInTheDocument()
   })
   it('points to the keyboard microphone where the browser has no speech recognition', () => {

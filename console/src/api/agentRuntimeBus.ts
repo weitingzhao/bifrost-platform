@@ -20,9 +20,11 @@ export function parseChiefThread(value: unknown): ChiefThread {
     created_at: text(m.created_at), acked_at: text(m.acked_at), task_id: text(m.task_id),
   })) }
 }
+/** What the message routes answer a browser not signed in as the Owner (400, 401, 403). */
+export const SIGN_IN_REFUSED = 'Connect with the Owner token to talk to the chief of staff.'
 class ActionsUnavailable extends Error {}
 async function busError(prefix: string, response: Response, token = '') {
-  if (prefix === 'Messages' && [400, 401, 403].includes(response.status)) return new Error('Connect with the Owner token to talk to the chief of staff.')
+  if (prefix === 'Messages' && [400, 401, 403].includes(response.status)) return new Error(SIGN_IN_REFUSED)
   const r = record(await response.json().catch(() => ({})))
   // Only a platform without redis-agents keeps no actions; a 503 of a runtime
   // not connected yet is an error to show (review of 4a, C1).

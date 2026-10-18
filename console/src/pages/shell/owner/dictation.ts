@@ -31,18 +31,37 @@ export function appendDictated(body: string, text: string): string {
   return /[A-Za-z0-9.,;:!?]$/.test(body) && /^[A-Za-z0-9]/.test(t) ? `${body} ${t}` : body + t
 }
 
-/** Dictation into a text box: each final phrase is handed to onText. */
-export function useDictation(onText: (text: string) => void) {
+/**
+ * Dictation into a text box: each final phrase is handed to onText. It stops, and drops what is still to come, as
+ * soon as enabled turns false (the entry is hidden, not unmounted) and when the component unmounts (review 271 A4).
+ */
+export function useDictation(onText: (text: string) => void, enabled = true) {
   const [listening, setListening] = useState(false)
   const [error, setError] = useState('')
   const rec = useRef<Recognition | null>(null)
   const handler = useRef(onText)
   useEffect(() => { handler.current = onText }, [onText])
-  useEffect(() => () => rec.current?.abort(), [])
+  function cancel() {
+    const r = rec.current
+    rec.current = null
+    if (r) {
+      r.onresult = null
+      r.onerror = null
+      r.onend = null
+      r.abort()
+    }
+  }
+  useEffect(() => {
+    if (!enabled) {
+      cancel()
+      setListening(false)
+    }
+  }, [enabled])
+  useEffect(() => cancel, [])
   const supported = recognitionClass() !== undefined
   function start() {
     const Rec = recognitionClass()
-    if (!Rec || rec.current) return
+    if (!Rec || rec.current || !enabled) return
     const r = new Rec()
     r.lang = (typeof navigator !== 'undefined' && navigator.language) || 'zh-CN'
     r.interimResults = false
