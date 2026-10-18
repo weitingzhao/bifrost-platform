@@ -102,9 +102,10 @@ func PrepareFetching(ctx context.Context, dir, remote, base string, env []string
 // setup put anywhere on the way cannot turn the removal onto something else
 // (review 228 A1). The clone reads neither the host user's global nor the
 // system git configuration (the setup could have written them) and installs
-// no template hooks. Nothing else runs on this host while a sibling is
-// prepared (the attempt before has ended and its process group is cleared;
-// this attempt's has not started), so the checked path is the one cloned to.
+// no template hooks. Nothing that may write outside its own workspace runs
+// on this host while a sibling is prepared: an attempt that may has the host
+// to itself, and one starts only when no process group of an earlier attempt
+// stands (share.go, review 276 A2); so the checked path is the one cloned to.
 func PrepareSibling(ctx context.Context, root, rel, remote, ref string, env []string) (string, error) {
 	if !filepath.IsLocal(rel) {
 		return "", fmt.Errorf("agentd: sibling: %q is not a path inside agentd's directory", rel)

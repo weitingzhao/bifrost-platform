@@ -556,15 +556,26 @@ func sortedIDs(m map[string]Entry) []string {
 // cannot be used (review 165 B1). An attempt this process runs now is its
 // Run's, and is left out (2.4 slice ③).
 func (d *Daemon) Recover(ctx context.Context) error {
+	// Read and sorted under the hold lock: a Run that writes its entry and
+	// lets go of its attempt does both before this read, or after it with the
+	// attempt still held (review 276 A1). An entry read here while held is
+	// left out; one not held is no Run's any more, and nothing else writes it.
+	d.mu.Lock()
 	entries, err := d.Registry.Load()
-	if err != nil {
-		return err
+	if d.afterLoad != nil {
+		d.afterLoad()
 	}
 	var ids []string
-	for _, id := range sortedIDs(entries) {
-		if !d.isLive(id) {
-			ids = append(ids, id)
+	if err == nil {
+		for _, id := range sortedIDs(entries) {
+			if !d.live[id] {
+				ids = append(ids, id)
+			}
 		}
+	}
+	d.mu.Unlock()
+	if err != nil {
+		return err
 	}
 	for _, id := range ids {
 		e := entries[id]

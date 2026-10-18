@@ -66,8 +66,20 @@ type Daemon struct {
 	// live are the attempts this process runs or hands over now. Several
 	// run at once (W-31 2.4 slice ③); Recover leaves these to their Run and
 	// takes over only what a previous process left.
-	mu   sync.Mutex
-	live map[string]bool
+	mu    sync.Mutex
+	live  map[string]bool
+	share hostShare
+	// afterLoad, in tests, runs between Recover's read of the registry and
+	// its choice of what to take over.
+	afterLoad func()
+}
+
+// blockedBy says which attempt's process group holds the host, or nothing.
+func blockedBy(id string) error {
+	if id == "" {
+		return nil
+	}
+	return fmt.Errorf("agentd: the process group of %s is not gone; nothing starts beside it", id)
 }
 
 // MaxSlots is how many attempts agentd asks for at most; the platform leases
@@ -183,6 +195,17 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 				return Outcome{}, err
 			}
 		}
+	}
+	// The host is held from here, before anything is written, to the end
+	// (review 276 A2); a process group still standing from an earlier attempt
+	// may write anywhere, so nothing starts beside one.
+	release, err := d.share.take(ctx, !confined(cl, a.prepare()))
+	if err != nil {
+		return Outcome{}, err
+	}
+	defer release()
+	if id, berr := d.Blocked(); berr != nil || id != "" {
+		return Outcome{}, errors.Join(berr, blockedBy(id))
 	}
 	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
 	a.Out = a.Dir + ".out"
