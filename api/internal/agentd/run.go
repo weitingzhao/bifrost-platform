@@ -80,9 +80,18 @@ type Daemon struct {
 // failBefore ends an attempt that failed after it was registered and before
 // its executor was released, as exit with the error (review 278 B); an
 // agentd that is shutting down leaves the entry for Recover instead.
-func (d *Daemon) failBefore(ctx context.Context, e *Entry, err error) (Outcome, error) {
-	if ctx.Err() != nil {
+// A stop or a lost lease that came while it was prepared takes its own path
+// first, as it would at the launch (review 279 B).
+func (d *Daemon) failBefore(ctx context.Context, a *Attempt, ws *Workspace, e *Entry, l *lease, err error) (Outcome, error) {
+	switch {
+	case ctx.Err() != nil:
 		return Outcome{}, err
+	case l.isLost():
+		out, lerr := d.lost(ctx, a, ws, e)
+		return out, errors.Join(err, lerr)
+	case l.isStopped():
+		out, serr := d.unlaunched(ctx, a, ws, e, l)
+		return out, errors.Join(err, serr)
 	}
 	d.logf("agentd: %s ends before its executor started: %v", e.AttemptID, err)
 	return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, e, "exit"))
@@ -252,49 +261,49 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	defer release()
 	if id, berr := d.Blocked(); berr != nil || id != "" {
-		return d.failBefore(ctx, &waiting, errors.Join(berr, blockedBy(id)))
+		return d.failBefore(ctx, a, nil, &waiting, l, errors.Join(berr, blockedBy(id)))
 	}
 	var ws *Workspace
 	switch {
 	case repo != "" && base != "":
 		if ws, err = d.checkout(ctx, a, repo, base); err != nil {
-			return d.failBefore(ctx, &waiting, err)
+			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	default:
 		if _, err = os.Stat(a.Dir); err == nil {
-			return d.failBefore(ctx, &waiting, ErrWorkspaceExists)
+			return d.failBefore(ctx, a, ws, &waiting, l, ErrWorkspaceExists)
 		}
 		if err = os.MkdirAll(a.Dir, 0o700); err != nil {
-			return d.failBefore(ctx, &waiting, err)
+			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
 	if err = os.MkdirAll(a.Out, 0o700); err != nil {
-		return d.failBefore(ctx, &waiting, err)
+		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	// Siblings and setup belong with a checkout: a task with none has nothing
 	// for them to sit beside or install into (setup.go).
 	prep := a.prepare()
 	if ws != nil {
 		if err = d.siblings(ctx, a, prep.Siblings); err != nil {
-			return d.failBefore(ctx, &waiting, err)
+			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
 	exec, ok := d.Executors[cl.Tool.Executor]
 	if !ok {
-		return d.failBefore(ctx, &waiting, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor))
+		return d.failBefore(ctx, a, ws, &waiting, l, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor))
 	}
 	sp, err := exec(a)
 	if err != nil {
-		return d.failBefore(ctx, &waiting, err)
+		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	if ws != nil && len(prep.Setup) > 0 {
 		if sp, err = withSetup(d.Self, a.Out, prep.Setup, sp); err != nil {
-			return d.failBefore(ctx, &waiting, err)
+			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
 	logf, err := os.OpenFile(filepath.Join(a.Out, "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return d.failBefore(ctx, &waiting, err)
+		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	defer func() { _ = logf.Close() }()
 	sp.Stdout, sp.Stderr = logf, logf

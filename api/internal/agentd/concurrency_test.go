@@ -313,3 +313,38 @@ func TestCheckoutRefusesLinksAndTheUsersGitConfig(t *testing.T) {
 		t.Fatal("the checkout ran a hook from the user's git configuration")
 	}
 }
+
+// Review 279 B: a stop or a lost lease that comes while the attempt is
+// prepared, followed by a failure of the preparation, ends the attempt as the
+// stop or the lost lease would, not as exit.
+func TestAStopDuringPreparationIsNoExit(t *testing.T) {
+	for _, why := range []string{"cancelled", "lease_lost"} {
+		t.Run(why, func(t *testing.T) {
+			f := newFake()
+			f.set("heartbeat", func(n int) (int, string) {
+				if why == "cancelled" {
+					return http.StatusOK, `{"stop":true}`
+				}
+				return http.StatusConflict, `{"error":"fenced"}`
+			})
+			d := fakeDaemon(t, f)
+			spec := []byte("# do it\n")
+			f.artifacts[ArtifactID(spec)] = spec
+			d.Executors = map[string]Executor{"exec:x": func(a *Attempt) (Spawn, error) {
+				time.Sleep(300 * time.Millisecond) // the heartbeats hear the stop, or the fence, meanwhile
+				return Spawn{}, errors.New("the tool could not be prepared")
+			}}
+			cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
+				Epoch: 1, Tool: Tool{Executor: "exec:x"}}
+			out, err := d.Run(bg, cl)
+			if out.EndHow != why || err == nil {
+				t.Fatalf("run = %+v %v", out, err)
+			}
+			for _, b := range f.sent("ended") {
+				if strings.Contains(string(b), `"end_how":"exit"`) {
+					t.Fatalf("ended as exit: %s", b)
+				}
+			}
+		})
+	}
+}
