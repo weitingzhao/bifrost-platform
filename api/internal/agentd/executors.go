@@ -183,12 +183,16 @@ func claudeExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
 		argv := []string{"claude", "-p", "--output-format", "stream-json",
 			"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`,
-			// No settings file is read, the host user's nor the checkout's, and
-			// no hook runs: a hook is a command the read-only tools do not
-			// govern, and a branch under review could carry one in its
-			// .claude/settings.json (measured 10-18, claude 2.1.302: such a
-			// hook runs without these, and with either alone it does not;
-			// TD-371). The OAuth token comes from the environment.
+			// No user, project or local settings file is read, the host user's
+			// nor the checkout's, and their hooks and plugins' are off: a hook
+			// is a command the read-only tools do not govern, and a branch
+			// under review could carry one in its .claude/settings.json
+			// (measured 10-18, claude 2.1.302: such a hook runs without these,
+			// and with either alone it does not; TD-371). A managed policy
+			// (/etc/claude-code) still applies, hooks and all: only root writes
+			// it, and check-agent-06.sh requires there be none, or one that
+			// turns every hook off (review 282 A). The OAuth token comes from
+			// the environment.
 			"--setting-sources", "", "--settings", `{"disableAllHooks":true}`,
 			"--allowedTools", "Read,Grep,Glob",
 			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
