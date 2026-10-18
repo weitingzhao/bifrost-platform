@@ -225,6 +225,13 @@ func (a *API) threadMessages(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	// A thread's identity is the session header it sends, which no token
+	// binds: a conversation, read or not, is the Owner's or a seat's to read
+	// (review 269 B5).
+	if who.Actor != "owner" && !strings.HasPrefix(who.Actor, "seat:") {
+		writeError(w, http.StatusForbidden, "forbidden", "a conversation is read by the Owner or a seat")
+		return
+	}
 	q := r.URL.Query()
 	limit := 50
 	if s := q.Get("limit"); s != "" {

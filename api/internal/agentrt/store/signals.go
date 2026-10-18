@@ -70,11 +70,15 @@ func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 // AckMessage records that the receiver handled a message. The ack lives in
 // PostgreSQL only; Redis is never the record of it.
 func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
-	var to string
-	if err := tx.QueryRow(ctx, `SELECT to_actor_id FROM agentrt.message WHERE message_id = $1 FOR UPDATE`, messageID).Scan(&to); err != nil {
+	// The event names the mission and task the message is about, if any (a
+	// brief's answer): the state guard refuses a write it does not name
+	// (review 269 A1).
+	var to, mission, task string
+	if err := tx.QueryRow(ctx, `SELECT to_actor_id, COALESCE(mission_id, ''), COALESCE(task_id, '') FROM agentrt.message
+	  WHERE message_id = $1 FOR UPDATE`, messageID).Scan(&to, &mission, &task); err != nil {
 		return err
 	}
-	if _, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_acked", Actor: actor,
+	if _, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_acked", Actor: actor, MissionID: mission, TaskID: task,
 		Body: map[string]any{"message_id": messageID}}); err != nil {
 		return err
 	}

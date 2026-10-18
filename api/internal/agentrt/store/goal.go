@@ -139,6 +139,10 @@ const (
 	snapTasks     = 60
 	snapDecisions = 20
 	snapGoalRunes = 300
+	// a title or a decision's field, and the whole snapshot (review 269 B4)
+	snapTitleRunes = 200
+	snapFieldRunes = 300
+	snapMaxBytes   = 64 << 10
 )
 
 // planSnapshot is what the runtime knows now, for a planner (the five records
@@ -168,7 +172,7 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 			return "", err
 		}
 		open = append(open, id)
-		fmt.Fprintf(&b, "- %s (%s): %s — %s\n", id, state, title, oneLineRunes(goal, snapGoalRunes))
+		fmt.Fprintf(&b, "- %s (%s): %s — %s\n", id, state, oneLineRunes(title, snapTitleRunes), oneLineRunes(goal, snapGoalRunes))
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
@@ -192,7 +196,7 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 			return "", err
 		}
 		n++
-		fmt.Fprintf(&b, "- %s %s (%s, %s): %s\n", m, id, role, state, title)
+		fmt.Fprintf(&b, "- %s %s (%s, %s): %s\n", m, id, role, state, oneLineRunes(title, snapTitleRunes))
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
@@ -219,12 +223,12 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 		var d map[string]string
 		_ = json.Unmarshal(body, &d)
 		n++
-		fmt.Fprintf(&b, "- %s %s: %s — why: %s", at.UTC().Format("2006-01-02"), m, d["decision"], d["why"])
+		fmt.Fprintf(&b, "- %s %s: %s — why: %s", at.UTC().Format("2006-01-02"), m, oneLineRunes(d["decision"], snapFieldRunes), oneLineRunes(d["why"], snapFieldRunes))
 		if d["dropped"] != "" {
-			fmt.Fprintf(&b, " — dropped: %s", d["dropped"])
+			fmt.Fprintf(&b, " — dropped: %s", oneLineRunes(d["dropped"], snapFieldRunes))
 		}
 		if d["reverse"] != "" {
-			fmt.Fprintf(&b, " — to reverse: %s", d["reverse"])
+			fmt.Fprintf(&b, " — to reverse: %s", oneLineRunes(d["reverse"], snapFieldRunes))
 		}
 		b.WriteString("\n")
 	}
@@ -259,7 +263,15 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 		}
 		fmt.Fprintf(&b, "- %s: %s\n", name, strings.Join(cmds, ", "))
 	}
-	return b.String(), nil
+	out := b.String()
+	if len(out) > snapMaxBytes { // the fields are cut above; this bounds the whole (review 269 B4)
+		cut := []byte(out[:snapMaxBytes])
+		for !utf8.Valid(cut) {
+			cut = cut[:len(cut)-1]
+		}
+		out = string(cut) + "\n(The snapshot was longer; it is cut here.)\n"
+	}
+	return out, nil
 }
 
 // oneLineRunes is s on one line, cut to n runes.

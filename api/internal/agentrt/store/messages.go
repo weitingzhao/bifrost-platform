@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"time"
@@ -40,8 +41,8 @@ func SendMessage(ctx context.Context, db DB, w Writer, to, kind string, body []b
 	switch {
 	case !sendKinds[kind]:
 		return "", invalid("a message's kind is ask, answer, help, handover or note, not %q", kind)
-	case len(body) == 0 || len(body) > MaxMessageBody || !utf8.Valid(body):
-		return "", invalid("a message's body is UTF-8 text of 1 to %d bytes", MaxMessageBody)
+	case len(body) == 0 || len(body) > MaxMessageBody || !utf8.Valid(body) || bytes.IndexByte(body, 0) >= 0:
+		return "", invalid("a message's body is UTF-8 text of 1 to %d bytes, without NUL", MaxMessageBody)
 	case kindOf(to) == "":
 		return "", invalid("%q is not an actor name", to)
 	case to == w.Actor:

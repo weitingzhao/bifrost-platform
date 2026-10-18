@@ -187,6 +187,9 @@ func TestMessages(t *testing.T) {
 		len(out["messages"].([]any)) != 1 || out["messages"].([]any)[0].(map[string]any)["body"] != "按计划。" {
 		t.Fatalf("the newest of the thread: %d %v", code, out)
 	}
+	if code, _ := c("reporter", "GET", "messages/thread?with=seat:chief_of_staff", nil, "X-Bifrost-Session", "local_fixture-1"); code != http.StatusForbidden {
+		t.Errorf("a thread read a conversation by its session header: %d", code)
+	}
 	for _, q := range []string{"with=owner", "with=", "with=seat:chief_of_staff&limit=101"} {
 		if code, _ := c("admin", "GET", "messages/thread?"+q, nil); code != http.StatusUnprocessableEntity && code != http.StatusBadRequest {
 			t.Errorf("thread %s: %d", q, code)

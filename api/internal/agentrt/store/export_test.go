@@ -101,3 +101,7 @@ func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any,
 	})
 	return out, err
 }
+
+// RefuseMailForTest is refuseMail, the end of a message that cannot become a
+// brief.
+var RefuseMailForTest = refuseMail
