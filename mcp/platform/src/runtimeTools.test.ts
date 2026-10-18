@@ -220,10 +220,14 @@ describe('propose_mission input', () => {
 describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
+    const messages = readFileSync(new URL('./registerMessages.ts', import.meta.url), 'utf8')
+    // the inbox tools are registered from registerMessages.ts, called with the scoped reg
+    assert.match(index, /registerMessageTools\(reg\)/)
+    const served = index + messages
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
     for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
-      assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
+      assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }
     // The schema the tests above check is the one served.
     assert.match(index, /reg\(\s*'propose_mission',\s*`[^`]*`,\s*PROPOSE_MISSION_INPUT,/)
