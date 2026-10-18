@@ -16,11 +16,19 @@ function namesFromStdioToolNamesTs(): string[] {
 }
 
 function serverToolNamesFromIndex(): string[] {
-  const src = fs.readFileSync(path.join(mcpSrcDir, 'index.ts'), 'utf8')
+  const index = fs.readFileSync(path.join(mcpSrcDir, 'index.ts'), 'utf8')
   // index.ts registers through the local `reg()` helper, not `server.tool()`
   // directly. Matching the old shape silently found zero tools, which made this
   // parity guard pass vacuously for every tool it was meant to check.
-  const names = [...src.matchAll(/^reg\(\s*\n?\s*'([a-z0-9_]+)'/gm)].map(m => m[1])
+  // A module index.ts hands its `reg` to (registerMessageTools(reg), W-31 2.3)
+  // registers tools too: read each of them as well.
+  const sources = [index]
+  for (const [, fn] of index.matchAll(/^(register\w+)\(reg\)/gm)) {
+    const from = index.match(new RegExp(`import \\{[^}]*\\b${fn}\\b[^}]*\\} from '\\./(\\w+)\\.js'`))
+    if (from == null) throw new Error(`${fn}(reg) is called but its module is not imported`)
+    sources.push(fs.readFileSync(path.join(mcpSrcDir, `${from[1]}.ts`), 'utf8'))
+  }
+  const names = sources.flatMap(src => [...src.matchAll(/^\s*reg\(\s*\n?\s*'([a-z0-9_]+)'/gm)].map(m => m[1]))
   return [...new Set(names)]
 }
 
