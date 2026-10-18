@@ -161,3 +161,58 @@ func TestNudges(t *testing.T) {
 }
 
 const NudgeAfterForTest = store.NudgeAfter
+
+// Review 280 B1: a backlog past the query's page is nudged in full, a few a
+// pass: what was nudged is left out before the limit.
+func TestABacklogIsNudgedInFull(t *testing.T) {
+	w := newKernelWorld(t)
+	var ids []string
+	for i := 0; i < 23; i++ {
+		id := w.ready(t, store.Task{})
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", id, "blocked") }))
+		ids = append(ids, id)
+	}
+	total := 0
+	for pass := 0; pass < 10; pass++ {
+		n, err := store.Nudges(ctx, w.rt, time.Now())
+		ok(t, err)
+		total += n
+	}
+	notes := strings.Join(controllerNotes(t, w), "\n")
+	for _, id := range ids {
+		if !strings.Contains(notes, "task "+id+" is blocked") {
+			t.Fatalf("task %s was never nudged (%d nudges)", id, total)
+		}
+	}
+	if total != 23 {
+		t.Fatalf("%d nudges, want 23", total)
+	}
+}
+
+// Review 280 B2, B3: a brief covers from the slot of the brief before it to
+// its own, whenever it is written, and a skipped slot is covered by the next;
+// what is stuck is what is stuck now, however long ago.
+func TestABriefCoversFromTheBriefBefore(t *testing.T) {
+	w := newKernelWorld(t)
+	old := w.ready(t, store.Task{})
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", old, "blocked") }))
+	w.legacy(t, `UPDATE agentrt.task SET updated_at = now() - interval '3 days' WHERE task_id = '`+old+`'`)
+	_, err := store.ScheduleBrief(ctx, w.rt, chicago(t, "2026-10-19 08:00"))
+	ok(t, err)
+	// the evening slot is skipped; the next morning's brief covers both
+	_, err = store.ScheduleBrief(ctx, w.rt, chicago(t, "2026-10-20 08:40"))
+	ok(t, err)
+	mail, err := store.PendingMail(ctx, w.rt)
+	ok(t, err)
+	if len(mail) != 2 {
+		t.Fatalf("mail %v", mail)
+	}
+	task, _ := takeAndReady(t, w, mail[1])
+	spec := specText(t, w, task)
+	for _, want := range []string{`"since": "` + chicago(t, "2026-10-19 08:00").UTC().Format(time.RFC3339) + `"`,
+		`"until": "` + chicago(t, "2026-10-20 08:00").UTC().Format(time.RFC3339) + `"`, `"task": "` + old + `"`} {
+		if !strings.Contains(spec, want) {
+			t.Fatalf("the spec has no %s: %.2000s", want, spec)
+		}
+	}
+}

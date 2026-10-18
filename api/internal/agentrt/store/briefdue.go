@@ -74,8 +74,8 @@ func dueSlot(now time.Time) (string, bool) {
 	if best.IsZero() || t.Sub(best) > briefLate {
 		return "", false
 	}
-	return fmt.Sprintf("%sthe %s brief of %s, %s %s.", scheduledPrefix, name, best.Format("Monday 2006-01-02"),
-		best.Format("15:04"), BriefZone), true
+	return fmt.Sprintf("%sthe %s brief of %s, %s %s (%s).", scheduledPrefix, name, best.Format("Monday 2006-01-02"),
+		best.Format("15:04"), BriefZone, best.UTC().Format(time.RFC3339)), true
 }
 
 // ScheduleBrief leaves the seat the note of the slot due now, once.
@@ -96,21 +96,30 @@ func Nudges(ctx context.Context, db DB, now time.Time) (int, error) {
 	var bodies []string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		bodies = nil
+		// What was nudged already is left out before the limit (review 280
+		// B1): the body is the note's artifact id, so the query asks for the
+		// note it would leave. Decision cards wait for as long as no decision
+		// is recorded for them (review 280 B4).
 		q := []struct {
 			sql    string
 			format string
 		}{
-			{`SELECT task_id FROM agentrt.task WHERE state = 'blocked' AND role <> 'brief' ORDER BY updated_at, task_id LIMIT 20`,
-				nudgePrefix + "task %s is blocked."},
-			{`SELECT mission_id FROM (SELECT m.mission_id, COALESCE((SELECT max(e.at) FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type IN ('mission_proposed','mission_state_changed')), m.created_at) AS since
+			{`SELECT t.task_id FROM agentrt.task t WHERE t.state = 'blocked' AND t.role <> 'brief'
+			  AND NOT EXISTS (SELECT 1 FROM agentrt.message n WHERE n.from_actor_id = 'controller' AND n.to_actor_id = 'seat:chief_of_staff' AND n.body_artifact_id = 'sha256:' || encode(sha256(convert_to('Nudge: task ' || t.task_id || ' is blocked.', 'UTF8')), 'hex'))
+			  ORDER BY t.updated_at, t.task_id LIMIT 20`, nudgePrefix + "task %s is blocked."},
+			{`SELECT w.mission_id FROM (SELECT m.mission_id, COALESCE((SELECT max(e.at) FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type IN ('mission_proposed','mission_state_changed')), m.created_at) AS since
 			    FROM agentrt.mission m WHERE m.state = 'awaiting_owner') w
-			  WHERE since < $1::timestamptz - make_interval(secs => $2) ORDER BY since, mission_id LIMIT 20`, nudgePrefix + "mission %s waits for the Owner."},
-			{`SELECT DISTINCT p.body_json->>'question_id' FROM agentrt.event p
-			  WHERE p.event_type = 'plan_change_proposed' AND p.body_json ? 'question_id'
-			    AND p.at < $1::timestamptz - make_interval(secs => $2) AND p.at > $1::timestamptz - interval '7 days'
-			    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.at >= p.at
-			      AND d.event_stream_id = p.event_stream_id AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-			  LIMIT 20`, nudgePrefix + "decision card %s waits for the Owner."},
+			  WHERE w.since < $1::timestamptz - make_interval(secs => $2)
+			  AND NOT EXISTS (SELECT 1 FROM agentrt.message n WHERE n.from_actor_id = 'controller' AND n.to_actor_id = 'seat:chief_of_staff' AND n.body_artifact_id = 'sha256:' || encode(sha256(convert_to('Nudge: mission ' || w.mission_id || ' waits for the Owner.', 'UTF8')), 'hex'))
+			  ORDER BY w.since, w.mission_id LIMIT 20`, nudgePrefix + "mission %s waits for the Owner."},
+			{`SELECT c.question FROM (SELECT p.body_json->>'question_id' AS question, min(p.at) AS at FROM agentrt.event p
+			    WHERE p.event_type = 'plan_change_proposed' AND p.body_json ? 'question_id'
+			      AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.at >= p.at
+			        AND d.event_stream_id = p.event_stream_id AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
+			    GROUP BY 1) c
+			  WHERE c.at < $1::timestamptz - make_interval(secs => $2)
+			  AND NOT EXISTS (SELECT 1 FROM agentrt.message n WHERE n.from_actor_id = 'controller' AND n.to_actor_id = 'seat:chief_of_staff' AND n.body_artifact_id = 'sha256:' || encode(sha256(convert_to('Nudge: decision card ' || c.question || ' waits for the Owner.', 'UTF8')), 'hex'))
+			  ORDER BY c.at, c.question LIMIT 20`, nudgePrefix + "decision card %s waits for the Owner."},
 		}
 		for i, c := range q {
 			var rows pgx.Rows
@@ -200,15 +209,32 @@ func controllerBrief(ctx context.Context, tx pgx.Tx, body string) (string, map[s
 	}
 	data["waiting_on_the_owner"] = waiting
 	if strings.HasPrefix(body, scheduledPrefix) {
-		since := now.Add(-13 * time.Hour)
-		data["since"] = since.UTC().Format(time.RFC3339)
-		for key, states := range map[string][]string{"done_since": {"accepted"}, "stuck": {"blocked", "rejected"}} {
-			list, err := tasksIn(ctx, tx, states, since)
+		// A brief covers from the slot of the brief before it to its own slot,
+		// whenever either was written: one after another they leave no gap and
+		// tell nothing twice, and a skipped slot is covered by the next
+		// (review 280 B2). What is stuck is what is stuck now, however long
+		// ago it got stuck (review 280 B3).
+		until, ok := slotOf(body)
+		if !ok {
+			until = now
+		}
+		since, err := previousSlot(ctx, tx, until)
+		if err != nil {
+			return "", nil, err
+		}
+		data["since"], data["until"] = since.UTC().Format(time.RFC3339), until.UTC().Format(time.RFC3339)
+		for key, states := range map[string][]string{"done_since": {"accepted"}, "rejected_since": {"rejected"}} {
+			list, err := tasksIn(ctx, tx, states, since, until)
 			if err != nil {
 				return "", nil, err
 			}
 			data[key] = list
 		}
+		stuck, err := tasksIn(ctx, tx, []string{"blocked"}, time.Time{}, time.Time{})
+		if err != nil {
+			return "", nil, err
+		}
+		data["stuck"] = stuck
 		pools, err := listPools(ctx, tx)
 		if err != nil {
 			return "", nil, err
@@ -227,8 +253,8 @@ func controllerBrief(ctx context.Context, tx pgx.Tx, body string) (string, map[s
 const scheduledText = "# Write the Owner's brief\n\n" +
 	"You are the chief of staff. The Owner sets goals, sets rules and decides what cannot be undone; everything else is yours\n" +
 	"and the agents', and he audits it afterwards. Write his brief for this slot (the note in the data) from the records in\n" +
-	"the data, in Chinese, at most 15 short lines, in this order: what was done since the last brief (done_since); what is stuck\n" +
-	"and why (stuck); what waits for him, each with where he acts (waiting_on_the_owner); and, for each vendor pool, how its\n" +
+	"the data, in Chinese, at most 15 short lines, in this order: what was done since the last brief (done_since, and what was\n" +
+	"rejected: rejected_since; both from since to until); what is stuck now and why (stuck); what waits for him, each with where he acts (waiting_on_the_owner); and, for each vendor pool, how its\n" +
 	"use compares with the time gone in its window (pace: used fraction less the fraction of the window gone; a pool that is\n" +
 	"cooling down, until when). Say plainly when a part is empty. Never claim work is done, approved or running unless the\n" +
 	"records say so. No repository is checked out here; do not edit anything.\n\n" +
@@ -245,11 +271,21 @@ const nudgeText = "# Tell the Owner about something that waits\n\n" +
 	"## What to hand in\n\n" +
 	"Your final message is the note, and nothing else: plain text. It is sent to the Owner's Chief page as it is.\n\n"
 
-// tasksIn lists the tasks that moved into one of states since a time.
-func tasksIn(ctx context.Context, tx pgx.Tx, states []string, since time.Time) ([]map[string]string, error) {
+// tasksIn lists the tasks in one of states that got there in [since, until);
+// a zero bound is no bound. At most 30, the earliest; the last item says when
+// there were more.
+func tasksIn(ctx context.Context, tx pgx.Tx, states []string, since, until time.Time) ([]map[string]string, error) {
+	var lo, hi any
+	if !since.IsZero() {
+		lo = since
+	}
+	if !until.IsZero() {
+		hi = until
+	}
 	rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.role, t.state, t.title, t.updated_at FROM agentrt.task t
-	  WHERE t.state = ANY($1) AND t.updated_at >= $2 AND t.role <> 'brief'
-	  ORDER BY t.updated_at, t.task_id LIMIT 30`, states, since)
+	  WHERE t.state = ANY($1) AND ($2::timestamptz IS NULL OR t.updated_at >= $2) AND ($3::timestamptz IS NULL OR t.updated_at < $3)
+	    AND t.role <> 'brief'
+	  ORDER BY t.updated_at, t.task_id LIMIT 31`, states, lo, hi)
 	if err != nil {
 		return nil, err
 	}
@@ -261,10 +297,51 @@ func tasksIn(ctx context.Context, tx pgx.Tx, states []string, since time.Time) (
 		if err = rows.Scan(&id, &mission, &role, &state, &title, &at); err != nil {
 			return nil, err
 		}
+		if len(out) == 30 {
+			out = append(out, map[string]string{"more": "there are more than 30; these are the earliest"})
+			break
+		}
 		out = append(out, map[string]string{"task": id, "mission": mission, "role": role, "state": state,
 			"title": oneLineRunes(title, snapTitleRunes), "at": at.UTC().Format(time.RFC3339)})
 	}
 	return out, rows.Err()
+}
+
+// slotOf is the slot a scheduled brief's note names (its time in
+// parentheses).
+func slotOf(body string) (time.Time, bool) {
+	i, j := strings.LastIndex(body, "("), strings.LastIndex(body, ")")
+	if i < 0 || j < i {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, body[i+1:j])
+	return t, err == nil
+}
+
+// previousSlot is the slot of the latest scheduled brief left before until,
+// or until less a day's two slots apart (13 hours) when there is none.
+func previousSlot(ctx context.Context, tx pgx.Tx, until time.Time) (time.Time, error) {
+	rows, err := tx.Query(ctx, `SELECT convert_from(b.body, 'UTF8') FROM agentrt.message m
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = m.body_artifact_id
+	  WHERE m.from_actor_id = 'controller' AND m.to_actor_id = $1 AND convert_from(b.body, 'UTF8') LIKE $2
+	  ORDER BY m.created_at DESC, m.message_id DESC LIMIT 10`, Seat, scheduledPrefix+"%")
+	if err != nil {
+		return time.Time{}, err
+	}
+	bodies, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return time.Time{}, err
+	}
+	var best time.Time
+	for _, b := range bodies {
+		if t, ok := slotOf(b); ok && t.Before(until) && t.After(best) {
+			best = t
+		}
+	}
+	if best.IsZero() {
+		best = until.Add(-13 * time.Hour)
+	}
+	return best, nil
 }
 
 // waitingOnOwner lists the missions waiting for the Owner and the decision
@@ -290,11 +367,12 @@ func waitingOnOwner(ctx context.Context, tx pgx.Tx) ([]map[string]string, error)
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
-	rows, err = tx.Query(ctx, `SELECT p.body_json->>'question_id', p.body_json->>'reason', p.at FROM agentrt.event p
-	  WHERE p.event_type = 'plan_change_proposed' AND p.body_json ? 'question_id' AND p.at > clock_timestamp() - interval '7 days'
+	rows, err = tx.Query(ctx, `SELECT DISTINCT ON (p.body_json->>'question_id') p.body_json->>'question_id', p.body_json->>'reason', p.at
+	  FROM agentrt.event p
+	  WHERE p.event_type = 'plan_change_proposed' AND p.body_json ? 'question_id'
 	    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided' AND d.at >= p.at
 	      AND d.event_stream_id = p.event_stream_id AND (d.body_json->>'proposal_event_id')::bigint = p.event_id)
-	  ORDER BY p.at LIMIT 20`)
+	  ORDER BY p.body_json->>'question_id', p.at LIMIT 20`)
 	if err != nil {
 		return nil, err
 	}
