@@ -122,16 +122,9 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 				return
 			}
 			hctx, hcancel := context.WithTimeout(ctx, timeout)
-			acts := l.tail.Load().take(actions.MaxPerBeat, time.Now())
-			if l.noActions.Load() {
-				acts = nil // the platform takes none: they are dropped, the lease goes on
-			}
-			stop, _, refused, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts)
+			stop, refused, err := d.heartbeat(hctx, attemptID, epoch, l, l.tail.Load().take(actions.MaxPerBeat, time.Now()))
 			<-l.beat
 			hcancel()
-			if strings.HasPrefix(refused, ActionsUnsupported) {
-				l.noActions.Store(true)
-			}
 			if refused != "" && refused != lastRefused {
 				d.logf("agentd: heartbeat %s: actions not kept: %s", attemptID, refused)
 			}
@@ -199,7 +192,10 @@ func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64,
 	if ctx.Err() != nil || l.isLost() || l.noActions.Load() {
 		return
 	}
-	_, _, _, err := d.Client.Heartbeat(ctx, attemptID, epoch, acts)
+	_, refused, err := d.heartbeat(ctx, attemptID, epoch, l, acts)
+	if refused != "" {
+		d.logf("agentd: last actions of %s not kept: %s", attemptID, refused)
+	}
 	switch {
 	case errors.Is(err, ErrFenced):
 		l.markLost()
@@ -207,6 +203,21 @@ func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64,
 	case err != nil:
 		d.logf("agentd: last actions of %s not sent: %v", attemptID, err)
 	}
+}
+
+// heartbeat sends one heartbeat with acts, none once the platform said it
+// takes none, and records that answer before the turn is given back, so the
+// next heartbeat, the keeper's or the last, sees it (review 267 B7). The
+// caller holds the beat.
+func (d *Daemon) heartbeat(ctx context.Context, attemptID string, epoch int64, l *lease, acts []actions.Action) (bool, string, error) {
+	if l.noActions.Load() {
+		acts = nil // the platform takes none: they are dropped, the lease goes on
+	}
+	stop, _, refused, err := d.Client.Heartbeat(ctx, attemptID, epoch, acts)
+	if strings.HasPrefix(refused, ActionsUnsupported) {
+		l.noActions.Store(true)
+	}
+	return stop, refused, err
 }
 
 // lastActionsBudget bounds lastActions as a whole.

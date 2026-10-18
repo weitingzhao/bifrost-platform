@@ -176,6 +176,19 @@ func TestTargetsAreScrubbed(t *testing.T) {
 		"git log --author=Alice --oneline":                  "git log --author=Alice --oneline",
 		"rg 'token:.*|x' && PGPASSWORD=fixture-secret psql": "rg 'token:.*|x' && PGPASSWORD=<secret> psql",
 		`TOKEN="$GITEA_TOKEN" ./push.sh`:                    "TOKEN=<secret> ./push.sh",
+		// review 267 A1: a value that starts like a pattern outside a search,
+		// $'…', escaped quotes, concatenation; a value inside quotes
+		"PASSWORD=+fixture-secret-value psql":            "PASSWORD=<secret> psql",
+		`PASSWORD=$'fixture-secret-value' psql`:          "PASSWORD=<secret> psql",
+		`mysql --password "fixture\" secret value" -e 1`: "mysql --password <secret> -e 1",
+		`TOKEN="fixture\" secret value" ./push`:          "TOKEN=<secret> ./push",
+		`TOKEN=fixture"secret value"rest ./push`:         "TOKEN=<secret> ./push",
+		"rg x ; PASSWORD=+fixture-secret-value psql":     "rg x ; PASSWORD=<secret> psql",
+		"echo 'TOKEN=fixture-secret-value' && ls":        "echo 'TOKEN=<secret>' && ls",
+		"echo 'token: fixture secret value' > x.yaml":    "echo 'token=<secret>' > x.yaml",
+		// review 267 C5: a JSON pattern in a search
+		`rg -n '"token":"[^"]+"' api`: `rg -n '"token":"[^"]+"' api`,
+		`Grep "password":\s*".*" src`: `Grep "password":\s*".*" src`,
 	} {
 		if got := scrub(in); got != want {
 			t.Errorf("scrub(%q) = %q, want %q", in, got, want)
@@ -190,6 +203,8 @@ func TestCredentialsAreNotQueued(t *testing.T) {
 		`curl -d '{"token":"fixture-secret-value"}' https://example.invalid`,
 		"mysql --password 'fixture secret value' -e 1",
 		"printf '-----BEGIN OPENSSH PRIVATE KEY-----\\nfixture-secret-value\\n-----END OPENSSH PRIVATE KEY-----\\n' > k",
+		"PASSWORD=+fixture-secret-value psql",
+		`TOKEN="fixture\" secret value" ./push`,
 	} {
 		tail, write := tailOf(t, "exec:codex")
 		ev, _ := json.Marshal(map[string]any{"type": "item.started", "item": map[string]any{"type": "command_execution", "command": cmd}})
@@ -287,6 +302,40 @@ func TestFlushIsTheCollectorsRead(t *testing.T) {
 	}
 }
 
+// A target longer than maxScrub is cut at a blank, never inside a credential
+// (review 267 A1).
+func TestALongTargetIsCutAtABlank(t *testing.T) {
+	tail := newActionTail("exec:codex", "", checkout)
+	long := "cat /home/" + strings.Repeat("p", maxScrub-10-1-7) + " ghp_FIXTURESECRETVALUE1"
+	got, cut := tail.clean(long)
+	if !cut || strings.Contains(got, "ghp_") || strings.Contains(got, "FIXT") {
+		t.Fatalf("cut %v, %q", cut, got)
+	}
+	if got, _ := tail.clean("TOKEN=" + strings.Repeat("a", maxScrub+1)); got != "" {
+		t.Fatalf("a long word kept as %q", got)
+	}
+}
+
+// A flush whose time ran out is not read later (review 267 B2).
+func TestAnExpiredFlushIsNotRead(t *testing.T) {
+	tail, write := tailOf(t, "exec:codex")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go tail.collect(ctx)
+	tail.io.Lock()
+	fctx, fcancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer fcancel()
+	if tail.flush(fctx) {
+		t.Fatal("a flush done while the read hangs")
+	}
+	write(`{"type":"item.started","item":{"type":"command_execution","command":"ls"}}` + "\n")
+	tail.io.Unlock()
+	time.Sleep(200 * time.Millisecond)
+	if got := tail.take(50, time.Now()); got != nil {
+		t.Fatalf("the expired flush was read: %s", kinds(got))
+	}
+}
+
 // Cursor's table of started commands is bounded (review 265 B11).
 func TestCursorCommandTableIsBounded(t *testing.T) {
 	tail, write := tailOf(t, "exec:cursor")
@@ -328,7 +377,7 @@ func TestHeartbeatToAnOlderPlatform(t *testing.T) {
 		bodies = append(bodies, body)
 		if _, has := body["actions"]; has {
 			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(`{"error":"bad_request","message":"body: json: unknown field \\"actions\\""}`))
+			_, _ = w.Write([]byte(`{"error":"bad_request","message":"body: json: unknown field \"actions\""}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"lease_expires_at":"2026-10-18T07:00:00Z","stop":false}`))
@@ -346,6 +395,24 @@ func TestHeartbeatToAnOlderPlatform(t *testing.T) {
 	bodies = nil
 	if _, _, refused, err := c.Heartbeat(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, nil); err != nil || refused != "" || len(bodies) != 1 {
 		t.Fatalf("a heartbeat without actions: refused %q, err %v, %d requests", refused, err, len(bodies))
+	}
+}
+
+// A 400 for another reason is not taken for an older platform: it is the
+// caller's, and actions are not given up (review 267 B6).
+func TestHeartbeatRefusedForAnotherReason(t *testing.T) {
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"bad_request","message":"lease_epoch is required"}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{Base: srv.URL, Host: "h1", Token: "fixture-agentd"}
+	acts := []actions.Action{{Kind: actions.Read, Target: "a.go", At: time.Now().UTC()}}
+	_, _, refused, err := c.Heartbeat(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, acts)
+	if err == nil || refused != "" || n != 1 {
+		t.Fatalf("refused %q, err %v, %d requests", refused, err, n)
 	}
 }
 
@@ -417,5 +484,21 @@ func TestLastActionsAfterTheLeaseIsLost(t *testing.T) {
 	<-lastActionsReturns(t, context.Background(), d, l)
 	if f.count("heartbeat") != 1 || l.isLost() {
 		t.Fatalf("%d heartbeats, lost %v", f.count("heartbeat"), l.isLost())
+	}
+}
+
+// The last heartbeat to an older platform records that it takes no actions,
+// as the keeper's does, before the turn is given back (review 267 B7).
+func TestLastActionsToAnOlderPlatform(t *testing.T) {
+	d, f, l, _ := lastLease(t)
+	f.set("heartbeat", func(n int) (int, string) {
+		if n == 0 { // the first, with actions
+			return http.StatusBadRequest, `{"error":"bad_request","message":"body: json: unknown field \"actions\""}`
+		}
+		return http.StatusOK, `{"lease_expires_at":"2026-10-18T07:00:00Z"}`
+	})
+	<-lastActionsReturns(t, context.Background(), d, l)
+	if f.count("heartbeat") != 2 || !l.noActions.Load() {
+		t.Fatalf("%d heartbeats, no actions %v", f.count("heartbeat"), l.noActions.Load())
 	}
 }

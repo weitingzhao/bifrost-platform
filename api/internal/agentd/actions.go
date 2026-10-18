@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +35,7 @@ import (
 type actionTail struct {
 	io      sync.Mutex // reading and parsing the log
 	mu      sync.Mutex // pending
-	flushes chan chan struct{}
+	flushes chan flushReq
 	gone    chan struct{} // closed when collect returns
 	path    string
 	dir     string
@@ -45,7 +44,18 @@ type actionTail struct {
 	partial []byte
 	skip    bool // inside a line longer than maxBody
 	pending []actions.Action
-	cmds    map[string]string // a call or item id → its command, for its result
+	cmds    map[string]cleanCmd // a call id → its command, for its result
+}
+
+// flushReq is a last read asked for, with the asker's context.
+type flushReq struct {
+	ctx  context.Context
+	done chan struct{}
+}
+
+type cleanCmd struct {
+	target string
+	cut    bool
 }
 
 const (
@@ -54,6 +64,9 @@ const (
 	maxCmds       = 256      // cursor's started commands waiting for their result (review 265 B11)
 	maxBatchBytes = 64 << 10 // the targets of one heartbeat's actions
 	collectEvery  = 2 * time.Second
+	// maxTargetRunes: a target is cut here to the platform's limit, so a
+	// heartbeat is never refused for its size (review 265 A9).
+	maxTargetRunes = actions.MaxTarget
 )
 
 // newActionTail is the tail of an executor's log, or nil for an executor
@@ -67,8 +80,8 @@ func newActionTail(executor, logPath, checkout string) *actionTail {
 	if parse == nil {
 		return nil
 	}
-	return &actionTail{path: logPath, dir: strings.TrimRight(checkout, "/"), parse: parse, cmds: map[string]string{},
-		flushes: make(chan chan struct{}), gone: make(chan struct{})}
+	return &actionTail{path: logPath, dir: strings.TrimRight(checkout, "/"), parse: parse, cmds: map[string]cleanCmd{},
+		flushes: make(chan flushReq), gone: make(chan struct{})}
 }
 
 // collect reads the log every collectEvery, and when flush asks, until ctx
@@ -83,10 +96,10 @@ func (t *actionTail) collect(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			t.readIf(ctx, time.Now())
-		case done := <-t.flushes:
-			t.readIf(ctx, time.Now())
-			close(done)
+			t.readIf(time.Now(), ctx)
+		case r := <-t.flushes:
+			t.readIf(time.Now(), ctx, r.ctx)
+			close(r.done)
 		}
 	}
 }
@@ -97,7 +110,7 @@ func (t *actionTail) collect(ctx context.Context) {
 func (t *actionTail) flush(ctx context.Context) bool {
 	done := make(chan struct{})
 	select {
-	case t.flushes <- done:
+	case t.flushes <- flushReq{ctx, done}:
 	case <-t.gone:
 		return false
 	case <-ctx.Done():
@@ -111,13 +124,16 @@ func (t *actionTail) flush(ctx context.Context) bool {
 	}
 }
 
-// readIf reads what the log gained unless ctx ended, looked at again once the
-// read is its to do (review 266 B3).
-func (t *actionTail) readIf(ctx context.Context, now time.Time) {
+// readIf reads what the log gained unless one of ctxs ended (the collector's,
+// and a flush's own), looked at again once the read is its to do (reviews 266
+// B3, 267 B2).
+func (t *actionTail) readIf(now time.Time, ctxs ...context.Context) {
 	t.io.Lock()
 	defer t.io.Unlock()
-	if ctx.Err() != nil {
-		return
+	for _, ctx := range ctxs {
+		if ctx.Err() != nil {
+			return
+		}
 	}
 	t.read(now)
 }
@@ -127,7 +143,7 @@ func (t *actionTail) readNow(now time.Time) {
 	if t == nil {
 		return
 	}
-	t.readIf(context.Background(), now)
+	t.readIf(now)
 }
 
 // take returns the newest max actions found so far, at most maxBatchBytes of
@@ -207,106 +223,21 @@ func (t *actionTail) read(now time.Time) {
 }
 
 func (t *actionTail) add(kind actions.Kind, target string, now time.Time, code *int) {
-	target = strings.TrimSpace(scrub(t.local(target)))
+	target, cut := t.clean(target)
+	t.addClean(kind, target, cut, now, code)
+}
+
+// addClean queues an action whose target is clean already.
+func (t *actionTail) addClean(kind actions.Kind, target string, cut bool, now time.Time, code *int) {
 	if target == "" {
 		return
 	}
-	a := actions.Action{Kind: kind, Target: target, At: now.UTC(), Code: code}
-	if r := []rune(a.Target); len(r) > actions.MaxTarget {
-		a.Target, a.Truncated = string(r[:actions.MaxTarget]), true
-	}
+	a := actions.Action{Kind: kind, Target: target, At: now.UTC(), Code: code, Truncated: cut}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.pending = append(t.pending, a)
 	if len(t.pending) > maxPending {
 		t.pending = t.pending[len(t.pending)-maxPending:]
-	}
-}
-
-// secretKey is a name that holds a credential: it ends in one of these words
-// (GITHUB_TOKEN, PGPASSWORD, "api_key"); a name that only contains one
-// (author, TOKEN_FILE) is not one (review 266 C8).
-const secretKey = `[a-z0-9_]*(?:token|secret|passw(?:or)?d|pwd|api_?key|private_?key|access_?key|secret_?key|credentials?|auth|authorization)s?`
-
-// Masks for what must not leave the host in a target (review 265 A8, 266 A1):
-// a local path outside the checkout, and values that look like credentials. A
-// quoted value is masked whole, and one whose quote never closes is masked to
-// the end, as is a private key whose END line is not there.
-type mask struct {
-	re   *regexp.Regexp
-	with string
-}
-
-// quoted are masked first: a private key, and a JSON value (raw, or inside a
-// double-quoted shell argument), so that what follows does not cut them.
-var quoted = []mask{
-	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "<secret>"},
-	{regexp.MustCompile(`(?i)("` + secretKey + `"\s*:\s*)(?:"(?:[^"\\]|\\.)*"|"(?s:.*)$|[^\s,}\]"]+)`), `${1}"<secret>"`},
-	{regexp.MustCompile(`(?i)(\\"` + secretKey + `\\"\s*:\s*)(?:\\"(?:[^\\]|\\[^"])*?\\"|\\"(?s:.*)$|[^\s,}\]\\]+)`), `${1}\"<secret>\"`},
-	{regexp.MustCompile(`(?i)\b(bearer|token|basic)\s+[a-z0-9._~+/=-]{8,}`), "${1} <secret>"},
-}
-
-// masks follow the assignments: flags, known token prefixes, credentials in a
-// URL, local paths.
-var masks = []mask{
-	{regexp.MustCompile(`(?i)(--?(?:password|passwd|token|secret|api-key|key)(?:=|\s+))(?:"[^"]*"|'[^']*'|["'](?s:.*)$|\S+)`), "${1}<secret>"},
-	{regexp.MustCompile(`\b(github_pat_|ghp_|gho_|ghs_|ghr_|glpat-|xox[abprs]-|sk-|AKIA)[A-Za-z0-9_\-]{8,}`), "${1}<secret>"},
-	{regexp.MustCompile(`(://)[^/\s:@]+:[^/\s@]+@`), "${1}<secret>@"},
-	{regexp.MustCompile(`(?:/home|/Users|/root|/var/folders|/private/var|/private/tmp|/tmp)/[^\s"'<>|;&)]*`), "<local path>"},
-	{regexp.MustCompile(`\b[A-Za-z]:\\[^\s"'<>|;&)]*`), "<local path>"},
-}
-
-// assignments are NAME=value, NAME: value and an Authorization header; their
-// value is masked unless it is a search pattern (rg 'token:.*'), which is kept
-// up to its next alternative and read on from there (review 266 C8).
-var assignments = []*regexp.Regexp{
-	regexp.MustCompile(`(?i)(authorization:\s*)((?:[a-z]+\s+)?[^\s"']+)`),
-	regexp.MustCompile(`(?i)\b(` + secretKey + `\s*[=:]\s*)("[^"]*"|'[^']*'|["'](?s:.*)$|[^\s"'<]+)`),
-}
-
-func scrub(s string) string {
-	for _, m := range quoted {
-		s = m.re.ReplaceAllString(s, m.with)
-	}
-	for _, re := range assignments {
-		s = maskValues(re, s)
-	}
-	for _, m := range masks {
-		s = m.re.ReplaceAllString(s, m.with)
-	}
-	return s
-}
-
-// maskValues masks the value (the second group) of each match of re in s.
-func maskValues(re *regexp.Regexp, s string) string {
-	var b strings.Builder
-	for {
-		m := re.FindStringSubmatchIndex(s)
-		if m == nil {
-			b.WriteString(s)
-			return b.String()
-		}
-		name, val := s[m[2]:m[3]], s[m[4]:m[5]]
-		b.WriteString(s[:m[2]])
-		if strings.ContainsAny(val[:1], `.*+?\([^$|`) {
-			// a pattern or a variable, not a credential: kept to its next
-			// alternative, the rest is read again
-			head, _, alt := strings.Cut(val, "|")
-			b.WriteString(name + head)
-			if alt {
-				b.WriteString("|")
-				s = s[m[4]+len(head)+1:]
-			} else {
-				s = s[m[5]:]
-			}
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(name), "authorization:") {
-			b.WriteString(name + "<secret>") // a header keeps its form
-		} else {
-			b.WriteString(strings.TrimRight(name, " \t=:") + "=<secret>")
-		}
-		s = s[m[1]:]
 	}
 }
 
@@ -409,25 +340,24 @@ func parseCursor(t *actionTail, ev map[string]any, now time.Time) {
 		case sub == "started" && (tool == "write" || tool == "edit" || tool == "delete" || tool == "strreplace"):
 			t.add(actions.Edit, str(args["path"]), now, nil)
 		case sub == "started" && (tool == "shell" || tool == "terminal" || tool == "runterminalcommand"):
-			cmd := firstOf(args, "command", "commandLine")
+			// kept clean: a command cut before it is masked could keep part
+			// of a credential (review 267 A1)
+			cmd, cut := t.clean(firstOf(args, "command", "commandLine"))
 			if id != "" { // bounded: a start whose end never comes cannot grow the table (review 265 B11)
 				if len(t.cmds) >= maxCmds {
-					t.cmds = map[string]string{}
+					t.cmds = map[string]cleanCmd{}
 				}
-				if r := []rune(cmd); len(r) > actions.MaxTarget {
-					cmd = string(r[:actions.MaxTarget])
-				}
-				t.cmds[id] = cmd
+				t.cmds[id] = cleanCmd{cmd, cut}
 			}
-			t.add(actions.Run, cmd, now, nil)
-		case sub == "completed" && t.cmds[id] != "":
+			t.addClean(actions.Run, cmd, cut, now, nil)
+		case sub == "completed" && t.cmds[id].target != "":
 			res := obj(body["result"])
 			code := intp(obj(res["success"])["exitCode"])
 			if code == nil {
 				code = intp(obj(res["failure"])["exitCode"])
 			}
-			if code != nil {
-				t.add(actions.Result, t.cmds[id], now, code)
+			if c := t.cmds[id]; code != nil {
+				t.addClean(actions.Result, c.target, c.cut, now, code)
 			}
 			delete(t.cmds, id)
 		}

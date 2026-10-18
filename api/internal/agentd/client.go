@@ -200,7 +200,9 @@ func (c *Client) Heartbeat(ctx context.Context, attempt string, epoch int64, act
 		body["actions"] = acts
 	}
 	code, err := c.post(ctx, "/attempts/"+attempt+"/heartbeat", body, &out)
-	if err != nil && len(acts) > 0 && code == http.StatusBadRequest {
+	// only the refusal of the field itself: a 400 for another reason is
+	// the caller's to see (review 267 B6)
+	if err != nil && len(acts) > 0 && code == http.StatusBadRequest && strings.Contains(err.Error(), `unknown field "actions"`) {
 		first := err
 		delete(body, "actions")
 		out.Refused = ""
