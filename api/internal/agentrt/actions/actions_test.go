@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 )
 
@@ -18,13 +20,14 @@ func TestNormalizeKeepsTheFormatClosed(t *testing.T) {
 	now := time.Date(2026, 10, 18, 5, 0, 0, 0, time.UTC)
 	ok := Action{Kind: Read, Target: "api/internal/safego/safego.go", At: now}
 	cases := map[string]Action{
-		"unknown kind":        {Kind: "think", Target: "x", At: now},
-		"no target":           {Kind: Read, At: now},
-		"no time":             {Kind: Read, Target: "x"},
-		"time in the future":  {Kind: Read, Target: "x", At: now.Add(10 * time.Minute)},
-		"exit code on a read": {Kind: Read, Target: "x", At: now, Code: code(1)},
-		"target not utf-8":    {Kind: Run, Target: "ls \xff", At: now},
-		"exit code on a run":  {Kind: Run, Target: "go test ./...", At: now, Code: code(0)},
+		"unknown kind":            {Kind: "think", Target: "x", At: now},
+		"no target":               {Kind: Read, At: now},
+		"no time":                 {Kind: Read, Target: "x"},
+		"time in the future":      {Kind: Read, Target: "x", At: now.Add(10 * time.Minute)},
+		"exit code on a read":     {Kind: Read, Target: "x", At: now, Code: code(1)},
+		"target not utf-8":        {Kind: Run, Target: "ls \xff", At: now},
+		"exit code on a run":      {Kind: Run, Target: "go test ./...", At: now, Code: code(0)},
+		"result without its code": {Kind: Result, Target: "false", At: now},
 	}
 	for name, bad := range cases {
 		if _, _, err := Normalize([]Action{ok, bad}, now); !errors.Is(err, ErrInvalid) {
@@ -114,5 +117,36 @@ func TestStoreTrimsTheStream(t *testing.T) {
 	// approximate trimming keeps at least MaxStream and drops whole nodes only
 	if err != nil || n < MaxStream || n >= 3*MaxStream {
 		t.Fatalf("stream length %d, %v", n, err)
+	}
+}
+
+// What another writer put in the stream is held to the same format (review 263 B2).
+func TestReadHoldsForeignEntriesToTheFormat(t *testing.T) {
+	rdb, prefix := agentrttest.Redis(t)
+	ctx := context.Background()
+	s := &Store{Redis: rdb, Prefix: prefix}
+	at := time.Now().UTC().Format(time.RFC3339Nano)
+	k := prefix + "act:" + attempt
+	for name, v := range map[string]map[string]any{
+		"no target":          {"kind": "read", "at": at},
+		"a read with a code": {"kind": "read", "target": "x", "at": at, "code": "7"},
+		"no time":            {"kind": "read", "target": "x"},
+		"a result, no code":  {"kind": "result", "target": "false", "at": at},
+		"unknown kind":       {"kind": "think", "target": "x", "at": at},
+	} {
+		rdb.Del(ctx, k)
+		rdb.XAdd(ctx, &redis.XAddArgs{Stream: k, Values: v})
+		if _, err := s.Read(ctx, attempt, "", 10); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: Read err = %v, want ErrInvalid", name, err)
+		}
+		if _, _, err := s.Last(ctx, attempt); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: Last err = %v, want ErrInvalid", name, err)
+		}
+	}
+	rdb.Del(ctx, k)
+	rdb.XAdd(ctx, &redis.XAddArgs{Stream: k, Values: map[string]any{"kind": "run", "target": strings.Repeat("x", MaxTarget+5), "at": at}})
+	got, err := s.Read(ctx, attempt, "", 10)
+	if err != nil || len(got) != 1 || !got[0].Truncated || len(got[0].Target) != MaxTarget {
+		t.Fatalf("a long foreign target: %+v %v", got, err)
 	}
 }

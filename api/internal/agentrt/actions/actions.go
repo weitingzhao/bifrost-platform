@@ -66,23 +66,13 @@ var ErrInvalid = errors.New("actions: not an action")
 func Normalize(in []Action, now time.Time) ([]Action, int, error) {
 	out := make([]Action, 0, len(in))
 	for i, a := range in {
-		if !kinds[a.Kind] {
-			return nil, 0, fmt.Errorf("%w: action %d has kind %q", ErrInvalid, i, a.Kind)
+		a, err := conform(a)
+		if err != nil {
+			return nil, 0, fmt.Errorf("action %d: %w", i, err)
 		}
-		if a.Target == "" || !utf8.ValidString(a.Target) {
-			return nil, 0, fmt.Errorf("%w: action %d has no readable target", ErrInvalid, i)
+		if a.At.After(now.Add(maxClockSkew)) {
+			return nil, 0, fmt.Errorf("%w: action %d is timed in the future", ErrInvalid, i)
 		}
-		if a.At.IsZero() || a.At.After(now.Add(maxClockSkew)) {
-			return nil, 0, fmt.Errorf("%w: action %d has no time or one in the future", ErrInvalid, i)
-		}
-		if a.Code != nil && a.Kind != Result {
-			return nil, 0, fmt.Errorf("%w: action %d of kind %s carries an exit code", ErrInvalid, i, a.Kind)
-		}
-		if utf8.RuneCountInString(a.Target) > MaxTarget {
-			a.Target = string([]rune(a.Target)[:MaxTarget])
-			a.Truncated = true
-		}
-		a.At = a.At.UTC()
 		out = append(out, a)
 	}
 	dropped := 0
@@ -91,6 +81,30 @@ func Normalize(in []Action, now time.Time) ([]Action, int, error) {
 		out = out[dropped:]
 	}
 	return out, dropped, nil
+}
+
+// conform checks one action against the format, the same on the way in
+// (Normalize) and on the way out of Redis (entries), and cuts a long target,
+// marking it. A result carries its exit code; nothing else does (review 263 B1).
+func conform(a Action) (Action, error) {
+	switch {
+	case !kinds[a.Kind]:
+		return a, fmt.Errorf("%w: kind %q", ErrInvalid, a.Kind)
+	case a.Target == "" || !utf8.ValidString(a.Target):
+		return a, fmt.Errorf("%w: no readable target", ErrInvalid)
+	case a.At.IsZero():
+		return a, fmt.Errorf("%w: no time", ErrInvalid)
+	case a.Kind == Result && a.Code == nil:
+		return a, fmt.Errorf("%w: a result without its exit code", ErrInvalid)
+	case a.Kind != Result && a.Code != nil:
+		return a, fmt.Errorf("%w: a %s carries an exit code", ErrInvalid, a.Kind)
+	}
+	if utf8.RuneCountInString(a.Target) > MaxTarget {
+		a.Target = string([]rune(a.Target)[:MaxTarget])
+		a.Truncated = true
+	}
+	a.At = a.At.UTC()
+	return a, nil
 }
 
 var attemptID = regexp.MustCompile(`^a_[0-9A-HJKMNP-TV-Z]{26}$`)
@@ -169,26 +183,31 @@ func (s *Store) Last(ctx context.Context, attempt string) (Entry, bool, error) {
 	return es[0], true, nil
 }
 
+// entries decodes stream entries and holds each to the format, whoever wrote
+// it (review 263 B2); one that is not an action fails the read.
 func entries(msgs []redis.XMessage) ([]Entry, error) {
 	out := make([]Entry, 0, len(msgs))
 	for _, m := range msgs {
-		e := Entry{ID: m.ID}
-		e.Kind = Kind(str(m.Values["kind"]))
-		e.Target = str(m.Values["target"])
-		at, err := time.Parse(time.RFC3339Nano, str(m.Values["at"]))
-		if err != nil || !kinds[e.Kind] {
-			return nil, fmt.Errorf("actions: stream entry %s is not an action", m.ID)
+		a := Action{Kind: Kind(str(m.Values["kind"])), Target: str(m.Values["target"]), Truncated: str(m.Values["truncated"]) == "1"}
+		if at := str(m.Values["at"]); at != "" {
+			t, err := time.Parse(time.RFC3339Nano, at)
+			if err != nil {
+				return nil, fmt.Errorf("%w: stream entry %s has time %q", ErrInvalid, m.ID, at)
+			}
+			a.At = t
 		}
-		e.At = at
 		if c, ok := m.Values["code"]; ok {
 			n, err := strconv.Atoi(str(c))
 			if err != nil {
-				return nil, fmt.Errorf("actions: stream entry %s has code %v", m.ID, c)
+				return nil, fmt.Errorf("%w: stream entry %s has code %v", ErrInvalid, m.ID, c)
 			}
-			e.Code = &n
+			a.Code = &n
 		}
-		e.Truncated = str(m.Values["truncated"]) == "1"
-		out = append(out, e)
+		a, err := conform(a)
+		if err != nil {
+			return nil, fmt.Errorf("stream entry %s: %w", m.ID, err)
+		}
+		out = append(out, Entry{ID: m.ID, Action: a})
 	}
 	return out, nil
 }
