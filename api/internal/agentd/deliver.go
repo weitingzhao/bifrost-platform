@@ -61,9 +61,10 @@ type lease struct {
 	// tail, once the executor's log is open, gives each heartbeat the
 	// actions found since the last one (W-31 2.3).
 	tail atomic.Pointer[actionTail]
-	// beat makes the keeper's heartbeats and the last one after the
-	// executor exits go one at a time (review 265 B12).
-	beat sync.Mutex
+	// beat (one slot) makes the keeper's heartbeats and the last one after
+	// the executor exits go one at a time (review 265 B12); the last one
+	// gives up waiting for it when its time is up (review 266 B5).
+	beat chan struct{}
 	// noActions: the platform said it takes no actions; none are sent again
 	// for this attempt.
 	noActions atomic.Bool
@@ -97,7 +98,7 @@ func (l *lease) release() {
 // keepLease heartbeats the attempt until released.
 func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *lease {
 	ctx, cancel := context.WithCancel(ctx)
-	l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: cancel, done: make(chan struct{})}
+	l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: cancel, done: make(chan struct{}), beat: make(chan struct{}, 1)}
 	every := orDefault(d.Beat, 30*time.Second)
 	timeout := min(max(every, time.Second), 10*time.Second)
 	maxFails := d.MaxFails
@@ -115,14 +116,18 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 				return
 			case <-t.C:
 			}
+			select {
+			case l.beat <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
 			hctx, hcancel := context.WithTimeout(ctx, timeout)
-			l.beat.Lock()
 			acts := l.tail.Load().take(actions.MaxPerBeat, time.Now())
 			if l.noActions.Load() {
 				acts = nil // the platform takes none: they are dropped, the lease goes on
 			}
 			stop, _, refused, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts)
-			l.beat.Unlock()
+			<-l.beat
 			hcancel()
 			if strings.HasPrefix(refused, ActionsUnsupported) {
 				l.noActions.Store(true)
@@ -157,32 +162,55 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 
 // lastActions reads what the executor wrote since the last read and sends it
 // in one more heartbeat, so actions of its last seconds are not lost (review
-// 265 B12). It is bounded and best effort: observation, never a reason to
-// hold up the hand-over.
+// 265 B12). It is best effort, observation, never a reason to hold up the
+// hand-over: the read, the wait for the keeper's turn and the send share one
+// budget, and a lost lease ends it; once its turn comes the lease is looked
+// at again, and a fenced answer marks the lease lost (review 266 B5, B7).
 func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64, l *lease) {
 	t := l.tail.Load()
 	if t == nil || l.isLost() || l.noActions.Load() {
 		return
 	}
-	done := make(chan struct{})
-	safego.Go("agentd-last-read", func() { defer close(done); t.readNow(time.Now()) })
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
+	ctx, cancel := context.WithTimeout(ctx, lastActionsBudget)
+	defer cancel()
+	safego.Go("agentd-last-lost", func() {
+		select {
+		case <-l.lost:
+			cancel()
+		case <-ctx.Done():
+		}
+	})
+	rctx, rcancel := context.WithTimeout(ctx, 2*time.Second)
+	read := t.flush(rctx)
+	rcancel()
+	if !read {
 		return
 	}
 	acts := t.take(actions.MaxPerBeat, time.Now())
 	if len(acts) == 0 {
 		return
 	}
-	hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	l.beat.Lock()
-	defer l.beat.Unlock()
-	if _, _, _, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts); err != nil {
+	select {
+	case l.beat <- struct{}{}:
+	case <-ctx.Done():
+		return
+	}
+	defer func() { <-l.beat }()
+	if ctx.Err() != nil || l.isLost() || l.noActions.Load() {
+		return
+	}
+	_, _, _, err := d.Client.Heartbeat(ctx, attemptID, epoch, acts)
+	switch {
+	case errors.Is(err, ErrFenced):
+		l.markLost()
+		d.logf("agentd: last actions of %s: the lease is fenced", attemptID)
+	case err != nil:
 		d.logf("agentd: last actions of %s not sent: %v", attemptID, err)
 	}
 }
+
+// lastActionsBudget bounds lastActions as a whole.
+const lastActionsBudget = 5 * time.Second
 
 // deliver hands the result of an attempt that kept its lease over, phase by
 // phase from where its journal stands: exited → computed → persisted →

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -158,9 +159,51 @@ func TestTargetsAreScrubbed(t *testing.T) {
 		"mysql --password=hunter22 -e 1":                                      "mysql --password=<secret> -e 1",
 		"export GITEA_ADMIN_TOKEN='0123456789abcdef0123456789abcdef01234567'": "export GITEA_ADMIN_TOKEN=<secret>",
 		"go test ./internal/agentd/...":                                       "go test ./internal/agentd/...",
+		// review 266 A1: a JSON key, a quoted flag value, a whole private key
+		`curl -d '{"token":"fixture-secret-value"}' https://example.invalid`:                                       `curl -d '{"token":"<secret>"}' https://example.invalid`,
+		`curl -d "{\"api_key\": \"fixture-secret-value\"}" https://x`:                                              `curl -d "{\"api_key\": \"<secret>\"}" https://x`,
+		`echo '{"Authorization": "Bearer fixture-secret-value"}'`:                                                  `echo '{"Authorization": "<secret>"}'`,
+		`echo '{"password":"fixture \"secret\" value"}'`:                                                           `echo '{"password":"<secret>"}'`,
+		"mysql --password 'fixture secret value' -e 1":                                                             "mysql --password <secret> -e 1",
+		`mysql --password="fixture secret value" -e 1`:                                                             "mysql --password=<secret> -e 1",
+		"mysql --password 'fixture secret":                                                                         "mysql --password <secret>",
+		"PGPASSWORD='fixture secret value psql":                                                                    "PGPASSWORD=<secret>",
+		"printf '-----BEGIN OPENSSH PRIVATE KEY-----\\nfixtureKeyBody\\n-----END OPENSSH PRIVATE KEY-----\\n' > k": "printf '<secret>\\n' > k",
+		"cat <<EOF > k\n-----BEGIN RSA PRIVATE KEY-----\nfixtureKeyBody\n-----END RSA PRIVATE KEY-----\nEOF":       "cat <<EOF > k\n<secret>\nEOF",
+		"echo '-----BEGIN EC PRIVATE KEY-----fixtureKeyBody":                                                       "echo '<secret>",
+		// review 266 C8: a search pattern and a name that only contains a word
+		`rg -n 'token:.*|password:.*|Authorization:.*' api`: `rg -n 'token:.*|password:.*|Authorization:.*' api`,
+		"git log --author=Alice --oneline":                  "git log --author=Alice --oneline",
+		"rg 'token:.*|x' && PGPASSWORD=fixture-secret psql": "rg 'token:.*|x' && PGPASSWORD=<secret> psql",
+		`TOKEN="$GITEA_TOKEN" ./push.sh`:                    "TOKEN=<secret> ./push.sh",
 	} {
 		if got := scrub(in); got != want {
 			t.Errorf("scrub(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// What is queued, a command's run and its result, holds no credential
+// (review 266 A1).
+func TestCredentialsAreNotQueued(t *testing.T) {
+	for _, cmd := range []string{
+		`curl -d '{"token":"fixture-secret-value"}' https://example.invalid`,
+		"mysql --password 'fixture secret value' -e 1",
+		"printf '-----BEGIN OPENSSH PRIVATE KEY-----\\nfixture-secret-value\\n-----END OPENSSH PRIVATE KEY-----\\n' > k",
+	} {
+		tail, write := tailOf(t, "exec:codex")
+		ev, _ := json.Marshal(map[string]any{"type": "item.started", "item": map[string]any{"type": "command_execution", "command": cmd}})
+		write(string(ev) + "\n")
+		ev, _ = json.Marshal(map[string]any{"type": "item.completed", "item": map[string]any{"type": "command_execution", "command": cmd, "exit_code": 0}})
+		write(string(ev) + "\n")
+		got := readTake(tail)
+		if len(got) != 2 || got[0].Kind != actions.Run || got[1].Kind != actions.Result {
+			t.Fatalf("%q: %s", cmd, kinds(got))
+		}
+		for _, a := range got {
+			if strings.Contains(a.Target, "fixture") || strings.Contains(a.Target, "secret value") {
+				t.Errorf("%s queued as %q", a.Kind, a.Target)
+			}
 		}
 	}
 }
@@ -205,6 +248,42 @@ func TestAFIFOIsNotRead(t *testing.T) {
 	}
 	if tail.take(50, time.Now()) != nil {
 		t.Fatal("actions from a FIFO")
+	}
+}
+
+// The last read is the collector's: a flush whose time is up while a read
+// hangs leaves nothing behind, and a read whose turn comes after the end
+// reads nothing (review 266 B3).
+func TestFlushIsTheCollectorsRead(t *testing.T) {
+	tail, write := tailOf(t, "exec:codex")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go tail.collect(ctx)
+	tail.io.Lock() // a read that hangs
+	before := runtime.NumGoroutine()
+	for i := 0; i < 20; i++ {
+		fctx, fcancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		if tail.flush(fctx) {
+			t.Fatal("a flush done while the read hangs")
+		}
+		fcancel()
+	}
+	if n := runtime.NumGoroutine(); n > before+2 {
+		t.Fatalf("%d goroutines after 20 flushes, %d before", n, before)
+	}
+	cancel()
+	write(`{"type":"item.started","item":{"type":"command_execution","command":"ls"}}` + "\n")
+	tail.io.Unlock()
+	select {
+	case <-tail.gone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the collector did not stop")
+	}
+	if got := tail.take(50, time.Now()); got != nil {
+		t.Fatalf("read after the end: %s", kinds(got))
+	}
+	if tail.flush(context.Background()) {
+		t.Fatal("a flush done after the collector stopped")
 	}
 }
 
@@ -267,5 +346,76 @@ func TestHeartbeatToAnOlderPlatform(t *testing.T) {
 	bodies = nil
 	if _, _, refused, err := c.Heartbeat(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, nil); err != nil || refused != "" || len(bodies) != 1 {
 		t.Fatalf("a heartbeat without actions: refused %q, err %v, %d requests", refused, err, len(bodies))
+	}
+}
+
+// A lease with no keeper: only lastActions heartbeats.
+func lastLease(t *testing.T) (*Daemon, *fakePlatform, *lease, func(string)) {
+	t.Helper()
+	f := newFake()
+	d := fakeDaemon(t, f)
+	l := &lease{lost: make(chan struct{}), stop: make(chan struct{}), cancel: func() {}, done: make(chan struct{}), beat: make(chan struct{}, 1)}
+	tail, write := tailOf(t, "exec:codex")
+	l.tail.Store(tail)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go tail.collect(ctx)
+	write(`{"type":"item.started","item":{"type":"command_execution","command":"go test ./..."}}` + "\n")
+	return d, f, l, write
+}
+
+func lastActionsReturns(t *testing.T, ctx context.Context, d *Daemon, l *lease) chan struct{} {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { d.lastActions(ctx, "a1", 1, l); close(done) }()
+	return done
+}
+
+// The last heartbeat gives up waiting for the keeper's turn when its context
+// ends (review 266 B5).
+func TestLastActionsGiveUpOnTheKeepersTurn(t *testing.T) {
+	d, f, l, _ := lastLease(t)
+	l.beat <- struct{}{} // the keeper's heartbeat in flight
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	select {
+	case <-lastActionsReturns(t, ctx, d, l):
+	case <-time.After(2 * time.Second):
+		t.Fatal("lastActions waited for the keeper past its context")
+	}
+	if n := f.count("heartbeat"); n != 0 {
+		t.Fatalf("%d heartbeats", n)
+	}
+}
+
+// A lease lost while the last heartbeat waits for its turn is not
+// heartbeated; a fenced answer marks the lease lost (review 266 B7).
+func TestLastActionsAfterTheLeaseIsLost(t *testing.T) {
+	d, f, l, _ := lastLease(t)
+	l.beat <- struct{}{}
+	done := lastActionsReturns(t, context.Background(), d, l)
+	time.Sleep(200 * time.Millisecond) // read, taken, waiting for the turn
+	l.markLost()
+	<-l.beat
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("lastActions did not return")
+	}
+	if n := f.count("heartbeat"); n != 0 {
+		t.Fatalf("%d heartbeats after the lease was lost", n)
+	}
+
+	d, f, l, _ = lastLease(t)
+	f.set("heartbeat", always(http.StatusConflict, "fenced"))
+	<-lastActionsReturns(t, context.Background(), d, l)
+	if f.count("heartbeat") != 1 || !l.isLost() {
+		t.Fatalf("%d heartbeats, lost %v", f.count("heartbeat"), l.isLost())
+	}
+
+	d, f, l, _ = lastLease(t)
+	<-lastActionsReturns(t, context.Background(), d, l)
+	if f.count("heartbeat") != 1 || l.isLost() {
+		t.Fatalf("%d heartbeats, lost %v", f.count("heartbeat"), l.isLost())
 	}
 }

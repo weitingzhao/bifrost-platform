@@ -26,13 +26,18 @@ import (
 // heartbeat's batch to maxBatchBytes, so a heartbeat is never refused for its
 // size (review 265 A9).
 //
-// The log is read by its own goroutine (collect), never by the lease keeper:
-// the keeper only takes what is already found, so a log that cannot be read
-// (a FIFO, a slow disk) never delays a heartbeat or the keeper's end (review
-// 265 A10). Only a regular file is read.
+// The log is read by one goroutine (collect), never by the lease keeper: the
+// keeper only takes what is already found, so a log that cannot be read (a
+// FIFO, a slow disk) never delays a heartbeat or the keeper's end (review 265
+// A10). The last read after the executor exits is collect's too (flush), so a
+// read that hangs holds that one goroutine and nothing more (review 266 B3).
+// Only a regular file is read: a read of a regular file cannot be cut short,
+// and agent-work is on the host's own disk.
 type actionTail struct {
 	io      sync.Mutex // reading and parsing the log
 	mu      sync.Mutex // pending
+	flushes chan chan struct{}
+	gone    chan struct{} // closed when collect returns
 	path    string
 	dir     string
 	parse   func(t *actionTail, ev map[string]any, now time.Time)
@@ -62,12 +67,15 @@ func newActionTail(executor, logPath, checkout string) *actionTail {
 	if parse == nil {
 		return nil
 	}
-	return &actionTail{path: logPath, dir: strings.TrimRight(checkout, "/"), parse: parse, cmds: map[string]string{}}
+	return &actionTail{path: logPath, dir: strings.TrimRight(checkout, "/"), parse: parse, cmds: map[string]string{},
+		flushes: make(chan chan struct{}), gone: make(chan struct{})}
 }
 
-// collect reads the log every collectEvery until ctx ends. It runs on its own:
-// nothing waits for it.
+// collect reads the log every collectEvery, and when flush asks, until ctx
+// ends. It runs on its own: nothing waits for it but a flush, and a flush
+// only until its own context ends.
 func (t *actionTail) collect(ctx context.Context) {
+	defer close(t.gone)
 	tick := time.NewTicker(collectEvery)
 	defer tick.Stop()
 	for {
@@ -75,20 +83,51 @@ func (t *actionTail) collect(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			t.readNow(time.Now())
+			t.readIf(ctx, time.Now())
+		case done := <-t.flushes:
+			t.readIf(ctx, time.Now())
+			close(done)
 		}
 	}
 }
 
-// readNow reads what the log gained (the last read after the executor exits
-// goes through here too).
+// flush has collect read what the log gained and waits for that read until
+// ctx ends; it reads nothing itself (review 266 B3). It says whether the read
+// was done.
+func (t *actionTail) flush(ctx context.Context) bool {
+	done := make(chan struct{})
+	select {
+	case t.flushes <- done:
+	case <-t.gone:
+		return false
+	case <-ctx.Done():
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// readIf reads what the log gained unless ctx ended, looked at again once the
+// read is its to do (review 266 B3).
+func (t *actionTail) readIf(ctx context.Context, now time.Time) {
+	t.io.Lock()
+	defer t.io.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+	t.read(now)
+}
+
+// readNow reads what the log gained (tests; collect reads through readIf).
 func (t *actionTail) readNow(now time.Time) {
 	if t == nil {
 		return
 	}
-	t.io.Lock()
-	defer t.io.Unlock()
-	t.read(now)
+	t.readIf(context.Background(), now)
 }
 
 // take returns the newest max actions found so far, at most maxBatchBytes of
@@ -184,28 +223,91 @@ func (t *actionTail) add(kind actions.Kind, target string, now time.Time, code *
 	}
 }
 
-// Masks for what must not leave the host in a target (review 265 A8): a
-// local path outside the checkout, and values that look like credentials.
-var scrubs = []struct {
+// secretKey is a name that holds a credential: it ends in one of these words
+// (GITHUB_TOKEN, PGPASSWORD, "api_key"); a name that only contains one
+// (author, TOKEN_FILE) is not one (review 266 C8).
+const secretKey = `[a-z0-9_]*(?:token|secret|passw(?:or)?d|pwd|api_?key|private_?key|access_?key|secret_?key|credentials?|auth|authorization)s?`
+
+// Masks for what must not leave the host in a target (review 265 A8, 266 A1):
+// a local path outside the checkout, and values that look like credentials. A
+// quoted value is masked whole, and one whose quote never closes is masked to
+// the end, as is a private key whose END line is not there.
+type mask struct {
 	re   *regexp.Regexp
 	with string
-}{
-	{regexp.MustCompile(`(?i)(authorization:\s*)(?:[a-z]+\s+)?[^\s"']+`), "${1}<secret>"},
+}
+
+// quoted are masked first: a private key, and a JSON value (raw, or inside a
+// double-quoted shell argument), so that what follows does not cut them.
+var quoted = []mask{
+	{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`), "<secret>"},
+	{regexp.MustCompile(`(?i)("` + secretKey + `"\s*:\s*)(?:"(?:[^"\\]|\\.)*"|"(?s:.*)$|[^\s,}\]"]+)`), `${1}"<secret>"`},
+	{regexp.MustCompile(`(?i)(\\"` + secretKey + `\\"\s*:\s*)(?:\\"(?:[^\\]|\\[^"])*?\\"|\\"(?s:.*)$|[^\s,}\]\\]+)`), `${1}\"<secret>\"`},
 	{regexp.MustCompile(`(?i)\b(bearer|token|basic)\s+[a-z0-9._~+/=-]{8,}`), "${1} <secret>"},
-	{regexp.MustCompile(`(?i)\b([a-z0-9_]*(?:token|secret|passw(?:or)?d|pwd|api_?key|private_?key|access_?key|credential|auth)[a-z0-9_]*)\s*[=:]\s*("[^"]*"|'[^']*'|[^\s"'<]+)`), "${1}=<secret>"},
-	{regexp.MustCompile(`(?i)(--?(?:password|passwd|token|secret|api-key|key)[= ])\S+`), "${1}<secret>"},
+}
+
+// masks follow the assignments: flags, known token prefixes, credentials in a
+// URL, local paths.
+var masks = []mask{
+	{regexp.MustCompile(`(?i)(--?(?:password|passwd|token|secret|api-key|key)(?:=|\s+))(?:"[^"]*"|'[^']*'|["'](?s:.*)$|\S+)`), "${1}<secret>"},
 	{regexp.MustCompile(`\b(github_pat_|ghp_|gho_|ghs_|ghr_|glpat-|xox[abprs]-|sk-|AKIA)[A-Za-z0-9_\-]{8,}`), "${1}<secret>"},
 	{regexp.MustCompile(`(://)[^/\s:@]+:[^/\s@]+@`), "${1}<secret>@"},
-	{regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----`), "<secret>"},
 	{regexp.MustCompile(`(?:/home|/Users|/root|/var/folders|/private/var|/private/tmp|/tmp)/[^\s"'<>|;&)]*`), "<local path>"},
 	{regexp.MustCompile(`\b[A-Za-z]:\\[^\s"'<>|;&)]*`), "<local path>"},
 }
 
+// assignments are NAME=value, NAME: value and an Authorization header; their
+// value is masked unless it is a search pattern (rg 'token:.*'), which is kept
+// up to its next alternative and read on from there (review 266 C8).
+var assignments = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(authorization:\s*)((?:[a-z]+\s+)?[^\s"']+)`),
+	regexp.MustCompile(`(?i)\b(` + secretKey + `\s*[=:]\s*)("[^"]*"|'[^']*'|["'](?s:.*)$|[^\s"'<]+)`),
+}
+
 func scrub(s string) string {
-	for _, m := range scrubs {
+	for _, m := range quoted {
+		s = m.re.ReplaceAllString(s, m.with)
+	}
+	for _, re := range assignments {
+		s = maskValues(re, s)
+	}
+	for _, m := range masks {
 		s = m.re.ReplaceAllString(s, m.with)
 	}
 	return s
+}
+
+// maskValues masks the value (the second group) of each match of re in s.
+func maskValues(re *regexp.Regexp, s string) string {
+	var b strings.Builder
+	for {
+		m := re.FindStringSubmatchIndex(s)
+		if m == nil {
+			b.WriteString(s)
+			return b.String()
+		}
+		name, val := s[m[2]:m[3]], s[m[4]:m[5]]
+		b.WriteString(s[:m[2]])
+		if strings.ContainsAny(val[:1], `.*+?\([^$|`) {
+			// a pattern or a variable, not a credential: kept to its next
+			// alternative, the rest is read again
+			head, _, alt := strings.Cut(val, "|")
+			b.WriteString(name + head)
+			if alt {
+				b.WriteString("|")
+				s = s[m[4]+len(head)+1:]
+			} else {
+				s = s[m[5]:]
+			}
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(name), "authorization:") {
+			b.WriteString(name + "<secret>") // a header keeps its form
+		} else {
+			b.WriteString(strings.TrimRight(name, " \t=:") + "=<secret>")
+		}
+		s = s[m[1]:]
+	}
 }
 
 // local writes the checkout's path as relative: a path inside it loses the
