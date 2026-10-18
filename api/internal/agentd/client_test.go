@@ -146,7 +146,19 @@ func TestClientPath(t *testing.T) {
 	must(t, err)
 	must(t, c.Checkpoint(ctx, cl.AttemptID, cl.Epoch, 1, []string{log}, false))
 	exit := 0
-	must(t, c.Computed(ctx, cl.AttemptID, cl.Epoch, &exit, "exit", "done"))
+	tokens := int64(321)
+	refused, err := c.Computed(ctx, cl.AttemptID, cl.Epoch, &exit, "exit", "done", agentd.Measured{
+		Usage: &agentd.Usage{Pool: "cursor:owner:monthly", Tokens: &tokens},
+		Pools: []agentd.PoolReading{{Pool: "cursor:owner:monthly", Limited: true, Text: "You've hit your usage limit"}}})
+	must(t, err)
+	if refused != "" {
+		t.Fatalf("usage refused: %s", refused)
+	}
+	var until *time.Time
+	must(t, pool.QueryRow(ctx, `SELECT cooldown_until FROM agentrt.vendor_pool WHERE vendor_pool_id = 'cursor:owner:monthly'`).Scan(&until))
+	if until == nil || !until.After(time.Now()) {
+		t.Fatalf("the refused pool cools until %v", until)
+	}
 	report, err := c.PutArtifact(ctx, "report", "text/markdown", []byte("# done\n"))
 	must(t, err)
 	if _, err := c.PutArtifact(ctx, "report", "text/markdown", []byte("see /Users/someone\n")); err == nil {

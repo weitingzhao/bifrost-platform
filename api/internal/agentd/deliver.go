@@ -244,8 +244,15 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			if err != nil {
 				break
 			}
+			// What the attempt used, read from its output each time this phase
+			// runs (again after a restart: the output is still there).
+			m := measure(cl.Tool.Executor, e.Workdir+".out")
 			err = d.retry(ctx, func() error {
-				return d.Client.Computed(ctx, cl.AttemptID, cl.Epoch, e.ExitCode, e.EndHow, e.Conclusion)
+				refused, err := d.Client.Computed(ctx, cl.AttemptID, cl.Epoch, e.ExitCode, e.EndHow, e.Conclusion, m)
+				if refused != "" {
+					d.logf("agentd: computed %s: usage not kept: %s", cl.AttemptID, refused)
+				}
+				return err
 			})
 			if err == nil {
 				e.Phase = "computed"

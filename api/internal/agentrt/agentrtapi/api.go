@@ -60,7 +60,7 @@ const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 // (and hand in a rule the Owner signed: the signature is the authority); they
 // and agentd upload artifacts; anyone authenticated reads and may stop, pause,
 // drain or tighten a rule; operators and the Owner drain hosts; only the Owner
-// lifts a control.
+// lifts a control and reads a vendor pool by hand.
 var abilities = []struct {
 	name  string
 	roles []actuation.Role
@@ -72,6 +72,7 @@ var abilities = []struct {
 	{"stop", []actuation.Role{actuation.RoleViewer, actuation.RoleReporter, actuation.RoleOperator, actuation.RoleAdmin, actuation.RoleAgentd}},
 	{"drain", []actuation.Role{actuation.RoleOperator, actuation.RoleAdmin}},
 	{"lift", []actuation.Role{actuation.RoleAdmin}},
+	{"measure", []actuation.Role{actuation.RoleAdmin}},
 }
 
 func may(name string) []actuation.Role {
@@ -124,6 +125,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/hosts", a.listHosts)
 		r.With(read, cfg).Get("/progress", a.progress)
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
+		r.With(read, cfg).Get("/pools", a.listPools)
+		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
 	})
 }
 
@@ -238,6 +241,7 @@ type tool struct {
 	Executor string `json:"executor"`
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
+	Account  string `json:"account,omitempty"` // the vendor account its quota pools are named after (2.4 slice ①)
 }
 
 type claimRequest struct {
@@ -259,7 +263,13 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
 			return
 		}
-		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
+		if t.Account != "" {
+			if _, _, _, ok := store.ParsePool("x:" + t.Account + ":short"); !ok {
+				writeError(w, http.StatusBadRequest, "bad_request", "an account is lower-case letters, digits and dashes")
+				return
+			}
+		}
+		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model, Account: t.Account})
 	}
 	// The first valid claim of a token registers the host it is bound to.
 	if err := store.RegisterAgentdHost(r.Context(), a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
@@ -323,6 +333,10 @@ type attemptBody struct {
 	// Actions stays raw until the lease is renewed: actions that do not
 	// parse never fail a heartbeat (review 264 A1).
 	Actions json.RawMessage `json:"actions"`
+	// An ending may carry what the attempt used and what its vendor said
+	// about its pools (2.4 slice ①); only computed takes them.
+	Usage *store.Usage        `json:"usage"`
+	Pools []store.PoolReading `json:"pools"`
 }
 
 func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
@@ -333,6 +347,10 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	}
 	if action != "heartbeat" && len(b.Actions) > 0 && string(b.Actions) != "null" {
 		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
+		return
+	}
+	if action != "computed" && (b.Usage != nil || len(b.Pools) > 0) {
+		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries usage and pool readings")
 		return
 	}
 	f := store.Fence{AttemptID: id, HostID: b.HostID, Epoch: b.Epoch}
@@ -354,7 +372,8 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	case "checkpoint":
 		out, err = store.Checkpoint(ctx, a.DB, f, b.CheckpointSeq, b.Artifacts, b.TooLarge)
 	case "computed":
-		out, err = store.Computed(ctx, a.DB, f, b.ExitCode, b.EndHow, b.Conclusion)
+		out, err = store.ComputedWith(ctx, a.DB, f, store.Ending{ExitCode: b.ExitCode, EndHow: b.EndHow, Conclusion: b.Conclusion,
+			Usage: b.Usage, Pools: b.Pools})
 	case "persist":
 		out, err = store.Persist(ctx, a.DB, f, res, a.Head)
 	case "submit":

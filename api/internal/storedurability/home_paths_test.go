@@ -41,6 +41,7 @@ var homePathFiles = map[string]string{
 	"agentd/local.go":                  "agentd's host lock on the agent host (design v5 §5.2 本地登记); not platform state",
 	"agentd/mcpguard.go":               "reads the agent host user's ~/.cursor/mcp.json to refuse an executor that would load MCP servers",
 	"agentd/executors.go":              "writes the home directory as \"$HOME\" in the verify output it hands in; opens and keeps nothing there",
+	"agentd/usage.go":                  "reads the rate limits codex keeps in the agent host user's ~/.codex/sessions (W-31 2.4 slice ①); writes nothing there",
 }
 
 func TestNoNewStoreUnderHome(t *testing.T) {

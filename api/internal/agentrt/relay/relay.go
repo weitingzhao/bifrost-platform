@@ -234,7 +234,8 @@ func (l *Lease) cooldown(ctx context.Context, payload string) error {
 	}
 	left := time.Until(until)
 	if left <= 0 {
-		return nil
+		// a cooldown lifted early (the Owner's reading, 2.4 slice ①)
+		return l.do(ctx, "DEL", l.r.key("cooldown:"+pool))
 	}
 	return l.do(ctx, "SETPX", l.r.key("cooldown:"+pool), payload, left.Milliseconds())
 }

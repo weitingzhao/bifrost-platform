@@ -1,0 +1,256 @@
+package store_test
+
+import (
+	"math"
+	"testing"
+	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+)
+
+func pv[T any](v T) *T { return &v }
+
+// started claims the oldest ready task with tool on host and starts it.
+func (w *world) started(t *testing.T, host string, tool store.Tool) store.Fence {
+	t.Helper()
+	c := w.claim(t, host, store.LeaseTTL, tool)
+	if c == nil {
+		t.Fatalf("%s on %s claimed nothing", tool.Executor, host)
+	}
+	f := fence(c, host)
+	ok(t, store.Start(ctx, w.rt, f, "", ""))
+	return f
+}
+
+func (w *world) cooldown(t *testing.T, pool string) *time.Time {
+	t.Helper()
+	var until *time.Time
+	if err := w.rt.QueryRow(ctx, `SELECT cooldown_until FROM agentrt.vendor_pool WHERE vendor_pool_id = $1`, pool).Scan(&until); err != nil {
+		t.Fatalf("pool %s: %v", pool, err)
+	}
+	return until
+}
+
+func (w *world) ledger(t *testing.T, attempt string) map[string]float64 {
+	t.Helper()
+	rows, err := w.rt.Query(ctx, `SELECT unit, amount::float8 FROM agentrt.budget_ledger WHERE attempt_id = $1`, attempt)
+	ok(t, err)
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var unit string
+		var n float64
+		ok(t, rows.Scan(&unit, &n))
+		out[unit] += n
+	}
+	ok(t, rows.Err())
+	return out
+}
+
+func TestRefusalCoolsThePoolAndClaimsPassTheAccountBy(t *testing.T) {
+	w := newKernelWorld(t)
+	w.ready(t, store.Task{})
+	f := w.started(t, "h1", cursor)
+	out, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(1), EndHow: "exit", Conclusion: "failed",
+		Usage: &store.Usage{Pool: "cursor:owner:monthly", Tokens: pv(int64(120))},
+		Pools: []store.PoolReading{{Pool: "cursor:owner:monthly", Limited: true, Text: "You've hit your usage limit"}}})
+	ok(t, err)
+	if out["usage_refused"] != nil {
+		t.Fatalf("usage refused: %v", out["usage_refused"])
+	}
+	if got := w.ledger(t, f.AttemptID); got["tokens"] != 120 || got["wall_s"] < 0 || len(got) != 2 {
+		t.Fatalf("ledger = %v; want wall_s and 120 tokens", got)
+	}
+	until := w.cooldown(t, "cursor:owner:monthly")
+	if until == nil || until.Sub(time.Now()) < 5*time.Hour || until.Sub(time.Now()) > 7*time.Hour {
+		t.Fatalf("cooldown until %v; want about 6 hours from now (no reset named)", until)
+	}
+	// The next task goes to no tool of the cooled account, and does go to the
+	// same tool under another account, and to another tool.
+	w.ready(t, store.Task{})
+	if c := w.claim(t, "h2", store.LeaseTTL, cursor); c != nil {
+		t.Fatalf("cursor of the cooled account claimed %s", c.TaskID)
+	}
+	if c := w.claim(t, "h2", store.LeaseTTL, store.Tool{Executor: "exec:cursor", Provider: "cursor-mix", Account: "team"}); c == nil {
+		t.Fatal("cursor of another account claimed nothing")
+	}
+	w.ready(t, store.Task{})
+	if c := w.claim(t, "h3", store.LeaseTTL, cursor, codex); c == nil || c.Tool.Executor != "exec:codex" {
+		t.Fatalf("claim = %+v; want codex, the cooled cursor passed by", c)
+	}
+}
+
+func TestAVendorReadingOfASpentWindowCoolsUntilItsReset(t *testing.T) {
+	w := newKernelWorld(t)
+	w.ready(t, store.Task{})
+	f := w.started(t, "h1", codex)
+	reset := time.Now().Add(30 * time.Hour).UTC().Truncate(time.Second)
+	_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
+		Usage: &store.Usage{Pool: "codex:owner:weekly", Tokens: pv(int64(3600))},
+		Pools: []store.PoolReading{{Pool: "codex:owner:weekly", UsedFraction: pv(1.0), ResetsAt: &reset}}})
+	ok(t, err)
+	if until := w.cooldown(t, "codex:owner:weekly"); until == nil || !until.Equal(reset) {
+		t.Fatalf("cooldown until %v; want the reset %v", until, reset)
+	}
+	var source string
+	ok(t, w.rt.QueryRow(ctx, `SELECT measure_source FROM agentrt.vendor_pool WHERE vendor_pool_id = 'codex:owner:weekly'`).Scan(&source))
+	if source != "reading" {
+		t.Fatalf("source = %q; want reading", source)
+	}
+	// A reading with quota left cools nothing.
+	w.ready(t, store.Task{})
+	f2 := w.started(t, "h2", claude)
+	_, err = store.ComputedWith(ctx, w.rt, f2, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
+		Usage: &store.Usage{Pool: "claude:owner:weekly", USD: pv(0.25)},
+		Pools: []store.PoolReading{{Pool: "claude:owner:short", UsedFraction: pv(0.3), ResetsAt: &reset}}})
+	ok(t, err)
+	if until := w.cooldown(t, "claude:owner:short"); until != nil {
+		t.Fatalf("a pool with quota left cools until %v", until)
+	}
+	if got := w.ledger(t, f2.AttemptID); got["usd"] != 0.25 {
+		t.Fatalf("ledger = %v; want 0.25 usd", got)
+	}
+}
+
+func TestARefusalNeverShortensACooldownButTheOwnerMay(t *testing.T) {
+	w := newKernelWorld(t)
+	long, short := time.Now().Add(10*time.Hour).UTC().Truncate(time.Second), time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	// Both attempts run before either is refused: once one is, claude takes nothing more.
+	w.ready(t, store.Task{})
+	w.ready(t, store.Task{})
+	fs := []store.Fence{w.started(t, "h1", claude), w.started(t, "h2", claude)}
+	for i, reset := range []time.Time{long, short} {
+		f := fs[i]
+		_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(1), EndHow: "exit", Conclusion: "failed",
+			Pools: []store.PoolReading{{Pool: "claude:owner:short", Limited: true, ResetsAt: pv(reset)}}})
+		ok(t, err)
+	}
+	if until := w.cooldown(t, "claude:owner:short"); until == nil || !until.Equal(long) {
+		t.Fatalf("cooldown until %v; want the longer %v kept", until, long)
+	}
+	owner := store.Writer{Actor: "owner"}
+	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "r1", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(1.0), ResetsAt: pv(short)})
+	ok(t, err)
+	if until := w.cooldown(t, "claude:owner:short"); until == nil || !until.Equal(short) {
+		t.Fatalf("cooldown until %v; want the Owner's %v", until, short)
+	}
+	// Quota left: the Owner's reading lifts the cooldown, and claude claims again.
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4), ResetsAt: pv(short)})
+	ok(t, err)
+	if until := w.cooldown(t, "claude:owner:short"); until == nil || until.After(time.Now()) {
+		t.Fatalf("cooldown until %v; want lifted", until)
+	}
+	w.ready(t, store.Task{})
+	if c := w.claim(t, "h3", store.LeaseTTL, claude); c == nil {
+		t.Fatal("claude claimed nothing after the Owner lifted its cooldown")
+	}
+	// The same key again is the same answer; a reading the same key does not name is refused.
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4), ResetsAt: pv(short)})
+	ok(t, err)
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "r2", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.5)})
+	is(t, err, store.ErrConflict)
+}
+
+func TestTheOwnerReadingIsChecked(t *testing.T) {
+	w := newKernelWorld(t)
+	owner := store.Writer{Actor: "owner"}
+	reset := time.Now().Add(time.Hour)
+	for name, c := range map[string]struct {
+		w   store.Writer
+		key string
+		r   store.PoolReading
+	}{
+		"no key":          {owner, "", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2)}},
+		"no fraction":     {owner, "k", store.PoolReading{Pool: "claude:owner:weekly"}},
+		"spent, no reset": {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.0)}},
+		"over 1":          {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(1.5), ResetsAt: &reset}},
+		"not a pool":      {owner, "k", store.PoolReading{Pool: "claude:weekly", UsedFraction: pv(0.2)}},
+		"a refusal":       {owner, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2), Limited: true}},
+		"not the owner":   {store.Writer{Actor: "controller"}, "k", store.PoolReading{Pool: "claude:owner:weekly", UsedFraction: pv(0.2)}},
+	} {
+		if _, err := store.RecordOwnerReading(ctx, w.rt, c.w, c.key, c.r); err == nil {
+			t.Errorf("%s: recorded", name)
+		}
+	}
+}
+
+// A report the platform cannot take never fails the ending (as a heartbeat's
+// actions, review 264 A1): another tool's pool, a fraction over 1.
+func TestABadReportIsDroppedAndTheAttemptIsComputed(t *testing.T) {
+	w := newKernelWorld(t)
+	for i, e := range []store.Ending{
+		{Usage: &store.Usage{Pool: "codex:owner:weekly", Tokens: pv(int64(5))}},
+		{Pools: []store.PoolReading{{Pool: "cursor:owner:monthly", UsedFraction: pv(2.0)}}},
+		{Pools: []store.PoolReading{{Pool: "cursor:owner:monthly", Text: "bad\x00text"}}},
+	} {
+		w.ready(t, store.Task{})
+		f := w.started(t, []string{"h1", "h2", "h3"}[i], cursor)
+		e.ExitCode, e.EndHow, e.Conclusion = pv(0), "exit", "done"
+		out, err := store.ComputedWith(ctx, w.rt, f, e)
+		ok(t, err)
+		if out["computed"] != true || out["usage_refused"] == nil {
+			t.Fatalf("case %d: out = %v; want computed with the report refused", i, out)
+		}
+		if got := w.ledger(t, f.AttemptID); len(got) != 1 || got["wall_s"] < 0 {
+			t.Fatalf("case %d: ledger = %v; want the wall time alone", i, got)
+		}
+	}
+	var pools int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.vendor_pool`).Scan(&pools))
+	if pools != 0 {
+		t.Fatalf("%d pools made from refused reports", pools)
+	}
+}
+
+func TestComputedWithUsageIsIdempotent(t *testing.T) {
+	w := newKernelWorld(t)
+	w.ready(t, store.Task{})
+	f := w.started(t, "h1", codex)
+	e := store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done", Usage: &store.Usage{Pool: "codex:owner:weekly", Tokens: pv(int64(42))}}
+	_, err := store.ComputedWith(ctx, w.rt, f, e)
+	ok(t, err)
+	_, err = store.ComputedWith(ctx, w.rt, f, e)
+	ok(t, err)
+	if got := w.ledger(t, f.AttemptID); got["tokens"] != 42 {
+		t.Fatalf("ledger = %v; want 42 tokens once", got)
+	}
+	// A retry that measured differently (agentd restarted and read its output
+	// again) gets the first answer: the ending is never held by its usage.
+	e.Usage.Tokens = pv(int64(43))
+	_, err = store.ComputedWith(ctx, w.rt, f, e)
+	ok(t, err)
+	if got := w.ledger(t, f.AttemptID); got["tokens"] != 42 {
+		t.Fatalf("ledger = %v; want the first report's 42 tokens", got)
+	}
+	// Another ending under the same key is still a conflict.
+	e.Conclusion = "failed"
+	_, err = store.ComputedWith(ctx, w.rt, f, e)
+	is(t, err, store.ErrConflict)
+}
+
+func TestListPoolsShowsPaceAndThisWindowsUsage(t *testing.T) {
+	w := newKernelWorld(t)
+	w.ready(t, store.Task{})
+	f := w.started(t, "h1", claude)
+	reset := time.Now().Add(48 * time.Hour)
+	_, err := store.ComputedWith(ctx, w.rt, f, store.Ending{ExitCode: pv(0), EndHow: "exit", Conclusion: "done",
+		Usage: &store.Usage{Pool: "claude:owner:weekly", Tokens: pv(int64(900)), USD: pv(1.5)},
+		Pools: []store.PoolReading{{Pool: "claude:owner:weekly", UsedFraction: pv(0.4), ResetsAt: &reset}}})
+	ok(t, err)
+	pools, err := store.ListPools(ctx, w.rt)
+	ok(t, err)
+	if len(pools) != 1 {
+		t.Fatalf("pools = %+v", pools)
+	}
+	p := pools[0]
+	if p.Tool != "claude" || p.Account != "owner" || p.Window != "weekly" || p.Source != "reading" || p.Cooling {
+		t.Fatalf("pool = %+v", p)
+	}
+	// 0.4 used with 48 of 168 hours left: 0.4 − (1 − 48/168) ≈ −0.314.
+	if p.Pace == nil || math.Abs(*p.Pace-(0.4-(1-48.0/168))) > 0.01 {
+		t.Fatalf("pace = %v", p.Pace)
+	}
+	if p.Used["tokens"] != 900 || p.Used["usd"] != 1.5 {
+		t.Fatalf("used = %v", p.Used)
+	}
+}

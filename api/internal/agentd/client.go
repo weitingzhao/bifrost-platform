@@ -224,9 +224,42 @@ func (c *Client) Checkpoint(ctx context.Context, attempt string, epoch int64, se
 	return c.attempt(ctx, attempt, "checkpoint", epoch, map[string]any{"checkpoint_seq": seq, "artifacts": artifacts, "too_large": tooLarge}, nil)
 }
 
-// Computed records that the executor exited and how.
-func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exitCode *int, endHow, conclusion string) error {
-	return c.attempt(ctx, attempt, "computed", epoch, map[string]any{"exit_code": exitCode, "end_how": endHow, "conclusion": conclusion}, nil)
+// UsageUnsupported starts what Computed reports when the platform does not
+// take usage at all (a platform from before W-31 2.4).
+const UsageUnsupported = "the platform does not take usage"
+
+// Computed records that the executor exited and how, with what it used and
+// what its vendor said about its pools (W-31 2.4 slice ①). A platform from
+// before 2.4 refuses a body with them (400, unknown field): computed is sent
+// again at once without them, so an ending never depends on its usage while
+// the PROD platform and agentd are on different versions. refused says why
+// the platform kept no usage (the attempt is computed anyway).
+func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exitCode *int, endHow, conclusion string, m Measured) (refused string, err error) {
+	body := map[string]any{"exit_code": exitCode, "end_how": endHow, "conclusion": conclusion, "lease_epoch": epoch}
+	if epoch == 0 {
+		delete(body, "lease_epoch")
+	}
+	if m.Usage != nil {
+		body["usage"] = m.Usage
+	}
+	if len(m.Pools) > 0 {
+		body["pools"] = m.Pools
+	}
+	var out struct {
+		Refused string `json:"usage_refused"`
+	}
+	path := "/attempts/" + attempt + "/computed"
+	code, err := c.post(ctx, path, body, &out)
+	if err != nil && !m.empty() && code == http.StatusBadRequest &&
+		(strings.Contains(err.Error(), `unknown field "usage"`) || strings.Contains(err.Error(), `unknown field "pools"`)) {
+		first := err
+		delete(body, "usage")
+		delete(body, "pools")
+		if _, err = c.post(ctx, path, body, &out); err == nil {
+			out.Refused = UsageUnsupported + ": " + oneLine(first.Error(), 200)
+		}
+	}
+	return out.Refused, err
 }
 
 func (r Result) body() map[string]any {

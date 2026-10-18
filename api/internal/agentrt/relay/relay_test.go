@@ -506,3 +506,28 @@ func TestNewHolderResendsAfterCrash(t *testing.T) {
 		t.Fatalf("wake %v, want the same event twice", ids)
 	}
 }
+
+// A cooldown lifted early (the Owner's reading, W-31 2.4 slice ①) leaves no
+// key behind in Redis.
+func TestALiftedCooldownLeavesNoKey(t *testing.T) {
+	f := setup(t)
+	f.tx(t, func(tx pgx.Tx) error {
+		return store.SetCooldown(ctx, tx, "controller", "claude:owner:short", "claude", "short", time.Now().Add(time.Hour), "refused")
+	})
+	l, err := f.relay.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deliverAll(t, l)
+	key := f.pre + "cooldown:claude:owner:short"
+	if ttl, _ := f.rc.PTTL(ctx, key).Result(); ttl <= 0 {
+		t.Fatalf("cooldown ttl %v", ttl)
+	}
+	f.tx(t, func(tx pgx.Tx) error {
+		return store.SetCooldown(ctx, tx, "owner", "claude:owner:short", "claude", "short", time.Now(), "the Owner's reading says the pool has quota left")
+	})
+	deliverAll(t, l)
+	if n, _ := f.rc.Exists(ctx, key).Result(); n != 0 {
+		t.Fatalf("the lifted cooldown is still in Redis")
+	}
+}

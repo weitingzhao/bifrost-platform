@@ -65,6 +65,8 @@ var bodies = map[string][]field{
 	"control_set":              {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
 	"control_cleared":          {{"control_id", kID, false}},
 	"pool_cooldown_set":        {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
+	"pool_measured":            {{"vendor_pool_id", kID, false}, {"source", kStr, false}, {"used_permille", kInt, true}, {"resets_at", kStr, true}, {"limited", kBool, true}, {"text", kStr, true}},
+	"budget_charged":           {{"attempt_id", kID, false}, {"wall_s", kInt, false}, {"vendor_pool_id", kID, true}, {"tokens", kInt, true}, {"usd_micros", kInt, true}},
 	"legacy_imported":          {{"source", kStr, false}, {"count", kInt, true}},
 	"rule_signed":              {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
 	"rule_tightened":           {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"capability_facts", kIDs, true}},

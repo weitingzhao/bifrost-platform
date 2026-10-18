@@ -306,6 +306,23 @@ var endHows = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daem
 // Computed records that the executor ended and its result is on the host.
 // exitCode is nil when the process had none (killed by a signal).
 func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclusion string) (map[string]any, error) {
+	return ComputedWith(ctx, db, f, Ending{ExitCode: exitCode, EndHow: endHow, Conclusion: conclusion})
+}
+
+// Ending is how an executor ended, with what it used and what its vendor
+// said about its pools (2.4 slice ①); an agentd older than 2.4 sends neither.
+type Ending struct {
+	ExitCode           *int
+	EndHow, Conclusion string
+	Usage              *Usage
+	Pools              []PoolReading
+}
+
+// ComputedWith is Computed with the attempt's usage and pool readings: the
+// usage goes to the ledger with the wall time since the start, and the
+// readings to the pools of the attempt's own tool, in the same transaction.
+func ComputedWith(ctx context.Context, db DB, f Fence, e Ending) (map[string]any, error) {
+	exitCode, endHow, conclusion := e.ExitCode, e.EndHow, e.Conclusion
 	if !slices.Contains(endHows, endHow) || !slices.Contains([]string{"done", "failed", "none"}, conclusion) {
 		return nil, fmt.Errorf("%w: end %q and conclusion %q", ErrState, endHow, conclusion)
 	}
@@ -314,6 +331,10 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 	if exitCode != nil {
 		req["exit_code"], body["exit_code"] = *exitCode, *exitCode
 	}
+	// The usage is not part of the request's identity: a retry after agentd
+	// restarted measures again from the output, and must get the first
+	// answer, never a key conflict that would hold the ending forever. The
+	// first report is the one kept.
 	return idempotent(ctx, db, hostActor(f.HostID), "computed", f.AttemptID, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		a, err := lockLive(ctx, tx, f, false)
 		if err != nil {
@@ -322,6 +343,20 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 		if !a.started || a.computed {
 			return nil, fmt.Errorf("%w: attempt %s is not started-and-uncomputed", ErrState, a.id)
 		}
+		var executor string
+		var wallS int64
+		if err = tx.QueryRow(ctx, `SELECT executor_actor_id, GREATEST(0, EXTRACT(EPOCH FROM clock_timestamp() - started_at))::bigint
+		  FROM agentrt.attempt WHERE attempt_id = $1`, a.id).Scan(&executor, &wallS); err != nil {
+			return nil, err
+		}
+		// A report the platform cannot take never fails the ending: the
+		// attempt is computed without it, and the answer says why (as with a
+		// heartbeat's actions, review 264 A1).
+		out := map[string]any{"computed": true}
+		if rerr := checkPoolReport(executor, e.Usage, e.Pools); rerr != nil {
+			e.Usage, e.Pools = nil, nil
+			out["usage_refused"] = rerr.Error()
+		}
 		if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_computed", body); err != nil {
 			return nil, err
 		}
@@ -329,7 +364,19 @@ func Computed(ctx context.Context, db DB, f Fence, exitCode *int, endHow, conclu
 		  WHERE attempt_id = $1`, a.id, exitCode, endHow, conclusion); err != nil {
 			return nil, err
 		}
-		return map[string]any{"computed": true}, nil
+		if err = chargeAttempt(ctx, tx, hostActor(f.HostID), a, wallS, e.Usage); err != nil {
+			return nil, err
+		}
+		for _, r := range e.Pools {
+			source := "reading"
+			if r.Limited {
+				source = "exit_text"
+			}
+			if err = measurePools(ctx, tx, hostActor(f.HostID), source, []PoolReading{r}); err != nil {
+				return nil, err
+			}
+		}
+		return out, nil
 	})
 }
 

@@ -350,7 +350,8 @@ func TestRecover(t *testing.T) {
 	}
 	must(t, next.Client.Start(ctx, cl2.AttemptID, cl2.Epoch, "", cursor.Provider))
 	exit := 0
-	must(t, next.Client.Computed(ctx, cl2.AttemptID, cl2.Epoch, &exit, "exit", "done"))
+	_, err = next.Client.Computed(ctx, cl2.AttemptID, cl2.Epoch, &exit, "exit", "done", agentd.Measured{})
+	must(t, err)
 	dir2 := agentd.WorkspaceDir(next.Root, cl2.TaskID, cl2.AttemptNo)
 	must(t, os.MkdirAll(dir2+".out", 0o700))
 	must(t, os.WriteFile(filepath.Join(dir2+".out", "report.md"), []byte("# done before the restart\n"), 0o600))

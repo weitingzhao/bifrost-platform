@@ -16,6 +16,14 @@ type Tool struct {
 	Executor string // actor id, e.g. exec:codex
 	Provider string // model provider; required, independence is checked on it
 	Model    string // may be empty until the executor starts
+	Account  string // the vendor account its quota pools are named after; DefaultAccount when the host names none
+}
+
+func (t Tool) account() string {
+	if t.Account == "" {
+		return DefaultAccount
+	}
+	return t.Account
 }
 
 // ClaimRequest is a host's poll for work.
@@ -60,8 +68,9 @@ const candidatePage = 100
 // ClaimNext leases the oldest ready task of an active mission that one of the
 // host's tools may take, or returns nil. It records the poll on the host (a
 // liveness column) whatever the outcome. Routing in 2.2 is v5 §5.1.2
-// 「分流顺序」②–④ only: hard capability facts, the core rule and
-// independence from the author; scores and quota are 2.4. Candidates are
+// 「分流顺序」②–④: hard capability facts, the core rule and independence
+// from the author; a tool whose account has a pool cooling down is not
+// offered (2.4 slice ①); scores and pace are 2.4 slice ②. Candidates are
 // read in pages until one is taken or none is left, so tasks no tool here may
 // take never hide the ones it may (review 148 B2).
 func ClaimNext(ctx context.Context, db DB, r ClaimRequest) (*Claim, error) {
@@ -103,6 +112,11 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 		}
 		stop, err := held(ctx, tx, []scope{{"global", ""}, {"host", r.HostID}}, "stop", "pause", "drain")
 		if err != nil || stop {
+			return err
+		}
+		// A tool whose vendor account has a pool cooling down takes nothing
+		// until it is over (2.4 slice ①).
+		if r.Tools, err = notCooling(ctx, tx, r.Tools); err != nil || len(r.Tools) == 0 {
 			return err
 		}
 		// Held shared from here to the commit, the capability lock fixes the
