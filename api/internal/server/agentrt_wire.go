@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -13,10 +14,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/relay"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -50,6 +53,13 @@ type agentRuntime struct {
 // see. Pushed branches are checked on Gitea in the organization
 // AGENTRT_GIT_ORG (agentrt_heads.go); without it, persist and salvage of a
 // branch answer 503.
+//
+// With AGENTRT_REDIS_ADDR (redis-agents of the environment; the password in
+// AGENTRT_REDIS_PASSWORD, from the Secret redis-agents) the workers process
+// also runs the relay: committed outbox rows go to redis-agents as signals,
+// and a new or wiped Redis is rebuilt from PostgreSQL first (design v5
+// §5.1.4, W-31 2.3). PostgreSQL stays the record; without Redis nothing is
+// lost, readers only wait for their next poll.
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
@@ -66,6 +76,13 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	// itself instead of leaving the runtime off until the next restart.
 	late := &lateDB{}
 	rt.api.DB = late
+	rdb, prefix, rerr := agentrtRedisFromEnv()
+	switch {
+	case rerr != nil:
+		slog.Error("agentrt: redis-agents is configured wrongly; no relay, PostgreSQL alone carries the runtime", "err", rerr)
+	case rdb == nil:
+		slog.Info("agentrt: AGENTRT_REDIS_ADDR is not set; no relay, PostgreSQL alone carries the runtime")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
@@ -75,26 +92,74 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return openAgentRuntime(ctx, dsn, env)
 		}, agentrtRetry)
 		if pool == nil {
+			if rdb != nil {
+				_ = rdb.Close()
+			}
 			return
 		}
 		late.pool.Store(pool)
 		if !role.RunsWorkers() {
 			<-ctx.Done()
 			pool.Close()
+			if rdb != nil {
+				_ = rdb.Close()
+			}
 			return
 		}
 		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 		wait := c.Start(ctx)
+		relayDone := make(chan struct{})
+		if rdb == nil {
+			close(relayDone)
+		} else {
+			r := &relay.Relay{PG: pool, Redis: rdb, Prefix: prefix}
+			safego.Go("agentrt-relay", func() {
+				defer close(relayDone)
+				slog.Info("agentrt relay: started", "prefix", prefix)
+				_ = r.Run(ctx)
+			})
+		}
 		<-ctx.Done()
 		wait()
+		<-relayDone
 		pool.Close()
+		if rdb != nil {
+			_ = rdb.Close()
+		}
 	})
 	rt.stop = func() {
 		cancel()
 		<-done
 	}
+}
+
+// agentrtRedisPrefix is a key prefix of the runtime: "agrt:" in PROD and STG
+// (each has its own redis-agents), "agrt-dev:" on DEV's shared Redis.
+var agentrtRedisPrefix = regexp.MustCompile(`^agrt(-[a-z]+)?:$`)
+
+// agentrtRedisFromEnv is the redis-agents client of AGENTRT_REDIS_ADDR, or nil
+// when it is not set. The password is required (redis-agents refuses to start
+// without one) and the prefix must be the runtime's, so the relay cannot write
+// over another tenant's keys on a shared Redis.
+func agentrtRedisFromEnv() (*redis.Client, string, error) {
+	addr := strings.TrimSpace(os.Getenv("AGENTRT_REDIS_ADDR"))
+	if addr == "" {
+		return nil, "", nil
+	}
+	prefix := strings.TrimSpace(os.Getenv("AGENTRT_REDIS_PREFIX"))
+	if prefix == "" {
+		prefix = "agrt:"
+	}
+	if !agentrtRedisPrefix.MatchString(prefix) {
+		return nil, "", fmt.Errorf("AGENTRT_REDIS_PREFIX %q is not a runtime prefix (agrt: or agrt-<env>:)", prefix)
+	}
+	pw := os.Getenv("AGENTRT_REDIS_PASSWORD")
+	if pw == "" {
+		return nil, "", errors.New("AGENTRT_REDIS_PASSWORD is empty")
+	}
+	return redis.NewClient(&redis.Options{Addr: addr, Password: pw, DialTimeout: 5 * time.Second}), prefix, nil
 }
 
 // agentrtRetry is how long connectAgentRuntime waits between attempts at
