@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 )
 
 // Keeping the lease and handing the result over (design v5 §5.2 心跳与死人开关、
@@ -55,6 +57,9 @@ type lease struct {
 	lostOnce    sync.Once
 	stopOnce    sync.Once
 	ended       sync.Once
+	// tail, once the executor's log is open, gives each heartbeat the
+	// actions found since the last one (W-31 2.3).
+	tail atomic.Pointer[actionTail]
 }
 
 func (l *lease) markLost() { l.lostOnce.Do(func() { close(l.lost) }) }
@@ -96,7 +101,7 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 		defer close(l.done)
 		t := time.NewTicker(every)
 		defer t.Stop()
-		fails := 0
+		fails, lastRefused := 0, ""
 		for {
 			select {
 			case <-ctx.Done():
@@ -104,8 +109,13 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 			case <-t.C:
 			}
 			hctx, hcancel := context.WithTimeout(ctx, timeout)
-			stop, _, err := d.Client.Heartbeat(hctx, attemptID, epoch)
+			acts := l.tail.Load().take(actions.MaxPerBeat, time.Now())
+			stop, _, refused, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts)
 			hcancel()
+			if refused != "" && refused != lastRefused {
+				d.logf("agentd: heartbeat %s: actions not kept: %s", attemptID, refused)
+			}
+			lastRefused = refused
 			switch {
 			case ctx.Err() != nil:
 				return

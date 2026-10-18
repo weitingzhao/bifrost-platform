@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 )
 
 // Client calls the platform's agentrt routes (design v5 §5.2 路由草图) as
@@ -173,14 +175,21 @@ func (c *Client) attempt(ctx context.Context, id, action string, epoch int64, bo
 	return err
 }
 
-// Heartbeat renews the lease; stop is the platform asking the attempt to stop.
-func (c *Client) Heartbeat(ctx context.Context, attempt string, epoch int64) (stop bool, expires time.Time, err error) {
+// Heartbeat renews the lease and carries the executor's recent actions, if
+// any (W-31 2.3); stop is the platform asking the attempt to stop, refused
+// why the platform kept none of the actions (the lease is renewed anyway).
+func (c *Client) Heartbeat(ctx context.Context, attempt string, epoch int64, acts []actions.Action) (stop bool, expires time.Time, refused string, err error) {
 	var out struct {
 		Stop    bool      `json:"stop"`
 		Expires time.Time `json:"lease_expires_at"`
+		Refused string    `json:"actions_refused"`
 	}
-	err = c.attempt(ctx, attempt, "heartbeat", epoch, nil, &out)
-	return out.Stop, out.Expires, err
+	var body map[string]any
+	if len(acts) > 0 {
+		body = map[string]any{"actions": acts}
+	}
+	err = c.attempt(ctx, attempt, "heartbeat", epoch, body, &out)
+	return out.Stop, out.Expires, out.Refused, err
 }
 
 // Start records that the executor started, with the model it uses.

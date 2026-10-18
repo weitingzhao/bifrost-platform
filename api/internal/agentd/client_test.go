@@ -135,11 +135,11 @@ func TestClientPath(t *testing.T) {
 		t.Fatalf("spec = %q %v", spec, err)
 	}
 	must(t, c.Start(ctx, cl.AttemptID, cl.Epoch, "auto", "cursor-mix"))
-	stop, expires, err := c.Heartbeat(ctx, cl.AttemptID, cl.Epoch)
+	stop, expires, _, err := c.Heartbeat(ctx, cl.AttemptID, cl.Epoch, nil)
 	if err != nil || stop || !expires.After(time.Now()) {
 		t.Fatalf("heartbeat = %v %v %v", stop, expires, err)
 	}
-	if _, _, err = c.Heartbeat(ctx, cl.AttemptID, cl.Epoch+1); !errors.Is(err, agentd.ErrFenced) {
+	if _, _, _, err = c.Heartbeat(ctx, cl.AttemptID, cl.Epoch+1, nil); !errors.Is(err, agentd.ErrFenced) {
 		t.Fatalf("another epoch = %v", err)
 	}
 	log, err := c.PutArtifact(ctx, "log_tail", "text/plain", []byte("compiling\n"))
