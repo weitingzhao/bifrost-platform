@@ -185,7 +185,25 @@ func TestTargetsAreScrubbed(t *testing.T) {
 		`TOKEN=fixture"secret value"rest ./push`:         "TOKEN=<secret> ./push",
 		"rg x ; PASSWORD=+fixture-secret-value psql":     "rg x ; PASSWORD=<secret> psql",
 		"echo 'TOKEN=fixture-secret-value' && ls":        "echo 'TOKEN=<secret>' && ls",
-		"echo 'token: fixture secret value' > x.yaml":    "echo 'token=<secret>' > x.yaml",
+		"echo 'token: fixture secret value' > x.yaml":    "echo 'token: <secret>' > x.yaml",
+		// review 268 A1: only the search pattern argument is kept; $(…) and
+		// `…` are whole values; JSON escaped inside a shell argument
+		"TOKEN=+fixture-secret-value rg needle api":                    "TOKEN=<secret> rg needle api",
+		"rg --pre 'TOKEN=+fixture-secret-value ./filter' needle api":   "rg --pre 'TOKEN=<secret> ./filter' needle api",
+		"PASSWORD=$(printf 'fixture-secret-value') psql":               "PASSWORD=<secret> psql",
+		"PASSWORD=`printf 'fixture secret value'` psql":                "PASSWORD=<secret> psql",
+		"PASSWORD=$(printf \"%s\" \"$(cat 'fixture)')\") psql":         "PASSWORD=<secret> psql",
+		`curl -d "{\"token\":\"fixture\\\" secret value\"}" https://x`: `curl -d "{\"token\":\"<secret>\"}" https://x`,
+		// and other shapes: curl -u, sshpass -p, mysql -p…, a header, a JWT
+		"curl -u bot:fixture-secret-value https://x":                                   "curl -u <secret> https://x",
+		"sshpass -p fixture-secret-value ssh h":                                        "sshpass -p <secret> ssh h",
+		"mysql -pfixture-secret-value db":                                              "mysql -p<secret> db",
+		`curl -H "X-Api-Key: fixture secret value" https://x`:                          `curl -H "X-Api-Key: <secret>" https://x`,
+		"echo eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N": "echo <secret>",
+		"sort -u a.txt && docker run -p 8080:80 img && mysql -P 3306 -h db":            "sort -u a.txt && docker run -p 8080:80 img && mysql -P 3306 -h db",
+		// review 268 C3: git's own options before grep; a pattern with "token"
+		`git -C api grep -n '"token":"[^"]+"'`: `git -C api grep -n '"token":"[^"]+"'`,
+		"rg -n 'token validation failed' api":  "rg -n 'token validation failed' api",
 		// review 267 C5: a JSON pattern in a search
 		`rg -n '"token":"[^"]+"' api`: `rg -n '"token":"[^"]+"' api`,
 		`Grep "password":\s*".*" src`: `Grep "password":\s*".*" src`,
@@ -204,6 +222,9 @@ func TestCredentialsAreNotQueued(t *testing.T) {
 		"mysql --password 'fixture secret value' -e 1",
 		"printf '-----BEGIN OPENSSH PRIVATE KEY-----\\nfixture-secret-value\\n-----END OPENSSH PRIVATE KEY-----\\n' > k",
 		"PASSWORD=+fixture-secret-value psql",
+		"TOKEN=+fixture-secret-value rg needle api",
+		"PASSWORD=$(printf 'fixture-secret-value') psql",
+		`curl -d "{\"token\":\"fixture\\\" secret value\"}" https://x`,
 		`TOKEN="fixture\" secret value" ./push`,
 	} {
 		tail, write := tailOf(t, "exec:codex")
@@ -500,5 +521,20 @@ func TestLastActionsToAnOlderPlatform(t *testing.T) {
 	<-lastActionsReturns(t, context.Background(), d, l)
 	if f.count("heartbeat") != 2 || !l.noActions.Load() {
 		t.Fatalf("%d heartbeats, no actions %v", f.count("heartbeat"), l.noActions.Load())
+	}
+}
+
+// Masking stays linear on inputs built to make it walk far (review 268 6):
+// nested $( that never close, many commands, many names in quotes.
+func TestScrubIsBounded(t *testing.T) {
+	for _, s := range []string{strings.Repeat("$(", 30000), strings.Repeat("a;", 30000), strings.Repeat("'TOKEN=$('", 6000),
+		strings.Repeat("TOKEN=a;", 8000), strings.Repeat(`\"token\":\"`, 5000), strings.Repeat("rg 'token:.*|", 5000), strings.Repeat("\\", 60000)} {
+		done := make(chan struct{})
+		go func() { scrub(s); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("scrub of %d bytes %q… did not end in 5 s", len(s), s[:20])
+		}
 	}
 }
