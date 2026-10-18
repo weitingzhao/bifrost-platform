@@ -395,7 +395,16 @@ type PoolView struct {
 func ListPools(ctx context.Context, db DB) ([]PoolView, error) {
 	var out []PoolView
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		out = nil
+		var err error
+		out, err = listPools(ctx, tx)
+		return err
+	})
+	return out, err
+}
+
+func listPools(ctx context.Context, tx pgx.Tx) ([]PoolView, error) {
+	var out []PoolView
+	err := func() error {
 		var now time.Time
 		if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 			return err
@@ -454,6 +463,6 @@ func ListPools(ctx context.Context, db DB) ([]PoolView, error) {
 			}
 		}
 		return nil
-	})
+	}()
 	return out, err
 }

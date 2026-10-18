@@ -155,13 +155,24 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 			return err
 		}
 		mission, _ := m["mission_id"].(string)
-		snap, err := planSnapshot(ctx, tx, mission)
-		if err != nil {
-			return err
-		}
-		spec, err := briefSpec(from, kind, body, thread, snap)
-		if err != nil {
-			return err
+		var spec []byte
+		if fromController(from) {
+			// a scheduled brief or a nudge: the Owner's (briefdue.go)
+			text, data, cerr := controllerBrief(ctx, tx, body)
+			if cerr != nil {
+				return cerr
+			}
+			if spec, err = controllerSpec(text, data); err != nil {
+				return err
+			}
+		} else {
+			snap, serr := planSnapshot(ctx, tx, mission)
+			if serr != nil {
+				return serr
+			}
+			if spec, err = briefSpec(from, kind, body, thread, snap); err != nil {
+				return err
+			}
 		}
 		if len(spec) > maxArtifactBytes {
 			return mailError{"the brief would be larger than an artifact may be"}
@@ -366,6 +377,12 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 		var question, to string
 		err = tx.QueryRow(ctx, `SELECT message_id, from_actor_id FROM agentrt.message WHERE task_id = $1 AND to_actor_id = $2
 		  ORDER BY created_at LIMIT 1 FOR UPDATE`, taskID, Seat).Scan(&question, &to)
+		// The answer to a note of the controller's (a scheduled brief, a
+		// nudge) is the Owner's, as a note on his Chief page (2.4 slice ④).
+		kind := "answer"
+		if err == nil && fromController(to) {
+			to, kind = "owner", "note"
+		}
 		if errors.Is(err, pgx.ErrNoRows) {
 			if t.state == "submitted" && aerr == nil {
 				did = "blocked"
@@ -384,7 +401,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			return err
 		}
 		tell := func(why string) error {
-			_, err := answer(ctx, tx, to, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
+			_, err := answer(ctx, tx, to, kind, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
 			return err
 		}
 		switch {
@@ -420,7 +437,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			}
 			return moveTask(ctx, tx, "controller", t, "blocked", "the brief's report is empty")
 		}
-		id, err := answer(ctx, tx, to, t, text)
+		id, err := answer(ctx, tx, to, kind, t, text)
 		if err != nil {
 			return err
 		}
@@ -432,7 +449,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 
 // answer posts text from the seat to to, linked to the brief's task and
 // mission, cut to maxAnswerRunes and MaxMessageBody.
-func answer(ctx context.Context, tx pgx.Tx, to string, t taskRow, text string) (string, error) {
+func answer(ctx context.Context, tx pgx.Tx, to, kind string, t taskRow, text string) (string, error) {
 	const cut = "\n\n(The answer was longer; this is its beginning.)"
 	if utf8.RuneCountInString(text) > maxAnswerRunes {
 		text = string([]rune(text)[:maxAnswerRunes]) + cut
@@ -441,5 +458,5 @@ func answer(ctx context.Context, tx pgx.Tx, to string, t taskRow, text string) (
 		r := []rune(strings.TrimSuffix(text, cut))
 		text = string(r[:len(r)*9/10]) + cut
 	}
-	return postMessage(ctx, tx, Seat, to, "answer", []byte(text), t.mission, t.id)
+	return postMessage(ctx, tx, Seat, to, kind, []byte(text), t.mission, t.id)
 }

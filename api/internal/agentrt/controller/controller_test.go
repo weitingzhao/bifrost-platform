@@ -395,3 +395,36 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 		}
 	}
 }
+
+// W-31 2.4 slice ④: with Briefs the controller leaves the chief of staff the
+// brief of the slot due, and the same pass takes it into a brief; without
+// Briefs (tests, and any controller not wired for them) it leaves nothing.
+func TestAcceptLeavesTheScheduledBrief(t *testing.T) {
+	loc, err := time.LoadLocation(store.BriefZone)
+	must(t, err)
+	at := time.Date(2026, 10, 19, 8, 5, 0, 0, loc)
+	for _, on := range []bool{false, true} {
+		pool := setup(t)
+		c := &controller.Controller{DB: pool, Sources: (&world{}).sources(), Briefs: on, Now: func() time.Time { return at }}
+		if _, err := c.Accept(ctx); err != nil {
+			t.Fatal(err)
+		}
+		var notes, briefs int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE from_actor_id = 'controller' AND to_actor_id = $1`, store.Seat).Scan(&notes))
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE role = 'brief'`).Scan(&briefs))
+		want := 0
+		if on {
+			want = 1
+		}
+		if notes != want || briefs != want {
+			t.Fatalf("Briefs %v: %d notes, %d briefs", on, notes, briefs)
+		}
+		if _, err := c.Accept(ctx); err != nil {
+			t.Fatal(err)
+		}
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.message WHERE from_actor_id = 'controller' AND to_actor_id = $1`, store.Seat).Scan(&notes))
+		if notes != want {
+			t.Fatalf("Briefs %v: a second pass left %d notes", on, notes)
+		}
+	}
+}

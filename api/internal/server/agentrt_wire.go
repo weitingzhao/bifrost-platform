@@ -110,7 +110,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			}
 			return
 		}
-		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Logf: func(format string, args ...any) {
+		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Briefs: true, Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 		wait := c.Start(ctx)

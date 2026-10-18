@@ -48,6 +48,11 @@ type Controller struct {
 	LeaseEvery  time.Duration
 	FactsEvery  time.Duration
 	ReadTimeout time.Duration // per source read; zero means 10 seconds
+	// Briefs has the controller leave the chief of staff its scheduled briefs
+	// and nudges (W-31 2.4 slice ④); Now is the clock they read, time.Now
+	// when nil.
+	Briefs bool
+	Now    func() time.Time
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -201,6 +206,24 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 		}
 		if did != "" {
 			moved++
+		}
+	}
+	// The chief of staff's briefs at 8:00 and 21:00, and its nudges (W-31
+	// 2.4 slice ④): notes to the seat, made briefs below like any mail.
+	if c.Briefs {
+		now := time.Now()
+		if c.Now != nil {
+			now = c.Now()
+		}
+		if left, err := store.ScheduleBrief(ctx, c.DB, now); err != nil {
+			errs = append(errs, fmt.Errorf("scheduled brief: %w", err))
+		} else if left {
+			moved++
+		}
+		if n, err := store.Nudges(ctx, c.DB, now); err != nil {
+			errs = append(errs, fmt.Errorf("nudges: %w", err))
+		} else {
+			moved += n
 		}
 	}
 	// Mail to the chief of staff's seat becomes briefs, and the briefs'
