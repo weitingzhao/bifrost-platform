@@ -1,4 +1,5 @@
 import { Bar, Card, Dot, Stat } from './OwnerParts'
+import { OwnerQuota } from './OwnerQuota'
 import { ago, plural, type Tone } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
@@ -45,6 +46,7 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
         </ul>
       </Card>
     </div>
+    <OwnerQuota now={now} />
     <Card label="Nodes" title={nodeCount ? `Nodes · ${nodeCount.ready} of ${nodeCount.total} ready${nodeCount.standby ? `, ${nodeCount.standby} on standby` : ''}` : 'Nodes'} more={{ href: '#infrastructure', text: 'Infrastructure' }}>
       {data.nodesError && <p role="alert" className="m-0 text-sm">Nodes could not be read: {data.nodesError}</p>}
       {!data.nodesError && nodes.length === 0 && <p className="m-0 text-sm text-muted-foreground">No nodes reported yet.</p>}
