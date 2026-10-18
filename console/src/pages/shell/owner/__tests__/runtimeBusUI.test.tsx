@@ -12,6 +12,8 @@ vi.mock('@/api/core', async original => ({ ...await original<object>(),
 import { AttemptActionLine } from '../AttemptActionLine'
 import { OwnerStop } from '../OwnerStop'
 import { ChiefConversation } from '../ChiefConversation'
+import { appendDictated } from '../dictation'
+import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { AttemptActions } from '../../progress/AttemptActions'
 const at = '2026-10-18T07:20:01.123Z'
 const attempt = parseRuntimeProgress({ live: [{ attempt_id: 'a_1', task_id: 't_1', mission_id: 'M-1', host_id: 'host', executor: 'exec:codex' }] }).live[0]
@@ -194,5 +196,65 @@ describe('chief conversation', () => {
     mocks.thread.mockResolvedValue({ actor: 'owner', with: 'seat:chief_of_staff', messages: messages.slice(0, 1) })
     show(<ChiefConversation active />)
     expect(await screen.findByText('The chief of staff answers when the agent host is awake; usually within a few minutes.')).toBeInTheDocument()
+  })
+})
+
+describe('chief conversation on every device (Owner 2026-10-18)', () => {
+  const auth = (canAdmin: boolean): PlatformAuthContextValue => ({ token: canAdmin ? 'owner' : 'operator', caps: undefined, capsLoading: false,
+    capsError: false, canOperate: true, canAdmin, setToken: () => {}, signOut: () => {}, refreshCapabilities: () => {} })
+  const signedIn = (canAdmin: boolean) => <PlatformAuthContext.Provider value={auth(canAdmin)}><ChiefConversation active /></PlatformAuthContext.Provider>
+  afterEach(() => { delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition })
+  it('says a browser not signed in as the Owner sees no conversation, and reads nothing', async () => {
+    show(signedIn(false))
+    expect(screen.getByText(/not signed in with the Owner token/)).toBeInTheDocument()
+    await new Promise(r => setTimeout(r, 30))
+    expect(mocks.thread).not.toHaveBeenCalled()
+  })
+  it('reads nothing while the sign-in is still being read', async () => {
+    show(<PlatformAuthContext.Provider value={{ ...auth(true), capsLoading: true }}><ChiefConversation active /></PlatformAuthContext.Provider>)
+    await new Promise(r => setTimeout(r, 30))
+    expect(mocks.thread).not.toHaveBeenCalled()
+  })
+  it('reads the conversation when signed in as the Owner', async () => {
+    show(signedIn(true))
+    await waitFor(() => expect(mocks.thread).toHaveBeenCalled())
+    expect(screen.queryByText(/not signed in with the Owner token/)).not.toBeInTheDocument()
+  })
+  it('types at 16 px, so Safari on the iPhone does not zoom in', () => {
+    show(<ChiefConversation active />)
+    expect(screen.getByLabelText('Message')).toHaveClass('text-base')
+  })
+  it('dictates into the message, and stops', () => {
+    const made: { started: number; stopped: number; onresult: ((e: unknown) => void) | null; onend: (() => void) | null }[] = []
+    class FakeRecognition {
+      lang = ''; interimResults = true; continuous = false; onresult: ((e: unknown) => void) | null = null
+      onerror: ((e: unknown) => void) | null = null; onend: (() => void) | null = null
+      me = { started: 0, stopped: 0, onresult: null as ((e: unknown) => void) | null, onend: null as (() => void) | null }
+      constructor() { made.push(this.me) }
+      start() { this.me.started++; this.me.onresult = this.onresult; this.me.onend = this.onend }
+      stop() { this.me.stopped++; this.onend?.() }
+      abort() {}
+    }
+    ;(window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition = FakeRecognition
+    show(<ChiefConversation active />)
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: '现在' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Speak' }))
+    expect(made).toHaveLength(1); expect(made[0].started).toBe(1)
+    act(() => { made[0].onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '有哪些任务在跑' } }] }) })
+    expect(screen.getByLabelText('Message')).toHaveValue('现在有哪些任务在跑')
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictating' }))
+    expect(made[0].stopped).toBe(1)
+    expect(screen.getByRole('button', { name: 'Speak' })).toBeInTheDocument()
+  })
+  it('points to the keyboard microphone where the browser has no speech recognition', () => {
+    show(<ChiefConversation active />)
+    expect(screen.queryByRole('button', { name: 'Speak' })).not.toBeInTheDocument()
+    expect(screen.getByText(/microphone key on your keyboard/)).toBeInTheDocument()
+  })
+  it('joins dictated text with a space only between Latin words', () => {
+    expect(appendDictated('', ' 你好 ')).toBe('你好')
+    expect(appendDictated('你好', '世界')).toBe('你好世界')
+    expect(appendDictated('Hello', 'world')).toBe('Hello world')
+    expect(appendDictated('Hello', '  ')).toBe('Hello')
   })
 })

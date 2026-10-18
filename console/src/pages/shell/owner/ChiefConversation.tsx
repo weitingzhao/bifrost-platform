@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useContext, useEffect, useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
 import { ackMessages, fetchChiefThread, messageBytes, sendChiefMessage, type ChiefThread } from '@/api/agentRuntimeBus'
+import { PlatformAuthContext } from '@/hooks/platformAuthContext'
+import { appendDictated, useDictation } from './dictation'
 import { Card } from './OwnerParts'
 
 export function ChiefConversation({ active }: { active: boolean }) {
   const client = useQueryClient()
+  // The conversation is the Owner's: a browser signed in with another token (or none) reads nothing, every 5 s,
+  // and says so instead (Owner 2026-10-18: what he wrote on the phone was not on the tablet; each browser keeps its
+  // own sign-in). Without the auth provider (tests) nothing is held back.
+  const auth = useContext(PlatformAuthContext)
+  const notOwner = auth != null && !auth.capsLoading && !auth.canAdmin
+  const reading = active && (auth == null || (!auth.capsLoading && auth.canAdmin))
   const query = useQuery({ queryKey: ['agent-runtime-chief-thread'], queryFn: ({ signal }) => fetchChiefThread(signal),
-    enabled: active, refetchInterval: active ? AGENT_RUNTIME_POLL_MS : false, retry: false })
+    enabled: reading, refetchInterval: reading ? AGENT_RUNTIME_POLL_MS : false, retry: false })
   const [body, setBody] = useState('')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -38,6 +46,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
     })
   }, [active, messages, query.isError, query.data?.actor, query.dataUpdatedAt, client])
   const unread = (messages ?? []).some(m => m.to === 'owner' && !m.acked_at)
+  const dictation = useDictation(text => setBody(b => appendDictated(b, text)))
   const bytes = messageBytes(body)
   const lastAsk = messages?.reduce((last, m, i) => m.from === 'owner' && m.kind === 'ask' ? i : last, -1) ?? -1
   const waiting = lastAsk >= 0 && !messages?.slice(lastAsk + 1).some(m => m.from === 'seat:chief_of_staff' && m.kind === 'answer')
@@ -52,8 +61,9 @@ export function ChiefConversation({ active }: { active: boolean }) {
     finally { busy.current = false; setPending(false) }
   }
   return <Card label="Conversation" title="Talk to the chief of staff">
-    {query.isPending && <p>Reading conversation…</p>}
-    {query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}</p>}
+    {notOwner && <p role="status" className="[overflow-wrap:anywhere]">This browser is not signed in with the Owner token, so the conversation is not shown here. Each phone, tablet and computer keeps its own sign-in: sign in once on each (menu at the top right → Connect).</p>}
+    {reading && query.isPending && <p>Reading conversation…</p>}
+    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}</p>}
     <ol className="min-w-0 space-y-3">{messages?.map(m => <li key={m.message_id} className="min-w-0 rounded bg-[var(--control-fill)] p-3">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><strong>{m.from === 'owner' ? 'You' : 'Chief of staff'}</strong><time dateTime={m.created_at}>{new Date(m.created_at).toLocaleString()}</time></div>
       <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{m.body}</p>
@@ -61,9 +71,16 @@ export function ChiefConversation({ active }: { active: boolean }) {
     {waiting && <p className="text-sm text-muted-foreground">The chief of staff answers when the agent host is awake; usually within a few minutes.</p>}
     <form onSubmit={event => void send(event)} className="flex min-w-0 flex-col gap-2">
       <label htmlFor="chief-message">Message</label>
-      <textarea id="chief-message" value={body} onChange={event => setBody(event.target.value)} rows={4} className="min-w-0 w-full rounded border border-[var(--card-border)] bg-background p-2" />
+      {/* 16 px: below it Safari on the iPhone zooms in on focus and leaves the page wider than the screen. */}
+      <textarea id="chief-message" value={body} onChange={event => setBody(event.target.value)} rows={4} className="min-w-0 w-full rounded border border-[var(--card-border)] bg-background p-2 text-base" />
       <span className="text-xs" role={bytes > 8192 ? 'alert' : undefined}>{bytes} / 8192 bytes</span>
-      <Button type="submit" disabled={pending || !body.trim() || bytes > 8192}>Send</Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" disabled={pending || !body.trim() || bytes > 8192}>Send</Button>
+        {dictation.supported
+          ? <Button type="button" variant="outline" aria-pressed={dictation.listening} onClick={() => dictation.listening ? dictation.stop() : dictation.start()}>{dictation.listening ? 'Stop dictating' : 'Speak'}</Button>
+          : <span className="text-xs text-muted-foreground">To speak instead of typing, use the microphone key on your keyboard.</span>}
+      </div>
+      {dictation.error && <span role="alert" className="text-xs [overflow-wrap:anywhere]">{dictation.error}</span>}
     </form>
     {(error || (ackError && unread)) && <p role="alert" className="[overflow-wrap:anywhere]">{error || ackError}</p>}
   </Card>
