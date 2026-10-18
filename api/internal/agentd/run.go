@@ -69,9 +69,23 @@ type Daemon struct {
 	mu    sync.Mutex
 	live  map[string]bool
 	share hostShare
+	// Confined says which attempts may share the host (share.go); nil is
+	// confined, which today confines none.
+	Confined func(cl *Claimed, prep TaskSpec) bool
 	// afterLoad, in tests, runs between Recover's read of the registry and
 	// its choice of what to take over.
 	afterLoad func()
+}
+
+// failBefore ends an attempt that failed after it was registered and before
+// its executor was released, as exit with the error (review 278 B); an
+// agentd that is shutting down leaves the entry for Recover instead.
+func (d *Daemon) failBefore(ctx context.Context, e *Entry, err error) (Outcome, error) {
+	if ctx.Err() != nil {
+		return Outcome{}, err
+	}
+	d.logf("agentd: %s ends before its executor started: %v", e.AttemptID, err)
+	return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, e, "exit"))
 }
 
 // blockedBy says which attempt's process group holds the host, or nothing.
@@ -220,7 +234,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		}
 		wcancel()
 	})
-	release, err := d.share.take(wctx, !confined(cl, a.prepare()))
+	isConfined := confined
+	if d.Confined != nil {
+		isConfined = d.Confined
+	}
+	release, err := d.share.take(wctx, !isConfined(cl, a.prepare()))
 	close(watched)
 	wcancel()
 	switch {
@@ -234,49 +252,49 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	defer release()
 	if id, berr := d.Blocked(); berr != nil || id != "" {
-		return Outcome{}, errors.Join(berr, blockedBy(id))
+		return d.failBefore(ctx, &waiting, errors.Join(berr, blockedBy(id)))
 	}
 	var ws *Workspace
 	switch {
 	case repo != "" && base != "":
 		if ws, err = d.checkout(ctx, a, repo, base); err != nil {
-			return Outcome{}, err
+			return d.failBefore(ctx, &waiting, err)
 		}
 	default:
 		if _, err = os.Stat(a.Dir); err == nil {
-			return Outcome{}, ErrWorkspaceExists
+			return d.failBefore(ctx, &waiting, ErrWorkspaceExists)
 		}
 		if err = os.MkdirAll(a.Dir, 0o700); err != nil {
-			return Outcome{}, err
+			return d.failBefore(ctx, &waiting, err)
 		}
 	}
 	if err = os.MkdirAll(a.Out, 0o700); err != nil {
-		return Outcome{}, err
+		return d.failBefore(ctx, &waiting, err)
 	}
 	// Siblings and setup belong with a checkout: a task with none has nothing
 	// for them to sit beside or install into (setup.go).
 	prep := a.prepare()
 	if ws != nil {
 		if err = d.siblings(ctx, a, prep.Siblings); err != nil {
-			return Outcome{}, err
+			return d.failBefore(ctx, &waiting, err)
 		}
 	}
 	exec, ok := d.Executors[cl.Tool.Executor]
 	if !ok {
-		return Outcome{}, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor)
+		return d.failBefore(ctx, &waiting, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor))
 	}
 	sp, err := exec(a)
 	if err != nil {
-		return Outcome{}, err
+		return d.failBefore(ctx, &waiting, err)
 	}
 	if ws != nil && len(prep.Setup) > 0 {
 		if sp, err = withSetup(d.Self, a.Out, prep.Setup, sp); err != nil {
-			return Outcome{}, err
+			return d.failBefore(ctx, &waiting, err)
 		}
 	}
 	logf, err := os.OpenFile(filepath.Join(a.Out, "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return Outcome{}, err
+		return d.failBefore(ctx, &waiting, err)
 	}
 	defer func() { _ = logf.Close() }()
 	sp.Stdout, sp.Stderr = logf, logf

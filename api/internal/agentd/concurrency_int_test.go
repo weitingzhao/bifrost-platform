@@ -54,6 +54,9 @@ func TestTwoAttemptsAtOnceOnOneHost(t *testing.T) {
 	readyTask(t, tx)
 	readyTask(t, tx) // a third, that no third slot takes
 	d := daemon(t, base, script(`sleep 2; printf '# done\n' > "$OUT/report.md"`), "", nil)
+	// The machinery, with every attempt classed confined: by default none is
+	// yet (share.go, TD-371), and each would have the host to itself.
+	d.Confined = func(*agentd.Claimed, agentd.TaskSpec) bool { return true }
 	var cls []*agentd.Claimed
 	for i := 0; i < 2; i++ {
 		cl, err := d.Client.Claim(ctx, agentd.MaxSlots-i, []agentd.Tool{cursor})

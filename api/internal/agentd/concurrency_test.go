@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -156,28 +157,55 @@ func TestHostShare(t *testing.T) {
 }
 
 func TestConfined(t *testing.T) {
+	// No executor is confined until its whole process tree is held to its
+	// workspace and that is proven on the host (reviews 277 A2, 278 A2;
+	// TD-371): claude's tools and cursor's ask mode do not reach the hooks a
+	// configuration runs.
 	for _, c := range []struct {
 		executor, effect string
 		setup            bool
-		want             bool
 	}{
-		{"exec:claude", "none", false, true},
-		{"exec:codex", "branch", false, false},
-		{"exec:codex", "none", false, false},
-		{"exec:cursor", "none", false, true},
-		{"exec:cursor", "branch", false, false},
-		{"exec:deterministic", "none", false, false},
-		{"exec:codex", "branch", true, false},
-		{"exec:other", "none", false, false},
+		{"exec:claude", "none", false},
+		{"exec:cursor", "none", false},
+		{"exec:cursor", "branch", false},
+		{"exec:codex", "branch", false},
+		{"exec:codex", "none", false},
+		{"exec:deterministic", "none", false},
+		{"exec:codex", "branch", true},
+		{"exec:other", "none", false},
 	} {
 		spec := TaskSpec{}
 		if c.setup {
 			spec.Setup = [][]string{{"npm", "ci"}}
 		}
 		cl := &Claimed{Tool: Tool{Executor: c.executor}, EffectClass: c.effect}
-		if got := confined(cl, spec); got != c.want {
-			t.Errorf("%s %s setup=%v: confined = %v", c.executor, c.effect, c.setup, got)
+		if confined(cl, spec) {
+			t.Errorf("%s %s setup=%v is confined", c.executor, c.effect, c.setup)
 		}
+	}
+}
+
+// Review 278 B: an attempt that fails after it waited for the host and
+// before its executor is released is ended as exit, not left to be ended as a
+// restart.
+func TestAFailureBeforeTheLaunchEndsAsExit(t *testing.T) {
+	f := newFake()
+	d := fakeDaemon(t, f)
+	spec := []byte("# do it\n")
+	f.artifacts[ArtifactID(spec)] = spec
+	d.Executors = map[string]Executor{"exec:x": func(a *Attempt) (Spawn, error) { return Spawn{}, errors.New("no such tool here") }}
+	cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
+		Epoch: 1, Tool: Tool{Executor: "exec:x"}}
+	out, err := d.Run(bg, cl)
+	if err == nil || out.EndHow != "exit" {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	ended := f.sent("ended")
+	if len(ended) != 1 || !strings.Contains(string(ended[0]), `"end_how":"exit"`) {
+		t.Fatalf("ended %q", ended)
+	}
+	if _, ok := registered(t, d, "a1"); ok {
+		t.Fatal("the entry stays for a takeover")
 	}
 }
 

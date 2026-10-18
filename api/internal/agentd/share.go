@@ -6,32 +6,23 @@ import (
 )
 
 // How attempts share the host when several run at once (W-31 2.4 slice ③,
-// review 276 A2). They run as one user, with no wall between their
-// workspaces: an attempt whose processes may write outside its own workspace
-// (unconfined) could change another's checkout, or the path a sibling is
-// cloned to with the Gitea credentials, while that one is being prepared. So
-// an unconfined attempt has the host to itself, from before its checkout to
-// its end, and confined attempts run side by side. Confined: claude, whose
-// tools only read; cursor in ask mode (anything but a branch task: it writes
-// no file and runs only read-only commands). Unconfined: a task with setup
-// commands (they run unsandboxed), the deterministic executor (it runs the
-// repository's own checks), cursor on a branch task, codex (its sandbox lets
-// it write the workspace and the shared temporary directories, and the host
-// user's configuration can add writable roots: until those are pinned and
-// checked on the host, review 277 A2, TD-371), and any executor this does
-// not know.
-func confined(cl *Claimed, prep TaskSpec) bool {
-	if len(prep.Setup) > 0 {
-		return false
-	}
-	switch cl.Tool.Executor {
-	case "exec:claude":
-		return true
-	case "exec:cursor":
-		return cl.EffectClass != "branch"
-	}
-	return false
-}
+// reviews 276 A2, 277 A2, 278 A2). They run as one user, with no wall
+// between their workspaces: an attempt whose processes may write outside its
+// own workspace (unconfined) could change another's checkout, or the path a
+// sibling is cloned to with the Gitea credentials, while that one is being
+// prepared. So an unconfined attempt has the host to itself, from before its
+// checkout to its end, and only confined attempts run side by side.
+//
+// No executor is confined yet. codex's sandbox also writes the shared
+// temporary directories, and the host's configuration can add writable
+// roots; claude's read-only tools and cursor's ask mode do not reach the
+// hooks the user's or the repository's configuration may run (a command
+// hook runs as the user, whatever the tools allow); setup commands and the
+// deterministic executor run unsandboxed. Until an executor's whole process
+// tree is held to its workspace, and that is proven on the host, it runs
+// alone: TD-371. The machinery stays, and a Daemon may be given its own
+// classification (tests do).
+func confined(cl *Claimed, prep TaskSpec) bool { return false }
 
 // hostShare lets confined attempts hold the host together and an unconfined
 // one alone. An unconfined attempt that waits holds back the confined that
