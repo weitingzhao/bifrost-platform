@@ -239,6 +239,14 @@ func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exit
 	if epoch == 0 {
 		delete(body, "lease_epoch")
 	}
+	var dropped string
+	if !m.empty() {
+		// a report that cannot even be encoded is left out, never the ending
+		// (review 274 A1)
+		if _, merr := json.Marshal(map[string]any{"usage": m.Usage, "pools": m.Pools}); merr != nil {
+			dropped, m = "usage not sent: "+oneLine(merr.Error(), 200), Measured{}
+		}
+	}
 	if m.Usage != nil {
 		body["usage"] = m.Usage
 	}
@@ -258,6 +266,9 @@ func (c *Client) Computed(ctx context.Context, attempt string, epoch int64, exit
 		if _, err = c.post(ctx, path, body, &out); err == nil {
 			out.Refused = UsageUnsupported + ": " + oneLine(first.Error(), 200)
 		}
+	}
+	if dropped != "" && err == nil {
+		out.Refused = dropped
 	}
 	return out.Refused, err
 }

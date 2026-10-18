@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -84,13 +85,16 @@ func toolOf(executor string) string { return strings.TrimPrefix(executor, "exec:
 // vendor's pools, a fraction outside 0..1, a reset that is not believable.
 func checkPoolReport(executor string, u *Usage, rs []PoolReading) error {
 	tool := toolOf(executor)
+	// Every vendor login on a host is the Owner's today, and a host states no
+	// account of its own: a report names the Owner's pools of its own tool
+	// alone (review 274 A4).
 	mine := func(id string) error {
-		t, _, _, ok := ParsePool(id)
+		t, account, _, ok := ParsePool(id)
 		if !ok {
 			return invalid("%q is not a pool (tool:account:window)", id)
 		}
-		if t != tool {
-			return invalid("%s reports on pool %s of another tool", executor, id)
+		if t != tool || account != DefaultAccount {
+			return invalid("%s reports on pool %s, not one of its own tool's under the %s account", executor, id, DefaultAccount)
 		}
 		return nil
 	}
@@ -131,19 +135,25 @@ func checkReading(r PoolReading) error {
 // cooldownUntil is how long a reading cools its pool: a refusal until the
 // reset it named (or unknownResetCooldown), a full window until its reset;
 // otherwise not at all (zero).
+//
+// A reset already past cools nothing: the window has come round (a refusal
+// handed over after its reset, review 274 B6). A reset further ahead than
+// maxReset is not believed, and the refusal counts as one that named none.
 func cooldownUntil(r PoolReading, now time.Time) time.Time {
-	reset := time.Time{}
-	if r.ResetsAt != nil && r.ResetsAt.After(now) && r.ResetsAt.Sub(now) <= maxReset {
-		reset = *r.ResetsAt
-	}
 	full := r.UsedFraction != nil && *r.UsedFraction >= 1
-	switch {
-	case (r.Limited || full) && !reset.IsZero():
-		return reset
-	case r.Limited:
-		return now.Add(unknownResetCooldown)
+	if !r.Limited && !full {
+		return time.Time{}
 	}
-	return time.Time{}
+	switch {
+	case r.ResetsAt == nil || r.ResetsAt.Sub(now) > maxReset:
+		if r.Limited {
+			return now.Add(unknownResetCooldown)
+		}
+		return time.Time{}
+	case !r.ResetsAt.After(now):
+		return time.Time{}
+	}
+	return *r.ResetsAt
 }
 
 // chargeAttempt writes what the attempt used to the ledger: its wall time, and
@@ -185,6 +195,26 @@ func chargeAttempt(ctx context.Context, tx pgx.Tx, actor string, a attemptRow, w
 	for _, r := range rows {
 		if _, err := tx.Exec(ctx, `INSERT INTO agentrt.budget_ledger (attempt_id, vendor_pool_id, unit, amount, measured)
 		  VALUES ($1,$2,$3,$4,$5)`, a.id, pool, r[0], r[1], r[2]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// poolLock is the lock of each pool, keyed by its name: every write of a
+// pool's row or stream takes the locks of all the pools it touches first, in
+// name order, so a computed and the Owner's reading never wait on each other
+// in turn (review 274 B5).
+const poolLock = 742110
+
+func lockPools(ctx context.Context, tx pgx.Tx, ids ...string) error {
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	for i, id := range sorted {
+		if id == "" || i > 0 && id == sorted[i-1] {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1, hashtext($2))`, poolLock, id); err != nil {
 			return err
 		}
 	}
@@ -244,7 +274,7 @@ func measurePools(ctx context.Context, tx pgx.Tx, actor, source string, rs []Poo
 			if err := SetCooldown(ctx, tx, actor, r.Pool, tool, window, until, poolReason(source, r)); err != nil {
 				return err
 			}
-		case until.IsZero() && source == "owner" && inForce:
+		case until.IsZero() && source == "owner" && inForce && r.UsedFraction != nil && *r.UsedFraction < 1:
 			if err := SetCooldown(ctx, tx, actor, r.Pool, tool, window, now, "the Owner's reading says the pool has quota left"); err != nil {
 				return err
 			}
@@ -279,6 +309,8 @@ func RecordOwnerReading(ctx context.Context, db DB, w Writer, key string, r Pool
 		return nil, invalid("the Owner's reading is a used fraction and a reset, not a refusal")
 	case *r.UsedFraction >= 1 && r.ResetsAt == nil:
 		return nil, invalid("a spent pool's reading says when it resets")
+	case r.ResetsAt != nil && (!r.ResetsAt.After(time.Now()) || time.Until(*r.ResetsAt) > maxReset):
+		return nil, invalid("the reset is not ahead and within %d days", int(maxReset.Hours()/24))
 	}
 	if _, _, _, ok := ParsePool(r.Pool); !ok {
 		return nil, invalid("%q is not a pool (tool:account:window)", r.Pool)
@@ -296,6 +328,9 @@ func RecordOwnerReading(ctx context.Context, db DB, w Writer, key string, r Pool
 		}
 		if w.Actor != "owner" {
 			return nil, invalid("only the Owner reads a pool by hand")
+		}
+		if err := lockPools(ctx, tx, r.Pool); err != nil {
+			return nil, err
 		}
 		if err := measurePools(ctx, tx, w.Actor, "owner", []PoolReading{r}); err != nil {
 			return nil, err
@@ -331,7 +366,7 @@ func notCooling(ctx context.Context, tx pgx.Tx, tools []Tool) ([]Tool, error) {
 	}
 	out := tools[:0:0]
 	for _, tl := range tools {
-		if !cool[toolOf(tl.Executor)+":"+tl.account()] {
+		if !cool[toolOf(tl.Executor)+":"+DefaultAccount] {
 			out = append(out, tl)
 		}
 	}

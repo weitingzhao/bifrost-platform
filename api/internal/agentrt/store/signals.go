@@ -159,6 +159,9 @@ func ClearControl(ctx context.Context, tx pgx.Tx, actor, controlID string) error
 // SetCooldown records that a vendor pool is cooling down until a time, and
 // creates the pool row on first use.
 func SetCooldown(ctx context.Context, tx pgx.Tx, actor, poolID, tool, window string, until time.Time, reason string) error {
+	if err := lockPools(ctx, tx, poolID); err != nil {
+		return err
+	}
 	until = until.UTC().Truncate(time.Microsecond)
 	ev, err := Append(ctx, tx, Event{Stream: "pool:" + poolID, Type: "pool_cooldown_set", Actor: actor,
 		Body: map[string]any{"vendor_pool_id": poolID, "until": until.Format(timeLayout), "reason": reason}})

@@ -357,6 +357,16 @@ func ComputedWith(ctx context.Context, db DB, f Fence, e Ending) (map[string]any
 			e.Usage, e.Pools = nil, nil
 			out["usage_refused"] = rerr.Error()
 		}
+		var pools []string
+		if e.Usage != nil {
+			pools = append(pools, e.Usage.Pool)
+		}
+		for _, r := range e.Pools {
+			pools = append(pools, r.Pool)
+		}
+		if err = lockPools(ctx, tx, pools...); err != nil {
+			return nil, err
+		}
 		if err = attemptEvent(ctx, tx, hostActor(f.HostID), a, "attempt_computed", body); err != nil {
 			return nil, err
 		}

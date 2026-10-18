@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func writeLog(t *testing.T, lines ...string) string {
@@ -190,5 +192,111 @@ func TestComputedToAnOlderPlatform(t *testing.T) {
 	if refused, err = c.Computed(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, &exit, "exit", "done",
 		Measured{Usage: &Usage{Tokens: &tokens}}); err != nil || !strings.Contains(refused, "pool readings") {
 		t.Fatalf("platform refusal: %q %v", refused, err)
+	}
+}
+
+// Review 274 A1: a reset in milliseconds is read as such; one that is neither
+// seconds nor milliseconds is no reset; and a report that cannot be encoded
+// is left out of computed, which is sent all the same.
+func TestResetUnitsAndAnUnencodableReport(t *testing.T) {
+	out := writeLog(t, `{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":1792880000000,"rateLimitType":"five_hour"}}`,
+		`{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":99999999999999999,"rateLimitType":"seven_day"}}`)
+	m := measureClaude(filepath.Join(out, "log.txt"))
+	if len(m.Pools) != 2 || m.Pools[0].ResetsAt == nil || m.Pools[0].ResetsAt.Unix() != 1792880000 || m.Pools[1].ResetsAt != nil {
+		t.Fatalf("pools = %+v", m.Pools)
+	}
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		_, _ = w.Write([]byte(`{"computed":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{Base: srv.URL, Host: "h1", Token: "fixture-agentd"}
+	beyond := time.Date(10000, 1, 1, 0, 0, 0, 0, time.UTC)
+	exit := 0
+	refused, err := c.Computed(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, &exit, "exit", "done",
+		Measured{Pools: []PoolReading{{Pool: "claude:owner:short", Limited: true, ResetsAt: &beyond}}})
+	if err != nil || !strings.HasPrefix(refused, "usage not sent") || len(bodies) != 1 || bodies[0]["pools"] != nil {
+		t.Fatalf("refused %q, err %v, requests %v", refused, err, bodies)
+	}
+}
+
+// Review 274 A3: what the executor may leave in place of a file it reads is
+// never waited on, followed out, or read past its bound.
+func TestMeasureOpensOnlyRegularFiles(t *testing.T) {
+	const thread = "01a15031-53fc-7183-bce4-1bc9fbf576fb"
+	home := t.TempDir()
+	day := filepath.Join(home, "sessions", "2026", "10", "18")
+	if err := os.MkdirAll(day, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	session := filepath.Join(day, "rollout-x-"+thread+".jsonl")
+	if err := syscall.Mkfifo(session, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan []PoolReading, 1)
+	go func() { done <- codexLimits(home, thread) }()
+	select {
+	case r := <-done:
+		if r != nil {
+			t.Fatalf("a FIFO read as %+v", r)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("reading a FIFO session file waits")
+	}
+	// a session file that links out of the sessions directory
+	_ = os.Remove(session)
+	outside := filepath.Join(t.TempDir(), "elsewhere.jsonl")
+	if err := os.WriteFile(outside, []byte(`{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"primary":{"used_percent":50,"window_minutes":10080,"resets_at":1792874442}}}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, session); err != nil {
+		t.Fatal(err)
+	}
+	if r := codexLimits(home, thread); r != nil {
+		t.Fatalf("a link out of the sessions directory read as %+v", r)
+	}
+	// the executor's log replaced by a FIFO, or by a link
+	dir := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(dir, "log.txt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mdone := make(chan Measured, 1)
+	go func() { mdone <- measure("exec:cursor", dir) }()
+	select {
+	case m := <-mdone:
+		if !m.empty() {
+			t.Fatalf("a FIFO log measured %+v", m)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("measuring a FIFO log waits")
+	}
+	if err := streamResultReport("cursor", filepath.Join(dir, "log.txt"), filepath.Join(dir, "report.md")); err == nil {
+		t.Fatal("a FIFO log gave a report")
+	}
+	linked := t.TempDir()
+	real := writeLog(t, `{"type":"result","is_error":false,"result":"ok","usage":{"inputTokens":5,"outputTokens":5}}`)
+	if err := os.Symlink(filepath.Join(real, "log.txt"), filepath.Join(linked, "log.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if m := measure("exec:cursor", linked); !m.empty() {
+		t.Fatalf("a linked log measured %+v", m)
+	}
+}
+
+// Review 274 B8: cursor's refusal is its own line on a run that did not
+// succeed; a line quoting the words, before a successful result, is not.
+func TestCursorQuotingTheRefusalIsNoRefusal(t *testing.T) {
+	out := writeLog(t, `warning: fixture example says You've hit your usage limit; continuing normally`,
+		`ActionRequiredError: You've hit your usage limit Get Cursor Pro for more Agent usage, unlimited Tab, and more.`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"done","usage":{"inputTokens":1,"outputTokens":1}}`)
+	if m := measureCursor(filepath.Join(out, "log.txt")); len(m.Pools) != 0 {
+		t.Fatalf("a successful run read as refused: %+v", m.Pools)
+	}
+	out = writeLog(t, `warning: fixture example says You've hit your usage limit; continuing normally`)
+	if m := measureCursor(filepath.Join(out, "log.txt")); len(m.Pools) != 0 {
+		t.Fatalf("a quoting line read as refused: %+v", m.Pools)
 	}
 }

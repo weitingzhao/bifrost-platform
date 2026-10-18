@@ -176,7 +176,7 @@ func claudeExecutor(env []string) Executor {
 // result event) as the report. The output is read a line at a time and a
 // line over maxBody is skipped, never held (review 164 B1).
 func streamResultReport(vendor, logPath, reportPath string) error {
-	f, err := os.Open(logPath)
+	f, err := openRegular(logPath, maxMeasured) // never waits on what the executor left in its place (review 274 A3)
 	if err != nil {
 		return err
 	}

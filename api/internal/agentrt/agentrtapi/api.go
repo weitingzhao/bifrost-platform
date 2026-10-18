@@ -7,6 +7,7 @@
 package agentrtapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -241,7 +242,6 @@ type tool struct {
 	Executor string `json:"executor"`
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
-	Account  string `json:"account,omitempty"` // the vendor account its quota pools are named after (2.4 slice ①)
 }
 
 type claimRequest struct {
@@ -263,13 +263,7 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "bad_request", "every tool names its executor and its model provider")
 			return
 		}
-		if t.Account != "" {
-			if _, _, _, ok := store.ParsePool("x:" + t.Account + ":short"); !ok {
-				writeError(w, http.StatusBadRequest, "bad_request", "an account is lower-case letters, digits and dashes")
-				return
-			}
-		}
-		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model, Account: t.Account})
+		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
 	}
 	// The first valid claim of a token registers the host it is bound to.
 	if err := store.RegisterAgentdHost(r.Context(), a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
@@ -334,9 +328,37 @@ type attemptBody struct {
 	// parse never fail a heartbeat (review 264 A1).
 	Actions json.RawMessage `json:"actions"`
 	// An ending may carry what the attempt used and what its vendor said
-	// about its pools (2.4 slice ①); only computed takes them.
-	Usage *store.Usage        `json:"usage"`
-	Pools []store.PoolReading `json:"pools"`
+	// about its pools (2.4 slice ①); only computed takes them. They stay raw
+	// until then: a report that does not parse never fails the ending
+	// (review 274 A2).
+	Usage json.RawMessage `json:"usage"`
+	Pools json.RawMessage `json:"pools"`
+}
+
+func present(raw json.RawMessage) bool { return len(raw) > 0 && string(raw) != "null" }
+
+// usageReport parses an ending's usage and pool readings, strictly; what does
+// not parse is dropped with the reason.
+func usageReport(b attemptBody) (*store.Usage, []store.PoolReading, string) {
+	var u *store.Usage
+	var pools []store.PoolReading
+	strict := func(raw json.RawMessage, v any) error {
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		return dec.Decode(v)
+	}
+	if present(b.Usage) {
+		u = &store.Usage{}
+		if err := strict(b.Usage, u); err != nil {
+			return nil, nil, "usage: " + err.Error()
+		}
+	}
+	if present(b.Pools) {
+		if err := strict(b.Pools, &pools); err != nil {
+			return nil, nil, "pools: " + err.Error()
+		}
+	}
+	return u, pools, ""
 }
 
 func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
@@ -349,7 +371,7 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
 		return
 	}
-	if action != "computed" && (b.Usage != nil || len(b.Pools) > 0) {
+	if action != "computed" && (present(b.Usage) || present(b.Pools)) {
 		writeError(w, http.StatusBadRequest, "bad_request", "only computed carries usage and pool readings")
 		return
 	}
@@ -372,8 +394,11 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	case "checkpoint":
 		out, err = store.Checkpoint(ctx, a.DB, f, b.CheckpointSeq, b.Artifacts, b.TooLarge)
 	case "computed":
-		out, err = store.ComputedWith(ctx, a.DB, f, store.Ending{ExitCode: b.ExitCode, EndHow: b.EndHow, Conclusion: b.Conclusion,
-			Usage: b.Usage, Pools: b.Pools})
+		u, pools, refused := usageReport(b)
+		if out, err = store.ComputedWith(ctx, a.DB, f, store.Ending{ExitCode: b.ExitCode, EndHow: b.EndHow, Conclusion: b.Conclusion,
+			Usage: u, Pools: pools}); err == nil && refused != "" {
+			out["usage_refused"] = refused
+		}
 	case "persist":
 		out, err = store.Persist(ctx, a.DB, f, res, a.Head)
 	case "submit":

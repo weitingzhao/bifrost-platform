@@ -16,14 +16,6 @@ type Tool struct {
 	Executor string // actor id, e.g. exec:codex
 	Provider string // model provider; required, independence is checked on it
 	Model    string // may be empty until the executor starts
-	Account  string // the vendor account its quota pools are named after; DefaultAccount when the host names none
-}
-
-func (t Tool) account() string {
-	if t.Account == "" {
-		return DefaultAccount
-	}
-	return t.Account
 }
 
 // ClaimRequest is a host's poll for work.
@@ -114,7 +106,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 		if err != nil || stop {
 			return err
 		}
-		// A tool whose vendor account has a pool cooling down takes nothing
+		// A tool whose vendor account (the Owner's) has a pool cooling down takes nothing
 		// until it is over (2.4 slice ①).
 		if r.Tools, err = notCooling(ctx, tx, r.Tools); err != nil || len(r.Tools) == 0 {
 			return err

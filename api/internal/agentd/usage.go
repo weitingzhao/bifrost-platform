@@ -2,11 +2,14 @@ package agentd
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -65,8 +68,38 @@ func measure(executor, outDir string) Measured {
 	return Measured{}
 }
 
+// maxMeasured bounds what measure reads of one file; past it only the end is
+// read (the last turns and the result).
+const maxMeasured = 64 << 20
+
+// openRegular opens a regular file for reading and nothing else: not through
+// a symbolic link, and without waiting on a FIFO or a device the executor may
+// have left in its place (review 274 A3). A file over max is read from its
+// last max bytes on.
+func openRegular(path string, max int64) (io.ReadCloser, error) {
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	st, err := f.Stat()
+	if err != nil || !st.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("agentd: %s is not a regular file", path)
+	}
+	if st.Size() > max {
+		if _, err = f.Seek(st.Size()-max, io.SeekStart); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+	}
+	return struct {
+		io.Reader
+		io.Closer
+	}{io.LimitReader(f, max), f}, nil
+}
+
 func eachJSON(logPath string, fn func(line []byte, ev map[string]any)) bool {
-	f, err := os.Open(logPath)
+	f, err := openRegular(logPath, maxMeasured)
 	if err != nil {
 		return false
 	}
@@ -93,6 +126,23 @@ func sumOf(m map[string]any, keys ...string) int64 {
 		}
 	}
 	return int64(n)
+}
+
+// unixTime is a reset the vendor gave in Unix seconds or milliseconds, or nil
+// when it is neither (review 274 A1: a millisecond value read as seconds is
+// past year 9999, and cannot even be sent).
+func unixTime(v any) *time.Time {
+	n, ok := num(v)
+	switch {
+	case !ok:
+		return nil
+	case n >= 1e12 && n < 1e13:
+		n /= 1000
+	case n < 1e9 || n >= 1e10:
+		return nil
+	}
+	t := time.Unix(int64(n), 0).UTC()
+	return &t
 }
 
 // windowOf is the kind of a window by its length in minutes.
@@ -199,6 +249,14 @@ func codexLimits(home, thread string) []PoolReading {
 	if len(files) != 1 {
 		return nil
 	}
+	// inside the sessions directory, whatever links lead there (review 274 A3)
+	root, err := filepath.EvalSymlinks(filepath.Join(home, "sessions"))
+	if err != nil {
+		return nil
+	}
+	if real, err := filepath.EvalSymlinks(files[0]); err != nil || !strings.HasPrefix(real, root+string(filepath.Separator)) {
+		return nil
+	}
 	var last map[string]any
 	eachJSON(files[0], func(_ []byte, ev map[string]any) {
 		if rl := obj(obj(ev["payload"])["rate_limits"]); rl != nil {
@@ -226,10 +284,7 @@ func codexLimits(home, thread string) []PoolReading {
 			r.UsedFraction = &f
 			r.Limited = reached && pct >= 100
 		}
-		if at, ok := num(w["resets_at"]); ok && at > 0 {
-			t := time.Unix(int64(at), 0).UTC()
-			r.ResetsAt = &t
-		}
+		r.ResetsAt = unixTime(w["resets_at"])
 		out = append(out, r)
 	}
 	return out
@@ -237,19 +292,27 @@ func codexLimits(home, thread string) []PoolReading {
 
 // measureCursor: cursor-agent's result event carries usage (inputTokens,
 // outputTokens, cacheReadTokens, cacheWriteTokens; measured 10-12). Out of
-// quota it writes "You've hit your usage limit" to stderr, names no reset and
-// exits 1 with no result (measured 10-18).
+// quota it writes "ActionRequiredError: You've hit your usage limit …" to
+// stderr, names no reset and exits 1 with no result (measured 10-18). Only
+// that line is a refusal, and not when a result says the run succeeded: a
+// line that quotes the words is not (review 274 B8).
+var cursorRefusal = regexp.MustCompile(`^ActionRequiredError: You've hit your usage limit`)
+
 func measureCursor(logPath string) Measured {
 	var m Measured
 	var refusal string
+	succeeded := false
 	if !eachJSON(logPath, func(line []byte, ev map[string]any) {
 		if ev == nil {
-			if s := string(line); usageLimit.MatchString(s) {
+			if s := strings.TrimSpace(string(line)); cursorRefusal.MatchString(s) {
 				refusal = s
 			}
 			return
 		}
 		if ev["type"] == "result" {
+			if failed, _ := ev["is_error"].(bool); !failed {
+				succeeded = true
+			}
 			if u := obj(ev["usage"]); u != nil {
 				n := sumOf(u, "inputTokens", "outputTokens", "cacheWriteTokens")
 				m.Usage = &Usage{Pool: pool("cursor", "monthly"), Tokens: &n}
@@ -258,7 +321,7 @@ func measureCursor(logPath string) Measured {
 	}) {
 		return Measured{}
 	}
-	if refusal != "" {
+	if refusal != "" && !succeeded {
 		m.Pools = []PoolReading{{Pool: pool("cursor", "monthly"), Limited: true, Text: refusalText(refusal)}}
 	}
 	return m
@@ -322,10 +385,7 @@ func measureClaude(logPath string) Measured {
 			if u, ok := num(info["utilization"]); ok && u <= 1 {
 				r.UsedFraction = &u
 			}
-			if at, ok := num(info["resetsAt"]); ok && at > 0 {
-				t := time.Unix(int64(at), 0).UTC()
-				r.ResetsAt = &t
-			}
+			r.ResetsAt = unixTime(info["resetsAt"])
 			r.Limited = info["status"] == "rejected"
 			readings[window] = r
 		}
@@ -350,9 +410,8 @@ func measureClaude(logPath string) Measured {
 				r.Pool = pool("claude", "weekly")
 			}
 			if s := claudeEpoch.FindStringSubmatch(refusal); s != nil {
-				if n, err := strconv.ParseInt(s[1], 10, 64); err == nil {
-					t := time.Unix(n, 0).UTC()
-					r.ResetsAt = &t
+				if n, err := strconv.ParseFloat(s[1], 64); err == nil {
+					r.ResetsAt = unixTime(n)
 				}
 			}
 			m.Pools = append(m.Pools, r)

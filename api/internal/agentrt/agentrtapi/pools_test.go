@@ -1,6 +1,7 @@
 package agentrtapi_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -13,7 +14,9 @@ import (
 func TestPools(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
-	call2 := func(caller, method, path string, body any) (int, map[string]any) { return call(t, s, caller, method, path, body) }
+	call2 := func(caller, method, path string, body any) (int, map[string]any) {
+		return call(t, s, caller, method, path, body)
+	}
 	attempt, fence := claimOne(t, s, call2)
 	usage := map[string]any{"pool": "cursor:owner:monthly", "tokens": 77}
 	refusal := []any{map[string]any{"pool": "cursor:owner:monthly", "limited": true, "text": "You've hit your usage limit"}}
@@ -51,5 +54,31 @@ func TestPools(t *testing.T) {
 	if code, out := call2("admin", "POST", "pools/not-a-pool/reading", map[string]any{"idempotency_key": "r-2", "used_fraction": 0.2}); code != http.StatusUnprocessableEntity ||
 		!strings.Contains(out["message"].(string), "not a pool") {
 		t.Fatalf("a reading of no pool: %d %v", code, out)
+	}
+}
+
+// Review 274 A2: a report that does not even parse (a number past int64, a
+// field it does not know, a time that is not one) is dropped; the ending is
+// not refused.
+func TestComputedWithAReportThatDoesNotParse(t *testing.T) {
+	for name, extra := range map[string]map[string]any{
+		"tokens past int64":  {"usage": json.RawMessage(`{"pool":"cursor:owner:monthly","tokens":9223372036854775808}`)},
+		"an unknown field":   {"usage": json.RawMessage(`{"pool":"cursor:owner:monthly","seconds":3}`)},
+		"a time that is not": {"pools": json.RawMessage(`[{"pool":"cursor:owner:monthly","resets_at":"soon"}]`)},
+	} {
+		pool, _ := world(t)
+		s := server(t, pool)
+		call2 := func(caller, method, path string, body any) (int, map[string]any) {
+			return call(t, s, caller, method, path, body)
+		}
+		attempt, fence := claimOne(t, s, call2)
+		body := fence(map[string]any{"exit_code": 0, "end_how": "exit", "conclusion": "done"})
+		for k, v := range extra {
+			body[k] = v
+		}
+		code, out := call2("agentd:h1", "POST", "attempts/"+attempt+"/computed", body)
+		if code != http.StatusOK || out["computed"] != true || out["usage_refused"] == nil {
+			t.Fatalf("%s: %d %v", name, code, out)
+		}
 	}
 }
