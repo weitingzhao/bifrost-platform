@@ -1,10 +1,16 @@
 package agentrtapi_test
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
@@ -171,5 +177,90 @@ func TestMessages(t *testing.T) {
 	// A thread reads its own inbox by its session header.
 	if code, out := c("reporter", "GET", "messages", nil, "X-Bifrost-Session", "local_fixture-1"); code != http.StatusOK || out["actor"] != "thread:local_fixture-1" {
 		t.Fatalf("a thread's inbox: %d %v", code, out)
+	}
+}
+
+// Actions that do not parse never fail the heartbeat: the lease is renewed
+// and the answer says why none were kept (review 264 A1).
+func TestHeartbeatRenewsWhateverTheActions(t *testing.T) {
+	rdb, prefix := agentrttest.Redis(t)
+	actionStore = &actions.Store{Redis: rdb, Prefix: prefix}
+	t.Cleanup(func() { actionStore = nil })
+	pool, _ := world(t)
+	s := server(t, pool)
+	c := func(caller, method, path string, body any) (int, map[string]any) {
+		return call(t, s, caller, method, path, body)
+	}
+	attempt, fence := claimOne(t, s, c)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for name, acts := range map[string]any{
+		"a time that is not one": []any{map[string]any{"kind": "read", "target": "a.go", "at": "not-a-time"}},
+		"an unknown field":       []any{map[string]any{"kind": "read", "target": "a.go", "at": now, "thought": "x"}},
+		"a code as text":         []any{map[string]any{"kind": "result", "target": "ls", "at": now, "code": "0"}},
+		"not a list":             map[string]any{"kind": "read"},
+	} {
+		code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
+		if code != http.StatusOK || out["lease_expires_at"] == nil || !strings.Contains(fmt.Sprint(out["actions_refused"]), "not a list of actions") {
+			t.Errorf("%s: %d %v", name, code, out)
+		}
+	}
+	if code, out := c("viewer", "GET", "attempts/"+attempt+"/actions?after=abc", nil); code != http.StatusBadRequest {
+		t.Errorf("a cursor that is not a stream id (review 264 C6): %d %v", code, out)
+	}
+}
+
+// A Redis that answers nothing costs a heartbeat at most its 2-second budget
+// (review 264 A2): the action store's client honours the request's deadline.
+func TestHeartbeatWithASilentRedis(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	must(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = conn.Close() }) // accept, never answer
+		}
+	}()
+	rdb := redis.NewClient(&redis.Options{Addr: ln.Addr().String(), ContextTimeoutEnabled: true})
+	t.Cleanup(func() { _ = rdb.Close() })
+	actionStore = &actions.Store{Redis: rdb, Prefix: "agrt-test-silent:"}
+	t.Cleanup(func() { actionStore = nil })
+	pool, _ := world(t)
+	s := server(t, pool)
+	c := func(caller, method, path string, body any) (int, map[string]any) {
+		return call(t, s, caller, method, path, body)
+	}
+	attempt, fence := claimOne(t, s, c)
+	acts := []any{map[string]any{"kind": "read", "target": "a.go", "at": time.Now().UTC().Format(time.RFC3339Nano)}}
+	start := time.Now()
+	code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(map[string]any{"actions": acts}))
+	if took := time.Since(start); code != http.StatusOK || out["lease_expires_at"] == nil || took > 3500*time.Millisecond {
+		t.Fatalf("a heartbeat against a silent Redis: %d %v after %v", code, out, took)
+	}
+	if !strings.Contains(fmt.Sprint(out["actions_refused"]), "not kept") {
+		t.Fatalf("the answer does not say the actions were not kept: %v", out)
+	}
+}
+
+// blockingDB never answers: the long poll's wait bounds the database too
+// (review 264 B5).
+type blockingDB struct{}
+
+func (blockingDB) Ready() bool { return true }
+
+func (blockingDB) BeginTx(ctx context.Context, _ pgx.TxOptions) (pgx.Tx, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestLongPollEndsWithItsWait(t *testing.T) {
+	s := server(t, blockingDB{})
+	start := time.Now()
+	code, out := call(t, s, "admin", "GET", "messages?wait=1", nil)
+	if took := time.Since(start); code != http.StatusOK || len(out["messages"].([]any)) != 0 || took > 2500*time.Millisecond {
+		t.Fatalf("a long poll on a database that does not answer: %d %v after %v", code, out, took)
 	}
 }

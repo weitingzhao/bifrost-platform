@@ -71,6 +71,8 @@ func init() {
 		"POST /api/v1/agentrt/missions",
 		"POST /api/v1/agentrt/missions/{id}/tasks",
 		"POST /api/v1/agentrt/goals",
+		"POST /api/v1/agentrt/messages",
+		"POST /api/v1/agentrt/messages/ack",
 		"POST /api/v1/agentrt/controls",
 		"DELETE /api/v1/agentrt/controls/{id}",
 		"POST /api/v1/agentrt/hosts/{id}/drain",

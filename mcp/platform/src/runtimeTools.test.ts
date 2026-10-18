@@ -221,7 +221,7 @@ describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
       assert.match(index, new RegExp(`reg\\(\\s*'${name}'`), name)
     }
@@ -285,5 +285,16 @@ describe('messages and actions (W-31 2.3)', () => {
     const { d: off, calls: none } = deps({ mode: 'off' })
     assert.ok(((await ackMessages({ message_ids: ['m_1'] }, off)) as { error?: string }).error)
     assert.equal(none.length, 0)
+  })
+})
+
+describe('wait_for_messages and a server that answers empty at once (review 264 B4)', () => {
+  it('polls at most about once a second', async () => {
+    let t = 0
+    let calls = 0
+    const d: RuntimeDeps = { ...deps().d, get: async () => { calls++; return { messages: [] } } }
+    const out = (await waitForMessages({ timeout_seconds: 10 }, d, () => t, async (ms) => { t += ms })) as { messages: unknown[] }
+    assert.equal(out.messages.length, 0)
+    assert.ok(calls <= 11, `${calls} polls in 10 seconds`)
   })
 })

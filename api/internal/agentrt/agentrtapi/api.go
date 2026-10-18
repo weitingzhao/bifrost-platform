@@ -306,20 +306,22 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 // phase and last line of v5 §5.2 are not taken: the actions replace them.
 type attemptBody struct {
 	hostBody
-	Epoch         int64            `json:"lease_epoch"`
-	Model         string           `json:"model"`
-	Provider      string           `json:"model_provider"`
-	CheckpointSeq int              `json:"checkpoint_seq"`
-	Artifacts     []string         `json:"artifacts"`
-	TooLarge      bool             `json:"too_large"`
-	ExitCode      *int             `json:"exit_code"`
-	EndHow        string           `json:"end_how"`
-	Conclusion    string           `json:"conclusion"`
-	Report        string           `json:"report"`
-	PushedRef     string           `json:"pushed_ref"`
-	PushedCommit  string           `json:"pushed_commit"`
-	GroupCleared  bool             `json:"group_cleared"`
-	Actions       []actions.Action `json:"actions"`
+	Epoch         int64    `json:"lease_epoch"`
+	Model         string   `json:"model"`
+	Provider      string   `json:"model_provider"`
+	CheckpointSeq int      `json:"checkpoint_seq"`
+	Artifacts     []string `json:"artifacts"`
+	TooLarge      bool     `json:"too_large"`
+	ExitCode      *int     `json:"exit_code"`
+	EndHow        string   `json:"end_how"`
+	Conclusion    string   `json:"conclusion"`
+	Report        string   `json:"report"`
+	PushedRef     string   `json:"pushed_ref"`
+	PushedCommit  string   `json:"pushed_commit"`
+	GroupCleared  bool     `json:"group_cleared"`
+	// Actions stays raw until the lease is renewed: actions that do not
+	// parse never fail a heartbeat (review 264 A1).
+	Actions json.RawMessage `json:"actions"`
 }
 
 func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
@@ -328,7 +330,7 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
 		return
 	}
-	if action != "heartbeat" && len(b.Actions) > 0 {
+	if action != "heartbeat" && len(b.Actions) > 0 && string(b.Actions) != "null" {
 		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
 		return
 	}

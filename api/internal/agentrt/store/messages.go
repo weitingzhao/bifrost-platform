@@ -105,6 +105,12 @@ func AckMessages(ctx context.Context, db DB, w Writer, ids []string) ([]string, 
 	var done []string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		done = nil
+		// The receiver's lock first: two batches of one inbox locked their
+		// message rows and the mailbox stream in different orders and could
+		// deadlock (review 264 B3).
+		if err := writerLock(ctx, tx, w.Actor); err != nil {
+			return err
+		}
 		for _, id := range ids {
 			var to string
 			var acked bool

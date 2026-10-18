@@ -163,7 +163,11 @@ func agentrtRedisFromEnv() (*redis.Client, string, error) {
 	if pw == "" {
 		return nil, "", errors.New("AGENTRT_REDIS_PASSWORD is empty")
 	}
-	return redis.NewClient(&redis.Options{Addr: addr, Password: pw, DialTimeout: 5 * time.Second}), prefix, nil
+	// ContextTimeoutEnabled: a request's deadline bounds the dial, the reads
+	// and the writes; without it go-redis keeps its own timeouts and a
+	// heartbeat's 2-second budget for actions held 5.25 s against a silent
+	// Redis (review 264 A2).
+	return redis.NewClient(&redis.Options{Addr: addr, Password: pw, DialTimeout: 5 * time.Second, ContextTimeoutEnabled: true}), prefix, nil
 }
 
 // agentrtRetry is how long connectAgentRuntime waits between attempts at

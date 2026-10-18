@@ -200,3 +200,16 @@ func TestAgentRuntimeRedisFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// A request's deadline bounds the client's I/O, or a heartbeat's 2-second
+// budget for actions does not hold against a silent Redis (review 264 A2).
+func TestAgentRuntimeRedisHonoursDeadlines(t *testing.T) {
+	t.Setenv("AGENTRT_REDIS_ADDR", "redis-agents:6379")
+	t.Setenv("AGENTRT_REDIS_PREFIX", "")
+	t.Setenv("AGENTRT_REDIS_PASSWORD", "fixture-redis-pw")
+	rdb, _, err := agentrtRedisFromEnv()
+	if err != nil || !rdb.Options().ContextTimeoutEnabled {
+		t.Fatalf("client %v, err %v: deadlines are not honoured", rdb, err)
+	}
+	_ = rdb.Close()
+}

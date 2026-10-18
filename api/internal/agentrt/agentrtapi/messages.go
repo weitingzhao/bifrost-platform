@@ -1,8 +1,11 @@
 package agentrtapi
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -17,7 +20,17 @@ import (
 // lease is renewed whatever happens to the actions, and the answer says what
 // was kept. Called only after the heartbeat's fence held, so only the
 // leaseholder's actions are kept.
-func (a *API) keepActions(ctx context.Context, attempt string, in []actions.Action, out map[string]any) {
+func (a *API) keepActions(ctx context.Context, attempt string, raw json.RawMessage, out map[string]any) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return
+	}
+	var in []actions.Action
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		out["actions_refused"] = "actions: not a list of actions: " + err.Error()
+		return
+	}
 	if len(in) == 0 {
 		return
 	}
@@ -75,6 +88,10 @@ func (a *API) attemptActions(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 	after := q.Get("after")
+	if after != "" && !streamID.MatchString(after) {
+		writeError(w, http.StatusBadRequest, "bad_request", "after is a stream id from a previous answer (digits-digits)")
+		return
+	}
 	es, err := a.Actions.Read(r.Context(), id, after, limit)
 	if err != nil {
 		a.fail(w, err)
@@ -89,6 +106,9 @@ func (a *API) attemptActions(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"attempt_id": id, "actions": es, "next": next})
 }
+
+// streamID is a Redis stream id, the cursor of an action stream.
+var streamID = regexp.MustCompile(`^[0-9]{1,20}-[0-9]{1,20}$`)
 
 type messageBody struct {
 	To   string `json:"to"`
@@ -147,9 +167,25 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		poll = time.Second
 	}
 	for {
-		ms, err := store.Unread(r.Context(), a.DB, who.Actor, limit)
-		if err != nil {
+		qctx := r.Context()
+		if wait > 0 {
+			qctx = ctx
+		}
+		ms, err := store.Unread(qctx, a.DB, who.Actor, limit)
+		switch {
+		case err != nil && r.Context().Err() != nil:
+			return // the client went away
+		case err != nil && wait > 0 && ctx.Err() != nil:
+			ms = nil // the wait is over (review 264 B5)
+		case err != nil:
 			a.fail(w, err)
+			return
+		}
+		if ctx.Err() != nil && wait > 0 {
+			if ms == nil {
+				ms = []store.Message{}
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "messages": ms})
 			return
 		}
 		if len(ms) > 0 || wait == 0 {

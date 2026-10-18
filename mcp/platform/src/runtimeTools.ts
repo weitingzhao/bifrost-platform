@@ -282,6 +282,7 @@ export async function waitForMessages(
   input: { timeout_seconds?: number; limit?: number },
   d: RuntimeDeps = defaultRuntimeDeps(),
   now: () => number = Date.now,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<unknown> {
   const total = Math.max(0, Math.min(600, input.timeout_seconds ?? 120))
   const limit = Math.max(1, Math.min(100, input.limit ?? 100))
@@ -289,11 +290,15 @@ export async function waitForMessages(
   for (;;) {
     const left = Math.ceil((end - now()) / 1000)
     const wait = Math.max(0, Math.min(25, left))
+    const asked = now()
     const got = (await d.get(`${BASE}/messages?wait=${wait}&limit=${limit}`)) as { messages?: unknown[] } | undefined
     const messages = Array.isArray(got?.messages) ? got.messages : []
     if (messages.length > 0 || wait === 0 || now() >= end) {
       return { ...(got ?? {}), messages, note: MESSAGE_DATA_NOTE }
     }
+    // A poll that came back empty well before its wait (a proxy, an older
+    // platform) is not repeated at once: at most one poll a second (review 264 B4).
+    if (now() - asked < wait * 1000 - 500) await sleep(Math.min(1000, Math.max(0, end - now())))
   }
 }
 
