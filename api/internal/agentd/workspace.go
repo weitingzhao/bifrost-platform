@@ -56,14 +56,49 @@ type Fetch struct {
 // PrepareFetching is Prepare that, when base is not in the clone, fetches
 // also's branches and looks again.
 func PrepareFetching(ctx context.Context, dir, remote, base string, env []string, also Fetch) (*Workspace, error) {
-	if _, err := os.Stat(dir); err == nil {
-		return nil, ErrWorkspaceExists
-	}
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return nil, err
 	}
-	w := &Workspace{Dir: dir, Base: base, env: env}
-	if _, err := w.git(ctx, filepath.Dir(dir), "clone", "--quiet", "--no-checkout", remote, dir); err != nil {
+	return prepareIn(ctx, filepath.Dir(dir), dir, remote, base, env, also)
+}
+
+// prepareIn is PrepareFetching for a workspace inside root, agentd's own
+// directory, as a sibling is made (review 277 A1): an attempt that ran
+// before may have run unsandboxed and left a link on the way, or a git
+// configuration and template hooks for the next clone to follow. So every
+// directory from root down, and the workspace, must not be a symbolic link,
+// the directories are made through an os.Root on root, and git reads neither
+// the user's global nor the system configuration and installs no template.
+func prepareIn(ctx context.Context, root, dir, remote, base string, env []string, also Fetch) (*Workspace, error) {
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, fmt.Errorf("agentd: workspace %s is not inside %s", dir, root)
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	if _, err = r.Lstat(rel); err == nil {
+		return nil, ErrWorkspaceExists
+	}
+	if err = r.MkdirAll(filepath.Dir(rel), 0o700); err != nil {
+		return nil, fmt.Errorf("agentd: workspace: %w", err)
+	}
+	for p := filepath.Dir(rel); p != "."; p = filepath.Dir(p) {
+		fi, lerr := r.Lstat(p)
+		switch {
+		case lerr != nil:
+			return nil, fmt.Errorf("agentd: workspace: %w", lerr)
+		case fi.Mode()&os.ModeSymlink != 0:
+			return nil, fmt.Errorf("agentd: workspace: %s is a symbolic link", filepath.Join(root, p))
+		case !fi.IsDir():
+			return nil, fmt.Errorf("agentd: workspace: %s is not a directory", filepath.Join(root, p))
+		}
+	}
+	isolated := append(append([]string{}, env...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	w := &Workspace{Dir: dir, Base: base, env: isolated}
+	if _, err := w.git(ctx, filepath.Dir(dir), "clone", "--quiet", "--no-checkout", "--template=", "--", remote, dir); err != nil {
 		return nil, err
 	}
 	if _, err := w.git(ctx, dir, "cat-file", "-e", base+"^{commit}"); err != nil && also.Remote != "" {

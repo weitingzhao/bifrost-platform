@@ -73,9 +73,17 @@ func TestCheckoutOfACheckFetchesTheCheckedTask(t *testing.T) {
 	env := gitEnv(t.TempDir())
 	mirror, base := remote(t, env)
 	agents, pushed := agentsRepo(t, env, mirror, "t_A")
-	d := &Daemon{Remote: func(string) string { return mirror }, PushRemote: func(string) string { return agents }, GitEnv: env}
+	root := t.TempDir()
+	d := &Daemon{Root: root, Remote: func(string) string { return mirror }, PushRemote: func(string) string { return agents }, GitEnv: env}
+	inRoot := func() string {
+		dir, err := os.MkdirTemp(root, "w")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return filepath.Join(dir, "a1")
+	}
 	check := func(task string) *Attempt {
-		return &Attempt{Dir: filepath.Join(t.TempDir(), "a1"), Spec: TaskSpec{Check: "verify", SubjectTask: task}, Subject: &TaskSpec{}}
+		return &Attempt{Dir: inRoot(), Spec: TaskSpec{Check: "verify", SubjectTask: task}, Subject: &TaskSpec{}}
 	}
 	ws, err := d.checkout(context.Background(), check("t_A"), "repo", pushed)
 	if err != nil {
@@ -94,11 +102,11 @@ func TestCheckoutOfACheckFetchesTheCheckedTask(t *testing.T) {
 		}
 	}
 	// Work that is not a check is cloned as before, from the mirror alone.
-	work := &Attempt{Dir: filepath.Join(t.TempDir(), "a1")}
+	work := &Attempt{Dir: inRoot()}
 	if _, err = d.checkout(context.Background(), work, "repo", pushed); err == nil {
 		t.Fatal("work that is not a check fetched from where branches go")
 	}
-	if _, err = d.checkout(context.Background(), &Attempt{Dir: filepath.Join(t.TempDir(), "a1")}, "repo", base); err != nil {
+	if _, err = d.checkout(context.Background(), &Attempt{Dir: inRoot()}, "repo", base); err != nil {
 		t.Fatal(err)
 	}
 }

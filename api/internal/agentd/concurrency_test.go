@@ -2,6 +2,8 @@ package agentd
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -160,7 +162,8 @@ func TestConfined(t *testing.T) {
 		want             bool
 	}{
 		{"exec:claude", "none", false, true},
-		{"exec:codex", "branch", false, true},
+		{"exec:codex", "branch", false, false},
+		{"exec:codex", "none", false, false},
 		{"exec:cursor", "none", false, true},
 		{"exec:cursor", "branch", false, false},
 		{"exec:deterministic", "none", false, false},
@@ -175,5 +178,110 @@ func TestConfined(t *testing.T) {
 		if got := confined(cl, spec); got != c.want {
 			t.Errorf("%s %s setup=%v: confined = %v", c.executor, c.effect, c.setup, got)
 		}
+	}
+}
+
+// Review 277 A3: an attempt waiting for the host hears its lease: a stop or
+// a lost lease ends the wait (and the attempt, unreleased) while another holds
+// the host; a wait cut by agentd's shutdown leaves its entry for Recover.
+func TestWaitingForTheHostHearsTheLease(t *testing.T) {
+	for _, why := range []string{"cancelled", "lease_lost", "daemon_restart"} {
+		t.Run(why, func(t *testing.T) {
+			f := newFake()
+			f.set("heartbeat", func(n int) (int, string) {
+				switch {
+				case why == "cancelled" && n >= 2:
+					return http.StatusOK, `{"stop":true}`
+				case why == "lease_lost" && n >= 2:
+					return http.StatusConflict, `{"error":"fenced"}`
+				}
+				return http.StatusOK, `{"stop":false}`
+			})
+			d := fakeDaemon(t, f)
+			spec := []byte("# do it\n")
+			f.artifacts[ArtifactID(spec)] = spec
+			marker := filepath.Join(t.TempDir(), "ran")
+			d.Executors = map[string]Executor{"exec:x": func(a *Attempt) (Spawn, error) {
+				return Spawn{Argv: []string{"sh", "-c", "touch " + marker}, Env: launcherEnv(), Dir: a.Dir}, nil
+			}}
+			// another attempt has the host to itself
+			holder, err := d.share.take(bg, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer holder()
+			ctx, cancel := context.WithCancel(bg)
+			defer cancel()
+			if why == "daemon_restart" {
+				time.AfterFunc(200*time.Millisecond, cancel)
+			}
+			cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
+				Epoch: 1, Tool: Tool{Executor: "exec:x"}}
+			done := make(chan struct{})
+			var out Outcome
+			go func() { defer close(done); out, err = d.Run(ctx, cl) }()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				t.Fatal("the wait for the host did not hear the lease")
+			}
+			if _, serr := os.Stat(marker); !errors.Is(serr, os.ErrNotExist) {
+				t.Fatal("the executor was released")
+			}
+			switch why {
+			case "daemon_restart":
+				if e, ok := registered(t, d, "a1"); !ok || e.Phase != "launching" {
+					t.Fatalf("after a shutdown the entry is %+v %v; want it left for Recover", e, ok)
+				}
+				if err := d.Recover(bg); err != nil || f.count("ended") != 1 {
+					t.Fatalf("Recover: %v, calls %v", err, f.log())
+				}
+			default:
+				if out.EndHow != why {
+					t.Fatalf("run = %+v %v", out, err)
+				}
+			}
+		})
+	}
+}
+
+// Review 277 A1: the main checkout refuses a link an earlier attempt left on
+// its way, and reads no template or hooks from the user's git configuration.
+func TestCheckoutRefusesLinksAndTheUsersGitConfig(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "tasks"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "tasks", "t_next")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := prepareIn(bg, root, WorkspaceDir(root, "t_next", 1), bare, base, env, Fetch{}); err == nil {
+		t.Fatal("a checkout through a link was made")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "a1")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the checkout went out of agentd's directory")
+	}
+	// a global template whose post-checkout hook leaves a mark
+	home := t.TempDir()
+	tpl := filepath.Join(home, "tpl", "hooks")
+	if err := os.MkdirAll(tpl, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	mark := filepath.Join(home, "hooked")
+	if err := os.WriteFile(filepath.Join(tpl, "post-checkout"), []byte("#!/bin/sh\ntouch "+mark+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".gitconfig"), []byte("[init]\n\ttemplateDir = "+filepath.Join(home, "tpl")+"\n[core]\n\thooksPath = "+tpl+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	homed := append(append([]string{}, env...), "HOME="+home, "XDG_CONFIG_HOME="+home)
+	if _, err := prepareIn(bg, root, WorkspaceDir(root, "t_ok", 1), bare, base, homed, Fetch{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(mark); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the checkout ran a hook from the user's git configuration")
 	}
 }

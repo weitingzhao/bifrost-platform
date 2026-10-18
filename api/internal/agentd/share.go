@@ -13,16 +13,19 @@ import (
 // an unconfined attempt has the host to itself, from before its checkout to
 // its end, and confined attempts run side by side. Confined: claude, whose
 // tools only read; cursor in ask mode (anything but a branch task: it writes
-// no file and runs only read-only commands); codex, in its workspace-write
-// sandbox. Unconfined: a task with setup commands (they run unsandboxed),
-// the deterministic executor (it runs the repository's own checks), cursor
-// on a branch task, and any executor this does not know.
+// no file and runs only read-only commands). Unconfined: a task with setup
+// commands (they run unsandboxed), the deterministic executor (it runs the
+// repository's own checks), cursor on a branch task, codex (its sandbox lets
+// it write the workspace and the shared temporary directories, and the host
+// user's configuration can add writable roots: until those are pinned and
+// checked on the host, review 277 A2, TD-371), and any executor this does
+// not know.
 func confined(cl *Claimed, prep TaskSpec) bool {
 	if len(prep.Setup) > 0 {
 		return false
 	}
 	switch cl.Tool.Executor {
-	case "exec:claude", "exec:codex":
+	case "exec:claude":
 		return true
 	case "exec:cursor":
 		return cl.EffectClass != "branch"

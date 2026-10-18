@@ -137,13 +137,13 @@ var taskName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 // else.
 func (d *Daemon) checkout(ctx context.Context, a *Attempt, repo, base string) (*Workspace, error) {
 	if a.Subject == nil || d.PushRemote == nil {
-		return Prepare(ctx, a.Dir, d.Remote(repo), base, d.GitEnv)
+		return prepareIn(ctx, d.Root, a.Dir, d.Remote(repo), base, d.GitEnv, Fetch{})
 	}
 	task := a.Spec.SubjectTask
 	if !taskName.MatchString(task) {
 		return nil, fmt.Errorf("agentd: the checked task %q is not a task id", task)
 	}
-	return PrepareFetching(ctx, a.Dir, d.Remote(repo), base, d.GitEnv, Fetch{Remote: d.PushRemote(repo),
+	return prepareIn(ctx, d.Root, a.Dir, d.Remote(repo), base, d.GitEnv, Fetch{Remote: d.PushRemote(repo),
 		Refspec: "+refs/heads/agent/" + task + "/*:refs/remotes/agents/" + task + "/*"})
 }
 
@@ -196,19 +196,46 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 			}
 		}
 	}
+	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
+	a.Out = a.Dir + ".out"
 	// The host is held from here, before anything is written, to the end
 	// (review 276 A2); a process group still standing from an earlier attempt
-	// may write anywhere, so nothing starts beside one.
-	release, err := d.share.take(ctx, !confined(cl, a.prepare()))
-	if err != nil {
+	// may write anywhere, so nothing starts beside one. While it waits for the
+	// host the attempt is registered as launching, and a stop or a lost lease
+	// ends the wait as it would end a launch (review 277 A3): a restart, or a
+	// standing group, leaves the entry for Recover to end.
+	waiting := Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role, Repo: cl.Repo,
+		Effect: cl.EffectClass, PushedRef: cl.PushedRef, WorkID: cl.WorkID, Workdir: a.Dir, Base: base, Phase: "launching",
+		Executor: cl.Tool.Executor, Group: GroupCleared}
+	if err = d.Registry.Put(waiting); err != nil {
+		return Outcome{}, err
+	}
+	wctx, wcancel := context.WithCancel(ctx)
+	watched := make(chan struct{})
+	safego.Go("agentd-share-watch", func() {
+		select {
+		case <-l.lost:
+		case <-l.stop:
+		case <-watched:
+		}
+		wcancel()
+	})
+	release, err := d.share.take(wctx, !confined(cl, a.prepare()))
+	close(watched)
+	wcancel()
+	switch {
+	case err == nil:
+	case l.isLost():
+		return d.lost(ctx, a, nil, &waiting)
+	case l.isStopped():
+		return d.unlaunched(ctx, a, nil, &waiting, l)
+	default:
 		return Outcome{}, err
 	}
 	defer release()
 	if id, berr := d.Blocked(); berr != nil || id != "" {
 		return Outcome{}, errors.Join(berr, blockedBy(id))
 	}
-	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
-	a.Out = a.Dir + ".out"
 	var ws *Workspace
 	switch {
 	case repo != "" && base != "":
