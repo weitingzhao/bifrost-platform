@@ -32,8 +32,11 @@ func TestAgentExecutors(t *testing.T) {
 	}
 	// What codex may write is pinned on its command line (TD-371).
 	tmp := filepath.Join(out, "tmp")
+	if !slices.Contains(sp.Argv, "--ignore-rules") {
+		t.Errorf("codex reads saved exec rules: %v", sp.Argv)
+	}
 	for _, pin := range []string{"sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]", "sandbox_workspace_write.exclude_slash_tmp=true",
-		"sandbox_workspace_write.exclude_tmpdir_env_var=true", "notify=[]"} {
+		"sandbox_workspace_write.exclude_tmpdir_env_var=true", "notify=[]", "features.hooks=false", `approval_policy="never"`, `model_provider="openai"`} {
 		if i := slices.Index(sp.Argv, pin); i < 1 || sp.Argv[i-1] != "-c" {
 			t.Errorf("codex has no -c %s: %v", pin, sp.Argv)
 		}

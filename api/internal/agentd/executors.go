@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
@@ -120,21 +121,36 @@ func deterministicExecutor(self string, env []string) Executor {
 	}
 }
 
-// codexExecutor runs codex in its workspace-write sandbox with what it may
-// write pinned on the command line, whatever the host user's configuration
-// says (TD-371): no writable root besides the workspace and a temporary
-// directory of the attempt's own, not /tmp nor the shared $TMPDIR, and no
-// notify command (codex runs it unsandboxed after each turn). Measured
-// 10-18 on macOS (codex 0.162): with these pins a write to /tmp and to the
-// home directory is refused, one to the workspace taken; on 06 (Linux) the
-// probe in agent-06-owner.sh proves it before codex shares the host.
+// codexExecutor runs codex in its workspace-write sandbox, narrowed on the
+// command line whatever the host user's configuration says (TD-371): no
+// writable root besides the workspace and a temporary directory of the
+// attempt's own, not /tmp nor the shared $TMPDIR; no notify command, no
+// lifecycle hooks, no saved exec rules (each could run a command outside the
+// sandbox, review 283); never asking for approval; the built-in provider, not
+// one whose auth command the configuration names. Measured 10-18 on macOS
+// (codex 0.162) with exactly these: writes to /tmp, the home directory and the
+// shared $TMPDIR refused, to the attempt's own temporary directory and the
+// workspace taken. This narrows codex; it does not confine it: a project
+// configuration in a trusted checkout (an MCP server's command) and other
+// state an earlier, unconfined run left in CODEX_HOME still apply, so codex
+// does not share the host (share.go) until each attempt has its own
+// configuration home (TD-371).
 func codexExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
 		tmp := filepath.Join(a.Out, "tmp")
+		// the path goes into TOML as a Go-quoted string: no control character
+		// may be in it (review 283 C)
+		if strings.ContainsFunc(tmp, unicode.IsControl) {
+			return Spawn{}, fmt.Errorf("agentd: the attempt's directory %q holds a control character", tmp)
+		}
 		if err := os.MkdirAll(tmp, 0o700); err != nil {
 			return Spawn{}, err
 		}
 		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write",
+			"--ignore-rules",
+			"-c", "features.hooks=false",
+			"-c", `approval_policy="never"`,
+			"-c", `model_provider="openai"`,
 			"-c", "sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]",
 			"-c", "sandbox_workspace_write.exclude_slash_tmp=true",
 			"-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
@@ -189,10 +205,10 @@ func claudeExecutor(env []string) Executor {
 			// under review could carry one in its .claude/settings.json
 			// (measured 10-18, claude 2.1.302: such a hook runs without these,
 			// and with either alone it does not; TD-371). A managed policy
-			// (/etc/claude-code) still applies, hooks and all: only root writes
-			// it, and check-agent-06.sh requires there be none, or one that
-			// turns every hook off (review 282 A). The OAuth token comes from
-			// the environment.
+			// (/etc/claude-code, its managed-settings.d too) still applies,
+			// hooks and all: only root writes it, and check-agent-06.sh
+			// requires there be none, or one that turns every hook off
+			// (reviews 282, 283). The OAuth token comes from the environment.
 			"--setting-sources", "", "--settings", `{"disableAllHooks":true}`,
 			"--allowedTools", "Read,Grep,Glob",
 			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
