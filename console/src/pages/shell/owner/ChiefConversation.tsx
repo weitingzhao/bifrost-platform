@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
 import { AGENT_RUNTIME_POLL_MS } from '@/api/agentRuntime'
-import { ackMessages, fetchChiefThread, messageBytes, sendChiefMessage } from '@/api/agentRuntimeBus'
+import { ackMessages, fetchChiefThread, messageBytes, sendChiefMessage, type ChiefThread } from '@/api/agentRuntimeBus'
 import { Card } from './OwnerParts'
 
 export function ChiefConversation({ active }: { active: boolean }) {
@@ -18,11 +18,23 @@ export function ChiefConversation({ active }: { active: boolean }) {
   const messages = query.data?.messages
   useEffect(() => {
     if (!active || query.isError) return
-    const ids = (messages ?? []).filter(m => m.kind === 'answer' && m.to === 'owner' && !m.acked_at && !acknowledged.current.has(m.message_id)).map(m => m.message_id)
+    // Every message to the Owner that is shown is read, whatever its kind; a
+    // failed acknowledgement is tried again on the next read, and a done one
+    // is marked in the cache so a remount does not send it again.
+    const me = query.data?.actor || 'owner'
+    const ids = (messages ?? []).filter(m => m.to === me && !m.acked_at && !acknowledged.current.has(m.message_id)).map(m => m.message_id)
     if (!ids.length) return
     ids.forEach(id => acknowledged.current.add(id))
-    void ackMessages(ids).catch(e => setAckError(e instanceof Error ? e.message : 'Could not acknowledge answers.'))
-  }, [active, messages, query.isError])
+    ackMessages(ids).then(() => {
+      setAckError('')
+      const now = new Date().toISOString()
+      client.setQueryData<ChiefThread>(['agent-runtime-chief-thread'], old => old && { ...old,
+        messages: old.messages.map(m => ids.includes(m.message_id) && !m.acked_at ? { ...m, acked_at: now } : m) })
+    }, e => {
+      ids.forEach(id => acknowledged.current.delete(id))
+      setAckError(e instanceof Error ? e.message : 'Could not acknowledge answers.')
+    })
+  }, [active, messages, query.isError, query.data?.actor, query.dataUpdatedAt, client])
   const bytes = messageBytes(body)
   const lastAsk = messages?.reduce((last, m, i) => m.from === 'owner' && m.kind === 'ask' ? i : last, -1) ?? -1
   const waiting = lastAsk >= 0 && !messages?.slice(lastAsk + 1).some(m => m.from === 'seat:chief_of_staff' && m.kind === 'answer')

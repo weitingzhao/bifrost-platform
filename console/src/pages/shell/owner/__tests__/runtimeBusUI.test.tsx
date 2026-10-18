@@ -6,7 +6,9 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 const mocks = vi.hoisted(() => ({ actions: vi.fn(), stop: vi.fn(), lift: vi.fn(), thread: vi.fn(), ack: vi.fn(), send: vi.fn(), env: 'stg' }))
 vi.mock('@/api/agentRuntimeBus', async original => ({ ...await original<object>(), fetchAttemptActions: mocks.actions, setGlobalStop: mocks.stop, liftControl: mocks.lift,
   fetchChiefThread: mocks.thread, ackMessages: mocks.ack, sendChiefMessage: mocks.send }))
-vi.mock('@/hooks/useFleetSnapshot', () => ({ useFleetSnapshot: () => ({ viewerEnv: mocks.env, viewerEnvLoading: false }) }))
+// The platform's own word on which environment it is; 'loading' never answers.
+vi.mock('@/api/core', async original => ({ ...await original<object>(),
+  fetchSelfHealth: () => mocks.env === 'loading' ? new Promise(() => {}) : Promise.resolve({ viewer_env: mocks.env }) }))
 import { AttemptActionLine } from '../AttemptActionLine'
 import { OwnerStop } from '../OwnerStop'
 import { ChiefConversation } from '../ChiefConversation'
@@ -67,28 +69,55 @@ it('fetches only while open, appends with next, and keeps the newest 200', async
   expect(mocks.actions).toHaveBeenCalledTimes(2)
 })
 describe('global stop', () => {
-  it('disables on prod', () => { mocks.env = 'prod'; show(<OwnerStop controls={[]} readable />); expect(screen.getByRole('button', { name: 'Stop all' })).toBeDisabled(); expect(screen.getByText('Stop all is enabled on STG first')).toBeInTheDocument() })
+  const enabled = async (name: string) => waitFor(() => expect(screen.getByRole('button', { name })).toBeEnabled())
+  it('disables on prod', async () => {
+    mocks.env = 'prod'; show(<OwnerStop controls={[]} readable />)
+    expect(await screen.findByText('Stop all and Resume are enabled on STG first')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop all' })).toBeDisabled()
+  })
+  it('stays disabled while the environment is not known', async () => {
+    mocks.env = 'loading'; show(<OwnerStop controls={[]} readable />)
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.getByRole('button', { name: 'Stop all' })).toBeDisabled()
+  })
   it('confirms once before stopping and invalidates progress', async () => {
     const { client } = show(<OwnerStop controls={[]} readable />)
     const invalidate = vi.spyOn(client, 'invalidateQueries')
+    await enabled('Stop all')
     fireEvent.click(screen.getByRole('button', { name: 'Stop all' }))
     expect(mocks.stop).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Stop all work' }))
+    fireEvent.click(screen.queryByRole('button', { name: 'Stop all work' }) ?? document.body)
     await waitFor(() => expect(mocks.stop).toHaveBeenCalledExactlyOnceWith('Owner: stop all from the Console'))
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['agent-runtime-progress'] })
   })
-  it('allows cancelling on dev without stopping', () => {
+  it('allows cancelling on dev without stopping', async () => {
     mocks.env = 'dev'; show(<OwnerStop controls={[]} readable />)
+    await enabled('Stop all')
     fireEvent.click(screen.getByRole('button', { name: 'Stop all' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(mocks.stop).not.toHaveBeenCalled()
   })
   it('lifts the active stop only', async () => {
-    show(<OwnerStop readable controls={[{ control_id: 'old', scope: 'global', control_kind: 'stop', cleared_at: at }, { control_id: 'c_1', scope: 'global', control_kind: 'stop', set_at: at, cleared_at: '' }]} />)
+    show(<OwnerStop readable controls={[{ control_id: 'old', scope: 'global', control_kind: 'stop', cleared_at: at },
+      { control_id: 'h_1', scope: 'host', control_kind: 'stop', set_at: at, cleared_at: '' },
+      { control_id: 'p_1', scope: 'global', control_kind: 'pause', set_at: at, cleared_at: '' },
+      { control_id: 'c_1', scope: 'global', control_kind: 'stop', set_at: at, cleared_at: '' }]} />)
     expect(screen.getByText(/All work stopped since/)).toBeInTheDocument()
+    await enabled('Resume')
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
     fireEvent.click(screen.getByRole('button', { name: 'Resume work' }))
     await waitFor(() => expect(mocks.lift).toHaveBeenCalledExactlyOnceWith('c_1'))
+  })
+  it('does what was pressed: a stop set elsewhere while it is open voids the confirmation', async () => {
+    const { client, rerender } = show(<OwnerStop controls={[]} readable />)
+    await enabled('Stop all')
+    fireEvent.click(screen.getByRole('button', { name: 'Stop all' }))
+    rerender(<QueryClientProvider client={client}><OwnerStop readable controls={[{ control_id: 'c_agent', scope: 'global', control_kind: 'stop', set_at: at, cleared_at: '' }]} /></QueryClientProvider>)
+    expect(screen.getByText('Work control changed while you were deciding; press again.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume work' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop all work' })).not.toBeInTheDocument()
+    expect(mocks.lift).not.toHaveBeenCalled(); expect(mocks.stop).not.toHaveBeenCalled()
   })
 })
 describe('chief conversation', () => {
@@ -105,6 +134,21 @@ describe('chief conversation', () => {
     await waitFor(() => expect(mocks.ack).toHaveBeenCalledExactlyOnceWith(['m_2', 'm_3']))
     await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-chief-thread'] }) })
     expect(mocks.ack).toHaveBeenCalledTimes(1)
+  })
+  it('tries a failed acknowledgement again, and does not send a done one twice after a remount', async () => {
+    mocks.thread.mockResolvedValue({ actor: 'owner', with: 'seat:chief_of_staff', messages })
+    mocks.ack.mockRejectedValueOnce(new Error('network down'))
+    const { client, unmount } = show(<ChiefConversation active />)
+    expect(await screen.findByText('network down')).toBeInTheDocument()
+    await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-chief-thread'] }) })
+    await waitFor(() => expect(mocks.ack).toHaveBeenCalledTimes(2))
+    expect(mocks.ack.mock.calls[1][0]).toEqual(['m_2', 'm_3'])
+    await waitFor(() => expect(screen.queryByText('network down')).not.toBeInTheDocument())
+    unmount()
+    mocks.thread.mockImplementation(() => new Promise(() => {}))
+    render(<QueryClientProvider client={client}><ChiefConversation active /></QueryClientProvider>)
+    await new Promise(r => setTimeout(r, 50))
+    expect(mocks.ack).toHaveBeenCalledTimes(2)
   })
   it('does not read or ack while hidden', () => { show(<ChiefConversation active={false} />); expect(mocks.thread).not.toHaveBeenCalled(); expect(mocks.ack).not.toHaveBeenCalled() })
   it('counts UTF-8 bytes, refuses excess, sends and clears a valid body', async () => {

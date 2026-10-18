@@ -23,6 +23,10 @@ describe('runtime bus', () => {
     mocks.fetch.mockImplementationOnce(async (prefix, _path, _init, errorParser) => { throw await errorParser(prefix, new Response(JSON.stringify({ error: 'unavailable', message: 'this platform keeps no actions (no redis-agents)' }), { status: 503 })) })
     expect(await fetchAttemptActions('a_1', { last: 1 })).toEqual({ attempt_id: 'a_1', actions: [], next: '', unavailable: true })
   })
+  it('shows a 503 of a runtime not connected yet as an error, not as no actions', async () => {
+    mocks.fetch.mockImplementationOnce(async (prefix, _path, _init, errorParser) => { throw await errorParser(prefix, new Response(JSON.stringify({ error: 'not_connected', message: 'agentrt: not connected yet' }), { status: 503 })) })
+    await expect(fetchAttemptActions('a_1', { last: 1 })).rejects.toThrow('agentrt: not connected yet')
+  })
   it('encodes the attempt and cursor and propagates cancellation', async () => {
     const signal = new AbortController().signal
     await fetchAttemptActions('a/1', { after: '1-0', limit: 200 }, signal)

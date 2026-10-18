@@ -22,9 +22,11 @@ export function parseChiefThread(value: unknown): ChiefThread {
 }
 class ActionsUnavailable extends Error {}
 async function busError(prefix: string, response: Response, token = '') {
-  if (prefix === 'Actions' && response.status === 503) return new ActionsUnavailable()
-  if (prefix === 'Messages' && [400, 401].includes(response.status)) return new Error('Connect with the Owner token to talk to the chief of staff.')
+  if (prefix === 'Messages' && [400, 401, 403].includes(response.status)) return new Error('Connect with the Owner token to talk to the chief of staff.')
   const r = record(await response.json().catch(() => ({})))
+  // Only a platform without redis-agents keeps no actions; a 503 of a runtime
+  // not connected yet is an error to show (review of 4a, C1).
+  if (prefix === 'Actions' && response.status === 503 && r.error === 'unavailable') return new ActionsUnavailable()
   return new Error(signInSafeError(text(r.message) || text(r.error) || `${prefix}: HTTP ${response.status}`, token, response.status))
 }
 async function request(prefix: string, path: string, init?: RequestInit): Promise<RuntimeRecord> {

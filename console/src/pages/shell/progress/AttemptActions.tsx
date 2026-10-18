@@ -9,16 +9,18 @@ function ActionStream({ id }: { id: string }) {
   const actions = useRef<AttemptAction[]>([])
   const query = useQuery({ queryKey: ['agent-runtime-actions-stream', id],
     queryFn: async ({ signal }) => {
-      const page = await fetchAttemptActions(id, { after: cursor.current, limit: 200 }, signal)
+      // The first read takes as much as the server gives (500), so the newest
+      // 200 show at once, not after a few polls.
+      const page = await fetchAttemptActions(id, { after: cursor.current, limit: cursor.current ? 200 : 500 }, signal)
       if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
       const merged = new Map(actions.current.map(a => [a.id, a]))
       for (const action of page.actions) merged.set(action.id, action)
       actions.current = [...merged.values()].slice(-200)
       cursor.current = page.next || cursor.current
       return { ...page, actions: actions.current }
-    }, retry: false, gcTime: 0, refetchInterval: AGENT_RUNTIME_POLL_MS })
+    }, retry: false, gcTime: 0, refetchInterval: q => q.state.data?.unavailable ? false : AGENT_RUNTIME_POLL_MS })
   return <div className="min-w-0 space-y-2 pt-2">
-    {query.isError && <p role="alert">{query.error.message}</p>}
+    {query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}</p>}
     {query.data?.unavailable ? <p>actions are not kept on this platform</p> : <>
       {!query.data?.actions.length && <p>{query.isPending ? 'Reading actions…' : 'no actions yet'}</p>}
       <ol className="space-y-2">{query.data?.actions.map(action => <li key={action.id} className="min-w-0">
