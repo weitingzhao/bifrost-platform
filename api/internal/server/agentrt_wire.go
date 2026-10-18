@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
@@ -82,6 +83,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Error("agentrt: redis-agents is configured wrongly; no relay, PostgreSQL alone carries the runtime", "err", rerr)
 	case rdb == nil:
 		slog.Info("agentrt: AGENTRT_REDIS_ADDR is not set; no relay, PostgreSQL alone carries the runtime")
+	}
+	if rdb != nil {
+		rt.api.Actions = &actions.Store{Redis: rdb, Prefix: prefix}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

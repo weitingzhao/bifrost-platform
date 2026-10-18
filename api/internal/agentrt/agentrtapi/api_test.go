@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -125,6 +126,9 @@ var (
 	noMain    bool
 )
 
+// actionStore, when set, is the API's action store (bus_test.go).
+var actionStore *actions.Store
+
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin and two seat tokens (one registered).
@@ -175,7 +179,7 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 			}
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
-		}, Anchor: anchor}
+		}, Anchor: anchor, Actions: actionStore}
 	if !noMain {
 		api.MainHead = func(_ context.Context, repo string) (string, error) {
 			mainsMu.Lock()

@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -45,6 +46,9 @@ type API struct {
 	// MainHead reads a repository's main where agentd clones it, the base of
 	// a goal's task; nil answers POST /goals 503.
 	MainHead MainHead
+	// Actions keeps attempts' actions in redis-agents (W-31 2.3); nil keeps
+	// none: a heartbeat's actions are refused in its answer, the read 503.
+	Actions *actions.Store
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -100,6 +104,10 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/tasks", a.listTasks)
 		r.With(read, cfg).Get("/tasks/{id}", a.getTask)
 		r.With(read, cfg).Get("/attempts/{id}", a.getAttempt)
+		r.With(read, cfg).Get("/attempts/{id}/actions", a.attemptActions)
+		r.With(propose, cfg).Post("/messages", a.sendMessage)
+		r.With(read, cfg).Get("/messages", a.readMessages)
+		r.With(propose, cfg).Post("/messages/ack", a.ackMessages)
 		r.With(read, cfg).Get("/events", a.getEvents)
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
@@ -164,7 +172,7 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
-	case errors.Is(err, store.ErrInvalid):
+	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
 		writeError(w, http.StatusForbidden, "unsigned", err.Error())
@@ -292,31 +300,36 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 }
 
 // attemptBody holds every field an attempt route takes; each route reads
-// its own. A heartbeat's phase and last line (v5 §5.2) are not taken yet:
-// nothing keeps them until the progress bus (2.3) gives them a place, and a
-// body that sends them is refused rather than answered as if they were kept
-// (review 156 B1).
+// its own. A heartbeat may carry the executor's recent actions (W-31 2.3),
+// kept in redis-agents for 24 hours; any other route that sends them is
+// refused rather than answered as if they were kept (review 156 B1). The
+// phase and last line of v5 §5.2 are not taken: the actions replace them.
 type attemptBody struct {
 	hostBody
-	Epoch         int64    `json:"lease_epoch"`
-	Model         string   `json:"model"`
-	Provider      string   `json:"model_provider"`
-	CheckpointSeq int      `json:"checkpoint_seq"`
-	Artifacts     []string `json:"artifacts"`
-	TooLarge      bool     `json:"too_large"`
-	ExitCode      *int     `json:"exit_code"`
-	EndHow        string   `json:"end_how"`
-	Conclusion    string   `json:"conclusion"`
-	Report        string   `json:"report"`
-	PushedRef     string   `json:"pushed_ref"`
-	PushedCommit  string   `json:"pushed_commit"`
-	GroupCleared  bool     `json:"group_cleared"`
+	Epoch         int64            `json:"lease_epoch"`
+	Model         string           `json:"model"`
+	Provider      string           `json:"model_provider"`
+	CheckpointSeq int              `json:"checkpoint_seq"`
+	Artifacts     []string         `json:"artifacts"`
+	TooLarge      bool             `json:"too_large"`
+	ExitCode      *int             `json:"exit_code"`
+	EndHow        string           `json:"end_how"`
+	Conclusion    string           `json:"conclusion"`
+	Report        string           `json:"report"`
+	PushedRef     string           `json:"pushed_ref"`
+	PushedCommit  string           `json:"pushed_commit"`
+	GroupCleared  bool             `json:"group_cleared"`
+	Actions       []actions.Action `json:"actions"`
 }
 
 func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 	id, action := chi.URLParam(r, "id"), chi.URLParam(r, "action")
 	var b attemptBody
 	if !decode(w, r, &b) || !boundHost(w, r, b.HostID) {
+		return
+	}
+	if action != "heartbeat" && len(b.Actions) > 0 {
+		writeError(w, http.StatusBadRequest, "bad_request", "only a heartbeat carries actions")
 		return
 	}
 	f := store.Fence{AttemptID: id, HostID: b.HostID, Epoch: b.Epoch}
@@ -329,6 +342,7 @@ func (a *API) attempt(w http.ResponseWriter, r *http.Request) {
 		var beat store.Beat
 		if beat, err = store.Heartbeat(ctx, a.DB, f); err == nil {
 			out = map[string]any{"lease_expires_at": beat.LeaseExpiresAt, "stop": beat.Stop}
+			a.keepActions(ctx, id, b.Actions, out)
 		}
 	case "start":
 		if err = store.Start(ctx, a.DB, f, b.Model, b.Provider); err == nil {

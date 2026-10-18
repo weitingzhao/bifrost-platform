@@ -21,6 +21,11 @@ import {
   putArtifact,
   requestStop,
   whoami,
+  sendMessage,
+  waitForMessages,
+  ackMessages,
+  getAttemptActions,
+  MESSAGE_DATA_NOTE,
   type RuntimeDeps,
 } from './runtimeTools.js'
 import { PLATFORM_STDIO_TOOL_NAMES } from './stdioToolNames.js'
@@ -222,5 +227,63 @@ describe('agent runtime tools are served', () => {
     }
     // The schema the tests above check is the one served.
     assert.match(index, /reg\(\s*'propose_mission',\s*`[^`]*`,\s*PROPOSE_MISSION_INPUT,/)
+  })
+})
+
+describe('messages and actions (W-31 2.3)', () => {
+  it('send_message posts as this thread and refuses without a session or with writes off', async () => {
+    const { d, calls } = deps()
+    await sendMessage({ to: 'seat:chief_of_staff', kind: 'ask', body: 'how is it going?' }, d)
+    assert.deepEqual(calls, [{ kind: 'send', path: '/api/v1/agentrt/messages', body: { to: 'seat:chief_of_staff', kind: 'ask', body: 'how is it going?' } }])
+    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+      const { d: d2, calls: c2 } = deps(over)
+      const out = (await sendMessage({ to: 'owner', kind: 'note', body: 'x' }, d2)) as { error?: string }
+      assert.ok(out.error)
+      assert.equal(c2.length, 0)
+    }
+  })
+
+  it('wait_for_messages polls at most 25 seconds at a time until one arrives or time is up', async () => {
+    let t = 0
+    const answers = [{ messages: [] }, { messages: [] }, { actor: 'thread:local_s1', messages: [{ message_id: 'm_1', body: 'hi' }] }]
+    const paths: string[] = []
+    const d: RuntimeDeps = {
+      ...deps().d,
+      get: async (path) => {
+        paths.push(path)
+        t += 25_000
+        return answers.shift()
+      },
+    }
+    const out = (await waitForMessages({ timeout_seconds: 120 }, d, () => t)) as { messages: unknown[]; note: string }
+    assert.equal(out.messages.length, 1)
+    assert.equal(out.note, MESSAGE_DATA_NOTE)
+    assert.deepEqual(paths, [
+      '/api/v1/agentrt/messages?wait=25&limit=100',
+      '/api/v1/agentrt/messages?wait=25&limit=100',
+      '/api/v1/agentrt/messages?wait=25&limit=100',
+    ])
+    let t2 = 0
+    const empty: RuntimeDeps = { ...deps().d, get: async () => { t2 += 25_000; return { messages: [] } } }
+    const none = (await waitForMessages({ timeout_seconds: 30 }, empty, () => t2)) as { messages: unknown[] }
+    assert.equal(none.messages.length, 0)
+    const { d: once, calls } = deps()
+    await waitForMessages({ timeout_seconds: 0, limit: 5 }, once, () => 0)
+    assert.deepEqual(calls, [{ kind: 'get', path: '/api/v1/agentrt/messages?wait=0&limit=5' }])
+  })
+
+  it('ack_messages sends the ids; get_attempt_actions reads the stream, after a cursor or only the newest', async () => {
+    const { d, calls } = deps()
+    await ackMessages({ message_ids: ['m_1', 'm_2'] }, d)
+    await getAttemptActions({ attempt_id: 'a_01M56J5QPAAQQP53KV4MQYCW5Q', after: '1760-0' }, d)
+    await getAttemptActions({ attempt_id: 'a_01M56J5QPAAQQP53KV4MQYCW5Q', last: true }, d)
+    assert.deepEqual(calls, [
+      { kind: 'send', path: '/api/v1/agentrt/messages/ack', body: { message_ids: ['m_1', 'm_2'] } },
+      { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?after=1760-0' },
+      { kind: 'get', path: '/api/v1/agentrt/attempts/a_01M56J5QPAAQQP53KV4MQYCW5Q/actions?last=1' },
+    ])
+    const { d: off, calls: none } = deps({ mode: 'off' })
+    assert.ok(((await ackMessages({ message_ids: ['m_1'] }, off)) as { error?: string }).error)
+    assert.equal(none.length, 0)
   })
 })

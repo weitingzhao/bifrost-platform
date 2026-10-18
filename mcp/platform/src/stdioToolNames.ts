@@ -73,6 +73,10 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'put_artifact',
   'get_artifact',
   'request_stop',
+  'send_message',
+  'wait_for_messages',
+  'ack_messages',
+  'get_attempt_actions',
 ] as const
 
 export type PlatformStdioToolName = (typeof PLATFORM_STDIO_TOOL_NAMES)[number]
