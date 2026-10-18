@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { fetchPools, parsePools, recordPoolReading } from '@/api/agentRuntimePools'
 import { OwnerQuota } from '../OwnerQuota'
+import chicago from './fixtures/pools-chicago.json'
+import utc from './fixtures/pools-utc.json'
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }))
 vi.mock('@/api/client', () => ({ authedFetch: mocks.fetch }))
 const reset = '2026-10-21T14:00:00Z'
@@ -75,7 +77,7 @@ describe('quota card', () => {
     show(); await screen.findByRole('listitem'); fill('100', '')
     expect(screen.getByLabelText('Reset (local time)')).toBeRequired()
     fireEvent.submit(screen.getByRole('form')); expect(mocks.fetch.mock.calls.some(c => c[2]?.method === 'POST')).toBe(false)
-    expect(screen.getAllByRole('option')).toHaveLength(5)
+    expect(screen.getAllByRole('option')).toHaveLength(6)
   })
   it('shows the server message for a 422 refusal', async () => {
     mocks.fetch.mockImplementation(async (prefix, _path, init, errorParser) => {
@@ -110,5 +112,34 @@ describe('quota API contract', () => {
     await recordPoolReading(pool.vendor_pool_id, 0.4); await recordPoolReading(pool.vendor_pool_id, 0.4)
     const bodies = mocks.fetch.mock.calls.slice(1).map(c => JSON.parse(c[2].body))
     expect(bodies[0].idempotency_key).not.toBe(bodies[1].idempotency_key); expect(bodies[0]).not.toHaveProperty('resets_at')
+  })
+})
+
+// Review 281: responses taken from the real platform (store.ListPools through
+// agentrtapi), in UTC and in a zone with an offset, with microseconds, a pool
+// only charged, an empty ledger.
+describe('the real API shape', () => {
+  it.each([['America/Chicago', chicago], ['UTC', utc]])('parses a response written in %s', (_zone, body) => {
+    const pools = parsePools(body)
+    expect(pools.length).toBeGreaterThan(0)
+    expect(pools.map(p => p.vendor_pool_id)).toContain('cursor:owner:monthly')
+  })
+  it('says a reading whose window has reset since is the window before (review 281 B1)', async () => {
+    mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ pools: [{ ...pool, used_fraction: 1, resets_at: '2026-10-18T13:30:00Z', pace: null }] })))
+    show(); const row = await screen.findByRole('listitem')
+    expect(within(row).getByText(/last reading 100.0% is from the window before/)).toBeInTheDocument()
+    expect(within(row).getByText(/Reset at .* passed/)).toBeInTheDocument()
+  })
+  it('clears the form after a reading is recorded, and the note once anything changes (review 281 C1)', async () => {
+    show(); await screen.findByRole('listitem'); fill(); fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+    await screen.findByText('Reading recorded.')
+    expect(screen.getByLabelText('Used percent')).toHaveValue(null)
+    expect(screen.getByLabelText('Reset (local time)')).toHaveValue('')
+    fireEvent.change(screen.getByLabelText('Used percent'), { target: { value: '10' } })
+    expect(screen.queryByText('Reading recorded.')).not.toBeInTheDocument()
+  })
+  it("offers codex's five-hour pool before agentd has reported it (review 281 C2)", async () => {
+    show(); await screen.findByRole('listitem')
+    expect(within(screen.getByLabelText('Pool')).getByRole('option', { name: 'codex:owner:short' })).toBeInTheDocument()
   })
 })

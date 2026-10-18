@@ -2,6 +2,7 @@ package agentrtapi
 
 import (
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -41,8 +42,15 @@ func (a *API) recordReading(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	// The router reads the escaped path when a client escapes it: a browser's
+	// encodeURIComponent sends claude%3Aowner%3Aweekly (review 281 A1).
+	pool, err := url.PathUnescape(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "the pool in the path is not escaped right")
+		return
+	}
 	out, err := store.RecordOwnerReading(r.Context(), a.DB, who, b.IdempotencyKey,
-		store.PoolReading{Pool: chi.URLParam(r, "id"), UsedFraction: b.UsedFraction, ResetsAt: b.ResetsAt})
+		store.PoolReading{Pool: pool, UsedFraction: b.UsedFraction, ResetsAt: b.ResetsAt})
 	if err != nil {
 		a.fail(w, err)
 		return
