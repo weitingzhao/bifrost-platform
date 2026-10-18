@@ -203,6 +203,34 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 			moved++
 		}
 	}
+	// Mail to the chief of staff's seat becomes briefs, and the briefs'
+	// answers go back to their senders (W-31 2.3).
+	mail, perr := store.PendingMail(ctx, c.DB)
+	if perr != nil {
+		errs = append(errs, perr)
+	}
+	for _, id := range mail {
+		task, err := store.TakeMail(ctx, c.DB, id)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("message %s: %w", id, err))
+		}
+		if task != "" {
+			moved++
+		}
+	}
+	briefs, perr := store.PendingBriefs(ctx, c.DB)
+	if perr != nil {
+		errs = append(errs, perr)
+	}
+	for _, id := range briefs {
+		did, err := store.AcceptBrief(ctx, c.DB, id)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("brief %s: %w", id, err))
+		}
+		if did != "" {
+			moved++
+		}
+	}
 	// Salvaged results of lost attempts get a check of their own (T34 case 8).
 	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
 	if perr != nil {

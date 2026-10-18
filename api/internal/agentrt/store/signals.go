@@ -41,18 +41,26 @@ func MarkReady(ctx context.Context, tx pgx.Tx, actor, taskID string) error {
 // PostMessage stores a message (its body as an artifact, data only) and
 // signals the receiver's mailbox.
 func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte) (string, error) {
+	return postMessage(ctx, tx, from, to, kind, body, "", "")
+}
+
+// postMessage is PostMessage for a message about a mission's task (the chief
+// of staff's answer to the mail its brief took): the event names them, as the
+// state guard requires of a row that does.
+func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string) (string, error) {
 	art, err := PutArtifact(ctx, tx, from, "message", "text/plain; charset=utf-8", body)
 	if err != nil {
 		return "", err
 	}
 	id := NewMessageID()
-	ev, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_posted", Actor: from,
+	ev, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_posted", Actor: from, MissionID: mission, TaskID: task,
 		Body: map[string]any{"message_id": id, "to": to, "kind": kind}})
 	if err != nil {
 		return "", err
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.message (message_id, from_actor_id, to_actor_id, message_kind, body_artifact_id, event_id)
-	  VALUES ($1,$2,$3,$4,$5,$6)`, id, from, to, kind, art, ev.EventID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.message (message_id, from_actor_id, to_actor_id, message_kind, body_artifact_id, event_id,
+	    mission_id, task_id)
+	  VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''))`, id, from, to, kind, art, ev.EventID, mission, task); err != nil {
 		return "", err
 	}
 	return id, Enqueue(ctx, tx, ev.EventID, MailboxTopic(to),
@@ -71,6 +79,23 @@ func AckMessage(ctx context.Context, tx pgx.Tx, actor, messageID string) error {
 		return err
 	}
 	_, err := tx.Exec(ctx, `UPDATE agentrt.message SET acked_at = clock_timestamp() WHERE message_id = $1 AND acked_at IS NULL`, messageID)
+	return err
+}
+
+// ackMessageFor records that the receiver took a message into a mission's
+// task (the mail a brief answers), linking the message to them in the same
+// write.
+func ackMessageFor(ctx context.Context, tx pgx.Tx, actor, messageID, mission, task string) error {
+	var to string
+	if err := tx.QueryRow(ctx, `SELECT to_actor_id FROM agentrt.message WHERE message_id = $1 FOR UPDATE`, messageID).Scan(&to); err != nil {
+		return err
+	}
+	if _, err := Append(ctx, tx, Event{Stream: "mbox:" + to, Type: "message_acked", Actor: actor, MissionID: mission, TaskID: task,
+		Body: map[string]any{"message_id": messageID}}); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE agentrt.message SET acked_at = clock_timestamp(), mission_id = $2, task_id = $3
+	  WHERE message_id = $1 AND acked_at IS NULL`, messageID, mission, task)
 	return err
 }
 

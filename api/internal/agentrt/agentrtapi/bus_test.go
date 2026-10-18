@@ -174,6 +174,24 @@ func TestMessages(t *testing.T) {
 			t.Errorf("%s: %d", q, code)
 		}
 	}
+	// The conversation, both directions, read or not, oldest first (W-31 2.3
+	// slice 4: the Console's chief of staff page).
+	code, out = c("admin", "GET", "messages/thread?with=seat:chief_of_staff", nil)
+	conv, _ := out["messages"].([]any)
+	if code != http.StatusOK || out["actor"] != "owner" || out["with"] != "seat:chief_of_staff" || len(conv) != 2 ||
+		conv[0].(map[string]any)["message_id"] != id || conv[0].(map[string]any)["acked_at"] == nil ||
+		conv[1].(map[string]any)["body"] != "按计划。" {
+		t.Fatalf("the thread: %d %v", code, out)
+	}
+	if code, out := c("admin", "GET", "messages/thread?with=seat:chief_of_staff&limit=1", nil); code != http.StatusOK ||
+		len(out["messages"].([]any)) != 1 || out["messages"].([]any)[0].(map[string]any)["body"] != "按计划。" {
+		t.Fatalf("the newest of the thread: %d %v", code, out)
+	}
+	for _, q := range []string{"with=owner", "with=", "with=seat:chief_of_staff&limit=101"} {
+		if code, _ := c("admin", "GET", "messages/thread?"+q, nil); code != http.StatusUnprocessableEntity && code != http.StatusBadRequest {
+			t.Errorf("thread %s: %d", q, code)
+		}
+	}
 	// A thread reads its own inbox by its session header.
 	if code, out := c("reporter", "GET", "messages", nil, "X-Bifrost-Session", "local_fixture-1"); code != http.StatusOK || out["actor"] != "thread:local_fixture-1" {
 		t.Fatalf("a thread's inbox: %d %v", code, out)

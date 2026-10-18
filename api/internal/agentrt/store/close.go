@@ -10,8 +10,9 @@ import (
 
 // Closing a goal's mission (W-31 2.2b, iteration 1: a goal that was done
 // still showed as active). A mission a goal made is bound to no plan step;
-// once every one of its tasks is accepted and an implementation is among
-// them, nothing is left for it to do, and the controller moves it to done
+// once every one of its tasks is accepted and an implementation (or, for a
+// message to the chief of staff, its brief) is among them, nothing is left
+// for it to do, and the controller moves it to done
 // (mission_state_changed). A mission bound to plan steps is left to its steps
 // and their rules. One with a task that is not accepted (open, rejected,
 // blocked, cancelled) stays as it is, for the Owner or the coordinator to
@@ -26,7 +27,7 @@ import (
 // closable is the condition, read again under the mission's lock.
 const closable = `m.state = 'active'
   AND NOT EXISTS (SELECT 1 FROM agentrt.plan_node n WHERE n.mission_id = m.mission_id)
-  AND EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.role = 'implement')
+  AND EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.role IN ('implement','brief'))
   AND NOT EXISTS (SELECT 1 FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.state <> 'accepted')`
 
 // CloseMissions is one pass: it closes every mission done as above and

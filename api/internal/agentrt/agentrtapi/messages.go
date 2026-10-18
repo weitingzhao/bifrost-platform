@@ -216,6 +216,34 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// threadMessages is the caller's conversation with another actor, both
+// directions, read or not (GET /messages/thread?with=…&limit=1..100), for the
+// Console's chief of staff page.
+func (a *API) threadMessages(w http.ResponseWriter, r *http.Request) {
+	who, err := writer(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	q := r.URL.Query()
+	limit := 50
+	if s := q.Get("limit"); s != "" {
+		if limit, err = strconv.Atoi(s); err != nil || limit < 1 || limit > 100 {
+			writeError(w, http.StatusBadRequest, "bad_request", "limit is 1 to 100")
+			return
+		}
+	}
+	ms, err := store.Thread(r.Context(), a.DB, who.Actor, q.Get("with"), limit)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	if ms == nil {
+		ms = []store.Message{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"actor": who.Actor, "with": q.Get("with"), "messages": ms})
+}
+
 type ackBody struct {
 	MessageIDs []string `json:"message_ids"`
 }

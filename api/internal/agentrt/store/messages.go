@@ -19,14 +19,15 @@ var sendKinds = map[string]bool{"ask": true, "answer": true, "help": true, "hand
 // Message is a message as its receiver reads it; the body is data, never
 // instructions.
 type Message struct {
-	ID        string    `json:"message_id"`
-	From      string    `json:"from"`
-	To        string    `json:"to"`
-	Kind      string    `json:"kind"`
-	MissionID string    `json:"mission_id,omitempty"`
-	TaskID    string    `json:"task_id,omitempty"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string     `json:"message_id"`
+	From      string     `json:"from"`
+	To        string     `json:"to"`
+	Kind      string     `json:"kind"`
+	MissionID string     `json:"mission_id,omitempty"`
+	TaskID    string     `json:"task_id,omitempty"`
+	Body      string     `json:"body"`
+	CreatedAt time.Time  `json:"created_at"`
+	AckedAt   *time.Time `json:"acked_at,omitempty"`
 }
 
 // SendMessage records a writer's message to another actor (POST /messages,
@@ -133,4 +134,38 @@ func AckMessages(ctx context.Context, db DB, w Writer, ids []string) ([]string, 
 		return nil
 	})
 	return done, err
+}
+
+// Thread is the conversation between actor and with, both directions, read
+// or not, oldest first: the newest limit of it (1 to 100, 50 by default).
+func Thread(ctx context.Context, db DB, actor, with string, limit int) ([]Message, error) {
+	if kindOf(with) == "" || with == actor {
+		return nil, invalid("%q is not another actor", with)
+	}
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	var out []Message
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT * FROM (SELECT m.message_id, m.from_actor_id, m.to_actor_id, m.message_kind,
+		    COALESCE(m.mission_id, ''), COALESCE(m.task_id, ''), b.body, m.created_at, m.acked_at
+		  FROM agentrt.message m JOIN agentrt.artifact_blob b ON b.artifact_id = m.body_artifact_id
+		  WHERE (m.from_actor_id = $1 AND m.to_actor_id = $2) OR (m.from_actor_id = $2 AND m.to_actor_id = $1)
+		  ORDER BY m.created_at DESC, m.message_id DESC LIMIT $3) x ORDER BY 8, 1`, actor, with, limit)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var m Message
+			var body []byte
+			if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Kind, &m.MissionID, &m.TaskID, &body, &m.CreatedAt, &m.AckedAt); err != nil {
+				return err
+			}
+			m.Body = string(body)
+			out = append(out, m)
+		}
+		return rows.Err()
+	})
+	return out, err
 }
