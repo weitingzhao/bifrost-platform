@@ -73,12 +73,13 @@ func TestParseEachKind(t *testing.T) {
 	for name, c := range map[string]struct {
 		text, kind, body string
 	}{
-		"envelope":    {envelope, rules.KindEnvelope, `{"budget":{"max_attempts":40,"max_wall_hours":48},"direction":"initial","effective_at":"2026-10-15T00:00:00Z","executors":["exec:codex","exec:deterministic"],"expires_at":"2027-01-15T00:00:00Z","hosts":["mbp-dev"],"max_action":"branch","rule_id":"standing-envelope:dev","rule_version":1,"tenant":"dev"}`},
-		"concurrency": {concurrency, rules.KindConcurrency, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","per_host":1,"rule_id":"concurrency","rule_version":1}`},
-		"budget":      {budget, rules.KindBudget, `{"attempt_hard_limit_s":3600,"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","mission":{"max_attempts":40,"max_wall_hours":48},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}`},
-		"job":         {job, rules.KindJob, `{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"},{"executor":"exec:cursor","model_pattern":"*","provider":"cursor-mix","status":"probation"}],"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","rule_id":"job:implementer","rule_version":1,"tenant":"dev","text":"Implement the task's spec on a branch.\n"}`},
-		"facts":       {facts, rules.KindFacts, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","facts":[{"executor":"exec:codex","kind":"cannot","subject":"docker"},{"executor":"exec:cursor","kind":"prefer","provider":"cursor-mix","scope":{"repo":"bifrost-trade-frontend"},"subject":"frontend"}],"rule_id":"capability-facts","rule_version":1}`},
-		"routing":     {routing, rules.KindRouting, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","order":["capability","quota"],"quota_stop_percent":90,"rule_id":"routing:dev","rule_version":1,"tenant":"dev"}`},
+		"envelope":                 {envelope, rules.KindEnvelope, `{"budget":{"max_attempts":40,"max_wall_hours":48},"direction":"initial","effective_at":"2026-10-15T00:00:00Z","executors":["exec:codex","exec:deterministic"],"expires_at":"2027-01-15T00:00:00Z","hosts":["mbp-dev"],"max_action":"branch","rule_id":"standing-envelope:dev","rule_version":1,"tenant":"dev"}`},
+		"concurrency":              {concurrency, rules.KindConcurrency, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","per_host":1,"rule_id":"concurrency","rule_version":1}`},
+		"budget":                   {budget, rules.KindBudget, `{"attempt_hard_limit_s":3600,"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","mission":{"max_attempts":40,"max_wall_hours":48},"rule_id":"budget:dev","rule_version":1,"tenant":"dev"}`},
+		"job":                      {job, rules.KindJob, `{"candidates":[{"executor":"exec:codex","model_pattern":"*","provider":"openai","status":"active"},{"executor":"exec:cursor","model_pattern":"*","provider":"cursor-mix","status":"probation"}],"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","rule_id":"job:implementer","rule_version":1,"tenant":"dev","text":"Implement the task's spec on a branch.\n"}`},
+		"facts":                    {facts, rules.KindFacts, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","facts":[{"executor":"exec:codex","kind":"cannot","subject":"docker"},{"executor":"exec:cursor","kind":"prefer","provider":"cursor-mix","scope":{"repo":"bifrost-trade-frontend"},"subject":"frontend"}],"rule_id":"capability-facts","rule_version":1}`},
+		"routing":                  {routing, rules.KindRouting, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","order":["capability","quota"],"quota_stop_percent":90,"rule_id":"routing:dev","rule_version":1,"tenant":"dev"}`},
+		"routing with a threshold": {routing + "min_score_percent: 60\nmin_samples: 8\n", rules.KindRouting, `{"direction":"initial","effective_at":"2026-10-15T00:00:00Z","expires_at":"2027-01-15T00:00:00Z","min_samples":8,"min_score_percent":60,"order":["capability","quota"],"quota_stop_percent":90,"rule_id":"routing:dev","rule_version":1,"tenant":"dev"}`},
 	} {
 		r := parse(t, c.text)
 		body, err := r.BodyJSON()
@@ -119,6 +120,11 @@ func TestParseRefuses(t *testing.T) {
 		"a C-class action":           strings.Replace(envelope, "max_action: branch", "max_action: release", 1),
 		"four live attempts a host":  strings.Replace(concurrency, "per_host: 1", "per_host: 4", 1),
 		"quota before capability":    strings.Replace(routing, "[capability, quota]", "[quota, capability]", 1),
+		"a score without samples":    routing + "min_score_percent: 60\n",
+		"samples without a score":    routing + "min_samples: 8\n",
+		"a score above 100":          routing + "min_score_percent: 101\nmin_samples: 8\n",
+		"no samples":                 routing + "min_score_percent: 60\nmin_samples: 0\n",
+		"a score as a fraction":      routing + "min_score_percent: 0.6\nmin_samples: 8\n",
 		"a budget past its bound":    strings.Replace(envelope, "max_attempts: 40", "max_attempts: 100000", 1),
 		"no executors":               strings.Replace(envelope, "executors: [exec:deterministic, exec:codex]\n", "", 1),
 		"an executor twice":          strings.Replace(envelope, "[exec:deterministic, exec:codex]", "[exec:codex, exec:codex]", 1),
@@ -182,6 +188,9 @@ func TestTightens(t *testing.T) {
 		"a fact's scope changed":    {facts, next(facts, "repo: bifrost-trade-frontend", "repo: bifrost-platform"), false},
 		"a lower quota stop":        {routing, next(routing, "quota_stop_percent: 90", "quota_stop_percent: 80"), true},
 		"a higher quota stop":       {routing, next(routing, "quota_stop_percent: 90", "quota_stop_percent: 95"), false},
+		"a threshold added":         {routing, next(routing+"min_score_percent: 60\nmin_samples: 8\n", "", ""), false},
+		"a threshold raised":        {routing + "min_score_percent: 60\nmin_samples: 8\n", next(routing+"min_score_percent: 60\nmin_samples: 8\n", "min_score_percent: 60", "min_score_percent: 70"), false},
+		"a threshold kept":          {routing + "min_score_percent: 60\nmin_samples: 8\n", next(routing+"min_score_percent: 60\nmin_samples: 8\n", "quota_stop_percent: 90", "quota_stop_percent: 80"), true},
 		"a different rule":          {concurrency, strings.Replace(next(budget, "", ""), "", "", 1), false},
 	} {
 		err := rules.Tightens(parse(t, c.prev), parse(t, c.next))

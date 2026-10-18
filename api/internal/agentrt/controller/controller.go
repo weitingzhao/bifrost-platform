@@ -254,6 +254,11 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 			moved++
 		}
 	}
+	// In-job scores, when a task has ended since the last computation (W-31
+	// 2.4 slice ②).
+	if _, err := store.ComputeScores(ctx, c.DB); err != nil {
+		errs = append(errs, fmt.Errorf("scores: %w", err))
+	}
 	// Salvaged results of lost attempts get a check of their own (T34 case 8).
 	salvaged, perr := store.PendingSalvaged(ctx, c.DB)
 	if perr != nil {

@@ -331,12 +331,13 @@ func AddDependency(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, dep
 // LeaseAttempt opens attempt n of a task for an executor with a fresh
 // fencing epoch.
 func LeaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID, executor, hostID string, n int, lease time.Duration) (string, int64, error) {
-	return leaseAttempt(ctx, tx, actor, missionID, taskID, Tool{Executor: executor}, hostID, n, lease)
+	return leaseAttemptWith(ctx, tx, actor, missionID, taskID, Tool{Executor: executor}, hostID, n, lease, nil)
 }
 
-// leaseAttempt also records the model and provider the attempt is for:
-// independence is checked against them.
-func leaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration) (string, int64, error) {
+// leaseAttemptWith also records the model and provider the attempt is for
+// (independence is checked against them) and, for a claim, why its tool was
+// the one picked (pick.go).
+func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID string, tl Tool, hostID string, n int, lease time.Duration, choice map[string]any) (string, int64, error) {
 	// The task before the event's stream (review 149 B1).
 	if _, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, taskID); err != nil {
 		return "", 0, err
@@ -355,6 +356,9 @@ func leaseAttempt(ctx context.Context, tx pgx.Tx, actor, missionID, taskID strin
 	}
 	if tl.Provider != "" {
 		body["model_provider"] = tl.Provider
+	}
+	if choice != nil {
+		body["choice"] = choice
 	}
 	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "attempt_leased", Actor: actor,
 		TaskID: taskID, AttemptID: id, Body: body}); err != nil {

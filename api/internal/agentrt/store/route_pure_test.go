@@ -137,3 +137,29 @@ func TestRecordReplays(t *testing.T) {
 		t.Fatal("replayed a record of another algorithm")
 	}
 }
+
+// W-31 2.4 slice ② ⑤: below the threshold over enough samples is out; with
+// too few, a candidate on probation takes no core work; no threshold, no step.
+func TestUnfit(t *testing.T) {
+	cm := &competence{threshold: threshold{minPercent: 40, minSamples: 5}, samples: map[string]sample{
+		"low": {attempts: 10, firstPass: 2}, "high": {attempts: 10, firstPass: 9}, "few": {attempts: 2, firstPass: 2}}}
+	core, plain := routeInput{core: "author_core", competence: cm}, routeInput{competence: cm}
+	for i, c := range []struct {
+		jc   jobCandidate
+		in   routeInput
+		want string
+	}{
+		{jobCandidate{id: "low", status: "active"}, plain, "below the competence threshold"},
+		{jobCandidate{id: "low", status: "probation"}, core, "below the competence threshold"},
+		{jobCandidate{id: "high", status: "probation"}, core, ""},
+		{jobCandidate{id: "few", status: "probation"}, core, "too few samples for core work"},
+		{jobCandidate{id: "few", status: "probation"}, plain, ""},
+		{jobCandidate{id: "few", status: "active"}, core, ""},
+		{jobCandidate{id: "none", status: "probation"}, core, "too few samples for core work"},
+		{jobCandidate{id: "low", status: "probation"}, routeInput{core: "author_core"}, ""},
+	} {
+		if got := strings.Join(c.in.unfit(c.jc), "; "); got != c.want {
+			t.Errorf("case %d (%s, %s): %q, want %q", i, c.jc.id, c.jc.status, got, c.want)
+		}
+	}
+}

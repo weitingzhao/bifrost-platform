@@ -51,6 +51,8 @@ type claimOpts struct {
 type candidate struct {
 	id, mission, role, spec, subject, base, repo, effect string
 	envelope                                             string // the standing envelope its mission started under
+	tenant                                               string // its mission's: whose routing rule applies
+	class                                                string // its task class: which scores bear on it
 	core                                                 bool
 	needs, route                                         []string
 	limitS                                               int
@@ -123,6 +125,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 		}
 		var after *candidate
 		rc := ruleCache{}
+		st := &pickState{}
 		for {
 			cands, err := candidates(ctx, tx, o.effects, after)
 			if err != nil {
@@ -142,7 +145,7 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 						continue
 					}
 				}
-				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc); err != nil || claim != nil {
+				if claim, err = tryCandidate(ctx, tx, req, cp, cands[i], o.ttl, rc, st); err != nil || claim != nil {
 					return err
 				}
 			}
@@ -177,14 +180,14 @@ func candidates(ctx context.Context, tx pgx.Tx, effects []string, after *candida
 const candidateColumns = `SELECT t.task_id, t.mission_id, t.role, t.spec_artifact_id,
 	  COALESCE(t.subject_task_id, ''), COALESCE(t.base_commit, ''), COALESCE(t.repo, ''), t.effect_class,
 	  t.core OR COALESCE(s.core, false), ARRAY(SELECT jsonb_array_elements_text(t.needs_json)),
-	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, '')
+	  ARRAY(SELECT jsonb_array_elements_text(t.route_json)), t.hard_limit_s, t.created_at, COALESCE(m.envelope_rule_id, ''), m.tenant, t.task_class
 	  FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 	  LEFT JOIN agentrt.task s ON s.task_id = t.subject_task_id`
 
 func scanCandidate(row pgx.CollectableRow) (candidate, error) {
 	var c candidate
 	err := row.Scan(&c.id, &c.mission, &c.role, &c.spec, &c.subject, &c.base, &c.repo, &c.effect, &c.core, &c.needs, &c.route,
-		&c.limitS, &c.created, &c.envelope)
+		&c.limitS, &c.created, &c.envelope, &c.tenant, &c.class)
 	return c, err
 }
 
@@ -201,9 +204,9 @@ func candidateOf(ctx context.Context, tx pgx.Tx, taskID string) (candidate, erro
 // What it locks for a candidate it does not take is released at once by
 // rolling back to a savepoint, so a skipped candidate holds nothing until the
 // claim commits (review 148 B1).
-func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache) (*Claim, error) {
+func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, error) {
 	hook("candidate", c.id)
-	_, found, err := pickTool(ctx, tx, r.Tools, cp, c)
+	_, _, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
 		return nil, err
 	}
@@ -212,7 +215,7 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 	if err != nil {
 		return nil, err
 	}
-	cl, err := take(ctx, sp, r, cp, c, ttl, rc)
+	cl, err := take(ctx, sp, r, cp, c, ttl, rc, st)
 	if err != nil || cl == nil {
 		if rerr := sp.Rollback(ctx); err == nil {
 			err = rerr
@@ -241,7 +244,7 @@ func tryCandidate(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilitie
 // either commits before the claim or is seen by it (review 148 A2). A plan
 // task takes the mission row exclusively, so two plan tasks of one mission
 // never lease together (task_one_live_plan).
-func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache) (*Claim, error) {
+func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c candidate, ttl time.Duration, rc ruleCache, st *pickState) (*Claim, error) {
 	var mission string
 	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1 AND state = 'ready' FOR NO KEY UPDATE SKIP LOCKED`,
 		c.id).Scan(&mission)
@@ -268,7 +271,7 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 	if c, err = candidateOf(ctx, tx, c.id); err != nil {
 		return nil, err
 	}
-	tl, found, err := pickTool(ctx, tx, r.Tools, cp, c)
+	tl, why, found, err := pickTool(ctx, tx, r.Tools, cp, c, st)
 	if err != nil || !found {
 		return nil, err
 	}
@@ -300,45 +303,57 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		}
 	}
 	hook("taken", c.id)
-	return lease(ctx, tx, r.HostID, tl, c, ttl)
+	return lease(ctx, tx, r.HostID, tl, c, ttl, why)
 }
 
-// pickTool walks the task's route (route_json) in order and returns the
-// first of the host's tools that matches a candidate still active or on
-// probation and that the hard checks (routeInput.exclusion) do not exclude
-// now. A task with an empty route goes to nobody.
-func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, cp capabilities, c candidate) (Tool, bool, error) {
+// pickTool returns the host tool the claim uses and why (pick.go): of the
+// task's route (route_json), each candidate still active or on probation
+// that one of the host's tools matches and neither the hard checks
+// (routeInput.exclusion) nor the competence step (unfit) exclude now offers
+// the first such tool; the pick among them goes by standing, quota and
+// rotation. A task with an empty route goes to nobody.
+func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, cp capabilities, c candidate, st *pickState) (Tool, map[string]any, bool, error) {
 	if len(c.route) == 0 {
-		return Tool{}, false, nil
+		return Tool{}, nil, false, nil
 	}
 	in, err := inputWith(ctx, tx, cp, c)
 	if err != nil {
-		return Tool{}, false, err
+		return Tool{}, nil, false, err
 	}
 	byID := map[string]jobCandidate{}
 	for _, jc := range in.candidates {
 		byID[jc.id] = jc
 	}
-	for _, id := range c.route {
+	var opts []pick
+	for pos, id := range c.route {
 		jc, ok := byID[id]
 		if !ok {
 			continue
 		}
 		for _, tl := range tools {
-			if jc.fits(tl) && len(in.exclusion(tl)) == 0 {
-				return tl, true, nil
+			if jc.fits(tl) && len(in.exclusion(tl)) == 0 && len(in.unfit(jc)) == 0 {
+				tier := 0
+				if jc.status == "probation" {
+					tier = 1
+				}
+				opts = append(opts, pick{tool: tl, jc: jc, pos: pos, tier: tier})
+				break
 			}
 		}
 	}
-	return Tool{}, false, nil
+	best, why, err := st.choose(ctx, tx, opts, c.tenant)
+	if err != nil || best == nil {
+		return Tool{}, nil, false, err
+	}
+	return best.tool, why, true, nil
 }
 
-func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration) (*Claim, error) {
+func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, ttl time.Duration, why map[string]any) (*Claim, error) {
 	var n int
 	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(attempt_no), 0) + 1 FROM agentrt.attempt WHERE task_id = $1`, c.id).Scan(&n); err != nil {
 		return nil, err
 	}
-	id, epoch, err := leaseAttempt(ctx, tx, "controller", c.mission, c.id, tl, hostID, n, ttl)
+	id, epoch, err := leaseAttemptWith(ctx, tx, "controller", c.mission, c.id, tl, hostID, n, ttl, why)
 	if err != nil {
 		return nil, err
 	}

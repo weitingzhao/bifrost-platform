@@ -115,12 +115,22 @@ type Fact struct {
 	Scope                             map[string]any
 }
 
-// Routing is the order routing decides in and how full a vendor pool may be
-// before it takes no more work (a percentage of its window).
+// Routing is the order routing decides in, how full a vendor pool may be
+// before it takes no more work (a percentage of its window) and, when the
+// rule sets one, the competence threshold.
 type Routing struct {
 	Tenant           string
 	Order            []string
 	QuotaStopPercent int
+	Competence       *Competence
+}
+
+// Competence is routing's step ⑤ (design v5 §5.1.2): a candidate whose
+// in-job score over at least MinSamples attempts of the task's kind is below
+// MinScorePercent is not routed to, and one on probation with fewer takes no
+// core work. A rule without it routes as before.
+type Competence struct {
+	MinScorePercent, MinSamples int
 }
 
 // Rule is a parsed rule: its header and the one part its kind has.
@@ -401,6 +411,21 @@ func (r *Rule) routing(o *object, arg string) error {
 	if rt.QuotaStopPercent, err = o.integer("quota_stop_percent", 1, 100); err != nil {
 		return err
 	}
+	_, score := o.fields["min_score_percent"]
+	_, samples := o.fields["min_samples"]
+	switch {
+	case score && samples:
+		c := &Competence{}
+		if c.MinScorePercent, err = o.integer("min_score_percent", 0, 100); err != nil {
+			return err
+		}
+		if c.MinSamples, err = o.integer("min_samples", 1, 10000); err != nil {
+			return err
+		}
+		rt.Competence = c
+	case score || samples:
+		return fmt.Errorf("%s: min_score_percent and min_samples go together", o.where)
+	}
 	r.Routing = rt
 	return nil
 }
@@ -455,6 +480,9 @@ func (r Rule) Doc() map[string]any {
 		doc["facts"] = facts
 	case KindRouting:
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
+		if c := r.Routing.Competence; c != nil {
+			doc["min_score_percent"], doc["min_samples"] = c.MinScorePercent, c.MinSamples
+		}
 	}
 	return doc
 }

@@ -45,6 +45,11 @@ func Tightens(prev, next Rule) error {
 		if next.Routing.QuotaStopPercent > prev.Routing.QuotaStopPercent {
 			return errors.New("quota_stop_percent goes up")
 		}
+		// A threshold excludes some candidates and, by its sample count,
+		// spares others: any change of it is the Owner's to sign.
+		if p, n := prev.Routing.Competence, next.Routing.Competence; (p == nil) != (n == nil) || (p != nil && *p != *n) {
+			return errors.New("the competence threshold changes")
+		}
 	}
 	return nil
 }

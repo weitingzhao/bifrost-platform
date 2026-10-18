@@ -25,7 +25,8 @@ import (
 // subject), and route_decided records them with their fingerprint, so a
 // decision can be replayed and is decided again exactly when they change
 // (Reroute; review 154 A2, B2, B3). A claim walks the route and checks it
-// again under its locks (claim.go). Scores and quota (⑤, ⑥) are 2.4.
+// again under its locks (claim.go). Competence (⑤) is a route input too
+// (competence.go); quota and rotation (⑥, ⑦) are read at the claim (pick.go).
 
 // capabilityLock is the lock on what routing reads from the Owner's rules:
 // job candidates and capability facts. A claim holds it shared from its start
@@ -118,10 +119,13 @@ type priorAttempt struct {
 
 // capabilities are the routing inputs of the Owner's rules: each job's
 // candidates that are active or on probation, active first and then by id,
-// and the restrictions in force, by id.
+// the restrictions in force, by id, and the competence thresholds by tenant
+// with the in-job scores they are read against.
 type capabilities struct {
 	candidates map[string][]jobCandidate
 	facts      []restriction
+	thresholds map[string]threshold
+	scores     []scoreLine
 }
 
 // readCapabilities reads the candidates and the restrictions routing acts on.
@@ -197,7 +201,8 @@ func readCapabilities(ctx context.Context, tx pgx.Tx) (capabilities, error) {
 			return cp, err
 		}
 	}
-	return cp, nil
+	cp.thresholds, cp.scores, err = readCompetence(ctx, tx)
+	return cp, err
 }
 
 // priorAttempts reads the attempts of the given tasks, by task, each by id.
@@ -227,6 +232,7 @@ type routeInput struct {
 	candidates         []jobCandidate
 	facts              []restriction // on the task's needs and its core label
 	attempts           []priorAttempt
+	competence         *competence // nil: the tenant's routing rule sets no threshold
 }
 
 // input selects what of the capabilities and the subject's attempts bears on
@@ -241,6 +247,7 @@ func (cp capabilities) input(c candidate, attempts []priorAttempt) routeInput {
 		}
 	}
 	in.candidates = cp.candidates[in.job]
+	in.competence = cp.competenceOf(c, in.job, in.candidates)
 	subjects := map[string]bool{in.core: in.core != ""}
 	for _, n := range c.needs {
 		subjects[n] = true
@@ -323,17 +330,23 @@ func (in routeInput) exclusion(tl Tool) []string {
 }
 
 // decide is the route: the candidates in order less those the hard checks
-// exclude, and each excluded one with its reasons.
+// and the competence step exclude, and each excluded one with its reasons
+// (and its sample, when the competence step is on).
 func (in routeInput) decide() (route []string, excluded []any) {
 	route = []string{}
 	excluded = []any{}
 	for _, jc := range in.candidates {
-		reasons := in.exclusion(Tool{Executor: jc.executor, Provider: jc.provider})
+		reasons := append(in.exclusion(Tool{Executor: jc.executor, Provider: jc.provider}), in.unfit(jc)...)
 		if len(reasons) == 0 {
 			route = append(route, jc.id)
 			continue
 		}
-		excluded = append(excluded, map[string]any{"candidate": jc.id, "reason": reasons[0], "reasons": reasons})
+		e := map[string]any{"candidate": jc.id, "reason": reasons[0], "reasons": reasons}
+		if in.competence != nil {
+			s := in.competence.samples[jc.id]
+			e["sample"] = map[string]any{"attempts": s.attempts, "first_pass": s.firstPass}
+		}
+		excluded = append(excluded, e)
 	}
 	return route, excluded
 }
@@ -364,8 +377,12 @@ func (in routeInput) record() map[string]any {
 	for _, n := range in.needs {
 		needs = append(needs, n)
 	}
-	return map[string]any{"algorithm": routeAlgorithm, "job": in.job, "core": in.core, "subject": in.subject, "needs": needs,
+	rec := map[string]any{"algorithm": routeAlgorithm, "job": in.job, "core": in.core, "subject": in.subject, "needs": needs,
 		"candidates": cands, "facts": facts, "attempts": attempts}
+	if in.competence != nil {
+		rec["competence"] = in.competence.record(in.candidates)
+	}
+	return rec
 }
 
 // fingerprint is the sha256 of the canonical record.
@@ -460,6 +477,16 @@ func replayInput(rec map[string]any) (routeInput, error) {
 	}
 	for _, m := range attempts {
 		in.attempts = append(in.attempts, priorAttempt{id: str(m, "id"), executor: str(m, "executor"), provider: opt(m, "provider")})
+	}
+	if cm, ok := rec["competence"].(map[string]any); ok {
+		in.competence = &competence{threshold: threshold{minPercent: num(cm, "min_score_percent"), minSamples: num(cm, "min_samples"),
+			rule: rule(cm)}, samples: map[string]sample{}}
+		l, _ := cm["samples"].([]any)
+		for _, x := range l {
+			if m, ok := x.(map[string]any); ok {
+				in.competence.samples[str(m, "candidate")] = sample{attempts: num(m, "attempts"), firstPass: num(m, "first_pass")}
+			}
+		}
 	}
 	return in, nil
 }
