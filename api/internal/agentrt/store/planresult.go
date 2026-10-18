@@ -165,6 +165,14 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			}
 			made = append(made, id)
 		}
+		// The seat's lock before the implementation specs are stored: a
+		// message to the seat stores its body under the sender's lock and the
+		// seat's mail is read under the seat's, then the sender's (review 270
+		// B1).
+		seat := Writer{Actor: Seat}
+		if err = ensureWriter(ctx, tx, seat, false); err != nil {
+			return err
+		}
 		tasks := make([]TaskProposal, 0, len(p.Tasks))
 		for _, pt := range p.Tasks {
 			verify := slices.Clone(Repos[pt.Repo].Verify)
@@ -187,10 +195,6 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		}
 		if err = checkBatch(tasks); err != nil {
 			return refuse(err.Error())
-		}
-		seat := Writer{Actor: Seat}
-		if err = ensureWriter(ctx, tx, seat, false); err != nil {
-			return err
 		}
 		if err = lockBatch(ctx, tx, tasks); err != nil {
 			return err

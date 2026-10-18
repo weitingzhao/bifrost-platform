@@ -36,10 +36,13 @@ func InTx(ctx context.Context, conn interface {
 func MissionStream(missionID string) string { return "mission:" + missionID }
 func PlanStream(rootID string) string       { return "plan:" + rootID }
 
+// maxArtifactBytes is the largest artifact body.
+const maxArtifactBytes = 1 << 20
+
 // PutArtifact stores a body by content and returns its id. Artifacts are
 // append only; the same body stored twice is one row.
 func PutArtifact(ctx context.Context, tx pgx.Tx, actor, kind, mediaType string, body []byte) (string, error) {
-	if len(body) > 1<<20 {
+	if len(body) > maxArtifactBytes {
 		return "", errors.New("store: an artifact is at most 1 MiB")
 	}
 	h := sha256.Sum256(body)
@@ -67,7 +70,7 @@ const ArtifactStream = "artifacts"
 // spec with task_proposed, a message with message_posted) go through
 // PutArtifact.
 func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string, body []byte) (string, bool, error) {
-	if len(body) > 1<<20 {
+	if len(body) > maxArtifactBytes {
 		return "", false, errors.New("store: an artifact is at most 1 MiB")
 	}
 	h := sha256.Sum256(body)

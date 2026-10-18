@@ -296,3 +296,44 @@ func TestABriefWithHugeRecords(t *testing.T) {
 		t.Fatalf("a spec of %d bytes", len(spec))
 	}
 }
+
+// Records over the snapshot's budget are cut; the envelope, the budget and
+// the checks stay whole (review 270 B4). A stored message too large to be a
+// brief is refused once, not retried each pass (review 270 B3).
+func TestTheSnapshotKeepsItsFixedPart(t *testing.T) {
+	w, ask := mailWorld(t, "status?")
+	han := strings.Repeat("汉", 300)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-80", Title: "m", Goal: "g",
+			Deadline: time.Now().Add(24 * time.Hour), Success: []string{"s"}, MaxAttempts: 1, MaxWallHours: 1}); err != nil {
+			return err
+		}
+		for i := 0; i < 20; i++ {
+			if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-80"), Type: "decision_recorded", Actor: store.Seat,
+				MissionID: "M-80", Body: map[string]any{"decision": han, "why": han, "dropped": han, "reverse": han}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	task, _ := takeAndReady(t, w, ask)
+	spec := specText(t, w, task)
+	for _, want := range []string{"Standing envelope and this mission's budget", "Repositories a plan may name", "they are cut here"} {
+		if !strings.Contains(spec, want) {
+			t.Errorf("the snapshot lost %q", want)
+		}
+	}
+
+	var big string
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		var err error
+		big, err = store.PostMessage(ctx, tx, "owner", store.Seat, "ask", []byte(strings.Repeat(`\`, 300<<10)))
+		return err
+	}))
+	if task, err := store.TakeMail(ctx, w.rt, big); err != nil || task != "" {
+		t.Fatalf("a stored message too large: %q %v", task, err)
+	}
+	if mail, _ := store.PendingMail(ctx, w.rt); len(mail) != 0 {
+		t.Fatalf("still pending: %v", mail)
+	}
+}

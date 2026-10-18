@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
@@ -85,10 +84,17 @@ func TakeMail(ctx context.Context, db DB, messageID string) (string, error) {
 	return "", refuseMail(ctx, db, messageID, err)
 }
 
-// unanswerable: an error a retry would meet again.
+// mailError is why a message itself cannot become a brief: a retry would
+// meet it again. An error of the runtime's own state is not one: the message
+// stays unread and the pass reports it (review 270 B3).
+type mailError struct{ why string }
+
+func (e mailError) Error() string { return e.why }
+
+// unanswerable: the message itself is the reason.
 func unanswerable(err error) bool {
-	var pg *pgconn.PgError
-	return errors.Is(err, ErrInvalid) || (errors.As(err, &pg) && strings.HasPrefix(pg.Code, "22"))
+	var m mailError
+	return errors.As(err, &m)
 }
 
 // Locks, in every pass that reads the seat's mail: the seat as a writer
@@ -131,6 +137,9 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 			return err
 		}
 		body := plainText(raw)
+		if len(body) > MaxMessageBody || strings.TrimSpace(body) == "" {
+			return mailError{fmt.Sprintf("a message is 1 to %d bytes of text", MaxMessageBody)}
+		}
 		thread, err := threadBefore(ctx, tx, from, at, messageID)
 		if err != nil {
 			return err
@@ -139,7 +148,7 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 		mp, err := MissionProposal{Title: cutRunes("Chief: "+first, maxTaskTitle), Goal: body,
 			Success: []string{BriefSuccess}, MaxAction: "none"}.check()
 		if err != nil {
-			return err
+			return mailError{err.Error()}
 		}
 		m, err := proposeMissionTx(ctx, tx, w, mp)
 		if err != nil {
@@ -153,6 +162,9 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 		spec, err := briefSpec(from, kind, body, thread, snap)
 		if err != nil {
 			return err
+		}
+		if len(spec) > maxArtifactBytes {
+			return mailError{"the brief would be larger than an artifact may be"}
 		}
 		specID, err := PutArtifact(ctx, tx, Seat, "task_spec", "application/json", spec)
 		if err != nil {
@@ -175,30 +187,45 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 
 // refuseMail reads a message that cannot become a brief and tells its sender
 // why, unless the sender can no longer be written to.
+// Locks as takeMail's: the seat, the sender, the row; and the refusal's body
+// is stored before either mailbox stream is touched (review 270 B2).
 func refuseMail(ctx context.Context, db DB, messageID string, why error) error {
 	return InTx(ctx, db, func(tx pgx.Tx) error {
 		if err := writerLock(ctx, tx, Seat); err != nil {
 			return err
 		}
 		var from string
-		err := tx.QueryRow(ctx, `SELECT from_actor_id FROM agentrt.message
-		  WHERE message_id = $1 AND to_actor_id = $2 AND acked_at IS NULL AND task_id IS NULL FOR UPDATE`, messageID, Seat).Scan(&from)
+		err := tx.QueryRow(ctx, `SELECT from_actor_id FROM agentrt.message WHERE message_id = $1 AND to_actor_id = $2`,
+			messageID, Seat).Scan(&from)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if err = AckMessage(ctx, tx, Seat, messageID); err != nil {
+		if err = writerLock(ctx, tx, from); err != nil {
 			return err
 		}
-		if _, err = ActorKind(ctx, tx, from); errors.Is(err, pgx.ErrNoRows) {
-			return nil
-		} else if err != nil {
+		var unread bool
+		if err = tx.QueryRow(ctx, `SELECT acked_at IS NULL AND task_id IS NULL FROM agentrt.message WHERE message_id = $1 FOR UPDATE`,
+			messageID).Scan(&unread); err != nil || !unread {
 			return err
 		}
-		_, err = postMessage(ctx, tx, Seat, from, "answer", []byte("I could not take your message ("+
-			oneLineRunes(why.Error(), 300)+"). Send it again in other words, or make it a goal."), "", "")
+		_, err = ActorKind(ctx, tx, from)
+		tell := err == nil
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		body := []byte("I could not take your message (" + oneLineRunes(why.Error(), 300) + "). Send it again in other words, or make it a goal.")
+		if tell {
+			if _, err = PutArtifact(ctx, tx, Seat, "message", "text/plain; charset=utf-8", body); err != nil {
+				return err
+			}
+		}
+		if err = AckMessage(ctx, tx, Seat, messageID); err != nil || !tell {
+			return err
+		}
+		_, err = postMessage(ctx, tx, Seat, from, "answer", body, "", "")
 		return err
 	})
 }

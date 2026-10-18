@@ -239,6 +239,7 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 	if n == 0 {
 		b.WriteString("None.\n")
 	}
+	records := b.Len() // what comes after is fixed and kept whole (review 270 B4)
 	b.WriteString("\n### Standing envelope and this mission's budget\n\n")
 	env, err := inForce(ctx, tx, rules.KindEnvelope+":dev")
 	if err != nil {
@@ -263,13 +264,19 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 		}
 		fmt.Fprintf(&b, "- %s: %s\n", name, strings.Join(cmds, ", "))
 	}
+	// The fields are cut above; this bounds the whole (review 269 B4), by
+	// cutting the records and keeping the envelope, the budget and the
+	// checks whole (review 270 B4).
 	out := b.String()
-	if len(out) > snapMaxBytes { // the fields are cut above; this bounds the whole (review 269 B4)
-		cut := []byte(out[:snapMaxBytes])
+	if len(out) > snapMaxBytes {
+		const mark = "\n(The records above were longer; they are cut here.)\n"
+		head, fixed := out[:records], out[records:]
+		n := max(snapMaxBytes-len(fixed)-len(mark), 0)
+		cut := []byte(head[:min(n, len(head))])
 		for !utf8.Valid(cut) {
 			cut = cut[:len(cut)-1]
 		}
-		out = string(cut) + "\n(The snapshot was longer; it is cut here.)\n"
+		out = string(cut) + mark + fixed
 	}
 	return out, nil
 }
