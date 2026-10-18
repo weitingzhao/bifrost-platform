@@ -48,8 +48,9 @@ const (
 	MaxMissionAttempts  = 1000
 	MaxMissionWallHours = 720
 	MaxAttemptLimitS    = 86400
-	// MaxPerHost is round 2's concurrency: one live attempt per host (v5).
-	MaxPerHost = 1
+	// MaxPerHost bounds concurrency: at most three live attempts a host
+	// (W-31 2.4 slice ③); how many run is the signed per_host.
+	MaxPerHost = 3
 	maxJobText = 16 << 10
 )
 

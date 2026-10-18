@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Claiming.
@@ -79,8 +81,10 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var state string
 		var slots int
+		// A host that states no slots has the most a rule may give (2.4 slice
+		// ③): the signed per_host decides how many run.
 		err := tx.QueryRow(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = $1
-		  RETURNING state, COALESCE((capacity_json->>'slots')::int, 1)`, r.HostID).Scan(&state, &slots)
+		  RETURNING state, COALESCE((capacity_json->>'slots')::int, $2)`, r.HostID, rules.MaxPerHost).Scan(&state, &slots)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("%w: host %s is not registered", ErrFenced, r.HostID)
 		}

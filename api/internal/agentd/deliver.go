@@ -553,13 +553,19 @@ func sortedIDs(m map[string]Entry) []string {
 // SalvageEvery, and holds up neither the others nor the next claim: each
 // step runs within TakeOverLimit, so a push that never ends is cut off and
 // left pending (review 165 A3). It returns an error only when the registry
-// cannot be used (review 165 B1).
+// cannot be used (review 165 B1). An attempt this process runs now is its
+// Run's, and is left out (2.4 slice ③).
 func (d *Daemon) Recover(ctx context.Context) error {
 	entries, err := d.Registry.Load()
 	if err != nil {
 		return err
 	}
-	ids := sortedIDs(entries)
+	var ids []string
+	for _, id := range sortedIDs(entries) {
+		if !d.isLive(id) {
+			ids = append(ids, id)
+		}
+	}
 	for _, id := range ids {
 		e := entries[id]
 		switch {

@@ -35,10 +35,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentd"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 func main() {
@@ -116,6 +118,11 @@ func run() error {
 		log.Printf("agentd: no executor of AGENTD_TOOLS can be offered on this host: it takes no work, and goes on handing over what it has")
 	}
 	d.Executors = executors
+	// Up to MaxSlots attempts at once (W-31 2.4 slice ③); the platform
+	// leases no more than the signed concurrency rule's per_host. Each runs in
+	// its own goroutine; on SIGTERM every one hands over before agentd exits.
+	var runs sync.WaitGroup
+	defer runs.Wait()
 	for ctx.Err() == nil {
 		// what a previous run left, and hand-overs that waited for the platform
 		if err := d.Recover(ctx); err != nil {
@@ -130,8 +137,10 @@ func run() error {
 			sleep(ctx, time.Minute)
 			continue
 		}
-		free := 1
-		if overloaded() {
+		// With every slot taken (or the host overloaded) the claim asks for
+		// none: it still keeps the host's poll fresh, and waits its long poll.
+		free := agentd.MaxSlots - d.Running()
+		if free < 0 || overloaded() {
 			free = 0
 		}
 		cl, err := d.Client.Claim(ctx, free, offered)
@@ -143,9 +152,14 @@ func run() error {
 		if cl == nil {
 			continue
 		}
-		out, err := d.Run(ctx, cl)
-		log.Printf("agentd: %s attempt %d: %s %s submitted=%v salvaged=%v err=%v",
-			cl.TaskID, cl.AttemptNo, out.EndHow, out.Conclusion, out.Submitted, out.Salvaged, err)
+		d.Hold(cl.AttemptID) // counted from now, not from when its goroutine starts
+		runs.Add(1)
+		safego.Go("agentd-run", func() {
+			defer runs.Done()
+			out, err := d.Run(ctx, cl)
+			log.Printf("agentd: %s attempt %d: %s %s submitted=%v salvaged=%v err=%v",
+				cl.TaskID, cl.AttemptNo, out.EndHow, out.Conclusion, out.Submitted, out.Salvaged, err)
+		})
 	}
 	return nil
 }

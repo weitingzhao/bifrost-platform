@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -61,6 +62,45 @@ type Daemon struct {
 	Retry           time.Duration // pause between retries of a step the platform could not take; 5 s
 
 	next map[string]time.Time // when a pending hand-over is tried again
+
+	// live are the attempts this process runs or hands over now. Several
+	// run at once (W-31 2.4 slice ③); Recover leaves these to their Run and
+	// takes over only what a previous process left.
+	mu   sync.Mutex
+	live map[string]bool
+}
+
+// MaxSlots is how many attempts agentd asks for at most; the platform leases
+// no more than the signed concurrency rule's per_host.
+const MaxSlots = 3
+
+// Hold marks an attempt as run by this process, before its Run starts.
+func (d *Daemon) Hold(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.live == nil {
+		d.live = map[string]bool{}
+	}
+	d.live[id] = true
+}
+
+func (d *Daemon) drop(id string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	delete(d.live, id)
+}
+
+func (d *Daemon) isLive(id string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.live[id]
+}
+
+// Running is how many attempts this process runs now.
+func (d *Daemon) Running() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.live)
 }
 
 func (d *Daemon) logf(format string, args ...any) {
@@ -111,8 +151,11 @@ type Outcome struct {
 	Salvaged   bool
 }
 
-// Run runs one claimed attempt to its end.
+// Run runs one claimed attempt to its end. It holds the attempt for as long
+// as it runs, so that Recover, which runs between claims, leaves it alone.
 func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
+	d.Hold(cl.AttemptID)
+	defer d.drop(cl.AttemptID)
 	a := &Attempt{Claim: cl}
 	l := d.keepLease(ctx, cl.AttemptID, cl.Epoch) // from the claim to the hand-over (review 163 A7)
 	defer l.release()

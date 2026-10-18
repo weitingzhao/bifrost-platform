@@ -117,7 +117,7 @@ func TestParseRefuses(t *testing.T) {
 		"an unknown kind":            text("visibility", "per_host: 1\n"),
 		"a tenant nobody has":        text("budget:prod", "tenant: prod\n"),
 		"a C-class action":           strings.Replace(envelope, "max_action: branch", "max_action: release", 1),
-		"two live attempts a host":   strings.Replace(concurrency, "per_host: 1", "per_host: 2", 1),
+		"four live attempts a host":  strings.Replace(concurrency, "per_host: 1", "per_host: 4", 1),
 		"quota before capability":    strings.Replace(routing, "[capability, quota]", "[quota, capability]", 1),
 		"a budget past its bound":    strings.Replace(envelope, "max_attempts: 40", "max_attempts: 100000", 1),
 		"no executors":               strings.Replace(envelope, "executors: [exec:deterministic, exec:codex]\n", "", 1),
