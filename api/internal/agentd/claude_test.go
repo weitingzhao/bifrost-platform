@@ -34,6 +34,7 @@ func TestClaudeExecutor(t *testing.T) {
 				"--output-format": "stream-json", "--mcp-config": `{"mcpServers":{}}`,
 				"--allowedTools": "Read,Grep,Glob", "--tools": "Read,Grep,Glob",
 				"--disallowedTools": "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
+				"--setting-sources": "", "--settings": `{"disableAllHooks":true}`,
 			} {
 				i := slices.Index(sp.Argv, flag)
 				if i < 0 || i+1 >= len(sp.Argv) || sp.Argv[i+1] != value {

@@ -155,6 +155,13 @@ func claudeExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
 		argv := []string{"claude", "-p", "--output-format", "stream-json",
 			"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`,
+			// No settings file is read, the host user's nor the checkout's, and
+			// no hook runs: a hook is a command the read-only tools do not
+			// govern, and a branch under review could carry one in its
+			// .claude/settings.json (measured 10-18, claude 2.1.302: such a
+			// hook runs without these, and with either alone it does not;
+			// TD-371). The OAuth token comes from the environment.
+			"--setting-sources", "", "--settings", `{"disableAllHooks":true}`,
 			"--allowedTools", "Read,Grep,Glob",
 			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
 			// allowedTools grants permission; tools limits the available built-ins.
