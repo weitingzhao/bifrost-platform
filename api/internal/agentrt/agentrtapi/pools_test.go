@@ -52,6 +52,11 @@ func TestPools(t *testing.T) {
 	if code, out := call2("admin", "POST", "pools/cursor%3Aowner%3Amonthly/reading", reading); code != http.StatusOK || out["vendor_pool_id"] != "cursor:owner:monthly" {
 		t.Fatalf("an escaped pool: %d %v", code, out)
 	}
+	// Escaped twice, it is decoded once: not a pool (review 285).
+	reading["idempotency_key"] = "r-twice"
+	if code, out := call2("admin", "POST", "pools/cursor%253Aowner%253Amonthly/reading", reading); code != http.StatusUnprocessableEntity {
+		t.Fatalf("a pool escaped twice: %d %v", code, out)
+	}
 	_, out = call2("viewer", "GET", "pools", nil)
 	if p := out["pools"].([]any)[0].(map[string]any); p["cooling"] != false || p["measure_source"] != "owner" || p["used_fraction"] != 0.2 {
 		t.Fatalf("after the Owner's reading: %v", p)

@@ -43,11 +43,16 @@ func (a *API) recordReading(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The router reads the escaped path when a client escapes it: a browser's
-	// encodeURIComponent sends claude%3Aowner%3Aweekly (review 281 A1).
-	pool, err := url.PathUnescape(chi.URLParam(r, "id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "the pool in the path is not escaped right")
-		return
+	// encodeURIComponent sends claude%3Aowner%3Aweekly (review 281 A1). Only
+	// then is the parameter unescaped: one already read from the decoded path
+	// is not decoded twice (review 285).
+	pool := chi.URLParam(r, "id")
+	if r.URL.RawPath != "" {
+		var err error
+		if pool, err = url.PathUnescape(pool); err != nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "the pool in the path is not escaped right")
+			return
+		}
 	}
 	out, err := store.RecordOwnerReading(r.Context(), a.DB, who, b.IdempotencyKey,
 		store.PoolReading{Pool: pool, UsedFraction: b.UsedFraction, ResetsAt: b.ResetsAt})

@@ -261,7 +261,10 @@ func measurePools(ctx context.Context, tx pgx.Tx, actor, source string, rs []Poo
 		  VALUES ($1,$2,$3,$4,$5,$6,$7)
 		  ON CONFLICT (vendor_pool_id) DO UPDATE SET
 		    used_fraction = COALESCE(EXCLUDED.used_fraction, agentrt.vendor_pool.used_fraction),
-		    resets_at = COALESCE(EXCLUDED.resets_at, agentrt.vendor_pool.resets_at),
+		    resets_at = CASE WHEN EXCLUDED.resets_at IS NOT NULL THEN EXCLUDED.resets_at
+		      -- a new fraction with no reset is not bound to a reset already past (review 285)
+		      WHEN EXCLUDED.used_fraction IS NOT NULL AND agentrt.vendor_pool.resets_at <= EXCLUDED.measured_at THEN NULL
+		      ELSE agentrt.vendor_pool.resets_at END,
 		    measured_at = EXCLUDED.measured_at, measure_source = EXCLUDED.measure_source,
 		    version = agentrt.vendor_pool.version + 1
 		  RETURNING cooldown_until`, r.Pool, tool, window, used, resets, now, source).Scan(&cooling); err != nil {

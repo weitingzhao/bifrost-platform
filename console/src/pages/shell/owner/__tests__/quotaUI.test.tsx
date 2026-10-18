@@ -143,3 +143,19 @@ describe('the real API shape', () => {
     expect(within(screen.getByLabelText('Pool')).getByRole('option', { name: 'codex:owner:short' })).toBeInTheDocument()
   })
 })
+
+// Review 285 C: while a reading is being sent the form cannot be edited, so a
+// success never clears what was typed after the submit.
+it('holds the form while a reading is sent', async () => {
+  let answer: (r: Response) => void = () => {}
+  mocks.fetch.mockImplementation(async (_prefix, _path, init) => init?.method === 'POST'
+    ? new Promise<Response>(resolve => { answer = resolve })
+    : new Response(JSON.stringify({ pools: [pool] })))
+  show(); await screen.findByRole('listitem'); fill(); fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
+  await waitFor(() => expect(screen.getByLabelText('Used percent')).toBeDisabled())
+  expect(screen.getByLabelText('Reset (local time)')).toBeDisabled()
+  expect(screen.getByLabelText('Pool')).toBeDisabled()
+  await act(async () => { answer(new Response(JSON.stringify({ vendor_pool_id: pool.vendor_pool_id, recorded: true }))) })
+  await screen.findByText('Reading recorded.')
+  expect(screen.getByLabelText('Used percent')).toBeEnabled()
+})

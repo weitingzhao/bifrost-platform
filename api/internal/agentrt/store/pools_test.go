@@ -322,3 +322,30 @@ func TestComputedAndTheOwnersReadingAtOnce(t *testing.T) {
 		}
 	}
 }
+
+// Review 285: a new reading with no reset is not shown against a reset that
+// has passed since the reading before; a reset still ahead is kept.
+func TestANewReadingDropsAResetAlreadyPast(t *testing.T) {
+	w := newKernelWorld(t)
+	owner := store.Writer{Actor: "owner"}
+	soon := time.Now().Add(2 * time.Second).UTC()
+	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "a", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.9), ResetsAt: &soon})
+	ok(t, err)
+	time.Sleep(2500 * time.Millisecond)
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "b", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.2)})
+	ok(t, err)
+	var resets *time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT resets_at FROM agentrt.vendor_pool WHERE vendor_pool_id = 'claude:owner:short'`).Scan(&resets))
+	if resets != nil {
+		t.Fatalf("the new reading keeps the reset %v that has passed", resets)
+	}
+	ahead := time.Now().Add(3 * time.Hour).UTC().Truncate(time.Second)
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "c", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.3), ResetsAt: &ahead})
+	ok(t, err)
+	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "d", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.4)})
+	ok(t, err)
+	ok(t, w.rt.QueryRow(ctx, `SELECT resets_at FROM agentrt.vendor_pool WHERE vendor_pool_id = 'claude:owner:short'`).Scan(&resets))
+	if resets == nil || !resets.Equal(ahead) {
+		t.Fatalf("a reset still ahead was dropped: %v", resets)
+	}
+}

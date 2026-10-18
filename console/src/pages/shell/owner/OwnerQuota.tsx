@@ -62,9 +62,9 @@ export function OwnerQuota({ now }: { now: number }) {
     {auth?.capsLoading && <p className="m-0 text-sm text-muted-foreground">Checking your sign-in…</p>}
     {!auth?.capsLoading && auth?.capsError && <p className="m-0 text-sm text-muted-foreground">Your role could not be read. Reading entry is unavailable.</p>}
     {owner && <form aria-label="Record quota reading" onSubmit={submit} className="grid min-w-0 gap-2 [overflow-wrap:anywhere] sm:grid-cols-2">
-      <label className="min-w-0 text-sm">Pool<select className={inputClass} value={pool} onChange={e => { setPool(e.target.value); setSaved(false) }}>{choices.map(id => <option key={id} value={id}>{id}</option>)}</select></label>
-      <label className="min-w-0 text-sm">Used percent<input className={inputClass} type="number" min="0" max="100" step="any" required value={percent} onChange={e => { setPercent(e.target.value); setSaved(false) }} /></label>
-      <label className="min-w-0 text-sm">Reset (local time)<input className={inputClass} type="datetime-local" required={Number(percent) === 100} value={reset} onChange={e => { setReset(e.target.value); setSaved(false) }} /></label>
+      <label className="min-w-0 text-sm">Pool<select className={inputClass} disabled={pending} value={pool} onChange={e => { setPool(e.target.value); setSaved(false) }}>{choices.map(id => <option key={id} value={id}>{id}</option>)}</select></label>
+      <label className="min-w-0 text-sm">Used percent<input className={inputClass} disabled={pending} type="number" min="0" max="100" step="any" required value={percent} onChange={e => { setPercent(e.target.value); setSaved(false) }} /></label>
+      <label className="min-w-0 text-sm">Reset (local time)<input className={inputClass} disabled={pending} type="datetime-local" required={Number(percent) === 100} value={reset} onChange={e => { setReset(e.target.value); setSaved(false) }} /></label>
       <div className="flex min-w-0 items-end"><Button type="submit" disabled={pending} className="min-h-11">{pending ? 'Submitting…' : 'Submit'}</Button></div>
       {error && <p role="alert" className="m-0 text-sm sm:col-span-2">{error}</p>}
       {saved && <p role="status" className="m-0 text-sm">Reading recorded.</p>}
