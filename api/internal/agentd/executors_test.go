@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,6 +29,20 @@ func TestAgentExecutors(t *testing.T) {
 	if err != nil || sp.Argv[0] != "codex" || !slices.Contains(sp.Argv, filepath.Join(out, "report.md")) ||
 		!slices.Contains(sp.Argv, "gpt-5") || !strings.Contains(sp.Argv[len(sp.Argv)-1], "# do it") || slices.Contains(sp.Env, "SOME_ADMIN_TOKEN=x") {
 		t.Fatalf("codex = %+v %v", sp, err)
+	}
+	// What codex may write is pinned on its command line (TD-371).
+	tmp := filepath.Join(out, "tmp")
+	for _, pin := range []string{"sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]", "sandbox_workspace_write.exclude_slash_tmp=true",
+		"sandbox_workspace_write.exclude_tmpdir_env_var=true", "notify=[]"} {
+		if i := slices.Index(sp.Argv, pin); i < 1 || sp.Argv[i-1] != "-c" {
+			t.Errorf("codex has no -c %s: %v", pin, sp.Argv)
+		}
+	}
+	if !slices.Contains(sp.Env, "TMPDIR="+tmp) || slices.ContainsFunc(sp.Env, func(kv string) bool { return strings.HasPrefix(kv, "TMPDIR=") && kv != "TMPDIR="+tmp }) {
+		t.Errorf("codex's TMPDIR: %v", sp.Env)
+	}
+	if fi, serr := os.Stat(tmp); serr != nil || !fi.IsDir() {
+		t.Errorf("the attempt's temporary directory: %v", serr)
 	}
 	sp, err = ex["exec:cursor"](a)
 	if err != nil || sp.Argv[0] != "cursor-agent" || !slices.Contains(sp.Argv, "--trust") || slices.Contains(sp.Argv, "--approve-mcps") || sp.After == nil {

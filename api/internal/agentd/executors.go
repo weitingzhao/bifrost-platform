@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,15 +120,42 @@ func deterministicExecutor(self string, env []string) Executor {
 	}
 }
 
+// codexExecutor runs codex in its workspace-write sandbox with what it may
+// write pinned on the command line, whatever the host user's configuration
+// says (TD-371): no writable root besides the workspace and a temporary
+// directory of the attempt's own, not /tmp nor the shared $TMPDIR, and no
+// notify command (codex runs it unsandboxed after each turn). Measured
+// 10-18 on macOS (codex 0.162): with these pins a write to /tmp and to the
+// home directory is refused, one to the workspace taken; on 06 (Linux) the
+// probe in agent-06-owner.sh proves it before codex shares the host.
 func codexExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
+		tmp := filepath.Join(a.Out, "tmp")
+		if err := os.MkdirAll(tmp, 0o700); err != nil {
+			return Spawn{}, err
+		}
 		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write",
+			"-c", "sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]",
+			"-c", "sandbox_workspace_write.exclude_slash_tmp=true",
+			"-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+			"-c", "notify=[]",
 			"-o", filepath.Join(a.Out, "report.md")}
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "-m", m)
 		}
-		return Spawn{Argv: append(argv, Prompt(a)), Env: env, Dir: a.Dir}, nil
+		return Spawn{Argv: append(argv, Prompt(a)), Env: withEnv(env, "TMPDIR", tmp), Dir: a.Dir}, nil
 	}
+}
+
+// withEnv is env with key set to value, replacing what it had.
+func withEnv(env []string, key, value string) []string {
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, key+"=") {
+			out = append(out, kv)
+		}
+	}
+	return append(out, key+"="+value)
 }
 
 func cursorExecutor(env []string) Executor {
