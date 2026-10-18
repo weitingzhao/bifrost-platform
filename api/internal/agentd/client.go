@@ -175,20 +175,39 @@ func (c *Client) attempt(ctx context.Context, id, action string, epoch int64, bo
 	return err
 }
 
+// ActionsUnsupported starts the refusal Heartbeat reports when the platform
+// does not take actions at all (a platform from before W-31 2.3).
+const ActionsUnsupported = "the platform does not take actions"
+
 // Heartbeat renews the lease and carries the executor's recent actions, if
 // any (W-31 2.3); stop is the platform asking the attempt to stop, refused
 // why the platform kept none of the actions (the lease is renewed anyway).
+// A platform from before 2.3 refuses a body with actions (400, unknown
+// field): the heartbeat is sent again at once without them, and refused
+// starts with ActionsUnsupported, so the lease never depends on actions
+// while the PROD platform and agentd are on different versions.
 func (c *Client) Heartbeat(ctx context.Context, attempt string, epoch int64, acts []actions.Action) (stop bool, expires time.Time, refused string, err error) {
 	var out struct {
 		Stop    bool      `json:"stop"`
 		Expires time.Time `json:"lease_expires_at"`
 		Refused string    `json:"actions_refused"`
 	}
-	var body map[string]any
-	if len(acts) > 0 {
-		body = map[string]any{"actions": acts}
+	body := map[string]any{}
+	if epoch != 0 {
+		body["lease_epoch"] = epoch
 	}
-	err = c.attempt(ctx, attempt, "heartbeat", epoch, body, &out)
+	if len(acts) > 0 {
+		body["actions"] = acts
+	}
+	code, err := c.post(ctx, "/attempts/"+attempt+"/heartbeat", body, &out)
+	if err != nil && len(acts) > 0 && code == http.StatusBadRequest {
+		first := err
+		delete(body, "actions")
+		out.Refused = ""
+		if _, err = c.post(ctx, "/attempts/"+attempt+"/heartbeat", body, &out); err == nil {
+			out.Refused = ActionsUnsupported + ": " + oneLine(first.Error(), 200)
+		}
+	}
 	return out.Stop, out.Expires, out.Refused, err
 }
 

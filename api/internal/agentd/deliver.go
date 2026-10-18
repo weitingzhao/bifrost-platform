@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,6 +64,9 @@ type lease struct {
 	// beat makes the keeper's heartbeats and the last one after the
 	// executor exits go one at a time (review 265 B12).
 	beat sync.Mutex
+	// noActions: the platform said it takes no actions; none are sent again
+	// for this attempt.
+	noActions atomic.Bool
 }
 
 func (l *lease) markLost() { l.lostOnce.Do(func() { close(l.lost) }) }
@@ -114,9 +118,15 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 			hctx, hcancel := context.WithTimeout(ctx, timeout)
 			l.beat.Lock()
 			acts := l.tail.Load().take(actions.MaxPerBeat, time.Now())
+			if l.noActions.Load() {
+				acts = nil // the platform takes none: they are dropped, the lease goes on
+			}
 			stop, _, refused, err := d.Client.Heartbeat(hctx, attemptID, epoch, acts)
 			l.beat.Unlock()
 			hcancel()
+			if strings.HasPrefix(refused, ActionsUnsupported) {
+				l.noActions.Store(true)
+			}
 			if refused != "" && refused != lastRefused {
 				d.logf("agentd: heartbeat %s: actions not kept: %s", attemptID, refused)
 			}
@@ -151,7 +161,7 @@ func (d *Daemon) keepLease(ctx context.Context, attemptID string, epoch int64) *
 // hold up the hand-over.
 func (d *Daemon) lastActions(ctx context.Context, attemptID string, epoch int64, l *lease) {
 	t := l.tail.Load()
-	if t == nil || l.isLost() {
+	if t == nil || l.isLost() || l.noActions.Load() {
 		return
 	}
 	done := make(chan struct{})

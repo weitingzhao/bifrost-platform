@@ -2,6 +2,9 @@ package agentd
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -232,5 +235,37 @@ func TestCollectorStops(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("the collector did not stop")
+	}
+}
+
+// A platform from before 2.3 refuses a heartbeat with actions (400, unknown
+// field): agentd sends it again without them at once and says the platform
+// takes none, so the lease never depends on actions.
+func TestHeartbeatToAnOlderPlatform(t *testing.T) {
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		if _, has := body["actions"]; has {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"bad_request","message":"body: json: unknown field \\"actions\\""}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"lease_expires_at":"2026-10-18T07:00:00Z","stop":false}`))
+	}))
+	t.Cleanup(srv.Close)
+	c := &Client{Base: srv.URL, Host: "h1", Token: "fixture-agentd"}
+	acts := []actions.Action{{Kind: actions.Read, Target: "a.go", At: time.Now().UTC()}}
+	stop, expires, refused, err := c.Heartbeat(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, acts)
+	if err != nil || stop || expires.IsZero() || !strings.HasPrefix(refused, ActionsUnsupported) {
+		t.Fatalf("stop %v, expires %v, refused %q, err %v", stop, expires, refused, err)
+	}
+	if len(bodies) != 2 || bodies[1]["actions"] != nil || bodies[1]["lease_epoch"] != float64(7) {
+		t.Fatalf("requests %v", bodies)
+	}
+	bodies = nil
+	if _, _, refused, err := c.Heartbeat(context.Background(), "a_01M56J5QPAAQQP53KV4MQYCW5Q", 7, nil); err != nil || refused != "" || len(bodies) != 1 {
+		t.Fatalf("a heartbeat without actions: refused %q, err %v, %d requests", refused, err, len(bodies))
 	}
 }
