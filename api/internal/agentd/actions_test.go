@@ -560,6 +560,12 @@ func TestTargetsNameTheAttemptsDirectories(t *testing.T) {
 		"ls /home/bifrost-agentd-stg/agent-work/other":                                            "ls <local path>",
 		"cat /home/bifrost-agentd-stg/agent-work/agentd/tasks/t_01M5B6KKPMM15HZB4BC0ZWVJ5Rx/a1/y": "cat <local path>",
 		"cat tasks/t_01M5B2WKM1CYDFE4PWGE4D3D42/a1/x":                                             withheldTarget,
+		// review 407 A1: a root's mask comes after scrub, which reads the
+		// words whole (fixture values, not credentials)
+		`TOKEN=$HOME/x"FIXTUREVALUE"`:                               "TOKEN=<secret>",
+		"TOKEN=" + task + "/a1.out/home/x'FIXTUREVALUE'":            "TOKEN=<secret>",
+		task + "/a1.out/tmp/curl -u user:FIXTUREVALUE https://host": "$TMPDIR/<local path> -u <secret> https://host",
+		"cat $HOME/x": "cat $HOME/<local path>",
 	} {
 		if got, _ := tail.clean(in); got != want {
 			t.Errorf("clean(%q) = %q; want %q", in, got, want)

@@ -397,6 +397,9 @@ func (t *actionTail) clean(target string) (string, bool) {
 		target, cut = target[:strings.LastIndexAny(target[:maxScrub], " \t\r\n")+1], true
 	}
 	target = strings.TrimSpace(scrub(target))
+	// After scrub, which reads the command's words whole: what follows a
+	// root local named is masked (review 407 A1).
+	target = namedRoot.ReplaceAllString(target, "${1}/<local path>")
 	// A target that still names a task's workspace (T11, as the platform
 	// reads an artifact) is withheld whole (review 405 A1).
 	if _, names := localpath.WorkspaceRef([]byte(target)); names {

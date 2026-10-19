@@ -257,8 +257,9 @@ func (t *actionTail) addClean(kind actions.Kind, target string, cut bool, now ti
 // wrote ".../a1.out/tmp/x" as "..out/tmp/x", which scrub then cut to
 // "..out<local path>" (STG walk 3, 2026-10-19). What follows such a root is
 // masked as scrub masks any other local path, since a name there can be a
-// credential (review 405 A1); the task's directory, other attempts and the
-// siblings are not named and scrub masks them whole.
+// credential (review 405 A1), by clean after scrub, which must read the
+// command's words whole (review 407 A1); the task's directory, other
+// attempts and the siblings are not named and scrub masks them whole.
 func (t *actionTail) local(s string) string {
 	if t.dir == "" {
 		return s
@@ -266,7 +267,7 @@ func (t *actionTail) local(s string) string {
 	if strings.HasPrefix(s, t.dir+"/") {
 		s = s[len(t.dir)+1:]
 	}
-	return namedRoot.ReplaceAllString(t.paths.rewrite(s), "${1}/<local path>")
+	return t.paths.rewrite(s)
 }
 
 // namedRoot is a path under a root local names, with what follows it.
