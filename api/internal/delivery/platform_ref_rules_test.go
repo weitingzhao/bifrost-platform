@@ -78,9 +78,21 @@ func TestPlatformInvalidInputsNoMirrorRequest(t *testing.T) {
 func TestPlatformUnknownDoesNotMaskMissing(t *testing.T) {
 	for _, name := range []string{"bifrost-deliver-platform", "bifrost-deliver-platform-prod"} {
 		s, dyn, m := pinnedService(t, name, platformRefs(factSHA1, factSHA2), []string{"bifrost-ui"}, "platform unknown")
-		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		secondLook := false
+		m.onGet = func(repo string) {
+			// Each look reads branches, tags, and the commit. End the wait
+			// only after the complete post-sync look at the missing UI ref.
+			if repo == "bifrost-ui" && m.posts[repo] == 1 && m.gets[repo] == 6 {
+				secondLook = true
+				cancel()
+			}
+		}
 		resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "tester", map[string]string{"uiRevision": factSHA2})
-		cancel()
+		if !secondLook || ctx.Err() != context.Canceled {
+			t.Fatal("post-sync read did not cancel the context", ctx.Err(), m.paths)
+		}
 		if err == nil || resp.OK || resp.Changed || !strings.Contains(resp.Message, "bifrost-ui") || strings.Contains(resp.Message, "bifrost-platform") || strings.Contains(resp.Message, "unverified") {
 			t.Fatal(resp, err)
 		}

@@ -29,6 +29,7 @@ type pinnedMirror struct {
 	mode      string
 	paths     []string
 	afterSync map[string]int
+	onGet     func(repo string)
 }
 
 func pinnedService(t *testing.T, name string, refs map[string]string, missing []string, mode string) (*Service, *dynfake.FakeDynamicClient, *pinnedMirror) {
@@ -80,6 +81,9 @@ func pinnedService(t *testing.T, name string, refs map[string]string, missing []
 			}
 		} else {
 			m.gets[repo]++
+			if m.onGet != nil {
+				defer m.onGet(repo)
+			}
 			if m.posts[repo] > 0 && (mode == "delayed branch" || mode == "delayed tag" || mode == "delayed commit") {
 				m.afterSync[repo]++
 				if m.afterSync[repo] >= 3 {
