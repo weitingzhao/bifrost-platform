@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
 // Using a plan (W-31 2.2b, the thin chief of staff, slice 3). The acceptance
@@ -34,8 +35,9 @@ import (
 // to its spec, as an implementation goes back for rework, until its rounds
 // run out (max_rounds, 2 by default); then the task is blocked with the
 // reason (review 216 A3). A mission that is no longer open blocks it at once.
-// Nothing else is written, and the cards a refused round made are withdrawn
-// in the same pass, before the refusal is written (review 217 B1).
+// Nothing else is written but the plan's policy alerts (alerts.go), and the
+// cards a refused round made are withdrawn in the same pass, before the
+// refusal is written (review 217 B1).
 //
 // Lock order: the planning task's attempt, the task, the mission's row, the
 // seat as a writer, the dependency graph and steps (lockBatch), then the
@@ -125,6 +127,18 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		var body []byte
 		if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, report).Scan(&body); err != nil {
 			return err
+		}
+		// The planner's POLICY_ALERT lines are recorded and told to the Owner
+		// whatever becomes of the plan: a round that is refused still saw what
+		// it reports, and the next round's same lines are not told twice
+		// (alerts.go). The seat's lock first, as below.
+		if alerts := seatproto.Alerts(strings.ToValidUTF8(string(body), "\uFFFD")); len(alerts) > 0 {
+			if err = ensureWriter(ctx, tx, Writer{Actor: Seat}, false); err != nil {
+				return err
+			}
+			if err = tellOwnerOfAlerts(ctx, tx, t.mission, taskID, "", "planning mission "+t.mission, alerts); err != nil {
+				return err
+			}
 		}
 		known := slices.DeleteFunc(slices.Clone(repos), func(r string) bool { _, ok := Repos[r]; return !ok })
 		p, err := ParsePlan(body, known)

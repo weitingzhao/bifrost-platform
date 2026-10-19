@@ -48,6 +48,13 @@ func PostMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 // of staff's answer to the mail its brief took): the event names them, as the
 // state guard requires of a row that does.
 func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string) (string, error) {
+	return postMessageAs(ctx, tx, from, to, kind, body, mission, task, true)
+}
+
+// postMessageAs is postMessage; checkClaims false is for a note that repeats
+// policy alerts just recorded (the seat's to the Owner, alerts.go), which is
+// not recorded a second time as a text that claims an approval.
+func postMessageAs(ctx context.Context, tx pgx.Tx, from, to, kind string, body []byte, mission, task string, checkClaims bool) (string, error) {
 	art, err := PutArtifact(ctx, tx, from, "message", "text/plain; charset=utf-8", body)
 	if err != nil {
 		return "", err
@@ -65,9 +72,11 @@ func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 	}
 	// A message that says the Owner approved is recorded where it came in;
 	// the receiver reads it as data, as every message (T04).
-	if err := alertClaim(ctx, tx, Event{Stream: "mbox:" + to, MissionID: mission, TaskID: task, Body: map[string]any{"message_id": id}},
-		ev.EventID, "message", art, body); err != nil {
-		return "", err
+	if checkClaims {
+		if err := alertClaim(ctx, tx, Event{Stream: "mbox:" + to, MissionID: mission, TaskID: task, Body: map[string]any{"message_id": id}},
+			ev.EventID, "message", art, body); err != nil {
+			return "", err
+		}
 	}
 	return id, Enqueue(ctx, tx, ev.EventID, MailboxTopic(to),
 		map[string]any{"message_id": id, "event_id": ev.EventID, "message_kind": kind})

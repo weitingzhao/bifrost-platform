@@ -14,6 +14,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
 // Goals (W-31 2.2b, the thin chief of staff; the Owner chose D1 A on
@@ -366,6 +367,7 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +
 		"- Do not repeat work an open mission above already does.\n\n" +
+		seatproto.Duties +
 		"## What to hand in\n\n" +
 		"Your final message is your report: a few lines on the plan, then exactly one fenced block ```json holding:\n\n" +
 		"    {\"mission\": {\"success\": [\"...\"], \"out_of_scope\": [\"...\"], \"max_attempts\": 10, \"max_wall_hours\": 24},\n" +
