@@ -137,3 +137,70 @@ func TestHandTextOnTheAgentHost(t *testing.T) {
 		}
 	}
 }
+
+// platformTakes fails t when the platform's scans of an upload (H8, T11)
+// refuse got as a kind.
+func platformTakes(t *testing.T, kind string, got []byte) {
+	t.Helper()
+	if p, found := store.LocalPath(kind, got); found {
+		t.Errorf("as a %s the platform refuses it for a local path: %q", kind, p)
+	}
+	if ref, found := store.WorkspaceRef(kind, got); found {
+		t.Errorf("as a %s the platform refuses it for a workspace: %q", kind, ref)
+	}
+}
+
+// Review 380 A1: a report that names its own checkout in a form the rewrite
+// does not know (a doubled slash, "/./", a JSON escape) is still handed in as
+// the platform takes it: such a line is withheld, the rest and the verdict
+// kept, and a JSON report is withheld as its one line.
+func TestHandTextWithholdsWhatTheScansStillRefuse(t *testing.T) {
+	const tid = "t_01M5B2WKM1CYDFE4PWGE4D3D42"
+	root := "/home/bifrost-agentd-stg/agent-work/agentd"
+	dir := WorkspaceDir(root, tid, 1)
+	a := &Attempt{Dir: dir, Out: dir + ".out"}
+	body := []byte(strings.Join([]string{"# Review", "kept: " + dir + "/api/y.go",
+		root + "/tasks//" + tid + "/a1/api/x.go", "also " + root + "/tasks/./" + tid + "/a1/api/x.go", VerdictPass}, "\n") + "\n")
+	for _, kind := range []string{"report", "review"} {
+		got := a.handText(kind, body)
+		platformTakes(t, kind, got)
+		if !bytes.Contains(got, []byte("kept: ./api/y.go\n")) || bytes.Count(got, []byte("(withheld by agentd")) != 2 || reviewVerdict(got) != "done" {
+			t.Errorf("%s handed in as:\n%s", kind, got)
+		}
+	}
+	escaped := []byte(`{"text":"read\n` + strings.ReplaceAll(dir+"/api/x.go", "/", `\/`) + `"}`)
+	got := a.handText("report", escaped)
+	platformTakes(t, "report", got)
+	if bytes.Contains(got, []byte(tid)) {
+		t.Errorf("a JSON report handed in as:\n%s", got)
+	}
+}
+
+// Review 380 A2: a report within the platform's 1 MiB that masking makes
+// longer is cut at a line to fit, and keeps its verdict; one without a line
+// to cut at is cut where it must be.
+func TestHandTextKeepsThePlatformsLimit(t *testing.T) {
+	dir := WorkspaceDir("/home/bifrost-agentd/agent-work/agentd", "t_01M5B2WKM1CYDFE4PWGE4D3D42", 1)
+	a := &Attempt{Dir: dir, Out: dir + ".out"}
+	line := strings.Repeat("~/", 40) + "\n"
+	lines := []byte(strings.Repeat(line, (maxBody-len(VerdictPass)-1)/len(line)) + VerdictPass + "\n")
+	oneLine := []byte(strings.Repeat("/tmp/", (maxBody-len(VerdictFail)-1)/5) + "\n" + VerdictFail)
+	for _, c := range []struct {
+		body    []byte
+		verdict string
+	}{{lines, "done"}, {oneLine, "failed"}} {
+		if len(c.body) > maxBody {
+			t.Fatalf("the report is %d bytes, over the limit before masking", len(c.body))
+		}
+		for _, kind := range []string{"report", "review"} {
+			got := a.handText(kind, c.body)
+			platformTakes(t, kind, got)
+			if len(got) > maxBody || !bytes.Contains(got, []byte("(cut by agentd")) || reviewVerdict(got) != c.verdict {
+				t.Errorf("%s of %d bytes handed in as %d bytes, verdict %q, ending %q", kind, len(c.body), len(got), reviewVerdict(got), got[max(0, len(got)-120):])
+			}
+		}
+	}
+	if got := a.handText("report", lines); !bytes.HasSuffix(got, []byte("<~>/\n(cut by agentd: the report was over 1 MiB once masked)\n"+VerdictPass+"\n")) {
+		t.Errorf("not cut at a line: %q", got[len(got)-160:])
+	}
+}

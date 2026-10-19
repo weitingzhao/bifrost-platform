@@ -1,7 +1,9 @@
 package agentd
 
 import (
+	"bytes"
 	"path/filepath"
+	"strings"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
@@ -19,6 +21,13 @@ import (
 // in the same way, so that no text agentd uploads names this machine's paths.
 // A check's verify.json is masked where it is written (handIn), and a patch
 // is kept as it is.
+//
+// What the platform would still refuse is withheld, as handIn withholds a
+// check's outputs (review 380 A1): a line that names a task's workspace in a
+// form the rewrite does not know (".../tasks//<task>/a1", "/./", a JSON
+// escape) is replaced, and a report the platform would still refuse after
+// that, or one over its 1 MiB once masked and cut at a line (review 380 A2),
+// is handed in as a note and the report's verdict line.
 
 // handText is body, an artifact of kind that a's executor wrote, as agentd
 // uploads it.
@@ -32,5 +41,54 @@ func (a *Attempt) handText(kind string, body []byte) []byte {
 		return nil
 	}
 	paths := newPathRewriteAt(a.Dir, map[string]string{"$HOME": filepath.Join(a.Out, "home"), "$TMPDIR": filepath.Join(a.Out, "tmp")})
-	return []byte(localpath.Mask(paths.rewrite(sgr.ReplaceAllString(string(body), ""))))
+	out := []byte(localpath.Mask(paths.rewrite(sgr.ReplaceAllString(string(body), ""))))
+	if kind == "log_tail" {
+		return out
+	}
+	if refusedText(out) {
+		lines := strings.Split(string(out), "\n")
+		for i, l := range lines {
+			if refusedText([]byte(l)) {
+				lines[i] = withheldLine
+			}
+		}
+		out = []byte(strings.Join(lines, "\n"))
+	}
+	verdict := verdictLine(body)
+	if len(out) > maxBody {
+		keep := []byte(strings.ToValidUTF8(string(out[:maxBody-len(truncatedNote)-1-len(verdict)]), ""))
+		if i := bytes.LastIndexByte(keep, '\n'); i >= 0 {
+			keep = keep[:i+1]
+		} else {
+			keep = append(keep, '\n')
+		}
+		out = append(append(keep, truncatedNote...), verdict...)
+	}
+	if refusedText(out) || len(out) > maxBody {
+		out = append([]byte(withheldReport), verdict...)
+	}
+	return out
+}
+
+const (
+	withheldLine   = "(withheld by agentd: this line still named a path of this machine or a task's workspace after masking)"
+	withheldReport = "(withheld by agentd: after masking, the report still named a path of this machine or a task's workspace)\n"
+	truncatedNote  = "(cut by agentd: the report was over 1 MiB once masked)\n"
+)
+
+// refusedText: the platform's scans of a report (H8, T11) refuse body.
+func refusedText(body []byte) bool {
+	_, local := localpath.Find(body)
+	_, names := localpath.WorkspaceRef(body)
+	return local || names
+}
+
+// verdictLine is report's verdict line (reviewVerdict) with its newline, or
+// "" when it ends on none.
+func verdictLine(report []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(report)), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last == VerdictPass || last == VerdictFail {
+		return last + "\n"
+	}
+	return ""
 }
