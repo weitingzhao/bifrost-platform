@@ -15,6 +15,7 @@ import (
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/plan"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // Plan changes (v5 §5.2: POST /plan/proposals). A thread or seat proposes
@@ -36,18 +37,25 @@ type Binding struct {
 // PlanChange is one change. Op is add_node (Parent, Kind, Title, and for a
 // step StepKind and MissionID), retitle (Node, Title), set_done_rule (Node,
 // Rule, Bind), rebind_step (Node, MissionID: the step and its tasks move to
-// the mission) or move_task (Task, Node: the task's step).
+// the mission), move_task (Task, Node: the task's step), drop_step (Node: the
+// step leaves the count, keeping its number) or set_marks (Node, and
+// OwnerStep, EffectStep or both: the step's 「（你）」 and ★ marks).
 type PlanChange struct {
-	Op        string          `json:"op"`
-	Node      string          `json:"node,omitempty"`
-	Parent    string          `json:"parent,omitempty"`
-	Kind      string          `json:"kind,omitempty"`
-	StepKind  string          `json:"step_kind,omitempty"`
-	Title     string          `json:"title,omitempty"`
-	MissionID string          `json:"mission_id,omitempty"`
-	Rule      json.RawMessage `json:"rule,omitempty"`
-	Bind      []Binding       `json:"bind,omitempty"`
-	Task      string          `json:"task,omitempty"`
+	Op         string          `json:"op"`
+	Node       string          `json:"node,omitempty"`
+	Parent     string          `json:"parent,omitempty"`
+	Kind       string          `json:"kind,omitempty"`
+	StepKind   string          `json:"step_kind,omitempty"`
+	Title      string          `json:"title,omitempty"`
+	MissionID  string          `json:"mission_id,omitempty"`
+	Rule       json.RawMessage `json:"rule,omitempty"`
+	Bind       []Binding       `json:"bind,omitempty"`
+	Task       string          `json:"task,omitempty"`
+	OwnerStep  *bool           `json:"owner_step,omitempty"`
+	EffectStep *bool           `json:"effect_step,omitempty"`
+	// Artifact is the request an import proposes (op import, only through
+	// POST /plan/imports; planimportcard.go).
+	Artifact string `json:"artifact,omitempty"`
 }
 
 // MaxChanges is the most changes one proposal holds.
@@ -101,8 +109,16 @@ func checkChanges(root, reason string, changes []PlanChange) error {
 			if c.Task == "" || c.Node == "" {
 				bad = "names the task and its new step"
 			}
+		case "drop_step":
+			if c.Node == "" {
+				bad = "names the step"
+			}
+		case "set_marks":
+			if c.Node == "" || (c.OwnerStep == nil && c.EffectStep == nil) {
+				bad = "names the step and owner_step, effect_step or both"
+			}
 		default:
-			bad = "is one of add_node, retitle, set_done_rule, rebind_step, move_task"
+			bad = "is one of add_node, retitle, set_done_rule, rebind_step, move_task, drop_step, set_marks"
 		}
 		if bad != "" {
 			return invalid("change %d (%s) %s", i, c.Op, bad)
@@ -120,11 +136,24 @@ func lockTree(ctx context.Context, tx pgx.Tx, root string) error {
 
 // standing reports whether a change is within the standing authorization:
 // a step added to an item in progress (one of its steps is active), or the
-// title of a step not started. Anything else is the Owner's.
-func standing(ctx context.Context, tx pgx.Tx, c PlanChange) (bool, error) {
+// title of a step not started; and, while the plan-standing rule in force
+// grants done_rules, the first done rule of a step not done that names no
+// manual atom (CUT-plan-import-2026-10-19.md §7). Anything else is the
+// Owner's.
+func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
 	var ok bool
 	var err error
 	switch {
+	case c.Op == "set_done_rule":
+		if rule == nil || !rule.Plan.DoneRules {
+			return false, nil
+		}
+		parsed, perr := plan.Parse(c.Rule)
+		if perr != nil || parsed.Empty() || parsed.HasManual() {
+			return false, nil
+		}
+		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 AND node_kind = 'step'
+		  AND state IN ('planned','active') AND done_rule_json = '{}'::jsonb)`, c.Node).Scan(&ok)
 	case c.Op == "add_node" && c.Kind == "step":
 		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node p WHERE p.plan_node_id = $1 AND p.node_kind = 'item'
 		  AND EXISTS (SELECT 1 FROM agentrt.plan_node s WHERE s.parent_plan_node_id = p.plan_node_id AND s.state = 'active'))`, c.Parent).Scan(&ok)
@@ -166,7 +195,7 @@ func lockChanges(ctx context.Context, tx pgx.Tx, root string, changes []PlanChan
 			for _, id := range steps {
 				want(id, "SHARE")
 			}
-		case "retitle", "set_done_rule":
+		case "retitle", "set_done_rule", "drop_step", "set_marks":
 			want(c.Node, "UPDATE")
 		case "rebind_step":
 			want(c.Node, "UPDATE")
@@ -362,7 +391,7 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 	for _, c := range changes {
 		var q, ref string
 		switch c.Op {
-		case "retitle", "set_done_rule", "rebind_step":
+		case "retitle", "set_done_rule", "rebind_step", "drop_step", "set_marks":
 			q, ref = `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, c.Node
 		case "move_task":
 			q, ref = `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, c.Task
@@ -387,7 +416,8 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 	if len(bindings) > 0 {
 		body["bindings"] = bindings
 	}
-	if _, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "plan_changed", Actor: actor, Body: body}); err != nil {
+	changed, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "plan_changed", Actor: actor, Body: body})
+	if err != nil {
 		return nil, err
 	}
 	for _, a := range adds {
@@ -426,12 +456,67 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 		case "move_task":
 			_, err = tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2, off_plan = false, off_plan_reason = NULL, version = version + 1,
 			  updated_at = clock_timestamp() WHERE task_id = $1`, c.Task, c.Node)
+		case "set_marks":
+			err = setMarks(ctx, tx, c)
 		}
 		if err != nil {
 			return nil, err
 		}
 	}
+	// Drops last: each writes a state change event of its own, which every
+	// row written after it would be checked against.
+	for _, c := range changes {
+		if c.Op == "drop_step" {
+			if err := dropStep(ctx, tx, actor, root, c.Node, changed.EventID); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return ids, nil
+}
+
+// setMarks sets a step's Owner and ★ marks under the plan_changed event.
+func setMarks(ctx context.Context, tx pgx.Tx, c PlanChange) error {
+	tag, err := tx.Exec(ctx, `UPDATE agentrt.plan_node SET owner_step = COALESCE($2, owner_step), effect_step = COALESCE($3, effect_step),
+	  version = version + 1 WHERE plan_node_id = $1 AND node_kind = 'step'`, c.Node, c.OwnerStep, c.EffectStep)
+	if err == nil && tag.RowsAffected() == 0 {
+		err = invalid("%s is not a step: only a step has marks", c.Node)
+	}
+	return err
+}
+
+// dropStep moves a step to dropped with its own plan_node_state_changed
+// event, caused by the plan change: it keeps its number and leaves the
+// count. A step with work still open on it is not dropped.
+func dropStep(ctx context.Context, tx pgx.Tx, actor, root, step string, cause int64) error {
+	var kind string
+	var state, mission *string
+	var open int
+	err := tx.QueryRow(ctx, `SELECT n.node_kind, n.state, n.mission_id, (SELECT count(*) FROM agentrt.task t WHERE t.plan_node_id = n.plan_node_id
+	    AND t.state NOT IN ('accepted','rejected','cancelled'))
+	  FROM agentrt.plan_node n WHERE n.plan_node_id = $1`, step).Scan(&kind, &state, &mission, &open)
+	switch {
+	case err != nil:
+		return err
+	case kind != "step":
+		return invalid("%s is a %s: only a step is dropped", step, kind)
+	case *state == "dropped":
+		return invalid("step %s is dropped already", step)
+	case open > 0:
+		return invalid("step %s has %d unfinished tasks; cancel them before it is dropped", step, open)
+	}
+	m := ""
+	if mission != nil {
+		m = *mission
+	}
+	ev, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "plan_node_state_changed", Actor: actor, PlanNode: step, MissionID: m,
+		Cause: cause, Body: map[string]any{"from": *state, "to": "dropped", "cause": "plan_changed"}})
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET state = 'dropped', state_event_id = $2, version = version + 1 WHERE plan_node_id = $1`,
+		step, ev.EventID)
+	return err
 }
 
 func canonRule(raw json.RawMessage) ([]byte, error) {
@@ -529,13 +614,22 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 			}
 			return nil, err
 		}
-		within := true
+		rule, err := inForce(ctx, tx, rules.KindPlan)
+		if err != nil {
+			return nil, err
+		}
+		within, byRule := true, false
 		for _, c := range changes {
-			ok, err := standing(ctx, tx, c)
-			if err != nil {
-				return nil, err
+			ok, serr := standing(ctx, tx, c, rule)
+			if serr != nil {
+				return nil, serr
 			}
 			within = within && ok
+			byRule = byRule || c.Op == "set_done_rule"
+		}
+		by := "standing authorization"
+		if byRule && rule != nil {
+			by = fmt.Sprintf("standing authorization (%s v%d)", rule.ID, rule.Version)
 		}
 		body := map[string]any{"changes": doc, "reason": reason, "standing": within, "token": w.Token}
 		if within {
@@ -544,7 +638,7 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 				return nil, err
 			}
 			decided, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "plan_change_decided", Actor: "controller",
-				Body: map[string]any{"proposal_event_id": proposed.EventID, "decision": "applied", "by": "standing authorization"}})
+				Body: map[string]any{"proposal_event_id": proposed.EventID, "decision": "applied", "by": by}})
 			if err != nil {
 				return nil, err
 			}

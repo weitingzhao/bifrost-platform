@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import { z } from 'zod'
 import {
@@ -17,6 +19,9 @@ import {
   listTasks,
   proposeMission,
   proposePlanChange,
+  proposePlanImport,
+  defaultRequestFiles,
+  PLAN_IMPORT_FORMAT,
   proposeTasks,
   putArtifact,
   requestStop,
@@ -137,6 +142,59 @@ describe('agent runtime writes', () => {
     assert.deepEqual(calls[0].body, { idempotency_key: 'c-1', root: 'R2', reason: 'r', changes })
   })
 
+  it('propose_plan_change passes drop_step and set_marks through as they are', async () => {
+    const { d, calls } = deps()
+    const changes = [
+      { op: 'drop_step' as const, node: 'R2:2.1-6' },
+      { op: 'set_marks' as const, node: 'R2:2.1-5', owner_step: true, effect_step: false },
+    ]
+    await proposePlanChange({ root: 'R2', reason: 'r', changes, idempotency_key: 'c-2' }, d)
+    assert.deepEqual(calls[0].body, { idempotency_key: 'c-2', root: 'R2', reason: 'r', changes })
+  })
+
+  it('propose_plan_import reads a request only from its folder and sends it with the caller\'s key', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'plan-import-'))
+    const dir = join(base, 'plan-import')
+    mkdirSync(dir)
+    const request = { format: PLAN_IMPORT_FORMAT, root: { id: 'R2' }, nodes: [] }
+    writeFileSync(join(dir, 'r2.json'), JSON.stringify(request))
+    writeFileSync(join(dir, 'other.json'), JSON.stringify({ format: 'something else' }))
+    writeFileSync(join(dir, 'bad.json'), '{not json')
+    writeFileSync(join(base, 'outside.json'), JSON.stringify(request))
+    symlinkSync(join(base, 'outside.json'), join(dir, 'link.json'))
+    const saved = process.env.AGENTRT_PLAN_IMPORT_DIR
+    process.env.AGENTRT_PLAN_IMPORT_DIR = dir
+    try {
+      const files = defaultRequestFiles()
+      const { d, calls } = deps()
+      const refusals: Array<[string, RegExp]> = [
+        [join(base, 'outside.json'), /the only folder request files are read from/],
+        [join(dir, 'link.json'), /the only folder request files are read from/],
+        [join(dir, 'other.json'), /is not a plan import request/],
+        [join(dir, 'bad.json'), /is not JSON/],
+        [join(dir, 'missing.json'), /cannot read/],
+        ['r2.json', /an absolute path/],
+        [join(dir, 'r2.txt'), /an absolute path to a \.json file/],
+      ]
+      for (const [file, want] of refusals) {
+        const out = (await proposePlanImport({ request_file: file, reason: 'r', idempotency_key: 'i-1' }, d, files)) as { error: string }
+        assert.match(out.error, want, file)
+      }
+      assert.equal(calls.length, 0, 'nothing is sent for a refused file')
+      const missing = await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'r', idempotency_key: '' }, d, files)
+      assert.deepEqual(missing, { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE })
+      await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'round 2', idempotency_key: 'i-1' }, d, files)
+      assert.equal(calls[0].path, '/api/v1/agentrt/plan/imports')
+      assert.deepEqual(calls[0].body, { idempotency_key: 'i-1', reason: 'round 2', request })
+      const off = deps({ mode: 'off' })
+      await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'r', idempotency_key: 'i-2' }, off.d, files)
+      assert.equal(off.calls.length, 0, 'writes off sends nothing')
+    } finally {
+      if (saved === undefined) delete process.env.AGENTRT_PLAN_IMPORT_DIR
+      else process.env.AGENTRT_PLAN_IMPORT_DIR = saved
+    }
+  })
+
   it('put_artifact addresses the content by its sha256 and names its kind', async () => {
     const { d, calls } = deps()
     await putArtifact({ kind: 'task_spec', content: '# implement x\n' }, d)
@@ -221,11 +279,14 @@ describe('agent runtime tools are served', () => {
   it('every runtime tool is registered and listed', () => {
     const index = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
     const messages = readFileSync(new URL('./registerMessages.ts', import.meta.url), 'utf8')
-    // the inbox tools are registered from registerMessages.ts, called with the scoped reg
+    const imports = readFileSync(new URL('./registerPlanImport.ts', import.meta.url), 'utf8')
+    // the inbox tools are registered from registerMessages.ts, the plan
+    // import from registerPlanImport.ts, each called with the scoped reg
     assert.match(index, /registerMessageTools\(reg\)/)
-    const served = index + messages
+    assert.match(index, /registerPlanImportTools\(reg\)/)
+    const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

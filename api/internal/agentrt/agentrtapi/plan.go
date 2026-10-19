@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -86,6 +87,34 @@ func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := store.ProposePlanChange(r.Context(), a.DB, who, b.IdempotencyKey, b.Root, b.Reason, b.Changes, a.Ask)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+type planImportBody struct {
+	IdempotencyKey string             `json:"idempotency_key"`
+	Reason         string             `json:"reason"`
+	Request        planimport.Request `json:"request"`
+}
+
+// proposePlanImport is POST /plan/imports: a plan's first import
+// (CUT-plan-import-2026-10-19.md §4 A), tried and rolled back, its request
+// kept, and put to the Owner on one decision card; the controller lands it
+// once he answers Import.
+func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
+	var b planImportBody
+	if !decode(w, r, &b) {
+		return
+	}
+	who, err := writer(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	out, err := store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, b.Request, a.Ask)
 	if err != nil {
 		a.fail(w, err)
 		return

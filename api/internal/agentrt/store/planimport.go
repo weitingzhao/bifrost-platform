@@ -25,7 +25,9 @@ import (
 // §5.1.2); a step in progress is moved to active by the import. Importing the
 // same request again changes nothing; a different request for a root that
 // exists is refused: after the import, the plan changes through proposals.
-// No route calls this yet (CUT §4).
+// The route (POST /plan/imports, planimportcard.go) proposes an import and
+// puts it to the Owner on a decision card; the controller's plan decision
+// pass lands it with importOnce, its head caused by the decision.
 
 // ImportResult is what an import did.
 type ImportResult struct {
@@ -38,36 +40,60 @@ type ImportResult struct {
 	Active   int    `json:"active"`
 }
 
-// ImportPlan imports a plan request as actor.
+// ImportPlan imports a plan request as actor, in a transaction of its own and
+// without a decision: the landing the decision pass runs, and what the tests
+// drive directly. No route calls it.
 func ImportPlan(ctx context.Context, db DB, actor string, req planimport.Request) (ImportResult, error) {
-	if err := req.Validate(); err != nil {
-		return ImportResult{}, invalid("plan import: %v", err)
-	}
-	raw, err := json.Marshal(req)
+	doc, reqID, err := prepareImport(req)
 	if err != nil {
 		return ImportResult{}, err
 	}
-	doc, err := canon.Marshal(raw)
-	if err != nil {
-		return ImportResult{}, err
-	}
-	if len(doc) > maxArtifactBytes {
-		return ImportResult{}, invalid("plan import: the request is %d bytes; an artifact is at most %d", len(doc), maxArtifactBytes)
-	}
-	sum := sha256.Sum256(doc)
-	reqID := "sha256:" + hex.EncodeToString(sum[:])
-	root := req.Root.ID
-	out := ImportResult{Root: root, Request: reqID, Nodes: 1 + len(req.Nodes)}
-	err = InTx(ctx, db, func(tx pgx.Tx) error { return importOnce(ctx, tx, actor, req, doc, reqID, &out) })
+	out := ImportResult{Root: req.Root.ID, Request: reqID, Nodes: 1 + len(req.Nodes)}
+	err = InTx(ctx, db, func(tx pgx.Tx) error { return importOnce(ctx, tx, actor, req, doc, reqID, 0, &out) })
 	if err != nil {
 		return ImportResult{}, err
 	}
 	return out, nil
 }
 
-// importOnce imports the request under its tree's lock, or finds the import
-// of this same request that already happened.
-func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, out *ImportResult) error {
+// prepareImport checks a request and gives its canonical bytes and the
+// artifact id they are stored under.
+func prepareImport(req planimport.Request) ([]byte, string, error) {
+	if err := req.Validate(); err != nil {
+		return nil, "", invalid("plan import: %v", err)
+	}
+	raw, err := json.Marshal(req)
+	if err != nil {
+		return nil, "", err
+	}
+	doc, err := canon.Marshal(raw)
+	if err != nil {
+		return nil, "", err
+	}
+	if len(doc) > maxArtifactBytes {
+		return nil, "", invalid("plan import: the request is %d bytes; an artifact is at most %d", len(doc), maxArtifactBytes)
+	}
+	sum := sha256.Sum256(doc)
+	return doc, "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// importedFrom is the import head of root's plan when it was imported from
+// the request stored as reqID, or 0.
+func importedFrom(ctx context.Context, tx pgx.Tx, root, reqID string) (int64, error) {
+	var id int64
+	err := tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'legacy_imported'
+	  AND body_json->>'source' = $2 ORDER BY event_id LIMIT 1`, PlanStream(root), planimport.ImportSource(reqID)).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+// importOnce imports the request under its tree's lock, its head caused by
+// cause (the decision that lands it; 0 for none), or finds the import of
+// this same request that already happened.
+func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, cause int64,
+	out *ImportResult) error {
 	root := req.Root.ID
 	if err := lockTree(ctx, tx, root); err != nil {
 		return err
@@ -78,22 +104,23 @@ func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 		return err
 	}
 	if !exists {
-		return importTree(ctx, tx, actor, req, doc, reqID, out)
+		return importTree(ctx, tx, actor, req, doc, reqID, cause, out)
 	}
-	err := tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'legacy_imported'
-	  AND body_json->>'source' = $2 ORDER BY event_id LIMIT 1`, PlanStream(root), planimport.ImportSource(reqID)).Scan(&out.EventID)
-	if errors.Is(err, pgx.ErrNoRows) {
+	id, err := importedFrom(ctx, tx, root, reqID)
+	if err == nil && id == 0 {
 		return invalid("plan %s already exists and was not imported from this request; change it through /plan/proposals", root)
 	}
+	out.EventID = id
 	return err
 }
 
-func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, out *ImportResult) error {
+func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Request, doc []byte, reqID string, cause int64,
+	out *ImportResult) error {
 	root := req.Root.ID
 	if _, err := PutArtifact(ctx, tx, actor, "other", "application/json", doc); err != nil {
 		return err
 	}
-	head, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: actor,
+	head, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: actor, Cause: cause,
 		Body: map[string]any{"source": planimport.ImportSource(reqID), "count": out.Nodes}})
 	if err != nil {
 		return err

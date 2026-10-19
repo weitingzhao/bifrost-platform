@@ -34,6 +34,7 @@ const (
 	KindJob         = "job"
 	KindFacts       = "capability-facts"
 	KindRouting     = "routing"
+	KindPlan        = "plan-standing"
 )
 
 // Directions as the rule table has them.
@@ -133,6 +134,16 @@ type Competence struct {
 	MinScorePercent, MinSamples int
 }
 
+// PlanStanding is what the plan's standing authorization adds to its two
+// built-in cases (a step added to an item in progress, the title of a step
+// not started; store/planchange.go): DoneRules lets a done rule be set on a
+// step not yet done that has none, when the rule names no manual atom;
+// ActiveOnLease lets the controller move a planned step to active once a
+// task on it has been leased (CUT-plan-import-2026-10-19.md §7).
+type PlanStanding struct {
+	DoneRules, ActiveOnLease bool
+}
+
 // Rule is a parsed rule: its header and the one part its kind has.
 type Rule struct {
 	Header
@@ -143,6 +154,7 @@ type Rule struct {
 	Job      *Job
 	Facts    []Fact
 	Routing  *Routing
+	Plan     *PlanStanding
 }
 
 // KindOf is the kind a rule_id names, and the tenant or job it is for.
@@ -157,12 +169,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts:
+	case KindConcurrency, KindFacts, KindPlan:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -217,6 +229,8 @@ func Parse(text []byte) (Rule, error) {
 		err = r.facts(o)
 	case KindRouting:
 		err = r.routing(o, arg)
+	case KindPlan:
+		err = r.plan(o)
 	}
 	if err != nil {
 		return Rule{}, err
@@ -271,6 +285,23 @@ func (r *Rule) envelope(o *object, arg string) error {
 	slices.Sort(e.Executors)
 	slices.Sort(e.Hosts)
 	r.Envelope = e
+	return nil
+}
+
+func (r *Rule) plan(o *object) error {
+	p := &PlanStanding{}
+	for key, at := range map[string]*bool{"done_rules": &p.DoneRules, "active_on_lease": &p.ActiveOnLease} {
+		v, err := o.flag(key)
+		if err != nil {
+			return err
+		}
+		b, ok := v.(bool)
+		if !ok {
+			return fmt.Errorf("%s.%s is true or false", o.where, key)
+		}
+		*at = b
+	}
+	r.Plan = p
 	return nil
 }
 
@@ -478,6 +509,8 @@ func (r Rule) Doc() map[string]any {
 			facts = append(facts, fd)
 		}
 		doc["facts"] = facts
+	case KindPlan:
+		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
 	case KindRouting:
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
 		if c := r.Routing.Competence; c != nil {

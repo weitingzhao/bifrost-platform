@@ -165,7 +165,8 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		if err := lockTree(ctx, tx, p.root); err != nil {
 			return err
 		}
-		if decision == "applied" {
+		artifact, isImport := importOf(p.changes)
+		if decision == "applied" && !isImport {
 			if err := lockChanges(ctx, tx, p.root, p.changes); err != nil {
 				return err
 			}
@@ -183,7 +184,12 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		if err != nil {
 			return err
 		}
-		if decision == "applied" {
+		switch {
+		case decision == "applied" && isImport:
+			if err = decideImport(ctx, tx, artifact, ev.EventID); err != nil {
+				return err
+			}
+		case decision == "applied":
 			if _, err = applyChanges(ctx, tx, "controller", p.root, ev.EventID, p.changes); err != nil {
 				return err
 			}

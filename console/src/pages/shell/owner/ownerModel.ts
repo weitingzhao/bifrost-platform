@@ -255,7 +255,7 @@ export function lastResultLine(r: LastResult, now: number): string {
 export type PlanRow = { key: string; name: string; done: number; total: number; tone: Tone; tag: '' | 'now' | 'next' }
 
 export function planRows(round: RuntimeRound | undefined): PlanRow[] {
-  if (!round) return []
+  if (!round || round.unknown !== undefined) return []
   const firstTodo = round.items.findIndex(i => i.state === 'todo')
   return round.items.map((item, i) => {
     const live = record(item).live === true

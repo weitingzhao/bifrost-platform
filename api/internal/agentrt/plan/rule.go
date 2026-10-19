@@ -113,6 +113,21 @@ func (r Rule) Standing() bool { return r.node != nil && r.node.standing() }
 // Empty reports whether the rule has no condition.
 func (r Rule) Empty() bool { return r.node == nil }
 
+// HasManual reports whether the rule names a manual atom anywhere.
+func (r Rule) HasManual() bool { return r.node != nil && r.node.has(kManual) }
+
+func (n *node) has(k nodeKind) bool {
+	if n.kind == k {
+		return true
+	}
+	for _, c := range n.children {
+		if c.has(k) {
+			return true
+		}
+	}
+	return false
+}
+
 func (n *node) standing() bool {
 	if n.kind == kGates {
 		return true

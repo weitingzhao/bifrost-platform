@@ -41,6 +41,11 @@ func Tightens(prev, next Rule) error {
 		return jobTightens(prev.Job, next.Job)
 	case KindFacts:
 		return factsTighten(prev.Facts, next.Facts)
+	case KindPlan:
+		// Each grant only goes from true to false.
+		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease {
+			return errors.New("the plan's standing authorization grants more")
+		}
 	case KindRouting:
 		if next.Routing.QuotaStopPercent > prev.Routing.QuotaStopPercent {
 			return errors.New("quota_stop_percent goes up")

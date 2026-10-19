@@ -383,11 +383,19 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 	return moved, errors.Join(errs...)
 }
 
+// Activate is one pass moving to active the planned steps whose work has
+// started, while the plan-standing rule in force says so
+// (store.ActivateLeasedSteps).
+func (c *Controller) Activate(ctx context.Context) (int, error) {
+	return store.ActivateLeasedSteps(ctx, c.DB)
+}
+
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
 // tasks whose job's candidates changed, acceptance, dispatch of proposed
-// tasks, the closing of missions whose goal is done, plan decisions, then
-// rules, so a change seen or a task accepted is
+// tasks, the closing of missions whose goal is done, plan decisions, the
+// steps whose work has started, then rules, so a change seen or a task
+// accepted is
 // evaluated at once, a task whose last dependency was just accepted is
 // ready in the same pass, and a step a decision added is evaluated with it.
 func (c *Controller) Start(ctx context.Context) (wait func()) {
@@ -408,8 +416,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, merr := c.MissionDecisions(ctx)
+		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, merr, rerr)
+		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, merr, verr, rerr)
 	})
 	return wg.Wait
 }

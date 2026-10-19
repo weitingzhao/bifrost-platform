@@ -13,6 +13,8 @@ import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../stand
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
+// The round the board publishes, when a test sets one (CUT-plan-import §6).
+const boardRound = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }))
 
 function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
@@ -34,9 +36,9 @@ function fake(): OwnerConsoleData {
     work: { running: 0, stuck: 0, open: 0, lastAccepted: { mission: 'M-2', at: '2026-10-16T04:17:22Z', openState: '' } },
     last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
-    board: { coordinator: { doing: 'Owner console, first version', next: '2.3 inbox' }, roadmap: { round: { n: 2, items: [] } } },
+    board: { coordinator: { doing: 'Owner console, first version', next: '2.3 inbox' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
     boardStale: false,
-    plan: [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
+    plan: boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
     arch: [{ state: 'done', what: 'a', now: '' }, { state: 'part', what: 'b', now: '' }],
     quota: [{ id: 'claude.weekly', name: 'Claude · weekly', used: 91, readAt: NOW - 5 * 86_400_000, stale: true, tone: 'muted' }],
     hosts: [],
@@ -179,6 +181,19 @@ describe('Owner Console entries', () => {
     await go('#chief', 'Chief of staff')
     expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('')
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
+  })
+
+  it('says why the plan is unavailable, and marks a plan from the runtime as not kept by hand', () => {
+    boardRound.value = { unknown: 'PG unavailable', source: 'runtime', items: [] }
+    try {
+      show('#work')
+      const plan = screen.getByRole('region', { name: 'The plan' })
+      expect(plan).toHaveTextContent('Plan unavailable: PG unavailable')
+      expect(plan).not.toHaveTextContent("No plan on the coordinator's board.")
+      expect(plan).not.toHaveTextContent('✎ by hand')
+    } finally {
+      boardRound.value = undefined
+    }
   })
 
   it('marks quota read days ago as stale and the plan as kept by hand', () => {

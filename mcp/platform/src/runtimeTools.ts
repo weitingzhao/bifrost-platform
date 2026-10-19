@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { z } from 'zod'
 import { bifrostSessionId, sessionFellBack } from './sessionId.js'
 import { platformGet, platformGetText, platformSend, platformUpload } from './platformClient.js'
@@ -185,7 +188,7 @@ export async function proposeTasks(
 }
 
 export interface PlanChange {
-  op: 'add_node' | 'retitle' | 'set_done_rule' | 'rebind_step' | 'move_task'
+  op: 'add_node' | 'retitle' | 'set_done_rule' | 'rebind_step' | 'move_task' | 'drop_step' | 'set_marks'
   node?: string
   parent?: string
   kind?: 'item' | 'step'
@@ -195,6 +198,8 @@ export interface PlanChange {
   rule?: unknown
   bind?: Array<{ kind: 'approval' | 'question'; ref: string }>
   task?: string
+  owner_step?: boolean
+  effect_step?: boolean
 }
 
 /**
@@ -216,6 +221,78 @@ export async function proposePlanChange(
     reason: input.reason,
     changes: input.changes,
   })
+}
+
+/** The plan import request format (planimport.Format on the platform). */
+export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
+
+/** The largest request file read, as the platform's artifact bound. */
+export const PLAN_IMPORT_MAX_BYTES = 1 << 20
+
+/**
+ * Where request files are read from: AGENTRT_PLAN_IMPORT_DIR, or
+ * ~/agent-work/plan-import. A file is read only from there, so the tool
+ * cannot be pointed at any other file of the host.
+ */
+export function planImportDir(env: NodeJS.ProcessEnv = process.env): string {
+  return env.AGENTRT_PLAN_IMPORT_DIR || path.join(os.homedir(), 'agent-work', 'plan-import')
+}
+
+/** Reads a request file; injected by tests. */
+export interface RequestFiles {
+  dir: () => string
+  read: (file: string) => { text: string } | { error: string }
+}
+
+export function defaultRequestFiles(): RequestFiles {
+  return {
+    dir: () => planImportDir(),
+    read: (file) => {
+      let dir: string, real: string
+      try {
+        dir = fs.realpathSync(planImportDir())
+        real = fs.realpathSync(file)
+      } catch (e) {
+        return { error: `cannot read ${file}: ${(e as Error).message}` }
+      }
+      const st = fs.lstatSync(real)
+      if (!st.isFile()) return { error: `${file} is not a regular file` }
+      if (path.dirname(real) !== dir) return { error: `${file} is not in ${dir}, the only folder request files are read from` }
+      if (st.size > PLAN_IMPORT_MAX_BYTES) return { error: `${file} is ${st.size} bytes; a request is at most ${PLAN_IMPORT_MAX_BYTES}` }
+      return { text: fs.readFileSync(real, 'utf8') }
+    },
+  }
+}
+
+/**
+ * Propose a plan's first import (POST /plan/imports): the request is the file
+ * agentrt-plan-import generate wrote, read from the request folder only,
+ * checked to be a request, and sent; the Owner decides on one card. The key
+ * is the caller's.
+ */
+export async function proposePlanImport(
+  input: { request_file: string; reason: string; idempotency_key: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+  files: RequestFiles = defaultRequestFiles(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: PROPOSAL_KEY_RULE }
+  if (!input.request_file.endsWith('.json') || !path.isAbsolute(input.request_file)) {
+    return { error: 'request_file is an absolute path to a .json file in ' + files.dir(), hint: 'No request was sent.' }
+  }
+  const got = files.read(input.request_file)
+  if ('error' in got) return { error: got.error, hint: 'No request was sent.' }
+  let request: unknown
+  try {
+    request = JSON.parse(got.text)
+  } catch (e) {
+    return { error: `${input.request_file} is not JSON: ${(e as Error).message}`, hint: 'No request was sent.' }
+  }
+  if (request == null || typeof request !== 'object' || (request as { format?: unknown }).format !== PLAN_IMPORT_FORMAT) {
+    return { error: `${input.request_file} is not a plan import request (${PLAN_IMPORT_FORMAT})`, hint: 'No request was sent.' }
+  }
+  return d.send('POST', `${BASE}/plan/imports`, { idempotency_key: input.idempotency_key, reason: input.reason, request })
 }
 
 /** Upload text as an artifact, addressed by its sha256; uploading it again is harmless. */

@@ -15,12 +15,14 @@ export function AgentsPlan() {
   const query = useQuery({ queryKey: ['agent-progress'], queryFn: fetchAgentProgress, refetchInterval: AGENT_PROGRESS_POLL_MS })
   const roadmap = query.data?.document?.roadmap
   const round = roadmap?.round, arch = roadmap?.arch
-  return <OpsSection title="Plan and architecture" description="From the coordinator’s board · kept by hand" collapsible defaultCollapsed bodyPadding="compact"
+  const description = round?.source === 'runtime' ? 'The plan from the agent runtime · architecture kept by hand' : 'From the coordinator’s board · kept by hand'
+  return <OpsSection title="Plan and architecture" description={description} collapsible defaultCollapsed bodyPadding="compact"
     actions={<span className="text-xs text-muted-foreground">Generated: {query.data?.generated_at || 'Unknown'}</span>}>
     {query.isPending && <p role="status">Loading plan and architecture…</p>}
     {query.isError && <p role="alert">Could not load plan and architecture: {query.error.message}</p>}
     {query.isSuccess && !round && !arch && <p>The plan is not published in this environment.</p>}
-    {round && <div className="flex flex-col gap-3">
+    {round?.unknown !== undefined && <p role="alert">Plan unavailable: {round.unknown}</p>}
+    {round && round.unknown === undefined && <div className="flex flex-col gap-3">
       <h4>Round {round.n ?? 'unknown'} · Checked: {checked(round.checked)}</h4>
       {round.items.length === 0 && <p>No round items published.</p>}
       {round.items.map((item, i) => <details open={['doing', 'running', 'current'].includes(item.state)} key={`${item.key}-${i}`} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">

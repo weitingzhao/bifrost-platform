@@ -74,17 +74,26 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		blocks, berr := changeBlocks(ctx, tx, p.changes)
-		if berr != nil {
-			return nil, berr
+		title, options := "Plan change to "+p.root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
+		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
+		var blocks any
+		if _, isImport := importOf(p.changes); isImport {
+			// An import adds a plan no mission's work sits on yet.
+			title, options = "Import plan "+p.root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
+			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
+			blocks = map[string]any{"unknown": "an import adds a plan; no mission's work sits on it yet"}
+		} else {
+			var berr error
+			if blocks, berr = changeBlocks(ctx, tx, p.changes); berr != nil {
+				return nil, berr
+			}
 		}
 		it := map[string]any{"id": "question:" + p.question, "kind": "plan_change", "ref": fmt.Sprint(p.event), "also_refs": []string{},
-			"title": "Plan change to " + p.root + ": " + firstLine(p.reason), "since": p.at.UTC().Format(time.RFC3339Nano),
+			"title": title, "since": p.at.UTC().Format(time.RFC3339Nano),
 			"waiting_min": int64(now.Sub(p.at) / time.Minute),
-			"action":      map[string]any{"where": "console", "question_id": p.question, "options": []string{CardApply, CardRefuse}},
+			"action":      map[string]any{"where": "console", "question_id": p.question, "options": options},
 			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
-			"deadline": nil, "blocks": blocks,
-			"after": "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."}
+			"deadline": nil, "blocks": blocks, "after": after}
 		byQuestion[p.question] = it
 		entries = append(entries, entry{p.at, p.question, it})
 	}

@@ -168,6 +168,7 @@ func TestPlanImportRollbackAfterManual(t *testing.T) {
 // A request that says something its lines do not is refused before anything
 // is written (review 310 A3).
 func TestPlanImportRefusesInconsistentRequest(t *testing.T) {
+	t.Parallel()
 	pool, req := importDB(t)
 	before := rows(t, pool)
 	for i := range req.Nodes {
@@ -209,6 +210,7 @@ func (f failingCommit) Commit(ctx context.Context) error {
 // steps' notes, leaves nothing, and the same request then imports (review
 // 311 B1).
 func TestPlanImportRollbackOnCommitFailure(t *testing.T) {
+	t.Parallel()
 	pool, req := importDB(t)
 	before := rows(t, pool)
 	if _, err := store.ImportPlan(ctx, commitFails{pool}, "controller", req); err == nil || !strings.Contains(err.Error(), "foreign key") {
@@ -230,6 +232,7 @@ func TestPlanImportRollbackOnCommitFailure(t *testing.T) {
 // A done step's own evidence artifact holds its evidence exactly as the
 // request does, the cut mark among it (review 312 B1).
 func TestPlanImportStepEvidenceIsTheRequests(t *testing.T) {
+	t.Parallel()
 	db := agentrttest.Migrated(t)
 	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
 	ok(t, err)

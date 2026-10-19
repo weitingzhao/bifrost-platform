@@ -42,6 +42,7 @@ import {
   whoami,
 } from './runtimeTools.js'
 import { registerMessageTools } from './registerMessages.js'
+import { registerPlanImportTools } from './registerPlanImport.js'
 
 const SERVER_NAME = 'mcp-server-platform'
 const SERVER_VERSION = '0.1.0'
@@ -702,16 +703,17 @@ reg(
 )
 
 registerMessageTools(reg)
+registerPlanImportTools(reg)
 
 reg(
   'propose_plan_change',
-  `Propose changes to a plan tree (root R2, …). Ops: add_node (parent, kind item or step; a step needs step_kind and may name mission_id), retitle (node, title), set_done_rule (node, rule, bind: approvals and questions the rule names), rebind_step (node, mission_id: the step and its tasks move), move_task (task, node). Within the standing authorization (a step added to an item with an active step, the title of a step not started) the change lands at once; otherwise it is checked, rolled back, and the Owner decides on a card; a change the plan's rules refuse is refused with the reason. ${PROPOSAL_KEY_RULE}`,
+  `Propose changes to a plan tree (root R2, …). Ops: add_node (parent, kind item or step; a step needs step_kind and may name mission_id), retitle (node, title), set_done_rule (node, rule, bind: approvals and questions the rule names), rebind_step (node, mission_id: the step and its tasks move), move_task (task, node), drop_step (node: the step leaves the count and keeps its number; refused while it has unfinished tasks), set_marks (node, owner_step, effect_step: either or both). Within the standing authorization (a step added to an item with an active step, the title of a step not started, and while the signed plan-standing rule grants it, the first done rule of a step not done that names no manual atom) the change lands at once; otherwise it is checked, rolled back, and the Owner decides on a card; a change the plan's rules refuse is refused with the reason. ${PROPOSAL_KEY_RULE}`,
   {
     root: z.string(),
     reason: z.string(),
     changes: z.array(
       z.object({
-        op: z.enum(['add_node', 'retitle', 'set_done_rule', 'rebind_step', 'move_task']),
+        op: z.enum(['add_node', 'retitle', 'set_done_rule', 'rebind_step', 'move_task', 'drop_step', 'set_marks']),
         node: z.string().optional(),
         parent: z.string().optional(),
         kind: z.enum(['item', 'step']).optional(),
@@ -721,6 +723,8 @@ reg(
         rule: z.unknown().optional(),
         bind: z.array(z.object({ kind: z.enum(['approval', 'question']), ref: z.string() })).optional(),
         task: z.string().optional(),
+        owner_step: z.boolean().optional(),
+        effect_step: z.boolean().optional(),
       }),
     ),
     idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
