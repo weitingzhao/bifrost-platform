@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,6 +178,29 @@ func TestBenchQuestionsRefused(t *testing.T) {
 		"no task text":            func(m map[string]any) { m["task_text"] = " " },
 		"an id with a slash":      func(m map[string]any) { m["id"] = "Q/1" },
 		"a repository path of ..": func(m map[string]any) { m["repo"] = "/x/.." },
+		"an empty declaration":    func(m map[string]any) { m["interface"] = []string{" "} },
+		"a huge declaration":      func(m map[string]any) { m["interface"] = []string{strings.Repeat("x", 5000)} },
+		"a huge interface": func(m map[string]any) {
+			m["interface"] = []string{strings.Repeat("x", 4000), strings.Repeat("x", 4000), strings.Repeat("x", 4000),
+				strings.Repeat("x", 4000), strings.Repeat("x", 4000), strings.Repeat("x", 4000), strings.Repeat("x", 4000),
+				strings.Repeat("x", 4000), strings.Repeat("x", 4000)}
+		},
+		"a sibling named as a tree": func(m map[string]any) {
+			m["siblings"] = []any{map[string]any{"repo": "judge", "commit": strings.Repeat("c", 40)}}
+		},
+		"the repository as its own sibling": func(m map[string]any) {
+			m["siblings"] = []any{map[string]any{"repo": "bifrost-platform", "commit": strings.Repeat("c", 40)}}
+		},
+		"a sibling twice": func(m map[string]any) {
+			m["siblings"] = []any{map[string]any{"repo": "bifrost-ui", "commit": strings.Repeat("c", 40)},
+				map[string]any{"repo": "bifrost-ui", "commit": strings.Repeat("d", 40)}}
+		},
+		"a sibling at a branch": func(m map[string]any) {
+			m["siblings"] = []any{map[string]any{"repo": "bifrost-ui", "commit": "main"}}
+		},
+		"a sibling outside": func(m map[string]any) {
+			m["siblings"] = []any{map[string]any{"repo": "../bifrost-ui", "commit": strings.Repeat("c", 40)}}
+		},
 	} {
 		m := map[string]any{}
 		for k, v := range good {
@@ -190,11 +214,103 @@ func TestBenchQuestionsRefused(t *testing.T) {
 			t.Errorf("%s: read", name)
 		}
 	}
+	good["interface"] = []string{"func MaskJSON(b []byte) []byte"}
+	good["siblings"] = []any{map[string]any{"repo": "bifrost-ui", "commit": strings.Repeat("c", 40)}}
 	b, _ := json.Marshal([]any{good})
 	path := filepath.Join(t.TempDir(), "q.json")
 	must(t, os.WriteFile(path, b, 0o600))
-	if qs, sum, err := agentd.ReadBenchQuestions(path); err != nil || len(qs) != 1 || len(sum) != 64 {
+	if qs, sum, err := agentd.ReadBenchQuestions(path); err != nil || len(qs) != 1 || len(sum) != 64 ||
+		len(qs[0].Interface) != 1 || len(qs[0].Siblings) != 1 || qs[0].Siblings[0].Repo != "bifrost-ui" {
 		t.Fatalf("the good one: %v %s %v", qs, sum, err)
+	}
+}
+
+// TD-373: a sibling is built beside the trees before the controls, and the
+// checks read it; the executor is told the declarations the tests call and
+// that the sibling is there; a sibling that cannot be had or built makes
+// the question unrunnable before the executor is called; nothing of it
+// stays.
+func TestBenchSiblings(t *testing.T) {
+	if _, err := osexec.LookPath("npm"); err != nil {
+		t.Skip("no npm")
+	}
+	env := gitEnvT(t.TempDir())
+	bare, base, fix := benchRepo(t, env)
+	ui, _ := bareRemote(t, env)
+	seed := filepath.Join(t.TempDir(), "ui")
+	sh(t, filepath.Dir(seed), env, "git", "clone", "--quiet", ui, seed)
+	put := func(name, body string) {
+		must(t, os.WriteFile(filepath.Join(seed, name), []byte(body), 0o600))
+		sh(t, seed, env, "git", "add", name)
+	}
+	put("package.json", `{"name":"ui","version":"1.0.0","scripts":{"build":"node -e \"require('fs').writeFileSync('dist.txt','built')\""}}`)
+	put("package-lock.json", `{"name":"ui","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"ui","version":"1.0.0"}}}`)
+	sh(t, seed, env, "git", "commit", "--quiet", "-m", "ui")
+	good := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	put("package.json", `{"name":"ui","version":"1.0.1","scripts":{"build":"exit 7"}}`)
+	put("package-lock.json", `{"name":"ui","version":"1.0.1","lockfileVersion":3,"requires":true,"packages":{"":{"name":"ui","version":"1.0.1"}}}`)
+	sh(t, seed, env, "git", "commit", "--quiet", "-m", "ui that does not build")
+	broken := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	sh(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
+	// The check passes only with the sibling built beside the tree it runs in.
+	q := func(id, commit string) agentd.BenchQuestion {
+		return agentd.BenchQuestion{ID: id, Repo: "/somewhere/bifrost-x", Language: "go", BaseCommit: base, FixCommit: fix,
+			TestFiles: []string{"check.sh"}, TaskText: "fix: calc says new",
+			Checks:    []agentd.BenchCheck{{Cwd: ".", Argv: []string{"sh", "-c", `test "$(cat ../ui/dist.txt)" = built && sh check.sh`}}},
+			Interface: []string{"func Calc() string // in calc.go"}, Siblings: []agentd.BenchSibling{{Repo: "ui", Commit: commit}}}
+	}
+	prompts := filepath.Join(t.TempDir(), "prompts")
+	ex := func(a *agentd.Attempt) (agentd.Spawn, error) {
+		f, err := os.OpenFile(prompts, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return agentd.Spawn{}, err
+		}
+		_, _ = f.WriteString(a.Spec.Text + "\n=====\n")
+		_ = f.Close()
+		return agentd.Spawn{Argv: []string{"sh", "-c", "test -f ../ui/dist.txt && echo new > calc.txt"}, Dir: a.Dir,
+			Env: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")}, nil
+	}
+	root := filepath.Join(t.TempDir(), "bench", "run-test-0002")
+	b := &agentd.Bench{Root: root, Self: os.Args[0], GitEnv: env, CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), Executor: ex,
+		Remote: func(repo string) string {
+			if repo == "ui" {
+				return ui
+			}
+			return bare
+		},
+		Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"}, Limit: 30 * time.Second, KillGrace: time.Second, Logf: t.Logf}
+	qs := []agentd.BenchQuestion{q("Q1", good), q("Q2", broken), q("Q3", strings.Repeat("e", 40))}
+	got, err := b.Run(context.Background(), qs)
+	must(t, err)
+	outcomes := map[string]string{}
+	for _, r := range got {
+		outcomes[r.Question] = r.Outcome + ": " + r.Reason
+	}
+	if outcomes["Q1"] != "pass: " {
+		t.Errorf("Q1: %q", outcomes["Q1"])
+	}
+	for _, id := range []string{"Q2", "Q3"} {
+		if !strings.HasPrefix(outcomes[id], "unrunnable: the sibling ui: ") {
+			t.Errorf("%s: %q", id, outcomes[id])
+		}
+	}
+	body, err := os.ReadFile(prompts)
+	must(t, err)
+	if n := strings.Count(string(body), "====="); n != 1 {
+		t.Fatalf("the executor ran %d times (Q1 only): %s", n, body)
+	}
+	for _, want := range []string{"fix: calc says new", "Declare them as given", "\nfunc Calc() string // in calc.go\n",
+		"../ui beside this checkout is ui as the change found it, built"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("the prompt has no %q: %s", want, body)
+		}
+	}
+	for _, x := range qs {
+		entries, rerr := os.ReadDir(filepath.Join(root, x.ID))
+		must(t, rerr)
+		if len(entries) != 1 || entries[0].Name() != "out" {
+			t.Errorf("%s left %v", x.ID, entries)
+		}
 	}
 }
 

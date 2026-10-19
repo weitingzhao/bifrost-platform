@@ -24,11 +24,13 @@ import (
 //     a tree of the code before it with the fix's tests over it (each a fresh
 //     snapshot, no repository, its own dependencies: TypeScript npm ci
 //     without install scripts, Python and shell a virtual environment with
-//     pytest, Go its modules), the checks must pass on the first and fail on
+//     pytest, Go its modules; the question's siblings beside them, each at
+//     its commit and built), the checks must pass on the first and fail on
 //     the second. Otherwise the question is unrunnable and costs nothing.
 //  2. The executor works in a repository holding only the code before the
 //     fix (one commit, no history: the fix is not there to read), asked to
-//     make the change the fix's commit message describes, within the limit.
+//     make the change the fix's commit message describes, within the limit,
+//     given the declarations the fix's tests call that are not there yet.
 //     Before it starts, the clone and the two trees are gone from disk; the
 //     unit hides the daemon's own task checkouts (review 287 B3).
 //  3. The judgement, in a fresh snapshot of the code before the fix: the
@@ -56,7 +58,31 @@ type BenchQuestion struct {
 	Checks     []BenchCheck `json:"check_command"`
 	FailsBy    string       `json:"fails_by"`
 	TaskText   string       `json:"task_text"`
+	// Interface is what the fix's tests call that the code before it does
+	// not declare, or declares otherwise: each entry a declaration as the
+	// fix wrote it, without its body. The executor is given it, so the
+	// question measures the change and not a guess at its names (TD-373).
+	Interface []string `json:"interface,omitempty"`
+	// Siblings are repositories the checks read beside the tree, each at a
+	// commit: the Trade UI's file:../bifrost-ui. They are built before the
+	// executor runs and read only by the checks (TD-373).
+	Siblings []BenchSibling `json:"siblings,omitempty"`
 }
+
+// BenchSibling is a repository beside the question's trees, at a commit.
+type BenchSibling struct {
+	Repo   string `json:"repo"`
+	Commit string `json:"commit"`
+}
+
+// benchReserved are the question directory's own names, which no sibling
+// takes.
+var benchReserved = map[string]bool{"src": true, "fix": true, "base": true, "judge": true, "work": true, "out": true}
+
+const (
+	maxInterfaceEntry = 4 << 10
+	maxInterface      = 32 << 10
+)
 
 // BenchCheck is one check command, run in Cwd of the tree.
 type BenchCheck struct {
@@ -147,6 +173,29 @@ func (q BenchQuestion) check() error {
 		if !filepath.IsLocal(c.Cwd) || len(c.Argv) == 0 || c.Argv[0] == "" {
 			return bad("a check runs a command in a directory inside the tree")
 		}
+	}
+	total := 0
+	for _, d := range q.Interface {
+		if strings.TrimSpace(d) == "" || len(d) > maxInterfaceEntry {
+			return bad(fmt.Sprintf("an interface entry is a declaration of at most %d bytes", maxInterfaceEntry))
+		}
+		total += len(d)
+	}
+	if total > maxInterface {
+		return bad(fmt.Sprintf("the interface is over %d bytes", maxInterface))
+	}
+	sibs := map[string]bool{}
+	for _, s := range q.Siblings {
+		switch {
+		case !benchRepoRE.MatchString(s.Repo) || benchReserved[s.Repo] || s.Repo == q.RepoName() || sibs[s.Repo]:
+			return bad("a sibling is another repository, once")
+		case !benchSHARE.MatchString(s.Commit):
+			return bad("a sibling's commit is a full hex id")
+		}
+		sibs[s.Repo] = true
+	}
+	if len(q.Siblings) > 4 {
+		return bad("a question has at most 4 siblings")
 	}
 	return nil
 }

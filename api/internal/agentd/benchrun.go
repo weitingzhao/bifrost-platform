@@ -82,18 +82,26 @@ func (b *Bench) Preflight(ctx context.Context) error {
 	defer func() { _ = forceRemove(tree) }()
 	probe := append([]string{"/bin/sh", "-c", `for f in "$@"; do if [ -e "$f" ]; then echo "visible: $f"; exit 3; fi; done
 if [ -r /proc/sys/kernel/yama/ptrace_scope ] && [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" -lt 1 ]; then echo "ptrace is not restricted"; exit 4; fi`, "sh"}, b.Secrets...)
-	if why := b.run(ctx, tree, b.checkEnv(tree), b.Sandbox(tree, b.readOnly(""), probe)...); why != "" {
+	if why := b.run(ctx, tree, b.checkEnv(tree), b.Sandbox(tree, b.readOnly("", nil), probe)...); why != "" {
 		return fmt.Errorf("agentd: a check in the sandbox is not kept from the host's secrets: %s", why)
 	}
 	return nil
 }
 
 // readOnly is what a check of question directory qdir may read beside its
-// tree: the Go module cache and the question's virtual environment.
-func (b *Bench) readOnly(qdir string) []string {
+// tree: the Go module cache, the question's virtual environment and its
+// siblings.
+func (b *Bench) readOnly(qdir string, sibs []BenchSibling) []string {
 	var out []string
-	for _, p := range []string{b.GoModCache, filepath.Join(qdir, "out", "venv")} {
-		if p == "" || (qdir == "" && strings.HasSuffix(p, "venv")) {
+	paths := []string{b.GoModCache}
+	if qdir != "" {
+		paths = append(paths, filepath.Join(qdir, "out", "venv"))
+		for _, s := range sibs {
+			paths = append(paths, filepath.Join(qdir, s.Repo))
+		}
+	}
+	for _, p := range paths {
+		if p == "" {
 			continue
 		}
 		if _, err := os.Stat(p); err == nil {
@@ -202,12 +210,21 @@ func (b *Bench) question(ctx context.Context, q BenchQuestion) (_ BenchResult, c
 	// However the question ends, only out/ stays: no clone, no tree of the
 	// fix, no change of an executor for a later one to read (review 288 B3).
 	defer func() {
-		for _, d := range []string{filepath.Join(qdir, "src"), fixTree, baseTree, judge, work} {
+		gone := []string{filepath.Join(qdir, "src"), fixTree, baseTree, judge, work}
+		for _, s := range q.Siblings {
+			gone = append(gone, filepath.Join(qdir, s.Repo), filepath.Join(qdir, ".clone-"+s.Repo))
+		}
+		for _, d := range gone {
 			if err := forceRemove(d); err != nil && cleanup == nil {
 				cleanup = err
 			}
 		}
 	}()
+	for _, s := range q.Siblings {
+		if err := b.sibling(ctx, qdir, s); err != nil {
+			return unrunnable("the sibling " + s.Repo + ": " + err.Error()), nil
+		}
+	}
 	src, err := Prepare(ctx, filepath.Join(qdir, "src"), b.Remote(q.RepoName()), q.FixCommit, b.GitEnv)
 	if err != nil {
 		return unrunnable("cloning the repository: " + err.Error()), nil
@@ -228,7 +245,7 @@ func (b *Bench) question(ctx context.Context, q BenchQuestion) (_ BenchResult, c
 	if err != nil {
 		return unrunnable("setting up the checks: " + err.Error()), nil
 	}
-	if why := b.verify(ctx, fixTree, checks, true); why != "" {
+	if why := b.verify(ctx, fixTree, checks, q.Siblings, true); why != "" {
 		return unrunnable("the fix does not pass its checks here: " + why), nil
 	}
 	if err = b.snapshot(ctx, src, q.BaseCommit, baseTree); err == nil {
@@ -240,7 +257,7 @@ func (b *Bench) question(ctx context.Context, q BenchQuestion) (_ BenchResult, c
 	if _, err = b.setup(ctx, baseTree, venv, q); err != nil {
 		return unrunnable("setting up the checks before the fix: " + err.Error()), nil
 	}
-	if why := b.verify(ctx, baseTree, checks, true); why == "" {
+	if why := b.verify(ctx, baseTree, checks, q.Siblings, true); why == "" {
 		return unrunnable("the checks pass on the code before the fix"), nil
 	}
 	if err = b.snapshot(ctx, src, q.BaseCommit, judge); err == nil {
@@ -277,7 +294,7 @@ func (b *Bench) question(ctx context.Context, q BenchQuestion) (_ BenchResult, c
 	if dropped > 0 {
 		note += fmt.Sprintf("%d protected or linked files of its change left out; ", dropped)
 	}
-	if why := b.verify(ctx, judge, checks, false); why != "" {
+	if why := b.verify(ctx, judge, checks, q.Siblings, false); why != "" {
 		return fail(note + why), nil
 	}
 	r.Outcome = "pass"
@@ -314,6 +331,47 @@ func (b *Bench) snapshot(ctx context.Context, src *Workspace, commit, dir string
 	}
 	if aerr != nil || uerr != nil {
 		return fmt.Errorf("git archive %s: %v %v: %s %s", commit, aerr, uerr, strings.TrimSpace(tail(aerrb.Bytes())), strings.TrimSpace(tail(uerrb.Bytes())))
+	}
+	return nil
+}
+
+// sibling makes qdir/<repo> the sibling's tree at its commit, beside the
+// question's trees, so a file:../<repo> dependency of a tree resolves to it,
+// and builds it: its locked dependencies without install scripts (online, as
+// a tree's), then its own build script in the sandbox, offline. Its clone is
+// gone before anything of it runs. It stays, unchanged by the executor (whose
+// writable roots are its own checkout and temporary directory), for the
+// judgement's checks, which read it only.
+func (b *Bench) sibling(ctx context.Context, qdir string, s BenchSibling) error {
+	clone := filepath.Join(qdir, ".clone-"+s.Repo)
+	src, err := Prepare(ctx, clone, b.Remote(s.Repo), s.Commit, b.GitEnv)
+	if err != nil {
+		return fmt.Errorf("cloning: %w", err)
+	}
+	dir := filepath.Join(qdir, s.Repo)
+	if err = b.snapshot(ctx, src, s.Commit, dir); err != nil {
+		return err
+	}
+	if err = forceRemove(clone); err != nil {
+		return err
+	}
+	for _, d := range []string{"tmp", "home"} {
+		if err = os.MkdirAll(filepath.Join(dir, ".bench", d), 0o700); err != nil {
+			return err
+		}
+	}
+	if _, err = os.Stat(filepath.Join(dir, "package-lock.json")); err != nil {
+		return nil // nothing to install or build: read as it is
+	}
+	if why := b.run(ctx, dir, b.setupEnv(dir), "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); why != "" {
+		return errors.New("npm ci: " + why)
+	}
+	build := []string{"/bin/sh", "-c", `cd "$1" && exec npm run --if-present build`, "sh", dir}
+	if b.Sandbox != nil {
+		build = b.Sandbox(dir, b.readOnly("", nil), build)
+	}
+	if why := b.run(ctx, dir, b.checkEnv(dir), build...); why != "" {
+		return errors.New("npm run build: " + why)
 	}
 	return nil
 }
@@ -503,8 +561,18 @@ func (b *Bench) setup(ctx context.Context, tree, venv string, q BenchQuestion) (
 			if _, err := os.Stat(filepath.Join(tree, c.Cwd, "package-lock.json")); err != nil {
 				return nil, fmt.Errorf("no package-lock.json in %s", c.Cwd)
 			}
-			if why := b.run(ctx, filepath.Join(tree, c.Cwd), env, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); why != "" {
-				return nil, errors.New("npm ci: " + why)
+			dir := filepath.Join(tree, c.Cwd)
+			if why := b.run(ctx, dir, env, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); why != "" {
+				// A lockfile the commit left out of step with its package.json
+				// (the Trade UI's, some commits): the CI that judged the fix
+				// installs then, and so does this, still without install
+				// scripts and without rewriting the manifests (TD-373).
+				if err := forceRemove(filepath.Join(dir, "node_modules")); err != nil {
+					return nil, err
+				}
+				if why2 := b.run(ctx, dir, env, "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", "--no-save"); why2 != "" {
+					return nil, errors.New("npm ci: " + why + "; npm install: " + why2)
+				}
 			}
 		}
 	case "go":
@@ -581,13 +649,13 @@ func (b *Bench) limit() time.Duration {
 // returns why they did not pass ("" when they did). What a check printed is
 // part of why only when withOutput: the code the judgement runs is the
 // executor's, and a reason is handed to the platform (review 288 A1).
-func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck, withOutput bool) string {
+func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck, sibs []BenchSibling, withOutput bool) string {
 	env := b.checkEnv(tree)
 	for _, c := range checks {
 		// The command's own directory, entered inside the sandbox.
 		argv := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", filepath.Join(tree, c.Cwd)}, c.Argv...)
 		if b.Sandbox != nil {
-			argv = b.Sandbox(tree, b.readOnly(filepath.Dir(tree)), argv)
+			argv = b.Sandbox(tree, b.readOnly(filepath.Dir(tree), sibs), argv)
 		}
 		if why := b.run(ctx, tree, env, argv...); why != "" {
 			if !withOutput {
@@ -649,11 +717,25 @@ func (b *Bench) launch(ctx context.Context, sp Spawn, limit time.Duration) (code
 	return code, timedOut, nil
 }
 
-// benchPrompt is what the executor is asked.
+// benchPrompt is what the executor is asked: the change's commit message,
+// the declarations its tests call that are not here yet (TD-373), and the
+// siblings beside the checkout.
 func benchPrompt(q BenchQuestion) string {
-	return fmt.Sprintf("This checkout of %s is at the commit before a change was made. Make that change: its commit message follows. "+
+	var p strings.Builder
+	fmt.Fprintf(&p, "This checkout of %s is at the commit before a change was made. Make that change: its commit message follows. "+
 		"Tests for it exist upstream; once you have finished they are put over this checkout and run. Do not commit.\n\n%s",
 		q.RepoName(), strings.TrimSpace(q.TaskText))
+	if len(q.Interface) > 0 {
+		p.WriteString("\n\n---\nThe tests use these declarations, which this checkout does not have yet or has with another " +
+			"signature. Declare them as given; the bodies are yours.\n")
+		for _, d := range q.Interface {
+			p.WriteString("\n" + strings.TrimSpace(d) + "\n")
+		}
+	}
+	for _, s := range q.Siblings {
+		fmt.Fprintf(&p, "\n\n../%s beside this checkout is %s as the change found it, built; the tests read it there.", s.Repo, s.Repo)
+	}
+	return p.String()
 }
 
 // execute runs the executor on the checkout within the limit and returns a
