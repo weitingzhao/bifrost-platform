@@ -96,7 +96,7 @@ func ProveWall(ctx context.Context, self, root string, env []string, codex strin
 	}
 	w := &Wall{ABI: abi, Executors: map[string]bool{"exec:deterministic": true, "exec:cursor": true, "exec:claude": true}}
 	if codex != "" {
-		cx, cerr := proveCodex(ctx, codex, self, dir, env)
+		cx, cerr := codexHeld(ctx, codex, self, root, dir, env)
 		lines = append(lines, cx...)
 		if cerr != nil {
 			lines = append(lines, "codex's own sandbox: "+cerr.Error()+"; codex runs alone")
@@ -159,6 +159,53 @@ func proveCodex(ctx context.Context, codex, self, dir string, env []string) ([]s
 		err = errors.New("codex's sandbox wrote outside its workspace")
 	}
 	return lines, err
+}
+
+// codexHeld proves codex's own sandbox (proveCodex), once codex and its
+// PATH are outside agentd's directory (pathOutside).
+func codexHeld(ctx context.Context, codex, self, root, dir string, env []string) ([]string, error) {
+	if err := pathOutside(root, codex, env); err != nil {
+		return nil, err
+	}
+	return proveCodex(ctx, codex, self, dir, env)
+}
+
+// pathOutside says why codex, or a directory of the PATH in env it runs
+// with, may be in agentd's directory root, where attempts write: there a
+// setup could put a program the proof did not run (a node for codex's
+// wrapper, review 306 A). Links are followed as far as a path exists.
+func pathOutside(root, codex string, env []string) error {
+	dirs := []string{filepath.Dir(codex)}
+	if p := envValues(env, "PATH"); len(p) > 0 {
+		dirs = append(dirs, filepath.SplitList(p[len(p)-1])...)
+	}
+	roots := []string{filepath.Clean(root), resolvedAncestor(root)}
+	for _, d := range dirs {
+		for _, c := range []string{filepath.Clean(d), resolvedAncestor(d)} {
+			for _, r := range roots {
+				if rel, err := filepath.Rel(r, c); err == nil && (rel == "." || filepath.IsLocal(rel)) {
+					return fmt.Errorf("%s, of codex's PATH, is in agentd's directory, where attempts write", d)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// resolvedAncestor is p with its longest existing ancestor's links resolved
+// and the rest, which does not exist yet, as it is.
+func resolvedAncestor(p string) string {
+	p = filepath.Clean(p)
+	rest := ""
+	for cur := p; ; cur = filepath.Dir(cur) {
+		if r, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(r, rest)
+		}
+		if cur == filepath.Dir(cur) {
+			return p
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+	}
 }
 
 // codexProofArgv is codex's sandbox with codexExecutor's pins, running the

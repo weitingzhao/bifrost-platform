@@ -616,3 +616,30 @@ func TestCodexWrapperFindsTheTrustedInterpreter(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Review 306 A: codex is not held when codex or a directory of its PATH is
+// in agentd's directory, where an attempt's setup could put a program the
+// proof did not run; through a link, or a directory that does not exist yet,
+// too. The check comes before codex is run at all.
+func TestCodexHeldNotWithAPathInAgentdsDirectory(t *testing.T) {
+	root, elsewhere := t.TempDir(), t.TempDir()
+	link := filepath.Join(elsewhere, "into-root")
+	must(t, os.Symlink(root, link))
+	for _, path := range []string{
+		filepath.Join(root, "tasks", "t1", "a1", "bin") + ":/usr/bin:/bin", // not there yet
+		link + "/tasks/t1/a1/bin:/usr/bin:/bin",
+		root + ":/usr/bin",
+	} {
+		_, err := codexHeld(t.Context(), "/opt/codex/bin/codex", "/opt/agentd", root, t.TempDir(), []string{"PATH=" + path})
+		if err == nil || !strings.Contains(err.Error(), "agentd's directory") {
+			t.Errorf("PATH %s: %v", path, err)
+		}
+	}
+	if _, err := codexHeld(t.Context(), filepath.Join(root, "bin", "codex"), "/opt/agentd", root, t.TempDir(), []string{"PATH=/usr/bin"}); err == nil ||
+		!strings.Contains(err.Error(), "agentd's directory") {
+		t.Errorf("codex in agentd's directory: %v", err)
+	}
+	if err := pathOutside(root, "/opt/codex/bin/codex", []string{"PATH=/opt/codex/bin:/usr/bin:/bin"}); err != nil {
+		t.Fatal(err)
+	}
+}
