@@ -70,9 +70,11 @@ export function useNeedsYou() {
   const groups: NeedsYouGroups = groupOpenApprovals(openQ.data ?? [], now)
   const questions: Question[] = questionsQ.data ?? []
   const openQuestions = questions.filter(question => question.status === 'open')
-  const questionsUnreadable = questionsQ.isError && questionsQ.data == null
-  const questionsLoading = questionsQ.data == null && !questionsQ.isError
-  const questionsStale = questionsQ.isError && questionsQ.data != null
+  // A refresh paused offline is not a read: the last list is stale, as after an error (review 351 A1).
+  const questionsFailed = questionsQ.isError || questionsQ.isPaused
+  const questionsUnreadable = questionsFailed && questionsQ.data == null
+  const questionsLoading = questionsQ.data == null && !questionsFailed
+  const questionsStale = questionsFailed && questionsQ.data != null
   const silent = silentThreads(threadsQuery.data?.threads ?? [])
   const lost = hostsNeedingYou(threadsQuery.data?.hosts)
   const capacityActive = threadsQuery.data != null && capacityRefusalActive(threadsQuery.data)
@@ -90,8 +92,8 @@ export function useNeedsYou() {
     waitingCount(groups, 0),
   )
   const silentCount = knownOrPending(
-    threadsQuery.isError,
-    threadsQuery.error,
+    threadsQuery.isError || threadsQuery.isPaused,
+    threadsQuery.isPaused ? new Error('Could not read agent threads — offline.') : threadsQuery.error,
     threadsQuery.data,
     'agent threads request failed',
     silentSectionCount,
@@ -100,8 +102,8 @@ export function useNeedsYou() {
   let count: NeedsYouCount
   if (openCount.state === 'unknown') count = openCount
   else if (silentCount.state === 'unknown') count = silentCount
-  else if (questionsQ.isError) {
-    count = { state: 'unknown', reason: reasonOf(questionsQ.error, 'questions request failed') }
+  else if (questionsFailed) {
+    count = { state: 'unknown', reason: questionsQ.isPaused ? 'Could not read questions — offline.' : reasonOf(questionsQ.error, 'questions request failed') }
   } else if (openCount.state === 'loading' || silentCount.state === 'loading' || questionsLoading) {
     count = { state: 'loading' }
   } else count = { state: 'known', count: waitingCount(groups, silentCount.count, openQuestions.length) }
@@ -161,7 +163,7 @@ export function useNeedsYou() {
     questionsLoading,
     questionsUnreadable,
     questionsStale,
-    questionsReason: questionsUnreadable || questionsStale ? reasonOf(questionsQ.error, 'questions request failed') : '',
+    questionsReason: !(questionsUnreadable || questionsStale) ? '' : questionsQ.isPaused ? 'offline' : reasonOf(questionsQ.error, 'questions request failed'),
     query: openQ,
     handledQuery: allQ,
     threadsQuery,

@@ -110,6 +110,12 @@ func sortedIDs(t *testing.T, pool *pgxpool.Pool, where string) []int64 {
 func TestEventsAcrossStreams(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
+	// A rolled-back append leaves a hole in the ids.
+	tx, err := pool.Begin(ctx)
+	must(t, err)
+	_, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
+	must(t, err)
+	must(t, tx.Rollback(ctx))
 	all := sortedIDs(t, pool, `true`)
 	proposals := sortedIDs(t, pool, `event_type IN ('task_proposed', 'mission_proposed', 'actor_registered')`)
 	if len(proposals) < 3 || len(proposals) == len(all) {
@@ -190,7 +196,9 @@ func TestEventsAcrossStreams(t *testing.T) {
 
 // An event that takes its id first and commits after another stream's later
 // one is read on, not skipped (review 350 A2): reading on is by transaction,
-// and an event shows once every older transaction has ended.
+// and an event shows once every older transaction has ended. A latest read
+// in between shows the later one; reading on from its next lists both, once
+// each (review 351 B1).
 func TestEventsReadOnSeesALateCommit(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
@@ -222,17 +230,80 @@ func TestEventsReadOnSeesALateCommit(t *testing.T) {
 	if slices.Contains(got, second) || slices.Contains(got, first) {
 		t.Fatalf("listed %v while %d's transaction runs", got, first)
 	}
+	// A latest read now shows the later one, not the early one.
+	latest := page(t, s, "events?limit=500")
+	if !slices.Contains(ids(latest.Events), second) || slices.Contains(ids(latest.Events), first) {
+		t.Fatalf("latest = %v; want %d and not %d", ids(latest.Events), second, first)
+	}
 	must(t, early.Commit(ctx))
-	// Both, once the early one ends (other tests' transactions may hold the horizon a moment).
-	var after []int64
-	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		more, next := readOn(t, s, held, "", 500)
-		after, held = append(after, more...), next
-		if slices.Contains(after, first) && slices.Contains(after, second) || time.Now().After(deadline) {
-			break
+	// Both, once each, once the early one ends (other tests' transactions
+	// may hold the horizon a moment), reading on from either cursor.
+	for name, cursor := range map[string]string{"read on": held, "the latest read": latest.Next} {
+		count := map[int64]int{}
+		for deadline := time.Now().Add(20 * time.Second); count[first] == 0 || count[second] == 0; time.Sleep(50 * time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("from %s: %v, want %d and %d", name, count, first, second)
+			}
+			var more []int64
+			more, cursor = readOn(t, s, cursor, "", 500)
+			for _, id := range more {
+				count[id]++
+			}
+		}
+		if count[first] != 1 || count[second] != 1 {
+			t.Fatalf("from %s: %v; want %d and %d once each", name, count, first, second)
 		}
 	}
-	if !slices.Contains(after, first) || !slices.Contains(after, second) {
-		t.Fatalf("read on after the commit: %v, want %d and %d", after, first, second)
+}
+
+// Reading on pages within one transaction's events, moves to the horizon on
+// a short page and keeps a cursor ahead of it (review 351 B1).
+func TestEventsReadOnPages(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	all := sortedIDs(t, pool, `true`)
+	readAllOn(t, s, "0.0", "", 500, all)
+	_, from := readOn(t, s, "0.0", "", 500)
+	var three []int64
+	var txid int64
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		for i := range 3 {
+			ev, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+				Body: map[string]any{"source": fmt.Sprint("test: one of three ", i)}})
+			if err != nil {
+				return err
+			}
+			three = append(three, ev.EventID)
+		}
+		return tx.QueryRow(ctx, `SELECT txid_current()`).Scan(&txid)
+	}))
+	var first eventPage
+	for deadline := time.Now().Add(20 * time.Second); len(first.Events) == 0; time.Sleep(50 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the three never read on")
+		}
+		first = page(t, s, "events?types=legacy_imported&limit=2&after="+from)
+	}
+	if !slices.Equal(ids(first.Events), three[:2]) || first.Next != fmt.Sprintf("%d.%d", txid, three[1]) {
+		t.Fatalf("first page %v next %s; want %v next %d.%d", ids(first.Events), first.Next, three[:2], txid, three[1])
+	}
+	second := page(t, s, "events?types=legacy_imported&limit=2&after="+first.Next)
+	var horizon int64
+	if _, err := fmt.Sscanf(second.Next, "%d.0", &horizon); err != nil || !slices.Equal(ids(second.Events), three[2:]) || horizon <= txid {
+		t.Fatalf("second page %v next %s; want [%d] and the horizon past %d", ids(second.Events), second.Next, three[2], txid)
+	}
+	// A cursor ahead of the horizon lists nothing and stays where it is.
+	ahead := fmt.Sprintf("%d.0", int64(1)<<62)
+	if p := page(t, s, "events?after="+ahead); len(p.Events) != 0 || p.Next != ahead {
+		t.Fatalf("ahead: %v next %s", ids(p.Events), p.Next)
+	}
+	// Back from the first id there is nothing; ids past int64 are refused.
+	if p := page(t, s, "events?before_event_id=1"); len(p.Events) != 0 {
+		t.Fatalf("before 1: %v", ids(p.Events))
+	}
+	for _, bad := range []string{"events?before_event_id=9223372036854775808", "events?after=9223372036854775808.0", "events?after=1.9223372036854775808"} {
+		if code, _ := call(t, s, "viewer", "GET", bad, nil); code != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", bad, code)
+		}
 	}
 }
