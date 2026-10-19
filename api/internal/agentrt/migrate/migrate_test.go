@@ -215,16 +215,17 @@ func TestEachEnvironmentGrantsItsOwnRuntimeOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// privileges is every table privilege role has in the schema, column
-	// privileges as a table's "UPDATE(cols)", as "table PRIV" lines.
+	// privileges is every table privilege role has in the schema, and each
+	// column it may update where it may not update the whole table, as
+	// "table PRIV" and "table UPDATE(column)" lines (review 335 B2).
 	privileges := func(conn *pgx.Conn, role string) []string {
 		t.Helper()
 		rows, err := conn.Query(ctx, `SELECT c.relname || ' ' || p.priv FROM pg_class c
 		  CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p(priv)
 		  WHERE c.relnamespace = 'agentrt'::regnamespace AND c.relkind IN ('r', 'p') AND has_table_privilege($1, c.oid, p.priv)
-		  UNION ALL SELECT c.relname || ' UPDATE(cols)' FROM pg_class c
-		  WHERE c.relnamespace = 'agentrt'::regnamespace AND c.relkind IN ('r', 'p') AND has_any_column_privilege($1, c.oid, 'UPDATE')
-		    AND NOT has_table_privilege($1, c.oid, 'UPDATE')
+		  UNION ALL SELECT c.relname || ' UPDATE(' || a.attname || ')' FROM pg_class c JOIN pg_attribute a ON a.attrelid = c.oid
+		  WHERE c.relnamespace = 'agentrt'::regnamespace AND c.relkind IN ('r', 'p') AND a.attnum > 0 AND NOT a.attisdropped
+		    AND NOT has_table_privilege($1, c.oid, 'UPDATE') AND has_column_privilege($1, c.oid, a.attnum, 'UPDATE')
 		  ORDER BY 1`, role)
 		if err != nil {
 			t.Fatal(err)

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,9 +81,9 @@ func TestTamperOnACleanStream(t *testing.T) {
 
 // T20: the writer's connection is killed while its transaction is open, an
 // event appended in it: nothing of it lands, the head does not move, and the
-// next write on another connection takes the next seq; meanwhile writers on
-// other connections keep appending to the stream while it is verified, and
-// every verification holds (review 145 B3's read in one snapshot).
+// next write on another connection takes the next seq. And a write that
+// commits while a stream is being verified, between its two reads, breaks
+// nothing (review 145 B3's read in one snapshot).
 func TestKilledInsideATransaction(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -118,71 +116,56 @@ func TestKilledInsideATransaction(t *testing.T) {
 		t.Fatalf("after the next write: %d %v", n, verr)
 	}
 
+	// A write commits between the verification's two reads, its events and
+	// its stream's head, three times: each verification still holds and
+	// counts what its snapshot saw; the next one sees the write (review 335
+	// A1: a barrier, not a race the writers might win).
 	pool := w.db.Pool(t, w.db.Runtime)
 	notes(t, w, "busy", 1)
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var writeErr error
-	var committed atomic.Int64
-	stop := make(chan struct{})
-	var once sync.Once
-	halt := func() { once.Do(func() { close(stop) }); wg.Wait() }
-	defer halt()
-	for g := range 3 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-				}
-				werr := store.InTx(context.Background(), pool, func(tx pgx.Tx) error {
-					_, aerr := store.Append(ctx, tx, store.Event{Stream: "busy", Type: "note", Actor: "controller", Body: map[string]any{"text": string(rune('a' + g))}})
-					return aerr
-				})
-				if werr != nil {
-					mu.Lock()
-					writeErr = errors.Join(writeErr, werr)
-					mu.Unlock()
-					return
-				}
-				committed.Add(1)
-			}
-		}()
+	for round := range 3 {
+		bctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		hooked := hookedDB{db: pool, before: func() {
+			ok(t, store.InTx(bctx, pool, func(tx pgx.Tx) error {
+				_, aerr := store.Append(bctx, tx, store.Event{Stream: "busy", Type: "note", Actor: "controller", Body: map[string]any{"text": "between"}})
+				return aerr
+			}))
+		}}
+		n, verr := store.VerifyStream(bctx, hooked, "busy")
+		cancel()
+		if verr != nil || n != int64(1+round) {
+			t.Fatalf("round %d: a write between the reads: %d events, %v; want %d and no break", round, n, verr, 1+round)
+		}
 	}
-	// Verify until writes have landed between verifications at least three
-	// times (so the writers and the reader did overlap), within a deadline
-	// that only a stalled run reaches; each verification holds and never
-	// sees fewer events than the one before (review 334 A1).
-	var checks, overlapped int
-	var last int64
-	deadline := time.Now().Add(20 * time.Second)
-	for overlapped < 3 {
-		if time.Now().After(deadline) {
-			t.Fatalf("writes landed between only %d of %d verifications", overlapped, checks)
-		}
-		before := committed.Load()
-		n, verr := store.VerifyStream(ctx, pool, "busy")
-		if verr != nil {
-			t.Fatalf("verify %d while writing: %v", checks, verr)
-		}
-		if n < last {
-			t.Fatalf("verify %d saw %d events after %d", checks, n, last)
-		}
-		if committed.Load() > before {
-			overlapped++
-		}
-		last = n
-		checks++
+	if n, verr := store.VerifyStream(ctx, pool, "busy"); verr != nil || n != 4 {
+		t.Fatalf("after the writes: %d %v; want 4", n, verr)
 	}
-	halt()
-	ok(t, writeErr)
-	// One event written before the writers, and one for each commit.
-	if n, verr := store.VerifyStream(ctx, pool, "busy"); verr != nil || n != 1+committed.Load() || n < last {
-		t.Fatalf("after the writers: %d events, %d commits, last seen %d, %v", n, committed.Load(), last, verr)
+}
+
+// hookedDB begins transactions whose QueryRow first runs before: in
+// VerifyStream, after the events are read and before the stream's head is.
+type hookedDB struct {
+	db interface {
+		BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
 	}
+	before func()
+}
+
+func (h hookedDB) BeginTx(c context.Context, o pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := h.db.BeginTx(c, o)
+	if err != nil {
+		return nil, err
+	}
+	return hookedTx{Tx: tx, before: h.before}, nil
+}
+
+type hookedTx struct {
+	pgx.Tx
+	before func()
+}
+
+func (h hookedTx) QueryRow(c context.Context, sql string, args ...any) pgx.Row {
+	h.before()
+	return h.Tx.QueryRow(c, sql, args...)
 }
 
 // Host liveness: a poll moves the host's last_poll_at forward, with work to
@@ -296,8 +279,11 @@ func blockedOn(t *testing.T, w *world, pid, holder int, stmt string) {
 	for {
 		var blocked bool
 		var query string
-		ok(t, w.rt.QueryRow(ctx, `SELECT $2 = ANY(pg_blocking_pids($1)), COALESCE((SELECT query FROM pg_stat_activity WHERE pid = $1), '')`,
-			pid, holder).Scan(&blocked, &query))
+		qctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		err := w.rt.QueryRow(qctx, `SELECT $2 = ANY(pg_blocking_pids($1)), COALESCE((SELECT query FROM pg_stat_activity WHERE pid = $1), '')`,
+			pid, holder).Scan(&blocked, &query)
+		cancel()
+		ok(t, err)
 		if blocked && strings.Contains(query, stmt) {
 			return
 		}
