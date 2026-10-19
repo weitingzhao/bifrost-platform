@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +76,18 @@ func TestReadAndCheck(t *testing.T) {
 	if err = recorderimport.Check(back); err != nil {
 		t.Fatalf("the kept log does not check: %v", err)
 	}
+	// Review 402 C1: a masked flag set on an unmasked record whose header
+	// stays whole passes Check by design; the kept log's own digest (its
+	// artifact id, read back at the decision) is what holds its bodies.
+	{
+		l := back
+		l.Records = append([]recorderimport.Record(nil), back.Records...)
+		l.Records[2].Masked = true
+		l.Records[2].Body = strings.Replace(l.Records[2].Body, `"exit":0`, `"exit":1`, 1)
+		if err := recorderimport.Check(l); err != nil {
+			t.Fatalf("Check's contract changed (a masked body is not hash-checked): %v", err)
+		}
+	}
 	// A kept log changed after it was read.
 	for name, change := range map[string]func(*recorderimport.Log){
 		"an unmasked body": func(l *recorderimport.Log) {
@@ -89,8 +100,8 @@ func TestReadAndCheck(t *testing.T) {
 		"a path put back": func(l *recorderimport.Log) {
 			l.Records[1].Body = strings.Replace(l.Records[1].Body, "<Users>/", "/Users/", 1)
 		},
-		"masked claimed falsely": func(l *recorderimport.Log) { l.Records[2].Masked = true; l.Records[2].Body = `{"v":2}` },
-		"another work":           func(l *recorderimport.Log) { l.Source.WorkID = "W-32" },
+		"masked claimed, no header": func(l *recorderimport.Log) { l.Records[2].Masked = true; l.Records[2].Body = `{"v":2}` },
+		"another work":              func(l *recorderimport.Log) { l.Source.WorkID = "W-32" },
 	} {
 		l := back
 		l.Records = append([]recorderimport.Record(nil), back.Records...)
@@ -209,5 +220,46 @@ func TestRealLogs(t *testing.T) {
 		total += len(log.Records)
 		masked += log.Masked()
 	}
-	t.Log(fmt.Sprintf("%d logs, %d records, %d masked", len(files), total, masked))
+	t.Logf("%d logs, %d records, %d masked", len(files), total, masked)
+}
+
+// sealOne is one sealed line of a body given as text.
+func sealOne(body string) []string { return []string{digest(body) + " " + body} }
+
+// Review 402 A1: the chain's fields are read by their exact names; "V",
+// "SEQ" and the like, which Go's struct decoding would take, are other keys.
+// B1: a path in a key or in a field the import reads is refused, never
+// masked; B2: a path written with escapes is masked like any other.
+func TestReadExactFieldsAndValuesOnly(t *testing.T) {
+	t.Parallel()
+	refused := map[string]struct{ body, want string }{
+		"aliases": {`{"v":1,"V":2,"seq":99,"SEQ":1,"prev_sha256":"broken","PREV_SHA256":"","type":"note","work_id":"W-32","WORK_ID":"W-31"}`,
+			"v is 1"},
+		"only upper case": {`{"V":2,"SEQ":1,"PREV_SHA256":"","TYPE":"note"}`, "no v"},
+		"seq a string":    {`{"v":2,"seq":"1","prev_sha256":"","type":"note"}`, "seq is not of its type"},
+		"a path key":      {`{"v":2,"seq":1,"prev_sha256":"","type":"note","/tmp/x":"first","<tmp>/x":"second"}`, "a key has a path"},
+		"a path type":     {`{"v":2,"seq":1,"prev_sha256":"","type":"/tmp/thing"}`, "its type has a path"},
+		"an escaped key":  {`{"v":2,"seq":1,"prev_sha256":"","type":"note","\u002fUsers\u002fx":1}`, "a key has a path"},
+	}
+	for name, c := range refused {
+		if _, err := recorderimport.Read(request("W-31", sealOne(c.body))); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v; want %q", name, err, c.want)
+		}
+	}
+	escaped := `{"at":1791936767.5,"text":"\u002fUsers\u002falice\u002fx and \/home\/bob","seq":1,"prev_sha256":"","type":"note","v":2}`
+	log, err := recorderimport.Read(request("W-31", sealOne(escaped)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := log.Records[0]
+	var got map[string]any
+	if err = json.Unmarshal([]byte(r.Body), &got); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Masked || got["text"] != "<Users>/alice/x and <home>/bob" || !strings.Contains(r.Body, `"at":1791936767.5`) || r.Digest != digest(escaped) {
+		t.Fatalf("escaped paths kept as %s (masked %v)", r.Body, r.Masked)
+	}
+	if err = recorderimport.Check(log); err != nil {
+		t.Fatal(err)
+	}
 }

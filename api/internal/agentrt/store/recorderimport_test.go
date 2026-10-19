@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -86,15 +87,42 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	if again["question_id"] != q || len(a.cards) != 1 {
 		t.Fatalf("asking again while the card waits: %v", again)
 	}
-	prog, err := store.Progress(ctx, pool)
-	ok(t, err)
-	if b, _ := json.Marshal(prog["needs_you"]); !strings.Contains(string(b), "Import recorder log td-336") {
-		t.Fatalf("needs_you does not list the card: %s", b)
+	card := recorderCard(t, pool, q)
+	if card == nil || card["kind"] != "plan_change" || card["title"] != "Import recorder log td-336: retire the recorder" ||
+		!strings.HasPrefix(fmt.Sprint(card["after"]), "Import: the controller imports the log") {
+		t.Fatalf("needs_you item %v", card)
+	}
+	action, _ := card["action"].(map[string]any)
+	blocks, _ := card["blocks"].(map[string]any)
+	if fmt.Sprint(action["options"]) != "["+store.RecorderApply+" "+store.RecorderRefuse+"]" || action["question_id"] != q ||
+		!strings.Contains(fmt.Sprint(blocks["unknown"]), "recorder log is history") {
+		t.Fatalf("needs_you action %v, blocks %v", action, blocks)
 	}
 
 	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
-	n, err := store.DecidePlanChanges(ctx, pool, a.question, a.ack)
+	// Two passes at once decide it once (review 402 B3).
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	n := 0
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d, derr := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			if derr != nil {
+				t.Error(derr)
+			}
+			mu.Lock()
+			n += d
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	_, err = store.DecidePlanChanges(ctx, pool, a.question, a.ack)
 	ok(t, err)
+	if recorderCard(t, pool, q) != nil {
+		t.Fatal("the decided card is still in needs_you")
+	}
 	if n != 1 || streamEvents(t, pool, stream, "legacy_imported") != 4 || streamEvents(t, pool, stream, "plan_change_decided") != 1 {
 		t.Fatalf("decided %d; the stream has %d legacy_imported", n, streamEvents(t, pool, stream, "legacy_imported"))
 	}
@@ -136,7 +164,14 @@ func TestRecorderImportThroughTheCard(t *testing.T) {
 	if done["imported"] != false || done["decision"] != "applied" || len(a.cards) != 1 {
 		t.Fatalf("the imported log asked again: %v", done)
 	}
-	longer := recorderLog(t, "td-336", map[string]any{"type": "work_opened", "work_id": "td-336"})
+	// The same log grown by a line is another log of the work.
+	longer := tdLog(t)
+	last := strings.SplitN(longer.Lines[2], " ", 2)[0]
+	body := fmt.Sprintf(`{"at":1791952600.5,"by":"coordinator","prev_sha256":"%s","seq":4,"step_id":"03e31b45","type":"step_seen","v":2}`, last)
+	s := sha256.Sum256([]byte(body))
+	longer.Lines = append(longer.Lines, hex.EncodeToString(s[:])+" "+body)
+	all := sha256.Sum256([]byte(strings.Join(longer.Lines, "\n") + "\n"))
+	longer.Source.SHA256 = hex.EncodeToString(all[:])
 	_, err = store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k4", "another", longer, a.ask)
 	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "imported once") {
 		t.Fatalf("another log of an imported work: %v", err)
@@ -185,4 +220,23 @@ func TestRecorderImportRefused(t *testing.T) {
 	if after := rows(t, pool); after != before {
 		t.Fatalf("refused requests wrote rows: %v -> %v", before, after)
 	}
+}
+
+// recorderCard is the needs_you item of question q, or nil.
+func recorderCard(t *testing.T, pool *pgxpool.Pool, q string) map[string]any {
+	t.Helper()
+	prog, err := store.Progress(ctx, pool)
+	ok(t, err)
+	raw, err := json.Marshal(prog["needs_you"])
+	ok(t, err)
+	var needs struct {
+		Items []map[string]any `json:"items"`
+	}
+	ok(t, json.Unmarshal(raw, &needs))
+	for _, it := range needs.Items {
+		if it["id"] == "question:"+q {
+			return it
+		}
+	}
+	return nil
 }

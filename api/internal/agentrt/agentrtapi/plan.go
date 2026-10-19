@@ -113,29 +113,31 @@ func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &b) {
 		return
 	}
+	// The request is read whole before the writer, as when it was one type
+	// (review 402 C2).
+	var head struct {
+		Format string `json:"format"`
+	}
+	_ = json.Unmarshal(b.Request, &head)
+	var recorder recorderimport.Request
+	var plan planimport.Request
+	if head.Format == recorderimport.Format {
+		if !strictly(w, b.Request, &recorder) {
+			return
+		}
+	} else if !strictly(w, b.Request, &plan) {
+		return
+	}
 	who, err := writer(r)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
-	var head struct {
-		Format string `json:"format"`
-	}
-	_ = json.Unmarshal(b.Request, &head)
 	var out map[string]any
-	switch head.Format {
-	case recorderimport.Format:
-		var req recorderimport.Request
-		if !strictly(w, b.Request, &req) {
-			return
-		}
-		out, err = store.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, req, a.Ask)
-	default:
-		var req planimport.Request
-		if !strictly(w, b.Request, &req) {
-			return
-		}
-		out, err = store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, req, a.Ask)
+	if head.Format == recorderimport.Format {
+		out, err = store.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, recorder, a.Ask)
+	} else {
+		out, err = store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, plan, a.Ask)
 	}
 	if err != nil {
 		a.fail(w, err)
@@ -145,12 +147,12 @@ func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 }
 
 // strictly reads a request that came as raw JSON into v as decode reads a
-// body: a field v does not have is refused (400).
+// body, with decode's answer: a field v does not have is refused (400).
 func strictly(w http.ResponseWriter, raw json.RawMessage, v any) bool {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request", "the request does not read: "+err.Error())
+		writeError(w, http.StatusBadRequest, "bad_request", "body: "+err.Error())
 		return false
 	}
 	return true

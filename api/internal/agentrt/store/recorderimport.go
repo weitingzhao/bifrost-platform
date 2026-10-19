@@ -87,6 +87,12 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 	if err != nil {
 		return nil, invalid("recorder import: %v", err)
 	}
+	// What the decision will check, checked now: a log the Owner could
+	// answer Import to and that would then fail is refused before any card
+	// (review 402 B1).
+	if err = recorderimport.Check(log); err != nil {
+		return nil, invalid("recorder import: the kept log does not check: %v", err)
+	}
 	doc, logID, err := keptLog(log)
 	if err != nil {
 		return nil, err

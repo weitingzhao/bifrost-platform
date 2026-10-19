@@ -133,12 +133,17 @@ func (s Source) check() error {
 
 // head is what a body says of its place in the chain.
 type head struct {
-	V      *int    `json:"v"`
-	Seq    *int    `json:"seq"`
-	Prev   *string `json:"prev_sha256"`
-	Type   *string `json:"type"`
-	WorkID *string `json:"work_id"`
+	V      int
+	Seq    int
+	Prev   string
+	Type   string
+	WorkID *string
 }
+
+// headKeys are the fields head reads, by their exact names: Go's struct
+// decoding would also take "V" or "SEQ" for them, which the recorder does
+// not (review 402 A1).
+var headKeys = []string{"v", "seq", "prev_sha256", "type", "work_id"}
 
 // readLine checks one line as the recorder sealed it.
 func readLine(l string, seq int, prev, work string) (Record, error) {
@@ -157,20 +162,20 @@ func readLine(l string, seq int, prev, work string) (Record, error) {
 		return Record{}, err
 	}
 	switch {
-	case *h.V != 2:
-		return Record{}, fmt.Errorf("v is %d, not 2", *h.V)
-	case *h.Seq != seq:
-		return Record{}, fmt.Errorf("seq is %d, not %d", *h.Seq, seq)
-	case *h.Prev != prev:
+	case h.V != 2:
+		return Record{}, fmt.Errorf("v is %d, not 2", h.V)
+	case h.Seq != seq:
+		return Record{}, fmt.Errorf("seq is %d, not %d", h.Seq, seq)
+	case h.Prev != prev:
 		return Record{}, errors.New("prev_sha256 is not the digest of the line before")
 	case h.WorkID != nil && *h.WorkID != work:
 		return Record{}, fmt.Errorf("work_id %q is not the log's %q", *h.WorkID, work)
 	}
-	return Record{Digest: digest, Body: body, Seq: seq, Type: *h.Type}, nil
+	return Record{Digest: digest, Body: body, Seq: seq, Type: h.Type}, nil
 }
 
-// readHead reads a body: one JSON object, no key twice, with v, seq,
-// prev_sha256 and a type.
+// readHead reads a body: one JSON object, no key twice, with v, seq and
+// prev_sha256 of their types and a type, each read by its exact name.
 func readHead(body string) (head, error) {
 	var h head
 	if !json.Valid([]byte(body)) {
@@ -179,15 +184,32 @@ func readHead(body string) (head, error) {
 	if err := noDuplicateKeys([]byte(body)); err != nil {
 		return h, err
 	}
-	dec := json.NewDecoder(strings.NewReader(body))
-	if err := dec.Decode(&h); err != nil {
-		return h, fmt.Errorf("the body is not a recorder event: %v", err)
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(body), &obj); err != nil || obj == nil {
+		return h, errors.New("the body is not a recorder event: not an object")
 	}
-	switch {
-	case h.V == nil || h.Seq == nil || h.Prev == nil:
-		return h, errors.New("the body has no v, seq or prev_sha256")
-	case h.Type == nil || *h.Type == "":
+	field := func(name string, v any) error {
+		raw, found := obj[name]
+		if !found {
+			return fmt.Errorf("the body has no %s", name)
+		}
+		if err := json.Unmarshal(raw, v); err != nil {
+			return fmt.Errorf("the body's %s is not of its type", name)
+		}
+		return nil
+	}
+	if err := errors.Join(field("v", &h.V), field("seq", &h.Seq), field("prev_sha256", &h.Prev), field("type", &h.Type)); err != nil {
+		return h, err
+	}
+	if h.Type == "" {
 		return h, errors.New("the body has no type")
+	}
+	if raw, found := obj["work_id"]; found {
+		var w string
+		if err := json.Unmarshal(raw, &w); err != nil {
+			return h, errors.New("the body's work_id is not a string")
+		}
+		h.WorkID = &w
 	}
 	return h, nil
 }
@@ -206,9 +228,9 @@ func noDuplicateKeys(doc []byte) error {
 		case json.Delim('{'):
 			seen := map[string]bool{}
 			for dec.More() {
-				k, err := dec.Token()
-				if err != nil {
-					return err
+				k, kerr := dec.Token()
+				if kerr != nil {
+					return kerr
 				}
 				key, _ := k.(string)
 				if seen[key] {
@@ -235,18 +257,73 @@ func noDuplicateKeys(doc []byte) error {
 	return walk()
 }
 
-// mask masks the local paths of a record's body, which must stay one valid
-// JSON object with no local path left and name no task's workspace.
+// mask masks the local paths in a record's string values, decoded (so an
+// escaped path, \u002fUsers\u002f, is one too; review 402 B2). A path in a
+// key, or in a field the chain or the import reads (v, seq, prev_sha256,
+// type, work_id), is refused rather than masked, so masking never changes a
+// key or what the record is (review 402 B1). A record with nothing to mask
+// keeps its bytes; one with something is encoded again, numbers as written.
+// The result names no task's workspace.
 func mask(r Record) (Record, error) {
-	if m := localpath.Mask(r.Body); m != r.Body {
-		masked, ok := localpath.MaskJSON([]byte(m))
-		if !ok {
-			return r, errors.New("its local paths cannot be masked into valid JSON")
+	dec := json.NewDecoder(strings.NewReader(r.Body))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil {
+		return r, errors.New("the body is not a recorder event: not an object")
+	}
+	changed := false
+	var walk func(v any) (any, error)
+	walk = func(v any) (any, error) {
+		switch x := v.(type) {
+		case string:
+			if m := localpath.Mask(x); m != x {
+				changed = true
+				return m, nil
+			}
+		case []any:
+			for i := range x {
+				var err error
+				if x[i], err = walk(x[i]); err != nil {
+					return nil, err
+				}
+			}
+		case map[string]any:
+			for k, e := range x {
+				if localpath.Mask(k) != k {
+					return nil, fmt.Errorf("a key has a path into one machine: %q", localpath.Mask(k))
+				}
+				var err error
+				if x[k], err = walk(e); err != nil {
+					return nil, err
+				}
+			}
 		}
-		r.Body, r.Masked = string(masked), true
+		return v, nil
+	}
+	for _, k := range headKeys {
+		if s, ok := obj[k].(string); ok && localpath.Mask(s) != s {
+			return r, fmt.Errorf("its %s has a path into one machine", k)
+		}
+	}
+	if _, err := walk(obj); err != nil {
+		return r, err
+	}
+	if changed {
+		var b bytes.Buffer
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(obj); err != nil {
+			return r, err
+		}
+		r.Body, r.Masked = strings.TrimSuffix(b.String(), "\n"), true
 	}
 	if _, found := localpath.Find([]byte(r.Body)); found {
 		return r, errors.New("a local path is left after masking")
+	}
+	if strs, _ := localpath.JSONStrings([]byte(r.Body)); strs != "" {
+		if _, found := localpath.Find([]byte(strs)); found {
+			return r, errors.New("a local path is left after masking")
+		}
 	}
 	if ref, found := localpath.WorkspaceRef([]byte(r.Body)); found {
 		return r, fmt.Errorf("it names a task's workspace: %s", ref)
@@ -257,6 +334,10 @@ func mask(r Record) (Record, error) {
 // Check checks a kept log as it is read back: its format and source, the
 // chain of every record (seq, prev_sha256), the digest of every record not
 // masked, and that a masked one is still a recorder event with no local path.
+// A masked record's body is not its digest's (the original's), so Check
+// alone cannot show a masked body is the one Read made: that rests on the
+// kept log's own digest, its artifact id, which the decision reads back
+// (review 402 C1).
 func Check(l Log) error {
 	if l.Format != Format {
 		return fmt.Errorf("format %q is not %s", l.Format, Format)
@@ -280,7 +361,7 @@ func Check(l Log) error {
 		switch {
 		case err != nil:
 			return fmt.Errorf("record %d: %w", i+1, err)
-		case *h.V != 2 || *h.Seq != i+1 || *h.Prev != prev:
+		case h.V != 2 || h.Seq != i+1 || h.Prev != prev:
 			return fmt.Errorf("record %d: the chain breaks here", i+1)
 		case h.WorkID != nil && *h.WorkID != l.Source.WorkID:
 			return fmt.Errorf("record %d: work_id %q is not the log's", i+1, *h.WorkID)
@@ -288,7 +369,7 @@ func Check(l Log) error {
 		if again, err := mask(*r); err != nil || again.Body != r.Body {
 			return fmt.Errorf("record %d: a local path or a workspace is left", i+1)
 		}
-		r.Seq, r.Type = i+1, *h.Type
+		r.Seq, r.Type = i+1, h.Type
 		prev = r.Digest
 	}
 	return nil
