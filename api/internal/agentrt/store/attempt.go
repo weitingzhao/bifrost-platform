@@ -409,6 +409,9 @@ func reportFits(ctx context.Context, tx pgx.Tx, id string) error {
 	if p, found := LocalPath(kind, body); found {
 		return fmt.Errorf("%w: the report %s has a local path in it: %s", ErrState, id, p)
 	}
+	if ref, found := WorkspaceRef(kind, body); found {
+		return fmt.Errorf("%w: the report %s refers to a task's workspace: %s", ErrState, id, ref)
+	}
 	return nil
 }
 

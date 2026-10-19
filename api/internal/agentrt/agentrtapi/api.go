@@ -466,6 +466,10 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "local_path", "a local path in the artifact: "+p)
 		return
 	}
+	if ref, found := store.WorkspaceRef(kind, body); found {
+		writeError(w, http.StatusUnprocessableEntity, "workspace_ref", "the artifact refers to a task's workspace: "+ref)
+		return
+	}
 	media := r.Header.Get("Content-Type")
 	if media == "" {
 		media = "application/octet-stream"

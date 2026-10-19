@@ -613,7 +613,9 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 			return nil, invalid("task %s: effect_class %s is above the mission's max_action %s", t.Ref, t.Effect, ceiling)
 		}
 		var kind string
-		if err := tx.QueryRow(ctx, `SELECT artifact_kind FROM agentrt.artifact WHERE artifact_id = $1`, t.SpecArtifact).Scan(&kind); err != nil {
+		var spec []byte
+		if err := tx.QueryRow(ctx, `SELECT a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
+		  WHERE a.artifact_id = $1`, t.SpecArtifact).Scan(&kind, &spec); err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, invalid("task %s: spec %s is not stored (upload it first)", t.Ref, t.SpecArtifact)
 			}
@@ -621,6 +623,11 @@ func proposeTasksTx(ctx context.Context, tx pgx.Tx, w Writer, missionID string, 
 		}
 		if kind != "task_spec" {
 			return nil, invalid("task %s: spec %s is a %s, not a task_spec", t.Ref, t.SpecArtifact, kind)
+		}
+		// A spec stored some other way than an upload is held to the
+		// upload's rule too (T11).
+		if ref, found := WorkspaceRef(kind, spec); found {
+			return nil, invalid("task %s: spec %s refers to a task's workspace: %s", t.Ref, t.SpecArtifact, ref)
 		}
 		id := NewTaskID()
 		if _, err := ProposeTask(ctx, tx, w.Actor, Task{ID: id, MissionID: missionID, PlanNode: t.PlanNode,

@@ -48,6 +48,11 @@ func SendMessage(ctx context.Context, db DB, w Writer, to, kind string, body []b
 	case to == w.Actor:
 		return "", invalid("a message goes to another actor")
 	}
+	// A message to the chief of staff becomes a brief's spec (TakeMail), so
+	// it is held to a spec's rule (T11).
+	if ref, found := WorkspaceRef("message", body); found {
+		return "", invalid("a message refers to a task's workspace: %s", ref)
+	}
 	var id string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
