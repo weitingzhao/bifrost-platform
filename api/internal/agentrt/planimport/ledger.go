@@ -306,11 +306,13 @@ func approvalsIn(text string) ([]string, bool) {
 	}
 }
 
-// reviewsIn lists the review numbers written after 「复核」: a number of 2 to
-// 4 digits, then more joined by a list mark (、，, 和) or a range mark (–—-~～
-// 到), a range counted out when it is short (a longer one keeps its ends and
-// is marked cut). A run of digits of another length ends the list and is
-// left out, never cut to a shorter number.
+// reviewsIn lists the review numbers written after 「复核」: a number of 3 or
+// 4 digits (review numbers; 「复核 18 次」 is a count), then more joined by a
+// list mark (、 or 和) or a range mark (–—-~～到), a range counted out when it
+// is short (a longer one keeps its ends and is marked cut). A comma ends the
+// list: in the ledger it starts the next clause, and what follows it (a date
+// such as 10-14) is not a review. A run of digits of another length ends the
+// list and is left out, never cut to a shorter number.
 func reviewsIn(text string) ([]string, bool) {
 	var refs refList
 	for rest := text; ; {
@@ -323,7 +325,7 @@ func reviewsIn(text string) ([]string, bool) {
 		prev, ranged := 0, false
 		for {
 			d := digits(s)
-			if len(d) < 2 || len(d) > 4 {
+			if len(d) < 3 || len(d) > 4 {
 				break
 			}
 			n, _ := strconv.Atoi(d)
@@ -353,7 +355,7 @@ func separator(s string) (string, bool) {
 			return r, true
 		}
 	}
-	for _, l := range []string{"、", "，", ",", " 和 ", "和"} {
+	for _, l := range []string{"、", " 和 ", "和"} {
 		if strings.HasPrefix(s, l) {
 			return l, false
 		}

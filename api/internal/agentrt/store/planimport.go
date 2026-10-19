@@ -109,8 +109,12 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 		switch {
 		case n.Kind != "step":
 		case n.State == planimport.StateDone:
+			ev, err := evidenceDoc(n.Evidence)
+			if err != nil {
+				return err
+			}
 			evidence, err := canon.Encode(map[string]any{"plan_node_id": n.ID, "request_artifact_id": reqID,
-				"source": sourceDoc(req.Source), "evidence": evidenceDoc(n.Evidence)})
+				"source": sourceDoc(req.Source), "evidence": ev})
 			if err != nil {
 				return err
 			}
@@ -179,15 +183,12 @@ func sourceDoc(s planimport.Source) map[string]any {
 	return d
 }
 
-func evidenceDoc(e *planimport.Evidence) map[string]any {
-	d := map[string]any{"line_no": e.LineNo, "line": e.Line, "mark": e.Mark}
-	if e.MarkedAt != "" {
-		d["marked_at"] = e.MarkedAt
+// evidenceDoc is the step's evidence exactly as the request holds it, so the
+// step's own artifact never says less than the request (review 312 B1).
+func evidenceDoc(e *planimport.Evidence) (any, error) {
+	raw, err := json.Marshal(e)
+	if err != nil {
+		return nil, err
 	}
-	for k, v := range map[string][]string{"commits": e.Commits, "approvals": e.Approvals, "reviews": e.Reviews} {
-		if len(v) > 0 {
-			d[k] = v
-		}
-	}
-	return d
+	return canon.Parse(raw)
 }

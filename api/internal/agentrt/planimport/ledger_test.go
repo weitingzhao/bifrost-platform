@@ -205,7 +205,13 @@ func TestReferences(t *testing.T) {
 		{"复核 263–270，都收线", nil, []string{"263", "264", "265", "266", "267", "268", "269", "270"}},
 		{"复核 286、289、291、292–294 等", nil, []string{"286", "289", "291", "292", "293", "294"}},
 		{"复核 100–200 太长只记两头", nil, []string{"100", "200"}},
-		{"复核 12–，后面没有", nil, []string{"12"}},
+		{"复核 120–，后面没有", nil, []string{"120"}},
+		// A comma ends the list: a date after it is not a review (found
+		// with review 312's B1 test); a count is not a review number.
+		{"复核 100–110，10-14 01:09", nil, []string{"100", "101", "102", "103", "104", "105", "106", "107", "108", "109", "110"}},
+		{"复核 263，264 另说", nil, []string{"263"}},
+		{"复核 18 次、2.18", nil, nil},
+		{"复核 12、13", nil, nil},
 		{"复核 270–263 倒着写", nil, []string{"270", "263"}},
 		{"复核（两轮）", nil, nil},
 	} {
@@ -240,7 +246,7 @@ func TestReferenceBudget(t *testing.T) {
 		{"提交" + hexes(20) + " `abcdef10` 重复的不算", 20, nil, nil},
 		{"复核 100–120", 0, []string{"100", "120"}, []string{"reviews"}},
 		{"复核 100–119", 0, nil, nil},
-		{"复核 10、11、12、13、14、15、16、17、18、19、20、21、22、23、24、25、26、27 和 30–35", 0, nil, []string{"reviews"}},
+		{"复核 110、111、112、113、114、115、116、117、118、119、120、121、122、123、124、125、126、127 和 130–135", 0, nil, []string{"reviews"}},
 	} {
 		req, err := planimport.ParseLedger(head+"        - [x] 一步｜"+c.text+"\n", 2, planimport.LedgerOptions{File: "WORK.md"})
 		ok(t, err)

@@ -2,8 +2,10 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -221,5 +224,41 @@ func TestPlanImportRollbackOnCommitFailure(t *testing.T) {
 	}
 	if _, err := store.VerifyStream(ctx, pool, store.PlanStream("R2")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A done step's own evidence artifact holds its evidence exactly as the
+// request does, the cut mark among it (review 312 B1).
+func TestPlanImportStepEvidenceIsTheRequests(t *testing.T) {
+	db := agentrttest.Migrated(t)
+	_, err := store.Seed(ctx, db.Connect(t, db.Owner))
+	ok(t, err)
+	pool := db.Pool(t, db.Runtime)
+	text := "### W-31\n    - **第 2 轮逐项（核对于 2026-10-19 01:20）**\n      - 2.0 First\n        - [x] A｜复核 100–120，10-14 01:09\n" +
+		"        - [x] B｜`abcdef1` #41\n"
+	req, err := planimport.ParseLedger(text, 2, planimport.LedgerOptions{File: "WORK.md"})
+	ok(t, err)
+	_, err = store.ImportPlan(ctx, pool, "controller", req)
+	ok(t, err)
+	for _, n := range req.Nodes[1:] {
+		var body []byte
+		ok(t, pool.QueryRow(ctx, `SELECT b.body FROM agentrt.event e JOIN agentrt.artifact_blob b ON b.artifact_id = e.body_json->'evidence'->>0
+		  WHERE e.event_type = 'note' AND e.plan_node_id = $1`, n.ID).Scan(&body))
+		var doc struct {
+			Evidence json.RawMessage `json:"evidence"`
+		}
+		ok(t, json.Unmarshal(body, &doc))
+		want, err := json.Marshal(n.Evidence)
+		ok(t, err)
+		got, err := canon.Marshal(doc.Evidence)
+		ok(t, err)
+		wantCanon, err := canon.Marshal(want)
+		ok(t, err)
+		if string(got) != string(wantCanon) {
+			t.Errorf("%s: its artifact says %s, the request %s", n.ID, got, wantCanon)
+		}
+	}
+	if e := req.Nodes[1].Evidence; !slices.Equal(e.Cut, []string{"reviews"}) || !slices.Equal(e.Reviews, []string{"100", "120"}) {
+		t.Fatalf("the fixture's first step: reviews %v, cut %v", e.Reviews, e.Cut)
 	}
 }
