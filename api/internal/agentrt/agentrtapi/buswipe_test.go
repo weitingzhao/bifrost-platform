@@ -3,6 +3,7 @@ package agentrtapi_test
 import (
 	"context"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,10 +27,12 @@ func eventually(t *testing.T, what string, cond func() bool) {
 }
 
 // T15 总线重建（接口层） (v5 §5.3, review 142 R6): redis-agents is wiped
-// while a task runs. The heartbeat, a new claim and the mailbox go on, by
-// what PostgreSQL holds: the unread message, and a stop set while Redis is
-// empty. The relay rebuilds Redis by itself; the message Redis may now hold
-// twice is handled once, by its message_id.
+// while a task runs and a message waits. While it is empty (the relay is
+// held off, so nothing writes it back; review 340 A4) the heartbeat, a new
+// claim, the unread message and a stop set then are all answered by what
+// PostgreSQL holds, and Redis is still empty after them. Let back, the relay
+// rebuilds Redis by itself; the message it may now signal twice is handled
+// once, by its message_id.
 func TestBusWipedMidTask(t *testing.T) {
 	rdb, prefix := agentrttest.Redis(t)
 	actionStore = &actions.Store{Redis: rdb, Prefix: prefix}
@@ -40,10 +43,16 @@ func TestBusWipedMidTask(t *testing.T) {
 		return call(t, s, caller, method, path, body)
 	}
 	rl := &relay.Relay{PG: pool, Redis: rdb, Prefix: prefix, LockTTL: 5 * time.Second}
-	runCtx, cancel := context.WithCancel(ctx)
-	done := make(chan error, 1)
-	go func() { done <- rl.Run(runCtx) }()
-	defer func() { cancel(); <-done }()
+	start := func() (stop func()) {
+		runCtx, cancel := context.WithCancel(ctx)
+		done := make(chan error, 1)
+		go func() { done <- rl.Run(runCtx) }()
+		var once sync.Once
+		stop = func() { once.Do(func() { cancel(); <-done }) }
+		t.Cleanup(stop)
+		return stop
+	}
+	stopRelay := start()
 	delivered := func() bool {
 		var pending int
 		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox WHERE delivered_at IS NULL`).Scan(&pending))
@@ -62,7 +71,17 @@ func TestBusWipedMidTask(t *testing.T) {
 		return delivered() && n >= 1
 	})
 
+	stopRelay()
 	agentrttest.DropPrefix(t, rdb, prefix)
+	empty := func(when string) {
+		t.Helper()
+		for _, key := range []string{"meta:epoch", store.MailboxTopic(store.Seat), "stop", "wake"} {
+			if n, err := rdb.Exists(ctx, prefix+key).Result(); err != nil || n != 0 {
+				t.Fatalf("%s: %s is in Redis (%d, %v)", when, key, n, err)
+			}
+		}
+	}
+	empty("after the wipe")
 
 	if got, beat := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); got != http.StatusOK || beat["stop"] != false {
 		t.Fatalf("a heartbeat after the wipe: %d %v", got, beat)
@@ -93,6 +112,9 @@ func TestBusWipedMidTask(t *testing.T) {
 		t.Fatalf("the heartbeat after a stop set on an empty Redis: %d %v", code, out)
 	}
 
+	empty("after the calls")
+
+	start()
 	eventually(t, "the rebuild and the delivery after it", func() bool {
 		n, _ := rdb.Exists(ctx, prefix+"meta:epoch").Result()
 		l, _ := rdb.XLen(ctx, mbox).Result()

@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -178,23 +179,67 @@ func TestApprovalClaimInAMessage(t *testing.T) {
 	}
 }
 
-// What changes between two runs of the same steps: ids, digests and times.
-var volatile = regexp.MustCompile(`\b[tamvc]_[0-9A-Z]{26}\b|sha256:[0-9a-f]{64}|\b[0-9a-f]{32,}\b|\d{4}-\d{2}-\d{2}T[0-9:.]+Z?`)
+// What two runs of the same steps make differently: row ids and artifact
+// digests, which aliases name by kind and first appearance, and times.
+var (
+	rowID = regexp.MustCompile(`\b[tamvc]_[0-9A-Z]{26}\b|sha256:[0-9a-f]{64}`)
+	stamp = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T[0-9:.]+(?:Z|[+-]\d{2}:\d{2})?`)
+)
+
+// aliases names each id by its kind and the order it first appears in: two
+// runs that make the same rows in the same order read the same, and two
+// different rows never read the same (review 340 A2).
+type aliases struct {
+	names map[string]string
+	count map[string]int
+}
+
+func (a *aliases) of(s string) string {
+	s = rowID.ReplaceAllStringFunc(s, func(id string) string {
+		if n, ok := a.names[id]; ok {
+			return n
+		}
+		kind := id[:1]
+		if strings.HasPrefix(id, "sha256:") {
+			kind = "artifact"
+		}
+		a.count[kind]++
+		a.names[id] = fmt.Sprintf("%s#%d", kind, a.count[kind])
+		return a.names[id]
+	})
+	return stamp.ReplaceAllString(s, "<time>")
+}
 
 // decisions are the controller's and the proposals' records on M-1's
-// stream, ids masked: the tasks' moves, the routes, the verdicts.
+// stream, with the rows they are about: the tasks' moves, the routes, the
+// leases (which executor got which attempt), the verdicts. A route's fingerprint is checked against its inputs (the replay
+// gives it again) and then stands for them, since its inputs are compared.
 func (w *world) decisions(t *testing.T) []string {
 	t.Helper()
-	rows, err := w.rt.Query(ctx, `SELECT actor_id, event_type, body_json::text FROM agentrt.event
-	  WHERE event_stream_id = 'mission:M-1' AND event_type IN ('task_proposed','task_state_changed','route_decided',
+	rows, err := w.rt.Query(ctx, `SELECT actor_id, event_type, COALESCE(task_id, ''), COALESCE(attempt_id, ''), COALESCE(plan_node_id, ''),
+	  body_json::text FROM agentrt.event
+	  WHERE event_stream_id = 'mission:M-1' AND event_type IN ('task_proposed','task_state_changed','route_decided','attempt_leased',
 	    'verification_recorded','mission_state_changed','task_dependency_added') ORDER BY seq`)
 	ok(t, err)
 	defer rows.Close()
+	a := &aliases{names: map[string]string{}, count: map[string]int{}}
 	var out []string
 	for rows.Next() {
-		var actor, typ, body string
-		ok(t, rows.Scan(&actor, &typ, &body))
-		out = append(out, actor+" "+typ+" "+volatile.ReplaceAllString(body, "#"))
+		var actor, typ, task, attempt, node, text string
+		ok(t, rows.Scan(&actor, &typ, &task, &attempt, &node, &text))
+		var body map[string]any
+		ok(t, json.Unmarshal([]byte(text), &body))
+		if typ == "route_decided" {
+			inputs, _ := body["inputs"].(map[string]any)
+			_, _, fp, err := store.ReplayRoute(inputs)
+			if err != nil || fp != body["fingerprint"] {
+				t.Fatalf("route of %s: the replay's fingerprint %q (%v), recorded %v", task, fp, err, body["fingerprint"])
+			}
+			body["fingerprint"] = "replayed"
+		}
+		b, err := json.Marshal(body)
+		ok(t, err)
+		out = append(out, a.of(fmt.Sprintf("%s %s task=%s attempt=%s node=%s %s", actor, typ, task, attempt, node, b)))
 	}
 	ok(t, rows.Err())
 	return out
@@ -246,6 +291,7 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 		decisions []string
 		final     string
 		alerts    int
+		rerouted  int
 	}
 	play := func(words string) outcome {
 		w := newKernelWorld(t)
@@ -270,7 +316,9 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 		review := w.checker(t, impl, "review")
 		w.runSaying(t, "h5", codex, "failed", words) // its last line says pass
 		conclude(review)
-		o.decisions, o.final, o.alerts = w.decisions(t), w.state(t, "task", impl), len(w.alerts(t))
+		rerouted, err := store.Reroute(ctx, w.rt)
+		ok(t, err)
+		o.decisions, o.final, o.alerts, o.rerouted = w.decisions(t), w.state(t, "task", impl), len(w.alerts(t)), rerouted
 		w.chainHolds(t, "mission:M-1")
 		return o
 	}
@@ -290,7 +338,32 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 			t.Errorf("decision %d differs:\n told  %s\n plain %s", i, told.decisions[i], plain.decisions[i])
 		}
 	}
+	// The aliases keep rows apart: four tasks, five attempts and three
+	// verifications, not one of each.
+	if all := strings.Join(plain.decisions, "\n"); !strings.Contains(all, "t#4") || !strings.Contains(all, "a#5") || !strings.Contains(all, "v#3") {
+		t.Fatalf("the decisions do not tell their rows apart:\n%s", all)
+	}
+	if plain.rerouted != 0 || told.rerouted != 0 {
+		t.Fatalf("rerouted after the runs: plain %d, told %d", plain.rerouted, told.rerouted)
+	}
 	if plain.alerts != 0 || told.alerts != 1 {
 		t.Fatalf("policy alerts: plain %d, told %d; want 0 and 1 (the spec's claim)", plain.alerts, told.alerts)
+	}
+}
+
+// The comparison T12 rests on tells two rows apart and names the same row
+// alike, whatever their ids (review 340 A2).
+func TestAliasesKeepRowsApart(t *testing.T) {
+	t.Parallel()
+	a, b := store.NewTaskID(), store.NewTaskID()
+	same := func(x string) string { return (&aliases{names: map[string]string{}, count: map[string]int{}}).of(x) }
+	if same(a+" waits for "+b) == same(a+" waits for "+a) {
+		t.Fatal("a dependency on another task reads as one on itself")
+	}
+	if same(a+" waits for "+b) != same(b+" waits for "+a) {
+		t.Fatal("the same shape with other ids reads differently")
+	}
+	if got := same("at 2026-10-19T12:00:00.123456Z, " + noSuch); got != "at <time>, artifact#1" {
+		t.Fatalf("aliases = %q", got)
 	}
 }

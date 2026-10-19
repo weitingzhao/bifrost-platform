@@ -1,11 +1,19 @@
 package agentd_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,12 +23,55 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
+// stopSeen is a proxy in front of the platform that says when agentd was
+// answered stop on a heartbeat.
+func stopSeen(t *testing.T, base string) (string, *atomic.Bool) {
+	t.Helper()
+	u, err := url.Parse(base)
+	must(t, err)
+	var seen atomic.Bool
+	rp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: u.Scheme, Host: u.Host})
+	rp.ModifyResponse = func(r *http.Response) error {
+		if !strings.HasSuffix(r.Request.URL.Path, "/heartbeat") {
+			return nil
+		}
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			return err
+		}
+		r.Body = io.NopCloser(bytes.NewReader(b))
+		var out map[string]any
+		if json.Unmarshal(b, &out) == nil && out["stop"] == true {
+			seen.Store(true)
+		}
+		return nil
+	}
+	proxy := httptest.NewServer(rp)
+	t.Cleanup(proxy.Close)
+	return proxy.URL + u.Path, &seen
+}
+
+func waitFile(t *testing.T, path string, within time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for {
+		if _, err := os.Stat(path); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s did not appear", filepath.Base(path))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // T07 安全停止 (v5 §5.3): a stop that comes while the attempt's branch is
-// being pushed leaves no half state. The push goes on (a hand-over is not
-// cut by a stop) and is recorded, or, refused by the remote, nothing is
-// pushed and nothing recorded: the branch on the remote and the commit the
-// platform holds are the same, or both absent. The stop is seen meanwhile:
-// heartbeats go on through the hand-over and are answered stop.
+// being pushed leaves no half state. The remote's hook holds the push until
+// the test lets it go; meanwhile the task is stopped and agentd is answered
+// stop on a heartbeat (heartbeats go on through a hand-over; review 340 A3).
+// Let go, the push is recorded; refused, nothing is pushed and nothing
+// recorded: the branch on the remote and the commit the platform holds are
+// the same, or both absent. A stop never cuts a hand-over.
 func TestAStopDuringThePush(t *testing.T) {
 	for _, refuse := range []bool{false, true} {
 		name := "pushed"
@@ -31,7 +82,13 @@ func TestAStopDuringThePush(t *testing.T) {
 			env := gitEnvT(t.TempDir())
 			bare, baseCommit := bareRemote(t, env)
 			sig := t.TempDir()
-			hook := "#!/bin/sh\ntouch '" + sig + "/pushing'\ni=0\nwhile [ ! -f '" + sig + "/go' ] && [ $i -lt 400 ]; do sleep 0.05; i=$((i+1)); done\n"
+			mark := func(f string) string { return filepath.Join(sig, f) }
+			// The hook ends only when let go; if it never is, it says so and
+			// refuses, and the test fails on the mark.
+			hook := "#!/bin/sh\ntouch '" + mark("pushing") + "'\ni=0\n" +
+				"while [ ! -f '" + mark("go") + "' ]; do\n" +
+				"  i=$((i+1)); if [ $i -gt 1200 ]; then touch '" + mark("timedout") + "'; exit 1; fi\n" +
+				"  sleep 0.05\ndone\n"
 			if refuse {
 				hook += "exit 1\n"
 			}
@@ -42,7 +99,8 @@ func TestAStopDuringThePush(t *testing.T) {
 				return strings.TrimSpace(first), err
 			}
 			pool, task, base := platformWith(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head)
-			d := daemon(t, base, script(`echo 'package x' > x.go; printf '# done\n' > "$OUT/report.md"`), bare, env)
+			viaProxy, seen := stopSeen(t, base)
+			d := daemon(t, viaProxy, script(`echo 'package x' > x.go; printf '# done\n' > "$OUT/report.md"`), bare, env)
 			cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
 			if err != nil || cl == nil {
 				t.Fatalf("claim = %+v %v", cl, err)
@@ -53,39 +111,46 @@ func TestAStopDuringThePush(t *testing.T) {
 			}
 			done := make(chan ran, 1)
 			go func() { out, err := d.Run(ctx, cl); done <- ran{out, err} }()
-			deadline := time.Now().Add(20 * time.Second)
-			for {
-				if _, err := os.Stat(filepath.Join(sig, "pushing")); err == nil {
-					break
+			var r ran
+			finished := false
+			t.Cleanup(func() { // whatever failed, the hook is let go and the run waited for
+				_ = os.WriteFile(mark("go"), nil, 0o600)
+				if !finished {
+					select {
+					case <-done:
+					case <-time.After(30 * time.Second):
+					}
 				}
-				if time.Now().After(deadline) {
-					t.Fatal("the push did not start")
-				}
-				time.Sleep(20 * time.Millisecond)
-			}
+			})
+
+			waitFile(t, mark("pushing"), 20*time.Second)
 			must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
 				return store.SetControl(ctx, tx, "owner", store.NewControlID(), "task", task, "stop", "T07: a stop during the push")
 			}))
-			var stopped time.Time
-			must(t, pool.QueryRow(ctx, `SELECT now() FROM agentrt.attempt LIMIT 1`).Scan(&stopped))
-			deadline = time.Now().Add(10 * time.Second)
-			for {
-				var beat time.Time
-				must(t, pool.QueryRow(ctx, `SELECT heartbeat_at FROM agentrt.attempt WHERE attempt_id = $1`, cl.AttemptID).Scan(&beat))
-				if beat.After(stopped) {
-					break // a heartbeat after the stop, answered stop
-				}
+			deadline := time.Now().Add(10 * time.Second)
+			for !seen.Load() {
 				if time.Now().After(deadline) {
-					t.Fatal("no heartbeat came while the push was held")
+					t.Fatal("agentd was not answered stop while the push was held")
 				}
 				time.Sleep(20 * time.Millisecond)
 			}
-			must(t, os.WriteFile(filepath.Join(sig, "go"), nil, 0o600))
-			var r ran
 			select {
 			case r = <-done:
+				t.Fatalf("the run ended before the push was let go: %+v %v", r.out, r.err)
+			default:
+			}
+			if _, err := os.Stat(mark("timedout")); err == nil {
+				t.Fatal("the hook stopped holding the push on its own")
+			}
+			must(t, os.WriteFile(mark("go"), nil, 0o600))
+			select {
+			case r = <-done:
+				finished = true
 			case <-time.After(30 * time.Second):
 				t.Fatal("the run did not end")
+			}
+			if _, err := os.Stat(mark("timedout")); err == nil {
+				t.Fatal("the hook timed out")
 			}
 
 			remote, _, _ := strings.Cut(sh(t, t.TempDir(), env, "git", "ls-remote", bare, cl.PushedRef), "\t")
