@@ -309,7 +309,17 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 		t.ID, t.MissionID, nullable(t.PlanNode), t.PlanNode == "", nullable(t.OffPlanReason), nullable(t.Subject),
 		t.Role, t.Class, t.Title, t.SpecArtifact, t.Effect, limit, actor,
 		t.Core, string(needs), nullable(t.Repo), nullable(t.BaseCommit))
-	return ev, err
+	if err != nil {
+		return ev, err
+	}
+	// A spec that says the Owner approved is recorded, and changes nothing
+	// (T04): whatever text another task's product put into it.
+	var spec []byte
+	if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, t.SpecArtifact).Scan(&spec); err != nil {
+		return ev, err
+	}
+	return ev, alertClaim(ctx, tx, Event{Stream: MissionStream(t.MissionID), MissionID: t.MissionID, PlanNode: t.PlanNode, TaskID: t.ID},
+		ev.EventID, "task_spec", t.SpecArtifact, spec)
 }
 
 // AddDependency records that taskID waits for dependsOn. It takes the

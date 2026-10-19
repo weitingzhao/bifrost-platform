@@ -63,6 +63,12 @@ func postMessage(ctx context.Context, tx pgx.Tx, from, to, kind string, body []b
 	  VALUES ($1,$2,$3,$4,$5,$6,NULLIF($7,''),NULLIF($8,''))`, id, from, to, kind, art, ev.EventID, mission, task); err != nil {
 		return "", err
 	}
+	// A message that says the Owner approved is recorded where it came in;
+	// the receiver reads it as data, as every message (T04).
+	if err := alertClaim(ctx, tx, Event{Stream: "mbox:" + to, MissionID: mission, TaskID: task, Body: map[string]any{"message_id": id}},
+		ev.EventID, "message", art, body); err != nil {
+		return "", err
+	}
 	return id, Enqueue(ctx, tx, ev.EventID, MailboxTopic(to),
 		map[string]any{"message_id": id, "event_id": ev.EventID, "message_kind": kind})
 }

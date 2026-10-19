@@ -89,6 +89,7 @@ var bodies = map[string][]field{
 	"artifact_put":            {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
 	"message_posted":          {{"message_id", kID, false}, {"to", kID, false}, {"kind", kStr, false}},
 	"message_acked":           {{"message_id", kID, false}},
+	"policy_alert":            {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, false}, {"message_id", kID, true}},
 	"control_set":             {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
 	"control_cleared":         {{"control_id", kID, false}},
 	"pool_cooldown_set":       {{"vendor_pool_id", kID, false}, {"until", kStr, false}, {"reason", kStr, false}},
