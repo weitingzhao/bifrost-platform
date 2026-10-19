@@ -42,11 +42,15 @@ type Sibling struct {
 // PyYAML (CUT-runtime-repo-infra-2026-10-19): run by the Python of a virtual
 // environment the setup makes in .git/venv, where no commit carries it and a
 // fresh clone has none, so neither the change under test nor an earlier
-// attempt decides what runs the tests. The environment comes first on PATH:
-// the tests start python3 themselves and expect pytest and PyYAML there.
-// Go's build cache goes under TMPDIR where there is one (an executor's own,
-// in codex's sandbox, which cannot write the home directory), else where Go
-// keeps it on Linux.
+// attempt chooses the interpreter or the packages. pip reads no configuration
+// file. pytest reads no configuration file and no conftest.py, the checkout's
+// or any directory's above it, and loads no plugin it finds installed, so a
+// change cannot make the run collect only or swallow its failures by
+// configuration (review 330 A1); the tests' own code is the review's to read.
+// The environment comes first on PATH: the tests start python3 themselves and
+// expect pytest and PyYAML there. Go's build cache goes under TMPDIR where
+// there is one (an executor's own, in codex's sandbox, which cannot write the
+// home directory), else where Go keeps it on Linux.
 var Repos = map[string]Repo{
 	"bifrost-platform": {
 		Verify: [][]string{
@@ -65,11 +69,12 @@ var Repos = map[string]Repo{
 	},
 	"bifrost-trade-infra": {
 		Verify: [][]string{{"sh", "-c", `PATH="$PWD/` + infraVenv + `/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" ` +
-			`exec python3 -I -m pytest -q -p no:cacheprovider ` + strings.Join(infraTests, " ")}},
+			`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider ` +
+			strings.Join(infraTests, " ")}},
 		Setup: [][]string{
 			{"python3", "-I", "-m", "venv", "--clear", infraVenv},
-			append([]string{infraVenv + "/bin/python3", "-I", "-m", "pip", "--isolated", "install", "--quiet", "--no-cache-dir",
-				"--no-input", "--disable-pip-version-check", "--only-binary=:all:", "--no-deps"}, infraPackages...),
+			append([]string{"env", "PIP_CONFIG_FILE=/dev/null", infraVenv + "/bin/python3", "-I", "-m", "pip", "--isolated", "install", "--quiet",
+				"--no-cache-dir", "--no-input", "--disable-pip-version-check", "--only-binary=:all:", "--no-deps"}, infraPackages...),
 		},
 	},
 }
@@ -87,7 +92,8 @@ var infraPackages = []string{"pytest==9.0.2", "pluggy==1.6.0", "iniconfig==2.1.0
 // infraTests are the infra tests the checks run, under two minutes on
 // 2026-10-19's main: those that pass with the repository alone and no network
 // at all, not even loopback (an executor runs them in codex's sandbox before
-// it hands in), on the agent host (git, bash, python3 and Go; no kubectl).
+// it hands in), on the agent host (git, bash, python3 and Go; no kubectl), and
+// with no conftest.py (there is none among them).
 // Left out for time, at about four minutes each and growing (the release
 // suite was one minute a week before): scripts/release, scripts/gitea and
 // k8s/cicd/gitea-backup. Left out as they serve on loopback:
@@ -195,11 +201,12 @@ func installed(setup string) string {
 
 // shellLine is a command as one line a shell runs as written: an argument
 // with anything but letters, digits and _-./=:@%+, in it is single-quoted, so
-// the infra check's sh -c script reads as one argument.
+// the infra check's sh -c script reads as one argument; so is a first word a
+// shell would read as an assignment or a reserved word (review 330 B1).
 func shellLine(c []string) string {
 	words := make([]string, len(c))
 	for i, s := range c {
-		if s != "" && strings.TrimFunc(s, shellPlain) == "" {
+		if s != "" && strings.TrimFunc(s, shellPlain) == "" && (i > 0 || !strings.Contains(s, "=") && !shellReserved[s]) {
 			words[i] = s
 		} else {
 			words[i] = "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
@@ -212,3 +219,9 @@ func shellLine(c []string) string {
 func shellPlain(r rune) bool {
 	return r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_-./=:@%+,", r))
 }
+
+// shellReserved are the words POSIX shells (and bash) read as syntax at the
+// start of a command.
+var shellReserved = map[string]bool{"if": true, "then": true, "else": true, "elif": true, "fi": true, "do": true, "done": true,
+	"case": true, "esac": true, "while": true, "until": true, "for": true, "in": true, "function": true, "select": true, "time": true,
+	"coproc": true}

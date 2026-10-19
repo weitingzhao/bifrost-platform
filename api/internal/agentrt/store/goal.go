@@ -148,9 +148,9 @@ const (
 // planSnapshot is what the runtime knows now, for a planner (the five records
 // of WORKMODE §四 the runtime holds): the missions open besides this one and
 // their unfinished tasks, the latest decisions recorded, the standing
-// envelope in force and this mission's budget, the repositories a plan may
-// name and their checks. The fifth, the design and its principles, is in the
-// spec's own text.
+// envelope in force and this mission's budget, the repositories the runtime
+// knows and their checks (a goal's plan names only the goal's: planSpec).
+// The fifth, the design and its principles, is in the spec's own text.
 func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error) {
 	var b strings.Builder
 	var now time.Time
@@ -256,7 +256,7 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 	if err = tx.QueryRow(ctx, `SELECT budget_json FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&budget); err != nil {
 		return "", err
 	}
-	fmt.Fprintf(&b, "This mission (%s): budget %s.\n\n### Repositories a plan may name, and the checks every task runs\n\n", mission, budget)
+	fmt.Fprintf(&b, "This mission (%s): budget %s.\n\n### Repositories the runtime knows, and the checks every task in each runs\n\n", mission, budget)
 	for _, name := range RepoNames() {
 		var cmds []string
 		for _, c := range Repos[name].Verify {

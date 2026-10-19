@@ -326,7 +326,7 @@ func TestTheSnapshotKeepsItsFixedPart(t *testing.T) {
 	}))
 	task, _ := takeAndReady(t, w, ask)
 	spec := specText(t, w, task)
-	for _, want := range []string{"Standing envelope and this mission's budget", "Repositories a plan may name", "they are cut here"} {
+	for _, want := range []string{"Standing envelope and this mission's budget", "Repositories the runtime knows", "they are cut here"} {
 		if !strings.Contains(spec, want) {
 			t.Errorf("the snapshot lost %q", want)
 		}

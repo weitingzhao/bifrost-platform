@@ -34,11 +34,12 @@ case "$*" in
 "-I -m venv --clear .git/venv")
   mkdir -p .git/venv/bin && cp "$0" .git/venv/bin/python3 && echo "venv|$(pwd -P)" >> "$log" ;;
 "-I -m pip --isolated install "*)
-  echo "pip|$(pwd -P)|$0|$*" >> "$log" ;;
+  echo "pip|$(pwd -P)|$0|$PIP_CONFIG_FILE|$*" >> "$log" ;;
 "-I -m pytest "*)
   first=other; [ "${PATH%%:*}" = "$PWD/.git/venv/bin" ] && first=venv
-  cache=other; case "$GOCACHE" in */go-build) cache=go-build ;; esac
-  echo "pytest|$(pwd -P)|$(git rev-parse HEAD)|$first|$cache|$0|$*" >> "$log" ;;
+  args=$(printf '%s' "$*" | sed "s|$PWD|<PWD>|g; s|$(pwd -P)|<PWD>|g")
+  echo "pytest|$(pwd -P)|$(git rev-parse HEAD)|$first|$0|$args" >> "$log"
+  echo "cache|$TMPDIR|$GOCACHE" >> "$log" ;;
 *)
   echo "unexpected|$*" >> "$log"; exit 2 ;;
 esac
@@ -228,13 +229,20 @@ func TestInfraGoalToCheck(t *testing.T) {
 	must(t, err)
 	checkDir, err := filepath.EvalSymlinks(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo))
 	must(t, err)
-	pip := strings.Join(repo.Setup[1][1:], " ")
+	pip := strings.Join(repo.Setup[1][3:], " ")
 	_, pytest, _ := strings.Cut(repo.Verify[0][2], "exec python3 ")
-	want := []string{"venv|" + implDir, "pip|" + implDir + "|.git/venv/bin/python3|" + pip, "venv|" + checkDir,
-		"pip|" + checkDir + "|.git/venv/bin/python3|" + pip,
-		"pytest|" + checkDir + "|" + pushed + "|venv|go-build|" + checkDir + "/.git/venv/bin/python3|" + pytest}
-	if !slices.Equal(lines, want) {
+	pytest = strings.Replace(pytest, `"$PWD"`, "<PWD>", 1)
+	want := []string{"venv|" + implDir, "pip|" + implDir + "|.git/venv/bin/python3|/dev/null|" + pip, "venv|" + checkDir,
+		"pip|" + checkDir + "|.git/venv/bin/python3|/dev/null|" + pip,
+		"pytest|" + checkDir + "|" + pushed + "|venv|" + checkDir + "/.git/venv/bin/python3|" + pytest}
+	if len(lines) != len(want)+1 || !slices.Equal(lines[:len(want)], want) {
 		t.Fatalf("python3 was asked:\n%s\nwant:\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+	// Go's build cache is under the check attempt's own temporary directory
+	// (review 330 B2).
+	checkTmp := filepath.Join(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)+".out", "tmp")
+	if got := lines[len(want)]; got != "cache|"+checkTmp+"|"+checkTmp+"/go-build" {
+		t.Fatalf("the check's cache: %q (its temporary directory is %s)", got, checkTmp)
 	}
 	if did, err := store.Conclude(ctx, pool, check); err != nil || did != "review" {
 		t.Fatalf("conclude: %q %v", did, err)

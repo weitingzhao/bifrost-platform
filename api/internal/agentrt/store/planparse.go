@@ -224,6 +224,9 @@ var (
 // subcommand (run, generate), no other flag (-exec, -toolexec, -o, -C
 // elsewhere), no path out of the module.
 func checkTest(at string, c []string, dirs []string) error {
+	if len(dirs) == 0 {
+		return fmt.Errorf("%s: this repository takes no checks of a plan's own; leave verify empty", at)
+	}
 	bad := func(why string) error {
 		return fmt.Errorf("%s: a check is go -C <%s> test [-run <pattern>] ./<package>...; %s",
 			at, strings.Join(dirs, "|"), why)

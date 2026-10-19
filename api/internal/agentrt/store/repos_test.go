@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -35,7 +38,10 @@ func TestInfraImplementSpec(t *testing.T) {
 		t.Fatalf("repos = %v", store.RepoNames())
 	}
 	check := r.Verify[0]
-	const script = `PATH="$PWD/.git/venv/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" exec python3 -I -m pytest -q -p no:cacheprovider `
+	// pytest reads no configuration and no conftest.py, and loads no plugin
+	// it finds (review 330 A1).
+	const script = `PATH="$PWD/.git/venv/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ` +
+		`exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider `
 	if len(check) != 3 || check[0] != "sh" || check[1] != "-c" || !strings.HasPrefix(check[2], script) {
 		t.Fatalf("check = %q", check)
 	}
@@ -61,8 +67,12 @@ func TestInfraImplementSpec(t *testing.T) {
 	if want := []string{"python3", "-I", "-m", "venv", "--clear", ".git/venv"}; !slices.Equal(r.Setup[0], want) {
 		t.Fatalf("setup[0] = %q", r.Setup[0])
 	}
-	pip := r.Setup[1]
-	if pip[0] != ".git/venv/bin/python3" || !slices.Contains(pip, "-I") || !slices.Contains(pip, "--isolated") ||
+	// pip reads no configuration file (review 330 B5).
+	if !slices.Equal(r.Setup[1][:3], []string{"env", "PIP_CONFIG_FILE=/dev/null", ".git/venv/bin/python3"}) {
+		t.Fatalf("setup[1] = %q", r.Setup[1])
+	}
+	pip := r.Setup[1][2:]
+	if !slices.Contains(pip, "-I") || !slices.Contains(pip, "--isolated") ||
 		!slices.Contains(pip, "--no-deps") || !slices.Contains(pip, "--only-binary=:all:") || !slices.Contains(pip, "--no-cache-dir") {
 		t.Fatalf("setup[1] = %q", pip)
 	}
@@ -93,7 +103,8 @@ func TestInfraImplementSpec(t *testing.T) {
 		t.Fatalf("spec = %s", body)
 	}
 	for _, want := range []string{"    sh -c '" + check[2] + "'\n", "    python3 -I -m venv --clear .git/venv\n",
-		"--only-binary=:all: --no-deps pytest==9.0.2", "You may have no network"} {
+		"    env PIP_CONFIG_FILE=/dev/null .git/venv/bin/python3 -I -m pip --isolated install", "--only-binary=:all: --no-deps pytest==9.0.2",
+		"You may have no network"} {
 		if !strings.Contains(spec.Text, want) {
 			t.Fatalf("the text lacks %q:\n%s", want, spec.Text)
 		}
@@ -101,15 +112,33 @@ func TestInfraImplementSpec(t *testing.T) {
 }
 
 // A command's words are quoted where a shell would read them otherwise; the
-// platform's commands, plain words, read as they did.
+// platform's commands, plain words, read as they did. A first word a shell
+// would take for an assignment or a reserved word is quoted too, and the line
+// runs as the command it shows (review 330 B1).
 func TestImplementSpecQuotesCommands(t *testing.T) {
-	body, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"echo", "it's", "a b", "", "./...", "--x=:all:"}, {"go", "-C", "api", "vet", "./..."}})
+	body, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"echo", "it's", "a b", "", "./...", "--x=:all:", "if", "A=B"},
+		{"go", "-C", "api", "vet", "./..."}, {"A=B", "x"}, {"if", "x"}})
 	ok(t, err)
 	var spec struct{ Text string }
 	ok(t, json.Unmarshal(body, &spec))
-	for _, want := range []string{`    echo 'it'\''s' 'a b' '' ./... --x=:all:` + "\n", "    go -C api vet ./...\n"} {
+	for _, want := range []string{`    echo 'it'\''s' 'a b' '' ./... --x=:all: if A=B` + "\n", "    go -C api vet ./...\n", "    'A=B' x\n", "    'if' x\n"} {
 		if !strings.Contains(spec.Text, want) {
 			t.Fatalf("the text lacks %q:\n%s", want, spec.Text)
+		}
+	}
+	// Read back by a shell: commands named A=B and if, on PATH, print their
+	// arguments.
+	bin := t.TempDir()
+	for _, name := range []string{"A=B", "if"} {
+		ok(t, os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\necho \"$0 $*\"\n"), 0o755))
+	}
+	for _, line := range []string{"    'A=B' x\n", "    'if' x\n"} {
+		cmd := exec.Command("/bin/sh", "-c", strings.TrimSpace(line))
+		cmd.Env = []string{"PATH=" + bin + ":/usr/bin:/bin"}
+		out, err := cmd.CombinedOutput()
+		name, _, _ := strings.Cut(strings.Trim(strings.TrimSpace(line), "'"), "'")
+		if err != nil || strings.TrimSpace(string(out)) != filepath.Join(bin, name)+" x" {
+			t.Fatalf("%q ran as %q (%v)", line, out, err)
 		}
 	}
 }
@@ -178,7 +207,7 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", impl, "cancelled", "test") }))
 	for key, c := range map[string]struct{ repo, report, why string }{
 		"g2": {infra, strings.Replace(infraPlan, `"verify": []`, `"verify": [["python3", "-m", "pytest", "scripts/agentrt"]]`, 1),
-			"a check is go -C <> test"},
+			"this repository takes no checks of a plan's own; leave verify empty"},
 		"g3": {"bifrost-platform", infraPlan, `repo is one of bifrost-platform, not "bifrost-trade-infra"`},
 	} {
 		_, plan = goal(key, c.repo)
