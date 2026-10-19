@@ -31,7 +31,7 @@ const (
 )
 
 // The fixture's steps with a ★ the board does not see (after 「（补强）」).
-var fixtureStars = []string{"2.1-4", "2.3-1", "2.3-2"}
+var fixtureStars = []string{"2.1-4", "2.3-1", "2.3-2", "2.4-2"}
 
 func seeded(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -120,16 +120,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	must(t, err)
 	var boardView planimport.View
 	must(t, json.Unmarshal(boardDoc, &boardView))
-	var extra []string
-	for i := range got.Items {
-		for j := range got.Items[i].Steps {
-			g := &got.Items[i].Steps[j]
-			if g.Star && !boardView.Items[i].Steps[j].Star {
-				extra = append(extra, g.ID)
-				g.Star = false
-			}
-		}
-	}
+	extra := planimport.BoardMissesStars(boardView, &got)
 	if d := planimport.Diff(boardView, got); len(d) > 0 || !slices.Equal(extra, stars) {
 		t.Fatalf("GET /plan differs from the board's reading (★ it misses: %v, want %v):\n%s", extra, stars, strings.Join(d, "\n"))
 	}
@@ -159,7 +150,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 		var ok bool
 		switch state {
 		case "done":
-			ok = n.Event.Type == "plan_node_state_changed" && cause == "done_rule_manual" && string(n.Done) == `{"manual": "`+store.ManualOf(n.ID)+`"}`
+			ok = n.Event.Type == "plan_node_state_changed" && cause == "done_rule_manual" && string(n.Done) == `{"manual": "`+planimport.ManualAtom(n.ID)+`"}`
 			if firstDone == "" {
 				firstDone = n.ID
 			}
@@ -183,7 +174,7 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	must(t, json.Unmarshal(get(t, s, "plan/"+firstDone), &node))
 	var evidence []any
 	for _, e := range node.Events {
-		if e.Type == "note" && e.Body["manual"] == store.ManualOf(firstDone) {
+		if e.Type == "note" && e.Body["manual"] == planimport.ManualAtom(firstDone) {
 			evidence, _ = e.Body["evidence"].([]any)
 		}
 	}
@@ -249,6 +240,38 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 		}
 	}
 
+	// The board's when, by the read chain of CUT §6: the plan stream's
+	// legacy_imported event names the request, read once; each step still in
+	// its imported state shows the date its line was marked, not the import's
+	// time (review 310 A6).
+	var events []struct {
+		Type string         `json:"event_type"`
+		Body map[string]any `json:"body_json"`
+	}
+	must(t, json.Unmarshal(get(t, s, "events?stream=plan:R2"), &events))
+	source, _ := events[0].Body["source"].(string)
+	reqID, found := planimport.RequestOf(source)
+	if events[0].Type != "legacy_imported" || !found || reqID != res.Request {
+		t.Fatalf("first event of plan:R2 = %s %v", events[0].Type, events[0].Body)
+	}
+	var named planimport.Request
+	must(t, json.Unmarshal(get(t, s, "artifacts/"+reqID), &named))
+	shown, err := planimport.FromPlanWithRequest(tree, "R2", &named)
+	must(t, err)
+	marked := map[string]string{}
+	for _, n := range req.Nodes {
+		if n.Kind == "step" {
+			marked[n.Label] = n.Evidence.MarkedAt
+		}
+	}
+	for _, it := range shown.Items {
+		for _, st := range it.Steps {
+			if st.When != marked[st.ID] {
+				t.Errorf("step %s shows %q beside it, want the line's %q", st.ID, st.When, marked[st.ID])
+			}
+		}
+	}
+
 	// The plan's stream is one unbroken chain.
 	if _, err := store.VerifyStream(ctx, pool, store.PlanStream("R2")); err != nil {
 		t.Fatal(err)
@@ -280,6 +303,7 @@ func TestPlanImportTwice(t *testing.T) {
 
 	// A request that differs in one title: refused, nothing written.
 	other := ledger(t, fixtureLedger)
+	other.Nodes[1].Evidence.Line = strings.Replace(other.Nodes[1].Evidence.Line, other.Nodes[1].Title, other.Nodes[1].Title+"（改）", 1)
 	other.Nodes[1].Title += "（改）"
 	if _, oerr := store.ImportPlan(ctx, pool, "controller", other); !errors.Is(oerr, store.ErrInvalid) ||
 		!strings.Contains(oerr.Error(), "already exists and was not imported from this request") {
@@ -306,7 +330,7 @@ func TestPlanImportTwice(t *testing.T) {
 }
 
 // After the import, the runtime numbers new nodes on from the imported ones:
-// a step added to 2.1 is 2.1-6, an item added to the round is 2.4 (2.2b is
+// a step added to 2.1 is 2.1-6, an item added to the round is 2.5 (2.2b is
 // not a number and is passed over).
 func TestPlanImportNumberingContinues(t *testing.T) {
 	pool := seeded(t)
@@ -341,7 +365,7 @@ func TestPlanImportNumberingContinues(t *testing.T) {
 	for _, it := range got.Items {
 		keys = append(keys, it.Key)
 	}
-	if !slices.Equal(keys, []string{"2.0", "2.1", "2.2b", "2.3", "2.4"}) || got.Items[1].Steps[5].ID != "2.1-6" {
+	if !slices.Equal(keys, []string{"2.0", "2.1", "2.2b", "2.3", "2.4", "2.5"}) || got.Items[1].Steps[5].ID != "2.1-6" {
 		t.Fatalf("items %v, 2.1's last step %+v", keys, got.Items[1].Steps[len(got.Items[1].Steps)-1])
 	}
 }

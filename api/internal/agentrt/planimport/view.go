@@ -24,13 +24,15 @@ type ViewItem struct {
 }
 
 // ViewStep is one step. State is the board's: done, doing or todo, and the
-// runtime's stopped and dropped as they are.
+// runtime's stopped and dropped as they are. When is what the board shows
+// beside it (FromPlanWithRequest); Diff does not compare it.
 type ViewStep struct {
 	ID    string `json:"id"`
 	T     string `json:"t"`
 	State string `json:"state"`
 	Owner bool   `json:"owner"`
 	Star  bool   `json:"star"`
+	When  string `json:"when,omitempty"`
 }
 
 // BoardState is the board's word for a runtime step state.
@@ -65,23 +67,46 @@ func FromRequest(r Request) View {
 }
 
 // planAnswer is the part of GET /plan?root= a view needs: the nodes, depth
-// first in ordinal order.
+// first in ordinal order, each with its done rule and state event.
 type planAnswer struct {
-	Root  string `json:"root"`
-	Nodes []struct {
-		ID     string  `json:"plan_node_id"`
-		Parent *string `json:"parent_plan_node_id"`
-		Kind   string  `json:"node_kind"`
-		Label  string  `json:"label"`
-		Title  string  `json:"title"`
-		State  *string `json:"state"`
-		Owner  bool    `json:"owner_step"`
-		Effect bool    `json:"effect_step"`
-	} `json:"nodes"`
+	Root  string     `json:"root"`
+	Nodes []planNode `json:"nodes"`
 }
 
-// FromPlan is the view of a GET /plan?root= answer for the round root.
+type planNode struct {
+	ID     string          `json:"plan_node_id"`
+	Parent *string         `json:"parent_plan_node_id"`
+	Kind   string          `json:"node_kind"`
+	Label  string          `json:"label"`
+	Title  string          `json:"title"`
+	State  *string         `json:"state"`
+	Owner  bool            `json:"owner_step"`
+	Effect bool            `json:"effect_step"`
+	Rule   json.RawMessage `json:"done_rule_json"`
+	Event  *struct {
+		Type string `json:"event_type"`
+		At   string `json:"at"`
+		Body struct {
+			Cause string `json:"cause"`
+		} `json:"body"`
+	} `json:"state_event"`
+}
+
+// FromPlan is the view of a GET /plan?root= answer for the round root. The
+// answer must be one round: the root once, each node's id <root>:<label>,
+// no id twice, every item under the root and every step under an item before
+// it.
 func FromPlan(doc []byte, root string) (View, error) {
+	return FromPlanWithRequest(doc, root, nil)
+}
+
+// FromPlanWithRequest is FromPlan with each step's When: for a step whose
+// state is still the one the import gave it (done by its imported manual
+// rule, active with cause legacy_imported, or planned since it was created),
+// the date its ledger line was marked, from the import request; for any
+// other step the time of its last state event. The request is the artifact
+// the plan's legacy_imported event names (RequestOf), read once.
+func FromPlanWithRequest(doc []byte, root string, req *Request) (View, error) {
 	var a planAnswer
 	if err := json.Unmarshal(doc, &a); err != nil {
 		return View{}, fmt.Errorf("the plan does not read: %w", err)
@@ -89,18 +114,36 @@ func FromPlan(doc []byte, root string) (View, error) {
 	if a.Root != root {
 		return View{}, fmt.Errorf("the plan is of root %q, not %q", a.Root, root)
 	}
+	marked := map[string]string{}
+	if req != nil {
+		for _, n := range req.Nodes {
+			if n.Evidence != nil {
+				marked[n.ID] = n.Evidence.MarkedAt
+			}
+		}
+	}
 	var v View
 	at := map[string]int{}
+	seen := map[string]bool{}
+	roots := 0
 	for _, n := range a.Nodes {
 		parent := ""
 		if n.Parent != nil {
 			parent = *n.Parent
 		}
+		if seen[n.ID] {
+			return View{}, fmt.Errorf("node %s is listed twice", n.ID)
+		}
+		seen[n.ID] = true
+		if n.Kind != "round" && n.ID != root+":"+n.Label {
+			return View{}, fmt.Errorf("node %s is not %s:%s", n.ID, root, n.Label)
+		}
 		switch n.Kind {
 		case "round":
-			if n.ID != root {
+			if n.ID != root || parent != "" {
 				return View{}, fmt.Errorf("round %s inside the plan of %s", n.ID, root)
 			}
+			roots++
 		case "item":
 			if parent != root {
 				return View{}, fmt.Errorf("item %s sits under %q, not the root", n.ID, parent)
@@ -113,12 +156,39 @@ func FromPlan(doc []byte, root string) (View, error) {
 				return View{}, fmt.Errorf("step %s sits under %q, which is not an item listed before it", n.ID, parent)
 			}
 			v.Items[i].Steps = append(v.Items[i].Steps, ViewStep{ID: n.Label, T: n.Title, State: BoardState(*n.State),
-				Owner: n.Owner, Star: n.Effect})
+				Owner: n.Owner, Star: n.Effect, When: when(n, marked)})
 		default:
 			return View{}, fmt.Errorf("node %s is a %s, which a round does not hold", n.ID, n.Kind)
 		}
 	}
+	if roots != 1 {
+		return View{}, fmt.Errorf("the plan holds its root %d times", roots)
+	}
 	return v, nil
+}
+
+// when is what the board shows beside a step (FromPlanWithRequest).
+func when(n planNode, marked map[string]string) string {
+	if n.Event == nil {
+		return ""
+	}
+	imported := false
+	if m, ok := marked[n.ID]; ok {
+		var rule map[string]string
+		_ = json.Unmarshal(n.Rule, &rule)
+		switch *n.State {
+		case StateDone:
+			imported = len(rule) == 1 && rule["manual"] == ManualAtom(n.ID) && n.Event.Body.Cause == "done_rule_manual"
+		case StateActive:
+			imported = n.Event.Body.Cause == "legacy_imported"
+		case StatePlanned:
+			imported = n.Event.Type == "plan_node_created"
+		}
+		if imported {
+			return m
+		}
+	}
+	return n.Event.At
 }
 
 // Diff lists where got differs from want, step by step, in want's order;
@@ -186,4 +256,23 @@ func diffSteps(w, g ViewItem) []string {
 		}
 	}
 	return out
+}
+
+// BoardMissesStars lists the steps got marks ★ where the board's view does
+// not, at the same place, and clears those marks in got, so the two can be
+// compared on everything else: the board reads a ★ only at the head of a
+// title, the import also after 「（补强…）」 (ledger.go).
+func BoardMissesStars(board View, got *View) []string {
+	var ids []string
+	for i := range got.Items {
+		for j := range got.Items[i].Steps {
+			g := &got.Items[i].Steps[j]
+			if i < len(board.Items) && j < len(board.Items[i].Steps) && board.Items[i].Steps[j].ID == g.ID &&
+				g.Star && !board.Items[i].Steps[j].Star {
+				ids = append(ids, g.ID)
+				g.Star = false
+			}
+		}
+	}
+	return ids
 }

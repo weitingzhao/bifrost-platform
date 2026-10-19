@@ -4,10 +4,15 @@
 // writes files only: it never sends the request anywhere.
 //
 //	agentrt-plan-import generate -ledger WORK.md [-round 2] [-file name] [-commit sha] [-o request.json]
-//	agentrt-plan-import diff -ledger WORK.md -plan plan.json [-round 2]
+//	agentrt-plan-import diff -ledger WORK.md -plan plan.json [-board board.json] [-round 2]
 //
 // plan.json is an answer of GET /api/v1/agentrt/plan?root=R<round>. diff
-// prints each difference and exits 1 when there is any.
+// compares it with the ledger as this command reads it and, with -board, with
+// the board's own reading of the ledger (roadmap.round_of's items and steps
+// as planimport.View JSON, CUT §5), an independent check of the parser. It
+// prints each difference and exits 1 when there is any. A ★ the plan has and
+// the board does not (after 「（补强…）」) is printed as a note, not a
+// difference.
 package main
 
 import (
@@ -39,6 +44,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	commit := fs.String("commit", "", "the 40-character commit the ledger was read at")
 	out := fs.String("o", "", "generate: write the request here instead of to standard output")
 	planFile := fs.String("plan", "", "diff: a GET /plan?root= answer")
+	boardFile := fs.String("board", "", "diff: the board's reading of the ledger, as planimport.View JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -64,7 +70,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 			say(stderr, "-plan is required")
 			return 2
 		}
-		return diff(req, *planFile, stdout, stderr)
+		return diff(req, *planFile, *boardFile, stdout, stderr)
 	}
 	sayf(stderr, "unknown command %q: generate or diff\n", args[0])
 	return 2
@@ -103,7 +109,7 @@ func generate(req planimport.Request, out string, stdout, stderr io.Writer) int 
 	return 0
 }
 
-func diff(req planimport.Request, planFile string, stdout, stderr io.Writer) int {
+func diff(req planimport.Request, planFile, boardFile string, stdout, stderr io.Writer) int {
 	doc, err := os.ReadFile(planFile)
 	if err != nil {
 		say(stderr, err)
@@ -115,6 +121,24 @@ func diff(req planimport.Request, planFile string, stdout, stderr io.Writer) int
 		return 1
 	}
 	lines := planimport.Diff(planimport.FromRequest(req), got)
+	if boardFile != "" {
+		raw, err := os.ReadFile(boardFile)
+		if err != nil {
+			say(stderr, err)
+			return 1
+		}
+		var board planimport.View
+		if err := json.Unmarshal(raw, &board); err != nil {
+			sayf(stderr, "%s: %v\n", boardFile, err)
+			return 1
+		}
+		for _, n := range planimport.BoardMissesStars(board, &got) {
+			say(stdout, "note: step "+n+" is a ★ step; the board does not see the ★ after 「（补强…）」")
+		}
+		for _, l := range planimport.Diff(board, got) {
+			lines = append(lines, "against the board: "+l)
+		}
+	}
 	for _, l := range lines {
 		say(stdout, l)
 	}

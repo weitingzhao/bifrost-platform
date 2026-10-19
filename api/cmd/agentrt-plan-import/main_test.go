@@ -46,7 +46,7 @@ func TestGenerateAndDiff(t *testing.T) {
 	reqFile := filepath.Join(dir, "r2.json")
 	commit := strings.Repeat("a", 40)
 	code, _, errs := runIt("generate", "-ledger", ledger, "-commit", commit, "-o", reqFile)
-	if code != 0 || !strings.Contains(errs, "R2: 4 items, 16 steps (9 done, 3 active, 4 planned)") {
+	if code != 0 || !strings.Contains(errs, "R2: 5 items, 18 steps (9 done, 4 active, 5 planned)") {
 		t.Fatalf("generate = %d, %s", code, errs)
 	}
 	raw, err := os.ReadFile(reqFile)
@@ -54,22 +54,41 @@ func TestGenerateAndDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	var req planimport.Request
-	if err := json.Unmarshal(raw, &req); err != nil {
+	if err = json.Unmarshal(raw, &req); err != nil {
 		t.Fatal(err)
 	}
-	if err := req.Validate(); err != nil || req.Source.Commit != commit || req.Source.File != defaultFile {
+	if err = req.Validate(); err != nil || req.Source.Commit != commit || req.Source.File != defaultFile {
 		t.Fatalf("written request: %v, source %+v", err, req.Source)
 	}
 
 	planFile := filepath.Join(dir, "plan.json")
-	if err := os.WriteFile(planFile, planOf(t, req), 0o600); err != nil {
+	if err = os.WriteFile(planFile, planOf(t, req), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if code, out, errs := runIt("diff", "-ledger", ledger, "-plan", planFile); code != 0 || out != "" || !strings.Contains(errs, "no differences") {
+	code, out, errs := runIt("diff", "-ledger", ledger, "-plan", planFile)
+	if code != 0 || out != "" || !strings.Contains(errs, "no differences") {
 		t.Fatalf("diff of the same plan = %d %q %q", code, out, errs)
 	}
+	// Against the board's own reading too: equal but for the ★ it misses.
+	board := "../../internal/agentrt/planimport/testdata/ledger-board.json"
+	code, out, errs = runIt("diff", "-ledger", ledger, "-plan", planFile, "-board", board)
+	if code != 0 || strings.Count(out, "note: step ") != 4 || strings.Contains(out, "against the board") {
+		t.Fatalf("diff against the board = %d %q %q", code, out, errs)
+	}
+	raw, err = os.ReadFile(board)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := filepath.Join(dir, "board.json")
+	if err = os.WriteFile(changed, []byte(strings.Replace(string(raw), "迁移器：pgx 接入", "迁移器", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := runIt("diff", "-ledger", ledger, "-plan", planFile, "-board", changed); code != 1 ||
+		!strings.Contains(out, "against the board: step 2.1-1: title") {
+		t.Fatalf("diff against a board that reads otherwise = %d %q", code, out)
+	}
 	req.Nodes[1].State = planimport.StatePlanned
-	if err := os.WriteFile(planFile, planOf(t, req), 0o600); err != nil {
+	if err = os.WriteFile(planFile, planOf(t, req), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if code, out, _ := runIt("diff", "-ledger", ledger, "-plan", planFile); code != 1 || !strings.Contains(out, "step 2.0-1: state todo, want done") {

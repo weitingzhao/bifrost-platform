@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Reading the ledger. The rules are the board's (~/agent-work/status/roadmap.py
@@ -14,23 +16,35 @@ import (
 // exactly as the ledger did: an item is a line "- <key> <name>（<note>）", a
 // step a line "- [x|~| ] <title>｜<when>" under it, numbered "<key>-<n>" by its
 // place in the item; the title is what comes before the first ｜ with a
-// leading ★ taken off. Two things are read more carefully than the board
-// does, and refused rather than dropped: a line that is neither an item nor
-// a step, and a step before any item. The step marks are read from the whole
-// run of marks a title starts with, so 「（补强）★ …」 is a ★ step, which the
-// board misses.
+// leading ★ taken off, and a step is the Owner's when its title then starts
+// with 「（你）」. Whitespace is what Python's str.isspace calls whitespace,
+// as the board's strip() and \s read it. Two things are read more carefully
+// than the board does, and refused rather than dropped or misread: a line
+// that is neither an item nor a step, and a step before any item. The ★ is
+// read from the whole run of marks a title starts with, so 「（补强）★ …」 is
+// a ★ step, which the board misses; that is the one place the two differ.
 
 var (
-	roundHead = regexp.MustCompile(`^(\s*)- \*\*第 ([0-9]+) 轮逐项（核对于 ([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2})）\*\*`)
-	stepLine  = regexp.MustCompile(`^\s*- \[([x~ ])\] (.+)$`)
-	itemName  = regexp.MustCompile(`^(.*?)（([^（）]*)）\s*$`)
+	roundHead = regexp.MustCompile(`^- \*\*第 ([0-9]+) 轮逐项（核对于 ([0-9]{4})-([0-9]{2})-([0-9]{2}) ([0-9]{2}):([0-9]{2})）\*\*`)
+	stepLine  = regexp.MustCompile(`^- \[([x~ ])\] (.+)$`)
+	itemName  = regexp.MustCompile(`^(.*?)（([^（）]*)）$`)
 	workHead  = regexp.MustCompile(`^### (W-[0-9]+)\s*$`)
 	markedAt  = regexp.MustCompile(`(?:([0-9]{4})-)?([0-9]{2})-([0-9]{2})(?: ([0-9]{2}):([0-9]{2}))?`)
 	backticks = regexp.MustCompile("`([^`]+)`")
 	hexToken  = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
-	approval  = regexp.MustCompile(`#([0-9]{1,6})`)
-	review    = regexp.MustCompile(`复核 ?([0-9]{2,4})`)
 )
+
+// pySpace is Python's str.isspace for one character.
+func pySpace(r rune) bool { return unicode.IsSpace(r) || r >= 0x1c && r <= 0x1f }
+
+func trim(s string) string { return strings.TrimFunc(s, pySpace) }
+
+// indent is the number of whitespace characters a line starts with, and the
+// rest of the line.
+func indent(line string) (int, string) {
+	rest := strings.TrimLeftFunc(line, pySpace)
+	return utf8.RuneCountInString(line[:len(line)-len(rest)]), rest
+}
 
 // LedgerOptions say what the ledger itself does not: the path to name it by
 // and the commit it was read at.
@@ -39,22 +53,38 @@ type LedgerOptions struct {
 	Commit string // the commit of the ledger's repository, when known
 }
 
+// header reads a round's header line: its indentation, round, year and the
+// 「核对于」 time as written.
+type header struct {
+	indent, round, year int
+	checked             string
+}
+
+func readHeader(line string) (header, bool) {
+	ind, rest := indent(line)
+	m := roundHead.FindStringSubmatch(rest)
+	if m == nil {
+		return header{}, false
+	}
+	round, _ := strconv.Atoi(m[1])
+	year, _ := strconv.Atoi(m[2])
+	return header{indent: ind, round: round, year: year, checked: fmt.Sprintf("%s-%s-%s %s:%s", m[2], m[3], m[4], m[5], m[6])}, true
+}
+
 // ParseLedger reads round n of the ledger into an import request.
 func ParseLedger(text string, n int, opt LedgerOptions) (Request, error) {
 	lines := strings.Split(text, "\n")
-	head, base, year := -1, 0, 0
-	var checked string
+	head := -1
+	var h header
 	for i, line := range lines {
-		m := roundHead.FindStringSubmatch(line)
-		if m == nil || m[2] != strconv.Itoa(n) {
+		got, ok := readHeader(line)
+		if !ok || got.round != n {
 			continue
 		}
 		if head >= 0 {
 			return Request{}, fmt.Errorf("line %d: a second 「第 %d 轮逐项」 header (the first is on line %d)", i+1, n, head+1)
 		}
-		head, base = i, len(m[1])
-		year, _ = strconv.Atoi(m[3])
-		checked = fmt.Sprintf("%s-%s-%s %s:%s", m[3], m[4], m[5], m[6], m[7])
+		head, h = i, got
 	}
 	if head < 0 {
 		return Request{}, fmt.Errorf("the ledger has no 「第 %d 轮逐项（核对于 …）」 header", n)
@@ -76,52 +106,83 @@ func ParseLedger(text string, n int, opt LedgerOptions) (Request, error) {
 	itemSteps := 0
 	for i := head + 1; i < len(lines); i++ {
 		line := lines[i]
-		if strings.TrimSpace(line) == "" {
+		if trim(line) == "" {
 			continue
 		}
-		if len(line)-len(strings.TrimLeft(line, " \t")) <= base {
+		if ind, _ := indent(line); ind <= h.indent {
 			break
 		}
 		last = i
-		body, ok := strings.CutPrefix(strings.TrimSpace(line), "- ")
-		if !ok {
-			return Request{}, fmt.Errorf("line %d: neither an item nor a step: %.60q", i+1, line)
+		l, err := readLine(line, h.year)
+		if err != nil {
+			return Request{}, fmt.Errorf("line %d: %w", i+1, err)
 		}
-		if s := stepLine.FindStringSubmatch(line); s != nil {
+		switch l.kind {
+		case "rest":
+			continue
+		case "step":
 			if item == nil {
 				return Request{}, fmt.Errorf("line %d: a step before any item", i+1)
 			}
 			itemSteps++
-			req.Nodes = append(req.Nodes, step(root, item, itemSteps, s[1], s[2], i+1, line, year, work))
-			continue
+			stepLabel := item.Label + "-" + strconv.Itoa(itemSteps)
+			req.Nodes = append(req.Nodes, Node{ID: root + ":" + stepLabel, Parent: item.ID, Kind: "step", Label: stepLabel, Title: l.title,
+				Ordinal: itemSteps - 1, WorkID: work, StepKind: l.stepKind, State: l.state, Owner: l.owner, Effect: l.effect,
+				Evidence: &Evidence{LineNo: i + 1, Line: line, Mark: l.mark, MarkedAt: l.markedAt, Commits: l.commits,
+					Approvals: l.approvals, Reviews: l.reviews}})
+		case "item":
+			req.Nodes = append(req.Nodes, Node{ID: root + ":" + l.key, Parent: root, Kind: "item", Label: l.key, Title: l.title,
+				Ordinal: countKind(req.Nodes, "item"), WorkID: work, Evidence: &Evidence{LineNo: i + 1, Line: line, Note: l.note}})
+			item, itemSteps = &req.Nodes[len(req.Nodes)-1], 0
 		}
-		if strings.HasPrefix(body, "剩余：") {
-			continue
-		}
-		key, rest, _ := strings.Cut(body, " ")
-		name, note := rest, ""
-		if m := itemName.FindStringSubmatch(rest); m != nil {
-			name, note = strings.TrimSpace(m[1]), strings.TrimSpace(m[2])
-		}
-		req.Nodes = append(req.Nodes, Node{ID: root + ":" + key, Parent: root, Kind: "item", Label: key, Title: name,
-			Ordinal: countKind(req.Nodes, "item"), WorkID: work, Evidence: &Evidence{LineNo: i + 1, Line: line, Note: note}})
-		item, itemSteps = &req.Nodes[len(req.Nodes)-1], 0
 	}
 	section := strings.Join(lines[head:last+1], "\n")
 	sum := sha256.Sum256([]byte(section))
-	req.Source = Source{File: opt.File, Section: "第 " + label + " 轮逐项", CheckedAt: checked, Commit: opt.Commit,
+	req.Source = Source{File: opt.File, Section: "第 " + label + " 轮逐项", CheckedAt: h.checked, Commit: opt.Commit,
 		SHA256: hex.EncodeToString(sum[:]), FirstLine: head + 1, LastLine: last + 1}
 	return req, req.Validate()
 }
 
-// step reads one step line: its title and marks before the first ｜, its
-// evidence after it.
-func step(root string, item *Node, n int, mark, text string, lineNo int, line string, year int, work string) Node {
+// line is what one line of a round says.
+type line struct {
+	kind                        string // item, step or rest (the 「剩余：」 line)
+	key, note                   string // an item's
+	title                       string
+	mark, state, stepKind       string // a step's
+	owner, effect               bool
+	markedAt                    string
+	commits, approvals, reviews []string
+}
+
+// readLine reads one non-blank line of a round. Validate reads each node's
+// evidence line with it again, so a request says nothing its lines do not.
+func readLine(raw string, year int) (line, error) {
+	_, rest := indent(raw)
+	body, ok := strings.CutPrefix(trim(rest), "- ")
+	if !ok {
+		return line{}, fmt.Errorf("neither an item nor a step: %.60q", raw)
+	}
+	if s := stepLine.FindStringSubmatch(rest); s != nil {
+		return readStep(s[1], s[2], year), nil
+	}
+	if strings.HasPrefix(body, "剩余：") {
+		return line{kind: "rest"}, nil
+	}
+	key, name, _ := strings.Cut(body, " ")
+	l := line{kind: "item", key: key, title: name}
+	if m := itemName.FindStringSubmatch(name); m != nil {
+		l.title, l.note = trim(m[1]), trim(m[2])
+	}
+	return l, nil
+}
+
+// readStep reads a step: its title and marks before the first ｜, its
+// evidence in the whole text.
+func readStep(mark, text string, year int) line {
 	what, when, _ := strings.Cut(text, "｜")
-	what = strings.TrimSpace(what)
-	title := strings.TrimSpace(strings.TrimLeft(what, "★"))
-	owner, effect := marks(what)
-	state := map[string]string{"x": StateDone, "~": StateActive, " ": StatePlanned}[mark]
+	what = trim(what)
+	title := trim(strings.TrimLeft(what, "★"))
+	owner := strings.HasPrefix(title, "（你）")
 	kind := "agent"
 	switch {
 	case owner:
@@ -129,33 +190,30 @@ func step(root string, item *Node, n int, mark, text string, lineNo int, line st
 	case strings.Contains(title, "复核"):
 		kind = "review"
 	}
-	label := item.Label + "-" + strconv.Itoa(n)
-	return Node{ID: root + ":" + label, Parent: item.ID, Kind: "step", Label: label, Title: title, Ordinal: n - 1,
-		WorkID: work, StepKind: kind, State: state, Owner: owner, Effect: effect,
-		Evidence: &Evidence{LineNo: lineNo, Line: line, Mark: mark, MarkedAt: dateIn(when, year),
-			Commits: commitsIn(text), Approvals: all(approval, text, "#"), Reviews: all(review, text, "")}}
+	return line{kind: "step", title: title, mark: mark, owner: owner, effect: effect(what), stepKind: kind,
+		state:    map[string]string{"x": StateDone, "~": StateActive, " ": StatePlanned}[mark],
+		markedAt: dateIn(when, year), commits: commitsIn(text), approvals: approvalsIn(text), reviews: reviewsIn(text)}
 }
 
-// marks reads the run of marks a title starts with: 「（你）」 is the
-// Owner's step, 「★」 the step that puts the item into effect, and any
-// 「（补强…）」 is passed over.
-func marks(what string) (owner, effect bool) {
+// effect reads the run of marks a title starts with (★, 「（你）」,
+// 「（补强…）」 in any order) for a ★.
+func effect(what string) bool {
 	s := what
 	for {
-		s = strings.TrimSpace(s)
+		s = trim(s)
 		switch {
 		case strings.HasPrefix(s, "★"):
-			effect, s = true, strings.TrimPrefix(s, "★")
+			return true
 		case strings.HasPrefix(s, "（你）"):
-			owner, s = true, strings.TrimPrefix(s, "（你）")
+			s = strings.TrimPrefix(s, "（你）")
 		case strings.HasPrefix(s, "（补强"):
 			end := strings.Index(s, "）")
 			if end < 0 {
-				return
+				return false
 			}
 			s = s[end+len("）"):]
 		default:
-			return
+			return false
 		}
 	}
 }
@@ -194,6 +252,15 @@ func dateIn(when string, year int) string {
 
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
+// digits is the run of ASCII digits s starts with.
+func digits(s string) string {
+	i := 0
+	for i < len(s) && isDigit(s[i]) {
+		i++
+	}
+	return s[:i]
+}
+
 // commitsIn lists the commit-like words inside backticks: 7 to 40 lowercase
 // hex characters with at least one letter (a run of digits is a number).
 func commitsIn(text string) []string {
@@ -211,12 +278,72 @@ func commitsIn(text string) []string {
 	return out
 }
 
-func all(re *regexp.Regexp, text, prefix string) []string {
+// approvalsIn lists the approval numbers written "#n": a whole run of 1 to 6
+// digits; a longer run is not an approval number and is left out, never cut
+// to a shorter one.
+func approvalsIn(text string) []string {
 	var out []string
-	for _, m := range re.FindAllStringSubmatch(text, -1) {
-		out = appendNew(out, prefix+m[1])
+	for rest := text; ; {
+		i := strings.Index(rest, "#")
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+1:]
+		if d := digits(rest); len(d) >= 1 && len(d) <= 6 {
+			out = appendNew(out, "#"+d)
+		}
 	}
-	return out
+}
+
+// reviewsIn lists the review numbers written after 「复核」: a number of 2 to
+// 4 digits, then more joined by a list mark (、，, 和) or a range mark (–—-~～
+// 到), a range counted out when it is short. A run of digits of another
+// length ends the list and is left out, never cut to a shorter number.
+func reviewsIn(text string) []string {
+	var out []string
+	for rest := text; ; {
+		i := strings.Index(rest, "复核")
+		if i < 0 {
+			return out
+		}
+		rest = rest[i+len("复核"):]
+		s := strings.TrimPrefix(rest, " ")
+		prev, ranged := 0, false
+		for {
+			d := digits(s)
+			if len(d) < 2 || len(d) > 4 {
+				break
+			}
+			n, _ := strconv.Atoi(d)
+			if ranged && n > prev && n-prev < maxRefs {
+				for k := prev + 1; k < n; k++ {
+					out = appendNew(out, strconv.Itoa(k))
+				}
+			}
+			out = appendNew(out, d)
+			prev, s = n, s[len(d):]
+			sep, isRange := separator(s)
+			if sep == "" {
+				break
+			}
+			s, ranged = strings.TrimLeft(s[len(sep):], " "), isRange
+		}
+	}
+}
+
+// separator is the list or range mark s starts with, if any.
+func separator(s string) (string, bool) {
+	for _, r := range []string{"–", "—", "-", "~", "～", "到"} {
+		if strings.HasPrefix(s, r) {
+			return r, true
+		}
+	}
+	for _, l := range []string{"、", "，", ",", " 和 ", "和"} {
+		if strings.HasPrefix(s, l) {
+			return l, false
+		}
+	}
+	return "", false
 }
 
 func appendNew(list []string, s string) []string {

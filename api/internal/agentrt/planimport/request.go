@@ -79,6 +79,23 @@ type Evidence struct {
 	Reviews   []string `json:"reviews,omitempty"`   // "复核 145" as "145"
 }
 
+// SourcePrefix starts the legacy_imported source of an import: the source is
+// SourcePrefix and the request's artifact id.
+const SourcePrefix = "plan-import "
+
+// Source of an import whose request is stored as artifactID.
+func ImportSource(artifactID string) string { return SourcePrefix + artifactID }
+
+// RequestOf is the request artifact a legacy_imported source names.
+func RequestOf(source string) (string, bool) {
+	id, ok := strings.CutPrefix(source, SourcePrefix)
+	return id, ok && sha256ID.MatchString(id)
+}
+
+// ManualAtom is the manual atom an imported done step's rule names, and its
+// note records.
+func ManualAtom(stepID string) string { return "imported from the work ledger: " + stepID }
+
 // Step states as the runtime stores them.
 const (
 	StatePlanned = "planned"
@@ -95,6 +112,7 @@ var (
 	workID     = regexp.MustCompile(`^W-[0-9]{1,5}$`)
 	sha64      = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	sha40      = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	sha256ID   = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
 
 // Validate checks a request by itself: the shape the store writes and the
@@ -137,12 +155,25 @@ func (r Request) Validate() error {
 	if err := r.checkCommon(root); err != nil {
 		return err
 	}
+	if root.Evidence == nil {
+		return fmt.Errorf("root carries its header line")
+	}
+	h, ok := readHeader(root.Evidence.Line)
+	switch {
+	case !ok || strconv.Itoa(h.round) != root.Label:
+		return fmt.Errorf("root's line is not the 「第 %s 轮逐项」 header", root.Label)
+	case h.checked != s.CheckedAt || root.Evidence.LineNo != s.FirstLine:
+		return fmt.Errorf("root's line is the header the source names, on its first line, checked at %s", s.CheckedAt)
+	case root.Title != "第 "+root.Label+" 轮":
+		return fmt.Errorf("root title is 第 %s 轮", root.Label)
+	}
 	if len(r.Nodes) == 0 || len(r.Nodes) > MaxNodes {
 		return fmt.Errorf("a request holds 1 to %d nodes, not %d", MaxNodes, len(r.Nodes))
 	}
 	items := map[string]*Node{}
 	steps := map[string]int{} // steps seen per item
 	ids := map[string]bool{root.ID: true}
+	lineNo := root.Evidence.LineNo
 	for i := range r.Nodes {
 		n := &r.Nodes[i]
 		at := fmt.Sprintf("nodes[%d] (%s)", i, n.ID)
@@ -155,6 +186,12 @@ func (r Request) Validate() error {
 		}
 		if err := r.checkCommon(*n); err != nil {
 			return fmt.Errorf("%s: %w", at, err)
+		}
+		switch {
+		case n.WorkID != root.WorkID:
+			return fmt.Errorf("%s: every node has the root's work id %q", at, root.WorkID)
+		case n.Evidence == nil:
+			return fmt.Errorf("%s: a node carries the line it was read from", at)
 		}
 		switch n.Kind {
 		case "item":
@@ -183,13 +220,53 @@ func (r Request) Validate() error {
 				return fmt.Errorf("%s: step kind is one of %v", at, StepKinds)
 			case n.State != StatePlanned && n.State != StateActive && n.State != StateDone:
 				return fmt.Errorf("%s: an imported step is planned, active or done", at)
-			case n.Evidence == nil:
-				return fmt.Errorf("%s: a step carries the line it was read from", at)
 			}
 			steps[n.Parent]++
 		default:
 			return fmt.Errorf("%s: a node under the root is an item or a step", at)
 		}
+		if n.Evidence.LineNo <= lineNo {
+			return fmt.Errorf("%s: nodes come in the order of their lines", at)
+		}
+		lineNo = n.Evidence.LineNo
+		if err := derived(*n, h.year); err != nil {
+			return fmt.Errorf("%s: %w", at, err)
+		}
+	}
+	return nil
+}
+
+// derived checks that a node says what its line says: read again by the
+// ledger's rules, the line gives the node's title, marks, state and kind and
+// the evidence's mark, note, date and references. A request is then
+// consistent in itself; that its lines are the ledger's is what its source
+// digest records, not something checked here.
+func derived(n Node, year int) error {
+	l, err := readLine(n.Evidence.Line, year)
+	if err != nil {
+		return err
+	}
+	e := n.Evidence
+	type fields struct {
+		title, stepKind, state, mark, note, markedAt string
+		owner, effect                                bool
+	}
+	want := fields{l.title, l.stepKind, l.state, l.mark, l.note, l.markedAt, l.owner, l.effect}
+	switch n.Kind {
+	case "item":
+		if l.kind != "item" || l.key != n.Label {
+			return fmt.Errorf("its line is not the item %s", n.Label)
+		}
+	case "step":
+		if l.kind != "step" {
+			return fmt.Errorf("its line is not a step")
+		}
+	}
+	got := fields{n.Title, n.StepKind, n.State, e.Mark, e.Note, e.MarkedAt, n.Owner, n.Effect}
+	if got != want || !slices.Equal(e.Commits, l.commits) || !slices.Equal(e.Approvals, l.approvals) ||
+		!slices.Equal(e.Reviews, l.reviews) {
+		return fmt.Errorf("it does not say what its line says (title %q, state %q, marks %v/%v, kind %q, mark %q)",
+			l.title, l.state, l.owner, l.effect, l.stepKind, l.mark)
 	}
 	return nil
 }

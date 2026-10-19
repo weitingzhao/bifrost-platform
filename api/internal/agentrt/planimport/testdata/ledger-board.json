@@ -135,6 +135,26 @@
      "star": false
     }
    ]
+  },
+  {
+   "key": "2.4",
+   "name": "缩进用不换行空格",
+   "steps": [
+    {
+     "id": "2.4-1",
+     "t": "（补强）（你）批准",
+     "state": "todo",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.4-2",
+     "t": "（补强）★（你）批准",
+     "state": "doing",
+     "owner": false,
+     "star": false
+    }
+   ]
   }
  ]
 }

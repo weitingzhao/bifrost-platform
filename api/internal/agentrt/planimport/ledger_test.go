@@ -33,7 +33,7 @@ func fixture(t *testing.T) planimport.Request {
 // states and Owner marks; it reads more ★ marks than the board (a ★ after
 // 「（补强）」), and only those.
 func TestParseMatchesBoard(t *testing.T) {
-	compareBoard(t, fixture(t), "testdata/ledger-board.json", []string{"2.1-4", "2.3-1", "2.3-2"})
+	compareBoard(t, fixture(t), "testdata/ledger-board.json", []string{"2.1-4", "2.3-1", "2.3-2", "2.4-2"})
 }
 
 // The same against the real ledger, when it is named: AGENTRT_PLAN_LEDGER is
@@ -63,16 +63,7 @@ func compareBoard(t *testing.T, req planimport.Request, board string, extraStars
 	var want planimport.View
 	ok(t, json.Unmarshal(raw, &want))
 	got := planimport.FromRequest(req)
-	var stars []string
-	for i := range got.Items {
-		for j := range got.Items[i].Steps {
-			g := &got.Items[i].Steps[j]
-			if i < len(want.Items) && j < len(want.Items[i].Steps) && g.Star && !want.Items[i].Steps[j].Star {
-				stars = append(stars, g.ID)
-				g.Star = false
-			}
-		}
-	}
+	stars := planimport.BoardMissesStars(want, &got)
 	if d := planimport.Diff(want, got); len(d) > 0 {
 		t.Fatalf("the request differs from the board's reading:\n%s", strings.Join(d, "\n"))
 	}
@@ -87,15 +78,15 @@ func TestParseFixture(t *testing.T) {
 		t.Fatalf("root = %+v", req.Root)
 	}
 	s := req.Source
-	if s.FirstLine != 14 || s.LastLine != 36 || s.CheckedAt != "2026-10-19 01:20" || s.Section != "第 2 轮逐项" || len(s.SHA256) != 64 {
+	if s.FirstLine != 14 || s.LastLine != 39 || s.CheckedAt != "2026-10-19 01:20" || s.Section != "第 2 轮逐项" || len(s.SHA256) != 64 {
 		t.Fatalf("source = %+v", s)
 	}
 	nodes := map[string]planimport.Node{}
 	for _, n := range req.Nodes {
 		nodes[n.ID] = n
 	}
-	if len(req.Nodes) != 4+16 {
-		t.Fatalf("%d nodes, want 4 items and 16 steps", len(req.Nodes))
+	if len(req.Nodes) != 5+18 {
+		t.Fatalf("%d nodes, want 5 items and 18 steps", len(req.Nodes))
 	}
 	item := nodes["R2:2.1"]
 	if item.Title != "数据层：状态库" || item.Evidence.Note != "v5 §5.1；Claude 写、Codex 复核" || item.Ordinal != 1 {
@@ -120,11 +111,16 @@ func TestParseFixture(t *testing.T) {
 		{id: "R2:2.1-5", kind: "agent", state: "done", marked: "2026-10-13 22:58", effect: true},
 		{id: "R2:2.2b-1", kind: "owner", state: "done", marked: "2026-10-18 11:59", owner: true, commits: []string{"9872f36"}},
 		{id: "R2:2.2b-2", kind: "agent", state: "active"},
-		{id: "R2:2.2b-3", kind: "agent", state: "active", reviews: []string{"263"}},
+		{id: "R2:2.2b-3", kind: "agent", state: "active", reviews: []string{"263", "264", "265", "266", "267", "268", "269", "270"}},
 		{id: "R2:2.2b-4", kind: "agent", state: "done"},
 		{id: "R2:2.2b-5", kind: "owner", state: "done", marked: "2026-10-14 15:49", owner: true},
 		{id: "R2:2.3-1", kind: "agent", state: "done", marked: "2026-10-18 12:09", effect: true},
 		{id: "R2:2.3-2", kind: "agent", state: "planned", effect: true},
+		// Indented with U+00A0 and U+3000, as the board reads it; 「（你）」
+		// after another mark is not the Owner's step (the board's rule); a
+		// number of the wrong length is left out, not cut short.
+		{id: "R2:2.4-1", kind: "agent", state: "planned", reviews: []string{"235", "236"}},
+		{id: "R2:2.4-2", kind: "agent", state: "active", effect: true, reviews: []string{"263", "264", "265", "266", "267", "268", "269", "270"}},
 	}
 	for _, c := range cases {
 		n, found := nodes[c.id]
@@ -190,5 +186,33 @@ func TestParseRefusals(t *testing.T) {
 	// Another round's header is not this round's.
 	if _, err := planimport.ParseLedger(head+"      - 2.1 项\n        - [x] 一步\n", 3, planimport.LedgerOptions{File: "WORK.md"}); err == nil {
 		t.Fatal("round 3 read from a ledger that has only round 2")
+	}
+}
+
+// References are whole numbers or nothing (review 310 A7), and a list or a
+// range after 「复核」 is read through (review 310 B4).
+func TestReferences(t *testing.T) {
+	head := "### W-31\n    - **第 2 轮逐项（核对于 2026-10-19 01:20）**\n      - 2.1 项\n"
+	for _, c := range []struct {
+		text               string
+		approvals, reviews []string
+	}{
+		{"审批单 #1234567 与 #41、#41", []string{"#41"}, nil},
+		{"#123456 #0", []string{"#123456", "#0"}, nil},
+		{"复核 12345 不是编号", nil, nil},
+		{"复核 235、236 和复核 145", nil, []string{"235", "236", "145"}},
+		{"复核 263–270，都收线", nil, []string{"263", "264", "265", "266", "267", "268", "269", "270"}},
+		{"复核 286、289、291、292–294 等", nil, []string{"286", "289", "291", "292", "293", "294"}},
+		{"复核 100–200 太长只记两头", nil, []string{"100", "200"}},
+		{"复核 12–，后面没有", nil, []string{"12"}},
+		{"复核 270–263 倒着写", nil, []string{"270", "263"}},
+		{"复核（两轮）", nil, nil},
+	} {
+		req, err := planimport.ParseLedger(head+"        - [x] 一步｜"+c.text+"\n", 2, planimport.LedgerOptions{File: "WORK.md"})
+		ok(t, err)
+		e := req.Nodes[1].Evidence
+		if !same(e.Approvals, c.approvals) || !same(e.Reviews, c.reviews) {
+			t.Errorf("%q: approvals %v reviews %v; want %v %v", c.text, e.Approvals, e.Reviews, c.approvals, c.reviews)
+		}
 	}
 }

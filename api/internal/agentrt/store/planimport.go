@@ -38,12 +38,6 @@ type ImportResult struct {
 	Active   int    `json:"active"`
 }
 
-// ImportSource is the legacy_imported source of a request's artifact.
-func ImportSource(artifactID string) string { return "plan-import " + artifactID }
-
-// ManualOf is the manual atom an imported done step's rule names.
-func ManualOf(stepID string) string { return "imported from the work ledger: " + stepID }
-
 // ImportPlan imports a plan request as actor.
 func ImportPlan(ctx context.Context, db DB, actor string, req planimport.Request) (ImportResult, error) {
 	if err := req.Validate(); err != nil {
@@ -78,6 +72,7 @@ func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 	if err := lockTree(ctx, tx, root); err != nil {
 		return err
 	}
+	hook("plan import locked", root)
 	var exists bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1)`, root).Scan(&exists); err != nil {
 		return err
@@ -86,7 +81,7 @@ func importOnce(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 		return importTree(ctx, tx, actor, req, doc, reqID, out)
 	}
 	err := tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'legacy_imported'
-	  AND body_json->>'source' = $2 ORDER BY event_id LIMIT 1`, PlanStream(root), ImportSource(reqID)).Scan(&out.EventID)
+	  AND body_json->>'source' = $2 ORDER BY event_id LIMIT 1`, PlanStream(root), planimport.ImportSource(reqID)).Scan(&out.EventID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return invalid("plan %s already exists and was not imported from this request; change it through /plan/proposals", root)
 	}
@@ -99,7 +94,7 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 		return err
 	}
 	head, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "legacy_imported", Actor: actor,
-		Body: map[string]any{"source": ImportSource(reqID), "count": out.Nodes}})
+		Body: map[string]any{"source": planimport.ImportSource(reqID), "count": out.Nodes}})
 	if err != nil {
 		return err
 	}
@@ -127,7 +122,7 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 			if n.Evidence.MarkedAt != "" {
 				text += ", marked " + n.Evidence.MarkedAt
 			}
-			if err = RecordManual(ctx, tx, actor, n.ID, ManualOf(n.ID), text, []string{eid, reqID}); err != nil {
+			if err = RecordManual(ctx, tx, actor, n.ID, planimport.ManualAtom(n.ID), text, []string{eid, reqID}); err != nil {
 				return fmt.Errorf("plan import: step %s: %w", n.ID, err)
 			}
 			to, err := evaluateStep(ctx, tx, n.ID, noDeployment)
@@ -144,6 +139,7 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 			}
 			out.Active++
 		}
+		hook("plan import step", n.ID)
 	}
 	return nil
 }
@@ -161,7 +157,7 @@ func importNode(ctx context.Context, tx pgx.Tx, actor, root string, head int64, 
 		state = planimport.StatePlanned
 		if n.State == planimport.StateDone {
 			var err error
-			if rule, err = canon.Encode(map[string]any{"manual": ManualOf(n.ID)}); err != nil {
+			if rule, err = canon.Encode(map[string]any{"manual": planimport.ManualAtom(n.ID)}); err != nil {
 				return err
 			}
 		}
