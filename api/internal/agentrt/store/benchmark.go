@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"sort"
@@ -9,6 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
 
 // Benchmark runs (design v5 §5.1.2 「能力怎么量」 ③; W-31 2.4 slice ⑤; the
@@ -49,13 +53,16 @@ type BenchmarkResult struct {
 
 // BenchmarkRun is a run as agentd hands it in.
 type BenchmarkRun struct {
-	RunID     string            `json:"run_id"`
-	Executor  string            `json:"executor"`
-	Provider  string            `json:"provider"`
-	Model     string            `json:"model"`
-	Questions string            `json:"questions_sha256"`
-	StartedAt time.Time         `json:"started_at"`
-	Results   []BenchmarkResult `json:"results"`
+	RunID     string `json:"run_id"`
+	Executor  string `json:"executor"`
+	Provider  string `json:"provider"`
+	Model     string `json:"model"`
+	Questions string `json:"questions_sha256"`
+	// QuestionIDs are the questions the run answers: the results are one
+	// for each, no more (a partial run is never recorded, review 287 B10).
+	QuestionIDs []string          `json:"question_ids"`
+	StartedAt   time.Time         `json:"started_at"`
+	Results     []BenchmarkResult `json:"results"`
 }
 
 var (
@@ -86,12 +93,18 @@ func checkBenchmark(run BenchmarkRun, now time.Time) error {
 		return invalid("started_at is a time in the last seven days")
 	case len(run.Results) == 0 || len(run.Results) > 100:
 		return invalid("a run has 1 to 100 results")
+	case len(run.QuestionIDs) != len(run.Results):
+		return invalid("a run has one result for each of its %d questions, not %d", len(run.QuestionIDs), len(run.Results))
+	}
+	asked := map[string]bool{}
+	for _, q := range run.QuestionIDs {
+		asked[q] = true
 	}
 	seen := map[string]bool{}
 	for _, r := range run.Results {
 		switch {
-		case !questionIDRE.MatchString(r.Question) || seen[r.Question]:
-			return invalid("question %q is not an id, or comes twice", r.Question)
+		case !questionIDRE.MatchString(r.Question) || seen[r.Question] || !asked[r.Question]:
+			return invalid("question %q is not an id, comes twice or is not one of the run's", r.Question)
 		case !benchmarkClasses[r.Class]:
 			return invalid("question %s: class %q is not go, python, ts or shell", r.Question, r.Class)
 		case !benchmarkOutcomes[r.Outcome]:
@@ -127,14 +140,25 @@ func RecordBenchmark(ctx context.Context, db DB, host string, run BenchmarkRun) 
 		if err != nil {
 			return err
 		}
-		// One record per run: the run's id is looked for under this lock.
+		digest, err := run.digest()
+		if err != nil {
+			return err
+		}
+		// One record per run of a host: looked for under this lock; the same
+		// run again is the record made, another one under its id is refused
+		// (review 287 B11).
 		if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(742112)`); err != nil {
 			return err
 		}
 		var id int64
-		err = tx.QueryRow(ctx, `SELECT event_id FROM agentrt.event WHERE event_stream_id = $1 AND body_json->>'run_id' = $2`,
-			BenchmarksStream, run.RunID).Scan(&id)
+		var had string
+		err = tx.QueryRow(ctx, `SELECT event_id, COALESCE(body_json->>'digest', '') FROM agentrt.event
+		  WHERE event_stream_id = $1 AND body_json->>'run_id' = $2 AND body_json->>'host' = $3`,
+			BenchmarksStream, run.RunID, host).Scan(&id, &had)
 		if err == nil {
+			if had != digest {
+				return invalid("run %s of host %s was handed in before with other results", run.RunID, host)
+			}
 			out = map[string]any{"event_id": id, "duplicate": true}
 			return nil
 		}
@@ -179,7 +203,8 @@ func RecordBenchmark(ctx context.Context, db DB, host string, run BenchmarkRun) 
 				"job": benchmarkJob, "class": k, "core": false, "attempts": c.attempts, "first_pass": c.passes})
 		}
 		body := map[string]any{"source": "benchmark", "rows": len(classes), "samples": samples, "run_id": run.RunID, "host": host,
-			"executor": run.Executor, "provider": run.Provider, "questions": run.Questions, "results": results}
+			"executor": run.Executor, "provider": run.Provider, "questions": run.Questions, "results": results,
+			"started_at": run.StartedAt.UTC().Format(time.RFC3339Nano), "digest": digest}
 		if run.Model != "" {
 			body["model"] = run.Model
 		}
@@ -209,12 +234,34 @@ func RecordBenchmark(ctx context.Context, db DB, host string, run BenchmarkRun) 
 	return out, err
 }
 
+// digest is the sha256 of what the run says, for telling the same run from
+// another under its id.
+func (run BenchmarkRun) digest() (string, error) {
+	results := []any{}
+	for _, r := range run.Results {
+		results = append(results, map[string]any{"q": r.Question, "c": r.Class, "o": r.Outcome, "w": r.WallS, "r": r.Reason})
+	}
+	doc, err := canon.Encode(map[string]any{"executor": run.Executor, "provider": run.Provider, "model": run.Model,
+		"questions": run.Questions, "started_at": run.StartedAt.UTC().Format(time.RFC3339Nano), "results": results})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(doc)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 // latestBenchmarks is, for each executor, provider and model, the samples of
-// its latest run in the last BenchmarkWindow.
+// the run that started last within the last BenchmarkWindow: a run handed in
+// late does not stand for a newer one (review 287 B12). A run is recorded
+// after it started, so the stream read back one window has every run that
+// started within it.
 func latestBenchmarks(ctx context.Context, tx pgx.Tx) ([]scoreLine, error) {
-	rows, err := tx.Query(ctx, `SELECT DISTINCT ON (body_json->>'executor', body_json->>'provider', body_json->>'model') body_json
-	  FROM agentrt.event WHERE event_stream_id = $1 AND at >= clock_timestamp() - make_interval(secs => $2)
-	  ORDER BY body_json->>'executor', body_json->>'provider', body_json->>'model', seq DESC`, BenchmarksStream, BenchmarkWindow.Seconds())
+	var now time.Time
+	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return nil, err
+	}
+	rows, err := tx.Query(ctx, `SELECT body_json FROM agentrt.event WHERE event_stream_id = $1 AND at >= $2 ORDER BY seq`,
+		BenchmarksStream, now.Add(-BenchmarkWindow))
 	if err != nil {
 		return nil, err
 	}
@@ -222,9 +269,31 @@ func latestBenchmarks(ctx context.Context, tx pgx.Tx) ([]scoreLine, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []scoreLine
+	type pick struct {
+		started time.Time
+		body    map[string]any
+	}
+	latest := map[string]pick{}
 	for _, b := range bodies {
-		out = append(out, samplesOf(b)...)
+		s, _ := b["started_at"].(string)
+		started, perr := time.Parse(time.RFC3339Nano, s)
+		if perr != nil || started.Before(now.Add(-BenchmarkWindow)) {
+			continue
+		}
+		str := func(k string) string { v, _ := b[k].(string); return v }
+		k := str("executor") + "|" + str("provider") + "|" + str("model")
+		if p, ok := latest[k]; !ok || started.After(p.started) {
+			latest[k] = pick{started, b}
+		}
+	}
+	keys := make([]string, 0, len(latest))
+	for k := range latest {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []scoreLine
+	for _, k := range keys {
+		out = append(out, samplesOf(latest[k].body)...)
 	}
 	return out, nil
 }

@@ -13,8 +13,10 @@ import (
 )
 
 // benchRepo is a bare repository with the code before a fix and the fix:
-// calc.txt goes from old to new; the fix adds check.sh (passes on new only),
-// always.sh (passes on anything) and never.sh (passes on nothing).
+// calc.txt goes from old to new and old.txt goes away; the fix adds the
+// tests: check.sh (new calc, or a pytest.ini, which only a protected file
+// gives), gone.sh (no old.txt), always.sh, never.sh and bg.sh (leaves a
+// process behind that would touch $BENCH_MARK a second later).
 func benchRepo(t *testing.T, env []string) (bare, base, fix string) {
 	t.Helper()
 	bare, _ = bareRemote(t, env)
@@ -25,21 +27,26 @@ func benchRepo(t *testing.T, env []string) (bare, base, fix string) {
 		sh(t, seed, env, "git", "add", name)
 	}
 	write("calc.txt", "old\n")
+	write("old.txt", "x\n")
 	sh(t, seed, env, "git", "commit", "--quiet", "-m", "base")
 	base = sh(t, seed, env, "git", "rev-parse", "HEAD")
 	write("calc.txt", "new\n")
-	write("check.sh", "test \"$(cat calc.txt)\" = new\n")
+	sh(t, seed, env, "git", "rm", "--quiet", "old.txt")
+	write("check.sh", "test \"$(cat calc.txt)\" = new || test -f pytest.ini\n")
+	write("gone.sh", "test ! -e old.txt\n")
 	write("always.sh", "exit 0\n")
 	write("never.sh", "exit 1\n")
+	write("bg.sh", "(sleep 1; touch \"$BENCH_MARK\") > /dev/null 2>&1 &\ntest \"$(cat calc.txt)\" = new\n")
 	sh(t, seed, env, "git", "commit", "--quiet", "-m", "fix: calc says new")
 	fix = sh(t, seed, env, "git", "rev-parse", "HEAD")
 	sh(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
 	return bare, base, fix
 }
 
-// W-31 2.4 slice ⑤: a question that does not stand on this host never
-// reaches the executor; one that does passes only when the fix's tests pass
-// over the change; a run cut short or run again goes on from its results.
+// W-31 2.4 slice ⑤, review 287: a question that does not stand never reaches
+// the executor; the executor sees only the code before the fix; the judgement
+// takes its change but no protected file and no link, and takes its removals;
+// a check leaves nothing running; a run goes on from its results.
 func TestBench(t *testing.T) {
 	env := gitEnvT(t.TempDir())
 	bare, base, fix := benchRepo(t, env)
@@ -47,22 +54,30 @@ func TestBench(t *testing.T) {
 		return agentd.BenchQuestion{ID: id, Repo: "/somewhere/bifrost-x", Language: "go", BaseCommit: base, FixCommit: fix,
 			TestFiles: []string{test}, Checks: []agentd.BenchCheck{{Cwd: ".", Argv: []string{"sh", test}}}, TaskText: "fix: calc says new"}
 	}
-	qs := []agentd.BenchQuestion{q("Q1", "check.sh"), q("Q2", "check.sh"), q("Q3", "always.sh"), q("Q4", "never.sh"), q("Q5", "check.sh")}
+	qs := []agentd.BenchQuestion{q("Q1", "check.sh"), q("Q2", "check.sh"), q("Q3", "always.sh"), q("Q4", "never.sh"),
+		q("Q5", "check.sh"), q("Q6", "check.sh"), q("Q7", "check.sh"), q("Q8", "gone.sh"), q("Q9", "bg.sh"), q("Q10", "check.sh")}
 	calls := filepath.Join(t.TempDir(), "calls")
-	// Q1 makes the change, Q2 does nothing, Q5 runs out of time; Q3 and Q4
-	// never reach the executor.
+	mark := filepath.Join(t.TempDir(), "late-marker")
 	exec := script(`echo "$PWD" >> ` + calls + `
 case "$PWD" in
-*/Q2/ws) ;;
-*/Q5/ws) sleep 30 ;;
+*/Q2/work) ;;
+*/Q5/work) sleep 30 ;;
+*/Q6/work) echo > pytest.ini ;;
+*/Q7/work) [ "$(git rev-list --all | wc -l | tr -d ' ')" = 1 ] && [ ! -e ../src ] && [ ! -e ../fix ] && echo new > calc.txt ;;
+*/Q8/work) rm old.txt ;;
+*/Q10/work) printf new > /tmp/bench-new-$$ && rm calc.txt && ln -s /tmp/bench-new-$$ calc.txt ;;
 *) echo new > calc.txt ;;
 esac`)
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0001")
 	b := &agentd.Bench{Root: root, Self: os.Args[0], Remote: func(string) string { return bare }, GitEnv: env,
-		CheckEnv: os.Environ(), Executor: exec, Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"},
-		Limit: 3 * time.Second, KillGrace: time.Second, Logf: t.Logf}
-	_, err := agentd.WriteBenchMeta(root, agentd.BenchMeta{RunID: "run-test-0001", Executor: "exec:codex", Provider: "openai",
-		Questions: strings.Repeat("a", 64), StartedAt: time.Now()})
+		CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1", "BENCH_MARK="+mark), Executor: exec,
+		Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"}, Limit: 3 * time.Second, KillGrace: time.Second, Logf: t.Logf}
+	ids := []string{}
+	for _, x := range qs {
+		ids = append(ids, x.ID)
+	}
+	meta, err := agentd.WriteBenchMeta(root, agentd.BenchMeta{RunID: "run-test-0001", Executor: "exec:codex", Provider: "openai",
+		Questions: strings.Repeat("a", 64), QuestionIDs: ids, StartedAt: time.Now()})
 	must(t, err)
 	got, err := b.Run(context.Background(), qs)
 	must(t, err)
@@ -70,17 +85,27 @@ esac`)
 	for _, r := range got {
 		outcomes[r.Question] = r.Outcome + ": " + r.Reason
 	}
-	for id, want := range map[string]string{"Q1": "pass: ", "Q2": "fail: sh check.sh exited 1",
-		"Q3": "unrunnable: the checks pass on the code before the fix", "Q4": "unrunnable: the fix does not pass its checks here: sh never.sh exited 1",
-		"Q5": "fail: the executor ran out of time; sh check.sh exited 1"} {
+	for id, want := range map[string]string{
+		"Q1": "pass: ", "Q2": "fail: sh check.sh exited 1",
+		"Q3": "unrunnable: the checks pass on the code before the fix",
+		"Q4": "unrunnable: the fix does not pass its checks here: sh never.sh exited 1",
+		"Q5": "fail: the executor ran out of time; sh check.sh exited 1",
+		"Q6": "fail: 1 protected or linked files of its change left out; sh check.sh exited 1",
+		"Q7": "pass: ", "Q8": "pass: ", "Q9": "pass: ",
+		"Q10": "fail: 1 protected or linked files of its change left out; sh check.sh exited 1: cat: calc.txt: No such file or directory",
+	} {
 		if outcomes[id] != want {
 			t.Errorf("%s: %q, want %q", id, outcomes[id], want)
 		}
 	}
 	ran, err := os.ReadFile(calls)
 	must(t, err)
-	if n := strings.Count(string(ran), "\n"); n != 3 {
-		t.Fatalf("the executor ran %d times (Q1, Q2, Q5 only): %s", n, ran)
+	if n := strings.Count(string(ran), "\n"); n != 8 {
+		t.Fatalf("the executor ran %d times (all but Q3 and Q4): %s", n, ran)
+	}
+	time.Sleep(1500 * time.Millisecond)
+	if _, serr := os.Stat(mark); serr == nil {
+		t.Fatal("a check of Q9 left a process that ran on after it")
 	}
 	// Run again: every outcome is read back, the executor is not called.
 	again, err := b.Run(context.Background(), qs)
@@ -93,9 +118,27 @@ esac`)
 	if ran2, _ := os.ReadFile(calls); string(ran2) != string(ran) {
 		t.Fatalf("a resumed run called the executor again")
 	}
-	// A run is of one executor on one question set.
-	if _, err = agentd.WriteBenchMeta(root, agentd.BenchMeta{RunID: "run-test-0001", Executor: "exec:cursor", Questions: strings.Repeat("a", 64)}); err == nil {
-		t.Fatal("a run resumed with another executor")
+	if all, cerr := meta.Complete(got); cerr != nil || len(all) != len(qs) {
+		t.Fatalf("complete: %d results, %v", len(all), cerr)
+	}
+	if _, cerr := meta.Complete(got[:3]); cerr == nil {
+		t.Fatal("a run with questions left was complete")
+	}
+	trial := meta
+	trial.Trial = true
+	if _, cerr := trial.Complete(got); cerr == nil {
+		t.Fatal("a trial is handed in")
+	}
+	// A run is of one executor, provider and model on one question set (review 287 B9).
+	for name, m := range map[string]agentd.BenchMeta{
+		"another executor": {RunID: meta.RunID, Executor: "exec:cursor", Provider: "openai", Questions: meta.Questions, QuestionIDs: ids},
+		"another provider": {RunID: meta.RunID, Executor: "exec:codex", Provider: "other", Questions: meta.Questions, QuestionIDs: ids},
+		"another model":    {RunID: meta.RunID, Executor: "exec:codex", Provider: "openai", Model: "m2", Questions: meta.Questions, QuestionIDs: ids},
+		"fewer questions":  {RunID: meta.RunID, Executor: "exec:codex", Provider: "openai", Questions: meta.Questions, QuestionIDs: ids[:2]},
+	} {
+		if _, err = agentd.WriteBenchMeta(root, m); err == nil {
+			t.Errorf("a run resumed with %s", name)
+		}
 	}
 }
 
@@ -104,10 +147,8 @@ func TestBenchQuestionsRefused(t *testing.T) {
 		"fix_commit": strings.Repeat("b", 40), "test_files": []string{"api/x_test.go"},
 		"check_command": []any{map[string]any{"cwd": "api", "argv": []string{"go", "test", "./..."}}}, "task_text": "fix"}
 	for name, mutate := range map[string]func(m map[string]any){
-		"a test file outside": func(m map[string]any) { m["test_files"] = []string{"../evil_test.go"} },
-		"a check outside": func(m map[string]any) {
-			m["check_command"] = []any{map[string]any{"cwd": "/tmp", "argv": []string{"true"}}}
-		},
+		"a test file outside":     func(m map[string]any) { m["test_files"] = []string{"../evil_test.go"} },
+		"a check outside":         func(m map[string]any) { m["check_command"] = []any{map[string]any{"cwd": "/tmp", "argv": []string{"true"}}} },
 		"a short commit":          func(m map[string]any) { m["base_commit"] = "abc" },
 		"a language unknown":      func(m map[string]any) { m["language"] = "rust" },
 		"no task text":            func(m map[string]any) { m["task_text"] = " " },

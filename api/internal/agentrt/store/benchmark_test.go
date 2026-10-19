@@ -20,6 +20,9 @@ func benchRun(id string, passes, fails int) store.BenchmarkRun {
 		r.Results = append(r.Results, store.BenchmarkResult{Question: fmt.Sprintf("Q%02d", i+1), Class: "go", Outcome: outcome, WallS: 60 * (i + 1)})
 	}
 	r.Results = append(r.Results, store.BenchmarkResult{Question: "Q99", Class: "ts", Outcome: "unrunnable", Reason: "no node here"})
+	for _, x := range r.Results {
+		r.QuestionIDs = append(r.QuestionIDs, x.Question)
+	}
 	return r
 }
 
@@ -28,7 +31,8 @@ func benchRun(id string, passes, fails int) store.BenchmarkRun {
 // read as a run.
 func TestBenchmarkRecord(t *testing.T) {
 	w := newKernelWorld(t)
-	out, err := store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-a-000001", 2, 1))
+	run := benchRun("run-a-000001", 2, 1)
+	out, err := store.RecordBenchmark(ctx, w.rt, "h1", run)
 	ok(t, err)
 	if out["duplicate"] != false || out["rows"] != 1 {
 		t.Fatalf("record: %v", out)
@@ -40,10 +44,13 @@ func TestBenchmarkRecord(t *testing.T) {
 	if attempts != 3 || firstPass != 2 || class != "go" {
 		t.Fatalf("row: %d attempts, %d first pass, %s %s", attempts, firstPass, source, class)
 	}
-	again, err := store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-a-000001", 0, 3))
+	again, err := store.RecordBenchmark(ctx, w.rt, "h1", run)
 	ok(t, err)
 	if again["duplicate"] != true || again["event_id"] != out["event_id"] {
 		t.Fatalf("again: %v", again)
+	}
+	if _, err = store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-a-000001", 0, 3)); err == nil {
+		t.Fatal("other results under the same run id were taken")
 	}
 	for name, mutate := range map[string]func(*store.BenchmarkRun){
 		"a deterministic run":   func(r *store.BenchmarkRun) { r.Executor = "exec:deterministic" },
@@ -55,6 +62,8 @@ func TestBenchmarkRecord(t *testing.T) {
 		"no question set":       func(r *store.BenchmarkRun) { r.Questions = "" },
 		"a reason of two lines": func(r *store.BenchmarkRun) { r.Results[0].Reason = "a\nb" },
 		"no results":            func(r *store.BenchmarkRun) { r.Results = nil },
+		"a question left out":   func(r *store.BenchmarkRun) { r.Results = r.Results[1:] },
+		"a question not asked":  func(r *store.BenchmarkRun) { r.QuestionIDs[0] = "Q77" },
 	} {
 		r := benchRun("run-b-"+strings.ReplaceAll(name, " ", "-"), 1, 1)
 		mutate(&r)
@@ -83,5 +92,36 @@ func TestBenchmarkCountsForCompetence(t *testing.T) {
 	ok(t, err)
 	if body = w.lastRoute(t, task); n == 0 || !strings.Contains(fmt.Sprint(body["candidates"]), "implementer/exec:codex/openai/*") {
 		t.Fatalf("codex at 5 of 5 (%d rerouted): %v", n, body["excluded"])
+	}
+}
+
+// Review 287 B11, B12: a run is one per host and id, the same one again is
+// the first record and another under its id is refused; the run that started
+// last stands, whenever it was handed in.
+func TestBenchmarkIdentityAndOrder(t *testing.T) {
+	w := newKernelWorld(t)
+	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h2", "dev"))
+	first, err := store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-d-000001", 1, 1))
+	ok(t, err)
+	other, err := store.RecordBenchmark(ctx, w.rt, "h2", benchRun("run-d-000001", 2, 0))
+	ok(t, err)
+	if other["duplicate"] != false || other["event_id"] == first["event_id"] {
+		t.Fatalf("another host's run of the same id: %v", other)
+	}
+	if _, err = store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-d-000001", 2, 0)); err == nil {
+		t.Fatal("other results under a run id already recorded")
+	}
+	w.legacy(t, routingRule(1, 30, 3))
+	newer := benchRun("run-d-000002", 5, 0)
+	newer.StartedAt = time.Now().Add(-time.Hour)
+	_, err = store.RecordBenchmark(ctx, w.rt, "h1", newer)
+	ok(t, err)
+	late := benchRun("run-d-000003", 0, 5)
+	late.StartedAt = time.Now().Add(-3 * 24 * time.Hour)
+	_, err = store.RecordBenchmark(ctx, w.rt, "h1", late)
+	ok(t, err)
+	task := w.ready(t, store.Task{})
+	if body := w.lastRoute(t, task); !strings.Contains(fmt.Sprint(body["candidates"]), "implementer/exec:codex/openai/*") {
+		t.Fatalf("an older run handed in late stood for the newer one: %v", body["excluded"])
 	}
 }

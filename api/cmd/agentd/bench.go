@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -25,8 +26,12 @@ import (
 // It reads the daemon's configuration (the same environment), takes the host
 // lock, so it refuses to run beside agentd (on agent-06 the bench unit stops
 // the STG agentd first), runs the questions with the executor as agentd
-// would run an attempt of it, and hands the run in as this host. A run cut
-// short goes on with the same --run-id; --post hands a run in again.
+// would run an attempt of it, every check in codex's sandbox, and hands the
+// run in as this host once every question has an outcome. A run cut short
+// goes on with the same --run-id; --post hands a run in again. --only makes
+// a trial, never handed in. Only exec:codex is offered for now: cursor runs
+// outside any sandbox (it could rewrite the run's results; TD-371) and
+// claude's executor has read-only tools.
 func runBench(args []string) int {
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	questions := fs.String("questions", "", "the question set (questions.json)")
@@ -91,14 +96,22 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 			return fmt.Errorf("--only %s names no question of the set", only)
 		}
 	}
+	ids := make([]string, 0, len(qs))
+	for _, q := range qs {
+		ids = append(ids, q.ID)
+	}
 	var tool agentd.Tool
 	for _, tl := range cfg.tools {
 		if tl.Executor == executor {
 			tool = tl
 		}
 	}
-	if tool.Executor == "" || executor == "exec:deterministic" {
-		return fmt.Errorf("%s is not an agent executor of AGENTD_TOOLS", executor)
+	if tool.Executor == "" || executor != "exec:codex" {
+		return fmt.Errorf("%s: only exec:codex of AGENTD_TOOLS runs the benchmark for now (cursor is not sandboxed, TD-371; claude's executor has read-only tools)", executor)
+	}
+	codex, err := exec.LookPath("codex")
+	if err != nil {
+		return fmt.Errorf("the checks run in codex's sandbox, and codex is not on PATH: %w", err)
 	}
 	self, err := os.Executable()
 	if err != nil {
@@ -116,22 +129,30 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 	}
 	root := filepath.Join(cfg.root, "bench", filepath.Base(runID))
 	meta, err := agentd.WriteBenchMeta(root, agentd.BenchMeta{RunID: runID, Executor: executor, Provider: tool.Provider,
-		Model: tool.Model, Questions: sum, StartedAt: time.Now().UTC()})
+		Model: tool.Model, Questions: sum, QuestionIDs: ids, Trial: only != "", StartedAt: time.Now().UTC()})
 	if err != nil {
 		return err
 	}
 	log.Printf("agentd bench: run %s, %d questions with %s (%s), in %s", meta.RunID, len(qs), executor, tool.Provider, root)
 	b := &agentd.Bench{Root: root, Self: self, GitEnv: cfg.gitEnv, CheckEnv: agentd.AllowedEnv(os.Environ()), Executor: ex,
-		Tool: tool, Limit: limit, Logf: log.Printf,
+		Tool: tool, Limit: limit, Logf: log.Printf, Sandbox: agentd.CodexSandbox(codex),
 		Remote: func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" }}
 	results, err := b.Run(ctx, qs)
 	if err != nil {
 		return fmt.Errorf("%w (the results so far are kept: run again with --run-id %s)", err, meta.RunID)
 	}
+	if meta.Trial {
+		log.Printf("agentd bench: run %s is a trial (--only): kept in %s, not handed in", meta.RunID, root)
+		return nil
+	}
 	return handIn(ctx, client, meta, results)
 }
 
-func handIn(ctx context.Context, client *agentd.Client, meta agentd.BenchMeta, results []agentd.BenchResult) error {
+func handIn(ctx context.Context, client *agentd.Client, meta agentd.BenchMeta, all []agentd.BenchResult) error {
+	results, err := meta.Complete(all)
+	if err != nil {
+		return err
+	}
 	n := map[string]int{}
 	for _, r := range results {
 		n[r.Outcome]++

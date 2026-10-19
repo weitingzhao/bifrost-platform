@@ -59,6 +59,12 @@ func main() {
 			os.Exit(agentd.RunSetup(os.Args[2:]))
 		case "bench":
 			os.Exit(runBench(os.Args[2:]))
+		default:
+			// Never the daemon by mistake: an older unit or script naming a
+			// subcommand this build does not have must not start claiming
+			// work (review 287 B7).
+			log.Printf("agentd: unknown subcommand %q", os.Args[1])
+			os.Exit(2)
 		}
 	}
 	if err := run(); err != nil {

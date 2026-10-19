@@ -2,15 +2,20 @@ package agentd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,23 +25,31 @@ import (
 // agentd bench (W-31 2.4 slice ⑤; the Owner 2026-10-18): the question set,
 // run on this host with one executor, judged by each fix's own tests, the
 // outcome handed to the platform as this host (store/benchmark.go). For each
-// question, in a checkout of its own:
+// question:
 //
-//  1. Whether it stands here, at no vendor cost: the dependencies its checks
-//     need are set up (TypeScript: npm ci without install scripts; Python
-//     and shell: a virtual environment with pytest; Go: nothing), the checks
-//     must pass on the fix and fail on the code before it with the fix's
-//     tests put over it. Otherwise the question is unrunnable and the
-//     executor is not called.
-//  2. The executor, launched as agentd launches an attempt (its own process
-//     group, the same argv and environment), is asked on the code before the
-//     fix to make the change the fix's commit message describes, within the
-//     limit; then the fix's tests are put over what it wrote and the checks
-//     run: pass or fail.
+//  1. Whether it stands here, at no vendor cost: in a tree of the fix and in
+//     a tree of the code before it with the fix's tests over it (each a fresh
+//     snapshot, no repository, its own dependencies: TypeScript npm ci
+//     without install scripts, Python and shell a virtual environment with
+//     pytest, Go its modules), the checks must pass on the first and fail on
+//     the second. Otherwise the question is unrunnable and costs nothing.
+//  2. The executor works in a repository holding only the code before the
+//     fix (one commit, no history: the fix is not there to read), asked to
+//     make the change the fix's commit message describes, within the limit.
+//     Before it starts, the clone and the two trees are gone from disk; the
+//     unit hides the daemon's own task checkouts (review 287 B3).
+//  3. The judgement, in a fresh snapshot of the code before the fix: the
+//     executor's changes are taken file by file, except tests, test and
+//     build configuration, dependency manifests and links (protected, review
+//     287 B2); the fix's tests go over them; the checks run. From the
+//     executor's start on, whatever fails is the executor's: fail (B5).
 //
-// Each outcome is appended to the run's results.jsonl as it is known, so a
-// run cut short goes on from where it was (the same run id) and a run whose
-// hand-in failed is handed in again with --post.
+// Every check runs in a process group of its own, cleared when it ends, and,
+// on the agent host, inside codex's sandbox: no network, writes only to its
+// tree (review 287 A1, B6). Each outcome is appended to the run's
+// results.jsonl as it is known, so a run cut short goes on from where it was
+// (the same run id); a run is handed in only once every one of its questions
+// has an outcome.
 
 // BenchQuestion is one question of the set (agent-config/work/multi-agent/
 // benchmark/questions.json in bifrost-trade-infra).
@@ -52,7 +65,7 @@ type BenchQuestion struct {
 	TaskText   string       `json:"task_text"`
 }
 
-// BenchCheck is one check command, run in Cwd of the checkout.
+// BenchCheck is one check command, run in Cwd of the tree.
 type BenchCheck struct {
 	Cwd  string   `json:"cwd"`
 	Argv []string `json:"argv"`
@@ -67,14 +80,18 @@ type BenchResult struct {
 	Reason   string `json:"reason,omitempty"`
 }
 
-// BenchMeta is what a run is: its id, the executor, the question set.
+// BenchMeta is what a run is: its id, the executor as configured, the
+// question set and the questions it answers. A trial (--only) is never
+// handed in.
 type BenchMeta struct {
-	RunID     string    `json:"run_id"`
-	Executor  string    `json:"executor"`
-	Provider  string    `json:"provider"`
-	Model     string    `json:"model"`
-	Questions string    `json:"questions_sha256"`
-	StartedAt time.Time `json:"started_at"`
+	RunID       string    `json:"run_id"`
+	Executor    string    `json:"executor"`
+	Provider    string    `json:"provider"`
+	Model       string    `json:"model"`
+	Questions   string    `json:"questions_sha256"`
+	QuestionIDs []string  `json:"question_ids"`
+	Trial       bool      `json:"trial,omitempty"`
+	StartedAt   time.Time `json:"started_at"`
 }
 
 var (
@@ -130,12 +147,12 @@ func (q BenchQuestion) check() error {
 	}
 	for _, f := range q.TestFiles {
 		if !filepath.IsLocal(f) {
-			return bad("test file " + f + " is not a path inside the checkout")
+			return bad("test file " + f + " is not a path inside the tree")
 		}
 	}
 	for _, c := range q.Checks {
 		if !filepath.IsLocal(c.Cwd) || len(c.Argv) == 0 || c.Argv[0] == "" {
-			return bad("a check runs a command in a directory inside the checkout")
+			return bad("a check runs a command in a directory inside the tree")
 		}
 	}
 	return nil
@@ -146,17 +163,29 @@ func (q BenchQuestion) RepoName() string { return filepath.Base(filepath.Clean(q
 
 // Bench runs a question set with one executor on this host.
 type Bench struct {
-	Root       string // the run's directory: <AGENTD_ROOT>/bench/<run id>
-	Self       string // agentd's executable: the launcher
-	Remote     func(repo string) string
-	GitEnv     []string
-	CheckEnv   []string // the checks' and the setup's environment
-	Executor   Executor
-	Tool       Tool
+	Root     string // the run's directory: <AGENTD_ROOT>/bench/<run id>
+	Self     string // agentd's executable: the launcher
+	Remote   func(repo string) string
+	GitEnv   []string
+	CheckEnv []string // the checks' and the setup's environment
+	Executor Executor
+	Tool     Tool
+	// Sandbox is the command that runs argv confined to tree (CodexSandbox on
+	// the agent host); nil runs it as it is, which only tests do.
+	Sandbox    func(tree string, argv []string) []string
 	Limit      time.Duration // the executor's, a question; 30 min
-	CheckLimit time.Duration // the checks', each run of them; 15 min
+	CheckLimit time.Duration // each setup or check command's; 15 min
 	KillGrace  time.Duration // 10 s
 	Logf       func(format string, args ...any)
+}
+
+// CodexSandbox runs argv in codex's own sandbox with the workspace profile,
+// tree its workspace: no network, writes only under tree (the step
+// codex-sandbox-probe.sh proves on the agent host).
+func CodexSandbox(codex string) func(tree string, argv []string) []string {
+	return func(tree string, argv []string) []string {
+		return append([]string{codex, "sandbox", "--permission-profile", ":workspace", "--cd", tree, "--"}, argv...)
+	}
 }
 
 // Run runs the questions not yet in the run's results and returns all of
@@ -204,132 +233,446 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 		r.Outcome, r.Reason = "unrunnable", oneLine(why, 280)
 		return r
 	}
+	fail := func(why string) BenchResult {
+		r.Outcome, r.Reason = "fail", oneLine(why, 280)
+		return r
+	}
 	qdir := filepath.Join(b.Root, q.ID)
 	if err := os.RemoveAll(qdir); err != nil {
 		return unrunnable("clearing the question's directory: " + err.Error())
 	}
 	out := filepath.Join(qdir, "out")
-	if err := os.MkdirAll(out, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(out, "tmp"), 0o700); err != nil {
 		return unrunnable(err.Error())
 	}
-	ws, err := Prepare(ctx, filepath.Join(qdir, "ws"), b.Remote(q.RepoName()), q.FixCommit, b.GitEnv)
+	src, err := Prepare(ctx, filepath.Join(qdir, "src"), b.Remote(q.RepoName()), q.FixCommit, b.GitEnv)
 	if err != nil {
-		return unrunnable("checking out the fix: " + err.Error())
+		return unrunnable("cloning the repository: " + err.Error())
 	}
-	checks, err := b.setup(ctx, ws.Dir, out, q)
+	tests := map[string][]byte{}
+	for _, f := range q.TestFiles {
+		body, gerr := gitRaw(ctx, src.Dir, src.env, "show", q.FixCommit+":"+filepath.ToSlash(f))
+		if gerr != nil {
+			return unrunnable("reading the fix's test " + f + ": " + gerr.Error())
+		}
+		tests[f] = []byte(body)
+	}
+	venv := filepath.Join(out, "venv")
+	fixTree, baseTree, judge := filepath.Join(qdir, "fix"), filepath.Join(qdir, "base"), filepath.Join(qdir, "judge")
+	if err = b.snapshot(ctx, src, q.FixCommit, fixTree); err != nil {
+		return unrunnable("the fix's tree: " + err.Error())
+	}
+	checks, err := b.setup(ctx, fixTree, venv, q)
 	if err != nil {
 		return unrunnable("setting up the checks: " + err.Error())
 	}
-	if v := b.verify(ctx, ws.Dir, checks); !v.Pass {
-		return unrunnable("the fix does not pass its checks here: " + failure(v))
+	if why := b.verify(ctx, fixTree, checks); why != "" {
+		return unrunnable("the fix does not pass its checks here: " + why)
 	}
-	if err = b.before(ctx, ws, q); err != nil {
-		return unrunnable(err.Error())
+	if err = b.snapshot(ctx, src, q.BaseCommit, baseTree); err == nil {
+		err = overlay(baseTree, tests)
 	}
-	if v := b.verify(ctx, ws.Dir, checks); v.Pass {
+	if err != nil {
+		return unrunnable("the tree before the fix: " + err.Error())
+	}
+	if _, err = b.setup(ctx, baseTree, venv, q); err != nil {
+		return unrunnable("setting up the checks before the fix: " + err.Error())
+	}
+	if why := b.verify(ctx, baseTree, checks); why == "" {
 		return unrunnable("the checks pass on the code before the fix")
 	}
-	if _, err = ws.git(ctx, ws.Dir, "reset", "--quiet", "--hard", q.BaseCommit); err != nil {
-		return unrunnable(err.Error())
+	work := filepath.Join(qdir, "work")
+	if err = b.snapshot(ctx, src, q.BaseCommit, judge); err == nil {
+		err = b.snapshot(ctx, src, q.BaseCommit, work)
 	}
-	if _, err = ws.git(ctx, ws.Dir, "clean", "--quiet", "-fd"); err != nil {
-		return unrunnable(err.Error())
+	if err == nil {
+		err = b.initRepo(ctx, work)
+	}
+	if err != nil {
+		return unrunnable("the executor's checkout: " + err.Error())
+	}
+	// Nothing of the fix stays on disk for the executor to read.
+	for _, d := range []string{src.Dir, fixTree, baseTree} {
+		if err = os.RemoveAll(d); err != nil {
+			return unrunnable("clearing " + filepath.Base(d) + ": " + err.Error())
+		}
 	}
 	start := time.Now()
-	ran, err := b.execute(ctx, q, ws.Dir, out)
+	note, err := b.execute(ctx, q, work, out)
 	r.WallS = int(time.Since(start).Seconds())
 	if err != nil {
-		r.Outcome, r.Reason = "fail", oneLine("the executor: "+err.Error(), 280)
-		return r
+		return fail("the executor: " + err.Error())
 	}
-	if _, err = ws.git(ctx, ws.Dir, append([]string{"checkout", q.FixCommit, "--"}, q.TestFiles...)...); err != nil {
-		return unrunnable("putting the fix's tests over the change: " + err.Error())
+	dropped, err := takeChanges(work, judge)
+	if err == nil {
+		err = overlay(judge, tests)
 	}
-	if v := b.verify(ctx, ws.Dir, checks); v.Pass {
-		r.Outcome = "pass"
-	} else {
-		r.Outcome, r.Reason = "fail", oneLine(ran+failure(v), 280)
+	if err != nil {
+		return fail(note + "taking its change: " + err.Error())
+	}
+	if _, err = b.setup(ctx, judge, venv, q); err != nil {
+		return fail(note + "setting up the checks over its change: " + err.Error())
+	}
+	if dropped > 0 {
+		note += fmt.Sprintf("%d protected or linked files of its change left out; ", dropped)
+	}
+	if why := b.verify(ctx, judge, checks); why != "" {
+		return fail(note + why)
+	}
+	r.Outcome = "pass"
+	if note != "" {
+		r.Reason = oneLine(strings.TrimSuffix(note, "; "), 280)
 	}
 	return r
 }
 
-// before puts the checkout at the code before the fix, the fix's tests over it.
-func (b *Bench) before(ctx context.Context, ws *Workspace, q BenchQuestion) error {
-	if _, err := ws.git(ctx, ws.Dir, "checkout", "--quiet", "--detach", q.BaseCommit); err != nil {
+// snapshot writes the tree of commit, without a repository, at dir.
+func (b *Bench) snapshot(ctx context.Context, src *Workspace, commit, dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	_, err := ws.git(ctx, ws.Dir, append([]string{"checkout", q.FixCommit, "--"}, q.TestFiles...)...)
-	return err
+	r, w, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	archive := exec.CommandContext(ctx, "git", "archive", "--format=tar", commit)
+	archive.Dir, archive.Env, archive.Stdout = src.Dir, src.env, w
+	unpack := exec.CommandContext(ctx, "tar", "-x", "-f", "-", "-C", dir)
+	unpack.Env, unpack.Stdin = b.CheckEnv, r
+	var aerrb, uerrb bytes.Buffer
+	archive.Stderr, unpack.Stderr = &aerrb, &uerrb
+	aerr := archive.Start()
+	uerr := unpack.Start()
+	_ = w.Close()
+	_ = r.Close()
+	if aerr == nil {
+		aerr = archive.Wait()
+	}
+	if uerr == nil {
+		uerr = unpack.Wait()
+	}
+	if aerr != nil || uerr != nil {
+		return fmt.Errorf("git archive %s: %v %v: %s %s", commit, aerr, uerr, strings.TrimSpace(tail(aerrb.Bytes())), strings.TrimSpace(tail(uerrb.Bytes())))
+	}
+	return nil
 }
 
-// setup installs what the checks need and returns them as they are run.
-func (b *Bench) setup(ctx context.Context, dir, out string, q BenchQuestion) ([]BenchCheck, error) {
+// initRepo makes the executor's checkout a repository of one commit, the code
+// before the fix, so the change it makes is a diff it can read; git reads
+// neither the user's nor the system configuration.
+func (b *Bench) initRepo(ctx context.Context, dir string) error {
+	env := append(append([]string{}, b.GitEnv...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	for _, args := range [][]string{{"init", "--quiet", "--template=", "--initial-branch=main"}, {"add", "--all"},
+		{"commit", "--quiet", "--no-verify", "-m", "the code before the change"}} {
+		if _, err := gitIn(ctx, dir, env, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// overlay writes the fix's tests into tree.
+func overlay(tree string, tests map[string][]byte) error {
+	root, err := os.OpenRoot(tree)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	for f, body := range tests {
+		if err = root.MkdirAll(filepath.Dir(f), 0o700); err != nil {
+			return err
+		}
+		_ = root.Remove(f)
+		if err = root.WriteFile(f, body, 0o600); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// protectedDirs and protectedFiles are what the judgement never takes from
+// the executor's change: what the checks run as, not what they check.
+var protectedDirs = map[string]bool{".git": true, "node_modules": true, "__tests__": true, "__fixtures__": true, "testdata": true,
+	".pytest_cache": true, ".bench": true}
+
+var protectedFiles = []string{"*_test.go", "test_*.py", "*_test.py", "conftest.py", "*.test.ts", "*.test.tsx", "*.spec.ts",
+	"*.spec.tsx", "*.test.js", "*.test.mjs", "*.test.cjs", "test_*.sh", "*_test.sh", "vitest.config.*", "vitest.workspace.*",
+	"vite.config.*", "jest.config.*", "tsconfig*.json", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml", "package.json",
+	"package-lock.json", ".npmrc", "go.mod", "go.sum", "go.work", "go.work.sum"}
+
+func protected(rel string) bool {
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for _, p := range parts[:len(parts)-1] {
+		if protectedDirs[p] {
+			return true
+		}
+	}
+	name := parts[len(parts)-1]
+	for _, g := range protectedFiles {
+		if ok, _ := path.Match(g, name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	maxTakenFile  = 32 << 20
+	maxTakenTotal = 512 << 20
+)
+
+// takeChanges brings what the executor changed in work into judge, the code
+// before the fix: each regular file that differs or is new, each file it
+// removed; never a protected one, a link or anything but a regular file,
+// which it counts. Nothing of work is followed or run.
+func takeChanges(work, judge string) (dropped int, err error) {
+	jr, err := os.OpenRoot(judge)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = jr.Close() }()
+	total := 0
+	err = filepath.WalkDir(work, func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		rel, rerr := filepath.Rel(work, p)
+		if rerr != nil || rel == "." {
+			return rerr
+		}
+		if d.IsDir() {
+			if protectedDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		info, ierr := d.Info()
+		if ierr != nil {
+			return ierr
+		}
+		old, oerr := jr.ReadFile(rel)
+		if !info.Mode().IsRegular() || protected(rel) {
+			if !info.Mode().IsRegular() || oerr != nil || !sameFile(p, old) {
+				dropped++
+			}
+			return nil
+		}
+		if info.Size() > maxTakenFile {
+			return fmt.Errorf("%s is over %d MiB", rel, maxTakenFile>>20)
+		}
+		body, berr := os.ReadFile(p)
+		if berr != nil {
+			return berr
+		}
+		if oerr == nil && bytes.Equal(old, body) {
+			return nil
+		}
+		if total += len(body); total > maxTakenTotal {
+			return fmt.Errorf("the change is over %d MiB", maxTakenTotal>>20)
+		}
+		if merr := jr.MkdirAll(filepath.Dir(rel), 0o700); merr != nil {
+			return merr
+		}
+		_ = jr.Remove(rel)
+		mode := os.FileMode(0o600)
+		if info.Mode()&0o100 != 0 {
+			mode = 0o700
+		}
+		return jr.WriteFile(rel, body, mode)
+	})
+	if err != nil {
+		return dropped, err
+	}
+	// what the executor removed (not what it could not have changed)
+	var gone []string
+	err = filepath.WalkDir(judge, func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		rel, rerr := filepath.Rel(judge, p)
+		if rerr != nil || rel == "." {
+			return rerr
+		}
+		if d.IsDir() {
+			if protectedDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if protected(rel) {
+			return nil
+		}
+		if info, lerr := os.Lstat(filepath.Join(work, rel)); lerr != nil || !info.Mode().IsRegular() {
+			gone = append(gone, rel)
+		}
+		return nil
+	})
+	for _, rel := range gone {
+		if rerr := jr.Remove(rel); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+			return dropped, rerr
+		}
+	}
+	return dropped, err
+}
+
+func sameFile(p string, old []byte) bool {
+	body, err := os.ReadFile(p)
+	return err == nil && bytes.Equal(body, old)
+}
+
+// setup installs what the checks need in tree (dependencies from the
+// tree's own manifests, which the judgement never takes from the executor)
+// and returns the checks as they are run.
+func (b *Bench) setup(ctx context.Context, tree, venv string, q BenchQuestion) ([]BenchCheck, error) {
 	checks := append([]BenchCheck(nil), q.Checks...)
+	if err := os.MkdirAll(filepath.Join(tree, ".bench", "tmp"), 0o700); err != nil {
+		return nil, err
+	}
+	env := b.setupEnv(tree)
+	seen := map[string]bool{}
 	switch q.Language {
 	case "ts":
-		seen := map[string]bool{}
 		for _, c := range checks {
 			if seen[c.Cwd] {
 				continue
 			}
 			seen[c.Cwd] = true
-			if _, err := os.Stat(filepath.Join(dir, c.Cwd, "package-lock.json")); err != nil {
+			if _, err := os.Stat(filepath.Join(tree, c.Cwd, "package-lock.json")); err != nil {
 				return nil, fmt.Errorf("no package-lock.json in %s", c.Cwd)
 			}
-			if v := Verify(ctx, filepath.Join(dir, c.Cwd), b.CheckEnv,
-				[][]string{{"npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"}}, b.checkLimit()); !v.Pass {
-				return nil, errors.New("npm ci: " + failure(v))
+			if why := b.run(ctx, filepath.Join(tree, c.Cwd), env, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); why != "" {
+				return nil, errors.New("npm ci: " + why)
+			}
+		}
+	case "go":
+		for _, c := range checks {
+			dir := moduleRoot(tree, c.Cwd)
+			if dir == "" || seen[dir] {
+				continue
+			}
+			seen[dir] = true
+			if why := b.run(ctx, dir, env, "go", "mod", "download"); why != "" {
+				return nil, errors.New("go mod download: " + why)
 			}
 		}
 	case "python", "shell":
-		venv := filepath.Join(out, "venv")
-		if v := Verify(ctx, dir, b.CheckEnv, [][]string{{"python3", "-m", "venv", venv},
-			{filepath.Join(venv, "bin", "pip"), "install", "--quiet", "--disable-pip-version-check", "pytest"}}, b.checkLimit()); !v.Pass {
-			return nil, errors.New("a virtual environment with pytest: " + failure(v))
+		if _, err := os.Stat(filepath.Join(venv, "bin", "python3")); err != nil {
+			if why := b.run(ctx, tree, env, "python3", "-m", "venv", venv); why != "" {
+				return nil, errors.New("python3 -m venv: " + why)
+			}
+			if why := b.run(ctx, tree, env, filepath.Join(venv, "bin", "pip"), "install", "--quiet", "--disable-pip-version-check", "pytest"); why != "" {
+				return nil, errors.New("pip install pytest: " + why)
+			}
 		}
 		for i, c := range checks {
 			if c.Argv[0] == "python3" || c.Argv[0] == "python" {
-				argv := append([]string{filepath.Join(venv, "bin", "python3")}, c.Argv[1:]...)
-				checks[i] = BenchCheck{Cwd: c.Cwd, Argv: argv}
+				checks[i] = BenchCheck{Cwd: c.Cwd, Argv: append([]string{filepath.Join(venv, "bin", "python3")}, c.Argv[1:]...)}
 			}
 		}
 	}
 	return checks, nil
 }
 
-func (b *Bench) checkLimit() time.Duration {
+// moduleRoot is the directory of the go.mod nearest cwd inside tree.
+func moduleRoot(tree, cwd string) string {
+	for d := filepath.Join(tree, cwd); strings.HasPrefix(d, tree); d = filepath.Dir(d) {
+		if _, err := os.Stat(filepath.Join(d, "go.mod")); err == nil {
+			return d
+		}
+		if d == tree {
+			break
+		}
+	}
+	return ""
+}
+
+func (b *Bench) setupEnv(tree string) []string {
+	env := append([]string{}, b.CheckEnv...)
+	env = withEnv(env, "GOCACHE", filepath.Join(tree, ".bench", "go-build"))
+	env = withEnv(env, "GOTOOLCHAIN", "local")
+	return withEnv(env, "TMPDIR", filepath.Join(tree, ".bench", "tmp"))
+}
+
+// checkEnv is the setup's, offline: everything the checks need is in place.
+func (b *Bench) checkEnv(tree string) []string {
+	env := b.setupEnv(tree)
+	env = withEnv(env, "GOFLAGS", "-mod=mod")
+	env = withEnv(env, "GOPROXY", "off")
+	return withEnv(env, "GONOSUMDB", "*")
+}
+
+func (b *Bench) limit() time.Duration {
 	if b.CheckLimit > 0 {
 		return b.CheckLimit
 	}
 	return 15 * time.Minute
 }
 
-// verify runs the checks, each in its directory, and passes when all do.
-func (b *Bench) verify(ctx context.Context, dir string, checks []BenchCheck) Verification {
-	all := Verification{Pass: true, Commands: []CommandTrace{}}
+// verify runs the checks in tree, confined, each in its directory, and
+// returns why they did not pass ("" when they did).
+func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck) string {
+	env := b.checkEnv(tree)
 	for _, c := range checks {
-		v := Verify(ctx, filepath.Join(dir, c.Cwd), b.CheckEnv, [][]string{c.Argv}, b.checkLimit())
-		all.Commands = append(all.Commands, v.Commands...)
-		if !v.Pass {
-			all.Pass, all.Reason = false, v.Reason
-			return all
+		// The command's own directory, entered inside the sandbox.
+		argv := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", filepath.Join(tree, c.Cwd)}, c.Argv...)
+		if b.Sandbox != nil {
+			argv = b.Sandbox(tree, argv)
+		}
+		if why := b.run(ctx, tree, env, argv...); why != "" {
+			return strings.Join(c.Argv, " ") + " " + why
 		}
 	}
-	return all
+	return ""
 }
 
-// failure is one line on why a verification failed.
-func failure(v Verification) string {
-	for _, c := range v.Commands {
-		if c.ExitCode != 0 || c.TimedOut {
-			s := fmt.Sprintf("%s exited %d", strings.Join(c.Argv, " "), c.ExitCode)
-			if c.TimedOut {
-				s += " (timed out)"
-			}
-			return s
+// run runs argv in dir in a process group of its own within the limit, and
+// clears the group when it ends however it ends; it returns why it failed
+// ("" when it exited 0).
+func (b *Bench) run(ctx context.Context, dir string, env []string, argv ...string) string {
+	out := &ring{max: tailBytes}
+	sp := Spawn{Argv: argv, Env: env, Dir: dir, Stdout: out, Stderr: out}
+	code, timedOut, err := b.launch(ctx, sp, b.limit())
+	switch {
+	case err != nil:
+		return err.Error()
+	case timedOut:
+		return "timed out"
+	case code != 0:
+		if t := oneLine(string(tail(out.bytes())), 160); t != "" {
+			return fmt.Sprintf("exited %d: %s", code, t)
 		}
+		return fmt.Sprintf("exited %d", code)
 	}
-	return v.Reason
+	return ""
+}
+
+// launch starts sp through the launcher, waits for it within limit, and
+// clears its group afterwards.
+func (b *Bench) launch(ctx context.Context, sp Spawn, limit time.Duration) (code int, timedOut bool, err error) {
+	proc, err := Launch(b.Self, sp, func(int, string) error { return nil })
+	if err != nil {
+		return 0, false, err
+	}
+	exited := make(chan int, 1)
+	safego.Go("agentd-bench-wait", func() { exited <- proc.Wait() })
+	grace := b.KillGrace
+	if grace <= 0 {
+		grace = 10 * time.Second
+	}
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+	select {
+	case code = <-exited:
+	case <-timer.C:
+		Terminate(proc.PGID, grace)
+		code, timedOut = <-exited, true
+	case <-ctx.Done():
+		Terminate(proc.PGID, grace)
+		<-exited
+		return 0, false, ctx.Err()
+	}
+	Terminate(proc.PGID, grace) // what it left running in its group (review 287 B6)
+	return code, timedOut, nil
 }
 
 // benchPrompt is what the executor is asked.
@@ -354,36 +697,20 @@ func (b *Bench) execute(ctx context.Context, q BenchQuestion, dir, out string) (
 	}
 	defer func() { _ = log.Close() }()
 	sp.Stdout, sp.Stderr = log, log
-	proc, err := Launch(b.Self, sp, func(int, string) error { return nil })
-	if err != nil {
-		return "", err
-	}
-	exited := make(chan int, 1)
-	safego.Go("agentd-bench-wait", func() { exited <- proc.Wait() })
 	limit := b.Limit
 	if limit <= 0 {
 		limit = 30 * time.Minute
 	}
-	grace := b.KillGrace
-	if grace <= 0 {
-		grace = 10 * time.Second
+	code, timedOut, err := b.launch(ctx, sp, limit)
+	if err != nil {
+		return "", err
 	}
-	timer := time.NewTimer(limit)
-	defer timer.Stop()
 	note := ""
-	select {
-	case code := <-exited:
-		if code != 0 {
-			note = fmt.Sprintf("the executor exited %d; ", code)
-		}
-	case <-timer.C:
-		Terminate(proc.PGID, grace)
-		<-exited
+	switch {
+	case timedOut:
 		note = "the executor ran out of time; "
-	case <-ctx.Done():
-		Terminate(proc.PGID, grace)
-		<-exited
-		return "", ctx.Err()
+	case code != 0:
+		note = fmt.Sprintf("the executor exited %d; ", code)
 	}
 	if sp.After != nil {
 		_ = sp.After() // the report is the executor's, not the outcome
@@ -429,16 +756,19 @@ func appendBenchResult(root string, r BenchResult) error {
 	return f.Close()
 }
 
-// WriteBenchMeta writes what the run is, once; a run resumed keeps its own.
+// WriteBenchMeta writes what the run is, once; a run resumed keeps its own,
+// and only with the same executor, provider, model, question set, questions
+// and kind (review 287 B9).
 func WriteBenchMeta(root string, m BenchMeta) (BenchMeta, error) {
-	path := filepath.Join(root, "meta.json")
-	if b, err := os.ReadFile(path); err == nil {
+	p := filepath.Join(root, "meta.json")
+	if b, err := os.ReadFile(p); err == nil {
 		var old BenchMeta
 		if err = json.Unmarshal(b, &old); err != nil {
 			return m, err
 		}
-		if old.Executor != m.Executor || old.Questions != m.Questions {
-			return m, fmt.Errorf("agentd: run %s is of %s on another question set", old.RunID, old.Executor)
+		if old.Executor != m.Executor || old.Provider != m.Provider || old.Model != m.Model || old.Questions != m.Questions ||
+			!slices.Equal(old.QuestionIDs, m.QuestionIDs) || old.Trial != m.Trial {
+			return m, fmt.Errorf("agentd: run %s is of %s (%s %s) on other questions: start a new run", old.RunID, old.Executor, old.Provider, old.Model)
 		}
 		return old, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -454,7 +784,7 @@ func WriteBenchMeta(root string, m BenchMeta) (BenchMeta, error) {
 	if err = os.MkdirAll(root, 0o700); err != nil {
 		return m, err
 	}
-	return m, os.WriteFile(path, b, 0o600)
+	return m, os.WriteFile(p, b, 0o600)
 }
 
 // ReadBenchMeta reads what a run is.
@@ -465,4 +795,26 @@ func ReadBenchMeta(root string) (BenchMeta, error) {
 		return m, err
 	}
 	return m, json.Unmarshal(b, &m)
+}
+
+// Complete is the run's results for its questions, in their order, when
+// every one has an outcome and it is not a trial: only then is it handed
+// in (review 287 B10).
+func (m BenchMeta) Complete(results []BenchResult) ([]BenchResult, error) {
+	if m.Trial {
+		return nil, fmt.Errorf("run %s is a trial (--only): it is not handed in", m.RunID)
+	}
+	by := map[string]BenchResult{}
+	for _, r := range results {
+		by[r.Question] = r
+	}
+	out := make([]BenchResult, 0, len(m.QuestionIDs))
+	for _, id := range m.QuestionIDs {
+		r, ok := by[id]
+		if !ok {
+			return nil, fmt.Errorf("run %s has no outcome for %s yet: run it again with --run-id %s", m.RunID, id, m.RunID)
+		}
+		out = append(out, r)
+	}
+	return out, nil
 }

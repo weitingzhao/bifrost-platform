@@ -157,7 +157,7 @@ func (c *Client) post(ctx context.Context, path string, body map[string]any, out
 // the platform's record of it.
 func (c *Client) Benchmark(ctx context.Context, m BenchMeta, results []BenchResult) (map[string]any, error) {
 	body := map[string]any{"run_id": m.RunID, "executor": m.Executor, "provider": m.Provider, "questions_sha256": m.Questions,
-		"started_at": m.StartedAt.UTC().Format(time.RFC3339Nano), "results": results}
+		"question_ids": m.QuestionIDs, "started_at": m.StartedAt.UTC().Format(time.RFC3339Nano), "results": results}
 	if m.Model != "" {
 		body["model"] = m.Model
 	}
