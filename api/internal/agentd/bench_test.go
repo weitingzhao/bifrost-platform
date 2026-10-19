@@ -55,7 +55,8 @@ func TestBench(t *testing.T) {
 			TestFiles: []string{test}, Checks: []agentd.BenchCheck{{Cwd: ".", Argv: []string{"sh", test}}}, TaskText: "fix: calc says new"}
 	}
 	qs := []agentd.BenchQuestion{q("Q1", "check.sh"), q("Q2", "check.sh"), q("Q3", "always.sh"), q("Q4", "never.sh"),
-		q("Q5", "check.sh"), q("Q6", "check.sh"), q("Q7", "check.sh"), q("Q8", "gone.sh"), q("Q9", "bg.sh"), q("Q10", "check.sh")}
+		q("Q5", "check.sh"), q("Q6", "check.sh"), q("Q7", "check.sh"), q("Q8", "gone.sh"), q("Q9", "bg.sh"), q("Q10", "check.sh"),
+		q("Q11", "check.sh")}
 	calls := filepath.Join(t.TempDir(), "calls")
 	mark := filepath.Join(t.TempDir(), "late-marker")
 	exec := script(`echo "$PWD" >> ` + calls + `
@@ -66,6 +67,7 @@ case "$PWD" in
 */Q7/work) [ "$(git rev-list --all | wc -l | tr -d ' ')" = 1 ] && [ ! -e ../src ] && [ ! -e ../fix ] && echo new > calc.txt ;;
 */Q8/work) rm old.txt ;;
 */Q10/work) printf new > /tmp/bench-new-$$ && rm calc.txt && ln -s /tmp/bench-new-$$ calc.txt ;;
+*/Q11/work) mkdir locked && echo new > locked/answer && chmod 000 locked ;;
 *) echo new > calc.txt ;;
 esac`)
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0001")
@@ -100,8 +102,11 @@ esac`)
 	}
 	ran, err := os.ReadFile(calls)
 	must(t, err)
-	if n := strings.Count(string(ran), "\n"); n != 8 {
+	if n := strings.Count(string(ran), "\n"); n != 9 {
 		t.Fatalf("the executor ran %d times (all but Q3 and Q4): %s", n, ran)
+	}
+	if !strings.HasPrefix(outcomes["Q11"], "fail: ") {
+		t.Errorf("Q11: %q", outcomes["Q11"])
 	}
 	// Only out/ is left of each question: no clone, no tree, no change (review 288 B3).
 	for _, x := range qs {
@@ -206,5 +211,44 @@ func TestBenchProtected(t *testing.T) {
 		if agentd.Protected(p) {
 			t.Errorf("%s is not taken from a change", p)
 		}
+	}
+}
+
+// Review 290 A1: a check runs where it sees none of the host's secrets: an
+// empty /home but for its tree and what it reads, no network, no other
+// process.
+func TestBwrapSandbox(t *testing.T) {
+	argv := agentd.BwrapSandbox("/opt/bwrap")("/home/u/run/Q1/judge", []string{"/home/u/go/pkg/mod", "/home/u/run/Q1/out/venv"},
+		[]string{"sh", "check.sh"})
+	got := strings.Join(argv, " ")
+	for _, want := range []string{"/opt/bwrap --unshare-all --die-with-parent", "--ro-bind / /", "--tmpfs /home", "--tmpfs /tmp",
+		"--ro-bind /home/u/go/pkg/mod /home/u/go/pkg/mod", "--ro-bind /home/u/run/Q1/out/venv /home/u/run/Q1/out/venv",
+		"--bind /home/u/run/Q1/judge /home/u/run/Q1/judge", "--setenv HOME /home/u/run/Q1/judge/.bench/home -- sh check.sh"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no %q in %s", want, got)
+		}
+	}
+	if strings.Index(got, "--tmpfs /home") > strings.Index(got, "--bind /home/u/run/Q1/judge") {
+		t.Errorf("the tree is bound before /home is emptied: %s", got)
+	}
+}
+
+// Review 290 A1: no question runs unless a probe, run as a check is, sees
+// none of the secrets.
+func TestBenchPreflight(t *testing.T) {
+	secret := filepath.Join(t.TempDir(), "agentd.token")
+	must(t, os.WriteFile(secret, []byte("x"), 0o600))
+	b := &agentd.Bench{Root: t.TempDir(), Self: os.Args[0], CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), KillGrace: time.Second,
+		Secrets: []string{secret}}
+	if err := b.Preflight(context.Background()); err == nil {
+		t.Fatal("ran with no sandbox")
+	}
+	b.Sandbox = func(_ string, _, argv []string) []string { return argv } // confines nothing
+	if err := b.Preflight(context.Background()); err == nil || !strings.Contains(err.Error(), "visible: "+secret) {
+		t.Fatalf("a sandbox that shows the secret: %v", err)
+	}
+	b.Secrets = []string{filepath.Join(t.TempDir(), "not-there")}
+	if err := b.Preflight(context.Background()); err != nil {
+		t.Fatalf("a sandbox that shows no secret: %v", err)
 	}
 }

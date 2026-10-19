@@ -170,22 +170,102 @@ type Bench struct {
 	CheckEnv []string // the checks' and the setup's environment
 	Executor Executor
 	Tool     Tool
-	// Sandbox is the command that runs argv confined to tree (CodexSandbox on
-	// the agent host); nil runs it as it is, which only tests do.
-	Sandbox    func(tree string, argv []string) []string
+	// Sandbox is the command that runs argv confined to tree, writable, and
+	// the readOnly paths (BwrapSandbox on the agent host); nil runs it as it
+	// is, which only tests do.
+	Sandbox func(tree string, readOnly, argv []string) []string
+	// GoModCache is where Go modules are kept: filled by the setup, read
+	// only by the checks.
+	GoModCache string
+	// Secrets are what a check must not see; Preflight proves it cannot.
+	Secrets    []string
 	Limit      time.Duration // the executor's, a question; 30 min
 	CheckLimit time.Duration // each setup or check command's; 15 min
 	KillGrace  time.Duration // 10 s
 	Logf       func(format string, args ...any)
 }
 
-// CodexSandbox runs argv in codex's own sandbox with the workspace profile,
-// tree its workspace: no network, writes only under tree (the step
-// codex-sandbox-probe.sh proves on the agent host).
-func CodexSandbox(codex string) func(tree string, argv []string) []string {
-	return func(tree string, argv []string) []string {
-		return append([]string{codex, "sandbox", "--permission-profile", ":workspace", "--cd", tree, "--"}, argv...)
+// BwrapSandbox runs argv in bubblewrap (the one codex ships, which the agent
+// host's AppArmor rule bifrost-codex lets create namespaces) with a view of
+// its own: the file system read only, /home empty but for tree (writable)
+// and the readOnly paths, a fresh /tmp, no network, no other process. So a
+// check, whose code is the executor's, sees no credential, no configuration
+// in a home, no other question: there is nothing it could carry out, by its
+// output, its exit or its outcome (review 290 A1).
+func BwrapSandbox(bwrap string) func(tree string, readOnly, argv []string) []string {
+	return func(tree string, readOnly, argv []string) []string {
+		a := []string{bwrap, "--unshare-all", "--die-with-parent", "--new-session", "--ro-bind", "/", "/",
+			"--tmpfs", "/home", "--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc"}
+		for _, p := range readOnly {
+			a = append(a, "--ro-bind", p, p)
+		}
+		a = append(a, "--bind", tree, tree, "--setenv", "HOME", filepath.Join(tree, ".bench", "home"), "--")
+		return append(a, argv...)
 	}
+}
+
+// Preflight proves, before any question, that a check sees none of the
+// Secrets: run in the sandbox as a check is, a probe looks for each. Without
+// a sandbox nothing is proved, and nothing runs (review 290 A1).
+func (b *Bench) Preflight(ctx context.Context) error {
+	if b.Sandbox == nil {
+		return errors.New("agentd: the benchmark's checks have no sandbox")
+	}
+	tree := filepath.Join(b.Root, ".preflight")
+	if err := os.MkdirAll(filepath.Join(tree, ".bench", "home"), 0o700); err != nil {
+		return err
+	}
+	defer func() { _ = forceRemove(tree) }()
+	probe := append([]string{"/bin/sh", "-c", `for f in "$@"; do if [ -e "$f" ]; then echo "visible: $f"; exit 3; fi; done`, "sh"}, b.Secrets...)
+	if why := b.run(ctx, tree, b.checkEnv(tree), b.Sandbox(tree, b.readOnly(""), probe)...); why != "" {
+		return fmt.Errorf("agentd: a check in the sandbox is not kept from the host's secrets: %s", why)
+	}
+	return nil
+}
+
+// readOnly is what a check of question directory qdir may read beside its
+// tree: the Go module cache and the question's virtual environment.
+func (b *Bench) readOnly(qdir string) []string {
+	var out []string
+	for _, p := range []string{b.GoModCache, filepath.Join(qdir, "out", "venv")} {
+		if p == "" || (qdir == "" && strings.HasSuffix(p, "venv")) {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// forceRemove removes path whatever the modes inside it say: a directory an
+// executor or a check made unreadable is opened again first (review 290 B3).
+func forceRemove(path string) error {
+	info, err := os.Lstat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		if err = os.Chmod(path, 0o700); err != nil {
+			return err
+		}
+		entries, rerr := os.ReadDir(path)
+		if rerr != nil {
+			return rerr
+		}
+		for _, e := range entries {
+			if err = forceRemove(filepath.Join(path, e.Name())); err != nil {
+				return err
+			}
+		}
+	}
+	if err = os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // Run runs the questions not yet in the run's results and returns all of
@@ -208,7 +288,10 @@ func (b *Bench) Run(ctx context.Context, qs []BenchQuestion) ([]BenchResult, err
 		if err = ctx.Err(); err != nil {
 			return out, err
 		}
-		r := b.one(ctx, q)
+		r, cerr := b.one(ctx, q)
+		if cerr != nil {
+			return out, fmt.Errorf("agentd: %s: what it left cannot be removed, so no further question runs: %w", q.ID, cerr)
+		}
 		if ctx.Err() != nil {
 			return out, ctx.Err() // a question cut short is run again, not recorded
 		}
@@ -227,7 +310,12 @@ func (b *Bench) logf(format string, args ...any) {
 	}
 }
 
-func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
+func (b *Bench) one(ctx context.Context, q BenchQuestion) (result BenchResult, cleanup error) {
+	result, cleanup = b.question(ctx, q)
+	return result, cleanup
+}
+
+func (b *Bench) question(ctx context.Context, q BenchQuestion) (_ BenchResult, cleanup error) {
 	r := BenchResult{Question: q.ID, Class: q.Language}
 	unrunnable := func(why string) BenchResult {
 		r.Outcome, r.Reason = "unrunnable", oneLine(why, 280)
@@ -238,55 +326,57 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 		return r
 	}
 	qdir := filepath.Join(b.Root, q.ID)
-	if err := os.RemoveAll(qdir); err != nil {
-		return unrunnable("clearing the question's directory: " + err.Error())
+	if err := forceRemove(qdir); err != nil {
+		return unrunnable("clearing the question's directory: " + err.Error()), nil
 	}
 	out := filepath.Join(qdir, "out")
 	if err := os.MkdirAll(filepath.Join(out, "tmp"), 0o700); err != nil {
-		return unrunnable(err.Error())
+		return unrunnable(err.Error()), nil
 	}
 	fixTree, baseTree, judge, work := filepath.Join(qdir, "fix"), filepath.Join(qdir, "base"), filepath.Join(qdir, "judge"), filepath.Join(qdir, "work")
 	// However the question ends, only out/ stays: no clone, no tree of the
 	// fix, no change of an executor for a later one to read (review 288 B3).
 	defer func() {
 		for _, d := range []string{filepath.Join(qdir, "src"), fixTree, baseTree, judge, work} {
-			_ = os.RemoveAll(d)
+			if err := forceRemove(d); err != nil && cleanup == nil {
+				cleanup = err
+			}
 		}
 	}()
 	src, err := Prepare(ctx, filepath.Join(qdir, "src"), b.Remote(q.RepoName()), q.FixCommit, b.GitEnv)
 	if err != nil {
-		return unrunnable("cloning the repository: " + err.Error())
+		return unrunnable("cloning the repository: " + err.Error()), nil
 	}
 	tests := map[string][]byte{}
 	for _, f := range q.TestFiles {
 		body, gerr := gitRaw(ctx, src.Dir, src.env, "show", q.FixCommit+":"+filepath.ToSlash(f))
 		if gerr != nil {
-			return unrunnable("reading the fix's test " + f + ": " + gerr.Error())
+			return unrunnable("reading the fix's test " + f + ": " + gerr.Error()), nil
 		}
 		tests[f] = []byte(body)
 	}
 	venv := filepath.Join(out, "venv")
 	if err = b.snapshot(ctx, src, q.FixCommit, fixTree); err != nil {
-		return unrunnable("the fix's tree: " + err.Error())
+		return unrunnable("the fix's tree: " + err.Error()), nil
 	}
 	checks, err := b.setup(ctx, fixTree, venv, q)
 	if err != nil {
-		return unrunnable("setting up the checks: " + err.Error())
+		return unrunnable("setting up the checks: " + err.Error()), nil
 	}
 	if why := b.verify(ctx, fixTree, checks, true); why != "" {
-		return unrunnable("the fix does not pass its checks here: " + why)
+		return unrunnable("the fix does not pass its checks here: " + why), nil
 	}
 	if err = b.snapshot(ctx, src, q.BaseCommit, baseTree); err == nil {
 		err = overlay(baseTree, tests)
 	}
 	if err != nil {
-		return unrunnable("the tree before the fix: " + err.Error())
+		return unrunnable("the tree before the fix: " + err.Error()), nil
 	}
 	if _, err = b.setup(ctx, baseTree, venv, q); err != nil {
-		return unrunnable("setting up the checks before the fix: " + err.Error())
+		return unrunnable("setting up the checks before the fix: " + err.Error()), nil
 	}
 	if why := b.verify(ctx, baseTree, checks, true); why == "" {
-		return unrunnable("the checks pass on the code before the fix")
+		return unrunnable("the checks pass on the code before the fix"), nil
 	}
 	if err = b.snapshot(ctx, src, q.BaseCommit, judge); err == nil {
 		err = b.snapshot(ctx, src, q.BaseCommit, work)
@@ -295,41 +385,41 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 		err = b.initRepo(ctx, work)
 	}
 	if err != nil {
-		return unrunnable("the executor's checkout: " + err.Error())
+		return unrunnable("the executor's checkout: " + err.Error()), nil
 	}
 	// Nothing of the fix stays on disk for the executor to read.
 	for _, d := range []string{src.Dir, fixTree, baseTree} {
 		if err = os.RemoveAll(d); err != nil {
-			return unrunnable("clearing " + filepath.Base(d) + ": " + err.Error())
+			return unrunnable("clearing " + filepath.Base(d) + ": " + err.Error()), nil
 		}
 	}
 	start := time.Now()
 	note, err := b.execute(ctx, q, work, out)
 	r.WallS = int(time.Since(start).Seconds())
 	if err != nil {
-		return fail("the executor: " + err.Error())
+		return fail("the executor: " + err.Error()), nil
 	}
 	dropped, err := takeChanges(work, judge)
 	if err == nil {
 		err = overlay(judge, tests)
 	}
 	if err != nil {
-		return fail(note + "taking its change: " + err.Error())
+		return fail(note + "taking its change: " + err.Error()), nil
 	}
 	if _, err = b.setup(ctx, judge, venv, q); err != nil {
-		return fail(note + "setting up the checks over its change failed")
+		return fail(note + "setting up the checks over its change failed"), nil
 	}
 	if dropped > 0 {
 		note += fmt.Sprintf("%d protected or linked files of its change left out; ", dropped)
 	}
 	if why := b.verify(ctx, judge, checks, false); why != "" {
-		return fail(note + why)
+		return fail(note + why), nil
 	}
 	r.Outcome = "pass"
 	if note != "" {
 		r.Reason = oneLine(strings.TrimSuffix(note, "; "), 280)
 	}
-	return r
+	return r, nil
 }
 
 // snapshot writes the tree of commit, without a repository, at dir.
@@ -531,8 +621,10 @@ func sameFile(p string, old []byte) bool {
 // and returns the checks as they are run.
 func (b *Bench) setup(ctx context.Context, tree, venv string, q BenchQuestion) ([]BenchCheck, error) {
 	checks := append([]BenchCheck(nil), q.Checks...)
-	if err := os.MkdirAll(filepath.Join(tree, ".bench", "tmp"), 0o700); err != nil {
-		return nil, err
+	for _, d := range []string{"tmp", "home"} {
+		if err := os.MkdirAll(filepath.Join(tree, ".bench", d), 0o700); err != nil {
+			return nil, err
+		}
 	}
 	env := b.setupEnv(tree)
 	seen := map[string]bool{}
@@ -597,6 +689,9 @@ func moduleRoot(tree, cwd string) string {
 
 func (b *Bench) setupEnv(tree string) []string {
 	env := append([]string{}, b.CheckEnv...)
+	if b.GoModCache != "" {
+		env = withEnv(env, "GOMODCACHE", b.GoModCache)
+	}
 	env = withEnv(env, "GOCACHE", filepath.Join(tree, ".bench", "go-build"))
 	env = withEnv(env, "GOTOOLCHAIN", "local")
 	return withEnv(env, "TMPDIR", filepath.Join(tree, ".bench", "tmp"))
@@ -627,7 +722,7 @@ func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck, wi
 		// The command's own directory, entered inside the sandbox.
 		argv := append([]string{"/bin/sh", "-c", `cd "$1" && shift && exec "$@"`, "sh", filepath.Join(tree, c.Cwd)}, c.Argv...)
 		if b.Sandbox != nil {
-			argv = b.Sandbox(tree, argv)
+			argv = b.Sandbox(tree, b.readOnly(filepath.Dir(tree)), argv)
 		}
 		if why := b.run(ctx, tree, env, argv...); why != "" {
 			if !withOutput {

@@ -109,9 +109,9 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 	if tool.Executor == "" || executor != "exec:codex" {
 		return fmt.Errorf("%s: only exec:codex of AGENTD_TOOLS runs the benchmark for now (cursor is not sandboxed, TD-371; claude's executor has read-only tools)", executor)
 	}
-	codex, err := exec.LookPath("codex")
+	bwrap, err := bubblewrap()
 	if err != nil {
-		return fmt.Errorf("the checks run in codex's sandbox, and codex is not on PATH: %w", err)
+		return err
 	}
 	self, err := os.Executable()
 	if err != nil {
@@ -134,9 +134,31 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 		return err
 	}
 	log.Printf("agentd bench: run %s, %d questions with %s (%s), in %s", meta.RunID, len(qs), executor, tool.Provider, root)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	modCache := filepath.Join(home, "go", "pkg", "mod")
+	if out, gerr := exec.Command("go", "env", "GOMODCACHE").Output(); gerr == nil && strings.TrimSpace(string(out)) != "" {
+		modCache = strings.TrimSpace(string(out))
+	}
+	if err = os.MkdirAll(modCache, 0o700); err != nil {
+		return err
+	}
+	// What a check must not see: every credential of the daemon's
+	// configuration, and the homes the executors keep theirs in.
+	secrets := []string{filepath.Join(home, ".config"), filepath.Join(home, ".codex"), filepath.Join(home, ".cursor"), filepath.Join(home, ".claude")}
+	for _, k := range []string{"AGENTD_TOKEN_FILE", "AGENTD_GIT_TOKEN_FILE", "AGENTD_CURSOR_KEY_FILE", "AGENTD_CLAUDE_TOKEN_FILE"} {
+		if v := os.Getenv(k); v != "" {
+			secrets = append(secrets, v)
+		}
+	}
 	b := &agentd.Bench{Root: root, Self: self, GitEnv: cfg.gitEnv, CheckEnv: agentd.AllowedEnv(os.Environ()), Executor: ex,
-		Tool: tool, Limit: limit, Logf: log.Printf, Sandbox: agentd.CodexSandbox(codex),
+		Tool: tool, Limit: limit, Logf: log.Printf, Sandbox: agentd.BwrapSandbox(bwrap), GoModCache: modCache, Secrets: secrets,
 		Remote: func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" }}
+	if err = b.Preflight(ctx); err != nil {
+		return err
+	}
 	results, err := b.Run(ctx, qs)
 	if err != nil {
 		return fmt.Errorf("%w (the results so far are kept: run again with --run-id %s)", err, meta.RunID)
@@ -146,6 +168,27 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 		return nil
 	}
 	return handIn(ctx, client, meta, results)
+}
+
+// codexVendor is where the codex package keeps the programs the agent host's
+// AppArmor rule bifrost-codex lets create namespaces (prepare-agent-06.sh).
+const codexVendor = "/opt/bifrost/codex/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/bwrap"
+
+// bubblewrap is the program the checks run in: AGENTD_BENCH_BWRAP, or the
+// one codex ships (a file, or a directory that holds it).
+func bubblewrap() (string, error) {
+	p := os.Getenv("AGENTD_BENCH_BWRAP")
+	if p == "" {
+		p = codexVendor
+	}
+	if info, err := os.Stat(p); err == nil && info.IsDir() {
+		p = filepath.Join(p, "bwrap")
+	}
+	info, err := os.Stat(p)
+	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
+		return "", fmt.Errorf("no bubblewrap for the checks at %s (set AGENTD_BENCH_BWRAP): the checks do not run without it", p)
+	}
+	return p, nil
 }
 
 func handIn(ctx context.Context, client *agentd.Client, meta agentd.BenchMeta, all []agentd.BenchResult) error {
