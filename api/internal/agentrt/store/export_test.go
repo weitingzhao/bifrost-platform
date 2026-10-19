@@ -31,6 +31,18 @@ func ReplayRoute(inputs map[string]any) ([]string, []any, string, error) {
 	return route, excluded, fp, err
 }
 
+// IssueExamLater is IssueExam with the clock moved on by later, so a test
+// can let a paper lapse without waiting.
+func IssueExamLater(ctx context.Context, db DB, req ExamRequest, set ExamSet, later time.Duration) (*ExamPaper, error) {
+	return issueExam(ctx, db, req, set, later)
+}
+
+// RecordExamAnswersLater is RecordExamAnswers with the clock moved on by
+// later.
+func RecordExamAnswersLater(ctx context.Context, db DB, host, token string, sub ExamSubmission, set ExamSet, later time.Duration) (map[string]any, error) {
+	return recordExamAnswers(ctx, db, host, token, sub, set, later)
+}
+
 // SetHook installs a test hook (see hook) and returns the function that
 // removes it.
 func SetHook(f func(point, arg string)) func() {

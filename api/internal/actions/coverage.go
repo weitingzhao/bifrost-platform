@@ -91,6 +91,9 @@ func init() {
 	exempt("agent runtime benchmark runs (W-31 2.4 slice ⑤): an agentd token hands in, for the host it is bound to, the outcome of the question set it ran with one executor; the store records it with its event in one transaction, and at most it changes which candidates routing's competence step lets through; not a cluster write",
 		"POST /api/v1/agentrt/benchmark",
 	)
+	exempt("agent runtime chief exam (W-31 2.4 ④, the exam's cut §6 甲): an agentd token hands in, for the host it is bound to, the answers to a paper the platform issued it (GET /api/v1/agentrt/exams/{job}, which records the paper); the store records them with their events in one transaction and grades the run once it is whole; at most it adds capability scores of source exam, which routing does not read; not a cluster write",
+		"POST /api/v1/agentrt/exams",
+	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",

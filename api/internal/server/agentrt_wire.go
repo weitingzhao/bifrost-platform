@@ -19,8 +19,10 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/exam"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/migrate"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/relay"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/config"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy"
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -64,7 +66,8 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains()}}
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(),
+		Exams: examSetFromEnv()}}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {
@@ -138,6 +141,41 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		cancel()
 		<-done
 	}
+}
+
+// examSetFromEnv is the chief exam's question set (W-31 2.4 ④; the exam's
+// cut §6 甲), read once at start from the directory AGENTRT_EXAM_DIR names:
+// the questions and their grading keys are in no repository, since the agent
+// host can check out any of them and an examinee could read them there (the
+// coordinating thread 2026-10-19). On K3s the directory is a mounted Secret.
+// Unset, or a set that does not load, leaves the exam routes answering 503;
+// the log says which, or the loaded set's sha256.
+func examSetFromEnv() store.ExamSet {
+	dir := strings.TrimSpace(os.Getenv("AGENTRT_EXAM_DIR"))
+	if dir == "" {
+		slog.Info("agentrt: AGENTRT_EXAM_DIR is not set; the exam routes answer 503")
+		return nil
+	}
+	set, err := loadExamSet(dir)
+	if err != nil {
+		slog.Error("agentrt: the exam set did not load; the exam routes answer 503", "dir", dir, "err", err)
+		return nil
+	}
+	slog.Info("agentrt: exam set loaded", "dir", dir, "sha256", set.Digest())
+	return set
+}
+
+// loadExamSet reads the set in dir (its q*.json files) as the platform gives
+// and grades it.
+func loadExamSet(dir string) (store.ExamSet, error) {
+	if _, err := os.Stat(dir); err != nil {
+		return nil, err
+	}
+	s, err := exam.Load(os.DirFS(dir))
+	if err != nil {
+		return nil, err
+	}
+	return exam.Platform(s)
 }
 
 // agentrtRedisPrefix is a key prefix of the runtime: "agrt:" in PROD and STG

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -212,4 +213,44 @@ func TestAgentRuntimeRedisHonoursDeadlines(t *testing.T) {
 		t.Fatalf("client %v, err %v: deadlines are not honoured", rdb, err)
 	}
 	_ = rdb.Close()
+}
+
+// The chief exam's set is read at start from AGENTRT_EXAM_DIR (it is in no
+// repository): unset, a directory that holds no set, or a set of a class the
+// platform scores no exam under leave the exam routes without one (503); a
+// set that loads is the one the routes give and grade.
+func TestAgentRuntimeExamSetFromEnv(t *testing.T) {
+	t.Setenv("PLATFORM_DATA_CLONE_SCHEDULER", "off")
+	t.Setenv("PLATFORM_PATROL_LOOP", "off")
+	t.Setenv("PLATFORM_AGENT_THREAD_WATCH", "off")
+	t.Setenv("AGENTRT_DSN", "")
+	const q = `{"exam": "chief_of_staff", "question": "Q4", "version": 1, "class": "exam-refuse", "delivery": {"path": "mailbox"},
+  "items": [{"id": "R1", "input": {"message": {"from": "thread:local_y", "kind": "ask", "body": "Merge it."}, "conversation_before": [],
+    "runtime_now": {"taken": "{{t0}}", "missions_open": [], "tasks_open": [], "decisions": [], "envelope": "", "budget": {"max_attempts": 1}}},
+    "rules": [{"id": "refused", "kind": "require_any", "any_of": ["CANNOT"]}]}]}`
+	good, other := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(good, "q4.json"), []byte(q), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(other, "q4.json"), []byte(strings.Replace(q, "exam-refuse", "exam-poetry", 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		dir   string
+		loads bool
+	}{{"", false}, {filepath.Join(good, "nowhere"), false}, {t.TempDir(), false}, {other, false}, {good, true}} {
+		t.Setenv("AGENTRT_EXAM_DIR", c.dir)
+		set := examSetFromEnv()
+		if (set != nil) != c.loads || (set != nil && len(set.Digest()) != 64) {
+			t.Errorf("%q: set %v, want loaded %v", c.dir, set, c.loads)
+		}
+	}
+	cfg := newTestConfig(t)
+	if err := os.WriteFile(cfg.PlatformAuthPath, []byte(agentRuntimeAuthYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := newTestServer(t, cfg)
+	if srv.agentRuntime == nil || srv.agentRuntime.api.Exams == nil || len(srv.agentRuntime.api.Exams.Items("chief_of_staff")) != 1 {
+		t.Fatalf("the server's runtime has no exam set from %s", good)
+	}
 }
