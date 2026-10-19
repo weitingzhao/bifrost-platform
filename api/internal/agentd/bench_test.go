@@ -271,7 +271,15 @@ func TestBenchSiblings(t *testing.T) {
 			Env: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")}, nil
 	}
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0002")
+	// A sandbox that confines nothing but records what each command may read
+	// beside its tree: the judgement's checks must have the sibling (review 292 C8).
+	var views []string
+	sandbox := func(tree string, ro, argv []string) []string {
+		views = append(views, filepath.Base(tree)+" "+strings.Join(ro, " "))
+		return argv
+	}
 	b := &agentd.Bench{Root: root, Self: os.Args[0], GitEnv: env, CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), Executor: ex,
+		Sandbox: sandbox,
 		Remote: func(repo string) string {
 			if repo == "ui" {
 				return ui
@@ -312,13 +320,80 @@ func TestBenchSiblings(t *testing.T) {
 			t.Errorf("%s left %v", x.ID, entries)
 		}
 	}
+	judged := false
+	for _, v := range views {
+		if strings.HasPrefix(v, "judge ") {
+			judged = true
+			if !strings.Contains(v, filepath.Join(root, "Q1", "ui")) {
+				t.Errorf("a check of the judgement cannot read the sibling: %s", v)
+			}
+		}
+	}
+	if !judged {
+		t.Fatalf("no check of the judgement ran in the sandbox: %v", views)
+	}
+}
+
+// Review 292 B6: a lockfile npm ci refuses is resolved once a question, and
+// the tree before the fix and the judgement install that one resolution, not
+// one each.
+func TestBenchNpmResolvedOnce(t *testing.T) {
+	npm, err := osexec.LookPath("npm")
+	if err != nil {
+		t.Skip("no npm")
+	}
+	env := gitEnvT(t.TempDir())
+	bare, _ := bareRemote(t, env)
+	seed := filepath.Join(t.TempDir(), "seed")
+	sh(t, filepath.Dir(seed), env, "git", "clone", "--quiet", bare, seed)
+	put := func(name, body string) {
+		must(t, os.MkdirAll(filepath.Dir(filepath.Join(seed, name)), 0o700))
+		must(t, os.WriteFile(filepath.Join(seed, name), []byte(body), 0o600))
+		sh(t, seed, env, "git", "add", name)
+	}
+	put("package.json", `{"name":"x","version":"1.0.0","dependencies":{"dep":"file:./dep"}}`)
+	// the lockfile misses dep: npm ci refuses it (EUSAGE)
+	put("package-lock.json", `{"name":"x","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{"":{"name":"x","version":"1.0.0"}}}`)
+	put("dep/package.json", `{"name":"dep","version":"1.0.0"}`)
+	put("calc.txt", "old\n")
+	sh(t, seed, env, "git", "commit", "--quiet", "-m", "base")
+	base := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	put("calc.txt", "new\n")
+	put("check.sh", "test -L node_modules/dep && test \"$(cat calc.txt)\" = new\n")
+	sh(t, seed, env, "git", "commit", "--quiet", "-m", "fix: calc says new")
+	fix := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	sh(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
+	shim := t.TempDir()
+	calls := filepath.Join(t.TempDir(), "npm-calls")
+	must(t, os.WriteFile(filepath.Join(shim, "npm"), []byte("#!/bin/sh\necho \"$*\" >> "+calls+"\nexec "+npm+" \"$@\"\n"), 0o700))
+	q := agentd.BenchQuestion{ID: "Q1", Repo: "/somewhere/bifrost-x", Language: "ts", BaseCommit: base, FixCommit: fix,
+		TestFiles: []string{"check.sh"}, Checks: []agentd.BenchCheck{{Cwd: ".", Argv: []string{"sh", "check.sh"}}}, TaskText: "fix: calc says new"}
+	root := filepath.Join(t.TempDir(), "bench", "run-test-0003")
+	b := &agentd.Bench{Root: root, Self: os.Args[0], Remote: func(string) string { return bare }, GitEnv: env,
+		CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1", "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"),
+			"npm_config_offline=true", "npm_config_cache="+t.TempDir()),
+		Executor: script("echo new > calc.txt"), Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"},
+		Limit: 30 * time.Second, KillGrace: time.Second, Logf: t.Logf}
+	got, err := b.Run(context.Background(), []agentd.BenchQuestion{q})
+	must(t, err)
+	if len(got) != 1 || got[0].Outcome != "pass" {
+		t.Fatalf("%+v", got)
+	}
+	body, err := os.ReadFile(calls)
+	must(t, err)
+	if n := strings.Count(string(body), "install --package-lock-only"); n != 1 {
+		t.Fatalf("resolved %d times (once for the fix's tree, the tree before it and the judgement): %s", n, body)
+	}
+	if strings.Contains(string(body), "--no-save") || strings.Count(string(body), "ci --ignore-scripts") != 6 {
+		t.Fatalf("each tree must npm ci, refused and then with the one resolution: %s", body)
+	}
 }
 
 // Review 287 B2, 288 B2: what the checks run as is never taken from a change.
 func TestBenchProtected(t *testing.T) {
 	for _, p := range []string{"pytest.py", "sub/conftest.py", "api/x_test.go", "console/src/test/setup.ts", "tests/helpers.py",
 		"console/vitest.config.ts", "package.json", "go.mod", "node_modules/.bin/vitest", "lib/site.pth", "sitecustomize.py",
-		"src/__mocks__/clock.ts", "pyproject.toml"} {
+		"src/__mocks__/clock.ts", "pyproject.toml", "npm-shrinkwrap.json", "console/npm-shrinkwrap.json"} {
 		if !agentd.Protected(p) {
 			t.Errorf("%s is taken from a change", p)
 		}
