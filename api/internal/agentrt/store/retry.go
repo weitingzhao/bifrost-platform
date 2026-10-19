@@ -54,37 +54,53 @@ type runOf struct {
 // by its executor's doing.
 func readFailureRun(ctx context.Context, tx pgx.Tx, taskID string) (failureRun, error) {
 	run := failureRun{by: map[string]runOf{}}
-	// The clock and the newest attempts in one statement (review 400 C1),
-	// at most runRows of them: a run is ended long before by the stop.
-	rows, err := tx.Query(ctx, `SELECT c.now, a.executor_actor_id, a.state, COALESCE(a.end_how, ''), a.ended_at
-	  FROM (SELECT clock_timestamp() AS now) c LEFT JOIN LATERAL (SELECT * FROM agentrt.attempt WHERE task_id = $1
-	    ORDER BY attempt_no DESC LIMIT $2) a ON true`, taskID, runRows)
-	if err != nil {
-		return run, err
-	}
-	defer rows.Close()
-	broken := false
-	for rows.Next() {
-		var executor, state, endHow *string
-		var ended *time.Time
-		if err = rows.Scan(&run.now, &executor, &state, &endHow, &ended); err != nil {
+	// The clock and a page of the newest attempts in one statement (review
+	// 400 C1); a further page only while the run has not ended (review 401
+	// B1: a run from before the stop existed can be longer than a page).
+	before, broken := 0, false
+	for {
+		n := 0
+		rows, err := tx.Query(ctx, `SELECT c.now, a.attempt_no, a.executor_actor_id, a.state, COALESCE(a.end_how, ''), a.ended_at
+		  FROM (SELECT clock_timestamp() AS now) c LEFT JOIN LATERAL (SELECT * FROM agentrt.attempt WHERE task_id = $1
+		    AND ($3 = 0 OR attempt_no < $3) ORDER BY attempt_no DESC LIMIT $2) a ON true`, taskID, runRows, before)
+		if err != nil {
 			return run, err
 		}
-		if broken || executor == nil || *state != "failed" || ended == nil || !slices.Contains(executorEnds, *endHow) {
-			broken = true
-			continue
+		for rows.Next() {
+			var now time.Time
+			var no *int
+			var executor, state, endHow *string
+			var ended *time.Time
+			if err = rows.Scan(&now, &no, &executor, &state, &endHow, &ended); err != nil {
+				rows.Close()
+				return run, err
+			}
+			if run.now.IsZero() {
+				run.now = now
+			}
+			if no == nil {
+				break
+			}
+			n, before = n+1, *no
+			if broken || *state != "failed" || ended == nil || !slices.Contains(executorEnds, *endHow) {
+				broken = true
+				continue
+			}
+			r := run.by[*executor]
+			if r.n == 0 {
+				r.last = *ended
+			}
+			r.n++
+			run.by[*executor] = r
 		}
-		r := run.by[*executor]
-		if r.n == 0 {
-			r.last = *ended
+		rows.Close()
+		if err = rows.Err(); err != nil || broken || n < runRows {
+			return run, err
 		}
-		r.n++
-		run.by[*executor] = r
 	}
-	return run, rows.Err()
 }
 
-// runRows bounds the attempts a run is read from.
+// runRows is how many attempts a page of a run reads.
 const runRows = 64
 
 // backoff is how long an executor waits after n failures in a row.

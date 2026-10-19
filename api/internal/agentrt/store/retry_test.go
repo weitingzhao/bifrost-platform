@@ -324,3 +324,34 @@ func TestARefusedSalvageIsNoOtherAttemptsCause(t *testing.T) {
 		t.Fatalf("the other attempt's end says %q", r)
 	}
 }
+
+// Review 401 B1: a run longer than a page (failures from before the stop
+// existed) is read whole: an executor whose three failures sit under 64
+// newer ones of another is still passed by, and a break inside the first
+// page ends the run there.
+func TestALongRunIsReadWhole(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	task := w.ready(t, store.Task{})
+	insert := func(from, to int, executor, state string) string {
+		return fmt.Sprintf(`INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, host_id, model_provider,
+		  lease_epoch, lease_expires_at, heartbeat_at, state, started_at, ended_at, end_how)
+		  SELECT 'a_' || lpad(n::text, 26, '0'), '%s', n, '%s', 'h1', 'x', nextval('agentrt.lease_epoch_seq'),
+		    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '2 hours', '%s',
+		    clock_timestamp() - interval '2 hours', clock_timestamp() - interval '1 hour', 'exit'
+		  FROM generate_series(%d, %d) n`, task, executor, state, from, to)
+	}
+	w.legacy(t, insert(1, 3, cursor.Executor, "failed"), insert(4, 67, codex.Executor, "failed"))
+	if c := w.claim(t, "h1", store.LeaseTTL, cursor); c != nil {
+		t.Fatalf("an executor whose three failures lie under 64 newer ones was leased the task: %+v", c)
+	}
+	if c := w.claim(t, "h2", store.LeaseTTL, codex); c != nil {
+		t.Fatalf("codex, 64 failures in a row, was leased the task: %+v", c)
+	}
+	// A break inside the first page: an attempt taken (finished) after the
+	// 67 ends the run, so neither executor is held back by what came before.
+	w.legacy(t, insert(68, 68, codex.Executor, "finished"))
+	if c := w.claim(t, "h1", store.LeaseTTL, cursor); c == nil {
+		t.Fatal("a run ended by a finished attempt still held cursor back")
+	}
+}
