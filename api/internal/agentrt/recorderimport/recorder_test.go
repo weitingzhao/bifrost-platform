@@ -276,6 +276,8 @@ func TestReadEachHeadFieldAndTheText(t *testing.T) {
 		"prev wrong, PREV right": {`{"v":2,"seq":1,"prev_sha256":"x","PREV_SHA256":"","type":"note"}`, "prev_sha256 is not"},
 		"PREV only":              {`{"v":2,"seq":1,"PREV_SHA256":"","type":"note"}`, "no prev_sha256"},
 		"TYPE only":              {`{"v":2,"seq":1,"prev_sha256":"","TYPE":"note"}`, "no type"},
+		"type empty, TYPE right": {`{"v":2,"seq":1,"prev_sha256":"","type":"","TYPE":"note"}`, "no type"},
+		"TYPE right, type empty": {`{"TYPE":"note","v":2,"seq":1,"prev_sha256":"","type":""}`, "no type"},
 		"V only":                 {`{"V":2,"seq":1,"prev_sha256":"","type":"note"}`, "no v"},
 		"work wrong, WORK right": {`{` + ok + `,"work_id":"W-32","WORK_ID":"W-31"}`, `work_id "W-32"`},
 		"v null":                 {`{"v":null,"seq":1,"prev_sha256":"","type":"note"}`, "v is null"},
@@ -293,6 +295,11 @@ func TestReadEachHeadFieldAndTheText(t *testing.T) {
 		if _, err := recorderimport.Read(request("W-31", sealOne(c.body))); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: err = %v; want %q", name, err, c.want)
 		}
+	}
+	// The exact type is the record's type, whatever an alias says (review 404).
+	typed, err := recorderimport.Read(request("W-31", sealOne(`{"v":2,"seq":1,"prev_sha256":"","type":"note","TYPE":"other"}`)))
+	if err != nil || typed.Records[0].Type != "note" || typed.Types()["note"] != 1 {
+		t.Fatalf("type read as %+v (%v)", typed.Records, err)
 	}
 	// A whole pair, an escaped backslash before a u, and numbers as written.
 	body := `{"n":[-0,1.2300,1e+02,9007199254740991],"pair":"\ud83d\ude00","slash":"\\u0041","text":"/tmp/x",` + ok + `}`
