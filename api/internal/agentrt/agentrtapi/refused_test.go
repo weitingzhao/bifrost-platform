@@ -7,9 +7,10 @@ import (
 )
 
 // TD-382: a report with a local path in it is refused (422) as before, and
-// the refusal is now recorded on the attempt handing it over, with the rule
-// that refused it; the attempt's end says why its result did not land, and
-// the executor is not leased the task again at once (TD-381).
+// the refusal is now recorded on the host's stream with the rule that
+// refused it; the attempt's end says its result did not land and that its
+// host had a report refused meanwhile, and the executor is not leased the
+// task again at once (TD-381).
 func TestRefusedReportEndsTheAttempt(t *testing.T) {
 	pool, task := world(t)
 	s := server(t, pool)
@@ -43,11 +44,12 @@ func TestRefusedReportEndsTheAttempt(t *testing.T) {
 	if code != http.StatusUnprocessableEntity || out["error"] != "local_path" {
 		t.Fatalf("a report with a local path: %d %v", code, out)
 	}
-	var rule, source, on string
-	must(t, pool.QueryRow(ctx, `SELECT body_json->>'rule', body_json->>'source', attempt_id FROM agentrt.event
-	  WHERE event_type = 'policy_alert' AND body_json->>'artifact_id' = $1`, artifactID(leaky)).Scan(&rule, &source, &on))
-	if rule != "local_path" || source != "report" || on != attempt {
-		t.Fatalf("the refusal is recorded as %s / %s on %s; want local_path / report on %s", rule, source, on, attempt)
+	var rule, source, stream string
+	var onAttempt bool
+	must(t, pool.QueryRow(ctx, `SELECT body_json->>'rule', body_json->>'source', event_stream_id, attempt_id IS NOT NULL FROM agentrt.event
+	  WHERE event_type = 'policy_alert' AND body_json->>'artifact_id' = $1`, artifactID(leaky)).Scan(&rule, &source, &stream, &onAttempt))
+	if rule != "local_path" || source != "report" || stream != "host:h1" || onAttempt {
+		t.Fatalf("the refusal is recorded as %s / %s on %s (on an attempt: %v); want local_path / report on host:h1", rule, source, stream, onAttempt)
 	}
 	var bodies int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'policy_alert' AND body_json::text LIKE '%/home/%'`).Scan(&bodies))
@@ -64,7 +66,7 @@ func TestRefusedReportEndsTheAttempt(t *testing.T) {
 	var reason string
 	must(t, pool.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
 	  AND body_json->>'to' = 'ready' ORDER BY event_id DESC LIMIT 1`, task).Scan(&reason))
-	if !strings.Contains(reason, "its report was refused by rule local_path") {
+	if !strings.Contains(reason, "its result was computed but not persisted; meanwhile its host had a report refused by rule local_path") {
 		t.Fatalf("the task's move says %q", reason)
 	}
 	if code, out := call(t, s, "agentd:h1", "POST", "claim", claimBody); code != http.StatusNoContent {

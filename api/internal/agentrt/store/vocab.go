@@ -94,9 +94,10 @@ var bodies = map[string][]field{
 	// chief of staff ended an answer or a plan with (seat_alert, the seat's
 	// protocol v2: its phrase is POLICY_ALERT and its words stay in the report
 	// the artifact names; line_digest tells one line from another), or the
-	// platform's refusal of a report agentd uploaded (local_path,
-	// workspace_ref: the rule that refused it, source the report's kind,
-	// artifact_id the refused body's id, which is not stored), or an executor
+	// platform's refusal of a report agentd uploaded, on the host's stream
+	// (local_path, workspace_ref: the rule that refused it, source the
+	// report's kind, artifact_id the refused body's id, which is not
+	// stored), or an executor
 	// that failed a task failuresToStop times in a row (repeated_failure,
 	// source attempt, no artifact: the event's attempt is the last failure;
 	// TD-381, TD-382). Every rule but repeated_failure names its artifact

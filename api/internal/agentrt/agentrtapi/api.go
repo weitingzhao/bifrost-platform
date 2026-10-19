@@ -488,9 +488,9 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 // refuse answers an artifact refused by rule (422). A report agentd uploads
-// is recorded as refused on the attempt handing over on its host
-// (store.RefusedReport, TD-382), so the attempt's end says why; the answer
-// is the refusal whatever the record does.
+// is recorded as refused on its host's stream (store.RefusedReport, TD-382),
+// and an attempt of the host that then ends without its result says so; the
+// answer is the refusal whatever the record does.
 func (a *API) refuse(w http.ResponseWriter, r *http.Request, host, kind, id, rule, message string) {
 	if host != "" {
 		if _, err := store.RefusedReport(r.Context(), a.DB, host, kind, id, rule); err != nil {
