@@ -474,17 +474,17 @@ func TestGoalToPlan(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner", Token: "admin"}
-	at := func(commit string, err error) func(context.Context) (string, error) {
-		return func(context.Context) (string, error) { return commit, err }
+	at := func(commit string, err error) func(context.Context, string) (string, error) {
+		return func(context.Context, string) (string, error) { return commit, err }
 	}
-	goal := store.Goal{Title: "Document the goal route", Text: "Document the goal route", Repo: "bifrost-platform", Main: at(commitA, nil)}
+	goal := store.Goal{Title: "Document the goal route", Text: "Document the goal route", Repos: []string{"bifrost-platform"}, Main: at(commitA, nil)}
 	out, err := store.ProposeGoal(ctx, w.rt, owner, "g1", goal)
 	ok(t, err)
 	mission, plan := out["mission_id"].(string), out["task_id"].(string)
 	if out["mission_state"] != "proposed" || w.state(t, "task", plan) != "proposed" {
 		t.Fatalf("no envelope: %v; the plan is %s", out, w.state(t, "task", plan))
 	}
-	for _, main := range []func(context.Context) (string, error){at(commitB, nil), at("", errors.New("gitea is down"))} {
+	for _, main := range []func(context.Context, string) (string, error){at(commitB, nil), at("", errors.New("gitea is down"))} {
 		goal.Main = main
 		again, err := store.ProposeGoal(ctx, w.rt, owner, "g1", goal)
 		if err != nil || again["task_id"] != plan || again["base_commit"] != commitA {

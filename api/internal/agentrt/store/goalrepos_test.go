@@ -1,0 +1,176 @@
+package store_test
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+)
+
+// A goal names its repositories sorted, at least one, at most GoalMaxRepos,
+// each known, none twice.
+func TestCheckGoalRepos(t *testing.T) {
+	t.Parallel()
+	if got, err := store.CheckGoalRepos([]string{infra, "bifrost-platform"}); err != nil || !slices.Equal(got, []string{"bifrost-platform", infra}) {
+		t.Fatalf("two repositories: %v %v", got, err)
+	}
+	for name, c := range map[string]struct {
+		repos []string
+		why   string
+	}{
+		"none":     {nil, "may name bifrost-platform, bifrost-trade-infra, not none"},
+		"empty":    {[]string{}, "not none"},
+		"unknown":  {[]string{"bifrost-platform", "bifrost-trade-api"}, `not "bifrost-trade-api"`},
+		"twice":    {[]string{infra, "bifrost-platform", infra}, "names bifrost-trade-infra twice"},
+		"too many": {[]string{"a", "b", "c", "d", "e", "f"}, "at most 5 repositories, not 6"},
+	} {
+		if _, err := store.CheckGoalRepos(c.repos); !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), c.why) {
+			t.Errorf("%s: %v (want %q)", name, err, c.why)
+		}
+	}
+}
+
+// twoRepoPlan puts a task in each repository of a two-repository goal, the
+// platform's with a check of its own, after infra's.
+const twoRepoPlan = "Two changes.\n\n```json\n" + `{
+  "mission": {"success": ["both land"]},
+  "tasks": [{"ref": "t1", "title": "Test the probe", "repo": "bifrost-trade-infra", "text": "Add a test to scripts/agentrt.", "verify": []},
+    {"ref": "t2", "title": "Name the test", "repo": "bifrost-platform", "text": "Name it in repos.go.",
+     "verify": [["go", "-C", "api", "test", "./internal/agentrt/store/"]], "depends_on": ["t1"]}]
+}` + "\n```\n"
+
+// A goal of two repositories (the Owner 10-19, T26): main is read for each;
+// the mission keeps both bases; the planning task has the first repository
+// checked out at its base and the other beside it as a sibling at main, and
+// its text says which checks each takes; the plan's tasks are made in their
+// own repositories, each from its own base, with its own checks. The same
+// goal keyed with repo or with repos of one is one request.
+func TestGoalOfTwoRepos(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	owner := store.Writer{Actor: "owner", Token: "admin"}
+	var read []string
+	main := func(_ context.Context, repo string) (string, error) {
+		read = append(read, repo)
+		if repo == infra {
+			return commitB, nil
+		}
+		return commitA, nil
+	}
+	out, err := store.ProposeGoal(ctx, w.rt, owner, "g1", store.Goal{Title: "Test the probe", Text: "Test the probe",
+		Repos: []string{infra, "bifrost-platform"}, Main: main})
+	ok(t, err)
+	mission, plan := out["mission_id"].(string), out["task_id"].(string)
+	repos, _ := out["repos"].([]any)
+	bases, _ := out["bases"].(map[string]any)
+	if out["repo"] != "bifrost-platform" || out["base_commit"] != commitA || len(repos) != 2 || repos[0] != "bifrost-platform" ||
+		repos[1] != infra || bases["bifrost-platform"] != commitA || bases[infra] != commitB || !slices.Equal(read, []string{"bifrost-platform", infra}) {
+		t.Fatalf("the answer: %v (main read for %v)", out, read)
+	}
+	var scope []byte
+	var planRepo, planBase string
+	ok(t, w.rt.QueryRow(ctx, `SELECT m.scope_json::text, t.repo, t.base_commit FROM agentrt.mission m
+	  JOIN agentrt.task t ON t.mission_id = m.mission_id WHERE t.task_id = $1`, plan).Scan(&scope, &planRepo, &planBase))
+	var sc struct {
+		Repos []string
+		Bases map[string]string
+	}
+	ok(t, json.Unmarshal(scope, &sc))
+	if !slices.Equal(sc.Repos, []string{"bifrost-platform", infra}) || sc.Bases["bifrost-platform"] != commitA || sc.Bases[infra] != commitB ||
+		planRepo != "bifrost-platform" || planBase != commitA {
+		t.Fatalf("the mission's scope %s; the plan on %s at %s", scope, planRepo, planBase)
+	}
+	var body []byte
+	ok(t, w.rt.QueryRow(ctx, `SELECT b.body FROM agentrt.task t JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id
+	  WHERE t.task_id = $1`, plan).Scan(&body))
+	var spec struct {
+		Text     string
+		Siblings []struct{ Repo, Ref string }
+	}
+	ok(t, json.Unmarshal(body, &spec))
+	if len(spec.Siblings) != 1 || spec.Siblings[0].Repo != infra || spec.Siblings[0].Ref != "main" {
+		t.Fatalf("the planning spec's siblings: %+v", spec.Siblings)
+	}
+	for _, want := range []string{"repositories bifrost-platform, bifrost-trade-infra",
+		"bifrost-platform is checked out here at " + commitA, "bifrost-trade-infra is beside it, at ../bifrost-trade-infra (the head of its main; its tasks start from " + commitB,
+		"one task in each, ordered with depends_on", "  - bifrost-platform: a test of the package you change", "  - bifrost-trade-infra: none: leave verify empty."} {
+		if !strings.Contains(spec.Text, want) {
+			t.Fatalf("the planning spec lacks %q:\n%s", want, spec.Text)
+		}
+	}
+	// The same goal of one repository, as repo before and as repos now, is
+	// one request under one key.
+	one := store.Goal{Title: "Docs", Text: "Docs", Repos: []string{"bifrost-platform"}, Main: main}
+	first, err := store.ProposeGoal(ctx, w.rt, owner, "g-one", one)
+	ok(t, err)
+	if again, rerr := store.ProposeGoal(ctx, w.rt, owner, "g-one", one); rerr != nil || again["task_id"] != first["task_id"] {
+		t.Fatalf("a retry: %v %v", again, rerr)
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		return store.MoveTask(ctx, tx, "controller", first["task_id"].(string), "cancelled", "test")
+	}))
+
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "active", "test") }))
+	_, err = store.Dispatch(ctx, w.rt)
+	ok(t, err)
+	w.work(t, plan, twoRepoPlan, "done")
+	var c cards
+	if did, aerr := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw); aerr != nil || did != "accepted" {
+		t.Fatalf("accept: %q %v", did, aerr)
+	}
+	rows, err := w.rt.Query(ctx, `SELECT t.repo, t.base_commit, b.body FROM agentrt.task t
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id WHERE t.mission_id = $1 AND t.role = 'implement' ORDER BY t.repo`, mission)
+	ok(t, err)
+	var got []string
+	for rows.Next() {
+		var repo, base string
+		var b []byte
+		ok(t, rows.Scan(&repo, &base, &b))
+		got = append(got, repo+"|"+base+"|"+string(b))
+	}
+	rows.Close()
+	platform := store.Repos["bifrost-platform"]
+	platformSpec, err := store.ImplementSpec("Name the test", "Name it in repos.go.", platform,
+		append(slices.Clone(platform.Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}))
+	ok(t, err)
+	infraSpec, err := store.ImplementSpec("Test the probe", "Add a test to scripts/agentrt.", store.Repos[infra], store.Repos[infra].Verify)
+	ok(t, err)
+	if want := []string{"bifrost-platform|" + commitA + "|" + string(platformSpec), infra + "|" + commitB + "|" + string(infraSpec)}; !slices.Equal(got, want) {
+		t.Fatalf("the implementations:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// A mission of two repositories that kept no base for the second (one a
+// route proposed, before goals kept bases): a plan with a task there is sent
+// back, never started from the other repository's commit.
+func TestPlanWithoutABaseIsSentBack(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-3", Title: "goal", Goal: "a goal",
+			Deadline: time.Now().Add(24 * time.Hour), Repos: []string{"bifrost-platform", infra}, Success: []string{store.GoalSuccess},
+			MaxAttempts: 10, MaxWallHours: 24}); err != nil {
+			return err
+		}
+		return store.MoveMission(ctx, tx, "controller", "M-3", "active", "test")
+	}))
+	plan := w.ready(t, store.Task{MissionID: "M-3", Role: "plan", Effect: "none", OffPlanReason: "a goal", BaseCommit: commitA})
+	w.work(t, plan, twoRepoPlan, "done")
+	var c cards
+	if did, err := store.AcceptPlan(ctx, w.rt, plan, c.ask, c.withdraw); err != nil || did != "rework" ||
+		!strings.Contains(lastReason(t, w, plan), "tasks[0]: the goal recorded no commit of bifrost-trade-infra to start from") {
+		t.Fatalf("a plan without a base: %q %v %q", did, err, lastReason(t, w, plan))
+	}
+	var n int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE mission_id = 'M-3' AND role = 'implement'`).Scan(&n))
+	if n != 0 {
+		t.Fatalf("a refused plan made %d tasks", n)
+	}
+}

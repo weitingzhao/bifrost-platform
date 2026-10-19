@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { submitRuntimeGoal, type GoalResult } from '@/api/agentRuntime'
+import { GOAL_REPOS, submitRuntimeGoal, type GoalResult } from '@/api/agentRuntime'
 import { OpsSection } from '@/components/layout/OpsSection'
 
 /**
@@ -10,6 +10,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalResult, goal: string) => void; draft?: string }) {
   const client = useQueryClient()
   const [goal, setGoal] = useState(draft)
+  const [repos, setRepos] = useState<string[]>(['bifrost-platform'])
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<GoalResult | null>(null)
   const [error, setError] = useState('')
@@ -17,14 +18,14 @@ export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalR
   const busy = useRef(false)
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (busy.current || !goal.trim() || goal.length > 2000) return
+    if (busy.current || !goal.trim() || goal.length > 2000 || repos.length === 0) return
     busy.current = true
     setSending(true)
     setError('')
     setResult(null)
     try {
       submission.current ??= { key: crypto.randomUUID() }
-      const response = await submitRuntimeGoal(goal, submission.current.key)
+      const response = await submitRuntimeGoal(goal, submission.current.key, GOAL_REPOS.filter(r => repos.includes(r)))
       setResult(response)
       onCreated?.(response, goal)
       setGoal('')
@@ -50,12 +51,19 @@ export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalR
           setError('')
         }} />
       <span id="agent-goal-count" className="text-xs text-muted-foreground" aria-live="polite">{goal.length}/2000 characters</span>
+      <fieldset className="flex flex-wrap items-center gap-3" disabled={sending}>
+        <legend className="mb-1 text-sm">Repositories</legend>
+        {GOAL_REPOS.map(r => <label key={r} className="flex items-center gap-1 text-sm pointer-coarse:min-h-11">
+          <input type="checkbox" checked={repos.includes(r)} onChange={e => {
+            setRepos(e.target.checked ? [...repos, r] : repos.filter(x => x !== r))
+            submission.current = null
+            setResult(null)
+            setError('')
+          }} />{r}
+        </label>)}
+      </fieldset>
       <div className="flex flex-wrap items-center gap-3">
-        <label htmlFor="agent-repo">Repository</label>
-        <select id="agent-repo" disabled={sending} className="rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 text-sm">
-          <option value="bifrost-platform">bifrost-platform</option>
-        </select>
-        <button type="submit" disabled={sending || !goal.trim() || goal.length > 2000}
+        <button type="submit" disabled={sending || !goal.trim() || goal.length > 2000 || repos.length === 0}
           className="rounded-[var(--control-radius)] border border-transparent bg-[var(--control-fill)] px-3 py-2 text-sm disabled:opacity-50 pointer-coarse:min-h-11">{sending ? 'Submitting…' : 'Submit'}</button>
       </div>
       {error && <p role="alert">{error}</p>}

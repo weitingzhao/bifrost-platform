@@ -52,6 +52,11 @@ describe('agent runtime fixtures', () => {
     expect(() => parseGoalResult(value)).not.toThrow()
     expect(() => parseRoadmap(value)).not.toThrow()
   })
+  it('reads a goal\'s repositories, keeping only strings', () => {
+    expect(parseGoalResult({ mission_id: 'M-7', repo: 'bifrost-platform', repos: ['bifrost-platform', 7, 'bifrost-trade-infra'] }))
+      .toMatchObject({ repo: 'bifrost-platform', repos: ['bifrost-platform', 'bifrost-trade-infra'] })
+    expect(parseGoalResult({ mission_id: 'M-8', repo: 'bifrost-platform' }).repos).toEqual([])
+  })
   it('does not accept invalid nested plan arrays or numeric strings', () => {
     expect(parseRoadmap({ round: { n: '2', items: [null, { done: '3', steps: [null, {}] }] }, arch: { rows: [null, {}] } }))
       .toMatchObject({ round: { n: undefined, items: [{ done: undefined, steps: [{ t: '' }] }] }, arch: { rows: [{ state: '' }] } })

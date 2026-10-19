@@ -135,6 +135,32 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if (p.Mission.MaxAttempts > 0 && p.Mission.MaxAttempts > maxAttempts) || (p.Mission.MaxWallHours > 0 && p.Mission.MaxWallHours > maxHours) {
 			return refuse(fmt.Sprintf("the plan raises the mission's budget (%d attempts, %d hours); a plan may only lower it", maxAttempts, maxHours))
 		}
+		// Each task starts from its repository's main as the goal read it
+		// (scope_json.bases); the planning task's own repository from the
+		// planning task's base, as before goals kept bases. A repository with
+		// neither has no commit to start from: never another repository's.
+		bases := map[string]string{}
+		if b, ok := scope["bases"].(map[string]any); ok {
+			for r, v := range b {
+				if c, ok := v.(string); ok {
+					bases[r] = c
+				}
+			}
+		}
+		baseOf := func(repo string) string {
+			if b := bases[repo]; b != "" {
+				return b
+			}
+			if repo == d.repo {
+				return d.base
+			}
+			return ""
+		}
+		for i, pt := range p.Tasks {
+			if baseOf(pt.Repo) == "" {
+				return refuse(fmt.Sprintf("tasks[%d]: the goal recorded no commit of %s to start from", i, pt.Repo))
+			}
+		}
 		var made, asked []string // cards this round made; questions asked before
 		for i, q := range p.Questions {
 			if ask == nil {
@@ -190,7 +216,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 				return err
 			}
 			tasks = append(tasks, TaskProposal{Ref: pt.Ref, OffPlanReason: "planned by task " + taskID, Role: "implement",
-				Class: "goal", Title: pt.Title, SpecArtifact: id, Effect: "branch", Repo: pt.Repo, BaseCommit: d.base,
+				Class: "goal", Title: pt.Title, SpecArtifact: id, Effect: "branch", Repo: pt.Repo, BaseCommit: baseOf(pt.Repo),
 				DependsOn: pt.DependsOn})
 		}
 		if err = checkBatch(tasks); err != nil {

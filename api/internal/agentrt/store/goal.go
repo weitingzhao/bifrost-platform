@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,14 +31,15 @@ import (
 // task are written together or not at all).
 
 // Goal is a goal to propose: its first line as the title, its text, the
-// repository it is about, and how to read the commit of that repository's
-// main the plan starts from.
+// repositories it is about (the Owner 10-19, T26: a goal may name several),
+// and how to read the commit of a repository's main its tasks start from.
 type Goal struct {
-	Title, Text, Repo string
-	Main              func(context.Context) (string, error)
+	Title, Text string
+	Repos       []string
+	Main        func(ctx context.Context, repo string) (string, error)
 }
 
-// ErrNoMain: the repository's main could not be read for a new goal.
+// ErrNoMain: a repository's main could not be read for a new goal.
 var ErrNoMain = errors.New("store: the repository's main branch cannot be read")
 
 // GoalSuccess is a goal's mission's success criterion until its plan names
@@ -47,35 +49,73 @@ const GoalSuccess = "the goal's plan is accepted and every task it splits into i
 // PlanOffPlanReason is why a goal's tasks are off the plan tree.
 const PlanOffPlanReason = "a goal from the Console, planned by the chief of staff's seat; the runtime has no plan tree yet"
 
+// GoalMaxRepos is how many repositories one goal may name: its planning task
+// has the first checked out and the others beside it, and agentd places at
+// most four siblings.
+const GoalMaxRepos = 5
+
+// CheckGoalRepos is repos as a goal names them, sorted: at least one, at most
+// GoalMaxRepos, each a repository the runtime knows (Repos), none twice.
+func CheckGoalRepos(repos []string) ([]string, error) {
+	if len(repos) == 0 {
+		return nil, invalid("a goal may name %s, not none", strings.Join(RepoNames(), ", "))
+	}
+	if len(repos) > GoalMaxRepos {
+		return nil, invalid("a goal names at most %d repositories, not %d", GoalMaxRepos, len(repos))
+	}
+	out := slices.Clone(repos)
+	slices.Sort(out)
+	for i, r := range out {
+		if _, ok := Repos[r]; !ok {
+			return nil, invalid("a goal may name %s, not %q", strings.Join(RepoNames(), ", "), r)
+		}
+		if i > 0 && out[i-1] == r {
+			return nil, invalid("a goal names %s twice", r)
+		}
+	}
+	return out, nil
+}
+
 // ProposeGoal records a goal's mission and its planning task. The key's
-// request is the goal and its repository; a key that has an answer gets it
-// without main being read (review 216 B1). Main is read once for a new key,
-// outside the transaction, and is the base of the first answer, as the
-// snapshot is.
+// request is the goal and its repositories (a goal of one repository is keyed
+// as before, by repo); a key that has an answer gets it without main being
+// read (review 216 B1). Each repository's main is read once for a new key,
+// outside the transaction: the commits are the bases of the first answer, as
+// the snapshot is, and the mission keeps them (scope_json.bases) for the
+// tasks its plan makes in each repository. The planning task has the first
+// repository checked out at its base and the others beside it, at their main.
 func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[string]any, error) {
 	if key == "" {
 		return nil, invalid("an idempotency key is required")
 	}
-	if _, ok := Repos[g.Repo]; !ok {
-		return nil, invalid("a goal may name %s, not %q", strings.Join(RepoNames(), ", "), g.Repo)
+	repos, err := CheckGoalRepos(g.Repos)
+	if err != nil {
+		return nil, err
 	}
 	if g.Title == "" || g.Text == "" || g.Main == nil {
 		return nil, invalid("a goal has a title, a text and a reader for main")
 	}
-	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: []string{g.Repo}, Success: []string{GoalSuccess}}.check()
+	bases := map[string]string{}
+	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: repos, Success: []string{GoalSuccess}, bases: bases}.check()
 	if err != nil {
 		return nil, err
 	}
 	title := cutRunes("Plan: "+g.Title, maxTaskTitle)
-	var base string
 	readMain := func(ctx context.Context) error {
-		var err error
-		if base, err = g.Main(ctx); err != nil || base == "" {
-			return fmt.Errorf("%w: %s: %v", ErrNoMain, g.Repo, err)
+		for _, r := range repos {
+			base, err := g.Main(ctx, r)
+			if err != nil || base == "" {
+				return fmt.Errorf("%w: %s: %v", ErrNoMain, r, err)
+			}
+			bases[r] = base
 		}
 		return nil
 	}
-	return idempotentAs(ctx, db, w, "goals", key, map[string]any{"goal": g.Text, "repo": g.Repo}, readMain,
+	request := map[string]any{"goal": g.Text, "repo": repos[0]}
+	if len(repos) > 1 {
+		request = map[string]any{"goal": g.Text, "repos": repos}
+	}
+	return idempotentAs(ctx, db, w, "goals", key, request, readMain,
 		func(tx pgx.Tx) (map[string]any, error) {
 			m, err := proposeMissionTx(ctx, tx, w, mp, "", nil)
 			if err != nil {
@@ -86,7 +126,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 			if err != nil {
 				return nil, err
 			}
-			spec, err := planSpec(g, base, mission, snap)
+			spec, err := planSpec(g, repos, bases, mission, snap)
 			if err != nil {
 				return nil, err
 			}
@@ -95,7 +135,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 				return nil, err
 			}
 			plan := []TaskProposal{{Ref: "plan", OffPlanReason: PlanOffPlanReason, Role: "plan", Class: "goal", Title: title,
-				SpecArtifact: specID, Effect: "none", Repo: g.Repo, BaseCommit: base}}
+				SpecArtifact: specID, Effect: "none", Repo: repos[0], BaseCommit: bases[repos[0]]}}
 			if err = checkBatch(plan); err != nil {
 				return nil, err
 			}
@@ -104,7 +144,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 				return nil, err
 			}
 			out := map[string]any{"mission_id": mission, "mission_state": m["state"], "task_id": firstTaskID(t),
-				"repo": g.Repo, "base_commit": base, "spec_artifact_id": specID}
+				"repo": repos[0], "base_commit": bases[repos[0]], "repos": repos, "bases": anyMap(bases), "spec_artifact_id": specID}
 			if why, ok := m["waiting"]; ok {
 				out["waiting"] = why
 			}
@@ -288,19 +328,40 @@ func oneLineRunes(s string, n int) string {
 
 // planSpec is a planning task's spec: the goal, the snapshot, the principles
 // and the format of the plan (ParsePlan reads it back), as canonical JSON with
-// no checks: a plan is checked by the controller, not by commands.
-func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
-	text := "# Plan: " + g.Title + "\n\nThe Owner's goal, typed in the Console (mission " + mission + ", repository " + g.Repo + "):\n\n" +
+// no checks: a plan is checked by the controller, not by commands. A goal of
+// several repositories has the first checked out and the others beside it as
+// siblings, at their main, for the planner to read.
+func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot string) ([]byte, error) {
+	first := repos[0]
+	where := "repository " + first
+	read := "Read this repository as you need to (it is checked out here at " + bases[first] + "); do not edit anything.\n\n"
+	scope := "- Every task is in " + first + ", the goal's repository, and runs its checks listed above. " + ownChecks(Repos[first])
+	if len(repos) > 1 {
+		where = "repositories " + strings.Join(repos, ", ")
+		var beside, own []string
+		for _, r := range repos[1:] {
+			beside = append(beside, fmt.Sprintf("%s is beside it, at ../%s (the head of its main; its tasks start from %s)", r, r, bases[r]))
+		}
+		for _, r := range repos {
+			own = append(own, "  - "+r+": "+ownChecksOf(Repos[r]))
+		}
+		read = "Read these repositories as you need to: " + first + " is checked out here at " + bases[first] + "; " +
+			strings.Join(beside, "; ") + ". Do not edit anything.\n\n"
+		scope = "- Every task is in one of the goal's repositories and runs that repository's checks listed above; a change that\n" +
+			"  spans repositories is one task in each, ordered with depends_on. Checks of a plan's own, by repository:\n" +
+			strings.Join(own, "")
+	}
+	text := "# Plan: " + g.Title + "\n\nThe Owner's goal, typed in the Console (mission " + mission + ", " + where + "):\n\n" +
 		g.Text + "\n\n---\n## Your seat\n\n" +
 		"You are the chief of staff's planner. The Owner sets goals, sets rules and decides what cannot be undone; everything else is\n" +
 		"yours and the agents', and he audits it afterwards. Turn this goal into a plan the agents can carry out without him:\n" +
 		"what counts as done, what is out of scope, the tasks it splits into, the questions only he can answer and the choices you\n" +
-		"made. Read this repository as you need to (it is checked out here at " + base + "); do not edit anything.\n\n" +
+		"made. " + read +
 		"## What the runtime knows now\n\n" + snapshot + "\n" +
 		"## How to plan\n\n" +
 		"- Each task is one change an implementer can make and hand in on its own: say what to change and why, where (files,\n" +
 		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
-		"- Every task is in " + g.Repo + ", the goal's repository, and runs its checks listed above. " + ownChecks(Repos[g.Repo]) +
+		scope +
 		"- Ask the Owner only what is his: a goal he left open, a rule, something that cannot be undone. Give 2 to 4 options and the\n" +
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +
@@ -308,8 +369,8 @@ func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 		"## What to hand in\n\n" +
 		"Your final message is your report: a few lines on the plan, then exactly one fenced block ```json holding:\n\n" +
 		"    {\"mission\": {\"success\": [\"...\"], \"out_of_scope\": [\"...\"], \"max_attempts\": 10, \"max_wall_hours\": 24},\n" +
-		"     \"tasks\": [{\"ref\": \"t1\", \"title\": \"...\", \"repo\": \"" + g.Repo + "\", \"text\": \"...\",\n" +
-		"                \"verify\": " + verifyExample(Repos[g.Repo]) + ", \"depends_on\": []}],\n" +
+		"     \"tasks\": [{\"ref\": \"t1\", \"title\": \"...\", \"repo\": \"" + first + "\", \"text\": \"...\",\n" +
+		"                \"verify\": " + verifyExample(Repos[first]) + ", \"depends_on\": []}],\n" +
 		"     \"questions\": [{\"question\": \"...\", \"body\": \"...\", \"options\": [\"...\", \"...\"], \"recommended\": 1,\n" +
 		"                    \"meanwhile\": \"what goes on until he answers\", \"owner_duty\": \"goal\"}],\n" +
 		"     \"decisions\": [{\"decision\": \"...\", \"why\": \"...\", \"dropped\": \"...\", \"reverse\": \"...\"}]}\n\n" +
@@ -318,7 +379,15 @@ func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 		"verify holds only the checks you add (maybe none). questions: up to " + fmt.Sprint(PlanMaxQuestions) + "; recommended is the\n" +
 		"1-based option; owner_duty is goal, rule or irreversible. decisions: up to " + fmt.Sprint(PlanMaxDecisions) + ". The controller\n" +
 		"checks the block; one that does not read blocks this task and the Owner sees why.\n"
-	return canon.Encode(map[string]any{"text": text})
+	spec := map[string]any{"text": text}
+	if len(repos) > 1 {
+		sibs := make([]any, 0, len(repos)-1)
+		for _, r := range repos[1:] {
+			sibs = append(sibs, map[string]any{"repo": r, "ref": "main"})
+		}
+		spec["siblings"] = sibs
+	}
+	return canon.Encode(spec)
 }
 
 // ownChecks says which checks of its own a plan may add to a task in repo:
@@ -331,6 +400,15 @@ func ownChecks(repo Repo) string {
 	return "Add a check only when it proves this task:\n" +
 		"  a test of the package you change, written exactly as `go -C " + strings.Join(repo.TestDirs, "|") +
 		" test [-run <pattern>] ./<package path>` (nothing else is taken).\n"
+}
+
+// ownChecksOf is ownChecks for one repository of several.
+func ownChecksOf(repo Repo) string {
+	if len(repo.TestDirs) == 0 {
+		return "none: leave verify empty.\n"
+	}
+	return "a test of the package you change, only when it proves the task, written exactly as\n" +
+		"    `go -C " + strings.Join(repo.TestDirs, "|") + " test [-run <pattern>] ./<package path>` (nothing else is taken).\n"
 }
 
 // verifyExample is the verify of the plan format's example task.

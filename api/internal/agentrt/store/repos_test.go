@@ -159,14 +159,14 @@ func TestInfraGoalToImplementation(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner", Token: "admin"}
-	main := func(context.Context) (string, error) { return commitA, nil }
-	if _, err := store.ProposeGoal(ctx, w.rt, owner, "g0", store.Goal{Title: "x", Text: "x", Repo: "bifrost-trade-api", Main: main}); !errors.Is(err, store.ErrInvalid) ||
+	main := func(context.Context, string) (string, error) { return commitA, nil }
+	if _, err := store.ProposeGoal(ctx, w.rt, owner, "g0", store.Goal{Title: "x", Text: "x", Repos: []string{"bifrost-trade-api"}, Main: main}); !errors.Is(err, store.ErrInvalid) ||
 		!strings.Contains(err.Error(), "may name bifrost-platform, bifrost-trade-infra, not \"bifrost-trade-api\"") {
 		t.Fatalf("an unknown repository: %v", err)
 	}
 	goal := func(key, repo string) (mission, plan string) {
 		t.Helper()
-		out, err := store.ProposeGoal(ctx, w.rt, owner, key, store.Goal{Title: "Test the probe", Text: "Test the probe", Repo: repo, Main: main})
+		out, err := store.ProposeGoal(ctx, w.rt, owner, key, store.Goal{Title: "Test the probe", Text: "Test the probe", Repos: []string{repo}, Main: main})
 		ok(t, err)
 		mission, plan = out["mission_id"].(string), out["task_id"].(string)
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "active", "test") }))

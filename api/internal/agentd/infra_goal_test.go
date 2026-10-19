@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -45,20 +46,33 @@ case "$*" in
 esac
 `
 
-// An infra goal end to end (CUT-runtime-repo-infra-2026-10-19), on a test
-// database behind the platform's routes: POST /goals names
-// bifrost-trade-infra; the planner's plan is recorded; its implementation's
-// spec is infra's; agentd runs the setup in the checkout before the executor
-// and pushes the change without the environment; the deterministic check
-// prepares the subject's setup on the pushed commit and runs infra's
-// command there, the environment first on PATH; the check passes and the
-// implementation goes to review.
-func TestInfraGoalToCheck(t *testing.T) {
-	const infra = "bifrost-trade-infra"
+// A goal of two repositories end to end (CUT-runtime-repo-infra-2026-10-19;
+// the Owner 10-19, T26: a goal may name several), on a test database behind
+// the platform's routes: POST /goals names bifrost-trade-infra and
+// bifrost-platform, each with a main of its own; the planner has the platform
+// checked out and infra beside it; its plan puts one task in each, and each
+// implementation's spec, checks and base are its own repository's; agentd
+// runs infra's setup in the checkout before the executor and pushes the
+// change without the environment; the deterministic check prepares the
+// subject's setup on the pushed commit and runs infra's command there, the
+// environment first on PATH; the check passes and the implementation goes to
+// review.
+func TestTwoRepoGoalToInfraCheck(t *testing.T) {
+	const infra, platform = "bifrost-trade-infra", "bifrost-platform"
 	env := gitEnvT(t.TempDir())
-	bare, baseCommit := bareRemote(t, env)
-	lsRemote := func(ref string) (string, error) {
-		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+	platformBare, platformBase := bareRemote(t, env)
+	infraBare, _ := bareRemote(t, env)
+	// infra's main moves on, so the two mains are different commits.
+	seed := filepath.Join(t.TempDir(), "seed")
+	sh(t, t.TempDir(), env, "git", "clone", "--quiet", infraBare, seed)
+	must(t, os.WriteFile(filepath.Join(seed, "INFRA.md"), []byte("# infra\n"), 0o600))
+	sh(t, seed, env, "git", "add", "INFRA.md")
+	sh(t, seed, env, "git", "commit", "--quiet", "-m", "infra")
+	sh(t, seed, env, "git", "push", "--quiet", "origin", "HEAD:refs/heads/main")
+	infraBase := sh(t, seed, env, "git", "rev-parse", "HEAD")
+	remotes := map[string]string{platform: platformBare, infra: infraBare}
+	lsRemote := func(repo, ref string) (string, error) {
+		out, err := exec.Command("git", "ls-remote", remotes[repo], ref).Output()
 		first, _, _ := strings.Cut(string(out), "\t")
 		return strings.TrimSpace(first), err
 	}
@@ -100,18 +114,18 @@ func TestInfraGoalToCheck(t *testing.T) {
 	must(t, err)
 	var mains []string
 	api := &agentrtapi.API{DB: pool, ClaimWait: 300 * time.Millisecond, ClaimPoll: 50 * time.Millisecond,
-		Head: func(_ context.Context, _, ref string) (string, error) { return lsRemote(ref) },
+		Head: func(_ context.Context, repo, ref string) (string, error) { return lsRemote(repo, ref) },
 		MainHead: func(_ context.Context, repo string) (string, error) {
 			mains = append(mains, repo)
-			return lsRemote("refs/heads/main")
+			return lsRemote(repo, "refs/heads/main")
 		}}
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, api) })
 	s := httptest.NewServer(r)
 	t.Cleanup(s.Close)
 
-	// The goal, as the Console sends it.
-	body, err := json.Marshal(map[string]string{"idempotency_key": "g1", "goal": "Test the T26 probe's summary", "repo": infra})
+	// The goal, as the Console sends it, naming both repositories.
+	body, err := json.Marshal(map[string]any{"idempotency_key": "g1", "goal": "Test the T26 probe's summary", "repos": []string{infra, platform}})
 	must(t, err)
 	req, err := http.NewRequest("POST", s.URL+"/api/v1/agentrt/goals", bytes.NewReader(body))
 	must(t, err)
@@ -122,7 +136,10 @@ func TestInfraGoalToCheck(t *testing.T) {
 	must(t, json.NewDecoder(resp.Body).Decode(&goal))
 	_ = resp.Body.Close()
 	mission, _ := goal["mission_id"].(string)
-	if resp.StatusCode != http.StatusOK || goal["repo"] != infra || goal["base_commit"] != baseCommit || !slices.Equal(mains, []string{infra}) {
+	wantBases := map[string]any{platform: platformBase, infra: infraBase}
+	if resp.StatusCode != http.StatusOK || goal["repo"] != platform || goal["base_commit"] != platformBase ||
+		fmt.Sprint(goal["repos"]) != fmt.Sprint([]any{platform, infra}) || fmt.Sprint(goal["bases"]) != fmt.Sprint(wantBases) ||
+		!slices.Equal(mains, []string{platform, infra}) {
 		t.Fatalf("the goal: %d %v (main read for %v)", resp.StatusCode, goal, mains)
 	}
 	tx(func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", mission, "active", "test") })
@@ -144,8 +161,10 @@ func TestInfraGoalToCheck(t *testing.T) {
 		return append(out, extra...)
 	}
 	planFile := filepath.Join(t.TempDir(), "plan.md")
-	must(t, os.WriteFile(planFile, []byte("One change.\n\n```json\n"+`{"mission": {"success": ["the probe's summary has a test"]},
-  "tasks": [{"ref": "t1", "title": "Test the probe's summary", "repo": "bifrost-trade-infra", "text": "Add scripts/agentrt/test_summary.py.", "verify": []}]}`+
+	must(t, os.WriteFile(planFile, []byte("Two changes, infra's first.\n\n```json\n"+`{"mission": {"success": ["the probe's summary has a test"]},
+  "tasks": [{"ref": "t1", "title": "Test the probe's summary", "repo": "bifrost-trade-infra", "text": "Add scripts/agentrt/test_summary.py.", "verify": []},
+    {"ref": "t2", "title": "Say so in the store", "repo": "bifrost-platform", "text": "Name the test in repos.go.",
+     "verify": [["go", "-C", "api", "test", "./internal/agentrt/store/"]], "depends_on": ["t1"]}]}`+
 		"\n```\n"), 0o600))
 	cursorScript := func(script string) agentd.Executor {
 		return func(a *agentd.Attempt) (agentd.Spawn, error) {
@@ -160,13 +179,14 @@ func TestInfraGoalToCheck(t *testing.T) {
 		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
 		return sp, perr
 	}
-	d := daemon(t, s.URL+"/api/v1/agentrt", nil, bare, env)
+	d := daemon(t, s.URL+"/api/v1/agentrt", nil, platformBare, env)
+	d.Remote = func(repo string) string { return remotes[repo] }
 	d.Executors["exec:deterministic"] = deterministic
-	run := func(tool agentd.Tool, role string, ex agentd.Executor) *agentd.Claimed {
+	run := func(tool agentd.Tool, role, repo string, ex agentd.Executor) *agentd.Claimed {
 		t.Helper()
 		d.Executors["exec:cursor"] = ex
 		cl, cerr := d.Client.Claim(ctx, 1, []agentd.Tool{tool})
-		if cerr != nil || cl == nil || cl.Role != role || cl.Repo != infra {
+		if cerr != nil || cl == nil || cl.Role != role || cl.Repo != repo {
 			t.Fatalf("claim of the %s: %+v %v", role, cl, cerr)
 		}
 		out, rerr := d.Run(ctx, cl)
@@ -176,8 +196,10 @@ func TestInfraGoalToCheck(t *testing.T) {
 		return cl
 	}
 
-	// The planner hands in the plan; the controller records it.
-	plan := run(cursor, "plan", cursorScript(`cat "`+planFile+`" > "$OUT/report.md"`))
+	// The planner, with the platform checked out at its base and infra beside
+	// it at its main, hands in the plan; the controller records it.
+	plan := run(cursor, "plan", platform, cursorScript(`test "$(git rev-parse HEAD)" = "`+platformBase+`" && `+
+		`test "$(git -C ../bifrost-trade-infra rev-parse HEAD)" = "`+infraBase+`" && cat "`+planFile+`" > "$OUT/report.md"`))
 	var cards []store.Card
 	ask := func(_ context.Context, c store.Card) (string, error) { cards = append(cards, c); return "q", nil }
 	if did, aerr := store.AcceptPlan(ctx, pool, plan.TaskID, ask, func(context.Context, string, string) error { return nil }); aerr != nil || did != "accepted" {
@@ -185,11 +207,33 @@ func TestInfraGoalToCheck(t *testing.T) {
 	}
 	_, err = store.Dispatch(ctx, pool)
 	must(t, err)
+	// One implementation in each repository, each with its repository's
+	// checks (and the plan's own, on the platform), setup and base.
+	rows, err := pool.Query(ctx, `SELECT t.repo, t.base_commit, t.state, convert_from(b.body, 'UTF8') FROM agentrt.task t
+	  JOIN agentrt.artifact_blob b ON b.artifact_id = t.spec_artifact_id WHERE t.mission_id = $1 AND t.role = 'implement' ORDER BY t.repo`, mission)
+	must(t, err)
+	type implRow struct{ repo, base, state, spec string }
+	var impls []implRow
+	for rows.Next() {
+		var r implRow
+		must(t, rows.Scan(&r.repo, &r.base, &r.state, &r.spec))
+		impls = append(impls, r)
+	}
+	rows.Close()
+	platformSpec, err := store.ImplementSpec("Say so in the store", "Name the test in repos.go.", store.Repos[platform],
+		append(slices.Clone(store.Repos[platform].Verify), []string{"go", "-C", "api", "test", "./internal/agentrt/store/"}))
+	must(t, err)
+	infraSpec, err := store.ImplementSpec("Test the probe's summary", "Add scripts/agentrt/test_summary.py.", store.Repos[infra], store.Repos[infra].Verify)
+	must(t, err)
+	if len(impls) != 2 || impls[0] != (implRow{platform, platformBase, "proposed", string(platformSpec)}) ||
+		impls[1] != (implRow{infra, infraBase, "ready", string(infraSpec)}) {
+		t.Fatalf("the implementations: %+v", impls)
+	}
 
 	// The implementation: its spec is infra's; the setup made the
 	// environment before the executor started; the change is pushed
 	// without it.
-	impl := run(cursor, "implement", cursorScript(`test -x .git/venv/bin/python3 && grep -q '^pip|' "$LOG" && mkdir -p scripts/agentrt && `+
+	impl := run(cursor, "implement", infra, cursorScript(`test -x .git/venv/bin/python3 && grep -q '^pip|' "$LOG" && mkdir -p scripts/agentrt && `+
 		`printf 'def test_summary():\n    pass\n' > scripts/agentrt/test_summary.py && printf '# done\n' > "$OUT/report.md"`))
 	spec, err := d.Client.GetArtifact(ctx, impl.SpecArtifact)
 	must(t, err)
@@ -199,9 +243,9 @@ func TestInfraGoalToCheck(t *testing.T) {
 	if !slices.EqualFunc(ts.Verify, repo.Verify, slices.Equal) || !slices.EqualFunc(ts.Setup, repo.Setup, slices.Equal) || len(ts.Siblings) != 0 {
 		t.Fatalf("the implementation's spec: %+v", ts)
 	}
-	pushed, err := lsRemote(impl.PushedRef)
+	pushed, err := lsRemote(infra, impl.PushedRef)
 	must(t, err)
-	if files := sh(t, t.TempDir(), env, "git", "--git-dir", bare, "diff", "--name-only", baseCommit, pushed); files != "scripts/agentrt/test_summary.py" {
+	if files := sh(t, t.TempDir(), env, "git", "--git-dir", infraBare, "diff", "--name-only", infraBase, pushed); files != "scripts/agentrt/test_summary.py" {
 		t.Fatalf("the pushed change: %q", files)
 	}
 
@@ -211,7 +255,7 @@ func TestInfraGoalToCheck(t *testing.T) {
 	if err != nil || check == "" {
 		t.Fatalf("verification: %q %v", check, err)
 	}
-	cl := run(agentd.Tool{Executor: "exec:deterministic", Provider: "local"}, "verify", nil)
+	cl := run(agentd.Tool{Executor: "exec:deterministic", Provider: "local"}, "verify", infra, nil)
 	if cl.TaskID != check {
 		t.Fatalf("claimed %s, not the check %s", cl.TaskID, check)
 	}

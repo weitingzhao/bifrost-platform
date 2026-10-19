@@ -237,6 +237,8 @@ type MissionProposal struct {
 	MaxAction           string // none or branch (the default); round 2 dispatches nothing above branch
 	MaxAttempts         int
 	MaxWallHours        int
+	// bases are a goal's, by repository (ProposeGoal); no route sets them.
+	bases map[string]string
 }
 
 // DefaultMissionDays is how long a mission runs when the proposal names no
@@ -398,7 +400,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 		return nil, err
 	}
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
-		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, MaxAction: p.MaxAction,
+		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
 		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
 		return nil, err
 	}

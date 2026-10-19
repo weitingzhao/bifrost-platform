@@ -35,8 +35,14 @@ export type RuntimeEvent = {
   seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
 }
 export type GoalResult = {
-  mission_id: string; mission_state: string; waiting: string; task_id: string; repo: string; base_commit: string; spec_artifact_id: string
+  mission_id: string; mission_state: string; waiting: string; task_id: string; repo: string; repos: string[]; base_commit: string
+  spec_artifact_id: string
 }
+/**
+ * The repositories a goal may name: the platform's `store.Repos` (a Go test,
+ * TestConsoleGoalReposAreTheRuntimes, reads this list and holds it to them).
+ */
+export const GOAL_REPOS = ['bifrost-platform', 'bifrost-trade-infra'] as const
 
 export function parseRuntimeTask(v: unknown): RuntimeTask {
   const r = record(v)
@@ -73,7 +79,8 @@ export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
 export function parseGoalResult(v: unknown): GoalResult {
   const r = record(v)
   return { mission_id: text(r.mission_id), mission_state: text(r.mission_state), waiting: text(r.waiting),
-    task_id: text(r.task_id), repo: text(r.repo), base_commit: text(r.base_commit), spec_artifact_id: text(r.spec_artifact_id) }
+    task_id: text(r.task_id), repo: text(r.repo), repos: strings(r.repos), base_commit: text(r.base_commit),
+    spec_artifact_id: text(r.spec_artifact_id) }
 }
 export async function fetchRuntimeProgress(signal?: AbortSignal): Promise<RuntimeProgress> {
   const r = await authedFetch('Agent runtime', '/api/v1/agentrt/progress', { signal })
@@ -114,9 +121,11 @@ async function goalError(prefix: string, response: Response, token = ''): Promis
   } catch { /* Non-JSON errors retain the HTTP status. */ }
   return new Error(signInSafeError(`${prefix}: ${message}`, token, response.status))
 }
-export async function submitRuntimeGoal(goal: string, key: string): Promise<GoalResult> {
+/** A goal of one repository is sent as repo, as before; of several, as repos. */
+export async function submitRuntimeGoal(goal: string, key: string, repos: readonly string[] = ['bifrost-platform']): Promise<GoalResult> {
+  const named = repos.length === 1 ? { repo: repos[0] } : { repos }
   const r = await authedFetch('Goal', '/api/v1/agentrt/goals', {
-    method: 'POST', body: JSON.stringify({ idempotency_key: key, goal, repo: 'bifrost-platform' }),
+    method: 'POST', body: JSON.stringify({ idempotency_key: key, goal, ...named }),
   }, goalError)
   const result = parseGoalResult(await r.json())
   if (!result.mission_id) throw new Error('Goal: invalid platform response; retry with the same goal.')

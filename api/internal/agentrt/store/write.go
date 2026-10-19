@@ -108,14 +108,16 @@ func UploadArtifact(ctx context.Context, db DB, w Writer, kind, mediaType string
 }
 
 // Mission is the part of a mission row the store writes at creation. The
-// success criteria, repos and budget are optional here (an empty list or a
-// zero is left out of the row's JSON); MaxAction defaults to branch and
-// Tenant to dev.
+// success criteria, repos, bases and budget are optional here (an empty list
+// or a zero is left out of the row's JSON); MaxAction defaults to branch and
+// Tenant to dev. Bases are a goal's: the commit of each repository's main its
+// tasks start from (scope_json.bases).
 type Mission struct {
 	ID, WorkID, Title, Goal string
 	Deadline                time.Time
 	Tenant, MaxAction       string
 	Success, Repos          []string
+	Bases                   map[string]string
 	MaxAttempts             int
 	MaxWallHours            int
 	Token                   string // the token that proposed it, when a route did (review 176 B2)
@@ -136,6 +138,9 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (App
 	scope := map[string]any{"max_action": m.MaxAction}
 	if len(m.Repos) > 0 {
 		scope["repos"] = m.Repos
+	}
+	if len(m.Bases) > 0 {
+		scope["bases"] = anyMap(m.Bases)
 	}
 	budget := map[string]any{}
 	if m.MaxAttempts > 0 {
@@ -376,4 +381,13 @@ func leaseAttemptWith(ctx context.Context, tx pgx.Tx, actor, missionID, taskID s
 	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8, clock_timestamp() + make_interval(secs => $9), clock_timestamp(), 'leased')`,
 		id, taskID, n, tl.Executor, nullable(hostID), nullable(tl.Model), nullable(tl.Provider), epoch, lease.Seconds())
 	return id, epoch, err
+}
+
+// anyMap is m as canonical JSON takes it.
+func anyMap(m map[string]string) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
