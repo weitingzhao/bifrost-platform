@@ -114,6 +114,8 @@ func (w *world) evaluate(t *testing.T, step string, d *deployments) string {
 
 // External facts are recorded when they change, once per change even when
 // several controllers see it at once.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestExternalFactsRecordChangesOnly(t *testing.T) {
 	w := newWorld(t)
 	for _, c := range []struct {
@@ -203,6 +205,7 @@ func TestExternalFactsRecordChangesOnly(t *testing.T) {
 // A step's done rule moves it once its facts hold, and only facts bound to
 // the step count (v5 §5.1.2).
 func TestStepRules(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	d := &deployments{}
 	w.rule(t, s1, `{"all":[{"approval_executed":16},{"question_answered":{"question":"Q3","option":"A"}},`+
@@ -326,6 +329,7 @@ func TestStepRules(t *testing.T) {
 // a new deployment takes a done step back to active; an unreadable delivery
 // record moves nothing; another test id, spec or environment never counts.
 func TestStandingGate(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	d := &deployments{}
 	spec := strings.Repeat("ab", 32)
@@ -401,6 +405,7 @@ func TestStandingGate(t *testing.T) {
 
 // RuledNodes lists live steps and architecture rows with a rule.
 func TestRuledNodes(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	w.rule(t, s1, `{"owner_signoff":"a"}`)
 	w.rule(t, s2, `{"owner_signoff":"b"}`)

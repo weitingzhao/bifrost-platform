@@ -50,6 +50,7 @@ func (w *world) taskWithAttempt(t *testing.T, step string) (string, string) {
 // A1: every gate of an environment is checked against one deployment, even
 // when the environment changes between two gates of the rule.
 func TestGatesShareOneDeployment(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	spec := strings.Repeat("ab", 32)
 	step := "R2:2.1-4"
@@ -75,6 +76,7 @@ func TestGatesShareOneDeployment(t *testing.T) {
 
 // B1: a gate counts only as a passing verification of method gate.
 func TestGateCountsOnlyPassingGates(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	spec := strings.Repeat("ab", 32)
 	step := "R2:2.1-4"
@@ -115,6 +117,7 @@ func (w *world) migration(t *testing.T, pool interface {
 // plan change that holds the step and then moves the tasks never closes a
 // cycle with them; they see the move and try again on the next pass.
 func TestAcceptanceWaitsForPlanChanges(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	impl := w.ready(t, store.Task{})
@@ -206,6 +209,7 @@ func (w *world) handCheck(t *testing.T, check, subject, attempt string, round in
 // review only after a deterministic pass of that attempt. Anything else
 // closes the check and moves nothing.
 func TestChecksAreAboutOneAttempt(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
@@ -252,6 +256,8 @@ func TestChecksAreAboutOneAttempt(t *testing.T) {
 }
 
 // B1: two controllers starting one verification start it once.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestStartVerificationOnce(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -287,6 +293,7 @@ func TestStartVerificationOnce(t *testing.T) {
 // A5: a source is read under its record's lock. A read that a newer one
 // overtakes is not recorded as a change back.
 func TestOutsideReadsUnderTheLock(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	_, err := store.SeeApproval(ctx, w.rt, 16, approvalIs("pending"))
@@ -334,6 +341,7 @@ func TestOutsideReadsUnderTheLock(t *testing.T) {
 
 // B2: an answered question is copied whole, or not at all.
 func TestAnswerIsCopiedWhole(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	_, err := store.SeeQuestion(ctx, w.rt, "Q3", questionIs(store.Question{Status: store.QuestionAnswered, Option: "A", AnsweredAt: "2026-10-14T12:00:00Z"}))
 	is(t, err, store.ErrState)
@@ -355,6 +363,7 @@ func TestAnswerIsCopiedWhole(t *testing.T) {
 // repo and task spec, and a checkout of that repo at that commit. A check
 // bound right counts whoever proposed it.
 func TestCheckVersionIsTheAttempts(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
 	first := w.run(t, "h1", cursor, "done")
@@ -384,6 +393,7 @@ func TestCheckVersionIsTheAttempts(t *testing.T) {
 // Review 152 A1: an attempt of an earlier round, still submitted, cannot
 // stand in for the current one by naming the current round.
 func TestOldAttemptCannotPoseAsCurrent(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")
@@ -412,6 +422,7 @@ func TestOldAttemptCannotPoseAsCurrent(t *testing.T) {
 // closed, a pinned verification takes its place; with another check open,
 // none is added.
 func TestClosedOnlyCheckIsReplaced(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	first := w.run(t, "h1", cursor, "done")

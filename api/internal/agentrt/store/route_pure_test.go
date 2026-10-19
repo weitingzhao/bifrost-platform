@@ -17,6 +17,7 @@ var (
 )
 
 func TestExclusionReasonsInOrder(t *testing.T) {
+	t.Parallel()
 	in := routeInput{job: "reviewer", core: "review_core", subject: "t_S", needs: []string{"gpu"},
 		facts: []restriction{
 			{id: "f1", executor: "exec:claude", kind: "cannot", subject: "gpu"},
@@ -47,6 +48,7 @@ func TestExclusionReasonsInOrder(t *testing.T) {
 }
 
 func TestNilProviders(t *testing.T) {
+	t.Parallel()
 	// A fact with no provider binds every provider of its executor.
 	in := routeInput{needs: []string{"gpu"}, facts: []restriction{{id: "f", executor: "exec:claude", kind: "must_not", subject: "gpu"}}}
 	if r := in.exclusion(Tool{Executor: "exec:claude", Provider: "other"}); len(r) != 1 {
@@ -60,6 +62,7 @@ func TestNilProviders(t *testing.T) {
 }
 
 func TestInputKeepsOnlyFactsOnTheTask(t *testing.T) {
+	t.Parallel()
 	cp := capabilities{candidates: map[string][]jobCandidate{"implementer": {{id: "c", status: "active", executor: "exec:claude",
 		provider: "anthropic", pattern: "*"}}},
 		facts: []restriction{
@@ -83,6 +86,7 @@ func TestInputKeepsOnlyFactsOnTheTask(t *testing.T) {
 }
 
 func TestPatternMustMatch(t *testing.T) {
+	t.Parallel()
 	jc := jobCandidate{executor: "exec:codex", provider: "openai", pattern: "gpt-*"}
 	if !jc.fits(codexTool) || jc.fits(Tool{Executor: "exec:codex", Provider: "openai", Model: "o3"}) {
 		t.Fatal("gpt-* must take gpt-x and not o3")
@@ -98,6 +102,7 @@ func TestPatternMustMatch(t *testing.T) {
 // The canonical record read back gives the same input, decision and
 // fingerprint; another algorithm's record is refused.
 func TestRecordReplays(t *testing.T) {
+	t.Parallel()
 	in := routeInput{job: "reviewer", subject: "t_S", needs: []string{"gpu"},
 		candidates: []jobCandidate{
 			{id: "a", status: "active", executor: "exec:claude", provider: "anthropic", pattern: "*", version: 3,
@@ -141,6 +146,7 @@ func TestRecordReplays(t *testing.T) {
 // W-31 2.4 slice ② ⑤: below the threshold over enough samples is out; with
 // too few, a candidate on probation takes no core work; no threshold, no step.
 func TestUnfit(t *testing.T) {
+	t.Parallel()
 	cm := &competence{threshold: threshold{minPercent: 40, minSamples: 5}, samples: map[string]sample{
 		"low": {attempts: 10, firstPass: 2}, "high": {attempts: 10, firstPass: 9}, "few": {attempts: 2, firstPass: 2}}}
 	core, plain := routeInput{core: "author_core", competence: cm}, routeInput{competence: cm}

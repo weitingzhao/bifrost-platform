@@ -72,6 +72,7 @@ func (w *world) sample(t *testing.T, executor, provider string) string {
 }
 
 func TestWilson(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		k, n int
 		want float64
@@ -86,6 +87,7 @@ func TestWilson(t *testing.T) {
 // attempt; first pass only in round 1 at attempt 1; rework when it took more
 // rounds; a computation is made only when a task ended since the last one.
 func TestInJobScores(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.conclude(t, "h1", codex, "accepted") // first pass
@@ -121,6 +123,7 @@ func TestInJobScores(t *testing.T) {
 // Review 286 B2: work blocked as failed counts as a failure; a task blocked
 // for another reason counts for nobody.
 func TestFailedWorkCounts(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.conclude(t, "h1", codex, "accepted")
@@ -138,6 +141,7 @@ func TestFailedWorkCounts(t *testing.T) {
 // Review 286 B1: one executor and model under two providers in one
 // computation: both samples kept, nothing rolled back.
 func TestTwoProvidersOfOneModel(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	other := store.Tool{Executor: "exec:claude", Provider: "cursor-mix", Model: "opus"}
 	w.ready(t, store.Task{})
@@ -154,6 +158,7 @@ func TestTwoProvidersOfOneModel(t *testing.T) {
 // Review 286 B3: an outcome whose transaction took its event id first and
 // commits after a later one's computation is counted by the next.
 func TestALateOutcomeIsCounted(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test") }))
 	w.ready(t, store.Task{})
@@ -184,6 +189,7 @@ func TestALateOutcomeIsCounted(t *testing.T) {
 // Review 286 B4: a computation whose earliest sample leaves the window is made
 // again, with nothing new, and drops it.
 func TestASampleLeavesTheWindow(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	task := w.conclude(t, "h1", codex, "failed")

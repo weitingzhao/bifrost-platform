@@ -77,6 +77,7 @@ func (w *world) finish(t *testing.T, task, host string, tool store.Tool, conclus
 // the review's pass accepts the lost attempt, cancels the new one in the same
 // transaction, and accepts the task, with one accepting verification.
 func TestAdoptSalvagedResult(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task, old, fresh := w.salvagedTask(t, true)
 	pending, err := store.PendingSalvaged(ctx, w.rt)
@@ -165,6 +166,8 @@ func (w *world) cancellations(t *testing.T) int {
 
 // The acceptance is one transaction: a failure after the cancellation was
 // written leaves nothing of it, and the next pass accepts.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestAdoptRollsBackWhole(t *testing.T) {
 	w := newKernelWorld(t)
 	task, old, fresh := w.salvagedTask(t, true)
@@ -204,6 +207,7 @@ func TestAdoptRollsBackWhole(t *testing.T) {
 // With no attempt running the task is accepted from ready; a salvaged result
 // that fails its check moves nothing and is not checked again.
 func TestAdoptWithoutALiveAttemptAndFailing(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task, old, _ := w.salvagedTask(t, false)
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
@@ -250,6 +254,8 @@ func (w *world) checker2(t *testing.T, subject, role string) string {
 
 // The new attempt's submit and the acceptance meet: whichever takes the new
 // attempt's row first wins, and the task ends with one result either way.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestAdoptRacesTheNewAttempt(t *testing.T) {
 	for _, first := range []string{"acceptance", "submit"} {
 		t.Run(first, func(t *testing.T) {
@@ -324,6 +330,8 @@ func TestAdoptRacesTheNewAttempt(t *testing.T) {
 // A new attempt that is claimed after the acceptance looked for a live
 // attempt, and before it locked the task, is not left running under an
 // accepted task: the acceptance waits for the next pass, which cancels it.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestAdoptLiveAttemptAppears(t *testing.T) {
 	w := newKernelWorld(t)
 	task, old, _ := w.salvagedTask(t, false)
@@ -362,6 +370,7 @@ func TestAdoptLiveAttemptAppears(t *testing.T) {
 // its check, so the task is ready again in the next round) is not checked:
 // the task went on without it.
 func TestNoSalvageCheckAfterALaterSubmit(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task := w.ready(t, store.Task{})
 	old := w.claim(t, "h1", -store.Grace-time.Second, codex)
@@ -433,6 +442,7 @@ func (w *world) handSalvage(t *testing.T, check, subject, attempt string, round 
 // is not the attempt's, it closes and moves nothing. (A review with no
 // deterministic pass at all is closed by the check every review meets.)
 func TestHandSalvagePins(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(t *testing.T, w *world) (task, check string){
 		"after a later submit": func(t *testing.T, w *world) (string, string) {
 			task := w.ready(t, store.Task{})
@@ -531,6 +541,7 @@ func TestHandSalvagePins(t *testing.T) {
 // A salvaged result whose review fails moves nothing: the new attempt runs
 // on, and nothing is accepted.
 func TestSalvageReviewFails(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task, old, fresh := w.salvagedTask(t, true)
 	v, err := store.StartSalvageCheck(ctx, w.rt, old)
@@ -571,6 +582,8 @@ func (w *world) passedSalvage(t *testing.T) (task, old string) {
 // Two controller passes at once: the first holds its lock at the point the
 // second must wait on, and lets go once the second waits there: one check
 // of a salvaged result, one acceptance, one cancelled attempt.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestAdoptTwoPassesAtOnce(t *testing.T) {
 	w := newKernelWorld(t)
 	task, old, fresh := w.salvagedTask(t, true)

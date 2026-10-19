@@ -19,6 +19,7 @@ const concurrencyHead = "rule_id: concurrency\nrule_version: %d\ndirection: %s\n
 // Without a concurrency rule in force nothing is dispatched (proposal §2:
 // the strictest default is 0); a tightening to 0 stops dispatch at once.
 func TestConcurrencyRule(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h1", "dev"))
@@ -48,6 +49,7 @@ func TestConcurrencyRule(t *testing.T) {
 // says (its text and body_json agree), so a fixture cannot drift from the
 // parser.
 func TestFixtureRule(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	r := inForce(t, w, "concurrency", time.Now())
 	if r == nil || *r.PerHost != 1 {
@@ -77,6 +79,7 @@ hosts: [`+hosts+`]
 // budget the budget rule's when it states none; one outside it waits and
 // says why. Its tasks go only to the envelope's hosts and executors.
 func TestEnvelopeStartsMission(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1, h2"))))

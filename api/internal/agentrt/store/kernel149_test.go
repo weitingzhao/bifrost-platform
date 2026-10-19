@@ -13,6 +13,8 @@ import (
 
 // A1: a plan change that moves a candidate to another mission between the
 // claim's read and its lock makes the claim skip it.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestClaimSkipsATaskMovedToAnotherMission(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -46,6 +48,8 @@ func TestClaimSkipsATaskMovedToAnotherMission(t *testing.T) {
 // A2: independence holds at the moment of the lease. An author attempt of
 // the subject that lands after the reviewer picked its tool makes the review
 // refuse; while the reviewer holds the subject, no author attempt lands.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestReviewIndependenceUnderTheSubjectLock(t *testing.T) {
 	// codex cannot commit (seed), so it passes over the subject, which needs
 	// to, and reviews it; cursor writes it. This reviewer shares cursor's
@@ -100,6 +104,8 @@ func TestReviewIndependenceUnderTheSubjectLock(t *testing.T) {
 // B1: writes take their row locks before their stream. A review proposed
 // while a claim holds its subject waits for the claim instead of closing a
 // cycle with it.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestProposeDuringAClaimDoesNotDeadlock(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -133,6 +139,8 @@ func TestProposeDuringAClaimDoesNotDeadlock(t *testing.T) {
 
 // B2: a sweep holds one attempt, and so one stream, at a time. While one
 // sweep is inside an attempt of M-1, another moves an attempt of M-2.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestSweepHoldsOneStreamAtATime(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -212,6 +220,7 @@ func TestSweepHoldsOneStreamAtATime(t *testing.T) {
 
 // Coverage review 149 B3 listed as still missing.
 func TestKernelBranches149(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 
 	// Core review work with no holder of only review_core goes to nobody.

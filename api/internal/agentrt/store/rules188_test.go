@@ -52,6 +52,8 @@ func within[T any](ch <-chan T, d time.Duration) (T, bool) {
 // R1: while a new thread's control holds the system stream, a rule write by
 // a registered writer does not wait for it (its events go to the rule's own
 // stream), so a claim on the control's host finishes too; then the control.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestRuleWriteDoesNotWaitForARegistration(t *testing.T) {
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
@@ -86,6 +88,8 @@ func TestRuleWriteDoesNotWaitForARegistration(t *testing.T) {
 
 // R1: a rule write by another new thread waits for the registration lock
 // before it takes the capability lock, so a claim does not wait behind it.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestRuleWriteRegistersBeforeTheCapabilityLock(t *testing.T) {
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}

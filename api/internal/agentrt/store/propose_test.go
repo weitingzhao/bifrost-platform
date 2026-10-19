@@ -63,6 +63,7 @@ var mission = store.MissionProposal{Title: "m", Goal: "g", Success: []string{"it
 // first write, with the token that wrote; a retry answers from the key; a
 // bad proposal writes nothing at all.
 func TestProposeMission(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", mission, nil)
 	ok(t, err)
@@ -150,6 +151,7 @@ func TestProposeMission(t *testing.T) {
 // its first answer; the same key with another deadline is a conflict; a new
 // proposal past its deadline is refused and writes nothing.
 func TestMissionDeadlineRetry(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	p := mission
 	p.Deadline = time.Now().Add(300 * time.Millisecond)
@@ -174,6 +176,7 @@ func TestMissionDeadlineRetry(t *testing.T) {
 // Review 175 B3: thread registrations are bounded per day; threads already
 // registered go on writing.
 func TestThreadRegistrationBound(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	_, err := store.ProposeMission(ctx, w.rt, wr("thread:known"), "k1", mission, nil)
 	ok(t, err)
@@ -195,6 +198,8 @@ func TestThreadRegistrationBound(t *testing.T) {
 // them): the second runs while the first holds its number; with the number
 // lock it waits, and the two get two numbers (without it the two would take
 // the same number and one would fail).
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestMissionNumberLock(t *testing.T) {
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -267,6 +272,7 @@ func taskIDs(out map[string]any) map[string]string {
 // through the store); dependencies are refs of the batch or tasks of the
 // mission.
 func TestProposeTasks(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	existing := w.ready(t, store.Task{})
 	b := proposal("b", w.spec, "a")
@@ -374,6 +380,7 @@ func TestProposeTasks(t *testing.T) {
 // becomes ready with its route; one waiting stays proposed; one whose
 // dependency was cancelled is blocked; tasks of a mission not active wait.
 func TestDispatch(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1",
 		[]store.TaskProposal{proposal("a", w.spec), proposal("b", w.spec, "a"), proposal("d", w.spec), proposal("c", w.spec, "d")})
@@ -428,6 +435,8 @@ func TestDispatch(t *testing.T) {
 // Dispatch re-reads the mission under its lock: a mission paused after the
 // pass listed its tasks gets neither a task readied nor one blocked (review
 // 175 B2).
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestDispatchRechecksMission(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -459,6 +468,7 @@ func TestDispatchRechecksMission(t *testing.T) {
 // at: with more waiting tasks than a page, a later task with nothing to wait
 // for is ready after one pass.
 func TestDispatchPages(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	gate, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "gate", "M-1", []store.TaskProposal{proposal("gate", w.spec)})
@@ -485,6 +495,7 @@ func TestDispatchPages(t *testing.T) {
 // task was readied, it is refused; added while Dispatch waits for the task,
 // Dispatch sees it and leaves the task proposed.
 func TestDependencyAgainstDispatch(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	// x first, so it is the first task Dispatch looks at.
@@ -526,6 +537,8 @@ func TestDependencyAgainstDispatch(t *testing.T) {
 // Review 175 A2: a batch with dependencies and another dependency of the
 // same mission at once do not deadlock: the batch holds the graph lock
 // before its first event, so the other waits for it and both commit.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestBatchAgainstDependency(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -571,6 +584,8 @@ func TestBatchAgainstDependency(t *testing.T) {
 // Review 176 A1: a batch and a control of the same writer at once (the batch
 // depending on the task the control stops) both commit: each takes the
 // writer before any row.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestBatchAndControlOfOneWriter(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -609,6 +624,7 @@ func TestBatchAndControlOfOneWriter(t *testing.T) {
 // Review 176 A2: a batch depending on tasks a verification holds (subject
 // and check, in either id order) does not wait for them.
 func TestBatchAgainstHeldTasks(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	a, b := w.ready(t, store.Task{}), w.ready(t, store.Task{})
@@ -634,6 +650,8 @@ func TestBatchAgainstHeldTasks(t *testing.T) {
 
 // Review 176 B1: the day's bound holds for registrations at once: with one
 // left, of two new threads at once one is registered.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestThreadQuotaAtOnce(t *testing.T) {
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -685,6 +703,7 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 // not only the first write of a thread; a thread writes with the token it
 // first wrote with (TD-370; session_test.go has the rest).
 func TestTokenOnEveryWrite(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "first"}, "k1", mission, nil)
 	ok(t, err)
@@ -712,6 +731,7 @@ func TestTokenOnEveryWrite(t *testing.T) {
 // Review 176 part 2 A1: a full day of registrations does not keep a new
 // session from stopping work; it still keeps it from proposing.
 func TestControlsPastThreadQuota(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
 	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay))
@@ -725,6 +745,7 @@ func TestControlsPastThreadQuota(t *testing.T) {
 // again, so a short hold costs a retry; a hold longer than the tries is
 // ErrBusy, with nothing written.
 func TestBatchRetriesBusyStep(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	hold := func(d time.Duration) {

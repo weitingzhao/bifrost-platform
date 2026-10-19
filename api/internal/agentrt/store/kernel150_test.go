@@ -15,6 +15,7 @@ import (
 // for it, so a plan change that moves the subject and then the review never
 // closes a cycle with the claim.
 func TestReviewClaimDoesNotWaitForItsSubject(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	subject := store.NewTaskID()
@@ -63,6 +64,7 @@ func TestReviewClaimDoesNotWaitForItsSubject(t *testing.T) {
 // B2: attempts a writer holds do not hide the ones after them from the
 // sweep.
 func TestSweepReadsPastHeldAttempts(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	lease := func(ago time.Duration) string {

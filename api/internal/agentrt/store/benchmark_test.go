@@ -30,6 +30,7 @@ func benchRun(id string, passes, fails int) store.BenchmarkRun {
 // of (an unrunnable question counts for nobody), and refused when it does not
 // read as a run.
 func TestBenchmarkRecord(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	run := benchRun("run-a-000001", 2, 1)
 	out, err := store.RecordBenchmark(ctx, w.rt, "h1", run)
@@ -77,6 +78,7 @@ func TestBenchmarkRecord(t *testing.T) {
 // competence step: codex failing every go question is not routed go work,
 // and routed again once a newer run passes them.
 func TestBenchmarkCountsForCompetence(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.legacy(t, routingRule(1, 30, 3))
 	// The run's classes are languages; the task's class is another: the
@@ -108,6 +110,7 @@ func TestBenchmarkCountsForCompetence(t *testing.T) {
 // the first record and another under its id is refused; the run that started
 // last stands, whenever it was handed in.
 func TestBenchmarkIdentityAndOrder(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h2", "dev"))
 	first, err := store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-d-000001", 1, 1))

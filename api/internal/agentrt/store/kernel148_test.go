@@ -22,6 +22,7 @@ type claimed struct {
 // A2: a pause, a stop or a drain that commits while a claim is between
 // reading its candidates and locking them is seen by that claim.
 func TestClaimSeesAControlThatLandsMidway(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name, waits string
 		set         func(tx pgx.Tx) error
@@ -82,6 +83,7 @@ func TestClaimSeesAControlThatLandsMidway(t *testing.T) {
 // clock; a wait for the task row that crosses the deadline is refused and
 // leaves no event, no state change and no idempotency key.
 func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	const taskLock = "FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE"
@@ -137,6 +139,7 @@ func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 
 // A4: external work is not dispatched in round 2.
 func TestExternalWorkIsNotDispatched(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{Effect: "external"})
 	c, err := store.ClaimNext(ctx, w.rt, store.ClaimRequest{HostID: "h1", FreeSlots: 1, Tools: []store.Tool{codex, claude, cursor}})
@@ -148,6 +151,8 @@ func TestExternalWorkIsNotDispatched(t *testing.T) {
 
 // B1: a candidate the claim looks at and does not take is unlocked before
 // the claim goes on.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestSkippedCandidateHoldsNothing(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -186,6 +191,7 @@ func TestSkippedCandidateHoldsNothing(t *testing.T) {
 
 // B2: the claim reads past a full page of candidates it may not take.
 func TestClaimLooksPastAFullPage(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for i := 0; i < 100; i++ {
 		w.ready(t, store.Task{Needs: []string{"git_commit"}})
@@ -199,6 +205,7 @@ func TestClaimLooksPastAFullPage(t *testing.T) {
 // B3: stale attempts within their grace do not crowd a newly lapsed one out
 // of the sweep.
 func TestSweepIsNotCrowdedByStaleAttempts(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		for i := 0; i < 100; i++ {
@@ -230,6 +237,7 @@ func TestSweepIsNotCrowdedByStaleAttempts(t *testing.T) {
 // B4: a review of core work is core work even when its proposer left Core
 // out.
 func TestReviewOfCoreWorkIsCore(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	core := w.ready(t, store.Task{Core: true})
 	if c := w.claim(t, "h1", store.LeaseTTL, claude); c == nil || c.TaskID != core {
@@ -246,6 +254,7 @@ func TestReviewOfCoreWorkIsCore(t *testing.T) {
 
 // B5: branches the first tests did not reach.
 func TestKernelBranches(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 

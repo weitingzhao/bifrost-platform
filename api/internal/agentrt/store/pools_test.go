@@ -49,6 +49,7 @@ func (w *world) ledger(t *testing.T, attempt string) map[string]float64 {
 }
 
 func TestRefusalCoolsThePoolAndClaimsPassTheToolBy(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	f := w.started(t, "h1", cursor)
@@ -78,6 +79,7 @@ func TestRefusalCoolsThePoolAndClaimsPassTheToolBy(t *testing.T) {
 }
 
 func TestAVendorReadingOfASpentWindowCoolsUntilItsReset(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	f := w.started(t, "h1", codex)
@@ -110,6 +112,7 @@ func TestAVendorReadingOfASpentWindowCoolsUntilItsReset(t *testing.T) {
 }
 
 func TestARefusalNeverShortensACooldownButTheOwnerMay(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	long, short := time.Now().Add(10*time.Hour).UTC().Truncate(time.Second), time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	// Both attempts run before either is refused: once one is, claude takes nothing more.
@@ -149,6 +152,7 @@ func TestARefusalNeverShortensACooldownButTheOwnerMay(t *testing.T) {
 }
 
 func TestTheOwnerReadingIsChecked(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner"}
 	reset := time.Now().Add(time.Hour)
@@ -174,6 +178,7 @@ func TestTheOwnerReadingIsChecked(t *testing.T) {
 // A report the platform cannot take never fails the ending (as a heartbeat's
 // actions, review 264 A1): another tool's pool, a fraction over 1.
 func TestABadReportIsDroppedAndTheAttemptIsComputed(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for i, e := range []store.Ending{
 		{Usage: &store.Usage{Pool: "codex:owner:weekly", Tokens: pv(int64(5))}},
@@ -203,6 +208,7 @@ func TestABadReportIsDroppedAndTheAttemptIsComputed(t *testing.T) {
 }
 
 func TestComputedWithUsageIsIdempotent(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	f := w.started(t, "h1", codex)
@@ -229,6 +235,7 @@ func TestComputedWithUsageIsIdempotent(t *testing.T) {
 }
 
 func TestListPoolsShowsPaceAndThisWindowsUsage(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	f := w.started(t, "h1", claude)
@@ -258,6 +265,7 @@ func TestListPoolsShowsPaceAndThisWindowsUsage(t *testing.T) {
 // Review 274 B6: a refusal handed over after the reset it named cools
 // nothing; one that named a reset past belief counts as naming none.
 func TestARefusalAfterItsResetCoolsNothing(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.ready(t, store.Task{})
@@ -280,6 +288,7 @@ func TestARefusalAfterItsResetCoolsNothing(t *testing.T) {
 // Review 274 B7: the Owner's "spent" with a reset past belief is refused and
 // the cooldown in force stays; only a reading under 1 lifts one.
 func TestTheOwnersSpentReadingNeverLifts(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner"}
 	tomorrow := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
@@ -299,6 +308,7 @@ func TestTheOwnersSpentReadingNeverLifts(t *testing.T) {
 // Review 274 B5: a computed and the Owner's reading of the same new pool at
 // once both commit; neither is chosen as a deadlock victim.
 func TestComputedAndTheOwnersReadingAtOnce(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	owner := store.Writer{Actor: "owner"}
@@ -326,6 +336,7 @@ func TestComputedAndTheOwnersReadingAtOnce(t *testing.T) {
 // Review 285: a new reading with no reset is not shown against a reset that
 // has passed since the reading before; a reset still ahead is kept.
 func TestANewReadingDropsAResetAlreadyPast(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner"}
 	soon := time.Now().Add(2 * time.Second).UTC()

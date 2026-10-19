@@ -49,6 +49,7 @@ func (w *world) retire(t *testing.T, candidate string) {
 // ① With no candidates for its job a task goes to nobody, however able the
 // tools; once candidates are written, the controller routes it again, once.
 func TestRouteNeedsCandidates(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	task := w.ready(t, store.Task{})
 	if c := w.claim(t, "h1", store.LeaseTTL, claude, codex, cursor); c != nil {
@@ -82,6 +83,7 @@ func TestRouteNeedsCandidates(t *testing.T) {
 // T08, routing half: the route says who was dropped and why; the claim
 // follows the route's order, active before probation, not the host's.
 func TestRouteRecordsWhyAndOrder(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", cursor, codex)
 	w.jobs(t, "probation", "*", claude)
@@ -111,6 +113,7 @@ func TestRouteRecordsWhyAndOrder(t *testing.T) {
 // A candidate demoted after the route was decided no longer takes the task;
 // a model pattern admits only the models it matches.
 func TestRouteChecksCandidatesAtClaim(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "gpt-*", codex)
 	w.jobs(t, "active", "*", claude)

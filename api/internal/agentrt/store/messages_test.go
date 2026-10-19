@@ -12,6 +12,7 @@ import (
 // Two batches of one inbox acknowledged at once, overlapping, never deadlock
 // (review 264 B3): the receiver's lock comes first.
 func TestAcknowledgingTheSameInboxAtOnce(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime) // one connection each: a pgx.Conn is not for two goroutines
 	seat := store.Writer{Actor: "seat:chief_of_staff", Token: "fixture"}

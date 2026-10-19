@@ -35,6 +35,7 @@ func controllerNotes(t *testing.T, w *world) []string {
 // in the Owner's zone, and not late: a slot first seen more than two hours
 // after it is skipped.
 func TestScheduledBriefsAreLeftOncePerSlot(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for _, c := range []struct {
 		at   string
@@ -71,6 +72,7 @@ func TestScheduledBriefsAreLeftOncePerSlot(t *testing.T) {
 // The seat's brief of the controller's note reads what happened, what waits
 // and the pools, and its answer goes to the Owner as a note on his Chief page.
 func TestAScheduledBriefGoesToTheOwner(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	done := w.ready(t, store.Task{})
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", done, "blocked") }))
@@ -108,6 +110,7 @@ func TestAScheduledBriefGoesToTheOwner(t *testing.T) {
 // (it tells its sender itself); a mission waiting on the Owner is nudged once
 // it has waited two hours; a pass leaves at most three.
 func TestNudges(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	var blocked []string
 	for i := 0; i < 4; i++ {
@@ -165,6 +168,7 @@ const NudgeAfterForTest = store.NudgeAfter
 // Review 280 B1: a backlog past the query's page is nudged in full, a few a
 // pass: what was nudged is left out before the limit.
 func TestABacklogIsNudgedInFull(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	var ids []string
 	for i := 0; i < 23; i++ {
@@ -193,6 +197,7 @@ func TestABacklogIsNudgedInFull(t *testing.T) {
 // its own, whenever it is written, and a skipped slot is covered by the next;
 // what is stuck is what is stuck now, however long ago.
 func TestABriefCoversFromTheBriefBefore(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	old := w.ready(t, store.Task{})
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", old, "blocked") }))

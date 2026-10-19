@@ -62,6 +62,8 @@ func (w *world) routes(t *testing.T, task string) int {
 
 // A1: a demotion, a new model pattern or a new restriction written while a
 // claim is choosing waits for the claim, and lands after its lease.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestCapabilityWritesWaitForTheClaim(t *testing.T) {
 	for _, write := range []struct{ name, sql string }{
 		{"demote", `UPDATE agentrt.job_candidate SET status = 'demoted' WHERE job_candidate_id = '` + claudeImpl + `'`},
@@ -108,6 +110,8 @@ func TestCapabilityWritesWaitForTheClaim(t *testing.T) {
 
 // A1: a route decided again between the claim's pick and its lock is the
 // route the claim follows.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestClaimFollowsTheRouteUnderItsLock(t *testing.T) {
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", cursor)
@@ -133,6 +137,7 @@ func TestClaimFollowsTheRouteUnderItsLock(t *testing.T) {
 // A2: the controller decides again when a candidate changes under the same
 // id (status, model pattern), and not again when nothing changed.
 func TestRerouteSeesChangesUnderTheSameID(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", cursor)
 	w.jobs(t, "probation", "*", claude)
@@ -171,6 +176,8 @@ func TestRerouteSeesChangesUnderTheSameID(t *testing.T) {
 // B1: two controllers, or a controller and anything else that decides the
 // route in between, record one decision per change. A controller that finds
 // the task held by another passes over it.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestRerouteDecidesOnce(t *testing.T) {
 	w := newRoutedWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -210,6 +217,7 @@ func TestRerouteDecidesOnce(t *testing.T) {
 // B3: a restriction added takes a candidate off the route; retired, it puts
 // it back.
 func TestRerouteFollowsRestrictions(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", claude, codex)
 	task := w.ready(t, store.Task{Needs: []string{"gpu"}})
@@ -242,6 +250,7 @@ func TestRerouteFollowsRestrictions(t *testing.T) {
 // B2: route_decided records what it read, so the decision can be made again
 // from the record alone, whatever changed since.
 func TestRouteDecisionReplays(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", cursor, codex)
 	w.jobs(t, "probation", "*", claude)
@@ -279,6 +288,7 @@ func TestRouteDecisionReplays(t *testing.T) {
 // B4: a pass over many ready tasks of which none changed decides nothing and
 // opens no transaction per task.
 func TestReroutePassScales(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", claude, codex)
 	const n = 200
@@ -312,6 +322,7 @@ func TestReroutePassScales(t *testing.T) {
 // A claim walks the route: a candidate written after the route was decided
 // takes the task only once the controller has routed it again.
 func TestClaimTakesOnlyTheRoute(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", cursor)
 	task := w.ready(t, store.Task{})
@@ -340,6 +351,8 @@ func (c *countingDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, erro
 
 // 155 B2: a task that went ready again after the controller's scan has its
 // route from that move; the controller records nothing more.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestRerouteAfterTheTaskWentReadyAgain(t *testing.T) {
 	w := newRoutedWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -368,6 +381,7 @@ func TestRerouteAfterTheTaskWentReadyAgain(t *testing.T) {
 
 // 155 B2: each field of a candidate is part of the input on its own.
 func TestRerouteSeesEachCandidateField(t *testing.T) {
+	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", claude)
 	task := w.ready(t, store.Task{})
@@ -391,6 +405,8 @@ func TestRerouteSeesEachCandidateField(t *testing.T) {
 }
 
 // 155 A1 follow-up: the claim reads the task's needs again under its lock.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestClaimRereadsNeedsUnderItsLock(t *testing.T) {
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", claude)

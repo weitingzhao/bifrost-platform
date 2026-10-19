@@ -132,6 +132,7 @@ func (s *cards) withdraw(_ context.Context, id, reason string) error {
 }
 
 func TestAcceptPlanRecordsIt(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	plan := w.handIn(t, goodPlan, "done")
 	if ids, err := store.PendingPlans(ctx, w.rt); err != nil || !slices.Equal(ids, []string{plan}) {
@@ -252,6 +253,7 @@ func lastReason(t *testing.T, w *world, task string) string {
 // again in round 2 with the reason added to its spec, and nothing else is
 // written (review 216 A3).
 func TestAcceptPlanReworks(t *testing.T) {
+	t.Parallel()
 	plan := func(old, new string) string { return strings.Replace(goodPlan, old, new, 1) }
 	for name, c := range map[string]struct {
 		report, conclusion string
@@ -291,6 +293,7 @@ func TestAcceptPlanReworks(t *testing.T) {
 // Round 2 with a plan that passes is used; round 2 refused again blocks the
 // task; a closed mission blocks it at once.
 func TestAcceptPlanRounds(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	var s cards
 	id := w.handIn(t, "no plan", "done")
@@ -326,6 +329,7 @@ func TestAcceptPlanRounds(t *testing.T) {
 // The second of two cards refused: the round goes back and the first card,
 // already made, is withdrawn (review 216 B2).
 func TestAcceptPlanWithdrawsARefusedRoundsCards(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{refuse: map[int]bool{1: true}}
@@ -352,6 +356,7 @@ func TestAcceptPlanWithdrawsARefusedRoundsCards(t *testing.T) {
 // the next pass does it again: the same card made, withdrawn, the round
 // refused (review 217 B1).
 func TestAcceptPlanRetriesAFailedWithdrawal(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{refuse: map[int]bool{1: true, 3: true}, failWith: 1}
@@ -370,6 +375,7 @@ func TestAcceptPlanRetriesAFailedWithdrawal(t *testing.T) {
 // answered): the plan goes on with its default, the card is not its own to
 // withdraw, and the task says it was asked before (review 217 B2).
 func TestAcceptPlanAskedBefore(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	id := w.handIn(t, twoCards, "done")
 	s := cards{before: map[int]bool{0: true}}
@@ -385,6 +391,7 @@ func TestAcceptPlanAskedBefore(t *testing.T) {
 // The question store failing leaves the plan submitted and writes nothing;
 // the next pass asks again under the same key and records the plan.
 func TestAcceptPlanWaitsForTheQuestionStore(t *testing.T) {
+	t.Parallel()
 	w := planWorld(t)
 	id := w.handIn(t, goodPlan, "done")
 	s := cards{down: errors.New("the question store is down")}
@@ -407,6 +414,8 @@ func TestAcceptPlanWaitsForTheQuestionStore(t *testing.T) {
 // (review 216 A2): the batch holds the dependency graph and waits; the plan
 // waits for the graph before it writes any event, so the batch finishes and
 // then the plan does, neither aborted as a deadlock.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestAcceptPlanAndABatchTogether(t *testing.T) {
 	w := planWorld(t)
 	id := w.handIn(t, goodPlan, "done")
@@ -462,6 +471,7 @@ func TestAcceptPlanAndABatchTogether(t *testing.T) {
 // read; once the mission is active, dispatch readies the task for the
 // planner job, claude takes it, and the plan it hands in is recorded.
 func TestGoalToPlan(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner", Token: "admin"}
 	at := func(commit string, err error) func(context.Context) (string, error) {
@@ -512,6 +522,7 @@ func TestGoalToPlan(t *testing.T) {
 }
 
 func TestParsePlan(t *testing.T) {
+	t.Parallel()
 	repos := []string{"bifrost-platform"}
 	p, err := store.ParsePlan([]byte(goodPlan), repos)
 	if err != nil || len(p.Tasks) != 2 || len(p.Questions) != 1 || len(p.Decisions) != 2 || p.Mission.MaxAttempts != 6 {

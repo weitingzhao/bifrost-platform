@@ -151,6 +151,7 @@ func (w *world) progress(t *testing.T) progressDoc {
 // The projection from real rows (SPEC-agentrt-progress-2026-10-14.md, second
 // version).
 func TestProgress(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	tools := []store.Tool{codex}
 	claimOne := func(host string, ttl time.Duration) (string, *store.Claim) {
@@ -349,6 +350,7 @@ func TestProgress(t *testing.T) {
 // A mission without tasks: proposed waits for the Owner (with what for);
 // active with steps not done is idle (the coordinator's turn).
 func TestProgressMissionWithoutTasks(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	var lastM1, proposedM2 time.Time
@@ -372,6 +374,7 @@ func TestProgressMissionWithoutTasks(t *testing.T) {
 // Task statuses where two hold at once (SPEC §3.1): the first in the order
 // wins.
 func TestTaskStatusOrder(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	fresh, old := now.Add(-time.Second), now.Add(-10*time.Minute)
 	long, short, atBound, pastBound := int64(400), int64(10), int64(150), int64(151)
@@ -429,6 +432,7 @@ func TestTaskStatusOrder(t *testing.T) {
 // Live attempts in start order by time, not by the text of the time (a
 // fraction of a second sorts after the whole second).
 func TestLiveOrder(t *testing.T) {
+	t.Parallel()
 	base := time.Date(2026, 10, 14, 20, 0, 0, 0, time.UTC)
 	// The ids sort the other way round from the times; as text,
 	// "…00.1Z" sorts before "…00Z".
@@ -445,6 +449,7 @@ func TestLiveOrder(t *testing.T) {
 // Review 181 B2: the usual time is read from accepted attempts only: done
 // attempts of tasks that were then rejected give none.
 func TestUsualCountsAcceptedAttemptsOnly(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for range 3 {
 		w.endedAs(t, "rejected", "done")
@@ -467,6 +472,7 @@ func TestUsualCountsAcceptedAttemptsOnly(t *testing.T) {
 // by updated_at, which a plan change moves: of 21 ended tasks the oldest is
 // not among the 20, even after a later change touches it.
 func TestRecentPicksByEndTime(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	var first string
 	for i := range 21 {
@@ -505,6 +511,7 @@ func sameMoment(t *testing.T, got string, want time.Time) bool {
 // came into that state, not when its task came into its own; a paused
 // mission says why, by whom and since when, with tasks or without.
 func TestProgressMissionSince(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task := w.ready(t, store.Task{})
 	time.Sleep(1100 * time.Millisecond)
@@ -544,6 +551,7 @@ func TestProgressMissionSince(t *testing.T) {
 
 // A paused mission without tasks is blocked by its pause, not idle.
 func TestProgressPausedMissionWithoutTasks(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -560,6 +568,8 @@ func TestProgressPausedMissionWithoutTasks(t *testing.T) {
 // Review 184 B3: more tasks ended and attempts failed at one moment than the
 // lists hold: each list is the newest by event, ties of time broken by event
 // id, the same on every read.
+//
+// Serial: it freezes the package's event clock (FreezeEventClock).
 func TestRecentTiesAtOneMoment(t *testing.T) {
 	w := newKernelWorld(t)
 	undo := store.FreezeEventClock(time.Now())
@@ -605,6 +615,7 @@ func TestRecentTiesAtOneMoment(t *testing.T) {
 // touches (an item's are the steps under it), the tasks it moves, and the
 // missions of these and the ones it binds to.
 func TestChangeBlocks(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	const s4 = "R2:2.1-4"
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -640,6 +651,8 @@ func TestChangeBlocks(t *testing.T) {
 
 // Review 184 B4: a card is one item however many proposals name it, a card
 // decided is no item, and the list stops at its bound and says so.
+//
+// Serial: it lowers needs_you's bound (LimitPendingChangesForTest).
 func TestNeedsYouOneItemPerCard(t *testing.T) {
 	w := newWorld(t)
 	card := func(id string) func(context.Context, store.Card) (string, error) {

@@ -13,6 +13,7 @@ import (
 // H8: the closed rule finds every local path form in the artifacts that are
 // scanned, and nothing in the ones that are not or in look-alikes.
 func TestLocalPath(t *testing.T) {
+	t.Parallel()
 	for _, hit := range []string{
 		"see /Users/someone/x", "in /home/ci/build", "/private/tmp/a", "at /var/folders/xy/T/z", "wrote /tmp/out.txt",
 		"open ~/agent-work", "C:\\Users\\x", "D:/data", "path=E:/x",
@@ -46,6 +47,7 @@ func TestLocalPath(t *testing.T) {
 
 // ArtifactKinds is the schema's list, read from the migration itself.
 func TestArtifactKindsAreTheSchemas(t *testing.T) {
+	t.Parallel()
 	sql, err := migrations.FS.ReadFile("0001_core.sql")
 	if err != nil {
 		t.Fatal(err)

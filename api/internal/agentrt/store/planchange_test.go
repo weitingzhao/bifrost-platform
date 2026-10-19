@@ -82,6 +82,7 @@ func (w *world) activate(t *testing.T, step string) {
 // once: a step added to an item in progress (numbered one past its largest
 // sibling), the title of a step not started.
 func TestPlanChangeStanding(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.activate(t, s1)
 	a := &asker{}
@@ -123,6 +124,7 @@ func TestPlanChangeStanding(t *testing.T) {
 // refused at once, with its reason, and nobody is asked (T32 through the
 // plan route).
 func TestPlanChangeOutside(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	before := w.footprint(t)
@@ -216,6 +218,7 @@ func setRule(t *testing.T, w *world, step, rule string) {
 // change that no longer fits when applied is decided failed, with the
 // reason. Each proposal is decided once.
 func TestPlanDecisions(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	t1, err := w.task(t, "M-1", s1, "", "implement")
@@ -291,6 +294,7 @@ func TestPlanDecisions(t *testing.T) {
 // being decided: with more waiting than a page, the last is decided in one
 // pass.
 func TestPlanDecisionsPage(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	var last string
@@ -311,6 +315,7 @@ func TestPlanDecisionsPage(t *testing.T) {
 
 // Review 180 A2: every change is within the tree it names.
 func TestPlanChangeStaysInItsTree(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	for _, n := range []store.PlanNode{
@@ -347,6 +352,7 @@ func TestPlanChangeStaysInItsTree(t *testing.T) {
 // to active when a retitle is proposed: the proposal waits for it and then
 // sees an active step, so the retitle goes to the Owner instead of landing.
 func TestStandingReadsWhatItLocks(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	a := &asker{}
@@ -381,6 +387,7 @@ func TestStandingReadsWhatItLocks(t *testing.T) {
 // do not deadlock: the decision takes the step before the plan's stream, as
 // the loop does.
 func TestDecisionAgainstRuleLoop(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	a := &asker{}
@@ -411,6 +418,7 @@ func TestDecisionAgainstRuleLoop(t *testing.T) {
 // Review 180 B1: a new node's number follows the numbers its siblings'
 // labels carry, not their positions, and skips ids already taken.
 func TestPlanChangeNumbering(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.activate(t, s1)
 	for _, n := range []store.PlanNode{
@@ -439,6 +447,7 @@ func TestPlanChangeNumbering(t *testing.T) {
 // refused as invalid, with nothing written (the store's own limits are
 // tested on the real store: TestPlanChangeCardOnTheStore).
 func TestPlanChangeCardRefused(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	before := w.footprint(t)
 	_, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "x",
@@ -454,6 +463,7 @@ func TestPlanChangeCardRefused(t *testing.T) {
 // Review 182 B3: an acknowledgement that fails is tried again next pass; a
 // card the store has dropped is recorded as gone and not asked about again.
 func TestPlanDecisionAcks(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	var ids []string
@@ -497,6 +507,8 @@ func TestPlanDecisionAcks(t *testing.T) {
 // Review 182 A2: a task another tree moves between the change reading
 // where it is and locking it: the change is tried again and then sees it
 // in the other tree.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestMoveSeesATaskMovedMeanwhile(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -548,6 +560,7 @@ func TestMoveSeesATaskMovedMeanwhile(t *testing.T) {
 // is busy with nothing written; a decision meeting it waits for the next
 // pass.
 func TestChangeMeetsAHeldTask(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	task, err := w.task(t, "M-1", s1, "", "implement")
@@ -591,6 +604,7 @@ func TestChangeMeetsAHeldTask(t *testing.T) {
 // once free, the move is refused by the rules (a verification sits with its
 // subject).
 func TestMoveVerificationMeetsItsHeldSubject(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	var subject, check string

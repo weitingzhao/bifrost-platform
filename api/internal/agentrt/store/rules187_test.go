@@ -19,6 +19,8 @@ import (
 // rule write by the same writer, and a claim on that host: the rule write
 // waits for the writer's lock without holding the capability lock, so the
 // claim finishes, then the control, then the rule write. No deadlock.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestControlRuleWriteAndClaim(t *testing.T) {
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
@@ -72,6 +74,7 @@ func TestControlRuleWriteAndClaim(t *testing.T) {
 // R2: a job rule or a capability-facts rule whose stored text does not read
 // as its row says grants nothing at the claim, whatever its dates.
 func TestUnreadableRulesGrantNothing(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	core := w.ready(t, store.Task{Core: true})
 	// A later capability-facts version whose body_json is not its text's.
@@ -96,6 +99,7 @@ func TestUnreadableRulesGrantNothing(t *testing.T) {
 // R3: until the Owner signs capability-facts, the seed's only facts grant
 // nobody: core work waits; once he signs, it is claimed.
 func TestCoreWaitsForTheSignedFacts(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
 	ok(t, store.RegisterHost(ctx, w.rt, "owner", "h1", "dev"))

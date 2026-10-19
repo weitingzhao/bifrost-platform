@@ -18,6 +18,7 @@ func note(tx pgx.Tx) error {
 // Review 144 A1: an event writes only the tables its type may write and only
 // the rows it names; ids never change; state rows are never deleted.
 func TestEventWritesOnlyWhatItNames(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if err := store.SetControl(ctx, tx, "controller", "c-1", "global", "", "pause", "x"); err != nil {
@@ -88,6 +89,7 @@ func TestEventWritesOnlyWhatItNames(t *testing.T) {
 
 // Review 144 A3: state is written only under READ COMMITTED.
 func TestRepeatableReadWritesAreRefused(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	a, err := w.task(t, "M-1", s3, "", "implement")
 	ok(t, err)
@@ -103,6 +105,7 @@ func TestRepeatableReadWritesAreRefused(t *testing.T) {
 // Review 144 A2: an off-plan review created while its off-plan subject is
 // being moved onto a step, in both orders.
 func TestSubjectLockSerializesMoveAndReview(t *testing.T) {
+	t.Parallel()
 	for _, moveFirst := range []bool{true, false} {
 		t.Run(map[bool]string{true: "move_first", false: "review_first"}[moveFirst], func(t *testing.T) {
 			w := newWorld(t)
@@ -152,6 +155,7 @@ func TestSubjectLockSerializesMoveAndReview(t *testing.T) {
 // Review 144 A5: an attempt keeps its task and its result once written; an
 // accepting verification needs a persisted result.
 func TestAttemptKeepsItsResult(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	t1, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
@@ -214,6 +218,7 @@ func TestAttemptKeepsItsResult(t *testing.T) {
 // T23a for all nine append-only tables, by the owner (the runtime role is
 // stopped earlier by missing privileges, which proves less).
 func TestAppendOnlyTablesRefuseTheOwner(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	t1, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
@@ -308,6 +313,7 @@ func firstColumn(tbl string) string {
 // T23b beyond an edited body: a deleted tail, a deleted middle event and an
 // edited head are each found.
 func TestTamperShapesAreFound(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	for i := range 3 {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
@@ -348,6 +354,7 @@ func TestTamperShapesAreFound(t *testing.T) {
 // T32 extras: a done rule naming a question needs a binding; an item cannot
 // sit under an item; moving a task a done rule names fails with that reason.
 func TestPlanBindingsAndShapes(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	wantErr(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "R2:2.1x", Parent: item, Kind: "item", Label: "x", Title: "x", Ordinal: 9, Root: root})
@@ -384,6 +391,7 @@ func TestPlanBindingsAndShapes(t *testing.T) {
 
 // T19: a failed commit takes its outbox row with it.
 func TestFailedCommitLeavesNoOutboxRow(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	var before int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.outbox`).Scan(&before))
@@ -406,6 +414,7 @@ func TestFailedCommitLeavesNoOutboxRow(t *testing.T) {
 // T20: the writer's connection is killed in the middle of a stream of
 // writes; writing resumes on a new connection and the chain stays whole.
 func TestKilledConnectionKeepsTheChain(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	admin := w.db.Connect(t, w.db.Admin)

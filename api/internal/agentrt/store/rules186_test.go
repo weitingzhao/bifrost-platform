@@ -17,6 +17,8 @@ import (
 
 // A1: a rule write waits for a claim in flight, which read the rules and
 // candidates before it, and the claim leases on what it read.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestRuleWriteWaitsForAClaim(t *testing.T) {
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
@@ -61,6 +63,7 @@ func TestRuleWriteWaitsForAClaim(t *testing.T) {
 
 // A2: a job or capability-facts rule takes effect when written, never later.
 func TestJobRuleTakesEffectNow(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	later := ruleText("job:implementer", 1, rules.Initial, "2030-01-01T00:00:00Z", "2030-06-01T00:00:00Z",
@@ -73,6 +76,7 @@ func TestJobRuleTakesEffectNow(t *testing.T) {
 // A2: a job whose rule has expired has no candidates; an only fact whose
 // rule has expired grants nobody (core work then waits).
 func TestExpiredRulesGrantNothing(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	first := w.ready(t, store.Task{})
 	if c := w.claim(t, "h1", time.Hour, codex); c == nil || c.TaskID != first {
@@ -99,6 +103,7 @@ func TestExpiredRulesGrantNothing(t *testing.T) {
 // A3: a mission's budget: attempts, wall time, its tenant's budget rule, and
 // the rule's hard limit on an attempt.
 func TestMissionBudget(t *testing.T) {
+	t.Parallel()
 	for name, c := range map[string]struct {
 		setup  string
 		claims int
@@ -136,6 +141,8 @@ func TestMissionBudget(t *testing.T) {
 
 // A3: two hosts reach the last attempt a mission's budget allows at once:
 // the second waits for the first and then finds none left.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestLastAttemptGoesToOneHost(t *testing.T) {
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
@@ -175,6 +182,7 @@ func TestLastAttemptGoesToOneHost(t *testing.T) {
 // under it: an effect above its max_action, or a mission budget above its
 // own, is no longer dispatched.
 func TestEnvelopeTighteningReachesStartedMissions(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1, h2, h3"))))
@@ -214,6 +222,7 @@ hosts: [h1, h2, h3]
 // A5: a signed rule marked tighten does not raise a candidate above the
 // table either.
 func TestSignedTighteningDoesNotRaise(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, jobText(1, rules.Initial, candidate("exec:codex", "openai", "active")))))
@@ -227,6 +236,7 @@ func TestSignedTighteningDoesNotRaise(t *testing.T) {
 // B2: a row whose columns disagree with its text is no rule; two signers of
 // the same next version: one wins.
 func TestRuleRowsAndVersions(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	text := ruleText("routing:dev", 1, rules.Initial, since, until, "tenant: dev\norder: [capability, quota]\nquota_stop_percent: 90\n")
 	r, err := rules.Parse([]byte(text))

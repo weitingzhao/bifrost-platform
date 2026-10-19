@@ -51,6 +51,7 @@ func (w *world) choice(t *testing.T, c *store.Claim) map[string]any {
 // W-31 2.4 slice ② ⑥: of the tools the route allows, the one whose pool is
 // furthest behind its window goes first; claude comes first in the route.
 func TestPickByPace(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.reading(t, "claude:owner:weekly", 0.9, 24*time.Hour)  // pace ≈ +0.04
@@ -77,6 +78,7 @@ func TestPickByPace(t *testing.T) {
 // ⑥: a pool used to the routing rule's quota stop is passed by even when it
 // is behind its window, and a reading with no reset still counts for it.
 func TestPickPassesAPoolAtTheQuotaStop(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.legacy(t, routingRule(1, -1, 0))
 	w.ready(t, store.Task{})
@@ -105,6 +107,7 @@ func TestPickPassesAPoolAtTheQuotaStop(t *testing.T) {
 
 // ⑦: with nothing read, the executor that took work longest ago goes first.
 func TestPickRotates(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	w.ready(t, store.Task{})
@@ -122,6 +125,7 @@ func TestPickRotates(t *testing.T) {
 // a candidate below it over enough samples is excluded (with its sample), a
 // new computation decides the route again, and the record replays.
 func TestCompetenceThreshold(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for i := 1; i <= 3; i++ {
 		w.ready(t, store.Task{})
@@ -194,6 +198,7 @@ func TestCompetenceThreshold(t *testing.T) {
 // Review 286 B5: a monthly reading whose reset is further off than 30 days
 // still meets the quota stop (its pace counts as 0).
 func TestALongMonthStillStops(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.legacy(t, routingRule(1, -1, 0))
 	w.ready(t, store.Task{})

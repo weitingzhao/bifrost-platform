@@ -27,6 +27,7 @@ func checkWriter(w *world, wr store.Writer) error {
 // registered it goes on; the runtime's own relayed write is not held; the
 // registration names the token in a field of its own.
 func TestSessionHeldToItsToken(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	first := store.Writer{Actor: "thread:s", Token: "first"}
 	second := store.Writer{Actor: "thread:s", Token: "second"}
@@ -108,6 +109,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 // the token its note names; a thread whose registration names none is held
 // to none, so no token may act as it.
 func TestSessionOfAnOlderRegistration(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	register := func(actor string, body map[string]any) {
 		t.Helper()
@@ -136,6 +138,7 @@ func TestSessionOfAnOlderRegistration(t *testing.T) {
 // the other is refused, whichever comes first (the check is the write's own,
 // under the writer's lock).
 func TestSessionFirstWriteAtOnce(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	for round := range 10 {
@@ -182,6 +185,8 @@ func pauseHeld(t *testing.T, actor string) (held chan struct{}, release chan str
 // key. One of the two registers the session and the other is refused; the
 // replay is never given the first token's answer (before the fix both
 // succeeded, the second with the first's answer).
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
@@ -222,6 +227,8 @@ func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
 // Review 320 A3: another token reads a session's mail while the first
 // token's first write registers it and a message to it commits between the
 // check and the read. The message is not read.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)

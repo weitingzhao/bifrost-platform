@@ -13,6 +13,7 @@ import (
 // past the grace; the result checked; persisted_at written while the state
 // stays as it is; a later verification may accept the lost attempt.
 func TestSalvage(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	inGrace := w.claim(t, "h1", -time.Second, codex)

@@ -36,6 +36,7 @@ func proposeOutside(t *testing.T, w *world, ask store.Ask, key string) (string, 
 // moves and acknowledged once; a card with no answer is not acknowledged;
 // the open card is in needs_you, and the decided ones are not.
 func TestMissionCard(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	question := map[string]string{}
@@ -117,6 +118,7 @@ func TestMissionCard(t *testing.T) {
 // asked, with a question store or without; outside it the same platform
 // asks.
 func TestMissionInsideTheEnvelopeAsksNobody(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1"))))
@@ -143,6 +145,7 @@ func TestMissionInsideTheEnvelopeAsksNobody(t *testing.T) {
 // same proposal under the same key makes the same card whatever number the
 // mission gets and whatever the budget rule says by then.
 func TestMissionCardDoesNotNameTheNumber(t *testing.T) {
+	t.Parallel()
 	cards := map[string]store.Card{}
 	for _, extra := range []int{0, 1} {
 		w := newKernelWorld(t)
@@ -183,6 +186,8 @@ func TestMissionCardDoesNotNameTheNumber(t *testing.T) {
 // missions page by page, so cards it cannot read never hide later ones; a
 // mission another pass moves between reading its card and locking it is
 // left as that pass left it and not counted.
+//
+// Serial: it lowers the decision pass's page (DecidePageForTest).
 func TestMissionDecisionsPageAndCount(t *testing.T) {
 	w := newKernelWorld(t)
 	defer store.DecidePageForTest(2)()
@@ -218,6 +223,8 @@ func TestMissionDecisionsPageAndCount(t *testing.T) {
 }
 
 // Review 190 B4: plan changes and missions share needs_you's one bound.
+//
+// Serial: it lowers needs_you's bound (LimitPendingChangesForTest).
 func TestNeedsYouOneBoundForEveryCard(t *testing.T) {
 	w := newKernelWorld(t)
 	a := &asker{}
@@ -235,6 +242,7 @@ func TestNeedsYouOneBoundForEveryCard(t *testing.T) {
 // When the Owner cannot be asked, a mission outside the envelope is refused
 // whole: nothing is written, and the same key may try again.
 func TestMissionCardOwnerUnreachable(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	failing := func(context.Context, store.Card) (string, error) { return "", errors.New("the question store is full") }
 	p := store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}}
@@ -258,6 +266,7 @@ func TestMissionCardOwnerUnreachable(t *testing.T) {
 // Review 190 B4: a mission on its card says on which question it waits, with
 // tasks or without, and its needs_you item counts its unfinished tasks.
 func TestMissionOnACardSaysSo(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	id, q := proposeOutside(t, w, a.ask, "a")
@@ -285,6 +294,7 @@ func TestMissionOnACardSaysSo(t *testing.T) {
 // Review 192 A4: two proposals with the same words make two cards (each card
 // names its proposal), so the question store never takes one for the other.
 func TestTwoProposalsTwoCards(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	same := store.MissionProposal{Title: "same", Goal: "g", Success: []string{"done"}}
@@ -306,6 +316,7 @@ func TestTwoProposalsTwoCards(t *testing.T) {
 // A5's proposal (a goal of 770 Chinese characters) is refused by the goal's
 // bound.
 func TestMissionProposalBounds(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	base := store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}}
@@ -371,6 +382,7 @@ func TestMissionProposalBounds(t *testing.T) {
 // refused before the Owner is asked, with nothing written; the longest one
 // that fits is asked, its body within the store's limit.
 func TestMissionCardTooLongIsRefusedBeforeAsking(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	a := &asker{}
 	// Quotes and newlines cost two bytes each once encoded.
@@ -403,6 +415,7 @@ func TestMissionCardTooLongIsRefusedBeforeAsking(t *testing.T) {
 // proposal gets its first answer again; the same words under a new key are
 // refused.
 func TestMissionBoundsSpareAnOlderKey(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	long := store.MissionProposal{Title: "m", Goal: strings.Repeat("g", store.MaxMissionGoalBytes+1), Success: []string{"done"}}
 	first, err := store.ProposeUnboundedForTest(ctx, w.rt, wr("thread:s1"), "legacy-long", long)

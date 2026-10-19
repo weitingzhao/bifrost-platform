@@ -76,6 +76,7 @@ func at(s string) time.Time {
 // tighten but loosening, signed in the release policy's namespace, a field
 // the parser does not know, no trust anchor).
 func TestRuleSet(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	now := at("2026-11-01T00:00:00Z")
@@ -196,6 +197,7 @@ func candidates(t *testing.T, w *world) string {
 // (one left out is retired); a tightening only lowers a status, and never
 // above what the table has.
 func TestJobRule(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, jobText(1, rules.Initial, candidate("exec:codex", "openai", "active")+candidate("exec:cursor", "cursor-mix", "probation")))))
@@ -237,6 +239,7 @@ func liveFacts(t *testing.T, w *world) string {
 // lists are bound to it, the ones it leaves out are retired, measured facts
 // are not its to touch; a tightening only adds cannot and must_not.
 func TestCapabilityFactsRule(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	before := liveFacts(t, w)
@@ -292,6 +295,7 @@ func TestCapabilityFactsRule(t *testing.T) {
 // Check and proposals write nothing that takes effect; a proposal keeps the
 // text and says whether the Owner must sign it.
 func TestRuleCheckAndProposal(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeText(1, rules.Initial, until, 40, "exec:codex"))))

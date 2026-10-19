@@ -81,6 +81,7 @@ func (w *world) verifications(t *testing.T, task string) []verificationRow {
 // deterministically, then reviewed, then accepted; each check is a task of
 // its own, accepted once its result is used.
 func TestAcceptanceFlow(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform"})
 	ic := w.run(t, "h1", cursor, "done")
@@ -142,6 +143,7 @@ func TestAcceptanceFlow(t *testing.T) {
 // A failed check sends the implementation back while rounds remain, then
 // blocks it; nothing is accepted.
 func TestAcceptanceRework(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	impl := w.ready(t, store.Task{})
 	w.run(t, "h1", cursor, "done")
@@ -183,6 +185,7 @@ func TestAcceptanceRework(t *testing.T) {
 
 // Two controllers using one result at once use it once.
 func TestConcludeOnce(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	impl := w.ready(t, store.Task{})
@@ -218,6 +221,7 @@ func TestConcludeOnce(t *testing.T) {
 // and goes round again; its second round is verified as found. Without the
 // switch (PROD) the need does nothing.
 func TestFailFirstVerifySwitch(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	on := store.ConcludeOptions{FailFirstVerify: true}
 	impl := w.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})

@@ -39,6 +39,7 @@ func (w *world) goalMission(t *testing.T, id string) {
 // implementation among them; not before, not when a task is not accepted,
 // not when it is bound to plan steps, and only once.
 func TestCloseMissions(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	for _, m := range []string{"M-3", "M-4", "M-5", "M-6", "M-7"} {
 		w.goalMission(t, m)

@@ -226,6 +226,7 @@ func heads(m map[string]string, calls *int) store.BranchHead {
 // of the seed, the core rule, independence from the author (T08 store half),
 // and controls.
 func TestClaimRouting(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	ttl := store.LeaseTTL
 	if c := w.claim(t, "h1", ttl, codex); c != nil {
@@ -359,6 +360,7 @@ func TestClaimRouting(t *testing.T) {
 // plan tasks of one mission are never leased together, and the loser moves
 // on without an error.
 func TestConcurrentClaims(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	for i := 0; i < 8; i++ {
@@ -418,6 +420,7 @@ func TestConcurrentClaims(t *testing.T) {
 // The write-time fence (v5 §5.2 ③): host, epoch, live state and the
 // database clock after the lock, without the lease loop (T22 ③, ⑤; T02).
 func TestFenceAndLeaseClock(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	c := w.claim(t, "h1", store.LeaseTTL, codex)
@@ -500,6 +503,7 @@ func TestFenceAndLeaseClock(t *testing.T) {
 // The lease loop: lapsed → stale (renewable); past the grace → lost, the
 // task back to ready (none, branch) or blocked (external).
 func TestLeaseSweep(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	lapsed := w.claim(t, "h1", -time.Second, codex)
@@ -541,6 +545,8 @@ func TestLeaseSweep(t *testing.T) {
 
 // T34, store half: checkpoints, computed, persist and submit, each once,
 // retries answered from the key, the result checked before it is recorded.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestResultPath(t *testing.T) {
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
@@ -659,6 +665,7 @@ func TestResultPath(t *testing.T) {
 // moves by effect class; an ended one keeps its state; repeats get the first
 // answer; another host is refused.
 func TestEnded(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	branch := w.ready(t, store.Task{})
 	c := w.claim(t, "h1", store.LeaseTTL, codex)
@@ -709,6 +716,7 @@ func TestEnded(t *testing.T) {
 // T25, store half for the kernel: no function moves a task or a mission
 // outside its transition table, and each move is one event.
 func TestOnlyListedMoves(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	task := w.ready(t, store.Task{})
 	for _, to := range []string{"leased", "running", "submitted", "accepted", "ready"} {

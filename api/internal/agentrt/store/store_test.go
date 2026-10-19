@@ -112,6 +112,7 @@ func (w *world) lastSeq(t *testing.T, stream string) int64 {
 // attempt are each first created in their own transaction; an event that
 // names a row never created makes the commit fail and leaves no trace.
 func TestSeedAndFirstCreation(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	again, err := store.Seed(ctx, w.db.Connect(t, w.db.Owner))
 	ok(t, err)
@@ -144,6 +145,7 @@ func TestSeedAndFirstCreation(t *testing.T) {
 
 // T19 and T25 (database half): what each identity can and cannot do.
 func TestIdentitiesAndTheEventRule(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	t1, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
@@ -218,6 +220,7 @@ func TestIdentitiesAndTheEventRule(t *testing.T) {
 // T23b: a superuser edits an event body behind the triggers; the verifier
 // names the stream and seq.
 func TestTamperIsDetected(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	admin := w.db.Connect(t, w.db.Admin)
 	for _, q := range []string{
@@ -250,6 +253,7 @@ func planChange(w *world, fn func(tx pgx.Tx) error) error {
 
 // T30: numbering never changes, nodes are never deleted.
 func TestPlanNumberingIsFixed(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	for q, want := range map[string]string{
 		`UPDATE agentrt.plan_node SET ordinal = 9 WHERE plan_node_id = 'R2:2.1-1'`:                                "keeps its id",
@@ -280,6 +284,7 @@ func TestPlanNumberingIsFixed(t *testing.T) {
 
 // T32: links between the plan and the work are checked by the database.
 func TestPlanLinks(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	_, err := w.task(t, "M-1", item, "", "implement")
 	wantErr(t, err, "must hang on a step")
@@ -352,6 +357,7 @@ func TestPlanLinks(t *testing.T) {
 // so their events go to different streams and only the graph lock can make
 // the second transaction wait.
 func TestConcurrentDependencyCycle(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	a, err := w.task(t, "M-1", s3, "", "implement")
 	ok(t, err)
@@ -388,6 +394,7 @@ func TestConcurrentDependencyCycle(t *testing.T) {
 // bound (no task moves, so only the step lock taken when a task is attached
 // makes the two wait for each other).
 func TestStepLockSerializesMoveAndAttach(t *testing.T) {
+	t.Parallel()
 	type tc struct {
 		name      string
 		step      string
@@ -458,6 +465,7 @@ func TestStepLockSerializesMoveAndAttach(t *testing.T) {
 
 // T32: the counting rule over steps read back from the database.
 func TestCountingFromTheDatabase(t *testing.T) {
+	t.Parallel()
 	w := newWorld(t)
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, err := store.SetStepState(ctx, tx, "controller", root, s1, "done", "test"); err != nil {
