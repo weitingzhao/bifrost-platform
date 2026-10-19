@@ -261,7 +261,7 @@ func (r rawJSON) MarshalJSON() ([]byte, error) { return r, nil }
 // usualTimes reads, per role and task class, the median time from start to
 // submission of the attempts accepted in the window (SPEC §3.3); fewer than
 // UsualMinSamples give none.
-func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]time.Duration, error) {
+func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]usualTime, error) {
 	rows, err := tx.Query(ctx, `SELECT t.role || '|' || t.task_class,
 	    percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM s.at - a.started_at)), count(*)
 	  FROM agentrt.verification v
@@ -275,7 +275,7 @@ func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]time.
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]time.Duration{}
+	out := map[string]usualTime{}
 	for rows.Next() {
 		var key string
 		var median float64
@@ -284,7 +284,7 @@ func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]time.
 			return nil, err
 		}
 		if n >= UsualMinSamples {
-			out[key] = time.Duration(median * float64(time.Second))
+			out[key] = usualTime{d: time.Duration(median * float64(time.Second)), n: n}
 		}
 	}
 	return out, rows.Err()
@@ -346,9 +346,16 @@ func sortedLive(live map[string]*ProgressAttempt) []*ProgressAttempt {
 	return list
 }
 
-func usualOf(usual map[string]time.Duration, role, class string) *time.Duration {
-	if d, ok := usual[role+"|"+class]; ok {
-		return &d
+// usualTime is a role and task class's usual time and how many accepted
+// attempts it is the median of.
+type usualTime struct {
+	d time.Duration
+	n int
+}
+
+func usualOf(usual map[string]usualTime, role, class string) *time.Duration {
+	if u, ok := usual[role+"|"+class]; ok {
+		return &u.d
 	}
 	return nil
 }
@@ -375,7 +382,7 @@ func stamp(t *time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]time.Duration) (map[string]any, error) {
+func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]usualTime) (map[string]any, error) {
 	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, m.goal, m.state, m.deadline_at, COALESCE(m.work_id, ''),
 	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), COALESCE(s.body_json->>'question_id', ''), l.at
 	  FROM agentrt.mission m
@@ -508,13 +515,14 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	}
 	list := make([]any, 0, len(missions))
 	for _, m := range missions {
-		list = append(list, missionDoc(m))
+		list = append(list, missionDoc(m, usual, now))
 	}
 	return map[string]any{"missions": list, "truncated": truncated}, nil
 }
 
-// missionDoc is one mission with its status (SPEC §3.2).
-func missionDoc(m *progressMission) map[string]any {
+// missionDoc is one mission with its status (SPEC §3.2) and when it should
+// be done (progresseta.go).
+func missionDoc(m *progressMission, usual map[string]usualTime, now time.Time) map[string]any {
 	statuses := make([]string, 0, len(m.tasks))
 	tasks := make([]any, 0, len(m.tasks))
 	for _, t := range m.tasks {
@@ -573,7 +581,7 @@ func missionDoc(m *progressMission) map[string]any {
 	return map[string]any{"mission_id": m.id, "title": m.title, "goal": m.goal, "state": m.state, "deadline_at": m.deadline,
 		"work_id": m.work, "slices": countDoc(count), "status": status, "reason": reason, "since": since, "waiting_on": waiting,
 		"waiting_roles": nonNil(roles), "tasks": tasks, "next_steps": nonNilAny(m.next),
-		"eta": map[string]any{"state": "unknown", "reason": "no history of slice times yet; the runtime gives times once Gate A has run"}}
+		"eta": missionETA(m, usual, now)}
 }
 
 // missionCardReason is why a mission on the Owner's card waits.
