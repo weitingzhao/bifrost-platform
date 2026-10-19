@@ -189,3 +189,49 @@ func TestUpgradeTo0006KeepsEvents(t *testing.T) {
 		t.Fatalf("a second run applied %v %v", again, rerr)
 	}
 }
+
+// T19, the three environments (review 145 B7): a database migrated for an
+// environment grants its own runtime role, platform_agentrt_<env>, what the
+// runtime needs, and the other two environments' runtime roles nothing on
+// the schema: not its use, not a read, not a write; no runtime role may
+// rewrite or delete an event.
+func TestEachEnvironmentGrantsItsOwnRuntimeOnly(t *testing.T) {
+	ctx := context.Background()
+	envs := []string{"dev", "stg", "prod"}
+	setup := agentrttest.New(t)
+	admin := setup.Connect(t, setup.Admin)
+	for _, env := range envs {
+		role, err := migrate.RuntimeRole(env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Roles are the cluster's: the test cluster may not have the STG and
+		// PROD ones yet.
+		if _, err = admin.Exec(ctx, `DO $$ BEGIN EXECUTE format('CREATE ROLE %I LOGIN', '`+role+`');
+		  EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL; END $$`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, env := range envs {
+		db := agentrttest.New(t)
+		if _, err := migrate.Run(ctx, db.Connect(t, db.Owner), env); err != nil {
+			t.Fatalf("%s: %v", env, err)
+		}
+		check := db.Connect(t, db.Admin)
+		for _, other := range envs {
+			role, _ := migrate.RuntimeRole(other)
+			var usage, read, insert, update, del, taskWrite bool
+			if err := check.QueryRow(ctx, `SELECT has_schema_privilege($1, 'agentrt', 'USAGE'),
+			    has_table_privilege($1, 'agentrt.event', 'SELECT'), has_table_privilege($1, 'agentrt.event', 'INSERT'),
+			    has_table_privilege($1, 'agentrt.event', 'UPDATE'), has_table_privilege($1, 'agentrt.event', 'DELETE'),
+			    has_table_privilege($1, 'agentrt.task', 'UPDATE')`, role).Scan(&usage, &read, &insert, &update, &del, &taskWrite); err != nil {
+				t.Fatal(err)
+			}
+			own := other == env
+			if usage != own || read != own || insert != own || taskWrite != own || update || del {
+				t.Errorf("%s database, %s: usage %v, read %v, insert %v, task update %v, event update %v, event delete %v",
+					env, role, usage, read, insert, taskWrite, update, del)
+			}
+		}
+	}
+}
