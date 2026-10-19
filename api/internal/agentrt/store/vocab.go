@@ -290,6 +290,7 @@ var fieldValues = map[string]map[string]value{
 	"artifact_put":             {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":           {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":            {"message_id": messageID},
+	"policy_alert":             {"rule": oneOf("approval_claim"), "source": oneOf("task_spec", "message"), "phrase": oneOf(approvalClaims...), "artifact_id": artifactID, "message_id": messageID},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},
 	"pool_cooldown_set":        {"until": instant},
 	"capability_scored":        {"source": oneOf("exam", "benchmark", "in_job"), "expires_at": instant, "started_at": instant},
