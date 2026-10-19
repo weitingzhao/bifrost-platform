@@ -116,7 +116,7 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 		if err != nil {
 			return err
 		}
-		w := Writer{Actor: from, Token: "message:" + messageID}
+		w := Writer{Actor: from, Token: "message:" + messageID, Relayed: true}
 		if err = ensureWriter(ctx, tx, w, false); errors.Is(err, ErrInvalid) {
 			// a sender that can no longer write (retired): the message is
 			// read and left, not answered, so it does not come back each pass

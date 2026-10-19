@@ -384,7 +384,7 @@ func ProposeRule(ctx context.Context, db DB, w Writer, key, id string, text []by
 		return nil, err
 	}
 	request := map[string]any{"rule_id": id, "text": string(text), "reason": reason}
-	return idempotent(ctx, db, w.Actor, "rules/proposals", key, request, nil, func(tx pgx.Tx) (map[string]any, error) {
+	return idempotentAs(ctx, db, w, "rules/proposals", key, request, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}

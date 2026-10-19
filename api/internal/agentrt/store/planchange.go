@@ -512,7 +512,7 @@ func ProposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 
 func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason string, changes []PlanChange, doc any,
 	req map[string]any, ask Ask) (map[string]any, error) {
-	return idempotent(ctx, db, w.Actor, "plan/proposals", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+	return idempotentAs(ctx, db, w, "plan/proposals", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, true); err != nil {
 			return nil, err
 		}

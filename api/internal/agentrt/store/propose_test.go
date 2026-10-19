@@ -682,12 +682,15 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 }
 
 // Review 176 B2: every proposal and control names the token that made it,
-// not only the first write of a thread.
+// not only the first write of a thread; a thread writes with the token it
+// first wrote with (TD-370; session_test.go has the rest).
 func TestTokenOnEveryWrite(t *testing.T) {
 	w := newKernelWorld(t)
 	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "first"}, "k1", mission, nil)
 	ok(t, err)
-	b := store.Writer{Actor: "thread:s", Token: "second"}
+	_, err = store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "second"}, "k2", mission, nil)
+	is(t, err, store.ErrNotYours)
+	b := store.Writer{Actor: "thread:s", Token: "first"}
 	m, err := store.ProposeMission(ctx, w.rt, b, "k2", mission, nil)
 	ok(t, err)
 	tasks, err := store.ProposeTasks(ctx, w.rt, b, "k3", "M-1", []store.TaskProposal{proposal("a", w.spec)})
@@ -700,7 +703,7 @@ func TestTokenOnEveryWrite(t *testing.T) {
 		"control_set":      fmt.Sprintf("body_json->>'control_id' = '%s'", c["control_id"]),
 	} {
 		if n := w.count(t, `SELECT count(*) FROM agentrt.event WHERE event_type = $1 AND actor_id = 'thread:s'
-		  AND body_json->>'token' = 'second' AND `+where, typ); n != 1 {
+		  AND body_json->>'token' = 'first' AND `+where, typ); n != 1 {
 			t.Errorf("%s does not name the token that made it", typ)
 		}
 	}

@@ -47,7 +47,7 @@ func RequestControl(ctx context.Context, db DB, w Writer, key, scope, ref, kind,
 		return nil, invalid("a global control has no scope_ref; any other names its %s", scope)
 	}
 	req := map[string]any{"scope": scope, "scope_ref": ref, "kind": kind, "reason": reason}
-	return idempotent(ctx, db, w.Actor, "controls", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+	return idempotentAs(ctx, db, w, "controls", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return nil, err
 		}

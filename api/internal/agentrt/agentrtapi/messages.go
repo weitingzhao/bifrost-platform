@@ -151,7 +151,8 @@ func (a *API) sendMessage(w http.ResponseWriter, r *http.Request) {
 // readMessages is the caller's unread messages, oldest first (GET /messages):
 // wait= 0 to 25 seconds holds the request until one arrives (a long poll on
 // PostgreSQL, the record; the mailbox signal in Redis is not needed to be
-// right), limit= 1 to 100.
+// right), limit= 1 to 100. A thread reads only with the token its session is
+// held to (store.Unread, TD-370).
 func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 	who, err := writer(r)
 	if err != nil {
@@ -183,7 +184,7 @@ func (a *API) readMessages(w http.ResponseWriter, r *http.Request) {
 		if wait > 0 {
 			qctx = ctx
 		}
-		ms, err := store.Unread(qctx, a.DB, who.Actor, limit)
+		ms, err := store.Unread(qctx, a.DB, who, limit)
 		switch {
 		case err != nil && r.Context().Err() != nil:
 			return // the client went away

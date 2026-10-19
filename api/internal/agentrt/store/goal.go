@@ -75,7 +75,7 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 		}
 		return nil
 	}
-	return idempotent(ctx, db, w.Actor, "goals", key, map[string]any{"goal": g.Text, "repo": g.Repo}, readMain,
+	return idempotentAs(ctx, db, w, "goals", key, map[string]any{"goal": g.Text, "repo": g.Repo}, readMain,
 		func(tx pgx.Tx) (map[string]any, error) {
 			m, err := proposeMissionTx(ctx, tx, w, mp, "", nil)
 			if err != nil {

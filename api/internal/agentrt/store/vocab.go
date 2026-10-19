@@ -29,7 +29,7 @@ type field struct {
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
 var bodies = map[string][]field{
-	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}},
+	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},
 	"plan_node_retitled":      {{"title", kStr, false}, {"label", kStr, true}},
 	"plan_node_state_changed": {{"from", kStr, false}, {"to", kStr, false}, {"cause", kStr, false}},

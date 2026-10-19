@@ -325,7 +325,7 @@ func RecordOwnerReading(ctx context.Context, db DB, w Writer, key string, r Pool
 	if r.ResetsAt != nil {
 		req["resets_at"] = r.ResetsAt.UTC().Truncate(time.Microsecond).Format(timeLayout)
 	}
-	return idempotent(ctx, db, w.Actor, "pool_reading", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
+	return idempotentAs(ctx, db, w, "pool_reading", key, req, nil, func(tx pgx.Tx) (map[string]any, error) {
 		if err := ensureWriter(ctx, tx, w, false); err != nil {
 			return nil, err
 		}

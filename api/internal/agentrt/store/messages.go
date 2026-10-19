@@ -65,14 +65,20 @@ func SendMessage(ctx context.Context, db DB, w Writer, to, kind string, body []b
 	return id, err
 }
 
-// Unread is an actor's messages not yet acknowledged, oldest first; PostgreSQL
-// is the record, whatever the mailbox stream in Redis holds.
-func Unread(ctx context.Context, db DB, actor string, limit int) ([]Message, error) {
+// Unread is the reader's messages not yet acknowledged, oldest first;
+// PostgreSQL is the record, whatever the mailbox stream in Redis holds. A
+// thread reads only with the token its session is held to (TD-370).
+func Unread(ctx context.Context, db DB, w Writer, limit int) ([]Message, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
+	actor := w.Actor
 	var out []Message
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		out = nil
+		if err := holdsSessionTx(ctx, tx, w); err != nil {
+			return err
+		}
 		rows, err := tx.Query(ctx, `SELECT m.message_id, m.from_actor_id, m.to_actor_id, m.message_kind,
 		    COALESCE(m.mission_id, ''), COALESCE(m.task_id, ''), b.body, m.created_at
 		  FROM agentrt.message m JOIN agentrt.artifact_blob b ON b.artifact_id = m.body_artifact_id
@@ -111,6 +117,9 @@ func AckMessages(ctx context.Context, db DB, w Writer, ids []string) ([]string, 
 		// message rows and the mailbox stream in different orders and could
 		// deadlock (review 264 B3).
 		if err := writerLock(ctx, tx, w.Actor); err != nil {
+			return err
+		}
+		if err := holdsSessionTx(ctx, tx, w); err != nil {
 			return err
 		}
 		for _, id := range ids {

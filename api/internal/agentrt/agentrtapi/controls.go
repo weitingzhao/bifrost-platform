@@ -37,7 +37,8 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 	} else {
 		out["actor"] = who.Actor
 		// The same check a write makes, without writing (review 176 part 2
-		// B1): retired, of another kind, or not registered say so.
+		// B1): retired, of another kind, not registered, or a thread's
+		// session another token's (TD-370) say so.
 		var registered bool
 		err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
 			var err error
@@ -45,7 +46,7 @@ func (a *API) whoami(w http.ResponseWriter, r *http.Request) {
 			return err
 		})
 		switch {
-		case errors.Is(err, store.ErrInvalid):
+		case errors.Is(err, store.ErrInvalid), errors.Is(err, store.ErrNotYours):
 			out["actor_error"] = err.Error()
 		case err != nil:
 			a.fail(w, err)

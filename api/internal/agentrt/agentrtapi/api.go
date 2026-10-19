@@ -179,6 +179,8 @@ func (a *API) logf(format string, args ...any) {
 func (a *API) fail(w http.ResponseWriter, err error) {
 	var pg *pgconn.PgError
 	switch {
+	case errors.Is(err, store.ErrNotYours):
+		writeError(w, http.StatusForbidden, "not_yours", err.Error())
 	case errors.Is(err, store.ErrInvalid), errors.Is(err, actions.ErrInvalid):
 		writeError(w, http.StatusUnprocessableEntity, "invalid", err.Error())
 	case errors.Is(err, store.ErrUnsigned):
