@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
@@ -582,9 +583,11 @@ func (a *Attempt) results() results {
 var errTooLarge = errors.New("agentd: the file is over its limit")
 
 // readAtMost reads a file of at most n bytes; a longer one is not read (one
-// that grows while it is read, not past n+1).
+// that grows while it is read, not past n+1). Like readTail it opens only a
+// regular file, never through a link, and never waits on a FIFO the executor
+// left in its place (review 303 B).
 func readAtMost(path string, n int) ([]byte, error) {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -592,6 +595,9 @@ func readAtMost(path string, n int) ([]byte, error) {
 	info, err := f.Stat()
 	if err != nil {
 		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("agentd: %s is not a regular file", path)
 	}
 	if info.Size() > int64(n) {
 		return nil, errTooLarge
@@ -608,21 +614,12 @@ func readAtMost(path string, n int) ([]byte, error) {
 
 // readTail reads the last n bytes of a file, and nothing before them.
 func readTail(path string, n int64) ([]byte, error) {
-	f, err := os.Open(path)
+	f, err := openRegular(path, n)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if off := info.Size() - n; off > 0 {
-		if _, err = f.Seek(off, io.SeekStart); err != nil {
-			return nil, err
-		}
-	}
-	return io.ReadAll(io.LimitReader(f, n))
+	return io.ReadAll(f)
 }
 
 // conclusion is the attempt's own verdict: a verification by its verify.json,

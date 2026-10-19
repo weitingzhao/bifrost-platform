@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -489,5 +490,27 @@ func TestReportAndLogNotWrittenThroughLinks(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(filepath.Join(elsewhere, "report.md")); string(b) != "theirs" {
 		t.Fatalf("written behind the linked output: %q", b)
+	}
+}
+
+// Review 303 B: a log or a report the executor left as a FIFO with no
+// writer is not read, and the reading does not wait for one.
+func TestResultsDoNotWaitOnAFIFO(t *testing.T) {
+	out := t.TempDir()
+	for _, name := range []string{"log.txt", "report.md"} {
+		if err := syscall.Mkfifo(filepath.Join(out, name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &Attempt{Claim: &Claimed{Role: "implement"}, Out: out}
+	done := make(chan results, 1)
+	go func() { done <- a.results() }()
+	select {
+	case r := <-done:
+		if r.reportBody != nil || len(r.logTail) > 0 {
+			t.Fatalf("read a FIFO: %+v", r)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the results wait on a FIFO")
 	}
 }
