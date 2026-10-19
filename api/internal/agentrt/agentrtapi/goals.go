@@ -2,6 +2,7 @@ package agentrtapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -41,12 +42,14 @@ const (
 )
 
 // goalBody is POST /goals: the goal and its repositories, as repos (the
-// Owner 10-19: a goal may name several) or, as before, one repo; not both.
+// Owner 10-19: a goal may name several) or, as before, one repo; never both,
+// whatever either holds, null or empty included (review 332 B1): the fields
+// are kept as they came, so that one given is told from one left out.
 type goalBody struct {
-	IdempotencyKey string   `json:"idempotency_key"`
-	Goal           string   `json:"goal"`
-	Repo           string   `json:"repo"`
-	Repos          []string `json:"repos"`
+	IdempotencyKey string          `json:"idempotency_key"`
+	Goal           string          `json:"goal"`
+	Repo           json.RawMessage `json:"repo"`
+	Repos          json.RawMessage `json:"repos"`
 }
 
 // proposeGoal is POST /goals. A key with an answer gets it; a new key reads
@@ -111,16 +114,24 @@ func checkGoal(b goalBody) (goal string, repos []string, err error) {
 			return "", nil, invalid("the goal has a control character %U", c)
 		}
 	}
-	switch {
-	case b.Repo != "" && b.Repos != nil:
+	if b.Repo != nil && b.Repos != nil {
 		return "", nil, invalid("a goal names repo or repos, not both")
-	case b.Repos == nil:
-		if _, ok := GoalRepos[b.Repo]; !ok {
-			return "", nil, invalid("a goal may name %s, not %q", strings.Join(store.RepoNames(), ", "), b.Repo)
-		}
-		return goal, []string{b.Repo}, nil
 	}
-	if repos, err = store.CheckGoalRepos(b.Repos); err != nil {
+	if b.Repos == nil {
+		var repo string
+		if b.Repo != nil && json.Unmarshal(b.Repo, &repo) != nil {
+			return "", nil, invalid("repo is a repository's name")
+		}
+		if _, ok := GoalRepos[repo]; !ok {
+			return "", nil, invalid("a goal may name %s, not %q", strings.Join(store.RepoNames(), ", "), repo)
+		}
+		return goal, []string{repo}, nil
+	}
+	var names []string
+	if json.Unmarshal(b.Repos, &names) != nil {
+		return "", nil, invalid("repos is a list of repositories' names")
+	}
+	if repos, err = store.CheckGoalRepos(names); err != nil {
 		return "", nil, err
 	}
 	return goal, repos, nil

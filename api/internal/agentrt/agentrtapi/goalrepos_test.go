@@ -58,6 +58,14 @@ func TestGoalRepos(t *testing.T) {
 		"empty":   {map[string]any{"idempotency_key": "x2", "goal": "do this", "repos": []string{}}, "not none"},
 		"twice":   {map[string]any{"idempotency_key": "x3", "goal": "do this", "repos": []string{"bifrost-platform", "bifrost-platform"}}, "names bifrost-platform twice"},
 		"unknown": {map[string]any{"idempotency_key": "x4", "goal": "do this", "repos": []string{"bifrost-platform", "bifrost-trade-api"}}, `not "bifrost-trade-api"`},
+		// Both given, whatever one holds (review 332 B1).
+		"empty repo and repos": {map[string]any{"idempotency_key": "x6", "goal": "do this", "repo": "", "repos": []string{"bifrost-platform"}}, "not both"},
+		"repo and null repos":  {map[string]any{"idempotency_key": "x7", "goal": "do this", "repo": "bifrost-platform", "repos": nil}, "not both"},
+		"null repos":           {map[string]any{"idempotency_key": "x8", "goal": "do this", "repos": nil}, "not none"},
+		"null repo":            {map[string]any{"idempotency_key": "x9", "goal": "do this", "repo": nil}, `not ""`},
+		"empty repo":           {map[string]any{"idempotency_key": "x10", "goal": "do this", "repo": ""}, `not ""`},
+		"a number in repos":    {map[string]any{"idempotency_key": "x11", "goal": "do this", "repos": []any{"bifrost-platform", 7}}, "list of repositories' names"},
+		"repo a list":          {map[string]any{"idempotency_key": "x12", "goal": "do this", "repo": []string{"bifrost-platform"}}, "a repository's name"},
 	} {
 		if code, out := call(t, s, "admin", "POST", "goals", c.body); code != http.StatusUnprocessableEntity || out["error"] != "invalid" ||
 			!strings.Contains(out["message"].(string), c.has) {
