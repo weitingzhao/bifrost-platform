@@ -130,6 +130,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/progress", a.progress)
 		r.With(gate("drain"), cfg).Post("/hosts/{id}/drain", a.drainHost)
 		r.With(read, cfg).Get("/pools", a.listPools)
+		r.With(read, cfg).Get("/capabilities", a.capabilities)
 		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
 	})
 }
@@ -520,6 +521,10 @@ func (a *API) getAttempt(w http.ResponseWriter, r *http.Request) {
 // getEvents lists a stream's events after a sequence number, at most 500.
 func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 	stream := r.URL.Query().Get("stream")
+	if stream == "" {
+		a.getRecentEvents(w, r)
+		return
+	}
 	var after int64
 	if s := r.URL.Query().Get("after_seq"); s != "" {
 		if _, err := fmt.Sscan(s, &after); err != nil {

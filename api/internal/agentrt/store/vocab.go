@@ -31,6 +31,12 @@ type field struct {
 // (design v5 §5.1.3): every required field present with a value of its kind,
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
+// IsEventType says whether t is an event type of the closed vocabulary.
+func IsEventType(t string) bool {
+	_, ok := bodies[t]
+	return ok
+}
+
 var bodies = map[string][]field{
 	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},
