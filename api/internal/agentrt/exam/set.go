@@ -20,6 +20,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Set is a loaded question set.
@@ -175,6 +177,9 @@ func Load(fsys fs.FS) (*Set, error) {
 			return nil, fmt.Errorf("exam: %s: a question has an id and items", name)
 		}
 		for _, it := range q.Items {
+			if it == nil || slices.Contains(it.Rules, nil) {
+				return nil, fmt.Errorf("exam: %s: a null item or rule", name)
+			}
 			if it.ID == "" || s.items[it.ID] != nil {
 				return nil, fmt.Errorf("exam: %s: item %q has no id or comes twice", name, it.ID)
 			}
@@ -216,48 +221,167 @@ func (r *Rule) compile() error {
 	if r.ID == "" {
 		return fmt.Errorf("a rule has an id")
 	}
+	if err := r.check(); err != nil {
+		return err
+	}
 	r.re = map[string]*regexp.Regexp{}
 	all := [][]string{r.Patterns, r.Forbid, r.HeadingForbid, r.AnyOf, r.SelectAnyOf, r.MeanwhileForbid}
 	for _, c := range r.MustCover {
 		all = append(all, c.AnyOf)
 	}
 	op := r.OptionParse
-	all = append(all, []string{op.Threshold, op.MinSamples, op.Pair, op.Empty})
+	if r.Kind == "card" {
+		all = append(all, []string{op.Threshold, op.MinSamples, op.Pair})
+		if op.Empty != "" {
+			all = append(all, []string{op.Empty})
+		}
+	}
 	for _, list := range all {
 		for _, p := range list {
-			if p == "" || r.re[p] != nil {
+			if r.re[p] != nil {
 				continue
 			}
-			re, err := regexp.Compile(p)
+			re, err := compilePy(p)
 			if err != nil {
 				return fmt.Errorf("pattern %q: %w", p, err)
 			}
 			r.re[p] = re
 		}
 	}
-	switch r.Kind {
-	case "max_lines":
-		if r.N <= 0 {
-			return fmt.Errorf("max_lines needs n")
-		}
-	case "alert":
-		if r.Expect == nil {
-			return fmt.Errorf("alert needs expect")
-		}
-	case "protocol_lines":
-		if r.Prefix == "" || len(r.MustCover) == 0 {
-			return fmt.Errorf("protocol_lines needs a prefix and must_cover")
-		}
-	case "time_near":
-		if !strings.HasPrefix(r.At, "{{t0") || !strings.HasSuffix(r.At, "}}") {
-			return fmt.Errorf("time_near's at is a {{t0…}} placeholder")
-		}
-	case "card":
-		if op.ExcludedAfter == "" || op.LimitedAfter == "" || op.Threshold == "" || op.MinSamples == "" || op.Pair == "" {
-			return fmt.Errorf("card needs its option_parse")
+	if r.Kind == "card" {
+		// the threshold and the sample count are a capture; a pair is two
+		if r.re[op.Threshold].NumSubexp() < 1 || r.re[op.MinSamples].NumSubexp() < 1 || r.re[op.Pair].NumSubexp() < 2 {
+			return fmt.Errorf("card: threshold and min_samples capture a number, pair captures two")
 		}
 	}
 	return nil
 }
+
+// check refuses a rule without what its kind needs: an empty list, an empty
+// string in one, a field left out. A rule that cannot be read is no rule at
+// all, and a missing pattern would make a forbidding rule pass everything
+// (review 371 A1).
+func (r *Rule) check() error {
+	lists := map[string][]string{"aliases": r.Aliases, "patterns": r.Patterns, "forbid": r.Forbid, "stop_at": r.StopAt,
+		"heading_forbid": r.HeadingForbid, "guard_extra": r.GuardExtra, "any_of": r.AnyOf, "must_reference_any": r.MustReference,
+		"repos": r.Repos, "select_any_of": r.SelectAnyOf, "no_score_executors": r.NoScoreExecutors,
+		"meanwhile_forbid": r.MeanwhileForbid, "meanwhile_guard_extra": r.MeanwhileGuardExtra}
+	for name, l := range lists {
+		if slices.Contains(l, "") {
+			return fmt.Errorf("%s holds an empty string", name)
+		}
+	}
+	need := func(ok bool, what string) error {
+		if !ok {
+			return fmt.Errorf("%s needs %s", r.Kind, what)
+		}
+		return nil
+	}
+	switch r.Kind {
+	case "max_lines":
+		return need(r.N > 0, "n")
+	case "mentions_all":
+		for _, it := range r.Items {
+			if it.Name == "" || len(it.Aliases) == 0 || slices.Contains(it.Aliases, "") {
+				return need(false, "items each with a name and aliases")
+			}
+		}
+		return need(len(r.Items) > 0, "items")
+	case "known_ids_only", "forbid_any":
+		return need(len(r.Patterns) > 0, "patterns")
+	case "clause_forbid":
+		return need(len(r.Aliases) > 0 && len(r.Forbid)+len(r.HeadingForbid) > 0, "aliases and forbid")
+	case "clause_require", "clause_each_require":
+		return need(len(r.Aliases) > 0 && len(r.AnyOf) > 0, "aliases and any_of")
+	case "pace_near":
+		return need(len(r.Aliases) > 0 && r.TolPoints >= 0, "aliases and a tolerance")
+	case "time_near":
+		return need(len(r.Aliases) > 0 && strings.HasPrefix(r.At, "{{t0") && strings.HasSuffix(r.At, "}}"), "aliases and at, a {{t0…}} placeholder")
+	case "require_any":
+		return need(len(r.AnyOf) > 0, "any_of")
+	case "alert":
+		return need(r.Expect != nil, "expect")
+	case "protocol_lines":
+		for _, c := range r.MustCover {
+			if c.Name == "" || len(c.AnyOf) == 0 || slices.Contains(c.AnyOf, "") {
+				return need(false, "must_cover groups each with a name and any_of")
+			}
+		}
+		return need((r.Prefix == "CANNOT:" || r.Prefix == "POLICY_ALERT:") && len(r.MustCover) > 0, "a prefix (CANNOT: or POLICY_ALERT:) and must_cover")
+	case "plan_parses":
+		return need(len(r.Repos) > 0, "repos")
+	case "card":
+		op := r.OptionParse
+		return need(len(r.SelectAnyOf) > 0 && r.OwnerDuty != "" && r.OptionsMin > 0 && r.OptionsMax >= r.OptionsMin && len(r.Scores) > 0 &&
+			op.ExcludedAfter != "" && op.LimitedAfter != "" && op.Threshold != "" && op.MinSamples != "" && op.Pair != "",
+			"select_any_of, owner_duty, options_min and options_max, scores and its option_parse")
+	case "section_order":
+		for _, g := range r.Groups {
+			if len(g) == 0 || slices.Contains(g, "") {
+				return need(false, "groups of aliases")
+			}
+		}
+		return need(len(r.Groups) > 1, "groups")
+	case "cjk_ratio":
+		return need(r.Min > 0 && r.Min <= 1, "min in (0, 1]")
+	}
+	return nil
+}
+
+// compilePy compiles a pattern of the set with the meaning Python's re.ASCII
+// gives it, which the reference grader runs (review 371 B2): \s is ASCII
+// whitespace with \v; a pattern may not hold a non-ASCII cased letter, and the
+// answer is read with the two letters that case-fold onto ASCII ones (ſ, K)
+// taken out (asciiFold), so (?i) folds ASCII letters only.
+func compilePy(p string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	inClass := false
+	rs := []rune(p)
+	for i := 0; i < len(rs); i++ {
+		c := rs[i]
+		if c >= utf8.RuneSelf && unicode.SimpleFold(c) != c {
+			return nil, fmt.Errorf("a cased non-ASCII letter %q: (?i) would fold it otherwise than the reference does", c)
+		}
+		switch {
+		case c == '\\' && i+1 < len(rs):
+			i++
+			switch d := rs[i]; {
+			case d == 's' && inClass:
+				b.WriteString(`\t\n\v\f\r `)
+			case d == 's':
+				b.WriteString(`[\t\n\v\f\r ]`)
+			case d == 'S' && inClass:
+				return nil, fmt.Errorf(`\S inside a class`)
+			case d == 'S':
+				b.WriteString(`[^\t\n\v\f\r ]`)
+			default:
+				b.WriteRune('\\')
+				b.WriteRune(d)
+			}
+			continue
+		case c == '[' && !inClass:
+			inClass = true
+			b.WriteRune(c)
+			// a ] right after [ or [^ is a member, not the end
+			if i+1 < len(rs) && rs[i+1] == '^' {
+				i++
+				b.WriteRune('^')
+			}
+			if i+1 < len(rs) && rs[i+1] == ']' {
+				i++
+				b.WriteRune(']')
+			}
+			continue
+		case c == ']' && inClass:
+			inClass = false
+		}
+		b.WriteRune(c)
+	}
+	return regexp.Compile(b.String())
+}
+
+// asciiFold takes out of an answer the two letters Go's case folding maps
+// onto ASCII ones and Python's re.ASCII does not.
+var asciiFold = strings.NewReplacer("ſ", "\uFFFD", "\u212A", "\uFFFD")
 
 func (r *Rule) rx(p string) *regexp.Regexp { return r.re[p] }

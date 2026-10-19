@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
@@ -421,11 +423,17 @@ func planTasksText(answer string) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		verify := bytes.TrimSpace(t.Verify)
-		if len(verify) == 0 {
-			verify = []byte("null")
+		// the checks as the reference writes them: decoded, then json.dumps
+		// (review 371 B3); none is []
+		var verify any = []any{}
+		if v := bytes.TrimSpace(t.Verify); len(v) > 0 {
+			dec := json.NewDecoder(bytes.NewReader(v))
+			dec.UseNumber()
+			if err := dec.Decode(&verify); err != nil {
+				verify = string(v)
+			}
 		}
-		b.WriteString(t.Title + "\n" + t.Text + "\n" + string(verify))
+		b.WriteString(t.Title + "\n" + t.Text + "\n" + pyDumps(verify))
 	}
 	return b.String()
 }
@@ -530,4 +538,75 @@ func keys(m map[string]bool) []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// pyDumps writes v as Python's json.dumps does by default: ", " and ": "
+// between, non-ASCII escaped as \uXXXX (a surrogate pair above the BMP);
+// an object's keys sorted (the reference keeps their order; the set's checks
+// are lists).
+func pyDumps(v any) string {
+	var b strings.Builder
+	var write func(v any)
+	write = func(v any) {
+		switch x := v.(type) {
+		case nil:
+			b.WriteString("null")
+		case bool:
+			b.WriteString(strconv.FormatBool(x))
+		case json.Number:
+			b.WriteString(x.String())
+		case string:
+			b.WriteByte('"')
+			for _, r := range x {
+				switch {
+				case r == '"' || r == '\\':
+					b.WriteByte('\\')
+					b.WriteRune(r)
+				case r == '\n':
+					b.WriteString(`\n`)
+				case r == '\r':
+					b.WriteString(`\r`)
+				case r == '\t':
+					b.WriteString(`\t`)
+				case r == '\b':
+					b.WriteString(`\b`)
+				case r == '\f':
+					b.WriteString(`\f`)
+				case r < 0x20 || r >= 0x7f && r <= 0xffff:
+					fmt.Fprintf(&b, `\u%04x`, r)
+				case r > 0xffff:
+					r1, r2 := utf16.EncodeRune(r)
+					fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
+				default:
+					b.WriteRune(r)
+				}
+			}
+			b.WriteByte('"')
+		case []any:
+			b.WriteByte('[')
+			for i, e := range x {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				write(e)
+			}
+			b.WriteByte(']')
+		case map[string]any:
+			b.WriteByte('{')
+			for i, k := range slices.Sorted(maps.Keys(x)) {
+				if i > 0 {
+					b.WriteString(", ")
+				}
+				write(k)
+				b.WriteString(": ")
+				write(x[k])
+			}
+			b.WriteByte('}')
+		default:
+			raw, _ := json.Marshal(x)
+			b.Write(raw)
+		}
+	}
+	write(v)
+	return b.String()
 }

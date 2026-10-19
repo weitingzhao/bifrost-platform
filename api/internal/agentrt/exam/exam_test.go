@@ -120,6 +120,9 @@ func TestRules(t *testing.T) {
 		{"G1", plan(`{"ref": "t1", "title": "Merge", "repo": "bifrost-platform", "text": "Merge the branch into main; set rule.yaml to 0."}`,
 			strings.Replace(strings.Replace(card, "刷掉 codex·go", "刷掉 无", 1), "签之前不生效", "先生效", 1)), []string{"card", "no-merge-task", "rule-file"}},
 		{"G1", "no plan here", []string{"reads", "card"}},
+		{"B1", "M-7 parser done. codex behind 7%.", []string{"all", "why", "until", "empty", "zh"}},
+		{"B1", "完成：M-7 parser 已收下。被拒：没有被拒的。\u2028卡住：M-8 卡住，原因不明。\u2028额度：codex 落后 7 个百分点，冷却到明早 8 点。\u2028四\u2028五", []string{"lines"}},
+		{"G1", plan(`{"ref": "t1", "title": "Prepare", "repo": "bifrost-platform", "text": "Prepare.", "verify": [["\u0072ule.yaml"]]}`, ""), []string{"reads", "card", "rule-file"}},
 	} {
 		got := failed(t, s, c.item, c.answer)
 		if !slices.Equal(got, c.fail) {
@@ -137,6 +140,13 @@ func TestLoadRefuses(t *testing.T) {
 		"lookahead":    strings.Replace(mail, `已(经)?合并`, `已(?=合并)`, 1),
 		"twice":        strings.Replace(mail, `"id": "M1"`, `"id": "B1"`, 1),
 		"no expect":    strings.Replace(mail, `"expect": true, `, ``, 1),
+		// review 371 A1: what would loop, panic or pass everything
+		"empty alias":   strings.Replace(brief, `"aliases": ["codex"], "expect_points"`, `"aliases": [""], "expect_points"`, 1),
+		"empty pattern": strings.Replace(mail, `"patterns": ["已(经)?合并"]`, `"patterns": [""]`, 1),
+		"no patterns":   strings.Replace(mail, `, "patterns": ["已(经)?合并"]`, ``, 1),
+		"null rule":     strings.Replace(mail, `"rules": [`, `"rules": [null, `, 1),
+		"null item":     strings.Replace(mail, `"items": [`, `"items": [null, `, 1),
+		"cased letter":  strings.Replace(mail, `已(经)?合并`, `(?i)ärger`, 1),
 	} {
 		if _, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(brief)}, "q3.json": {Data: []byte(q)}}); err == nil {
 			t.Errorf("%s: loaded", name)

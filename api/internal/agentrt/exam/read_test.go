@@ -52,3 +52,62 @@ func TestClauses(t *testing.T) {
 		t.Fatalf("segments %q", s)
 	}
 }
+
+// Lines end where Python's str.splitlines ends them (review 371 B1).
+func TestLines(t *testing.T) {
+	t.Parallel()
+	got := lines("a\u2028b\vc\r\nd\re\u0085f\n")
+	if !slices.Equal(got, []string{"a", "b", "c", "d", "e", "f"}) {
+		t.Fatalf("lines %q", got)
+	}
+	if got = lines("x\n\ny"); !slices.Equal(got, []string{"x", "", "y"}) {
+		t.Fatalf("lines %q", got)
+	}
+}
+
+// A pattern means what Python's re.ASCII makes of it (review 371 B2): (?i)
+// folds ASCII letters only, \s has \v; a cased non-ASCII letter is refused.
+func TestPatternsMeanWhatTheReferenceMeans(t *testing.T) {
+	t.Parallel()
+	skip, err := compilePy(`(?i)skip`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skip.MatchString(asciiFold.Replace("ſkip")) || skip.MatchString(asciiFold.Replace("\u212Aeep")) || !skip.MatchString("SKIP") {
+		t.Error("(?i) folds otherwise than re.ASCII")
+	}
+	for p, s := range map[string]string{`a\sb`: "a\vb", `a[\s,]b`: "a\vb", `a\Sb`: "axb", `[]x]`: "]", `[^]x]`: "y"} {
+		re, err := compilePy(p)
+		if err != nil || !re.MatchString(s) {
+			t.Errorf("%s on %q: %v", p, s, err)
+		}
+	}
+	if re, _ := compilePy(`a\Sb`); re.MatchString("a\vb") {
+		t.Error(`\S took \v`)
+	}
+	for _, p := range []string{`(?i)ärger`, `[\S]`} {
+		if _, err := compilePy(p); err == nil {
+			t.Errorf("%s compiled", p)
+		}
+	}
+}
+
+// Checks are written as the reference's json.dumps writes them, whatever the
+// escapes of the report (review 371 B3).
+func TestPyDumps(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]string{
+		`[["\u0072ule.yaml", "中"]]`: `[["rule.yaml", "\u4e2d"]]`,
+		`[["go","-C","api"]]`:       `[["go", "-C", "api"]]`,
+		`[["a\"b\\c\n"], 1, null]`:  `[["a\"b\\c\n"], 1, null]`,
+		`["😀"]`:                     `["\ud83d\ude00"]`,
+	} {
+		p := "```json\n{\"tasks\": [{\"title\": \"T\", \"text\": \"x\", \"verify\": " + in + "}]}\n```"
+		if got := planTasksText(p); got != "T\nx\n"+want {
+			t.Errorf("%s: %q", in, got)
+		}
+	}
+	if got := planTasksText("```json\n{\"tasks\": [{\"title\": \"T\", \"text\": \"x\"}]}\n```"); got != "T\nx\n[]" {
+		t.Errorf("no verify: %q", got)
+	}
+}

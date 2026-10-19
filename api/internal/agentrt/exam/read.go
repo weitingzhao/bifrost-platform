@@ -40,11 +40,29 @@ type clause struct{ heading, body string }
 
 func (c clause) String() string { return c.heading + c.body }
 
-// lines splits text as Python's str.splitlines does for the line ends a model
-// writes.
+// lines splits text as Python's str.splitlines does: at \n, \r, \r\n, \v,
+// \f, \x1c–\x1e, \x85, U+2028 and U+2029, no empty line after a last break
+// (review 371 B1).
 func lines(text string) []string {
-	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
-	return strings.Split(text, "\n")
+	var out []string
+	start := 0
+	for i, r := range text {
+		switch r {
+		case '\n', '\r', '\v', '\f', 0x1c, 0x1d, 0x1e, 0x85, 0x2028, 0x2029:
+		default:
+			continue
+		}
+		if r == '\n' && i > 0 && text[i-1] == '\r' {
+			start = i + 1 // the \n of a \r\n: the line ended at the \r
+			continue
+		}
+		out = append(out, text[start:i])
+		start = i + utf8.RuneLen(r)
+	}
+	if start < len(text) {
+		out = append(out, text[start:])
+	}
+	return out
 }
 
 // clauses reads an answer into clauses: a blank line ends a heading; a bullet
@@ -202,6 +220,9 @@ func segments(text string, aliases, stopAt []string, ahead bool) []string {
 	var out []string
 	for _, c := range cs {
 		for _, a := range aliases {
+			if a == "" {
+				continue // Load refuses one; never loop on it
+			}
 			for from := 0; ; {
 				k := strings.Index(c[from:], a)
 				if k < 0 {

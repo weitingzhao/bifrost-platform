@@ -22,6 +22,7 @@ func (s *Set) Grade(id, answer string, t0 time.Time) ([]Result, error) {
 		return nil, err
 	}
 	g := grading{t0: t0, input: string(input)}
+	answer = asciiFold.Replace(answer)
 	out := make([]Result, 0, len(it.Rules))
 	for _, r := range it.Rules {
 		ok, why := r.eval(answer, g)
