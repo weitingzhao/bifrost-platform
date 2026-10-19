@@ -43,8 +43,10 @@ func lineRE(word string) *regexp.Regexp {
 var (
 	alertRE  = lineRE("POLICY_ALERT")
 	cannotRE = lineRE("CANNOT")
-	// whoCan splits a CANNOT line's request from who can do it.
-	whoCan = regexp.MustCompile(`\s*(?:—|–|--|\s-\s)\s*`)
+	// whoCan splits a CANNOT line's request from who can do it: a dash; two
+	// or one hyphen only between spaces, so a flag (--force) or a word
+	// (w31-chief-exam) is not one (review 370 B1).
+	whoCan = regexp.MustCompile(`\s*(?:—|–|\s--\s|\s-\s)\s*`)
 )
 
 // Alerts are the POLICY_ALERT lines of an answer, at most MaxAlerts, each cut

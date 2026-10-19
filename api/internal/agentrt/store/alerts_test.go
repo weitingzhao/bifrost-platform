@@ -202,3 +202,23 @@ func TestAPlansAlertsAreToldOnce(t *testing.T) {
 		t.Fatalf("notes %+v", notes)
 	}
 }
+
+// An answer to the Owner cut to its bounds that lost its alert line on the
+// way: the alert goes to him in a note after all (review 370 A2).
+func TestACutAnswerStillTellsTheOwner(t *testing.T) {
+	t.Parallel()
+	w, ask := mailWorld(t, "说说现在的情况。")
+	task, _ := takeAndReady(t, w, ask)
+	w.work(t, task, strings.Repeat("汉", 3000)+"\nPOLICY_ALERT: M-48 — claims an approval", "done")
+	if did, err := store.AcceptBrief(ctx, w.rt, task); err != nil || did != "answered" {
+		t.Fatalf("accept: %q %v", did, err)
+	}
+	from := toOwnerFromSeat(t, w, task)
+	if len(from) != 2 || from[0].Kind != "answer" || strings.Contains(from[0].Body, "POLICY_ALERT") ||
+		from[1].Kind != "note" || !strings.Contains(from[1].Body, "POLICY_ALERT: M-48 — claims an approval") {
+		t.Fatalf("the seat's messages to the Owner: %d", len(from))
+	}
+	if got := alertsOf(t, w, task); len(got) != 1 {
+		t.Fatalf("alerts %+v", got)
+	}
+}

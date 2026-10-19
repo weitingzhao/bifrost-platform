@@ -403,7 +403,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			return err
 		}
 		tell := func(why string) error {
-			_, err := answer(ctx, tx, to, kind, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
+			_, _, err := answer(ctx, tx, to, kind, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
 			return err
 		}
 		switch {
@@ -447,13 +447,14 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 				text = alertsPassedOn
 			}
 		}
-		id, err := answer(ctx, tx, to, kind, t, text)
+		id, posted, err := answer(ctx, tx, to, kind, t, text)
 		if err != nil {
 			return err
 		}
 		if len(alerts) > 0 {
-			if to == "owner" {
-				// The Owner reads them in the answer itself.
+			if to == "owner" && allIn(posted, alerts) {
+				// The Owner reads them in the answer itself; one the cut took
+				// off goes in a note (review 370 A2).
 				_, err = recordAlerts(ctx, tx, t.mission, t.id, question, alerts)
 			} else {
 				err = tellOwnerOfAlerts(ctx, tx, t.mission, t.id, question, "answering "+to+"'s message "+question, alerts)
@@ -469,8 +470,9 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 }
 
 // answer posts text from the seat to to, linked to the brief's task and
-// mission, cut to maxAnswerRunes and MaxMessageBody.
-func answer(ctx context.Context, tx pgx.Tx, to, kind string, t taskRow, text string) (string, error) {
+// mission, cut to maxAnswerRunes and MaxMessageBody; it returns the message
+// and the text sent.
+func answer(ctx context.Context, tx pgx.Tx, to, kind string, t taskRow, text string) (string, string, error) {
 	const cut = "\n\n(The answer was longer; this is its beginning.)"
 	if utf8.RuneCountInString(text) > maxAnswerRunes {
 		text = string([]rune(text)[:maxAnswerRunes]) + cut
@@ -479,5 +481,17 @@ func answer(ctx context.Context, tx pgx.Tx, to, kind string, t taskRow, text str
 		r := []rune(strings.TrimSuffix(text, cut))
 		text = string(r[:len(r)*9/10]) + cut
 	}
-	return postMessage(ctx, tx, Seat, to, kind, []byte(text), t.mission, t.id)
+	id, err := postMessage(ctx, tx, Seat, to, kind, []byte(text), t.mission, t.id)
+	return id, text, err
+}
+
+// allIn says whether every alert reads in the text sent.
+func allIn(sent string, alerts []string) bool {
+	in := seatproto.Alerts(sent)
+	for _, a := range alerts {
+		if !slices.Contains(in, a) {
+			return false
+		}
+	}
+	return true
 }

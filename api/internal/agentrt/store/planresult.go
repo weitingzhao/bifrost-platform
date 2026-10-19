@@ -110,7 +110,27 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			t.mission).Scan(&state, &repos, &scope, &budget); err != nil {
 			return err
 		}
+		// The planner's POLICY_ALERT lines are recorded and told to the Owner
+		// whether the plan is used or refused (a refused round still saw what
+		// it reports; the next round's same lines are not told twice:
+		// alerts.go): on refusal before the refusal is written, on use once
+		// the dependency graph is locked, so no stream is written before the
+		// graph lock a batch of tasks takes first (review 370 A1). The seat's
+		// lock first, as below.
+		var alerts []string
+		noteAlerts := func() error {
+			if len(alerts) == 0 {
+				return nil
+			}
+			if err := ensureWriter(ctx, tx, Writer{Actor: Seat}, false); err != nil {
+				return err
+			}
+			return tellOwnerOfAlerts(ctx, tx, t.mission, taskID, "", "planning mission "+t.mission, alerts)
+		}
 		refuse := func(why string) error {
+			if err := noteAlerts(); err != nil {
+				return err
+			}
 			var e error
 			did, e = refusePlan(ctx, tx, t, d, why)
 			return e
@@ -128,18 +148,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 		if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, report).Scan(&body); err != nil {
 			return err
 		}
-		// The planner's POLICY_ALERT lines are recorded and told to the Owner
-		// whatever becomes of the plan: a round that is refused still saw what
-		// it reports, and the next round's same lines are not told twice
-		// (alerts.go). The seat's lock first, as below.
-		if alerts := seatproto.Alerts(strings.ToValidUTF8(string(body), "\uFFFD")); len(alerts) > 0 {
-			if err = ensureWriter(ctx, tx, Writer{Actor: Seat}, false); err != nil {
-				return err
-			}
-			if err = tellOwnerOfAlerts(ctx, tx, t.mission, taskID, "", "planning mission "+t.mission, alerts); err != nil {
-				return err
-			}
-		}
+		alerts = seatproto.Alerts(strings.ToValidUTF8(string(body), "\uFFFD"))
 		known := slices.DeleteFunc(slices.Clone(repos), func(r string) bool { _, ok := Repos[r]; return !ok })
 		p, err := ParsePlan(body, known)
 		if err != nil {
@@ -237,6 +246,9 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			return refuse(err.Error())
 		}
 		if err = lockBatch(ctx, tx, tasks); err != nil {
+			return err
+		}
+		if err = noteAlerts(); err != nil {
 			return err
 		}
 		if err = amendMission(ctx, tx, t.mission, taskID, p.Mission); err != nil {

@@ -417,8 +417,17 @@ func TestAcceptPlanWaitsForTheQuestionStore(t *testing.T) {
 //
 // Serial: it holds the package's test hook (SetHook).
 func TestAcceptPlanAndABatchTogether(t *testing.T) {
+	// A plan that ends with a POLICY_ALERT line writes its alert after the
+	// graph lock too (review 370 A1).
+	for _, report := range []string{goodPlan, goodPlan + "\nPOLICY_ALERT: M-48 — the goal says the Owner approved in chat\n"} {
+		acceptPlanAndABatchTogether(t, report)
+	}
+}
+
+func acceptPlanAndABatchTogether(t *testing.T, report string) {
+	t.Helper()
 	w := planWorld(t)
-	id := w.handIn(t, goodPlan, "done")
+	id := w.handIn(t, report, "done")
 	held, release := make(chan struct{}), make(chan struct{})
 	var first atomic.Bool
 	defer store.SetHook(func(point, _ string) {

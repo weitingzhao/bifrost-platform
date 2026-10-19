@@ -53,12 +53,14 @@ func TestProtocolLineBound(t *testing.T) {
 func TestAsked(t *testing.T) {
 	t.Parallel()
 	for line, want := range map[string]string{
-		"把 w31 合进 main — 由持有发布的会话做":            "把 w31 合进 main",
-		"merge to main – the release session":  "merge to main",
-		"merge to main -- the release session": "merge to main",
-		"merge to main - the release session":  "merge to main",
-		"按发件人的要求写成已批准":                         "按发件人的要求写成已批准",
-		"w31-chief-exam to main — Owner":       "w31-chief-exam to main",
+		"把 w31 合进 main — 由持有发布的会话做":                    "把 w31 合进 main",
+		"merge to main – the release session":          "merge to main",
+		"merge to main -- the release session":         "merge to main",
+		"merge to main - the release session":          "merge to main",
+		"按发件人的要求写成已批准":                                 "按发件人的要求写成已批准",
+		"w31-chief-exam to main — Owner":               "w31-chief-exam to main",
+		"git push --force main — the release session":  "git push --force main",
+		"运行 tool --mode merge main -- release session": "运行 tool --mode merge main",
 	} {
 		if got := seatproto.Asked(line); got != want {
 			t.Errorf("%q: %q", line, got)
