@@ -336,7 +336,7 @@ func streamResultReport(vendor, logPath, reportPath string) error {
 	if failed {
 		return fmt.Errorf("agentd: %s ended in error: %s", vendor, oneLine(result, 200))
 	}
-	return os.WriteFile(reportPath, []byte(result), 0o600)
+	return writeOwn(filepath.Dir(reportPath), filepath.Base(reportPath), []byte(result))
 }
 
 // oneLine is s on one line, cut to at most max bytes.

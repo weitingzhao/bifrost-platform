@@ -200,8 +200,13 @@ func (w *Workspace) Dirty(ctx context.Context) (bool, error) {
 // made itself included (review 164 A6); the index is left as it was. A patch
 // over limit is not read past it: tooLarge (review 164 B1).
 func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge bool, err error) {
+	g, err := w.gitDir()
+	if err != nil {
+		return nil, false, err
+	}
+	defer func() { _ = g.Close() }()
 	idx := filepath.Join(w.Dir, ".git", "agentd-checkpoint-index")
-	defer func() { _ = os.Remove(idx) }()
+	defer func() { _ = g.Remove("agentd-checkpoint-index") }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
 	if _, err = w.gitEnv(ctx, env, "read-tree", w.Base); err != nil {
 		return nil, false, err
@@ -410,15 +415,19 @@ func runGit(ctx context.Context, wall []string, dir string, env []string, args .
 // own, removed with its lock, so a call cut short leaves nothing in the way
 // of the next (review 240 B5).
 func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []string, err error) {
-	removeStaleIndexes(filepath.Join(w.Dir, ".git"))
-	f, err := os.CreateTemp(filepath.Join(w.Dir, ".git"), "agentd-changed-index-*")
+	g, err := w.gitDir()
 	if err != nil {
 		return nil, nil, err
 	}
-	idx := f.Name()
-	_ = f.Close()
-	_ = os.Remove(idx) // git writes the index itself; only the unique name is wanted
-	defer func() { _ = os.Remove(idx); _ = os.Remove(idx + ".lock") }()
+	defer func() { _ = g.Close() }()
+	removeStaleIndexes(g)
+	name, err := NewChangeID() // a unique name: git writes the index itself
+	if err != nil {
+		return nil, nil, err
+	}
+	name = "agentd-changed-index-" + name
+	idx := filepath.Join(w.Dir, ".git", name)
+	defer func() { _ = g.Remove(name); _ = g.Remove(name + ".lock") }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
 	if _, err = w.gitEnv(ctx, env, "read-tree", w.Base); err != nil {
 		return nil, nil, err
@@ -517,13 +526,34 @@ func configUnder(root, dir string) []string {
 // agentd was killed (review 241 B5), and the fixed-name ones of the version
 // before; a check runs once per attempt at a time, so one older than ten
 // minutes is no running check's.
-func removeStaleIndexes(gitDir string) {
-	matches, _ := filepath.Glob(filepath.Join(gitDir, "agentd-changed-index*"))
-	for _, m := range matches {
-		if info, err := os.Lstat(m); err == nil && time.Since(info.ModTime()) > 10*time.Minute {
-			_ = os.Remove(m)
+func removeStaleIndexes(g *os.Root) {
+	d, err := g.Open(".")
+	if err != nil {
+		return
+	}
+	names, _ := d.Readdirnames(-1)
+	_ = d.Close()
+	for _, n := range names {
+		if !strings.HasPrefix(n, "agentd-changed-index") {
+			continue
+		}
+		if info, err := g.Lstat(n); err == nil && time.Since(info.ModTime()) > 10*time.Minute {
+			_ = g.Remove(n)
 		}
 	}
+}
+
+// gitDir is the checkout's .git, opened through the checkout: agentd makes
+// and removes its own index files there outside the wall, and a .git the
+// executor turned into a link out of the checkout is not followed (review
+// 301).
+func (w *Workspace) gitDir() (*os.Root, error) {
+	r, err := os.OpenRoot(w.Dir)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	return r.OpenRoot(".git")
 }
 
 func nulSplit(out string) []string {

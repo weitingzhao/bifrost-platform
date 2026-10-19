@@ -510,3 +510,50 @@ func TestWorkspaceGitGoesThroughItsWall(t *testing.T) {
 		}
 	}
 }
+
+// Review 301 A2: agentd makes and removes its own index files in the
+// checkout's .git outside the wall; a .git the executor made a link out of
+// the checkout is not followed, whether or not git runs.
+func TestIndexFilesNotThroughALinkedGitDir(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	ctx := context.Background()
+	w, err := Prepare(ctx, WorkspaceDir(t.TempDir(), "t1", 1), bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	elsewhere := t.TempDir()
+	stale := filepath.Join(elsewhere, "agentd-changed-index-victim")
+	cp := filepath.Join(elsewhere, "agentd-checkpoint-index")
+	for _, f := range []string{stale, cp} {
+		if err = os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		old := time.Now().Add(-time.Hour)
+		if err = os.Chtimes(f, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = os.Rename(filepath.Join(w.Dir, ".git"), filepath.Join(w.Dir, "moved.git")); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink(elsewhere, filepath.Join(w.Dir, ".git")); err != nil {
+		t.Fatal(err)
+	}
+	w.wall = []string{"/usr/bin/false"} // git itself never runs
+	if _, _, err = w.Changes(ctx); err == nil {
+		t.Error("changes listed through a linked .git")
+	}
+	if _, _, err = w.Diff(ctx, 1<<20); err == nil {
+		t.Error("a diff through a linked .git")
+	}
+	entries, _ := os.ReadDir(elsewhere)
+	if len(entries) != 2 {
+		t.Fatalf("files behind the link: %v", entries)
+	}
+	for _, f := range []string{stale, cp} {
+		if _, err = os.Stat(f); err != nil {
+			t.Errorf("removed behind the link: %v", err)
+		}
+	}
+}

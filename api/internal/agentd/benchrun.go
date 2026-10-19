@@ -619,6 +619,12 @@ func (b *Bench) execute(ctx context.Context, q BenchQuestion, dir, out string) (
 	if err != nil {
 		return "", err
 	}
+	// The question's modules are in the cache the setup filled, which codex's
+	// commands (no network) read; its own Go cache stays the attempt's
+	// (review 301 B).
+	if b.GoModCache != "" {
+		sp.Env = withEnv(sp.Env, "GOMODCACHE", b.GoModCache)
+	}
 	log, err := os.OpenFile(filepath.Join(out, "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", err

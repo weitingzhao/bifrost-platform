@@ -393,49 +393,101 @@ func afterExecutor(executor, codexHome, root, out string, logf func(format strin
 	}
 }
 
-// openOutput opens out, a directory inside root, through root: no part of
-// the way from root down is a link, and the directory opened is the one
-// looked at.
+// openOutput opens out, a directory inside root, through root, one step at
+// a time: each step a directory and not a link, and the directory opened the
+// one looked at, so a step swapped meanwhile is not followed (review 301).
 func openOutput(root, out string) (*os.Root, error) {
 	rel, err := filepath.Rel(root, out)
 	if err != nil || !filepath.IsLocal(rel) {
 		return nil, fmt.Errorf("agentd: %s is not inside %s", out, root)
 	}
-	r, err := os.OpenRoot(root)
+	cur, err := os.OpenRoot(root)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = r.Close() }()
-	var last fs.FileInfo
-	for _, p := range prefixes(rel) {
-		fi, lerr := r.Lstat(p)
-		if lerr != nil {
-			return nil, lerr
+	for _, step := range strings.Split(rel, string(filepath.Separator)) {
+		next, serr := openStep(cur, step)
+		_ = cur.Close()
+		if serr != nil {
+			return nil, serr
 		}
-		if !fi.IsDir() {
-			return nil, fmt.Errorf("agentd: %s is not a directory", filepath.Join(root, p))
-		}
-		last = fi
+		cur = next
 	}
-	sub, err := r.OpenRoot(rel)
-	if err != nil {
-		return nil, err
-	}
-	if fi, serr := sub.Stat("."); serr != nil || !os.SameFile(fi, last) {
-		_ = sub.Close()
-		return nil, fmt.Errorf("agentd: %s changed while it was opened", out)
-	}
-	return sub, nil
+	return cur, nil
 }
 
-// prefixes are a/, a/b, a/b/c of the local path a/b/c.
-func prefixes(rel string) []string {
-	parts := strings.Split(rel, string(filepath.Separator))
-	out := make([]string, len(parts))
-	for i := range parts {
-		out[i] = filepath.Join(parts[:i+1]...)
+// openStep opens the directory name directly in r, not a link, the one
+// looked at.
+func openStep(r *os.Root, name string) (*os.Root, error) {
+	fi, err := r.Lstat(name)
+	if err != nil {
+		return nil, err
 	}
-	return out
+	if !fi.IsDir() {
+		return nil, fmt.Errorf("agentd: %s in %s is not a directory", name, r.Name())
+	}
+	next, err := r.OpenRoot(name)
+	if err != nil {
+		return nil, err
+	}
+	if st, serr := next.Stat("."); serr != nil || !os.SameFile(fi, st) {
+		_ = next.Close()
+		return nil, fmt.Errorf("agentd: %s in %s changed while it was opened", name, r.Name())
+	}
+	return next, nil
+}
+
+// writeOwn puts body in dir/name as a new file, replacing whatever the
+// executor left under that name (a link, a hard link, a FIFO) without
+// writing through it: agentd writes there outside the wall (review 301).
+func writeOwn(dir, name string, body []byte) error {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+	tmp, err := NewChangeID()
+	if err != nil {
+		return err
+	}
+	tmp = ".agentd-" + tmp
+	f, err := r.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(body)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = r.Rename(tmp, name)
+	}
+	if err != nil {
+		_ = r.Remove(tmp)
+	}
+	return err
+}
+
+// appendOwn adds text to dir/name, a regular file of dir itself (a link out
+// of dir is not followed), or makes it.
+func appendOwn(dir, name, text string) error {
+	r, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+	if fi, lerr := r.Lstat(name); lerr == nil && !fi.Mode().IsRegular() {
+		return fmt.Errorf("agentd: %s in %s is not a regular file", name, dir)
+	}
+	f, err := r.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE|syscall.O_NONBLOCK, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(text)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // removeIn removes rel and what is beneath it, inside r only (a link an

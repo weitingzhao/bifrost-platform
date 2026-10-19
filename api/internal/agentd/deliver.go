@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -320,10 +318,7 @@ func (d *Daemon) checkChanges(ctx context.Context, ws *Workspace, e *Entry) erro
 	}
 	if why != "" {
 		d.logf("agentd: %s: %s", e.AttemptID, why)
-		if f, ferr := os.OpenFile(filepath.Join(e.Workdir+".out", "log.txt"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); ferr == nil {
-			_, _ = fmt.Fprintf(f, "\nagentd: the attempt is failed: %s\n", why)
-			_ = f.Close()
-		}
+		_ = appendOwn(e.Workdir+".out", "log.txt", fmt.Sprintf("\nagentd: the attempt is failed: %s\n", why))
 		e.Conclusion = "failed"
 	}
 	e.Checked = true

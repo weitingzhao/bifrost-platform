@@ -425,3 +425,43 @@ func TestGitWall(t *testing.T) {
 		t.Fatalf("git's wall = %q", w)
 	}
 }
+
+// Review 301 A1: what agentd writes into an attempt's output after its
+// executor (cursor's or claude's report, a line of the log) goes to the
+// attempt's own file, never through a link or a hard link the executor left
+// under that name.
+func TestReportAndLogNotWrittenThroughLinks(t *testing.T) {
+	for _, how := range []string{"link", "hard link", "plain"} {
+		t.Run(how, func(t *testing.T) {
+			out, elsewhere := t.TempDir(), t.TempDir()
+			victim := filepath.Join(elsewhere, "report.md")
+			must(t, os.WriteFile(victim, []byte("another attempt's report"), 0o600))
+			report := filepath.Join(out, "report.md")
+			switch how {
+			case "link":
+				must(t, os.Symlink(victim, report))
+			case "hard link":
+				must(t, os.Link(victim, report))
+			}
+			must(t, os.WriteFile(filepath.Join(out, "log.txt"), []byte(`{"type":"result","result":"replaced"}`+"\n"), 0o600))
+			must(t, streamResultReport("cursor", filepath.Join(out, "log.txt"), report))
+			if b, _ := os.ReadFile(victim); string(b) != "another attempt's report" {
+				t.Fatalf("written through the %s: %q", how, b)
+			}
+			fi, err := os.Lstat(report)
+			if b, _ := os.ReadFile(report); err != nil || !fi.Mode().IsRegular() || string(b) != "replaced" {
+				t.Fatalf("the report = %q %v", b, err)
+			}
+		})
+	}
+	out, elsewhere := t.TempDir(), t.TempDir()
+	victim := filepath.Join(elsewhere, "log.txt")
+	must(t, os.WriteFile(victim, []byte("x"), 0o600))
+	must(t, os.Symlink(victim, filepath.Join(out, "log.txt")))
+	if appendOwn(out, "log.txt", "agentd: failed\n") == nil {
+		t.Error("appended through a link out of the output")
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "x" {
+		t.Fatalf("the log line went through the link: %q", b)
+	}
+}
