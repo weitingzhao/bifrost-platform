@@ -1,13 +1,13 @@
 package store
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"strings"
 	"unicode"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
 // Claims of the Owner's approval (v5 §5.3 T04 交叉传播, §5.1.3 policy_alert
@@ -64,7 +64,7 @@ func normalizeClaim(s string) string {
 // escape (已) hides nothing.
 func ApprovalClaim(body []byte) (string, bool) {
 	text := normalizeClaim(string(body))
-	if strs := jsonStrings(body); strs != "" {
+	if strs, isJSON := localpath.JSONStrings(body); isJSON {
 		text += normalizeClaim(strs)
 	}
 	for i, p := range claimPhrases {
@@ -73,41 +73,6 @@ func ApprovalClaim(body []byte) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// jsonStrings is every key and string value of a JSON body, one per line; ""
-// when body is not JSON.
-func jsonStrings(body []byte) string {
-	if !json.Valid(body) {
-		return ""
-	}
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-	var v any
-	if dec.Decode(&v) != nil {
-		return ""
-	}
-	var b strings.Builder
-	var walk func(any)
-	walk = func(v any) {
-		switch x := v.(type) {
-		case string:
-			b.WriteString(x)
-			b.WriteByte('\n')
-		case []any:
-			for _, e := range x {
-				walk(e)
-			}
-		case map[string]any:
-			for k, e := range x {
-				b.WriteString(k)
-				b.WriteByte('\n')
-				walk(e)
-			}
-		}
-	}
-	walk(v)
-	return b.String()
 }
 
 // alertClaim records a policy_alert on stream when body claims the Owner's

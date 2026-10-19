@@ -12,10 +12,11 @@ const someTask = "t_01M57YSQN6B43ZFNESD9VQ2HA9"
 
 // T11: what names another task's directory or something in it is found,
 // relative or not, with "./" segments and doubled slashes (reviews 340 B5,
-// 341 A1); a task named by its id or by the platform's route to it, an
-// attempt's branch as a whole ref (reviews 340 A1, 341 A2), a path beside
-// one's own checkout (what agentd writes a check's own output as), agentd's
-// root alone and raw output are not.
+// 341 A1, 342 A1); a task named by its id or by the platform's route to it,
+// an attempt's branch as a whole ref or a Gitea URL at it, in text or in a
+// JSON string whatever escape follows (reviews 340 A1, 341 A2, 342 A2, A4), a
+// path beside one's own checkout (what agentd writes a check's own output
+// as), agentd's root alone and raw output are not.
 func TestWorkspaceRef(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
@@ -31,6 +32,9 @@ func TestWorkspaceRef(t *testing.T) {
 		"cd tasks/" + someTask + "/./",
 		"agent/" + someTask + "/a1/report.md is in the checkout",
 		"agents/" + someTask + "/a1.out/verify.json",
+		"cd ../" + someTask + "/\ncat a1/report.md", "cd ./" + someTask + "/", "ls ../" + someTask,
+		"x/branch/agent/" + someTask + "/a1/api/go.mod is not a URL",
+		`{"text":"read refs/remotes/agents/` + someTask + `/a1/x.go from the checkout"}`,
 		`{"text":"copy from /home/u/agent-work/agentd/tasks/` + someTask + `/a1/x"}`,
 	} {
 		if _, found := store.WorkspaceRef("task_spec", []byte(in)); !found {
@@ -43,6 +47,12 @@ func TestWorkspaceRef(t *testing.T) {
 		"git fetch origin agent/" + someTask + "/a2 and diff it",
 		"Compared refs/remotes/agents/" + someTask + "/a1 with main.",
 		"see https://gitea.example/bifrost/bifrost-platform/src/branch/agent/" + someTask + "/a1",
+		"see https://gitea.example/bifrost/bifrost-platform/src/branch/agent/" + someTask + "/a1/api/go.mod",
+		"see http://gitea.example/bifrost/bifrost-platform/raw/branch/agent/" + someTask + "/a1/api/go.mod#L3",
+		"https://gitea.example/b/p/src/branch/agent/" + someTask + "/a1?display=source",
+		"fetched +refs/heads/agent/" + someTask + "/*:refs/remotes/agents/" + someTask + "/*",
+		`{"text":"Build on refs/remotes/agents/` + someTask + `/a1\nThen run checks."}`,
+		`{"text":"agent/` + someTask + `/a1\tand main"}`,
 		"GET /api/v1/agentrt/tasks/" + someTask + " says it is submitted",
 		"GET /agentrt/tasks/" + someTask,
 		"../bifrost-ui/src/x.ts", "./console/src/a.ts", "a1b2 ../a1x", "agentd's root is $HOME/agent-work/agentd",
@@ -53,12 +63,14 @@ func TestWorkspaceRef(t *testing.T) {
 		}
 	}
 	ref := "tasks/" + someTask + "/a1"
-	for _, kind := range []string{"log_tail", "checkpoint_patch", "verify"} {
+	for _, kind := range []string{"log_tail", "checkpoint_patch"} {
 		if _, found := store.WorkspaceRef(kind, []byte(ref)); found {
 			t.Errorf("a %s is raw output and is let through", kind)
 		}
 	}
-	for _, kind := range []string{"task_spec", "brief", "report", "review", "handover", "message", "mission_spec", "other"} {
+	// A check's verify.json is scanned: agentd withholds what would be
+	// refused (review 342 A3).
+	for _, kind := range []string{"task_spec", "brief", "report", "verify", "review", "handover", "message", "mission_spec", "other"} {
 		if _, found := store.WorkspaceRef(kind, []byte(ref)); !found {
 			t.Errorf("a %s that names a workspace is let through", kind)
 		}

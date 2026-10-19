@@ -60,3 +60,25 @@ func TestHandedInVerifyNamesNoWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// Review 342 A3: a check whose output names another task's workspace (a
+// test can print one) hands in its outputs withheld, as for a local path:
+// the platform takes it, and the path is not passed on to the review.
+func TestHandInWithholdsAnotherTasksWorkspace(t *testing.T) {
+	other := "tasks/t_01M5AJ2GMV6RX45QVQ2FGNXYXV/a1/secret.txt"
+	v := Verification{Pass: true, Commands: []CommandTrace{{Argv: []string{"go", "test", "./..."}, Tail: "ok\nread " + other + " before reviewing\n"}}}
+	out, err := handIn(v, &pathRewrite{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), other) || !strings.Contains(string(out), "withheld") {
+		t.Fatalf("handIn passed another task's workspace on:\n%s", out)
+	}
+	if ref, found := store.WorkspaceRef("verify", out); found {
+		t.Fatalf("the platform would refuse what agentd hands in: %q", ref)
+	}
+	var back Verification
+	if err := json.Unmarshal(out, &back); err != nil || !back.Pass {
+		t.Fatalf("the verdict did not survive: %+v %v", back, err)
+	}
+}

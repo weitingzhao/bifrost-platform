@@ -305,10 +305,16 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 		}
 		// With a check ready and nothing about its job changed, a reroute
 		// moves nothing (review 341 B1).
+		routes := func() int {
+			var n int
+			ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'route_decided'`).Scan(&n))
+			return n
+		}
 		reroute := func() {
+			before := routes()
 			n, err := store.Reroute(ctx, w.rt)
 			ok(t, err)
-			o.rerouted += n
+			o.rerouted += n + routes() - before // nothing returned, nothing written (review 342 B1)
 		}
 		w.runSaying(t, "h1", cursor, "done", words)
 		v, err := store.StartVerification(ctx, w.rt, impl)
@@ -367,6 +373,12 @@ func TestAliasesKeepRowsApart(t *testing.T) {
 	same := func(x string) string { return (&aliases{names: map[string]string{}, count: map[string]int{}}).of(x) }
 	if same(a+" waits for "+b) == same(a+" waits for "+a) {
 		t.Fatal("a dependency on another task reads as one on itself")
+	}
+	// Two targets named before; the dependency moved from one to the other
+	// reads differently (review 342 B1).
+	c := store.NewTaskID()
+	if same(a+" "+b+" "+c+"; "+a+" waits for "+b) == same(a+" "+b+" "+c+"; "+a+" waits for "+c) {
+		t.Fatal("a dependency moved to another known task reads the same")
 	}
 	if same(a+" waits for "+b) != same(b+" waits for "+a) {
 		t.Fatal("the same shape with other ids reads differently")

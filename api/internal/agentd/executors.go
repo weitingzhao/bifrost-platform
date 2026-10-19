@@ -482,8 +482,10 @@ func RunVerify(args []string) int {
 // (withoutLocalPaths), marshalled, and the JSON itself masked
 // (localpath.MaskJSON), since the platform scans the marshalled bytes and the
 // encoder's own escapes can complete H8's drive-letter form ("C:<" is written
-// "C:\u003c", review 237 A). When a local path is still left, the outputs are
-// withheld rather than refused for it.
+// "C:\u003c", review 237 A). When a local path is still left, or the output
+// names another task's workspace (localpath.WorkspaceRef, T11: the platform
+// refuses that too; its own directories are "." and ".." by now, review 342
+// A3), the outputs are withheld rather than refused.
 func handIn(v Verification, paths *pathRewrite) ([]byte, error) {
 	v = withoutLocalPaths(v, paths)
 	out, err := json.MarshalIndent(v, "", "  ")
@@ -491,7 +493,9 @@ func handIn(v Verification, paths *pathRewrite) ([]byte, error) {
 		return nil, err
 	}
 	if masked, ok := localpath.MaskJSON(out); ok {
-		return masked, nil
+		if _, names := localpath.WorkspaceRef(masked); !names {
+			return masked, nil
+		}
 	}
 	v.Reason = withheld
 	for i := range v.Commands {
@@ -501,7 +505,7 @@ func handIn(v Verification, paths *pathRewrite) ([]byte, error) {
 	return json.MarshalIndent(v, "", "  ")
 }
 
-const withheld = "(withheld: it still named a path of this machine after masking)"
+const withheld = "(withheld: it still named a path of this machine, or another task's workspace, after masking)"
 
 // pathRewrite names the directories a check's output names most by what
 // they are to the check: the checkout "." (the check runs in it), the task's
