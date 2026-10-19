@@ -272,7 +272,14 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	// The locks the insert's guard takes, taken before the event's stream
 	// (review 149 B1): the step, then the subject.
 	if t.PlanNode != "" {
-		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, t.PlanNode); err != nil {
+		// A dropped step takes no new work (review 313 A3); read under the
+		// step's lock, so a drop and a new task never interleave.
+		var state *string
+		err = tx.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1 FOR SHARE`, t.PlanNode).Scan(&state)
+		switch {
+		case err == nil && state != nil && *state == "dropped":
+			return Appended{}, invalid("step %s is dropped; it takes no new work", t.PlanNode)
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return Appended{}, err
 		}
 	}

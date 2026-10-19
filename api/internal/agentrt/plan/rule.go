@@ -113,8 +113,28 @@ func (r Rule) Standing() bool { return r.node != nil && r.node.standing() }
 // Empty reports whether the rule has no condition.
 func (r Rule) Empty() bool { return r.node == nil }
 
+// Atoms a rule may name, for Names.
+const (
+	AtomTask     = "task_accepted"
+	AtomApproval = "approval_executed"
+	AtomQuestion = "question_answered"
+	AtomCI       = "ci_succeeded"
+	AtomSignoff  = "owner_signoff"
+	AtomManual   = "manual"
+	AtomGates    = "gates_passed"
+)
+
+var atomKinds = map[string]nodeKind{AtomTask: kTask, AtomApproval: kApproval, AtomQuestion: kQuestion, AtomCI: kCI,
+	AtomSignoff: kSignoff, AtomManual: kManual, AtomGates: kGates}
+
+// Names reports whether the rule names an atom of this kind anywhere.
+func (r Rule) Names(atom string) bool {
+	k, ok := atomKinds[atom]
+	return ok && r.node != nil && r.node.has(k)
+}
+
 // HasManual reports whether the rule names a manual atom anywhere.
-func (r Rule) HasManual() bool { return r.node != nil && r.node.has(kManual) }
+func (r Rule) HasManual() bool { return r.Names(AtomManual) }
 
 func (n *node) has(k nodeKind) bool {
 	if n.kind == k {

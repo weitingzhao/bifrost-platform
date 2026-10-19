@@ -145,15 +145,7 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (b
 	var err error
 	switch {
 	case c.Op == "set_done_rule":
-		if rule == nil || !rule.Plan.DoneRules {
-			return false, nil
-		}
-		parsed, perr := plan.Parse(c.Rule)
-		if perr != nil || parsed.Empty() || parsed.HasManual() {
-			return false, nil
-		}
-		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 AND node_kind = 'step'
-		  AND state IN ('planned','active') AND done_rule_json = '{}'::jsonb)`, c.Node).Scan(&ok)
+		return standingRule(ctx, tx, c, rule)
 	case c.Op == "add_node" && c.Kind == "step":
 		err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node p WHERE p.plan_node_id = $1 AND p.node_kind = 'item'
 		  AND EXISTS (SELECT 1 FROM agentrt.plan_node s WHERE s.parent_plan_node_id = p.plan_node_id AND s.state = 'active'))`, c.Parent).Scan(&ok)
@@ -162,6 +154,43 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (b
 		  AND state = 'planned')`, c.Node).Scan(&ok)
 	}
 	return ok, err
+}
+
+// standingRule is the plan-standing grant for a done rule (review 313 A2):
+// only while the rule in force grants done_rules; only the first rule of a
+// step not done; binding nothing new (a new binding is the Owner's); naming
+// only the step's own tasks, approvals and questions bound to it already, or
+// the Owner's sign-off, never a manual atom, a CI run (a fact of no step) or
+// a gate; and not already holding, so no rule makes a step done at once.
+func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
+	if rule == nil || !rule.Plan.DoneRules || len(c.Bind) > 0 {
+		return false, nil
+	}
+	parsed, err := plan.Parse(c.Rule)
+	if err != nil || parsed.Empty() || parsed.Names(plan.AtomManual) || parsed.Names(plan.AtomCI) || parsed.Names(plan.AtomGates) {
+		return false, nil
+	}
+	var first bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 AND node_kind = 'step'
+	  AND state IN ('planned','active') AND done_rule_json = '{}'::jsonb)`, c.Node).Scan(&first); err != nil || !first {
+		return false, err
+	}
+	for _, ref := range parsed.Refs() {
+		if ref.Kind != plan.RefApproval && ref.Kind != plan.RefQuestion {
+			continue
+		}
+		var bound bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node_binding WHERE plan_node_id = $1 AND bound_kind = $2
+		  AND bound_ref = $3)`, c.Node, ref.Kind, ref.ID).Scan(&bound); err != nil || !bound {
+			return false, err
+		}
+	}
+	f := &stepFacts{ctx: ctx, tx: tx, step: c.Node, deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false }}
+	res := parsed.Eval(f)
+	if f.err != nil {
+		return false, f.err
+	}
+	return res.Value != plan.True, nil
 }
 
 // lockChanges takes, before any event of the tree's stream (review 180 A3),
@@ -454,8 +483,17 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 				  WHERE plan_node_id = $1`, c.Node, c.MissionID)
 			}
 		case "move_task":
-			_, err = tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2, off_plan = false, off_plan_reason = NULL, version = version + 1,
-			  updated_at = clock_timestamp() WHERE task_id = $1`, c.Task, c.Node)
+			// Not onto a dropped step (review 313 A3); the step is locked
+			// above.
+			var state *string
+			if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, c.Node).Scan(&state); err == nil &&
+				state != nil && *state == "dropped" {
+				err = invalid("step %s is dropped; no task moves onto it", c.Node)
+			}
+			if err == nil {
+				_, err = tx.Exec(ctx, `UPDATE agentrt.task SET plan_node_id = $2, off_plan = false, off_plan_reason = NULL, version = version + 1,
+				  updated_at = clock_timestamp() WHERE task_id = $1`, c.Task, c.Node)
+			}
 		case "set_marks":
 			err = setMarks(ctx, tx, c)
 		}
@@ -612,6 +650,11 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, invalid("%s is not the root of a plan", root)
 			}
+			return nil, err
+		}
+		// The stream's lock before the rule is read, so a standing decision
+		// is made under a rule still in force when it is written.
+		if err := lockStream(ctx, tx, PlanStream(root)); err != nil {
 			return nil, err
 		}
 		rule, err := inForce(ctx, tx, rules.KindPlan)

@@ -66,8 +66,20 @@ func activateStep(ctx context.Context, db DB, id string) (bool, error) {
 			id).Scan(&state, &mission); err != nil {
 			return err
 		}
+		if state != "planned" {
+			return nil
+		}
+		root, err := stepRoot(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		// The stream's lock before the rule's check, so the rule is in
+		// force when the event is written, not only before a wait.
+		if err = lockStream(ctx, tx, PlanStream(root)); err != nil {
+			return err
+		}
 		r, err := inForce(ctx, tx, rules.KindPlan)
-		if err != nil || r == nil || !r.Plan.ActiveOnLease || state != "planned" {
+		if err != nil || r == nil || !r.Plan.ActiveOnLease {
 			return err
 		}
 		var leased *int64
@@ -77,10 +89,6 @@ func activateStep(ctx context.Context, db DB, id string) (bool, error) {
 		}
 		if leased == nil {
 			return nil
-		}
-		root, err := stepRoot(ctx, tx, id)
-		if err != nil {
-			return err
 		}
 		m := ""
 		if mission != nil {

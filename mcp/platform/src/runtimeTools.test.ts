@@ -21,6 +21,9 @@ import {
   proposePlanChange,
   proposePlanImport,
   defaultRequestFiles,
+  readRequestFile,
+  nodeRequestFs,
+  PLAN_IMPORT_MAX_BYTES,
   PLAN_IMPORT_FORMAT,
   proposeTasks,
   putArtifact,
@@ -169,7 +172,7 @@ describe('agent runtime writes', () => {
       const { d, calls } = deps()
       const refusals: Array<[string, RegExp]> = [
         [join(base, 'outside.json'), /the only folder request files are read from/],
-        [join(dir, 'link.json'), /the only folder request files are read from/],
+        [join(dir, 'link.json'), /cannot read .*link\.json/],
         [join(dir, 'other.json'), /is not a plan import request/],
         [join(dir, 'bad.json'), /is not JSON/],
         [join(dir, 'missing.json'), /cannot read/],
@@ -193,6 +196,30 @@ describe('agent runtime writes', () => {
       if (saved === undefined) delete process.env.AGENTRT_PLAN_IMPORT_DIR
       else process.env.AGENTRT_PLAN_IMPORT_DIR = saved
     }
+  })
+
+  it('reads a request from the descriptor it checked: a file swapped, linked out or grown is refused (review 313 A1)', () => {
+    const base = mkdtempSync(join(tmpdir(), 'plan-import-race-'))
+    const dir = join(base, 'plan-import')
+    mkdirSync(dir)
+    writeFileSync(join(dir, 'r2.json'), '{"format":"agentrt.plan_import/v1"}')
+    writeFileSync(join(base, 'outside.json'), '{"format":"agentrt.plan_import/v1","secret":1}')
+    const real = nodeRequestFs
+    assert.deepEqual(readRequestFile(join(dir, 'r2.json'), dir, real), { text: '{"format":"agentrt.plan_import/v1"}' })
+    // The path is swapped for a link out after it was opened: the path now
+    // names another file than the one opened.
+    const swapped = { ...real, stat: (p: string) => (p.endsWith('r2.json') ? real.stat(join(base, 'outside.json')) : real.stat(p)) }
+    assert.match((readRequestFile(join(dir, 'r2.json'), dir, swapped) as { error: string }).error, /the only folder/)
+    // The folder's path resolves elsewhere once the file is open.
+    const moved = { ...real, realpath: (p: string) => (p.endsWith('r2.json') ? join(base, 'outside.json') : real.realpath(p)) }
+    assert.match((readRequestFile(join(dir, 'r2.json'), dir, moved) as { error: string }).error, /the only folder/)
+    // The file grows while it is read.
+    let calls = 0
+    const growing = { ...real, read: (_fd: number, buf: Buffer) => (calls++ < 2 ? buf.fill(32).length : 0) }
+    assert.match((readRequestFile(join(dir, 'r2.json'), dir, growing) as { error: string }).error, /grew past/)
+    // A descriptor that does not open (a link in the last part) is refused.
+    const refuses = { ...real, openNoFollow: () => { throw new Error('ELOOP: too many symbolic links') } }
+    assert.match((readRequestFile(join(dir, 'r2.json'), dir, refuses) as { error: string }).error, /cannot read .*ELOOP/)
   })
 
   it('put_artifact addresses the content by its sha256 and names its kind', async () => {

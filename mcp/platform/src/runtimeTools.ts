@@ -244,24 +244,76 @@ export interface RequestFiles {
   read: (file: string) => { text: string } | { error: string }
 }
 
-export function defaultRequestFiles(): RequestFiles {
-  return {
-    dir: () => planImportDir(),
-    read: (file) => {
-      let dir: string, real: string
+/** The file system calls a request read makes; injected by tests. */
+export interface RequestFs {
+  realpath: (p: string) => string
+  openNoFollow: (p: string) => number
+  fstat: (fd: number) => { isFile: boolean; size: number; dev: number; ino: number }
+  stat: (p: string) => { dev: number; ino: number }
+  read: (fd: number, buf: Buffer) => number
+  close: (fd: number) => void
+}
+
+export const nodeRequestFs: RequestFs = {
+  realpath: (p) => fs.realpathSync(p),
+  openNoFollow: (p) => fs.openSync(p, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW),
+  fstat: (fd) => {
+    const st = fs.fstatSync(fd)
+    return { isFile: st.isFile(), size: st.size, dev: st.dev, ino: st.ino }
+  },
+  stat: (p) => {
+    const st = fs.statSync(p)
+    return { dev: st.dev, ino: st.ino }
+  },
+  read: (fd, buf) => fs.readSync(fd, buf, 0, buf.length, null),
+  close: (fd) => fs.closeSync(fd),
+}
+
+/**
+ * Read a request file from dir only (review 313 A1): the file is opened once,
+ * not following a link in its last part; what is checked is the opened file —
+ * a regular file, the one the path names inside dir (same device and inode
+ * after resolving the path), at most the bound — and what is read is read
+ * from that descriptor, at most one byte past the bound. A file swapped,
+ * linked out or grown between the steps is refused.
+ */
+export function readRequestFile(file: string, dirPath: string, f: RequestFs = nodeRequestFs): { text: string } | { error: string } {
+  let fd: number | undefined
+  try {
+    const dir = f.realpath(dirPath)
+    fd = f.openNoFollow(file)
+    const opened = f.fstat(fd)
+    if (!opened.isFile) return { error: `${file} is not a regular file` }
+    if (opened.size > PLAN_IMPORT_MAX_BYTES) return { error: `${file} is ${opened.size} bytes; a request is at most ${PLAN_IMPORT_MAX_BYTES}` }
+    const real = f.realpath(file)
+    const named = f.stat(real)
+    if (path.dirname(real) !== dir || named.dev !== opened.dev || named.ino !== opened.ino) {
+      return { error: `${file} is not in ${dir}, the only folder request files are read from` }
+    }
+    const buf = Buffer.alloc(PLAN_IMPORT_MAX_BYTES + 1)
+    let n = 0
+    for (;;) {
+      const got = f.read(fd, buf.subarray(n))
+      if (got <= 0) break
+      n += got
+      if (n > PLAN_IMPORT_MAX_BYTES) return { error: `${file} grew past ${PLAN_IMPORT_MAX_BYTES} bytes while it was read` }
+    }
+    return { text: buf.subarray(0, n).toString('utf8') }
+  } catch (e) {
+    return { error: `cannot read ${file}: ${(e as Error).message}` }
+  } finally {
+    if (fd !== undefined) {
       try {
-        dir = fs.realpathSync(planImportDir())
-        real = fs.realpathSync(file)
-      } catch (e) {
-        return { error: `cannot read ${file}: ${(e as Error).message}` }
+        f.close(fd)
+      } catch {
+        // nothing more to do with a descriptor that will not close
       }
-      const st = fs.lstatSync(real)
-      if (!st.isFile()) return { error: `${file} is not a regular file` }
-      if (path.dirname(real) !== dir) return { error: `${file} is not in ${dir}, the only folder request files are read from` }
-      if (st.size > PLAN_IMPORT_MAX_BYTES) return { error: `${file} is ${st.size} bytes; a request is at most ${PLAN_IMPORT_MAX_BYTES}` }
-      return { text: fs.readFileSync(real, 'utf8') }
-    },
+    }
   }
+}
+
+export function defaultRequestFiles(): RequestFiles {
+  return { dir: () => planImportDir(), read: (file) => readRequestFile(file, planImportDir()) }
 }
 
 /**

@@ -93,4 +93,11 @@ func TestPlanChangeDropAndMarksRefusals(t *testing.T) {
 	ok(t, err)
 	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "d2", root, "test", []store.PlanChange{{Op: "drop_step", Node: s2}}, a.ask)
 	wantErr(t, err, "dropped already")
+	// A dropped step takes no new work, proposed or moved (review 313 A3).
+	_, err = w.task(t, "M-2", s2, "", "implement")
+	wantErr(t, err, "is dropped; it takes no new work")
+	t1, err := w.task(t, "M-1", s3, "", "implement")
+	ok(t, err)
+	_, err = store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "m1", root, "test", []store.PlanChange{{Op: "move_task", Task: t1, Node: s2}}, a.ask)
+	wantErr(t, err, "no task moves onto it")
 }

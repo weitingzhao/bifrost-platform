@@ -133,6 +133,17 @@ func Append(ctx context.Context, tx pgx.Tx, ev Event) (Appended, error) {
 	return Appended{EventID: id, Seq: seq, SHA256: sum, At: at}, nil
 }
 
+// lockStream takes the lock Append takes on a stream's head, making the
+// stream when it is new: a caller that must check something at the moment
+// its event is written takes it first and checks after (review 313 A4).
+func lockStream(ctx context.Context, tx pgx.Tx, stream string) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO agentrt.event_stream (event_stream_id) VALUES ($1) ON CONFLICT DO NOTHING`, stream); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, stream)
+	return err
+}
+
 // ChainBreak names the first event of a stream whose hash or link is wrong.
 type ChainBreak struct {
 	Stream string

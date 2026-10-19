@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,45 +33,75 @@ func putPlanStanding(t *testing.T, w *world, doneRules, activeOnLease bool) {
 
 func TestPlanStandingDoneRules(t *testing.T) {
 	t.Parallel()
-	w := newWorld(t)
 	a := &asker{}
-	setRule := func(key, step, rule string) map[string]any {
+	setRule := func(w *world, key, step, rule string, bind ...store.Binding) map[string]any {
 		t.Helper()
 		out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, root, "test", []store.PlanChange{{Op: "set_done_rule", Node: step,
-			Rule: []byte(rule), Bind: []store.Binding{{Kind: "approval", Ref: "16"}}}}, a.ask)
+			Rule: []byte(rule), Bind: bind}}, a.ask)
 		ok(t, err)
 		return out
 	}
 	// No rule in force: the Owner's card.
-	if out := setRule("k0", s2, `{"approval_executed":16}`); out["decision"] != "" {
+	w := newWorld(t)
+	t2, err := w.task(t, "M-2", s2, "", "implement")
+	ok(t, err)
+	if out := setRule(w, "k0", s2, `{"task_accepted":"`+t2+`"}`); out["decision"] != "" {
 		t.Fatalf("without the rule: %v", out)
 	}
-	w2 := newWorld(t)
-	putPlanStanding(t, w2, true, false)
-	w = w2
+
+	w = newWorld(t)
+	putPlanStanding(t, w, true, false)
+	t2, err = w.task(t, "M-2", s2, "", "implement")
+	ok(t, err)
+	// Approval 16 bound to s3 by a change the Owner applied.
+	out := setRule(w, "b0", s3, `{"approval_executed":16}`, store.Binding{Kind: "approval", Ref: "16"})
+	if out["decision"] != "" {
+		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
+	}
+	a.answer(out["question_id"].(string), store.QuestionAnswered, store.CardApplyKey)
+	_, err = store.DecidePlanChanges(ctx, w.rt, a.question, nil)
+	ok(t, err)
+
+	// Within it: the first rule of a step not done, naming its own task.
 	cards := len(a.cards)
-	out := setRule("k1", s2, `{"approval_executed":16}`)
-	if out["decision"] != "applied" || len(a.cards) != cards {
-		t.Fatalf("a first rule on a step not done: %v", out)
+	if out := setRule(w, "k1", s2, `{"task_accepted":"`+t2+`"}`); out["decision"] != "applied" || len(a.cards) != cards {
+		t.Fatalf("a first rule naming the step's own task: %v", out)
 	}
 	var by string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'by' FROM agentrt.event WHERE event_type = 'plan_change_decided' ORDER BY event_id DESC LIMIT 1`).Scan(&by))
 	if by != "standing authorization (plan-standing v1)" {
 		t.Fatalf("decided by %q", by)
 	}
-	// Not within it: a rule on a step that has one, a manual atom, a step
-	// done.
-	if out := setRule("k2", s2, `{"any":[{"approval_executed":16}]}`); out["decision"] != "" {
-		t.Fatalf("a second rule: %v", out)
-	}
-	if out := setRule("k3", s3, `{"manual":"by hand"}`); out["decision"] != "" {
-		t.Fatalf("a manual rule: %v", out)
+	// Not within it (review 313 A2): binding something new, even an
+	// approval long executed; a CI run, a gate, a manual atom; a rule that
+	// holds already; a step with a rule; a step done.
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, aerr := store.Append(ctx, tx, store.Event{Stream: "approvals", Type: "approval_seen", Actor: "controller",
+			Body: map[string]any{"approval": 16, "status": store.ApprovalExecuted}}); aerr != nil {
+			return aerr
+		}
+		return store.SignOff(ctx, tx, "owner", s1, "TD-1")
+	}))
+	for name, c := range map[string]struct {
+		step, rule string
+		bind       []store.Binding
+	}{
+		"a new binding":   {s1, `{"approval_executed":16}`, []store.Binding{{Kind: "approval", Ref: "16"}}},
+		"a CI run":        {s1, `{"ci_succeeded":{"repo":"bifrost-platform","commit":"2333e00753f91c74c8b2f4d693a803f8e89e7892"}}`, nil},
+		"a gate":          {s1, `{"gates_passed":[{"test":"T19","spec_sha256":"` + strings.Repeat("a", 64) + `"}],"env":"prod"}`, nil},
+		"a manual atom":   {s1, `{"manual":"by hand"}`, nil},
+		"already holding": {s1, `{"owner_signoff":"TD-1"}`, nil},
+		"a second rule":   {s2, `{"any":[{"task_accepted":"` + t2 + `"}]}`, nil},
+	} {
+		if out := setRule(w, "n-"+name, c.step, c.rule, c.bind...); out["decision"] != "" {
+			t.Errorf("%s: decided at once: %v", name, out)
+		}
 	}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		_, err := store.SetStepState(ctx, tx, "controller", root, s1, "done", "test")
 		return err
 	}))
-	if out := setRule("k4", s1, `{"approval_executed":16}`); out["decision"] != "" {
+	if out := setRule(w, "k4", s1, `{"owner_signoff":"TD-1"}`); out["decision"] != "" {
 		t.Fatalf("a rule on a done step: %v", out)
 	}
 }
@@ -119,6 +150,87 @@ func TestActivateLeasedSteps(t *testing.T) {
 			}
 			if n, err := store.ActivateLeasedSteps(ctx, w.rt); err != nil || n != 0 {
 				t.Fatalf("a second pass moved %d: %v", n, err)
+			}
+		})
+	}
+}
+
+// The rule is read again once the plan stream's lock is held: a rule that
+// expires while the write waits for that lock grants nothing (review 313 A4).
+func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"activate", "standing"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			w := newWorld(t)
+			var now time.Time
+			ok(t, w.rt.QueryRow(ctx, `SELECT date_trunc('second', clock_timestamp())`).Scan(&now))
+			expires := now.Add(4 * time.Second).UTC()
+			text := fmt.Sprintf("rule_id: plan-standing\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\n"+
+				"expires_at: %s\ndone_rules: true\nactive_on_lease: true\n", expires.Format(time.RFC3339))
+			r, err := rules.Parse([]byte(text))
+			ok(t, err)
+			body, err := r.BodyJSON()
+			ok(t, err)
+			_, err = w.rt.Exec(ctx, `INSERT INTO agentrt.rule (rule_id, rule_version, body_json, body_text, direction, signed_by, signature,
+			  effective_at, expires_at) VALUES ('plan-standing', 1, $1, $2, 'initial', 'test', 'test', '2026-01-01T00:00:00Z', $3)`,
+				string(body), text, expires)
+			ok(t, err)
+			t1, err := w.task(t, "M-1", s1, "", "implement")
+			ok(t, err)
+			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+				_, _, lerr := store.LeaseAttempt(ctx, tx, "controller", "M-1", t1, "exec:codex", "", 1, 2*time.Minute)
+				return lerr
+			}))
+			t2, err := w.task(t, "M-2", s2, "", "implement")
+			ok(t, err)
+			// Separate connections: the write waits on one, the test polls
+			// on another, and another transaction holds the plan stream's
+			// head.
+			pool := w.db.Pool(t, w.db.Runtime)
+			holder := w.db.Connect(t, w.db.Runtime)
+			tx, err := holder.Begin(ctx)
+			ok(t, err)
+			_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.event_stream WHERE event_stream_id = $1 FOR UPDATE`, store.PlanStream(root))
+			ok(t, err)
+			done := make(chan map[string]any, 1)
+			a := &asker{}
+			go func() {
+				if path == "activate" {
+					n, aerr := store.ActivateLeasedSteps(ctx, pool)
+					done <- map[string]any{"n": n, "err": aerr}
+					return
+				}
+				out, perr := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "test", []store.PlanChange{{Op: "set_done_rule",
+					Node: s2, Rule: []byte(`{"task_accepted":"` + t2 + `"}`)}}, a.ask)
+				if perr != nil {
+					out = map[string]any{"err": perr}
+				}
+				done <- out
+			}()
+			waiting := false
+			for i := 0; i < 200 && !waiting; i++ {
+				ok(t, pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database()
+				  AND wait_event_type = 'Lock')`).Scan(&waiting))
+				time.Sleep(20 * time.Millisecond)
+			}
+			if !waiting {
+				t.Fatal("the write never waited for the stream's lock")
+			}
+			time.Sleep(time.Until(expires) + 500*time.Millisecond)
+			ok(t, tx.Commit(ctx))
+			out := <-done
+			switch path {
+			case "activate":
+				var state string
+				ok(t, w.rt.QueryRow(ctx, `SELECT state FROM agentrt.plan_node WHERE plan_node_id = $1`, s1).Scan(&state))
+				if out["err"] != nil || state != "planned" {
+					t.Fatalf("an expired rule activated %s: %v, state %s", s1, out, state)
+				}
+			case "standing":
+				if out["decision"] != "" || out["question_id"] == nil {
+					t.Fatalf("an expired rule decided at once: %v", out)
+				}
 			}
 		})
 	}
