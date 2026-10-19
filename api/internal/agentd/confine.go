@@ -31,19 +31,37 @@ import (
 // so nothing an earlier run wrote is read. An executor shares the host
 // (share.go) only when ProveWall found the wall holding for it on this host
 // and the spawn built for the attempt carries every pin (checkPins).
+//
+// codex is the exception (Owner 2026-10-19, option A of the cut's §10):
+// codex 0.163 sandboxes its commands only with bubblewrap, which cannot
+// mount inside a Landlock domain, so codex runs outside agentd's wall, its
+// commands in its own sandbox with the pinned writable roots and no network.
+// It shares the host when ProveWall proved that sandbox on this host; what
+// the codex process itself writes rests on codex's own checks (a residual,
+// the cut's §7). Its setup still runs each command in the narrower wall.
 
 // ConfineArg is the first argument that makes agentd run argv inside the
 // write wall.
 const ConfineArg = "confine"
 
 // Wall is what ProveWall found on this host: the kernel's Landlock ABI and
-// the executors that run inside the wall. A nil Wall walls nothing.
+// the executors that are held to their own directories: inside the wall, or
+// for codex in its own sandbox (selfSandboxed). A nil Wall holds nothing.
 type Wall struct {
 	ABI       int
 	Executors map[string]bool
 }
 
+// selfSandboxed are the executors held by a sandbox of their own, proven on
+// the host, instead of by agentd's wall.
+var selfSandboxed = map[string]bool{"exec:codex": true}
+
+// holds: the executor's attempts are held to their own directories, and so
+// may share the host.
 func (w *Wall) holds(executor string) bool { return w != nil && w.Executors[executor] }
+
+// wraps: the executor's attempts run inside agentd's wall.
+func (w *Wall) wraps(executor string) bool { return w.holds(executor) && !selfSandboxed[executor] }
 
 // wallArgv is the start of a walled command: argv follows it.
 func wallArgv(self string, writes []string) []string {
@@ -203,8 +221,9 @@ var envKeys = map[string][]string{
 	"exec:cursor":        {"CURSOR_API_KEY", "AGENT_CLI_CREDENTIAL_STORE"},
 }
 
-// checkPins says what the spawn of a walled attempt lacks: the wall over
-// exactly the attempt's workspace, output and siblings, outermost; the
+// checkPins says what the spawn of a confined attempt lacks: the wall over
+// exactly the attempt's workspace, output and siblings, outermost (but for
+// an executor in a sandbox of its own, which has none); the
 // setup, when there is one, with its own home, its narrower wall and, for
 // cursor, its refusals; the executor's command exactly as its builder makes
 // it (no flag added, none missing, none repeated); and an environment of
@@ -218,11 +237,13 @@ func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error
 	}
 	var lacks []string
 	argv := sp.Argv
-	wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
-	if !hasPrefix(argv, wall) {
-		lacks = append(lacks, "the wall over its own directories")
-	} else {
-		argv = argv[len(wall):]
+	if !selfSandboxed[executor] {
+		wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
+		if !hasPrefix(argv, wall) {
+			lacks = append(lacks, "the wall over its own directories")
+		} else {
+			argv = argv[len(wall):]
+		}
 	}
 	if len(argv) > 1 && argv[0] == self && argv[1] == SetupArg {
 		o := setupOpts{Home: setupHome(a.Out), Writes: innerWrites(a, sibs)}
@@ -272,7 +293,7 @@ func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error
 	}
 	if len(lacks) > 0 {
 		slices.Sort(lacks)
-		return fmt.Errorf("agentd: %s runs walled, but its command lacks: %s", executor, strings.Join(slices.Compact(lacks), "; "))
+		return fmt.Errorf("agentd: %s is confined, but its command lacks: %s", executor, strings.Join(slices.Compact(lacks), "; "))
 	}
 	return nil
 }
@@ -322,7 +343,7 @@ func executorArgv(executor, self string, a *Attempt, sibs []string, argv []strin
 }
 
 // codexArgv: argv is codex exec in workspace-write with saved rules
-// ignored, every -c of codexPins, its writable roots and codexWalled once and
+// ignored, every -c of codexPins and its writable roots once and
 // no other, its report where agentd reads it, the claim's model, and the
 // prompt last.
 func codexArgv(a *Attempt, argv []string) string {
@@ -330,7 +351,7 @@ func codexArgv(a *Attempt, argv []string) string {
 	if !hasPrefix(argv, head) || len(argv) < len(head)+1 || argv[len(argv)-1] != Prompt(a) {
 		return "codex exec in workspace-write, rules ignored, the prompt last"
 	}
-	want := map[string]bool{codexRoots(attemptTmp(a.Out)): false, codexWalled: false}
+	want := map[string]bool{codexRoots(attemptTmp(a.Out)): false}
 	for _, p := range codexPins {
 		want[p] = false
 	}

@@ -70,8 +70,11 @@ func TestExecutorPins(t *testing.T) {
 					if !slices.Contains(sp.Argv, "--ignore-rules") {
 						t.Errorf("codex reads saved rules: %v", sp.Argv)
 					}
-					if got := hasRunT(sp.Argv, []string{"-c", "features.use_legacy_landlock=true"}); got != walled {
-						t.Errorf("codex's own Landlock sandbox = %v, walled %v", got, walled)
+					// codex 0.163 sandboxes only with bubblewrap: no legacy mode
+					// (06, 2026-10-19), and no wall of agentd's around it.
+					if slices.ContainsFunc(sp.Argv, func(a string) bool { return strings.Contains(a, "use_legacy_landlock") }) ||
+						slices.Contains(sp.Argv, ConfineArg) {
+						t.Errorf("codex in legacy mode or a wall: %v", sp.Argv)
 					}
 				case "exec:claude":
 					for _, pin := range [][]string{{"--setting-sources", ""}, {"--settings", `{"disableAllHooks":true}`}, {"--strict-mcp-config"},
@@ -86,8 +89,9 @@ func TestExecutorPins(t *testing.T) {
 	}
 }
 
-// Run's spawn for a walled attempt passes checkPins; each pin taken away,
-// repeated or overridden is refused (review 300 A2, A3).
+// Run's spawn for a confined attempt passes checkPins (codex's with no wall
+// of agentd's around it); each pin taken away, repeated or overridden is
+// refused (review 300 A2, A3).
 func TestCheckPins(t *testing.T) {
 	for _, c := range []struct {
 		name, effect, model string
@@ -98,7 +102,7 @@ func TestCheckPins(t *testing.T) {
 		t.Run(c.name+"/"+c.effect, func(t *testing.T) {
 			const self = "/opt/agentd"
 			a := &Attempt{Claim: &Claimed{EffectClass: c.effect, Tool: Tool{Model: c.model}}, Spec: TaskSpec{Text: "# do it"},
-				Dir: t.TempDir(), Out: t.TempDir(), Walled: true}
+				Dir: t.TempDir(), Out: t.TempDir(), Walled: !selfSandboxed[c.name]}
 			sibs := []string{filepath.Join(filepath.Dir(a.Dir), "bifrost-ui")}
 			a.inner = innerWrites(a, sibs)
 			sp, err := Executors(self, hostEnv, Secrets{CursorAPIKey: "fixture-key", ClaudeOAuthToken: "fixture-token"})[c.name](a)
@@ -114,6 +118,9 @@ func TestCheckPins(t *testing.T) {
 				t.Fatal(err)
 			}
 			wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
+			if selfSandboxed[c.name] {
+				wall = nil
+			}
 			for _, built := range []Spawn{sp, withS} {
 				built.Argv = append(slices.Clone(wall), built.Argv...)
 				if err = checkPins(c.name, self, a, sibs, built); err != nil {
@@ -166,6 +173,14 @@ func TestCheckPins(t *testing.T) {
 				"the host's CODEX_HOME": func(s Spawn) Spawn { s.Env = withEnv(s.Env, "CODEX_HOME", "/home/u/.codex"); return s },
 				"a flag more":           beforePrompt("--verbose"),
 			}
+			if selfSandboxed[c.name] {
+				delete(bad, "no wall")
+				delete(bad, "one more directory")
+				bad["a wall around it"] = func(s Spawn) Spawn {
+					s.Argv = append(wallArgv(self, append([]string{a.Dir, a.Out}, sibs...)), s.Argv...)
+					return s
+				}
+			}
 			if c.name != "exec:claude" {
 				bad["a CLAUDE_CONFIG_DIR"] = func(s Spawn) Spawn { s.Env = withEnv(s.Env, "CLAUDE_CONFIG_DIR", "/home/u/.claude"); return s }
 			}
@@ -176,7 +191,7 @@ func TestCheckPins(t *testing.T) {
 				bad["updater on"] = func(s Spawn) Spawn { s.Env = withoutEnv(s.Env, "DISABLE_AUTOUPDATER"); return s }
 				bad["a tool more"] = replace([]string{"--tools", "Read,Grep,Glob"}, []string{"--tools", "Read,Grep,Glob,Bash"})
 			case "exec:codex":
-				bad["bubblewrap inside the wall"] = replace([]string{"-c", codexWalled}, nil)
+				bad["legacy Landlock mode"] = beforePrompt("-c", "features.use_legacy_landlock=true")
 				bad["hooks on"] = replace([]string{"-c", "features.hooks=false"}, nil)
 				bad["hooks on again"] = beforePrompt("-c", "features.hooks=true")
 				bad["a pin twice"] = beforePrompt("-c", "features.hooks=false")
@@ -512,5 +527,42 @@ func TestResultsDoNotWaitOnAFIFO(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the results wait on a FIFO")
+	}
+}
+
+// codex's proof runs its own sandbox with codexExecutor's pins and nothing
+// of agentd's wall around it (the cut's §10 A).
+func TestCodexProofArgv(t *testing.T) {
+	argv := codexProofArgv("/opt/agentd", "/p/ws", "/p/home", "/p/tmp", "Ix")
+	if argv[0] != "codex" || argv[1] != "sandbox" || slices.Contains(argv, ConfineArg) ||
+		slices.ContainsFunc(argv, func(a string) bool { return strings.Contains(a, "use_legacy_landlock") }) {
+		t.Fatalf("argv = %q", argv)
+	}
+	for _, pin := range append(slices.Clone(codexPins), codexRoots("/p/tmp")) {
+		if !hasRunT(argv, []string{"-c", pin}) {
+			t.Errorf("no -c %s: %q", pin, argv)
+		}
+	}
+	if !hasRunT(argv, []string{"-P", ":workspace", "-C", "/p/ws", "--", "/opt/agentd", CheckArg, "--codex", "--in", "/p/ws", "--tmp", "/p/tmp",
+		"--outside", "/p/home", "--nonce", "Ix"}) {
+		t.Fatalf("argv = %q", argv)
+	}
+}
+
+// The check in codex's mode finds a sandbox that holds nothing: run outside
+// any, the write beside the workspace goes through, and it exits 1.
+func TestCodexCheckFindsNoSandbox(t *testing.T) {
+	in, tmp, outside := t.TempDir(), t.TempDir(), t.TempDir()
+	cmd := exec.Command(os.Args[0], CheckArg, "--codex", "--in", in, "--tmp", tmp, "--outside", outside, "--nonce", "Ix")
+	cmd.Env = launcherEnv()
+	out, err := cmd.CombinedOutput()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.ExitCode() != 1 {
+		t.Fatalf("exit %v:\n%s", err, out)
+	}
+	for _, want := range []string{"ok: write inside", "ok: write the temporary directory", "FAIL: make a file outside was allowed", checkDone + "Ix"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("no %q in:\n%s", want, out)
+		}
 	}
 }

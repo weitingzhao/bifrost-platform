@@ -149,12 +149,6 @@ func verifyArgv(self string, a *Attempt) []string {
 var codexPins = []string{"features.hooks=false", `approval_policy="never"`, `model_provider="openai"`,
 	"sandbox_workspace_write.exclude_slash_tmp=true", "sandbox_workspace_write.exclude_tmpdir_env_var=true", "notify=[]"}
 
-// codexWalled: inside agentd's write wall codex runs its commands in its own
-// Landlock and seccomp sandbox. Its default on Linux, bubblewrap, mounts,
-// which a Landlock domain may not; two Landlock domains nest, and the commands
-// still have no network (confine.go; ProveWall proves it on the host).
-const codexWalled = "features.use_legacy_landlock=true"
-
 // codexRoots: the workspace and the attempt's own temporary directory are
 // all codex's commands may write. The path goes into TOML as a Go-quoted
 // string.
@@ -168,7 +162,10 @@ func codexRoots(tmp string) string {
 // .codex/config.toml applies only to a project the home trusts, and this one
 // trusts none (measured 10-19, codex 0.162: a checkout's MCP server is not
 // loaded with a new home, and is with the project trusted), and nothing an
-// earlier run left (hooks, rules, a provider, MCP servers) is read.
+// earlier run left (hooks, rules, a provider, MCP servers) is read. It runs
+// outside agentd's wall, its commands in its own bubblewrap sandbox (codex
+// 0.163 sandboxes with nothing else on Linux, and bubblewrap cannot mount
+// inside a Landlock domain; the cut's §10, option A).
 // Measured 10-18 on macOS (codex 0.162) with these pins: writes to /tmp, the
 // home directory and the shared $TMPDIR refused, to the attempt's own
 // temporary directory and the workspace taken.
@@ -196,9 +193,6 @@ func codexExecutor(env []string, master string) Executor {
 			argv = append(argv, "-c", p)
 		}
 		argv = append(argv, "-c", codexRoots(tmp))
-		if a.Walled {
-			argv = append(argv, "-c", codexWalled)
-		}
 		argv = append(argv, "-o", filepath.Join(a.Out, "report.md"))
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "-m", m)

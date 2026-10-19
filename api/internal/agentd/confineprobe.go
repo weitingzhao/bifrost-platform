@@ -18,7 +18,8 @@ import (
 
 // Proving the write wall on the host (TD-371): before agentd counts any
 // executor as confined, it runs, inside the wall, a check that tries what an
-// attempt must not be able to do, and codex's own sandbox inside the wall.
+// attempt must not be able to do, and the same kind of check in codex's own
+// sandbox (codex runs outside the wall: confine.go).
 // The Owner's probe on the agent host (agentd confine-probe) runs the same
 // and prints it.
 
@@ -36,8 +37,10 @@ const proofLimit = time.Minute
 // went. It runs agentd confine-check inside agentd confine (self) with env:
 // every write it tries outside the wall must be refused, and the file it
 // tries them on must be unchanged after. Then, when codex is wanted, codex's
-// sandbox inside the wall must run a command that writes its workspace, may
-// not write the rest of the wall, and has no network. A nil Wall is no wall.
+// own sandbox, configured as codexExecutor configures it and outside the
+// wall, must run a command that writes its workspace and its temporary
+// directory, may write nowhere else, and has no route out. A nil Wall is no
+// wall.
 func ProveWall(ctx context.Context, self, root string, env []string, codex bool) (*Wall, []string) {
 	abi, err := landlockABI()
 	if err != nil {
@@ -95,7 +98,7 @@ func ProveWall(ctx context.Context, self, root string, env []string, codex bool)
 		cx, cerr := proveCodex(ctx, self, dir, env)
 		lines = append(lines, cx...)
 		if cerr != nil {
-			lines = append(lines, "codex's sandbox inside the wall: "+cerr.Error()+"; codex runs unwalled, alone")
+			lines = append(lines, "codex's own sandbox: "+cerr.Error()+"; codex runs alone")
 		} else {
 			w.Executors["exec:codex"] = true
 		}
@@ -103,9 +106,11 @@ func ProveWall(ctx context.Context, self, root string, env []string, codex bool)
 	return w, lines
 }
 
-// proveCodex runs codex's sandbox, configured as codexExecutor configures it
-// inside the wall, inside the wall; the check in it must find its workspace
-// writable, the rest of the wall not, and no network.
+// proveCodex runs codex's own sandbox outside agentd's wall, configured as
+// codexExecutor configures it (codexProofArgv); the check in it must write its
+// workspace and its temporary directory, write nothing in the codex home
+// beside them, and find no route out, while this process finds one (the
+// check's control: without it, a host with no route would prove nothing).
 func proveCodex(ctx context.Context, self, dir string, env []string) ([]string, error) {
 	ws, home, tmp := filepath.Join(dir, "cx-ws"), filepath.Join(dir, "cx-home"), filepath.Join(dir, "cx-tmp")
 	for _, d := range []string{ws, home, tmp, filepath.Join(home, ".codex")} {
@@ -113,38 +118,67 @@ func proveCodex(ctx context.Context, self, dir string, env []string) ([]string, 
 			return nil, err
 		}
 	}
-	argv := append(wallArgv(self, []string{ws, home, tmp}), "codex", "sandbox")
-	for _, p := range append(append([]string{}, codexPins...), codexRoots(tmp), codexWalled) {
-		argv = append(argv, "-c", p)
+	if err := routeOut(); !errors.Is(err, syscall.EINPROGRESS) && err != nil {
+		return nil, fmt.Errorf("this host has no route out to test the sandbox against: %v", err)
 	}
 	nonce, err := NewChangeID()
 	if err != nil {
 		return nil, err
 	}
-	argv = append(argv, "-P", ":workspace", "-C", ws, "--", self, CheckArg, "--codex", "--in", ws, "--outside", home, "--nonce", nonce)
+	argv := codexProofArgv(self, ws, home, tmp, nonce)
 	env = withEnv(withEnv(withEnv(env, "HOME", home), "CODEX_HOME", filepath.Join(home, ".codex")), "TMPDIR", tmp)
 	lines, err := runProof(ctx, env, ws, argv)
 	_, inErr := os.Stat(filepath.Join(ws, "new"))
+	_, tmpErr := os.Stat(filepath.Join(tmp, "new"))
 	_, outErr := os.Lstat(filepath.Join(home, "new"))
 	switch {
 	case err != nil:
 	case !slices.Contains(lines, checkDone+nonce):
 		err = errors.New("the check in codex's sandbox did not all run")
-	case inErr != nil:
-		err = errors.New("nothing was written in codex's workspace")
+	case inErr != nil || tmpErr != nil:
+		err = errors.New("codex's workspace or temporary directory was not written")
 	case outErr == nil:
 		err = errors.New("codex's sandbox wrote outside its workspace")
 	}
 	return lines, err
 }
 
+// codexProofArgv is codex's sandbox with codexExecutor's pins, running the
+// check: no wall of agentd's around it.
+func codexProofArgv(self, ws, home, tmp, nonce string) []string {
+	argv := []string{"codex", "sandbox"}
+	for _, p := range append(append([]string{}, codexPins...), codexRoots(tmp)) {
+		argv = append(argv, "-c", p)
+	}
+	return append(argv, "-P", ":workspace", "-C", ws, "--", self, CheckArg, "--codex", "--in", ws, "--tmp", tmp,
+		"--outside", home, "--nonce", nonce)
+}
+
+// routeOut starts a TCP connection to an address of the documentation range
+// (192.0.2.1:443), without waiting: EINPROGRESS (or a connection) when there
+// is a route out, a refusal or "network is unreachable" when there is none.
+func routeOut() error {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = syscall.Close(fd) }()
+	syscall.CloseOnExec(fd)
+	if err = syscall.SetNonblock(fd, true); err != nil {
+		return err
+	}
+	return syscall.Connect(fd, &syscall.SockaddrInet4{Port: 443, Addr: [4]byte{192, 0, 2, 1}})
+}
+
 // checkDone starts the last line of a check that ran every test.
 const checkDone = "confine-check done "
 
-// denied: err is a refusal (Landlock's EACCES or EXDEV, seccomp's EPERM), not
-// a failure for another reason (a path that is not there).
+// denied: err is a refusal (Landlock's EACCES or EXDEV, a read-only mount's
+// EROFS, seccomp's EPERM), not a failure for another reason (a path that is
+// not there).
 func denied(err error) bool {
-	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EXDEV)
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EXDEV) ||
+		errors.Is(err, syscall.EROFS)
 }
 
 // runProof runs argv in dir within proofLimit and returns what it printed,
@@ -174,10 +208,11 @@ func RunConfineCheck(args []string) int {
 	outside := fs.String("outside", "", "a directory outside it")
 	file := fs.String("file", "", "a file outside it")
 	pid := fs.Int("pid", 0, "a process outside it")
-	codex := fs.Bool("codex", false, "inside codex's sandbox: the workspace is in, the rest of the wall outside, no network")
+	codex := fs.Bool("codex", false, "inside codex's sandbox: the workspace and --tmp are in, --outside is not, no route out")
+	tmp := fs.String("tmp", "", "with --codex: the sandbox's temporary directory, writable")
 	nonce := fs.String("nonce", "", "printed on the last line once every test ran")
-	if err := fs.Parse(args); err != nil || *in == "" || *outside == "" || !*codex && (*file == "" || *pid == 0) {
-		fmt.Fprintln(os.Stderr, "usage: agentd confine-check --in <dir> --outside <dir> [--file <file> --pid <pid> | --codex] [--nonce <word>]")
+	if err := fs.Parse(args); err != nil || *in == "" || *outside == "" || !*codex && (*file == "" || *pid == 0) || *codex && *tmp == "" {
+		fmt.Fprintln(os.Stderr, "usage: agentd confine-check --in <dir> --outside <dir> [--file <file> --pid <pid> | --codex --tmp <dir>] [--nonce <word>]")
 		return 2
 	}
 	failed := false
@@ -199,14 +234,19 @@ func RunConfineCheck(args []string) int {
 	try("write inside", true, os.WriteFile(filepath.Join(*in, "new"), []byte("x"), 0o600))
 	try("make a file outside", false, os.WriteFile(filepath.Join(*outside, "new"), []byte("x"), 0o600))
 	if *codex {
-		// The socket or the connection is refused (codex's seccomp filter);
-		// a refused connection to a closed port is not a refusal.
-		fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
-		if err == nil {
-			err = syscall.Connect(fd, &syscall.SockaddrInet4{Port: 1, Addr: [4]byte{127, 0, 0, 1}})
-			_ = syscall.Close(fd)
+		try("write the temporary directory", true, os.WriteFile(filepath.Join(*tmp, "new"), []byte("x"), 0o600))
+		// No route out: a network namespace of its own with no route
+		// (ENETUNREACH), or a socket refused; a connection started is a route.
+		switch err := routeOut(); {
+		case errors.Is(err, syscall.ENETUNREACH), denied(err):
+			fmt.Println("ok: no route out")
+		case err == nil, errors.Is(err, syscall.EINPROGRESS):
+			failed = true
+			fmt.Println("FAIL: a route out")
+		default:
+			failed = true
+			fmt.Printf("FAIL: a route out failed, but not as a refusal: %v\n", err)
 		}
-		try("reach the network", false, err)
 	} else {
 		try("append to a file outside", false, appendTo(*file))
 		try("truncate a file outside", false, os.Truncate(*file, 0))
@@ -256,7 +296,8 @@ func appendTo(path string) error {
 // RunConfineProbe is agentd confine-probe --root <dir>: the Owner's probe on
 // the agent host, run as an agent user under its unit's confinement. It
 // proves the wall as agentd does when it starts, codex included, prints each
-// check, and exits 0 only when the wall holds for every executor.
+// check, and exits 0 only when every executor is held: by the wall, codex by
+// its own sandbox.
 func RunConfineProbe(args []string) int {
 	fs := flag.NewFlagSet(ProbeArg, flag.ContinueOnError)
 	root := fs.String("root", "", "agentd's directory (AGENTD_ROOT)")
@@ -277,10 +318,10 @@ func RunConfineProbe(args []string) int {
 	fmt.Print(b.String())
 	for _, ex := range []string{"exec:deterministic", "exec:cursor", "exec:claude", "exec:codex"} {
 		if !w.holds(ex) {
-			fmt.Printf("agentd confine-probe: the wall does not hold for %s\n", ex)
+			fmt.Printf("agentd confine-probe: %s is not held to its own directories\n", ex)
 			return 1
 		}
 	}
-	fmt.Println("agentd confine-probe: the wall holds for every executor")
+	fmt.Println("agentd confine-probe: every executor is held to its own directories (codex by its own sandbox)")
 	return 0
 }

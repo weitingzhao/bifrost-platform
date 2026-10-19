@@ -35,8 +35,8 @@ type Attempt struct {
 	Dir          string // the workspace
 	Out          string // where the executor writes report.md or verify.json
 	// Walled: the executor runs inside agentd's write wall (confine.go);
-	// inner is then what the code it runs besides itself may write
-	// (innerWrites).
+	// inner is what the code it runs besides itself may write (innerWrites),
+	// walled whenever the host has a wall.
 	Walled bool
 	inner  []string
 	root   string // agentd's directory, which Dir and Out are in (openWithin)
@@ -289,8 +289,11 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		}
 		wcancel()
 	})
-	a.Walled = d.Wall.holds(cl.Tool.Executor)
-	isConfined := func(*Claimed, TaskSpec) bool { return a.Walled }
+	// Held to its own directories: inside agentd's wall, or codex in its own
+	// sandbox proven on this host (confine.go).
+	confined := d.Wall.holds(cl.Tool.Executor)
+	a.Walled = d.Wall.wraps(cl.Tool.Executor)
+	isConfined := func(*Claimed, TaskSpec) bool { return confined }
 	if d.Confined != nil {
 		isConfined = d.Confined
 	}
@@ -352,11 +355,12 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	if ws != nil && len(prep.Setup) > 0 {
-		// The setup has a home of its own and, walled, a narrower wall: it
-		// cannot leave configuration for the executor; what may not be in
-		// the checkout is looked for again once it is done (review 300 A3).
+		// The setup has a home of its own and, on a host with a wall, a
+		// narrower wall, the executor in it or not (codex): it cannot leave
+		// configuration for the executor; what may not be in the checkout is
+		// looked for again once it is done (review 300 A3).
 		o := setupOpts{Home: setupHome(a.Out)}
-		if a.Walled {
+		if d.Wall != nil {
 			o.Writes = a.inner
 		}
 		if cl.Tool.Executor == "exec:cursor" {
@@ -366,10 +370,12 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
-	// The wall goes around the setup and the executor alike; a walled
+	// The wall goes around the setup and the executor alike; a confined
 	// attempt runs beside others, so it does not run without every pin.
 	if a.Walled {
 		sp.Argv = append(wallArgv(d.Self, append([]string{a.Dir, a.Out}, sibs...)), sp.Argv...)
+	}
+	if confined {
 		if err = checkPins(cl.Tool.Executor, d.Self, a, sibs, sp); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}

@@ -171,6 +171,15 @@ func TestConfined(t *testing.T) {
 	if !w.holds("exec:claude") || w.holds("exec:codex") || w.holds("exec:other") {
 		t.Fatalf("wall %+v", w)
 	}
+	// codex is held by its own sandbox once proven (Owner 2026-10-19, the
+	// cut's §10 A): confined, but never inside agentd's wall.
+	if !w.wraps("exec:claude") || w.wraps("exec:codex") {
+		t.Fatalf("wraps %+v", w)
+	}
+	w.Executors["exec:codex"] = true
+	if !w.holds("exec:codex") || w.wraps("exec:codex") {
+		t.Fatalf("codex proven: holds %v, wraps %v", w.holds("exec:codex"), w.wraps("exec:codex"))
+	}
 	// A walled attempt whose command lacks its pins never starts.
 	f := newFake()
 	d := fakeDaemon(t, f)
@@ -189,6 +198,25 @@ func TestConfined(t *testing.T) {
 	}
 	if _, serr := os.Stat(ran); serr == nil {
 		t.Fatal("it ran")
+	}
+	// codex, confined by its own sandbox: its command is checked as it is,
+	// with no wall put around it, and one without its pins never starts.
+	d = fakeDaemon(t, f)
+	d.Executors = map[string]Executor{"exec:codex": func(a *Attempt) (Spawn, error) {
+		if a.Walled {
+			t.Error("codex was given agentd's wall")
+		}
+		return Spawn{Argv: []string{"touch", ran}, Env: launcherEnv(), Dir: a.Dir}, nil
+	}}
+	d.Wall = &Wall{ABI: 4, Executors: map[string]bool{"exec:codex": true}}
+	cl = &Claimed{TaskID: "t2", AttemptID: "a2", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
+		Epoch: 1, Tool: Tool{Executor: "exec:codex"}}
+	out, err = d.Run(bg, cl)
+	if err == nil || !strings.Contains(err.Error(), "codex exec in workspace-write") || strings.Contains(err.Error(), "the wall over") {
+		t.Fatalf("codex run = %+v %v", out, err)
+	}
+	if _, serr := os.Stat(ran); serr == nil {
+		t.Fatal("codex ran")
 	}
 }
 
