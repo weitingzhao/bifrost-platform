@@ -71,10 +71,10 @@ func TestWorkspaceRefRefused(t *testing.T) {
 	if after := w.lastSeq(t, "mission:M-1"); after != before {
 		t.Fatalf("the refused batch wrote %d events", after-before)
 	}
-	if _, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{
+	if _, perr := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{
 		{Ref: "a", PlanNode: s1, Role: "implement", Class: "go", Title: "a", SpecArtifact: clean, Effect: "branch"},
-	}); err != nil {
-		t.Fatalf("a spec naming a task by its id: %v", err)
+	}); perr != nil {
+		t.Fatalf("a spec naming a task by its id: %v", perr)
 	}
 	_, err = store.SendMessage(ctx, w.rt, wr("thread:s1"), store.Seat, "ask", []byte("look at ../a1.out/report.md"))
 	if !errors.Is(err, store.ErrInvalid) {

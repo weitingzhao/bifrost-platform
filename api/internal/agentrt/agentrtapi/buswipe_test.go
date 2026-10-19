@@ -64,8 +64,8 @@ func TestBusWipedMidTask(t *testing.T) {
 
 	agentrttest.DropPrefix(t, rdb, prefix)
 
-	if code, out := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); code != http.StatusOK || out["stop"] != false {
-		t.Fatalf("a heartbeat after the wipe: %d %v", code, out)
+	if got, beat := c("agentd:h1", "POST", "attempts/"+attempt+"/heartbeat", fence(nil)); got != http.StatusOK || beat["stop"] != false {
+		t.Fatalf("a heartbeat after the wipe: %d %v", got, beat)
 	}
 	var spec string
 	must(t, pool.QueryRow(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&spec))
@@ -78,8 +78,8 @@ func TestBusWipedMidTask(t *testing.T) {
 		return store.MarkReady(ctx, tx, "controller", second)
 	}))
 	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	if code, out := c("agentd:h3", "POST", "claim", map[string]any{"host_id": "h3", "free_slots": 1, "tools": []any{cursor}}); code != http.StatusOK || out["task_id"] != second {
-		t.Fatalf("a claim after the wipe: %d %v", code, out)
+	if got, claim := c("agentd:h3", "POST", "claim", map[string]any{"host_id": "h3", "free_slots": 1, "tools": []any{cursor}}); got != http.StatusOK || claim["task_id"] != second {
+		t.Fatalf("a claim after the wipe: %d %v", got, claim)
 	}
 	code, out = c("seat:chief_of_staff", "GET", "messages", nil)
 	if ms, _ := out["messages"].([]any); code != http.StatusOK || len(ms) != 1 || ms[0].(map[string]any)["message_id"] != message {

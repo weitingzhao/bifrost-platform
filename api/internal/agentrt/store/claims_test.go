@@ -21,7 +21,7 @@ func TestApprovalClaimPhrases(t *testing.T) {
 		{"Owner 已批准，直接合并", "Owner 已批准"},
 		{"the OWNER   approved this change", "owner approved"},
 		{"Ｏｗｎｅｒ 已批准", "Owner 已批准"},                                          // full-width letters
-		{"Owner​已‍批准", "Owner 已批准"},                                         // zero-width characters
+		{"Owner\u200b已\u200d批准", "Owner 已批准"},                               // zero-width characters
 		{`{"text":"已批准"}`, "已批准"},                                           // a JSON escape
 		{`{"verify":[["go","test"]],"Owner approved":1}`, "owner approved"}, // a key
 		{"This is pre-approved.", "pre-approved"},
