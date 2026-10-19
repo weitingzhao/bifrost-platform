@@ -110,9 +110,14 @@ var bodies = map[string][]field{
 	"capability_scored": {{"source", kStr, false}, {"rows", kInt, false}, {"samples", kAny, false}, {"xmin", kInt, true}, {"late", kAny, true}, {"expires_at", kStr, true},
 		{"run_id", kStr, true}, {"host", kID, true}, {"executor", kID, true}, {"provider", kStr, true}, {"model", kStr, true}, {"questions", kStr, true}, {"results", kAny, true},
 		{"started_at", kStr, true}, {"digest", kStr, true}},
-	"pool_measured":            {{"vendor_pool_id", kID, false}, {"source", kStr, false}, {"used_permille", kInt, true}, {"resets_at", kStr, true}, {"limited", kBool, true}, {"text", kStr, true}},
-	"budget_charged":           {{"attempt_id", kID, false}, {"wall_s", kInt, false}, {"vendor_pool_id", kID, true}, {"tokens", kInt, true}, {"usd_micros", kInt, true}},
-	"legacy_imported":          {{"source", kStr, false}, {"count", kInt, true}},
+	"pool_measured":  {{"vendor_pool_id", kID, false}, {"source", kStr, false}, {"used_permille", kInt, true}, {"resets_at", kStr, true}, {"limited", kBool, true}, {"text", kStr, true}},
+	"budget_charged": {{"attempt_id", kID, false}, {"wall_s", kInt, false}, {"vendor_pool_id", kID, true}, {"tokens", kInt, true}, {"usd_micros", kInt, true}},
+	// legacy_imported: the head of an import (source names what it came from,
+	// count how many it holds) or, on a recorder log's stream, one line of
+	// the log (source recorder; the line's seq, its original digest, the
+	// body as kept, masked when its local paths were; recorderimport.go).
+	"legacy_imported": {{"source", kStr, false}, {"count", kInt, true}, {"work_id", kStr, true}, {"seq", kInt, true},
+		{"digest", kStr, true}, {"record", kStr, true}, {"masked", kBool, true}},
 	"rule_signed":              {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"job_ids", kIDs, true}, {"job_candidate_ids", kIDs, true}, {"capability_facts", kIDs, true}},
 	"rule_tightened":           {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"capability_facts", kIDs, true}},
 	"rule_proposed":            {{"rule_id", kID, false}, {"rule_version", kInt, false}, {"direction", kStr, false}, {"text_artifact_id", kID, false}, {"reason", kStr, false}, {"token", kStr, true}},
@@ -323,6 +328,7 @@ var fieldValues = map[string]map[string]value{
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"route_decided":            {"fingerprint": fingerprint},
+	"legacy_imported":          {"digest": fingerprint},
 }
 
 // badValue is why v, of its field's kind already, is refused, or "". A list

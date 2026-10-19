@@ -21,7 +21,7 @@ import (
 // a candidate, and the Console keeps it only while that question is open.
 // Waits he cannot act on are the missions' statuses.
 func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, error) {
-	rows, err := tx.Query(ctx, `SELECT p.event_id, substr(p.event_stream_id, 6), p.body_json->>'reason', p.at,
+	rows, err := tx.Query(ctx, `SELECT p.event_id, p.event_stream_id, p.body_json->>'reason', p.at,
 	    p.body_json->>'question_id', (p.body_json->'changes')::text
 	  FROM agentrt.event p
 	  WHERE p.event_type = 'plan_change_proposed' AND p.at > $1::timestamptz - make_interval(secs => $2) AND p.body_json ? 'question_id'
@@ -32,16 +32,16 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		return nil, err
 	}
 	type pending struct {
-		event                  int64
-		root, reason, question string
-		at                     time.Time
-		changes                []PlanChange
+		event                    int64
+		stream, reason, question string
+		at                       time.Time
+		changes                  []PlanChange
 	}
 	var list []pending
 	for rows.Next() {
 		var p pending
 		var doc string
-		if err = rows.Scan(&p.event, &p.root, &p.reason, &p.at, &p.question, &doc); err != nil {
+		if err = rows.Scan(&p.event, &p.stream, &p.reason, &p.at, &p.question, &doc); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -74,12 +74,19 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		title, options := "Plan change to "+p.root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
+		root := streamRoot(p.stream)
+		title, options := "Plan change to "+root+": "+firstLine(p.reason), []string{CardApply, CardRefuse}
 		after := "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."
 		var blocks any
-		if _, isImport := importOf(p.changes); isImport {
+		if _, isRecorder := recorderImportOf(p.changes); isRecorder {
+			// A recorder log is history: no plan or mission waits on it.
+			work := strings.TrimPrefix(p.stream, RecorderStream(""))
+			title, options = "Import recorder log "+work+": "+firstLine(p.reason), []string{RecorderApply, RecorderRefuse}
+			after = "Import: the controller imports the log on its next pass (about 15 seconds). Do not import: nothing is written."
+			blocks = map[string]any{"unknown": "a recorder log is history; no plan or mission waits on it"}
+		} else if _, isImport := importOf(p.changes); isImport {
 			// An import adds a plan no mission's work sits on yet.
-			title, options = "Import plan "+p.root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
+			title, options = "Import plan "+root+": "+firstLine(p.reason), []string{ImportApply, ImportRefuse}
 			after = "Import: the controller imports the plan on its next pass (about 15 seconds). Do not import: nothing is written."
 			blocks = map[string]any{"unknown": "an import adds a plan; no mission's work sits on it yet"}
 		} else {

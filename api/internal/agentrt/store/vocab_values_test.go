@@ -50,6 +50,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"policy_alert", "rule", "approval_claim", "claim"},
 		{"policy_alert", "rule", "seat_alert", "seat"},
 		{"policy_alert", "source", "message", "log_tail"},
+		{"legacy_imported", "digest", sha, "ace660f699888d88caf667e3eef6cedec535df23003c0d1aea5466bc68ff9ba4"},
 		{"policy_alert", "rule", "local_path", "/home/"},
 		{"policy_alert", "rule", "repeated_failure", "failed"},
 		{"policy_alert", "source", "review", "report.md"},

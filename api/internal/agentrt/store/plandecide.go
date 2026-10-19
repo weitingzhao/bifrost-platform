@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -17,9 +18,18 @@ import (
 // pendingChange is a proposal waiting on the Owner's answer.
 type pendingChange struct {
 	event    int64
-	root     string
+	stream   string // the proposal's: a plan's, or a recorder log's (recorderimport.go)
+	root     string // the plan's root; "" on a stream that is not a plan's
 	question string
 	changes  []PlanChange
+}
+
+// streamRoot is the plan root a stream belongs to, or "".
+func streamRoot(stream string) string {
+	if root, ok := strings.CutPrefix(stream, "plan:"); ok {
+		return root
+	}
+	return ""
 }
 
 // DecidePlanChanges is one pass of the plan decisions: each proposal waiting
@@ -49,10 +59,10 @@ var ErrQuestionGone = errors.New("store: the question is gone from the question 
 // since dropped is recorded as gone and not asked about again. A failure is
 // tried again by the next pass.
 func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) error) error {
-	type card struct{ root, question string }
+	type card struct{ stream, question string }
 	var cards []card
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT DISTINCT substr(d.event_stream_id, 6), d.body_json->>'question_id' FROM agentrt.event d
+		rows, err := tx.Query(ctx, `SELECT DISTINCT d.event_stream_id, d.body_json->>'question_id' FROM agentrt.event d
 		  WHERE d.event_type = 'plan_change_decided' AND d.body_json->>'decision' IN ('applied','refused','failed')
 		    AND d.body_json ? 'question_id' AND d.at > clock_timestamp() - interval '7 days'
 		    AND NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.event_stream_id = d.event_stream_id
@@ -64,7 +74,7 @@ func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) er
 		}
 		cards, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (card, error) {
 			var c card
-			return c, r.Scan(&c.root, &c.question)
+			return c, r.Scan(&c.stream, &c.question)
 		})
 		return err
 	})
@@ -81,7 +91,7 @@ func ackDecided(ctx context.Context, db DB, ack func(context.Context, string) er
 			continue
 		}
 		if nerr := InTx(ctx, db, func(tx pgx.Tx) error {
-			_, err := Append(ctx, tx, Event{Stream: PlanStream(c.root), Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
+			_, err := Append(ctx, tx, Event{Stream: c.stream, Type: "note", Actor: "controller", Body: map[string]any{"text": text}})
 			return err
 		}); nerr != nil {
 			errs = append(errs, nerr)
@@ -99,7 +109,7 @@ func decidePending(ctx context.Context, db DB, question func(context.Context, st
 	for {
 		var page []pendingChange
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
-			rows, qerr := tx.Query(ctx, `SELECT p.event_id, substr(p.event_stream_id, 6), p.body_json->>'question_id', (p.body_json->'changes')::text
+			rows, qerr := tx.Query(ctx, `SELECT p.event_id, p.event_stream_id, p.body_json->>'question_id', (p.body_json->'changes')::text
 			  FROM agentrt.event p
 			  WHERE p.event_type = 'plan_change_proposed' AND p.body_json ? 'question_id' AND p.event_id > $1
 			    AND NOT EXISTS (SELECT 1 FROM agentrt.event d WHERE d.event_type = 'plan_change_decided'
@@ -112,9 +122,10 @@ func decidePending(ctx context.Context, db DB, question func(context.Context, st
 			page, cerr = pgx.CollectRows(rows, func(r pgx.CollectableRow) (pendingChange, error) {
 				var p pendingChange
 				var doc string
-				if serr := r.Scan(&p.event, &p.root, &p.question, &doc); serr != nil {
+				if serr := r.Scan(&p.event, &p.stream, &p.question, &doc); serr != nil {
 					return p, serr
 				}
+				p.root = streamRoot(p.stream)
 				return p, json.Unmarshal([]byte(doc), &p.changes)
 			})
 			return cerr
@@ -162,31 +173,46 @@ func decideOne(ctx context.Context, db DB, p pendingChange, question func(contex
 func decide(ctx context.Context, db DB, p pendingChange, decision, reason string) (bool, error) {
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		if err := lockTree(ctx, tx, p.root); err != nil {
-			return err
-		}
 		artifact, isImport := importOf(p.changes)
-		if decision == "applied" && !isImport {
+		log, isRecorder := recorderImportOf(p.changes)
+		switch {
+		case isRecorder:
+			// A recorder log's stream is its own lock (landRecorder).
+			if err := lockStream(ctx, tx, p.stream); err != nil {
+				return err
+			}
+		case p.root == "":
+			return invalid("proposal %d on %s is neither a plan's nor a recorder import", p.event, p.stream)
+		default:
+			if err := lockTree(ctx, tx, p.root); err != nil {
+				return err
+			}
+		}
+		if decision == "applied" && !isImport && !isRecorder {
 			if err := lockChanges(ctx, tx, p.root, p.changes); err != nil {
 				return err
 			}
 		}
 		var done bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'plan_change_decided'
-		  AND event_stream_id = $1 AND (body_json->>'proposal_event_id')::bigint = $2)`, PlanStream(p.root), p.event).Scan(&done); err != nil || done {
+		  AND event_stream_id = $1 AND (body_json->>'proposal_event_id')::bigint = $2)`, p.stream, p.event).Scan(&done); err != nil || done {
 			return err
 		}
 		body := map[string]any{"proposal_event_id": p.event, "decision": decision, "by": "owner", "question_id": p.question}
 		if reason != "" {
 			body["error"] = reason
 		}
-		ev, err := Append(ctx, tx, Event{Stream: PlanStream(p.root), Type: "plan_change_decided", Actor: "controller", Body: body})
+		ev, err := Append(ctx, tx, Event{Stream: p.stream, Type: "plan_change_decided", Actor: "controller", Body: body})
 		if err != nil {
 			return err
 		}
 		switch {
 		case decision == "applied" && isImport:
 			if err = decideImport(ctx, tx, artifact, ev.EventID); err != nil {
+				return err
+			}
+		case decision == "applied" && isRecorder:
+			if err = decideRecorderImport(ctx, tx, log, ev.EventID); err != nil {
 				return err
 			}
 		case decision == "applied":

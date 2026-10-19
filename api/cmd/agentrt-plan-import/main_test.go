@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
 const ledger = "../../internal/agentrt/planimport/testdata/ledger.md"
@@ -104,5 +107,42 @@ func TestUsage(t *testing.T) {
 	}
 	if code, _, errs := runIt("generate", "-ledger", ledger, "-round", "5"); code != 1 || !strings.Contains(errs, "第 5 轮逐项") {
 		t.Errorf("a round the ledger does not have = %d %s", code, errs)
+	}
+}
+
+// recorder: a log on disk (with a torn tail, as an interrupted append
+// leaves it) becomes a request that reads; a broken log exits 1 with the
+// line; flags are required.
+func TestRecorder(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "td-339")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"at":1791936767.5,"by":"coordinator","prev_sha256":"","seq":1,"type":"work_opened","v":2,"work_id":"td-339"}`
+	sum := sha256.Sum256([]byte(body))
+	line := hex.EncodeToString(sum[:]) + " " + body
+	if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(line+"\n"+`{"torn`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := runIt("recorder", "-root", root, "-work", "td-339")
+	if code != 0 || !strings.Contains(errs, "1 events, chain holds") {
+		t.Fatalf("recorder = %d %s", code, errs)
+	}
+	var req recorderimport.Request
+	if err := json.Unmarshal([]byte(out), &req); err != nil || len(req.Lines) != 1 || req.Lines[0] != line || req.Source.File != "td-339/events.jsonl" {
+		t.Fatalf("request %s: %v", out, err)
+	}
+	if _, err := recorderimport.Read(req); err != nil {
+		t.Fatalf("the request does not read: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(strings.Replace(line, `"seq":1`, `"seq":2`, 1)+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs = runIt("recorder", "-root", root, "-work", "td-339"); code != 1 || !strings.Contains(errs, "line 1") {
+		t.Fatalf("a broken log = %d %s", code, errs)
+	}
+	if code, _, _ = runIt("recorder", "-root", root); code != 2 {
+		t.Fatalf("no -work = %d", code)
 	}
 }

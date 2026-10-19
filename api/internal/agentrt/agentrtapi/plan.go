@@ -1,11 +1,14 @@
 package agentrtapi
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -95,15 +98,16 @@ func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 }
 
 type planImportBody struct {
-	IdempotencyKey string             `json:"idempotency_key"`
-	Reason         string             `json:"reason"`
-	Request        planimport.Request `json:"request"`
+	IdempotencyKey string          `json:"idempotency_key"`
+	Reason         string          `json:"reason"`
+	Request        json.RawMessage `json:"request"`
 }
 
 // proposePlanImport is POST /plan/imports: a plan's first import
-// (CUT-plan-import-2026-10-19.md §4 A), tried and rolled back, its request
-// kept, and put to the Owner on one decision card; the controller lands it
-// once he answers Import.
+// (CUT-plan-import-2026-10-19.md §4 A), or a recorder log's
+// (agentrt.recorder_import/v1, CUT-gate-b-2026-10-19.md §2 item 3 A), by the
+// request's format; tried and rolled back, kept, and put to the Owner on one
+// decision card; the controller lands it once he answers Import.
 func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 	var b planImportBody
 	if !decode(w, r, &b) {
@@ -114,12 +118,42 @@ func (a *API) proposePlanImport(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	out, err := store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, b.Request, a.Ask)
+	var head struct {
+		Format string `json:"format"`
+	}
+	_ = json.Unmarshal(b.Request, &head)
+	var out map[string]any
+	switch head.Format {
+	case recorderimport.Format:
+		var req recorderimport.Request
+		if !strictly(w, b.Request, &req) {
+			return
+		}
+		out, err = store.ProposeRecorderImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, req, a.Ask)
+	default:
+		var req planimport.Request
+		if !strictly(w, b.Request, &req) {
+			return
+		}
+		out, err = store.ProposePlanImport(r.Context(), a.DB, who, b.IdempotencyKey, b.Reason, req, a.Ask)
+	}
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// strictly reads a request that came as raw JSON into v as decode reads a
+// body: a field v does not have is refused (400).
+func strictly(w http.ResponseWriter, raw json.RawMessage, v any) bool {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "the request does not read: "+err.Error())
+		return false
+	}
+	return true
 }
 
 // progress is GET /progress: the projection of

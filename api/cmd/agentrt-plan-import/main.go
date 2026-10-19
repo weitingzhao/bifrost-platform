@@ -5,6 +5,12 @@
 //
 //	agentrt-plan-import generate -ledger WORK.md [-round 2] [-file name] [-commit sha] [-o request.json]
 //	agentrt-plan-import diff -ledger WORK.md -plan plan.json [-board board.json] [-round 2]
+//	agentrt-plan-import recorder -root DIR -work ID [-o request.json]
+//
+// recorder makes the request that imports one work's log of the infra event
+// recorder (DIR/ID/events.jsonl; format agentrt.recorder_import/v1,
+// CUT-gate-b-2026-10-19.md §2 item 3 A) and checks it as the runtime will:
+// the hash chain, and the local paths it will mask.
 //
 // plan.json is an answer of GET /api/v1/agentrt/plan?root=R<round>. diff
 // compares it with the ledger as this command reads it and, with -board, with
@@ -21,8 +27,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
 
 const defaultFile = "bifrost-trade-infra/agent-config/WORK.md"
@@ -33,8 +41,11 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		say(stderr, "usage: agentrt-plan-import generate|diff [flags]")
+		say(stderr, "usage: agentrt-plan-import generate|diff|recorder [flags]")
 		return 2
+	}
+	if args[0] == "recorder" {
+		return recorder(args[1:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -155,3 +166,48 @@ func diff(req planimport.Request, planFile, boardFile string, stdout, stderr io.
 func say(w io.Writer, a ...any) { _, _ = fmt.Fprintln(w, a...) }
 
 func sayf(w io.Writer, format string, a ...any) { _, _ = fmt.Fprintf(w, format, a...) }
+
+// recorder writes the request for one work's recorder log, after checking
+// it as the runtime will.
+func recorder(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("recorder", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	root := fs.String("root", "", "the recorder's root directory")
+	work := fs.String("work", "", "the work whose log to import (a directory under -root)")
+	out := fs.String("o", "", "write the request here instead of to standard output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *root == "" || *work == "" {
+		say(stderr, "-root and -work are required")
+		return 2
+	}
+	data, err := os.ReadFile(filepath.Join(*root, *work, "events.jsonl"))
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	req := recorderimport.FromLog(*work, data)
+	log, err := recorderimport.Read(req)
+	if err != nil {
+		sayf(stderr, "%s: %v\n", *work, err)
+		return 1
+	}
+	sayf(stderr, "%s: %d events, chain holds, %d with local paths to mask\n", *work, len(log.Records), log.Masked())
+	doc, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	doc = append(doc, '\n')
+	if *out == "" {
+		_, err = stdout.Write(doc)
+	} else {
+		err = os.WriteFile(*out, doc, 0o644)
+	}
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	return 0
+}
