@@ -93,8 +93,15 @@ var bodies = map[string][]field{
 	// a task's spec or a message: the closed phrase it holds), or a line the
 	// chief of staff ended an answer or a plan with (seat_alert, the seat's
 	// protocol v2: its phrase is POLICY_ALERT and its words stay in the report
-	// the artifact names; line_digest tells one line from another).
-	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, false}, {"message_id", kID, true},
+	// the artifact names; line_digest tells one line from another), or the
+	// platform's refusal of a report agentd uploaded (local_path,
+	// workspace_ref: the rule that refused it, source the report's kind,
+	// artifact_id the refused body's id, which is not stored), or an executor
+	// that failed a task failuresToStop times in a row (repeated_failure,
+	// source attempt, no artifact: the event's attempt is the last failure;
+	// TD-381, TD-382). Every rule but repeated_failure names its artifact
+	// (checkBody).
+	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, true}, {"message_id", kID, true},
 		{"line_digest", kStr, true}},
 	"control_set":       {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
 	"control_cleared":   {{"control_id", kID, false}},
@@ -148,6 +155,9 @@ func checkBody(eventType string, body map[string]any) error {
 	if len(extra) > 0 {
 		sort.Strings(extra)
 		return fmt.Errorf("store: %s does not take %v", eventType, extra)
+	}
+	if _, named := body["artifact_id"]; eventType == "policy_alert" && !named && body["rule"] != "repeated_failure" {
+		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
 	}
 	return nil
 }
@@ -296,8 +306,10 @@ var fieldValues = map[string]map[string]value{
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
-	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert"), "source": oneOf("task_spec", "message", "seat_answer", "seat_plan"),
-		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase)...), "artifact_id": artifactID, "message_id": messageID,
+	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure"),
+		"source":      oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt"),
+		"phrase":      oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase)...),
+		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},
 	"pool_cooldown_set":        {"until": instant},

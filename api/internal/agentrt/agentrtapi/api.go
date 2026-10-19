@@ -438,7 +438,7 @@ var agentdKinds = map[string]bool{"report": true, "verify": true, "review": true
 func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	p := actuation.PrincipalFromContext(r.Context())
-	_, isAgentd := actuation.AgentdHost(p)
+	host, isAgentd := actuation.AgentdHost(p)
 	kind := r.Header.Get("X-Artifact-Kind")
 	if p.Role == actuation.RoleAgentd && !isAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token must be bound to a host")
@@ -463,11 +463,11 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p, found := store.LocalPath(kind, body); found {
-		writeError(w, http.StatusUnprocessableEntity, "local_path", "a local path in the artifact: "+p)
+		a.refuse(w, r, host, kind, id, "local_path", "a local path in the artifact: "+p)
 		return
 	}
 	if ref, found := store.WorkspaceRef(kind, body); found {
-		writeError(w, http.StatusUnprocessableEntity, "workspace_ref", "the artifact refers to a task's workspace: "+ref)
+		a.refuse(w, r, host, kind, id, "workspace_ref", "the artifact refers to a task's workspace: "+ref)
 		return
 	}
 	media := r.Header.Get("Content-Type")
@@ -485,6 +485,19 @@ func (a *API) putArtifact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"artifact_id": id, "created": created})
+}
+
+// refuse answers an artifact refused by rule (422). A report agentd uploads
+// is recorded as refused on the attempt handing over on its host
+// (store.RefusedReport, TD-382), so the attempt's end says why; the answer
+// is the refusal whatever the record does.
+func (a *API) refuse(w http.ResponseWriter, r *http.Request, host, kind, id, rule, message string) {
+	if host != "" {
+		if _, err := store.RefusedReport(r.Context(), a.DB, host, kind, id, rule); err != nil {
+			a.logf("agentrt: the refusal of %s from host %s was not recorded: %v", id, host, err)
+		}
+	}
+	writeError(w, http.StatusUnprocessableEntity, rule, message)
 }
 
 func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {

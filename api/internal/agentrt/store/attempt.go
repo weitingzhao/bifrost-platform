@@ -558,11 +558,25 @@ func Ended(ctx context.Context, db DB, attemptID, hostID, endHow string, groupCl
 		if !liveState(a.state) {
 			return map[string]any{"state": a.state}, nil
 		}
-		if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'failed', ended_at = clock_timestamp(),
-		  end_how = COALESCE(end_how, $2) WHERE attempt_id = $1`, a.id, endHow); err != nil {
+		// An attempt that computed a result and ends without having handed it
+		// over says why in its task's move (TD-382).
+		reason := "attempt ended on its host: " + endHow
+		why, err := handOverFailure(ctx, tx, a)
+		if err != nil {
 			return nil, err
 		}
-		if err = releaseTask(ctx, tx, hostActor(hostID), a.t, "attempt ended on its host: "+endHow); err != nil {
+		if why != "" {
+			reason += "; " + why
+		}
+		var executor string
+		if err = tx.QueryRow(ctx, `UPDATE agentrt.attempt SET state = 'failed', ended_at = clock_timestamp(),
+		  end_how = COALESCE(end_how, $2) WHERE attempt_id = $1 RETURNING executor_actor_id`, a.id, endHow).Scan(&executor); err != nil {
+			return nil, err
+		}
+		if err = releaseTask(ctx, tx, hostActor(hostID), a.t, reason); err != nil {
+			return nil, err
+		}
+		if err = alertRepeatedFailure(ctx, tx, a, executor); err != nil {
 			return nil, err
 		}
 		return map[string]any{"state": "failed"}, nil

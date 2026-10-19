@@ -325,6 +325,12 @@ func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, cp capabilities, c c
 	if err != nil {
 		return Tool{}, nil, false, err
 	}
+	// An executor that just failed the task waits, and one that failed it
+	// failuresToStop times in a row is passed by (TD-381, retry.go).
+	run, err := readFailureRun(ctx, tx, c.id)
+	if err != nil {
+		return Tool{}, nil, false, err
+	}
 	byID := map[string]jobCandidate{}
 	for _, jc := range in.candidates {
 		byID[jc.id] = jc
@@ -336,7 +342,7 @@ func pickTool(ctx context.Context, tx pgx.Tx, tools []Tool, cp capabilities, c c
 			continue
 		}
 		for _, tl := range tools {
-			if jc.fits(tl) && len(in.exclusion(tl)) == 0 && len(in.unfit(jc)) == 0 {
+			if jc.fits(tl) && len(in.exclusion(tl)) == 0 && len(in.unfit(jc)) == 0 && run.holdsBack(tl.Executor) == "" {
 				tier := 0
 				if jc.status == "probation" {
 					tier = 1
