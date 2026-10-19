@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import { z } from 'zod'
@@ -218,9 +218,16 @@ describe('agent runtime writes', () => {
     let calls = 0
     const growing = { ...real, read: (_fd: number, buf: Buffer) => (calls++ < 2 ? buf.fill(32).length : 0) }
     assert.match((readRequestFile(join(dir, 'r2.json'), dir, growing) as { error: string }).error, /grew past/)
-    // A FIFO with no writer is refused at once, not waited on (review 314 B1).
+    // A FIFO with no writer is refused at once, not waited on (review 314 B1),
+    // read in a child process with a deadline: a read that waits fails the
+    // test instead of hanging it (review 315 B1).
     execFileSync('mkfifo', [join(dir, 'pipe.json')])
-    assert.match((readRequestFile(join(dir, 'pipe.json'), dir, real) as { error: string }).error, /not a regular file/)
+    const module = JSON.stringify(new URL('./runtimeTools.ts', import.meta.url).href)
+    const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e',
+      `import { readRequestFile } from ${module}; process.stdout.write(JSON.stringify(readRequestFile(${JSON.stringify(join(dir, 'pipe.json'))}, ${JSON.stringify(dir)})))`],
+    { timeout: 15000, encoding: 'utf8' })
+    assert.equal(child.error, undefined, `the read of a FIFO did not return within 15 s: ${child.error?.message}`)
+    assert.match((JSON.parse(child.stdout) as { error: string }).error, /not a regular file/)
     // A descriptor that does not open (a link in the last part) is refused.
     const refuses = { ...real, openNoFollow: () => { throw new Error('ELOOP: too many symbolic links') } }
     assert.match((readRequestFile(join(dir, 'r2.json'), dir, refuses) as { error: string }).error, /cannot read .*ELOOP/)
