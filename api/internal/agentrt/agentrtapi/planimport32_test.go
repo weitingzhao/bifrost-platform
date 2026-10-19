@@ -30,6 +30,13 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 		t.Fatalf("the fixture has no %s %d", kind, n)
 		return nil
 	}
+	counts := func() [5]int {
+		var n [5]int
+		for i, table := range []string{"artifact", "artifact_blob", "idempotency_key", "event", "plan_node"} {
+			must(t, pool.QueryRow(ctx, "SELECT count(*) FROM agentrt."+table).Scan(&n[i]))
+		}
+		return n
+	}
 	for name, c := range map[string]struct {
 		change func(*planimport.Request) any
 		code   int
@@ -57,7 +64,7 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 	} {
 		req := ledger(t, fixtureLedger)
 		body := map[string]any{"idempotency_key": "k-" + name, "reason": "T32 through the import", "request": c.change(&req)}
-		before := len(cards)
+		before, rows := len(cards), counts()
 		code, out := call(t, s, "reporter", "POST", "plan/imports", body, "X-Bifrost-Session", "s1")
 		msg, _ := out["message"].(string)
 		if code != c.code || !strings.Contains(msg, c.want) {
@@ -65,6 +72,11 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 		}
 		if len(cards) != before {
 			t.Errorf("%s: %d cards asked", name, len(cards)-before)
+		}
+		// Nothing at all is left: no request stored, no key taken, no event,
+		// no node (review 341 B4).
+		if after := counts(); after != rows {
+			t.Errorf("%s: rows %v before, %v after", name, rows, after)
 		}
 	}
 	var proposals, nodes int
@@ -76,5 +88,14 @@ func TestPlanImportCounterExamplesThroughTheRoute(t *testing.T) {
 	}
 	if code, _ := call(t, s, "viewer", "GET", "plan?root=R2", nil); code != http.StatusNotFound {
 		t.Fatalf("GET /plan after the refusals = %d", code)
+	}
+	// The counts see a proposal that is taken: the request is stored and its
+	// key kept.
+	rows := counts()
+	if code, out := call(t, s, "reporter", "POST", "plan/imports", importBody("k-ok", ledger(t, fixtureLedger)), "X-Bifrost-Session", "s1"); code != http.StatusOK {
+		t.Fatalf("the plan as it is: %d %v", code, out)
+	}
+	if after := counts(); after[0] == rows[0] || after[2] == rows[2] || after[3] == rows[3] {
+		t.Fatalf("a taken proposal changed no count: %v, then %v", rows, after)
 	}
 }

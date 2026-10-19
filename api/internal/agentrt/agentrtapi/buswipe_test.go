@@ -31,8 +31,9 @@ func eventually(t *testing.T, what string, cond func() bool) {
 // held off, so nothing writes it back; review 340 A4) the heartbeat, a new
 // claim, the unread message and a stop set then are all answered by what
 // PostgreSQL holds, and Redis is still empty after them. Let back, the relay
-// rebuilds Redis by itself; the message it may now signal twice is handled
-// once, by its message_id.
+// rebuilds Redis by itself, and again when Redis is wiped under it while it
+// runs; the message it may now signal twice is handled once, by its
+// message_id.
 func TestBusWipedMidTask(t *testing.T) {
 	rdb, prefix := agentrttest.Redis(t)
 	actionStore = &actions.Store{Redis: rdb, Prefix: prefix}
@@ -125,6 +126,16 @@ func TestBusWipedMidTask(t *testing.T) {
 	if len(entries) == 0 {
 		t.Fatal("the rebuilt mailbox is empty")
 	}
+	// Wiped again under the same running relay, it finds its lock gone and
+	// rebuilds by itself, a new epoch with the unread message (review 341 B3).
+	epoch, err := rdb.Get(ctx, prefix+"meta:epoch").Result()
+	must(t, err)
+	agentrttest.DropPrefix(t, rdb, prefix)
+	eventually(t, "the running relay's own rebuild", func() bool {
+		now, _ := rdb.Get(ctx, prefix+"meta:epoch").Result()
+		l, _ := rdb.XLen(ctx, mbox).Result()
+		return now != "" && now != epoch && l >= 1 && delivered()
+	})
 	for i := 0; i < 2; i++ { // Redis may signal it twice; it is acknowledged once
 		code, out := c("seat:chief_of_staff", "POST", "messages/ack", map[string]any{"message_ids": []string{message}})
 		if acked, _ := out["acknowledged"].([]any); code != http.StatusOK || len(acked) != 1-i {

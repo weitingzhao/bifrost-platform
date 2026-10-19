@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -23,32 +22,39 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// stopSeen is a proxy in front of the platform that says when agentd was
-// answered stop on a heartbeat.
+// stopSeen is a proxy in front of the platform that says when a heartbeat
+// answer of stop has been written whole to agentd (review 341 B2: after the
+// response, not before it is sent on).
 func stopSeen(t *testing.T, base string) (string, *atomic.Bool) {
 	t.Helper()
 	u, err := url.Parse(base)
 	must(t, err)
 	var seen atomic.Bool
 	rp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: u.Scheme, Host: u.Host})
-	rp.ModifyResponse = func(r *http.Response) error {
-		if !strings.HasSuffix(r.Request.URL.Path, "/heartbeat") {
-			return nil
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec := &teeWriter{ResponseWriter: w}
+		rp.ServeHTTP(rec, r)
+		if !strings.HasSuffix(r.URL.Path, "/heartbeat") {
+			return
 		}
-		b, err := io.ReadAll(r.Body)
-		if err != nil {
-			return err
-		}
-		r.Body = io.NopCloser(bytes.NewReader(b))
 		var out map[string]any
-		if json.Unmarshal(b, &out) == nil && out["stop"] == true {
+		if json.Unmarshal(rec.body.Bytes(), &out) == nil && out["stop"] == true {
 			seen.Store(true)
 		}
-		return nil
-	}
-	proxy := httptest.NewServer(rp)
+	}))
 	t.Cleanup(proxy.Close)
 	return proxy.URL + u.Path, &seen
+}
+
+// teeWriter keeps a copy of what it writes on.
+type teeWriter struct {
+	http.ResponseWriter
+	body bytes.Buffer
+}
+
+func (w *teeWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
 }
 
 func waitFile(t *testing.T, path string, within time.Duration) {
@@ -67,8 +73,10 @@ func waitFile(t *testing.T, path string, within time.Duration) {
 
 // T07 安全停止 (v5 §5.3): a stop that comes while the attempt's branch is
 // being pushed leaves no half state. The remote's hook holds the push until
-// the test lets it go; meanwhile the task is stopped and agentd is answered
-// stop on a heartbeat (heartbeats go on through a hand-over; review 340 A3).
+// the test lets it go; meanwhile the task is stopped and a heartbeat answer
+// of stop is written to agentd (heartbeats go on through a hand-over; review
+// 340 A3). That agentd marked it is not observed: a hand-over does not read
+// it.
 // Let go, the push is recorded; refused, nothing is pushed and nothing
 // recorded: the branch on the remote and the commit the platform holds are
 // the same, or both absent. A stop never cuts a hand-over.
@@ -109,17 +117,40 @@ func TestAStopDuringThePush(t *testing.T) {
 				out agentd.Outcome
 				err error
 			}
+			runCtx, cancel := context.WithCancel(ctx)
 			done := make(chan ran, 1)
-			go func() { out, err := d.Run(ctx, cl); done <- ran{out, err} }()
+			go func() { out, err := d.Run(runCtx, cl); done <- ran{out, err} }()
 			var r ran
-			finished := false
-			t.Cleanup(func() { // whatever failed, the hook is let go and the run waited for
+			var finished atomic.Bool
+			wait := func(within time.Duration) bool {
+				var timeout <-chan time.Time // nil for a zero wait: it only looks
+				if within > 0 {
+					timeout = time.After(within)
+				}
+				select {
+				case r = <-done:
+					finished.Store(true)
+					return true
+				case <-timeout:
+					return false
+				default:
+				}
+				if timeout == nil {
+					return false
+				}
+				select {
+				case r = <-done:
+					finished.Store(true)
+					return true
+				case <-timeout:
+					return false
+				}
+			}
+			t.Cleanup(func() { // whatever failed: the hook let go, the run cancelled and waited for
 				_ = os.WriteFile(mark("go"), nil, 0o600)
-				if !finished {
-					select {
-					case <-done:
-					case <-time.After(30 * time.Second):
-					}
+				cancel()
+				if !finished.Load() && !wait(30*time.Second) {
+					t.Errorf("the run did not end after it was cancelled")
 				}
 			})
 
@@ -134,19 +165,14 @@ func TestAStopDuringThePush(t *testing.T) {
 				}
 				time.Sleep(20 * time.Millisecond)
 			}
-			select {
-			case r = <-done:
+			if wait(0) {
 				t.Fatalf("the run ended before the push was let go: %+v %v", r.out, r.err)
-			default:
 			}
 			if _, err := os.Stat(mark("timedout")); err == nil {
 				t.Fatal("the hook stopped holding the push on its own")
 			}
 			must(t, os.WriteFile(mark("go"), nil, 0o600))
-			select {
-			case r = <-done:
-				finished = true
-			case <-time.After(30 * time.Second):
+			if !wait(30 * time.Second) {
 				t.Fatal("the run did not end")
 			}
 			if _, err := os.Stat(mark("timedout")); err == nil {

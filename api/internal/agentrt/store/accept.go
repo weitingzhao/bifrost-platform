@@ -278,6 +278,13 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 		if err != nil {
 			return err
 		}
+		// A check of a stopped task is not used while the stop holds: its
+		// result waits, and nothing of the subject moves (review 341 A3). The
+		// subject is locked, as a stop takes it, so a stop and a conclusion
+		// come one after the other.
+		if stopped, herr := held(ctx, tx, []scope{{"task", s.id}}, "stop"); herr != nil || stopped {
+			return herr
+		}
 		v, err := readTask(ctx, tx, taskID, true)
 		if err != nil {
 			return err

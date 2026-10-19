@@ -10,11 +10,12 @@ import (
 
 const someTask = "t_01M57YSQN6B43ZFNESD9VQ2HA9"
 
-// T11: what names another task's workspace, its output or a sibling in it
-// is found, relative or not, with "./" segments and doubled slashes (review
-// 340 B5); a task named by its id or as the API names it, an attempt's branch
-// (review 340 A1), a path beside one's own checkout (what agentd writes a
-// check's own output as), agentd's root alone and raw output are not.
+// T11: what names another task's directory or something in it is found,
+// relative or not, with "./" segments and doubled slashes (reviews 340 B5,
+// 341 A1); a task named by its id or by the platform's route to it, an
+// attempt's branch as a whole ref (reviews 340 A1, 341 A2), a path beside
+// one's own checkout (what agentd writes a check's own output as), agentd's
+// root alone and raw output are not.
 func TestWorkspaceRef(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
@@ -26,6 +27,10 @@ func TestWorkspaceRef(t *testing.T) {
 		someTask + "/bifrost-ui/src/x.ts, from the tasks directory",
 		someTask + "/a3/report.md",
 		"under agentd/tasks/" + someTask,
+		"cd tasks/" + someTask + "\ncat a1/report.md",
+		"cd tasks/" + someTask + "/./",
+		"agent/" + someTask + "/a1/report.md is in the checkout",
+		"agents/" + someTask + "/a1.out/verify.json",
 		`{"text":"copy from /home/u/agent-work/agentd/tasks/` + someTask + `/a1/x"}`,
 	} {
 		if _, found := store.WorkspaceRef("task_spec", []byte(in)); !found {
@@ -36,7 +41,10 @@ func TestWorkspaceRef(t *testing.T) {
 		"# task\n", "build on the report of " + someTask,
 		"Build on branch refs/heads/agent/" + someTask + "/a1, commit 2333e00753f91c74c8b2f4d693a803f8e89e7892.",
 		"git fetch origin agent/" + someTask + "/a2 and diff it",
+		"Compared refs/remotes/agents/" + someTask + "/a1 with main.",
+		"see https://gitea.example/bifrost/bifrost-platform/src/branch/agent/" + someTask + "/a1",
 		"GET /api/v1/agentrt/tasks/" + someTask + " says it is submitted",
+		"GET /agentrt/tasks/" + someTask,
 		"../bifrost-ui/src/x.ts", "./console/src/a.ts", "a1b2 ../a1x", "agentd's root is $HOME/agent-work/agentd",
 		"open ../a1.out/tmp/TestParse1234/001/in.json: no such file or directory", "diff against ../a1/api",
 	} {

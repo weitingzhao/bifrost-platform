@@ -303,22 +303,30 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 			ok(t, err)
 			o.did = append(o.did, did)
 		}
+		// With a check ready and nothing about its job changed, a reroute
+		// moves nothing (review 341 B1).
+		reroute := func() {
+			n, err := store.Reroute(ctx, w.rt)
+			ok(t, err)
+			o.rerouted += n
+		}
 		w.runSaying(t, "h1", cursor, "done", words)
 		v, err := store.StartVerification(ctx, w.rt, impl)
 		ok(t, err)
+		reroute()
 		w.runSaying(t, "h2", deterministic, "failed", words) // its report says pass
 		conclude(v)
 		w.runSaying(t, "h3", cursor, "done", words)
 		v2, err := store.StartVerification(ctx, w.rt, impl)
 		ok(t, err)
+		reroute()
 		w.runSaying(t, "h4", deterministic, "done", words) // its report says fail
 		conclude(v2)
 		review := w.checker(t, impl, "review")
+		reroute()
 		w.runSaying(t, "h5", codex, "failed", words) // its last line says pass
 		conclude(review)
-		rerouted, err := store.Reroute(ctx, w.rt)
-		ok(t, err)
-		o.decisions, o.final, o.alerts, o.rerouted = w.decisions(t), w.state(t, "task", impl), len(w.alerts(t)), rerouted
+		o.decisions, o.final, o.alerts = w.decisions(t), w.state(t, "task", impl), len(w.alerts(t))
 		w.chainHolds(t, "mission:M-1")
 		return o
 	}
@@ -344,7 +352,7 @@ func TestRepositoryInstructionsChangeNoDecision(t *testing.T) {
 		t.Fatalf("the decisions do not tell their rows apart:\n%s", all)
 	}
 	if plain.rerouted != 0 || told.rerouted != 0 {
-		t.Fatalf("rerouted after the runs: plain %d, told %d", plain.rerouted, told.rerouted)
+		t.Fatalf("rerouted with a check ready: plain %d, told %d", plain.rerouted, told.rerouted)
 	}
 	if plain.alerts != 0 || told.alerts != 1 {
 		t.Fatalf("policy alerts: plain %d, told %d; want 0 and 1 (the spec's claim)", plain.alerts, told.alerts)

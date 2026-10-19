@@ -7,31 +7,44 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
-// T11 隔离 (v5 §5.3): a task spec or an artifact that refers to a task's
-// workspace is refused. A task reads another task's work from its
+// T11 隔离 (v5 §5.3): a task spec or an artifact that refers to another
+// task's workspace is refused. A task reads another task's work from its
 // artifacts and its pushed branch, never from its directory. agentd keeps an
 // attempt's checkout at <root>/tasks/<task>/a<n>, its output beside it at
 // a<n>.out, a task's siblings at <root>/tasks/<task>/<repo>, and its root at
 // ~/agent-work/agentd (agentd.WorkspaceDir, cmd/agentd). A spec is written
 // before its task exists, so whatever workspace it names is another task's.
 //
-// What names one, once a path's "./" segments and repeated slashes are
-// folded (review 340 B5): agentd's tasks directory with a task in it, and
-// something inside a task's directory (<task>/a<n>, <task>/<repo>), with or
-// without the tasks/ before it. What does not: a task named by its id alone
-// or as the API names it (tasks/<task>), agentd's root alone, an attempt's
-// branch (agent/<task>/a<n>, refs/heads/agent/<task>/a<n>), which is how a
-// task is meant to read another's work (review 340 A1), and a path beside a
-// checkout (../a<n>.out/tmp): agentd writes a check's own checkout as "." and
-// its task's directory as ".." in what it hands in, so that is the task's
-// own. Raw output (log tails, checkpoint patches, and a check's verify.json,
-// which is its commands' output) quotes the executor's own paths and is let
-// through.
-var workspaceRef = regexp.MustCompile(`agentd/tasks/t_|t_[0-9A-HJKMNP-TV-Z]{26}/[A-Za-z0-9]`)
+// Once a path's "./" segments and repeated slashes are folded (review 340
+// B5), a task id names a workspace where it is a task's directory
+// (tasks/<task>) or has something inside it (<task>/a<n>, <task>/<repo>, with
+// or without tasks/ before it; review 341 A1). It does not where it is a
+// task's record: the id alone, or the platform's route to it
+// (/api/v1/agentrt/tasks/<task>, /agentrt/tasks/<task>); nor where it is an attempt's branch, a
+// whole ref and nothing after it: agent/<task>/a<n> (refs/heads/agent/…,
+// a Gitea branch URL) or agents/<task>/a<n> (refs/remotes/agents/…, where
+// agentd fetches a checked task's branches; review 341 A2). A branch is how
+// a task is meant to read another's work. agentd writes a check's own
+// checkout as "." and its task's directory as ".." in what it hands in, so a
+// path beside a checkout (../a<n>.out/tmp) is the task's own. Raw output (log
+// tails, checkpoint patches, and a check's verify.json, its commands'
+// output) quotes the executor's own paths and is let through.
+var taskID = regexp.MustCompile(`t_[0-9A-HJKMNP-TV-Z]{26}`)
 
-// branchPrefix is what comes before a task id in an attempt's branch
-// (store.AttemptRef).
-const branchPrefix = "agent/"
+var (
+	// inside is what follows a task id that has something in its directory.
+	inside = regexp.MustCompile(`^/[A-Za-z0-9.]`)
+	// branchTail is what follows a task id in an attempt's branch: /a<n>,
+	// then the end of the token.
+	branchTail = regexp.MustCompile("^/a[0-9]+(?:$|[\\s,;:)\\]}'\"`>]|\\.(?:$|\\s))")
+	// apiRoute is the platform's route to a task's record, as a client calls
+	// it (/api/v1/agentrt/tasks/<task>) or the docs name it
+	// (GET /agentrt/tasks/{id}).
+	apiRoute = "agentrt/tasks/"
+	// branchPrefixes come before a task id in its attempts' branches
+	// (store.AttemptRef, agentd's fetch of a checked task).
+	branchPrefixes = []string{"agent/", "agents/"}
+)
 
 var (
 	dotSegments = regexp.MustCompile(`/(?:\./)+`)
@@ -69,9 +82,17 @@ func WorkspaceRef(kind string, body []byte) (string, bool) {
 }
 
 func workspaceRefIn(text string) (string, bool) {
-	for _, loc := range workspaceRef.FindAllStringIndex(text, -1) {
-		if strings.HasPrefix(text[loc[0]:], "t_") && strings.HasSuffix(text[:loc[0]], branchPrefix) {
-			continue // an attempt's branch
+	for _, loc := range taskID.FindAllStringIndex(text, -1) {
+		before, after := text[:loc[0]], text[loc[1]:]
+		var names bool
+		switch {
+		case inside.MatchString(after):
+			names = !isBranch(before, after)
+		case strings.HasSuffix(before, "tasks/"):
+			names = !strings.HasSuffix(before, apiRoute)
+		}
+		if !names {
+			continue
 		}
 		start, end := loc[0]-40, loc[1]+20
 		if start < 0 {
@@ -83,4 +104,17 @@ func workspaceRefIn(text string) (string, bool) {
 		return localpath.Mask(strings.ToValidUTF8(text[start:end], "")), true
 	}
 	return "", false
+}
+
+// isBranch: the task id is an attempt's branch, a whole ref.
+func isBranch(before, after string) bool {
+	if !branchTail.MatchString(after) {
+		return false
+	}
+	for _, p := range branchPrefixes {
+		if strings.HasSuffix(before, p) {
+			return true
+		}
+	}
+	return false
 }
