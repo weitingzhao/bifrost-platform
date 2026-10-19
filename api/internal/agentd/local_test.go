@@ -21,6 +21,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == SetupArg {
 		os.Exit(RunSetup(os.Args[2:]))
 	}
+	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == ConfineArg {
+		os.Exit(RunConfine(os.Args[2:]))
+	}
+	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == CheckArg {
+		os.Exit(RunConfineCheck(os.Args[2:]))
+	}
 	os.Exit(m.Run())
 }
 

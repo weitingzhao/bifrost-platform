@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -97,7 +98,7 @@ func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	}
 	return map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),
-		"exec:codex":         codexExecutor(env),
+		"exec:codex":         codexExecutor(env, CodexHome(environ)),
 		"exec:cursor":        cursorExecutor(cursorEnv),
 		"exec:claude":        claudeExecutor(claudeEnv),
 	}
@@ -117,49 +118,78 @@ func deterministicExecutor(self string, env []string) Executor {
 		if err = os.WriteFile(path, body, 0o600); err != nil {
 			return Spawn{}, err
 		}
-		return Spawn{Argv: []string{self, "verify", "--spec", path, "--out", filepath.Join(a.Out, "verify.json")}, Env: env, Dir: a.Dir}, nil
+		own, err := attemptEnv(env, a.Out)
+		if err != nil {
+			return Spawn{}, err
+		}
+		return Spawn{Argv: []string{self, "verify", "--spec", path, "--out", filepath.Join(a.Out, "verify.json")}, Env: own, Dir: a.Dir}, nil
 	}
 }
 
-// codexExecutor runs codex in its workspace-write sandbox, narrowed on the
-// command line whatever the host user's configuration says (TD-371): no
-// writable root besides the workspace and a temporary directory of the
-// attempt's own, not /tmp nor the shared $TMPDIR; no notify command, no
-// lifecycle hooks, no saved exec rules (each could run a command outside the
-// sandbox, review 283); never asking for approval; the built-in provider, not
-// one whose auth command the configuration names. Measured 10-18 on macOS
-// (codex 0.162) with exactly these: writes to /tmp, the home directory and the
-// shared $TMPDIR refused, to the attempt's own temporary directory and the
-// workspace taken. This narrows codex; it does not confine it: a project
-// configuration in a trusted checkout (an MCP server's command) and other
-// state an earlier, unconfined run left in CODEX_HOME still apply, so codex
-// does not share the host (share.go) until each attempt has its own
-// configuration home (TD-371).
-func codexExecutor(env []string) Executor {
+// codexPins are the configuration codex always runs with, whatever the host
+// user's says (TD-371), but for its writable roots (codexRoots): no notify
+// command, no lifecycle hooks (each could run a command outside the sandbox,
+// review 283); never asking for approval; the built-in provider, not one
+// whose auth command a configuration names; neither /tmp nor $TMPDIR
+// writable.
+var codexPins = []string{"features.hooks=false", `approval_policy="never"`, `model_provider="openai"`,
+	"sandbox_workspace_write.exclude_slash_tmp=true", "sandbox_workspace_write.exclude_tmpdir_env_var=true", "notify=[]"}
+
+// codexWalled: inside agentd's write wall codex runs its commands in its own
+// Landlock and seccomp sandbox. Its default on Linux, bubblewrap, mounts,
+// which a Landlock domain may not; two Landlock domains nest, and the commands
+// still have no network (confine.go; ProveWall proves it on the host).
+const codexWalled = "features.use_legacy_landlock=true"
+
+// codexRoots: the workspace and the attempt's own temporary directory are
+// all codex's commands may write. The path goes into TOML as a Go-quoted
+// string.
+func codexRoots(tmp string) string {
+	return "sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]"
+}
+
+// codexExecutor runs codex in its workspace-write sandbox with codexPins,
+// with saved exec rules ignored, and with a codex home of the attempt's own
+// that holds only the host's login (codexlogin.go): a project's
+// .codex/config.toml applies only to a project the home trusts, and this one
+// trusts none (measured 10-19, codex 0.162: a checkout's MCP server is not
+// loaded with a new home, and is with the project trusted), and nothing an
+// earlier run left (hooks, rules, a provider, MCP servers) is read.
+// Measured 10-18 on macOS (codex 0.162) with these pins: writes to /tmp, the
+// home directory and the shared $TMPDIR refused, to the attempt's own
+// temporary directory and the workspace taken.
+func codexExecutor(env []string, master string) Executor {
 	return func(a *Attempt) (Spawn, error) {
-		tmp := filepath.Join(a.Out, "tmp")
+		tmp := attemptTmp(a.Out)
 		// the path goes into TOML as a Go-quoted string: no control character
 		// may be in it (review 283 C)
 		if strings.ContainsFunc(tmp, unicode.IsControl) {
 			return Spawn{}, fmt.Errorf("agentd: the attempt's directory %q holds a control character", tmp)
 		}
-		if err := os.MkdirAll(tmp, 0o700); err != nil {
+		own, err := attemptEnv(env, a.Out)
+		if err != nil {
 			return Spawn{}, err
 		}
-		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write",
-			"--ignore-rules",
-			"-c", "features.hooks=false",
-			"-c", `approval_policy="never"`,
-			"-c", `model_provider="openai"`,
-			"-c", "sandbox_workspace_write.writable_roots=[" + strconv.Quote(tmp) + "]",
-			"-c", "sandbox_workspace_write.exclude_slash_tmp=true",
-			"-c", "sandbox_workspace_write.exclude_tmpdir_env_var=true",
-			"-c", "notify=[]",
-			"-o", filepath.Join(a.Out, "report.md")}
+		home := codexHomeOf(a.Out)
+		if err = ownDir(home); err != nil {
+			return Spawn{}, err
+		}
+		if err = copyCodexLogin(master, home); err != nil {
+			return Spawn{}, fmt.Errorf("agentd: codex's login: %w", err)
+		}
+		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
+		for _, p := range codexPins {
+			argv = append(argv, "-c", p)
+		}
+		argv = append(argv, "-c", codexRoots(tmp))
+		if a.Walled {
+			argv = append(argv, "-c", codexWalled)
+		}
+		argv = append(argv, "-o", filepath.Join(a.Out, "report.md"))
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "-m", m)
 		}
-		return Spawn{Argv: append(argv, Prompt(a)), Env: withEnv(env, "TMPDIR", tmp), Dir: a.Dir}, nil
+		return Spawn{Argv: append(argv, Prompt(a)), Env: withEnv(own, "CODEX_HOME", home), Dir: a.Dir}, nil
 	}
 }
 
@@ -174,8 +204,23 @@ func withEnv(env []string, key, value string) []string {
 	return append(out, key+"="+value)
 }
 
+// cursorRefused are files of a checkout that make cursor run commands of the
+// checkout's own: project hooks and MCP servers (TD-371). cursor does not
+// start in a checkout that has one; a home of the attempt's own keeps the
+// user's (~/.cursor) out.
+var cursorRefused = []string{".cursor/hooks.json", ".cursor/mcp.json"}
+
 func cursorExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
+		for _, rel := range cursorRefused {
+			if _, err := os.Lstat(filepath.Join(a.Dir, rel)); !errors.Is(err, fs.ErrNotExist) {
+				return Spawn{}, fmt.Errorf("agentd: the checkout has %s (or it cannot be looked at: %v); cursor would run its commands, so it does not start (TD-371)", rel, err)
+			}
+		}
+		own, err := attemptEnv(env, a.Out)
+		if err != nil {
+			return Spawn{}, err
+		}
 		argv := []string{"cursor-agent", "-p", "--output-format", "stream-json", "--trust", "--workspace", a.Dir}
 		if a.Claim.EffectClass != "branch" {
 			// An attempt that pushes no branch (a review) changes nothing:
@@ -188,39 +233,54 @@ func cursorExecutor(env []string) Executor {
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
-		return Spawn{Argv: append(argv, Prompt(a)), Env: env, Dir: a.Dir,
+		return Spawn{Argv: append(argv, Prompt(a)), Env: own, Dir: a.Dir,
 			After: func() error {
 				return streamResultReport("cursor", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
 			}}, nil
 	}
 }
 
+// claudePins are the flags claude always runs with: no MCP server; no
+// user, project or local settings file read, the host user's nor the
+// checkout's, and their hooks and plugins' off: a hook is a command the
+// read-only tools do not govern, and a branch under review could carry one in
+// its .claude/settings.json (measured 10-18, claude 2.1.302: such a hook runs
+// without these, and with either alone it does not; TD-371). A managed policy
+// (/etc/claude-code, its managed-settings.d too) still applies, hooks and
+// all: only root writes it, and check-agent-06.sh requires there be none, or
+// one that turns every hook off (reviews 282, 283). tools limits the
+// available built-ins (allowedTools only grants permission).
+var claudePins = [][]string{{"--strict-mcp-config"}, {"--mcp-config", `{"mcpServers":{}}`},
+	{"--setting-sources", ""}, {"--settings", `{"disableAllHooks":true}`}, {"--tools", "Read,Grep,Glob"}}
+
+// claudeExecutor runs claude with claudePins and read-only tools, its
+// configuration directory the attempt's own (CLAUDE_CONFIG_DIR) and its
+// updater off: an update writes beside the program, outside the wall. The
+// OAuth token comes from the environment.
 func claudeExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
-		argv := []string{"claude", "-p", "--output-format", "stream-json",
-			"--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`,
-			// No user, project or local settings file is read, the host user's
-			// nor the checkout's, and their hooks and plugins' are off: a hook
-			// is a command the read-only tools do not govern, and a branch
-			// under review could carry one in its .claude/settings.json
-			// (measured 10-18, claude 2.1.302: such a hook runs without these,
-			// and with either alone it does not; TD-371). A managed policy
-			// (/etc/claude-code, its managed-settings.d too) still applies,
-			// hooks and all: only root writes it, and check-agent-06.sh
-			// requires there be none, or one that turns every hook off
-			// (reviews 282, 283). The OAuth token comes from the environment.
-			"--setting-sources", "", "--settings", `{"disableAllHooks":true}`,
-			"--allowedTools", "Read,Grep,Glob",
-			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch",
-			// allowedTools grants permission; tools limits the available built-ins.
-			"--tools", "Read,Grep,Glob", "--verbose"}
+		own, err := attemptEnv(env, a.Out)
+		if err != nil {
+			return Spawn{}, err
+		}
+		dir := claudeDirOf(a.Out)
+		if err = ownDir(dir); err != nil {
+			return Spawn{}, err
+		}
+		own = withEnv(withEnv(own, "CLAUDE_CONFIG_DIR", dir), "DISABLE_AUTOUPDATER", "1")
+		argv := []string{"claude", "-p", "--output-format", "stream-json"}
+		for _, p := range claudePins {
+			argv = append(argv, p...)
+		}
+		argv = append(argv, "--allowedTools", "Read,Grep,Glob",
+			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch", "--verbose")
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
 		// The tool lists take every word that follows, and a prompt that begins
 		// with "-" is refused as an unknown option; "--" ends both (measured
 		// 10-15, claude 2.1.295; review 215 B1, B2).
-		return Spawn{Argv: append(argv, "--", Prompt(a)), Env: env, Dir: a.Dir,
+		return Spawn{Argv: append(argv, "--", Prompt(a)), Env: own, Dir: a.Dir,
 			After: func() error {
 				return streamResultReport("claude", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
 			}}, nil

@@ -59,7 +59,13 @@ func measure(executor, outDir string) Measured {
 	logPath := filepath.Join(outDir, "log.txt")
 	switch executor {
 	case "exec:codex":
-		return measureCodex(logPath, codexHome())
+		// The attempt's own codex home (TD-371); an attempt from before it
+		// had one ran with the host's.
+		home := codexHomeOf(outDir)
+		if fi, err := os.Lstat(home); err != nil || !fi.IsDir() {
+			home = codexHome()
+		}
+		return measureCodex(logPath, home)
 	case "exec:cursor":
 		return measureCursor(logPath)
 	case "exec:claude":

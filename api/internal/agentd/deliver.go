@@ -635,6 +635,9 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 	if e.Repo != "" {
 		ws = &Workspace{Dir: e.Workdir, Base: e.Base, env: d.GitEnv}
 	}
+	if e.Group == GroupCleared && e.Phase != "launching" {
+		afterExecutor(e.Executor, d.CodexHome, a.Out, d.logf) // again, or for a run a restart cut short
+	}
 	var err error
 	switch e.Phase {
 	case "restarted":

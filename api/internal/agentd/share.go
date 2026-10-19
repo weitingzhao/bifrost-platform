@@ -13,16 +13,14 @@ import (
 // prepared. So an unconfined attempt has the host to itself, from before its
 // checkout to its end, and only confined attempts run side by side.
 //
-// No executor is confined yet. codex's sandbox also writes the shared
-// temporary directories, and the host's configuration can add writable
-// roots; claude's read-only tools and cursor's ask mode do not reach the
-// hooks the user's or the repository's configuration may run (a command
-// hook runs as the user, whatever the tools allow); setup commands and the
-// deterministic executor run unsandboxed. Until an executor's whole process
-// tree is held to its workspace, and that is proven on the host, it runs
-// alone: TD-371. The machinery stays, and a Daemon may be given its own
-// classification (tests do).
-func confined(cl *Claimed, prep TaskSpec) bool { return false }
+// An attempt is confined when its executor runs inside agentd's write wall
+// (confine.go): its whole process tree, setup and executor, may write only
+// its own workspace, output and siblings, with a home of its own. That is
+// Daemon.Wall, which holds an executor only when ProveWall proved the wall on
+// this host for it; Run then wraps the attempt's command in the wall and
+// refuses to start one whose spawn lacks a pin (checkPins). Without a wall
+// (macOS, an old kernel, a probe that failed) no attempt is confined, and
+// each has the host alone (TD-371).
 
 // hostShare lets confined attempts hold the host together and an unconfined
 // one alone. An unconfined attempt that waits holds back the confined that

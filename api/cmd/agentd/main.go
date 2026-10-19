@@ -35,6 +35,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -57,6 +58,12 @@ func main() {
 			os.Exit(agentd.RunVerify(os.Args[2:]))
 		case agentd.SetupArg:
 			os.Exit(agentd.RunSetup(os.Args[2:]))
+		case agentd.ConfineArg:
+			os.Exit(agentd.RunConfine(os.Args[2:]))
+		case agentd.CheckArg:
+			os.Exit(agentd.RunConfineCheck(os.Args[2:]))
+		case agentd.ProbeArg:
+			os.Exit(agentd.RunConfineProbe(os.Args[2:]))
 		case "bench":
 			os.Exit(runBench(os.Args[2:]))
 		default:
@@ -128,6 +135,14 @@ func run() error {
 		log.Printf("agentd: no executor of AGENTD_TOOLS can be offered on this host: it takes no work, and goes on handing over what it has")
 	}
 	d.Executors = executors
+	// The write wall, proven here before any work (TD-371): an executor it
+	// does not hold runs alone.
+	codex := slices.ContainsFunc(offered, func(tl agentd.Tool) bool { return tl.Executor == "exec:codex" })
+	wall, proof := agentd.ProveWall(ctx, self, cfg.root, agentd.AllowedEnv(os.Environ()), codex)
+	for _, line := range proof {
+		log.Printf("agentd: write wall: %s", line)
+	}
+	d.Wall, d.CodexHome = wall, agentd.CodexHome(os.Environ())
 	// Up to MaxSlots attempts at once (W-31 2.4 slice ③); the platform
 	// leases no more than the signed concurrency rule's per_host. Each runs in
 	// its own goroutine; on SIGTERM every one hands over before agentd exits.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -157,31 +158,37 @@ func TestHostShare(t *testing.T) {
 }
 
 func TestConfined(t *testing.T) {
-	// No executor is confined until its whole process tree is held to its
-	// workspace and that is proven on the host (reviews 277 A2, 278 A2;
-	// TD-371): claude's tools and cursor's ask mode do not reach the hooks a
-	// configuration runs.
-	for _, c := range []struct {
-		executor, effect string
-		setup            bool
-	}{
-		{"exec:claude", "none", false},
-		{"exec:cursor", "none", false},
-		{"exec:cursor", "branch", false},
-		{"exec:codex", "branch", false},
-		{"exec:codex", "none", false},
-		{"exec:deterministic", "none", false},
-		{"exec:codex", "branch", true},
-		{"exec:other", "none", false},
-	} {
-		spec := TaskSpec{}
-		if c.setup {
-			spec.Setup = [][]string{{"npm", "ci"}}
+	// Without a wall proven on the host (this Mac, a kernel without Landlock,
+	// a probe that failed) no attempt shares it (TD-371); with one, only the
+	// executors it holds.
+	var none *Wall
+	for _, ex := range append(slices.Clone(pinnedExecutors), "exec:other") {
+		if none.holds(ex) {
+			t.Errorf("%s is confined without a wall", ex)
 		}
-		cl := &Claimed{Tool: Tool{Executor: c.executor}, EffectClass: c.effect}
-		if confined(cl, spec) {
-			t.Errorf("%s %s setup=%v is confined", c.executor, c.effect, c.setup)
-		}
+	}
+	w := &Wall{ABI: 4, Executors: map[string]bool{"exec:claude": true}}
+	if !w.holds("exec:claude") || w.holds("exec:codex") || w.holds("exec:other") {
+		t.Fatalf("wall %+v", w)
+	}
+	// A walled attempt whose command lacks its pins never starts.
+	f := newFake()
+	d := fakeDaemon(t, f)
+	spec := []byte("# do it\n")
+	f.artifacts[ArtifactID(spec)] = spec
+	ran := filepath.Join(t.TempDir(), "ran")
+	d.Executors = map[string]Executor{"exec:x": func(a *Attempt) (Spawn, error) {
+		return Spawn{Argv: []string{"touch", ran}, Env: launcherEnv(), Dir: a.Dir}, nil
+	}}
+	d.Wall = &Wall{ABI: 4, Executors: map[string]bool{"exec:x": true}}
+	cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
+		Epoch: 1, Tool: Tool{Executor: "exec:x"}}
+	out, err := d.Run(bg, cl)
+	if err == nil || !strings.Contains(err.Error(), "no pins") || out.EndHow != "exit" {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	if _, serr := os.Stat(ran); serr == nil {
+		t.Fatal("it ran")
 	}
 }
 

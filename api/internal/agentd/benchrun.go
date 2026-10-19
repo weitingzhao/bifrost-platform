@@ -36,7 +36,10 @@ type Bench struct {
 	// only by the checks.
 	GoModCache string
 	// Secrets are what a check must not see; Preflight proves it cannot.
-	Secrets    []string
+	Secrets []string
+	// CodexHome is the host user's codex home: codex's login comes from it
+	// and goes back to it refreshed (codexlogin.go).
+	CodexHome  string
 	Limit      time.Duration // the executor's, a question; 30 min
 	CheckLimit time.Duration // each setup or check command's; 15 min
 	KillGrace  time.Duration // 10 s
@@ -630,6 +633,11 @@ func (b *Bench) execute(ctx context.Context, q BenchQuestion, dir, out string) (
 	if err != nil {
 		return "", err
 	}
+	logf := b.Logf
+	if logf == nil {
+		logf = func(string, ...any) {}
+	}
+	afterExecutor(b.Tool.Executor, b.CodexHome, out, logf)
 	note := ""
 	switch {
 	case timedOut:

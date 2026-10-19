@@ -155,7 +155,8 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 	}
 	b := &agentd.Bench{Root: root, Self: self, GitEnv: cfg.gitEnv, CheckEnv: agentd.AllowedEnv(os.Environ()), Executor: ex,
 		Tool: tool, Limit: limit, Logf: log.Printf, Sandbox: agentd.BwrapSandbox(bwrap), GoModCache: modCache, Secrets: secrets,
-		Remote: func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" }}
+		CodexHome: agentd.CodexHome(os.Environ()),
+		Remote:    func(repo string) string { return strings.TrimRight(cfg.gitBase, "/") + "/" + repo + ".git" }}
 	if err = b.Preflight(ctx); err != nil {
 		return err
 	}
