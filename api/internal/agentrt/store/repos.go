@@ -4,6 +4,8 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 )
@@ -27,12 +29,24 @@ type Sibling struct {
 	Repo, Ref string
 }
 
-// Repos are the repositories goals and plans may name. The platform only so
-// far. Its checks are CI's (ci-platform): the API module built and vetted (the
-// full Go suite needs databases agentd's workspace has not), and the Console
-// linted, tested and built. The Console's @bifrost/ui is file:../../bifrost-ui,
-// so bifrost-ui's main sits beside the checkout, as CI clones it by default,
-// and both are installed before the executor starts.
+// Repos are the repositories goals and plans may name.
+//
+// The platform's checks are CI's (ci-platform): the API module built and
+// vetted (the full Go suite needs databases agentd's workspace has not), and
+// the Console linted, tested and built. The Console's @bifrost/ui is
+// file:../../bifrost-ui, so bifrost-ui's main sits beside the checkout, as CI
+// clones it by default, and both are installed before the executor starts.
+//
+// The infra repository has no CI test job and no Python manifest; its checks
+// are its own Python tests that need nothing but the repository, pytest and
+// PyYAML (CUT-runtime-repo-infra-2026-10-19): run by the Python of a virtual
+// environment the setup makes in .git/venv, where no commit carries it and a
+// fresh clone has none, so neither the change under test nor an earlier
+// attempt decides what runs the tests. The environment comes first on PATH:
+// the tests start python3 themselves and expect pytest and PyYAML there.
+// Go's build cache goes under TMPDIR where there is one (an executor's own,
+// in codex's sandbox, which cannot write the home directory), else where Go
+// keeps it on Linux.
 var Repos = map[string]Repo{
 	"bifrost-platform": {
 		Verify: [][]string{
@@ -49,6 +63,57 @@ var Repos = map[string]Repo{
 		},
 		Siblings: []Sibling{{Repo: "bifrost-ui", Ref: "main"}},
 	},
+	"bifrost-trade-infra": {
+		Verify: [][]string{{"sh", "-c", `PATH="$PWD/` + infraVenv + `/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" ` +
+			`exec python3 -I -m pytest -q -p no:cacheprovider ` + strings.Join(infraTests, " ")}},
+		Setup: [][]string{
+			{"python3", "-I", "-m", "venv", "--clear", infraVenv},
+			append([]string{infraVenv + "/bin/python3", "-I", "-m", "pip", "--isolated", "install", "--quiet", "--no-cache-dir",
+				"--no-input", "--disable-pip-version-check", "--only-binary=:all:", "--no-deps"}, infraPackages...),
+		},
+	},
+}
+
+// infraVenv is where an infra task's Python environment is made, relative to
+// the checkout.
+const infraVenv = ".git/venv"
+
+// infraPackages are what the infra tests import beyond the standard library,
+// pytest's own dependencies included: each pinned, installed as a wheel and
+// nothing else, so no release published later changes a check.
+var infraPackages = []string{"pytest==9.0.2", "pluggy==1.6.0", "iniconfig==2.1.0", "packaging==25.0", "pygments==2.19.2",
+	"pyyaml==6.0.3"}
+
+// infraTests are the infra tests the checks run, under two minutes on
+// 2026-10-19's main: those that pass with the repository alone and no network
+// at all, not even loopback (an executor runs them in codex's sandbox before
+// it hands in), on the agent host (git, bash, python3 and Go; no kubectl).
+// Left out for time, at about four minutes each and growing (the release
+// suite was one minute a week before): scripts/release, scripts/gitea and
+// k8s/cicd/gitea-backup. Left out as they serve on loopback:
+// scripts/cicd and scripts/agent-host/test_probe_gitea_protection.py. Left
+// out as they cannot pass there: agent-config/scripts/recorder (one test runs
+// scripts/release three times, three need bifrost-platform beside the
+// checkout); scripts/agent-host/test_agent_06_owner.py (the Owner's Mac
+// script, with macOS's shasum); scripts/test_agentrt_infra.py (kubectl);
+// scripts/test_access_checks.py (fails on main);
+// scripts/test_audit_retention_archive.py and scripts/test_iv_gap_audit.py
+// (pyarrow, bifrost_research).
+var infraTests = []string{
+	"agent-config/scripts/test_check_hardcoded_paths.py",
+	"k8s/data/role-matrix",
+	"scripts/agentrt",
+	"scripts/benchmark",
+	"scripts/k3s",
+	"scripts/test_check_monitoring_persistence.py",
+	"scripts/test_check_registry_images.py",
+	"scripts/test_iv_depth_plan.py",
+	"scripts/test_iv_empty_audit.py",
+	"scripts/test_iv_repair_actions.py",
+	"scripts/test_precommit_monitoring_checks.py",
+	"scripts/test_research_alert_delivery_route.py",
+	"scripts/test_research_secret_holders.py",
+	"scripts/test_scrub_config_secrets.py",
 }
 
 // RepoNames are the names of Repos, sorted.
@@ -75,10 +140,10 @@ func ImplementSpec(title, text string, repo Repo, verify [][]string) ([]byte, er
 	}
 	var cmds, setup strings.Builder
 	for _, c := range verify {
-		cmds.WriteString("    " + strings.Join(c, " ") + "\n")
+		cmds.WriteString("    " + shellLine(c) + "\n")
 	}
 	for _, c := range repo.Setup {
-		setup.WriteString("    " + strings.Join(c, " ") + "\n")
+		setup.WriteString("    " + shellLine(c) + "\n")
 	}
 	body := "# " + title + "\n\n" + text + "\n\n---\n" +
 		"This task comes from a goal the Owner typed in the Console. How to hand it in:\n\n" +
@@ -126,4 +191,24 @@ func installed(setup string) string {
 	}
 	return "- Dependencies were installed before you started, by:\n\n" + setup + "\n" +
 		"  You may have no network: use what is installed and add no packages.\n"
+}
+
+// shellLine is a command as one line a shell runs as written: an argument
+// with anything but letters, digits and _-./=:@%+, in it is single-quoted, so
+// the infra check's sh -c script reads as one argument.
+func shellLine(c []string) string {
+	words := make([]string, len(c))
+	for i, s := range c {
+		if s != "" && strings.TrimFunc(s, shellPlain) == "" {
+			words[i] = s
+		} else {
+			words[i] = "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// shellPlain is a character a shell reads as part of a word, unquoted.
+func shellPlain(r rune) bool {
+	return r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("_-./=:@%+,", r))
 }

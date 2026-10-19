@@ -260,7 +260,7 @@ func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error
 	for _, name := range RepoNames() {
 		var cmds []string
 		for _, c := range Repos[name].Verify {
-			cmds = append(cmds, "`"+strings.Join(c, " ")+"`")
+			cmds = append(cmds, "`"+shellLine(c)+"`")
 		}
 		fmt.Fprintf(&b, "- %s: %s\n", name, strings.Join(cmds, ", "))
 	}
@@ -300,8 +300,7 @@ func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 		"## How to plan\n\n" +
 		"- Each task is one change an implementer can make and hand in on its own: say what to change and why, where (files,\n" +
 		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
-		"- Every task runs the repository's checks listed above. Add a check only when it proves this task: a test of the package\n" +
-		"  you change, written exactly as `go -C api test [-run <pattern>] ./<package path>` (nothing else is taken).\n" +
+		"- Every task is in " + g.Repo + ", the goal's repository, and runs its checks listed above. " + ownChecks(Repos[g.Repo]) +
 		"- Ask the Owner only what is his: a goal he left open, a rule, something that cannot be undone. Give 2 to 4 options and the\n" +
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +
@@ -310,7 +309,7 @@ func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 		"Your final message is your report: a few lines on the plan, then exactly one fenced block ```json holding:\n\n" +
 		"    {\"mission\": {\"success\": [\"...\"], \"out_of_scope\": [\"...\"], \"max_attempts\": 10, \"max_wall_hours\": 24},\n" +
 		"     \"tasks\": [{\"ref\": \"t1\", \"title\": \"...\", \"repo\": \"" + g.Repo + "\", \"text\": \"...\",\n" +
-		"                \"verify\": [[\"go\", \"-C\", \"api\", \"test\", \"./internal/...\"]], \"depends_on\": []}],\n" +
+		"                \"verify\": " + verifyExample(Repos[g.Repo]) + ", \"depends_on\": []}],\n" +
 		"     \"questions\": [{\"question\": \"...\", \"body\": \"...\", \"options\": [\"...\", \"...\"], \"recommended\": 1,\n" +
 		"                    \"meanwhile\": \"what goes on until he answers\", \"owner_duty\": \"goal\"}],\n" +
 		"     \"decisions\": [{\"decision\": \"...\", \"why\": \"...\", \"dropped\": \"...\", \"reverse\": \"...\"}]}\n\n" +
@@ -320,4 +319,24 @@ func planSpec(g Goal, base, mission, snapshot string) ([]byte, error) {
 		"1-based option; owner_duty is goal, rule or irreversible. decisions: up to " + fmt.Sprint(PlanMaxDecisions) + ". The controller\n" +
 		"checks the block; one that does not read blocks this task and the Owner sees why.\n"
 	return canon.Encode(map[string]any{"text": text})
+}
+
+// ownChecks says which checks of its own a plan may add to a task in repo:
+// tests of a Go module, as checkTest takes them, or none where repo has no
+// module a plan may test.
+func ownChecks(repo Repo) string {
+	if len(repo.TestDirs) == 0 {
+		return "This repository takes no\n  checks of a plan's own: leave verify empty.\n"
+	}
+	return "Add a check only when it proves this task:\n" +
+		"  a test of the package you change, written exactly as `go -C " + strings.Join(repo.TestDirs, "|") +
+		" test [-run <pattern>] ./<package path>` (nothing else is taken).\n"
+}
+
+// verifyExample is the verify of the plan format's example task.
+func verifyExample(repo Repo) string {
+	if len(repo.TestDirs) == 0 {
+		return "[]"
+	}
+	return `[["go", "-C", "` + repo.TestDirs[0] + `", "test", "./internal/..."]]`
 }
