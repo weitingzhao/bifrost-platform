@@ -193,14 +193,17 @@ func TestASampleLeavesTheWindow(t *testing.T) {
 	w := newKernelWorld(t)
 	w.ready(t, store.Task{})
 	task := w.conclude(t, "h1", codex, "failed")
-	edge := time.Now().Add(-store.ScoreWindow + time.Second).UTC().Format(time.RFC3339Nano)
+	// Five seconds left in the window, for the computation and the read
+	// whatever the tests beside this one do (review 322 A1).
+	leaves := time.Now().Add(5 * time.Second)
+	edge := leaves.Add(-store.ScoreWindow).UTC().Format(time.RFC3339Nano)
 	w.legacy(t, `UPDATE agentrt.task SET updated_at = '`+edge+`' WHERE task_id = '`+task+`'`)
 	_, err := store.ComputeScores(ctx, w.rt)
 	ok(t, err)
 	if got := w.sample(t, "exec:codex", "openai"); got != "0 of 1" {
 		t.Fatalf("inside the window: %s", got)
 	}
-	time.Sleep(1200 * time.Millisecond)
+	time.Sleep(time.Until(leaves) + 200*time.Millisecond)
 	_, err = store.ComputeScores(ctx, w.rt)
 	ok(t, err)
 	if got := w.sample(t, "exec:codex", "openai"); got != "none" {

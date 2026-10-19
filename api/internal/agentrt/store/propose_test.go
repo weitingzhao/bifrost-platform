@@ -36,6 +36,23 @@ func (w *world) footprint(t *testing.T) string {
 	return s
 }
 
+// whileHeld runs a call the test holds a lock for and returns its error: a
+// call that waited for the lock instead of giving up would never return while
+// it is held, so after 30 seconds the test fails rather than the package
+// timing out (review 322 A2).
+func whileHeld(t *testing.T, what string, call func() error) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- call() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(30 * time.Second):
+		t.Fatalf("%s waited for a lock the test holds", what)
+		return nil
+	}
+}
+
 // wr is a writer as the routes make one: the actor and the token.
 func wr(actor string) store.Writer { return store.Writer{Actor: actor, Token: "operator"} }
 
@@ -154,10 +171,12 @@ func TestMissionDeadlineRetry(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
 	p := mission
-	p.Deadline = time.Now().Add(300 * time.Millisecond)
+	// Seconds, not milliseconds: the first proposal must be checked before
+	// the deadline whatever the tests beside this one do (review 322 A1).
+	p.Deadline = time.Now().Add(3 * time.Second)
 	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p, nil)
 	ok(t, err)
-	time.Sleep(400 * time.Millisecond)
+	time.Sleep(time.Until(p.Deadline) + 100*time.Millisecond)
 	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p, nil)
 	ok(t, err)
 	same(t, again, first)
@@ -748,23 +767,30 @@ func TestBatchRetriesBusyStep(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	hold := func(d time.Duration) {
+	hold := func() pgx.Tx {
 		tx, err := pool.Begin(ctx)
 		ok(t, err)
+		t.Cleanup(func() { _ = tx.Rollback(ctx) })
 		_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, s1)
 		ok(t, err)
-		go func() {
-			time.Sleep(d)
-			_ = tx.Rollback(ctx)
-		}()
+		return tx
 	}
-	hold(100 * time.Millisecond)
+	short := hold()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_ = short.Rollback(ctx)
+	}()
 	_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("a", w.spec)})
 	ok(t, err)
-	hold(3 * time.Second)
+	// Held until the batch has given up, not for a time it might outlast
+	// (review 322 A2).
+	held := hold()
 	before := w.footprint(t)
-	_, err = store.ProposeTasks(ctx, pool, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{proposal("b", w.spec)})
-	is(t, err, store.ErrBusy)
+	is(t, whileHeld(t, "a batch", func() error {
+		_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k2", "M-1", []store.TaskProposal{proposal("b", w.spec)})
+		return err
+	}), store.ErrBusy)
+	ok(t, held.Rollback(ctx))
 	if after := w.footprint(t); after != before {
 		t.Fatalf("a busy batch left something: %s -> %s", before, after)
 	}

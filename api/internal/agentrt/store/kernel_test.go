@@ -477,7 +477,9 @@ func TestFenceAndLeaseClock(t *testing.T) {
 	ok(t, err)
 
 	w.ready(t, store.Task{})
-	edge := w.claim(t, "h5", -store.Grace+2*time.Second, codex)
+	// Six seconds to the deadline for the setup and the wait it watches,
+	// whatever the tests beside this one do (review 322 A1).
+	edge := w.claim(t, "h5", -store.Grace+6*time.Second, codex)
 	deadline := edge.LeaseExpiresAt.Add(store.Grace)
 	pool := w.db.Pool(t, w.db.Runtime)
 	holder, err := pool.Begin(ctx)

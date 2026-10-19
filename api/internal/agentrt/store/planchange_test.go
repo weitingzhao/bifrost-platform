@@ -565,34 +565,45 @@ func TestChangeMeetsAHeldTask(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	task, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
-	hold := func(d time.Duration) {
+	hold := func() pgx.Tx {
 		tx, herr := pool.Begin(ctx)
 		ok(t, herr)
+		t.Cleanup(func() { _ = tx.Rollback(ctx) })
 		_, herr = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, task)
 		ok(t, herr)
-		go func() {
-			time.Sleep(d)
-			_ = tx.Rollback(ctx)
-		}()
+		return tx
 	}
 	a := &asker{}
-	hold(100 * time.Millisecond)
+	short := hold()
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		_ = short.Rollback(ctx)
+	}()
 	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, a.ask)
 	ok(t, err)
-	hold(3 * time.Second)
+	// Each hold lasts until the call it is for has returned, not for a time
+	// the call might outlast (review 322 A2).
+	held := hold()
 	before := w.footprint(t)
-	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, a.ask)
-	is(t, err, store.ErrBusy)
+	is(t, whileHeld(t, "a change", func() error {
+		_, err := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: task, Node: s3}}, a.ask)
+		return err
+	}), store.ErrBusy)
 	if after := w.footprint(t); after != before {
 		t.Fatalf("a busy change left something: %s -> %s", before, after)
 	}
-	time.Sleep(3 * time.Second)
+	ok(t, held.Rollback(ctx))
 	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	hold(time.Second)
-	if n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil); derr != nil || n != 0 {
+	held = hold()
+	var n int
+	if derr := whileHeld(t, "a decision", func() error {
+		var err error
+		n, err = store.DecidePlanChanges(ctx, pool, a.question, nil)
+		return err
+	}); derr != nil || n != 0 {
 		t.Fatalf("a decision on a held task: %d %v; want none this pass", n, derr)
 	}
-	time.Sleep(1200 * time.Millisecond)
+	ok(t, held.Rollback(ctx))
 	if n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil); derr != nil || n != 1 {
 		t.Fatalf("the next pass: %d %v", n, derr)
 	}
@@ -620,20 +631,19 @@ func TestMoveVerificationMeetsItsHeldSubject(t *testing.T) {
 	}))
 	tx, err := pool.Begin(ctx)
 	ok(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(ctx) })
 	_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, subject)
 	ok(t, err)
-	released := make(chan struct{})
-	go func() {
-		time.Sleep(3 * time.Second)
-		_ = tx.Rollback(ctx)
-		close(released)
-	}()
-	start := time.Now()
-	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
-	took := time.Since(start)
-	<-released
-	if !errors.Is(err, store.ErrBusy) || took > 2*time.Second {
-		t.Fatalf("a move of a verification whose subject is held: %v after %s; want busy at once", err, took)
+	// The subject stays held until the move has returned: a move that waited
+	// for the lock would never return while it is held, so returning busy is
+	// the proof it did not wait, whatever the clock says (review 322 A2).
+	err = whileHeld(t, "a move of a verification whose subject is held", func() error {
+		_, merr := store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
+		return merr
+	})
+	ok(t, tx.Rollback(ctx))
+	if !errors.Is(err, store.ErrBusy) {
+		t.Fatalf("a move of a verification whose subject is held: %v; want busy", err)
 	}
 	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k2", root, "move", []store.PlanChange{{Op: "move_task", Task: check, Node: s1}}, (&asker{}).ask)
 	if err == nil || errors.Is(err, store.ErrBusy) || !containsFold(err.Error(), "must sit where its subject") {

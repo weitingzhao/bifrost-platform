@@ -339,10 +339,12 @@ func TestANewReadingDropsAResetAlreadyPast(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner"}
-	soon := time.Now().Add(2 * time.Second).UTC()
+	// Five seconds, for the first reading to be taken before the reset
+	// whatever the tests beside this one do (review 322 A1).
+	soon := time.Now().Add(5 * time.Second).UTC()
 	_, err := store.RecordOwnerReading(ctx, w.rt, owner, "a", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.9), ResetsAt: &soon})
 	ok(t, err)
-	time.Sleep(2500 * time.Millisecond)
+	time.Sleep(time.Until(soon) + 500*time.Millisecond)
 	_, err = store.RecordOwnerReading(ctx, w.rt, owner, "b", store.PoolReading{Pool: "claude:owner:short", UsedFraction: pv(0.2)})
 	ok(t, err)
 	var resets *time.Time

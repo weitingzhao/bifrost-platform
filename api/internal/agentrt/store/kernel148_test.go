@@ -96,8 +96,10 @@ func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 		return tx
 	}
 
+	// Six and ten seconds to the deadlines, for each request to reach the
+	// lock it waits on whatever the tests beside this one do (review 322 A1).
 	w.ready(t, store.Task{})
-	c := w.claim(t, "h1", -store.Grace+2*time.Second, codex)
+	c := w.claim(t, "h1", -store.Grace+6*time.Second, codex)
 	deadline := c.LeaseExpiresAt.Add(store.Grace)
 	holder := hold(c.TaskID)
 	done := make(chan error, 1)
@@ -111,7 +113,7 @@ func TestTaskLockWaitCrossesTheDeadline(t *testing.T) {
 	}
 
 	w.ready(t, store.Task{Effect: "none"})
-	s := w.claim(t, "h2", -store.Grace+4*time.Second, codex)
+	s := w.claim(t, "h2", -store.Grace+10*time.Second, codex)
 	f := fence(s, "h2")
 	ok(t, store.Start(ctx, w.rt, f, "", ""))
 	exit := 0

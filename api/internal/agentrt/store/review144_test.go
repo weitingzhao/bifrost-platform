@@ -413,8 +413,9 @@ func TestFailedCommitLeavesNoOutboxRow(t *testing.T) {
 
 // T20: the writer's connection is killed in the middle of a stream of
 // writes; writing resumes on a new connection and the chain stays whole.
+//
+// Serial: it times 200 writes after a killed connection against a budget (review 322 B4).
 func TestKilledConnectionKeepsTheChain(t *testing.T) {
-	t.Parallel()
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	admin := w.db.Connect(t, w.db.Admin)

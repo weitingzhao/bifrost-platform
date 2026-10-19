@@ -287,8 +287,9 @@ func TestRouteDecisionReplays(t *testing.T) {
 
 // B4: a pass over many ready tasks of which none changed decides nothing and
 // opens no transaction per task.
+//
+// Serial: it times a pass against a budget (review 322 B4).
 func TestReroutePassScales(t *testing.T) {
-	t.Parallel()
 	w := newRoutedWorld(t)
 	w.jobs(t, "active", "*", claude, codex)
 	const n = 200
