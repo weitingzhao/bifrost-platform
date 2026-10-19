@@ -778,3 +778,23 @@ func TestCursorDataDirIsShortAndWalled(t *testing.T) {
 		t.Fatal("cursor starts with a data directory too long for its sockets")
 	}
 }
+
+// Review 361 B1: an attempt that ends without its executor having run (a
+// stop while it was prepared) or after a restart leaves no cursor data
+// directory: every end that deletes its entry, with its group gone, removes
+// it.
+func TestSettleRemovesCursorData(t *testing.T) {
+	root := t.TempDir()
+	reg, err := OpenRegistry(filepath.Join(root, "registry.json"))
+	must(t, err)
+	d := &Daemon{Root: root, Registry: reg, Logf: t.Logf}
+	work := filepath.Join(root, "tasks", "t1", "a1")
+	data := cursorDataDir(root, work+".out")
+	must(t, os.MkdirAll(data, 0o700))
+	e := Entry{AttemptID: "a1", TaskID: "t1", Workdir: work, Phase: "ending", Group: GroupCleared}
+	must(t, reg.Put(e))
+	must(t, d.settle(&e))
+	if _, serr := os.Lstat(data); !errors.Is(serr, os.ErrNotExist) {
+		t.Fatalf("%s outlived the attempt: %v", data, serr)
+	}
+}

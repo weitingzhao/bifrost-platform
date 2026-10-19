@@ -512,6 +512,9 @@ func (d *Daemon) settle(e *Entry) error {
 		d.clear(e, time.Time{})
 	}
 	if e.Group == GroupCleared {
+		// Every end comes here with its group gone: cursor's data directory,
+		// outside the attempt's output, goes before its entry (review 361 B1).
+		removeCursorData(d.Root, e.Workdir+".out", d.logf)
 		return d.Registry.Delete(e.AttemptID)
 	}
 	e.Phase = "uncleared"
@@ -587,6 +590,7 @@ func (d *Daemon) Recover(ctx context.Context) error {
 			continue
 		}
 		if e.Phase == "uncleared" && e.Group == GroupCleared {
+			removeCursorData(d.Root, e.Workdir+".out", d.logf)
 			delete(entries, id)
 			if err := d.Registry.Delete(id); err != nil {
 				return err
