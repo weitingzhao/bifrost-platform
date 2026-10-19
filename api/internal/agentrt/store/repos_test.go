@@ -30,6 +30,7 @@ const infraPlan = "One change.\n\n```json\n" + `{
 // in .git/venv from pinned wheels, first on PATH; no sibling. The commands
 // are shown as a shell runs them, the sh -c script as one argument.
 func TestInfraImplementSpec(t *testing.T) {
+	t.Parallel()
 	r, known := store.Repos[infra]
 	if !known || len(r.TestDirs) != 0 || len(r.Siblings) != 0 || len(r.Verify) != 1 || len(r.Setup) != 2 {
 		t.Fatalf("infra = %+v", r)
@@ -121,6 +122,7 @@ func TestInfraImplementSpec(t *testing.T) {
 // would take for an assignment or a reserved word is quoted too, and the line
 // runs as the command it shows (review 330 B1).
 func TestImplementSpecQuotesCommands(t *testing.T) {
+	t.Parallel()
 	body, err := store.ImplementSpec("t", "x", store.Repo{}, [][]string{{"echo", "it's", "a b", "", "./...", "--x=:all:", "if", "A=B"},
 		{"go", "-C", "api", "vet", "./..."}, {"A=B", "x"}, {"if", "x"}})
 	ok(t, err)
@@ -154,6 +156,7 @@ func TestImplementSpecQuotesCommands(t *testing.T) {
 // platform goal's plan naming infra; a repository the runtime does not know
 // is still refused.
 func TestInfraGoalToImplementation(t *testing.T) {
+	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner", Token: "admin"}
 	main := func(context.Context) (string, error) { return commitA, nil }
