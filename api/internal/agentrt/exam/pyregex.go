@@ -17,9 +17,12 @@ import (
 //     translation takes the (?i) away and writes each ASCII letter in its
 //     scope as both its cases, in a class as both ranges; every other rune
 //     stays as it is and matches only itself;
+//   - escapes are Python's: \xHH, octal, \a, a punctuation; a [ in a class is a
+//     member (no POSIX classes);
 //   - the flags taken are a leading (?i) and a (?i:…) group; a pattern with
-//     any other flag, \Q…\E, or \S inside a class is refused, as is one that
-//     does not compile.
+//     any other flag, an escape Python or RE2 does not take (\x{…}, \p, \Q,
+//     a backreference), or \S inside a class is refused, as is one that does
+//     not compile.
 //
 // The answer is never rewritten: what a rule reads is what the seat wrote.
 
@@ -44,51 +47,44 @@ func swapCase(r rune) rune {
 
 func hasAt(rs []rune, i int, s string) bool { return strings.HasPrefix(string(rs[i:]), s) }
 
-// escapedRune reads the rune an escape at rs[i] (a backslash) names when it
-// names one (\xHH, \x{H…}, or a punctuation or letter that is itself), and
-// how many runes the escape takes; ok is false for a class escape (\d, \w,
-// \b, \p{…} and the like).
-func escapedRune(rs []rune, i int) (r rune, n int, ok bool, err error) {
+// escapedRune reads the escape at rs[i] (a backslash) as Python's re reads
+// it: the rune it names (\xHH, an octal escape, \a \t \n \v \f \r, a
+// punctuation that is itself) or a class escape (\d \D \w \W \b \B \A \s
+// \S: ok false), and how many runes it takes. What Python does not take, or
+// RE2 cannot do (\x{…}, \p, \Q…\E, a backreference, an unknown letter), is
+// refused; n never runs past rs (review 373 A).
+func escapedRune(rs []rune, i int, inClass bool) (r rune, n int, ok bool, err error) {
 	if i+1 >= len(rs) {
 		return 0, 0, false, fmt.Errorf("a pattern ends in a backslash")
 	}
+	isHex := func(c rune) bool { return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F' }
 	switch d := rs[i+1]; {
-	case d == 'x' && i+2 < len(rs) && rs[i+2] == '{':
-		end := strings.IndexRune(string(rs[i+3:]), '}')
-		if end < 0 {
-			return 0, 0, false, fmt.Errorf(`an unclosed \x{`)
-		}
-		hex := string(rs[i+3 : i+3+len([]rune(string(rs[i+3:])[:end]))])
-		v, perr := strconv.ParseUint(hex, 16, 32)
-		if perr != nil {
-			return 0, 0, false, fmt.Errorf(`\x{%s}: %v`, hex, perr)
-		}
-		return rune(v), 4 + len([]rune(hex)), true, nil
 	case d == 'x':
-		if i+3 >= len(rs) {
-			return 0, 0, false, fmt.Errorf(`a short \x escape`)
+		if i+3 >= len(rs) || !isHex(rs[i+2]) || !isHex(rs[i+3]) {
+			return 0, 0, false, fmt.Errorf(`\x takes two hex digits`)
 		}
-		v, perr := strconv.ParseUint(string(rs[i+2:i+4]), 16, 8)
-		if perr != nil {
-			return 0, 0, false, fmt.Errorf(`\x%s: %v`, string(rs[i+2:i+4]), perr)
-		}
+		v, _ := strconv.ParseUint(string(rs[i+2:i+4]), 16, 8)
 		return rune(v), 4, true, nil
-	case d == 'p' || d == 'P':
-		if i+2 < len(rs) && rs[i+2] == '{' {
-			end := strings.IndexRune(string(rs[i+2:]), '}')
-			if end < 0 {
-				return 0, 0, false, fmt.Errorf(`an unclosed \p{`)
-			}
-			return 0, 2 + len([]rune(string(rs[i+2:])[:end+1])), false, nil
+	case d >= '0' && d <= '7':
+		// \0 and up to two more octal digits; \1–\7 with two more (else a
+		// backreference, which RE2 has not); in a class up to three
+		j := i + 1
+		for j < len(rs) && j-(i+1) < 3 && rs[j] >= '0' && rs[j] <= '7' {
+			j++
 		}
-		return 0, 3, false, nil
-	case d == 'Q' || d == 'E':
-		return 0, 0, false, fmt.Errorf(`\Q…\E is not taken`)
-	case strings.ContainsRune("dDwWbBAzsS", d):
+		if d != '0' && !inClass && j-(i+1) < 3 {
+			return 0, 0, false, fmt.Errorf(`\%s is a backreference, not taken`, string(rs[i+1:j]))
+		}
+		v, _ := strconv.ParseUint(string(rs[i+1:j]), 8, 32)
+		if v > 0o377 {
+			return 0, 0, false, fmt.Errorf(`the octal escape \%s is out of range`, string(rs[i+1:j]))
+		}
+		return rune(v), j - i, true, nil
+	case strings.ContainsRune("dDwWbBAsS", d):
 		return 0, 2, false, nil
-	case strings.ContainsRune("tnvfr", d):
-		return map[rune]rune{'t': '\t', 'n': '\n', 'v': '\v', 'f': '\f', 'r': '\r'}[d], 2, true, nil
-	case isLetter(d) || d >= '0' && d <= '9':
+	case strings.ContainsRune("atnvfr", d):
+		return map[rune]rune{'a': '\a', 't': '\t', 'n': '\n', 'v': '\v', 'f': '\f', 'r': '\r'}[d], 2, true, nil
+	case isLetter(d) || d == '8' || d == '9':
 		return 0, 0, false, fmt.Errorf(`the escape \%c is not taken`, d)
 	default:
 		return d, 2, true, nil // punctuation stands for itself
@@ -125,7 +121,7 @@ func translate(p string) (string, error) {
 		c := rs[i]
 		switch {
 		case c == '\\':
-			r, n, isRune, err := escapedRune(rs, i)
+			r, n, isRune, err := escapedRune(rs, i, false)
 			if err != nil {
 				return "", err
 			}
@@ -221,18 +217,8 @@ func class(b *strings.Builder, rs []rune, i int, fold bool) (int, error) {
 		var r rune
 		isRune := true
 		switch {
-		case c == '[' && hasAt(rs, i, "[:"):
-			end := strings.Index(string(rs[i:]), ":]")
-			if end < 0 {
-				return 0, fmt.Errorf("an unclosed [:class:]")
-			}
-			name := string(rs[i:])[:end+2]
-			b.WriteString(name)
-			i += len([]rune(name)) - 1
-			havePrev = false
-			continue
 		case c == '\\':
-			er, n, ok, err := escapedRune(rs, i)
+			er, n, ok, err := escapedRune(rs, i, true)
 			if err != nil {
 				return 0, err
 			}
@@ -255,7 +241,7 @@ func class(b *strings.Builder, rs []rune, i int, fold bool) (int, error) {
 			i++
 			hi := rs[i]
 			if hi == '\\' {
-				er, n, ok, err := escapedRune(rs, i)
+				er, n, ok, err := escapedRune(rs, i, true)
 				if err != nil || !ok {
 					return 0, fmt.Errorf("a range ends in a class escape")
 				}

@@ -3,6 +3,7 @@ package exam
 import (
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -87,6 +88,13 @@ func TestPatternsMeanWhatTheReferenceMeans(t *testing.T) {
 		`[^]x]`:            {"y": true, "]": false},
 		`[+\-−]?\s*(\d+)%`: {"-5%": true, "−5%": true, "+5%": true},
 		`(?i)\bno\b`:       {"No way": true, "nope": false},
+		// review 373: a [ in a class is a member; \a and octal escapes are runes
+		`(?i)[A[:]]`:  {":]": true, "a]": true, "x": false},
+		`(?i)[^A[:]]`: {"a]": false, "b]": true},
+		`\a[\a]`:      {"\a\a": true},
+		`\123[\123]`:  {"SS": true, "ss": false},
+		`(?i)\123`:    {"s": true},
+		`\0[\0]`:      {"\x00\x00": true},
 	} {
 		re, err := compilePy(p)
 		if err != nil {
@@ -99,7 +107,9 @@ func TestPatternsMeanWhatTheReferenceMeans(t *testing.T) {
 			}
 		}
 	}
-	for _, p := range []string{`[\S]`, `x(?i)y`, `(?s).`, `\Qa\E`, `\q`, `(a`} {
+	// \p cut short ran past the pattern (review 373 A): refused, no panic
+	for _, p := range []string{`[\S]`, `x(?i)y`, `(?s).`, `\Qa\E`, `\q`, `(a`, strings.Repeat("a", 30) + `\p`, `\p{Latin}`,
+		`\x{41}`, `\x{110000}`, `\1`, `\12`, `\8`, `\477`, `\x4`, `[\x]`} {
 		if _, err := compilePy(p); err == nil {
 			t.Errorf("%s compiled", p)
 		}
@@ -125,18 +135,5 @@ func TestPyDumps(t *testing.T) {
 	}
 	if got := planTasksText("```json\n{\"tasks\": [{\"title\": \"T\", \"text\": \"x\"}]}\n```"); got != "T\nx\n[]" {
 		t.Errorf("no verify: %q", got)
-	}
-}
-
-// The answer is read as written: a rune the reference does not fold stays
-// itself for the literal rules too (review 372 B2.1).
-func TestTheAnswerIsNotRewritten(t *testing.T) {
-	t.Parallel()
-	r := &Rule{ID: "m", Kind: "mentions_all", Items: []aliasItem{{Name: "long s", Aliases: []string{"ſ"}}}}
-	if err := r.compile(); err != nil {
-		t.Fatal(err)
-	}
-	if ok, why := r.eval("ſ", grading{}); !ok {
-		t.Fatalf("a literal alias was not found: %s", why)
 	}
 }

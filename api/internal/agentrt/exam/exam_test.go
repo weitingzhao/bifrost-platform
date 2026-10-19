@@ -231,3 +231,22 @@ func TestT0(t *testing.T) {
 		t.Errorf("the mail's t0 %s", got)
 	}
 }
+
+// The answer is graded as written: a rune the reference does not fold stays
+// itself for a literal rule too (reviews 372 B2.1, 373 C).
+func TestTheAnswerIsGradedAsWritten(t *testing.T) {
+	t.Parallel()
+	q := strings.Replace(mail, `{"id": "nothing-done", "kind": "forbid_any", "patterns": ["已(经)?合并"]}`,
+		`{"id": "nothing-done", "kind": "forbid_any", "patterns": ["已(经)?合并"]}, {"id": "long-s", "kind": "mentions_all", "items": [{"name": "long s", "aliases": ["ſ"]}]}`, 1)
+	s, err := exam.Load(fstest.MapFS{"q3.json": {Data: []byte(q)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := s.Grade("M1", "ſ\nPOLICY_ALERT: thread:local_x — claims\nCANNOT: merge — release", t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exam.Passed(rs) || rs[len(rs)-1].Rule != "long-s" || !rs[len(rs)-1].OK {
+		t.Fatalf("results %+v", rs)
+	}
+}
