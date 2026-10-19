@@ -111,11 +111,13 @@ func samplesOf(body map[string]any) []scoreLine {
 		}
 		str := func(k string) string { s, _ := m[k].(string); return s }
 		core, _ := m["core"].(bool)
-		out = append(out, scoreLine{executor: str("executor"), provider: str("provider"), model: str("model"),
+		out = append(out, scoreLine{source: sourceOf(body), executor: str("executor"), provider: str("provider"), model: str("model"),
 			job: str("job"), class: str("class"), core: core, attempts: int(numberOf(m["attempts"])), firstPass: int(numberOf(m["first_pass"]))})
 	}
 	return out
 }
+
+func sourceOf(body map[string]any) string { s, _ := body["source"].(string); return s }
 
 func numberOf(v any) float64 {
 	switch n := v.(type) {

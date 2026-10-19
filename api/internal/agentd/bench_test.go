@@ -92,7 +92,7 @@ esac`)
 		"Q5": "fail: the executor ran out of time; sh check.sh exited 1",
 		"Q6": "fail: 1 protected or linked files of its change left out; sh check.sh exited 1",
 		"Q7": "pass: ", "Q8": "pass: ", "Q9": "pass: ",
-		"Q10": "fail: 1 protected or linked files of its change left out; sh check.sh exited 1: cat: calc.txt: No such file or directory",
+		"Q10": "fail: 1 protected or linked files of its change left out; sh check.sh exited 1", // no output of the change's code (review 288 A1)
 	} {
 		if outcomes[id] != want {
 			t.Errorf("%s: %q, want %q", id, outcomes[id], want)
@@ -102,6 +102,18 @@ esac`)
 	must(t, err)
 	if n := strings.Count(string(ran), "\n"); n != 8 {
 		t.Fatalf("the executor ran %d times (all but Q3 and Q4): %s", n, ran)
+	}
+	// Only out/ is left of each question: no clone, no tree, no change (review 288 B3).
+	for _, x := range qs {
+		entries, rerr := os.ReadDir(filepath.Join(root, x.ID))
+		must(t, rerr)
+		if len(entries) != 1 || entries[0].Name() != "out" {
+			names := []string{}
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			t.Errorf("%s left %v", x.ID, names)
+		}
 	}
 	time.Sleep(1500 * time.Millisecond)
 	if _, serr := os.Stat(mark); serr == nil {
@@ -129,6 +141,10 @@ esac`)
 	if _, cerr := trial.Complete(got); cerr == nil {
 		t.Fatal("a trial is handed in")
 	}
+	// With no model pinned a run is not resumed, even as it was (review 288 B9).
+	if _, err = agentd.WriteBenchMeta(root, meta); err == nil {
+		t.Fatal("a run with no model pinned was resumed")
+	}
 	// A run is of one executor, provider and model on one question set (review 287 B9).
 	for name, m := range map[string]agentd.BenchMeta{
 		"another executor": {RunID: meta.RunID, Executor: "exec:cursor", Provider: "openai", Questions: meta.Questions, QuestionIDs: ids},
@@ -147,8 +163,10 @@ func TestBenchQuestionsRefused(t *testing.T) {
 		"fix_commit": strings.Repeat("b", 40), "test_files": []string{"api/x_test.go"},
 		"check_command": []any{map[string]any{"cwd": "api", "argv": []string{"go", "test", "./..."}}}, "task_text": "fix"}
 	for name, mutate := range map[string]func(m map[string]any){
-		"a test file outside":     func(m map[string]any) { m["test_files"] = []string{"../evil_test.go"} },
-		"a check outside":         func(m map[string]any) { m["check_command"] = []any{map[string]any{"cwd": "/tmp", "argv": []string{"true"}}} },
+		"a test file outside": func(m map[string]any) { m["test_files"] = []string{"../evil_test.go"} },
+		"a check outside": func(m map[string]any) {
+			m["check_command"] = []any{map[string]any{"cwd": "/tmp", "argv": []string{"true"}}}
+		},
 		"a short commit":          func(m map[string]any) { m["base_commit"] = "abc" },
 		"a language unknown":      func(m map[string]any) { m["language"] = "rust" },
 		"no task text":            func(m map[string]any) { m["task_text"] = " " },
@@ -172,5 +190,21 @@ func TestBenchQuestionsRefused(t *testing.T) {
 	must(t, os.WriteFile(path, b, 0o600))
 	if qs, sum, err := agentd.ReadBenchQuestions(path); err != nil || len(qs) != 1 || len(sum) != 64 {
 		t.Fatalf("the good one: %v %s %v", qs, sum, err)
+	}
+}
+
+// Review 287 B2, 288 B2: what the checks run as is never taken from a change.
+func TestBenchProtected(t *testing.T) {
+	for _, p := range []string{"pytest.py", "sub/conftest.py", "api/x_test.go", "console/src/test/setup.ts", "tests/helpers.py",
+		"console/vitest.config.ts", "package.json", "go.mod", "node_modules/.bin/vitest", "lib/site.pth", "sitecustomize.py",
+		"src/__mocks__/clock.ts", "pyproject.toml"} {
+		if !agentd.Protected(p) {
+			t.Errorf("%s is taken from a change", p)
+		}
+	}
+	for _, p := range []string{"api/internal/agentd/run.go", "console/src/pages/Work.tsx", "scripts/release.sh", "src/testing.py"} {
+		if agentd.Protected(p) {
+			t.Errorf("%s is not taken from a change", p)
+		}
 	}
 }

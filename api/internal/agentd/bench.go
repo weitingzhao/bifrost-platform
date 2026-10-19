@@ -245,6 +245,14 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 	if err := os.MkdirAll(filepath.Join(out, "tmp"), 0o700); err != nil {
 		return unrunnable(err.Error())
 	}
+	fixTree, baseTree, judge, work := filepath.Join(qdir, "fix"), filepath.Join(qdir, "base"), filepath.Join(qdir, "judge"), filepath.Join(qdir, "work")
+	// However the question ends, only out/ stays: no clone, no tree of the
+	// fix, no change of an executor for a later one to read (review 288 B3).
+	defer func() {
+		for _, d := range []string{filepath.Join(qdir, "src"), fixTree, baseTree, judge, work} {
+			_ = os.RemoveAll(d)
+		}
+	}()
 	src, err := Prepare(ctx, filepath.Join(qdir, "src"), b.Remote(q.RepoName()), q.FixCommit, b.GitEnv)
 	if err != nil {
 		return unrunnable("cloning the repository: " + err.Error())
@@ -258,7 +266,6 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 		tests[f] = []byte(body)
 	}
 	venv := filepath.Join(out, "venv")
-	fixTree, baseTree, judge := filepath.Join(qdir, "fix"), filepath.Join(qdir, "base"), filepath.Join(qdir, "judge")
 	if err = b.snapshot(ctx, src, q.FixCommit, fixTree); err != nil {
 		return unrunnable("the fix's tree: " + err.Error())
 	}
@@ -266,7 +273,7 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 	if err != nil {
 		return unrunnable("setting up the checks: " + err.Error())
 	}
-	if why := b.verify(ctx, fixTree, checks); why != "" {
+	if why := b.verify(ctx, fixTree, checks, true); why != "" {
 		return unrunnable("the fix does not pass its checks here: " + why)
 	}
 	if err = b.snapshot(ctx, src, q.BaseCommit, baseTree); err == nil {
@@ -278,10 +285,9 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 	if _, err = b.setup(ctx, baseTree, venv, q); err != nil {
 		return unrunnable("setting up the checks before the fix: " + err.Error())
 	}
-	if why := b.verify(ctx, baseTree, checks); why == "" {
+	if why := b.verify(ctx, baseTree, checks, true); why == "" {
 		return unrunnable("the checks pass on the code before the fix")
 	}
-	work := filepath.Join(qdir, "work")
 	if err = b.snapshot(ctx, src, q.BaseCommit, judge); err == nil {
 		err = b.snapshot(ctx, src, q.BaseCommit, work)
 	}
@@ -311,12 +317,12 @@ func (b *Bench) one(ctx context.Context, q BenchQuestion) BenchResult {
 		return fail(note + "taking its change: " + err.Error())
 	}
 	if _, err = b.setup(ctx, judge, venv, q); err != nil {
-		return fail(note + "setting up the checks over its change: " + err.Error())
+		return fail(note + "setting up the checks over its change failed")
 	}
 	if dropped > 0 {
 		note += fmt.Sprintf("%d protected or linked files of its change left out; ", dropped)
 	}
-	if why := b.verify(ctx, judge, checks); why != "" {
+	if why := b.verify(ctx, judge, checks, false); why != "" {
 		return fail(note + why)
 	}
 	r.Outcome = "pass"
@@ -392,13 +398,13 @@ func overlay(tree string, tests map[string][]byte) error {
 
 // protectedDirs and protectedFiles are what the judgement never takes from
 // the executor's change: what the checks run as, not what they check.
-var protectedDirs = map[string]bool{".git": true, "node_modules": true, "__tests__": true, "__fixtures__": true, "testdata": true,
-	".pytest_cache": true, ".bench": true}
+var protectedDirs = map[string]bool{".git": true, "node_modules": true, "__tests__": true, "__fixtures__": true, "__mocks__": true,
+	"testdata": true, "test": true, "tests": true, "_pytest": true, ".pytest_cache": true, ".bench": true}
 
 var protectedFiles = []string{"*_test.go", "test_*.py", "*_test.py", "conftest.py", "*.test.ts", "*.test.tsx", "*.spec.ts",
 	"*.spec.tsx", "*.test.js", "*.test.mjs", "*.test.cjs", "test_*.sh", "*_test.sh", "vitest.config.*", "vitest.workspace.*",
 	"vite.config.*", "jest.config.*", "tsconfig*.json", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml", "package.json",
-	"package-lock.json", ".npmrc", "go.mod", "go.sum", "go.work", "go.work.sum"}
+	"package-lock.json", ".npmrc", "go.mod", "go.sum", "go.work", "go.work.sum", "pytest.py", "sitecustomize.py", "usercustomize.py", "*.pth"}
 
 func protected(rel string) bool {
 	parts := strings.Split(filepath.ToSlash(rel), "/")
@@ -566,7 +572,10 @@ func (b *Bench) setup(ctx context.Context, tree, venv string, q BenchQuestion) (
 		}
 		for i, c := range checks {
 			if c.Argv[0] == "python3" || c.Argv[0] == "python" {
-				checks[i] = BenchCheck{Cwd: c.Cwd, Argv: append([]string{filepath.Join(venv, "bin", "python3")}, c.Argv[1:]...)}
+				// -I: the tree is not on the module path before pytest puts it
+				// there, so a pytest.py of the change is not what runs (review
+				// 288 B2).
+				checks[i] = BenchCheck{Cwd: c.Cwd, Argv: append([]string{filepath.Join(venv, "bin", "python3"), "-I"}, c.Argv[1:]...)}
 			}
 		}
 	}
@@ -609,8 +618,10 @@ func (b *Bench) limit() time.Duration {
 }
 
 // verify runs the checks in tree, confined, each in its directory, and
-// returns why they did not pass ("" when they did).
-func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck) string {
+// returns why they did not pass ("" when they did). What a check printed is
+// part of why only when withOutput: the code the judgement runs is the
+// executor's, and a reason is handed to the platform (review 288 A1).
+func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck, withOutput bool) string {
 	env := b.checkEnv(tree)
 	for _, c := range checks {
 		// The command's own directory, entered inside the sandbox.
@@ -619,6 +630,9 @@ func (b *Bench) verify(ctx context.Context, tree string, checks []BenchCheck) st
 			argv = b.Sandbox(tree, argv)
 		}
 		if why := b.run(ctx, tree, env, argv...); why != "" {
+			if !withOutput {
+				why, _, _ = strings.Cut(why, ":")
+			}
 			return strings.Join(c.Argv, " ") + " " + why
 		}
 	}
@@ -762,6 +776,11 @@ func appendBenchResult(root string, r BenchResult) error {
 func WriteBenchMeta(root string, m BenchMeta) (BenchMeta, error) {
 	p := filepath.Join(root, "meta.json")
 	if b, err := os.ReadFile(p); err == nil {
+		if m.Model == "" {
+			// The executor's default model may have changed since: a run
+			// with no model pinned is never resumed (review 288 B9).
+			return m, fmt.Errorf("agentd: run %s has no model pinned and is not resumed: start a new run", m.RunID)
+		}
 		var old BenchMeta
 		if err = json.Unmarshal(b, &old); err != nil {
 			return m, err

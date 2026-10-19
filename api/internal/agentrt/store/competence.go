@@ -27,11 +27,11 @@ type threshold struct {
 	rule                   ruleRef
 }
 
-// scoreLine is one row of the latest in-job computation.
+// scoreLine is one group of a computation's or a run's samples.
 type scoreLine struct {
-	executor, provider, model, job, class string
-	core                                  bool
-	attempts, firstPass                   int
+	source, executor, provider, model, job, class string
+	core                                          bool
+	attempts, firstPass                           int
 }
 
 // sample is a candidate's summed counts on one kind of task.
@@ -96,7 +96,10 @@ func (cp capabilities) competenceOf(c candidate, job string, cands []jobCandidat
 	for _, jc := range cands {
 		var s sample
 		for _, l := range cp.scores {
-			if l.job != job || l.class != c.class || l.core != c.core || l.executor != jc.executor || l.provider != jc.provider {
+			// A benchmark's classes are languages, not the task classes work is
+			// planned in (goal, test, brief, ...): its samples count for the
+			// job whatever the class (measured 10-18 on PROD and STG).
+			if l.job != job || (l.source != "benchmark" && l.class != c.class) || l.core != c.core || l.executor != jc.executor || l.provider != jc.provider {
 				continue
 			}
 			if ok, err := path.Match(jc.pattern, l.model); ok && err == nil {

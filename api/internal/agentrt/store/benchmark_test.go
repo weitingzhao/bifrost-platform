@@ -79,7 +79,16 @@ func TestBenchmarkRecord(t *testing.T) {
 func TestBenchmarkCountsForCompetence(t *testing.T) {
 	w := newKernelWorld(t)
 	w.legacy(t, routingRule(1, 30, 3))
-	_, err := store.RecordBenchmark(ctx, w.rt, "h1", benchRun("run-c-000001", 0, 5))
+	// The run's classes are languages; the task's class is another: the
+	// samples count for the job all the same (task classes on PROD and STG
+	// are goal, test, brief, analysis).
+	failing := benchRun("run-c-000001", 0, 5)
+	for i := range failing.Results {
+		if failing.Results[i].Class == "go" {
+			failing.Results[i].Class = "shell"
+		}
+	}
+	_, err := store.RecordBenchmark(ctx, w.rt, "h1", failing)
 	ok(t, err)
 	task := w.ready(t, store.Task{})
 	body := w.lastRoute(t, task)
