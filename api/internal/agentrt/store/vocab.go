@@ -58,7 +58,7 @@ var bodies = map[string][]field{
 	"host_registered":         {{"host_id", kID, false}, {"actor_id", kID, false}, {"host_kind", kStr, false}, {"token", kStr, true}},
 	"host_state_changed":      {{"host_id", kID, false}, {"from", kStr, false}, {"to", kStr, false}},
 	"attempt_persisted":       {{"pushed_commit", kStr, true}, {"pushed_ref", kStr, true}, {"artifacts", kIDs, true}},
-	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}},
+	"verification_recorded":   {{"verification_id", kID, false}, {"method", kStr, false}, {"verdict", kStr, false}, {"check_ref", kStr, true}, {"env", kStr, true}, {"injected", kBool, true}},
 	"artifact_put":            {{"artifact_id", kID, false}, {"artifact_kind", kStr, false}, {"size_bytes", kInt, false}, {"uploaded_by", kStr, false}},
 	"message_posted":          {{"message_id", kID, false}, {"to", kID, false}, {"kind", kStr, false}},
 	"message_acked":           {{"message_id", kID, false}},

@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -209,5 +210,54 @@ func TestConcludeOnce(t *testing.T) {
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'review'`, impl).Scan(&reviews))
 	if reviews != 1 || len(w.verifications(t, impl)) != 1 {
 		t.Fatalf("%d review tasks, %d verifications", reviews, len(w.verifications(t, impl)))
+	}
+}
+
+// T26 (the Owner 2026-10-18): on STG a task carrying the test need fails its
+// first deterministic verification whatever it found, recorded as injected,
+// and goes round again; its second round is verified as found. Without the
+// switch (PROD) the need does nothing.
+func TestFailFirstVerifySwitch(t *testing.T) {
+	w := newKernelWorld(t)
+	on := store.ConcludeOptions{FailFirstVerify: true}
+	impl := w.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})
+	w.run(t, "h1", cursor, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	w.run(t, "h2", deterministic, "done")
+	did, err := store.ConcludeWith(ctx, w.rt, v, on)
+	ok(t, err)
+	if did != "rework" || w.state(t, "task", impl) != "ready" {
+		t.Fatalf("round 1 with the switch: %q, implementation %s", did, w.state(t, "task", impl))
+	}
+	if got := w.verifications(t, impl); len(got) != 1 || got[0].verdict != "fail" {
+		t.Fatalf("verifications = %+v", got)
+	}
+	var injected bool
+	var reason string
+	ok(t, w.rt.QueryRow(ctx, `SELECT (body_json->>'injected')::boolean FROM agentrt.event WHERE event_type = 'verification_recorded' AND task_id = $1`,
+		impl).Scan(&injected))
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'reason' FROM agentrt.event WHERE event_type = 'task_state_changed' AND task_id = $1
+	  AND body_json->>'to' = 'rework'`, impl).Scan(&reason))
+	if !injected || !strings.Contains(reason, "STG test switch") {
+		t.Fatalf("injected %v, rework reason %q", injected, reason)
+	}
+	w.run(t, "h3", cursor, "done")
+	v2, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	w.run(t, "h4", deterministic, "done")
+	if did, err = store.ConcludeWith(ctx, w.rt, v2, on); err != nil || did != "review" {
+		t.Fatalf("round 2 with the switch: %q (%v)", did, err)
+	}
+
+	// Without the switch the need is just a need.
+	w2 := newKernelWorld(t)
+	other := w2.ready(t, store.Task{Needs: []string{store.TestNeedFailFirstVerify}})
+	w2.run(t, "h1", cursor, "done")
+	v3, err := store.StartVerification(ctx, w2.rt, other)
+	ok(t, err)
+	w2.run(t, "h2", deterministic, "done")
+	if did, err = store.Conclude(ctx, w2.rt, v3); err != nil || did != "review" {
+		t.Fatalf("without the switch: %q (%v)", did, err)
 	}
 }

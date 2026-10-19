@@ -110,7 +110,8 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			}
 			return
 		}
-		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Briefs: true, Logf: func(format string, args ...any) {
+		// The STG test switch that forces a rework is STG's alone (T26).
+		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Briefs: true, FailFirstVerify: env == "stg", Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 		wait := c.Start(ctx)

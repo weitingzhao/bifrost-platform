@@ -209,6 +209,24 @@ func StartVerification(ctx context.Context, db DB, taskID string) (string, error
 // "review" (a review task was proposed), "accepted", "rework", "blocked",
 // "closed", or "" when there was nothing to do.
 func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
+	return ConcludeWith(ctx, db, taskID, ConcludeOptions{})
+}
+
+// TestNeedFailFirstVerify is a need a task may carry to show the rework path
+// on STG (T26; the Owner 2026-10-18): where the controller runs with
+// ConcludeOptions.FailFirstVerify (STG only), the task's first deterministic
+// verification records a failure whatever it found, so the task goes round
+// again. Elsewhere it is a need nothing holds a fact on, and does nothing.
+const TestNeedFailFirstVerify = "test:fail-first-verify"
+
+// ConcludeOptions are the controller's test switches.
+type ConcludeOptions struct {
+	// FailFirstVerify honours TestNeedFailFirstVerify (STG only).
+	FailFirstVerify bool
+}
+
+// ConcludeWith is Conclude with the controller's test switches.
+func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOptions) (string, error) {
 	var did string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		var role, specID, subject string
@@ -328,11 +346,24 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		if v.role == "review" {
 			method = "review"
 		}
+		injected := false
+		if opts.FailFirstVerify && v.role == "verify" && verdict == "pass" && sd.round == 1 {
+			if err = tx.QueryRow(ctx, `SELECT needs_json ? $2 FROM agentrt.task WHERE task_id = $1`, s.id, TestNeedFailFirstVerify).Scan(&injected); err != nil {
+				return err
+			}
+			if injected {
+				verdict = "fail"
+			}
+		}
+		why := method
+		if injected {
+			why = method + " (a failure the STG test switch injected)"
+		}
 		accepts := v.role == "review" && verdict == "pass"
 		vid := NewVerificationID()
 		if _, err = Append(ctx, tx, Event{Stream: MissionStream(s.mission), Type: "verification_recorded", Actor: "controller",
 			MissionID: s.mission, PlanNode: s.step, TaskID: s.id, AttemptID: spec.attempt,
-			Body: map[string]any{"verification_id": vid, "method": method, "verdict": verdict}}); err != nil {
+			Body: verificationBody(vid, method, verdict, injected)}); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
@@ -362,10 +393,10 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		}
 		if sd.round+1 > sd.maxRounds {
 			did = "blocked"
-			return failWork(ctx, tx, "controller", s, fmt.Sprintf("%s failed in round %d of %d", method, sd.round, sd.maxRounds))
+			return failWork(ctx, tx, "controller", s, fmt.Sprintf("%s failed in round %d of %d", why, sd.round, sd.maxRounds))
 		}
 		did = "rework"
-		if err = moveTask(ctx, tx, "controller", s, "rework", fmt.Sprintf("%s failed in round %d of %d", method, sd.round, sd.maxRounds)); err != nil {
+		if err = moveTask(ctx, tx, "controller", s, "rework", fmt.Sprintf("%s failed in round %d of %d", why, sd.round, sd.maxRounds)); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(ctx, `UPDATE agentrt.task SET round_no = round_no + 1 WHERE task_id = $1`, s.id); err != nil {
@@ -428,4 +459,12 @@ func Pending(ctx context.Context, db DB) ([]string, []string, error) {
 		return rows.Err()
 	})
 	return implementations, checks, err
+}
+
+func verificationBody(id, method, verdict string, injected bool) map[string]any {
+	body := map[string]any{"verification_id": id, "method": method, "verdict": verdict}
+	if injected {
+		body["injected"] = true
+	}
+	return body
 }

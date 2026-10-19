@@ -52,7 +52,10 @@ type Controller struct {
 	// and nudges (W-31 2.4 slice ④); Now is the clock they read, time.Now
 	// when nil.
 	Briefs bool
-	Now    func() time.Time
+	// FailFirstVerify honours store.TestNeedFailFirstVerify: on STG only
+	// (T26's rework path, the Owner 2026-10-18).
+	FailFirstVerify bool
+	Now             func() time.Time
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -186,7 +189,7 @@ func (c *Controller) Accept(ctx context.Context) (int, error) {
 		}
 	}
 	for _, id := range checks {
-		did, err := store.Conclude(ctx, c.DB, id)
+		did, err := store.ConcludeWith(ctx, c.DB, id, store.ConcludeOptions{FailFirstVerify: c.FailFirstVerify})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
 		}
