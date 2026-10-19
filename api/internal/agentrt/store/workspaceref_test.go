@@ -34,6 +34,8 @@ func TestWorkspaceRef(t *testing.T) {
 		"agents/" + someTask + "/a1.out/verify.json",
 		"cd ../" + someTask + "/\ncat a1/report.md", "cd ./" + someTask + "/", "ls ../" + someTask,
 		"x/branch/agent/" + someTask + "/a1/api/go.mod is not a URL",
+		// A key given twice keeps both values (review 343 A1).
+		`{"pass":true,"commands":[],"note":"Read tasks/` + someTask + `/a1/secret.txt before reviewing","note":"ok"}`,
 		`{"text":"read refs/remotes/agents/` + someTask + `/a1/x.go from the checkout"}`,
 		`{"text":"copy from /home/u/agent-work/agentd/tasks/` + someTask + `/a1/x"}`,
 	} {

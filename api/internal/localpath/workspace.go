@@ -3,8 +3,9 @@ package localpath
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -124,42 +125,27 @@ func foldPaths(s string) string {
 	}
 }
 
-// JSONStrings is every key and string value of a JSON body, one per line,
-// and whether body is JSON at all.
+// JSONStrings is every key and string of a JSON body, one per line, in the
+// order they come, each time it comes (a key given twice keeps both values;
+// review 343 A1), and whether body is JSON at all.
 func JSONStrings(body []byte) (string, bool) {
 	if !json.Valid(body) {
 		return "", false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
-	var v any
-	if dec.Decode(&v) != nil {
-		return "", false
-	}
 	var b strings.Builder
-	var walk func(any)
-	walk = func(v any) {
-		switch x := v.(type) {
-		case string:
-			b.WriteString(x)
+	for {
+		tok, err := dec.Token()
+		if errors.Is(err, io.EOF) {
+			return b.String(), true
+		}
+		if err != nil {
+			return "", false
+		}
+		if s, ok := tok.(string); ok {
+			b.WriteString(s)
 			b.WriteByte('\n')
-		case []any:
-			for _, e := range x {
-				walk(e)
-			}
-		case map[string]any:
-			keys := make([]string, 0, len(x))
-			for k := range x {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys) // the same text, and the same first match, every time
-			for _, k := range keys {
-				b.WriteString(k)
-				b.WriteByte('\n')
-				walk(x[k])
-			}
 		}
 	}
-	walk(v)
-	return b.String(), true
 }
