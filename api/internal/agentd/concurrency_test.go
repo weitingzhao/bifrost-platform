@@ -212,7 +212,7 @@ func TestConfined(t *testing.T) {
 	cl = &Claimed{TaskID: "t2", AttemptID: "a2", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
 		Epoch: 1, Tool: Tool{Executor: "exec:codex"}}
 	out, err = d.Run(bg, cl)
-	if err == nil || !strings.Contains(err.Error(), "codex exec in workspace-write") || strings.Contains(err.Error(), "the wall over") {
+	if err == nil || !strings.Contains(err.Error(), "codex") || strings.Contains(err.Error(), "the wall over") {
 		t.Fatalf("codex run = %+v %v", out, err)
 	}
 	if _, serr := os.Stat(ran); serr == nil {

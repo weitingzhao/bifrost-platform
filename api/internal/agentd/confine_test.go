@@ -105,7 +105,11 @@ func TestCheckPins(t *testing.T) {
 				Dir: t.TempDir(), Out: t.TempDir(), Walled: !selfSandboxed[c.name]}
 			sibs := []string{filepath.Join(filepath.Dir(a.Dir), "bifrost-ui")}
 			a.inner = innerWrites(a, sibs)
-			sp, err := Executors(self, hostEnv, Secrets{CursorAPIKey: "fixture-key", ClaudeOAuthToken: "fixture-token"})[c.name](a)
+			bin := t.TempDir()
+			must(t, os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\n"), 0o755))
+			env := withEnv(hostEnv, "PATH", bin+":/bin")
+			w := &Wall{ABI: 4, Codex: filepath.Join(bin, "codex"), Path: bin + ":/bin"}
+			sp, err := Executors(self, env, Secrets{CursorAPIKey: "fixture-key", ClaudeOAuthToken: "fixture-token"})[c.name](a)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -123,7 +127,7 @@ func TestCheckPins(t *testing.T) {
 			}
 			for _, built := range []Spawn{sp, withS} {
 				built.Argv = append(slices.Clone(wall), built.Argv...)
-				if err = checkPins(c.name, self, a, sibs, built); err != nil {
+				if err = checkPins(w, c.name, self, a, sibs, built); err != nil {
 					t.Fatalf("the spawn as Run builds it: %v", err)
 				}
 			}
@@ -181,6 +185,7 @@ func TestCheckPins(t *testing.T) {
 					return s
 				}
 			}
+			bad["another directory"] = func(s Spawn) Spawn { s.Dir = t.TempDir(); return s }
 			if c.name != "exec:claude" {
 				bad["a CLAUDE_CONFIG_DIR"] = func(s Spawn) Spawn { s.Env = withEnv(s.Env, "CLAUDE_CONFIG_DIR", "/home/u/.claude"); return s }
 			}
@@ -192,6 +197,9 @@ func TestCheckPins(t *testing.T) {
 				bad["a tool more"] = replace([]string{"--tools", "Read,Grep,Glob"}, []string{"--tools", "Read,Grep,Glob,Bash"})
 			case "exec:codex":
 				bad["legacy Landlock mode"] = beforePrompt("-c", "features.use_legacy_landlock=true")
+				// Review 304 A2: the program and the PATH its sandbox was proven with.
+				bad["PATH of the checkout"] = func(s Spawn) Spawn { s.Env = withEnv(s.Env, "PATH", a.Dir+"/bin:/bin"); return s }
+				bad["codex by name"] = replace([]string{filepath.Join(bin, "codex"), "exec"}, []string{"codex", "exec"})
 				bad["hooks on"] = replace([]string{"-c", "features.hooks=false"}, nil)
 				bad["hooks on again"] = beforePrompt("-c", "features.hooks=true")
 				bad["a pin twice"] = beforePrompt("-c", "features.hooks=false")
@@ -210,13 +218,13 @@ func TestCheckPins(t *testing.T) {
 			for what, mutate := range bad {
 				cp := sp
 				cp.Argv, cp.Env = slices.Clone(sp.Argv), slices.Clone(sp.Env)
-				if checkPins(c.name, self, a, sibs, mutate(cp)) == nil {
+				if checkPins(w, c.name, self, a, sibs, mutate(cp)) == nil {
 					t.Errorf("%s: passed", what)
 				}
 			}
 		})
 	}
-	if checkPins("exec:other", "/opt/agentd", &Attempt{Claim: &Claimed{}, Out: "/x"}, nil, Spawn{Argv: []string{"x"}}) == nil {
+	if checkPins(nil, "exec:other", "/opt/agentd", &Attempt{Claim: &Claimed{}, Out: "/x"}, nil, Spawn{Argv: []string{"x"}}) == nil {
 		t.Fatal("an executor with no pins passed")
 	}
 }
@@ -387,7 +395,7 @@ func TestProveWallWithoutLandlock(t *testing.T) {
 	if _, err := landlockABI(); err == nil {
 		t.Skip("this kernel has Landlock: TestWallHolds proves it")
 	}
-	w, lines := ProveWall(t.Context(), os.Args[0], t.TempDir(), launcherEnv(), true)
+	w, lines := ProveWall(t.Context(), os.Args[0], t.TempDir(), launcherEnv(), "/opt/codex")
 	if w != nil || len(lines) == 0 {
 		t.Fatalf("wall %+v, %q", w, lines)
 	}
@@ -533,8 +541,8 @@ func TestResultsDoNotWaitOnAFIFO(t *testing.T) {
 // codex's proof runs its own sandbox with codexExecutor's pins and nothing
 // of agentd's wall around it (the cut's §10 A).
 func TestCodexProofArgv(t *testing.T) {
-	argv := codexProofArgv("/opt/agentd", "/p/ws", "/p/home", "/p/tmp", "Ix")
-	if argv[0] != "codex" || argv[1] != "sandbox" || slices.Contains(argv, ConfineArg) ||
+	argv := codexProofArgv("/opt/codex/bin/codex", "/opt/agentd", "/p/ws", "/p/home", "/p/tmp", "/p/out/file", "net:[1]", "Ix")
+	if argv[0] != "/opt/codex/bin/codex" || argv[1] != "sandbox" || slices.Contains(argv, ConfineArg) ||
 		slices.ContainsFunc(argv, func(a string) bool { return strings.Contains(a, "use_legacy_landlock") }) {
 		t.Fatalf("argv = %q", argv)
 	}
@@ -544,8 +552,21 @@ func TestCodexProofArgv(t *testing.T) {
 		}
 	}
 	if !hasRunT(argv, []string{"-P", ":workspace", "-C", "/p/ws", "--", "/opt/agentd", CheckArg, "--codex", "--in", "/p/ws", "--tmp", "/p/tmp",
-		"--outside", "/p/home", "--nonce", "Ix"}) {
+		"--outside", "/p/home", "--file", "/p/out/file", "--netns", "net:[1]", "--nonce", "Ix"}) {
 		t.Fatalf("argv = %q", argv)
+	}
+}
+
+// CodexBin is the codex PATH finds, absolute, executable; none is "".
+func TestCodexBin(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	must(t, os.WriteFile(filepath.Join(a, "codex"), []byte("x"), 0o600)) // not executable
+	must(t, os.WriteFile(filepath.Join(b, "codex"), []byte("#!/bin/sh\n"), 0o755))
+	if got := CodexBin([]string{"PATH=rel:" + a + ":" + b}); got != filepath.Join(b, "codex") {
+		t.Fatalf("CodexBin = %q", got)
+	}
+	if got := CodexBin([]string{"PATH=" + a}); got != "" {
+		t.Fatalf("CodexBin = %q", got)
 	}
 }
 
@@ -553,14 +574,17 @@ func TestCodexProofArgv(t *testing.T) {
 // any, the write beside the workspace goes through, and it exits 1.
 func TestCodexCheckFindsNoSandbox(t *testing.T) {
 	in, tmp, outside := t.TempDir(), t.TempDir(), t.TempDir()
-	cmd := exec.Command(os.Args[0], CheckArg, "--codex", "--in", in, "--tmp", tmp, "--outside", outside, "--nonce", "Ix")
+	file := filepath.Join(t.TempDir(), "file")
+	must(t, os.WriteFile(file, []byte("before\n"), 0o600))
+	cmd := exec.Command(os.Args[0], CheckArg, "--codex", "--in", in, "--tmp", tmp, "--outside", outside, "--file", file, "--netns", "net:[none]", "--nonce", "Ix")
 	cmd.Env = launcherEnv()
 	out, err := cmd.CombinedOutput()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) || ee.ExitCode() != 1 {
 		t.Fatalf("exit %v:\n%s", err, out)
 	}
-	for _, want := range []string{"ok: write inside", "ok: write the temporary directory", "FAIL: make a file outside was allowed", checkDone + "Ix"} {
+	for _, want := range []string{"ok: write inside", "ok: write the temporary directory", "FAIL: make a file outside was allowed",
+		"FAIL: append to a file outside was allowed", "FAIL: make a file in /tmp was allowed", checkDone + "Ix"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("no %q in:\n%s", want, out)
 		}

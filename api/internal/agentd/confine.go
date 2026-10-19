@@ -50,6 +50,29 @@ const ConfineArg = "confine"
 type Wall struct {
 	ABI       int
 	Executors map[string]bool
+	// Codex is the codex program whose sandbox was proven, an absolute path,
+	// and Path the PATH it was proven with: a confined codex attempt runs
+	// exactly these (checkPins, review 304 A2).
+	Codex, Path string
+}
+
+// CodexBin is the codex program PATH in environ finds, an absolute path, or
+// "" when there is none.
+func CodexBin(environ []string) string {
+	v := envValues(environ, "PATH")
+	if len(v) == 0 {
+		return ""
+	}
+	for _, dir := range filepath.SplitList(v[len(v)-1]) {
+		if !filepath.IsAbs(dir) {
+			continue
+		}
+		p := filepath.Join(dir, "codex")
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
+			return p
+		}
+	}
+	return ""
 }
 
 // selfSandboxed are the executors held by a sandbox of their own, proven on
@@ -230,12 +253,15 @@ var envKeys = map[string][]string{
 // the allowed variables and the executor's own only, each once, with
 // homePins and the executor's configuration directory the attempt's own. An
 // executor this does not know has no pins.
-func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error {
+func checkPins(w *Wall, executor, self string, a *Attempt, sibs []string, sp Spawn) error {
 	keys, known := envKeys[executor]
 	if !known {
 		return fmt.Errorf("agentd: %s has no pins to hold it to its workspace", executor)
 	}
 	var lacks []string
+	if sp.Dir != a.Dir {
+		lacks = append(lacks, "its workspace as its directory")
+	}
 	argv := sp.Argv
 	if !selfSandboxed[executor] {
 		wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
@@ -256,7 +282,11 @@ func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error
 			lacks = append(lacks, "the setup's own home and wall")
 		}
 	}
-	if why := executorArgv(executor, self, a, sibs, argv); why != "" {
+	codex := ""
+	if w != nil {
+		codex = w.Codex
+	}
+	if why := executorArgv(executor, self, codex, a, sibs, argv); why != "" {
 		lacks = append(lacks, why)
 	}
 	want := map[string]string{}
@@ -265,7 +295,14 @@ func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error
 	}
 	switch executor {
 	case "exec:codex":
+		// The program and the PATH its sandbox was proven with: a PATH of the
+		// attempt's could find another codex, or another node for it.
 		want["CODEX_HOME"] = codexHomeOf(a.Out)
+		if w == nil || w.Path == "" {
+			lacks = append(lacks, "a PATH its sandbox was proven with")
+		} else {
+			want["PATH"] = w.Path
+		}
 	case "exec:claude":
 		want["CLAUDE_CONFIG_DIR"], want["DISABLE_AUTOUPDATER"] = claudeDirOf(a.Out), "1"
 	case "exec:cursor":
@@ -304,7 +341,7 @@ func hasPrefix(argv, prefix []string) bool {
 
 // executorArgv says how argv is not the executor's command as its builder
 // makes it ("" when it is).
-func executorArgv(executor, self string, a *Attempt, sibs []string, argv []string) string {
+func executorArgv(executor, self, codex string, a *Attempt, sibs []string, argv []string) string {
 	model := a.Claim.Tool.Model
 	switch executor {
 	case "exec:deterministic":
@@ -337,7 +374,7 @@ func executorArgv(executor, self string, a *Attempt, sibs []string, argv []strin
 			return "cursor's command as agentd makes it"
 		}
 	case "exec:codex":
-		return codexArgv(a, argv)
+		return codexArgv(a, codex, argv)
 	}
 	return ""
 }
@@ -346,8 +383,11 @@ func executorArgv(executor, self string, a *Attempt, sibs []string, argv []strin
 // ignored, every -c of codexPins and its writable roots once and
 // no other, its report where agentd reads it, the claim's model, and the
 // prompt last.
-func codexArgv(a *Attempt, argv []string) string {
-	head := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
+func codexArgv(a *Attempt, codex string, argv []string) string {
+	if codex == "" {
+		return "a codex whose sandbox was proven"
+	}
+	head := []string{codex, "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
 	if !hasPrefix(argv, head) || len(argv) < len(head)+1 || argv[len(argv)-1] != Prompt(a) {
 		return "codex exec in workspace-write, rules ignored, the prompt last"
 	}

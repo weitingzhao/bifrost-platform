@@ -376,7 +376,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		sp.Argv = append(wallArgv(d.Self, append([]string{a.Dir, a.Out}, sibs...)), sp.Argv...)
 	}
 	if confined {
-		if err = checkPins(cl.Tool.Executor, d.Self, a, sibs, sp); err != nil {
+		if err = checkPins(d.Wall, cl.Tool.Executor, d.Self, a, sibs, sp); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}

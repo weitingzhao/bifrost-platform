@@ -137,7 +137,10 @@ func run() error {
 	d.Executors = executors
 	// The write wall, proven here before any work (TD-371): an executor it
 	// does not hold runs alone.
-	codex := slices.ContainsFunc(offered, func(tl agentd.Tool) bool { return tl.Executor == "exec:codex" })
+	codex := ""
+	if slices.ContainsFunc(offered, func(tl agentd.Tool) bool { return tl.Executor == "exec:codex" }) {
+		codex = agentd.CodexBin(os.Environ())
+	}
 	wall, proof := agentd.ProveWall(ctx, self, cfg.root, agentd.AllowedEnv(os.Environ()), codex)
 	for _, line := range proof {
 		log.Printf("agentd: write wall: %s", line)

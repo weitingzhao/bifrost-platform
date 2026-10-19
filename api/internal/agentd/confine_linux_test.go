@@ -16,7 +16,7 @@ func TestWallHolds(t *testing.T) {
 	if abi, err := landlockABI(); err != nil || abi < wallABI {
 		t.Skipf("no Landlock ABI %d here (%d, %v): the agent host's probe proves it", wallABI, abi, err)
 	}
-	w, lines := ProveWall(t.Context(), os.Args[0], t.TempDir(), launcherEnv(), true)
+	w, lines := ProveWall(t.Context(), os.Args[0], t.TempDir(), launcherEnv(), "/no/such/codex")
 	t.Log(strings.Join(lines, "\n"))
 	for _, name := range []string{"exec:deterministic", "exec:cursor", "exec:claude"} {
 		if !w.holds(name) {

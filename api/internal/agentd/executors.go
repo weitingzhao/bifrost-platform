@@ -98,7 +98,7 @@ func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	}
 	return map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),
-		"exec:codex":         codexExecutor(env, CodexHome(environ)),
+		"exec:codex":         codexExecutor(env, CodexHome(environ), CodexBin(environ)),
 		"exec:cursor":        cursorExecutor(cursorEnv),
 		"exec:claude":        claudeExecutor(claudeEnv),
 	}
@@ -169,7 +169,10 @@ func codexRoots(tmp string) string {
 // Measured 10-18 on macOS (codex 0.162) with these pins: writes to /tmp, the
 // home directory and the shared $TMPDIR refused, to the attempt's own
 // temporary directory and the workspace taken.
-func codexExecutor(env []string, master string) Executor {
+func codexExecutor(env []string, master, bin string) Executor {
+	if bin == "" {
+		bin = "codex" // none on PATH: it fails to start, and is never confined
+	}
 	return func(a *Attempt) (Spawn, error) {
 		tmp := attemptTmp(a.Out)
 		// the path goes into TOML as a Go-quoted string: no control character
@@ -188,7 +191,7 @@ func codexExecutor(env []string, master string) Executor {
 		if err = copyCodexLogin(master, home); err != nil {
 			return Spawn{}, fmt.Errorf("agentd: codex's login: %w", err)
 		}
-		argv := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
+		argv := []string{bin, "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
 		for _, p := range codexPins {
 			argv = append(argv, "-c", p)
 		}
