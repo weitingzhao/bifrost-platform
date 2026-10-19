@@ -692,7 +692,7 @@ func (d *Daemon) checkpoint(ctx context.Context, a *Attempt, ws *Workspace, entr
 	if entry.Pending == nil {
 		p := &PendingCheckpoint{Seq: entry.CheckpointSeq + 1}
 		if tail, _ := readTail(filepath.Join(a.Out, "log.txt"), logTailBytes); len(tail) > 0 {
-			id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", tail)
+			id, err := d.Client.PutArtifact(ctx, "log_tail", "text/plain; charset=utf-8", a.handText("log_tail", tail))
 			switch {
 			case err == nil:
 				p.Artifacts = append(p.Artifacts, id)

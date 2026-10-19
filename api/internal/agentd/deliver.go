@@ -340,7 +340,7 @@ func (d *Daemon) prepare(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 	r := a.results()
 	if !e.LogTailDone {
 		if r.logTail != nil {
-			id, err := d.putRetried(ctx, "log_tail", "text/plain; charset=utf-8", r.logTail)
+			id, err := d.putRetried(ctx, "log_tail", "text/plain; charset=utf-8", a.handText("log_tail", r.logTail))
 			switch {
 			case err == nil:
 				e.Artifacts = append(e.Artifacts, id)
@@ -361,7 +361,7 @@ func (d *Daemon) prepare(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			if r.report == "verify.json" {
 				media = "application/json"
 			}
-			id, err := d.putRetried(ctx, r.reportKind, media, r.reportBody)
+			id, err := d.putRetried(ctx, r.reportKind, media, a.handText(r.reportKind, r.reportBody))
 			switch {
 			case err == nil:
 				e.Report = id

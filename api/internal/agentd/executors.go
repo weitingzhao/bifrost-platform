@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -517,6 +519,14 @@ type pathRewrite struct {
 }
 
 func newPathRewrite() *pathRewrite {
+	wd, _ := os.Getwd()
+	return newPathRewriteAt(wd, map[string]string{"$HOME": os.Getenv("HOME")})
+}
+
+// newPathRewriteAt is the rewrite for what ran in the checkout wd, each
+// directory in named also by its name ("$HOME"), from anywhere: agentd
+// handing in an attempt's report (handText).
+func newPathRewriteAt(wd string, named map[string]string) *pathRewrite {
 	p := &pathRewrite{alias: map[string]string{}}
 	var dirs []string
 	add := func(d, alias string) {
@@ -530,11 +540,13 @@ func newPathRewrite() *pathRewrite {
 			}
 		}
 	}
-	if wd, err := os.Getwd(); err == nil {
+	if wd != "" {
 		add(wd, ".")
 		add(filepath.Dir(wd), "..")
 	}
-	add(os.Getenv("HOME"), "$HOME")
+	for _, name := range slices.Sorted(maps.Keys(named)) {
+		add(named[name], name)
+	}
 	if len(dirs) == 0 {
 		return p
 	}
