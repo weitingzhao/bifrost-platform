@@ -412,3 +412,16 @@ func TestSetupRefusesWhatItLeft(t *testing.T) {
 		t.Fatalf("the setup's HOME = %q, want %q", got, home)
 	}
 }
+
+// agentd's own git in a checkout an executor had runs in the wall on a host
+// that has one, and as it is on one that has none.
+func TestGitWall(t *testing.T) {
+	d := &Daemon{Self: "/opt/agentd"}
+	if w := d.gitWall("/w/a1"); w != nil {
+		t.Fatalf("no wall on the host, yet %q", w)
+	}
+	d.Wall = &Wall{ABI: 4}
+	if w := d.gitWall("/w/a1"); !slices.Equal(w, []string{"/opt/agentd", ConfineArg, "--write", "/w/a1", "--"}) {
+		t.Fatalf("git's wall = %q", w)
+	}
+}

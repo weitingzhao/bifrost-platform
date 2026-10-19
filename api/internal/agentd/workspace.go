@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,12 @@ type Workspace struct {
 	Dir  string
 	Base string
 	env  []string
+	// wall, when the host has one, is the command git runs in once the
+	// workspace is the executor's: git reads the checkout's .git/config and
+	// hooks, which the walled executor can write (an fsmonitor, a filter, a
+	// hook are commands), so agentd's own git there may write the checkout
+	// only, like the executor (TD-371).
+	wall []string
 }
 
 // WorkspaceDir is where attempt n of task keeps its checkout.
@@ -96,8 +103,7 @@ func prepareIn(ctx context.Context, root, dir, remote, base string, env []string
 			return nil, fmt.Errorf("agentd: workspace: %s is not a directory", filepath.Join(root, p))
 		}
 	}
-	isolated := append(append([]string{}, env...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
-	w := &Workspace{Dir: dir, Base: base, env: isolated}
+	w := &Workspace{Dir: dir, Base: base, env: isolatedGit(env)}
 	if _, err := w.git(ctx, filepath.Dir(dir), "clone", "--quiet", "--no-checkout", "--template=", "--", remote, dir); err != nil {
 		return nil, err
 	}
@@ -173,8 +179,7 @@ func PrepareSibling(ctx context.Context, root, rel, remote, ref string, env []st
 		return "", fmt.Errorf("agentd: sibling: %w", err)
 	}
 	dir, parent := filepath.Join(root, rel), filepath.Join(root, parentRel)
-	isolated := append(append([]string{}, env...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
-	w := &Workspace{Dir: dir, env: isolated}
+	w := &Workspace{Dir: dir, env: isolatedGit(env)}
 	if _, err := w.git(ctx, parent, "clone", "--quiet", "--no-checkout", "--template=", "--single-branch", "--branch", ref, "--", remote, dir); err != nil {
 		return "", err
 	}
@@ -198,18 +203,17 @@ func (w *Workspace) Diff(ctx context.Context, limit int) (patch []byte, tooLarge
 	idx := filepath.Join(w.Dir, ".git", "agentd-checkpoint-index")
 	defer func() { _ = os.Remove(idx) }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
-	if _, err = gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
+	if _, err = w.gitEnv(ctx, env, "read-tree", w.Base); err != nil {
 		return nil, false, err
 	}
-	if _, err = gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
+	if _, err = w.gitEnv(ctx, env, "add", "--all", "--", "."); err != nil {
 		return nil, false, err
 	}
 	// exec copies git's output into a bounded writer, so the wait for the
 	// output, like the wait for git, ends WaitDelay after git ended or was
 	// killed, even while a helper git started still holds stdout (review
 	// 171 A1). A patch over the limit stops the copy and git.
-	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--binary", w.Base)
-	cmd.Dir, cmd.Env, cmd.WaitDelay = w.Dir, env, gitWaitDelay
+	cmd := gitCmd(ctx, w.wall, w.Dir, env, "diff", "--cached", "--binary", w.Base)
 	errb := &ring{max: tailBytes}
 	// stop reads cmd.Process when it is called: Start sets it before the
 	// goroutine that copies the output starts.
@@ -339,7 +343,28 @@ func (w *Workspace) Push(ctx context.Context, remote, commit, ref string) (strin
 }
 
 func (w *Workspace) git(ctx context.Context, dir string, args ...string) (string, error) {
-	return gitIn(ctx, dir, w.env, args...)
+	out, err := runGit(ctx, w.wall, dir, w.env, args...)
+	return strings.TrimSpace(out), err
+}
+
+// gitEnv is git in the workspace with env, inside its wall.
+func (w *Workspace) gitEnv(ctx context.Context, env []string, args ...string) (string, error) {
+	return runGit(ctx, w.wall, w.Dir, env, args...)
+}
+
+// gitCmd is the command that runs git args in dir, inside wall when there
+// is one.
+func gitCmd(ctx context.Context, wall []string, dir string, env []string, args ...string) *exec.Cmd {
+	argv := append(append(slices.Clone(wall), "git"), args...)
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, env, gitWaitDelay
+	return cmd
+}
+
+// isolatedGit is env for git that reads neither the user's global nor the
+// system configuration (an earlier run could have written them).
+func isolatedGit(env []string) []string {
+	return append(append([]string{}, env...), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 }
 
 // gitWaitDelay bounds the wait for git's output once git itself has ended,
@@ -355,8 +380,12 @@ func gitIn(ctx context.Context, dir string, env []string, args ...string) (strin
 // gitRaw is gitIn without trimming the output: for -z lists, whose first
 // path may begin with a space (review 239 B4).
 func gitRaw(ctx context.Context, dir string, env []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir, cmd.Env, cmd.WaitDelay = dir, env, gitWaitDelay
+	return runGit(ctx, nil, dir, env, args...)
+}
+
+// runGit is gitRaw inside wall.
+func runGit(ctx context.Context, wall []string, dir string, env []string, args ...string) (string, error) {
+	cmd := gitCmd(ctx, wall, dir, env, args...)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
@@ -391,13 +420,13 @@ func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []strin
 	_ = os.Remove(idx) // git writes the index itself; only the unique name is wanted
 	defer func() { _ = os.Remove(idx); _ = os.Remove(idx + ".lock") }()
 	env := append(append([]string{}, w.env...), "GIT_INDEX_FILE="+idx)
-	if _, err = gitIn(ctx, w.Dir, env, "read-tree", w.Base); err != nil {
+	if _, err = w.gitEnv(ctx, env, "read-tree", w.Base); err != nil {
 		return nil, nil, err
 	}
-	if _, err = gitIn(ctx, w.Dir, env, "add", "--all", "--", "."); err != nil {
+	if _, err = w.gitEnv(ctx, env, "add", "--all", "--", "."); err != nil {
 		return nil, nil, err
 	}
-	out, err := gitRaw(ctx, w.Dir, env, "diff", "--cached", "--no-renames", "--name-only", "-z", w.Base)
+	out, err := w.gitEnv(ctx, env, "diff", "--cached", "--no-renames", "--name-only", "-z", w.Base)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -410,7 +439,7 @@ func (w *Workspace) Changes(ctx context.Context) (changed, ignoredConfig []strin
 		append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--"}, configDirPathspecs...),
 		append([]string{"ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory", "--"}, configTopFiles...),
 	} {
-		out, err = gitRaw(ctx, w.Dir, env, q...)
+		out, err = w.gitEnv(ctx, env, q...)
 		if err != nil {
 			return nil, nil, err
 		}

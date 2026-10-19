@@ -92,6 +92,15 @@ type Daemon struct {
 	afterLoad func()
 }
 
+// gitWall is the wall agentd's own git runs in, in a checkout an executor
+// had (Workspace.wall): any host with a write wall has it.
+func (d *Daemon) gitWall(dir string) []string {
+	if d.Wall == nil {
+		return nil
+	}
+	return wallArgv(d.Self, []string{dir})
+}
+
 // takeHost holds the host for an attempt, alone or shared, and for a codex
 // attempt codex's turn first (codexTurn): always in that order, so no two
 // attempts wait for each other.
@@ -312,6 +321,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		if err = os.MkdirAll(a.Dir, 0o700); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
+	}
+	if ws != nil {
+		ws.wall = d.gitWall(a.Dir) // from here the checkout is the executor's
 	}
 	// The output is new, as the workspace is: the attempt's home is in it,
 	// and nothing an earlier run left there may be read (TD-371).

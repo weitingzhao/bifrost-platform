@@ -465,3 +465,48 @@ func TestCheckOutcomeWhenTheJournalFails(t *testing.T) {
 		t.Fatalf("deliver = %+v %v; calls %v", out, err, f.log())
 	}
 }
+
+// TD-371: once the checkout is the executor's, every git agentd runs in it
+// (the checkpoint's diff, the check of what changed, the commit, the push)
+// goes through the workspace's wall: the checkout's .git/config can name
+// commands (an fsmonitor, a filter) that git would run.
+func TestWorkspaceGitGoesThroughItsWall(t *testing.T) {
+	env := gitEnv(t.TempDir())
+	bare, base := remote(t, env)
+	ctx := context.Background()
+	w, err := Prepare(ctx, WorkspaceDir(t.TempDir(), "t1", 1), bare, base, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(t.TempDir(), "wall.log")
+	spy := filepath.Join(t.TempDir(), "wall.sh")
+	if err = os.WriteFile(spy, []byte("#!/bin/sh\necho \"$1 $2\" >> "+log+"\nexec \"$@\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	w.wall = []string{spy}
+	if err = os.WriteFile(filepath.Join(w.Dir, "b.txt"), []byte("b\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if dirty, derr := w.Dirty(ctx); derr != nil || !dirty {
+		t.Fatalf("dirty = %v %v", dirty, derr)
+	}
+	if _, _, err = w.Diff(ctx, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = w.Changes(ctx); err != nil {
+		t.Fatal(err)
+	}
+	commit, err := w.Commit(ctx, "b", Lineage{Task: "t1", ChangeID: "Ib", Work: "W-31"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = w.Push(ctx, bare, commit, "refs/heads/agent/t1/a1"); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(log)
+	for _, want := range []string{"git status", "git read-tree", "git add", "git diff", "git ls-files", "git commit", "git push", "git ls-remote"} {
+		if !strings.Contains(string(body), want+"\n") {
+			t.Errorf("%s did not go through the wall:\n%s", want, body)
+		}
+	}
+}

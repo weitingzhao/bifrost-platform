@@ -633,7 +633,7 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 		EffectClass: e.Effect, PushedRef: e.PushedRef, WorkID: e.WorkID, Epoch: e.Epoch}, Dir: e.Workdir, Out: e.Workdir + ".out"}
 	var ws *Workspace
 	if e.Repo != "" {
-		ws = &Workspace{Dir: e.Workdir, Base: e.Base, env: d.GitEnv}
+		ws = &Workspace{Dir: e.Workdir, Base: e.Base, env: isolatedGit(d.GitEnv), wall: d.gitWall(e.Workdir)}
 	}
 	if e.Group == GroupCleared && e.Phase != "launching" {
 		afterExecutor(e.Executor, d.CodexHome, d.Root, a.Out, d.logf) // again, or for a run a restart cut short
