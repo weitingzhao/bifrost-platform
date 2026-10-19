@@ -20,10 +20,13 @@ import (
 // (codex login --device-auth), whose refresh token is rotated when codex
 // refreshes it: the refreshed login is in the attempt's copy, and the host's
 // would be spent. So once the executor is gone agentd takes the refreshed
-// tokens back, and only those: from a file that is the same login (its mode,
-// its API key and its account the host's) refreshed later than the host's.
-// An executor can write that file, so what comes back is at worst a login
-// that does not work, never another account's.
+// tokens back, and only those: from a file that says it is the same login
+// (its mode, its API key and its account id the host's) refreshed later than
+// the host's. The executor can write that file and agentd cannot check a
+// token's signature, so a run can spoil the host's login (it then has to log
+// in again); it cannot put more than these tokens there. One codex attempt
+// runs at a time on a host (Run), so a login is not copied while another
+// attempt may be refreshing it (review 300 B5).
 
 // maxCodexLogin is the most of an auth.json agentd reads.
 const maxCodexLogin = 64 << 10
@@ -68,6 +71,31 @@ func readLogin(path string) ([]byte, error) {
 	body, err := io.ReadAll(f)
 	if err == nil && len(body) > maxCodexLogin {
 		err = fmt.Errorf("agentd: %s is over %d bytes", path, maxCodexLogin)
+	}
+	return body, err
+}
+
+// readLoginIn is readLogin for rel inside r: a regular file, the one looked
+// at, at most maxCodexLogin bytes.
+func readLoginIn(r *os.Root, rel string) ([]byte, error) {
+	fi, err := r.Lstat(rel)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("agentd: %s is not a regular file", rel)
+	}
+	f, err := r.OpenFile(rel, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	if st, serr := f.Stat(); serr != nil || !os.SameFile(st, fi) {
+		return nil, fmt.Errorf("agentd: %s changed while it was opened", rel)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, maxCodexLogin+1))
+	if err == nil && len(body) > maxCodexLogin {
+		err = fmt.Errorf("agentd: %s is over %d bytes", rel, maxCodexLogin)
 	}
 	return body, err
 }
@@ -137,14 +165,15 @@ func refreshed(cur, got codexLogin, now time.Time) string {
 	return ""
 }
 
-// keepCodexLogin takes a refreshed login in home, an attempt's codex home,
-// back into master's auth.json: only its tokens and time of refresh, into the
-// host's file as it is, replaced at once. Nothing is done when the attempt's
-// login is the host's or there is none; an error says why it was not taken.
-func keepCodexLogin(master, home string) error {
+// keepCodexLogin takes a refreshed login in out, an attempt's output
+// opened as a root (openOutput), back into master's auth.json: only its
+// tokens and time of refresh, into the host's file as it is, replaced at
+// once. Nothing is done when the attempt's login is the host's or there is
+// none; an error says why it was not taken.
+func keepCodexLogin(master string, out *os.Root) error {
 	codexLoginMu.Lock()
 	defer codexLoginMu.Unlock()
-	body, err := readLogin(filepath.Join(home, "auth.json"))
+	body, err := readLoginIn(out, filepath.Join("home", ".codex", "auth.json"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -187,11 +216,11 @@ func keepCodexLogin(master, home string) error {
 	}
 	doc["tokens"], _ = json.Marshal(toks)
 	doc["last_refresh"], _ = json.Marshal(got.LastRefresh)
-	out, err := json.MarshalIndent(doc, "", "  ")
+	merged, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err
 	}
-	return replaceFile(path, out)
+	return replaceFile(path, merged)
 }
 
 // replaceFile writes body to path at once: a file beside it, synced, renamed

@@ -33,8 +33,11 @@ type Attempt struct {
 	VerifyReport []byte
 	Dir          string // the workspace
 	Out          string // where the executor writes report.md or verify.json
-	// Walled: the executor runs inside agentd's write wall (confine.go).
+	// Walled: the executor runs inside agentd's write wall (confine.go);
+	// inner is then what the code it runs besides itself may write
+	// (innerWrites).
 	Walled bool
+	inner  []string
 }
 
 // An Executor turns an attempt into the command agentd launches.
@@ -71,6 +74,10 @@ type Daemon struct {
 	mu    sync.Mutex
 	live  map[string]bool
 	share hostShare
+	// codexTurn: one codex attempt at a time, each with a copy of the host's
+	// login, which a refresh in one would spend for the others (review 300
+	// B5).
+	codexTurn hostShare
 	// Wall is what ProveWall found on this host: the executors that run
 	// inside the write wall, and so may share it (share.go). nil walls none.
 	Wall *Wall
@@ -83,6 +90,26 @@ type Daemon struct {
 	// afterLoad, in tests, runs between Recover's read of the registry and
 	// its choice of what to take over.
 	afterLoad func()
+}
+
+// takeHost holds the host for an attempt, alone or shared, and for a codex
+// attempt codex's turn first (codexTurn): always in that order, so no two
+// attempts wait for each other.
+func (d *Daemon) takeHost(ctx context.Context, cl *Claimed, alone bool) (func(), error) {
+	turn := func() {}
+	if cl.Tool.Executor == "exec:codex" {
+		r, err := d.codexTurn.take(ctx, true)
+		if err != nil {
+			return nil, err
+		}
+		turn = r
+	}
+	release, err := d.share.take(ctx, alone)
+	if err != nil {
+		turn()
+		return nil, err
+	}
+	return func() { release(); turn() }, nil
 }
 
 // failBefore ends an attempt that failed after it was registered and before
@@ -256,7 +283,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	if d.Confined != nil {
 		isConfined = d.Confined
 	}
-	release, err := d.share.take(wctx, !isConfined(cl, a.prepare()))
+	release, err := d.takeHost(wctx, cl, !isConfined(cl, a.prepare()))
 	close(watched)
 	wcancel()
 	switch {
@@ -294,13 +321,14 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	// Siblings and setup belong with a checkout: a task with none has nothing
 	// for them to sit beside or install into (setup.go).
 	prep := a.prepare()
-	writes := []string{a.Dir, a.Out}
+	var sibs []string
 	if ws != nil {
 		if err = d.siblings(ctx, a, prep.Siblings); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
-		writes = append(writes, siblingDirs(a, prep.Siblings)...)
+		sibs = siblingDirs(a, prep.Siblings)
 	}
+	a.inner = innerWrites(a, sibs)
 	exec, ok := d.Executors[cl.Tool.Executor]
 	if !ok {
 		return d.failBefore(ctx, a, ws, &waiting, l, fmt.Errorf("agentd: no executor %s on this host", cl.Tool.Executor))
@@ -310,15 +338,25 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	if ws != nil && len(prep.Setup) > 0 {
-		if sp, err = withSetup(d.Self, a.Out, prep.Setup, sp); err != nil {
+		// The setup has a home of its own and, walled, a narrower wall: it
+		// cannot leave configuration for the executor; what may not be in
+		// the checkout is looked for again once it is done (review 300 A3).
+		o := setupOpts{Home: setupHome(a.Out)}
+		if a.Walled {
+			o.Writes = a.inner
+		}
+		if cl.Tool.Executor == "exec:cursor" {
+			o.Refuse = cursorRefused
+		}
+		if sp, err = withSetup(d.Self, a.Out, prep.Setup, sp, o); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
 	// The wall goes around the setup and the executor alike; a walled
 	// attempt runs beside others, so it does not run without every pin.
 	if a.Walled {
-		sp.Argv = append(wallArgv(d.Self, writes), sp.Argv...)
-		if err = checkPins(cl.Tool.Executor, d.Self, a, writes, sp); err != nil {
+		sp.Argv = append(wallArgv(d.Self, append([]string{a.Dir, a.Out}, sibs...)), sp.Argv...)
+		if err = checkPins(cl.Tool.Executor, d.Self, a, sibs, sp); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}
@@ -387,7 +425,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 
 	endHow, code := d.supervise(ctx, a, proc, ws, &entry, l)
 	if entry.Group == GroupCleared {
-		afterExecutor(cl.Tool.Executor, d.CodexHome, a.Out, d.logf)
+		afterExecutor(cl.Tool.Executor, d.CodexHome, d.Root, a.Out, d.logf)
 	}
 	if endHow != "lease_lost" {
 		d.lastActions(ctx, cl.AttemptID, cl.Epoch, l)

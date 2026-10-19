@@ -1,6 +1,7 @@
 package agentd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // The write wall (TD-371; agent-config/work/multi-agent/
@@ -90,18 +92,31 @@ func RunConfine(args []string) int {
 	return 127
 }
 
-// An attempt's own directories, under its output.
+// An attempt's own directories, under its output. The home is the
+// executor's (its configuration: CODEX_HOME, CLAUDE_CONFIG_DIR, cursor's
+// ~/.cursor), which the setup and the checked code may not write; the
+// temporary directory holds what they share with it: TMPDIR, the Go caches
+// (codex's commands may write there too) and the setup's own home.
 func attemptHome(out string) string { return filepath.Join(out, "home") }
 func attemptTmp(out string) string  { return filepath.Join(out, "tmp") }
+func setupHome(out string) string   { return filepath.Join(attemptTmp(out), "home") }
 func codexHomeOf(out string) string { return filepath.Join(attemptHome(out), ".codex") }
 func claudeDirOf(out string) string { return filepath.Join(attemptHome(out), ".claude") }
 
 // homePins are the variables every executor's environment has set to the
 // attempt's own directories.
 func homePins(out string) [][2]string {
-	home := attemptHome(out)
-	return [][2]string{{"HOME", home}, {"TMPDIR", attemptTmp(out)}, {"GOPATH", filepath.Join(home, "go")},
-		{"GOMODCACHE", filepath.Join(home, "go", "pkg", "mod")}, {"GOCACHE", filepath.Join(home, ".cache", "go-build")}}
+	tmp := attemptTmp(out)
+	return [][2]string{{"HOME", attemptHome(out)}, {"TMPDIR", tmp}, {"GOPATH", filepath.Join(tmp, "go")},
+		{"GOMODCACHE", filepath.Join(tmp, "go", "pkg", "mod")}, {"GOCACHE", filepath.Join(tmp, "go-build")}}
+}
+
+// innerWrites are what the code an attempt runs besides its executor (the
+// setup, the deterministic check's commands) may write when it is walled:
+// the checkout, the siblings and the temporary directory; not the executor's
+// home, nor the attempt's output (review 300 A3).
+func innerWrites(a *Attempt, sibs []string) []string {
+	return append(append([]string{a.Dir}, sibs...), attemptTmp(a.Out))
 }
 
 // attemptEnv is env with the attempt's own home, temporary directory and Go
@@ -157,76 +172,207 @@ func siblingDirs(a *Attempt, sibs []Sibling) []string {
 	return out
 }
 
+// walledVerify is Verify with each command inside a wall over writes (none:
+// as it is); the trace keeps each command as the spec wrote it.
+func walledVerify(ctx context.Context, env []string, cmds [][]string, writes []string, limit time.Duration) (Verification, error) {
+	run := cmds
+	if len(writes) > 0 {
+		self, err := os.Executable()
+		if err != nil {
+			return Verification{}, err
+		}
+		run = make([][]string, len(cmds))
+		for k, c := range cmds {
+			run[k] = append(wallArgv(self, writes), c...)
+		}
+	}
+	v := Verify(ctx, ".", env, run, limit)
+	for k := range v.Commands {
+		v.Commands[k].Argv = cmds[k]
+	}
+	return v, nil
+}
+
+// envKeys are the variables an executor's environment may hold: the allowed
+// ones and the executor's own (its credential, its configuration).
+var envKeys = map[string][]string{
+	"exec:codex":         nil,
+	"exec:deterministic": nil,
+	"exec:claude":        {"CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_OAUTH_TOKEN"},
+	"exec:cursor":        {"CURSOR_API_KEY", "AGENT_CLI_CREDENTIAL_STORE"},
+}
+
 // checkPins says what the spawn of a walled attempt lacks: the wall over
-// exactly writes, outermost; every variable of homePins, and codex's or
-// claude's configuration directory, set once to the attempt's own; codex's and
-// claude's flags (executors.go). An executor this does not know has no pins.
-func checkPins(executor, self string, a *Attempt, writes []string, sp Spawn) error {
+// exactly the attempt's workspace, output and siblings, outermost; the
+// setup, when there is one, with its own home, its narrower wall and, for
+// cursor, its refusals; the executor's command exactly as its builder makes
+// it (no flag added, none missing, none repeated); and an environment of
+// the allowed variables and the executor's own only, each once, with
+// homePins and the executor's configuration directory the attempt's own. An
+// executor this does not know has no pins.
+func checkPins(executor, self string, a *Attempt, sibs []string, sp Spawn) error {
+	keys, known := envKeys[executor]
+	if !known {
+		return fmt.Errorf("agentd: %s has no pins to hold it to its workspace", executor)
+	}
 	var lacks []string
-	wall := wallArgv(self, writes)
-	if len(sp.Argv) <= len(wall) || !slices.Equal(sp.Argv[:len(wall)], wall) {
+	argv := sp.Argv
+	wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
+	if !hasPrefix(argv, wall) {
 		lacks = append(lacks, "the wall over its own directories")
+	} else {
+		argv = argv[len(wall):]
+	}
+	if len(argv) > 1 && argv[0] == self && argv[1] == SetupArg {
+		o := setupOpts{Home: setupHome(a.Out), Writes: innerWrites(a, sibs)}
+		if executor == "exec:cursor" {
+			o.Refuse = cursorRefused
+		}
+		if setup := setupArgv(self, a.Out, o); hasPrefix(argv, setup) {
+			argv = argv[len(setup):]
+		} else {
+			lacks = append(lacks, "the setup's own home and wall")
+		}
+	}
+	if why := executorArgv(executor, self, a, sibs, argv); why != "" {
+		lacks = append(lacks, why)
 	}
 	want := map[string]string{}
 	for _, kv := range homePins(a.Out) {
 		want[kv[0]] = kv[1]
 	}
-	var flags [][]string
 	switch executor {
 	case "exec:codex":
 		want["CODEX_HOME"] = codexHomeOf(a.Out)
-		flags = append(flags, []string{"--ignore-rules"}, []string{"-c", codexWalled}, []string{"-c", codexRoots(attemptTmp(a.Out))})
-		for _, p := range codexPins {
-			flags = append(flags, []string{"-c", p})
-		}
 	case "exec:claude":
-		want["CLAUDE_CONFIG_DIR"] = claudeDirOf(a.Out)
-		flags = claudePins
-	case "exec:cursor", "exec:deterministic":
-	default:
-		return fmt.Errorf("agentd: %s has no pins to hold it to its workspace", executor)
+		want["CLAUDE_CONFIG_DIR"], want["DISABLE_AUTOUPDATER"] = claudeDirOf(a.Out), "1"
+	case "exec:cursor":
+		if len(envValues(sp.Env, "AGENT_CLI_CREDENTIAL_STORE")) > 0 {
+			want["AGENT_CLI_CREDENTIAL_STORE"] = "memory"
+		}
 	}
-	for _, k := range []string{"HOME", "TMPDIR", "GOPATH", "GOMODCACHE", "GOCACHE", "CODEX_HOME", "CLAUDE_CONFIG_DIR"} {
-		got := envValues(sp.Env, k)
-		if v, ok := want[k]; ok && (len(got) != 1 || got[0] != v) || !ok && len(got) > 0 {
+	seen := map[string]bool{}
+	for _, kv := range sp.Env {
+		k, v, _ := strings.Cut(kv, "=")
+		switch {
+		case seen[k]:
+			lacks = append(lacks, k+" once")
+		case !allowedEnv[k] && !slices.Contains(keys, k):
+			lacks = append(lacks, "no "+k)
+		case want[k] != "" && v != want[k], k == "CODEX_HOME" && executor != "exec:codex":
+			lacks = append(lacks, k+" its own")
+		}
+		seen[k] = true
+	}
+	for k := range want {
+		if !seen[k] {
 			lacks = append(lacks, k)
 		}
 	}
-	inner := sp.Argv[min(len(wall), len(sp.Argv)):]
-	for _, f := range flags {
-		if !hasRun(inner, f) {
-			lacks = append(lacks, strings.Join(f, " "))
-		}
-	}
 	if len(lacks) > 0 {
-		return fmt.Errorf("agentd: %s runs walled, but its command lacks: %s", executor, strings.Join(lacks, "; "))
+		slices.Sort(lacks)
+		return fmt.Errorf("agentd: %s runs walled, but its command lacks: %s", executor, strings.Join(slices.Compact(lacks), "; "))
 	}
 	return nil
 }
 
-// hasRun: run appears in argv, its words next to each other.
-func hasRun(argv, run []string) bool {
-	for i := 0; i+len(run) <= len(argv); i++ {
-		if slices.Equal(argv[i:i+len(run)], run) {
-			return true
+func hasPrefix(argv, prefix []string) bool {
+	return len(argv) >= len(prefix) && slices.Equal(argv[:len(prefix)], prefix)
+}
+
+// executorArgv says how argv is not the executor's command as its builder
+// makes it ("" when it is).
+func executorArgv(executor, self string, a *Attempt, sibs []string, argv []string) string {
+	model := a.Claim.Tool.Model
+	switch executor {
+	case "exec:deterministic":
+		w := *a
+		w.inner = innerWrites(a, sibs)
+		if !slices.Equal(argv, verifyArgv(self, &w)) {
+			return "the deterministic check as agentd runs it, inside its own wall"
+		}
+	case "exec:claude":
+		want := []string{"claude", "-p", "--output-format", "stream-json"}
+		for _, p := range claudePins {
+			want = append(want, p...)
+		}
+		want = append(want, claudeTools...)
+		if model != "" {
+			want = append(want, "--model", model)
+		}
+		if !slices.Equal(argv, append(want, "--", Prompt(a))) {
+			return "claude's command as agentd makes it"
+		}
+	case "exec:cursor":
+		want := []string{"cursor-agent", "-p", "--output-format", "stream-json", "--trust", "--workspace", a.Dir}
+		if a.Claim.EffectClass != "branch" {
+			want = append(want, "--mode", "ask")
+		}
+		if model != "" {
+			want = append(want, "--model", model)
+		}
+		if !slices.Equal(argv, append(want, Prompt(a))) {
+			return "cursor's command as agentd makes it"
+		}
+	case "exec:codex":
+		return codexArgv(a, argv)
+	}
+	return ""
+}
+
+// codexArgv: argv is codex exec in workspace-write with saved rules
+// ignored, every -c of codexPins, its writable roots and codexWalled once and
+// no other, its report where agentd reads it, the claim's model, and the
+// prompt last.
+func codexArgv(a *Attempt, argv []string) string {
+	head := []string{"codex", "exec", "--json", "--skip-git-repo-check", "-C", a.Dir, "-s", "workspace-write", "--ignore-rules"}
+	if !hasPrefix(argv, head) || len(argv) < len(head)+1 || argv[len(argv)-1] != Prompt(a) {
+		return "codex exec in workspace-write, rules ignored, the prompt last"
+	}
+	want := map[string]bool{codexRoots(attemptTmp(a.Out)): false, codexWalled: false}
+	for _, p := range codexPins {
+		want[p] = false
+	}
+	report, model := false, a.Claim.Tool.Model == ""
+	rest := argv[len(head) : len(argv)-1]
+	for i := 0; i < len(rest); i += 2 {
+		if i+1 >= len(rest) {
+			return "codex's flags in pairs"
+		}
+		flag, v := rest[i], rest[i+1]
+		switch done, ok := want[v]; {
+		case flag == "-c" && ok && !done:
+			want[v] = true
+		case flag == "-o" && !report && v == filepath.Join(a.Out, "report.md"):
+			report = true
+		case flag == "-m" && !model && v == a.Claim.Tool.Model:
+			model = true
+		default:
+			return "codex's flags as agentd sets them (" + flag + " " + v + ")"
 		}
 	}
-	return false
+	for v, done := range want {
+		if !done {
+			return "-c " + v
+		}
+	}
+	if !report || !model {
+		return "codex's report and model"
+	}
+	return ""
 }
 
 // afterExecutor is what agentd does with an attempt's output once its
 // executor and its whole group are gone: codex's login, which codex may have
-// refreshed, goes back to the host's (codexlogin.go), and the attempt's build
-// caches and temporary files go (each attempt fills its own: TD-371). The
-// codex home stays: measure reads its session. It may run again for the same
-// attempt (a restart): what is gone stays gone.
-func afterExecutor(executor, codexHome, out string, logf func(format string, args ...any)) {
-	if executor == "exec:codex" && codexHome != "" {
-		if err := keepCodexLogin(codexHome, codexHomeOf(out)); err != nil {
-			logf("agentd: codex's login of %s is not kept: %v", out, err)
-		}
-	}
-	r, err := os.OpenRoot(out)
+// refreshed, goes back to the host's (codexlogin.go), and the attempt's
+// temporary directory (its build caches among it) and npm and other caches
+// go (each attempt fills its own: TD-371). The codex home stays: measure
+// reads its session. The output is reached from root, agentd's own
+// directory, and only when it is the directory it should be: an earlier run
+// may have left a link in its place (review 300 A1). It may run again for
+// the same attempt (a restart): what is gone stays gone.
+func afterExecutor(executor, codexHome, root, out string, logf func(format string, args ...any)) {
+	r, err := openOutput(root, out)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
 	}
@@ -235,11 +381,61 @@ func afterExecutor(executor, codexHome, out string, logf func(format string, arg
 		return
 	}
 	defer func() { _ = r.Close() }()
-	for _, rel := range []string{"home/go", "home/.cache", "home/.npm", "tmp"} {
+	if executor == "exec:codex" && codexHome != "" {
+		if err := keepCodexLogin(codexHome, r); err != nil {
+			logf("agentd: codex's login of %s is not kept: %v", out, err)
+		}
+	}
+	for _, rel := range []string{"tmp", "home/.npm", "home/.cache"} {
 		if err := removeIn(r, rel); err != nil {
 			logf("agentd: %s/%s: %v", out, rel, err)
 		}
 	}
+}
+
+// openOutput opens out, a directory inside root, through root: no part of
+// the way from root down is a link, and the directory opened is the one
+// looked at.
+func openOutput(root, out string) (*os.Root, error) {
+	rel, err := filepath.Rel(root, out)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, fmt.Errorf("agentd: %s is not inside %s", out, root)
+	}
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = r.Close() }()
+	var last fs.FileInfo
+	for _, p := range prefixes(rel) {
+		fi, lerr := r.Lstat(p)
+		if lerr != nil {
+			return nil, lerr
+		}
+		if !fi.IsDir() {
+			return nil, fmt.Errorf("agentd: %s is not a directory", filepath.Join(root, p))
+		}
+		last = fi
+	}
+	sub, err := r.OpenRoot(rel)
+	if err != nil {
+		return nil, err
+	}
+	if fi, serr := sub.Stat("."); serr != nil || !os.SameFile(fi, last) {
+		_ = sub.Close()
+		return nil, fmt.Errorf("agentd: %s changed while it was opened", out)
+	}
+	return sub, nil
+}
+
+// prefixes are a/, a/b, a/b/c of the local path a/b/c.
+func prefixes(rel string) []string {
+	parts := strings.Split(rel, string(filepath.Separator))
+	out := make([]string, len(parts))
+	for i := range parts {
+		out[i] = filepath.Join(parts[:i+1]...)
+	}
+	return out
 }
 
 // removeIn removes rel and what is beneath it, inside r only (a link an

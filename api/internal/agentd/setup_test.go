@@ -235,7 +235,7 @@ func TestSetupDoesNotSeeTheExecutorsKeys(t *testing.T) {
 	dir, out := t.TempDir(), t.TempDir()
 	env := append(launcherEnv(), "CURSOR_API_KEY=fixture-cursor", "CLAUDE_CODE_OAUTH_TOKEN=fixture-claude")
 	sp, err := withSetup(os.Args[0], out, [][]string{{"sh", "-c", "env > setup-env.txt"}},
-		Spawn{Argv: []string{"sh", "-c", "env > exec-env.txt"}, Env: env})
+		Spawn{Argv: []string{"sh", "-c", "env > exec-env.txt"}, Env: env}, setupOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,7 +265,7 @@ func TestRunSetup(t *testing.T) {
 	dir, out := t.TempDir(), t.TempDir()
 	marker := filepath.Join(out, "executor-ran")
 	setup := func(cmds [][]string) []string {
-		sp, err := withSetup(os.Args[0], out, cmds, Spawn{Argv: []string{"sh", "-c", "touch " + marker}})
+		sp, err := withSetup(os.Args[0], out, cmds, Spawn{Argv: []string{"sh", "-c", "touch " + marker}}, setupOpts{})
 		if err != nil {
 			t.Fatal(err)
 		}

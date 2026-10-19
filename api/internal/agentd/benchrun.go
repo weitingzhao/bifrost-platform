@@ -637,7 +637,7 @@ func (b *Bench) execute(ctx context.Context, q BenchQuestion, dir, out string) (
 	if logf == nil {
 		logf = func(string, ...any) {}
 	}
-	afterExecutor(b.Tool.Executor, b.CodexHome, out, logf)
+	afterExecutor(b.Tool.Executor, b.CodexHome, b.Root, out, logf)
 	note := ""
 	switch {
 	case timedOut:

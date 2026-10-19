@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -66,15 +67,24 @@ func ProveWall(ctx context.Context, self, root string, env []string, codex bool)
 	if err = os.WriteFile(file, []byte("before\n"), 0o600); err != nil {
 		return nil, append(lines, err.Error())
 	}
+	nonce, err := NewChangeID()
+	if err != nil {
+		return nil, append(lines, err.Error())
+	}
 	argv := append(wallArgv(self, []string{in}), self, CheckArg, "--in", in, "--outside", outside, "--file", file,
-		"--pid", strconv.Itoa(os.Getpid()))
+		"--pid", strconv.Itoa(os.Getpid()), "--nonce", nonce)
 	out, err := runProof(ctx, withEnv(env, "TMPDIR", in), dir, argv)
 	lines = append(lines, out...)
 	body, rerr := os.ReadFile(file)
 	entries, derr := os.ReadDir(outside)
+	_, inErr := os.Stat(filepath.Join(in, "new"))
 	switch {
 	case err != nil:
 		return nil, append(lines, "the checks inside the wall: "+err.Error())
+	case !slices.Contains(out, checkDone+nonce):
+		return nil, append(lines, "the checks inside the wall did not all run")
+	case inErr != nil:
+		return nil, append(lines, "nothing was written inside the wall")
 	case rerr != nil || string(body) != "before\n":
 		return nil, append(lines, "the file outside the wall was changed")
 	case derr != nil || len(entries) != 1:
@@ -107,9 +117,34 @@ func proveCodex(ctx context.Context, self, dir string, env []string) ([]string, 
 	for _, p := range append(append([]string{}, codexPins...), codexRoots(tmp), codexWalled) {
 		argv = append(argv, "-c", p)
 	}
-	argv = append(argv, "-P", ":workspace", "-C", ws, "--", self, CheckArg, "--codex", "--in", ws, "--outside", home)
+	nonce, err := NewChangeID()
+	if err != nil {
+		return nil, err
+	}
+	argv = append(argv, "-P", ":workspace", "-C", ws, "--", self, CheckArg, "--codex", "--in", ws, "--outside", home, "--nonce", nonce)
 	env = withEnv(withEnv(withEnv(env, "HOME", home), "CODEX_HOME", filepath.Join(home, ".codex")), "TMPDIR", tmp)
-	return runProof(ctx, env, ws, argv)
+	lines, err := runProof(ctx, env, ws, argv)
+	_, inErr := os.Stat(filepath.Join(ws, "new"))
+	_, outErr := os.Lstat(filepath.Join(home, "new"))
+	switch {
+	case err != nil:
+	case !slices.Contains(lines, checkDone+nonce):
+		err = errors.New("the check in codex's sandbox did not all run")
+	case inErr != nil:
+		err = errors.New("nothing was written in codex's workspace")
+	case outErr == nil:
+		err = errors.New("codex's sandbox wrote outside its workspace")
+	}
+	return lines, err
+}
+
+// checkDone starts the last line of a check that ran every test.
+const checkDone = "confine-check done "
+
+// denied: err is a refusal (Landlock's EACCES or EXDEV, seccomp's EPERM), not
+// a failure for another reason (a path that is not there).
+func denied(err error) bool {
+	return errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.EXDEV)
 }
 
 // runProof runs argv in dir within proofLimit and returns what it printed,
@@ -140,18 +175,22 @@ func RunConfineCheck(args []string) int {
 	file := fs.String("file", "", "a file outside it")
 	pid := fs.Int("pid", 0, "a process outside it")
 	codex := fs.Bool("codex", false, "inside codex's sandbox: the workspace is in, the rest of the wall outside, no network")
+	nonce := fs.String("nonce", "", "printed on the last line once every test ran")
 	if err := fs.Parse(args); err != nil || *in == "" || *outside == "" || !*codex && (*file == "" || *pid == 0) {
-		fmt.Fprintln(os.Stderr, "usage: agentd confine-check --in <dir> --outside <dir> [--file <file> --pid <pid> | --codex]")
+		fmt.Fprintln(os.Stderr, "usage: agentd confine-check --in <dir> --outside <dir> [--file <file> --pid <pid> | --codex] [--nonce <word>]")
 		return 2
 	}
 	failed := false
 	try := func(what string, want bool, err error) {
 		switch {
-		case want && err == nil, !want && err != nil:
+		case want && err == nil, !want && denied(err):
 			fmt.Printf("ok: %s\n", what)
 		case want:
 			failed = true
 			fmt.Printf("FAIL: %s: %v\n", what, err)
+		case err != nil:
+			failed = true
+			fmt.Printf("FAIL: %s failed, but not as a refusal: %v\n", what, err)
 		default:
 			failed = true
 			fmt.Printf("FAIL: %s was allowed\n", what)
@@ -160,11 +199,14 @@ func RunConfineCheck(args []string) int {
 	try("write inside", true, os.WriteFile(filepath.Join(*in, "new"), []byte("x"), 0o600))
 	try("make a file outside", false, os.WriteFile(filepath.Join(*outside, "new"), []byte("x"), 0o600))
 	if *codex {
+		// The socket or the connection is refused (codex's seccomp filter);
+		// a refused connection to a closed port is not a refusal.
 		fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 		if err == nil {
+			err = syscall.Connect(fd, &syscall.SockaddrInet4{Port: 1, Addr: [4]byte{127, 0, 0, 1}})
 			_ = syscall.Close(fd)
 		}
-		try("open a network socket", false, err)
+		try("reach the network", false, err)
 	} else {
 		try("append to a file outside", false, appendTo(*file))
 		try("truncate a file outside", false, os.Truncate(*file, 0))
@@ -195,6 +237,7 @@ func RunConfineCheck(args []string) int {
 		}
 		try("write /dev/null", true, err)
 	}
+	fmt.Println(checkDone + *nonce)
 	if failed {
 		return 1
 	}

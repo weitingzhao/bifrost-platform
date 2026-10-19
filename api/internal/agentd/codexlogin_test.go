@@ -100,11 +100,13 @@ func TestKeepCodexLogin(t *testing.T) {
 		}, false, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			master, home := t.TempDir(), t.TempDir()
+			master, out := t.TempDir(), t.TempDir()
+			home := filepath.Join(out, "home", ".codex")
+			must(t, os.MkdirAll(home, 0o700))
 			hostBody := loginJSON(t, "acct-1", "r1", host, map[string]any{"kept_by_codex": true})
 			must(t, os.WriteFile(filepath.Join(master, "auth.json"), hostBody, 0o600))
 			must(t, os.WriteFile(filepath.Join(home, "auth.json"), c.got(t), 0o600))
-			err := keepCodexLogin(master, home)
+			err := keepCodexLogin(master, openRootT(t, out))
 			if (err != nil) != c.error {
 				t.Fatalf("err = %v, want an error %v", err, c.error)
 			}
@@ -131,15 +133,17 @@ func TestKeepCodexLogin(t *testing.T) {
 		})
 	}
 	// The attempt's login is a link to another file: not read.
-	master, home, other := t.TempDir(), t.TempDir(), t.TempDir()
+	master, out, other := t.TempDir(), t.TempDir(), t.TempDir()
+	home := filepath.Join(out, "home", ".codex")
+	must(t, os.MkdirAll(home, 0o700))
 	must(t, os.WriteFile(filepath.Join(master, "auth.json"), loginJSON(t, "acct-1", "r1", host, nil), 0o600))
 	must(t, os.WriteFile(filepath.Join(other, "auth.json"), loginJSON(t, "acct-1", "r2", later, nil), 0o600))
 	must(t, os.Symlink(filepath.Join(other, "auth.json"), filepath.Join(home, "auth.json")))
-	if keepCodexLogin(master, home) == nil {
+	if keepCodexLogin(master, openRootT(t, out)) == nil {
 		t.Fatal("a linked login was taken")
 	}
 	// No login in the attempt: nothing to do.
-	if err := keepCodexLogin(master, t.TempDir()); err != nil {
+	if err := keepCodexLogin(master, openRootT(t, t.TempDir())); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -148,16 +152,17 @@ func TestKeepCodexLogin(t *testing.T) {
 // the refreshed one taken back by afterExecutor; its usage read from its own
 // home.
 func TestCodexLoginRoundTrip(t *testing.T) {
-	master := t.TempDir()
+	master, root := t.TempDir(), t.TempDir()
 	must(t, os.WriteFile(filepath.Join(master, "auth.json"), loginJSON(t, "acct-1", "r1", "2026-10-19T01:00:00Z", nil), 0o600))
-	out := t.TempDir()
+	out := filepath.Join(root, "a1.out")
+	must(t, os.Mkdir(out, 0o700))
 	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: out}
 	if _, err := Executors("/opt/agentd", []string{"PATH=/bin", "CODEX_HOME=" + master}, Secrets{})["exec:codex"](a); err != nil {
 		t.Fatal(err)
 	}
 	later := time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano)
 	must(t, os.WriteFile(filepath.Join(out, "home", ".codex", "auth.json"), loginJSON(t, "acct-1", "r2", later, nil), 0o600))
-	afterExecutor("exec:codex", master, out, t.Logf)
+	afterExecutor("exec:codex", master, root, out, t.Logf)
 	if b, _ := os.ReadFile(filepath.Join(master, "auth.json")); !strings.Contains(string(b), "fixture-refresh-r2") {
 		t.Fatalf("the refreshed login is not the host's: %s", b)
 	}
@@ -171,4 +176,12 @@ func TestCodexLoginRoundTrip(t *testing.T) {
 	if m := measure("exec:codex", out); len(m.Pools) != 1 || *m.Pools[0].UsedFraction != 0.04 {
 		t.Fatalf("pools from the attempt's codex home = %+v", m.Pools)
 	}
+}
+
+func openRootT(t *testing.T, dir string) *os.Root {
+	t.Helper()
+	r, err := os.OpenRoot(dir)
+	must(t, err)
+	t.Cleanup(func() { _ = r.Close() })
+	return r
 }

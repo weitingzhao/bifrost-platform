@@ -3,12 +3,14 @@ package agentd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -71,34 +73,79 @@ func (d *Daemon) siblings(ctx context.Context, a *Attempt, sibs []Sibling) error
 	return os.WriteFile(filepath.Join(a.Out, "siblings.json"), body, 0o600)
 }
 
+// setupOpts are what a setup gets besides its commands (TD-371): a home of
+// its own (Home), never the executor's, so it cannot leave configuration
+// there; when the attempt is walled, the narrower wall each command runs in
+// (Writes: the checkout, the siblings and the attempt's temporary
+// directory, not the executor's home nor the attempt's output); and the paths
+// that may not be in the checkout once the commands are done (Refuse:
+// cursor's project hooks and MCP servers).
+type setupOpts struct {
+	Home   string
+	Writes []string
+	Refuse []string
+}
+
+// flags are opts on agentd setup's command line.
+func (o setupOpts) flags() []string {
+	var f []string
+	if o.Home != "" {
+		f = append(f, "--home", o.Home)
+	}
+	for _, w := range o.Writes {
+		f = append(f, "--write", w)
+	}
+	for _, r := range o.Refuse {
+		f = append(f, "--refuse", r)
+	}
+	return f
+}
+
+// setupArgv is the start of a command that runs the setup in out first.
+func setupArgv(self, out string, o setupOpts) []string {
+	argv := append([]string{self, SetupArg, "--spec", filepath.Join(out, "setup-spec.json"), "--out", filepath.Join(out, "setup.json")}, o.flags()...)
+	return append(argv, "--")
+}
+
 // withSetup makes sp run the setup commands first: agentd setup, with the
 // commands in setup-spec.json, then sp's own argv.
-func withSetup(self, out string, setup [][]string, sp Spawn) (Spawn, error) {
+func withSetup(self, out string, setup [][]string, sp Spawn, o setupOpts) (Spawn, error) {
 	body, err := json.Marshal(TaskSpec{Text: "setup", Verify: setup, TimeoutS: int(SetupLimit / time.Second)})
 	if err != nil {
 		return sp, err
 	}
-	path := filepath.Join(out, "setup-spec.json")
-	if err = os.WriteFile(path, body, 0o600); err != nil {
+	if err = os.WriteFile(filepath.Join(out, "setup-spec.json"), body, 0o600); err != nil {
 		return sp, err
 	}
-	argv := []string{self, SetupArg, "--spec", path, "--out", filepath.Join(out, "setup.json"), "--"}
-	sp.Argv = append(argv, sp.Argv...)
+	sp.Argv = append(setupArgv(self, out, o), sp.Argv...)
 	return sp, nil
 }
 
-// RunSetup is agentd setup --spec <file> --out <file> -- <argv>: it runs the
-// spec's commands in the current directory as Verify does, writes their
-// record to --out and, when they all pass, execs argv (argv[0] looked up on
-// PATH) in its place. It returns only when it does not exec, with the exit
-// code to use.
+// stringsFlag is a flag given once per value.
+type stringsFlag []string
+
+func (s *stringsFlag) String() string     { return strings.Join(*s, ",") }
+func (s *stringsFlag) Set(v string) error { *s = append(*s, v); return nil }
+
+// RunSetup is agentd setup --spec <file> --out <file> [--home <dir>]
+// [--write <dir>...] [--refuse <path>...] -- <argv>: it runs the spec's
+// commands in the current directory as Verify does (with HOME the given
+// home; each inside agentd confine over the --write directories when there
+// are any), writes their record to --out and, when they all pass and no
+// --refuse path is in the checkout, execs argv (argv[0] looked up on PATH)
+// in its place. It returns only when it does not exec, with the exit code to
+// use.
 func RunSetup(args []string) int {
 	i := slices.Index(args, "--")
 	fs := flag.NewFlagSet(SetupArg, flag.ContinueOnError)
 	specPath := fs.String("spec", "", "the setup commands, as a spec")
 	outPath := fs.String("out", "", "where to write setup.json")
-	if i < 0 || i == len(args)-1 || fs.Parse(args[:i]) != nil || *specPath == "" || *outPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: agentd setup --spec <file> --out <file> -- <command> [args...]")
+	home := fs.String("home", "", "the commands' HOME")
+	var writes, refuse stringsFlag
+	fs.Var(&writes, "write", "a directory the commands may write (repeated); none: no wall of their own")
+	fs.Var(&refuse, "refuse", "a path that may not be there once they are done (repeated)")
+	if i < 0 || i == len(args)-1 || fs.Parse(args[:i]) != nil || *specPath == "" || *outPath == "" || fs.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "usage: agentd setup --spec <file> --out <file> [--home <dir>] [--write <dir>...] [--refuse <path>...] -- <command> [args...]")
 		return 2
 	}
 	body, err := os.ReadFile(*specPath)
@@ -120,7 +167,19 @@ func RunSetup(args []string) int {
 	// executor, not for the install scripts of the checkout's dependencies
 	// (review 227 A2). The executor gets its environment back when it is
 	// exec'd below.
-	v := Verify(context.Background(), ".", AllowedEnv(os.Environ()), spec.Verify, limit)
+	env := AllowedEnv(os.Environ())
+	if *home != "" {
+		if err = os.MkdirAll(*home, 0o700); err != nil {
+			fmt.Fprintln(os.Stderr, "agentd setup:", err)
+			return 2
+		}
+		env = withEnv(env, "HOME", *home)
+	}
+	v, err := walledVerify(context.Background(), env, spec.Verify, writes, limit)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "agentd setup:", err)
+		return 2
+	}
 	if out, merr := json.MarshalIndent(v, "", "  "); merr != nil {
 		err = merr
 	} else {
@@ -136,6 +195,12 @@ func RunSetup(args []string) int {
 			fmt.Fprintln(os.Stderr, v.Commands[n-1].Tail)
 		}
 		return setupFailed
+	}
+	for _, r := range refuse {
+		if _, lerr := os.Lstat(r); !errors.Is(lerr, os.ErrNotExist) {
+			fmt.Fprintf(os.Stderr, "agentd setup: the checkout has %s after the setup (or it cannot be looked at: %v); the executor did not start\n", r, lerr)
+			return setupFailed
+		}
 	}
 	argv := args[i+1:]
 	path, err := exec.LookPath(argv[0])

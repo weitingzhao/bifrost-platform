@@ -122,8 +122,22 @@ func deterministicExecutor(self string, env []string) Executor {
 		if err != nil {
 			return Spawn{}, err
 		}
-		return Spawn{Argv: []string{self, "verify", "--spec", path, "--out", filepath.Join(a.Out, "verify.json")}, Env: own, Dir: a.Dir}, nil
+		return Spawn{Argv: verifyArgv(self, a), Env: own, Dir: a.Dir}, nil
 	}
+}
+
+// verifyArgv is the deterministic executor's command. Walled, each verify
+// command, which runs the checked code, runs inside a narrower wall (the
+// checkout, the siblings, the temporary directory), so that it cannot write
+// the attempt's output, verify.json among it (TD-371, review 300).
+func verifyArgv(self string, a *Attempt) []string {
+	argv := []string{self, "verify", "--spec", filepath.Join(a.Out, "verify-spec.json"), "--out", filepath.Join(a.Out, "verify.json")}
+	if a.Walled {
+		for _, w := range a.inner {
+			argv = append(argv, "--write", w)
+		}
+	}
+	return argv
 }
 
 // codexPins are the configuration codex always runs with, whatever the host
@@ -253,6 +267,9 @@ func cursorExecutor(env []string) Executor {
 var claudePins = [][]string{{"--strict-mcp-config"}, {"--mcp-config", `{"mcpServers":{}}`},
 	{"--setting-sources", ""}, {"--settings", `{"disableAllHooks":true}`}, {"--tools", "Read,Grep,Glob"}}
 
+// claudeTools: read-only tools, granted, and every other built-in refused.
+var claudeTools = []string{"--allowedTools", "Read,Grep,Glob", "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch", "--verbose"}
+
 // claudeExecutor runs claude with claudePins and read-only tools, its
 // configuration directory the attempt's own (CLAUDE_CONFIG_DIR) and its
 // updater off: an update writes beside the program, outside the wall. The
@@ -272,8 +289,7 @@ func claudeExecutor(env []string) Executor {
 		for _, p := range claudePins {
 			argv = append(argv, p...)
 		}
-		argv = append(argv, "--allowedTools", "Read,Grep,Glob",
-			"--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch", "--verbose")
+		argv = append(argv, claudeTools...)
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
@@ -370,8 +386,10 @@ func RunVerify(args []string) int {
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
 	specPath := fs.String("spec", "", "the spec whose verify commands to run")
 	outPath := fs.String("out", "", "where to write verify.json")
-	if err := fs.Parse(args); err != nil || *specPath == "" || *outPath == "" {
-		fmt.Fprintln(os.Stderr, "usage: agentd verify --spec <file> --out <file>")
+	var writes stringsFlag
+	fs.Var(&writes, "write", "a directory the commands may write (repeated); none: no wall of their own")
+	if err := fs.Parse(args); err != nil || *specPath == "" || *outPath == "" || fs.NArg() > 0 {
+		fmt.Fprintln(os.Stderr, "usage: agentd verify --spec <file> --out <file> [--write <dir>...]")
 		return 2
 	}
 	body, err := os.ReadFile(*specPath)
@@ -385,7 +403,11 @@ func RunVerify(args []string) int {
 		return 2
 	}
 	limit := time.Duration(spec.TimeoutS) * time.Second
-	v := Verify(context.Background(), ".", os.Environ(), spec.Verify, limit)
+	v, err := walledVerify(context.Background(), os.Environ(), spec.Verify, writes, limit)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	out, err := handIn(v, newPathRewrite())
 	if err == nil {
 		err = os.WriteFile(*outPath, out, 0o600)
