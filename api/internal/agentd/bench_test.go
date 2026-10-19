@@ -67,7 +67,7 @@ case "$PWD" in
 */Q6/work) echo > pytest.ini ;;
 */Q7/work) [ "$(git rev-list --all | wc -l | tr -d ' ')" = 1 ] && [ ! -e ../src ] && [ ! -e ../fix ] && echo new > calc.txt ;;
 */Q8/work) rm old.txt ;;
-*/Q10/work) printf new > /tmp/bench-new-$$ && rm calc.txt && ln -s /tmp/bench-new-$$ calc.txt ;;
+*/Q10/work) printf new > "${TMPDIR:-/tmp}/bench-new-$$" && rm calc.txt && ln -s "${TMPDIR:-/tmp}/bench-new-$$" calc.txt ;;
 */Q11/work) mkdir locked && echo new > locked/answer && chmod 000 locked ;;
 *) echo new > calc.txt ;;
 esac`)

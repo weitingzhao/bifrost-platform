@@ -121,7 +121,7 @@ func TestCheckPins(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
+			wall := wallArgv(self, executorWrites(c.name, a, sibs))
 			if selfSandboxed[c.name] {
 				wall = nil
 			}
@@ -162,7 +162,7 @@ func TestCheckPins(t *testing.T) {
 			bad := map[string]func(Spawn) Spawn{
 				"no wall": func(s Spawn) Spawn { s.Argv = s.Argv[n:]; return s },
 				"one more directory": func(s Spawn) Spawn {
-					s.Argv = append(wallArgv(self, append([]string{a.Dir, a.Out, sibs[0]}, "/home/u")), s.Argv[n:]...)
+					s.Argv = append(wallArgv(self, append(executorWrites(c.name, a, sibs), "/home/u")), s.Argv[n:]...)
 					return s
 				},
 				"another agentd":        func(s Spawn) Spawn { s.Argv = append([]string{"/tmp/agentd"}, s.Argv[1:]...); return s },
@@ -181,7 +181,7 @@ func TestCheckPins(t *testing.T) {
 				delete(bad, "no wall")
 				delete(bad, "one more directory")
 				bad["a wall around it"] = func(s Spawn) Spawn {
-					s.Argv = append(wallArgv(self, append([]string{a.Dir, a.Out}, sibs...)), s.Argv...)
+					s.Argv = append(wallArgv(self, executorWrites(c.name, a, sibs)), s.Argv...)
 					return s
 				}
 			}
@@ -578,7 +578,9 @@ func TestCodexBin(t *testing.T) {
 }
 
 // The check in codex's mode finds a sandbox that holds nothing: run outside
-// any, the write beside the workspace goes through, and it exits 1.
+// any, the write beside the workspace goes through, and it exits 1. Whether
+// /tmp takes the write depends on where the test runs (agentd's wall refuses
+// it: TD-380), so that line is not asserted.
 func TestCodexCheckFindsNoSandbox(t *testing.T) {
 	in, tmp, outside := t.TempDir(), t.TempDir(), t.TempDir()
 	file := filepath.Join(t.TempDir(), "file")
@@ -591,7 +593,7 @@ func TestCodexCheckFindsNoSandbox(t *testing.T) {
 		t.Fatalf("exit %v:\n%s", err, out)
 	}
 	for _, want := range []string{"ok: write inside", "ok: write the temporary directory", "FAIL: make a file outside was allowed",
-		"FAIL: append to a file outside was allowed", "FAIL: make a file in /tmp was allowed", checkDone + "Ix"} {
+		"FAIL: append to a file outside was allowed", checkDone + "Ix"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("no %q in:\n%s", want, out)
 		}
@@ -674,5 +676,81 @@ func TestCodexHeldNotThroughLinksIntoAgentdsDirectory(t *testing.T) {
 	must(t, os.Symlink(filepath.Join(outside, "gone", "bin"), nowhere))
 	if err := pathOutside(root, "/opt/codex/bin/codex", []string{"PATH=" + nowhere}); err == nil {
 		t.Error("an unresolvable PATH entry is trusted")
+	}
+}
+
+// cursor's data directory (CURSOR_DATA_DIR): on the agent host's two users
+// its projects directory, where cursor puts its sockets, is at most 83
+// characters, so cursor never falls back to /tmp/.cursor (STG 2026-10-19:
+// EACCES under the wall); it is the attempt's own, in agentd's directory, and
+// the wall lets cursor write it.
+func TestCursorDataDirIsShortAndWalled(t *testing.T) {
+	for _, root := range []string{"/home/bifrost-agentd/agent-work/agentd", "/home/bifrost-agentd-stg/agent-work/agentd"} {
+		out := filepath.Join(root, "tasks", "t_01M5AHP9Q7G4RWDSW5DGR5DSY2", "a12.out")
+		d := cursorDataDir(root, out)
+		if n := len(filepath.Join(d, "projects")); n > cursorPathMax {
+			t.Errorf("%s: %s/projects is %d characters", root, d, n)
+		}
+		if rel, err := filepath.Rel(root, d); err != nil || !filepath.IsLocal(rel) {
+			t.Errorf("%s is not in %s", d, root)
+		}
+		if d == cursorDataDir(root, filepath.Join(root, "tasks", "t_01M5AHP9Q7G4RWDSW5DGR5DSY2", "a13.out")) {
+			t.Errorf("two attempts share %s", d)
+		}
+		a := &Attempt{Dir: strings.TrimSuffix(out, ".out"), Out: out, root: root}
+		if !slices.Contains(executorWrites("exec:cursor", a, nil), d) || slices.Contains(executorWrites("exec:claude", a, nil), d) {
+			t.Errorf("the wall's directories: %q", executorWrites("exec:cursor", a, nil))
+		}
+	}
+	// The builder sets it, makes it, and refuses one too long for the sockets.
+	root, err := os.MkdirTemp("/tmp", "cw")
+	if err != nil {
+		root = t.TempDir() // inside agentd's wall /tmp is refused
+	} else {
+		t.Cleanup(func() { _ = os.RemoveAll(root) })
+	}
+	out := filepath.Join(root, "a1.out")
+	must(t, os.MkdirAll(out, 0o700))
+	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: out, root: root}
+	sp, err := cursorExecutor(nil)(a)
+	d := cursorDataDir(root, out)
+	if len(filepath.Join(d, "projects")) > cursorPathMax {
+		if err == nil {
+			t.Fatalf("cursor starts with %s, too long for its sockets", d)
+		}
+		return
+	}
+	must(t, err)
+	if got := envValues(sp.Env, "CURSOR_DATA_DIR"); !slices.Equal(got, []string{d}) {
+		t.Fatalf("CURSOR_DATA_DIR = %q, want %s", got, d)
+	}
+	if fi, serr := os.Lstat(d); serr != nil || !fi.IsDir() {
+		t.Fatalf("%s: %v", d, serr)
+	}
+	sp.Argv = append(wallArgv("/opt/agentd", executorWrites("exec:cursor", a, nil)), sp.Argv...)
+	if err = checkPins(nil, "exec:cursor", "/opt/agentd", a, nil, sp); err != nil {
+		t.Fatal(err)
+	}
+	other := sp
+	other.Env = withEnv(slices.Clone(sp.Env), "CURSOR_DATA_DIR", filepath.Join(out, "home", ".cursor"))
+	if checkPins(nil, "exec:cursor", "/opt/agentd", a, nil, other) == nil {
+		t.Fatal("cursor with another data directory passed")
+	}
+	other = sp
+	other.Argv = append(wallArgv("/opt/agentd", []string{a.Dir, a.Out}), sp.Argv[len(wallArgv("/opt/agentd", executorWrites("exec:cursor", a, nil))):]...)
+	if checkPins(nil, "exec:cursor", "/opt/agentd", a, nil, other) == nil {
+		t.Fatal("cursor with no wall over its data directory passed")
+	}
+	// Gone after the attempt, through agentd's directory.
+	afterExecutor("exec:cursor", "", root, out, t.Logf)
+	if _, serr := os.Lstat(d); !errors.Is(serr, os.ErrNotExist) {
+		t.Fatalf("%s is still there: %v", d, serr)
+	}
+	// A root too long for it: cursor does not start.
+	long := filepath.Join(root, strings.Repeat("x", 80))
+	must(t, os.MkdirAll(filepath.Join(long, "a1.out"), 0o700))
+	if _, err = cursorExecutor(nil)(&Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(),
+		Out: filepath.Join(long, "a1.out"), root: long}); err == nil {
+		t.Fatal("cursor starts with a data directory too long for its sockets")
 	}
 }

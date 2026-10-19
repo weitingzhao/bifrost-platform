@@ -2,6 +2,8 @@ package agentd
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -153,6 +155,37 @@ func homePins(out string) [][2]string {
 		{"GOMODCACHE", filepath.Join(tmp, "go", "pkg", "mod")}, {"GOCACHE", filepath.Join(tmp, "go-build")}}
 }
 
+// cursorDataDir is cursor's data directory for the attempt whose output is
+// out (CURSOR_DATA_DIR): a short directory of the attempt's own under root,
+// named by a digest of out. cursor puts each workspace's sockets under
+// <data dir>/projects when that path is at most cursorPathMax characters,
+// and otherwise falls back, through $TMPDIR/.cursor, to /tmp/.cursor, which
+// the wall refuses and which every attempt would share (cursor-agent
+// 2026.10.16, measured on STG 2026-10-19: the attempt's home under the tasks
+// tree is 90-odd characters). With no root (a test) it is in out.
+func cursorDataDir(root, out string) string {
+	if root == "" {
+		return filepath.Join(out, "cursor")
+	}
+	sum := sha256.Sum256([]byte(filepath.Clean(out)))
+	return filepath.Join(root, "s", hex.EncodeToString(sum[:])[:12])
+}
+
+// cursorPathMax is the longest base cursor-agent takes for its sockets'
+// directories (its projects directory).
+const cursorPathMax = 83
+
+// executorWrites are the directories the wall lets an attempt's executor
+// write: its checkout, its output, its siblings, and for cursor its data
+// directory.
+func executorWrites(executor string, a *Attempt, sibs []string) []string {
+	w := append([]string{a.Dir, a.Out}, sibs...)
+	if executor == "exec:cursor" {
+		w = append(w, cursorDataDir(a.root, a.Out))
+	}
+	return w
+}
+
 // innerWrites are what the code an attempt runs besides its executor (the
 // setup, the deterministic check's commands) may write when it is walled:
 // the checkout, the siblings and the temporary directory; not the executor's
@@ -241,7 +274,7 @@ var envKeys = map[string][]string{
 	"exec:codex":         nil,
 	"exec:deterministic": nil,
 	"exec:claude":        {"CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_OAUTH_TOKEN"},
-	"exec:cursor":        {"CURSOR_API_KEY", "AGENT_CLI_CREDENTIAL_STORE"},
+	"exec:cursor":        {"CURSOR_API_KEY", "AGENT_CLI_CREDENTIAL_STORE", "CURSOR_DATA_DIR"},
 }
 
 // checkPins says what the spawn of a confined attempt lacks: the wall over
@@ -264,7 +297,7 @@ func checkPins(w *Wall, executor, self string, a *Attempt, sibs []string, sp Spa
 	}
 	argv := sp.Argv
 	if !selfSandboxed[executor] {
-		wall := wallArgv(self, append([]string{a.Dir, a.Out}, sibs...))
+		wall := wallArgv(self, executorWrites(executor, a, sibs))
 		if !hasPrefix(argv, wall) {
 			lacks = append(lacks, "the wall over its own directories")
 		} else {
@@ -306,6 +339,7 @@ func checkPins(w *Wall, executor, self string, a *Attempt, sibs []string, sp Spa
 	case "exec:claude":
 		want["CLAUDE_CONFIG_DIR"], want["DISABLE_AUTOUPDATER"] = claudeDirOf(a.Out), "1"
 	case "exec:cursor":
+		want["CURSOR_DATA_DIR"] = cursorDataDir(a.root, a.Out)
 		if len(envValues(sp.Env, "AGENT_CLI_CREDENTIAL_STORE")) > 0 {
 			want["AGENT_CLI_CREDENTIAL_STORE"] = "memory"
 		}
@@ -451,6 +485,15 @@ func afterExecutor(executor, codexHome, root, out string, logf func(format strin
 	for _, rel := range []string{"tmp", "home/.npm", "home/.cache"} {
 		if err := removeIn(r, rel); err != nil {
 			logf("agentd: %s/%s: %v", out, rel, err)
+		}
+	}
+	// cursor's data directory, outside the output, through root as well.
+	if d := cursorDataDir(root, out); root != "" {
+		if s, serr := openWithin(root, filepath.Dir(d)); serr == nil {
+			if err := removeIn(s, filepath.Base(d)); err != nil {
+				logf("agentd: %s: %v", d, err)
+			}
+			_ = s.Close()
 		}
 	}
 }

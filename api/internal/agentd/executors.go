@@ -250,6 +250,21 @@ func cursorExecutor(env []string) Executor {
 		if err != nil {
 			return Spawn{}, err
 		}
+		// A data directory of the attempt's own, short enough for cursor's
+		// sockets: otherwise cursor falls back to /tmp/.cursor (confine.go).
+		data := cursorDataDir(a.root, a.Out)
+		if a.root != "" {
+			if n := len(filepath.Join(data, "projects")); n > cursorPathMax {
+				return Spawn{}, fmt.Errorf("agentd: cursor's data directory %s is %d characters with its projects, over %d; cursor would put its sockets in /tmp", data, n, cursorPathMax)
+			}
+			if err = ownDir(filepath.Dir(data)); err != nil {
+				return Spawn{}, err
+			}
+		}
+		if err = ownDir(data); err != nil {
+			return Spawn{}, err
+		}
+		own = withEnv(own, "CURSOR_DATA_DIR", data)
 		argv := []string{"cursor-agent", "-p", "--output-format", "stream-json", "--trust", "--workspace", a.Dir}
 		if a.Claim.EffectClass != "branch" {
 			// An attempt that pushes no branch (a review) changes nothing:

@@ -373,7 +373,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	// The wall goes around the setup and the executor alike; a confined
 	// attempt runs beside others, so it does not run without every pin.
 	if a.Walled {
-		sp.Argv = append(wallArgv(d.Self, append([]string{a.Dir, a.Out}, sibs...)), sp.Argv...)
+		sp.Argv = append(wallArgv(d.Self, executorWrites(cl.Tool.Executor, a, sibs)), sp.Argv...)
 	}
 	if confined {
 		if err = checkPins(d.Wall, cl.Tool.Executor, d.Self, a, sibs, sp); err != nil {
