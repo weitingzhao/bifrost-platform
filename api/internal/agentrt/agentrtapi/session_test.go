@@ -1,6 +1,7 @@
 package agentrtapi_test
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -67,7 +68,7 @@ func TestSessionHeldToItsToken(t *testing.T) {
 			t.Errorf("%s by another token: %d %v; want 403 not_yours", name, code, out)
 		}
 	}
-	if code, out := as("reporter", "GET", "whoami", nil); code != http.StatusOK || !strings.Contains(out["actor_error"].(string), "another token") {
+	if code, out := as("reporter", "GET", "whoami", nil); code != http.StatusOK || !strings.Contains(fmt.Sprint(out["actor_error"]), "another token") {
 		t.Errorf("whoami for another token: %d %v", code, out)
 	}
 	// The first token goes on: its mail is still unread, and it may write.

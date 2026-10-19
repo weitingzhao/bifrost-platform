@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -157,4 +159,109 @@ func TestSessionFirstWriteAtOnce(t *testing.T) {
 			}
 		}
 	}
+}
+
+// pauseHeld holds the first session check of actor until release is
+// closed, telling held when it is there (review 320 A2, A3: the check and
+// the read after it, with another token's first write in between).
+func pauseHeld(t *testing.T, actor string) (held chan struct{}, release chan struct{}) {
+	t.Helper()
+	held, release = make(chan struct{}), make(chan struct{})
+	var first atomic.Bool // not a sync.Once: a second caller must not wait for the first
+	t.Cleanup(store.SetHook(func(point, arg string) {
+		if point == "held" && arg == actor && first.CompareAndSwap(false, true) {
+			close(held)
+			<-release
+		}
+	}))
+	return held, release
+}
+
+// Review 320 A2: another token replays a key while the first token's first
+// write of the session would commit between its check and its read of the
+// key. One of the two registers the session and the other is refused; the
+// replay is never given the first token's answer (before the fix both
+// succeeded, the second with the first's answer).
+func TestSessionReplayAcrossTheFirstWrite(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	first := store.Writer{Actor: "thread:race", Token: "first"}
+	second := store.Writer{Actor: "thread:race", Token: "second"}
+	held, release := pauseHeld(t, first.Actor)
+	replay := make(chan error, 1)
+	go func() {
+		_, err := store.ProposeMission(context.Background(), pool, second, "k", mission, nil)
+		replay <- err
+	}()
+	<-held
+	wrote := make(chan error, 1)
+	go func() {
+		_, err := store.ProposeMission(context.Background(), pool, first, "k", mission, nil)
+		wrote <- err
+	}()
+	var errs []error
+	select {
+	case err := <-wrote: // the first write committed while the replay was between its check and its read
+		errs = append(errs, err)
+		close(release)
+	case <-time.After(1500 * time.Millisecond):
+		close(release)
+		errs = append(errs, <-wrote)
+	}
+	errs = append(errs, <-replay)
+	if (errs[0] == nil) == (errs[1] == nil) {
+		t.Fatalf("the first write %v, the replay %v; want one to register and the other refused", errs[0], errs[1])
+	}
+	for _, err := range errs {
+		if err != nil && !errors.Is(err, store.ErrNotYours) {
+			t.Fatalf("%v; want ErrNotYours", err)
+		}
+	}
+}
+
+// Review 320 A3: another token reads a session's mail while the first
+// token's first write registers it and a message to it commits between the
+// check and the read. The message is not read.
+func TestSessionMailAcrossTheFirstWrite(t *testing.T) {
+	w := newKernelWorld(t)
+	pool := w.db.Pool(t, w.db.Runtime)
+	first := store.Writer{Actor: "thread:race", Token: "first"}
+	second := store.Writer{Actor: "thread:race", Token: "second"}
+	held, release := pauseHeld(t, first.Actor)
+	type read struct {
+		ms  []store.Message
+		err error
+	}
+	got := make(chan read, 1)
+	go func() {
+		ms, err := store.Unread(context.Background(), pool, second, 10)
+		got <- read{ms, err}
+	}()
+	<-held
+	wrote := make(chan error, 1)
+	go func() {
+		bg := context.Background()
+		if _, err := store.ProposeMission(bg, pool, first, "k", mission, nil); err != nil {
+			wrote <- err
+			return
+		}
+		wrote <- store.InTx(bg, pool, func(tx pgx.Tx) error {
+			_, err := store.PostMessage(bg, tx, "owner", first.Actor, "note", []byte("for the first token"))
+			return err
+		})
+	}()
+	select {
+	case err := <-wrote:
+		ok(t, err) // registered and written to while the read was between its check and its query
+	case <-time.After(1500 * time.Millisecond):
+	}
+	close(release)
+	r := <-got
+	if r.err != nil && !errors.Is(r.err, store.ErrNotYours) {
+		t.Fatalf("the read by another token: %v", r.err)
+	}
+	if len(r.ms) != 0 {
+		t.Fatalf("another token read %d messages of the session", len(r.ms))
+	}
+	ok(t, <-wrote)
 }

@@ -90,13 +90,21 @@ func holdsToken(ctx context.Context, tx pgx.Tx, w Writer) error {
 // holdsSessionTx is the check a thread's write makes (CheckWriter: not
 // retired, of its kind, its session held to its token), for a read of its
 // mail or a replay of its key, which make no write: a thread not registered
-// yet holds nothing here (its first write registers it, under its lock), nor
-// does any other actor.
+// yet holds nothing here, nor does any other actor. It takes the thread's
+// writer lock first and keeps it to the end of the transaction, so a first
+// write registering the session cannot commit between this check and the
+// read after it (review 320 A2, A3): the read sees the session as it was
+// checked. Its callers take no lock a writer waits on while holding the
+// writer's lock: a key's lock comes before it, as in a write.
 func holdsSessionTx(ctx context.Context, tx pgx.Tx, w Writer) error {
 	if kindOf(w.Actor) != "thread" {
 		return nil
 	}
+	if err := writerLock(ctx, tx, w.Actor); err != nil {
+		return err
+	}
 	_, err := CheckWriter(ctx, tx, w)
+	hook("held", w.Actor)
 	return err
 }
 
@@ -333,14 +341,16 @@ func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionP
 	if key == "" {
 		return nil, invalid("an idempotency key is required")
 	}
-	if err := p.bounded(); err != nil {
-		return nil, err
-	}
 	p, err := p.check()
 	if err != nil {
 		return nil, err
 	}
 	return idempotentAs(ctx, db, w, "missions", key, p.request(), nil, func(tx pgx.Tx) (map[string]any, error) {
+		// Only a new proposal is held to the bounds: a key taken before
+		// them gets its first answer again (review 320 A1).
+		if err := p.bounded(); err != nil {
+			return nil, err
+		}
 		return proposeMissionTx(ctx, tx, w, p, key, ask)
 	})
 }

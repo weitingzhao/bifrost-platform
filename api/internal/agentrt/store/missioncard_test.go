@@ -398,3 +398,20 @@ func TestMissionCardTooLongIsRefusedBeforeAsking(t *testing.T) {
 		t.Fatalf("the card that fits is %d encoded bytes; want close to and within %d", n, questions.BodyLimit)
 	}
 }
+
+// Review 320 A1: a key a platform before the bounds took for a long
+// proposal gets its first answer again; the same words under a new key are
+// refused.
+func TestMissionBoundsSpareAnOlderKey(t *testing.T) {
+	w := newKernelWorld(t)
+	long := store.MissionProposal{Title: "m", Goal: strings.Repeat("g", store.MaxMissionGoalBytes+1), Success: []string{"done"}}
+	first, err := store.ProposeUnboundedForTest(ctx, w.rt, wr("thread:s1"), "legacy-long", long)
+	ok(t, err)
+	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "legacy-long", long, (&asker{}).ask)
+	ok(t, err)
+	same(t, again, first)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s1"), "new-long", long, (&asker{}).ask)
+	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "put the details in a document") {
+		t.Fatalf("a new key for the long words: %v", err)
+	}
+}

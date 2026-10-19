@@ -122,3 +122,15 @@ func DecidePageForTest(n int) func() {
 	decidePageSize = n
 	return func() { decidePageSize = old }
 }
+
+// ProposeUnboundedForTest proposes a mission as a platform before the
+// proposal bounds did (review 320 A1): the same key and request, no bounds.
+func ProposeUnboundedForTest(ctx context.Context, db DB, w Writer, key string, p MissionProposal) (map[string]any, error) {
+	p, err := p.check()
+	if err != nil {
+		return nil, err
+	}
+	return idempotentAs(ctx, db, w, "missions", key, p.request(), nil, func(tx pgx.Tx) (map[string]any, error) {
+		return proposeMissionTx(ctx, tx, w, p, key, nil)
+	})
+}

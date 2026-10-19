@@ -67,7 +67,8 @@ func SendMessage(ctx context.Context, db DB, w Writer, to, kind string, body []b
 
 // Unread is the reader's messages not yet acknowledged, oldest first;
 // PostgreSQL is the record, whatever the mailbox stream in Redis holds. A
-// thread reads only with the token its session is held to (TD-370).
+// thread reads only with the token its session is held to (TD-370), under
+// its writer's lock (holdsSessionTx).
 func Unread(ctx context.Context, db DB, w Writer, limit int) ([]Message, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
