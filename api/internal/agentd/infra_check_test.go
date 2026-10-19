@@ -17,8 +17,9 @@ import (
 // fails it whatever the change adds at the checkout's root (pytest.ini,
 // tox.ini, setup.cfg or pyproject.toml asking to collect only, a conftest.py
 // that clears the session's failures) and whatever a directory above the
-// checkout holds (review 330 A1). pytest is the host's python3's: the test is
-// skipped where it has none.
+// checkout holds (review 330 A1), and a package's __init__.py that makes
+// itself a plugin to clear them is refused by name (review 331 A1). pytest is
+// the host's python3's: the test is skipped where it has none.
 func TestInfraCheckTakesNoPlantedConfiguration(t *testing.T) {
 	if exec.Command("python3", "-I", "-c", "import pytest").Run() != nil {
 		t.Skip("no python3 with pytest on this host")
@@ -58,6 +59,7 @@ func TestInfraCheckTakesNoPlantedConfiguration(t *testing.T) {
 	}
 	const collectOnly = "addopts = --collect-only\n"
 	const swallow = "def pytest_sessionfinish(session, exitstatus):\n    session.exitstatus = 0\n"
+	const plugin = "pytest_plugins = [__name__]\n\n" + swallow
 	for name, files := range map[string]map[string]string{
 		"pytest.ini":     {"pytest.ini": "[pytest]\n" + collectOnly},
 		"tox.ini":        {"tox.ini": "[pytest]\n" + collectOnly},
@@ -65,13 +67,27 @@ func TestInfraCheckTakesNoPlantedConfiguration(t *testing.T) {
 		"pyproject.toml": {"pyproject.toml": "[tool.pytest.ini_options]\naddopts = \"--collect-only\"\n"},
 		"conftest.py":    {"conftest.py": swallow},
 		"above":          {"../pytest.ini": "[pytest]\n" + collectOnly, "../conftest.py": swallow},
+		"__init__.py":    {"__init__.py": plugin},
+		"scripts":        {"scripts/__init__.py": plugin},
+		"a tree":         {"scripts/agentrt/__init__.py": plugin},
+		"deep":           {"scripts/benchmark/sub/__init__.py": plugin, "scripts/benchmark/sub/test_sub.py": "def test_sub():\n    pass\n"},
+		"a link":         {"../elsewhere.py": plugin, "link:scripts/__init__.py": "../../elsewhere.py"},
 	} {
 		dir := tree(true)
 		for path, body := range files {
+			if link, ok := strings.CutPrefix(path, "link:"); ok {
+				must(t, os.Symlink(body, filepath.Join(dir, link)))
+				continue
+			}
 			write(filepath.Join(dir, path), body)
 		}
-		if v := run(dir); v.Pass {
+		v := run(dir)
+		if v.Pass {
 			t.Errorf("%s: a failing test passed the check:\n%s", name, v.Commands[0].Tail)
+		}
+		if strings.Contains(fmt.Sprint(files), "__init__.py") &&
+			!strings.Contains(v.Commands[0].Tail, "__init__.py: the infra check runs no test inside a Python package") {
+			t.Errorf("%s: refused, but not for the package:\n%s", name, v.Commands[0].Tail)
 		}
 	}
 }

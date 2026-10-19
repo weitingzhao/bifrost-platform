@@ -38,14 +38,19 @@ func TestInfraImplementSpec(t *testing.T) {
 		t.Fatalf("repos = %v", store.RepoNames())
 	}
 	check := r.Verify[0]
-	// pytest reads no configuration and no conftest.py, and loads no plugin
-	// it finds (review 330 A1).
+	// First a tree whose tests sit in a Python package is refused (review
+	// 331 A1), then pytest reads no configuration and no conftest.py, and
+	// loads no plugin it finds (review 330 A1).
+	const refuse = `for f in __init__.py agent-config/__init__.py agent-config/scripts/__init__.py k8s/__init__.py k8s/data/__init__.py ` +
+		`scripts/__init__.py; do if [ -e "$f" ] || [ -L "$f" ]; then echo "$f: `
+	const find = `f=$(find -L k8s/data/role-matrix scripts/agentrt scripts/benchmark scripts/k3s -name __init__.py -print 2>/dev/null | head -n 1); `
 	const script = `PATH="$PWD/.git/venv/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ` +
 		`exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider `
-	if len(check) != 3 || check[0] != "sh" || check[1] != "-c" || !strings.HasPrefix(check[2], script) {
+	before, after, found := strings.Cut(check[2], script)
+	if len(check) != 3 || check[0] != "sh" || check[1] != "-c" || !found || !strings.HasPrefix(before, refuse) || !strings.Contains(before, find) {
 		t.Fatalf("check = %q", check)
 	}
-	tests := strings.Fields(strings.TrimPrefix(check[2], script))
+	tests := strings.Fields(after)
 	for _, want := range []string{"scripts/agentrt", "scripts/benchmark", "scripts/k3s", "k8s/data/role-matrix"} {
 		if !slices.Contains(tests, want) {
 			t.Errorf("the check does not run %s: %v", want, tests)

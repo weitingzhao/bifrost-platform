@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"path"
 	"slices"
 	"strings"
 	"unicode"
@@ -46,7 +47,8 @@ type Sibling struct {
 // file. pytest reads no configuration file and no conftest.py, the checkout's
 // or any directory's above it, and loads no plugin it finds installed, so a
 // change cannot make the run collect only or swallow its failures by
-// configuration (review 330 A1); the tests' own code is the review's to read.
+// configuration (review 330 A1), nor by a package's __init__.py (infraCheck);
+// the tests' own code is the review's to read.
 // The environment comes first on PATH: the tests start python3 themselves and
 // expect pytest and PyYAML there. Go's build cache goes under TMPDIR where
 // there is one (an executor's own, in codex's sandbox, which cannot write the
@@ -68,9 +70,7 @@ var Repos = map[string]Repo{
 		Siblings: []Sibling{{Repo: "bifrost-ui", Ref: "main"}},
 	},
 	"bifrost-trade-infra": {
-		Verify: [][]string{{"sh", "-c", `PATH="$PWD/` + infraVenv + `/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" ` +
-			`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider ` +
-			strings.Join(infraTests, " ")}},
+		Verify: [][]string{{"sh", "-c", infraCheck()}},
 		Setup: [][]string{
 			{"python3", "-I", "-m", "venv", "--clear", infraVenv},
 			append([]string{"env", "PIP_CONFIG_FILE=/dev/null", infraVenv + "/bin/python3", "-I", "-m", "pip", "--isolated", "install", "--quiet",
@@ -88,6 +88,37 @@ const infraVenv = ".git/venv"
 // nothing else, so no release published later changes a check.
 var infraPackages = []string{"pytest==9.0.2", "pluggy==1.6.0", "iniconfig==2.1.0", "packaging==25.0", "pygments==2.19.2",
 	"pyyaml==6.0.3"}
+
+// infraCheck is the infra check's script. It first refuses a tree in which a
+// test it runs would sit inside a Python package: pytest imports a package's
+// __init__.py, whose pytest_plugins can make it a plugin that sets the run's
+// outcome, and neither -c, --noconftest nor the autoload switch stops that
+// (review 331 A1). infra has no package; a change that makes one there is
+// refused, the file named. Then it runs pytest, as the comment on Repos says.
+func infraCheck() string {
+	var inits, trees []string
+	seen := map[string]bool{}
+	for _, p := range infraTests {
+		if !strings.HasSuffix(p, ".py") {
+			trees = append(trees, p)
+		}
+		for d := path.Dir(p); ; d = path.Dir(d) {
+			if f := path.Join(d, "__init__.py"); !seen[f] {
+				seen[f] = true
+				inits = append(inits, f)
+			}
+			if d == "." {
+				break
+			}
+		}
+	}
+	slices.Sort(inits)
+	refuse := `echo "$f: the infra check runs no test inside a Python package (its __init__.py can load a pytest plugin)" >&2; exit 3`
+	return `for f in ` + strings.Join(inits, " ") + `; do if [ -e "$f" ] || [ -L "$f" ]; then ` + refuse + `; fi; done; ` +
+		`f=$(find -L ` + strings.Join(trees, " ") + ` -name __init__.py -print 2>/dev/null | head -n 1); if [ -n "$f" ]; then ` + refuse + `; fi; ` +
+		`PATH="$PWD/` + infraVenv + `/bin:$PATH" GOCACHE="${TMPDIR:-$HOME/.cache}/go-build" PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 ` +
+		`exec python3 -I -m pytest -c /dev/null --rootdir="$PWD" --noconftest -q -p no:cacheprovider ` + strings.Join(infraTests, " ")
+}
 
 // infraTests are the infra tests the checks run, under two minutes on
 // 2026-10-19's main: those that pass with the repository alone and no network
@@ -199,7 +230,8 @@ func installed(setup string) string {
 		"  You may have no network: use what is installed and add no packages.\n"
 }
 
-// shellLine is a command as one line a shell runs as written: an argument
+// shellLine is a command as one line a shell without aliases runs as written
+// (review 331 B1: an alias still rewrites a first word unquoted): an argument
 // with anything but letters, digits and _-./=:@%+, in it is single-quoted, so
 // the infra check's sh -c script reads as one argument; so is a first word a
 // shell would read as an assignment or a reserved word (review 330 B1).
