@@ -10,10 +10,11 @@ import (
 
 const someTask = "t_01M57YSQN6B43ZFNESD9VQ2HA9"
 
-// T11: what names a task's workspace, its output or a sibling in it is
-// found, relative or not, with "./" segments and doubled slashes (review 340
-// B5); a task named by its id or as the API names it, an attempt's branch
-// (review 340 A1), agentd's root alone and raw output are not.
+// T11: what names another task's workspace, its output or a sibling in it
+// is found, relative or not, with "./" segments and doubled slashes (review
+// 340 B5); a task named by its id or as the API names it, an attempt's branch
+// (review 340 A1), a path beside one's own checkout (what agentd writes a
+// check's own output as), agentd's root alone and raw output are not.
 func TestWorkspaceRef(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
@@ -23,8 +24,6 @@ func TestWorkspaceRef(t *testing.T) {
 		"cat tasks/./" + someTask + "/bifrost-ui/src/x.ts",
 		"cat tasks//" + someTask + "/a1/report.md",
 		someTask + "/bifrost-ui/src/x.ts, from the tasks directory",
-		"cat ../a2.out/verify.json",
-		"diff against ../a1/api",
 		someTask + "/a3/report.md",
 		"under agentd/tasks/" + someTask,
 		`{"text":"copy from /home/u/agent-work/agentd/tasks/` + someTask + `/a1/x"}`,
@@ -39,18 +38,19 @@ func TestWorkspaceRef(t *testing.T) {
 		"git fetch origin agent/" + someTask + "/a2 and diff it",
 		"GET /api/v1/agentrt/tasks/" + someTask + " says it is submitted",
 		"../bifrost-ui/src/x.ts", "./console/src/a.ts", "a1b2 ../a1x", "agentd's root is $HOME/agent-work/agentd",
+		"open ../a1.out/tmp/TestParse1234/001/in.json: no such file or directory", "diff against ../a1/api",
 	} {
 		if ref, found := store.WorkspaceRef("task_spec", []byte(in)); found {
 			t.Errorf("WorkspaceRef(%q) = %q", in, ref)
 		}
 	}
 	ref := "tasks/" + someTask + "/a1"
-	for _, kind := range []string{"log_tail", "checkpoint_patch"} {
+	for _, kind := range []string{"log_tail", "checkpoint_patch", "verify"} {
 		if _, found := store.WorkspaceRef(kind, []byte(ref)); found {
 			t.Errorf("a %s is raw output and is let through", kind)
 		}
 	}
-	for _, kind := range []string{"task_spec", "brief", "report", "verify", "review", "handover", "message", "mission_spec", "other"} {
+	for _, kind := range []string{"task_spec", "brief", "report", "review", "handover", "message", "mission_spec", "other"} {
 		if _, found := store.WorkspaceRef(kind, []byte(ref)); !found {
 			t.Errorf("a %s that names a workspace is let through", kind)
 		}
@@ -84,7 +84,7 @@ func TestWorkspaceRefRefused(t *testing.T) {
 	}); perr != nil {
 		t.Fatalf("a spec naming a task by its id: %v", perr)
 	}
-	_, err = store.SendMessage(ctx, w.rt, wr("thread:s1"), store.Seat, "ask", []byte("look at ../a1.out/report.md"))
+	_, err = store.SendMessage(ctx, w.rt, wr("thread:s1"), store.Seat, "ask", []byte("look at tasks/"+someTask+"/a1.out/report.md"))
 	if !errors.Is(err, store.ErrInvalid) {
 		t.Fatalf("a message naming a workspace: %v", err)
 	}

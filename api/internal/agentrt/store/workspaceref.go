@@ -16,16 +16,18 @@ import (
 // before its task exists, so whatever workspace it names is another task's.
 //
 // What names one, once a path's "./" segments and repeated slashes are
-// folded (review 340 B5): agentd's tasks directory with a task in it;
+// folded (review 340 B5): agentd's tasks directory with a task in it, and
 // something inside a task's directory (<task>/a<n>, <task>/<repo>), with or
-// without the tasks/ before it; an attempt's checkout or output beside one's
-// own (../a<n>, ../a<n>.out). What does not: a task named by its id alone or
-// as the API names it (tasks/<task>), agentd's root alone, and an attempt's
+// without the tasks/ before it. What does not: a task named by its id alone
+// or as the API names it (tasks/<task>), agentd's root alone, an attempt's
 // branch (agent/<task>/a<n>, refs/heads/agent/<task>/a<n>), which is how a
-// task is meant to read another's work (review 340 A1). Raw output and patches
-// (log tails, checkpoint patches) quote the executor's own paths and are let
+// task is meant to read another's work (review 340 A1), and a path beside a
+// checkout (../a<n>.out/tmp): agentd writes a check's own checkout as "." and
+// its task's directory as ".." in what it hands in, so that is the task's
+// own. Raw output (log tails, checkpoint patches, and a check's verify.json,
+// which is its commands' output) quotes the executor's own paths and is let
 // through.
-var workspaceRef = regexp.MustCompile(`agentd/tasks/t_|t_[0-9A-HJKMNP-TV-Z]{26}/[A-Za-z0-9]|(?:^|[^A-Za-z0-9_.-])\.\./a[0-9]+(?:\.out)?(?:[^A-Za-z0-9_.-]|$)`)
+var workspaceRef = regexp.MustCompile(`agentd/tasks/t_|t_[0-9A-HJKMNP-TV-Z]{26}/[A-Za-z0-9]`)
 
 // branchPrefix is what comes before a task id in an attempt's branch
 // (store.AttemptRef).
@@ -49,7 +51,7 @@ func foldPaths(s string) string {
 }
 
 // unrefKinds are the kinds the workspace rule lets through.
-var unrefKinds = map[string]bool{"log_tail": true, "checkpoint_patch": true}
+var unrefKinds = map[string]bool{"log_tail": true, "checkpoint_patch": true, "verify": true}
 
 // WorkspaceRef reports the first reference to a task's workspace in body, a
 // local path in it masked, unless kind is one the rule lets through. A JSON
