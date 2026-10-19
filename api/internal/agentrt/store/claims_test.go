@@ -159,8 +159,12 @@ func TestApprovalClaimInAMessage(t *testing.T) {
 		t.Fatalf("the alert's cause is %d; the message was event %d", alerts[0].cause, posted)
 	}
 
+	// The plain message is taken first, as a fixed order: the brief made after
+	// the claim was taken reads the mailbox history with the claim in it and is
+	// flagged too (a map's order made this test fail one run in two, CI 10-19).
 	states := map[string][2]string{}
-	for name, id := range map[string]string{"plain": plain, "claim": claim} {
+	for _, mail := range []struct{ name, id string }{{"plain", plain}, {"claim", claim}} {
+		name, id := mail.name, mail.id
 		task, err := store.TakeMail(ctx, w.rt, id)
 		ok(t, err)
 		var mission string
