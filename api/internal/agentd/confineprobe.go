@@ -230,15 +230,26 @@ func resolvePath(p string) (string, error) {
 }
 
 // codexProofArgv is codex's sandbox with codexExecutor's pins, running the
-// check: no wall of agentd's around it.
+// check: no wall of agentd's around it. It is configured the way codex exec
+// -s workspace-write is: the legacy sandbox mode, whose policy codex 0.163
+// derives from sandbox_workspace_write (exclude_slash_tmp, writable_roots).
+// Naming the built-in profile (-P :workspace) instead ignores those settings
+// on purpose and leaves /tmp writable: the agentd unit's /tmp, which every
+// attempt shares (06, 2026-10-19 11:33).
 func codexProofArgv(codex, self, ws, home, tmp, file, netns, nonce string) []string {
-	argv := []string{codex, "sandbox"}
+	argv := []string{codex, "sandbox", "-c", codexProofMode}
 	for _, p := range append(append([]string{}, codexPins...), codexRoots(tmp)) {
 		argv = append(argv, "-c", p)
 	}
-	return append(argv, "-P", ":workspace", "-C", ws, "--", self, CheckArg, "--codex", "--in", ws, "--tmp", tmp,
+	// No -C: codex sandbox takes it only with -P; the command runs in ws
+	// (runProof), which codex takes as its workspace.
+	return append(argv, "--", self, CheckArg, "--codex", "--in", ws, "--tmp", tmp,
 		"--outside", home, "--file", file, "--netns", netns, "--nonce", nonce)
 }
+
+// codexProofMode is codexExecutor's -s workspace-write as a configuration
+// key, which codex sandbox takes.
+const codexProofMode = `sandbox_mode="workspace-write"`
 
 // routeOut starts a TCP connection to an address of the documentation range
 // (192.0.2.1:443), without waiting: EINPROGRESS (or a connection) when there

@@ -551,8 +551,15 @@ func TestCodexProofArgv(t *testing.T) {
 			t.Errorf("no -c %s: %q", pin, argv)
 		}
 	}
-	if !hasRunT(argv, []string{"-P", ":workspace", "-C", "/p/ws", "--", "/opt/agentd", CheckArg, "--codex", "--in", "/p/ws", "--tmp", "/p/tmp",
+	if !hasRunT(argv, []string{"--", "/opt/agentd", CheckArg, "--codex", "--in", "/p/ws", "--tmp", "/p/tmp",
 		"--outside", "/p/home", "--file", "/p/out/file", "--netns", "net:[1]", "--nonce", "Ix"}) {
+		t.Fatalf("argv = %q", argv)
+	}
+	// The legacy workspace-write mode, as codex exec -s workspace-write: a
+	// named profile (-P) ignores exclude_slash_tmp and leaves the unit's
+	// shared /tmp writable (06, 2026-10-19 11:33).
+	if !hasRunT(argv, []string{"-c", `sandbox_mode="workspace-write"`}) || slices.Contains(argv, "-P") ||
+		slices.Contains(argv, "--permission-profile") || slices.Contains(argv, "-C") {
 		t.Fatalf("argv = %q", argv)
 	}
 }
