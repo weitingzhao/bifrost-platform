@@ -244,15 +244,9 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	// legacy_imported event names the request, read once; each step still in
 	// its imported state shows the date its line was marked, not the import's
 	// time (review 310 A6).
-	var events []struct {
-		Type string         `json:"event_type"`
-		Body map[string]any `json:"body_json"`
-	}
-	must(t, json.Unmarshal(get(t, s, "events?stream=plan:R2"), &events))
-	source, _ := events[0].Body["source"].(string)
-	reqID, found := planimport.RequestOf(source)
-	if events[0].Type != "legacy_imported" || !found || reqID != res.Request {
-		t.Fatalf("first event of plan:R2 = %s %v", events[0].Type, events[0].Body)
+	reqID := importHead(t, s, "R2")
+	if reqID != res.Request {
+		t.Fatalf("import head names %s, the import stored %s", reqID, res.Request)
 	}
 	var named planimport.Request
 	must(t, json.Unmarshal(get(t, s, "artifacts/"+reqID), &named))
@@ -275,6 +269,51 @@ func checkImport(t *testing.T, path, board string, stars []string) {
 	// The plan's stream is one unbroken chain.
 	if _, err := store.VerifyStream(ctx, pool, store.PlanStream("R2")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// importHead pages through the plan's stream for its import head, as the
+// board does (planimport.ImportHead).
+func importHead(t *testing.T, s *httptest.Server, root string) string {
+	t.Helper()
+	var after int64
+	for pages := 0; pages < 100; pages++ {
+		id, next, err := planimport.ImportHead(get(t, s, fmt.Sprintf("events?stream=plan:%s&after_seq=%d", root, after)))
+		must(t, err)
+		if id != "" {
+			return id
+		}
+		if next == 0 {
+			t.Fatalf("plan %s has no import head", root)
+		}
+		after = next
+	}
+	t.Fatal("no import head in 100 pages")
+	return ""
+}
+
+// The import head need not be the stream's first event: under the
+// recommended entry (CUT §4 A) the proposal and its decision come first, and
+// a stream can hold more than a page (500) before it (review 311 A2).
+func TestPlanImportHeadAfterOtherEvents(t *testing.T) {
+	pool := seeded(t)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		for i := 0; i < 501; i++ {
+			if _, err := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("R2"), Type: "note", Actor: "controller",
+				Body: map[string]any{"text": fmt.Sprintf("before the import %d", i)}}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	res, err := store.ImportPlan(ctx, pool, "controller", ledger(t, fixtureLedger))
+	must(t, err)
+	s := server(t, pool)
+	if got := importHead(t, s, "R2"); got != res.Request {
+		t.Fatalf("import head %s, want %s", got, res.Request)
+	}
+	if _, next, err := planimport.ImportHead(get(t, s, "events?stream=plan:R9")); err != nil || next != 0 {
+		t.Fatalf("a stream that does not exist: next %d, %v", next, err)
 	}
 }
 

@@ -2,6 +2,7 @@ package planimport_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -213,6 +214,42 @@ func TestReferences(t *testing.T) {
 		e := req.Nodes[1].Evidence
 		if !same(e.Approvals, c.approvals) || !same(e.Reviews, c.reviews) {
 			t.Errorf("%q: approvals %v reviews %v; want %v %v", c.text, e.Approvals, e.Reviews, c.approvals, c.reviews)
+		}
+	}
+}
+
+// A reference list that is not complete says so (review 311 B2): more than
+// 20 of a kind, or a range too long to count out.
+func TestReferenceBudget(t *testing.T) {
+	head := "### W-31\n    - **第 2 轮逐项（核对于 2026-10-19 01:20）**\n      - 2.1 项\n"
+	hexes := func(n int) string {
+		var b strings.Builder
+		for i := 0; i < n; i++ {
+			fmt.Fprintf(&b, " `abcdef%x`", 0x10+i)
+		}
+		return b.String()
+	}
+	for _, c := range []struct {
+		text    string
+		commits int
+		reviews []string
+		cut     []string
+	}{
+		{"提交" + hexes(20), 20, nil, nil},
+		{"提交" + hexes(21), 20, nil, []string{"commits"}},
+		{"提交" + hexes(20) + " `abcdef10` 重复的不算", 20, nil, nil},
+		{"复核 100–120", 0, []string{"100", "120"}, []string{"reviews"}},
+		{"复核 100–119", 0, nil, nil},
+		{"复核 10、11、12、13、14、15、16、17、18、19、20、21、22、23、24、25、26、27 和 30–35", 0, nil, []string{"reviews"}},
+	} {
+		req, err := planimport.ParseLedger(head+"        - [x] 一步｜"+c.text+"\n", 2, planimport.LedgerOptions{File: "WORK.md"})
+		ok(t, err)
+		e := req.Nodes[1].Evidence
+		if len(e.Commits) != c.commits || c.reviews != nil && !same(e.Reviews, c.reviews) || !same(e.Cut, c.cut) {
+			t.Errorf("%.40q: %d commits, reviews %v, cut %v; want %d, %v, %v", c.text, len(e.Commits), e.Reviews, e.Cut, c.commits, c.reviews, c.cut)
+		}
+		if c.text == "复核 100–119" && len(e.Reviews) != 20 {
+			t.Errorf("a range of 20 is counted out: %v", e.Reviews)
 		}
 	}
 }

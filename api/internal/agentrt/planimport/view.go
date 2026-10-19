@@ -276,3 +276,30 @@ func BoardMissesStars(board View, got *View) []string {
 	}
 	return ids
 }
+
+// ImportHead reads one page of GET /events?stream=plan:<root> (events in seq
+// order) for the plan's import head: the first legacy_imported event whose
+// source names a request artifact (RequestOf). Other events may come before
+// it on the stream, a proposal and its decision among them, so a reader
+// pages on: when the head is not on this page, next is the page's last seq
+// to read after (after_seq), and 0 when the page is empty, which means the
+// plan was never imported.
+func ImportHead(page []byte) (artifact string, next int64, err error) {
+	var events []struct {
+		Seq  int64  `json:"seq"`
+		Type string `json:"event_type"`
+		Body struct {
+			Source string `json:"source"`
+		} `json:"body_json"`
+	}
+	if err := json.Unmarshal(page, &events); err != nil {
+		return "", 0, fmt.Errorf("the events do not read: %w", err)
+	}
+	for _, e := range events {
+		if id, ok := RequestOf(e.Body.Source); ok && e.Type == "legacy_imported" {
+			return id, 0, nil
+		}
+		next = e.Seq
+	}
+	return "", next, nil
+}

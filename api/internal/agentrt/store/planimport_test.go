@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
@@ -177,5 +179,47 @@ func TestPlanImportRefusesInconsistentRequest(t *testing.T) {
 	}
 	if rows(t, pool) != before {
 		t.Fatal("a refused request wrote something")
+	}
+}
+
+// commitFails is a database whose transactions add, just before they
+// commit, a valid event naming a plan node nobody creates: its deferred
+// foreign key fails the COMMIT itself.
+type commitFails struct{ *pgxpool.Pool }
+
+func (c commitFails) BeginTx(ctx context.Context, opts pgx.TxOptions) (pgx.Tx, error) {
+	tx, err := c.Pool.BeginTx(ctx, opts)
+	return failingCommit{tx}, err
+}
+
+type failingCommit struct{ pgx.Tx }
+
+func (f failingCommit) Commit(ctx context.Context) error {
+	if _, err := store.Append(ctx, f.Tx, store.Event{Stream: store.PlanStream("R2"), Type: "note", Actor: "controller",
+		PlanNode: "R2:never-created", Body: map[string]any{"text": "fails at commit"}}); err != nil {
+		return err
+	}
+	return f.Tx.Commit(ctx)
+}
+
+// An import whose COMMIT fails, after every write of it including the done
+// steps' notes, leaves nothing, and the same request then imports (review
+// 311 B1).
+func TestPlanImportRollbackOnCommitFailure(t *testing.T) {
+	pool, req := importDB(t)
+	before := rows(t, pool)
+	if _, err := store.ImportPlan(ctx, commitFails{pool}, "controller", req); err == nil || !strings.Contains(err.Error(), "foreign key") {
+		t.Fatalf("an import whose commit fails: %v", err)
+	}
+	if got := rows(t, pool); got != before {
+		t.Fatalf("a failed commit left rows: %v, were %v", got, before)
+	}
+	res, err := store.ImportPlan(ctx, pool, "controller", req)
+	ok(t, err)
+	if !res.Imported {
+		t.Fatalf("the import after the failed commit = %+v", res)
+	}
+	if _, err := store.VerifyStream(ctx, pool, store.PlanStream("R2")); err != nil {
+		t.Fatal(err)
 	}
 }

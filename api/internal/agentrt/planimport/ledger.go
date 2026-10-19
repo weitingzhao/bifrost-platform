@@ -129,7 +129,7 @@ func ParseLedger(text string, n int, opt LedgerOptions) (Request, error) {
 			req.Nodes = append(req.Nodes, Node{ID: root + ":" + stepLabel, Parent: item.ID, Kind: "step", Label: stepLabel, Title: l.title,
 				Ordinal: itemSteps - 1, WorkID: work, StepKind: l.stepKind, State: l.state, Owner: l.owner, Effect: l.effect,
 				Evidence: &Evidence{LineNo: i + 1, Line: line, Mark: l.mark, MarkedAt: l.markedAt, Commits: l.commits,
-					Approvals: l.approvals, Reviews: l.reviews}})
+					Approvals: l.approvals, Reviews: l.reviews, Cut: l.cut}})
 		case "item":
 			req.Nodes = append(req.Nodes, Node{ID: root + ":" + l.key, Parent: root, Kind: "item", Label: l.key, Title: l.title,
 				Ordinal: countKind(req.Nodes, "item"), WorkID: work, Evidence: &Evidence{LineNo: i + 1, Line: line, Note: l.note}})
@@ -152,6 +152,7 @@ type line struct {
 	owner, effect               bool
 	markedAt                    string
 	commits, approvals, reviews []string
+	cut                         []string
 }
 
 // readLine reads one non-blank line of a round. Validate reads each node's
@@ -190,9 +191,19 @@ func readStep(mark, text string, year int) line {
 	case strings.Contains(title, "复核"):
 		kind = "review"
 	}
-	return line{kind: "step", title: title, mark: mark, owner: owner, effect: effect(what), stepKind: kind,
+	l := line{kind: "step", title: title, mark: mark, owner: owner, effect: effect(what), stepKind: kind,
 		state:    map[string]string{"x": StateDone, "~": StateActive, " ": StatePlanned}[mark],
-		markedAt: dateIn(when, year), commits: commitsIn(text), approvals: approvalsIn(text), reviews: reviewsIn(text)}
+		markedAt: dateIn(when, year)}
+	var cut [3]bool
+	l.commits, cut[0] = commitsIn(text)
+	l.approvals, cut[1] = approvalsIn(text)
+	l.reviews, cut[2] = reviewsIn(text)
+	for i, name := range []string{"commits", "approvals", "reviews"} {
+		if cut[i] {
+			l.cut = append(l.cut, name)
+		}
+	}
+	return l
 }
 
 // effect reads the run of marks a title starts with (★, 「（你）」,
@@ -263,48 +274,49 @@ func digits(s string) string {
 
 // commitsIn lists the commit-like words inside backticks: 7 to 40 lowercase
 // hex characters with at least one letter (a run of digits is a number).
-func commitsIn(text string) []string {
-	var out []string
+func commitsIn(text string) ([]string, bool) {
+	var refs refList
 	for _, span := range backticks.FindAllStringSubmatch(text, -1) {
 		words := strings.FieldsFunc(span[1], func(r rune) bool {
 			return (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
 		})
 		for _, w := range words {
 			if hexToken.MatchString(w) && strings.ContainsAny(w, "abcdef") {
-				out = appendNew(out, w)
+				refs.add(w)
 			}
 		}
 	}
-	return out
+	return refs.list, refs.cut
 }
 
 // approvalsIn lists the approval numbers written "#n": a whole run of 1 to 6
 // digits; a longer run is not an approval number and is left out, never cut
 // to a shorter one.
-func approvalsIn(text string) []string {
-	var out []string
+func approvalsIn(text string) ([]string, bool) {
+	var refs refList
 	for rest := text; ; {
 		i := strings.Index(rest, "#")
 		if i < 0 {
-			return out
+			return refs.list, refs.cut
 		}
 		rest = rest[i+1:]
 		if d := digits(rest); len(d) >= 1 && len(d) <= 6 {
-			out = appendNew(out, "#"+d)
+			refs.add("#" + d)
 		}
 	}
 }
 
 // reviewsIn lists the review numbers written after 「复核」: a number of 2 to
 // 4 digits, then more joined by a list mark (、，, 和) or a range mark (–—-~～
-// 到), a range counted out when it is short. A run of digits of another
-// length ends the list and is left out, never cut to a shorter number.
-func reviewsIn(text string) []string {
-	var out []string
+// 到), a range counted out when it is short (a longer one keeps its ends and
+// is marked cut). A run of digits of another length ends the list and is
+// left out, never cut to a shorter number.
+func reviewsIn(text string) ([]string, bool) {
+	var refs refList
 	for rest := text; ; {
 		i := strings.Index(rest, "复核")
 		if i < 0 {
-			return out
+			return refs.list, refs.cut
 		}
 		rest = rest[i+len("复核"):]
 		s := strings.TrimPrefix(rest, " ")
@@ -315,12 +327,15 @@ func reviewsIn(text string) []string {
 				break
 			}
 			n, _ := strconv.Atoi(d)
-			if ranged && n > prev && n-prev < maxRefs {
+			switch {
+			case ranged && n > prev && n-prev < maxRefs:
 				for k := prev + 1; k < n; k++ {
-					out = appendNew(out, strconv.Itoa(k))
+					refs.add(strconv.Itoa(k))
 				}
+			case ranged && n > prev+1:
+				refs.cut = true
 			}
-			out = appendNew(out, d)
+			refs.add(d)
 			prev, s = n, s[len(d):]
 			sep, isRange := separator(s)
 			if sep == "" {
@@ -346,16 +361,24 @@ func separator(s string) (string, bool) {
 	return "", false
 }
 
-func appendNew(list []string, s string) []string {
-	for _, have := range list {
+// refList keeps references in order, each once, at most maxRefs; cut says
+// one was left out.
+type refList struct {
+	list []string
+	cut  bool
+}
+
+func (r *refList) add(s string) {
+	for _, have := range r.list {
 		if have == s {
-			return list
+			return
 		}
 	}
-	if len(list) >= maxRefs {
-		return list
+	if len(r.list) >= maxRefs {
+		r.cut = true
+		return
 	}
-	return append(list, s)
+	r.list = append(r.list, s)
 }
 
 func countKind(nodes []Node, kind string) int {

@@ -77,6 +77,9 @@ type Evidence struct {
 	Commits   []string `json:"commits,omitempty"`
 	Approvals []string `json:"approvals,omitempty"` // "#41"
 	Reviews   []string `json:"reviews,omitempty"`   // "复核 145" as "145"
+	// Cut names the reference lists that are not complete: more than
+	// maxRefs, or a range too long to count out (only its ends are kept).
+	Cut []string `json:"cut,omitempty"`
 }
 
 // SourcePrefix starts the legacy_imported source of an import: the source is
@@ -172,6 +175,7 @@ func (r Request) Validate() error {
 	}
 	items := map[string]*Node{}
 	steps := map[string]int{} // steps seen per item
+	var last *Node            // the item the lines so far are under
 	ids := map[string]bool{root.ID: true}
 	lineNo := root.Evidence.LineNo
 	for i := range r.Nodes {
@@ -206,12 +210,14 @@ func (r Request) Validate() error {
 			case n.StepKind != "" || n.State != "" || n.Owner || n.Effect:
 				return fmt.Errorf("%s: an item has no step kind, state or step marks", at)
 			}
-			items[n.ID] = n
+			items[n.ID], last = n, n
 		case "step":
 			parent, ok := items[n.Parent]
 			switch {
 			case !ok:
 				return fmt.Errorf("%s: a step sits under an item listed before it", at)
+			case parent != last:
+				return fmt.Errorf("%s: a step sits under the item its line comes after, %s", at, last.ID)
 			case n.Ordinal != steps[n.Parent]:
 				return fmt.Errorf("%s: steps are numbered 0, 1, … in order; this is %d, not %d", at, steps[n.Parent], n.Ordinal)
 			case n.Label != parent.Label+"-"+strconv.Itoa(n.Ordinal+1):
@@ -227,6 +233,9 @@ func (r Request) Validate() error {
 		}
 		if n.Evidence.LineNo <= lineNo {
 			return fmt.Errorf("%s: nodes come in the order of their lines", at)
+		}
+		if ind, _ := indent(n.Evidence.Line); ind <= h.indent {
+			return fmt.Errorf("%s: its line is not inside the round's section", at)
 		}
 		lineNo = n.Evidence.LineNo
 		if err := derived(*n, h.year); err != nil {
@@ -264,7 +273,7 @@ func derived(n Node, year int) error {
 	}
 	got := fields{n.Title, n.StepKind, n.State, e.Mark, e.Note, e.MarkedAt, n.Owner, n.Effect}
 	if got != want || !slices.Equal(e.Commits, l.commits) || !slices.Equal(e.Approvals, l.approvals) ||
-		!slices.Equal(e.Reviews, l.reviews) {
+		!slices.Equal(e.Reviews, l.reviews) || !slices.Equal(e.Cut, l.cut) {
 		return fmt.Errorf("it does not say what its line says (title %q, state %q, marks %v/%v, kind %q, mark %q)",
 			l.title, l.state, l.owner, l.effect, l.stepKind, l.mark)
 	}

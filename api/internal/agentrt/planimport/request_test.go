@@ -212,3 +212,25 @@ func TestWhen(t *testing.T) {
 		t.Fatal("RequestOf read a source that names no artifact")
 	}
 }
+
+// A step belongs to the item its line comes after, and every line is inside
+// the round's section (review 311 A1).
+func TestValidateRejectsReparentedLine(t *testing.T) {
+	text := "### W-31\n    - **第 2 轮逐项（核对于 2026-10-19 01:20）**\n      - 2.0 First\n        - [x] A\n      - 2.1 Second\n        - [ ] B\n"
+	parse := func() planimport.Request {
+		r, err := planimport.ParseLedger(text, 2, planimport.LedgerOptions{File: "WORK.md"})
+		ok(t, err)
+		return r
+	}
+	r := parse()
+	b := &r.Nodes[3]
+	b.ID, b.Label, b.Parent, b.Ordinal = "R2:2.0-2", "2.0-2", "R2:2.0", 1
+	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "the item its line comes after, R2:2.1") {
+		t.Fatalf("a step moved under the item before its own: %v", err)
+	}
+	r = parse()
+	r.Nodes[1].Evidence.Line = strings.TrimLeft(r.Nodes[1].Evidence.Line, " ")
+	if err := r.Validate(); err == nil || !strings.Contains(err.Error(), "not inside the round's section") {
+		t.Fatalf("a line outside the section: %v", err)
+	}
+}
