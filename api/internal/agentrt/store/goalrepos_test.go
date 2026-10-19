@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -176,35 +177,44 @@ func TestPlanWithoutABaseIsSentBack(t *testing.T) {
 	}
 }
 
+// oldGoalAnswer is an answer as the code before goals named several
+// repositories stored it for a goal of the platform: no repos, no bases, and
+// the waiting a proposed mission's answer carries (review 333 B1).
+const oldGoalAnswer = `{"base_commit": "` + commitA + `", "mission_id": "M-9", "mission_state": "proposed", "repo": "bifrost-platform", ` +
+	`"spec_artifact_id": "sha256:` + "0000000000000000000000000000000000000000000000000000000000000000" + `", "task_id": "t_old", ` +
+	`"waiting": "no standing-envelope:dev is in force: the Owner starts or stops it"}`
+
 // A key stored before goals named several repositories (its request {goal,
-// repo}, its answer without repos or bases) still answers, by repo or by
-// repos of one, with what it stored: no main read, nothing written (review
-// 332 A1).
+// repo}, its answer oldGoalAnswer) still answers, by repos of one, with all
+// it stored and nothing else: no main read, nothing written (reviews 332 A1,
+// 333 B1).
 func TestGoalKeyStoredBeforeRepos(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	owner := store.Writer{Actor: "owner", Token: "admin"}
 	sum, err := canon.Sum(map[string]any{"goal": "Document the goal route", "repo": "bifrost-platform"})
 	ok(t, err)
-	stored := `{"base_commit": "` + commitA + `", "mission_id": "M-9", "mission_state": "proposed", "repo": "bifrost-platform", ` +
-		`"spec_artifact_id": "sha256:` + strings.Repeat("a", 64) + `", "task_id": "t_old"}`
 	_, err = w.rt.Exec(ctx, `INSERT INTO agentrt.idempotency_key (idempotency_key_id, route, request_sha256, response_json, expires_at)
-	  VALUES ('owner|goals|old', 'goals', $1, $2::jsonb, clock_timestamp() + interval '7 days')`, sum, stored)
+	  VALUES ('owner|goals|old', 'goals', $1, $2::jsonb, clock_timestamp() + interval '7 days')`, sum, oldGoalAnswer)
 	ok(t, err)
-	count := func() (m, k int) {
-		ok(t, w.rt.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.mission), (SELECT count(*) FROM agentrt.task)`).Scan(&m, &k))
-		return m, k
+	count := func() string {
+		var n string
+		ok(t, w.rt.QueryRow(ctx, `SELECT concat_ws(' ', (SELECT count(*) FROM agentrt.mission), (SELECT count(*) FROM agentrt.task),
+		  (SELECT count(*) FROM agentrt.event), (SELECT count(*) FROM agentrt.artifact_blob), (SELECT count(*) FROM agentrt.idempotency_key))`).Scan(&n))
+		return n
 	}
-	missions, tasks := count()
+	before := count()
 	read := false
 	main := func(context.Context, string) (string, error) { read = true; return commitB, nil }
 	out, err := store.ProposeGoal(ctx, w.rt, owner, "old", store.Goal{Title: "Document the goal route", Text: "Document the goal route",
 		Repos: []string{"bifrost-platform"}, Main: main})
 	ok(t, err)
-	if out["mission_id"] != "M-9" || out["task_id"] != "t_old" || out["base_commit"] != commitA || read {
-		t.Fatalf("the stored answer: %v (main read: %v)", out, read)
+	var want map[string]any
+	ok(t, json.Unmarshal([]byte(oldGoalAnswer), &want))
+	if !reflect.DeepEqual(out, want) || read {
+		t.Fatalf("the stored answer: %v, want %v (main read: %v)", out, want, read)
 	}
-	if m, k := count(); m != missions || k != tasks {
-		t.Fatalf("a stored key wrote: missions %d -> %d, tasks %d -> %d", missions, m, tasks, k)
+	if after := count(); after != before {
+		t.Fatalf("a stored key wrote: missions, tasks, events, artifacts, keys %s -> %s", before, after)
 	}
 }

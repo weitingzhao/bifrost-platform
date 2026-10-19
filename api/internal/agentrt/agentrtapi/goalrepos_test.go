@@ -1,14 +1,17 @@
 package agentrtapi_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -99,5 +102,32 @@ func TestConsoleGoalReposAreTheRuntimes(t *testing.T) {
 	}
 	if !slices.Equal(console, store.RepoNames()) {
 		t.Fatalf("the Console offers %v; the runtime takes %v", console, store.RepoNames())
+	}
+}
+
+// A key the code before stored (request {goal, repo}, an answer without repos
+// or bases) answers over HTTP as it was, sent by repo and by repos of one:
+// main is not read (review 333 B1).
+func TestGoalKeyStoredBeforeReposOverHTTP(t *testing.T) {
+	pool, _ := world(t)
+	s := server(t, pool)
+	sum, err := canon.Sum(map[string]any{"goal": "do this", "repo": "bifrost-platform"})
+	must(t, err)
+	stored := `{"base_commit": "` + commitA + `", "mission_id": "M-9", "mission_state": "active", "repo": "bifrost-platform", ` +
+		`"spec_artifact_id": "sha256:` + strings.Repeat("0", 64) + `", "task_id": "t_old"}`
+	_, err = pool.Exec(ctx, `INSERT INTO agentrt.idempotency_key (idempotency_key_id, route, request_sha256, response_json, expires_at)
+	  VALUES ('owner|goals|old', 'goals', $1, $2::jsonb, clock_timestamp() + interval '7 days')`, sum, stored)
+	must(t, err)
+	var want map[string]any
+	must(t, json.Unmarshal([]byte(stored), &want))
+	mains = nil
+	for _, body := range []map[string]any{{"idempotency_key": "old", "goal": "do this", "repo": "bifrost-platform"},
+		{"idempotency_key": "old", "goal": "do this", "repos": []string{"bifrost-platform"}}} {
+		if code, out := call(t, s, "admin", "POST", "goals", body); code != http.StatusOK || !reflect.DeepEqual(out, want) {
+			t.Fatalf("%v: %d %v, want %v", body, code, out, want)
+		}
+	}
+	if len(mains) != 0 {
+		t.Fatalf("main read for %v", mains)
 	}
 }
