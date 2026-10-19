@@ -134,3 +134,14 @@ func ProposeUnboundedForTest(ctx context.Context, db DB, w Writer, key string, p
 		return proposeMissionTx(ctx, tx, w, p, key, nil)
 	})
 }
+
+// EventTypesForTest is the closed vocabulary and the types with a body.
+func EventTypesForTest() (vocabulary, written []string) {
+	for t := range eventTypes {
+		vocabulary = append(vocabulary, t)
+	}
+	for t := range bodies {
+		written = append(written, t)
+	}
+	return vocabulary, written
+}

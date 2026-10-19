@@ -38,7 +38,7 @@ function fake(): OwnerConsoleData {
     work: { running: 0, stuck: 0, open: 0, lastAccepted: { mission: 'M-2', at: '2026-10-16T04:17:22Z', openState: '' } },
     last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
-    coordinator: coordinatorView.value ?? { state: 'read', note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
+    coordinator: coordinatorView.value ?? { state: 'read', full: false, note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
     board: { coordinator: { doing: 'Board text, not shown', next: '' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
     boardStale: false,
     plan: boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
@@ -209,7 +209,8 @@ describe('Owner Console entries', () => {
   })
 
   it.each([
-    [{ state: 'read', note: null }, 'No note from the coordinator.'],
+    [{ state: 'read', note: null, full: false }, 'No note from the coordinator.'],
+    [{ state: 'read', note: null, full: true }, 'No note among the latest 50 messages with the coordinator.'],
     [{ state: 'loading' }, 'Reading the mailbox…'],
     [{ state: 'error', error: 'Connect with the Owner token to read the coordinator’s notes.' }, 'Coordinator note unavailable: Connect with the Owner token'],
   ])('says what the coordinator card read: %j', (view, line) => {

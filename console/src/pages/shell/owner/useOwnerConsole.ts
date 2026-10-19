@@ -129,7 +129,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
       : coordinatorQ.isError ? { state: 'error' as const, error: errorText(coordinatorQ.error) ?? 'Request failed' }
       : coordinatorQ.isPaused ? { state: 'error' as const, error: 'offline' }
       : coordinatorQ.data === undefined ? { state: 'loading' as const }
-      : { state: 'read' as const, note: coordinatorQ.data },
+      : { state: 'read' as const, note: coordinatorQ.data.note, full: coordinatorQ.data.full },
     board,
     boardStale: needsYou.progressQuery.data?.stale === true,
     plan: planRows(board?.roadmap?.round),

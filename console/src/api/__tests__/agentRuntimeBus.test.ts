@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }))
 vi.mock('@/api/client', () => ({ authedFetch: mocks.fetch }))
-import { COORDINATOR_THREAD, ackMessages, fetchAttemptActions, fetchChiefThread, fetchCoordinatorNote, latestNote, liftControl, parseAttemptActions, parseChiefThread, sendChiefMessage, setGlobalStop } from '../agentRuntimeBus'
+import { COORDINATOR_THREAD, COORDINATOR_WINDOW, ackMessages, fetchAttemptActions, fetchChiefThread, fetchCoordinatorNote, latestNote, liftControl, parseAttemptActions, parseChiefThread, sendChiefMessage, setGlobalStop } from '../agentRuntimeBus'
 
 beforeEach(() => { mocks.fetch.mockReset(); mocks.fetch.mockResolvedValue(new Response('{}')) })
 describe('runtime bus', () => {
@@ -61,10 +61,21 @@ describe('runtime bus', () => {
       { message_id: 'm_4', from: 'owner', to: COORDINATOR_THREAD, kind: 'note', body: 'From the Owner', created_at: at(4) },
     ] }
     mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify(thread)))
-    expect(await fetchCoordinatorNote()).toEqual({ body: 'Doing G8\nNext: G3', at: at(2) })
-    expect(mocks.fetch.mock.calls[0][1]).toBe(`/api/v1/agentrt/messages/thread?with=${encodeURIComponent(COORDINATOR_THREAD)}&limit=50`)
+    expect(await fetchCoordinatorNote()).toEqual({ note: { body: 'Doing G8\nNext: G3', at: at(2) }, full: false })
+    expect(mocks.fetch.mock.calls[0][1]).toBe(`/api/v1/agentrt/messages/thread?with=${encodeURIComponent(COORDINATOR_THREAD)}&limit=${COORDINATOR_WINDOW}`)
     expect(latestNote(parseChiefThread({ messages: [thread.messages[2]] }), COORDINATOR_THREAD)).toBeNull()
     expect(COORDINATOR_THREAD).toMatch(/^thread:[A-Za-z0-9._:-]{1,128}$/)
+  })
+  it('says the window was full when no note is among the latest messages (review 350 A4)', async () => {
+    const messages = Array.from({ length: COORDINATOR_WINDOW }, (_, i) => ({ message_id: `m_${i}`, from: COORDINATOR_THREAD, to: 'owner', kind: 'help', body: 'x', created_at: '2026-10-19T12:00:00Z' }))
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ actor: 'owner', with: COORDINATOR_THREAD, messages })))
+    expect(await fetchCoordinatorNote()).toEqual({ note: null, full: true })
+  })
+  it('refuses a conversation read as a seat, and a note to anyone but the Owner (review 350 A5)', async () => {
+    const toSeat = { message_id: 'm_1', from: COORDINATOR_THREAD, to: 'seat:chief_of_staff', kind: 'note', body: 'For the chief of staff', created_at: '2026-10-19T12:00:00Z' }
+    mocks.fetch.mockResolvedValueOnce(new Response(JSON.stringify({ actor: 'seat:chief_of_staff', with: COORDINATOR_THREAD, messages: [toSeat] })))
+    await expect(fetchCoordinatorNote()).rejects.toThrow('Connect with the Owner token to read the coordinator’s notes.')
+    expect(latestNote(parseChiefThread({ actor: 'owner', messages: [toSeat] }), COORDINATOR_THREAD)).toBeNull()
   })
   it.each([400, 401, 403])('asks for the Owner token when the coordinator note is refused with HTTP %s', async status => {
     mocks.fetch.mockImplementationOnce(async (prefix, _path, _init, errorParser) => { throw await errorParser(prefix, new Response('{}', { status })) })

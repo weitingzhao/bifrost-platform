@@ -64,17 +64,28 @@ export async function fetchChiefThread(signal?: AbortSignal) {
   return parseChiefThread(await request('Messages', '/messages/thread?with=seat:chief_of_staff&limit=50', { signal }))
 }
 export type CoordinatorNote = { body: string; at: string }
-/** The latest note from `from` in a conversation read oldest first, or null. */
+/** How many of the latest messages between the Owner and the coordinating thread are read for its note. */
+export const COORDINATOR_WINDOW = 50
+/**
+ * The coordinating thread's latest note: `note` is null when none is among the messages read, and
+ * `full` says the read was the whole window, so an older note may exist (review 350 A4).
+ */
+export type CoordinatorRead = { note: CoordinatorNote | null; full: boolean }
+/** The latest note from `from` to the Owner in a conversation read oldest first, or null. */
 export function latestNote(thread: ChiefThread, from: string): CoordinatorNote | null {
   for (let i = thread.messages.length - 1; i >= 0; i--) {
     const m = thread.messages[i]
-    if (m.from === from && m.kind === 'note') return { body: m.body, at: m.created_at }
+    if (m.from === from && m.to === 'owner' && m.kind === 'note') return { body: m.body, at: m.created_at }
   }
   return null
 }
-/** The coordinating thread's latest note to the Owner, among the latest 50 messages between them. */
-export async function fetchCoordinatorNote(signal?: AbortSignal, thread = COORDINATOR_THREAD) {
-  const read = parseChiefThread(await request('Coordinator', `/messages/thread?with=${encodeURIComponent(thread)}&limit=50`, { signal }))
-  return latestNote(read, thread)
+/**
+ * The coordinating thread's latest note to the Owner. The route answers any seat its own
+ * conversation too, so an answer read as anyone but the Owner is refused (review 350 A5).
+ */
+export async function fetchCoordinatorNote(signal?: AbortSignal, thread = COORDINATOR_THREAD): Promise<CoordinatorRead> {
+  const read = parseChiefThread(await request('Coordinator', `/messages/thread?with=${encodeURIComponent(thread)}&limit=${COORDINATOR_WINDOW}`, { signal }))
+  if (read.actor !== 'owner') throw new Error(COORDINATOR_SIGN_IN)
+  return { note: latestNote(read, thread), full: read.messages.length >= COORDINATOR_WINDOW }
 }
 export const ackMessages = (ids: string[]) => request('Messages', '/messages/ack', { method: 'POST', body: JSON.stringify({ message_ids: ids }) })

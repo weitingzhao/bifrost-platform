@@ -1,3 +1,4 @@
+import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
 import { Bar, Card, HandMark, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
 import { ago } from './ownerModel'
@@ -13,7 +14,7 @@ const ARCH = { done: 'landed', part: 'part', none: 'none' } as const
 function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator']; now: number }) {
   if (view.state === 'loading') return <span className="text-sm text-muted-foreground">Reading the mailbox…</span>
   if (view.state === 'error') return <span role="alert" className="break-words text-sm text-muted-foreground">Coordinator note unavailable: {view.error}</span>
-  if (view.note == null) return <span className="text-sm text-muted-foreground">No note from the coordinator.</span>
+  if (view.note == null) return <span className="text-sm text-muted-foreground">{view.full ? `No note among the latest ${COORDINATOR_WINDOW} messages with the coordinator.` : 'No note from the coordinator.'}</span>
   return <>
     <span className="whitespace-pre-line break-words">{view.note.body}</span>
     <span className="text-xs text-muted-foreground" title={view.note.at}>Note {ago(view.note.at, now)}</span>

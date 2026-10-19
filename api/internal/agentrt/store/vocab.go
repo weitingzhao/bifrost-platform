@@ -27,16 +27,34 @@ type field struct {
 	optional bool
 }
 
+// eventTypes is the closed vocabulary, as the database's event_type_closed
+// constraint has it (migrations 0006); TestEventTypesAreTheDatabases holds
+// the two together. bodies below covers only the types the store writes.
+var eventTypes = map[string]bool{
+	"plan_node_created": true, "plan_node_retitled": true, "plan_node_state_changed": true,
+	"plan_change_proposed": true, "plan_change_decided": true, "plan_changed": true, "mission_proposed": true,
+	"mission_state_changed": true, "mission_amended": true, "task_proposed": true, "task_state_changed": true,
+	"task_dependency_added": true, "task_cancelled": true, "route_decided": true, "attempt_leased": true,
+	"attempt_started": true, "attempt_progress": true, "attempt_checkpointed": true, "attempt_stale": true,
+	"attempt_renewed": true, "attempt_computed": true, "attempt_persisted": true, "attempt_submitted": true,
+	"attempt_lost": true, "attempt_ended": true, "attempt_salvaged": true, "attempt_cancelled": true,
+	"artifact_put": true, "verification_recorded": true, "owner_wait_opened": true, "owner_wait_closed": true,
+	"approval_seen": true, "question_seen": true, "ci_seen": true, "pipeline_seen": true, "deploy_seen": true,
+	"owner_signoff": true, "actor_registered": true, "host_registered": true, "host_state_changed": true,
+	"host_retired": true, "control_set": true, "control_cleared": true, "rule_proposed": true, "rule_signed": true,
+	"rule_tightened": true, "rule_expired": true, "capability_scored": true, "candidate_status_changed": true,
+	"budget_charged": true, "pool_cooldown_set": true, "pool_measured": true, "message_posted": true,
+	"message_acked": true, "policy_alert": true, "decision_recorded": true, "note": true, "wait_limit_passed": true,
+	"legacy_imported": true,
+}
+
+// IsEventType says whether t is an event type of the closed vocabulary.
+func IsEventType(t string) bool { return eventTypes[t] }
+
 // bodies is the closed body of each event type the store writes so far
 // (design v5 §5.1.3): every required field present with a value of its kind,
 // no other field. The database checks the type against the full vocabulary;
 // a type with no body here is refused rather than written with a guessed shape.
-// IsEventType says whether t is an event type of the closed vocabulary.
-func IsEventType(t string) bool {
-	_, ok := bodies[t]
-	return ok
-}
-
 var bodies = map[string][]field{
 	"actor_registered":        {{"actors", kIDs, false}, {"capability_facts", kIDs, true}, {"note", kStr, true}, {"token", kStr, true}},
 	"plan_node_created":       {{"node_kind", kStr, false}, {"label", kStr, false}, {"title", kStr, false}, {"ordinal", kInt, false}},

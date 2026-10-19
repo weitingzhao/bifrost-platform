@@ -35,6 +35,7 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 	}
 	var low, high time.Duration
 	var late []string
+	counted := 0
 	type basisKey struct{ role, class string }
 	basis := map[basisKey]usualTime{}
 	for _, t := range m.tasks {
@@ -51,6 +52,7 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 			return unknownETA(fmt.Sprintf("no usual time for %s %s tasks: fewer than %d accepted in 30 days", t.Role, t.class, UsualMinSamples))
 		}
 		basis[basisKey{t.Role, t.class}] = u
+		counted++
 		var spent time.Duration
 		if t.Attempt != nil && t.Attempt.ElapsedS != nil {
 			spent = time.Duration(*t.Attempt.ElapsedS) * time.Second
@@ -61,6 +63,11 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 		if spent > top {
 			late = append(late, t.TaskID)
 		}
+	}
+	if counted == 0 {
+		// Submitted work waits for its acceptance and review, which are not
+		// proposed yet: nothing to time (review 350 A3).
+		return unknownETA("every unfinished task is submitted or verifying: its acceptance and review are not proposed yet")
 	}
 	rows := make([]any, 0, len(basis))
 	keys := make([]basisKey, 0, len(basis))
