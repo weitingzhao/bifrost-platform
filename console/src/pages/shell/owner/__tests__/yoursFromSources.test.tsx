@@ -1,5 +1,6 @@
+import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { renderHook, waitFor } from '@testing-library/react'
+import { cleanup, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import runtimeFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
@@ -7,6 +8,8 @@ import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approval
 import type { Question } from '@/api/questions'
 import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
 import questionFixture from '../../../../../../api/internal/questions/testdata/contract/question-open.json'
+import { OwnerYou } from '../OwnerYou'
+import { useOwnerConsole } from '../useOwnerConsole'
 import { useOwnerYours } from '../useOwnerYours'
 
 const question = questionFixture.body as Question
@@ -45,7 +48,13 @@ beforeEach(() => {
     getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
   } })
 })
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+/** For you as the Owner Console renders it, from the real hooks. */
+function ForYou() {
+  const data = useOwnerConsole({ system: false, work: false, chief: false })
+  return <OwnerYou data={data} onGoal={() => undefined} />
+}
 
 // What is yours comes from items with a way in, through the hooks the shell's count and the Owner's
 // Yours read, whatever the board says or whether it answers (2.5 slice 3, review 351 B2).
@@ -62,6 +71,20 @@ describe('Yours from the sources', () => {
       questionHref(question.id), questionHref(absent)].sort())
     expect(items.map(i => i.title)).not.toContain('Written on the board · by hand')
     expect(items.map(i => i.title)).not.toContain('Same as the open question')
+    client.clear()
+  })
+  it.each(['ok', 'down'] as const)('renders the five as links in Yours and counts them, nothing from the board (board %s)', async board => {
+    mockSources(board)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><ForYou /></QueryClientProvider>)
+    const yours = await screen.findByRole('region', { name: 'Yours' })
+    await waitFor(() => expect(within(yours).getAllByRole('listitem')).toHaveLength(5))
+    const links = within(yours).getAllByRole('listitem').flatMap(li => within(li).getAllByRole('link')).map(a => a.getAttribute('href')).sort()
+    expect(links).toEqual([approvalHref('appr_aaaaaaaaaaaaaaaa'), approvalHref('appr_bbbbbbbbbbbbbbbb'), approvalHref('appr_cccccccccccccccc'),
+      questionHref(question.id), questionHref(absent)].sort())
+    expect(screen.getByRole('region', { name: 'For you' })).toHaveTextContent('5')
+    expect(screen.queryByText(/Written on the board/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Do it by hand')).not.toBeInTheDocument()
     client.clear()
   })
 })

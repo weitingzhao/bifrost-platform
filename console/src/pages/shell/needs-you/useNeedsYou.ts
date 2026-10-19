@@ -160,6 +160,7 @@ export function useNeedsYou() {
     now,
     questions,
     openQuestions,
+    silentOffline: threadsQuery.isPaused && !threadsQuery.isError,
     questionsLoading,
     questionsUnreadable,
     questionsStale,

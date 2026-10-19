@@ -110,13 +110,25 @@ func sortedIDs(t *testing.T, pool *pgxpool.Pool, where string) []int64 {
 func TestEventsAcrossStreams(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
-	// A rolled-back append leaves a hole in the ids.
+	// A rolled-back append leaves a hole in the ids between two stored events.
 	tx, err := pool.Begin(ctx)
 	must(t, err)
-	_, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
+	hole, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: a hole"}})
 	must(t, err)
 	must(t, tx.Rollback(ctx))
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		_, aerr := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller", Body: map[string]any{"source": "test: after the hole"}})
+		return aerr
+	}))
 	all := sortedIDs(t, pool, `true`)
+	if slices.Contains(all, hole.EventID) || all[len(all)-1] <= hole.EventID {
+		t.Fatalf("the hole %d is not between stored events: %v", hole.EventID, all)
+	}
+	below := sortedIDs(t, pool, fmt.Sprintf(`event_id < %d`, hole.EventID))
+	slices.Reverse(below)
+	if p := page(t, s, fmt.Sprintf("events?limit=500&before_event_id=%d", hole.EventID)); !slices.Equal(ids(p.Events), below) {
+		t.Fatalf("back from the hole %d: %v, want %v", hole.EventID, ids(p.Events), below)
+	}
 	proposals := sortedIDs(t, pool, `event_type IN ('task_proposed', 'mission_proposed', 'actor_registered')`)
 	if len(proposals) < 3 || len(proposals) == len(all) {
 		t.Fatalf("the fixture needs proposals among other events: %d of %d", len(proposals), len(all))

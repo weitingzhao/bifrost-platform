@@ -105,6 +105,7 @@ export function NeedsYouPage() {
     runtimeItems, runtimeCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,
+    silentOffline,
     recentCount,
     decide,
     terminal,
@@ -152,7 +153,8 @@ export function NeedsYouPage() {
   if (silentCount.state === 'loading') {
     stalled = <Note>Loading…</Note>
   } else if (silentCount.state === 'unknown') {
-    stalled = <Note>{`Could not read agent threads: ${silentCount.reason}`}</Note>
+    // Offline, the reason is already the whole sentence (review 352 C1).
+    stalled = <Note>{silentOffline ? silentCount.reason : `Could not read agent threads: ${silentCount.reason}`}</Note>
   } else if (silent.length === 0 && lost.length === 0 && capacityText === '') {
     stalled = <Note>No agent thread has gone silent mid-turn.</Note>
   } else {
