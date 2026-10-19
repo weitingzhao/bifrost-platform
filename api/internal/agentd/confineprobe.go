@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -170,21 +171,31 @@ func codexHeld(ctx context.Context, codex, self, root, dir string, env []string)
 	return proveCodex(ctx, codex, self, dir, env)
 }
 
-// pathOutside says why codex, or a directory of the PATH in env it runs
-// with, may be in agentd's directory root, where attempts write: there a
-// setup could put a program the proof did not run (a node for codex's
-// wrapper, review 306 A). Links are followed as far as a path exists.
+// pathOutside says why codex (the file, and the directory it is in), or a
+// directory of the PATH in env it runs with, may be in agentd's directory
+// root, where attempts write: there a setup could put a program the proof did
+// not run (a node for codex's wrapper, or codex itself), after the proof
+// (review 306 A). Each is resolved through its links (resolvePath); one that
+// cannot be (a dangling link, a loop) is not trusted (review 307).
 func pathOutside(root, codex string, env []string) error {
-	dirs := []string{filepath.Dir(codex)}
+	paths := []string{codex, filepath.Dir(codex)}
 	if p := envValues(env, "PATH"); len(p) > 0 {
-		dirs = append(dirs, filepath.SplitList(p[len(p)-1])...)
+		paths = append(paths, filepath.SplitList(p[len(p)-1])...)
 	}
-	roots := []string{filepath.Clean(root), resolvedAncestor(root)}
-	for _, d := range dirs {
-		for _, c := range []string{filepath.Clean(d), resolvedAncestor(d)} {
+	r, err := resolvePath(root)
+	if err != nil {
+		return err
+	}
+	roots := []string{filepath.Clean(root), r}
+	for _, d := range paths {
+		c, err := resolvePath(d)
+		if err != nil {
+			return fmt.Errorf("%s, of codex or its PATH, cannot be resolved: %w", d, err)
+		}
+		for _, x := range []string{filepath.Clean(d), c} {
 			for _, r := range roots {
-				if rel, err := filepath.Rel(r, c); err == nil && (rel == "." || filepath.IsLocal(rel)) {
-					return fmt.Errorf("%s, of codex's PATH, is in agentd's directory, where attempts write", d)
+				if rel, rerr := filepath.Rel(r, x); rerr == nil && (rel == "." || filepath.IsLocal(rel)) {
+					return fmt.Errorf("%s, of codex or its PATH, is in agentd's directory, where attempts write", d)
 				}
 			}
 		}
@@ -192,20 +203,30 @@ func pathOutside(root, codex string, env []string) error {
 	return nil
 }
 
-// resolvedAncestor is p with its longest existing ancestor's links resolved
-// and the rest, which does not exist yet, as it is.
-func resolvedAncestor(p string) string {
+// resolvePath is the absolute path p with every link on its way resolved:
+// the part that exists resolved, and the rest, which does not exist at all
+// (not even as a link), as it is. A link that does not resolve is an error.
+func resolvePath(p string) (string, error) {
 	p = filepath.Clean(p)
-	rest := ""
-	for cur := p; ; cur = filepath.Dir(cur) {
-		if r, err := filepath.EvalSymlinks(cur); err == nil {
-			return filepath.Join(r, rest)
-		}
-		if cur == filepath.Dir(cur) {
-			return p
-		}
-		rest = filepath.Join(filepath.Base(cur), rest)
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("%s is not absolute", p)
 	}
+	cur := string(filepath.Separator)
+	parts := strings.Split(strings.TrimPrefix(p, cur), string(filepath.Separator))
+	for i, part := range parts {
+		next := filepath.Join(cur, part)
+		if _, err := os.Lstat(next); errors.Is(err, fs.ErrNotExist) {
+			r, rerr := filepath.EvalSymlinks(cur)
+			if rerr != nil {
+				return "", rerr
+			}
+			return filepath.Join(append([]string{r}, parts[i:]...)...), nil
+		} else if err != nil {
+			return "", err
+		}
+		cur = next
+	}
+	return filepath.EvalSymlinks(p)
 }
 
 // codexProofArgv is codex's sandbox with codexExecutor's pins, running the

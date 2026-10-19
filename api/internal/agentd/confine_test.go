@@ -643,3 +643,29 @@ func TestCodexHeldNotWithAPathInAgentdsDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Review 307: codex itself a link into agentd's directory, and a PATH entry
+// a dangling link into it (its target not made yet): neither is trusted.
+func TestCodexHeldNotThroughLinksIntoAgentdsDirectory(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	checkout := filepath.Join(root, "tasks", "t1", "a1")
+	must(t, os.MkdirAll(checkout, 0o700))
+	must(t, os.WriteFile(filepath.Join(checkout, "codex"), []byte("#!/bin/sh\n"), 0o755))
+	must(t, os.MkdirAll(filepath.Join(outside, "bin"), 0o700))
+	codex := filepath.Join(outside, "bin", "codex")
+	must(t, os.Symlink(filepath.Join(checkout, "codex"), codex))
+	if err := pathOutside(root, codex, []string{"PATH=/usr/bin:/bin"}); err == nil {
+		t.Error("a codex linked into agentd's directory is trusted")
+	}
+	dangling := filepath.Join(outside, "future-bin")
+	must(t, os.Symlink(filepath.Join(checkout, "bin"), dangling)) // not made yet
+	if err := pathOutside(root, "/opt/codex/bin/codex", []string{"PATH=" + dangling + ":/usr/bin:/bin"}); err == nil {
+		t.Error("a PATH entry linked into agentd's directory, not made yet, is trusted")
+	}
+	// A dangling link anywhere else is not trusted either: it cannot be resolved.
+	nowhere := filepath.Join(outside, "nowhere")
+	must(t, os.Symlink(filepath.Join(outside, "gone", "bin"), nowhere))
+	if err := pathOutside(root, "/opt/codex/bin/codex", []string{"PATH=" + nowhere}); err == nil {
+		t.Error("an unresolvable PATH entry is trusted")
+	}
+}
