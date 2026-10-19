@@ -242,6 +242,11 @@ func TestFailFirstVerifySwitch(t *testing.T) {
 	if !injected || !strings.Contains(reason, "STG test switch") {
 		t.Fatalf("injected %v, rework reason %q", injected, reason)
 	}
+	var rowRef, rowEnv string
+	ok(t, w.rt.QueryRow(ctx, `SELECT COALESCE(check_ref, ''), COALESCE(env, '') FROM agentrt.verification WHERE task_id = $1`, impl).Scan(&rowRef, &rowEnv))
+	if rowRef != store.TestNeedFailFirstVerify || rowEnv != "stg" {
+		t.Fatalf("the verification row says %q %q; want the switch and stg", rowRef, rowEnv)
+	}
 	w.run(t, "h3", cursor, "done")
 	v2, err := store.StartVerification(ctx, w.rt, impl)
 	ok(t, err)

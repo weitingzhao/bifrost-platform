@@ -347,7 +347,9 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 			method = "review"
 		}
 		injected := false
-		if opts.FailFirstVerify && v.role == "verify" && verdict == "pass" && sd.round == 1 {
+		// Never a salvaged result's check: it has no round to go again in
+		// (review 291 B1).
+		if opts.FailFirstVerify && v.role == "verify" && verdict == "pass" && sd.round == 1 && !spec.salvage {
 			if err = tx.QueryRow(ctx, `SELECT needs_json ? $2 FROM agentrt.task WHERE task_id = $1`, s.id, TestNeedFailFirstVerify).Scan(&injected); err != nil {
 				return err
 			}
@@ -366,9 +368,15 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 			Body: verificationBody(vid, method, verdict, injected)}); err != nil {
 			return err
 		}
+		// An injected failure says so on its row as on its event (review 291 B2).
+		checkRef, env := "", ""
+		if injected {
+			checkRef, env = TestNeedFailFirstVerify, "stg"
+		}
 		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
-		  evidence_artifact_id, verifier_attempt_id, subject_commit, accepts_attempt)
-		  VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9)`, vid, s.id, spec.attempt, method, verdict, report, va, spec.commit, accepts); err != nil {
+		  evidence_artifact_id, verifier_attempt_id, subject_commit, accepts_attempt, check_ref, env)
+		  VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), $9, NULLIF($10, ''), NULLIF($11, ''))`, vid, s.id, spec.attempt, method, verdict,
+			report, va, spec.commit, accepts, checkRef, env); err != nil {
 			return fmt.Errorf("store: record verification: %w", err)
 		}
 		if err = moveTask(ctx, tx, "controller", v, "accepted", "result used: "+verdict); err != nil {
@@ -464,7 +472,7 @@ func Pending(ctx context.Context, db DB) ([]string, []string, error) {
 func verificationBody(id, method, verdict string, injected bool) map[string]any {
 	body := map[string]any{"verification_id": id, "method": method, "verdict": verdict}
 	if injected {
-		body["injected"] = true
+		body["injected"], body["check_ref"], body["env"] = true, TestNeedFailFirstVerify, "stg"
 	}
 	return body
 }
