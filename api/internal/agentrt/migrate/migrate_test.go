@@ -3,6 +3,7 @@ package migrate_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -191,10 +192,12 @@ func TestUpgradeTo0006KeepsEvents(t *testing.T) {
 }
 
 // T19, the three environments (review 145 B7): a database migrated for an
-// environment grants its own runtime role, platform_agentrt_<env>, what the
-// runtime needs, and the other two environments' runtime roles nothing on
-// the schema: not its use, not a read, not a write; no runtime role may
-// rewrite or delete an event.
+// environment grants its own runtime role, platform_agentrt_<env>, the same
+// privileges on every table of the schema whichever the environment, and the
+// other two environments' runtime roles nothing there: no table privilege,
+// no use of the schema; connected as one of them, a read is refused. No
+// runtime role may update or delete an event (review 334 B1: the whole
+// matrix, and a real connection).
 func TestEachEnvironmentGrantsItsOwnRuntimeOnly(t *testing.T) {
 	ctx := context.Background()
 	envs := []string{"dev", "stg", "prod"}
@@ -212,6 +215,27 @@ func TestEachEnvironmentGrantsItsOwnRuntimeOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// privileges is every table privilege role has in the schema, column
+	// privileges as a table's "UPDATE(cols)", as "table PRIV" lines.
+	privileges := func(conn *pgx.Conn, role string) []string {
+		t.Helper()
+		rows, err := conn.Query(ctx, `SELECT c.relname || ' ' || p.priv FROM pg_class c
+		  CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p(priv)
+		  WHERE c.relnamespace = 'agentrt'::regnamespace AND c.relkind IN ('r', 'p') AND has_table_privilege($1, c.oid, p.priv)
+		  UNION ALL SELECT c.relname || ' UPDATE(cols)' FROM pg_class c
+		  WHERE c.relnamespace = 'agentrt'::regnamespace AND c.relkind IN ('r', 'p') AND has_any_column_privilege($1, c.oid, 'UPDATE')
+		    AND NOT has_table_privilege($1, c.oid, 'UPDATE')
+		  ORDER BY 1`, role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	var own [][]string
 	for _, env := range envs {
 		db := agentrttest.New(t)
 		if _, err := migrate.Run(ctx, db.Connect(t, db.Owner), env); err != nil {
@@ -220,18 +244,37 @@ func TestEachEnvironmentGrantsItsOwnRuntimeOnly(t *testing.T) {
 		check := db.Connect(t, db.Admin)
 		for _, other := range envs {
 			role, _ := migrate.RuntimeRole(other)
-			var usage, read, insert, update, del, taskWrite bool
+			got := privileges(check, role)
+			var usage, update, del bool
 			if err := check.QueryRow(ctx, `SELECT has_schema_privilege($1, 'agentrt', 'USAGE'),
-			    has_table_privilege($1, 'agentrt.event', 'SELECT'), has_table_privilege($1, 'agentrt.event', 'INSERT'),
-			    has_table_privilege($1, 'agentrt.event', 'UPDATE'), has_table_privilege($1, 'agentrt.event', 'DELETE'),
-			    has_table_privilege($1, 'agentrt.task', 'UPDATE')`, role).Scan(&usage, &read, &insert, &update, &del, &taskWrite); err != nil {
+			    has_table_privilege($1, 'agentrt.event', 'UPDATE'), has_table_privilege($1, 'agentrt.event', 'DELETE')`, role).Scan(&usage, &update, &del); err != nil {
 				t.Fatal(err)
 			}
-			own := other == env
-			if usage != own || read != own || insert != own || taskWrite != own || update || del {
-				t.Errorf("%s database, %s: usage %v, read %v, insert %v, task update %v, event update %v, event delete %v",
-					env, role, usage, read, insert, taskWrite, update, del)
+			switch {
+			case other == env && (!usage || len(got) == 0 || update || del):
+				t.Errorf("%s database, its own %s: usage %v, event update %v, event delete %v, privileges %v", env, role, usage, update, del, got)
+			case other != env && (usage || len(got) != 0):
+				t.Errorf("%s database, %s of another environment: usage %v, privileges %v", env, role, usage, got)
 			}
+			if other == env {
+				own = append(own, got)
+			}
+		}
+		// Connected as another environment's runtime role (given CONNECT
+		// here, as a misconfigured cluster might), a read is refused.
+		stranger, _ := migrate.RuntimeRole(map[string]string{"dev": "stg", "stg": "prod", "prod": "dev"}[env])
+		if _, err := check.Exec(ctx, `GRANT CONNECT ON DATABASE `+pgx.Identifier{db.Name}.Sanitize()+` TO `+pgx.Identifier{stranger}.Sanitize()); err != nil {
+			t.Fatal(err)
+		}
+		conn := db.Connect(t, db.Admin+" user="+stranger)
+		var n int
+		if err := conn.QueryRow(ctx, `SELECT count(*) FROM agentrt.event`).Scan(&n); err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Errorf("%s database read as %s: %v", env, stranger, err)
+		}
+	}
+	for i := 1; i < len(own); i++ {
+		if !slices.Equal(own[i], own[0]) {
+			t.Errorf("%s's runtime has %v; dev's has %v", envs[i], own[i], own[0])
 		}
 	}
 }

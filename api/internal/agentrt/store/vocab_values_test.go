@@ -13,13 +13,17 @@ func TestEventFieldValues(t *testing.T) {
 	t.Parallel()
 	const ulid = "01M59KGZ56VX9YCCCN9KCR9264"
 	const sha = "sha256:05851c9c83bf54acb720e9979da3455e3b27a76ef7bc0c0e1b25b44fbb3d0311"
+	covered := map[string]bool{}
 	for _, c := range []struct{ event, field, good, bad string }{
 		{"plan_node_created", "node_kind", "step", "leaf"},
 		{"plan_node_state_changed", "to", "dropped", "deleted"},
+		{"plan_node_state_changed", "from", "planned", "draft"},
 		{"plan_change_decided", "decision", "expired", "maybe"},
 		{"mission_state_changed", "from", "awaiting_owner", "waiting"},
+		{"mission_state_changed", "to", "expired", "closed"},
 		{"task_proposed", "role", "brief", "author"},
 		{"task_state_changed", "to", "blocked", "stuck"},
+		{"task_state_changed", "from", "verifying", "checking"},
 		{"task_dependency_added", "depends_on_task_id", "t_" + ulid, "t1"},
 		{"attempt_leased", "executor", "exec:codex", "codex"},
 		{"attempt_checkpointed", "artifacts", sha, "sha256:short"},
@@ -33,6 +37,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"attempt_cancelled", "accepted_attempt", "a_" + ulid, "a_" + strings.ToLower(ulid)},
 		{"host_registered", "host_kind", "vm", "laptop"},
 		{"host_state_changed", "to", "draining", "down"},
+		{"host_state_changed", "from", "retired", "gone"},
 		{"verification_recorded", "verification_id", "v_" + ulid, "v-1"},
 		{"verification_recorded", "method", "gate", "manual"},
 		{"verification_recorded", "verdict", "fail", "failed"},
@@ -54,12 +59,14 @@ func TestEventFieldValues(t *testing.T) {
 		{"rule_proposed", "direction", "loosen", "relax"},
 		{"rule_proposed", "text_artifact_id", sha, "rule.yaml"},
 		{"candidate_status_changed", "to", "probation", "paused"},
+		{"candidate_status_changed", "from", "qualifying", "trial"},
 		{"question_seen", "answered_at", "2026-10-19T11:40:00Z", "now"},
 		{"ci_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "42bb2c9"},
 		{"deploy_seen", "env", "prod", "production"},
 		{"deploy_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "main"},
 		{"route_decided", "fingerprint", sha, "05851c9c"},
 	} {
+		covered[c.event+"."+c.field] = true
 		if why := badValue(c.event, c.field, c.good); why != "" {
 			t.Errorf("%s.%s refused %q: %s", c.event, c.field, c.good, why)
 		}
@@ -70,10 +77,13 @@ func TestEventFieldValues(t *testing.T) {
 			t.Errorf("%s.%s is not checked", c.event, c.field)
 		}
 	}
-	// Every checked field is in its event's body, so no check sits on a
-	// field no event has.
+	// Every checked field has its pair above (review 334 B3) and is in its
+	// event's body, so no check sits on a field no event has.
 	for event, fields := range fieldValues {
 		for name := range fields {
+			if !covered[event+"."+name] {
+				t.Errorf("%s.%s is checked but has no good and bad value here", event, name)
+			}
 			found := false
 			for _, f := range bodies[event] {
 				found = found || f.name == name

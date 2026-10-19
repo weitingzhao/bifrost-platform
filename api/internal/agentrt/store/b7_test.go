@@ -3,7 +3,9 @@ package store_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,8 +29,9 @@ func notes(t *testing.T, w *world, stream string, n int) {
 }
 
 // T23b: on a clean stream of its own, deleting the last event alone is found
-// (the head names an event that is gone); so is an envelope field edited, and
-// a NULL envelope field given a value or a value taken to NULL.
+// (the head names an event that is gone); so is an envelope field edited, one
+// field at a time with the body untouched (review 334 A2), and a NULL envelope
+// field given a value or a value taken to NULL.
 func TestTamperOnACleanStream(t *testing.T) {
 	t.Parallel()
 	w := newWorld(t)
@@ -55,7 +58,7 @@ func TestTamperOnACleanStream(t *testing.T) {
 
 	for name, q := range map[string]string{
 		"by":           `UPDATE agentrt.event SET actor_id = 'owner' WHERE event_stream_id = 'by' AND seq = 2`,
-		"type":         `UPDATE agentrt.event SET event_type = 'owner_signoff', body_json = '{"ref": "b"}' WHERE event_stream_id = 'type' AND seq = 2`,
+		"type":         `UPDATE agentrt.event SET event_type = 'owner_signoff' WHERE event_stream_id = 'type' AND seq = 2`,
 		"at":           `UPDATE agentrt.event SET at = at + interval '1 microsecond' WHERE event_stream_id = 'at' AND seq = 2`,
 		"null to set":  `UPDATE agentrt.event SET mission_id = 'M-1' WHERE event_stream_id = 'null to set' AND seq = 2`,
 		"set to null":  `UPDATE agentrt.event SET mission_id = NULL WHERE event_stream_id = 'set to null' AND seq = 2`,
@@ -120,12 +123,16 @@ func TestKilledInsideATransaction(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	var writeErr error
+	var committed atomic.Int64
 	stop := make(chan struct{})
+	var once sync.Once
+	halt := func() { once.Do(func() { close(stop) }); wg.Wait() }
+	defer halt()
 	for g := range 3 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; ; i++ {
+			for {
 				select {
 				case <-stop:
 					return
@@ -141,29 +148,40 @@ func TestKilledInsideATransaction(t *testing.T) {
 					mu.Unlock()
 					return
 				}
+				committed.Add(1)
 			}
 		}()
 	}
-	var checks int
+	// Verify until writes have landed between verifications at least three
+	// times (so the writers and the reader did overlap), within a deadline
+	// that only a stalled run reaches; each verification holds and never
+	// sees fewer events than the one before (review 334 A1).
+	var checks, overlapped int
 	var last int64
-	for start := time.Now(); time.Since(start) < 2*time.Second; checks++ {
+	deadline := time.Now().Add(20 * time.Second)
+	for overlapped < 3 {
+		if time.Now().After(deadline) {
+			t.Fatalf("writes landed between only %d of %d verifications", overlapped, checks)
+		}
+		before := committed.Load()
 		n, verr := store.VerifyStream(ctx, pool, "busy")
 		if verr != nil {
-			close(stop)
-			wg.Wait()
 			t.Fatalf("verify %d while writing: %v", checks, verr)
 		}
 		if n < last {
 			t.Fatalf("verify %d saw %d events after %d", checks, n, last)
 		}
+		if committed.Load() > before {
+			overlapped++
+		}
 		last = n
+		checks++
 	}
-	close(stop)
-	wg.Wait()
+	halt()
 	ok(t, writeErr)
-	n, err := store.VerifyStream(ctx, pool, "busy")
-	if err != nil || n <= last || checks < 2 {
-		t.Fatalf("after the writers: %d events (last seen %d) in %d checks, %v", n, last, checks, err)
+	// One event written before the writers, and one for each commit.
+	if n, verr := store.VerifyStream(ctx, pool, "busy"); verr != nil || n != 1+committed.Load() || n < last {
+		t.Fatalf("after the writers: %d events, %d commits, last seen %d, %v", n, committed.Load(), last, verr)
 	}
 }
 
@@ -198,6 +216,14 @@ func TestPollMovesLivenessWithoutAnEvent(t *testing.T) {
 	if !second.After(first) || again != events {
 		t.Fatalf("a second poll: last_poll_at %v -> %v, events %d -> %d", first, second, events, again)
 	}
+	// A poll that hands out work moves it too (review 334 B2).
+	_ = w.ready(t, store.Task{})
+	if c := w.claim(t, "h1", store.LeaseTTL, codex); c == nil {
+		t.Fatal("a ready task was not handed out")
+	}
+	if third, _ := read(); !third.After(second) {
+		t.Fatalf("a poll with work: last_poll_at %v -> %v", second, third)
+	}
 	// A poll from a host that is not registered moves nothing.
 	if _, err := store.ClaimFor(ctx, w.rt, store.ClaimRequest{HostID: "nobody", FreeSlots: 1, Tools: []store.Tool{codex}}, store.LeaseTTL); !errors.Is(err, store.ErrFenced) {
 		t.Fatalf("an unregistered host: %v", err)
@@ -219,9 +245,20 @@ func TestEveryOutboxRowHasItsEventAndBack(t *testing.T) {
 		return err
 	}))
 	w.control(t, store.NewControlID(), "task", a, "stop")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		return store.SetCooldown(ctx, tx, "controller", "codex:owner:weekly", "codex", "weekly", time.Now().Add(time.Hour), "test")
+	}))
 	notes(t, w, "quiet", 2)
-	if n := w.count(t, `SELECT count(*) FROM agentrt.outbox`); n < 4 {
-		t.Fatalf("the fixture signalled %d times; want at least 4", n)
+	// Every kind of signal is in the fixture (review 334 A3).
+	for kind, q := range map[string]string{
+		"a readied task": `SELECT count(*) FROM agentrt.event WHERE event_type = 'task_state_changed' AND body_json->>'to' = 'ready'`,
+		"a message":      `SELECT count(*) FROM agentrt.event WHERE event_type = 'message_posted'`,
+		"a control":      `SELECT count(*) FROM agentrt.event WHERE event_type = 'control_set'`,
+		"a cooldown":     `SELECT count(*) FROM agentrt.event WHERE event_type = 'pool_cooldown_set'`,
+	} {
+		if w.count(t, q) == 0 {
+			t.Fatalf("the fixture has no %s", kind)
+		}
 	}
 	// Each signalling event: one row, its topic, its subject.
 	if n := w.count(t, `SELECT count(*) FROM agentrt.event e WHERE
@@ -230,8 +267,9 @@ func TestEveryOutboxRowHasItsEventAndBack(t *testing.T) {
 	    CASE e.event_type
 	      WHEN 'task_state_changed' THEN o.topic = 'wake' AND o.payload_json->>'task_id' = e.task_id
 	      WHEN 'message_posted' THEN o.topic = 'mbox:' || (e.body_json->>'to') AND o.payload_json->>'message_id' = e.body_json->>'message_id'
-	      WHEN 'control_set' THEN o.topic = 'stop'
-	      WHEN 'pool_cooldown_set' THEN o.topic = 'cooldown'
+	      WHEN 'control_set' THEN o.topic = 'stop' AND o.payload_json->>'control_id' = e.body_json->>'control_id'
+	      WHEN 'pool_cooldown_set' THEN o.topic = 'cooldown' AND o.payload_json->>'vendor_pool_id' = e.body_json->>'vendor_pool_id'
+	        AND o.payload_json->>'until' = e.body_json->>'until'
 	    END) <> 1`); n != 0 {
 		t.Fatalf("%d signalling events without exactly one matching outbox row", n)
 	}
@@ -248,10 +286,34 @@ func TestEveryOutboxRowHasItsEventAndBack(t *testing.T) {
 	}
 }
 
+// blockedOn waits, within a bound, until the backend pid waits on a lock held
+// by holder while running a statement that contains stmt: proof that the
+// second connection reached the guarded statement and waits there, not a
+// silence taken for it (review 334 A4).
+func blockedOn(t *testing.T, w *world, pid, holder int, stmt string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var blocked bool
+		var query string
+		ok(t, w.rt.QueryRow(ctx, `SELECT $2 = ANY(pg_blocking_pids($1)), COALESCE((SELECT query FROM pg_stat_activity WHERE pid = $1), '')`,
+			pid, holder).Scan(&blocked, &query))
+		if blocked && strings.Contains(query, stmt) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("backend %d did not wait on %d at %q (it runs %q)", pid, holder, stmt, query)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // T32, the reverse migration: a task on a step moved off the plan while a
-// review of it is being made on that step, in both orders; the subject's lock
-// serializes them and the second fails, so no review sits apart from its
-// subject (review 144 A2 covered the move onto a step).
+// review of it is being made on that step, in both orders: the second waits
+// for the first (on the step's or the subject's lock, whichever it meets
+// first), then fails, so no review sits apart from its subject (review 144
+// A2 covered the move onto a step). The subject's own lock is not isolated
+// here (review 334 A4).
 func TestSubjectLockSerializesMoveOffAndReview(t *testing.T) {
 	t.Parallel()
 	for _, moveFirst := range []bool{true, false} {
@@ -260,6 +322,8 @@ func TestSubjectLockSerializesMoveOffAndReview(t *testing.T) {
 			subj, err := w.task(t, "M-1", s2, "", "implement")
 			ok(t, err)
 			other := w.db.Connect(t, w.db.Runtime)
+			var otherPID int
+			ok(t, other.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&otherPID))
 			move := func(tx pgx.Tx) error {
 				if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream(root), Type: "plan_changed", Actor: "controller",
 					MissionID: "M-1", TaskID: subj, Body: map[string]any{"change": "off the plan"}}); aerr != nil {
@@ -273,21 +337,20 @@ func TestSubjectLockSerializesMoveOffAndReview(t *testing.T) {
 					Class: "go", Title: "r", SpecArtifact: w.spec, Effect: "none"})
 				return perr
 			}
-			first, second := move, review
+			first, second, stmt := move, review, "FROM agentrt.plan_node" // the step's lock, met first
 			if !moveFirst {
-				first, second = review, move
+				first, second, stmt = review, move, "UPDATE agentrt.task"
 			}
-			tx1, err := w.rt.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+			conn1 := w.db.Connect(t, w.db.Runtime)
+			var firstPID int
+			ok(t, conn1.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&firstPID))
+			tx1, err := conn1.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 			ok(t, err)
 			defer func() { _ = tx1.Rollback(ctx) }()
 			ok(t, first(tx1))
 			done := make(chan error, 1)
 			go func() { done <- store.InTx(ctx, other, second) }()
-			select {
-			case err := <-done:
-				t.Fatalf("the second transaction did not wait for the subject's lock: %v", err)
-			case <-time.After(300 * time.Millisecond):
-			}
+			blockedOn(t, w, otherPID, firstPID, stmt)
 			ok(t, tx1.Commit(ctx))
 			wantErr(t, <-done, "sit")
 			if n := w.count(t, `SELECT count(*) FROM agentrt.task t JOIN agentrt.task s ON s.task_id = t.subject_task_id
@@ -316,7 +379,10 @@ func TestAcceptanceWaitsForTheResult(t *testing.T) {
 				attempt, _, lerr = store.LeaseAttempt(ctx, tx, "controller", "M-1", task, "exec:codex", "", 1, time.Minute)
 				return lerr
 			}))
-			persist, err := w.rt.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+			conn1 := w.db.Connect(t, w.db.Runtime)
+			var persistPID int
+			ok(t, conn1.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&persistPID))
+			persist, err := conn1.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 			ok(t, err)
 			defer func() { _ = persist.Rollback(ctx) }()
 			if _, err = store.Append(ctx, persist, store.Event{Stream: store.MissionStream("M-1"), Type: "attempt_persisted", Actor: "controller",
@@ -328,6 +394,8 @@ func TestAcceptanceWaitsForTheResult(t *testing.T) {
 				t.Fatal(err)
 			}
 			other := w.db.Connect(t, w.db.Runtime)
+			var otherPID int
+			ok(t, other.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&otherPID))
 			done := make(chan error, 1)
 			go func() {
 				done <- store.InTx(ctx, other, func(tx pgx.Tx) error {
@@ -340,11 +408,7 @@ func TestAcceptanceWaitsForTheResult(t *testing.T) {
 					return err
 				})
 			}()
-			select {
-			case err := <-done:
-				t.Fatalf("the verification did not wait for the result: %v", err)
-			case <-time.After(300 * time.Millisecond):
-			}
+			blockedOn(t, w, otherPID, persistPID, "INSERT INTO agentrt.verification")
 			if commit {
 				ok(t, persist.Commit(ctx))
 				ok(t, <-done)
