@@ -591,7 +591,8 @@ describe('Needs you names the progress work', () => {
   it('shows no part line when the document is absent or does not name the request', async () => {
     stub(null, true)
     const missing = render(wrap(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    // The board is not a source of what waits for the Owner (2.5 slice 3): unread, it leaves the count whole.
+    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
     expect(screen.queryByText(/Agent-reported:/)).toBeNull()
     missing.unmount()
 

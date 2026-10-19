@@ -157,9 +157,9 @@ describe('the verdict', () => {
     const v = ownerVerdict({ ...base, approvals: null, running: null, nodes: null, yours: { state: 'unknown', reason: 'questions request failed' } })
     expect(v.line).toBe('questions request failed · approvals unknown · agents unknown · release lane free · nodes unknown')
   })
-  it('marks a coordinator item as kept by hand', () => {
-    expect(waitingRow({ id: 'c', title: 'Look', href: '#progress', instruction: 'Open Progress', coordinator: {} }).hand).toBe(true)
-    expect(waitingRow({ id: 'q', title: 'Q1', href: '#needs-you', instruction: 'Answer' }).hand).toBe(false)
+  it('makes a waiting item a row with its way in', () => {
+    expect(waitingRow({ id: 'q', title: 'Q1', href: '#needs-you', instruction: 'Answer', since: '2026-10-19T12:00:00Z' }))
+      .toEqual({ id: 'q', title: 'Q1', detail: 'Answer', tone: 'attention', href: '#needs-you', action: 'Open', since: '2026-10-19T12:00:00Z' })
   })
 })
 

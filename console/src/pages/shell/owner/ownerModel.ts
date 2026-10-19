@@ -30,8 +30,6 @@ export type OwnerRow = {
   whose?: string
   /** A goal draft for the chief of staff; the Owner edits and sends it himself. */
   goalDraft?: string
-  /** Kept by hand by the coordinator thread, not a system record. */
-  hand?: boolean
 }
 
 /** Lamp colours of the console, one per tone. */
@@ -68,9 +66,9 @@ const SAME_EVENT: Record<string, (alert: MappedAlert) => boolean> = {
   BifrostIBGatewayDisconnected: alert => alert.name === 'BifrostPluginDegraded' && alert.labels.plugin === 'ib-gateway',
 }
 
-/** A waiting item from Needs you, as a row of Yours. Coordinator items are kept by hand. */
+/** A waiting item from Needs you, as a row of Yours. */
 export function waitingRow(item: WaitingItem): OwnerRow {
-  return { id: item.id, title: item.title, detail: item.instruction, tone: 'attention', href: item.href, action: 'Open', since: item.since, hand: item.coordinator != null }
+  return { id: item.id, title: item.title, detail: item.instruction, tone: 'attention', href: item.href, action: 'Open', since: item.since }
 }
 
 export type AlertSplit = {

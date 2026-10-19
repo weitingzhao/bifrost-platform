@@ -15,7 +15,6 @@ function Row({ row, onGoal }: { row: OwnerRow; onGoal?: (draft: string) => void 
       <span className="break-words font-semibold">{row.title}</span>
       <span className="break-words text-sm text-muted-foreground">{row.detail}</span>
       {row.whose && <span className="text-xs font-semibold text-[var(--color-warning)]">{row.whose}</span>}
-      {row.hand && <span title="Kept by hand by the coordinator thread" className="text-xs text-[var(--color-warning)]">✎ from the coordinator thread</span>}
     </div>
     {row.href && row.action && <ActionLink href={row.href} primary>{row.action}</ActionLink>}
     {row.goalDraft && onGoal && <button type="button" onClick={() => onGoal(row.goalDraft!)}

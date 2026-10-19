@@ -1,7 +1,7 @@
 import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
-import { coordinatorWaiting, mergedWaitingCount, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
+import { mergedWaitingCount, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
 import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
@@ -107,12 +107,11 @@ export function useNeedsYou() {
   } else count = { state: 'known', count: waitingCount(groups, silentCount.count, openQuestions.length) }
 
   const runtimeItems = runtimeWaiting(runtimeQuery.data?.needs_you.items ?? [], questions)
-  const coordinatorItems = coordinatorWaiting(progressQuery.data?.document?.owner_now ?? [])
   const runtimeCount = knownOrPending(runtimeQuery.isError || runtimeQuery.isPaused || runtimeQuery.data?.needs_you.truncated === true,
     runtimeQuery.error, runtimeQuery.data, 'Agent runtime list is unavailable or truncated; count is incomplete', runtimeItems.length)
-  const coordinatorCount = knownOrPending(progressQuery.isError || progressQuery.isPaused, progressQuery.error,
-    progressQuery.data, 'Coordinator request failed; count is incomplete', coordinatorItems.length)
-  count = mergedWaitingCount([count, runtimeCount, coordinatorCount])
+  // What waits for the Owner comes only from items with a way in: approvals, questions, the runtime.
+  // The board's hand-written owner_now is not read (2.5 slice 3): the coordinator asks with a card or a request.
+  count = mergedWaitingCount([count, runtimeCount])
   const waitingItems: WaitingItem[] = [
     ...(['decide', 'terminal', 'check'] as const).flatMap(group => groups[group].map(item => ({
       id: item.id, title: item.summary || item.id, href: approvalHref(item.id),
@@ -122,7 +121,7 @@ export function useNeedsYou() {
     ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: '#needs-you', kind: 'silent_thread', instruction: 'Needs you · Check the silent thread' })),
     ...lost.map(h => ({ id: h.host, title: h.host, href: '#needs-you', instruction: 'Needs you · Check the host heartbeat' })),
     ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: '#needs-you', instruction: 'Needs you · Restore thread monitoring capacity' }] : []),
-    ...runtimeItems, ...coordinatorItems,
+    ...runtimeItems,
   ]
 
   const decisionItems = waitingItems.filter(item => item.kind !== 'silent_thread')
@@ -145,7 +144,7 @@ export function useNeedsYou() {
   return {
     count,
     decisionItems, silentItems,
-    waitingItems, runtimeItems, coordinatorItems, runtimeCount, coordinatorCount, runtimeQuery, progressQuery,
+    waitingItems, runtimeItems, runtimeCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,
     recentCount,

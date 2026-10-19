@@ -22,10 +22,10 @@ function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
     gaps: parseDaemonSetGaps(evidenceFixture.gaps), down: parseDownTargets(evidenceFixture.targets as TelemetryTargetEntry[]) }
   const alerts = splitAlerts(alertsFixture.alerts as TelemetryAlertEntry[], standbyKnown.value ? evidence : null, NOW)
-  const coordinator = { id: 'coordinator-0', title: 'Look at the goal cards', href: '#progress', instruction: 'Open Progress', coordinator: {} }
+  const card = { id: 'runtime-0', title: 'Look at the goal cards', href: '#needs-you', instruction: 'Needs you · Review the runtime request' }
   return {
     now: NOW,
-    needsYou: { count: { state: 'known', count: 1 }, decisionItems: [coordinator], silentItems: [{ id: 't1', title: 'thread', href: '#needs-you', instruction: '', kind: 'silent_thread' }],
+    needsYou: { count: { state: 'known', count: 1 }, decisionItems: [card], silentItems: [{ id: 't1', title: 'thread', href: '#needs-you', instruction: '', kind: 'silent_thread' }],
       decide: [], openQuestions: [], runtimeItems: [], recentCount: { state: 'known', count: 11 } },
     yours: { state: 'known', count: 2 },
     standbyEvidence: standbyKnown.value ? 'read' : 'unread',
@@ -123,7 +123,7 @@ describe('Owner Console entries', () => {
     const yours = screen.getByRole('region', { name: 'Yours' })
     expect(within(yours).getAllByRole('listitem').map(li => li.querySelector('.font-semibold')?.textContent)).toEqual([
       'Log in to TWS for the IB secondary slot', 'Look at the goal cards'])
-    expect(yours).toHaveTextContent('✎ from the coordinator thread')
+    expect(yours).not.toHaveTextContent('✎')
     expect(yours).toHaveTextContent('No approvals, questions or agent cards waiting')
     const worth = screen.getByRole('region', { name: 'Worth a look' })
     expect(within(worth).getAllByText('No goal yet')).toHaveLength(4)

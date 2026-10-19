@@ -10,10 +10,9 @@ import boardFixture from './fixtures/sample-progress-w62.json'
 import questionFixture from '../../../../../../api/internal/questions/testdata/contract/question-open.json'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { parseRuntimeProgress, parseRuntimeTask } from '@/api/agentRuntime'
-import { parseProgressDocument } from '@/api/agentProgress'
 import type { Question } from '@/api/questions'
 import { ConsoleNavBadgeMark } from '@/components/shell/ConsoleNavSlotItem'
-import { coordinatorWaiting, mergedWaitingCount, runtimeWaiting } from '../../needs-you/mergedNeedsYou'
+import { mergedWaitingCount, runtimeWaiting } from '../../needs-you/mergedNeedsYou'
 import { needsYouBadge } from '../../needs-you/needsYouModel'
 import { useNeedsYou } from '../../needs-you/useNeedsYou'
 import { NeedsYouPage } from '../../needs-you/NeedsYouPage'
@@ -64,33 +63,32 @@ describe('one Needs you list', () => {
     expect(runtimeWaiting([request], [{ ...question, status: 'answered' }])).toMatchObject([{ href: `#questions?id=${question.id}`, kind: 'plan_change', since: question.created_at }])
     expect(runtimeWaiting([{ ...request, action: {}, kind: 'future' }], [question])).toMatchObject([{ title: request.title, kind: 'future' }])
   })
-  it('keeps coordinator fixture requests and skips every item carrying an approval', () => {
-    const board = parseProgressDocument(boardFixture)!
-    expect(coordinatorWaiting(board.owner_now!)).toHaveLength(1)
-    expect(coordinatorWaiting([...board.owner_now!, { name: 'Duplicate', approval: { id: 'appr_aaaaaaaaaaaaaaaa' } }])).toHaveLength(1)
-    expect(coordinatorWaiting(board.owner_now!)[0]!.instruction).toContain(boardFixture.owner_now[0]!.actions[0]!.text)
-  })
-  it('uses the same four-item count in the sidebar, home and Progress, renders both new groups', async () => {
+  it('uses the same three-item count in the sidebar, home and Progress, without the board\'s hand-written requests', async () => {
     mockSources(); wrap()
-    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="4"]')).toHaveLength(2))
-    expect(within(screen.getByLabelText('Sidebar')).getByText('4')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(2))
+    expect(within(screen.getByLabelText('Sidebar')).getByText('3')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Agent runtime')).getByText('Future request')).toBeInTheDocument()
-    expect(within(screen.getByLabelText('Written by the coordinator')).getByText(boardFixture.owner_now[0]!.actions[0]!.text)).toBeInTheDocument()
+    // The board's owner_now has no way in: what waits for the Owner is a card, a request or a runtime item (2.5 slice 3).
+    expect(screen.queryByLabelText('Written by the coordinator')).not.toBeInTheDocument()
+    expect(screen.queryByText(boardFixture.owner_now[0]!.actions[0]!.text)).not.toBeInTheDocument()
     expect(screen.queryByText('Already an approval')).not.toBeInTheDocument()
-    expect(screen.getByText(/Commands are not published to the platform/)).toBeInTheDocument()
     const blocks = Array.from(screen.getByTestId('merged-progress').children)
     expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Goals', 'Overview', 'Coordinator', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
     const preview = within(blocks[0] as HTMLElement)
-    expect(preview.getAllByRole('listitem')).toHaveLength(4)
+    expect(preview.getAllByRole('listitem')).toHaveLength(3)
     expect(preview.getByRole('link', { name: /Where is the quota/ })).toHaveAttribute('href', `#questions?id=${question.id}`)
   })
-  it.each(['/agentrt/progress', '/agent/progress'])('marks all three counts incomplete when %s fails', async source => {
-    mockSources(source); wrap()
+  it('marks all three counts incomplete when the runtime fails', async () => {
+    mockSources('/agentrt/progress'); wrap()
     expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Sidebar')).getByText('?')).toBeInTheDocument()
     expect(screen.getByText(/Count is incomplete:/)).toBeInTheDocument()
-    const label = source.includes('agentrt') ? 'Agent runtime' : 'Written by the coordinator'
-    expect(within(screen.getByLabelText(label)).getByText(/Could not load/)).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Agent runtime')).getByText(/Could not load/)).toBeInTheDocument()
+  })
+  it('keeps the count whole when the board fails: it is not a source of what waits for the Owner', async () => {
+    mockSources('/agent/progress'); wrap()
+    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(2))
+    expect(within(screen.getByLabelText('Sidebar')).getByText('3')).toBeInTheDocument()
   })
   it('makes a failed source outrank loading, and counts the complete list', () => {
     expect(mergedWaitingCount([{ state: 'loading' }, { state: 'unknown', reason: 'offline' }])).toEqual({ state: 'unknown', reason: 'offline' })

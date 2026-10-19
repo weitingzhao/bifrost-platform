@@ -1,4 +1,3 @@
-import { actionLink } from '@/api/agentProgress'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
@@ -103,7 +102,7 @@ function RecentlyHandled({ count, rows }: { count: NeedsYouCount; rows: HandledR
 export function NeedsYouPage() {
   const {
     count,
-    runtimeItems, coordinatorItems, runtimeCount, coordinatorCount, runtimeQuery, progressQuery,
+    runtimeItems, runtimeCount, runtimeQuery, progressQuery,
     openCount,
     silentCount,
     recentCount,
@@ -244,21 +243,16 @@ export function NeedsYouPage() {
       {!questionsLoading && !questionsUnreadable ? (
         <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} />
       ) : null}
-      {([
-        { label: 'Agent runtime', items: runtimeItems, state: runtimeCount, at: runtimeQuery.data?.generated_at },
-        { label: 'Written by the coordinator', items: coordinatorItems, state: coordinatorCount, at: progressQuery.data?.generated_at, coordinator: true },
-      ]).map(source => <Group key={source.label} label={source.label} count={needsYouCountText(source.state)}>
-        <Note>Generated: {source.at || 'Unknown'}</Note>
-        {source.coordinator && <Note>Commands are not published to the platform: run them from the coordinator's local board or its thread.</Note>}
-        {source.state.state === 'loading' && <Note>Loading…</Note>}
-        {source.state.state === 'unknown' && <Note>Could not load {source.label.toLowerCase()}: {source.state.reason}. Count is incomplete.</Note>}
-        {source.state.state === 'known' && source.items.length === 0 && <Note>No requests.</Note>}
-        <ul className="m-0 flex flex-col gap-2 p-0">{source.items.map(item => <li key={item.id} className="list-none text-sm">
+      <Group label="Agent runtime" count={needsYouCountText(runtimeCount)}>
+        <Note>Generated: {runtimeQuery.data?.generated_at || 'Unknown'}</Note>
+        {runtimeCount.state === 'loading' && <Note>Loading…</Note>}
+        {runtimeCount.state === 'unknown' && <Note>Could not load agent runtime: {runtimeCount.reason}. Count is incomplete.</Note>}
+        {runtimeCount.state === 'known' && runtimeItems.length === 0 && <Note>No requests.</Note>}
+        <ul className="m-0 flex flex-col gap-2 p-0">{runtimeItems.map(item => <li key={item.id} className="list-none text-sm">
           <strong>{item.title}</strong>{item.kind && ` · ${item.kind}`} {item.since && <time>{item.since}</time>}
-          {item.coordinator ? <><p>{item.coordinator.urgency}</p>{item.coordinator.actions?.map((action, i) => <p key={i}>{actionLink(action).kind === 'anchor' ? <a className="underline" href={(actionLink(action) as { href: string }).href}>{action.text}</a> : action.text}</p>)}</>
-            : <p><a className="underline" href={item.href}>{item.instruction}</a></p>}
+          <p><a className="underline" href={item.href}>{item.instruction}</a></p>
         </li>)}</ul>
-      </Group>)}
+      </Group>
       <Group label="Silent threads" count={needsYouCountText(silentCount)} collapsed description={SILENT_THREAD_EXPLANATION}>
         <Note>Claude sessions that went quiet.</Note>
         {stalled}
