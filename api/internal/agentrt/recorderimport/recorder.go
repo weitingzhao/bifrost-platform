@@ -22,7 +22,9 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
@@ -181,6 +183,9 @@ func readHead(body string) (head, error) {
 	if !json.Valid([]byte(body)) {
 		return h, errors.New("the body is not JSON")
 	}
+	if err := wholeText(body); err != nil {
+		return h, err
+	}
 	if err := noDuplicateKeys([]byte(body)); err != nil {
 		return h, err
 	}
@@ -188,10 +193,16 @@ func readHead(body string) (head, error) {
 	if err := json.Unmarshal([]byte(body), &obj); err != nil || obj == nil {
 		return h, errors.New("the body is not a recorder event: not an object")
 	}
+	// A null is no value of any type: Go would read it as the zero value
+	// ("" for the first line's prev_sha256), which the recorder refuses
+	// (review 403 A1).
 	field := func(name string, v any) error {
 		raw, found := obj[name]
 		if !found {
 			return fmt.Errorf("the body has no %s", name)
+		}
+		if string(raw) == "null" {
+			return fmt.Errorf("the body's %s is null", name)
 		}
 		if err := json.Unmarshal(raw, v); err != nil {
 			return fmt.Errorf("the body's %s is not of its type", name)
@@ -206,12 +217,56 @@ func readHead(body string) (head, error) {
 	}
 	if raw, found := obj["work_id"]; found {
 		var w string
-		if err := json.Unmarshal(raw, &w); err != nil {
+		if err := json.Unmarshal(raw, &w); err != nil || string(raw) == "null" {
 			return h, errors.New("the body's work_id is not a string")
 		}
 		h.WorkID = &w
 	}
 	return h, nil
+}
+
+// wholeText refuses text Go's decoder would repair: bytes that are not
+// UTF-8, and a \u escape of half a surrogate pair, which it reads as U+FFFD,
+// so a masked record encoded again would carry another key or type than the
+// line (review 403 B1). The recorder refuses both too.
+func wholeText(body string) error {
+	if !utf8.ValidString(body) {
+		return errors.New("the body is not UTF-8")
+	}
+	for i := 0; i < len(body); i++ {
+		if body[i] != '\\' {
+			continue
+		}
+		if i+1 >= len(body) || body[i+1] != 'u' {
+			i++ // another escape: skip its letter
+			continue
+		}
+		r, ok := hexRune(body, i)
+		switch {
+		case !ok:
+			return errors.New("the body has a bad \\u escape")
+		case r >= 0xDC00 && r <= 0xDFFF:
+			return errors.New("the body has half a surrogate pair")
+		case r >= 0xD800 && r <= 0xDBFF:
+			low, lok := hexRune(body, i+6)
+			if !lok || low < 0xDC00 || low > 0xDFFF {
+				return errors.New("the body has half a surrogate pair")
+			}
+			i += 11
+		default:
+			i += 5
+		}
+	}
+	return nil
+}
+
+// hexRune reads the \uXXXX escape at i.
+func hexRune(s string, i int) (rune, bool) {
+	if i+6 > len(s) || s[i] != '\\' || s[i+1] != 'u' {
+		return 0, false
+	}
+	v, err := strconv.ParseUint(s[i+2:i+6], 16, 16)
+	return rune(v), err == nil
 }
 
 // noDuplicateKeys refuses a document with a key twice in one object: Go and

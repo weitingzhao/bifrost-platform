@@ -171,6 +171,7 @@ func decideOne(ctx context.Context, db DB, p pendingChange, question func(contex
 // change when it is applied; a change the database refuses then is decided
 // failed instead, with its reason.
 func decide(ctx context.Context, db DB, p pendingChange, decision, reason string) (bool, error) {
+	hook("plan change deciding", p.stream)
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		artifact, isImport := importOf(p.changes)

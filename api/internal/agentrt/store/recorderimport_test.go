@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -239,4 +240,58 @@ func recorderCard(t *testing.T, pool *pgxpool.Pool, q string) map[string]any {
 		}
 	}
 	return nil
+}
+
+// Review 403 B3: two decision passes that have both read the same waiting
+// recorder import before either decides it land it once.
+// Serial: it holds the package's test hook (SetHook).
+func TestRecorderImportTwoPassesAtOnce(t *testing.T) {
+	pool := recorderDB(t)
+	a := &asker{}
+	out, err := store.ProposeRecorderImport(ctx, pool, wr("thread:s1"), "k1", "retire the recorder", tdLog(t), a.ask)
+	ok(t, err)
+	q := out["question_id"].(string)
+	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	stream := store.RecorderStream("td-336")
+	var mu sync.Mutex
+	arrived := 0
+	both := make(chan struct{})
+	defer store.SetHook(func(point, arg string) {
+		if point != "plan change deciding" || arg != stream {
+			return
+		}
+		mu.Lock()
+		arrived++
+		if arrived == 2 {
+			close(both)
+		}
+		mu.Unlock()
+		select {
+		case <-both:
+		case <-time.After(10 * time.Second):
+		}
+	})()
+	var wg sync.WaitGroup
+	total := 0
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			n, derr := store.DecidePlanChanges(ctx, pool, a.question, nil)
+			if derr != nil {
+				t.Error(derr)
+			}
+			mu.Lock()
+			total += n
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	if arrived != 2 {
+		t.Fatalf("%d passes reached the decision; the case needs both to have read the proposal", arrived)
+	}
+	if total != 1 || streamEvents(t, pool, stream, "plan_change_decided") != 1 || streamEvents(t, pool, stream, "legacy_imported") != 4 {
+		t.Fatalf("decided %d times; %d decisions, %d imported events", total, streamEvents(t, pool, stream, "plan_change_decided"),
+			streamEvents(t, pool, stream, "legacy_imported"))
+	}
 }

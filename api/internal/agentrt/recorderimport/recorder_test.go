@@ -263,3 +263,49 @@ func TestReadExactFieldsAndValuesOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Review 403: each head field on its own — an alias that would be right
+// beside an exact field that is wrong, and the reverse; a null for each; half
+// a surrogate pair anywhere; a masked record keeps every number as written.
+func TestReadEachHeadFieldAndTheText(t *testing.T) {
+	t.Parallel()
+	ok := `"v":2,"seq":1,"prev_sha256":"","type":"note"`
+	refused := map[string]struct{ body, want string }{
+		"seq wrong, SEQ right":   {`{"v":2,"seq":99,"SEQ":1,"prev_sha256":"","type":"note"}`, "seq is 99"},
+		"SEQ only":               {`{"v":2,"SEQ":1,"prev_sha256":"","type":"note"}`, "no seq"},
+		"prev wrong, PREV right": {`{"v":2,"seq":1,"prev_sha256":"x","PREV_SHA256":"","type":"note"}`, "prev_sha256 is not"},
+		"PREV only":              {`{"v":2,"seq":1,"PREV_SHA256":"","type":"note"}`, "no prev_sha256"},
+		"TYPE only":              {`{"v":2,"seq":1,"prev_sha256":"","TYPE":"note"}`, "no type"},
+		"V only":                 {`{"V":2,"seq":1,"prev_sha256":"","type":"note"}`, "no v"},
+		"work wrong, WORK right": {`{` + ok + `,"work_id":"W-32","WORK_ID":"W-31"}`, `work_id "W-32"`},
+		"v null":                 {`{"v":null,"seq":1,"prev_sha256":"","type":"note"}`, "v is null"},
+		"seq null":               {`{"v":2,"seq":null,"prev_sha256":"","type":"note"}`, "seq is null"},
+		"prev null":              {`{"v":2,"seq":1,"prev_sha256":null,"type":"note"}`, "prev_sha256 is null"},
+		"type null":              {`{"v":2,"seq":1,"prev_sha256":"","type":null}`, "type is null"},
+		"work null":              {`{` + ok + `,"work_id":null}`, "work_id is not a string"},
+		"half pair in a key":     {`{` + ok + `,"\ud800":"keep","text":"/tmp/x"}`, "half a surrogate pair"},
+		"half pair in the type":  {`{"v":2,"seq":1,"prev_sha256":"","type":"\ud800","text":"/tmp/x"}`, "half a surrogate pair"},
+		"low half alone":         {`{` + ok + `,"text":"\udc00 and /tmp/x"}`, "half a surrogate pair"},
+		"high half, no low":      {`{` + ok + `,"text":"\ud800\u0041"}`, "half a surrogate pair"},
+		"not UTF-8":              {"{" + ok + ",\"text\":\"\xff\"}", "not UTF-8"},
+	}
+	for name, c := range refused {
+		if _, err := recorderimport.Read(request("W-31", sealOne(c.body))); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: err = %v; want %q", name, err, c.want)
+		}
+	}
+	// A whole pair, an escaped backslash before a u, and numbers as written.
+	body := `{"n":[-0,1.2300,1e+02,9007199254740991],"pair":"\ud83d\ude00","slash":"\\u0041","text":"/tmp/x",` + ok + `}`
+	log, err := recorderimport.Read(request("W-31", sealOne(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := log.Records[0].Body
+	if !log.Records[0].Masked || !strings.Contains(kept, `[-0,1.2300,1e+02,9007199254740991]`) || !strings.Contains(kept, `"<tmp>/x"`) ||
+		!strings.Contains(kept, `"\\u0041"`) || !strings.Contains(kept, "😀") {
+		t.Fatalf("kept %s", kept)
+	}
+	if err = recorderimport.Check(log); err != nil {
+		t.Fatal(err)
+	}
+}
