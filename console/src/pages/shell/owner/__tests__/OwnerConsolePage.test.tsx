@@ -8,6 +8,10 @@ import { splitAlerts } from '../ownerModel'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
+import poolsFixture from './fixtures/pools-utc.json'
+import capabilitiesFixture from '@/api/__fixtures__/agentrt-capabilities.testdb.json'
+import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
 
@@ -17,6 +21,9 @@ const standbyKnown = vi.hoisted(() => ({ value: true }))
 const boardRound = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }))
 // The coordinating thread's note as the hook reads it from the mailbox (2.5 G3).
 const coordinatorView = vi.hoisted(() => ({ value: undefined as unknown }))
+// The time the page is drawn at, when a test sets one; the open goals the runtime gives (2.5 G8).
+const nowValue = vi.hoisted(() => ({ value: undefined as number | undefined }))
+const missionsValue = vi.hoisted(() => ({ value: [] as unknown[] }))
 
 function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
@@ -24,7 +31,7 @@ function fake(): OwnerConsoleData {
   const alerts = splitAlerts(alertsFixture.alerts as TelemetryAlertEntry[], standbyKnown.value ? evidence : null, NOW)
   const card = { id: 'runtime-0', title: 'Look at the goal cards', href: '#needs-you', instruction: 'Needs you · Review the runtime request' }
   return {
-    now: NOW,
+    now: nowValue.value ?? NOW,
     needsYou: { count: { state: 'known', count: 1 }, decisionItems: [card], silentItems: [{ id: 't1', title: 'thread', href: '#needs-you', instruction: '', kind: 'silent_thread' }],
       decide: [], openQuestions: [], runtimeItems: [], recentCount: { state: 'known', count: 11 } },
     yours: { state: 'known', count: 2 },
@@ -43,8 +50,9 @@ function fake(): OwnerConsoleData {
     boardStale: false,
     plan: boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
     arch: [{ state: 'done', what: 'a', now: '' }, { state: 'part', what: 'b', now: '' }],
-    quota: [{ id: 'claude.weekly', name: 'Claude · weekly', used: 91, readAt: NOW - 5 * 86_400_000, stale: true, tone: 'muted' }],
     hosts: [],
+    missions: missionsValue.value,
+    controlsReadable: true,
     nodes: [{ name: 'ubt-k3s-02', status: 'Ready', roles: 'worker', internal_ip: '192.168.10.70', version: '', reachability: 'ok', cpu_usage_percent: 4.5, memory_usage_percent: 35.2 },
       { name: 'gpu-server', status: 'NotReady', roles: 'worker', internal_ip: '192.168.10.60', version: '', reachability: 'fail', elastic_mode: 'standby' }],
     nodeCount: { ready: 1, total: 1, standby: 1 }, nodesError: null,
@@ -81,7 +89,7 @@ function Shell() {
 
 function show(hash = '#you') {
   window.history.replaceState(null, '', hash)
-  return render(<QueryClientProvider client={new QueryClient()}><Shell /></QueryClientProvider>)
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Shell /></QueryClientProvider>)
 }
 const headings = () => screen.getAllByRole('heading', { level: 2 }).map(h => h.textContent)
 async function go(hash: string, heading: string) {
@@ -92,8 +100,24 @@ async function go(hash: string, heading: string) {
 beforeEach(() => {
   submit.mockClear()
   standbyKnown.value = true
+  // jsdom here has no working localStorage; the sign-in token is read from it on every request.
+  const values = new Map<string, string>()
+  Object.defineProperty(window, 'localStorage', { configurable: true, value: {
+    getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
+  } })
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = [] })
+
+function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
+/** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
+function stubRuntimeReads() {
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/agentrt/pools')) return json(poolsFixture)
+    if (url.includes('/agentrt/capabilities')) return json(capabilitiesFixture)
+    return json({ error: `not stubbed: ${url}` })
+  }))
+}
 
 describe('Owner Console entries', () => {
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {
@@ -223,11 +247,49 @@ describe('Owner Console entries', () => {
     }
   })
 
-  it('marks quota read days ago as stale and the plan as kept by hand', () => {
+  it('shows each pool\'s last reading from the runtime with when, an old one marked; no hand-kept quota (2.5 G7 A)', async () => {
+    stubRuntimeReads()
+    nowValue.value = Date.parse('2026-10-19T21:00:00Z')
     show('#work')
-    expect(screen.getByRole('region', { name: 'Quota' })).toHaveTextContent('stale')
-    expect(screen.getByRole('region', { name: 'Quota' })).toHaveTextContent('read 5 days ago')
+    const quota = screen.getByRole('region', { name: 'Quota' })
+    expect(await within(quota).findByText('claude · weekly')).toBeInTheDocument()
+    expect(within(quota).getAllByText('old')).toHaveLength(3)
+    expect(within(quota).getAllByText('read 25 h ago')).toHaveLength(3)
+    expect(within(quota).getAllByText('old')[0]).toHaveAttribute('title', 'its window has reset since it was read')
+    expect(within(quota).getByText('no reading yet')).toBeInTheDocument()
+    expect(within(quota).getByRole('link', { name: /System/ })).toHaveAttribute('href', '#system')
+    expect(quota).not.toHaveTextContent('✎')
     expect(screen.getByRole('region', { name: 'The plan' })).toHaveTextContent('✎ by hand')
     expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent('M-2 Add a comment above Repos.')
+  })
+
+  it('gives each open goal when it should be done, as a range with its basis, or unknown with why (2.5 G8)', () => {
+    missionsValue.value = parseRuntimeProgress(etaFixture).work.missions
+    nowValue.value = Date.parse('2026-10-19T23:35:51Z')
+    show('#work')
+    const goals = screen.getByRole('region', { name: 'Open goals' })
+    expect(goals).toHaveTextContent('Open goals · 2')
+    const [m2, m1] = within(goals).getAllByRole('listitem').filter(li => li.parentElement?.parentElement === goals)
+    expect(m2).toHaveTextContent('M-2')
+    expect(m2).toHaveTextContent('Done by: unknown — the mission is proposed: a wait for a decision has no usual time')
+    expect(m1).toHaveTextContent(/M-1 M-1queued · ready for a host to claim/)
+    expect(m1).toHaveTextContent(/Expected \d\d:\d\d–\d\d:\d\d, in 3 min to 5 min/)
+    expect(m1).toHaveTextContent('implement go: usually 1 min 40 s, from 3 accepted attempts in 30 days')
+    expect(m1).not.toHaveTextContent('unknown')
+  })
+
+  it('System puts the capability scores beside the quota, from GET /capabilities (2.5 G9)', async () => {
+    stubRuntimeReads()
+    show('#system')
+    const card = screen.getByRole('region', { name: 'Capabilities' })
+    const implementer = await within(card).findByRole('region', { name: 'Scores for implementer' })
+    expect(within(implementer).getAllByRole('listitem').map(li => li.textContent)).toEqual([
+      expect.stringMatching(/^codex \(gpt-x\) · go · core95%exam · 6 attempts: 5 first pass, 6 accepted, 0 rework · window ended/),
+      expect.stringMatching(/^cursor \(auto\) · go80%in the job · 4 attempts: 2 first pass, 3 accepted, 1 rework · median 7 min · window ended/),
+    ])
+    expect(within(card).getByRole('region', { name: 'Scores for reviewer' })).toHaveTextContent('claude (opus) · ts50%')
+    expect(within(card).getByText('Candidates · 40')).toBeInTheDocument()
+    expect(within(card).getByText('Capability facts · 6')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Quota' })).toBeInTheDocument()
   })
 })

@@ -49,9 +49,12 @@ describe('a round the board could not read', () => {
   })
 
   it('shows the round as unavailable in the overview', () => {
+    vi.stubGlobal('fetch', vi.fn(async () => json({ pools: [] })))
     const board = { roadmap: { round: parseRuntimeRound(unknownRound) } }
-    render(<ProgressOverview count={{ state: 'known', count: 0 }} board={board as never} failed={false} />)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><ProgressOverview count={{ state: 'known', count: 0 }} board={board as never} failed={false} /></QueryClientProvider>)
     expect(screen.getByText('Plan unavailable: PG unavailable')).toBeInTheDocument()
     expect(screen.queryByLabelText('steps')).not.toBeInTheDocument()
+    client.clear()
   })
 })

@@ -36,7 +36,8 @@ function mockFetch() {
     let data: unknown = {}
     if (url.includes('/agentrt/missions/')) data = { ...mission, mission_id: url.split('/').at(-1) }
     else if (url.includes('/agentrt/tasks?')) data = tasks
-    else if (url.includes('/agentrt/events?')) data = events
+    else if (url.includes('/agentrt/events?stream=')) data = events
+    else if (url.includes('/agentrt/events?')) data = { events: [], next: '0.0' }
     else if (url.includes('/agentrt/artifacts/')) return new Response('Fixture implementation report')
     else if (url.includes('/agentrt/goals') && init?.method === 'POST') data = { mission_id: 'M-20', mission_state: 'active', task_id: 't_new' }
     else if (url.includes('/agentrt/progress')) data = { work: { missions: [{ mission_id: 'M-2' }] }, needs_you: { items: [] } }
@@ -147,8 +148,8 @@ describe('goal cards and source links', () => {
     expect(fetch).toHaveBeenCalledTimes(3)
   })
   it('does not give the Owner the move for silent threads alone', () => {
-    expect(whoseMove({ state: 'known', count: 4 }, parseRuntimeProgress({ live: [{ task_id: 't' }] }), {}, false, 4)).toBe("Agents' move")
-    expect(whoseMove({ state: 'known', count: 5 }, parseRuntimeProgress({}), {}, false, 4)).toBe("Owner's move")
+    expect(whoseMove({ state: 'known', count: 4 }, parseRuntimeProgress({ live: [{ task_id: 't' }] }), false, 4)).toBe("Agents' move")
+    expect(whoseMove({ state: 'known', count: 5 }, parseRuntimeProgress({}), false, 4)).toBe("Owner's move")
   })
 })
 

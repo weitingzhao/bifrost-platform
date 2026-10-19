@@ -1,14 +1,17 @@
 import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
 import { Bar, Card, HandMark, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
+import { OwnerGoals } from './OwnerGoals'
+import { PoolReadings } from './PoolReadings'
 import { ago } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 const ARCH = { done: 'landed', part: 'part', none: 'none' } as const
 
 /**
- * Work: running, stuck and open goals, the last finished and what is next; the crew, host by host;
- * the plan as bars; the quota. The last run step by step, done → now → next and the threads are on their detail pages.
+ * Work: running, stuck and open goals, the last finished and what is next; each open goal with when it
+ * should be done; the crew, host by host; the plan as bars; each pool's last reading. The last run step by
+ * step, done → now → next and the threads are on their detail pages.
  */
 /** The coordinating thread's latest note to the Owner, from the mailbox (2.5 G3). */
 function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator']; now: number }) {
@@ -22,7 +25,7 @@ function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator'];
 }
 
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {
-  const { work, board, plan, quota, now } = data
+  const { work, board, plan, now } = data
   const arch = (['done', 'part', 'none'] as const).map(state => ({ state, n: data.arch.filter(r => r.state === state).length }))
   return <section aria-label="Work" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">Work</h2>
@@ -47,6 +50,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <CoordinatorNote view={data.coordinator} now={now} />
         </div>
       </Card>
+      <OwnerGoals missions={data.missions ?? []} now={now} read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
       <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}
         read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
       <Card label="The plan" title={<>The plan{board?.roadmap?.round?.n != null && ` · Round ${board.roadmap.round.n}`} {board?.roadmap?.round?.source !== 'runtime' && <HandMark title="Kept by hand by the coordinator thread (WORK.md)" />}</>} more={{ href: '#progress', text: 'Plan' }}>
@@ -65,14 +69,8 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
         {data.arch.length > 0 && <p className="m-0 flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2 text-sm">
           <strong>Architecture, {data.arch.length} parts:</strong>{arch.map(a => <span key={a.state}>{a.n} {ARCH[a.state]}</span>)}</p>}
       </Card>
-      <Card label="Quota" title={<>Quota <HandMark title="Read by hand into the coordinator's usage file" /></>} more={{ href: '#progress', text: 'Usage' }}>
-        {quota.length === 0 && <p className="m-0 text-sm text-muted-foreground">No quota reading on the board.</p>}
-        <ul className="m-0 flex list-none flex-col gap-2.5 p-0">{quota.map(q => <li key={q.id} className="flex flex-col gap-1">
-          <div className={`flex justify-between gap-2 text-sm ${q.stale ? 'text-muted-foreground' : ''}`}><span className="min-w-0 break-words">{q.name}</span><span className="font-mono">{q.used == null ? '?' : `${q.used}%`}</span></div>
-          <Bar percent={q.used ?? 0} tone={q.tone} />
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">{q.readAt ? `read ${ago(q.readAt, now)}` : 'read time unknown'}
-            {q.stale && <span className="rounded-full bg-[var(--control-fill)] px-2 font-bold text-[var(--color-warning)]">stale</span>}</span>
-        </li>)}</ul>
+      <Card label="Quota" title="Quota" more={{ href: '#system', text: 'System' }}>
+        <PoolReadings now={now} />
       </Card>
     </div>
   </section>

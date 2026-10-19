@@ -1,0 +1,343 @@
+{
+ "as_of_event_id": 78,
+ "controls": [
+  {
+   "scope": "mission",
+   "reason": "test",
+   "set_at": "2026-10-19T18:35:51.334619-05:00",
+   "scope_ref": "M-2",
+   "cleared_at": null,
+   "control_id": "c_01M5B8AZ96YVSMESHG08XE5KPV",
+   "control_kind": "pause",
+   "set_by_actor_id": "owner",
+   "cleared_by_actor_id": null
+  }
+ ],
+ "generated_at": "2026-10-19T23:35:51.352678Z",
+ "hosts": [
+  {
+   "state": "active",
+   "online": true,
+   "host_id": "h1",
+   "version": 0,
+   "actor_id": "host:h1",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": 0,
+   "tools_json": {},
+   "last_poll_at": "2026-10-19T18:35:51.3039-05:00",
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h2",
+   "version": 0,
+   "actor_id": "host:h2",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h3",
+   "version": 0,
+   "actor_id": "host:h3",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h4",
+   "version": 0,
+   "actor_id": "host:h4",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h5",
+   "version": 0,
+   "actor_id": "host:h5",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h6",
+   "version": 0,
+   "actor_id": "host:h6",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h7",
+   "version": 0,
+   "actor_id": "host:h7",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  },
+  {
+   "state": "active",
+   "online": false,
+   "host_id": "h8",
+   "version": 0,
+   "actor_id": "host:h8",
+   "controls": [],
+   "host_kind": "dev",
+   "poll_age_s": null,
+   "tools_json": {},
+   "last_poll_at": null,
+   "capacity_json": {},
+   "live_attempts": 0,
+   "agentd_version": null
+  }
+ ],
+ "live": [],
+ "needs_you": {
+  "count": 0,
+  "items": [],
+  "truncated": false
+ },
+ "plan": [
+  {
+   "count": {
+    "done": 1,
+    "manual": 0,
+    "state": "active",
+    "stopped": 0,
+    "total": 3
+   },
+   "items": [
+    {
+     "active_steps": [],
+     "count": {
+      "done": 1,
+      "manual": 0,
+      "state": "active",
+      "stopped": 0,
+      "total": 3
+     },
+     "label": "2.1",
+     "plan_node_id": "R2:2.1",
+     "title": "data layer"
+    }
+   ],
+   "kind": "round",
+   "plan_node_id": "R2",
+   "title": "round 2"
+  }
+ ],
+ "recent": {
+  "failed_attempts": [
+   {
+    "task_id": "t_01M5B8AZ5PQKX6NP52J50PEWFK",
+    "ended_at": "2026-10-19T18:35:51.224619-05:00",
+    "attempt_id": "a_01M5B8AZ5QN3CRSWPFR4B5QTZT",
+    "mission_id": "M-1",
+    "ended_event_id": 40,
+    "report_artifact_id": null
+   }
+  ],
+  "tasks": [
+   {
+    "role": "implement",
+    "state": "rejected",
+    "title": "ended",
+    "task_id": "t_01M5B8AZ5PQKX6NP52J50PEWFK",
+    "ended_at": "2026-10-19T18:35:51.225852-05:00",
+    "conclusion": "failed",
+    "mission_id": "M-1",
+    "ended_event_id": 42,
+    "report_artifact_id": null
+   },
+   {
+    "role": "implement",
+    "state": "accepted",
+    "title": "ended",
+    "task_id": "t_01M5B8AZ5GVX8Q328EHPQ68GXC",
+    "ended_at": "2026-10-19T18:35:51.220978-05:00",
+    "conclusion": "done",
+    "mission_id": "M-1",
+    "ended_event_id": 37,
+    "report_artifact_id": null
+   },
+   {
+    "role": "implement",
+    "state": "accepted",
+    "title": "ended",
+    "task_id": "t_01M5B8AZ5715R9HV4GPE1A9S4Z",
+    "ended_at": "2026-10-19T18:35:51.213724-05:00",
+    "conclusion": "done",
+    "mission_id": "M-1",
+    "ended_event_id": 31,
+    "report_artifact_id": null
+   },
+   {
+    "role": "implement",
+    "state": "accepted",
+    "title": "ended",
+    "task_id": "t_01M5B8AZ4V9FNSC8PSR548KHEE",
+    "ended_at": "2026-10-19T18:35:51.205506-05:00",
+    "conclusion": "done",
+    "mission_id": "M-1",
+    "ended_event_id": 25,
+    "report_artifact_id": null
+   }
+  ]
+ },
+ "work": {
+  "missions": [
+   {
+    "deadline_at": "2026-10-26T23:35:51Z",
+    "eta": {
+     "basis": [
+      {
+       "role": "implement",
+       "samples": 3,
+       "task_class": "go",
+       "usual_s": 100
+      }
+     ],
+     "earliest": "2026-10-19T23:39:11Z",
+     "latest": "2026-10-19T23:40:51Z",
+     "reason": "the unfinished tasks one after another, each from its usual time to 1.5 times it; acceptance and review tasks not yet proposed are not counted",
+     "state": "estimated"
+    },
+    "goal": "test",
+    "mission_id": "M-1",
+    "next_steps": [
+     {
+      "owner_step": false,
+      "plan_node_id": "R2:2.1-1",
+      "title": "s1"
+     },
+     {
+      "owner_step": false,
+      "plan_node_id": "R2:2.1-3",
+      "title": "s3"
+     }
+    ],
+    "reason": "ready for a host to claim",
+    "since": "2026-10-19T23:35:51.317593Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 2
+    },
+    "state": "active",
+    "status": "queued",
+    "tasks": [
+     {
+      "task_id": "t_01M5B8AZ5TQWK0H9F14562Y9XX",
+      "title": "t",
+      "role": "implement",
+      "plan_node_id": "R2:2.1-1",
+      "off_plan": false,
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-19T23:35:51.317593Z",
+      "depends_on": [],
+      "usual_s": 100,
+      "computed_not_persisted": false
+     },
+     {
+      "task_id": "t_01M5B8AZ8TH1V9TNW1F9JXT4X7",
+      "title": "t",
+      "role": "implement",
+      "plan_node_id": "R2:2.1-1",
+      "off_plan": false,
+      "round_no": 1,
+      "max_rounds": 2,
+      "state": "ready",
+      "status": "queued",
+      "reason": "ready for a host to claim",
+      "since": "2026-10-19T23:35:51.324428Z",
+      "depends_on": [],
+      "usual_s": 100,
+      "computed_not_persisted": false
+     }
+    ],
+    "title": "M-1",
+    "waiting_on": "coordinator",
+    "waiting_roles": [],
+    "work_id": "W-31"
+   },
+   {
+    "deadline_at": "2026-10-26T23:35:51Z",
+    "eta": {
+     "reason": "the mission is proposed: a wait for a decision has no usual time",
+     "state": "unknown"
+    },
+    "goal": "test",
+    "mission_id": "M-2",
+    "next_steps": [],
+    "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
+    "since": "2026-10-19T23:35:51.156425Z",
+    "slices": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "state": "proposed",
+    "status": "waiting_owner",
+    "tasks": [],
+    "title": "M-2",
+    "waiting_on": "owner",
+    "waiting_roles": [],
+    "work_id": "W-31"
+   }
+  ],
+  "truncated": false
+ }
+}

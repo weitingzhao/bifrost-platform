@@ -648,13 +648,13 @@ describe('AgentWorkBoard', () => {
     20_000,
   )
 
-  it('places the seven project blocks in the Owner question order, then lineage and code health', async () => {
+  it('places the six project blocks in the Owner question order, then lineage and code health', async () => {
     stubProgress(envelope(null))
     render(wrap(<ProgressPage />))
     expect(await screen.findAllByText('No progress has been published.')).not.toHaveLength(0)
     const page = screen.getByTestId('merged-progress')
     expect(Array.from(page.children).map(child => child.getAttribute('aria-label'))).toEqual([
-      'Needs you', 'Goals', 'Overview', 'Coordinator', 'Plan and architecture', 'Hosts', 'History',
+      'Needs you', 'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History',
       'Commit lineage', 'Code health',
     ])
   })

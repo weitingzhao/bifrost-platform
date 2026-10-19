@@ -24,7 +24,6 @@ import {
   planRows,
   goalRefreshMs,
   lastResult,
-  quotaRows,
   workNow,
 } from './ownerModel'
 import { current, errorText, useOwnerYours } from './useOwnerYours'
@@ -134,7 +133,6 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     boardStale: needsYou.progressQuery.data?.stale === true,
     plan: planRows(board?.roadmap?.round),
     arch: board?.roadmap?.arch?.rows ?? [],
-    quota: quotaRows(board?.usage?.pools, now),
     hosts: runtime?.hosts ?? [],
     missions: runtime?.work.missions ?? [],
     nodes,

@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
-import { parseRuntimeProgress } from '@/api/agentRuntime'
+import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
+import { parseMissionEta, parseRuntimeProgress } from '@/api/agentRuntime'
+import { parsePools } from '@/api/agentRuntimePools'
 import { parseRuntimeRound } from '@/api/agentRuntimePlan'
 import type { TelemetryAlertEntry, TelemetryTargetEntry } from '@/api/clusterTypes'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile } from '../dataTiles'
-import { ago, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, quotaRows, splitAlerts, waitingRow, workNow, yoursCount, QUOTA_STALE_MS } from '../ownerModel'
+import { ago, clockTime, etaBasis, etaLine, yoursNavBadge, goalRefreshMs, lastResult, lastResultLine, ownerVerdict, planRows, poolRows, splitAlerts, waitingRow, workNow, yoursCount } from '../ownerModel'
 import { DAEMONSET_GAPS_QUERY, parseDaemonSetGaps, parseDownTargets, parseStandbyPods, standbyPodsQuery, type StandbyEvidence } from '../standbyEvidence'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
+import poolsFixture from './fixtures/pools-utc.json'
 
 const alerts = alertsFixture.alerts as TelemetryAlertEntry[]
 const NOW = Date.parse('2026-10-16T20:10:43Z')
@@ -202,16 +205,58 @@ describe('work, plan and quota', () => {
     expect(rows[0]).toMatchObject({ tone: 'ok', done: 3, total: 3 })
     expect(rows[1].tone).toBe('info')
   })
-  it('greys a quota read more than a day ago, never red, and leaves out sub-limits', () => {
-    const fresh = (NOW - 3600_000) / 1000, old = (NOW - QUOTA_STALE_MS - 1000) / 1000
-    const rows = quotaRows([
-      { vendor: 'Codex', label: 'weekly', used: 6, read_at: fresh },
-      { vendor: 'Claude', label: 'weekly', used: 91, read_at: old },
-      { vendor: 'Claude', label: 'Fable', used: 0, read_at: fresh, sublimit: true },
-      { vendor: 'Cursor', label: 'other', used: 95, read_at: fresh },
-    ], NOW)
-    expect(rows.map(r => [r.name, r.stale, r.tone])).toEqual([
-      ['Codex · weekly', false, 'ok'], ['Claude · weekly', true, 'muted'], ['Cursor · other', false, 'fail']])
+  // GET /agentrt/pools as the platform answered (pools-utc.json, review 281), read a day and an hour later.
+  it('gives each pool its last reading and when, and marks a reading old once its window reset or a day went by (2.5 G7 A)', () => {
+    const pools = parsePools(poolsFixture)
+    const at = Date.parse('2026-10-18T20:30:00Z')
+    expect(poolRows(pools, at).map(r => [r.id, r.used, r.old, r.tone, r.cooling])).toEqual([
+      ['claude:owner:short', 100, '', 'fail', true],
+      ['claude:owner:weekly', 20, '', 'ok', false],
+      ['codex:owner:weekly', 50, '', 'ok', false],
+      // A refusal without a figure: nothing read, so nothing old; it cools.
+      ['cursor:owner:monthly', null, '', 'fail', true],
+    ])
+    const later = Date.parse('2026-10-19T21:00:00Z')
+    expect(poolRows(pools, later).map(r => [r.name, r.old, r.tone])).toEqual([
+      ['claude · short', 'its window has reset since it was read', 'fail'],
+      ['claude · weekly', 'read more than a day ago', 'muted'],
+      ['codex · weekly', 'read more than a day ago', 'muted'],
+      ['cursor · monthly', '', 'fail'],
+    ])
+    // A short window's reading is old after its five hours, before a day.
+    const short = { ...pools[0], resets_at: null, cooling: false, cooldown_until: null, used_fraction: 0.3 }
+    expect(poolRows([short], Date.parse(short.measured_at!) + 5 * 3600_000 + 1000)[0]).toMatchObject({ old: 'read more than 5 hours ago', tone: 'muted' })
+    expect(poolRows([short], Date.parse(short.measured_at!) + 4 * 3600_000)[0]).toMatchObject({ old: '', tone: 'ok', name: 'claude · short' })
+  })
+})
+
+// GET /agentrt/progress from the handler on a test database (store's kernel world: three accepted
+// implementations of 100 s, two queued): M-1 is estimated, M-2 waits for a decision.
+describe('when a goal should be done (2.5 G8)', () => {
+  const [m1, m2] = parseRuntimeProgress(etaFixture).work.missions
+  const generated = Date.parse('2026-10-19T23:35:51Z')
+  it('reads the estimate as a range with its basis, and an unknown one with why', () => {
+    expect(m1.eta).toEqual({ state: 'estimated', earliest: '2026-10-19T23:39:11Z', latest: '2026-10-19T23:40:51Z', past_usual: [],
+      basis: [{ role: 'implement', task_class: 'go', usual_s: 100, samples: 3 }], reason: etaFixture.work.missions[0].eta.reason })
+    expect(m2.eta).toEqual({ state: 'unknown', reason: 'the mission is proposed: a wait for a decision has no usual time' })
+  })
+  it('says the range in local times and how far off, never a fixed unknown', () => {
+    const lo = Date.parse('2026-10-19T23:39:11Z'), hi = Date.parse('2026-10-19T23:40:51Z')
+    expect(etaLine(m1.eta, generated)).toBe(`Expected ${clockTime(lo, generated)}–${clockTime(hi, generated)}, in 3 min to 5 min`)
+    expect(etaLine(m1.eta, lo + 1000)).toBe(`Expected by ${clockTime(hi, lo)}, within 2 min`)
+    expect(etaLine(m1.eta, hi + 1000)).toBe(`Expected by ${clockTime(hi, hi)}; that time has passed`)
+    expect(etaLine(m2.eta, generated)).toBe('Done by: unknown — the mission is proposed: a wait for a decision has no usual time')
+    expect(etaBasis(m1.eta)).toEqual(['implement go: usually 1 min 40 s, from 3 accepted attempts in 30 days'])
+    expect(etaBasis(m2.eta)).toEqual([])
+  })
+  it('names tasks past their usual time, and takes an estimate it cannot read as unknown', () => {
+    const late = parseMissionEta({ ...etaFixture.work.missions[0].eta, past_usual: ['t_1'] })
+    expect(etaBasis(late)[1]).toBe('1 task already past 1.5 times its usual time: t_1')
+    for (const broken of [{ ...etaFixture.work.missions[0].eta, latest: 'soon' }, { ...etaFixture.work.missions[0].eta, basis: [] },
+      { ...etaFixture.work.missions[0].eta, earliest: '2026-10-19T23:41:00Z' }, false, null, { state: 'estimated' }]) {
+      expect(parseMissionEta(broken)).toEqual({ state: 'unknown', reason: expect.any(String) })
+    }
+    expect(parseMissionEta({})).toEqual({ state: 'unknown', reason: 'the runtime gave no estimate' })
   })
 })
 

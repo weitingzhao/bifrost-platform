@@ -8,10 +8,7 @@ import { AgentsPlan } from '../agents/AgentsPlan'
 import { TaskRow } from './RuntimeWork'
 import { ProgressOverview } from './ProgressOverview'
 import { NowClock, Tick } from './progressClock'
-import { ProgressActivity, ProgressDoneToday } from './ProgressActivity'
-import { FinishedWorks, WorkCard } from './ProgressWorks'
-import { splitWorks } from './progressModel'
-import { workRunning, workWaiting } from './mergedProgressModel'
+import { ProgressTimeline } from './ProgressTimeline'
 import { GoalCard } from './GoalCard'
 import { missionIds, relative } from './goalCardModel'
 import { ProgressNeedsPreview } from './ProgressNeedsPreview'
@@ -42,7 +39,6 @@ export function ProgressPage() {
   const { count, runtimeQuery: runtimeQ, progressQuery: boardQ } = needs
   const runtime = runtimeQ.data, board = boardQ.data?.document
   const ids = missionIds(runtime, submitted?.id)
-  const { active, finished } = splitWorks(board?.works ?? [])
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
       <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime?.generated_at}><Tick text={now => relative(runtime?.generated_at || '', now)} /></time></p>
@@ -72,18 +68,12 @@ export function ProgressPage() {
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, 8).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
-    <section aria-label="Overview">{boardState()}<ProgressOverview count={count} runtime={runtime} board={board} failed={runtimeQ.isError || boardQ.isError} silentThreads={needs.silent.length} /></section>
-    <section aria-label="Coordinator"><OpsSection title="Coordinator" description="Kept by hand by the coordinator thread · not system records" bodyPadding="compact">
-      {boardState()}
-      {board?.coordinator && <p className="text-sm">{board.coordinator.doing || board.coordinator.note || board.coordinator.state} {board.coordinator.next && `· Then: ${board.coordinator.next}`}</p>}
-      {board && active.length === 0 && <p>No coordinator work running.</p>}
-      {active.map((work, i) => <details key={`${work.title}-${i}`} open={workRunning(work) || workWaiting(work)}><summary className="cursor-pointer text-sm">{work.title} {workWaiting(work) && <a href="#needs-you">· Waiting for you</a>}</summary><WorkCard work={work} index={i} at={board?.at} /></details>)}
-    </OpsSection></section>
+    <section aria-label="Overview">{boardState()}<ProgressOverview count={count} runtime={runtime} board={board} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
     <section aria-label="Plan and architecture"><AgentsPlan /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" collapsible defaultCollapsed bodyPadding="compact">
       {ids.slice(8).map(id => <p key={id} className="text-sm">{id} · {runtime?.work.missions.find(m => m.mission_id === id)?.title || text(runtime?.recent.tasks.find(t => text(t.mission_id) === id)?.title) || 'Finished goal'} · <a href={`#progress?goal=${encodeURIComponent(id)}`} className="underline" onClick={() => { setSubmitted({ id, goal: '' }); setHighlighted(id) }}>View goal</a></p>)}
-      {boardState()}<ProgressDoneToday recent={board?.recent} /><FinishedWorks works={finished} at={board?.at} /><ProgressActivity feed={board?.feed} />
+      <ProgressTimeline runtime={runtime} now={Date.now()} />
       {runtimeState(<>
         <h4>Recent runtime tasks</h4>{runtime?.recent.tasks.length === 0 && <p>No recent tasks.</p>}
         {runtime?.recent.tasks.map((task, i) => <details key={i}><summary className="cursor-pointer break-words text-sm">{text(task.title) || text(task.task_id)} · {text(task.state)} · {text(task.ended_at)}</summary><TaskRow mission={text(task.mission_id)} task={parseRuntimeTask(task)} /></details>)}

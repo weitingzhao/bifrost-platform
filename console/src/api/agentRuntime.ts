@@ -13,9 +13,18 @@ export type RuntimeTask = {
   task_id: string; title: string; role: string; state: string; status: string; reason: string
   since: string; round_no?: number; max_rounds?: number; depends_on: string[]
 }
+/**
+ * When a mission should be done (2.5 G8; store/progresseta.go): its unfinished tasks one after another,
+ * each from its usual time to 1.5 times it, with the role and task class each usual time came from;
+ * or unknown, with why.
+ */
+export type EtaBasis = { role: string; task_class: string; usual_s: number; samples: number }
+export type MissionEta =
+  | { state: 'estimated'; earliest: string; latest: string; basis: EtaBasis[]; reason: string; past_usual: string[] }
+  | { state: 'unknown'; reason: string }
 export type RuntimeMission = {
   mission_id: string; title: string; goal: string; state: string; status: string; reason: string
-  since: string; deadline_at: string; eta: RuntimeRecord; next_steps: unknown[]
+  since: string; deadline_at: string; eta: MissionEta; next_steps: unknown[]
   waiting_on: string; waiting_roles: string[]; tasks: RuntimeTask[]
 }
 export type RuntimeHost = {
@@ -50,6 +59,20 @@ export function parseRuntimeTask(v: unknown): RuntimeTask {
     status: text(r.status), reason: text(r.reason), since: text(r.since) || text(r.ended_at),
     round_no: number(r.round_no), max_rounds: number(r.max_rounds), depends_on: strings(r.depends_on) }
 }
+const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0
+/** An estimate whose times or basis do not read is unknown, not a guess (v4 §20.3). */
+export function parseMissionEta(v: unknown): MissionEta {
+  const r = record(v), reason = text(r.reason)
+  if (r.state !== 'estimated') return { state: 'unknown', reason: reason || 'the runtime gave no estimate' }
+  const basis = Array.isArray(r.basis) ? r.basis.map(record) : []
+  const earliest = text(r.earliest), latest = text(r.latest)
+  if (!Number.isFinite(Date.parse(earliest)) || !Number.isFinite(Date.parse(latest)) || Date.parse(latest) < Date.parse(earliest)
+    || basis.length === 0 || basis.some(b => !text(b.role) || !count(b.usual_s) || !count(b.samples))) {
+    return { state: 'unknown', reason: 'the runtime\'s estimate could not be read' }
+  }
+  return { state: 'estimated', earliest, latest, reason, past_usual: strings(r.past_usual),
+    basis: basis.map(b => ({ role: text(b.role), task_class: text(b.task_class), usual_s: b.usual_s as number, samples: b.samples as number })) }
+}
 export function parseRuntimeProgress(v: unknown): RuntimeProgress {
   const r = record(v), needs = record(r.needs_you), recent = record(r.recent)
   return {
@@ -65,7 +88,7 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
       truncated: typeof needs.truncated === 'boolean' ? needs.truncated : undefined },
     work: { missions: records(record(r.work).missions).map(m => ({ mission_id: text(m.mission_id),
       title: text(m.title), goal: text(m.goal), state: text(m.state), status: text(m.status), reason: text(m.reason),
-      since: text(m.since), deadline_at: text(m.deadline_at), eta: record(m.eta),
+      since: text(m.since), deadline_at: text(m.deadline_at), eta: parseMissionEta(m.eta),
       next_steps: Array.isArray(m.next_steps) ? m.next_steps : [], waiting_on: text(m.waiting_on),
       waiting_roles: strings(m.waiting_roles), tasks: records(m.tasks).map(parseRuntimeTask) })) },
     recent: { tasks: records(recent.tasks), failed_attempts: records(recent.failed_attempts) },

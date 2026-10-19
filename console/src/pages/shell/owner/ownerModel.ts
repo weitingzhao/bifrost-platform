@@ -1,8 +1,8 @@
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
-import type { RuntimeProgress } from '@/api/agentRuntime'
+import type { MissionEta, RuntimeProgress } from '@/api/agentRuntime'
 import { record, text } from '@/api/agentRuntime'
 import type { RuntimeRound } from '@/api/agentRuntimePlan'
-import type { ProgressPool } from '@/api/agentProgressExtra'
+import type { PoolView } from '@/api/agentRuntimePools'
 import { annotateExpectedNeutralAlerts, mapAlerts } from '@/lib/observability/alertMapping'
 import type { MappedAlert } from '@/lib/observability/types'
 import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/mergedNeedsYou'
@@ -263,19 +263,66 @@ export function planRows(round: RuntimeRound | undefined): PlanRow[] {
   })
 }
 
-export type QuotaRow = { id: string; name: string; used: number | null; readAt: number | null; stale: boolean; tone: Tone }
+/** One vendor pool as Work and Progress show it, from GET /agentrt/pools (2.5 G7 A): what was read and when. */
+export type PoolRow = {
+  id: string; name: string; used: number | null; readAt: string | null
+  /** Why the reading is old ("" while it is current): a reading is shown with its time and marked old, never taken as now. */
+  old: string; tone: Tone; cooling: boolean; cooldownUntil: string | null
+}
 
-/** A pool read more than a day ago is stale: shown grey, never red. */
-export const QUOTA_STALE_MS = 24 * 3600 * 1000
+/** How long a reading is current: a day, or a short window's five hours (store.WindowLength). */
+const READING_CURRENT_MS: Record<PoolView['window'], number> = { short: 5 * 3600_000, weekly: 24 * 3600_000, monthly: 24 * 3600_000 }
 
-export function quotaRows(pools: readonly ProgressPool[] | undefined, now: number): QuotaRow[] {
-  return (pools ?? []).filter(p => !p.sublimit).map((pool, i) => {
-    const readAt = pool.read_at != null && pool.read_at > 0 ? pool.read_at * 1000 : null
-    const used = typeof pool.used === 'number' && Number.isFinite(pool.used) ? pool.used : null
-    const stale = readAt == null || now - readAt > QUOTA_STALE_MS
-    const tone: Tone = stale || used == null ? 'muted' : used >= 90 ? 'fail' : used >= 60 ? 'warn' : 'ok'
-    return { id: pool.id || `pool-${i}`, name: [pool.vendor, pool.label].filter(Boolean).join(' · ') || 'Pool', used, readAt, stale, tone }
+export function poolRows(pools: readonly PoolView[], now: number): PoolRow[] {
+  return pools.map(p => {
+    const used = p.used_fraction === null ? null : Math.round(p.used_fraction * 1000) / 10
+    const read = p.measured_at === null ? NaN : Date.parse(p.measured_at)
+    // The ledger's figures are counted here, not read from the vendor; only a reading can be old.
+    const old = used === null || !Number.isFinite(read) ? ''
+      : p.resets_at !== null && Date.parse(p.resets_at) <= now ? 'its window has reset since it was read'
+      : now - read > READING_CURRENT_MS[p.window] ? `read more than ${p.window === 'short' ? '5 hours' : 'a day'} ago` : ''
+    const tone: Tone = p.cooling ? 'fail' : used === null || old ? 'muted' : used >= 90 ? 'fail' : used >= 60 ? 'warn' : 'ok'
+    return { id: p.vendor_pool_id, name: [p.tool, p.window, p.account === 'owner' ? '' : p.account].filter(Boolean).join(' · '), used,
+      readAt: p.measured_at, old, tone, cooling: p.cooling, cooldownUntil: p.cooldown_until }
   })
+}
+
+/** A time of day, with the date when it is not today. */
+export function clockTime(ms: number, now: number): string {
+  const d = new Date(ms)
+  const hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+  return d.toDateString() === new Date(now).toDateString() ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`
+}
+
+function span(ms: number): string {
+  const m = Math.max(1, Math.round(ms / 60_000))
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`
+}
+
+/** A usual time to the second under an hour: "1 min 40 s". */
+function usual(s: number): string {
+  if (s < 60) return `${s} s`
+  if (s < 3600) return `${Math.floor(s / 60)} min${s % 60 ? ` ${s % 60} s` : ''}`
+  return `${Math.floor(s / 3600)} h${Math.floor((s % 3600) / 60) ? ` ${Math.floor((s % 3600) / 60)} min` : ''}`
+}
+
+/** When a goal should be done, as a range of local times and how far off; or that it is unknown, and why. */
+export function etaLine(eta: MissionEta, now: number): string {
+  if (eta.state === 'unknown') return `Done by: unknown — ${eta.reason}`
+  const lo = Date.parse(eta.earliest), hi = Date.parse(eta.latest)
+  if (hi <= now) return `Expected by ${clockTime(hi, now)}; that time has passed`
+  if (lo <= now) return `Expected by ${clockTime(hi, now)}, within ${span(hi - now)}`
+  const range = clockTime(lo, now) === clockTime(hi, now) ? clockTime(hi, now) : `${clockTime(lo, now)}–${clockTime(hi, now)}`
+  return `Expected ${range}, in ${span(lo - now)}${hi - lo >= 60_000 ? ` to ${span(hi - now)}` : ''}`
+}
+
+/** What an estimate stands on: each role and task class with its usual time and how many accepted attempts gave it. */
+export function etaBasis(eta: MissionEta): string[] {
+  if (eta.state === 'unknown') return []
+  return [
+    ...eta.basis.map(b => `${b.role} ${b.task_class || 'tasks'}: usually ${usual(b.usual_s)}, from ${plural(b.samples, 'accepted attempt')} in 30 days`),
+    ...(eta.past_usual.length ? [`${plural(eta.past_usual.length, 'task')} already past 1.5 times its usual time: ${eta.past_usual.join(', ')}`] : []),
+  ]
 }
 
 export type DataTile = { name: string; tone: Tone; state: string; figure: string; detail: string; href: string }

@@ -1,12 +1,11 @@
 import { useContext, useRef, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@bifrost/ui'
-import { fetchPools, recordPoolReading } from '@/api/agentRuntimePools'
+import { POOLS_QUERY_KEY, fetchPools, recordPoolReading } from '@/api/agentRuntimePools'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { Card } from './OwnerParts'
 import { ago } from './ownerModel'
 
-const POOLS_KEY = ['agent-runtime-pools']
 const KNOWN_POOLS = ['codex:owner:short', 'codex:owner:weekly', 'claude:owner:short', 'claude:owner:weekly', 'cursor:owner:monthly']
 const localTime = (at: string | null) => at ? new Date(at).toLocaleString() : 'unknown'
 const inputClass = 'min-h-11 min-w-0 w-full max-w-full rounded border border-[var(--card-border)] bg-[var(--control-fill)] px-2 text-base'
@@ -16,7 +15,7 @@ export function OwnerQuota({ now }: { now: number }) {
   const owner = auth != null && !auth.capsLoading && !auth.capsError && auth.canAdmin
   const client = useQueryClient()
   // This card mounts only in the System entry; unmounting removes its polling observer.
-  const query = useQuery({ queryKey: POOLS_KEY, queryFn: ({ signal }) => fetchPools(signal), refetchInterval: 30_000 })
+  const query = useQuery({ queryKey: POOLS_QUERY_KEY, queryFn: ({ signal }) => fetchPools(signal), refetchInterval: 30_000 })
   const [pool, setPool] = useState(KNOWN_POOLS[0])
   const [percent, setPercent] = useState('')
   const [reset, setReset] = useState('')
@@ -36,7 +35,7 @@ export function OwnerQuota({ now }: { now: number }) {
       await recordPoolReading(pool, fraction, reset ? new Date(reset).toISOString() : undefined)
       // a form left open overnight must not send yesterday's reset again (review 281 C1)
       setPercent(''); setReset(''); setSaved(true)
-      await client.invalidateQueries({ queryKey: POOLS_KEY })
+      await client.invalidateQueries({ queryKey: POOLS_QUERY_KEY })
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not record reading.') }
     finally { busy.current = false; setPending(false) }
   }

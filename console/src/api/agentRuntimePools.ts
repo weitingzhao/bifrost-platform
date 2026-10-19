@@ -2,6 +2,9 @@ import { authedFetch } from '@/api/client'
 import { record, text } from '@/api/agentRuntime'
 import { signInSafeError } from '@/lib/signInError'
 
+/** The query key every reader of GET /pools shares: System's card, Work's and Progress's summaries. */
+export const POOLS_QUERY_KEY = ['agent-runtime-pools'] as const
+
 export type PoolView = {
   vendor_pool_id: string; tool: string; account: string; window: 'short' | 'weekly' | 'monthly'
   used_fraction: number | null; resets_at: string | null; measured_at: string | null

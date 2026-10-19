@@ -7,6 +7,8 @@ vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => null }))
 import runtimeFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import boardFixture from './fixtures/sample-progress-w62.json'
+import eventsFixture from '@/api/__fixtures__/agentrt-events-across.testdb.json'
+import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import questionFixture from '../../../../../../api/internal/questions/testdata/contract/question-open.json'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { parseRuntimeProgress, parseRuntimeTask } from '@/api/agentRuntime'
@@ -45,7 +47,10 @@ function mockSources(fail = '') {
     if (url.includes('/self-health')) return json({ overall: 'ok', probes: [] })
     if (url.includes('/checklist/signals')) return json({ signals: [] })
     if (url.includes('/telemetry/alerts')) return json({ alerts: [] })
-    if (url.includes('/agentrt/events')) return json([])
+    if (url.includes('/agentrt/events?stream=')) return json([])
+    if (url.includes('/agentrt/events?')) return json(eventsFixture)
+    if (url.includes('/agentrt/pools')) return json(poolsFixture)
+    if (url.includes('/api/v1/releases')) return json({ status: {}, records: [] })
     throw new Error(`Unexpected URL ${url}`)
   }))
 }
@@ -73,7 +78,7 @@ describe('one Needs you list', () => {
     expect(screen.queryByText(boardFixture.owner_now[0]!.actions[0]!.text)).not.toBeInTheDocument()
     expect(screen.queryByText('Already an approval')).not.toBeInTheDocument()
     const blocks = Array.from(screen.getByTestId('merged-progress').children)
-    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Goals', 'Overview', 'Coordinator', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
     const preview = within(blocks[0] as HTMLElement)
     expect(preview.getAllByRole('listitem')).toHaveLength(3)
     expect(preview.getByRole('link', { name: /Where is the quota/ })).toHaveAttribute('href', `#questions?id=${question.id}`)
@@ -96,35 +101,52 @@ describe('one Needs you list', () => {
   })
 })
 
-describe('whose move (A8)', () => {
+describe('whose move (A8), from the runtime alone (2.5 slice 4)', () => {
   const zero = { state: 'known', count: 0 } as const
   const runtime = parseRuntimeProgress({ ...runtimeFixture, live: [], work: { missions: [] } })
-  const board = { coordinator: { state: 'idle' } }
   it('is the Owner when a complete list has requests, before any agent or coordinator', () => {
-    expect(whoseMove({ state: 'known', count: 1 }, runtime, { coordinator: { state: 'working' } })).toBe("Owner's move")
-    expect(whoseMove({ state: 'known', count: 1 }, runtime, null)).toBe("Owner's move")
+    expect(whoseMove({ state: 'known', count: 1 }, runtime)).toBe("Owner's move")
+    expect(whoseMove({ state: 'known', count: 1 }, parseRuntimeProgress({ live: [{ attempt_id: 'a' }] }))).toBe("Owner's move")
   })
   it('is the agents when an attempt is live', () => {
     const live = parseRuntimeProgress({ live: [{ attempt_id: 'a' }] })
-    expect(whoseMove(zero, live, board)).toBe("Agents' move")
+    expect(whoseMove(zero, live)).toBe("Agents' move")
   })
   it.each(['proposed', 'ready', 'leased', 'running', 'submitted', 'verifying', 'rework'])('is the agents when a task is %s', state => {
     const withTask = parseRuntimeProgress({ work: { missions: [{ tasks: [{ state }] }] } })
-    expect(whoseMove(zero, withTask, board)).toBe("Agents' move")
+    expect(whoseMove(zero, withTask)).toBe("Agents' move")
   })
   it.each(['accepted', 'blocked', 'cancelled'])('is not the agents when the only task is %s', state => {
     const withTask = parseRuntimeProgress({ work: { missions: [{ tasks: [{ state }] }] } })
-    expect(whoseMove(zero, withTask, board)).toBe('All done')
+    expect(whoseMove(zero, withTask)).toBe('All done')
   })
-  it('is the coordinator when working, then all done when nothing is left', () => {
-    expect(whoseMove(zero, runtime, { coordinator: { state: 'working' } })).toBe("Coordinator's move")
-    expect(whoseMove(zero, runtime, { coordinator: { doing: 'Reviewing the implementation' } })).toBe("Coordinator's move")
-    expect(whoseMove(zero, runtime, board)).toBe('All done')
+  it('is the coordinator when a goal waits on it, then all done when nothing is left', () => {
+    // M-3 of the STG fixture is blocked and waits on the coordinator; with its queued and checked tasks taken out, nothing is the agents'.
+    const stg = parseRuntimeProgress(runtimeFixture)
+    const waiting = { ...stg, live: [], work: { missions: stg.work.missions.filter(m => m.waiting_on === 'coordinator').map(m => ({ ...m, tasks: m.tasks.filter(t => !['proposed', 'ready', 'leased', 'running', 'submitted', 'verifying', 'rework'].includes(t.state)) })) } }
+    expect(waiting.work.missions.length).toBeGreaterThan(0)
+    expect(whoseMove(zero, waiting)).toBe("Coordinator's move")
+    expect(whoseMove(zero, runtime)).toBe('All done')
   })
   it('is unknown on a failed or loading source even with an Owner request', () => {
-    expect(whoseMove({ state: 'known', count: 1 }, runtime, board, true)).toBe('Unknown')
-    expect(whoseMove({ state: 'loading' }, runtime, board)).toBe('Unknown')
-    expect(whoseMove(zero, undefined, board)).toBe('Unknown')
+    expect(whoseMove({ state: 'known', count: 1 }, runtime, true)).toBe('Unknown')
+    expect(whoseMove({ state: 'loading' }, runtime)).toBe('Unknown')
+    expect(whoseMove(zero, undefined)).toBe('Unknown')
+  })
+})
+
+describe('Progress with the board stopped (2.5 slice 4)', () => {
+  it('builds History from the runtime\'s events and shows no board lines', async () => {
+    mockSources('/agent/progress'); wrap()
+    const history = screen.getByRole('region', { name: 'History' })
+    expect(await within(history).findByText('Host h1 had a report refused: it named a local path (H8)')).toBeInTheDocument()
+    expect(within(history).getByText('An executor failed t_01M5B8AZ5TQWK0H9F14562Y9XX three times in a row; it is not offered that task again')).toBeInTheDocument()
+    for (const gone of ['Done today', 'Activity', 'Finished works', 'Coordinator works']) expect(screen.queryByText(gone)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Coordinator' })).not.toBeInTheDocument()
+    expect(within(history).queryByText(/Board updated/)).not.toBeInTheDocument()
+    expect(screen.getByTestId('merged-progress')).not.toHaveTextContent('✎')
+    const overview = screen.getByRole('region', { name: 'Overview' })
+    expect(await within(overview).findByText('claude · weekly')).toBeInTheDocument()
   })
 })
 

@@ -1,4 +1,5 @@
 import { Bar, Card, Dot, Stat } from './OwnerParts'
+import { OwnerCapabilities } from './OwnerCapabilities'
 import { OwnerQuota } from './OwnerQuota'
 import { ago, plural, type Tone } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
@@ -10,7 +11,7 @@ function nodeTone(status: string, mode: string | undefined): Tone {
   return status === 'Ready' ? 'ok' : 'fail'
 }
 
-/** System: alerts that count, the release lane (held? delivering?), the nodes. */
+/** System: alerts that count, the release lane (held? delivering?), the quota and capability scores, the nodes. */
 export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
   const { alerts, lane, nodes, nodeCount, now } = data
   const yoursCritical = alerts?.yours.filter(r => r.tone === 'fail').length ?? 0
@@ -46,7 +47,10 @@ export function OwnerSystem({ data }: { data: OwnerConsoleData }) {
         </ul>
       </Card>
     </div>
-    <OwnerQuota now={now} />
+    <div className="grid gap-4 @3xl:grid-cols-2">
+      <OwnerQuota now={now} />
+      <OwnerCapabilities now={now} />
+    </div>
     <Card label="Nodes" title={nodeCount ? `Nodes · ${nodeCount.ready} of ${nodeCount.total} ready${nodeCount.standby ? `, ${nodeCount.standby} on standby` : ''}` : 'Nodes'} more={{ href: '#infrastructure', text: 'Infrastructure' }}>
       {data.nodesError && <p role="alert" className="m-0 text-sm">Nodes could not be read: {data.nodesError}</p>}
       {!data.nodesError && nodes.length === 0 && <p className="m-0 text-sm text-muted-foreground">No nodes reported yet.</p>}
