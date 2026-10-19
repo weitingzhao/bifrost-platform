@@ -96,7 +96,14 @@ func lastComputation(ctx context.Context, tx pgx.Tx) (*computation, error) {
 			c.expires = &t
 		}
 	}
-	l, _ = body["samples"].([]any)
+	c.samples = samplesOf(body)
+	return c, nil
+}
+
+// samplesOf reads the samples a capability_scored body carries.
+func samplesOf(body map[string]any) []scoreLine {
+	var out []scoreLine
+	l, _ := body["samples"].([]any)
 	for _, v := range l {
 		m, ok := v.(map[string]any)
 		if !ok {
@@ -104,10 +111,10 @@ func lastComputation(ctx context.Context, tx pgx.Tx) (*computation, error) {
 		}
 		str := func(k string) string { s, _ := m[k].(string); return s }
 		core, _ := m["core"].(bool)
-		c.samples = append(c.samples, scoreLine{executor: str("executor"), provider: str("provider"), model: str("model"),
+		out = append(out, scoreLine{executor: str("executor"), provider: str("provider"), model: str("model"),
 			job: str("job"), class: str("class"), core: core, attempts: int(numberOf(m["attempts"])), firstPass: int(numberOf(m["first_pass"]))})
 	}
-	return c, nil
+	return out
 }
 
 func numberOf(v any) float64 {

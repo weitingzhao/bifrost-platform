@@ -46,7 +46,8 @@ type competence struct {
 
 // readCompetence reads the thresholds the routing rules in force set, by
 // tenant, and when any does, the samples of the latest in-job computation
-// (its event's, scores.go).
+// (its event's, scores.go) and of each executor's latest benchmark run
+// (benchmark.go); competenceOf sums those of a candidate.
 func readCompetence(ctx context.Context, tx pgx.Tx) (map[string]threshold, []scoreLine, error) {
 	rows, err := tx.Query(ctx, `SELECT DISTINCT rule_id FROM agentrt.rule WHERE rule_id LIKE 'routing:%' ORDER BY 1`)
 	if err != nil {
@@ -72,11 +73,16 @@ func readCompetence(ctx context.Context, tx pgx.Tx) (map[string]threshold, []sco
 	if len(out) == 0 {
 		return out, nil, nil
 	}
+	var lines []scoreLine
 	last, err := lastComputation(ctx, tx)
-	if err != nil || last == nil {
-		return out, nil, err
+	if err != nil {
+		return nil, nil, err
 	}
-	return out, last.samples, nil
+	if last != nil {
+		lines = last.samples
+	}
+	bench, err := latestBenchmarks(ctx, tx)
+	return out, append(lines, bench...), err
 }
 
 // competenceOf is task c's step ⑤ input, or nil when its tenant's routing

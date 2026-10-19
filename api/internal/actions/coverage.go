@@ -87,6 +87,9 @@ func init() {
 	exempt("agent runtime vendor pools (W-31 2.4 slice ①): the Owner's (admin's) reading of a vendor quota window from its usage page; the store records it with its event in one transaction, and at most it holds work back from that account or lets it through again; not a cluster write",
 		"POST /api/v1/agentrt/pools/{id}/reading",
 	)
+	exempt("agent runtime benchmark runs (W-31 2.4 slice ⑤): an agentd token hands in, for the host it is bound to, the outcome of the question set it ran with one executor; the store records it with its event in one transaction, and at most it changes which candidates routing's competence step lets through; not a cluster write",
+		"POST /api/v1/agentrt/benchmark",
+	)
 	exempt("unclassified by LANE-B1: evidence, queue, or checklist — not a cluster write",
 		"POST /api/v1/audit/append",
 		"POST /api/v1/code-health/report",

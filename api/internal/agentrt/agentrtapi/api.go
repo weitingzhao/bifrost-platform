@@ -97,6 +97,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(agentd, cfg).Post("/claim", a.claim)
 		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
+		r.With(agentd, cfg).Post("/benchmark", a.recordBenchmark)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
 		r.With(propose, cfg).Post("/missions", a.proposeMission)

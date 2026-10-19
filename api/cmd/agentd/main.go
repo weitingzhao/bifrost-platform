@@ -19,7 +19,9 @@
 //	AGENTD_ROOT            workspaces, registry and lock; default ~/agent-work/agentd
 //
 // The first argument "launch" makes it the launcher of one executor, and
-// "verify" the deterministic executor; neither is for people.
+// "verify" the deterministic executor; neither is for people. "bench" runs
+// the benchmark question set with one executor instead of the daemon
+// (bench.go).
 package main
 
 import (
@@ -55,6 +57,8 @@ func main() {
 			os.Exit(agentd.RunVerify(os.Args[2:]))
 		case agentd.SetupArg:
 			os.Exit(agentd.RunSetup(os.Args[2:]))
+		case "bench":
+			os.Exit(runBench(os.Args[2:]))
 		}
 	}
 	if err := run(); err != nil {

@@ -153,6 +153,19 @@ func (c *Client) post(ctx context.Context, path string, body map[string]any, out
 	return c.call(ctx, http.MethodPost, path, bytes.NewReader(b), nil, out)
 }
 
+// Benchmark hands in a benchmark run (agentd bench) as this host and returns
+// the platform's record of it.
+func (c *Client) Benchmark(ctx context.Context, m BenchMeta, results []BenchResult) (map[string]any, error) {
+	body := map[string]any{"run_id": m.RunID, "executor": m.Executor, "provider": m.Provider, "questions_sha256": m.Questions,
+		"started_at": m.StartedAt.UTC().Format(time.RFC3339Nano), "results": results}
+	if m.Model != "" {
+		body["model"] = m.Model
+	}
+	var out map[string]any
+	_, err := c.post(ctx, "/benchmark", body, &out)
+	return out, err
+}
+
 // Claim asks for one attempt; nil when the platform had none for the whole
 // long poll (204).
 func (c *Client) Claim(ctx context.Context, freeSlots int, tools []Tool) (*Claimed, error) {
