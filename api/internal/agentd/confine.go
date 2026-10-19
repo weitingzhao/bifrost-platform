@@ -168,7 +168,7 @@ func cursorDataDir(root, out string) string {
 		return filepath.Join(out, "cursor")
 	}
 	sum := sha256.Sum256([]byte(filepath.Clean(out)))
-	return filepath.Join(root, "s", hex.EncodeToString(sum[:])[:12])
+	return filepath.Join(root, "s", hex.EncodeToString(sum[:])[:24])
 }
 
 // cursorPathMax is the longest base cursor-agent takes for its sockets'
@@ -468,6 +468,7 @@ func codexArgv(a *Attempt, codex string, argv []string) string {
 // may have left a link in its place (review 300 A1). It may run again for
 // the same attempt (a restart): what is gone stays gone.
 func afterExecutor(executor, codexHome, root, out string, logf func(format string, args ...any)) {
+	removeCursorData(root, out, logf)
 	r, err := openWithin(root, out)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
@@ -482,19 +483,35 @@ func afterExecutor(executor, codexHome, root, out string, logf func(format strin
 			logf("agentd: codex's login of %s is not kept: %v", out, err)
 		}
 	}
-	for _, rel := range []string{"tmp", "home/.npm", "home/.cache"} {
+	// home/.local: what cursor's updater downloads into the attempt's home
+	// (review 360).
+	for _, rel := range []string{"tmp", "home/.npm", "home/.cache", "home/.local"} {
 		if err := removeIn(r, rel); err != nil {
 			logf("agentd: %s/%s: %v", out, rel, err)
 		}
 	}
-	// cursor's data directory, outside the output, through root as well.
-	if d := cursorDataDir(root, out); root != "" {
-		if s, serr := openWithin(root, filepath.Dir(d)); serr == nil {
-			if err := removeIn(s, filepath.Base(d)); err != nil {
-				logf("agentd: %s: %v", d, err)
-			}
-			_ = s.Close()
-		}
+}
+
+// removeCursorData removes cursor's data directory for the attempt whose
+// output is out, through agentd's directory root (links on the way not
+// followed), whether or not the output is still there; none is fine. It runs
+// once the attempt's group is gone, or when the attempt never started.
+func removeCursorData(root, out string, logf func(format string, args ...any)) {
+	if root == "" || out == "" {
+		return
+	}
+	d := cursorDataDir(root, out)
+	s, err := openWithin(root, filepath.Dir(d))
+	if errors.Is(err, fs.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		logf("agentd: %s: %v", filepath.Dir(d), err)
+		return
+	}
+	defer func() { _ = s.Close() }()
+	if err = removeIn(s, filepath.Base(d)); err != nil {
+		logf("agentd: %s: %v", d, err)
 	}
 }
 

@@ -209,6 +209,7 @@ func TestCheckPins(t *testing.T) {
 				bad["another report"] = replace([]string{"-o", filepath.Join(a.Out, "report.md")}, []string{"-o", "/home/u/r.md"})
 			case "exec:cursor":
 				bad["refusals not looked for after the setup"] = replace([]string{"--refuse", ".cursor/hooks.json"}, nil)
+				bad["no CURSOR_DATA_DIR"] = func(s Spawn) Spawn { s.Env = withoutEnv(s.Env, "CURSOR_DATA_DIR"); return s }
 				if c.effect != "branch" {
 					bad["not in ask mode"] = replace([]string{"--mode", "ask"}, nil)
 				}
@@ -715,9 +716,12 @@ func TestCursorDataDirIsShortAndWalled(t *testing.T) {
 	sp, err := cursorExecutor(nil)(a)
 	d := cursorDataDir(root, out)
 	if len(filepath.Join(d, "projects")) > cursorPathMax {
+		// Inside agentd's wall (/tmp refused, a long TMPDIR): only the
+		// refusal can be checked here; the host's paths are checked above.
 		if err == nil {
 			t.Fatalf("cursor starts with %s, too long for its sockets", d)
 		}
+		t.Log("no short writable root here: the builder's refusal checked, its success not")
 		return
 	}
 	must(t, err)
@@ -746,6 +750,26 @@ func TestCursorDataDirIsShortAndWalled(t *testing.T) {
 	if _, serr := os.Lstat(d); !errors.Is(serr, os.ErrNotExist) {
 		t.Fatalf("%s is still there: %v", d, serr)
 	}
+	// The output gone, or a link: the data directory still goes (review 360
+	// B1); a link where its parent should be makes cursor not start.
+	must(t, os.MkdirAll(d, 0o700))
+	must(t, os.RemoveAll(out))
+	afterExecutor("exec:cursor", "", root, out, t.Logf)
+	if _, serr := os.Lstat(d); !errors.Is(serr, os.ErrNotExist) {
+		t.Fatalf("%s outlived its output: %v", d, serr)
+	}
+	must(t, os.MkdirAll(out, 0o700))
+	elsewhere := t.TempDir()
+	must(t, os.RemoveAll(filepath.Dir(d)))
+	must(t, os.Symlink(elsewhere, filepath.Dir(d)))
+	if _, err = cursorExecutor(nil)(a); err == nil {
+		t.Fatal("cursor's data directory made through a link")
+	}
+	afterExecutor("exec:cursor", "", root, out, t.Logf)
+	if entries, _ := os.ReadDir(elsewhere); len(entries) != 0 {
+		t.Fatalf("made or removed behind the link: %v", entries)
+	}
+	must(t, os.Remove(filepath.Dir(d)))
 	// A root too long for it: cursor does not start.
 	long := filepath.Join(root, strings.Repeat("x", 80))
 	must(t, os.MkdirAll(filepath.Join(long, "a1.out"), 0o700))

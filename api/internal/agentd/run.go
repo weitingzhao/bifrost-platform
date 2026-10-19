@@ -129,6 +129,7 @@ func (d *Daemon) takeHost(ctx context.Context, cl *Claimed, alone bool) (func(),
 // A stop or a lost lease that came while it was prepared takes its own path
 // first, as it would at the launch (review 279 B).
 func (d *Daemon) failBefore(ctx context.Context, a *Attempt, ws *Workspace, e *Entry, l *lease, err error) (Outcome, error) {
+	removeCursorData(d.Root, a.Out, d.logf) // made by cursor's builder, never used (review 360 B1)
 	switch {
 	case ctx.Err() != nil:
 		return Outcome{}, err
@@ -432,6 +433,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	})
 	if err != nil {
 		if entry.PGID == 0 {
+			removeCursorData(d.Root, a.Out, d.logf) // nothing started (review 360 B1)
 			return Outcome{}, err
 		}
 		switch {
