@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { text } from '@/api/agentRuntime'
+import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@/api/agentRuntimeBus'
 import { fetchRuntimeGoal } from '@/api/agentRuntimeGoals'
 import { operatorToken } from '@/api/client'
 import { fetchClusterPostgresBackupStatus, fetchDataFreshness } from '@/api/cluster'
@@ -66,6 +67,10 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
     refetchInterval: q => goalRefreshMs(text(q.state.data?.mission.state)) })
 
+  // What the coordinating thread is doing: its latest note in the Owner's mailbox (2.5 G3).
+  const coordinatorQ = useQuery({ queryKey: ['agent-runtime-thread', COORDINATOR_THREAD, 'note'], queryFn: ({ signal }) => fetchCoordinatorNote(signal),
+    enabled: blocks.work && hasToken, retry: false, refetchInterval: 60_000 })
+
   const core = nodes.filter(n => n.elastic_mode !== 'standby')
   // An empty node list is a read that found nothing (no cluster access), not a cluster with no nodes.
   const nodeCount = nodes.length > 0 ? { ready: core.filter(n => n.status === 'Ready').length, total: core.length, standby: standby.length } : null
@@ -120,6 +125,11 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     runtimeError: needsYou.runtimeQuery.isError,
     lastGoal: text(lastGoalQ.data?.mission.goal) || text(lastGoalQ.data?.mission.title),
     last: lastResult(work, current(lastGoalQ) ? text(lastGoalQ.data?.mission.state) : ''),
+    coordinator: !hasToken ? { state: 'error' as const, error: COORDINATOR_SIGN_IN }
+      : coordinatorQ.isError ? { state: 'error' as const, error: errorText(coordinatorQ.error) ?? 'Request failed' }
+      : coordinatorQ.isPaused ? { state: 'error' as const, error: 'offline' }
+      : coordinatorQ.data === undefined ? { state: 'loading' as const }
+      : { state: 'read' as const, note: coordinatorQ.data },
     board,
     boardStale: needsYou.progressQuery.data?.stale === true,
     plan: planRows(board?.roadmap?.round),

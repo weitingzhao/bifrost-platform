@@ -22,9 +22,17 @@ export function parseChiefThread(value: unknown): ChiefThread {
 }
 /** What the message routes answer a browser not signed in as the Owner (400, 401, 403). */
 export const SIGN_IN_REFUSED = 'Connect with the Owner token to talk to the chief of staff.'
+export const COORDINATOR_SIGN_IN = 'Connect with the Owner token to read the coordinator’s notes.'
+/**
+ * The coordinating thread (2.5 G3): it tells the Owner what it is doing and what is next as a note
+ * in the Owner's mailbox (send_message to owner, kind note), and Work shows the latest one. Change it when
+ * the coordinating thread changes.
+ */
+export const COORDINATOR_THREAD = import.meta.env.VITE_COORDINATOR_THREAD || 'thread:local_accccb4e-410c-4b5f-9f1b-b54c6915dc9a'
 class ActionsUnavailable extends Error {}
 async function busError(prefix: string, response: Response, token = '') {
   if (prefix === 'Messages' && [400, 401, 403].includes(response.status)) return new Error(SIGN_IN_REFUSED)
+  if (prefix === 'Coordinator' && [400, 401, 403].includes(response.status)) return new Error(COORDINATOR_SIGN_IN)
   const r = record(await response.json().catch(() => ({})))
   // Only a platform without redis-agents keeps no actions; a 503 of a runtime
   // not connected yet is an error to show (review of 4a, C1).
@@ -54,5 +62,19 @@ export function sendChiefMessage(body: string) {
 }
 export async function fetchChiefThread(signal?: AbortSignal) {
   return parseChiefThread(await request('Messages', '/messages/thread?with=seat:chief_of_staff&limit=50', { signal }))
+}
+export type CoordinatorNote = { body: string; at: string }
+/** The latest note from `from` in a conversation read oldest first, or null. */
+export function latestNote(thread: ChiefThread, from: string): CoordinatorNote | null {
+  for (let i = thread.messages.length - 1; i >= 0; i--) {
+    const m = thread.messages[i]
+    if (m.from === from && m.kind === 'note') return { body: m.body, at: m.created_at }
+  }
+  return null
+}
+/** The coordinating thread's latest note to the Owner, among the latest 50 messages between them. */
+export async function fetchCoordinatorNote(signal?: AbortSignal, thread = COORDINATOR_THREAD) {
+  const read = parseChiefThread(await request('Coordinator', `/messages/thread?with=${encodeURIComponent(thread)}&limit=50`, { signal }))
+  return latestNote(read, thread)
 }
 export const ackMessages = (ids: string[]) => request('Messages', '/messages/ack', { method: 'POST', body: JSON.stringify({ message_ids: ids }) })

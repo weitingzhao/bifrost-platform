@@ -9,10 +9,20 @@ const ARCH = { done: 'landed', part: 'part', none: 'none' } as const
  * Work: running, stuck and open goals, the last finished and what is next; the crew, host by host;
  * the plan as bars; the quota. The last run step by step, done → now → next and the threads are on their detail pages.
  */
+/** The coordinating thread's latest note to the Owner, from the mailbox (2.5 G3). */
+function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator']; now: number }) {
+  if (view.state === 'loading') return <span className="text-sm text-muted-foreground">Reading the mailbox…</span>
+  if (view.state === 'error') return <span role="alert" className="break-words text-sm text-muted-foreground">Coordinator note unavailable: {view.error}</span>
+  if (view.note == null) return <span className="text-sm text-muted-foreground">No note from the coordinator.</span>
+  return <>
+    <span className="whitespace-pre-line break-words">{view.note.body}</span>
+    <span className="text-xs text-muted-foreground" title={view.note.at}>Note {ago(view.note.at, now)}</span>
+  </>
+}
+
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {
   const { work, board, plan, quota, now } = data
   const arch = (['done', 'part', 'none'] as const).map(state => ({ state, n: data.arch.filter(r => r.state === state).length }))
-  const boardAt = board?.at ? new Date(board.at * 1000).toISOString() : undefined
   return <section aria-label="Work" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">Work</h2>
     <div className="grid gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
@@ -33,11 +43,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
         </div>
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Coordinator</span>
-          {board?.coordinator?.doing || board?.coordinator?.next
-            ? <>{board.coordinator.doing && <span className="break-words">{board.coordinator.doing}</span>}
-              {board.coordinator.next && <span className="break-words text-sm text-muted-foreground">Next: {board.coordinator.next}</span>}</>
-            : <span className="text-sm text-muted-foreground">No note from the coordinator.</span>}
-          <HandMark title={`Kept by hand by the coordinator thread${boardAt ? ` · ${boardAt}` : ''}${data.boardStale ? ' · stale' : ''}`} />
+          <CoordinatorNote view={data.coordinator} now={now} />
         </div>
       </Card>
       <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}

@@ -15,6 +15,8 @@ const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
 // The round the board publishes, when a test sets one (CUT-plan-import §6).
 const boardRound = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }))
+// The coordinating thread's note as the hook reads it from the mailbox (2.5 G3).
+const coordinatorView = vi.hoisted(() => ({ value: undefined as unknown }))
 
 function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
@@ -36,7 +38,8 @@ function fake(): OwnerConsoleData {
     work: { running: 0, stuck: 0, open: 0, lastAccepted: { mission: 'M-2', at: '2026-10-16T04:17:22Z', openState: '' } },
     last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
-    board: { coordinator: { doing: 'Owner console, first version', next: '2.3 inbox' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
+    coordinator: coordinatorView.value ?? { state: 'read', note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
+    board: { coordinator: { doing: 'Board text, not shown', next: '' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
     boardStale: false,
     plan: boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
     arch: [{ state: 'done', what: 'a', now: '' }, { state: 'part', what: 'b', now: '' }],
@@ -193,6 +196,29 @@ describe('Owner Console entries', () => {
       expect(plan).not.toHaveTextContent('✎ by hand')
     } finally {
       boardRound.value = undefined
+    }
+  })
+
+  it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {
+    show('#work')
+    const now = screen.getByRole('region', { name: 'Now' })
+    expect(now).toHaveTextContent('Owner console, first version')
+    expect(now).toHaveTextContent('Note 7 min ago')
+    expect(now).not.toHaveTextContent('Board text, not shown')
+    expect(now).not.toHaveTextContent('✎ by hand')
+  })
+
+  it.each([
+    [{ state: 'read', note: null }, 'No note from the coordinator.'],
+    [{ state: 'loading' }, 'Reading the mailbox…'],
+    [{ state: 'error', error: 'Connect with the Owner token to read the coordinator’s notes.' }, 'Coordinator note unavailable: Connect with the Owner token'],
+  ])('says what the coordinator card read: %j', (view, line) => {
+    coordinatorView.value = view
+    try {
+      show('#work')
+      expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent(line)
+    } finally {
+      coordinatorView.value = undefined
     }
   })
 
