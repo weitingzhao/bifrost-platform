@@ -114,9 +114,12 @@ func ProveWall(ctx context.Context, self, root string, env []string, codex strin
 // wall, configured as codexExecutor configures it (codexProofArgv); the check
 // in it must write its workspace and its temporary directory, and nothing
 // else: not the codex home beside them, not a file outside them, not /tmp;
-// and it must have a network namespace of its own with no route out, while
-// this process has a route (the control: on a host with no route the check
-// would prove nothing).
+// and it must be in a network namespace not the host's, where a connection
+// to a documentation address over IPv4 (192.0.2.1:443) and over IPv6
+// (2001:db8::1) is refused or unreachable, while this process can start the
+// IPv4 one (the control: on a host with no route the check would prove
+// nothing). That is what is proven of the network, not every route or
+// protocol (review 305 B).
 func proveCodex(ctx context.Context, codex, self, dir string, env []string) ([]string, error) {
 	ws, home, tmp, outside := filepath.Join(dir, "cx-ws"), filepath.Join(dir, "cx-home"), filepath.Join(dir, "cx-tmp"), filepath.Join(dir, "cx-outside")
 	for _, d := range []string{ws, home, tmp, outside, filepath.Join(home, ".codex")} {

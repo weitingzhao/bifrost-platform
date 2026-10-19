@@ -19,6 +19,10 @@ func TestAllowedEnv(t *testing.T) {
 	if strings.Join(got, ",") != "PATH=/bin,HOME=/h,LANG=C" {
 		t.Fatalf("env = %v", got)
 	}
+	// Only the absolute directories of PATH (review 305 A).
+	if got := AllowedEnv([]string{"PATH=.:/usr/bin::bin:/bin"}); strings.Join(got, ",") != "PATH=/usr/bin:/bin" {
+		t.Fatalf("env = %v", got)
+	}
 }
 
 func TestAgentExecutors(t *testing.T) {

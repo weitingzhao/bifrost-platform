@@ -35,16 +35,34 @@ var allowedEnv = map[string]bool{"PATH": true, "HOME": true, "USER": true, "LOGN
 	"LC_ALL": true, "LC_CTYPE": true, "TMPDIR": true, "TERM": true, "GOPATH": true, "GOCACHE": true, "GOMODCACHE": true,
 	"CODEX_HOME": true}
 
-// AllowedEnv keeps only the allowed variables of environ.
+// AllowedEnv keeps only the allowed variables of environ, and of PATH only
+// its absolute directories: an empty or relative entry is looked up from
+// whatever directory a command runs in, a checkout among them, so the same
+// PATH could find another program there (codex's node, review 305 A).
 func AllowedEnv(environ []string) []string {
 	out := []string{}
 	for _, kv := range environ {
-		k, _, _ := strings.Cut(kv, "=")
-		if allowedEnv[k] {
-			out = append(out, kv)
+		k, v, _ := strings.Cut(kv, "=")
+		if !allowedEnv[k] {
+			continue
 		}
+		if k == "PATH" {
+			kv = "PATH=" + absolutePath(v)
+		}
+		out = append(out, kv)
 	}
 	return out
+}
+
+// absolutePath is the absolute directories of a PATH, in order.
+func absolutePath(path string) string {
+	var dirs []string
+	for _, d := range filepath.SplitList(path) {
+		if filepath.IsAbs(d) {
+			dirs = append(dirs, d)
+		}
+	}
+	return strings.Join(dirs, string(filepath.ListSeparator))
 }
 
 // Prompt is what an agent executor is asked: the spec's text, and how the

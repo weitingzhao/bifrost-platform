@@ -590,3 +590,29 @@ func TestCodexCheckFindsNoSandbox(t *testing.T) {
 		}
 	}
 }
+
+// Review 305 A: codex is a wrapper whose interpreter PATH finds (npm's
+// "#!/usr/bin/env node"); a relative PATH entry would find another one in the
+// checkout, where the attempt runs. The spawn's PATH has none, so the
+// interpreter is the one the proof found.
+func TestCodexWrapperFindsTheTrustedInterpreter(t *testing.T) {
+	trusted, checkout, out := t.TempDir(), t.TempDir(), t.TempDir()
+	must(t, os.WriteFile(filepath.Join(trusted, "fakenode"), []byte("#!/bin/sh\necho trusted\n"), 0o755))
+	must(t, os.WriteFile(filepath.Join(trusted, "codex"), []byte("#!/usr/bin/env fakenode\n"), 0o755))
+	must(t, os.WriteFile(filepath.Join(checkout, "fakenode"), []byte("#!/bin/sh\necho checkout\n"), 0o755))
+	environ := []string{"PATH=.:" + trusted + ":/usr/bin:/bin"}
+	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: checkout, Out: out}
+	sp, err := Executors("/opt/agentd", environ, Secrets{})["exec:codex"](a)
+	must(t, err)
+	cmd := exec.Command(sp.Argv[0])
+	cmd.Env, cmd.Dir = sp.Env, sp.Dir
+	b, err := cmd.Output()
+	if err != nil || strings.TrimSpace(string(b)) != "trusted" {
+		t.Fatalf("the wrapper ran %q (%v)", b, err)
+	}
+	// The PATH the proof runs with (AllowedEnv) is the spawn's: it passes.
+	w := &Wall{Codex: filepath.Join(trusted, "codex"), Path: envValues(AllowedEnv(environ), "PATH")[0]}
+	if err = checkPins(w, "exec:codex", "/opt/agentd", a, nil, sp); err != nil {
+		t.Fatal(err)
+	}
+}
