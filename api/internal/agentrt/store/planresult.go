@@ -122,14 +122,14 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			if len(alerts) == 0 {
 				return nil
 			}
-			if err := ensureWriter(ctx, tx, Writer{Actor: Seat}, false); err != nil {
-				return err
+			if e := ensureWriter(ctx, tx, Writer{Actor: Seat}, false); e != nil {
+				return e
 			}
 			return tellOwnerOfAlerts(ctx, tx, t.mission, taskID, "", "planning mission "+t.mission, alerts)
 		}
 		refuse := func(why string) error {
-			if err := noteAlerts(); err != nil {
-				return err
+			if e := noteAlerts(); e != nil {
+				return e
 			}
 			var e error
 			did, e = refusePlan(ctx, tx, t, d, why)

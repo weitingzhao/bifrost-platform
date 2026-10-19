@@ -403,8 +403,8 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			return err
 		}
 		tell := func(why string) error {
-			_, _, err := answer(ctx, tx, to, kind, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
-			return err
+			_, _, e := answer(ctx, tx, to, kind, t, "I could not answer your message this time ("+why+"). Ask again, or make it a goal.")
+			return e
 		}
 		switch {
 		case (t.state == "blocked" || t.state == "cancelled") && sent:

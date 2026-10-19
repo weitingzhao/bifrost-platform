@@ -2,18 +2,15 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/seatproto"
 )
 
@@ -185,142 +182,6 @@ const (
 	snapFieldRunes = 300
 	snapMaxBytes   = 64 << 10
 )
-
-// planSnapshot is what the runtime knows now, for a planner (the five records
-// of WORKMODE §四 the runtime holds): the missions open besides this one and
-// their unfinished tasks, the latest decisions recorded, the standing
-// envelope in force and this mission's budget, the repositories the runtime
-// knows and their checks (a goal's plan names only the goal's: planSpec).
-// The fifth, the design and its principles, is in the spec's own text.
-func planSnapshot(ctx context.Context, tx pgx.Tx, mission string) (string, error) {
-	var b strings.Builder
-	var now time.Time
-	if err := tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
-		return "", err
-	}
-	fmt.Fprintf(&b, "Taken %s.\n\n### Missions open besides this one\n\n", now.UTC().Format(time.RFC3339))
-	rows, err := tx.Query(ctx, `SELECT mission_id, state, title, goal FROM agentrt.mission
-	  WHERE state IN ('proposed','awaiting_owner','active','paused') AND mission_id <> $1
-	  ORDER BY created_at DESC, mission_id LIMIT $2`, mission, snapMissions)
-	if err != nil {
-		return "", err
-	}
-	var open []string
-	for rows.Next() {
-		var id, state, title, goal string
-		if err = rows.Scan(&id, &state, &title, &goal); err != nil {
-			rows.Close()
-			return "", err
-		}
-		open = append(open, id)
-		fmt.Fprintf(&b, "- %s (%s): %s — %s\n", id, state, oneLineRunes(title, snapTitleRunes), oneLineRunes(goal, snapGoalRunes))
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return "", err
-	}
-	if len(open) == 0 {
-		b.WriteString("None.\n")
-	}
-	b.WriteString("\n### Their unfinished tasks\n\n")
-	rows, err = tx.Query(ctx, `SELECT mission_id, task_id, role, state, title FROM agentrt.task
-	  WHERE mission_id = ANY($1) AND state NOT IN ('accepted','rejected','cancelled')
-	  ORDER BY mission_id, created_at, task_id LIMIT $2`, open, snapTasks)
-	if err != nil {
-		return "", err
-	}
-	n := 0
-	for rows.Next() {
-		var m, id, role, state, title string
-		if err = rows.Scan(&m, &id, &role, &state, &title); err != nil {
-			rows.Close()
-			return "", err
-		}
-		n++
-		fmt.Fprintf(&b, "- %s %s (%s, %s): %s\n", m, id, role, state, oneLineRunes(title, snapTitleRunes))
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return "", err
-	}
-	if n == 0 {
-		b.WriteString("None.\n")
-	}
-	b.WriteString("\n### Latest decisions recorded (newest first)\n\n")
-	rows, err = tx.Query(ctx, `SELECT COALESCE(mission_id, ''), at, body_json FROM agentrt.event
-	  WHERE event_type = 'decision_recorded' ORDER BY event_id DESC LIMIT $1`, snapDecisions)
-	if err != nil {
-		return "", err
-	}
-	n = 0
-	for rows.Next() {
-		var m string
-		var at time.Time
-		var body []byte
-		if err = rows.Scan(&m, &at, &body); err != nil {
-			rows.Close()
-			return "", err
-		}
-		var d map[string]string
-		_ = json.Unmarshal(body, &d)
-		n++
-		fmt.Fprintf(&b, "- %s %s: %s — why: %s", at.UTC().Format("2006-01-02"), m, oneLineRunes(d["decision"], snapFieldRunes), oneLineRunes(d["why"], snapFieldRunes))
-		if d["dropped"] != "" {
-			fmt.Fprintf(&b, " — dropped: %s", oneLineRunes(d["dropped"], snapFieldRunes))
-		}
-		if d["reverse"] != "" {
-			fmt.Fprintf(&b, " — to reverse: %s", oneLineRunes(d["reverse"], snapFieldRunes))
-		}
-		b.WriteString("\n")
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return "", err
-	}
-	if n == 0 {
-		b.WriteString("None.\n")
-	}
-	records := b.Len() // what comes after is fixed and kept whole (review 270 B4)
-	b.WriteString("\n### Standing envelope and this mission's budget\n\n")
-	env, err := inForce(ctx, tx, rules.KindEnvelope+":dev")
-	if err != nil {
-		return "", err
-	}
-	if env == nil || env.Envelope == nil {
-		b.WriteString("No standing envelope is in force: every mission waits for the Owner.\n")
-	} else {
-		fmt.Fprintf(&b, "%s v%d: up to %s, at most %d attempts and %d hours a mission, executors %s, hosts %s.\n",
-			env.ID, env.Version, env.Envelope.MaxAction, env.Envelope.Budget.MaxAttempts, env.Envelope.Budget.MaxWallHours,
-			strings.Join(env.Envelope.Executors, ", "), strings.Join(env.Envelope.Hosts, ", "))
-	}
-	var budget []byte
-	if err = tx.QueryRow(ctx, `SELECT budget_json FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&budget); err != nil {
-		return "", err
-	}
-	fmt.Fprintf(&b, "This mission (%s): budget %s.\n\n### Repositories the runtime knows, and the checks every task in each runs\n\n", mission, budget)
-	for _, name := range RepoNames() {
-		var cmds []string
-		for _, c := range Repos[name].Verify {
-			cmds = append(cmds, "`"+shellLine(c)+"`")
-		}
-		fmt.Fprintf(&b, "- %s: %s\n", name, strings.Join(cmds, ", "))
-	}
-	// The fields are cut above; this bounds the whole (review 269 B4), by
-	// cutting the records and keeping the envelope, the budget and the
-	// checks whole (review 270 B4).
-	out := b.String()
-	if len(out) > snapMaxBytes {
-		const mark = "\n(The records above were longer; they are cut here.)\n"
-		head, fixed := out[:records], out[records:]
-		n := max(snapMaxBytes-len(fixed)-len(mark), 0)
-		cut := []byte(head[:min(n, len(head))])
-		for !utf8.Valid(cut) {
-			cut = cut[:len(cut)-1]
-		}
-		out = string(cut) + mark + fixed
-	}
-	return out, nil
-}
 
 // oneLineRunes is s on one line, cut to n runes.
 func oneLineRunes(s string, n int) string {
