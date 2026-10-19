@@ -81,8 +81,9 @@ func Prompt(a *Attempt) string {
 	}
 	b.WriteString("\n\n---\nWork only in this directory. Your final message is your report, in markdown: what you did, what you ran and how it ended, and what is left. Do not write paths of this machine into the report.\n")
 	// R2-2 (STG walks 2 and 3, 2026-10-19): told to keep caches out of the
-	// checkout, codex made new empty ones and its offline build failed.
-	b.WriteString("The tools' caches (GOCACHE, GOMODCACHE, npm's cache) are already set for this attempt, outside this directory, and hold what was fetched before you started; there is no network, so use them as they are and do not point them elsewhere.\n")
+	// checkout, codex made new empty ones and its offline build failed. What
+	// the caches hold depends on the task's setup (review 405 B1).
+	b.WriteString("Go's cache locations (GOCACHE, GOMODCACHE) are set for this attempt, outside this directory; keep them as they are, so that whatever the task's setup fetched is used (commands have no network to fetch it again), unless the task asks for a fresh cache.\n")
 	if a.Spec.Check == "review" {
 		fmt.Fprintf(&b, "End the report with exactly one line: %q if the work is correct and complete as its spec asks, or %q if anything must change. A report without that line counts as no verdict.\n",
 			VerdictPass, VerdictFail)
@@ -530,6 +531,14 @@ func newPathRewrite() *pathRewrite {
 // directory in named also by its name ("$HOME"), from anywhere: agentd
 // handing in an attempt's report (handText).
 func newPathRewriteAt(wd string, named map[string]string) *pathRewrite {
+	return newPathRewriteFor(wd, true, named)
+}
+
+// newPathRewriteFor is newPathRewriteAt with the checkout's parent ("..")
+// named only when parent says so: an action target names the checkout and
+// the named roots, never the task's directory, so another attempt or a
+// sibling stays masked whole there (review 405 A1).
+func newPathRewriteFor(wd string, parent bool, named map[string]string) *pathRewrite {
 	p := &pathRewrite{alias: map[string]string{}}
 	var dirs []string
 	add := func(d, alias string) {
@@ -545,7 +554,9 @@ func newPathRewriteAt(wd string, named map[string]string) *pathRewrite {
 	}
 	if wd != "" {
 		add(wd, ".")
-		add(filepath.Dir(wd), "..")
+		if parent {
+			add(filepath.Dir(wd), "..")
+		}
 	}
 	for _, name := range slices.Sorted(maps.Keys(named)) {
 		add(named[name], name)

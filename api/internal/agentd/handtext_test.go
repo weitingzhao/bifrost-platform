@@ -229,11 +229,26 @@ func TestHandTextSaysWhatItRewrote(t *testing.T) {
 	}
 }
 
-// R2-2 (STG walks 2 and 3): the prompt says the caches are set and to use
-// them as they are.
+// Review 405 A2: a report the note pushes over the limit, with a verdict
+// line a terminal coloured, still ends on its verdict.
+func TestHandTextKeepsAColouredVerdictWhenCut(t *testing.T) {
+	const tid = "t_01M5B2WKM1CYDFE4PWGE4D3D42"
+	dir := WorkspaceDir("/home/bifrost-agentd-stg/agent-work/agentd", tid, 1)
+	a := &Attempt{Claim: &Claimed{TaskID: tid, Role: "review"}, Dir: dir, Out: dir + ".out"}
+	for verdict, want := range map[string]string{VerdictPass: "done", VerdictFail: "failed"} {
+		raw := []byte(strings.Repeat("x\n", (maxBody-100)/2) + "/tmp/x\n\x1b[32m" + verdict + "\x1b[0m\n")
+		got := a.handText("review", raw)
+		if len(got) > maxBody || reviewVerdict(got) != want || !bytes.HasSuffix(got, []byte(verdict+"\n")) {
+			t.Fatalf("%s: %d bytes, verdict %q, ends %q", verdict, len(got), reviewVerdict(got), got[len(got)-60:])
+		}
+	}
+}
+
+// R2-2 (STG walks 2 and 3): the prompt says Go's caches are set, to keep
+// them, unless the task asks for a fresh one (review 405 B1).
 func TestPromptKeepsTheCaches(t *testing.T) {
 	p := Prompt(&Attempt{Spec: TaskSpec{Text: "do it"}})
-	if !strings.Contains(p, "GOMODCACHE") || !strings.Contains(p, "do not point them elsewhere") {
+	if !strings.Contains(p, "GOMODCACHE") || !strings.Contains(p, "keep them as they are") || !strings.Contains(p, "unless the task asks for a fresh cache") {
 		t.Fatalf("prompt:\n%s", p)
 	}
 }

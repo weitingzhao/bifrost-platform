@@ -539,22 +539,27 @@ func TestScrubIsBounded(t *testing.T) {
 	}
 }
 
-// STG walk 3 (2026-10-19): the attempt's own directories are named in a
-// target as a report and a log tail name them (handText): ".", "..",
-// "$HOME", "$TMPDIR", each only as a whole path; "a1.out" is not the
-// checkout "a1" with ".out" after it. Any other local path is still masked
-// whole.
+// STG walk 3 (2026-10-19): a target names the checkout "." and the
+// attempt's home and temporary directory by their roots, each only as a
+// whole path ("a1.out" is not the checkout "a1" with ".out" after it); what
+// follows a root is masked, as is any other local path, the task's directory
+// and its other attempts included (review 405 A1); a target that names a
+// task's workspace is withheld whole.
 func TestTargetsNameTheAttemptsDirectories(t *testing.T) {
 	task := "/home/bifrost-agentd-stg/agent-work/agentd/tasks/t_01M5B6KKPMM15HZB4BC0ZWVJ5R"
 	tail := newActionTail("exec:codex", "", task+"/a1", task+"/a1.out")
 	for in, want := range map[string]string{
-		"mktemp -d " + task + "/a1.out/tmp/localpath-checks.XXXXXX":                               "mktemp -d $TMPDIR/localpath-checks.XXXXXX",
+		"mktemp -d " + task + "/a1.out/tmp/localpath-checks.XXXXXX":                               "mktemp -d $TMPDIR/<local path>",
 		"cat " + task + "/a1/api/internal/localpath/localpath.go":                                 "cat ./api/internal/localpath/localpath.go",
 		task + "/a1/api/x_test.go":                                                                "api/x_test.go",
-		"ls " + task + "/a1.out/home/.config":                                                     "ls $HOME/.config",
-		"diff " + task + "/a2/x " + task + "/a1/x":                                                "diff ../a2/x ./x",
+		"ls " + task + "/a1.out/home/.config":                                                     "ls $HOME/<local path>",
+		"cat " + task + "/a1.out/home/cache/7a91c482d09f5e6b08a36495c271df13":                     "cat $HOME/<local path>",
+		"cat " + task + "/a1.out/tmp/t_01M5B2WKM1CYDFE4PWGE4D3D42/a1/x":                           "cat $TMPDIR/<local path>",
+		"diff " + task + "/a2/x " + task + "/a1/x":                                                "diff <local path> ./x",
+		"cat " + task + "/bifrost-ui/x":                                                           "cat <local path>",
 		"ls /home/bifrost-agentd-stg/agent-work/other":                                            "ls <local path>",
 		"cat /home/bifrost-agentd-stg/agent-work/agentd/tasks/t_01M5B6KKPMM15HZB4BC0ZWVJ5Rx/a1/y": "cat <local path>",
+		"cat tasks/t_01M5B2WKM1CYDFE4PWGE4D3D42/a1/x":                                             withheldTarget,
 	} {
 		if got, _ := tail.clean(in); got != want {
 			t.Errorf("clean(%q) = %q; want %q", in, got, want)

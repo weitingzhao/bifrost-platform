@@ -61,7 +61,9 @@ func (a *Attempt) handText(kind string, body []byte) []byte {
 		}
 		out = []byte(strings.Join(lines, "\n"))
 	}
-	verdict := verdictLine(body)
+	// From the text without colour codes: a verdict line a terminal coloured
+	// is still the verdict when the report is cut (review 405 A2).
+	verdict := verdictLine([]byte(plain))
 	if len(out) > maxBody {
 		keep := []byte(strings.ToValidUTF8(string(out[:maxBody-len(truncatedNote)-1-len(verdict)]), ""))
 		if i := bytes.LastIndexByte(keep, '\n'); i >= 0 {

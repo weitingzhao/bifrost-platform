@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
 
 // What must not leave the host in a target (reviews 265 A8, 266 A1, 267 A1,
@@ -78,6 +80,9 @@ var (
 		{regexp.MustCompile(`\b[A-Za-z]:\\[^\s"'<>|;&)]*`), "<local path>"},
 	}
 )
+
+// withheldTarget stands for a target that named a task's workspace.
+const withheldTarget = "(withheld by agentd: it named a task's workspace)"
 
 func scrub(s string) string {
 	s = privateKey.ReplaceAllString(s, "<secret>")
@@ -392,6 +397,11 @@ func (t *actionTail) clean(target string) (string, bool) {
 		target, cut = target[:strings.LastIndexAny(target[:maxScrub], " \t\r\n")+1], true
 	}
 	target = strings.TrimSpace(scrub(target))
+	// A target that still names a task's workspace (T11, as the platform
+	// reads an artifact) is withheld whole (review 405 A1).
+	if _, names := localpath.WorkspaceRef([]byte(target)); names {
+		target = withheldTarget
+	}
 	if r := []rune(target); len(r) > maxTargetRunes {
 		target, cut = string(r[:maxTargetRunes]), true
 	}

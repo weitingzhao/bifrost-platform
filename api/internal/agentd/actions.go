@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -89,7 +90,7 @@ func newActionTail(executor, logPath, checkout, out string) *actionTail {
 	if out != "" {
 		named["$HOME"], named["$TMPDIR"] = filepath.Join(out, "home"), filepath.Join(out, "tmp")
 	}
-	return &actionTail{path: logPath, dir: dir, paths: newPathRewriteAt(dir, named), parse: parse, cmds: map[string]cleanCmd{},
+	return &actionTail{path: logPath, dir: dir, paths: newPathRewriteFor(dir, false, named), parse: parse, cmds: map[string]cleanCmd{},
 		flushes: make(chan flushReq), gone: make(chan struct{})}
 }
 
@@ -250,14 +251,14 @@ func (t *actionTail) addClean(kind actions.Kind, target string, cut bool, now ti
 	}
 }
 
-// local writes the attempt's own directories as what they are, the way a
-// report and a log tail are handed in (handText, TD-382): a target that
-// starts in the checkout loses the prefix; elsewhere the checkout is ".",
-// its task's directory "..", the executor's home and temporary directory
-// "$HOME" and "$TMPDIR", each only as a whole path (a plain replace wrote
-// ".../a1.out/tmp/x" as "..out/tmp/x", which scrub then cut to
-// "..out<local path>"; STG walk 3, 2026-10-19). Any other local path is
-// masked whole by scrub, as before.
+// local writes the attempt's checkout as "." (a target that starts in it
+// loses the prefix) and its output's home and temporary directory by their
+// roots, "$HOME" and "$TMPDIR", each only as a whole path: a plain replace
+// wrote ".../a1.out/tmp/x" as "..out/tmp/x", which scrub then cut to
+// "..out<local path>" (STG walk 3, 2026-10-19). What follows such a root is
+// masked as scrub masks any other local path, since a name there can be a
+// credential (review 405 A1); the task's directory, other attempts and the
+// siblings are not named and scrub masks them whole.
 func (t *actionTail) local(s string) string {
 	if t.dir == "" {
 		return s
@@ -265,8 +266,11 @@ func (t *actionTail) local(s string) string {
 	if strings.HasPrefix(s, t.dir+"/") {
 		s = s[len(t.dir)+1:]
 	}
-	return t.paths.rewrite(s)
+	return namedRoot.ReplaceAllString(t.paths.rewrite(s), "${1}/<local path>")
 }
+
+// namedRoot is a path under a root local names, with what follows it.
+var namedRoot = regexp.MustCompile(`(\$HOME|\$TMPDIR)/[^\s"'<>|;&)]*`)
 
 func str(v any) string {
 	s, _ := v.(string)
