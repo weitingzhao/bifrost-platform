@@ -565,22 +565,23 @@ func TestChangeMeetsAHeldTask(t *testing.T) {
 	pool := w.db.Pool(t, w.db.Runtime)
 	task, err := w.task(t, "M-1", s1, "", "implement")
 	ok(t, err)
-	hold := func() pgx.Tx {
+	lock := func() pgx.Tx {
 		tx, herr := pool.Begin(ctx)
 		ok(t, herr)
-		t.Cleanup(func() { _ = tx.Rollback(ctx) })
 		_, herr = tx.Exec(ctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR NO KEY UPDATE`, task)
 		ok(t, herr)
 		return tx
 	}
+	hold := func() pgx.Tx {
+		tx := lock()
+		t.Cleanup(func() { _ = tx.Rollback(ctx) })
+		return tx
+	}
 	a := &asker{}
-	short := hold()
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		_ = short.Rollback(ctx)
-	}()
+	released := releaseLater(t, lock(), 100*time.Millisecond)
 	_, err = store.ProposePlanChange(ctx, pool, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1, MissionID: "M-2"}}, a.ask)
 	ok(t, err)
+	ok(t, released())
 	// Each hold lasts until the call it is for has returned, not for a time
 	// the call might outlast (review 322 A2).
 	held := hold()

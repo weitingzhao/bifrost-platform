@@ -36,23 +36,6 @@ func (w *world) footprint(t *testing.T) string {
 	return s
 }
 
-// whileHeld runs a call the test holds a lock for and returns its error: a
-// call that waited for the lock instead of giving up would never return while
-// it is held, so after 30 seconds the test fails rather than the package
-// timing out (review 322 A2).
-func whileHeld(t *testing.T, what string, call func() error) error {
-	t.Helper()
-	done := make(chan error, 1)
-	go func() { done <- call() }()
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(30 * time.Second):
-		t.Fatalf("%s waited for a lock the test holds", what)
-		return nil
-	}
-}
-
 // wr is a writer as the routes make one: the actor and the token.
 func wr(actor string) store.Writer { return store.Writer{Actor: actor, Token: "operator"} }
 
@@ -767,21 +750,22 @@ func TestBatchRetriesBusyStep(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
-	hold := func() pgx.Tx {
+	lock := func() pgx.Tx {
 		tx, err := pool.Begin(ctx)
 		ok(t, err)
-		t.Cleanup(func() { _ = tx.Rollback(ctx) })
 		_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 FOR UPDATE`, s1)
 		ok(t, err)
 		return tx
 	}
-	short := hold()
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		_ = short.Rollback(ctx)
-	}()
+	hold := func() pgx.Tx {
+		tx := lock()
+		t.Cleanup(func() { _ = tx.Rollback(ctx) })
+		return tx
+	}
+	released := releaseLater(t, lock(), 100*time.Millisecond)
 	_, err := store.ProposeTasks(ctx, pool, wr("thread:s1"), "k1", "M-1", []store.TaskProposal{proposal("a", w.spec)})
 	ok(t, err)
+	ok(t, released())
 	// Held until the batch has given up, not for a time it might outlast
 	// (review 322 A2).
 	held := hold()
