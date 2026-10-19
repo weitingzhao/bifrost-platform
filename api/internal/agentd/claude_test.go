@@ -122,7 +122,7 @@ func TestStreamResultReport(t *testing.T) {
 				if err := os.WriteFile(log, []byte(tc.log), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				err := streamResultReport(vendor, log, report)
+				err := streamResultReport(vendor, "", dir)
 				if tc.want == "error" {
 					if err == nil || err.Error() != "agentd: "+vendor+" ended in error: Failed to authenticate: OAuth session expired" {
 						t.Fatalf("error result: %v", err)

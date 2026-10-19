@@ -249,7 +249,7 @@ func cursorExecutor(env []string) Executor {
 		}
 		return Spawn{Argv: append(argv, Prompt(a)), Env: own, Dir: a.Dir,
 			After: func() error {
-				return streamResultReport("cursor", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
+				return streamResultReport("cursor", a.root, a.Out)
 			}}, nil
 	}
 }
@@ -298,7 +298,7 @@ func claudeExecutor(env []string) Executor {
 		// 10-15, claude 2.1.295; review 215 B1, B2).
 		return Spawn{Argv: append(argv, "--", Prompt(a)), Env: own, Dir: a.Dir,
 			After: func() error {
-				return streamResultReport("claude", filepath.Join(a.Out, "log.txt"), filepath.Join(a.Out, "report.md"))
+				return streamResultReport("claude", a.root, a.Out)
 			}}, nil
 	}
 }
@@ -306,7 +306,8 @@ func claudeExecutor(env []string) Executor {
 // streamResultReport writes the result of a vendor's stream-json output (its last
 // result event) as the report. The output is read a line at a time and a
 // line over maxBody is skipped, never held (review 164 B1).
-func streamResultReport(vendor, logPath, reportPath string) error {
+func streamResultReport(vendor, root, out string) error {
+	logPath := filepath.Join(out, "log.txt")
 	f, err := openRegular(logPath, maxMeasured) // never waits on what the executor left in its place (review 274 A3)
 	if err != nil {
 		return err
@@ -336,7 +337,12 @@ func streamResultReport(vendor, logPath, reportPath string) error {
 	if failed {
 		return fmt.Errorf("agentd: %s ended in error: %s", vendor, oneLine(result, 200))
 	}
-	return writeOwn(filepath.Dir(reportPath), filepath.Base(reportPath), []byte(result))
+	r, err := ownDirAt(root, out)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = r.Close() }()
+	return writeOwn(r, "report.md", []byte(result))
 }
 
 // oneLine is s on one line, cut to at most max bytes.

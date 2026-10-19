@@ -614,7 +614,7 @@ func benchPrompt(q BenchQuestion) string {
 // note on how it ended when that was not a clean exit.
 func (b *Bench) execute(ctx context.Context, q BenchQuestion, dir, out string) (string, error) {
 	a := &Attempt{Claim: &Claimed{TaskID: q.ID, AttemptNo: 1, Role: "implement", Repo: q.RepoName(), BaseCommit: q.BaseCommit,
-		EffectClass: "branch", Tool: b.Tool}, Spec: TaskSpec{Text: benchPrompt(q)}, Dir: dir, Out: out}
+		EffectClass: "branch", Tool: b.Tool}, Spec: TaskSpec{Text: benchPrompt(q)}, Dir: dir, Out: out, root: b.Root}
 	sp, err := b.Executor(a)
 	if err != nil {
 		return "", err

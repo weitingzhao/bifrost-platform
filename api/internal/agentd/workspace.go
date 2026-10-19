@@ -40,6 +40,9 @@ type Workspace struct {
 	// hook are commands), so agentd's own git there may write the checkout
 	// only, like the executor (TD-371).
 	wall []string
+	// root is agentd's directory, through which agentd reaches the checkout
+	// (openWithin) for what it does there itself (review 302).
+	root string
 }
 
 // WorkspaceDir is where attempt n of task keeps its checkout.
@@ -548,12 +551,12 @@ func removeStaleIndexes(g *os.Root) {
 // executor turned into a link out of the checkout is not followed (review
 // 301).
 func (w *Workspace) gitDir() (*os.Root, error) {
-	r, err := os.OpenRoot(w.Dir)
+	r, err := ownDirAt(w.root, w.Dir)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = r.Close() }()
-	return r.OpenRoot(".git")
+	return openStep(r, ".git")
 }
 
 func nulSplit(out string) []string {

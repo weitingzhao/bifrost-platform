@@ -557,3 +557,30 @@ func TestIndexFilesNotThroughALinkedGitDir(t *testing.T) {
 		}
 	}
 }
+
+// Review 302 B: the checkout itself a link an earlier run left: agentd's
+// index files do not go behind it.
+func TestIndexFilesNotBehindALinkedCheckout(t *testing.T) {
+	root, elsewhere := t.TempDir(), t.TempDir()
+	if err := os.MkdirAll(filepath.Join(elsewhere, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cp := filepath.Join(elsewhere, ".git", "agentd-checkpoint-index")
+	if err := os.WriteFile(cp, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := WorkspaceDir(root, "t1", 1)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, dir); err != nil {
+		t.Fatal(err)
+	}
+	w := &Workspace{Dir: dir, Base: "HEAD", root: root, wall: []string{"/usr/bin/false"}}
+	if _, _, err := w.Diff(context.Background(), 1<<20); err == nil {
+		t.Error("a diff behind a linked checkout")
+	}
+	if _, err := os.Stat(cp); err != nil {
+		t.Fatalf("removed behind the link: %v", err)
+	}
+}

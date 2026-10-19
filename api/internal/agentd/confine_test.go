@@ -444,7 +444,7 @@ func TestReportAndLogNotWrittenThroughLinks(t *testing.T) {
 				must(t, os.Link(victim, report))
 			}
 			must(t, os.WriteFile(filepath.Join(out, "log.txt"), []byte(`{"type":"result","result":"replaced"}`+"\n"), 0o600))
-			must(t, streamResultReport("cursor", filepath.Join(out, "log.txt"), report))
+			must(t, streamResultReport("cursor", "", out))
 			if b, _ := os.ReadFile(victim); string(b) != "another attempt's report" {
 				t.Fatalf("written through the %s: %q", how, b)
 			}
@@ -454,14 +454,40 @@ func TestReportAndLogNotWrittenThroughLinks(t *testing.T) {
 			}
 		})
 	}
-	out, elsewhere := t.TempDir(), t.TempDir()
-	victim := filepath.Join(elsewhere, "log.txt")
-	must(t, os.WriteFile(victim, []byte("x"), 0o600))
-	must(t, os.Symlink(victim, filepath.Join(out, "log.txt")))
-	if appendOwn(out, "log.txt", "agentd: failed\n") == nil {
-		t.Error("appended through a link out of the output")
+	// The line of a failed attempt goes into a new log file: neither a link
+	// out of the output nor a hard link to another file is written through
+	// (review 302).
+	for _, how := range []string{"link", "hard link"} {
+		out, elsewhere := t.TempDir(), t.TempDir()
+		victim := filepath.Join(elsewhere, "log.txt")
+		must(t, os.WriteFile(victim, []byte("x"), 0o600))
+		if how == "link" {
+			must(t, os.Symlink(victim, filepath.Join(out, "log.txt")))
+			if appendOwn(openRootT(t, out), "log.txt", "agentd: failed\n") == nil {
+				t.Error("appended through a link out of the output")
+			}
+		} else {
+			must(t, os.Link(victim, filepath.Join(out, "log.txt")))
+			must(t, appendOwn(openRootT(t, out), "log.txt", "agentd: failed\n"))
+			if b, _ := os.ReadFile(filepath.Join(out, "log.txt")); string(b) != "xagentd: failed\n" {
+				t.Errorf("the log = %q", b)
+			}
+		}
+		if b, _ := os.ReadFile(victim); string(b) != "x" {
+			t.Fatalf("the log line went through the %s: %q", how, b)
+		}
 	}
-	if b, _ := os.ReadFile(victim); string(b) != "x" {
-		t.Fatalf("the log line went through the link: %q", b)
+	// The output itself, or the checkout, a link left by an earlier run:
+	// agentd's report and index files do not go behind it (review 302).
+	root, elsewhere := t.TempDir(), t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(root, "tasks", "t1"), 0o700))
+	must(t, os.WriteFile(filepath.Join(elsewhere, "report.md"), []byte("theirs"), 0o600))
+	must(t, os.WriteFile(filepath.Join(elsewhere, "log.txt"), []byte(`{"type":"result","result":"replaced"}`+"\n"), 0o600))
+	must(t, os.Symlink(elsewhere, filepath.Join(root, "tasks", "t1", "a1.out")))
+	if streamResultReport("cursor", root, filepath.Join(root, "tasks", "t1", "a1.out")) == nil {
+		t.Error("a report written behind a linked output")
+	}
+	if b, _ := os.ReadFile(filepath.Join(elsewhere, "report.md")); string(b) != "theirs" {
+		t.Fatalf("written behind the linked output: %q", b)
 	}
 }

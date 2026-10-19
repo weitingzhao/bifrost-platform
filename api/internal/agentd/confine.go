@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -372,7 +373,7 @@ func codexArgv(a *Attempt, argv []string) string {
 // may have left a link in its place (review 300 A1). It may run again for
 // the same attempt (a restart): what is gone stays gone.
 func afterExecutor(executor, codexHome, root, out string, logf func(format string, args ...any)) {
-	r, err := openOutput(root, out)
+	r, err := openWithin(root, out)
 	if errors.Is(err, fs.ErrNotExist) {
 		return
 	}
@@ -393,10 +394,12 @@ func afterExecutor(executor, codexHome, root, out string, logf func(format strin
 	}
 }
 
-// openOutput opens out, a directory inside root, through root, one step at
+// openWithin opens out, a directory inside root, through root, one step at
 // a time: each step a directory and not a link, and the directory opened the
 // one looked at, so a step swapped meanwhile is not followed (review 301).
-func openOutput(root, out string) (*os.Root, error) {
+// agentd reaches an attempt's checkout and output this way wherever it
+// writes there outside the wall (review 302).
+func openWithin(root, out string) (*os.Root, error) {
 	rel, err := filepath.Rel(root, out)
 	if err != nil || !filepath.IsLocal(rel) {
 		return nil, fmt.Errorf("agentd: %s is not inside %s", out, root)
@@ -437,15 +440,58 @@ func openStep(r *os.Root, name string) (*os.Root, error) {
 	return next, nil
 }
 
-// writeOwn puts body in dir/name as a new file, replacing whatever the
+// ownDir opens dir, an attempt's directory, inside root (openWithin); with
+// no root (a test), as it is.
+func ownDirAt(root, dir string) (*os.Root, error) {
+	if root == "" {
+		return os.OpenRoot(dir)
+	}
+	return openWithin(root, dir)
+}
+
+// writeOwn puts body in r's name as a new file, replacing whatever the
 // executor left under that name (a link, a hard link, a FIFO) without
 // writing through it: agentd writes there outside the wall (review 301).
-func writeOwn(dir, name string, body []byte) error {
-	r, err := os.OpenRoot(dir)
-	if err != nil {
+func writeOwn(r *os.Root, name string, body []byte) error {
+	return replaceIn(r, name, func(f *os.File) error {
+		_, err := f.Write(body)
 		return err
-	}
-	defer func() { _ = r.Close() }()
+	})
+}
+
+// appendOwn adds text to r's name, as a new file holding the old one's
+// content and text: the old file, which may share its inode with another
+// (a hard link), is never written (review 302). An old name that is not a
+// regular file directly in r is not read.
+func appendOwn(r *os.Root, name, text string) error {
+	return replaceIn(r, name, func(f *os.File) error {
+		if fi, lerr := r.Lstat(name); lerr == nil {
+			if !fi.Mode().IsRegular() {
+				return fmt.Errorf("agentd: %s is not a regular file", name)
+			}
+			old, oerr := r.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+			if oerr != nil {
+				return oerr
+			}
+			st, serr := old.Stat()
+			if serr == nil && !os.SameFile(fi, st) {
+				serr = fmt.Errorf("agentd: %s changed while it was opened", name)
+			}
+			if serr == nil {
+				_, serr = io.Copy(f, old)
+			}
+			_ = old.Close()
+			if serr != nil {
+				return serr
+			}
+		}
+		_, err := f.WriteString(text)
+		return err
+	})
+}
+
+// replaceIn writes a new file in r with fill and renames it over name.
+func replaceIn(r *os.Root, name string, fill func(*os.File) error) error {
 	tmp, err := NewChangeID()
 	if err != nil {
 		return err
@@ -455,7 +501,7 @@ func writeOwn(dir, name string, body []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.Write(body)
+	err = fill(f)
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}
@@ -464,28 +510,6 @@ func writeOwn(dir, name string, body []byte) error {
 	}
 	if err != nil {
 		_ = r.Remove(tmp)
-	}
-	return err
-}
-
-// appendOwn adds text to dir/name, a regular file of dir itself (a link out
-// of dir is not followed), or makes it.
-func appendOwn(dir, name, text string) error {
-	r, err := os.OpenRoot(dir)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = r.Close() }()
-	if fi, lerr := r.Lstat(name); lerr == nil && !fi.Mode().IsRegular() {
-		return fmt.Errorf("agentd: %s in %s is not a regular file", name, dir)
-	}
-	f, err := r.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE|syscall.O_NONBLOCK, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = f.WriteString(text)
-	if cerr := f.Close(); err == nil {
-		err = cerr
 	}
 	return err
 }

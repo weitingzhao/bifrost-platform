@@ -361,7 +361,7 @@ func TestCursorReportSkipsLongLines(t *testing.T) {
 	if err := os.WriteFile(log, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := streamResultReport("cursor", log, filepath.Join(dir, "report.md")); err != nil {
+	if err := streamResultReport("cursor", "", dir); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "report.md")); string(b) != "# last\nok" {

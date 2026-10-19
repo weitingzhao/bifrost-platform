@@ -273,7 +273,7 @@ func TestMeasureOpensOnlyRegularFiles(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("measuring a FIFO log waits")
 	}
-	if err := streamResultReport("cursor", filepath.Join(dir, "log.txt"), filepath.Join(dir, "report.md")); err == nil {
+	if err := streamResultReport("cursor", "", dir); err == nil {
 		t.Fatal("a FIFO log gave a report")
 	}
 	linked := t.TempDir()

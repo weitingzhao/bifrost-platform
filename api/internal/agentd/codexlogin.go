@@ -166,7 +166,7 @@ func refreshed(cur, got codexLogin, now time.Time) string {
 }
 
 // keepCodexLogin takes a refreshed login in out, an attempt's output
-// opened as a root (openOutput), back into master's auth.json: only its
+// opened as a root (openWithin), back into master's auth.json: only its
 // tokens and time of refresh, into the host's file as it is, replaced at
 // once. Nothing is done when the attempt's login is the host's or there is
 // none; an error says why it was not taken.

@@ -318,7 +318,10 @@ func (d *Daemon) checkChanges(ctx context.Context, ws *Workspace, e *Entry) erro
 	}
 	if why != "" {
 		d.logf("agentd: %s: %s", e.AttemptID, why)
-		_ = appendOwn(e.Workdir+".out", "log.txt", fmt.Sprintf("\nagentd: the attempt is failed: %s\n", why))
+		if r, oerr := ownDirAt(d.Root, e.Workdir+".out"); oerr == nil {
+			_ = appendOwn(r, "log.txt", fmt.Sprintf("\nagentd: the attempt is failed: %s\n", why))
+			_ = r.Close()
+		}
 		e.Conclusion = "failed"
 	}
 	e.Checked = true
@@ -628,7 +631,7 @@ func (d *Daemon) takeOver(ctx context.Context, e *Entry) error {
 		EffectClass: e.Effect, PushedRef: e.PushedRef, WorkID: e.WorkID, Epoch: e.Epoch}, Dir: e.Workdir, Out: e.Workdir + ".out"}
 	var ws *Workspace
 	if e.Repo != "" {
-		ws = &Workspace{Dir: e.Workdir, Base: e.Base, env: isolatedGit(d.GitEnv), wall: d.gitWall(e.Workdir)}
+		ws = &Workspace{Dir: e.Workdir, Base: e.Base, env: isolatedGit(d.GitEnv), wall: d.gitWall(e.Workdir), root: d.Root}
 	}
 	if e.Group == GroupCleared && e.Phase != "launching" {
 		afterExecutor(e.Executor, d.CodexHome, d.Root, a.Out, d.logf) // again, or for a run a restart cut short

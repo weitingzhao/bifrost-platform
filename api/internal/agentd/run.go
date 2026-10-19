@@ -38,6 +38,7 @@ type Attempt struct {
 	// (innerWrites).
 	Walled bool
 	inner  []string
+	root   string // agentd's directory, which Dir and Out are in (openWithin)
 }
 
 // An Executor turns an attempt into the command agentd launches.
@@ -264,7 +265,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		}
 	}
 	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
-	a.Out = a.Dir + ".out"
+	a.Out, a.root = a.Dir+".out", d.Root
 	// The host is held from here, before anything is written, to the end
 	// (review 276 A2); a process group still standing from an earlier attempt
 	// may write anywhere, so nothing starts beside one. While it waits for the
@@ -323,7 +324,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		}
 	}
 	if ws != nil {
-		ws.wall = d.gitWall(a.Dir) // from here the checkout is the executor's
+		ws.wall, ws.root = d.gitWall(a.Dir), d.Root // from here the checkout is the executor's
 	}
 	// The output is new, as the workspace is: the attempt's home is in it,
 	// and nothing an earlier run left there may be read (TD-371).
