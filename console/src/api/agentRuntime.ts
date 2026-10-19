@@ -92,6 +92,16 @@ export async function fetchRuntimeEvents(mission: string, signal?: AbortSignal):
     after = last
   }
 }
+/** One task as GET /agentrt/tasks/{id} answers (store.TaskView): what the Crew card names a live attempt by. */
+export type RuntimeTaskDetail = { task_id: string; title: string; role: string; mission_id: string; subject_task_id: string }
+export function parseRuntimeTaskDetail(v: unknown): RuntimeTaskDetail {
+  const r = record(v)
+  return { task_id: text(r.task_id), title: text(r.title), role: text(r.role), mission_id: text(r.mission_id), subject_task_id: text(r.subject_task_id) }
+}
+export async function fetchRuntimeTaskDetail(id: string, signal?: AbortSignal): Promise<RuntimeTaskDetail> {
+  const r = await authedFetch('Agent task', `/api/v1/agentrt/tasks/${encodeURIComponent(id)}`, { signal })
+  return parseRuntimeTaskDetail(await r.json())
+}
 export async function fetchRuntimeArtifact(id: string, signal?: AbortSignal): Promise<string> {
   const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`, { signal })
   return r.text()

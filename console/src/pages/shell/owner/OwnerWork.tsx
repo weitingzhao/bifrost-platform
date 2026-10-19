@@ -40,7 +40,8 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <HandMark title={`Kept by hand by the coordinator thread${boardAt ? ` · ${boardAt}` : ''}${data.boardStale ? ' · stale' : ''}`} />
         </div>
       </Card>
-      <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now} />
+      <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}
+        read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
       <Card label="The plan" title={<>The plan{board?.roadmap?.round?.n != null && ` · Round ${board.roadmap.round.n}`} <HandMark title="Kept by hand by the coordinator thread (WORK.md)" /></>} more={{ href: '#progress', text: 'Plan' }}>
         {plan.length === 0 && <p className="m-0 text-sm text-muted-foreground">No plan on the coordinator's board.</p>}
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0">{plan.map(row => <li key={row.key} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center gap-2 rounded px-1.5 py-1 ${row.tag === 'now' ? 'bg-[var(--control-fill)]' : ''}`}>
