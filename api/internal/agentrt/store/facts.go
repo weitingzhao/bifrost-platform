@@ -351,44 +351,51 @@ func (f *stepFacts) GatePassed(env, test, specSHA256 string) plan.Tri {
 func EvaluateStep(ctx context.Context, db DB, stepID string, deployed Deployed) (string, error) {
 	var moved string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		var state, doc string
-		if err := tx.QueryRow(ctx, `SELECT state, done_rule_json::text FROM agentrt.plan_node
-		  WHERE plan_node_id = $1 AND node_kind = 'step' FOR UPDATE`, stepID).Scan(&state, &doc); err != nil {
-			return err
-		}
-		rule, err := plan.Parse([]byte(doc))
-		if err != nil {
-			return fmt.Errorf("store: step %s: %w", stepID, err)
-		}
-		if rule.Empty() || state == "dropped" || state == "stopped" {
-			return nil
-		}
-		f := &stepFacts{ctx: ctx, tx: tx, step: stepID, deployed: deployed}
-		res := rule.Eval(f)
-		if f.err != nil {
-			return f.err
-		}
-		to, cause := "", ""
-		switch {
-		case res.Value == plan.True && (state == "planned" || state == "active"):
-			to, cause = "done", "done_rule"
-			if res.Manual {
-				cause = "done_rule_manual"
-			}
-		case res.Value == plan.False && state == "done" && rule.Standing():
-			to, cause = "active", "standing_lapsed"
-		default:
-			return nil
-		}
-		root, err := stepRoot(ctx, tx, stepID)
-		if err != nil {
-			return err
-		}
-		if _, err := SetStepState(ctx, tx, "controller", root, stepID, to, cause); err != nil {
-			return err
-		}
-		moved = to
-		return nil
+		var err error
+		moved, err = evaluateStep(ctx, tx, stepID, deployed)
+		return err
 	})
 	return moved, err
+}
+
+// evaluateStep is EvaluateStep inside tx; a plan import runs it on the steps
+// it brings in done (planimport.go).
+func evaluateStep(ctx context.Context, tx pgx.Tx, stepID string, deployed Deployed) (string, error) {
+	var state, doc string
+	if err := tx.QueryRow(ctx, `SELECT state, done_rule_json::text FROM agentrt.plan_node
+	  WHERE plan_node_id = $1 AND node_kind = 'step' FOR UPDATE`, stepID).Scan(&state, &doc); err != nil {
+		return "", err
+	}
+	rule, err := plan.Parse([]byte(doc))
+	if err != nil {
+		return "", fmt.Errorf("store: step %s: %w", stepID, err)
+	}
+	if rule.Empty() || state == "dropped" || state == "stopped" {
+		return "", nil
+	}
+	f := &stepFacts{ctx: ctx, tx: tx, step: stepID, deployed: deployed}
+	res := rule.Eval(f)
+	if f.err != nil {
+		return "", f.err
+	}
+	to, cause := "", ""
+	switch {
+	case res.Value == plan.True && (state == "planned" || state == "active"):
+		to, cause = "done", "done_rule"
+		if res.Manual {
+			cause = "done_rule_manual"
+		}
+	case res.Value == plan.False && state == "done" && rule.Standing():
+		to, cause = "active", "standing_lapsed"
+	default:
+		return "", nil
+	}
+	root, err := stepRoot(ctx, tx, stepID)
+	if err != nil {
+		return "", err
+	}
+	if _, err := SetStepState(ctx, tx, "controller", root, stepID, to, cause); err != nil {
+		return "", err
+	}
+	return to, nil
 }

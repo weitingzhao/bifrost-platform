@@ -1,0 +1,140 @@
+{
+ "items": [
+  {
+   "key": "2.0",
+   "name": "设计对齐：v4 到 v5",
+   "steps": [
+    {
+     "id": "2.0-1",
+     "t": "起草 v5：每一步写验收测试（`work/multi-agent/DESIGN-v5.md`）",
+     "state": "done",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.0-2",
+     "t": "Codex 独立复核 v5（两轮）",
+     "state": "done",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.0-3",
+     "t": "（你）确认 v5 和 §7 八条",
+     "state": "done",
+     "owner": true,
+     "star": false
+    }
+   ]
+  },
+  {
+   "key": "2.1",
+   "name": "数据层：状态库",
+   "steps": [
+    {
+     "id": "2.1-1",
+     "t": "迁移器：pgx 接入",
+     "state": "done",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.1-2",
+     "t": "（补强）复核 145 的 B6、B7",
+     "state": "todo",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.1-3",
+     "t": "（你）批 PROD 迁移作业（O10、O11）",
+     "state": "doing",
+     "owner": true,
+     "star": false
+    },
+    {
+     "id": "2.1-4",
+     "t": "（补强）★ PROD 库可用：T19 的 PROD 部分",
+     "state": "todo",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.1-5",
+     "t": "本机测试库可用",
+     "state": "done",
+     "owner": false,
+     "star": true
+    }
+   ]
+  },
+  {
+   "key": "2.2b",
+   "name": "第一版拉通",
+   "steps": [
+    {
+     "id": "2.2b-1",
+     "t": "（你）（补强）批发布单",
+     "state": "done",
+     "owner": true,
+     "star": false
+    },
+    {
+     "id": "2.2b-2",
+     "t": "**（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入",
+     "state": "doing",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.2b-3",
+     "t": "（补强，10-16 晚提到 2.3 之前）agentd 工作区能跑检查",
+     "state": "doing",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.2b-4",
+     "t": "只有标题没有竖线的一步",
+     "state": "done",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.2b-5",
+     "t": "（你）定：交付失败或没记录、",
+     "state": "done",
+     "owner": true,
+     "star": false
+    },
+    {
+     "id": "2.2b-6",
+     "t": "导航第二片：Needs you 并进 For you",
+     "state": "todo",
+     "owner": false,
+     "star": false
+    }
+   ]
+  },
+  {
+   "key": "2.3",
+   "name": "交互总线与叫停",
+   "steps": [
+    {
+     "id": "2.3-1",
+     "t": "（补强）★ 手机上问参谋长一句",
+     "state": "done",
+     "owner": false,
+     "star": false
+    },
+    {
+     "id": "2.3-2",
+     "t": "（补强）★ Gate B",
+     "state": "todo",
+     "owner": false,
+     "star": false
+    }
+   ]
+  }
+ ]
+}
