@@ -114,11 +114,31 @@ func Executors(self string, environ []string, s Secrets) map[string]Executor {
 	if s.ClaudeOAuthToken != "" {
 		claudeEnv = append(append([]string{}, env...), "CLAUDE_CODE_OAUTH_TOKEN="+s.ClaudeOAuthToken)
 	}
-	return map[string]Executor{
+	ex := map[string]Executor{
 		"exec:deterministic": deterministicExecutor(self, env),
 		"exec:codex":         codexExecutor(env, CodexHome(environ), CodexBin(environ)),
 		"exec:cursor":        cursorExecutor(cursorEnv),
 		"exec:claude":        claudeExecutor(claudeEnv),
+	}
+	for name, e := range ex {
+		ex[name] = keyless(name, e)
+	}
+	return ex
+}
+
+// keyless is an executor whose spawn is refused when its environment holds
+// a name on the deny list (T13): whatever its builder did, no business key
+// reaches a task.
+func keyless(name string, e Executor) Executor {
+	return func(a *Attempt) (Spawn, error) {
+		sp, err := e(a)
+		if err != nil {
+			return Spawn{}, err
+		}
+		if err = noBusinessKeys(name, sp.Env); err != nil {
+			return Spawn{}, err
+		}
+		return sp, nil
 	}
 }
 
