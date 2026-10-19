@@ -55,6 +55,15 @@ func MoveTaskForTest(ctx context.Context, tx pgx.Tx, actor, taskID, to string) e
 	return moveTask(ctx, tx, actor, t, to, "test")
 }
 
+// FailWorkForTest blocks a task as failed work (failWork).
+func FailWorkForTest(ctx context.Context, tx pgx.Tx, taskID string) error {
+	t, err := readTask(ctx, tx, taskID, true)
+	if err != nil {
+		return err
+	}
+	return failWork(ctx, tx, "controller", t, "test: checks failed with no round left")
+}
+
 // LiveForTest is a live attempt as the projection reads one: its state,
 // whether its host is known, when the host last polled, and its elapsed
 // seconds.

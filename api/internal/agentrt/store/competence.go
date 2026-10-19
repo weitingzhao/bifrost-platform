@@ -45,8 +45,8 @@ type competence struct {
 }
 
 // readCompetence reads the thresholds the routing rules in force set, by
-// tenant, and when any does, the rows of the latest in-job computation (none
-// when it found nothing to score).
+// tenant, and when any does, the samples of the latest in-job computation
+// (its event's, scores.go).
 func readCompetence(ctx context.Context, tx pgx.Tx) (map[string]threshold, []scoreLine, error) {
 	rows, err := tx.Query(ctx, `SELECT DISTINCT rule_id FROM agentrt.rule WHERE rule_id LIKE 'routing:%' ORDER BY 1`)
 	if err != nil {
@@ -72,19 +72,11 @@ func readCompetence(ctx context.Context, tx pgx.Tx) (map[string]threshold, []sco
 	if len(out) == 0 {
 		return out, nil, nil
 	}
-	rows, err = tx.Query(ctx, `SELECT executor_actor_id, model_provider, model, job_id, task_class, core, attempts, first_pass
-	  FROM agentrt.capability_score WHERE source = 'in_job' AND computed_from_event_id =
-	    (SELECT max((body_json->>'through_event_id')::bigint) FROM agentrt.event
-	      WHERE event_type = 'capability_scored' AND body_json->>'source' = 'in_job')`)
-	if err != nil {
-		return nil, nil, err
+	last, err := lastComputation(ctx, tx)
+	if err != nil || last == nil {
+		return out, nil, err
 	}
-	lines, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (scoreLine, error) {
-		var l scoreLine
-		serr := r.Scan(&l.executor, &l.provider, &l.model, &l.job, &l.class, &l.core, &l.attempts, &l.firstPass)
-		return l, serr
-	})
-	return out, lines, err
+	return out, last.samples, nil
 }
 
 // competenceOf is task c's step ⑤ input, or nil when its tenant's routing

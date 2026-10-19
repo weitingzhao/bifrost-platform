@@ -236,7 +236,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 func refusePlan(ctx context.Context, tx pgx.Tx, t taskRow, d taskDetail, why string) (string, error) {
 	why = oneLineRunes("plan not used: "+why, 500)
 	if d.round+1 > d.maxRounds {
-		return "blocked", moveTask(ctx, tx, "controller", t, "blocked", fmt.Sprintf("%s (round %d of %d)", why, d.round, d.maxRounds))
+		return "blocked", failWork(ctx, tx, "controller", t, fmt.Sprintf("%s (round %d of %d)", why, d.round, d.maxRounds))
 	}
 	spec, err := reworkSpec(ctx, tx, d.spec, d.round+1, why)
 	if err != nil {

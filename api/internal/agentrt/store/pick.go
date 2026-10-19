@@ -18,7 +18,8 @@ import (
 // routing rule's quota_stop_percent is passed by; the rest go active before
 // probation, then the lowest pace first (the used fraction less the fraction
 // of the window gone; a pool not read counts as on pace, 0), then the one
-// whose executor took work longest ago, then the route's order. What was
+// whose executor took work longest ago (rotationWindow), then the route's
+// order. What was
 // picked, and why, goes into the attempt_leased event.
 
 type pick struct {
@@ -33,8 +34,10 @@ type pick struct {
 // toolQuota is, for each tool of the Owner's account, the fullest of its
 // pools still read for the window they are in: the used fraction and the
 // pace. A reading counts until its reset, or, when it gave none, for a
-// window's length after it was taken; without a reset the fraction of the
-// window gone is not known and the pool counts as on pace.
+// window's length after it was taken. The pace needs the fraction of the
+// window gone: without a reset, or with one further off than the window's
+// usual length (a month of 31 days), the pool counts as on pace, and its used
+// fraction still meets the quota stop (review 286 B5).
 type toolQuota struct {
 	used, pace float64
 	read       bool
@@ -61,17 +64,19 @@ func quotaByTool(ctx context.Context, tx pgx.Tx) (map[string]toolQuota, error) {
 		}
 		tool, account, window, ok := ParsePool(id)
 		length := WindowLength[window]
-		if !ok || account != DefaultAccount || length == 0 {
+		if !ok || account != DefaultAccount {
 			continue
 		}
 		pace := 0.0
 		switch {
 		case resets != nil:
 			left := resets.Sub(now)
-			if left <= 0 || left > length {
-				continue // its window has come round since, or the reset is past belief
+			if left <= 0 {
+				continue // its window has come round since
 			}
-			pace = used - (1 - float64(left)/float64(length))
+			if left <= length {
+				pace = used - (1 - float64(left)/float64(length))
+			}
 		case measured == nil || now.Sub(*measured) > length:
 			continue
 		}
@@ -96,9 +101,17 @@ func quotaStop(ctx context.Context, tx pgx.Tx, tenant string) (float64, error) {
 	return float64(r.Routing.QuotaStopPercent) / 100, nil
 }
 
-// lastLeases is each executor's latest lease epoch (epochs only grow).
+// rotationWindow bounds what rotation reads: an executor that took no work in
+// it took work longer ago than any that did.
+const rotationWindow = 7 * 24 * time.Hour
+
+// lastLeases is, for each executor that took work in the rotation window, the
+// id of its latest attempt_leased event (ids grow): read by the event type and
+// time index, so a claim reads the leases of a week, not all of history
+// (review 286 B6).
 func lastLeases(ctx context.Context, tx pgx.Tx) (map[string]int64, error) {
-	rows, err := tx.Query(ctx, `SELECT executor_actor_id, max(lease_epoch) FROM agentrt.attempt GROUP BY 1`)
+	rows, err := tx.Query(ctx, `SELECT body_json->>'executor', max(event_id) FROM agentrt.event
+	  WHERE event_type = 'attempt_leased' AND at >= clock_timestamp() - make_interval(secs => $1) GROUP BY 1`, rotationWindow.Seconds())
 	if err != nil {
 		return nil, err
 	}

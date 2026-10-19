@@ -423,7 +423,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			if err = tell("its attempt handed in nothing"); err != nil {
 				return err
 			}
-			return moveTask(ctx, tx, "controller", t, "blocked", "the brief's attempt has no report")
+			return failWork(ctx, tx, "controller", t, "the brief's attempt has no report")
 		}
 		var body []byte
 		if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, report).Scan(&body); err != nil {
@@ -435,7 +435,7 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 			if err = tell("its answer was empty"); err != nil {
 				return err
 			}
-			return moveTask(ctx, tx, "controller", t, "blocked", "the brief's report is empty")
+			return failWork(ctx, tx, "controller", t, "the brief's report is empty")
 		}
 		id, err := answer(ctx, tx, to, kind, t, text)
 		if err != nil {

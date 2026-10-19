@@ -190,3 +190,18 @@ func TestCompetenceThreshold(t *testing.T) {
 		t.Fatalf("claude at 3 of 9 still routed: %v", body["candidates"])
 	}
 }
+
+// Review 286 B5: a monthly reading whose reset is further off than 30 days
+// still meets the quota stop (its pace counts as 0).
+func TestALongMonthStillStops(t *testing.T) {
+	w := newKernelWorld(t)
+	w.legacy(t, routingRule(1, -1, 0))
+	w.ready(t, store.Task{})
+	w.reading(t, "codex:owner:monthly", 0.95, 31*24*time.Hour)
+	if c := w.claim(t, "h1", store.LeaseTTL, codex); c != nil {
+		t.Fatalf("codex at 95 %% of its month took %+v", c)
+	}
+	if c := w.claim(t, "h1", store.LeaseTTL, codex, claude); c == nil || c.Tool.Executor != "exec:claude" {
+		t.Fatalf("claim = %+v; want claude", c)
+	}
+}

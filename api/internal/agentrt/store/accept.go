@@ -362,7 +362,7 @@ func Conclude(ctx context.Context, db DB, taskID string) (string, error) {
 		}
 		if sd.round+1 > sd.maxRounds {
 			did = "blocked"
-			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("%s failed in round %d of %d", method, sd.round, sd.maxRounds))
+			return failWork(ctx, tx, "controller", s, fmt.Sprintf("%s failed in round %d of %d", method, sd.round, sd.maxRounds))
 		}
 		did = "rework"
 		if err = moveTask(ctx, tx, "controller", s, "rework", fmt.Sprintf("%s failed in round %d of %d", method, sd.round, sd.maxRounds)); err != nil {
