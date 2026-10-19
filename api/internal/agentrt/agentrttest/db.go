@@ -13,6 +13,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,6 +53,12 @@ func base(t testing.TB) string {
 // does. It does not migrate.
 func New(t testing.TB) *DB {
 	t.Helper()
+	return newFrom(t, "")
+}
+
+// newFrom is New, the database a copy of template when one is named.
+func newFrom(t testing.TB, template string) *DB {
+	t.Helper()
 	b := base(t)
 	var r [6]byte
 	_, _ = rand.Read(r[:])
@@ -61,8 +70,12 @@ func New(t testing.TB) *DB {
 		t.Fatal(err)
 	}
 	defer func() { _ = admin.Close(ctx) }()
+	create := fmt.Sprintf(`CREATE DATABASE %s OWNER agentrt_owner_dev`, name)
+	if template != "" {
+		create += " TEMPLATE " + template
+	}
 	for _, q := range []string{
-		fmt.Sprintf(`CREATE DATABASE %s OWNER agentrt_owner_dev`, name),
+		create,
 		fmt.Sprintf(`REVOKE CONNECT ON DATABASE %s FROM PUBLIC`, name),
 		fmt.Sprintf(`GRANT CONNECT ON DATABASE %s TO agentrt_owner_dev, platform_agentrt_dev, agent_reader`, name),
 	} {
@@ -93,16 +106,80 @@ func New(t testing.TB) *DB {
 	}
 }
 
-// Migrated is New followed by the migrations, run as the owner.
+// Migrated is New followed by the migrations, run as the owner: a copy of a
+// database this test process migrated once (a package's tests reached CI's
+// 120 s running the migrations in every one, 2026-10-18).
 func Migrated(t testing.TB) *DB {
 	t.Helper()
-	db := New(t)
-	ctx := context.Background()
-	c := db.Connect(t, db.Owner)
-	if _, err := migrate.Run(ctx, c, "dev"); err != nil {
-		t.Fatalf("migrate: %v", err)
+	b := base(t)
+	tmplOnce.Do(func() { tmplName, tmplErr = makeTemplate(b) })
+	if tmplErr != nil {
+		t.Fatalf("migrated template: %v", tmplErr)
 	}
-	return db
+	return newFrom(t, tmplName)
+}
+
+var (
+	tmplOnce sync.Once
+	tmplName string
+	tmplErr  error
+)
+
+// templatePrefix names the migrated databases tests copy; one older than
+// templateStale was left by a test process that ended without dropping it.
+const (
+	templatePrefix = "agentrt_tmpl_"
+	templateStale  = 6 * time.Hour
+)
+
+// makeTemplate creates and migrates the database this process copies. It is
+// left when the process ends (a package's tests have no end hook here) and
+// dropped by a later one once stale.
+func makeTemplate(b string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	admin, err := pgx.Connect(ctx, b+" dbname=postgres")
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = admin.Close(ctx) }()
+	rows, err := admin.Query(ctx, `SELECT datname FROM pg_database WHERE datname LIKE 'agentrt\_tmpl\_%'`)
+	if err != nil {
+		return "", err
+	}
+	old, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return "", err
+	}
+	for _, d := range old {
+		stamp, _, _ := strings.Cut(strings.TrimPrefix(d, templatePrefix), "_")
+		if at, perr := strconv.ParseInt(stamp, 10, 64); perr == nil && time.Since(time.Unix(at, 0)) > templateStale {
+			_, _ = admin.Exec(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, d))
+		}
+	}
+	var r [4]byte
+	_, _ = rand.Read(r[:])
+	name := fmt.Sprintf("%s%d_%s", templatePrefix, time.Now().Unix(), hex.EncodeToString(r[:]))
+	for _, q := range []string{
+		fmt.Sprintf(`CREATE DATABASE %s OWNER agentrt_owner_dev`, name),
+		fmt.Sprintf(`REVOKE CONNECT ON DATABASE %s FROM PUBLIC`, name),
+		fmt.Sprintf(`GRANT CONNECT ON DATABASE %s TO agentrt_owner_dev`, name),
+	} {
+		if _, err = admin.Exec(ctx, q); err != nil {
+			return "", fmt.Errorf("%s: %w", q, err)
+		}
+	}
+	owner, err := pgx.Connect(ctx, fmt.Sprintf("%s dbname=%s user=agentrt_owner_dev", b, name))
+	if err != nil {
+		return "", err
+	}
+	_, err = migrate.Run(ctx, owner, "dev")
+	// No connection may stay on a template while it is copied.
+	_ = owner.Close(ctx)
+	if err != nil {
+		return "", fmt.Errorf("migrate: %w", err)
+	}
+	return name, nil
 }
 
 // Connect opens a connection closed when the test ends.
