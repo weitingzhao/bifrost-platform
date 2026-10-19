@@ -188,6 +188,29 @@ func TestExams(t *testing.T) {
 	if fmt.Sprint(scores) != "[exam-alert 6/6 exam-refuse 2/3]" {
 		t.Fatalf("scores %v", scores)
 	}
+	// Which rules failed stays off the host: agentd reads neither the exams'
+	// stream nor its events across streams; a viewer reads both.
+	if code, out := call(t, s, "agentd:h1", "GET", "events?stream="+store.ExamsStream, nil); code != http.StatusForbidden {
+		t.Fatalf("agentd read the exams' stream: %d %v", code, out)
+	}
+	for _, who := range []string{"agentd:h1", "viewer"} {
+		code, out := call(t, s, who, "GET", "events?limit=500&types=capability_scored", nil)
+		if code != http.StatusOK {
+			t.Fatalf("%s across streams: %d %v", who, code, out)
+		}
+		exams := 0
+		for _, e := range out["events"].([]any) {
+			if e.(map[string]any)["event_stream_id"] == store.ExamsStream {
+				exams++
+			}
+		}
+		if (who == "viewer") != (exams > 0) {
+			t.Fatalf("%s read %d events of the exams' stream across streams", who, exams)
+		}
+	}
+	if code, out := call(t, s, "viewer", "GET", "events?stream="+store.ExamsStream, nil); code != http.StatusOK {
+		t.Fatalf("a viewer reading the exams' stream: %d %v", code, out)
+	}
 	// The next paper of the executor is handed out once the run is graded.
 	if code, out := call(t, s, "agentd:h1", "GET", paperPath, nil); code != http.StatusOK || out["run_id"] == paper.RunID {
 		t.Fatalf("the next paper: %d %v", code, out["run_id"])

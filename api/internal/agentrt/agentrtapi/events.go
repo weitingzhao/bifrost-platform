@@ -107,6 +107,7 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 			types = append(types, t)
 		}
 	}
+	hidden := hiddenFrom(r)
 	var doc []byte
 	var next eventCursor
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
@@ -115,19 +116,21 @@ func (a *API) getRecentEvents(w http.ResponseWriter, r *http.Request) {
 			return tx.QueryRow(r.Context(), `SELECT txid_snapshot_xmin(txid_current_snapshot()),
 			  COALESCE((SELECT jsonb_agg(to_jsonb(e) ORDER BY e.event_id DESC) FROM (
 			    SELECT * FROM agentrt.event WHERE ($1::text[] IS NULL OR event_type = ANY($1)) AND ($2::bigint = 0 OR event_id < $2)
-			    ORDER BY event_id DESC LIMIT $3) e), '[]')`, types, before, limit).Scan(&next.txid, &doc)
+			      AND NOT (event_stream_id = ANY($4::text[]))
+			    ORDER BY event_id DESC LIMIT $3) e), '[]')`, types, before, limit, hidden).Scan(&next.txid, &doc)
 		}
 		var n int
 		var horizon int64
 		err := tx.QueryRow(r.Context(), `WITH h AS (SELECT txid_snapshot_xmin(txid_current_snapshot()) AS x),
 		  page AS (SELECT e.* FROM agentrt.event e WHERE ($1::text[] IS NULL OR e.event_type = ANY($1))
 		    AND e.txid >= $2 AND (e.txid, e.event_id) > ($2::bigint, $3::bigint) AND e.txid < (SELECT x FROM h)
+		    AND NOT (e.event_stream_id = ANY($5::text[]))
 		    ORDER BY e.txid, e.event_id LIMIT $4)
 		  SELECT (SELECT x FROM h), COALESCE((SELECT jsonb_agg(to_jsonb(p) ORDER BY p.txid, p.event_id) FROM page p), '[]'),
 		    (SELECT count(*) FROM page),
 		    COALESCE((SELECT txid FROM page ORDER BY txid DESC, event_id DESC LIMIT 1), 0),
 		    COALESCE((SELECT event_id FROM page ORDER BY txid DESC, event_id DESC LIMIT 1), 0)`,
-			types, after.txid, after.event, limit).Scan(&horizon, &doc, &n, &next.txid, &next.event)
+			types, after.txid, after.event, limit, hidden).Scan(&horizon, &doc, &n, &next.txid, &next.event)
 		switch {
 		case err != nil:
 		case n == limit:

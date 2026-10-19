@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -540,11 +541,27 @@ func (a *API) getAttempt(w http.ResponseWriter, r *http.Request) {
 	a.getRow(w, r, `SELECT to_jsonb(a) FROM agentrt.attempt a WHERE attempt_id = $1`, chi.URLParam(r, "id"))
 }
 
+// hiddenFrom are the streams a principal of a role may not read: an Agent
+// host's agentd does not read the exams' records (capability_exams: which
+// rules an answer failed). The cut keeps per-rule results off the host
+// (CUT-chief-exam §5), and an executor reads what its agentd's user can
+// (TD-377), the token included.
+func hiddenFrom(r *http.Request) []string {
+	if actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd {
+		return []string{store.ExamsStream}
+	}
+	return []string{}
+}
+
 // getEvents lists a stream's events after a sequence number, at most 500.
 func (a *API) getEvents(w http.ResponseWriter, r *http.Request) {
 	stream := r.URL.Query().Get("stream")
 	if stream == "" {
 		a.getRecentEvents(w, r)
+		return
+	}
+	if slices.Contains(hiddenFrom(r), stream) {
+		writeError(w, http.StatusForbidden, "forbidden", "this token may not read stream "+stream)
 		return
 	}
 	var after int64
