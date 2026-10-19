@@ -31,7 +31,7 @@ func tailOf(t *testing.T, executor string) (*actionTail, func(string)) {
 			t.Fatal(err)
 		}
 	}
-	return newActionTail(executor, path, checkout), write
+	return newActionTail(executor, path, checkout, ""), write
 }
 
 // readTake reads what the log gained and takes it, as the collector and the
@@ -136,7 +136,7 @@ func TestTailReadsWholeLinesOnly(t *testing.T) {
 }
 
 func TestNoTailForOtherExecutors(t *testing.T) {
-	if tail := newActionTail("exec:deterministic", "/x/log.txt", checkout); tail != nil {
+	if tail := newActionTail("exec:deterministic", "/x/log.txt", checkout, ""); tail != nil {
 		t.Fatal("a deterministic run has a tail")
 	}
 	var none *actionTail
@@ -274,7 +274,7 @@ func TestAFIFOIsNotRead(t *testing.T) {
 	if err := syscall.Mkfifo(path, 0o600); err != nil {
 		t.Skip("no FIFO here:", err)
 	}
-	tail := newActionTail("exec:codex", path, checkout)
+	tail := newActionTail("exec:codex", path, checkout, "")
 	done := make(chan struct{})
 	go func() { tail.readNow(time.Now()); close(done) }()
 	select {
@@ -326,7 +326,7 @@ func TestFlushIsTheCollectorsRead(t *testing.T) {
 // A target longer than maxScrub is cut at a blank, never inside a credential
 // (review 267 A1).
 func TestALongTargetIsCutAtABlank(t *testing.T) {
-	tail := newActionTail("exec:codex", "", checkout)
+	tail := newActionTail("exec:codex", "", checkout, "")
 	long := "cat /home/" + strings.Repeat("p", maxScrub-10-1-7) + " ghp_FIXTURESECRETVALUE1"
 	got, cut := tail.clean(long)
 	if !cut || strings.Contains(got, "ghp_") || strings.Contains(got, "FIXT") {
@@ -535,6 +535,29 @@ func TestScrubIsBounded(t *testing.T) {
 		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Fatalf("scrub of %d bytes %q… did not end in 5 s", len(s), s[:20])
+		}
+	}
+}
+
+// STG walk 3 (2026-10-19): the attempt's own directories are named in a
+// target as a report and a log tail name them (handText): ".", "..",
+// "$HOME", "$TMPDIR", each only as a whole path; "a1.out" is not the
+// checkout "a1" with ".out" after it. Any other local path is still masked
+// whole.
+func TestTargetsNameTheAttemptsDirectories(t *testing.T) {
+	task := "/home/bifrost-agentd-stg/agent-work/agentd/tasks/t_01M5B6KKPMM15HZB4BC0ZWVJ5R"
+	tail := newActionTail("exec:codex", "", task+"/a1", task+"/a1.out")
+	for in, want := range map[string]string{
+		"mktemp -d " + task + "/a1.out/tmp/localpath-checks.XXXXXX":                               "mktemp -d $TMPDIR/localpath-checks.XXXXXX",
+		"cat " + task + "/a1/api/internal/localpath/localpath.go":                                 "cat ./api/internal/localpath/localpath.go",
+		task + "/a1/api/x_test.go":                                                                "api/x_test.go",
+		"ls " + task + "/a1.out/home/.config":                                                     "ls $HOME/.config",
+		"diff " + task + "/a2/x " + task + "/a1/x":                                                "diff ../a2/x ./x",
+		"ls /home/bifrost-agentd-stg/agent-work/other":                                            "ls <local path>",
+		"cat /home/bifrost-agentd-stg/agent-work/agentd/tasks/t_01M5B6KKPMM15HZB4BC0ZWVJ5Rx/a1/y": "cat <local path>",
+	} {
+		if got, _ := tail.clean(in); got != want {
+			t.Errorf("clean(%q) = %q; want %q", in, got, want)
 		}
 	}
 }

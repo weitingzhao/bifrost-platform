@@ -387,7 +387,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	defer func() { _ = logf.Close() }()
 	sp.Stdout, sp.Stderr = logf, logf
-	if t := newActionTail(cl.Tool.Executor, filepath.Join(a.Out, "log.txt"), a.Dir); t != nil {
+	if t := newActionTail(cl.Tool.Executor, filepath.Join(a.Out, "log.txt"), a.Dir, a.Out); t != nil {
 		l.tail.Store(t)
 		tctx, tcancel := context.WithCancel(ctx)
 		defer tcancel()

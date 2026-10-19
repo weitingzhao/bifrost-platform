@@ -41,9 +41,16 @@ func (a *Attempt) handText(kind string, body []byte) []byte {
 		return nil
 	}
 	paths := newPathRewriteAt(a.Dir, map[string]string{"$HOME": filepath.Join(a.Out, "home"), "$TMPDIR": filepath.Join(a.Out, "tmp")})
-	out := []byte(localpath.Mask(paths.rewrite(sgr.ReplaceAllString(string(body), ""))))
+	plain := sgr.ReplaceAllString(string(body), "")
+	out := []byte(localpath.Mask(paths.rewrite(plain)))
 	if kind == "log_tail" {
 		return out
+	}
+	// A reader of the report sees quoted code or logs as agentd rewrote
+	// them (a pattern "/Users/|/home/" reads "<Users>/|<home>/"); one line
+	// at the top says so (STG walk 3, 2026-10-19).
+	if string(out) != plain {
+		out = append([]byte(rewrittenNote), out...)
 	}
 	if refusedText(out) {
 		lines := strings.Split(string(out), "\n")
@@ -71,6 +78,7 @@ func (a *Attempt) handText(kind string, body []byte) []byte {
 }
 
 const (
+	rewrittenNote  = "(agentd rewrote this machine's paths in this report: the attempt's directories as ., .., $HOME, $TMPDIR; other path prefixes as <Users>/, <home>/, <tmp>/ and the like, quoted code and logs included)\n"
 	withheldLine   = "(withheld by agentd: this line still named a path of this machine or a task's workspace after masking)"
 	withheldReport = "(withheld by agentd: after masking, the report still named a path of this machine or a task's workspace)\n"
 	truncatedNote  = "(cut by agentd: the report was over 1 MiB once masked)\n"

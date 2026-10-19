@@ -204,3 +204,36 @@ func TestHandTextKeepsThePlatformsLimit(t *testing.T) {
 		t.Errorf("not cut at a line: %q", got[len(got)-160:])
 	}
 }
+
+// STG walk 3: a report whose paths agentd rewrote says so in its first line,
+// so quoted code is not read as the code; a report with nothing rewritten,
+// and a log tail, carry no such line. The verdict stays the last line.
+func TestHandTextSaysWhatItRewrote(t *testing.T) {
+	const tid = "t_01M5B2WKM1CYDFE4PWGE4D3D42"
+	dir := WorkspaceDir("/home/bifrost-agentd-stg/agent-work/agentd", tid, 1)
+	a := &Attempt{Claim: &Claimed{TaskID: tid, Role: "review"}, Dir: dir, Out: dir + ".out"}
+	quoted := []byte("the pattern is `/Users/|/home/|/tmp/`\n" + VerdictPass + "\n")
+	got := a.handText("review", quoted)
+	if !bytes.HasPrefix(got, []byte(rewrittenNote)) || !bytes.HasSuffix(got, []byte(VerdictPass+"\n")) || reviewVerdict(got) != "done" {
+		t.Fatalf("a rewritten review:\n%s", got)
+	}
+	if p, found := store.LocalPath("review", got); found {
+		t.Fatalf("the note names a local path %q", p)
+	}
+	plain := []byte("all tests pass\n" + VerdictPass + "\n")
+	if got = a.handText("review", plain); !bytes.Equal(got, plain) {
+		t.Fatalf("a review with no path was changed:\n%s", got)
+	}
+	if got = a.handText("log_tail", quoted); bytes.Contains(got, []byte(rewrittenNote)) {
+		t.Fatal("a log tail got the note")
+	}
+}
+
+// R2-2 (STG walks 2 and 3): the prompt says the caches are set and to use
+// them as they are.
+func TestPromptKeepsTheCaches(t *testing.T) {
+	p := Prompt(&Attempt{Spec: TaskSpec{Text: "do it"}})
+	if !strings.Contains(p, "GOMODCACHE") || !strings.Contains(p, "do not point them elsewhere") {
+		t.Fatalf("prompt:\n%s", p)
+	}
+}

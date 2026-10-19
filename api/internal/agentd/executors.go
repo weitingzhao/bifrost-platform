@@ -80,6 +80,9 @@ func Prompt(a *Attempt) string {
 		}
 	}
 	b.WriteString("\n\n---\nWork only in this directory. Your final message is your report, in markdown: what you did, what you ran and how it ended, and what is left. Do not write paths of this machine into the report.\n")
+	// R2-2 (STG walks 2 and 3, 2026-10-19): told to keep caches out of the
+	// checkout, codex made new empty ones and its offline build failed.
+	b.WriteString("The tools' caches (GOCACHE, GOMODCACHE, npm's cache) are already set for this attempt, outside this directory, and hold what was fetched before you started; there is no network, so use them as they are and do not point them elsewhere.\n")
 	if a.Spec.Check == "review" {
 		fmt.Fprintf(&b, "End the report with exactly one line: %q if the work is correct and complete as its spec asks, or %q if anything must change. A report without that line counts as no verdict.\n",
 			VerdictPass, VerdictFail)

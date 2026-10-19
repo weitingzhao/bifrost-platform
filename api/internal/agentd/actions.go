@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,7 @@ type actionTail struct {
 	gone    chan struct{} // closed when collect returns
 	path    string
 	dir     string
+	paths   *pathRewrite // the attempt's directories by what they are (local)
 	parse   func(t *actionTail, ev map[string]any, now time.Time)
 	off     int64
 	partial []byte
@@ -70,8 +72,10 @@ const (
 )
 
 // newActionTail is the tail of an executor's log, or nil for an executor
-// whose output is not one of the three vendors' streams.
-func newActionTail(executor, logPath, checkout string) *actionTail {
+// whose output is not one of the three vendors' streams. out is the
+// attempt's output directory, whose home and tmp are the executor's $HOME
+// and $TMPDIR.
+func newActionTail(executor, logPath, checkout, out string) *actionTail {
 	parse := map[string]func(*actionTail, map[string]any, time.Time){
 		"exec:codex":  parseCodex,
 		"exec:cursor": parseCursor,
@@ -80,7 +84,12 @@ func newActionTail(executor, logPath, checkout string) *actionTail {
 	if parse == nil {
 		return nil
 	}
-	return &actionTail{path: logPath, dir: strings.TrimRight(checkout, "/"), parse: parse, cmds: map[string]cleanCmd{},
+	dir := strings.TrimRight(checkout, "/")
+	named := map[string]string{}
+	if out != "" {
+		named["$HOME"], named["$TMPDIR"] = filepath.Join(out, "home"), filepath.Join(out, "tmp")
+	}
+	return &actionTail{path: logPath, dir: dir, paths: newPathRewriteAt(dir, named), parse: parse, cmds: map[string]cleanCmd{},
 		flushes: make(chan flushReq), gone: make(chan struct{})}
 }
 
@@ -241,8 +250,14 @@ func (t *actionTail) addClean(kind actions.Kind, target string, cut bool, now ti
 	}
 }
 
-// local writes the checkout's path as relative: a path inside it loses the
-// prefix, the checkout itself and any other mention of it become ".".
+// local writes the attempt's own directories as what they are, the way a
+// report and a log tail are handed in (handText, TD-382): a target that
+// starts in the checkout loses the prefix; elsewhere the checkout is ".",
+// its task's directory "..", the executor's home and temporary directory
+// "$HOME" and "$TMPDIR", each only as a whole path (a plain replace wrote
+// ".../a1.out/tmp/x" as "..out/tmp/x", which scrub then cut to
+// "..out<local path>"; STG walk 3, 2026-10-19). Any other local path is
+// masked whole by scrub, as before.
 func (t *actionTail) local(s string) string {
 	if t.dir == "" {
 		return s
@@ -250,7 +265,7 @@ func (t *actionTail) local(s string) string {
 	if strings.HasPrefix(s, t.dir+"/") {
 		s = s[len(t.dir)+1:]
 	}
-	return strings.ReplaceAll(s, t.dir, ".")
+	return t.paths.rewrite(s)
 }
 
 func str(v any) string {
