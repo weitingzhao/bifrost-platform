@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,7 +15,8 @@ import (
 // changes waiting on a decision card, and what each holds up.
 
 // needsYou lists what the Owner may act on (SPEC §2.1): plan changes on a
-// decision card no decision is recorded for. Whether the card is still open
+// decision card no decision is recorded for, and missions outside the
+// standing envelope waiting on their card. Whether the card is still open
 // is the question store's to say, which this read does not reach: an item is
 // a candidate, and the Console keeps it only while that question is open.
 // Waits he cannot act on are the missions' statuses.
@@ -57,17 +60,23 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 		list = list[:pendingChangeLimit]
 	}
 	// One card is one item: a second proposal naming a card already listed
-	// adds its event to that item.
-	items := make([]any, 0, len(list))
+	// adds its event to that item. Plan changes and missions share one
+	// bound, oldest first (review 190 B4).
+	type entry struct {
+		at time.Time
+		id string
+		it map[string]any
+	}
+	var entries []entry
 	byQuestion := map[string]map[string]any{}
 	for _, p := range list {
 		if it, seen := byQuestion[p.question]; seen {
 			it["also_refs"] = append(it["also_refs"].([]string), fmt.Sprint(p.event))
 			continue
 		}
-		blocks, err := changeBlocks(ctx, tx, p.changes)
-		if err != nil {
-			return nil, err
+		blocks, berr := changeBlocks(ctx, tx, p.changes)
+		if berr != nil {
+			return nil, berr
 		}
 		it := map[string]any{"id": "question:" + p.question, "kind": "plan_change", "ref": fmt.Sprint(p.event), "also_refs": []string{},
 			"title": "Plan change to " + p.root + ": " + firstLine(p.reason), "since": p.at.UTC().Format(time.RFC3339Nano),
@@ -77,9 +86,83 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 			"deadline": nil, "blocks": blocks,
 			"after": "Apply: the controller lands the change on its next pass (about 15 seconds). Do not apply: the plan stays as it is."}
 		byQuestion[p.question] = it
-		items = append(items, it)
+		entries = append(entries, entry{p.at, p.question, it})
+	}
+	cards, more, err := missionCards(ctx, tx, now, byQuestion)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range cards {
+		entries = append(entries, entry{c.at, c.question, c.it})
+	}
+	slices.SortFunc(entries, func(a, b entry) int {
+		if c := a.at.Compare(b.at); c != 0 {
+			return c
+		}
+		return strings.Compare(a.id, b.id)
+	})
+	truncated = truncated || more
+	if len(entries) > pendingChangeLimit {
+		entries, truncated = entries[:pendingChangeLimit], true
+	}
+	items := make([]any, 0, len(entries))
+	for _, e := range entries {
+		items = append(items, e.it)
 	}
 	return map[string]any{"count": len(items), "items": items, "truncated": truncated}, nil
+}
+
+type missionCard struct {
+	at       time.Time
+	question string
+	it       map[string]any
+}
+
+// missionCards are the missions outside the standing envelope waiting on
+// their card, oldest first, at most the bound (more says there were more),
+// leaving out a card already listed.
+func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
+	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, s.at, s.body_json->>'question_id', COALESCE(s.body_json->>'reason', ''),
+	    (SELECT count(*) FROM agentrt.task t WHERE t.mission_id = m.mission_id AND t.state NOT IN ('accepted','rejected','cancelled'))
+	  FROM agentrt.mission m
+	  JOIN LATERAL (SELECT e.at, e.body_json FROM agentrt.event e WHERE e.mission_id = m.mission_id
+	    AND e.event_type = 'mission_state_changed' ORDER BY e.event_id DESC LIMIT 1) s ON true
+	  WHERE m.state = 'awaiting_owner' AND s.body_json ? 'question_id' ORDER BY s.at, m.mission_id LIMIT $1`, pendingChangeLimit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	type row struct {
+		mission, title, question, why string
+		at                            time.Time
+		open                          int
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+		var c row
+		return c, r.Scan(&c.mission, &c.title, &c.at, &c.question, &c.why, &c.open)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(list) > pendingChangeLimit
+	if more {
+		list = list[:pendingChangeLimit]
+	}
+	var cards []missionCard
+	for _, c := range list {
+		if _, seen := listed[c.question]; seen {
+			continue
+		}
+		it := map[string]any{"id": "question:" + c.question, "kind": "mission", "ref": c.mission, "also_refs": []string{},
+			"title": "Mission " + c.mission + ": " + firstLine(c.title), "since": c.at.UTC().Format(time.RFC3339Nano),
+			"waiting_min": int64(now.Sub(c.at) / time.Minute),
+			"action":      map[string]any{"where": "console", "question_id": c.question, "options": []string{MissionStart, MissionNotStart}},
+			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
+			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
+			"after": "Start: the controller makes it active on its next pass (about 15 seconds). Do not start: it stops."}
+		listed[c.question] = it
+		cards = append(cards, missionCard{c.at, c.question, it})
+	}
+	return cards, more, nil
 }
 
 // changeBlocks is what a waiting plan change holds up (SPEC §2.1), from one

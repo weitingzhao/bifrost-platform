@@ -179,7 +179,7 @@ func TestEnvelopeTighteningReachesStartedMissions(t *testing.T) {
 	s := signer{t, rptest.NewKey(t)}
 	ok(t, firstErr(s.sign(w, envelopeRule(1, rules.Initial, "h1, h2, h3"))))
 	out, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "m", store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"},
-		MaxAttempts: 10, MaxWallHours: 10})
+		MaxAttempts: 10, MaxWallHours: 10}, nil)
 	ok(t, err)
 	mission := out["mission_id"].(string)
 	if out["state"] != "active" {

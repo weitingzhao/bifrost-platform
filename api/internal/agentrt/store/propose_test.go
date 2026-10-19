@@ -64,19 +64,19 @@ var mission = store.MissionProposal{Title: "m", Goal: "g", Success: []string{"it
 // bad proposal writes nothing at all.
 func TestProposeMission(t *testing.T) {
 	w := newWorld(t)
-	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", mission)
+	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", mission, nil)
 	ok(t, err)
 	if first["mission_id"] != "M-3" || first["state"] != "proposed" || first["waiting"] != store.EnvelopePending {
 		t.Fatalf("answer %v", first)
 	}
-	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", mission)
+	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", mission, nil)
 	ok(t, err)
 	same(t, again, first)
 	other := mission
 	other.Goal = "another goal"
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", other)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", other, nil)
 	is(t, err, store.ErrConflict)
-	second, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k2", other)
+	second, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k2", other, nil)
 	ok(t, err)
 	if second["mission_id"] != "M-4" {
 		t.Fatalf("second mission %v", second)
@@ -98,7 +98,7 @@ func TestProposeMission(t *testing.T) {
 	full := mission
 	full.Repos, full.MaxAction, full.MaxAttempts, full.MaxWallHours, full.Tenant = []string{"bifrost-platform"}, "none", 40, 48, "business"
 	full.Deadline = time.Now().Add(time.Hour)
-	out, err := store.ProposeMission(ctx, w.rt, wr("owner"), "k3", full)
+	out, err := store.ProposeMission(ctx, w.rt, wr("owner"), "k3", full, nil)
 	ok(t, err)
 	ok(t, w.rt.QueryRow(ctx, `SELECT created_by_actor_id, scope_json::text, budget_json::text, tenant FROM agentrt.mission
 	  WHERE mission_id = $1`, out["mission_id"]).Scan(&by, &scope, &budget, &tenant))
@@ -136,7 +136,7 @@ func TestProposeMission(t *testing.T) {
 	} {
 		p := mission
 		c.edit(&p)
-		if _, err := store.ProposeMission(ctx, w.rt, wr(c.actor), c.key, p); !errors.Is(err, store.ErrInvalid) {
+		if _, err := store.ProposeMission(ctx, w.rt, wr(c.actor), c.key, p, nil); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("%s: err = %v", name, err)
 		}
 	}
@@ -153,18 +153,18 @@ func TestMissionDeadlineRetry(t *testing.T) {
 	w := newWorld(t)
 	p := mission
 	p.Deadline = time.Now().Add(300 * time.Millisecond)
-	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p)
+	first, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p, nil)
 	ok(t, err)
 	time.Sleep(400 * time.Millisecond)
-	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p)
+	again, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", p, nil)
 	ok(t, err)
 	same(t, again, first)
 	moved := p
 	moved.Deadline = time.Now().Add(time.Hour)
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", moved)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s1"), "k1", moved, nil)
 	is(t, err, store.ErrConflict)
 	before := w.footprint(t)
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s2"), "k2", p)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:s2"), "k2", p, nil)
 	is(t, err, store.ErrInvalid)
 	if after := w.footprint(t); after != before {
 		t.Fatalf("a proposal past its deadline left something: %s -> %s", before, after)
@@ -175,19 +175,19 @@ func TestMissionDeadlineRetry(t *testing.T) {
 // registered go on writing.
 func TestThreadRegistrationBound(t *testing.T) {
 	w := newWorld(t)
-	_, err := store.ProposeMission(ctx, w.rt, wr("thread:known"), "k1", mission)
+	_, err := store.ProposeMission(ctx, w.rt, wr("thread:known"), "k1", mission, nil)
 	ok(t, err)
 	w.legacy(t, fmt.Sprintf(`INSERT INTO agentrt.actor (actor_id, actor_kind, display_name)
 	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay-1))
 	before := w.footprint(t)
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:one-more"), "k1", mission)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:one-more"), "k1", mission, nil)
 	if !errors.Is(err, store.ErrInvalid) || !strings.Contains(err.Error(), "threads were registered") {
 		t.Fatalf("a thread past the day's bound: %v", err)
 	}
 	if after := w.footprint(t); after != before {
 		t.Fatalf("a refused registration left something: %s -> %s", before, after)
 	}
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:known"), "k2", mission)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:known"), "k2", mission, nil)
 	ok(t, err)
 }
 
@@ -199,7 +199,7 @@ func TestMissionNumberLock(t *testing.T) {
 	w := newWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	for _, th := range []string{"thread:a", "thread:b"} {
-		_, err := store.ProposeMission(ctx, pool, wr(th), "first", mission)
+		_, err := store.ProposeMission(ctx, pool, wr(th), "first", mission, nil)
 		ok(t, err)
 	}
 	hold, reached := make(chan struct{}), make(chan struct{})
@@ -215,7 +215,7 @@ func TestMissionNumberLock(t *testing.T) {
 	})()
 	got := make(chan any, 2)
 	propose := func(th string) {
-		out, err := store.ProposeMission(ctx, pool, wr(th), "second", mission)
+		out, err := store.ProposeMission(ctx, pool, wr(th), "second", mission, nil)
 		if err != nil {
 			got <- err
 			return
@@ -575,7 +575,7 @@ func TestBatchAndControlOfOneWriter(t *testing.T) {
 	w := newKernelWorld(t)
 	pool := w.db.Pool(t, w.db.Runtime)
 	target := w.ready(t, store.Task{})
-	_, err := store.ProposeMission(ctx, pool, wr("thread:s1"), "register", mission)
+	_, err := store.ProposeMission(ctx, pool, wr("thread:s1"), "register", mission, nil)
 	ok(t, err)
 	hold, reached := make(chan struct{}), make(chan struct{})
 	var first atomic.Bool
@@ -652,12 +652,12 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 	})()
 	got := make(chan error, 2)
 	go func() {
-		_, perr := store.ProposeMission(ctx, pool, wr("thread:new1"), "k", mission)
+		_, perr := store.ProposeMission(ctx, pool, wr("thread:new1"), "k", mission, nil)
 		got <- perr
 	}()
 	<-reached
 	go func() {
-		_, perr := store.ProposeMission(ctx, pool, wr("thread:new2"), "k", mission)
+		_, perr := store.ProposeMission(ctx, pool, wr("thread:new2"), "k", mission, nil)
 		got <- perr
 	}()
 	// The second waits for the registration lock, or (without it) is done.
@@ -685,10 +685,10 @@ func TestThreadQuotaAtOnce(t *testing.T) {
 // not only the first write of a thread.
 func TestTokenOnEveryWrite(t *testing.T) {
 	w := newKernelWorld(t)
-	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "first"}, "k1", mission)
+	_, err := store.ProposeMission(ctx, w.rt, store.Writer{Actor: "thread:s", Token: "first"}, "k1", mission, nil)
 	ok(t, err)
 	b := store.Writer{Actor: "thread:s", Token: "second"}
-	m, err := store.ProposeMission(ctx, w.rt, b, "k2", mission)
+	m, err := store.ProposeMission(ctx, w.rt, b, "k2", mission, nil)
 	ok(t, err)
 	tasks, err := store.ProposeTasks(ctx, w.rt, b, "k3", "M-1", []store.TaskProposal{proposal("a", w.spec)})
 	ok(t, err)
@@ -714,7 +714,7 @@ func TestControlsPastThreadQuota(t *testing.T) {
 	  SELECT 'thread:bulk' || i, 'thread', 'bulk' FROM generate_series(1, %d) i`, store.ThreadsPerDay))
 	_, err := store.RequestControl(ctx, w.rt, wr("thread:late"), "k1", "global", "", "stop", "stop everything")
 	ok(t, err)
-	_, err = store.ProposeMission(ctx, w.rt, wr("thread:later"), "k1", mission)
+	_, err = store.ProposeMission(ctx, w.rt, wr("thread:later"), "k1", mission, nil)
 	is(t, err, store.ErrInvalid)
 }
 

@@ -93,6 +93,12 @@ var missionMoves = map[string][]string{
 // the mission row exclusively, so a claim of one of its tasks either commits
 // first or sees the new state.
 func MoveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason string) error {
+	return moveMission(ctx, tx, actor, missionID, to, reason, "", "")
+}
+
+// moveMission is MoveMission naming the decision card the move is about and,
+// when the move acts on its answer, the option answered.
+func moveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason, question, answer string) error {
 	var from string
 	if err := tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`, missionID).Scan(&from); err != nil {
 		return err
@@ -103,6 +109,12 @@ func MoveMission(ctx context.Context, tx pgx.Tx, actor, missionID, to, reason st
 	body := map[string]any{"from": from, "to": to}
 	if reason != "" {
 		body["reason"] = reason
+	}
+	if question != "" {
+		body["question_id"] = question
+	}
+	if answer != "" {
+		body["answer"] = answer
 	}
 	if _, err := Append(ctx, tx, Event{Stream: MissionStream(missionID), Type: "mission_state_changed", Actor: actor,
 		MissionID: missionID, Body: body}); err != nil {

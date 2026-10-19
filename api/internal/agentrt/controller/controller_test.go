@@ -396,6 +396,36 @@ func TestStartDecidesPlanChanges(t *testing.T) {
 	}
 }
 
+// The loops decide missions on a card: once the Owner answers a mission's
+// card with the first option, the mission is active.
+func TestStartDecidesMissions(t *testing.T) {
+	pool := setup(t)
+	out, err := store.ProposeMission(ctx, pool, store.Writer{Actor: "thread:s1", Token: "operator"}, "k1",
+		store.MissionProposal{Title: "m", Goal: "g", Success: []string{"done"}},
+		func(context.Context, store.Card) (string, error) { return "q_8", nil })
+	must(t, err)
+	if out["state"] != "awaiting_owner" || out["question_id"] != "q_8" {
+		t.Fatalf("proposal: %v", out)
+	}
+	w := &world{questions: map[string]store.Question{"q_8": {ID: "q_8", Status: store.QuestionAnswered, Option: store.CardApplyKey,
+		AnsweredBy: "owner", AnsweredAt: "2026-10-14T20:00:00Z"}}}
+	c := &controller.Controller{DB: pool, Sources: w.sources(), LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
+	run, cancel := context.WithCancel(ctx)
+	wait := c.Start(run)
+	defer wait()
+	defer cancel()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var state string
+		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1`, out["mission_id"]).Scan(&state))
+		if state == "active" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the loops did not start the mission (it is %s)", state)
+		}
+	}
+}
+
 // W-31 2.4 slice ④: with Briefs the controller leaves the chief of staff the
 // brief of the slot due, and the same pass takes it into a brief; without
 // Briefs (tests, and any controller not wired for them) it leaves nothing.

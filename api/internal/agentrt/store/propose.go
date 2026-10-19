@@ -219,28 +219,74 @@ func (p MissionProposal) request() map[string]any {
 // standing-envelope 内自动 active).
 const EnvelopePending = "no standing-envelope rule is in force: the mission waits for the Owner"
 
+// The bounds of a proposed mission's words (Owner 2026-10-15 「决策卡 A」): a
+// mission outside the standing envelope goes on the Owner's card whole, and
+// the question store takes a card body of 3000 encoded bytes; a proposal
+// within these bounds fits a card. The details go in a document the goal
+// names.
+const (
+	MaxMissionTitleBytes   = 200
+	MaxMissionGoalBytes    = 1200
+	MaxMissionSuccess      = 10
+	MaxMissionSuccessBytes = 200
+	MaxMissionRepos        = 12
+)
+
+// tooLong is the advice a proposal that does not fit is given.
+const tooLong = "too long: put the details in a document (an artifact, or a file in a repo) and name it in the goal"
+
+// bounded checks the words of a proposal against the bounds, whatever
+// envelope is in force, so whether a proposal is taken never depends on the
+// rules of the day. Nothing is cut.
+func (p MissionProposal) bounded() error {
+	switch {
+	case len(p.Title) > MaxMissionTitleBytes:
+		return invalid("the title is %d bytes, more than %d: %s", len(p.Title), MaxMissionTitleBytes, tooLong)
+	case len(p.Goal) > MaxMissionGoalBytes:
+		return invalid("the goal is %d bytes, more than %d: %s", len(p.Goal), MaxMissionGoalBytes, tooLong)
+	case len(p.Success) > MaxMissionSuccess:
+		return invalid("%d success criteria, more than %d: %s", len(p.Success), MaxMissionSuccess, tooLong)
+	case len(p.Repos) > MaxMissionRepos:
+		return invalid("%d repos, more than %d: propose a mission for fewer", len(p.Repos), MaxMissionRepos)
+	}
+	for i, c := range p.Success {
+		if len(c) > MaxMissionSuccessBytes {
+			return invalid("success criterion %d is %d bytes, more than %d: %s", i+1, len(c), MaxMissionSuccessBytes, tooLong)
+		}
+	}
+	return nil
+}
+
 // ProposeMission records mission_proposed with a number the platform gives
 // (M-<n>, one more than the largest there is, under a lock two proposals
 // share). The idempotency key is the writer's: a retry with the same key and
 // request gets the first answer, even after the deadline has passed; the
-// same key with another request is ErrConflict.
-func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionProposal) (map[string]any, error) {
+// same key with another request is ErrConflict. A mission outside the
+// standing envelope in force goes on the Owner's decision card through ask
+// and waits as awaiting_owner (missiondecide.go); without ask it stays
+// proposed.
+func ProposeMission(ctx context.Context, db DB, w Writer, key string, p MissionProposal, ask Ask) (map[string]any, error) {
 	if key == "" {
 		return nil, invalid("an idempotency key is required")
+	}
+	if err := p.bounded(); err != nil {
+		return nil, err
 	}
 	p, err := p.check()
 	if err != nil {
 		return nil, err
 	}
 	return idempotent(ctx, db, w.Actor, "missions", key, p.request(), nil, func(tx pgx.Tx) (map[string]any, error) {
-		return proposeMissionTx(ctx, tx, w, p)
+		return proposeMissionTx(ctx, tx, w, p, key, ask)
 	})
 }
 
 // proposeMissionTx is ProposeMission's write, in a transaction its caller
 // holds (a goal proposes its mission and its plan task in one; goal.go). p
-// has been checked.
-func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposal) (map[string]any, error) {
+// has been checked. key and ask put a mission outside the envelope on the
+// Owner's card; a goal's or a brief's mission passes no ask and stays
+// proposed there.
+func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposal, key string, ask Ask) (map[string]any, error) {
 	// Only a new proposal is held to the clock (review 175 A4).
 	now := time.Now()
 	deadline := p.Deadline
@@ -263,6 +309,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	hook("numbered", id)
 	// A proposal stating no budget takes the tenant's budget rule's; one
 	// inside the standing envelope in force starts at once (proposal §2).
+	asked := p // the proposal as it came, for the Owner's card
 	if p.MaxAttempts == 0 && p.MaxWallHours == 0 {
 		b, err := inForce(ctx, tx, rules.KindBudget+":"+p.Tenant)
 		if err != nil {
@@ -283,7 +330,15 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	}
 	inside, why := envelopeFit(env, p)
 	if !inside {
-		return map[string]any{"mission_id": id, "state": "proposed", "waiting": why}, nil
+		// Outside the envelope the Owner decides, on a card.
+		if ask == nil {
+			return map[string]any{"mission_id": id, "state": "proposed", "waiting": why}, nil
+		}
+		q, err := askMission(ctx, tx, w, key, id, asked, why, ask)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"mission_id": id, "state": "awaiting_owner", "waiting": why, "question_id": q}, nil
 	}
 	if err := MoveMission(ctx, tx, "controller", id, "active", fmt.Sprintf("inside %s v%d", env.ID, env.Version)); err != nil {
 		return nil, err

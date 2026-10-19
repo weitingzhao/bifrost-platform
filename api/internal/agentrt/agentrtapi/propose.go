@@ -59,8 +59,12 @@ type missionBody struct {
 }
 
 // proposeMission is POST /missions: mission_proposed with a number the
-// platform gives. Until a signed standing envelope exists the mission stays
-// proposed (the answer says so).
+// platform gives. Inside the standing envelope in force the mission is active
+// at once; outside it, it waits as awaiting_owner on the Owner's decision
+// card (the answer names the question), or stays proposed when the platform
+// has no question store (the answer says why either way). A title, goal or
+// success list longer than a card holds is refused (Owner 2026-10-15
+// 「决策卡 A」).
 func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 	var b missionBody
 	if !decode(w, r, &b) {
@@ -79,7 +83,7 @@ func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 	if b.Budget != nil {
 		p.MaxAttempts, p.MaxWallHours = b.Budget.MaxAttempts, b.Budget.MaxWallHours
 	}
-	out, err := store.ProposeMission(r.Context(), a.DB, who, b.IdempotencyKey, p)
+	out, err := store.ProposeMission(r.Context(), a.DB, who, b.IdempotencyKey, p, a.Ask)
 	if err != nil {
 		a.fail(w, err)
 		return

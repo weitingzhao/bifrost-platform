@@ -362,10 +362,10 @@ type progressMission struct {
 	id, title, goal, state, deadline, work string
 	// The event that put the mission in its state (when, why, by whom) and
 	// the mission's last event (when anything last happened in it).
-	stateAt, stateReason, stateBy, lastAt string
-	steps                                 []plan.Step
-	next                                  []any
-	tasks                                 []*ProgressTask
+	stateAt, stateReason, stateBy, stateQuestion, lastAt string
+	steps                                                []plan.Step
+	next                                                 []any
+	tasks                                                []*ProgressTask
 }
 
 func stamp(t *time.Time) string {
@@ -377,7 +377,7 @@ func stamp(t *time.Time) string {
 
 func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]time.Duration) (map[string]any, error) {
 	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, m.goal, m.state, m.deadline_at, COALESCE(m.work_id, ''),
-	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), l.at
+	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), COALESCE(s.body_json->>'question_id', ''), l.at
 	  FROM agentrt.mission m
 	  LEFT JOIN LATERAL (SELECT e.at, e.body_json, e.actor_id FROM agentrt.event e WHERE e.mission_id = m.mission_id
 	    AND e.event_type IN ('mission_proposed','mission_state_changed') ORDER BY e.event_id DESC LIMIT 1) s ON true
@@ -392,7 +392,8 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		m := &progressMission{}
 		var deadline time.Time
 		var stateAt, lastAt *time.Time
-		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work, &stateAt, &m.stateReason, &m.stateBy, &lastAt); err != nil {
+		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work, &stateAt, &m.stateReason, &m.stateBy,
+			&m.stateQuestion, &lastAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -530,6 +531,11 @@ func missionDoc(m *progressMission) map[string]any {
 				break
 			}
 		}
+		// A mission on the Owner's card says so, with or without tasks
+		// (review 190 B4).
+		if status == StatusWaitingOwner && m.state == "awaiting_owner" && m.stateQuestion != "" {
+			reason = missionCardReason(m)
+		}
 		switch status {
 		case StatusWaitingOwner:
 			waiting = "owner"
@@ -546,6 +552,9 @@ func missionDoc(m *progressMission) map[string]any {
 		case m.state == "proposed" || m.state == "awaiting_owner":
 			status, waiting, since = StatusWaitingOwner, "owner", m.stateAt
 			reason = "the mission is " + m.state + ": it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet"
+			if m.stateQuestion != "" {
+				reason = missionCardReason(m)
+			}
 		case m.state == "paused":
 			status, waiting, since = StatusBlocked, "coordinator", m.stateAt
 			reason = "the mission is paused"
@@ -565,6 +574,11 @@ func missionDoc(m *progressMission) map[string]any {
 		"work_id": m.work, "slices": countDoc(count), "status": status, "reason": reason, "since": since, "waiting_on": waiting,
 		"waiting_roles": nonNil(roles), "tasks": tasks, "next_steps": nonNilAny(m.next),
 		"eta": map[string]any{"state": "unknown", "reason": "no history of slice times yet; the runtime gives times once Gate A has run"}}
+}
+
+// missionCardReason is why a mission on the Owner's card waits.
+func missionCardReason(m *progressMission) string {
+	return "the mission waits for the Owner's answer on question " + m.stateQuestion + ": " + m.stateReason
 }
 
 func nonNilAny(s []any) []any {

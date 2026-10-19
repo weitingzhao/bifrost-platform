@@ -29,13 +29,39 @@ func TestProposeMissionRoute(t *testing.T) {
 	if code, out := call(t, s, "operator", "POST", "missions", body); code != http.StatusUnprocessableEntity || out["error"] != "invalid" {
 		t.Fatalf("a thread without a session: %d %v", code, out)
 	}
+	// No standing envelope is in force: the mission waits on the Owner's card.
+	cards, askFails = nil, false
 	status, first := call(t, s, "operator", "POST", "missions", body, session, "s1")
-	if status != http.StatusOK || first["mission_id"] != "M-2" || first["state"] != "proposed" {
-		t.Fatalf("propose: %d %v", status, first)
+	if status != http.StatusOK || first["mission_id"] != "M-2" || first["state"] != "awaiting_owner" || first["question_id"] != "q_1" ||
+		len(cards) != 1 || cards[0].Title != "Mission: m" || cards[0].Options[0] != store.MissionStart {
+		t.Fatalf("propose: %d %v, cards %+v", status, first, cards)
 	}
-	if code, again := call(t, s, "operator", "POST", "missions", body, session, "s1"); code != http.StatusOK || again["mission_id"] != "M-2" {
-		t.Fatalf("a retry: %d %v", code, again)
+	if code, again := call(t, s, "operator", "POST", "missions", body, session, "s1"); code != http.StatusOK || again["mission_id"] != "M-2" ||
+		len(cards) != 1 {
+		t.Fatalf("a retry: %d %v, %d cards", code, again, len(cards))
 	}
+	// The Owner cannot be asked: refused whole, to be tried again.
+	askFails = true
+	body["idempotency_key"] = "k-unreachable"
+	if code, out := call(t, s, "operator", "POST", "missions", body, session, "s1"); code != http.StatusServiceUnavailable || out["error"] != "owner_unreachable" {
+		t.Fatalf("the Owner unreachable: %d %v", code, out)
+	}
+	askFails = false
+	// Words longer than a card holds are refused, whatever the envelope
+	// (Owner 2026-10-15 「决策卡 A」), with what to do instead.
+	for name, edit := range map[string]func(b map[string]any){
+		"title":   func(b map[string]any) { b["title"] = strings.Repeat("t", store.MaxMissionTitleBytes+1) },
+		"goal":    func(b map[string]any) { b["goal"] = strings.Repeat("目", store.MaxMissionGoalBytes/3+1) },
+		"success": func(b map[string]any) { b["success"] = []string{strings.Repeat("s", store.MaxMissionSuccessBytes+1)} },
+	} {
+		long := map[string]any{"idempotency_key": "k-long-" + name, "title": "m", "goal": "g", "success": []string{"it works"}}
+		edit(long)
+		code, out := call(t, s, "operator", "POST", "missions", long, session, "s1")
+		if msg, _ := out["message"].(string); code != http.StatusUnprocessableEntity || !strings.Contains(msg, "put the details in a document") {
+			t.Errorf("a long %s: %d %v", name, code, out)
+		}
+	}
+	body["idempotency_key"] = "k1"
 	body["goal"] = "another"
 	if code, out := call(t, s, "operator", "POST", "missions", body, session, "s1"); code != http.StatusConflict || out["error"] != "key_conflict" {
 		t.Fatalf("a reused key: %d %v", code, out)
@@ -69,7 +95,7 @@ func TestProposeMissionRoute(t *testing.T) {
 		t.Fatalf("an unknown field: %d", code)
 	}
 	status, m := call(t, s, "viewer", "GET", "missions/M-2", nil)
-	if status != http.StatusOK || m["state"] != "proposed" || m["created_by_actor_id"] != "thread:s1" {
+	if status != http.StatusOK || m["state"] != "awaiting_owner" || m["created_by_actor_id"] != "thread:s1" {
 		t.Fatalf("read: %d %v", status, m)
 	}
 	if code, _ := call(t, s, "viewer", "GET", "missions/M-99", nil); code != http.StatusNotFound {

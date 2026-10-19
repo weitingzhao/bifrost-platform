@@ -462,12 +462,14 @@ var ErrAsk = errors.New("store: the Owner cannot be asked now")
 // title and body only, and gets the two options below; a planner's names its
 // own options, the one it goes with when nobody answers (1-based), what
 // happens meanwhile, which of the Owner's duties it is and the task that asks
-// (planresult.go).
+// (planresult.go); a mission's (missiondecide.go) names its options, what
+// happens meanwhile, the duty and how soon (Urgency), with no default.
 type Card struct {
 	Key, Title, Body             string
 	Options                      []string
 	Recommended                  int
 	Meanwhile, OwnerDuty, TaskID string
+	Urgency                      string
 }
 
 // Options of a plan change's card, as the Owner reads them, and the keys

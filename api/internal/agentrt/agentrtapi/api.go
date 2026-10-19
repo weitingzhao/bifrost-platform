@@ -38,7 +38,8 @@ type API struct {
 	ClaimWait, ClaimPoll time.Duration
 	Logf                 func(format string, args ...any)
 	// Ask creates the Owner's decision card for a plan change outside the
-	// standing authorization; nil answers such a proposal 503.
+	// standing authorization (nil answers such a proposal 503) and for a
+	// mission outside the standing envelope (nil leaves it proposed).
 	Ask store.Ask
 	// Anchor is the fingerprint of the Owner's signing key a signed rule must
 	// verify against (releasepolicy.OwnerKeyFingerprint); empty refuses every

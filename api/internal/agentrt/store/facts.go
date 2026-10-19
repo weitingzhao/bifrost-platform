@@ -116,17 +116,23 @@ func SeeQuestion(ctx context.Context, db DB, id string, question func(context.Co
 		if !ok {
 			return nil, false, nil
 		}
-		if q.Status == QuestionAnswered && (q.Option == "" || q.AnsweredBy == "" || q.AnsweredAt == "") {
-			return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
-		}
-		body := map[string]any{"question": id, "status": q.Status}
-		for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt} {
-			if v != "" {
-				body[k] = v
-			}
-		}
-		return body, true, nil
+		return questionSeenBody(id, q)
 	})
+}
+
+// questionSeenBody is the question_seen body of a question as read: its
+// status and, once answered, the whole answer.
+func questionSeenBody(id string, q Question) (map[string]any, bool, error) {
+	if q.Status == QuestionAnswered && (q.Option == "" || q.AnsweredBy == "" || q.AnsweredAt == "") {
+		return nil, false, fmt.Errorf("%w: question %s is answered but its option, answerer or time is missing", ErrState, id)
+	}
+	body := map[string]any{"question": id, "status": q.Status}
+	for k, v := range map[string]string{"option": q.Option, "text": q.Text, "answered_by": q.AnsweredBy, "answered_at": q.AnsweredAt} {
+		if v != "" {
+			body[k] = v
+		}
+	}
+	return body, true, nil
 }
 
 // SeeCI reads the status of the CI run of a commit and records a change

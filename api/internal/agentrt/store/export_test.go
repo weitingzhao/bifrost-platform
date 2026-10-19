@@ -114,3 +114,11 @@ func ChangeBlocksForTest(ctx context.Context, db DB, changes []PlanChange) (any,
 // RefuseMailForTest is refuseMail, the end of a message that cannot become a
 // brief.
 var RefuseMailForTest = refuseMail
+
+// DecidePageForTest lowers how many waiting missions a decision pass reads
+// at a time, and returns the function that restores it.
+func DecidePageForTest(n int) func() {
+	old := decidePageSize
+	decidePageSize = n
+	return func() { decidePageSize = old }
+}

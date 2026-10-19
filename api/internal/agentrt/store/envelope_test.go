@@ -85,7 +85,7 @@ func TestEnvelopeStartsMission(t *testing.T) {
 	propose := func(key string, p store.MissionProposal) map[string]any {
 		t.Helper()
 		p.Title, p.Goal, p.Success = "m", "g", []string{"done"}
-		out, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), key, p)
+		out, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), key, p, nil)
 		ok(t, err)
 		return out
 	}

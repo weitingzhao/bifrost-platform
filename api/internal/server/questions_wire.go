@@ -105,7 +105,9 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 // standing authorization to the Owner (design v5 §5.2 POST /plan/proposals):
 // a decision card of the runtime's own (session agentrt), owner_duty goal,
 // two options the controller reads back (apply, do not apply), keyed by the
-// proposal so a retry finds the same card. nil without a question store.
+// proposal so a retry finds the same card. A planner's card and a mission's
+// card name their own options; only a planner's has a default and a task.
+// nil without a question store.
 func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 	if rt == nil || rt.svc == nil {
 		return nil
@@ -121,7 +123,8 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			"idempotency_key": card.Key,
 		}
 		// A planner's card (W-31 2.2b): its own options and default; the
-		// work goes on with the default meanwhile.
+		// work goes on with the default meanwhile. A mission's card: its own
+		// options, no default, and how soon it says (missiondecide.go).
 		if len(card.Options) > 0 {
 			options := make([]map[string]string, 0, len(card.Options))
 			for _, o := range card.Options {
@@ -130,6 +133,9 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			req["options"], req["recommended"], req["meanwhile"] = options, card.Recommended, card.Meanwhile
 			req["owner_duty"], req["task_id"] = card.OwnerDuty, card.TaskID
 			req["urgency"] = "when you can: the work goes on with the recommended option"
+			if card.Urgency != "" {
+				req["urgency"] = card.Urgency
+			}
 		}
 		raw, err := json.Marshal(req)
 		if err != nil {
@@ -143,7 +149,7 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		case res.Code == http.StatusBadRequest:
 			// The card itself does not fit: retrying will not help.
 			return "", fmt.Errorf("%w: the question store refused the card: %v", store.ErrInvalid, res.Body)
-		case len(card.Options) > 0 && res.Code == http.StatusConflict &&
+		case card.TaskID != "" && res.Code == http.StatusConflict &&
 			(strings.HasPrefix(msg, "already answered: ") || strings.HasPrefix(msg, "duplicate of ")):
 			// A planner's question the store holds under another key, open or
 			// answered (review 217 B2): the Owner has it; the plan goes on.

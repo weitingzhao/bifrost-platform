@@ -324,20 +324,38 @@ func (c *Controller) PlanDecisions(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil {
 		return 0, nil
 	}
-	var ack func(context.Context, string) error
-	if c.Sources.Ack != nil {
-		ack = func(ctx context.Context, id string) error {
-			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Ack(ctx, id) })
-		}
+	return store.DecidePlanChanges(ctx, c.DB, c.question, c.ack())
+}
+
+// MissionDecisions is one pass over the missions outside the standing
+// envelope that wait on a decision card: an answered card starts or stops the
+// mission (store.DecideMissions).
+func (c *Controller) MissionDecisions(ctx context.Context) (int, error) {
+	if c.Sources.Question == nil {
+		return 0, nil
 	}
-	return store.DecidePlanChanges(ctx, c.DB, func(ctx context.Context, id string) (store.Question, bool) {
-		type r struct {
-			q  store.Question
-			ok bool
-		}
-		x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })
-		return x.q, x.ok
-	}, ack)
+	return store.DecideMissions(ctx, c.DB, c.question, c.ack())
+}
+
+// question reads a question with the per-read timeout.
+func (c *Controller) question(ctx context.Context, id string) (store.Question, bool) {
+	type r struct {
+		q  store.Question
+		ok bool
+	}
+	x := bounded(c, ctx, func(ctx context.Context) r { q, ok := c.Sources.Question(ctx, id); return r{q, ok} })
+	return x.q, x.ok
+}
+
+// ack acknowledges an answer with the per-read timeout; nil without a
+// source.
+func (c *Controller) ack() func(context.Context, string) error {
+	if c.Sources.Ack == nil {
+		return nil
+	}
+	return func(ctx context.Context, id string) error {
+		return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.Ack(ctx, id) })
+	}
 }
 
 // Rules is one pass of the done-rule loop: every live step with a rule is
@@ -389,8 +407,9 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, derr := store.Dispatch(ctx, c.DB)
 		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
+		_, merr := c.MissionDecisions(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, rerr)
+		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, merr, rerr)
 	})
 	return wg.Wait
 }

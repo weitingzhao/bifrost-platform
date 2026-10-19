@@ -150,7 +150,7 @@ func takeMail(ctx context.Context, db DB, messageID string) (string, error) {
 		if err != nil {
 			return mailError{err.Error()}
 		}
-		m, err := proposeMissionTx(ctx, tx, w, mp)
+		m, err := proposeMissionTx(ctx, tx, w, mp, "", nil)
 		if err != nil {
 			return err
 		}
