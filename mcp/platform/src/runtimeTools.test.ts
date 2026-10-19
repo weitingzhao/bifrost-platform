@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { execFileSync } from 'node:child_process'
 import { join } from 'node:path'
 import { describe, it } from 'node:test'
 import { z } from 'zod'
@@ -217,6 +218,9 @@ describe('agent runtime writes', () => {
     let calls = 0
     const growing = { ...real, read: (_fd: number, buf: Buffer) => (calls++ < 2 ? buf.fill(32).length : 0) }
     assert.match((readRequestFile(join(dir, 'r2.json'), dir, growing) as { error: string }).error, /grew past/)
+    // A FIFO with no writer is refused at once, not waited on (review 314 B1).
+    execFileSync('mkfifo', [join(dir, 'pipe.json')])
+    assert.match((readRequestFile(join(dir, 'pipe.json'), dir, real) as { error: string }).error, /not a regular file/)
     // A descriptor that does not open (a link in the last part) is refused.
     const refuses = { ...real, openNoFollow: () => { throw new Error('ELOOP: too many symbolic links') } }
     assert.match((readRequestFile(join(dir, 'r2.json'), dir, refuses) as { error: string }).error, /cannot read .*ELOOP/)

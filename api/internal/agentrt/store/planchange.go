@@ -156,34 +156,31 @@ func standing(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (b
 	return ok, err
 }
 
-// standingRule is the plan-standing grant for a done rule (review 313 A2):
-// only while the rule in force grants done_rules; only the first rule of a
-// step not done; binding nothing new (a new binding is the Owner's); naming
-// only the step's own tasks, approvals and questions bound to it already, or
-// the Owner's sign-off, never a manual atom, a CI run (a fact of no step) or
-// a gate; and not already holding, so no rule makes a step done at once.
+// standingRule is the plan-standing grant for a done rule (reviews 313 A2,
+// 314 A2): only while the rule in force grants done_rules; only the first
+// rule of a step not done; binding nothing new (a new binding is the
+// Owner's); naming only facts the runtime itself keeps, the step's own
+// tasks and the Owner's sign-off on it, never an approval or a question (an
+// outside record the runtime may not have read yet, so that it does not hold
+// cannot be shown), a manual atom, a CI run (a fact of no step) or a gate;
+// and not already holding, so no rule makes a step done at once.
 func standingRule(ctx context.Context, tx pgx.Tx, c PlanChange, rule *StoredRule) (bool, error) {
 	if rule == nil || !rule.Plan.DoneRules || len(c.Bind) > 0 {
 		return false, nil
 	}
 	parsed, err := plan.Parse(c.Rule)
-	if err != nil || parsed.Empty() || parsed.Names(plan.AtomManual) || parsed.Names(plan.AtomCI) || parsed.Names(plan.AtomGates) {
+	if err != nil || parsed.Empty() {
 		return false, nil
+	}
+	for _, atom := range []string{plan.AtomManual, plan.AtomCI, plan.AtomGates, plan.AtomApproval, plan.AtomQuestion} {
+		if parsed.Names(atom) {
+			return false, nil
+		}
 	}
 	var first bool
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node WHERE plan_node_id = $1 AND node_kind = 'step'
 	  AND state IN ('planned','active') AND done_rule_json = '{}'::jsonb)`, c.Node).Scan(&first); err != nil || !first {
 		return false, err
-	}
-	for _, ref := range parsed.Refs() {
-		if ref.Kind != plan.RefApproval && ref.Kind != plan.RefQuestion {
-			continue
-		}
-		var bound bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.plan_node_binding WHERE plan_node_id = $1 AND bound_kind = $2
-		  AND bound_ref = $3)`, c.Node, ref.Kind, ref.ID).Scan(&bound); err != nil || !bound {
-			return false, err
-		}
 	}
 	f := &stepFacts{ctx: ctx, tx: tx, step: c.Node, deployed: func(context.Context, string) (string, map[string]any, bool) { return "", nil, false }}
 	res := parsed.Eval(f)

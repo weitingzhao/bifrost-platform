@@ -256,7 +256,9 @@ export interface RequestFs {
 
 export const nodeRequestFs: RequestFs = {
   realpath: (p) => fs.realpathSync(p),
-  openNoFollow: (p) => fs.openSync(p, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW),
+  // O_NONBLOCK: a FIFO in the folder does not hang the server before it is
+  // refused as not a regular file (review 314 B1).
+  openNoFollow: (p) => fs.openSync(p, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK),
   fstat: (fd) => {
     const st = fs.fstatSync(fd)
     return { isFile: st.isFile(), size: st.size, dev: st.dev, ino: st.ino }
@@ -275,7 +277,11 @@ export const nodeRequestFs: RequestFs = {
  * a regular file, the one the path names inside dir (same device and inode
  * after resolving the path), at most the bound — and what is read is read
  * from that descriptor, at most one byte past the bound. A file swapped,
- * linked out or grown between the steps is refused.
+ * linked out or grown between the steps is refused. What this does not stop
+ * (review 314 A1): another process of the same user swapping the folder
+ * itself back and forth between the path lookups, for Node opens nothing
+ * relative to a held directory; such a process can read the file without the
+ * tool. The check is against a caller pointing the tool at another file.
  */
 export function readRequestFile(file: string, dirPath: string, f: RequestFs = nodeRequestFs): { text: string } | { error: string } {
   let fd: number | undefined

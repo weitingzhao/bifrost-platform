@@ -53,8 +53,10 @@ func TestPlanStandingDoneRules(t *testing.T) {
 	putPlanStanding(t, w, true, false)
 	t2, err = w.task(t, "M-2", s2, "", "implement")
 	ok(t, err)
-	// Approval 16 bound to s3 by a change the Owner applied.
-	out := setRule(w, "b0", s3, `{"approval_executed":16}`, store.Binding{Kind: "approval", Ref: "16"})
+	// Approvals 16 and 18 and question Q1 bound to s3 by a change the Owner
+	// applied, with no rule yet.
+	out := setRule(w, "b0", s3, `{}`, store.Binding{Kind: "approval", Ref: "16"}, store.Binding{Kind: "approval", Ref: "18"},
+		store.Binding{Kind: "question", Ref: "Q1"})
 	if out["decision"] != "" {
 		t.Fatalf("a rule binding something new within the standing authorization: %v", out)
 	}
@@ -91,7 +93,11 @@ func TestPlanStandingDoneRules(t *testing.T) {
 		"a gate":          {s1, `{"gates_passed":[{"test":"T19","spec_sha256":"` + strings.Repeat("a", 64) + `"}],"env":"prod"}`, nil},
 		"a manual atom":   {s1, `{"manual":"by hand"}`, nil},
 		"already holding": {s1, `{"owner_signoff":"TD-1"}`, nil},
-		"a second rule":   {s2, `{"any":[{"task_accepted":"` + t2 + `"}]}`, nil},
+		// Bound already but outside records the runtime may not have read:
+		// that they do not hold cannot be shown (review 314 A2).
+		"an approval bound, not yet seen": {s3, `{"approval_executed":18}`, nil},
+		"a question bound, not yet seen":  {s3, `{"question_answered":{"question":"Q1","option":"a"}}`, nil},
+		"a second rule":                   {s2, `{"any":[{"task_accepted":"` + t2 + `"}]}`, nil},
 	} {
 		if out := setRule(w, "n-"+name, c.step, c.rule, c.bind...); out["decision"] != "" {
 			t.Errorf("%s: decided at once: %v", name, out)
