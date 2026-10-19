@@ -291,7 +291,12 @@ func take(ctx context.Context, tx pgx.Tx, r ClaimRequest, cp capabilities, c can
 		return nil, err
 	}
 	c.limitS = limit
-	stop, err := held(ctx, tx, []scope{{"mission", c.mission}, {"task", c.id}}, "stop", "pause")
+	scopes := []scope{{"mission", c.mission}, {"task", c.id}}
+	if c.subject != "" {
+		// A check of a stopped or paused task stops with it (T09).
+		scopes = append(scopes, scope{"task", c.subject})
+	}
+	stop, err := held(ctx, tx, scopes, "stop", "pause")
 	if err != nil || stop {
 		return nil, err
 	}

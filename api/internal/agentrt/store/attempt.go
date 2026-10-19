@@ -129,7 +129,16 @@ func Heartbeat(ctx context.Context, db DB, f Fence) (Beat, error) {
 		if err != nil {
 			return err
 		}
-		b.Stop, err = held(ctx, tx, []scope{{"global", ""}, {"mission", t.mission}, {"task", t.id}, {"host", f.HostID}}, "stop")
+		scopes := []scope{{"global", ""}, {"mission", t.mission}, {"task", t.id}, {"host", f.HostID}}
+		var subject string
+		if err = tx.QueryRow(ctx, `SELECT COALESCE(subject_task_id, '') FROM agentrt.task WHERE task_id = $1`, t.id).Scan(&subject); err != nil {
+			return err
+		}
+		if subject != "" {
+			// A check of a stopped task stops with it (T09).
+			scopes = append(scopes, scope{"task", subject})
+		}
+		b.Stop, err = held(ctx, tx, scopes, "stop")
 		return err
 	})
 	return b, err
