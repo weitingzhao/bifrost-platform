@@ -126,7 +126,7 @@ func TestImportDecisionBadRequest(t *testing.T) {
 	}
 }
 
-// Not parallel: it sets the package's hook.
+// Serial: it holds the package's test hook (SetHook).
 func TestImportDecisionFailsHalfWay(t *testing.T) {
 	pool, req := importDB(t)
 	a := &asker{}

@@ -62,6 +62,8 @@ type importOutcome struct {
 
 // Two imports of one root at once: the second waits for the first's lock,
 // then finds its import (the same request) or refuses (a different one).
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestPlanImportConcurrent(t *testing.T) {
 	for _, differ := range []bool{false, true} {
 		name := "same request"
@@ -135,6 +137,8 @@ func TestPlanImportConcurrent(t *testing.T) {
 
 // An import that fails after it has written done steps' notes and moved them
 // to done leaves nothing: no node, event, artifact, stream or outbox row.
+//
+// Serial: it holds the package's test hook (SetHook).
 func TestPlanImportRollbackAfterManual(t *testing.T) {
 	pool, req := importDB(t)
 	before := rows(t, pool)

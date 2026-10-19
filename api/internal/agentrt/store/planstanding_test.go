@@ -163,11 +163,12 @@ func TestActivateLeasedSteps(t *testing.T) {
 
 // The rule is read again once the plan stream's lock is held: a rule that
 // expires while the write waits for that lock grants nothing (review 313 A4).
+//
+// Serial: a window of four seconds: the write must be waiting for the lock
+// before the rule expires, which parallel neighbours could delay.
 func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
-	t.Parallel()
 	for _, path := range []string{"activate", "standing"} {
 		t.Run(path, func(t *testing.T) {
-			t.Parallel()
 			w := newWorld(t)
 			var now time.Time
 			ok(t, w.rt.QueryRow(ctx, `SELECT date_trunc('second', clock_timestamp())`).Scan(&now))
@@ -220,8 +221,8 @@ func TestPlanStandingExpiresWhileWaiting(t *testing.T) {
 				  AND wait_event_type = 'Lock')`).Scan(&waiting))
 				time.Sleep(20 * time.Millisecond)
 			}
-			if !waiting {
-				t.Fatal("the write never waited for the stream's lock")
+			if !waiting || !time.Now().Before(expires) {
+				t.Fatal("the write was not waiting for the stream's lock before the rule expired")
 			}
 			time.Sleep(time.Until(expires) + 500*time.Millisecond)
 			ok(t, tx.Commit(ctx))
