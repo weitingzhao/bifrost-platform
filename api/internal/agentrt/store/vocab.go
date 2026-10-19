@@ -3,7 +3,10 @@ package store
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"slices"
 	"sort"
+	"time"
 )
 
 // A body field's kind. Values are what canon.Parse or a Go caller produce.
@@ -11,7 +14,7 @@ type kind int
 
 const (
 	kStr  kind = iota // a non-empty string
-	kID               // a non-empty string naming a row
+	kID               // a non-empty string naming a row (some of a fixed shape: fieldValues)
 	kInt              // an integer
 	kIDs              // a non-empty list of row ids
 	kAny              // any canonical JSON value
@@ -101,6 +104,9 @@ func checkBody(eventType string, body map[string]any) error {
 		if !ofKind(v, f.kind) {
 			return fmt.Errorf("store: %s field %q has the wrong kind of value", eventType, f.name)
 		}
+		if why := badValue(eventType, f.name, v); why != "" {
+			return invalid("%s field %q %s", eventType, f.name, why)
+		}
 	}
 	var extra []string
 	for k := range body {
@@ -158,4 +164,144 @@ func ofKind(v any, k kind) bool {
 		return ok
 	}
 	return true
+}
+
+// Values (review 145 B6): what a field may hold beyond its kind. An enum's
+// values are the states and kinds the schema's checks allow (0001_core.sql),
+// taken from the state machines here where there is one; an id has the shape
+// ids.go mints; a commit is 40 lower-case hex digits; an instant is RFC 3339.
+// A value refused here is the request's (ErrInvalid). A field not named here
+// takes any value of its kind: free text; the states of what is outside the
+// runtime (an approval's, a question's, a CI run's), which another system
+// names; a control's id, which fixtures name freely and no table checks; and
+// a value its row checks in the same transaction (a task's base commit, an
+// attempt's pushed commit and branch), where the row's constraint, which the
+// routes report as such, decides.
+
+// value checks one string of a field; ok is "" or why it is refused.
+type value func(s string) string
+
+// oneOf is an enum.
+func oneOf(vals ...string) value {
+	return func(s string) string {
+		if slices.Contains(vals, s) {
+			return ""
+		}
+		return fmt.Sprintf("is %q, not one of %v", s, vals)
+	}
+}
+
+// statesOf is every state a state machine names.
+func statesOf(moves map[string][]string) []string {
+	var out []string
+	for from, tos := range moves {
+		out = append(out, from)
+		out = append(out, tos...)
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
+}
+
+func keysOf[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// shaped is an id or a reference of a fixed shape.
+func shaped(name string, re *regexp.Regexp) value {
+	return func(s string) string {
+		if re.MatchString(s) {
+			return ""
+		}
+		return fmt.Sprintf("is %q, not %s", s, name)
+	}
+}
+
+func instant(s string) string {
+	if _, err := time.Parse(time.RFC3339Nano, s); err != nil {
+		return fmt.Sprintf("is %q, not an RFC 3339 instant", s)
+	}
+	return ""
+}
+
+var (
+	ulid        = `[0-9A-HJKMNP-TV-Z]{26}`
+	taskID      = shaped("a task id", regexp.MustCompile(`^t_`+ulid+`$`))
+	attemptID   = shaped("an attempt id", regexp.MustCompile(`^a_`+ulid+`$`))
+	messageID   = shaped("a message id", regexp.MustCompile(`^m_`+ulid+`$`))
+	verifyID    = shaped("a verification id", regexp.MustCompile(`^v_`+ulid+`$`))
+	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
+	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
+	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
+	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
+	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost"}
+)
+
+// fieldValues are the checked fields, by event type and field.
+var fieldValues = map[string]map[string]value{
+	"plan_node_created":        {"node_kind": oneOf("round", "item", "step", "arch_root", "arch_row")},
+	"plan_node_state_changed":  {"from": oneOf(statesOf(stepMoves)...), "to": oneOf(statesOf(stepMoves)...)},
+	"plan_change_decided":      {"decision": oneOf("applied", "refused", "failed", "withdrawn", "expired")},
+	"mission_state_changed":    {"from": oneOf(statesOf(missionMoves)...), "to": oneOf(statesOf(missionMoves)...)},
+	"task_proposed":            {"role": oneOf("plan", "implement", "verify", "review", "brief", "other")},
+	"task_state_changed":       {"from": oneOf(statesOf(taskMoves)...), "to": oneOf(statesOf(taskMoves)...)},
+	"task_dependency_added":    {"depends_on_task_id": taskID},
+	"attempt_leased":           {"executor": executorID},
+	"attempt_checkpointed":     {"artifacts": artifactID},
+	"attempt_stale":            {"lease_expires_at": instant},
+	"attempt_renewed":          {"lease_expires_at": instant},
+	"attempt_computed":         {"end_how": oneOf(attemptEnds...), "conclusion": oneOf("done", "failed", "none")},
+	"attempt_ended":            {"end_how": oneOf(attemptEnds...)},
+	"attempt_salvaged":         {"artifacts": artifactID},
+	"attempt_persisted":        {"artifacts": artifactID},
+	"attempt_cancelled":        {"accepted_attempt": attemptID},
+	"host_registered":          {"host_kind": oneOf("dev", "vm")},
+	"host_state_changed":       {"from": oneOf("active", "draining", "retired"), "to": oneOf("active", "draining", "retired")},
+	"verification_recorded":    {"verification_id": verifyID, "method": oneOf("deterministic", "review", "gate"), "verdict": oneOf("pass", "fail", "none"), "env": oneOf("dev", "stg", "prod")},
+	"artifact_put":             {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
+	"message_posted":           {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
+	"message_acked":            {"message_id": messageID},
+	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},
+	"pool_cooldown_set":        {"until": instant},
+	"capability_scored":        {"source": oneOf("exam", "benchmark", "in_job"), "expires_at": instant, "started_at": instant},
+	"pool_measured":            {"source": oneOf("reading", "exit_text", "owner"), "resets_at": instant},
+	"budget_charged":           {"attempt_id": attemptID},
+	"rule_proposed":            {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
+	"candidate_status_changed": {"from": oneOf(candidateStatus...), "to": oneOf(candidateStatus...)},
+	"question_seen":            {"answered_at": instant},
+	"ci_seen":                  {"commit": commit},
+	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
+	"route_decided":            {"fingerprint": fingerprint},
+}
+
+// badValue is why v, of its field's kind already, is refused, or "". A list
+// is checked element by element.
+func badValue(eventType, name string, v any) string {
+	check, ok := fieldValues[eventType][name]
+	if !ok {
+		return ""
+	}
+	switch t := v.(type) {
+	case string:
+		return check(t)
+	case []string:
+		for _, s := range t {
+			if why := check(s); why != "" {
+				return why
+			}
+		}
+	case []any:
+		for _, e := range t {
+			if s, ok := e.(string); ok {
+				if why := check(s); why != "" {
+					return why
+				}
+			}
+		}
+	}
+	return ""
 }
