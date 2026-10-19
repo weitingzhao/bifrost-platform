@@ -65,27 +65,41 @@ func TestLines(t *testing.T) {
 	}
 }
 
-// A pattern means what Python's re.ASCII makes of it (review 371 B2): (?i)
-// folds ASCII letters only, \s has \v; a cased non-ASCII letter is refused.
+// A pattern means what Python's re.ASCII makes of it (reviews 371 B2, 372
+// B2): (?i) folds ASCII letters only, escapes and classes included; \s has
+// \v; other runes match only themselves; the answer is not rewritten.
 func TestPatternsMeanWhatTheReferenceMeans(t *testing.T) {
 	t.Parallel()
-	skip, err := compilePy(`(?i)skip`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if skip.MatchString(asciiFold.Replace("ſkip")) || skip.MatchString(asciiFold.Replace("\u212Aeep")) || !skip.MatchString("SKIP") {
-		t.Error("(?i) folds otherwise than re.ASCII")
-	}
-	for p, s := range map[string]string{`a\sb`: "a\vb", `a[\s,]b`: "a\vb", `a\Sb`: "axb", `[]x]`: "]", `[^]x]`: "y"} {
+	for p, cases := range map[string]map[string]bool{
+		`(?i)skip`:         {"SKIP": true, "Skip": true, "ſkip": false},
+		`(?i)keep`:         {"KEEP": true, "\u212Aeep": false},
+		`(?i)\xe4`:         {"ä": true, "Ä": false},
+		`(?i)\x41b`:        {"aB": true, "Ab": true},
+		`(?i:edit)x`:       {"EDITx": true, "EDITX": false},
+		`(?i)[a-c]+`:       {"aBc": true, "D": false},
+		`(?i)[^a-c]`:       {"B": false, "d": true},
+		`(?i)(?P<w>ok)`:    {"OK": true},
+		`ä`:                {"ä": true, "Ä": false},
+		`a\sb`:             {"a\vb": true, "a b": true},
+		`a[\s,]b`:          {"a\vb": true, "a,b": true},
+		`a\Sb`:             {"axb": true, "a\vb": false},
+		`[]x]`:             {"]": true},
+		`[^]x]`:            {"y": true, "]": false},
+		`[+\-−]?\s*(\d+)%`: {"-5%": true, "−5%": true, "+5%": true},
+		`(?i)\bno\b`:       {"No way": true, "nope": false},
+	} {
 		re, err := compilePy(p)
-		if err != nil || !re.MatchString(s) {
-			t.Errorf("%s on %q: %v", p, s, err)
+		if err != nil {
+			t.Errorf("%s: %v", p, err)
+			continue
+		}
+		for s, want := range cases {
+			if got := re.MatchString(s); got != want {
+				t.Errorf("%s on %q: %v, want %v", p, s, got, want)
+			}
 		}
 	}
-	if re, _ := compilePy(`a\Sb`); re.MatchString("a\vb") {
-		t.Error(`\S took \v`)
-	}
-	for _, p := range []string{`(?i)ärger`, `[\S]`} {
+	for _, p := range []string{`[\S]`, `x(?i)y`, `(?s).`, `\Qa\E`, `\q`, `(a`} {
 		if _, err := compilePy(p); err == nil {
 			t.Errorf("%s compiled", p)
 		}
@@ -101,6 +115,8 @@ func TestPyDumps(t *testing.T) {
 		`[["go","-C","api"]]`:       `[["go", "-C", "api"]]`,
 		`[["a\"b\\c\n"], 1, null]`:  `[["a\"b\\c\n"], 1, null]`,
 		`["😀"]`:                     `["\ud83d\ude00"]`,
+		// numbers as Python writes them once read (review 372 B3)
+		`[1e2, 1E+02, -0, 1.00, 1e-7, 12, 123456789012.5, 1e16, 0.0001, -0.0]`: `[100.0, 100.0, 0, 1.0, 1e-07, 12, 123456789012.5, 1e+16, 0.0001, -0.0]`,
 	} {
 		p := "```json\n{\"tasks\": [{\"title\": \"T\", \"text\": \"x\", \"verify\": " + in + "}]}\n```"
 		if got := planTasksText(p); got != "T\nx\n"+want {
@@ -109,5 +125,18 @@ func TestPyDumps(t *testing.T) {
 	}
 	if got := planTasksText("```json\n{\"tasks\": [{\"title\": \"T\", \"text\": \"x\"}]}\n```"); got != "T\nx\n[]" {
 		t.Errorf("no verify: %q", got)
+	}
+}
+
+// The answer is read as written: a rune the reference does not fold stays
+// itself for the literal rules too (review 372 B2.1).
+func TestTheAnswerIsNotRewritten(t *testing.T) {
+	t.Parallel()
+	r := &Rule{ID: "m", Kind: "mentions_all", Items: []aliasItem{{Name: "long s", Aliases: []string{"ſ"}}}}
+	if err := r.compile(); err != nil {
+		t.Fatal(err)
+	}
+	if ok, why := r.eval("ſ", grading{}); !ok {
+		t.Fatalf("a literal alias was not found: %s", why)
 	}
 }

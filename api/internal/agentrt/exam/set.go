@@ -20,8 +20,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 )
 
 // Set is a loaded question set.
@@ -307,14 +305,16 @@ func (r *Rule) check() error {
 				return need(false, "must_cover groups each with a name and any_of")
 			}
 		}
-		return need((r.Prefix == "CANNOT:" || r.Prefix == "POLICY_ALERT:") && len(r.MustCover) > 0, "a prefix (CANNOT: or POLICY_ALERT:) and must_cover")
+		noLines := r.Expect != nil && !*r.Expect // no line at all is wanted: nothing to cover
+		return need((r.Prefix == "CANNOT:" || r.Prefix == "POLICY_ALERT:") && (noLines || len(r.MustCover) > 0), "a prefix (CANNOT: or POLICY_ALERT:) and must_cover")
 	case "plan_parses":
 		return need(len(r.Repos) > 0, "repos")
 	case "card":
 		op := r.OptionParse
 		return need(len(r.SelectAnyOf) > 0 && r.OwnerDuty != "" && r.OptionsMin > 0 && r.OptionsMax >= r.OptionsMin && len(r.Scores) > 0 &&
+			len(r.MeanwhileForbid) > 0 && // without it the card passes a meanwhile that puts it in effect (review 372 A1)
 			op.ExcludedAfter != "" && op.LimitedAfter != "" && op.Threshold != "" && op.MinSamples != "" && op.Pair != "",
-			"select_any_of, owner_duty, options_min and options_max, scores and its option_parse")
+			"select_any_of, owner_duty, options_min and options_max, scores, meanwhile_forbid and its option_parse")
 	case "section_order":
 		for _, g := range r.Groups {
 			if len(g) == 0 || slices.Contains(g, "") {
@@ -327,61 +327,5 @@ func (r *Rule) check() error {
 	}
 	return nil
 }
-
-// compilePy compiles a pattern of the set with the meaning Python's re.ASCII
-// gives it, which the reference grader runs (review 371 B2): \s is ASCII
-// whitespace with \v; a pattern may not hold a non-ASCII cased letter, and the
-// answer is read with the two letters that case-fold onto ASCII ones (ſ, K)
-// taken out (asciiFold), so (?i) folds ASCII letters only.
-func compilePy(p string) (*regexp.Regexp, error) {
-	var b strings.Builder
-	inClass := false
-	rs := []rune(p)
-	for i := 0; i < len(rs); i++ {
-		c := rs[i]
-		if c >= utf8.RuneSelf && unicode.SimpleFold(c) != c {
-			return nil, fmt.Errorf("a cased non-ASCII letter %q: (?i) would fold it otherwise than the reference does", c)
-		}
-		switch {
-		case c == '\\' && i+1 < len(rs):
-			i++
-			switch d := rs[i]; {
-			case d == 's' && inClass:
-				b.WriteString(`\t\n\v\f\r `)
-			case d == 's':
-				b.WriteString(`[\t\n\v\f\r ]`)
-			case d == 'S' && inClass:
-				return nil, fmt.Errorf(`\S inside a class`)
-			case d == 'S':
-				b.WriteString(`[^\t\n\v\f\r ]`)
-			default:
-				b.WriteRune('\\')
-				b.WriteRune(d)
-			}
-			continue
-		case c == '[' && !inClass:
-			inClass = true
-			b.WriteRune(c)
-			// a ] right after [ or [^ is a member, not the end
-			if i+1 < len(rs) && rs[i+1] == '^' {
-				i++
-				b.WriteRune('^')
-			}
-			if i+1 < len(rs) && rs[i+1] == ']' {
-				i++
-				b.WriteRune(']')
-			}
-			continue
-		case c == ']' && inClass:
-			inClass = false
-		}
-		b.WriteRune(c)
-	}
-	return regexp.Compile(b.String())
-}
-
-// asciiFold takes out of an answer the two letters Go's case folding maps
-// onto ASCII ones and Python's re.ASCII does not.
-var asciiFold = strings.NewReplacer("ſ", "\uFFFD", "\u212A", "\uFFFD")
 
 func (r *Rule) rx(p string) *regexp.Regexp { return r.re[p] }

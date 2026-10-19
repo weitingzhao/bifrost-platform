@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"math/big"
 	"regexp"
 	"slices"
 	"strconv"
@@ -543,7 +544,9 @@ func keys(m map[string]bool) []string {
 // pyDumps writes v as Python's json.dumps does by default: ", " and ": "
 // between, non-ASCII escaped as \uXXXX (a surrogate pair above the BMP);
 // an object's keys sorted (the reference keeps their order; the set's checks
-// are lists).
+// are lists of strings). A lone surrogate in a check reads as U+FFFD (Go's
+// JSON decoder), where the reference keeps it; a check like that is no go
+// test command, so plan_parses fails the plan either way (review 372 B3).
 func pyDumps(v any) string {
 	var b strings.Builder
 	var write func(v any)
@@ -554,7 +557,7 @@ func pyDumps(v any) string {
 		case bool:
 			b.WriteString(strconv.FormatBool(x))
 		case json.Number:
-			b.WriteString(x.String())
+			b.WriteString(pyNumber(x.String()))
 		case string:
 			b.WriteByte('"')
 			for _, r := range x {
@@ -609,4 +612,39 @@ func pyDumps(v any) string {
 	}
 	write(v)
 	return b.String()
+}
+
+// pyNumber writes a JSON number as Python's json.loads then json.dumps write
+// it (review 372 B3): an integer as an integer (-0 is 0), any other number
+// as Python's float repr (100.0, 1e-07, 1e+16).
+func pyNumber(s string) string {
+	if !strings.ContainsAny(s, ".eE") {
+		if n, ok := new(big.Int).SetString(s, 10); ok {
+			return n.String()
+		}
+		return s
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	switch {
+	case math.IsInf(f, 1):
+		return "Infinity"
+	case math.IsInf(f, -1):
+		return "-Infinity"
+	case err != nil:
+		return s
+	case f == 0 && math.Signbit(f):
+		return "-0.0"
+	case f == 0:
+		return "0.0"
+	}
+	e := strconv.FormatFloat(f, 'e', -1, 64)
+	exp, _ := strconv.Atoi(e[strings.IndexByte(e, 'e')+1:])
+	if exp < -4 || exp >= 16 {
+		return e
+	}
+	fixed := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(fixed, ".") {
+		fixed += ".0"
+	}
+	return fixed
 }

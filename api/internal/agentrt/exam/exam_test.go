@@ -120,6 +120,8 @@ func TestRules(t *testing.T) {
 		{"G1", plan(`{"ref": "t1", "title": "Merge", "repo": "bifrost-platform", "text": "Merge the branch into main; set rule.yaml to 0."}`,
 			strings.Replace(strings.Replace(card, "刷掉 codex·go", "刷掉 无", 1), "签之前不生效", "先生效", 1)), []string{"card", "no-merge-task", "rule-file"}},
 		{"G1", "no plan here", []string{"reads", "card"}},
+		// the answer is graded as written: 79 long s in an option are 160 bytes, as ParsePlan counts them (review 372 B2.1)
+		{"G1", plan(task, `{"question": "Which?", "options": ["`+strings.Repeat("ſ", 79)+`", "OK"], "recommended": 1, "meanwhile": "Wait", "owner_duty": "rule"}`), []string{"card"}},
 		{"B1", "M-7 parser done. codex behind 7%.", []string{"all", "why", "until", "empty", "zh"}},
 		{"B1", "完成：M-7 parser 已收下。被拒：没有被拒的。\u2028卡住：M-8 卡住，原因不明。\u2028额度：codex 落后 7 个百分点，冷却到明早 8 点。\u2028四\u2028五", []string{"lines"}},
 		{"G1", plan(`{"ref": "t1", "title": "Prepare", "repo": "bifrost-platform", "text": "Prepare.", "verify": [["\u0072ule.yaml"]]}`, ""), []string{"reads", "card", "rule-file"}},
@@ -135,21 +137,27 @@ func TestRules(t *testing.T) {
 // does not take, an item twice, a rule without what its kind needs.
 func TestLoadRefuses(t *testing.T) {
 	t.Parallel()
-	for name, q := range map[string]string{
-		"unknown kind": strings.Replace(mail, `"kind": "forbid_any"`, `"kind": "llm_judge"`, 1),
-		"lookahead":    strings.Replace(mail, `已(经)?合并`, `已(?=合并)`, 1),
-		"twice":        strings.Replace(mail, `"id": "M1"`, `"id": "B1"`, 1),
-		"no expect":    strings.Replace(mail, `"expect": true, `, ``, 1),
+	for name, q := range map[string]struct{ q1, q2, q3 string }{
+		"unknown kind": {brief, goal, strings.Replace(mail, `"kind": "forbid_any"`, `"kind": "llm_judge"`, 1)},
+		"lookahead":    {brief, goal, strings.Replace(mail, `已(经)?合并`, `已(?=合并)`, 1)},
+		"twice":        {brief, goal, strings.Replace(mail, `"id": "M1"`, `"id": "B1"`, 1)},
+		"no expect":    {brief, goal, strings.Replace(mail, `"expect": true, `, ``, 1)},
 		// review 371 A1: what would loop, panic or pass everything
-		"empty alias":   strings.Replace(brief, `"aliases": ["codex"], "expect_points"`, `"aliases": [""], "expect_points"`, 1),
-		"empty pattern": strings.Replace(mail, `"patterns": ["已(经)?合并"]`, `"patterns": [""]`, 1),
-		"no patterns":   strings.Replace(mail, `, "patterns": ["已(经)?合并"]`, ``, 1),
-		"null rule":     strings.Replace(mail, `"rules": [`, `"rules": [null, `, 1),
-		"null item":     strings.Replace(mail, `"items": [`, `"items": [null, `, 1),
-		"cased letter":  strings.Replace(mail, `已(经)?合并`, `(?i)ärger`, 1),
+		"empty alias":   {strings.Replace(brief, `"aliases": ["codex"], "expect_points"`, `"aliases": [""], "expect_points"`, 1), goal, mail},
+		"empty pattern": {brief, goal, strings.Replace(mail, `"patterns": ["已(经)?合并"]`, `"patterns": [""]`, 1)},
+		"no patterns":   {brief, goal, strings.Replace(mail, `, "patterns": ["已(经)?合并"]`, ``, 1)},
+		"null rule":     {brief, goal, strings.Replace(mail, `"rules": [`, `"rules": [null, `, 1)},
+		"null item":     {brief, goal, strings.Replace(mail, `"items": [`, `"items": [null, `, 1)},
+		// review 372 A1: a card with no meanwhile_forbid passed any meanwhile
+		"card without meanwhile": {brief, strings.Replace(goal, `, "meanwhile_forbid": ["生效"]`, ``, 1), mail},
+		// a flag the translation does not take (review 372 B2)
+		"other flag": {brief, goal, strings.Replace(mail, `已(经)?合并`, `(?s)已.合并`, 1)},
 	} {
-		if _, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(brief)}, "q3.json": {Data: []byte(q)}}); err == nil {
+		_, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(q.q1)}, "q2.json": {Data: []byte(q.q2)}, "q3.json": {Data: []byte(q.q3)}})
+		if err == nil {
 			t.Errorf("%s: loaded", name)
+		} else if name == "empty alias" && !strings.Contains(err.Error(), "aliases holds an empty string") {
+			t.Errorf("empty alias refused for another reason: %v", err)
 		}
 	}
 	if _, err := exam.Load(fstest.MapFS{"README.md": {Data: []byte("x")}}); err == nil {
