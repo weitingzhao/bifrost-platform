@@ -46,14 +46,20 @@ type Bench struct {
 // BwrapSandbox runs argv in bubblewrap (the one codex ships, which the agent
 // host's AppArmor rule bifrost-codex lets create namespaces) with a view of
 // its own: the file system read only, /home empty but for tree (writable)
-// and the readOnly paths, a fresh /tmp, no network, no other process. So a
-// check, whose code is the executor's, sees no credential, no configuration
-// in a home, no other question: there is nothing it could carry out, by its
-// output, its exit or its outcome (review 290 A1).
+// and the readOnly paths, a fresh /tmp, no network. So a check, whose code
+// is the executor's, sees no credential, no configuration in a home, no
+// other question: there is nothing it could carry out, by its output, its
+// exit or its outcome (review 290 A1). It keeps the host's process ids and
+// /proc: the agent units' hardening (ProtectKernelTunables and the like)
+// covers parts of /proc, and the kernel then refuses a fresh /proc in a new
+// user namespace (measured on 06, 2026-10-18: "Can't mount proc on
+// /newroot/proc"). What another process holds stays out of reach as long as
+// ptrace is restricted (Preflight requires it): a check may not read the
+// memory of the bench above it, and the bench's environment holds no secret.
 func BwrapSandbox(bwrap string) func(tree string, readOnly, argv []string) []string {
 	return func(tree string, readOnly, argv []string) []string {
-		a := []string{bwrap, "--unshare-all", "--die-with-parent", "--new-session", "--ro-bind", "/", "/",
-			"--tmpfs", "/home", "--tmpfs", "/tmp", "--dev", "/dev", "--proc", "/proc"}
+		a := []string{bwrap, "--unshare-user", "--unshare-ipc", "--unshare-net", "--unshare-uts", "--unshare-cgroup-try",
+			"--die-with-parent", "--new-session", "--ro-bind", "/", "/", "--tmpfs", "/home", "--tmpfs", "/tmp", "--dev", "/dev"}
 		for _, p := range readOnly {
 			a = append(a, "--ro-bind", p, p)
 		}
@@ -74,7 +80,8 @@ func (b *Bench) Preflight(ctx context.Context) error {
 		return err
 	}
 	defer func() { _ = forceRemove(tree) }()
-	probe := append([]string{"/bin/sh", "-c", `for f in "$@"; do if [ -e "$f" ]; then echo "visible: $f"; exit 3; fi; done`, "sh"}, b.Secrets...)
+	probe := append([]string{"/bin/sh", "-c", `for f in "$@"; do if [ -e "$f" ]; then echo "visible: $f"; exit 3; fi; done
+if [ -r /proc/sys/kernel/yama/ptrace_scope ] && [ "$(cat /proc/sys/kernel/yama/ptrace_scope)" -lt 1 ]; then echo "ptrace is not restricted"; exit 4; fi`, "sh"}, b.Secrets...)
 	if why := b.run(ctx, tree, b.checkEnv(tree), b.Sandbox(tree, b.readOnly(""), probe)...); why != "" {
 		return fmt.Errorf("agentd: a check in the sandbox is not kept from the host's secrets: %s", why)
 	}

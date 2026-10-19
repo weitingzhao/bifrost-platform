@@ -221,12 +221,16 @@ func TestBwrapSandbox(t *testing.T) {
 	argv := agentd.BwrapSandbox("/opt/bwrap")("/home/u/run/Q1/judge", []string{"/home/u/go/pkg/mod", "/home/u/run/Q1/out/venv"},
 		[]string{"sh", "check.sh"})
 	got := strings.Join(argv, " ")
-	for _, want := range []string{"/opt/bwrap --unshare-all --die-with-parent", "--ro-bind / /", "--tmpfs /home", "--tmpfs /tmp",
+	for _, want := range []string{"/opt/bwrap --unshare-user", "--unshare-net", "--die-with-parent", "--ro-bind / /", "--tmpfs /home", "--tmpfs /tmp",
 		"--ro-bind /home/u/go/pkg/mod /home/u/go/pkg/mod", "--ro-bind /home/u/run/Q1/out/venv /home/u/run/Q1/out/venv",
 		"--bind /home/u/run/Q1/judge /home/u/run/Q1/judge", "--setenv HOME /home/u/run/Q1/judge/.bench/home -- sh check.sh"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("no %q in %s", want, got)
 		}
+	}
+	// No fresh /proc: on the agent host the kernel refuses it under the unit's hardening.
+	if strings.Contains(got, "--proc") || strings.Contains(got, "--unshare-pid") || strings.Contains(got, "--unshare-all") {
+		t.Errorf("a fresh /proc or pid namespace: %s", got)
 	}
 	if strings.Index(got, "--tmpfs /home") > strings.Index(got, "--bind /home/u/run/Q1/judge") {
 		t.Errorf("the tree is bound before /home is emptied: %s", got)
