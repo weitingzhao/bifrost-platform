@@ -381,7 +381,7 @@ func TestBenchNpmResolvedOnce(t *testing.T) {
 	}
 	body, err := os.ReadFile(calls)
 	must(t, err)
-	if n := strings.Count(string(body), "install --package-lock-only"); n != 1 {
+	if n := strings.Count(string(body), "install --ignore-scripts"); n != 1 {
 		t.Fatalf("resolved %d times (once for the fix's tree, the tree before it and the judgement): %s", n, body)
 	}
 	if strings.Contains(string(body), "--no-save") || strings.Count(string(body), "ci --ignore-scripts") != 6 {
@@ -393,7 +393,8 @@ func TestBenchNpmResolvedOnce(t *testing.T) {
 func TestBenchProtected(t *testing.T) {
 	for _, p := range []string{"pytest.py", "sub/conftest.py", "api/x_test.go", "console/src/test/setup.ts", "tests/helpers.py",
 		"console/vitest.config.ts", "package.json", "go.mod", "node_modules/.bin/vitest", "lib/site.pth", "sitecustomize.py",
-		"src/__mocks__/clock.ts", "pyproject.toml", "npm-shrinkwrap.json", "console/npm-shrinkwrap.json"} {
+		"src/__mocks__/clock.ts", "pyproject.toml", "npm-shrinkwrap.json", "console/npm-shrinkwrap.json", ".pytest.ini", "sub/.pytest.ini",
+		"pytest.toml", ".pytest.toml"} {
 		if !agentd.Protected(p) {
 			t.Errorf("%s is taken from a change", p)
 		}

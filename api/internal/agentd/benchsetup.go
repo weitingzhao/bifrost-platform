@@ -136,10 +136,19 @@ func (b *Bench) npmInstall(ctx context.Context, dir string, env []string) error 
 	}
 	resolved, ok := b.locks[key]
 	if !ok {
-		if why2 := b.run(ctx, dir, env, "npm", "install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"); why2 != "" {
+		// A whole install: --package-lock-only leaves out optional packages
+		// of other platforms (@emnapi/wasi-threads), and npm ci refuses that
+		// lockfile too. package.json is put back as it was.
+		if why2 := b.run(ctx, dir, env, "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund"); why2 != "" {
 			return errors.New("npm ci: " + why + "; resolving the lockfile: " + why2)
 		}
 		if resolved, err = os.ReadFile(lockPath); err != nil {
+			return err
+		}
+		if err = os.WriteFile(filepath.Join(dir, "package.json"), manifest, 0o600); err != nil {
+			return err
+		}
+		if err = forceRemove(filepath.Join(dir, "node_modules")); err != nil {
 			return err
 		}
 		if b.locks == nil {

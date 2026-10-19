@@ -378,7 +378,7 @@ var protectedDirs = map[string]bool{".git": true, "node_modules": true, "__tests
 
 var protectedFiles = []string{"*_test.go", "test_*.py", "*_test.py", "conftest.py", "*.test.ts", "*.test.tsx", "*.spec.ts",
 	"*.spec.tsx", "*.test.js", "*.test.mjs", "*.test.cjs", "test_*.sh", "*_test.sh", "vitest.config.*", "vitest.workspace.*",
-	"vite.config.*", "jest.config.*", "tsconfig*.json", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml", "package.json",
+	"vite.config.*", "jest.config.*", "tsconfig*.json", "pytest.ini", ".pytest.ini", "pytest.toml", ".pytest.toml", "tox.ini", "setup.cfg", "pyproject.toml", "package.json",
 	"package-lock.json", "npm-shrinkwrap.json", ".npmrc", "go.mod", "go.sum", "go.work", "go.work.sum", "pytest.py", "sitecustomize.py", "usercustomize.py", "*.pth"}
 
 func protected(rel string) bool {
