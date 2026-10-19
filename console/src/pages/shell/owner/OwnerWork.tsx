@@ -1,13 +1,13 @@
 import { Bar, Card, HandMark, Stat } from './OwnerParts'
-import { AttemptActionLine } from './AttemptActionLine'
+import { OwnerCrew } from './OwnerCrew'
 import { ago } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 const ARCH = { done: 'landed', part: 'part', none: 'none' } as const
 
 /**
- * Work: running, stuck and open goals, the last finished and what is next; the plan as bars; the
- * quota. The last run step by step, done → now → next and the threads are on their detail pages.
+ * Work: running, stuck and open goals, the last finished and what is next; the crew, host by host;
+ * the plan as bars; the quota. The last run step by step, done → now → next and the threads are on their detail pages.
  */
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {
   const { work, board, plan, quota, now } = data
@@ -22,7 +22,6 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <Stat value={work?.stuck ?? '?'} label="stuck" tone={work && work.stuck > 0 ? 'fail' : undefined} />
           <Stat value={work?.open ?? '?'} label="open goals" />
         </div>
-        {(data.live ?? []).map(attempt => <AttemptActionLine key={attempt.attempt_id} attempt={attempt} now={now} />)}
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Last result</span>
           {data.last
@@ -41,6 +40,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <HandMark title={`Kept by hand by the coordinator thread${boardAt ? ` · ${boardAt}` : ''}${data.boardStale ? ' · stale' : ''}`} />
         </div>
       </Card>
+      <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now} />
       <Card label="The plan" title={<>The plan{board?.roadmap?.round?.n != null && ` · Round ${board.roadmap.round.n}`} <HandMark title="Kept by hand by the coordinator thread (WORK.md)" /></>} more={{ href: '#progress', text: 'Plan' }}>
         {plan.length === 0 && <p className="m-0 text-sm text-muted-foreground">No plan on the coordinator's board.</p>}
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0">{plan.map(row => <li key={row.key} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center gap-2 rounded px-1.5 py-1 ${row.tag === 'now' ? 'bg-[var(--control-fill)]' : ''}`}>

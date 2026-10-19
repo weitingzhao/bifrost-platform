@@ -126,6 +126,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     arch: board?.roadmap?.arch?.rows ?? [],
     quota: quotaRows(board?.usage?.pools, now),
     hosts: runtime?.hosts ?? [],
+    missions: runtime?.work.missions ?? [],
     nodes,
     nodeCount,
     nodesError: errorText(nodesQ.error),
