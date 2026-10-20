@@ -18,6 +18,8 @@ export type TimelineKind = 'step' | 'accepted' | 'rejected' | 'failed' | 'decisi
 export type TimelineRow = { key: string; at: string; kind: TimelineKind; label: string; text: string; detail: string; mission: string; order: number }
 
 const CONTROL: Record<string, string> = { stop: 'Stop', pause: 'Pause', drain: 'Drain' }
+/** The kinds of report agentd uploads that the platform may refuse (store reportKinds). */
+const REPORT: Record<string, string> = { report: 'a report', verify: 'a verification report', review: 'a review report' }
 
 /** Task titles the runtime's progress names: an event names a task by its id only. */
 export function taskTitles(runtime: RuntimeProgress | undefined): Map<string, string> {
@@ -32,7 +34,7 @@ function alertText(e: RuntimeEventRow, task: string): string {
   switch (text(e.body.rule)) {
     case 'repeated_failure': return `An executor failed ${task || 'a task'} three times in a row; it is not offered that task again`
     case 'local_path':
-    case 'workspace_ref': return `${e.event_stream_id.replace(/^host:/, 'Host ')} had a ${source || 'report'} refused: it named ${phrase}`
+    case 'workspace_ref': return `${e.event_stream_id.replace(/^host:/, 'Host ')} had ${REPORT[source] ?? 'a report'} refused: it named ${phrase}`
     case 'approval_claim': return `A ${source === 'message' ? 'message' : 'task spec'} claims the Owner's approval: "${phrase}"`
     case 'seat_alert': return `The chief of staff raised an alert in its ${source === 'seat_plan' ? 'plan' : 'answer'}`
     default: return [text(e.body.rule), phrase].filter(Boolean).join(': ') || 'Policy alert'
@@ -81,24 +83,58 @@ export function releaseRow(r: ReleaseRecord): TimelineRow {
 
 const NO_TITLES = new Map<string, string>()
 
-/**
- * Events are kept once by id: a read on from a latest read's cursor may list some of them again. Only
- * events the timeline shows are kept; a task moving to running is read and let go, so a page left open
- * for days holds what it shows and no more.
- */
-export function mergeEvents(into: Map<number, RuntimeEventRow>, page: readonly RuntimeEventRow[]): void {
-  for (const e of page) if (eventRow(e, NO_TITLES) !== null) into.set(e.event_id, e)
+/** Events kept from reading on: the newest this many shown events, plus what Show older loaded. */
+export const TIMELINE_KEEP = 300
+
+/** The earliest time among rows, by a loop: a long list is never spread into arguments. */
+export function earliestAt(rows: readonly { at: string }[]): number {
+  let min = Infinity
+  for (const r of rows) {
+    const t = Date.parse(r.at)
+    if (t < min) min = t
+  }
+  return min
 }
 
 /**
- * Newest first. While older events are still unread, release records older than the oldest event read
- * wait with them, so one order holds as the reader goes back.
+ * Events are kept once by id: a read on from a latest read's cursor may list some of them again. Only
+ * events the timeline shows are kept; a task moving to running is read and let go. Says how many it added.
  */
-export function timelineRows(events: readonly RuntimeEventRow[], releases: readonly ReleaseRecord[], o: { titles: Map<string, string>; complete: boolean }): TimelineRow[] {
-  const oldest = Math.min(...events.map(e => Date.parse(e.at)))
+export function mergeEvents(into: Map<number, RuntimeEventRow>, page: readonly RuntimeEventRow[]): number {
+  let added = 0
+  for (const e of page) {
+    if (eventRow(e, NO_TITLES) === null) continue
+    if (!into.has(e.event_id)) added++
+    into.set(e.event_id, e)
+  }
+  return added
+}
+
+/**
+ * Keeps the `limit` events of the largest ids and lets the rest go: they are behind Show older again.
+ * Returns the smallest id kept and the latest time among those let go, or null when nothing went.
+ */
+export function trimEvents(into: Map<number, RuntimeEventRow>, limit: number): { smallestKept: number; droppedUntil: number } | null {
+  if (into.size <= limit) return null
+  const ids = [...into.keys()].sort((a, b) => b - a)
+  let droppedUntil = -Infinity
+  for (const id of ids.slice(limit)) {
+    const t = Date.parse(into.get(id)!.at)
+    if (t > droppedUntil) droppedUntil = t
+    into.delete(id)
+  }
+  return { smallestKept: ids[limit - 1], droppedUntil }
+}
+
+/**
+ * Newest first. `releasesFrom` is how far back the events were read, from the raw pages (not from the
+ * events kept to show): release records older than it wait with the events behind Show older, so one
+ * order holds as the reader goes back; -Infinity once every event has been read.
+ */
+export function timelineRows(events: readonly RuntimeEventRow[], releases: readonly ReleaseRecord[], o: { titles: Map<string, string>; releasesFrom: number }): TimelineRow[] {
   const rows = [
     ...events.map(e => eventRow(e, o.titles)).filter((r): r is TimelineRow => r !== null),
-    ...releases.filter(r => Number.isFinite(Date.parse(r.completed_at)) && (o.complete || Date.parse(r.completed_at) >= oldest)).map(releaseRow),
+    ...releases.filter(r => Date.parse(r.completed_at) >= o.releasesFrom).map(releaseRow),
   ]
   return rows.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.order - a.order)
 }

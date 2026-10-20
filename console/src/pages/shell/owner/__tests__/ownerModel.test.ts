@@ -252,6 +252,12 @@ describe('when a goal should be done (2.5 G8)', () => {
   it('names tasks past their usual time, and takes an estimate it cannot read as unknown', () => {
     const late = parseMissionEta({ ...etaFixture.work.missions[0].eta, past_usual: ['t_1'] })
     expect(etaBasis(late)[1]).toBe('1 task already past 1.5 times its usual time: t_1')
+    const basis = etaFixture.work.missions[0].eta.basis![0]
+    // A basis without its task class, or with no samples behind its usual time, is not read as another basis (review 411 C2).
+    for (const bad of [{ ...basis, task_class: { name: 'go' } }, { ...basis, task_class: undefined }, { ...basis, samples: 0 }]) {
+      expect(parseMissionEta({ ...etaFixture.work.missions[0].eta, basis: [bad] })).toEqual({ state: 'unknown', reason: 'the runtime\'s estimate could not be read' })
+    }
+    expect(parseMissionEta({ ...etaFixture.work.missions[0].eta, basis: [{ ...basis, task_class: '' }] })).toMatchObject({ state: 'estimated' })
     for (const broken of [{ ...etaFixture.work.missions[0].eta, latest: 'soon' }, { ...etaFixture.work.missions[0].eta, basis: [] },
       { ...etaFixture.work.missions[0].eta, earliest: '2026-10-19T23:41:00Z' }, false, null, { state: 'estimated' }]) {
       expect(parseMissionEta(broken)).toEqual({ state: 'unknown', reason: expect.any(String) })

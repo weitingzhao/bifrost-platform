@@ -60,18 +60,21 @@ export function parseRuntimeTask(v: unknown): RuntimeTask {
     round_no: number(r.round_no), max_rounds: number(r.max_rounds), depends_on: strings(r.depends_on) }
 }
 const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0
-/** An estimate whose times or basis do not read is unknown, not a guess (v4 §20.3). */
+/**
+ * An estimate whose times or basis do not read is unknown, not a guess (v4 §20.3): a basis with no
+ * task class, or with no samples behind its usual time, is not read as another basis (review 411 C2).
+ */
 export function parseMissionEta(v: unknown): MissionEta {
   const r = record(v), reason = text(r.reason)
   if (r.state !== 'estimated') return { state: 'unknown', reason: reason || 'the runtime gave no estimate' }
   const basis = Array.isArray(r.basis) ? r.basis.map(record) : []
   const earliest = text(r.earliest), latest = text(r.latest)
   if (!Number.isFinite(Date.parse(earliest)) || !Number.isFinite(Date.parse(latest)) || Date.parse(latest) < Date.parse(earliest)
-    || basis.length === 0 || basis.some(b => !text(b.role) || !count(b.usual_s) || !count(b.samples))) {
+    || basis.length === 0 || basis.some(b => !text(b.role) || typeof b.task_class !== 'string' || !count(b.usual_s) || !count(b.samples) || b.samples < 1)) {
     return { state: 'unknown', reason: 'the runtime\'s estimate could not be read' }
   }
   return { state: 'estimated', earliest, latest, reason, past_usual: strings(r.past_usual),
-    basis: basis.map(b => ({ role: text(b.role), task_class: text(b.task_class), usual_s: b.usual_s as number, samples: b.samples as number })) }
+    basis: basis.map(b => ({ role: text(b.role), task_class: b.task_class as string, usual_s: b.usual_s as number, samples: b.samples as number })) }
 }
 export function parseRuntimeProgress(v: unknown): RuntimeProgress {
   const r = record(v), needs = record(r.needs_you), recent = record(r.recent)

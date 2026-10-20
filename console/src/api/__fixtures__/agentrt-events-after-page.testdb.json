@@ -1,0 +1,262 @@
+{
+ "events": [
+  {
+   "at": "2026-10-19T19:13:33.956703-05:00",
+   "seq": 2,
+   "txid": 2229999,
+   "sha256": "46008e9d6d8537642b4df97242f5f8979b1cc57e71ffd9e1f00a9279ee820a71",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 18,
+   "body_json": {
+    "source": "test"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "7eb8fe031add153eb2c5fa896257078ef8d77ecd47baceacef587cb0d7042db1",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:33.959643-05:00",
+   "seq": 3,
+   "txid": 2230000,
+   "sha256": "b761127e4a116ce69bebd3d1a1737dd1b217677733076d47d057dd9008708af3",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 19,
+   "body_json": {
+    "source": "test: jobs and candidates"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "46008e9d6d8537642b4df97242f5f8979b1cc57e71ffd9e1f00a9279ee820a71",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:33.97265-05:00",
+   "seq": 4,
+   "txid": 2230001,
+   "sha256": "74bec1dc261a2ce6e660773b4053467c4c010d47d04d6d830f7635f3828bd0ee",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 20,
+   "body_json": {
+    "source": "test: an ended task"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "b761127e4a116ce69bebd3d1a1737dd1b217677733076d47d057dd9008708af3",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:33.975578-05:00",
+   "seq": 5,
+   "txid": 2230001,
+   "sha256": "9e71ce5f43467400a0b5fd9cc1398e251d0100adcf5a9360acafb85ef2ff91cb",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 21,
+   "body_json": {
+    "source": "test: an ended task"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "74bec1dc261a2ce6e660773b4053467c4c010d47d04d6d830f7635f3828bd0ee",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:33.978241-05:00",
+   "seq": 3,
+   "txid": 2230001,
+   "sha256": "d6b6696f8ddd4508c9284ae078d92933e342270833850b1054b70360cb72b13b",
+   "task_id": "t_01M5BAG0WMSQBESK4HGS4N51KG",
+   "actor_id": "controller",
+   "event_id": 22,
+   "body_json": {
+    "end_how": "exit",
+    "conclusion": "done"
+   },
+   "attempt_id": "a_01M5BAG0WQKYXF9EVFKBX5SANS",
+   "event_type": "attempt_computed",
+   "mission_id": "M-1",
+   "prev_sha256": "1e73256015140f3049757d6a2d298fcb5e14d19b658501e5bb1a90ec36fc5604",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "mission:M-1"
+  },
+  {
+   "at": "2026-10-19T19:13:33.979582-05:00",
+   "seq": 6,
+   "txid": 2230001,
+   "sha256": "f76b634cb6f4a1efb866a0258b3f786c4d47d9a9c8acf43d2e5a620b1f2fed62",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 24,
+   "body_json": {
+    "source": "test: an ended task"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "9e71ce5f43467400a0b5fd9cc1398e251d0100adcf5a9360acafb85ef2ff91cb",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:33.997827-05:00",
+   "seq": 5,
+   "txid": 2230001,
+   "sha256": "737baa06500a938a2f9a0f065622938d64c811bb6c2ee4b7c6c1b142f84ef6b4",
+   "task_id": "t_01M5BAG0WMSQBESK4HGS4N51KG",
+   "actor_id": "controller",
+   "event_id": 25,
+   "body_json": {
+    "to": "accepted",
+    "from": "verifying"
+   },
+   "attempt_id": null,
+   "event_type": "task_state_changed",
+   "mission_id": "M-1",
+   "prev_sha256": "23d33847d357777c732f4a8b46ea940664238f5b768be1f6fa43d96d755e598e",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "mission:M-1"
+  },
+  {
+   "at": "2026-10-19T19:13:34.031459-05:00",
+   "seq": 7,
+   "txid": 2230002,
+   "sha256": "5f9e6bdd55ebd27467b111234346a170367d529f936d79f3f57110f98c340461",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 26,
+   "body_json": {
+    "source": "test: an ended task"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "f76b634cb6f4a1efb866a0258b3f786c4d47d9a9c8acf43d2e5a620b1f2fed62",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:34.04507-05:00",
+   "seq": 8,
+   "txid": 2230002,
+   "sha256": "c42a2a81e3daf3e369ee32ab99456ce5ec0f6dc2d7001f480e05c232d6a48f94",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 27,
+   "body_json": {
+    "source": "test: an ended task"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "5f9e6bdd55ebd27467b111234346a170367d529f936d79f3f57110f98c340461",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "system"
+  },
+  {
+   "at": "2026-10-19T19:13:34.053397-05:00",
+   "seq": 6,
+   "txid": 2230002,
+   "sha256": "06848bdd5e233b6409d63ccb8c7ec9b55560ff93c61178c878511934d5b87065",
+   "task_id": "t_01M5BAG0YC99DQ0GW0PPA9YZ6K",
+   "actor_id": "controller",
+   "event_id": 28,
+   "body_json": {
+    "end_how": "exit",
+    "conclusion": "failed"
+   },
+   "attempt_id": "a_01M5BAG0YW38AX60W0S1Z27R2W",
+   "event_type": "attempt_computed",
+   "mission_id": "M-1",
+   "prev_sha256": "737baa06500a938a2f9a0f065622938d64c811bb6c2ee4b7c6c1b142f84ef6b4",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "mission:M-1"
+  },
+  {
+   "at": "2026-10-19T19:13:34.057308-05:00",
+   "seq": 8,
+   "txid": 2230002,
+   "sha256": "5d81196ae256e472203ef8c334fef318b9a78c9ee57db31c2f3a8602e4afeb17",
+   "task_id": "t_01M5BAG0YC99DQ0GW0PPA9YZ6K",
+   "actor_id": "controller",
+   "event_id": 30,
+   "body_json": {
+    "to": "rejected",
+    "from": "verifying"
+   },
+   "attempt_id": null,
+   "event_type": "task_state_changed",
+   "mission_id": "M-1",
+   "prev_sha256": "3c711ca08cbe59e680e86f1c3d1e808b3d8fa3acdaae593388d5cd77dbc3f3f8",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "mission:M-1"
+  },
+  {
+   "at": "2026-10-19T19:13:34.062259-05:00",
+   "seq": 6,
+   "txid": 2230003,
+   "sha256": "9cb2ca6b0895fba07353a39cd57e08f5791d1695eb242a8bc947b0a95b6efbc7",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 31,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "test: the step is done"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "28c17fa7fc5c34e6fd495d2152208f07408c2cd7ea4b70fc65931cacfa3af677",
+   "plan_node_id": "R2:2.1-2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:13:34.194822-05:00",
+   "seq": 2,
+   "txid": 2230004,
+   "sha256": "02b5302eb2c001580bc10245eaa251b44f4b41aa817649c94eb2750d560d9d93",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 34,
+   "body_json": {
+    "rule": "approval_claim",
+    "phrase": "已经批准",
+    "source": "message",
+    "message_id": "m_01M5BAG139SPFT2CKMCRS4WT7B",
+    "artifact_id": "sha256:2d58e69240799b9fccf3407343ce786174cc4286b7c5062b9523e6f574bf055b"
+   },
+   "attempt_id": null,
+   "event_type": "policy_alert",
+   "mission_id": null,
+   "prev_sha256": "6be08a06fd8019a180f967809a4faaf4a6b0c428ceb0d45ceccd65fc594a1a48",
+   "plan_node_id": null,
+   "cause_event_id": 33,
+   "event_stream_id": "mbox:seat:chief_of_staff"
+  }
+ ],
+ "next": "2230006.0"
+}

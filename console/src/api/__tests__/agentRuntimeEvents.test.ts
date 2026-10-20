@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import latest from '../__fixtures__/agentrt-events-across.testdb.json'
 import readOn from '../__fixtures__/agentrt-events-after.testdb.json'
+import readOnPage from '../__fixtures__/agentrt-events-after-page.testdb.json'
 import prodStream from '../__fixtures__/agentrt-events-mission-M-2.prod.json'
 import { fetchEventsAfter, fetchLatestEvents, parseEventPage } from '../agentRuntimeEvents'
 
@@ -26,6 +27,12 @@ describe('events across streams (2.5 G6)', () => {
     const failed = page.events.find(e => e.event_type === 'attempt_computed' && e.body.conclusion === 'failed')!
     expect(failed).toMatchObject({ mission_id: 'M-1', task_id: expect.stringMatching(/^t_/), attempt_id: expect.stringMatching(/^a_/) })
     expect(parseEventPage(readOn)).toEqual({ events: [], next: '2173743.0' })
+    // A read on that listed events (review 411 C1): oldest first by transaction, next at the horizon.
+    const on = parseEventPage(readOnPage)
+    expect(on.next).toBe('2230006.0')
+    expect(on.events.map(e => e.event_id)).toEqual(readOnPage.events.map(e => e.event_id))
+    expect(readOnPage.events.map(e => [e.txid, e.event_id])).toEqual([...readOnPage.events.map(e => [e.txid, e.event_id])].sort((a, b) => a[0] - b[0] || a[1] - b[1]))
+    expect(on.events.at(-1)).toMatchObject({ event_type: 'policy_alert', event_stream_id: 'mbox:seat:chief_of_staff', body: { rule: 'approval_claim', source: 'message' } })
     expect(parseEventPage({ events: prodStream, next: '61980682.65' }).events).toHaveLength(prodStream.length)
   })
   it.each([
