@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -385,6 +386,9 @@ func TestExamRaces(t *testing.T) {
 		// any transaction (pg_stat_activity is a snapshot inside one).
 		holder, err := pool.Begin(ctx)
 		ok(t, err)
+		// Released on every path, a failed wait included, so the pool can
+		// close (review 409 B3); a rollback after the first is a no-op.
+		defer func() { _ = holder.Rollback(context.Background()) }()
 		_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742113)`)
 		ok(t, err)
 		errs := make([]error, len(calls))
@@ -392,6 +396,8 @@ func TestExamRaces(t *testing.T) {
 		for i, c := range calls {
 			go func() { errs[i] = c(); done <- struct{}{} }()
 		}
+		// A call that never waits on the lock leaves the wait to fail; the
+		// holder is rolled back by the defer and the calls end.
 		w.waitForN(t, "pg_advisory_xact_lock", len(calls), time.Now().Add(20*time.Second))
 		ok(t, holder.Rollback(ctx))
 		for range calls {
@@ -440,5 +446,37 @@ func TestExamRaces(t *testing.T) {
 	}
 	if (outs[0]["graded"] == true) == (outs[1]["graded"] == true) || w.examEvents(t, "capability_scored") != 1 {
 		t.Fatalf("the halves: %v / %v, %d records", outs[0], outs[1], w.examEvents(t, "capability_scored"))
+	}
+
+	// The last answer of a run against a paper asked for after the run's
+	// paper lapsed (review 406 item 5): whichever takes the lock first, the
+	// run is graded once, with or without that answer, and the answer is
+	// either kept and graded or refused.
+	q, err := store.IssueExam(ctx, pool, examAsk("h3", "exec:cursor"), set)
+	ok(t, err)
+	rest := all(q)
+	_, err = store.RecordExamAnswers(ctx, pool, "h3", "agentd:h3", part(q, rest[:len(rest)-1]...), set)
+	ok(t, err)
+	before := w.examEvents(t, "capability_scored")
+	var last map[string]any
+	errs = race("the last answer and a lapse", func() (err error) {
+		last, err = store.RecordExamAnswers(ctx, pool, "h3", "agentd:h3", part(q, rest[len(rest)-1]), set)
+		return
+	}, func() error {
+		_, err := store.IssueExamLater(ctx, pool, examAsk("h3", "exec:cursor"), set, store.ExamPaperLife+time.Minute)
+		return err
+	})
+	ok(t, errs[1])
+	var answered int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'artifact_put'
+	  AND cause_event_id = (SELECT event_id FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'artifact_put'
+	    AND body_json->>'artifact_id' = $2)`, store.ExamsStream, "sha256:"+q.RunID).Scan(&answered))
+	switch {
+	case w.examEvents(t, "capability_scored") != before+1:
+		t.Fatalf("the run was graded %d times", w.examEvents(t, "capability_scored")-before)
+	case errs[0] == nil && (last["graded"] != true || answered != len(rest)):
+		t.Fatalf("the last answer taken first: %v, %d answers kept", last, answered)
+	case errs[0] != nil && (!errors.Is(errs[0], store.ErrState) || answered != len(rest)-1):
+		t.Fatalf("the last answer after the lapse: %v, %d answers kept", errs[0], answered)
 	}
 }

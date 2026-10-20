@@ -510,9 +510,12 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var media, kind string
 	var body []byte
+	var exam bool
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
-		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id)
-		  WHERE a.artifact_id = $1`, id).Scan(&media, &kind, &body)
+		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body,
+		    EXISTS (SELECT 1 FROM agentrt.event e WHERE e.event_stream_id = $2 AND e.body_json->>'artifact_id' = a.artifact_id)
+		  FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id) WHERE a.artifact_id = $1`, id, store.ExamsStream).
+			Scan(&media, &kind, &body, &exam)
 	})
 	if err != nil {
 		a.fail(w, err)
@@ -520,8 +523,11 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 	// An Agent host reads no exam artifact: an answer's id can be known to a
 	// host that handed it in, and answers stay off the host (CUT-chief-exam
-	// §5; review 406 A1). agentd keeps the paper it was handed.
-	if kind == "exam" && actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd {
+	// §5; review 406 A1). An exam artifact is one of kind exam or one the
+	// exams' stream names, whatever kind its first upload gave it (the same
+	// bytes put earlier as "other", review 409 A1). agentd keeps the paper
+	// it was handed.
+	if (kind == "exam" || exam) && actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token does not read exam artifacts")
 		return
 	}

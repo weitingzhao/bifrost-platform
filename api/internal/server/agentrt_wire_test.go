@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -273,8 +275,30 @@ func TestExamLoadWhereSaysNoContent(t *testing.T) {
 	if !strings.Contains(err.Error(), "PRIVATE_MARKER") {
 		t.Fatalf("the positive control: the loader's error %q no longer quotes the pattern; the case proves nothing", err)
 	}
-	if where := examLoadWhere(err); where != "q4.json item R1 rule refused" {
+	if where := examLoadWhere(err); where != "q4.json" {
 		t.Fatalf("where %q", where)
+	}
+	// An id the loader takes as it is, with a marker in it (review 409 B1),
+	// and the start log itself, read back.
+	odd := strings.Replace(strings.Replace(q, `"id": "R1"`, `"id": "R1 rule PRIVATE_ID"`, 1), `"any_of": ["PRIVATE_MARKER("]`, `"any_of": ["CANNOT"]`, 1)
+	odd = strings.Replace(odd, `"rules": [{"id": "refused", "kind": "require_any", "any_of": ["CANNOT"]}]`, `"rules": []`, 1)
+	if err = os.WriteFile(filepath.Join(bad, "q4.json"), []byte(odd), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err = loadExamSet(bad)
+	if err == nil || !strings.Contains(err.Error(), "PRIVATE_ID") {
+		t.Fatalf("the positive control: %v", err)
+	}
+	var logged bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	t.Setenv("AGENTRT_EXAM_DIR", bad)
+	if examSetFromEnv() != nil {
+		t.Fatal("a set that does not load was loaded")
+	}
+	if strings.Contains(logged.String(), "PRIVATE") || !strings.Contains(logged.String(), "q4.json") {
+		t.Fatalf("the start log: %s", logged.String())
 	}
 	if _, err = loadExamSet(filepath.Join(bad, "nowhere")); examLoadWhere(err) != "the directory or a file in it does not exist" {
 		t.Fatalf("a missing directory: %q", examLoadWhere(err))

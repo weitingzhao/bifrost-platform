@@ -161,6 +161,27 @@ func TestExams(t *testing.T) {
 	if code, out := call(t, s, "agentd:h1", "POST", "exams", examPart(strings.Repeat("ab", 32), paper.SetSHA256, pass("A1", 1))); code != http.StatusNotFound {
 		t.Fatalf("an unknown run: %d %v", code, out)
 	}
+	// Review 409 A1: the bytes an answer will be kept as, put first as an
+	// artifact of another kind (as the store encodes an answer).
+	kept, err := json.Marshal(struct {
+		RunID       string `json:"run_id"`
+		Item        string `json:"item"`
+		RunNo       int    `json:"run_no"`
+		Round       int    `json:"round"`
+		Executor    string `json:"executor"`
+		Provider    string `json:"provider"`
+		Model       string `json:"model"`
+		ToolVersion string `json:"tool_version"`
+		WallS       int    `json:"wall_s"`
+		Conclusion  string `json:"conclusion"`
+		OutOfWork   bool   `json:"out_of_workspace"`
+		Text        string `json:"text"`
+	}{paper.RunID, "A2", 1, 1, "exec:claude", "anthropic", "opus", "2.1.0 (Claude Code)", 30, "done", false, "Noted."})
+	must(t, err)
+	if code, out := call(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(kept), kept, "X-Artifact-Kind", "other",
+		"Content-Type", "application/json"); code != http.StatusOK {
+		t.Fatalf("the answer's bytes put early: %d %v", code, out)
+	}
 	code, out := call(t, s, "agentd:h1", "POST", "exams", first)
 	if code != http.StatusOK || out["graded"] != false || out["taken"] != float64(4) || out["expected"] != float64(9) {
 		t.Fatalf("the first part: %d %v", code, out)
@@ -244,6 +265,16 @@ func TestExams(t *testing.T) {
 	}
 	if code, _ := call(t, s, "viewer", "GET", "artifacts/"+answer, nil); code != http.StatusOK {
 		t.Fatalf("a viewer read an exam answer: %d", code)
+	}
+	var early string
+	must(t, pool.QueryRow(ctx, `SELECT a.artifact_kind FROM agentrt.artifact a WHERE a.artifact_id = $1
+	  AND EXISTS (SELECT 1 FROM agentrt.event e WHERE e.event_stream_id = $2 AND e.body_json->>'artifact_id' = a.artifact_id)`,
+		artifactID(kept), store.ExamsStream).Scan(&early))
+	if early != "other" {
+		t.Fatalf("the positive control: the early bytes are kept as %q, not taken as the answer", early)
+	}
+	if code, out := call(t, s, "agentd:h1", "GET", "artifacts/"+artifactID(kept), nil); code != http.StatusForbidden {
+		t.Fatalf("agentd read an answer put early as another kind: %d %v", code, out)
 	}
 	if code, out := call(t, s, "viewer", "GET", "events?stream="+store.ExamsStream, nil); code != http.StatusOK {
 		t.Fatalf("a viewer reading the exams' stream: %d %v", code, out)
