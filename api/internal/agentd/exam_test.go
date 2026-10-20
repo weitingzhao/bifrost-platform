@@ -637,13 +637,21 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 	p, err := e.Paper(ctx, "chief_of_staff")
 	must(t, err)
 	dir := filepath.Join(root, "exam", "chief_of_staff-claude")
+	// group starts sh as a group's leader and reads its start time before a
+	// leader that reads its input may go on: one that exited at once could be
+	// gone before ps reads it (CI, ci-platform-mwk5k).
 	group := func(sh string) (int, string) {
 		cmd := exec.Command("sh", "-c", sh)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		r, w, perr := os.Pipe()
+		must(t, perr)
+		cmd.Stdin = r
 		must(t, cmd.Start())
+		must(t, r.Close())
 		go func() { _ = cmd.Wait() }()
 		start, serr := agentd.StartTime(cmd.Process.Pid)
 		must(t, serr)
+		must(t, w.Close())
 		t.Cleanup(func() {
 			if agentd.Alive(cmd.Process.Pid, start) {
 				agentd.KillGroup(cmd.Process.Pid)
@@ -667,7 +675,7 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 
 	// Its leader gone, a process of the group left: not known to be the
 	// run's, so nothing is killed, removed or sat.
-	pgid, start := group("sleep 60 & exit 0")
+	pgid, start := group("sleep 60 & read _; exit 0")
 	for deadline := time.Now().Add(10 * time.Second); agentd.Alive(pgid, start); time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("the shell did not exit")
