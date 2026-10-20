@@ -158,6 +158,13 @@ export const PROPOSE_MISSION_INPUT = {
     .describe(
       "Why this mission's accepted results are not to be merged into main: a drill, a benchmark replay, a gate walk. Left out for ordinary work (TD-383)",
     ),
+  needs_owner: z
+    .string()
+    .refine((s) => s.trim() !== '' && new TextEncoder().encode(s.trim()).length <= 200, 'a sentence of up to 200 bytes')
+    .optional()
+    .describe(
+      "Why this mission's cards wait for the Owner himself, never answered by a card-auto-answer rule: a walk that tests his buttons. Left out for ordinary work (TD-390)",
+    ),
   idempotency_key: z.string().min(1).describe('One key per proposal; see the description'),
 }
 

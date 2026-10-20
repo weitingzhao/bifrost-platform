@@ -298,3 +298,10 @@ const OwnerFactsRule = ruleInsert + `('capability-facts', 1,
 // BindOwnerFacts binds the seed's Owner facts to OwnerFactsRule.
 const BindOwnerFacts = `UPDATE agentrt.capability_fact SET rule_id = 'capability-facts', rule_version = 1
   WHERE source_kind = 'owner' AND rule_id IS NULL`
+
+// CardAutoRule is a card-auto-answer rule (TD-390) that answers blocked
+// cards 30 minutes after they open, as if the Owner had signed it on STG.
+const CardAutoRule = ruleInsert + `('card-auto-answer', 1,
+    '{"after_minutes":30,"direction":"initial","effective_at":"2026-01-01T00:00:00Z","expires_at":"2100-01-01T00:00:00Z","kinds":["blocked"],"rule_id":"card-auto-answer","rule_version":1}',
+    E'rule_id: card-auto-answer\nrule_version: 1\ndirection: initial\neffective_at: 2026-01-01T00:00:00Z\nexpires_at: 2100-01-01T00:00:00Z\nafter_minutes: 30\nkinds: [blocked]\n',
+    'initial', 'test', 'test', '2026-01-01T00:00:00Z', '2100-01-01T00:00:00Z') ON CONFLICT DO NOTHING`

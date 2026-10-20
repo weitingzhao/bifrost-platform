@@ -35,6 +35,7 @@ type Goal struct {
 	Title, Text string
 	Repos       []string
 	NoMerge     string // why its accepted results stay off main, "" for none (MissionProposal.NoMerge)
+	NeedsOwner  string // why its cards wait for the Owner himself, "" for none (MissionProposal.NeedsOwner)
 	Main        func(ctx context.Context, repo string) (string, error)
 }
 
@@ -95,12 +96,16 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 		return nil, invalid("a goal has a title, a text and a reader for main")
 	}
 	bases := map[string]string{}
-	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: repos, Success: []string{GoalSuccess}, NoMerge: g.NoMerge, bases: bases}.check()
+	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: repos, Success: []string{GoalSuccess}, NoMerge: g.NoMerge,
+		NeedsOwner: g.NeedsOwner, bases: bases}.check()
 	if err != nil {
 		return nil, err
 	}
 	if len(mp.NoMerge) > MaxNoMergeBytes {
 		return nil, invalid("no_merge is %d bytes, more than %d: say in a sentence why the results stay off main", len(mp.NoMerge), MaxNoMergeBytes)
+	}
+	if len(mp.NeedsOwner) > MaxNeedsOwnerBytes {
+		return nil, invalid("needs_owner is %d bytes, more than %d: say in a sentence why its cards wait for the Owner", len(mp.NeedsOwner), MaxNeedsOwnerBytes)
 	}
 	title := cutRunes("Plan: "+g.Title, maxTaskTitle)
 	readMain := func(ctx context.Context) error {
@@ -119,6 +124,9 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 	}
 	if mp.NoMerge != "" {
 		request["no_merge"] = mp.NoMerge // only when given: an older key's digest stays the same
+	}
+	if mp.NeedsOwner != "" {
+		request["needs_owner"] = mp.NeedsOwner // only when given, as no_merge
 	}
 	return idempotentAs(ctx, db, w, "goals", key, request, readMain,
 		func(tx pgx.Tx) (map[string]any, error) {

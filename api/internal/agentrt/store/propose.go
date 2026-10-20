@@ -240,6 +240,10 @@ type MissionProposal struct {
 	// NoMerge: why its accepted results stay off main, "" for none (a drill,
 	// a benchmark replay; TD-383 「不合 A」); scope_json.no_merge, prune.go.
 	NoMerge string
+	// NeedsOwner: why its cards wait for the Owner himself, "" for none (a
+	// walk that tests his buttons; TD-390): a card-auto-answer rule never
+	// answers them. scope_json.needs_owner.
+	NeedsOwner string
 	// bases are a goal's, by repository (ProposeGoal); no route sets them.
 	bases map[string]string
 }
@@ -276,6 +280,7 @@ func (p MissionProposal) check() (MissionProposal, error) {
 		return p, invalid("a budget is not negative")
 	}
 	p.NoMerge = strings.TrimSpace(p.NoMerge)
+	p.NeedsOwner = strings.TrimSpace(p.NeedsOwner)
 	return p, nil
 }
 
@@ -294,6 +299,9 @@ func (p MissionProposal) request() map[string]any {
 		// Only when given: a key taken before the field was has the same digest.
 		req["no_merge"] = p.NoMerge
 	}
+	if p.NeedsOwner != "" {
+		req["needs_owner"] = p.NeedsOwner // only when given, as no_merge
+	}
 	return req
 }
 
@@ -301,47 +309,6 @@ func (p MissionProposal) request() map[string]any {
 // standing envelope is in force for its tenant (v5 §5.2: 落在
 // standing-envelope 内自动 active).
 const EnvelopePending = "no standing-envelope rule is in force: the mission waits for the Owner"
-
-// The bounds of a proposed mission's words (Owner 2026-10-15 「决策卡 A」): a
-// mission outside the standing envelope goes on the Owner's card whole, and
-// the question store takes a card body of 3000 encoded bytes; a proposal
-// within these bounds fits a card. The details go in a document the goal
-// names.
-const (
-	MaxMissionTitleBytes   = 200
-	MaxMissionGoalBytes    = 1200
-	MaxMissionSuccess      = 10
-	MaxMissionSuccessBytes = 200
-	MaxMissionRepos        = 12
-	MaxNoMergeBytes        = 200
-)
-
-// tooLong is the advice a proposal that does not fit is given.
-const tooLong = "too long: put the details in a document (an artifact, or a file in a repo) and name it in the goal"
-
-// bounded checks the words of a proposal against the bounds, whatever
-// envelope is in force, so whether a proposal is taken never depends on the
-// rules of the day. Nothing is cut.
-func (p MissionProposal) bounded() error {
-	switch {
-	case len(p.Title) > MaxMissionTitleBytes:
-		return invalid("the title is %d bytes, more than %d: %s", len(p.Title), MaxMissionTitleBytes, tooLong)
-	case len(p.Goal) > MaxMissionGoalBytes:
-		return invalid("the goal is %d bytes, more than %d: %s", len(p.Goal), MaxMissionGoalBytes, tooLong)
-	case len(p.Success) > MaxMissionSuccess:
-		return invalid("%d success criteria, more than %d: %s", len(p.Success), MaxMissionSuccess, tooLong)
-	case len(p.Repos) > MaxMissionRepos:
-		return invalid("%d repos, more than %d: propose a mission for fewer", len(p.Repos), MaxMissionRepos)
-	case len(p.NoMerge) > MaxNoMergeBytes:
-		return invalid("no_merge is %d bytes, more than %d: say in a sentence why the results stay off main", len(p.NoMerge), MaxNoMergeBytes)
-	}
-	for i, c := range p.Success {
-		if len(c) > MaxMissionSuccessBytes {
-			return invalid("success criterion %d is %d bytes, more than %d: %s", i+1, len(c), MaxMissionSuccessBytes, tooLong)
-		}
-	}
-	return nil
-}
 
 // ProposeMission records mission_proposed with a number the platform gives
 // (M-<n>, one more than the largest there is, under a lock two proposals
@@ -413,7 +380,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	}
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
-		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, Token: w.Token}); err != nil {
+		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, NeedsOwner: p.NeedsOwner, Token: w.Token}); err != nil {
 		return nil, err
 	}
 	inside, why := envelopeFit(env, p)

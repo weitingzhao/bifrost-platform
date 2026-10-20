@@ -179,6 +179,52 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 	}
 }
 
+// agentRuntimeCards lists the runtime's open cards for its card-auto-answer
+// rule (TD-390), by OpenOf, which writes nothing; nil without a question
+// store.
+func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.RuntimeCard, error) {
+	if rt == nil || rt.svc == nil || rt.reads == nil {
+		return nil
+	}
+	return func(ctx context.Context) ([]store.RuntimeCard, error) {
+		type r struct {
+			qs  []questions.Question
+			err error
+		}
+		x, ok, err := within(ctx, rt.reads, func() (r, bool, error) {
+			qs, err := rt.svc.OpenOf(agentRuntimeRequester)
+			return r{qs, err}, true, nil
+		})
+		if err != nil || !ok {
+			return nil, fmt.Errorf("the question store did not answer: %v", err)
+		}
+		if x.err != nil {
+			return nil, x.err
+		}
+		cards := make([]store.RuntimeCard, 0, len(x.qs))
+		for _, q := range x.qs {
+			cards = append(cards, store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt})
+		}
+		return cards, nil
+	}
+}
+
+// agentRuntimeRuleAnswer answers one of the runtime's cards as its rule
+// (questions.AnswerAsRule: the option the card recommends, by the rule, on
+// the rule channel); nil without a question store.
+func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id, option, rule string) error {
+	if rt == nil || rt.svc == nil {
+		return nil
+	}
+	return func(ctx context.Context, id, option, rule string) error {
+		res := rt.svc.AnswerAsRule(ctx, agentRuntimeRequester, rule, id, option)
+		if res.Code != http.StatusOK {
+			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
+		}
+		return nil
+	}
+}
+
 // sameCard says whether a question the store holds is the card c: the same
 // task and option labels (a blocked card's third names its mission). The
 // title is not compared: the store cleans it, and it is the task's anyway.

@@ -121,6 +121,7 @@ type Mission struct {
 	MaxAttempts             int
 	MaxWallHours            int
 	NoMerge                 string // why its accepted results stay off main, "" for none (scope_json.no_merge, TD-383)
+	NeedsOwner              string // why its cards wait for the Owner himself, "" for none (scope_json.needs_owner, TD-390)
 	Token                   string // the token that proposed it, when a route did (review 176 B2)
 }
 
@@ -149,6 +150,9 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (App
 	}
 	if m.NoMerge != "" {
 		scope["no_merge"] = m.NoMerge
+	}
+	if m.NeedsOwner != "" {
+		scope["needs_owner"] = m.NeedsOwner
 	}
 	budget := map[string]any{}
 	if m.MaxAttempts > 0 {

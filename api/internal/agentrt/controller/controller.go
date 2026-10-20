@@ -41,6 +41,11 @@ type Sources struct {
 	// stand there (store.OnMain); ok false when it cannot be read now. nil
 	// records no landings (TD-383).
 	MainResults store.MainResults
+	// Cards lists the runtime's open cards and RuleAnswer answers one as the
+	// card-auto-answer rule in force (store.AnswerByRule, TD-390); nil
+	// answers nothing.
+	Cards      func(ctx context.Context) ([]store.RuntimeCard, error)
+	RuleAnswer func(ctx context.Context, id, option, rule string) error
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -339,6 +344,35 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	return decided + late + withdrawn + spent + asked, errors.Join(derr, lerr, werr, serr, aerr)
 }
 
+// CardRuleEvery is how often the cards are answered by rule: a loop of its
+// own, so a slow question store never holds up dispatch; a rule waits at
+// least five minutes, so a minute late is no matter.
+const CardRuleEvery = time.Minute
+
+// AnswerByRule answers the runtime's cards by the card-auto-answer rule in
+// force (store.AnswerByRule, TD-390): none without the rule, the lister or the
+// answerer. Each call to the question store has the per-read timeout. It
+// returns how many it answered.
+func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
+	if c.Sources.Cards == nil || c.Sources.RuleAnswer == nil {
+		return 0, nil
+	}
+	type list struct {
+		cards []store.RuntimeCard
+		err   error
+	}
+	return store.AnswerByRule(ctx, c.DB, store.CardRule{
+		Cards: func(ctx context.Context) ([]store.RuntimeCard, error) {
+			x := bounded(c, ctx, func(ctx context.Context) list { cs, err := c.Sources.Cards(ctx); return list{cs, err} })
+			return x.cards, x.err
+		},
+		Answer: func(ctx context.Context, id, option, rule string) error {
+			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule) })
+		},
+		Ack: c.ack(),
+	})
+}
+
 // LandingsEvery is how often the landings pass reads main: a loop of its own,
 // so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
 const LandingsEvery = 5 * time.Minute
@@ -472,6 +506,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, rerr := c.Rules(ctx)
 		return errors.Join(ferr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
 	})
+	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
+		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {
+			_, err := c.AnswerByRule(ctx)
+			return err
+		})
+	}
 	if c.Sources.MainResults != nil {
 		c.every(ctx, &wg, "agentrt-landings", LandingsEvery, func() error {
 			_, err := c.Landings(ctx)

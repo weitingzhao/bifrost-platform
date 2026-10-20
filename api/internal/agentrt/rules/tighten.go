@@ -46,6 +46,12 @@ func Tightens(prev, next Rule) error {
 		if next.Plan.DoneRules && !prev.Plan.DoneRules || next.Plan.ActiveOnLease && !prev.Plan.ActiveOnLease {
 			return errors.New("the plan's standing authorization grants more")
 		}
+	case KindCardAuto:
+		// It waits no less long and answers no new kind of card.
+		if next.CardAuto.AfterMinutes < prev.CardAuto.AfterMinutes {
+			return errors.New("after_minutes goes down")
+		}
+		return subset(next.CardAuto.Kinds, prev.CardAuto.Kinds, "kinds")
 	case KindRouting:
 		if next.Routing.QuotaStopPercent > prev.Routing.QuotaStopPercent {
 			return errors.New("quota_stop_percent goes up")

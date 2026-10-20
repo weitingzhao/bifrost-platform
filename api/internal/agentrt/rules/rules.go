@@ -35,6 +35,20 @@ const (
 	KindFacts       = "capability-facts"
 	KindRouting     = "routing"
 	KindPlan        = "plan-standing"
+	KindCardAuto    = "card-auto-answer"
+)
+
+// The kinds of card a card-auto-answer rule may list: a blocked task's card
+// (store/blockedcard.go) and a planner's question (store/planresult.go).
+// Plan changes and missions outside the standing envelope are the Owner's
+// decisions and are never answered by a rule.
+var cardKinds = []string{"blocked", "plan_question"}
+
+// Bounds of a card-auto-answer rule's wait: at least five minutes, at most a
+// week (a card expires before then).
+const (
+	MinCardWaitMinutes = 5
+	MaxCardWaitMinutes = 7 * 24 * 60
 )
 
 // Directions as the rule table has them.
@@ -144,6 +158,15 @@ type PlanStanding struct {
 	DoneRules, ActiveOnLease bool
 }
 
+// CardAuto lets the platform answer a card the runtime asked with the
+// option the card recommends, once it has been open AfterMinutes unanswered,
+// when the card is of one of Kinds and its mission does not need the Owner
+// (TD-390, the Owner 2026-10-20 「STG 用 A」: STG only; PROD has no such rule).
+type CardAuto struct {
+	AfterMinutes int
+	Kinds        []string
+}
+
 // Rule is a parsed rule: its header and the one part its kind has.
 type Rule struct {
 	Header
@@ -155,6 +178,7 @@ type Rule struct {
 	Facts    []Fact
 	Routing  *Routing
 	Plan     *PlanStanding
+	CardAuto *CardAuto
 }
 
 // KindOf is the kind a rule_id names, and the tenant or job it is for.
@@ -169,12 +193,12 @@ func KindOf(id string) (kind, arg string, err error) {
 		if jobID.MatchString(arg) {
 			return kind, arg, nil
 		}
-	case KindConcurrency, KindFacts, KindPlan:
+	case KindConcurrency, KindFacts, KindPlan, KindCardAuto:
 		if arg == "" && !strings.Contains(id, ":") {
 			return kind, "", nil
 		}
 	}
-	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing", id)
+	return "", "", fmt.Errorf("rule_id %q is none of standing-envelope:<tenant>, concurrency, budget:<tenant>, job:<job>, capability-facts, routing:<tenant>, plan-standing, card-auto-answer", id)
 }
 
 // Parse reads a rule's text. Nothing it does not list passes.
@@ -231,6 +255,8 @@ func Parse(text []byte) (Rule, error) {
 		err = r.routing(o, arg)
 	case KindPlan:
 		err = r.plan(o)
+	case KindCardAuto:
+		err = r.cardAuto(o)
 	}
 	if err != nil {
 		return Rule{}, err
@@ -285,6 +311,30 @@ func (r *Rule) envelope(o *object, arg string) error {
 	slices.Sort(e.Executors)
 	slices.Sort(e.Hosts)
 	r.Envelope = e
+	return nil
+}
+
+// cardAuto reads a card-auto-answer rule: after_minutes, and kinds, a list of
+// the card kinds it answers, at least one, none twice (kept sorted).
+func (r *Rule) cardAuto(o *object) error {
+	c := &CardAuto{}
+	var err error
+	if c.AfterMinutes, err = o.integer("after_minutes", MinCardWaitMinutes, MaxCardWaitMinutes); err != nil {
+		return err
+	}
+	if c.Kinds, err = o.strings("kinds", false); err != nil {
+		return err
+	}
+	if len(c.Kinds) == 0 {
+		return fmt.Errorf("%s.kinds lists at least one of %v", o.where, cardKinds)
+	}
+	for _, k := range c.Kinds {
+		if !slices.Contains(cardKinds, k) {
+			return fmt.Errorf("%s.kinds: %q is none of %v", o.where, k, cardKinds)
+		}
+	}
+	slices.Sort(c.Kinds)
+	r.CardAuto = c
 	return nil
 }
 
@@ -511,6 +561,8 @@ func (r Rule) Doc() map[string]any {
 		doc["facts"] = facts
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
+	case KindCardAuto:
+		doc["after_minutes"], doc["kinds"] = r.CardAuto.AfterMinutes, anyList(r.CardAuto.Kinds)
 	case KindRouting:
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
 		if c := r.Routing.Competence; c != nil {

@@ -368,6 +368,8 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Ack = s.questionRuntime.agentRuntimeAck()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
+	src.Cards = s.questionRuntime.agentRuntimeCards()
+	src.RuleAnswer = s.questionRuntime.agentRuntimeRuleAnswer()
 	src.MainResults = s.agentRuntimeMainResults()
 	return src
 }

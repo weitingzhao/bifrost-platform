@@ -86,6 +86,10 @@ export function StoredAnswer({ question, answer }: { question: Question; answer:
     <div className="flex w-full min-w-0 flex-col gap-2" data-stored-answer="">
       <p className="m-0 break-words text-sm">{storedAnswerWords(answer)}</p>
       {label != null && label !== '' ? <p className="m-0 break-words text-sm">{label}</p> : null}
+      {answer.channel === 'rule' ? (
+        // A signed card-auto-answer rule's answer (STG, TD-390): the card's own recommendation, not the Owner's.
+        <p className="m-0 break-words text-sm" data-answer-by-rule>{`Answered by ${answer.by}, with the option the card recommends; not by you`}</p>
+      ) : null}
       <p className="m-0 text-sm">{readReportLine(answer)}</p>
     </div>
   )

@@ -125,6 +125,8 @@ describe('agent runtime writes', () => {
     assert.deepEqual(calls[1].body, { ...mission, budget: { max_attempts: 2, max_wall_hours: 1 }, idempotency_key: 'm-2' })
     await proposeMission({ ...mission, no_merge: 'a benchmark replay', idempotency_key: 'm-3' }, d)
     assert.deepEqual(calls[2].body, { ...mission, no_merge: 'a benchmark replay', idempotency_key: 'm-3' })
+    await proposeMission({ ...mission, needs_owner: 'the walk tests his buttons', idempotency_key: 'm-4' }, d)
+    assert.deepEqual(calls[3].body, { ...mission, needs_owner: 'the walk tests his buttons', idempotency_key: 'm-4' })
   })
 
   it('propose_tasks sends the batch with the caller\'s key, and none without one', async () => {
@@ -332,6 +334,14 @@ describe('propose_mission input', () => {
     assert.equal(ok({ no_merge: '  ' }), false)
     assert.equal(ok({ no_merge: '演'.repeat(66) }), true, '198 bytes')
     assert.equal(ok({ no_merge: '演'.repeat(67) }), false, '201 bytes')
+  })
+
+  it('takes needs_owner as one sentence the route takes (TD-390)', () => {
+    assert.equal(ok({ needs_owner: 'the walk tests his buttons' }), true)
+    assert.equal(ok({ needs_owner: '' }), false)
+    assert.equal(ok({ needs_owner: '  ' }), false)
+    assert.equal(ok({ needs_owner: '演'.repeat(66) }), true, '198 bytes')
+    assert.equal(ok({ needs_owner: '演'.repeat(67) }), false, '201 bytes')
   })
 
   it('needs what the route needs', () => {

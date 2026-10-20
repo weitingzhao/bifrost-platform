@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrttest"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -103,4 +104,81 @@ func TestBlockedCardsCloseAMission(t *testing.T) {
 			t.Fatalf("%d cards still open; withdrew %v", open, withdrawn)
 		}
 	})
+}
+
+// TD-390: the controller answers a blocked card by the card-auto-answer rule
+// in force, with the option the card recommends, once it has waited; with no
+// rule it answers nothing.
+func TestAnswerByRuleInTheController(t *testing.T) {
+	pool := setup(t)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "goal", Goal: "g", Deadline: time.Now().Add(time.Hour),
+			Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}, MaxAttempts: 9, MaxWallHours: 4}); err != nil {
+			return err
+		}
+		if err := store.MoveMission(ctx, tx, "controller", "M-2", "active", "test"); err != nil {
+			return err
+		}
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/plain", []byte("spec"))
+		if err != nil {
+			return err
+		}
+		id := store.NewTaskID()
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-2", OffPlanReason: "a goal",
+			Role: "implement", Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform"}); err != nil {
+			return err
+		}
+		if err = store.MarkReady(ctx, tx, "controller", id); err != nil {
+			return err
+		}
+		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test"}}); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '5 days' WHERE mission_id = 'M-2'`)
+		return err
+	}))
+	w := &world{questions: map[string]store.Question{}}
+	src := w.sources()
+	var card store.Card
+	src.Ask = func(_ context.Context, c store.Card) (string, error) {
+		w.set(func() { card = c })
+		return "q_8", nil
+	}
+	type answer struct{ id, option, rule string }
+	var answers []answer
+	src.Cards = func(context.Context) ([]store.RuntimeCard, error) {
+		var out []store.RuntimeCard
+		w.set(func() {
+			if card.Key != "" && len(answers) == 0 {
+				out = []store.RuntimeCard{{ID: "q_8", TaskID: card.TaskID, Recommended: string(rune('a' + card.Recommended - 1)),
+					CreatedAt: time.Now().Add(-31 * time.Minute)}}
+			}
+		})
+		return out, nil
+	}
+	src.RuleAnswer = func(_ context.Context, id, option, rule string) error {
+		w.set(func() { answers = append(answers, answer{id, option, rule}) })
+		return nil
+	}
+	c := &controller.Controller{DB: pool, Sources: src}
+	if _, err := c.BlockedCards(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := c.AnswerByRule(ctx); err != nil || n != 0 {
+		t.Fatalf("with no rule: answered %d (%v)", n, err)
+	}
+	_, err := pool.Exec(ctx, agentrttest.CardAutoRule)
+	must(t, err)
+	if n, err := c.AnswerByRule(ctx); err != nil || n != 1 {
+		t.Fatalf("answered %d (%v)", n, err)
+	}
+	w.set(func() {
+		if len(answers) != 1 || answers[0] != (answer{"q_8", "c", "rule card-auto-answer v1"}) {
+			t.Fatalf("answers %+v", answers)
+		}
+	})
+	if n, err := (&controller.Controller{DB: pool, Sources: w.sources()}).AnswerByRule(ctx); err != nil || n != 0 {
+		t.Fatalf("with no card lister: answered %d (%v)", n, err)
+	}
 }

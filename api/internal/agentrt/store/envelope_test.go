@@ -64,6 +64,11 @@ func TestFixtureRule(t *testing.T) {
 	if f := inForce(t, w, "capability-facts", time.Now()); f == nil || len(f.Facts) != 4 {
 		t.Fatalf("the fixture facts rule reads as %+v", f)
 	}
+	_, err := w.rt.Exec(ctx, agentrttest.CardAutoRule)
+	ok(t, err)
+	if c := inForce(t, w, "card-auto-answer", time.Now()); c == nil || c.CardAuto.AfterMinutes != 30 || len(c.CardAuto.Kinds) != 1 {
+		t.Fatalf("the fixture card-auto-answer rule reads as %+v", c)
+	}
 }
 
 func envelopeRule(version int, direction, hosts string) string {
