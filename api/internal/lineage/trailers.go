@@ -2,6 +2,7 @@ package lineage
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -10,6 +11,7 @@ const (
 	keyTranscript = "Claude-Transcript"
 	keyChangeID   = "Change-Id"
 	keyTask       = "Agentrt-Task"
+	keyWork       = "Work"
 )
 
 var (
@@ -23,8 +25,9 @@ var (
 // trailers holds the lineage keys of one commit message.
 type trailers struct {
 	session, transcript, changeID string
-	task                          string // Agentrt-Task: the agent runtime task an agentd attempt pushed it for
-	agent                         bool   // a Co-Authored-By line names Claude
+	task                          string   // Agentrt-Task: the agent runtime task an agentd attempt pushed it for
+	work                          []string // Work: the ledger items it names (TD-n, W-n, LANE-…)
+	agent                         bool     // a Co-Authored-By line names Claude
 }
 
 // parseMessage reads the trailer block (the last paragraph, as git does) for the
@@ -58,11 +61,28 @@ func parseMessage(msg string) (subject string, t trailers) {
 			t.changeID = val
 		case strings.EqualFold(key, keyTask) && t.task == "" && taskID.MatchString(val):
 			t.task = val
+		case strings.EqualFold(key, keyWork) && t.work == nil:
+			t.work = workItems(val)
 		case strings.EqualFold(key, "Co-Authored-By") && strings.Contains(strings.ToLower(val), "claude"):
 			t.agent = true
 		}
 	}
 	return subject, t
+}
+
+// workItem is one item a Work trailer names: a ledger id (TD-391, W-31,
+// LANE-C); "unassigned" names none.
+var workItem = regexp.MustCompile(`^[A-Z][A-Z0-9]{0,15}-[0-9A-Z]{1,8}$`)
+
+// workItems is the items of a Work trailer's value, in order, each once.
+func workItems(val string) []string {
+	out := []string{}
+	for _, w := range strings.Split(val, ",") {
+		if w = strings.TrimSpace(w); workItem.MatchString(w) && !slices.Contains(out, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // changeIDsAnywhere returns every Change-Id line in the whole message: a squash

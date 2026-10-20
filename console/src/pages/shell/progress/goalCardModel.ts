@@ -154,7 +154,22 @@ export function goalWaitingLinks(id: string, data: GoalData, questions: Question
   }
   return links
 }
+/** The title the runtime gives an assessment's mission and task (TD-391, store/assess.go). */
+export const ASSESSMENT_TITLE = 'Assess: '
+
+/**
+ * A mission the runtime made to assess a card or an approval (TD-391): the chief of staff's work, shown on
+ * the card it assesses, not a goal of the Owner's. It has only brief tasks and the runtime's title.
+ */
+export function assessmentMission(runtime: RuntimeProgress | undefined, id: string): boolean {
+  const live = runtime?.work.missions.find(m => m.mission_id === id)
+  if (live != null) return live.title.startsWith(ASSESSMENT_TITLE) && live.tasks.length > 0 && live.tasks.every(t => t.role === 'brief')
+  const tasks = runtime?.recent.tasks.filter(t => text(t.mission_id) === id) ?? []
+  return tasks.length > 0 && tasks.every(t => text(t.role) === 'brief' && text(t.title).startsWith(ASSESSMENT_TITLE))
+}
+
 export function missionIds(runtime?: RuntimeProgress, submitted = ''): string[] {
   return [...new Set([submitted, ...(runtime?.work.missions.map(m => m.mission_id) ?? []), ...(runtime?.recent.tasks.map(t => text(t.mission_id)) ?? [])].filter(Boolean))]
+    .filter(id => id === submitted || !assessmentMission(runtime, id))
     .sort((a, b) => a === submitted ? -1 : b === submitted ? 1 : b.localeCompare(a, undefined, { numeric: true }))
 }

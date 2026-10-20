@@ -246,6 +246,9 @@ type MissionProposal struct {
 	NeedsOwner string
 	// bases are a goal's, by repository (ProposeGoal); no route sets them.
 	bases map[string]string
+	// assessmentOf is the stream of the item an assessment's mission
+	// assesses (assess.go, TD-391); no route sets it.
+	assessmentOf string
 }
 
 // DefaultMissionDays is how long a mission runs when the proposal names no
@@ -380,7 +383,8 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	}
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
-		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, NeedsOwner: p.NeedsOwner, Token: w.Token}); err != nil {
+		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, NeedsOwner: p.NeedsOwner, AssessmentOf: p.assessmentOf,
+		Token: w.Token}); err != nil {
 		return nil, err
 	}
 	inside, why := envelopeFit(env, p)

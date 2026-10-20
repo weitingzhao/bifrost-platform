@@ -1,0 +1,218 @@
+{
+  "approval": [
+    {
+      "at": "2026-10-20T16:23:08.847968-05:00",
+      "seq": 1,
+      "txid": 3386781,
+      "sha256": "7193ae247ec62f5994496056e060421bdd06fec0d4f68113865088b41f52693b",
+      "task_id": "t_01M5DK4PDFJ0TNE61KNHF0GNFD",
+      "actor_id": "controller",
+      "event_id": 33,
+      "body_json": {
+        "ask": {
+          "refs": {
+            "approval:#12": {
+              "kind": "approval",
+              "label": "approval #12 Deliver platform to PROD",
+              "number": "12"
+            },
+            "ledger:TD-378": {
+              "id": "TD-378",
+              "org": "bifrost",
+              "kind": "ledger",
+              "path": "agent-config/TECH_DEBT.md",
+              "repo": "bifrost-trade-infra",
+              "label": "TD-378 P2 · agentrt · the infra check leaves a file out"
+            },
+            "commit:bifrost-platform@6b9507328434": {
+              "org": "bifrost",
+              "sha": "6b9507328434ff6cdb47ad46e48ae851b9c8d5ae",
+              "kind": "commit",
+              "repo": "bifrost-platform",
+              "label": "6b950732 agentrt: the infra check runs scripts/test_access_checks.py (TD-378)"
+            }
+          },
+          "options": [
+            "approve",
+            "reject"
+          ]
+        },
+        "text": "an AI assessment of approval #12 was asked of the chief of staff's seat: task t_01M5DK4PDFJ0TNE61KNHF0GNFD of mission M-3"
+      },
+      "attempt_id": null,
+      "event_type": "note",
+      "mission_id": "M-3",
+      "prev_sha256": "",
+      "plan_node_id": null,
+      "cause_event_id": null,
+      "event_stream_id": "assess:approval:12"
+    },
+    {
+      "at": "2026-10-20T16:23:08.861276-05:00",
+      "seq": 2,
+      "txid": 3386791,
+      "sha256": "ecc1668e56d5b0078920de1ec10c888d9643c5b3eda94d7d483f68189fae7c3e",
+      "task_id": "t_01M5DK4PDFJ0TNE61KNHF0GNFD",
+      "actor_id": "controller",
+      "event_id": 47,
+      "body_json": {
+        "text": "AI assessment unavailable: its report is not an assessment: no JSON object",
+        "unavailable": "its report is not an assessment: no JSON object"
+      },
+      "attempt_id": null,
+      "event_type": "note",
+      "mission_id": "M-3",
+      "prev_sha256": "7193ae247ec62f5994496056e060421bdd06fec0d4f68113865088b41f52693b",
+      "plan_node_id": null,
+      "cause_event_id": null,
+      "event_stream_id": "assess:approval:12"
+    }
+  ],
+  "card": [
+    {
+      "at": "2026-10-20T16:23:08.825847-05:00",
+      "seq": 1,
+      "txid": 3386770,
+      "sha256": "b0095beff539bb7ac92ffe5f2144733a817248f492f6a3485b563f5aac103ced",
+      "task_id": "t_01M5DK4PCR39GWG7W5AS8ZFGPQ",
+      "actor_id": "controller",
+      "event_id": 15,
+      "body_json": {
+        "ask": {
+          "refs": {
+            "event:2": {
+              "kind": "event",
+              "label": "mission_proposed M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "2"
+            },
+            "event:3": {
+              "kind": "event",
+              "label": "mission_state_changed M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "3"
+            },
+            "event:6": {
+              "kind": "event",
+              "label": "plan_node_created M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "6"
+            },
+            "event:9": {
+              "kind": "event",
+              "label": "task_proposed M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "9"
+            },
+            "event:10": {
+              "kind": "event",
+              "label": "task_state_changed M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "10"
+            },
+            "event:11": {
+              "kind": "event",
+              "label": "route_decided M-1 2026-10-20T21:23:08Z",
+              "mission": "M-1",
+              "event_id": "11"
+            },
+            "ledger:TD-378": {
+              "id": "TD-378",
+              "org": "bifrost",
+              "kind": "ledger",
+              "path": "agent-config/TECH_DEBT.md",
+              "repo": "bifrost-trade-infra",
+              "label": "TD-378 P2 · agentrt · the infra check leaves a file out"
+            },
+            "commit:bifrost-platform@6b9507328434": {
+              "org": "bifrost",
+              "sha": "6b9507328434ff6cdb47ad46e48ae851b9c8d5ae",
+              "kind": "commit",
+              "repo": "bifrost-platform",
+              "label": "6b950732 agentrt: the infra check runs scripts/test_access_checks.py (TD-378)"
+            }
+          },
+          "options": [
+            "a",
+            "b",
+            "c"
+          ]
+        },
+        "text": "an AI assessment of card q_0123456789abcdef was asked of the chief of staff's seat: task t_01M5DK4PCR39GWG7W5AS8ZFGPQ of mission M-2"
+      },
+      "attempt_id": null,
+      "event_type": "note",
+      "mission_id": "M-2",
+      "prev_sha256": "",
+      "plan_node_id": null,
+      "cause_event_id": null,
+      "event_stream_id": "assess:card:q_0123456789abcdef"
+    },
+    {
+      "at": "2026-10-20T16:23:08.844938-05:00",
+      "seq": 2,
+      "txid": 3386780,
+      "sha256": "7447780621c2338f6150ca8a611111daf62979535c4e71c94437f81ec59dbfbe",
+      "task_id": "t_01M5DK4PCR39GWG7W5AS8ZFGPQ",
+      "actor_id": "controller",
+      "event_id": 29,
+      "body_json": {
+        "text": "AI assessment: recommends b, high confidence",
+        "assessment": {
+          "by": "exec:codex",
+          "task": "t_01M5DK4PCR39GWG7W5AS8ZFGPQ",
+          "reasons": [
+            {
+              "text": "这项工作已经在 main 上：6b950732。",
+              "evidence": [
+                {
+                  "org": "bifrost",
+                  "ref": "commit:bifrost-platform@6b9507328434",
+                  "sha": "6b9507328434ff6cdb47ad46e48ae851b9c8d5ae",
+                  "kind": "commit",
+                  "repo": "bifrost-platform",
+                  "label": "6b950732 agentrt: the infra check runs scripts/test_access_checks.py (TD-378)"
+                }
+              ]
+            },
+            {
+              "text": "台账 TD-378 等签收，防线就是这个提交。",
+              "evidence": [
+                {
+                  "id": "TD-378",
+                  "org": "bifrost",
+                  "ref": "ledger:TD-378",
+                  "kind": "ledger",
+                  "path": "agent-config/TECH_DEBT.md",
+                  "repo": "bifrost-trade-infra",
+                  "label": "TD-378 P2 · agentrt · the infra check leaves a file out"
+                },
+                {
+                  "org": "bifrost",
+                  "ref": "commit:bifrost-platform@6b9507328434",
+                  "sha": "6b9507328434ff6cdb47ad46e48ae851b9c8d5ae",
+                  "kind": "commit",
+                  "repo": "bifrost-platform",
+                  "label": "6b950732 agentrt: the infra check runs scripts/test_access_checks.py (TD-378)"
+                }
+              ]
+            }
+          ],
+          "unchecked": [
+            "STG 是否已经跑着这个提交"
+          ],
+          "confidence": "high",
+          "recommended": "b",
+          "report_artifact_id": "sha256:77299c1b0769e9f708542ed18fef5a454f5c81b2edcf58058d9ed8b4a27a0b4c"
+        }
+      },
+      "attempt_id": null,
+      "event_type": "note",
+      "mission_id": "M-2",
+      "prev_sha256": "b0095beff539bb7ac92ffe5f2144733a817248f492f6a3485b563f5aac103ced",
+      "plan_node_id": null,
+      "cause_event_id": null,
+      "event_stream_id": "assess:card:q_0123456789abcdef"
+    }
+  ]
+}

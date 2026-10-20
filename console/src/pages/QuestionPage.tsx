@@ -2,11 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import { useDecisionPageResume } from '@/pages/useDecisionPageResume'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
-import { fetchQuestion, type QuestionStatus } from '@/api/questions'
+import { RUNTIME_REQUESTER, fetchQuestion, optionLabel, type QuestionStatus } from '@/api/questions'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
 import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
 import { decisionBlockReason } from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
+import { AssessmentPanel } from '@/pages/question/AssessmentPanel'
+import { assessmentError, useAssessment } from '@/pages/question/useAssessment'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
 import { questionItemKey, useAnswerSend } from '@/pages/question/useAnswerSend'
 import { ClosedLine, FROM_AN_AGENT, QuestionBody, SECRETS_LINE, StoredAnswer } from '@/pages/question/QuestionRecord'
@@ -81,6 +83,10 @@ function QuestionSession({ id }: { id: string }) {
   const showForm = shown != null && !showStored && status !== 'withdrawn'
   const stale = itemQ.isError && itemQ.data != null
   const unreadable = itemQ.isError && itemQ.data == null
+  // A runtime card's AI assessment (TD-391), beside the runtime rule's recommendation.
+  const runtimeCard = shown != null && shown.requester === RUNTIME_REQUESTER
+  const assessQ = useAssessment('card', id, runtimeCard)
+  const aiRecommended = assessQ.data?.state === 'ready' ? assessQ.data.recommended : null
 
   let state: 'loading' | 'unreadable' | 'stale' | 'ready' = 'ready'
   if (itemQ.isLoading && loaded == null) state = 'loading'
@@ -110,6 +116,14 @@ function QuestionSession({ id }: { id: string }) {
             <QuestionBody question={shown} />
             {showStored && answer != null ? <StoredAnswer question={shown} answer={answer} /> : null}
             {showClosed ? <ClosedLine question={shown} /> : null}
+            {runtimeCard ? (
+              <AssessmentPanel
+                assessment={assessQ.data}
+                error={assessmentError(assessQ)}
+                ruleKey={shown.recommended ?? null}
+                label={key => optionLabel(shown, key)}
+              />
+            ) : null}
             <p className="m-0 text-sm">{SECRETS_LINE}</p>
             {showForm ? (
               <QuestionAnswerForm
@@ -120,6 +134,7 @@ function QuestionSession({ id }: { id: string }) {
                 onChoose={send.choose}
                 onConfirm={send.confirm}
                 onCheckAgain={send.checkAgain}
+                aiRecommended={aiRecommended}
               />
             ) : null}
           </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ServerContactStatus } from '@/pages/ServerContactStatus'
-import type { Question } from '@/api/questions'
+import { RUNTIME_REQUESTER, type Question } from '@/api/questions'
 import { useNow } from '@/pages/shell/progress/progressClock'
 import {
   confirmIsSendable,
@@ -38,9 +38,12 @@ export function QuestionAnswerForm({
   onChoose,
   onConfirm,
   onCheckAgain,
+  aiRecommended = null,
 }: {
   question: Question
   phase: AnswerPhase
+  /** The option the card's AI assessment recommends (TD-391), null for none. */
+  aiRecommended?: string | null
   /** Why Confirm answer stays off, from the same sign-in the top-right badge uses. */
   blocked: string | null
   contactNotice?: string | null
@@ -106,7 +109,12 @@ export function QuestionAnswerForm({
               <span className={`break-words font-normal ${recommended ? 'opacity-80' : 'text-muted-foreground'}`}>{choice.detail}</span>
             ) : null}
             {recommended ? (
-              <span className="font-normal opacity-80">{question.requester === 'agentrt' ? 'Recommended by the runtime' : 'Recommended by the agent'}</span>
+              <span className="font-normal opacity-80">
+                {`${question.requester === RUNTIME_REQUESTER ? 'Recommended by the runtime' : 'Recommended by the agent'}${
+                  aiRecommended === choice.key ? ' and the AI assessment' : ''}`}
+              </span>
+            ) : aiRecommended === choice.key ? (
+              <span className="font-normal" data-ai-recommended>Recommended by the AI assessment</span>
             ) : null}
           </button>
         )

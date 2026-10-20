@@ -602,6 +602,14 @@ export function questionNumberLabel(number: number): string {
  * The option a question recommends and why (its detail), as one line: a blocked task's card says why
  * the runtime's rules recommend it (blockedrecommend.go). Null when it recommends none.
  */
+/** The agent runtime's own session: the cards it asks (questions.RuntimeSession). */
+export const RUNTIME_REQUESTER = 'agentrt'
+
+/** An option as a line names it: its label, or its key when the question has no such option. */
+export function optionLabel(question: Pick<Question, 'options'>, key: string): string {
+  return question.options.find(o => o.key === key)?.label ?? key
+}
+
 export function recommendedLine(question: Pick<Question, 'options' | 'recommended'>): string | null {
   const option = question.options.find(o => o.key === question.recommended)
   if (option == null) return null

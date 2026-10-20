@@ -131,8 +131,12 @@ var bodies = map[string][]field{
 	// the controller first saw it there; pruned, an attempt branch its host
 	// deleted; prune_refused, one Gitea would not let it delete; prune_failed,
 	// one it could not reach Gitea to delete (prune.go).
+	// On an item's assessment stream (assess.go, TD-391): ask, the option
+	// keys and refs its spec gave; assessment, what the seat handed in, its
+	// refs resolved; unavailable, why there is none.
 	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
-		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true}},
+		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
+		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card

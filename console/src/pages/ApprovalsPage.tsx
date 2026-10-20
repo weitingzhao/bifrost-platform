@@ -60,6 +60,8 @@ import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { ConsoleBuildBanner } from '@/pwa/ConsoleBuildBanner'
 import { DECISION_AFTER_RELOAD, NEWER_CONSOLE_BANNER } from '@/pwa/consoleBuild'
 import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
+import { approvalOptionLabel } from '@/api/assessment'
+import { AssessmentSection } from '@/pages/question/AssessmentPanel'
 
 function useRecordState<T>(id: string | null, initial: T): [T, (value: T) => void] {
   const [records, setRecords] = useState<Record<string, T>>({})
@@ -370,6 +372,10 @@ function ApprovalCard({
         <Prose label="If you approve" value={lead} />
         {rest !== '' ? <Prose label="Why" value={rest} /> : null}
         <Prose label="If it goes wrong" value={item.rollback ?? ''} />
+        {/* The request's AI assessment (TD-391): advice beside it; only the buttons below decide. */}
+        {pending && item.number != null && item.number > 0 ? (
+          <AssessmentSection kind="approval" id={String(item.number)} ruleKey={null} label={approvalOptionLabel} />
+        ) : null}
         <div className="min-w-0 max-w-full">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Asked by</div>
           <div className="flex min-w-0 flex-wrap items-center gap-2">

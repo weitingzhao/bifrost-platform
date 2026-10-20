@@ -46,6 +46,13 @@ type Sources struct {
 	// answers nothing.
 	Cards      func(ctx context.Context) ([]store.RuntimeCard, error)
 	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time) error
+	// Assessable lists what is assessed now (TD-391): the runtime's open
+	// cards and the approvals waiting for the Owner; with an error, those it
+	// could read. Evidence reads what an assessment reads outside the
+	// runtime (main's commits, the ledger). nil Assessable assesses nothing;
+	// nil Evidence gives the assessments the runtime's records only.
+	Assessable func(ctx context.Context) ([]store.AssessItem, error)
+	Evidence   store.EvidenceReader
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -509,6 +516,12 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 	if c.Sources.Cards != nil && c.Sources.RuleAnswer != nil {
 		c.every(ctx, &wg, "agentrt-card-rule", CardRuleEvery, func() error {
 			_, err := c.AnswerByRule(ctx)
+			return err
+		})
+	}
+	if c.Sources.Assessable != nil {
+		c.every(ctx, &wg, "agentrt-assess", AssessEvery, func() error {
+			_, err := c.Assess(ctx)
 			return err
 		})
 	}

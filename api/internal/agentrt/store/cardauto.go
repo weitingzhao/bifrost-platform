@@ -24,7 +24,11 @@ import (
 //   - that recommends an option, with that option and no other;
 //   - whose mission is active or paused and does not need the Owner
 //     (scope_json.needs_owner, set when a walk tests his buttons);
-//   - that has been open after_minutes unanswered.
+//   - that has been open after_minutes unanswered;
+//   - whose AI assessment (assess.go, TD-391) recommends the same option, or
+//     was not asked, or cannot come (unavailable, or past AssessTimeout): an
+//     assessment still under way holds the answer, one that differs leaves
+//     the card to the Owner.
 //
 // The answer is the rule's, never the Owner's: the question store records it
 // as answered by "rule <id> v<version>" on the rule channel, a note on the
@@ -133,6 +137,17 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 		if on, ok, err = cardFor(ctx, tx, card); err != nil || !ok || !slices.Contains(rule.CardAuto.Kinds, on.kind) {
 			return err
 		}
+		// The card's AI assessment (TD-391, 「不一致时 STG 也不自动答」): the
+		// rule answers only when it agrees, when none was asked, or when none
+		// can come; not while it may still come, nor against it.
+		st, err := cardAssessment(ctx, tx, card.ID)
+		if err != nil {
+			return err
+		}
+		lets, said := st.lets(card.Recommended, now)
+		if !lets {
+			return nil
+		}
 		// The rule holds until it expires or a later version stored already
 		// takes effect (review 443 A2: the question store may be reached
 		// after that instant).
@@ -150,17 +165,21 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 			return err
 		}
 		did = true
-		return ruleNote(ctx, tx, on, by, card, now)
+		return ruleNote(ctx, tx, on, by, card, now, said)
 	})
 	return on, did && err == nil, err
 }
 
-// ruleNote records on the card's mission that a rule answered it, unless
-// that is recorded already.
-func ruleNote(ctx context.Context, tx pgx.Tx, on cardOn, by string, card RuntimeCard, now time.Time) error {
-	return noteRuleAnswer(ctx, tx, on.mission, on.step, on.task, card.ID, fmt.Sprintf(
-		"%s answered question %s with %s, the option it recommends, after %d minutes unanswered",
-		by, card.ID, card.Recommended, int(now.Sub(card.CreatedAt)/time.Minute)))
+// ruleNote records on the card's mission that a rule answered it, and what
+// its AI assessment said when it did (said, "" when not known), unless that
+// is recorded already.
+func ruleNote(ctx context.Context, tx pgx.Tx, on cardOn, by string, card RuntimeCard, now time.Time, said string) error {
+	text := fmt.Sprintf("%s answered question %s with %s, the option it recommends, after %d minutes unanswered",
+		by, card.ID, card.Recommended, int(now.Sub(card.CreatedAt)/time.Minute))
+	if said != "" {
+		text += "; " + said
+	}
+	return noteRuleAnswer(ctx, tx, on.mission, on.step, on.task, card.ID, text)
 }
 
 // noteRuleAnswer is the one way a rule's answer is noted: on the mission the
@@ -220,7 +239,7 @@ func finishRuleAnswer(ctx context.Context, db DB, c CardRule, card RuntimeCard) 
 		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 			return err
 		}
-		return ruleNote(ctx, tx, on, card.By, card, now)
+		return ruleNote(ctx, tx, on, card.By, card, now, "")
 	})
 	if err != nil {
 		return fmt.Errorf("card %s: %w", card.ID, err)

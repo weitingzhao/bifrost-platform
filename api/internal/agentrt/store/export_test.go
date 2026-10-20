@@ -237,3 +237,9 @@ func ReworkSpecAsRefused(ctx context.Context, db DB, specID string, round int, w
 	})
 	return body, err
 }
+
+// ParseAssessmentForTest is parseAssessment: a report read as an assessment
+// of an item with these option keys and refs (TD-391).
+func ParseAssessmentForTest(text string, options []string, refs map[string]any) (map[string]any, string) {
+	return parseAssessment(text, options, refs)
+}

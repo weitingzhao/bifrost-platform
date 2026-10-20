@@ -217,6 +217,45 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 	}
 }
 
+// agentRuntimeOpenCards lists the runtime's open cards as their
+// assessments read them (TD-391): title, body, options with their details,
+// the option each recommends; by RuleCards, which writes nothing. nil without
+// a question store.
+func (rt *questionRuntime) agentRuntimeOpenCards() func(context.Context) ([]store.AssessItem, error) {
+	if rt == nil || rt.svc == nil || rt.reads == nil {
+		return nil
+	}
+	return func(ctx context.Context) ([]store.AssessItem, error) {
+		type r struct {
+			qs  []questions.Question
+			err error
+		}
+		x, ok, err := within(ctx, rt.reads, func() (r, bool, error) {
+			qs, err := rt.svc.RuleCards(agentRuntimeRequester)
+			return r{qs, err}, true, nil
+		})
+		if err != nil || !ok {
+			return nil, fmt.Errorf("the question store did not answer: %v", err)
+		}
+		if x.err != nil {
+			return nil, x.err
+		}
+		var items []store.AssessItem
+		for _, q := range x.qs {
+			if q.Status != questions.StatusOpen {
+				continue
+			}
+			it := store.AssessItem{Kind: store.AssessCard, ID: q.ID, Title: q.Title, Body: q.Body, Recommended: q.Recommended,
+				TaskID: q.TaskID, CreatedAt: q.CreatedAt}
+			for _, o := range q.Options {
+				it.Options = append(it.Options, store.AssessOption{Key: o.Key, Label: o.Label, Detail: o.Detail})
+			}
+			items = append(items, it)
+		}
+		return items, nil
+	}
+}
+
 // agentRuntimeRuleAnswer answers one of the runtime's cards as its rule
 // while the rule holds (questions.AnswerAsRule: the option the card
 // recommends, by the rule, on the rule channel); nil without a question

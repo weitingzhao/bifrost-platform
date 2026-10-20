@@ -3,6 +3,7 @@ package approvals
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -321,6 +322,26 @@ func (s *Service) find(ref string) (Approval, bool) {
 // runtime's controller). err is a store read failure; ok is false only after
 // a successful read that does not contain ref.
 func (s *Service) Lookup(ref string) (Approval, bool, error) { return s.load(ref) }
+
+// Waiting lists the approvals waiting for a decision that have not expired,
+// oldest first, as the store holds them: unlike Pending it sweeps nothing,
+// so a reader outside the approval flow (the runtime's assessments, TD-391)
+// writes nothing.
+func (s *Service) Waiting() ([]Approval, error) {
+	doc, err := s.store.read()
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock()
+	var out []Approval
+	for _, a := range doc.Approvals {
+		if a.Status == StatusPending && now.Before(a.ExpiresAt) {
+			out = append(out, a)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
 
 // load reads one record without sweeping. err is a store read failure.
 // ok is false only after a successful read that does not contain ref.

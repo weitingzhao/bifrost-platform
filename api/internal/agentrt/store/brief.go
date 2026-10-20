@@ -365,12 +365,20 @@ func AcceptBrief(ctx context.Context, db DB, taskID string) (string, error) {
 	var did string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = ""
-		_, conclusion, report, _, aerr := submittedAttempt(ctx, tx, taskID, "FOR UPDATE")
+		attempt, conclusion, report, _, aerr := submittedAttempt(ctx, tx, taskID, "FOR UPDATE")
 		if aerr != nil && !errors.Is(aerr, errNoSubmitted) {
 			return aerr
 		}
 		t, err := readTask(ctx, tx, taskID, true)
 		if err != nil || t.role != "brief" {
+			return err
+		}
+		// An assessment answers no message: its report is recorded on the
+		// item it assesses (assessaccept.go, TD-391).
+		if stream, err := assessmentOfTask(ctx, tx, t); err != nil || stream != "" {
+			if err == nil {
+				did, err = acceptAssessment(ctx, tx, t, stream, attempt, conclusion, report, aerr)
+			}
 			return err
 		}
 		// The seat's lock before the message rows, as AckMessages takes its

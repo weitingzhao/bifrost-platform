@@ -377,6 +377,8 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Cards = s.questionRuntime.agentRuntimeCards()
 	src.RuleAnswer = s.questionRuntime.agentRuntimeRuleAnswer()
 	src.MainResults = s.agentRuntimeMainResults()
+	src.Assessable = s.agentRuntimeAssessable()
+	src.Evidence = s.agentRuntimeEvidence()
 	return src
 }
 

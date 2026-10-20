@@ -114,6 +114,14 @@ describe('goal stages from the production stream', () => {
     expect(missionIds(runtime)).toEqual(['M-12', 'M-10', 'M-2'])
     expect(missionIds(runtime, 'M-20')[0]).toBe('M-20')
   })
+  it('leaves out the missions that assess a card or an approval (TD-391): they are no goals', () => {
+    const runtime = parseRuntimeProgress({
+      work: { missions: [{ mission_id: 'M-30', title: 'Assess: card q_0123456789abcdef — Blocked in M-3', tasks: [{ task_id: 't1', role: 'brief' }] },
+        { mission_id: 'M-31', title: 'Assess: the new pages', tasks: [{ task_id: 't2', role: 'plan' }] }] },
+      recent: { tasks: [{ mission_id: 'M-29', role: 'brief', title: 'Assess: Deliver platform to PROD' }, { mission_id: 'M-28', role: 'brief', title: 'Answer: what runs?' }] },
+    })
+    expect(missionIds(runtime)).toEqual(['M-31', 'M-28'])
+  })
 })
 
 // T26's first run (PROD M-9): the fifth task failed its review in its last round and was blocked. Once

@@ -59,6 +59,8 @@ beforeEach(() => {
     if (init?.method === 'POST') return post(init)
     if (url === '/index.html') return Promise.resolve(new Response('<script type="module" src="/same.js"></script>'))
     if (url.includes('?status=')) return Promise.resolve(json({ approvals: [] }))
+    // The request's AI assessment (TD-391) is read beside it; none here.
+    if (url.includes('/agentrt/events?')) return Promise.resolve(json([]))
     const id = url.split('/').at(-1)!
     reads.push(id)
     return read(id)
