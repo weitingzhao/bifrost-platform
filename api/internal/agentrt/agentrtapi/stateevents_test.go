@@ -7,141 +7,115 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/weitingzhao/bifrost-platform/api/internal/actuation"
-	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// T25 (design v5 §5.2 Gate A, 状态只由事件改), the routes' half: every route
-// Mount serves, walked from the router so a new one is fuzzed without being
-// listed, is sent bodies made of the fields the package and the store read,
-// state words and ids of the world, from every caller. After each request:
-// a refused one changed nothing and appended nothing; for an answered one,
-// every task, mission, plan node and attempt whose state moved has events of
-// that request naming it that lead from the old state to the new one, each
-// move one of the transition tables, each with its reason or the event of
-// the same transaction that caused it. The world is walked through a claim,
-// a start and a hand-over between rounds, so the routes are fuzzed against
-// live, running and submitted work too. The database half (direct SQL by the
-// runtime role) is store_test.go TestIdentitiesAndTheEventRule.
+// T25 (design v5 §5.2 Gate A, 状态只由事件改), the routes' half. Every route
+// Mount serves, walked from the router, is sent first what a client of it
+// sends (each write route's valid path, stateevents_world_test.go), then
+// bodies made of every field the package and the store declare, state words
+// and the world's ids, from every caller, in four worlds: ready, blocked,
+// paused and proposed work; a running attempt; a submitted task; a lost
+// attempt. After each request:
+//   - refused (4xx, 5xx): no table of the runtime differs in any row and no
+//     event was appended;
+//   - answered: for every task, mission, plan node and attempt that has state
+//     events of the request or whose state differs, those events, replayed
+//     from the state before, lead to the state after along the transition
+//     tables (a new row from its creating event and its first state), each
+//     task, mission and step move with its reason or the event of the same
+//     transaction about the same row that caused it; a step's state_event_id
+//     is its last move;
+//   - every stream's hash chain verifies at the end of each world.
 //
-// AGENTRT_FUZZ_SEED repeats a run; AGENTRT_FUZZ_N sets the bodies per route
-// and caller in each round.
+// At the end every write route (each attempt action apart) must have taken
+// its valid request: answered, and, for a route whose valid path writes,
+// with events appended; a read route must never have appended one, and a
+// route nobody classified fails the test. The direct-SQL half is
+// store_test.go TestIdentitiesAndTheEventRule.
+//
+// The seed is fixed; AGENTRT_FUZZ_SEED tries another, AGENTRT_FUZZ_N sets the
+// bodies per route and caller in each world.
 func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 	routes := walkRoutes(t)
 	if len(routes) < 40 {
 		t.Fatalf("walked %d routes; the walk found less than Mount serves", len(routes))
 	}
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	// Each stage is its own world, brought to its point by a client's own
-	// requests (checked like the rest), then fuzzed: what one round's
-	// requests do (a stop, a claim) never keeps the next from its stage.
-	stages := []struct {
-		name  string
-		steps int // of the hand-over below, after the claim: 0 not claimed, 1 started, 5 submitted
-	}{{"a ready task, a blocked, a paused and a proposed one", 0}, {"a running attempt", 1}, {"a submitted task", 5}}
-	var requests, answered, moved int
-	tally, moves := map[string][3]int{}, map[string]int{}
-	for _, st := range stages {
-		pool, task := world(t)
-		f := newStateFuzz(t, pool)
-		s := server(t, pool)
-		cards, askFails = nil, false
-		if st.steps > 0 {
-			code, claim := f.send(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}})
-			if code != http.StatusOK || claim["task_id"] != task {
-				t.Fatalf("claim: %d %v", code, claim)
-			}
-			attempt := claim["attempt_id"].(string)
-			fence := func(extra map[string]any) map[string]any {
-				b := map[string]any{"host_id": "h1", "lease_epoch": claim["lease_epoch"]}
-				for k, v := range extra {
-					b[k] = v
-				}
-				return b
-			}
-			report := []byte("# done\nall tests pass\n")
-			steps := []struct {
-				action string
-				body   any
-			}{
-				{"start", fence(map[string]any{"model_provider": "cursor-mix"})},
-				{"upload", report},
-				{"computed", fence(map[string]any{"exit_code": 0, "end_how": "exit", "conclusion": "done"})},
-				{"persist", fence(map[string]any{"report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})},
-				{"submit", fence(nil)},
-			}
-			for _, step := range steps[:st.steps] {
-				var code int
-				var out map[string]any
-				if step.action == "upload" {
-					code, out = f.send(t, s, "agentd:h1", "PUT", "artifacts/"+artifactID(report), report, "X-Artifact-Kind", "report")
-				} else {
-					code, out = f.send(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/"+step.action, step.body)
-				}
-				if code != http.StatusOK {
-					t.Fatalf("%s: %d %v", step.action, code, out)
-				}
-			}
-			want := map[int]string{1: "running", 5: "submitted"}[st.steps]
-			if got := f.snapshot(t)[rowKey{"task", task}]; got != want {
-				t.Fatalf("stage %q: the task is %s", st.name, got)
-			}
-		}
-		f.round(t, s, routes, st.name)
-		requests, answered, moved = requests+f.requests, answered+f.answered, moved+f.moved
-		for k, v := range f.tally {
-			c := tally[k]
-			tally[k] = [3]int{c[0] + v[0], c[1] + v[1], c[2] + v[2]}
-		}
-		for k, v := range f.moves {
-			moves[k] += v
-		}
-		t.Logf("stage %q: seed %d, %d routes, %d requests, %d answered, %d state moves checked", st.name, f.seed, len(routes), f.requests, f.answered, f.moved)
-		rows, err := pool.Query(ctx, `SELECT event_stream_id FROM agentrt.event_stream ORDER BY 1`)
+	seed, n := int64(20261020), 3
+	if v := os.Getenv("AGENTRT_FUZZ_SEED"); v != "" {
+		var err error
+		seed, err = strconv.ParseInt(v, 10, 64)
 		must(t, err)
-		streams, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	}
+	if v := os.Getenv("AGENTRT_FUZZ_N"); v != "" {
+		var err error
+		n, err = strconv.Atoi(v)
 		must(t, err)
+	}
+	tally := map[string]*routeTally{}
+	moves := map[string]int{}
+	for _, st := range fuzzStages {
+		f := newStateFuzz(t, seed, n, tally, moves)
+		s := f.stage(t, st)
+		f.round(t, s, routes, st)
+		t.Logf("stage %q: seed %d, %d requests, %d answered, %d rows checked", st, seed, f.requests, f.answered, f.checked)
+		streams := f.ids(t, `SELECT event_stream_id FROM agentrt.event_stream ORDER BY 1`)
 		for _, id := range streams {
-			if _, err := store.VerifyStream(ctx, pool, id); err != nil {
-				t.Errorf("stream %s: %v", id, err)
+			if _, err := store.VerifyStream(ctx, f.pool, id); err != nil {
+				t.Errorf("stage %q: stream %s: %v", st, id, err)
 			}
 		}
 	}
-	if moved == 0 {
-		t.Fatal("no request moved any state: the fuzz checked nothing")
+
+	keys := make([]string, 0, len(tally))
+	for k := range tally {
+		keys = append(keys, k)
 	}
-	t.Logf("%d requests, %d answered, %d state moves checked", requests, answered, moved)
+	sort.Strings(keys)
+	for _, k := range keys {
+		c := tally[k]
+		t.Logf("  %-34s valid %2d  answered %4d  wrote %4d  refused %4d  moves %3d", k, c.valid, c.answered, c.wrote, c.refused, c.moves)
+	}
 	for _, rt := range routes {
-		c := tally[rt.method+" "+rt.pattern]
-		t.Logf("  %-6s %-28s answered %4d  refused %4d  moves %3d", rt.method, rt.pattern, c[0], c[1], c[2])
+		for _, k := range routeKeys(rt) {
+			want, ok := routeExpect[k]
+			c := tally[k]
+			switch {
+			case !ok && rt.method != http.MethodGet:
+				t.Errorf("%s: a write route nobody classified; add its valid request and its expectation", k)
+			case !ok && c != nil && c.wrote > 0:
+				t.Errorf("%s: a read route appended events %d times", k, c.wrote)
+			case !ok:
+			case c == nil || c.valid == 0:
+				t.Errorf("%s: its valid request was never answered", k)
+			case want == expectWrites && c.validWrote == 0:
+				t.Errorf("%s: its valid request never appended an event", k)
+			}
+		}
 	}
-	keys := make([]string, 0, len(moves))
+	keys = keys[:0]
 	for k := range moves {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		t.Logf("  move %-40s %3d", k, moves[k])
+		t.Logf("  move %-44s %3d", k, moves[k])
 	}
 }
 
-// The transition tables (store/kernel.go taskMoves and missionMoves, and
-// store/adopt.go adoptMoves, which accepts a salvaged result from ready,
-// leased or running). A route that makes any other move fails the test.
+// The transition tables: store/kernel.go taskMoves (with store/adopt.go
+// adoptMoves, which accepts a salvaged result from ready, leased or running)
+// and missionMoves; store/write.go stepMoves. A step is created planned, any
+// other node with no state. An attempt's moves are by its events.
 var (
 	fuzzTaskMoves = map[string][]string{
 		"proposed":       {"ready", "awaiting_owner", "blocked", "cancelled"},
@@ -161,159 +135,61 @@ var (
 		"active":         {"paused", "done", "stopped", "expired"},
 		"paused":         {"active", "stopped", "expired"},
 	}
-	// The events that put an attempt in each state.
-	fuzzAttemptBy = map[string][]string{
-		"leased":    {"attempt_leased", "attempt_renewed"},
-		"running":   {"attempt_started", "attempt_renewed"},
-		"stale":     {"attempt_stale"},
-		"lost":      {"attempt_lost"},
-		"submitted": {"attempt_submitted"},
-		"failed":    {"attempt_ended"},
-		"cancelled": {"attempt_cancelled"},
-		"finished":  {"verification_recorded"},
+	fuzzStepMoves = map[string][]string{
+		"planned": {"active", "done", "stopped", "dropped"},
+		"active":  {"done", "stopped", "dropped"},
+		"done":    {"active", "dropped"},
+		"stopped": {"active", "dropped"},
+	}
+	// By event: the attempt states it moves from and to (an ended attempt
+	// that is already over keeps its state).
+	fuzzAttemptMoves = map[string]map[string][]string{
+		"attempt_leased":    {"": {"leased"}},
+		"attempt_started":   {"leased": {"running"}},
+		"attempt_stale":     {"leased": {"stale"}, "running": {"stale"}},
+		"attempt_renewed":   {"stale": {"leased", "running"}, "leased": {"leased"}, "running": {"running"}},
+		"attempt_lost":      {"leased": {"lost"}, "running": {"lost"}, "stale": {"lost"}},
+		"attempt_submitted": {"running": {"submitted"}},
+		"attempt_ended": {"leased": {"failed"}, "running": {"failed"}, "stale": {"failed"},
+			"lost": {"lost"}, "failed": {"failed"}, "cancelled": {"cancelled"}, "finished": {"finished"}, "submitted": {"submitted"}},
+		"attempt_cancelled": {"leased": {"cancelled"}, "running": {"cancelled"}, "stale": {"cancelled"}},
 	}
 )
 
-// Every state of every table (migrations/0001_core.sql), and other words a
-// caller might try.
-var fuzzStates = []string{"proposed", "awaiting_owner", "ready", "leased", "running", "submitted", "verifying", "accepted",
-	"rework", "rejected", "blocked", "paused", "cancelled", "active", "done", "stopped", "expired", "planned", "dropped",
-	"stale", "finished", "lost", "failed", "draining", "retired", "approved", "pass", "merged", ""}
-
-// Keys that name a state, sent beside or instead of a route's own fields.
-var fuzzStateKeys = []string{"state", "to", "from", "status", "task_state", "mission_state", "attempt_state", "plan_state",
-	"phase", "verdict", "accepted", "set_state", "new_state"}
-
-var fuzzCallers = []string{"agentd:h1", "agentd:h2", "reporter", "operator", "admin", "seat:chief_of_staff", "viewer", ""}
-
-var fuzzAttemptActions = []string{"heartbeat", "start", "checkpoint", "computed", "persist", "submit", "salvage", "ended",
-	"accept", "state", "cancel", "lost", ""}
-
 type rowKey struct{ table, id string }
+
+type routeTally struct{ valid, validWrote, answered, wrote, refused, moves int }
 
 type stateFuzz struct {
 	pool     *pgxpool.Pool
-	route    string            // the route of the request being checked
-	tally    map[string][3]int // by route: answered, refused, moves
-	moves    map[string]int    // by table and move
+	task     string // the world's first task
 	r        *rand.Rand
-	seed     int64
 	n        int
 	fields   []string
+	digestQ  string // one query: a digest of every table of the runtime
+	tally    map[string]*routeTally
+	moves    map[string]int
 	requests int
 	answered int
-	moved    int
+	checked  int
 }
 
-// newStateFuzz adds to world: missions M-2 (proposed) and M-3 (paused);
-// tasks of M-1 that are blocked, paused and proposed; host h2.
-func newStateFuzz(t *testing.T, pool *pgxpool.Pool) *stateFuzz {
+func newStateFuzz(t *testing.T, seed int64, n int, tally map[string]*routeTally, moves map[string]int) *stateFuzz {
 	t.Helper()
-	seed := time.Now().UnixNano()
-	if v := os.Getenv("AGENTRT_FUZZ_SEED"); v != "" {
-		var err error
-		seed, err = strconv.ParseInt(v, 10, 64)
-		must(t, err)
+	pool, task := world(t)
+	f := &stateFuzz{pool: pool, task: task, r: rand.New(rand.NewSource(seed)), n: n, fields: requestFields(t), tally: tally, moves: moves}
+	var parts []string
+	// The event table is append-only (its triggers) and checked by its last
+	// id; every other table is digested whole.
+	for _, tbl := range f.ids(t, `SELECT table_name FROM information_schema.tables WHERE table_schema = 'agentrt' AND table_type = 'BASE TABLE'
+	  AND table_name <> 'event' ORDER BY 1`) {
+		parts = append(parts, fmt.Sprintf(`SELECT '%[1]s', count(*), md5(COALESCE(string_agg(x::text, '|' ORDER BY x::text), '')) FROM agentrt.%[1]s x`, tbl))
 	}
-	n := 6
-	if v := os.Getenv("AGENTRT_FUZZ_N"); v != "" {
-		var err error
-		n, err = strconv.Atoi(v)
-		must(t, err)
+	if len(parts) < 15 {
+		t.Fatalf("found %d tables of the runtime", len(parts))
 	}
-	tx := func(fn func(pgx.Tx) error) { t.Helper(); must(t, store.InTx(ctx, pool, fn)) }
-	tx(func(tx pgx.Tx) error {
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "m2", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
-			return err
-		}
-		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-3", Title: "m3", Goal: "g", Deadline: time.Now().Add(time.Hour)}); err != nil {
-			return err
-		}
-		if err := store.MoveMission(ctx, tx, "controller", "M-3", "active", "test"); err != nil {
-			return err
-		}
-		return store.MoveMission(ctx, tx, "controller", "M-3", "paused", "test")
-	})
-	for _, to := range []string{"blocked", "paused", ""} {
-		tx(func(tx pgx.Tx) error {
-			spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# task "+to+"\n"))
-			if err != nil {
-				return err
-			}
-			id := store.NewTaskID()
-			if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-				Class: "go", Title: "t " + to, SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform", BaseCommit: commitA}); err != nil {
-				return err
-			}
-			switch to {
-			case "":
-				return nil
-			case "paused":
-				if err := store.MarkReady(ctx, tx, "controller", id); err != nil {
-					return err
-				}
-			}
-			return store.MoveTask(ctx, tx, "controller", id, to, "test")
-		})
-	}
-	must(t, store.RegisterHost(ctx, pool, "owner", "h2", "dev"))
-	return &stateFuzz{pool: pool, r: rand.New(rand.NewSource(seed)), seed: seed, n: n, fields: requestFields(t),
-		tally: map[string][3]int{}, moves: map[string]int{}}
-}
-
-// requestFields is every JSON field name the package and the store declare,
-// read from their sources: what any route might read from a body.
-func requestFields(t *testing.T) []string {
-	t.Helper()
-	tag := regexp.MustCompile("json:\"([a-z_0-9]+)")
-	seen := map[string]bool{}
-	for _, dir := range []string{".", "../store"} {
-		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
-		must(t, err)
-		for _, file := range files {
-			if strings.HasSuffix(file, "_test.go") {
-				continue
-			}
-			src, err := os.ReadFile(file)
-			must(t, err)
-			for _, m := range tag.FindAllSubmatch(src, -1) {
-				seen[string(m[1])] = true
-			}
-		}
-	}
-	for _, k := range fuzzStateKeys {
-		seen[k] = true
-	}
-	out := make([]string, 0, len(seen))
-	for k := range seen {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	if len(out) < 50 {
-		t.Fatalf("read only %d field names from the sources", len(out))
-	}
-	return out
-}
-
-type fuzzRoute struct{ method, pattern string }
-
-// walkRoutes is every route Mount serves, as chi lists them.
-func walkRoutes(t *testing.T) []fuzzRoute {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "auth.yaml")
-	must(t, os.WriteFile(path, []byte("tokens:\n  - name: viewer\n    role: viewer\n    token: fixture-walk\n"), 0o600))
-	auth, err := actuation.LoadAuth(path)
-	must(t, err)
-	r := chi.NewRouter()
-	r.Route("/api/v1", func(r chi.Router) { agentrtapi.Mount(r, auth, &agentrtapi.API{}) })
-	var out []fuzzRoute
-	must(t, chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		route = strings.TrimSuffix(strings.TrimPrefix(route, "/api/v1/agentrt/"), "/")
-		out = append(out, fuzzRoute{method, route})
-		return nil
-	}))
-	sort.Slice(out, func(i, j int) bool { return out[i].method+out[i].pattern < out[j].method+out[j].pattern })
-	return out
+	f.digestQ = strings.Join(parts, " UNION ALL ")
+	return f
 }
 
 // snapshot is the state of every row of the four state tables.
@@ -336,6 +212,23 @@ func (f *stateFuzz) snapshot(t *testing.T) map[rowKey]string {
 	return out
 }
 
+// digest is every table's row count and a digest of all its rows.
+func (f *stateFuzz) digest(t *testing.T) map[string]string {
+	t.Helper()
+	rows, err := f.pool.Query(ctx, f.digestQ)
+	must(t, err)
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var tbl, sum string
+		var n int
+		must(t, rows.Scan(&tbl, &n, &sum))
+		out[tbl] = fmt.Sprintf("%d %s", n, sum)
+	}
+	must(t, rows.Err())
+	return out
+}
+
 func (f *stateFuzz) lastEvent(t *testing.T) int64 {
 	t.Helper()
 	var id int64
@@ -343,373 +236,394 @@ func (f *stateFuzz) lastEvent(t *testing.T) int64 {
 	return id
 }
 
-// ids lists one column of a table, for paths and bodies.
-func (f *stateFuzz) ids(t *testing.T, q string) []string {
+// ids lists one column, in the order the query gives.
+func (f *stateFuzz) ids(t *testing.T, q string, args ...any) []string {
 	t.Helper()
-	rows, err := f.pool.Query(ctx, q)
+	rows, err := f.pool.Query(ctx, q, args...)
 	must(t, err)
 	out, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	must(t, err)
 	return out
 }
 
-// send is call, with the checks after it.
-func (f *stateFuzz) send(t *testing.T, s *httptest.Server, caller, method, path string, body any, header ...string) (int, map[string]any) {
+// send sends one request as a client of key's route would and checks it;
+// valid marks the route's valid request.
+func (f *stateFuzz) send(t *testing.T, s *httptest.Server, key string, valid bool, caller, method, path string, body any, header ...string) (int, map[string]any) {
 	t.Helper()
-	f.route = method + " " + path
-	before, since := f.snapshot(t), f.lastEvent(t)
-	code, out := call(t, s, caller, method, path, body, append([]string{session, "fuzz"}, header...)...)
+	before, digest, since := f.snapshot(t), f.digest(t), f.lastEvent(t)
+	code, out := call(t, s, caller, method, path, body, append([]string{session, sessionOf(caller)}, header...)...)
 	f.requests++
-	f.check(t, fmt.Sprintf("%s %s as %q (%d)", method, path, caller, code), code, before, since)
+	doc, _ := json.Marshal(body)
+	if b, ok := body.([]byte); ok {
+		doc = b
+	}
+	f.check(t, key, valid, fmt.Sprintf("%s %s as %q (%d), body %.300s", method, path, caller, code, doc), code, before, digest, since)
 	return code, out
 }
 
-// check holds the request to T25: a refusal changed nothing; every move has
-// its events.
-func (f *stateFuzz) check(t *testing.T, what string, code int, before map[rowKey]string, since int64) {
+// check holds a request to T25 and counts it for its route.
+func (f *stateFuzz) check(t *testing.T, key string, valid bool, what string, code int, before map[rowKey]string, digest map[string]string, since int64) {
 	t.Helper()
-	after, last := f.snapshot(t), f.lastEvent(t)
-	c := f.tally[f.route]
-	defer func() { f.tally[f.route] = c }()
+	if err := f.judge(t, key, valid, code, before, digest, since); err != nil {
+		t.Fatalf("%s: %v", what, err)
+	}
+}
+
+// judge is check's verdict.
+func (f *stateFuzz) judge(t *testing.T, key string, valid bool, code int, before map[rowKey]string, digest map[string]string, since int64) error {
+	t.Helper()
+	c := f.tally[key]
+	if c == nil {
+		c = &routeTally{}
+		f.tally[key] = c
+	}
+	last := f.lastEvent(t)
 	if code >= 400 || code == 0 {
-		c[1]++
+		c.refused++
 		if last != since {
-			t.Fatalf("%s: refused, yet it appended %d events", what, last-since)
+			return fmt.Errorf("refused, yet it appended %d events", last-since)
 		}
-		for k, st := range after {
-			if old, ok := before[k]; !ok || old != st {
-				t.Fatalf("%s: refused, yet %s %s moved %q -> %q", what, k.table, k.id, old, st)
+		now := f.digest(t)
+		for tbl, d := range digest {
+			if now[tbl] != d {
+				return fmt.Errorf("refused, yet agentrt.%s changed (%s -> %s)", tbl, d, now[tbl])
 			}
-		}
-		return
-	}
-	f.answered++
-	c[0]++
-	for k, st := range after {
-		old, existed := before[k]
-		if existed && old == st {
-			continue
-		}
-		f.moved++
-		c[2]++
-		f.moves[fmt.Sprintf("%s %s -> %s", k.table, map[bool]string{true: old, false: "(new)"}[existed], st)]++
-		if err := f.moveHasEvents(t, k, old, st, existed, since); err != nil {
-			t.Fatalf("%s: %s %s %q -> %q: %v", what, k.table, k.id, old, st, err)
-		}
-	}
-	for k := range before {
-		if _, ok := after[k]; !ok {
-			t.Fatalf("%s: %s %s is gone", what, k.table, k.id)
-		}
-	}
-}
-
-type fuzzEvent struct {
-	id, txid int64
-	typ      string
-	body     map[string]any
-}
-
-// moveHasEvents checks one row's move against the events appended since.
-func (f *stateFuzz) moveHasEvents(t *testing.T, k rowKey, old, now string, existed bool, since int64) error {
-	t.Helper()
-	col := k.table + "_id"
-	rows, err := f.pool.Query(ctx, `SELECT event_id, txid, event_type, body_json FROM agentrt.event
-	  WHERE event_id > $1 AND `+col+` = $2 ORDER BY event_id`, since, k.id)
-	must(t, err)
-	var evs []fuzzEvent
-	for rows.Next() {
-		var e fuzzEvent
-		var raw []byte
-		must(t, rows.Scan(&e.id, &e.txid, &e.typ, &raw))
-		must(t, json.Unmarshal(raw, &e.body))
-		evs = append(evs, e)
-	}
-	rows.Close()
-	must(t, rows.Err())
-	has := func(types ...string) bool {
-		return slices.ContainsFunc(evs, func(e fuzzEvent) bool { return slices.Contains(types, e.typ) })
-	}
-	if k.table == "attempt" {
-		if !existed && !has("attempt_leased") {
-			return fmt.Errorf("a new attempt without attempt_leased (%v)", typesOf(evs))
-		}
-		if !has(fuzzAttemptBy[now]...) {
-			return fmt.Errorf("no %v among %v", fuzzAttemptBy[now], typesOf(evs))
 		}
 		return nil
 	}
-	created, changed := map[string]string{"task": "task_proposed", "mission": "mission_proposed", "plan_node": "plan_node_created"}[k.table],
-		k.table+"_state_changed"
-	from := old
-	if !existed {
-		if !has(created) {
-			return fmt.Errorf("a new row without %s (%v)", created, typesOf(evs))
-		}
-		from = map[string]string{"task": "proposed", "mission": "proposed"}[k.table]
+	f.answered++
+	c.answered++
+	if valid {
+		c.valid++
 	}
-	var chain []fuzzEvent
-	for _, e := range evs {
-		if e.typ == changed {
-			chain = append(chain, e)
+	if last != since {
+		c.wrote++
+		if valid {
+			c.validWrote++
 		}
 	}
-	if len(chain) == 0 {
-		if !existed && (k.table == "plan_node" || now == from) {
-			return nil // created in this state
+	after := f.snapshot(t)
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			return fmt.Errorf("%s %s is gone", k.table, k.id)
 		}
-		return fmt.Errorf("no %s (%v)", changed, typesOf(evs))
 	}
-	moves := map[string]map[string][]string{"task": fuzzTaskMoves, "mission": fuzzMissionMoves}[k.table]
-	for i, e := range chain {
-		ef, et := fmt.Sprint(e.body["from"]), fmt.Sprint(e.body["to"])
-		if (i > 0 || existed || k.table != "plan_node") && ef != from {
-			return fmt.Errorf("event %d moves from %q, the row was %q", e.id, ef, from)
+	touched := map[rowKey]bool{}
+	for k, st := range after {
+		if old, ok := before[k]; !ok || old != st {
+			touched[k] = true
 		}
-		if moves != nil && !slices.Contains(moves[ef], et) {
-			return fmt.Errorf("event %d makes %q -> %q, which no transition table has", e.id, ef, et)
-		}
-		if !f.hasCause(t, e) {
-			return fmt.Errorf("event %d (%s) has no reason and no other event in its transaction", e.id, e.typ)
-		}
-		from = et
 	}
-	if from != now {
-		return fmt.Errorf("the events end at %q, the row is %q", from, now)
+	rows, err := f.pool.Query(ctx, `SELECT DISTINCT tbl, id FROM agentrt.event e,
+	  LATERAL (VALUES ('task', e.task_id), ('mission', e.mission_id), ('plan_node', e.plan_node_id), ('attempt', e.attempt_id)) v(tbl, id)
+	  WHERE e.event_id > $1 AND id IS NOT NULL
+	    AND ((tbl = 'attempt' AND e.event_type = ANY($2)) OR e.event_type = tbl || '_state_changed')`, since, attemptStateEvents())
+	must(t, err)
+	for rows.Next() {
+		var k rowKey
+		must(t, rows.Scan(&k.table, &k.id))
+		touched[k] = true
 	}
-	if k.table == "plan_node" {
-		var at int64
-		must(t, f.pool.QueryRow(ctx, `SELECT COALESCE(state_event_id, 0) FROM agentrt.plan_node WHERE plan_node_id = $1`, k.id).Scan(&at))
-		if at != chain[len(chain)-1].id {
-			return fmt.Errorf("state_event_id %d, the last move is event %d", at, chain[len(chain)-1].id)
+	rows.Close()
+	must(t, rows.Err())
+	for _, k := range sortedKeys(touched) {
+		old, existed := before[k]
+		now, ok := after[k]
+		if !ok {
+			return fmt.Errorf("an event names %s %s, which is not there", k.table, k.id)
+		}
+		f.checked++
+		if !existed || old != now {
+			c.moves++
+			f.moves[fmt.Sprintf("%s %s -> %s", k.table, map[bool]string{true: old, false: "(new)"}[existed], now)]++
+		}
+		if err := f.replay(t, k, old, now, existed, since); err != nil {
+			return fmt.Errorf("%s %s %q -> %q: %w", k.table, k.id, old, now, err)
 		}
 	}
 	return nil
 }
 
-// hasCause: a state event says why, or another event of its transaction is
-// the cause (attempt_started for running, route_decided for ready, …).
-func (f *stateFuzz) hasCause(t *testing.T, e fuzzEvent) bool {
-	t.Helper()
-	for _, k := range []string{"reason", "cause"} {
-		if v, ok := e.body[k].(string); ok && v != "" {
-			return true
-		}
-	}
-	var n int
-	must(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE txid = $1 AND event_id <> $2
-	  AND event_type NOT LIKE '%\_state\_changed'`, e.txid, e.id).Scan(&n))
-	return n > 0
-}
+// sessionOf is a session a caller's token keeps to itself (a thread is
+// registered by the token it first wrote with).
+func sessionOf(caller string) string { return "s-" + strings.NewReplacer(":", "-").Replace(caller) }
 
-func typesOf(evs []fuzzEvent) []string {
-	out := make([]string, len(evs))
-	for i, e := range evs {
-		out[i] = e.typ
+func attemptStateEvents() []string {
+	out := make([]string, 0, len(fuzzAttemptMoves))
+	for e := range fuzzAttemptMoves {
+		out = append(out, e)
 	}
+	sort.Strings(out)
 	return out
 }
 
-// round sends n bodies to every route from every caller.
-func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute, what string) {
-	t.Helper()
-	for _, rt := range routes {
-		n := f.n
-		if rt.method != http.MethodGet {
-			n *= 2
-		}
-		for _, caller := range fuzzCallers {
-			for i := 0; i < n; i++ {
-				path := f.path(t, rt.pattern)
-				body, header := f.body(t, rt, caller, path)
-				if b, ok := body.([]byte); ok && rt.method == http.MethodPut && f.r.Intn(2) == 0 {
-					path = "artifacts/" + artifactID(b) // under its own hash, so the upload is weighed on what it is
-				}
-				f.route = rt.method + " " + rt.pattern
-				before, since := f.snapshot(t), f.lastEvent(t)
-				code, _ := call(t, s, caller, rt.method, path, body, append([]string{session, f.pick([]string{"s1", "s2", "fuzz"})}, header...)...)
-				f.requests++
-				f.check(t, fmt.Sprintf("round %q: %s %s as %q (%d), seed %d", what, rt.method, path, caller, code, f.seed), code, before, since)
-			}
-		}
-	}
+type fuzzEvent struct {
+	id       int64
+	typ      string
+	cause    bool // cause_event_id is set
+	siblings int  // other events of its transaction about the same row, not state moves
+	body     map[string]any
 }
 
-func (f *stateFuzz) pick(xs []string) string { return xs[f.r.Intn(len(xs))] }
-
-// path fills a route's parameters with ids of the world and some that are not.
-func (f *stateFuzz) path(t *testing.T, pattern string) string {
+// replay checks one row's events since the request began against its states
+// before and after.
+func (f *stateFuzz) replay(t *testing.T, k rowKey, old, now string, existed bool, since int64) error {
 	t.Helper()
-	parts := strings.Split(pattern, "/")
-	for i, p := range parts {
-		if !strings.HasPrefix(p, "{") {
+	col := k.table + "_id"
+	rows, err := f.pool.Query(ctx, `SELECT e.event_id, e.event_type, e.cause_event_id IS NOT NULL, e.body_json,
+	    (SELECT count(*) FROM agentrt.event o WHERE o.txid = e.txid AND o.event_id <> e.event_id AND o.`+col+` = $2
+	       AND o.event_type NOT LIKE '%\_state\_changed')
+	  FROM agentrt.event e WHERE e.event_id > $1 AND e.`+col+` = $2 ORDER BY e.event_id`, since, k.id)
+	must(t, err)
+	var evs []fuzzEvent
+	for rows.Next() {
+		var e fuzzEvent
+		var raw []byte
+		must(t, rows.Scan(&e.id, &e.typ, &e.cause, &raw, &e.siblings))
+		must(t, json.Unmarshal(raw, &e.body))
+		evs = append(evs, e)
+	}
+	rows.Close()
+	must(t, rows.Err())
+	if k.table == "attempt" {
+		return replayAttempt(evs, old, now, existed)
+	}
+	from := old
+	if !existed {
+		if from, err = f.created(t, k, evs, since); err != nil {
+			return err
+		}
+	}
+	last, err := replayChain(k.table, evs, from, now)
+	if err != nil {
+		return err
+	}
+	if k.table == "plan_node" && last != 0 {
+		var at int64
+		must(t, f.pool.QueryRow(ctx, `SELECT COALESCE(state_event_id, 0) FROM agentrt.plan_node WHERE plan_node_id = $1`, k.id).Scan(&at))
+		if at != last {
+			return fmt.Errorf("state_event_id %d, the last move is event %d", at, last)
+		}
+	}
+	return nil
+}
+
+// created checks the event that made a new row and returns the state it
+// starts in: a task and a mission proposed; a step planned, another node none.
+func (f *stateFuzz) created(t *testing.T, k rowKey, evs []fuzzEvent, since int64) (string, error) {
+	t.Helper()
+	switch k.table {
+	case "task":
+		if !slices.ContainsFunc(evs, func(e fuzzEvent) bool { return e.typ == "task_proposed" }) {
+			return "", fmt.Errorf("a new task without task_proposed")
+		}
+		return "proposed", nil
+	case "mission":
+		if !slices.ContainsFunc(evs, func(e fuzzEvent) bool { return e.typ == "mission_proposed" }) {
+			return "", fmt.Errorf("a new mission without mission_proposed")
+		}
+		return "proposed", nil
+	}
+	// A plan node: plan_node_created names it; a plan change lists it; an
+	// import's head is on its tree's stream.
+	root, _, _ := strings.Cut(k.id, ":")
+	var n int
+	must(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_id > $1 AND (
+	    (event_type = 'plan_node_created' AND plan_node_id = $2)
+	    OR (event_type = 'plan_changed' AND body_json->'nodes' ? $2)
+	    OR (event_type = 'legacy_imported' AND event_stream_id = 'plan:' || $3))`, since, k.id, root).Scan(&n))
+	if n == 0 {
+		return "", fmt.Errorf("a new plan node that no event of the request creates")
+	}
+	var kind string
+	must(t, f.pool.QueryRow(ctx, `SELECT node_kind FROM agentrt.plan_node WHERE plan_node_id = $1`, k.id).Scan(&kind))
+	if kind == "step" {
+		return "planned", nil
+	}
+	return "", nil
+}
+
+// replayChain runs a task's, mission's or step's moves among evs (its events
+// of the request, in order) from the state before and returns the last
+// move's event: each from the state the last left, along its table, with a
+// cause, ending at the state after.
+func replayChain(table string, evs []fuzzEvent, from, now string) (int64, error) {
+	moves := map[string]map[string][]string{"task": fuzzTaskMoves, "mission": fuzzMissionMoves, "plan_node": fuzzStepMoves}[table]
+	var last int64
+	for _, e := range evs {
+		if e.typ != table+"_state_changed" {
 			continue
 		}
-		var pool []string
-		switch p {
-		case "{action}":
-			pool = slices.Concat(fuzzAttemptActions, fuzzAttemptActions[:8]) // the routes' own, twice
-		case "{rule_id}":
-			pool = []string{"standing-envelope:dev", "job:implementer", "capability-facts", "card-auto-answer", "routing:dev", "x"}
-		case "{job}":
-			pool = []string{"chief", "implementer", "x"}
-		default:
-			switch parts[i-1] {
-			case "attempts":
-				pool = f.ids(t, `SELECT attempt_id FROM agentrt.attempt`)
-			case "missions":
-				pool = append(f.ids(t, `SELECT mission_id FROM agentrt.mission`), "M-99")
-			case "tasks":
-				pool = f.ids(t, `SELECT task_id FROM agentrt.task`)
-			case "plan":
-				pool = f.ids(t, `SELECT plan_node_id FROM agentrt.plan_node`)
-			case "controls":
-				pool = f.ids(t, `SELECT control_id FROM agentrt.control`)
-			case "hosts":
-				pool = []string{"h1", "h2", "h9"}
-			case "pools":
-				pool = f.ids(t, `SELECT vendor_pool_id FROM agentrt.vendor_pool`)
-			case "artifacts":
-				pool = f.ids(t, `SELECT artifact_id FROM agentrt.artifact`)
+		ef, et := fmt.Sprint(e.body["from"]), fmt.Sprint(e.body["to"])
+		if ef != from {
+			return 0, fmt.Errorf("event %d moves from %q, the row was %q", e.id, ef, from)
+		}
+		if !slices.Contains(moves[ef], et) {
+			return 0, fmt.Errorf("event %d makes %q -> %q, which no transition table has", e.id, ef, et)
+		}
+		if !hasCause(e) {
+			return 0, fmt.Errorf("event %d (%s) has no reason, no cause and no event of its transaction about this row", e.id, e.typ)
+		}
+		from, last = et, e.id
+	}
+	if from != now {
+		return 0, fmt.Errorf("the events end at %q, the row is %q", from, now)
+	}
+	return last, nil
+}
+
+// hasCause: a move says why (reason, cause or cause_event_id), or another
+// event of its transaction about the same row is its cause (attempt_started
+// for running, attempt_submitted for submitted, route_decided for ready).
+func hasCause(e fuzzEvent) bool {
+	if e.cause || e.siblings > 0 {
+		return true
+	}
+	for _, key := range []string{"reason", "cause"} {
+		if v, ok := e.body[key].(string); ok && v != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// replayAttempt runs an attempt's state events from where it was; a renewal
+// may come back leased or running, so the possible states are a set.
+func replayAttempt(evs []fuzzEvent, old, now string, existed bool) error {
+	states := map[string]bool{old: true}
+	if !existed {
+		states = map[string]bool{"": true}
+	}
+	for _, e := range evs {
+		m, ok := fuzzAttemptMoves[e.typ]
+		if !ok {
+			continue
+		}
+		next := map[string]bool{}
+		for s := range states {
+			for _, to := range m[s] {
+				next[to] = true
 			}
 		}
-		// The world's ids three times over: most requests name a real row.
-		pool = append(slices.Concat(pool, pool, pool), "x_nope", strings.Repeat("9", 40))
-		parts[i] = f.pick(pool)
+		if len(next) == 0 {
+			return fmt.Errorf("event %d (%s) cannot follow %v", e.id, e.typ, keysOf(states))
+		}
+		states = next
 	}
-	return strings.Join(parts, "/")
+	if !states[now] {
+		return fmt.Errorf("the events end at %v, the row is %q", keysOf(states), now)
+	}
+	return nil
 }
 
-// value is a random value: a state, an id of the world, a number, a bool,
-// text, nothing, or a list or object of those.
-func (f *stateFuzz) value(t *testing.T, depth int) any {
-	t.Helper()
-	switch f.r.Intn(9) {
-	case 0, 1:
-		return f.pick(fuzzStates)
-	case 2:
-		ids := f.ids(t, `SELECT task_id FROM agentrt.task UNION ALL SELECT attempt_id FROM agentrt.attempt
-		  UNION ALL SELECT mission_id FROM agentrt.mission UNION ALL SELECT plan_node_id FROM agentrt.plan_node`)
-		return f.pick(append(ids, "h1", "h2", "owner", "controller"))
-	case 3:
-		return []int64{0, 1, -1, 2, 999, 1 << 40}[f.r.Intn(6)]
-	case 4:
-		return f.r.Intn(2) == 0
-	case 5:
-		return nil
-	case 6:
-		if depth > 0 {
-			return f.pick([]string{"", "x", "../../etc", "'; DROP TABLE agentrt.task; --"})
-		}
-		return []any{f.value(t, depth+1), f.value(t, depth+1)}
-	case 7:
-		if depth > 0 {
-			return "y"
-		}
-		return map[string]any{f.pick(fuzzStateKeys): f.pick(fuzzStates), f.pick(f.fields): f.value(t, depth+1)}
-	default:
-		return f.pick([]string{"", "x", "exec:cursor", "cursor-mix", pushedAt, commitA})
+func sortedKeys(m map[rowKey]bool) []rowKey {
+	out := make([]rowKey, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].table+out[i].id < out[j].table+out[j].id })
+	return out
 }
 
-// body is a request body for the route: nothing, bytes that are not one
-// object, an object of random fields, or the route's own fields as a client
-// sends them with state words beside them or in their place.
-func (f *stateFuzz) body(t *testing.T, rt fuzzRoute, caller, path string) (any, []string) {
-	t.Helper()
-	header := []string{}
-	if rt.method == http.MethodPut {
-		header = append(header, "X-Artifact-Kind", f.pick([]string{"report", "log_tail", "task_spec", "verify", "x"}))
+func keysOf(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
-	switch f.r.Intn(5) {
-	case 0:
-		return nil, header
-	case 1:
-		return []byte(f.pick([]string{`[]`, `"state"`, `{"state":`, `null`, `{"state":"accepted"}`, `{"to":"accepted","task_id":1}`})), header
-	case 2:
-		b := map[string]any{}
-		for i := 0; i < 1+f.r.Intn(6); i++ {
-			b[f.pick(f.fields)] = f.value(t, 0)
+	sort.Strings(out)
+	return out
+}
+
+// The checker catches what it is there to catch (review 449): a step moved
+// out of dropped; a wrong move whose row ends where it began; a move whose
+// only other event in its transaction is about something else; a refused
+// request that changed a row's other columns; an attempt event out of order.
+func TestStateEventCheckerCatches(t *testing.T) {
+	ev := func(id int64, typ, from, to string, reason bool, siblings int) fuzzEvent {
+		body := map[string]any{"from": from, "to": to}
+		if reason {
+			body["reason"] = "test"
 		}
-		return b, header
+		return fuzzEvent{id: id, typ: typ, siblings: siblings, body: body}
 	}
-	b := f.template(t, rt, caller, path)
-	switch f.r.Intn(3) {
-	case 0: // as a client sends it
-	case 1: // a state word beside the route's own fields
-		for i := 0; i < 1+f.r.Intn(2); i++ {
-			b[f.pick(fuzzStateKeys)] = f.pick(fuzzStates)
+	for name, c := range map[string]struct {
+		table     string
+		evs       []fuzzEvent
+		from, now string
+		want      string
+	}{
+		"a step out of dropped": {"plan_node", []fuzzEvent{ev(1, "plan_node_state_changed", "dropped", "active", true, 0)}, "dropped", "active", "no transition table"},
+		"a round trip with a wrong second move": {"task", []fuzzEvent{ev(1, "task_state_changed", "ready", "paused", true, 0),
+			ev(2, "task_state_changed", "blocked", "ready", true, 0)}, "ready", "ready", `moves from "blocked"`},
+		"no reason, nothing else about the row": {"task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false, 0)}, "leased", "running", "no reason"},
+		"events that end elsewhere":             {"mission", []fuzzEvent{ev(1, "mission_state_changed", "active", "paused", true, 0)}, "active", "stopped", "end at"},
+	} {
+		if _, err := replayChain(c.table, c.evs, c.from, c.now); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v; want %q", name, err, c.want)
 		}
-	default: // one of its own fields made a state word, an id or noise
-		own := make([]string, 0, len(b))
-		for k := range b {
-			own = append(own, k)
-		}
-		sort.Strings(own)
-		b[f.pick(own)] = f.value(t, 0)
 	}
-	if rt.method == http.MethodPut {
-		doc, err := json.Marshal(b)
+	if _, err := replayChain("task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false, 1)}, "leased", "running"); err != nil {
+		t.Errorf("a move caused by another event about the row: %v", err)
+	}
+	if err := replayAttempt([]fuzzEvent{{id: 1, typ: "attempt_submitted"}}, "leased", "submitted", true); err == nil {
+		t.Error("a submit of an attempt that never started passed")
+	}
+
+	f := newStateFuzz(t, 1, 1, map[string]*routeTally{}, map[string]int{})
+	move := func(tx pgx.Tx, from, to string, reason bool) error {
+		body := map[string]any{"from": from, "to": to}
+		if reason {
+			body["reason"] = "test"
+		}
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "task_state_changed", Actor: "controller",
+			MissionID: "M-1", PlanNode: "R2:1-1", TaskID: f.task, Body: body}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE agentrt.task SET state = $2, version = version + 1 WHERE task_id = $1`, f.task, to)
+		return err
+	}
+	judge := func(code int, fn func(tx pgx.Tx) error) error {
+		t.Helper()
+		before, digest, since := f.snapshot(t), f.digest(t), f.lastEvent(t)
+		must(t, store.InTx(ctx, f.pool, fn))
+		return f.judge(t, "test", false, code, before, digest, since)
+	}
+	// A move whose transaction's other event (an upload) is not about the task.
+	err := judge(http.StatusOK, func(tx pgx.Tx) error {
+		if _, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("unrelated")); err != nil {
+			return err
+		}
+		return move(tx, "ready", "paused", false)
+	})
+	if err == nil || !strings.Contains(err.Error(), "no reason") {
+		t.Errorf("a move caused by an unrelated upload: %v", err)
+	}
+	// A round trip back to where the task began (paused), its second move
+	// recorded wrong: the state is the same before and after.
+	if st := f.snapshot(t)[rowKey{"task", f.task}]; st != "paused" {
+		t.Fatalf("the task is %s", st)
+	}
+	err = judge(http.StatusOK, func(tx pgx.Tx) error {
+		if merr := move(tx, "paused", "ready", true); merr != nil {
+			return merr
+		}
+		return move(tx, "blocked", "paused", true)
+	})
+	if err == nil || !strings.Contains(err.Error(), `moves from "blocked"`) {
+		t.Errorf("a wrong move inside a round trip: %v", err)
+	}
+	// A refused request that changed a column other than the state.
+	var db string
+	must(t, f.pool.QueryRow(ctx, `SELECT current_database()`).Scan(&db))
+	admin, err := pgx.Connect(ctx, os.Getenv("AGENTRT_TEST_PG")+" dbname="+db)
+	must(t, err)
+	t.Cleanup(func() { _ = admin.Close(ctx) })
+	before, digest, since := f.snapshot(t), f.digest(t), f.lastEvent(t)
+	for _, q := range []string{`SET session_replication_role = replica`, `UPDATE agentrt.task SET title = 'edited' WHERE task_id = '` + f.task + `'`} {
+		_, err = admin.Exec(ctx, q)
 		must(t, err)
-		return doc, header
 	}
-	return b, header
-}
-
-// template is what a client of the route sends.
-func (f *stateFuzz) template(t *testing.T, rt fuzzRoute, caller, path string) map[string]any {
-	t.Helper()
-	host := strings.TrimPrefix(caller, "agentd:")
-	if host == caller {
-		host = f.pick([]string{"h1", "h2"})
+	if err = f.judge(t, "test", false, http.StatusConflict, before, digest, since); err == nil || !strings.Contains(err.Error(), "agentrt.task changed") {
+		t.Errorf("a refused request that edited a title: %v", err)
 	}
-	key := fmt.Sprintf("k%d", f.r.Intn(4))
-	cursor := map[string]any{"executor": "exec:cursor", "provider": "cursor-mix"}
-	switch {
-	case rt.pattern == "claim":
-		return map[string]any{"host_id": host, "free_slots": 1, "tools": []any{cursor}}
-	case strings.HasPrefix(rt.pattern, "attempts/"):
-		parts := strings.Split(path, "/")
-		var epoch int64
-		var ref string
-		_ = f.pool.QueryRow(ctx, `SELECT lease_epoch, COALESCE(pushed_ref, '') FROM agentrt.attempt WHERE attempt_id = $1`, parts[1]).Scan(&epoch, &ref)
-		arts := f.ids(t, `SELECT artifact_id FROM agentrt.artifact`)
-		return map[string]any{"host_id": host, "lease_epoch": epoch, "model_provider": "cursor-mix", "checkpoint_seq": 1 + f.r.Intn(3),
-			"artifacts": []string{f.pick(arts)}, "exit_code": 0, "end_how": f.pick([]string{"exit", "daemon_restart", "lease_lost"}),
-			"conclusion": f.pick([]string{"done", "failed"}), "report": f.pick(arts), "pushed_ref": ref, "pushed_commit": pushedAt,
-			"group_cleared": true}
-	case rt.pattern == "missions":
-		return map[string]any{"idempotency_key": key, "title": "m", "goal": "g", "success": []string{"it works"},
-			"budget": map[string]any{"max_attempts": 4, "max_wall_hours": 2}}
-	case rt.pattern == "missions/{id}/tasks":
-		specs := f.ids(t, `SELECT artifact_id FROM agentrt.artifact WHERE artifact_kind = 'task_spec'`)
-		return map[string]any{"idempotency_key": key, "tasks": []any{map[string]any{"ref": "a", "plan_node_id": "R2:1-1", "role": "implement",
-			"task_class": "go", "title": "a", "spec_artifact_id": f.pick(specs), "effect_class": "branch", "repo": "bifrost-platform",
-			"base_commit": commitA}}}
-	case rt.pattern == "plan/proposals":
-		return map[string]any{"idempotency_key": key, "root": "R2", "reason": "fuzz", "changes": []any{map[string]any{"op": "add_node",
-			"parent": "R2:1", "kind": "step", "step_kind": "agent", "title": "next", "mission_id": "M-1"}}}
-	case rt.pattern == "controls":
-		tasks := f.ids(t, `SELECT task_id FROM agentrt.task`)
-		return map[string]any{"idempotency_key": key, "scope": f.pick([]string{"task", "mission", "global", "host"}),
-			"scope_ref": f.pick(append(tasks, "M-1", "h1")), "kind": f.pick([]string{"stop", "pause"}), "reason": "fuzz"}
-	case rt.pattern == "goals":
-		return map[string]any{"idempotency_key": key, "goal": "do this", "repo": "bifrost-platform"}
-	case strings.HasPrefix(rt.pattern, "rules/"):
-		text := "rule_id: " + strings.Split(path, "/")[1] + "\nrule_version: 1\ndirection: " + f.pick([]string{"initial", "tighten", "loosen"}) +
-			"\neffective_at: 2026-10-01T00:00:00Z\nexpires_at: 2027-01-15T00:00:00Z\ntenant: dev\nmax_action: branch\n" +
-			"budget: {max_attempts: 4, max_wall_hours: 48}\nexecutors: [exec:cursor]\nhosts: [h1]\n"
-		switch {
-		case strings.HasSuffix(rt.pattern, "/sign"):
-			return map[string]any{"text": text, "signature": "-----BEGIN SSH SIGNATURE-----\nAAAA\n-----END SSH SIGNATURE-----\n"}
-		case strings.HasSuffix(rt.pattern, "/proposals"):
-			return map[string]any{"idempotency_key": key, "text": text, "reason": "fuzz"}
-		}
-		return map[string]any{"text": text}
-	case rt.pattern == "messages":
-		return map[string]any{"to": f.pick([]string{"seat:chief_of_staff", "owner"}), "kind": f.pick([]string{"ask", "note", "answer"}), "body": "hi"}
-	case rt.pattern == "messages/ack":
-		return map[string]any{"message_ids": f.ids(t, `SELECT message_id FROM agentrt.message`)}
-	}
-	return map[string]any{"idempotency_key": key, "reason": "fuzz"}
 }

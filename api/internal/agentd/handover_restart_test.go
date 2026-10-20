@@ -2,6 +2,9 @@ package agentd_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -18,16 +21,24 @@ import (
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
-// dieAt is a proxy in front of the platform that holds the first request
-// matching at and says so: the test kills agentd while it is held. With
-// taken, the platform has the request first and only its answer is lost
-// with the process; without, the request never reaches the platform.
+// How far a request agentd dies on got: held at the proxy (the platform never
+// sees it); half its body sent to the platform before the connection is cut;
+// taken whole by the platform, only its answer lost with the process.
+const (
+	held = iota
+	half
+	taken
+)
+
+// dieAt is a proxy in front of the platform that stops the first request
+// matching at, takes it as far as how says, and says so: the test kills
+// agentd then.
 type dieAt struct {
-	at    func(r *http.Request) bool
-	taken bool
-	held  chan struct{} // closed when the request is held
-	dead  chan struct{} // closed by the test once agentd is dead
-	once  sync.Once
+	at   func(r *http.Request) bool
+	how  int
+	held chan struct{} // closed when the request is where it dies
+	dead chan struct{} // closed by the test once agentd is dead
+	once sync.Once
 }
 
 func (d *dieAt) proxy(t *testing.T, base string) string {
@@ -44,8 +55,17 @@ func (d *dieAt) proxy(t *testing.T, base string) string {
 			rp.ServeHTTP(w, r)
 			return
 		}
-		if d.taken {
+		switch d.how {
+		case taken:
 			rp.ServeHTTP(httptest.NewRecorder(), r) // the platform takes it; the answer goes nowhere
+		case half:
+			body, err := io.ReadAll(r.Body)
+			if err == nil {
+				err = sendHalf(target.Host, r, body)
+			}
+			if err != nil {
+				t.Errorf("half a request: %v", err)
+			}
 		}
 		close(d.held)
 		<-d.dead
@@ -61,11 +81,38 @@ func (d *dieAt) proxy(t *testing.T, base string) string {
 	return s.URL + target.Path
 }
 
+// sendHalf sends r to host with its whole length declared and half its body,
+// waits for the platform to be reading it, and cuts the connection.
+func sendHalf(host string, r *http.Request, body []byte) error {
+	conn, err := net.Dial("tcp", host)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	var head strings.Builder
+	fmt.Fprintf(&head, "%s %s HTTP/1.1\r\nHost: %s\r\n", r.Method, r.URL.RequestURI(), host)
+	for k, vs := range r.Header {
+		if k == "Content-Length" || k == "Connection" {
+			continue
+		}
+		for _, v := range vs {
+			fmt.Fprintf(&head, "%s: %s\r\n", k, v)
+		}
+	}
+	fmt.Fprintf(&head, "Content-Length: %d\r\nConnection: close\r\n\r\n", len(body))
+	if _, err = conn.Write(append([]byte(head.String()), body[:len(body)/2]...)); err != nil {
+		return err
+	}
+	time.Sleep(200 * time.Millisecond)
+	return nil
+}
+
 // T34 case 4 (design v5 §5.2 Gate A, 上传中途重启 agentd): agentd, a process
-// of its own, is killed (SIGKILL) in the middle of its hand-over: while the
-// report is being uploaded, once the platform has taken the report but
-// before its answer came back, and once the platform has recorded persist
-// but before its answer came back. A new agentd on the same registry and
+// of its own, is killed (SIGKILL) in the middle of its hand-over: with the
+// report on its way to the platform; with half the report's body sent and
+// the connection cut; once the platform has taken the report but before its
+// answer came back; with the branch pushed and persist on its way; and once
+// the platform has recorded persist but before its answer came back. A new agentd on the same registry and
 // workspace takes over: the result is handed over once (the artifacts, one
 // artifact_put each; one attempt_persisted; one attempt_submitted; one
 // commit, on the attempt's branch, the one the platform holds), and the task
@@ -74,20 +121,24 @@ func TestRestartDuringTheHandOver(t *testing.T) {
 	report := func(r *http.Request) bool {
 		return r.Method == http.MethodPut && r.Header.Get("X-Artifact-Kind") == "report"
 	}
+	persist := func(r *http.Request) bool { return strings.HasSuffix(r.URL.Path, "/persist") }
 	for _, c := range []struct {
-		name  string
-		at    func(*http.Request) bool
-		taken bool
-		// what the platform holds when agentd dies: reports, persisted
+		name string
+		at   func(*http.Request) bool
+		how  int
+		// what the platform and the remote hold when agentd dies
 		reports, persisted int
+		pushed             bool
 	}{
-		{"uploading the report", report, false, 0, 0},
-		{"the report taken, its answer lost", report, true, 1, 0},
-		{"persist recorded, its answer lost", func(r *http.Request) bool { return strings.HasSuffix(r.URL.Path, "/persist") }, true, 1, 1},
+		{"the report on its way", report, held, 0, 0, false},
+		{"half the report sent", report, half, 0, 0, false},
+		{"the report taken, its answer lost", report, taken, 1, 0, false},
+		{"pushed, persist on its way", persist, held, 1, 0, true},
+		{"persist recorded, its answer lost", persist, taken, 1, 1, true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := branchPlatform(t)
-			die := &dieAt{at: c.at, taken: c.taken, held: make(chan struct{}), dead: make(chan struct{})}
+			die := &dieAt{at: c.at, how: c.how, held: make(chan struct{}), dead: make(chan struct{})}
 			root := t.TempDir()
 			cfg := agentd.TestDaemon{Base: die.proxy(t, w.base), Host: "h1", Token: "fixture-agentd-h1", Root: root,
 				Registry: filepath.Join(root, "registry.json"), Remote: w.bare, GitEnv: w.env,
@@ -129,6 +180,11 @@ func TestRestartDuringTheHandOver(t *testing.T) {
 			persisted := count(`SELECT count(*) FROM agentrt.event WHERE event_type = 'attempt_persisted' AND attempt_id = $1`, attempt)
 			if reports != c.reports || persisted != c.persisted {
 				t.Fatalf("agentd died with %d reports and %d persisted on the platform; want %d and %d", reports, persisted, c.reports, c.persisted)
+			}
+			// It dies at persist only once its branch is pushed; before that, nothing is.
+			branch := sh(t, t.TempDir(), w.env, "git", "ls-remote", w.bare, "refs/heads/agent/"+w.task+"/a1")
+			if c.pushed != (branch != "") {
+				t.Fatalf("agentd died with the branch at %q", branch)
 			}
 			reg, err := agentd.OpenRegistry(cfg.Registry)
 			must(t, err)

@@ -25,6 +25,7 @@ type TestDaemon struct {
 const TestDaemonEnv = "AGENTD_TEST_DAEMON"
 
 func runTestDaemon(path string) int {
+	_ = os.Unsetenv(TestDaemonEnv) // not for the launcher or the executor
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
