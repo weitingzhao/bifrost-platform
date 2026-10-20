@@ -50,6 +50,17 @@ func (w *world) proposed(t *testing.T, task store.Task) string {
 	return task.ID
 }
 
+// returned is what done sends, or the test fails after 30 seconds rather
+// than waiting for go test's own timeout.
+func returned(t *testing.T, done <-chan error) error {
+	t.Helper()
+	err, ok := within(done, 30*time.Second)
+	if !ok {
+		t.Fatal("a call the test waits for did not return in 30 seconds")
+	}
+	return err
+}
+
 // closedCard is the owner_wait_closed of a card: its outcome, answer and text.
 func (w *world) closedCard(t *testing.T, question string) (outcome, answer, text string) {
 	t.Helper()
@@ -456,6 +467,16 @@ func TestBlockedCardFitsTheQuestionStore(t *testing.T) {
 			}
 		}
 	}
+	// Review 421 B3: a repository is any name a proposal gave; C3: words cut
+	// to nothing say where they are, and quote nothing.
+	if body := store.BlockedCardBodyInForTest(strings.Repeat("r", 3000), "implement", "t", "dependency t_01M5B8BF2MZ2577S8MWMF0EJVQ is cancelled",
+		"", ""); questions.BodyBytes(body) > questions.BodyLimit {
+		t.Errorf("a long repository: %d bytes", questions.BodyBytes(body))
+	}
+	gone := store.BlockedCardBodyForTest("plan", strings.Repeat("修", 200), strings.Repeat("🚧", 500), strings.Repeat("修", 300), "")
+	if !strings.Contains(gone, "none of these (your words are on that card)") || strings.Contains(gone, `none of these: "`) {
+		t.Errorf("words cut to nothing:\n%s", gone)
+	}
 	short := store.BlockedCardBodyForTest("implement", "t", "review failed in round 2 of 2", "read it", "a short report")
 	if strings.Contains(short, "…") || strings.Contains(short, "(cut;") || !strings.Contains(short, `none of these: "read it"`) ||
 		!strings.Contains(short, "a short report") {
@@ -479,6 +500,18 @@ func TestBlockedExternalNeedsAClearedEnd(t *testing.T) {
 	a := &asker{}
 	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 0 {
 		t.Fatalf("an uncleared end asked %d (%v)", n, err)
+	}
+	lostTask := w.ready(t, store.Task{Effect: "external"})
+	l := w.claimExternal(t, "h4", -store.Grace-time.Second, codex)
+	_, _, err = store.SweepLeases(ctx, w.rt)
+	ok(t, err)
+	_, err = store.Ended(ctx, w.rt, l.AttemptID, "h4", "host_reboot", false)
+	ok(t, err)
+	if l.TaskID != lostTask || w.state(t, "task", lostTask) != "blocked" {
+		t.Fatalf("the lost external task is %s", w.state(t, "task", lostTask))
+	}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 0 {
+		t.Fatalf("a lost attempt ended uncleared asked %d (%v)", n, err)
 	}
 	cleared := w.ready(t, store.Task{Effect: "external"})
 	c := w.claimExternal(t, "h3", store.LeaseTTL, codex)
@@ -525,8 +558,8 @@ func TestBlockedCardAskedUnderTheMission(t *testing.T) {
 	}()
 	w.waitFor(t, "agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE", time.Now().Add(10*time.Second))
 	released.Do(func() { close(release) })
-	ok(t, <-asked)
-	ok(t, <-stopped)
+	ok(t, returned(t, asked))
+	ok(t, returned(t, stopped))
 	var opened, stop int64
 	ok(t, w.rt.QueryRow(ctx, `SELECT (SELECT max(event_id) FROM agentrt.event WHERE event_type = 'owner_wait_opened' AND task_id = $1),
 	  (SELECT max(event_id) FROM agentrt.event WHERE event_type = 'mission_state_changed' AND mission_id = 'M-3' AND body_json->>'to' = 'stopped')`,
@@ -568,8 +601,8 @@ func TestBlockedCardDecidesUnderTheMission(t *testing.T) {
 	}()
 	w.waitFor(t, "agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE", time.Now().Add(10*time.Second))
 	ok(t, holder.Rollback(ctx))
-	ok(t, <-decided)
-	ok(t, <-stopped)
+	ok(t, returned(t, decided))
+	ok(t, returned(t, stopped))
 	if o, _, _ := w.closedCard(t, q); o != store.OutcomeRetried || w.state(t, "task", impl) != "ready" || w.state(t, "mission", "M-3") != "stopped" {
 		t.Fatalf("the card closed %q; task %s, mission %s", o, w.state(t, "task", impl), w.state(t, "mission", "M-3"))
 	}

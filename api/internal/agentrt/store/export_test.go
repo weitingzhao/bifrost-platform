@@ -163,12 +163,17 @@ func EventTypesForTest() (vocabulary, written []string) {
 // on a card of that block and the start of its last check's report ("" for
 // no check).
 func BlockedCardBodyForTest(role, title, reason, words, report string) string {
+	return BlockedCardBodyInForTest("bifrost-platform", role, title, reason, words, report)
+}
+
+// BlockedCardBodyInForTest is BlockedCardBodyForTest for a task in repo.
+func BlockedCardBodyInForTest(repo, role, title, reason, words, report string) string {
 	var check *checkSummary
 	if report != "" {
 		check = &checkSummary{method: "review", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2, report: report}
 	}
 	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-9", role: role, effect: "branch"},
-		title: title, repo: "bifrost-platform", reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 2, check: check})
+		title: title, repo: repo, reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 2, check: check})
 }
 
 // BlockedPageForTest sets how many blocked tasks a pass reads at a time and

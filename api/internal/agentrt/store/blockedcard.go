@@ -326,7 +326,9 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		return string(parts[i])
 	}
 	var b strings.Builder
-	repo := c.repo
+	// A repository is any name a proposal gave (review 421 B3): cut, as it is
+	// the only other part of no fixed length.
+	repo := oneLineRunes(c.repo, 100)
 	if repo == "" {
 		repo = "no repository"
 	}
@@ -342,8 +344,9 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 			fmt.Fprintf(&b, "Its report begins:\n\n%s%s\n", excerpt, cut)
 		}
 	}
-	if words := text(cutWords); words != "" {
-		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the two.\n", words)
+	if len(parts[cutWords]) > 0 {
+		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the two.\n",
+			text(cutWords))
 	} else if c.words != "" {
 		b.WriteString("\nYour last answer on this block's card was none of these (your words are on that card). The runtime does not act on words; choose one of the two.\n")
 	}
