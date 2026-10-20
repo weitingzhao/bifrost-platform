@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -188,16 +189,55 @@ func newStateFuzz(t *testing.T, seed int64, n int, tally map[string]*routeTally,
 	f := &stateFuzz{pool: pool, task: task, r: rand.New(rand.NewSource(seed)), n: n, fields: requestFields(t), tally: tally, moves: moves}
 	var parts []string
 	// The event table is append-only (its triggers) and checked by its last
-	// id; every other table is digested whole.
+	// id; every other table is digested whole but for its liveness columns.
+	live := liveness(t, f)
 	for _, tbl := range f.ids(t, `SELECT table_name FROM information_schema.tables WHERE table_schema = 'agentrt' AND table_type = 'BASE TABLE'
 	  AND table_name <> 'event' ORDER BY 1`) {
-		parts = append(parts, fmt.Sprintf(`SELECT '%[1]s', count(*), md5(COALESCE(string_agg(x::text, '|' ORDER BY x::text), '')) FROM agentrt.%[1]s x`, tbl))
+		row := "to_jsonb(x)"
+		if cols := live[tbl]; len(cols) > 0 {
+			row = "(to_jsonb(x) - ARRAY['" + strings.Join(cols, "','") + "']::text[])"
+		}
+		parts = append(parts, fmt.Sprintf(`SELECT '%[1]s', count(*), md5(COALESCE(string_agg(%[2]s::text, '|' ORDER BY %[2]s::text), '')) FROM agentrt.%[1]s x`, tbl, row))
 	}
 	if len(parts) < 15 {
 		t.Fatalf("found %d tables of the runtime", len(parts))
 	}
 	f.digestQ = strings.Join(parts, " UNION ALL ")
 	return f
+}
+
+// liveness is the runtime's liveness columns by table, read from its own
+// definition, agentrt.only_liveness (migrations/0002_guards.sql): what is
+// written without an event (a heartbeat, a host's poll). A refused request
+// is not held to them: another transaction may write one meanwhile, and does
+// (ci-platform-tj5wx: a claim's last poll committed after its handler had
+// answered, pgx reporting the deadline on a commit the server still made).
+// Every other column of every table must stay as it was.
+func liveness(t *testing.T, f *stateFuzz) map[string][]string {
+	t.Helper()
+	var src string
+	must(t, f.pool.QueryRow(ctx, `SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+	  WHERE n.nspname = 'agentrt' AND p.proname = 'only_liveness'`).Scan(&src))
+	out := map[string][]string{}
+	for _, m := range regexp.MustCompile(`tbl = '([a-z_]+)' THEN\s+live := ARRAY\[([^\]]*)\]`).FindAllStringSubmatch(src, -1) {
+		for _, c := range regexp.MustCompile(`'([a-z_]+)'`).FindAllStringSubmatch(m[2], -1) {
+			out[m[1]] = append(out[m[1]], c[1])
+		}
+	}
+	if n := strings.Count(src, "live := ARRAY["); n == 0 || n != len(out) {
+		t.Fatalf("read the liveness columns of %d tables from agentrt.only_liveness, which lists %d:\n%s", len(out), n, src)
+	}
+	for tbl, cols := range out {
+		for _, c := range cols {
+			var ok bool
+			must(t, f.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'agentrt'
+			  AND table_name = $1 AND column_name = $2)`, tbl, c).Scan(&ok))
+			if !ok {
+				t.Fatalf("agentrt.only_liveness names %s.%s, which is no column", tbl, c)
+			}
+		}
+	}
+	return out
 }
 
 // snapshot is the state of every row of the four state tables.
@@ -757,5 +797,20 @@ func TestStateEventCheckerCatches(t *testing.T) {
 	}
 	if err = f.judge(t, "test", false, http.StatusConflict, before, digest, since); err == nil || !strings.Contains(err.Error(), "agentrt.task changed") {
 		t.Errorf("regression: a refused request that edited a title: %v", err)
+	}
+	// A refused request while another transaction writes a host's poll, a
+	// liveness column (ci-platform-tj5wx): nothing the request did.
+	before, digest, since = f.snapshot(t), f.digest(t), f.lastEvent(t)
+	_, err = f.pool.Exec(ctx, `UPDATE agentrt.host SET last_poll_at = clock_timestamp() WHERE host_id = 'h1'`)
+	must(t, err)
+	if err = f.judge(t, "test", false, http.StatusUnauthorized, before, digest, since); err != nil {
+		t.Errorf("regression: a refused request beside a host's poll: %v", err)
+	}
+	// Another column of the same row still counts.
+	before, digest, since = f.snapshot(t), f.digest(t), f.lastEvent(t)
+	_, err = admin.Exec(ctx, `UPDATE agentrt.host SET capacity_json = '{"slots": 9}' WHERE host_id = 'h1'`)
+	must(t, err)
+	if err = f.judge(t, "test", false, http.StatusUnauthorized, before, digest, since); err == nil || !strings.Contains(err.Error(), "agentrt.host changed") {
+		t.Errorf("a refused request that changed a host's capacity: %v", err)
 	}
 }
