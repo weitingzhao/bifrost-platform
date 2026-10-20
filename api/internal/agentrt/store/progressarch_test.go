@@ -144,7 +144,11 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	gate("T20", "stg", commitB, refA)
 	rows = w.archRows(t)
 	wantTick(t, rows["ARCH:state-db"], "false", "T20: no pass on stg at 2333e00753f9")
-	if strings.Contains(rows["ARCH:state-db"]["reason"].(string), "T19") {
+	// Only T20 fails, so the reason starts with it ("T19, T20: …" or
+	// "T19: …" would name the gate that passed). Not a search for "T19": the
+	// reason carries the deployment's time, and 2026-10-20T19:45:29Z holds
+	// "T19" for an hour every day.
+	if !strings.HasPrefix(rows["ARCH:state-db"]["reason"].(string), "T20: ") {
 		t.Fatalf("a gate that passed is named as failing: %v", rows["ARCH:state-db"]["reason"])
 	}
 	// The same pass in another environment counts for nothing there.
