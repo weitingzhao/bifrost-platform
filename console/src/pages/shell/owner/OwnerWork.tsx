@@ -1,4 +1,5 @@
 import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
+import { PLAN_FROM_BOARD } from '../agents/useRuntimePlan'
 import { Bar, Card, HandMark, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
 import { OwnerGoals } from './OwnerGoals'
@@ -10,7 +11,8 @@ const ARCH = { done: 'landed', part: 'part', none: 'none' } as const
 
 /**
  * Work: running, stuck and open goals, the last finished and what is next; each open goal with when it
- * should be done; the crew, host by host; the plan as bars; each pool's last reading. The last run step by
+ * should be done; the crew, host by host; the plan as bars, from the runtime once it holds the round
+ * (the board's, marked as such, until then); each pool's last reading. The last run step by
  * step, done → now → next and the threads are on their detail pages.
  */
 /** The coordinating thread's latest note to the Owner, from the mailbox (2.5 G3). */
@@ -25,7 +27,7 @@ function CoordinatorNote({ view, now }: { view: OwnerConsoleData['coordinator'];
 }
 
 export function OwnerWork({ data }: { data: OwnerConsoleData }) {
-  const { work, board, plan, now } = data
+  const { work, plan, planSource: source, planRound: round, now } = data
   const arch = (['done', 'part', 'none'] as const).map(state => ({ state, n: data.arch.filter(r => r.state === state).length }))
   return <section aria-label="Work" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">Work</h2>
@@ -53,10 +55,12 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
       <OwnerGoals missions={data.missions ?? []} now={now} read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
       <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}
         read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
-      <Card label="The plan" title={<>The plan{board?.roadmap?.round?.n != null && ` · Round ${board.roadmap.round.n}`} {board?.roadmap?.round?.source !== 'runtime' && <HandMark title="Kept by hand by the coordinator thread (WORK.md)" />}</>} more={{ href: '#progress', text: 'Plan' }}>
-        {board?.roadmap?.round?.unknown !== undefined
-          ? <p role="alert" className="m-0 text-sm text-muted-foreground">Plan unavailable: {board.roadmap.round.unknown}</p>
-          : plan.length === 0 && <p className="m-0 text-sm text-muted-foreground">No plan on the coordinator's board.</p>}
+      <Card label="The plan" title={<>The plan{round?.n != null && ` · Round ${round.n}`} {source.from === 'board' && round?.source !== 'runtime' && <HandMark title="Kept by hand by the coordinator thread (WORK.md)" />}</>} more={{ href: '#progress', text: 'Plan' }}>
+        {source.from === 'board' && <p className="m-0 text-xs text-muted-foreground">{PLAN_FROM_BOARD}</p>}
+        {source.from === 'loading' && <p role="status" className="m-0 text-sm text-muted-foreground">Reading the plan from the agent runtime…</p>}
+        {source.from === 'error' || round?.unknown !== undefined
+          ? <p role="alert" className="m-0 break-words text-sm text-muted-foreground">Plan unavailable: {source.from === 'error' ? source.error : round?.unknown}</p>
+          : plan.length === 0 && source.from !== 'loading' && <p className="m-0 text-sm text-muted-foreground">{source.from === 'runtime' ? 'No items in the runtime\'s plan.' : 'No plan on the coordinator\'s board.'}</p>}
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0">{plan.map(row => <li key={row.key} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center gap-2 rounded px-1.5 py-1 ${row.tag === 'now' ? 'bg-[var(--control-fill)]' : ''}`}>
           <span className="font-mono text-sm font-semibold">{row.key}</span>
           <div className="flex min-w-0 flex-col gap-1">

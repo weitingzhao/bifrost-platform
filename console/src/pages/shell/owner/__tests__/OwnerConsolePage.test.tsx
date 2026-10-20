@@ -4,7 +4,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
-import { splitAlerts } from '../ownerModel'
+import { planRows, splitAlerts } from '../ownerModel'
+import { PLAN_FROM_BOARD, planRead, type PlanRead } from '../../agents/useRuntimePlan'
+import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
+import { PLAN_ROOT, parsePlanRequest } from '@/api/agentRuntimePlan'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
@@ -24,6 +27,8 @@ const coordinatorView = vi.hoisted(() => ({ value: undefined as unknown }))
 // The time the page is drawn at, when a test sets one; the open goals the runtime gives (2.5 G8).
 const nowValue = vi.hoisted(() => ({ value: undefined as number | undefined }))
 const missionsValue = vi.hoisted(() => ({ value: [] as unknown[] }))
+// Where the plan was read from, when a test sets it; the board otherwise, as while the runtime holds none (2.5 slice 2).
+const planValue = vi.hoisted(() => ({ value: undefined as PlanRead | undefined }))
 
 function fake(): OwnerConsoleData {
   const evidence = { nodes: [{ name: 'gpu-server', internalIp: '192.168.10.60' }], pods: parseStandbyPods(evidenceFixture.pods),
@@ -48,7 +53,10 @@ function fake(): OwnerConsoleData {
     coordinator: coordinatorView.value ?? { state: 'read', full: false, note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
     board: { coordinator: { doing: 'Board text, not shown', next: '' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
     boardStale: false,
-    plan: boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
+    planSource: planValue.value ?? { from: 'board' },
+    planRound: planValue.value === undefined ? boardRound.value ?? { n: 2, items: [] } : planValue.value.from === 'runtime' ? planValue.value.round : undefined,
+    plan: planValue.value !== undefined ? planRows(planValue.value.from === 'runtime' ? planValue.value.round : undefined)
+      : boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
     arch: [{ state: 'done', what: 'a', now: '' }, { state: 'part', what: 'b', now: '' }],
     hosts: [],
     missions: missionsValue.value,
@@ -106,7 +114,7 @@ beforeEach(() => {
     getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
   } })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = [] })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
 /** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
@@ -221,6 +229,36 @@ describe('Owner Console entries', () => {
     } finally {
       boardRound.value = undefined
     }
+  })
+
+  it('shows the plan from the runtime, counted as GET /progress counts it, with no hand mark and no board note (2.5 slice 2)', () => {
+    const read = (data: unknown) => ({ data, error: null, isError: false, isPaused: false })
+    planValue.value = planRead(read({ found: true, doc: planFixture.plan }), read(parsePlanRequest(planFixture.request, PLAN_ROOT)), read(parseRuntimeProgress(planFixture.progress)))
+    show('#work')
+    const plan = screen.getByRole('region', { name: 'The plan' })
+    expect(within(plan).getByRole('heading')).toHaveTextContent('The plan · Round 2')
+    const rows = within(plan).getAllByRole('listitem').map(li => li.textContent)
+    expect(rows).toEqual(planFixture.progress.plan[0].items.map(i => `${i.label}${i.title}${i.count.done}/${i.count.total}`))
+    expect(plan).not.toHaveTextContent('✎ by hand')
+    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
+  })
+
+  it('says the plan is read from the board while the runtime holds none, and marks it kept by hand', () => {
+    show('#work')
+    const plan = screen.getByRole('region', { name: 'The plan' })
+    expect(plan).toHaveTextContent(PLAN_FROM_BOARD)
+    expect(plan).toHaveTextContent('✎ by hand')
+    expect(plan).toHaveTextContent('2.2b')
+  })
+
+  it('shows a failed read of the runtime\'s plan as unavailable, never the board\'s rows', () => {
+    planValue.value = { from: 'error', error: 'Plan: unavailable' }
+    show('#work')
+    const plan = screen.getByRole('region', { name: 'The plan' })
+    expect(within(plan).getByRole('alert')).toHaveTextContent('Plan unavailable: Plan: unavailable')
+    expect(plan).not.toHaveTextContent('2.2b')
+    expect(plan).not.toHaveTextContent('✎ by hand')
+    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
   })
 
   it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {

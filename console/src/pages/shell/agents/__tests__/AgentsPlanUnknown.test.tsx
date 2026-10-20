@@ -39,7 +39,10 @@ describe('a round the board could not read', () => {
   })
 
   it('shows the plan as unavailable on the agents page', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => json({ document: { roadmap: { round: unknownRound } }, generated_at: 'now' })))
+    // The runtime holds no plan, so the plan pane reads the board (2.5 slice 2).
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => String(input).includes('/agentrt/plan?')
+      ? new Response(JSON.stringify({ error: 'not_found', message: 'no such record' }), { status: 404 })
+      : json({ document: { roadmap: { round: unknownRound } }, generated_at: 'now' })))
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(<QueryClientProvider client={client}><AgentsPlan /></QueryClientProvider>)
     expect(await screen.findByRole('alert')).toHaveTextContent('Plan unavailable: PG unavailable')
@@ -52,7 +55,7 @@ describe('a round the board could not read', () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ pools: [] })))
     const board = { roadmap: { round: parseRuntimeRound(unknownRound) } }
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(<QueryClientProvider client={client}><ProgressOverview count={{ state: 'known', count: 0 }} board={board as never} failed={false} /></QueryClientProvider>)
+    render(<QueryClientProvider client={client}><ProgressOverview count={{ state: 'known', count: 0 }} board={board as never} plan={{ from: 'board' }} failed={false} /></QueryClientProvider>)
     expect(screen.getByText('Plan unavailable: PG unavailable')).toBeInTheDocument()
     expect(screen.queryByLabelText('steps')).not.toBeInTheDocument()
     client.clear()

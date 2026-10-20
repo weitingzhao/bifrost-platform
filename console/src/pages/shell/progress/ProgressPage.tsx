@@ -5,6 +5,7 @@ import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
 import { GoalForm } from '../agents/GoalForm'
 import { AgentsPlan } from '../agents/AgentsPlan'
+import { useRuntimePlan } from '../agents/useRuntimePlan'
 import { TaskRow } from './RuntimeWork'
 import { ProgressOverview } from './ProgressOverview'
 import { NowClock, Tick } from './progressClock'
@@ -18,6 +19,7 @@ import { CommitLineagePage } from '@/pages/CommitLineagePage'
 /** One project surface, ordered by the Owner's questions. */
 export function ProgressPage() {
   const needs = useNeedsYou()
+  const plan = useRuntimePlan()
   const [submitted, setSubmitted] = useState<{ id: string; goal: string } | null>(() => {
     const id = new URLSearchParams(window.location.hash.split('?')[1]).get('goal')
     return id && /^M-\d+$/.test(id) ? { id, goal: '' } : null
@@ -68,7 +70,7 @@ export function ProgressPage() {
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, 8).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
-    <section aria-label="Overview">{boardState()}<ProgressOverview count={count} runtime={runtime} board={board} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
+    <section aria-label="Overview">{boardState()}<ProgressOverview count={count} runtime={runtime} board={board} plan={plan} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
     <section aria-label="Plan and architecture"><AgentsPlan /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" collapsible defaultCollapsed bodyPadding="compact">

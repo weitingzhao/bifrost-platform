@@ -1,0 +1,2425 @@
+{
+ "absent": {
+  "body": {
+   "error": "not_found",
+   "message": "no such record"
+  },
+  "status": 404
+ },
+ "events": [
+  {
+   "at": "2026-10-19T19:41:15.004503-05:00",
+   "seq": 1,
+   "txid": 2275686,
+   "sha256": "80f935505cd3381a74d67098d9a81cda183024c1ba5b358776d52655a4500dc1",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 2,
+   "body_json": {
+    "count": 24,
+    "source": "plan-import sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+   },
+   "attempt_id": null,
+   "event_type": "legacy_imported",
+   "mission_id": null,
+   "prev_sha256": "",
+   "plan_node_id": null,
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.005193-05:00",
+   "seq": 2,
+   "txid": 2275686,
+   "sha256": "4ce706bc3881f24405e26def2eaf7a2235f80c56d4972027ee77bd7b2c66db61",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 3,
+   "body_json": {
+    "label": "2",
+    "title": "第 2 轮",
+    "ordinal": 2,
+    "node_kind": "round"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "80f935505cd3381a74d67098d9a81cda183024c1ba5b358776d52655a4500dc1",
+   "plan_node_id": "R2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.006412-05:00",
+   "seq": 3,
+   "txid": 2275686,
+   "sha256": "db4c3d6e5c4c60c50f681dcf4810e0eefe65fe392756c5174689798482d4d64a",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 4,
+   "body_json": {
+    "label": "2.0",
+    "title": "设计对齐：v4 到 v5",
+    "ordinal": 0,
+    "node_kind": "item"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "4ce706bc3881f24405e26def2eaf7a2235f80c56d4972027ee77bd7b2c66db61",
+   "plan_node_id": "R2:2.0",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.007015-05:00",
+   "seq": 4,
+   "txid": 2275686,
+   "sha256": "57af99bba9d41b8e37dd431891f21c8a828a27aad2a481c5e5f37b1331582503",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 5,
+   "body_json": {
+    "label": "2.0-1",
+    "title": "起草 v5：每一步写验收测试（`work/multi-agent/DESIGN-v5.md`）",
+    "ordinal": 0,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "db4c3d6e5c4c60c50f681dcf4810e0eefe65fe392756c5174689798482d4d64a",
+   "plan_node_id": "R2:2.0-1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.007573-05:00",
+   "seq": 5,
+   "txid": 2275686,
+   "sha256": "40434250dc735e41f9d5ddb2f6e084e4face95fc08d22329ee1279fb4747d164",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 6,
+   "body_json": {
+    "label": "2.0-2",
+    "title": "Codex 独立复核 v5（两轮）",
+    "ordinal": 1,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "57af99bba9d41b8e37dd431891f21c8a828a27aad2a481c5e5f37b1331582503",
+   "plan_node_id": "R2:2.0-2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.008071-05:00",
+   "seq": 6,
+   "txid": 2275686,
+   "sha256": "24fa6d5850d83e32901121bb61dca089740c7e0add5915d95165a1d4380fe400",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 7,
+   "body_json": {
+    "label": "2.0-3",
+    "title": "（你）确认 v5 和 §7 八条",
+    "ordinal": 2,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "40434250dc735e41f9d5ddb2f6e084e4face95fc08d22329ee1279fb4747d164",
+   "plan_node_id": "R2:2.0-3",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.008543-05:00",
+   "seq": 7,
+   "txid": 2275686,
+   "sha256": "af46dc68bb6b22f724e4346fe99dcdbcb04abe6c9f7802e8a2776cf3b931c643",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 8,
+   "body_json": {
+    "label": "2.1",
+    "title": "数据层：状态库",
+    "ordinal": 1,
+    "node_kind": "item"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "24fa6d5850d83e32901121bb61dca089740c7e0add5915d95165a1d4380fe400",
+   "plan_node_id": "R2:2.1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.00904-05:00",
+   "seq": 8,
+   "txid": 2275686,
+   "sha256": "8f8f74bf9d151155a390c680ba741b9d86dfd5810579227cc18b44b89d9c532b",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 9,
+   "body_json": {
+    "label": "2.1-1",
+    "title": "迁移器：pgx 接入",
+    "ordinal": 0,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "af46dc68bb6b22f724e4346fe99dcdbcb04abe6c9f7802e8a2776cf3b931c643",
+   "plan_node_id": "R2:2.1-1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.009462-05:00",
+   "seq": 9,
+   "txid": 2275686,
+   "sha256": "b9d68ac51e1ef27ef0577fc73e03383633922d31ee6cf6f0bf887ca98bafc109",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 10,
+   "body_json": {
+    "label": "2.1-2",
+    "title": "（补强）复核 145 的 B6、B7",
+    "ordinal": 1,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "8f8f74bf9d151155a390c680ba741b9d86dfd5810579227cc18b44b89d9c532b",
+   "plan_node_id": "R2:2.1-2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.009876-05:00",
+   "seq": 10,
+   "txid": 2275686,
+   "sha256": "c145ce17734c8b42c3665e67c4cf3ec8ca030c91ca87530b83c6b3fd92657a29",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 11,
+   "body_json": {
+    "label": "2.1-3",
+    "title": "（你）批 PROD 迁移作业（O10、O11）",
+    "ordinal": 2,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "b9d68ac51e1ef27ef0577fc73e03383633922d31ee6cf6f0bf887ca98bafc109",
+   "plan_node_id": "R2:2.1-3",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.010237-05:00",
+   "seq": 11,
+   "txid": 2275686,
+   "sha256": "3b8bf8b5a8920084383e399a73b2763169de22bd3fb0346930023627af2d2a4a",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 12,
+   "body_json": {
+    "label": "2.1-4",
+    "title": "（补强）★ PROD 库可用：T19 的 PROD 部分",
+    "ordinal": 3,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "c145ce17734c8b42c3665e67c4cf3ec8ca030c91ca87530b83c6b3fd92657a29",
+   "plan_node_id": "R2:2.1-4",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.010581-05:00",
+   "seq": 12,
+   "txid": 2275686,
+   "sha256": "37ebd1bed4d2c3c4b86fd64efcf605413f7b4858a3f30914b5ae501964bdfb71",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 13,
+   "body_json": {
+    "label": "2.1-5",
+    "title": "本机测试库可用",
+    "ordinal": 4,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "3b8bf8b5a8920084383e399a73b2763169de22bd3fb0346930023627af2d2a4a",
+   "plan_node_id": "R2:2.1-5",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.010911-05:00",
+   "seq": 13,
+   "txid": 2275686,
+   "sha256": "ac382a6770d4368d70922593277ea14654cd2eef15f48d168b65a890bdee10b5",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 14,
+   "body_json": {
+    "label": "2.2b",
+    "title": "第一版拉通",
+    "ordinal": 2,
+    "node_kind": "item"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "37ebd1bed4d2c3c4b86fd64efcf605413f7b4858a3f30914b5ae501964bdfb71",
+   "plan_node_id": "R2:2.2b",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.011234-05:00",
+   "seq": 14,
+   "txid": 2275686,
+   "sha256": "59bfa0d9ff3ad581ce8eb14804bef9d528238de6703d7d6b6779430cb7b97b40",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 15,
+   "body_json": {
+    "label": "2.2b-1",
+    "title": "（你）（补强）批发布单",
+    "ordinal": 0,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "ac382a6770d4368d70922593277ea14654cd2eef15f48d168b65a890bdee10b5",
+   "plan_node_id": "R2:2.2b-1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.011576-05:00",
+   "seq": 15,
+   "txid": 2275686,
+   "sha256": "b49f2817b7d87517bd5c6533833ef771664c85a5d58e44fa749a7d4d957cdb3d",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 16,
+   "body_json": {
+    "label": "2.2b-2",
+    "title": "**（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入",
+    "ordinal": 1,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "59bfa0d9ff3ad581ce8eb14804bef9d528238de6703d7d6b6779430cb7b97b40",
+   "plan_node_id": "R2:2.2b-2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.011989-05:00",
+   "seq": 16,
+   "txid": 2275686,
+   "sha256": "b6d90c112689621973dedeab8ad53cd8bf3496acd1223707d73c664d31508f30",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 17,
+   "body_json": {
+    "label": "2.2b-3",
+    "title": "（补强，10-16 晚提到 2.3 之前）agentd 工作区能跑检查",
+    "ordinal": 2,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "b49f2817b7d87517bd5c6533833ef771664c85a5d58e44fa749a7d4d957cdb3d",
+   "plan_node_id": "R2:2.2b-3",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.012395-05:00",
+   "seq": 17,
+   "txid": 2275686,
+   "sha256": "1fd0093c6a34473b2cfea317f2f9b7635d2f41319c59eb2083b16e22eae21f70",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 18,
+   "body_json": {
+    "label": "2.2b-4",
+    "title": "只有标题没有竖线的一步",
+    "ordinal": 3,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "b6d90c112689621973dedeab8ad53cd8bf3496acd1223707d73c664d31508f30",
+   "plan_node_id": "R2:2.2b-4",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.012834-05:00",
+   "seq": 18,
+   "txid": 2275686,
+   "sha256": "a8880fa075727b41d3cdc3c3441f4b7350e100c11af125012a3d3c58026d633a",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 19,
+   "body_json": {
+    "label": "2.2b-5",
+    "title": "（你）定：交付失败或没记录、",
+    "ordinal": 4,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "1fd0093c6a34473b2cfea317f2f9b7635d2f41319c59eb2083b16e22eae21f70",
+   "plan_node_id": "R2:2.2b-5",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.013266-05:00",
+   "seq": 19,
+   "txid": 2275686,
+   "sha256": "aab19faae121b315c540a0eceb4ed2ff7027099526eb0845769f62d64d41d960",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 20,
+   "body_json": {
+    "label": "2.2b-6",
+    "title": "导航第二片：Needs you 并进 For you",
+    "ordinal": 5,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "a8880fa075727b41d3cdc3c3441f4b7350e100c11af125012a3d3c58026d633a",
+   "plan_node_id": "R2:2.2b-6",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.013702-05:00",
+   "seq": 20,
+   "txid": 2275686,
+   "sha256": "6b1989d9af8418cceb6c5e8b624251ffc720d6e324af6df265e8dcbe48a6e517",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 21,
+   "body_json": {
+    "label": "2.3",
+    "title": "交互总线与叫停",
+    "ordinal": 3,
+    "node_kind": "item"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "aab19faae121b315c540a0eceb4ed2ff7027099526eb0845769f62d64d41d960",
+   "plan_node_id": "R2:2.3",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.014165-05:00",
+   "seq": 21,
+   "txid": 2275686,
+   "sha256": "521aa2928e4e89922ef26ec19348db36e4ad2dd16586ef48ee8d7bc64afaa05c",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 22,
+   "body_json": {
+    "label": "2.3-1",
+    "title": "（补强）★ 手机上问参谋长一句",
+    "ordinal": 0,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "6b1989d9af8418cceb6c5e8b624251ffc720d6e324af6df265e8dcbe48a6e517",
+   "plan_node_id": "R2:2.3-1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.014716-05:00",
+   "seq": 22,
+   "txid": 2275686,
+   "sha256": "84ac15dfb17df00a65395e1685655142c5c166cfe8c892c74996840ecf650da9",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 23,
+   "body_json": {
+    "label": "2.3-2",
+    "title": "（补强）★ Gate B",
+    "ordinal": 1,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "521aa2928e4e89922ef26ec19348db36e4ad2dd16586ef48ee8d7bc64afaa05c",
+   "plan_node_id": "R2:2.3-2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.015064-05:00",
+   "seq": 23,
+   "txid": 2275686,
+   "sha256": "29d765b08421430c2d2fdef77edd014f1f7cf45262f084cc966d1bd82fef3573",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 24,
+   "body_json": {
+    "label": "2.4",
+    "title": "缩进用不换行空格",
+    "ordinal": 4,
+    "node_kind": "item"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "84ac15dfb17df00a65395e1685655142c5c166cfe8c892c74996840ecf650da9",
+   "plan_node_id": "R2:2.4",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.015424-05:00",
+   "seq": 24,
+   "txid": 2275686,
+   "sha256": "c7519c788b87446767d7eda6528cd448bd99790e88e6c7ecfd42333034051b97",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 25,
+   "body_json": {
+    "label": "2.4-1",
+    "title": "（补强）（你）批准",
+    "ordinal": 0,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "29d765b08421430c2d2fdef77edd014f1f7cf45262f084cc966d1bd82fef3573",
+   "plan_node_id": "R2:2.4-1",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.015773-05:00",
+   "seq": 25,
+   "txid": 2275686,
+   "sha256": "6db03920b8420bbc2cb4decbe2d09acf4fcb7240d0c65cdd67395613c257eb43",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 26,
+   "body_json": {
+    "label": "2.4-2",
+    "title": "（补强）★（你）批准",
+    "ordinal": 1,
+    "node_kind": "step"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "c7519c788b87446767d7eda6528cd448bd99790e88e6c7ecfd42333034051b97",
+   "plan_node_id": "R2:2.4-2",
+   "cause_event_id": 2,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.016835-05:00",
+   "seq": 26,
+   "txid": 2275686,
+   "sha256": "a5bf0ee690da0055aa05b81b6c9aa1b2647469478bf0b7e8cfcd628f1f73d3a1",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 27,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 16: done, marked 2026-10-14 00:30",
+    "manual": "imported from the work ledger: R2:2.0-1",
+    "evidence": [
+     "sha256:af4fdaa32138de635ea5296ffc99900019cbc33c1b3a97ad893ec85d0faa9158",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "6db03920b8420bbc2cb4decbe2d09acf4fcb7240d0c65cdd67395613c257eb43",
+   "plan_node_id": "R2:2.0-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.017635-05:00",
+   "seq": 27,
+   "txid": 2275686,
+   "sha256": "560b68e17ccabcb227ef30099aed72741439404e95743c4822a4f9a5136720e9",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 28,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "a5bf0ee690da0055aa05b81b6c9aa1b2647469478bf0b7e8cfcd628f1f73d3a1",
+   "plan_node_id": "R2:2.0-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.018643-05:00",
+   "seq": 28,
+   "txid": 2275686,
+   "sha256": "ed82ccacc829b26600a9ad01bd3e05370a8a5f27708419968d25a61b2c998fbf",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 29,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 17: done",
+    "manual": "imported from the work ledger: R2:2.0-2",
+    "evidence": [
+     "sha256:8a89c1edb90ae313bf653eaead80bc761eab4052d888cc6341fe70e4b2d4865a",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "560b68e17ccabcb227ef30099aed72741439404e95743c4822a4f9a5136720e9",
+   "plan_node_id": "R2:2.0-2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.019167-05:00",
+   "seq": 29,
+   "txid": 2275686,
+   "sha256": "bdd9b67c9e63416c8c29c4ffe1c135b5e765e9d2f38ec9c0d616e0d5b1ff1284",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 30,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "ed82ccacc829b26600a9ad01bd3e05370a8a5f27708419968d25a61b2c998fbf",
+   "plan_node_id": "R2:2.0-2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.020006-05:00",
+   "seq": 30,
+   "txid": 2275686,
+   "sha256": "2d235b9ca9058ea7a0ca319cda9df81794568c50b11c9046a645f6d8a36f3c86",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 31,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 18: done, marked 2026-10-14 00:30",
+    "manual": "imported from the work ledger: R2:2.0-3",
+    "evidence": [
+     "sha256:9751975b2fe917d93196ffc9605cff952cdec64b2808b35e542fa131690734c4",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "bdd9b67c9e63416c8c29c4ffe1c135b5e765e9d2f38ec9c0d616e0d5b1ff1284",
+   "plan_node_id": "R2:2.0-3",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.020639-05:00",
+   "seq": 31,
+   "txid": 2275686,
+   "sha256": "aed6a2877d56d0753975b393937338cccf700912959060dcbda8aec8a8bd31ce",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 32,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "2d235b9ca9058ea7a0ca319cda9df81794568c50b11c9046a645f6d8a36f3c86",
+   "plan_node_id": "R2:2.0-3",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.021419-05:00",
+   "seq": 32,
+   "txid": 2275686,
+   "sha256": "adf1e2df9af7849b8b63f0d8a49e8b775190efcc5edf40195705f69422124eb4",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 33,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 20: done, marked 2026-10-14 01:09",
+    "manual": "imported from the work ledger: R2:2.1-1",
+    "evidence": [
+     "sha256:635af5bfb7259e02ff9a9e38d2d66b073e05a60b094ceb508402b5d0e1953b26",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "aed6a2877d56d0753975b393937338cccf700912959060dcbda8aec8a8bd31ce",
+   "plan_node_id": "R2:2.1-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.021962-05:00",
+   "seq": 33,
+   "txid": 2275686,
+   "sha256": "cee8243bea5cd8808fd8f3346f1059bd27663e4ff211c9e71d784bd93f206ed6",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 34,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "adf1e2df9af7849b8b63f0d8a49e8b775190efcc5edf40195705f69422124eb4",
+   "plan_node_id": "R2:2.1-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.022373-05:00",
+   "seq": 34,
+   "txid": 2275686,
+   "sha256": "0a1f14f9965624949c2cbf8f55a69f8195f605b05c282fe5b44047d7f44354b5",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 35,
+   "body_json": {
+    "to": "active",
+    "from": "planned",
+    "cause": "legacy_imported"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "cee8243bea5cd8808fd8f3346f1059bd27663e4ff211c9e71d784bd93f206ed6",
+   "plan_node_id": "R2:2.1-3",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.023033-05:00",
+   "seq": 35,
+   "txid": 2275686,
+   "sha256": "b5e1a95aa8b21d52d3350af96abb77b7db9eb389bab8a38c726243fe787b48af",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 36,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 24: done, marked 2026-10-13 22:58",
+    "manual": "imported from the work ledger: R2:2.1-5",
+    "evidence": [
+     "sha256:a5d00d1c8269fb918bd25a77e8c3c41f37006f7aecfc8c225c2a163ef3dbbd74",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "0a1f14f9965624949c2cbf8f55a69f8195f605b05c282fe5b44047d7f44354b5",
+   "plan_node_id": "R2:2.1-5",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.023488-05:00",
+   "seq": 36,
+   "txid": 2275686,
+   "sha256": "aef4d7b95196fc87a7c63b21be5006e286d827f2166d4444588bc9d238401535",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 37,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "b5e1a95aa8b21d52d3350af96abb77b7db9eb389bab8a38c726243fe787b48af",
+   "plan_node_id": "R2:2.1-5",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.024118-05:00",
+   "seq": 37,
+   "txid": 2275686,
+   "sha256": "c8f759f13381181bf635053e11aea19020091f5f9af1aa1d68edaff393ac1616",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 38,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 26: done, marked 2026-10-18 11:59",
+    "manual": "imported from the work ledger: R2:2.2b-1",
+    "evidence": [
+     "sha256:a520524bd40fe88998ee0140ed9dbf2c6db7a68cc0bc064ebb6a45a8ec467884",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "aef4d7b95196fc87a7c63b21be5006e286d827f2166d4444588bc9d238401535",
+   "plan_node_id": "R2:2.2b-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.024603-05:00",
+   "seq": 38,
+   "txid": 2275686,
+   "sha256": "a7af091a17603ba8be9a8e76394da53e6eb564038b86cc6b44f11c2adf4a58d5",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 39,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "c8f759f13381181bf635053e11aea19020091f5f9af1aa1d68edaff393ac1616",
+   "plan_node_id": "R2:2.2b-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.025105-05:00",
+   "seq": 39,
+   "txid": 2275686,
+   "sha256": "0251d3ecf6ad8d12ccb2c01b34f8428f16328160d9af059399e80596560a53a5",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 40,
+   "body_json": {
+    "to": "active",
+    "from": "planned",
+    "cause": "legacy_imported"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "a7af091a17603ba8be9a8e76394da53e6eb564038b86cc6b44f11c2adf4a58d5",
+   "plan_node_id": "R2:2.2b-2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.025476-05:00",
+   "seq": 40,
+   "txid": 2275686,
+   "sha256": "a006d7748845d69b76549bf19d9c57826eee522917ca6f17066b1cef122a2ef0",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 41,
+   "body_json": {
+    "to": "active",
+    "from": "planned",
+    "cause": "legacy_imported"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "0251d3ecf6ad8d12ccb2c01b34f8428f16328160d9af059399e80596560a53a5",
+   "plan_node_id": "R2:2.2b-3",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.026061-05:00",
+   "seq": 41,
+   "txid": 2275686,
+   "sha256": "0474e26fdaa8f668eda84ff24aa3eb7c5be75a31e447c50ab9744816d115cd29",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 42,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 29: done",
+    "manual": "imported from the work ledger: R2:2.2b-4",
+    "evidence": [
+     "sha256:f182b5fe0db2ef30d98215c5414cd78337d97cae70692b65169dae512dbcf710",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "a006d7748845d69b76549bf19d9c57826eee522917ca6f17066b1cef122a2ef0",
+   "plan_node_id": "R2:2.2b-4",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.026491-05:00",
+   "seq": 42,
+   "txid": 2275686,
+   "sha256": "1ba08e9068e918aa3eeaa446973ad08eedf3cd58fe1995e9ddd6a6194d69bc28",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 43,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "0474e26fdaa8f668eda84ff24aa3eb7c5be75a31e447c50ab9744816d115cd29",
+   "plan_node_id": "R2:2.2b-4",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.027111-05:00",
+   "seq": 43,
+   "txid": 2275686,
+   "sha256": "7d63d99770121c4589484712bee01308a4edb4da6437a45dcb1c42dfec3f690c",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 44,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 30: done, marked 2026-10-14 15:49",
+    "manual": "imported from the work ledger: R2:2.2b-5",
+    "evidence": [
+     "sha256:d8acb4c02e2c8d975540f493e0adcf470911ccd96bbdf48fafec5f4f7841cfa2",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "1ba08e9068e918aa3eeaa446973ad08eedf3cd58fe1995e9ddd6a6194d69bc28",
+   "plan_node_id": "R2:2.2b-5",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.027675-05:00",
+   "seq": 44,
+   "txid": 2275686,
+   "sha256": "96850518e7725bf8aa2c082b536d844e5885ca12161c3d68a04c145ddc70f5ba",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 45,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "7d63d99770121c4589484712bee01308a4edb4da6437a45dcb1c42dfec3f690c",
+   "plan_node_id": "R2:2.2b-5",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.028375-05:00",
+   "seq": 45,
+   "txid": 2275686,
+   "sha256": "38eb530a7730dd8f3b014df18478163ab97d51f34f8277f25973ca2cc81253a6",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 46,
+   "body_json": {
+    "text": "imported from WORK.md, 第 2 轮逐项 line 35: done, marked 2026-10-18 12:09",
+    "manual": "imported from the work ledger: R2:2.3-1",
+    "evidence": [
+     "sha256:54dcf8bef0fed6e2d066134a8e8623ea12b1f9f121404d8059f84eb231bac616",
+     "sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559"
+    ]
+   },
+   "attempt_id": null,
+   "event_type": "note",
+   "mission_id": null,
+   "prev_sha256": "96850518e7725bf8aa2c082b536d844e5885ca12161c3d68a04c145ddc70f5ba",
+   "plan_node_id": "R2:2.3-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.028815-05:00",
+   "seq": 46,
+   "txid": 2275686,
+   "sha256": "e4a4427a76b2251e7cf4d684689e53c82aa284e48aedd35b340cc8ecd1a3410f",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 47,
+   "body_json": {
+    "to": "done",
+    "from": "planned",
+    "cause": "done_rule_manual"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "38eb530a7730dd8f3b014df18478163ab97d51f34f8277f25973ca2cc81253a6",
+   "plan_node_id": "R2:2.3-1",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  },
+  {
+   "at": "2026-10-19T19:41:15.029181-05:00",
+   "seq": 47,
+   "txid": 2275686,
+   "sha256": "ec35f89335f99f87efaa3467ee76ea24a6cebf8b52e27c0ea041dc2a70351bdc",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 48,
+   "body_json": {
+    "to": "active",
+    "from": "planned",
+    "cause": "legacy_imported"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_state_changed",
+   "mission_id": null,
+   "prev_sha256": "e4a4427a76b2251e7cf4d684689e53c82aa284e48aedd35b340cc8ecd1a3410f",
+   "plan_node_id": "R2:2.4-2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  }
+ ],
+ "plan": {
+  "root": "R2",
+  "nodes": [
+   {
+    "depth": 0,
+    "label": "2",
+    "state": null,
+    "title": "第 2 轮",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "round",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.005193-05:00",
+     "body": {
+      "label": "2",
+      "title": "第 2 轮",
+      "ordinal": 2,
+      "node_kind": "round"
+     },
+     "actor_id": "controller",
+     "event_id": 3,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": null
+   },
+   {
+    "depth": 1,
+    "label": "2.0",
+    "state": null,
+    "title": "设计对齐：v4 到 v5",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "item",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.006412-05:00",
+     "body": {
+      "label": "2.0",
+      "title": "设计对齐：v4 到 v5",
+      "ordinal": 0,
+      "node_kind": "item"
+     },
+     "actor_id": "controller",
+     "event_id": 4,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.0",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2"
+   },
+   {
+    "depth": 2,
+    "label": "2.0-1",
+    "state": "done",
+    "title": "起草 v5：每一步写验收测试（`work/multi-agent/DESIGN-v5.md`）",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.017635-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 28,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.0-1",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.0-1"
+    },
+    "state_event_id": 28,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.0"
+   },
+   {
+    "depth": 2,
+    "label": "2.0-2",
+    "state": "done",
+    "title": "Codex 独立复核 v5（两轮）",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "review",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.019167-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 30,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.0-2",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.0-2"
+    },
+    "state_event_id": 30,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.0"
+   },
+   {
+    "depth": 2,
+    "label": "2.0-3",
+    "state": "done",
+    "title": "（你）确认 v5 和 §7 八条",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "owner",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": true,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.020639-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 32,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.0-3",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.0-3"
+    },
+    "state_event_id": 32,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.0"
+   },
+   {
+    "depth": 1,
+    "label": "2.1",
+    "state": null,
+    "title": "数据层：状态库",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "item",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.008543-05:00",
+     "body": {
+      "label": "2.1",
+      "title": "数据层：状态库",
+      "ordinal": 1,
+      "node_kind": "item"
+     },
+     "actor_id": "controller",
+     "event_id": 8,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2"
+   },
+   {
+    "depth": 2,
+    "label": "2.1-1",
+    "state": "done",
+    "title": "迁移器：pgx 接入",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.021962-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 34,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1-1",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.1-1"
+    },
+    "state_event_id": 34,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.1"
+   },
+   {
+    "depth": 2,
+    "label": "2.1-2",
+    "state": "planned",
+    "title": "（补强）复核 145 的 B6、B7",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "review",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.009462-05:00",
+     "body": {
+      "label": "2.1-2",
+      "title": "（补强）复核 145 的 B6、B7",
+      "ordinal": 1,
+      "node_kind": "step"
+     },
+     "actor_id": "controller",
+     "event_id": 10,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1-2",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.1"
+   },
+   {
+    "depth": 2,
+    "label": "2.1-3",
+    "state": "active",
+    "title": "（你）批 PROD 迁移作业（O10、O11）",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "owner",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": true,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.022373-05:00",
+     "body": {
+      "to": "active",
+      "from": "planned",
+      "cause": "legacy_imported"
+     },
+     "actor_id": "controller",
+     "event_id": 35,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1-3",
+    "done_rule_json": {},
+    "state_event_id": 35,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.1"
+   },
+   {
+    "depth": 2,
+    "label": "2.1-4",
+    "state": "planned",
+    "title": "（补强）★ PROD 库可用：T19 的 PROD 部分",
+    "ordinal": 3,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": true,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.010237-05:00",
+     "body": {
+      "label": "2.1-4",
+      "title": "（补强）★ PROD 库可用：T19 的 PROD 部分",
+      "ordinal": 3,
+      "node_kind": "step"
+     },
+     "actor_id": "controller",
+     "event_id": 12,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1-4",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.1"
+   },
+   {
+    "depth": 2,
+    "label": "2.1-5",
+    "state": "done",
+    "title": "本机测试库可用",
+    "ordinal": 4,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": true,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.023488-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 37,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.1-5",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.1-5"
+    },
+    "state_event_id": 37,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.1"
+   },
+   {
+    "depth": 1,
+    "label": "2.2b",
+    "state": null,
+    "title": "第一版拉通",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "item",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.010911-05:00",
+     "body": {
+      "label": "2.2b",
+      "title": "第一版拉通",
+      "ordinal": 2,
+      "node_kind": "item"
+     },
+     "actor_id": "controller",
+     "event_id": 14,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-1",
+    "state": "done",
+    "title": "（你）（补强）批发布单",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "owner",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": true,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.024603-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 39,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-1",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.2b-1"
+    },
+    "state_event_id": 39,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-2",
+    "state": "active",
+    "title": "**（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.025105-05:00",
+     "body": {
+      "to": "active",
+      "from": "planned",
+      "cause": "legacy_imported"
+     },
+     "actor_id": "controller",
+     "event_id": 40,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-2",
+    "done_rule_json": {},
+    "state_event_id": 40,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-3",
+    "state": "active",
+    "title": "（补强，10-16 晚提到 2.3 之前）agentd 工作区能跑检查",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.025476-05:00",
+     "body": {
+      "to": "active",
+      "from": "planned",
+      "cause": "legacy_imported"
+     },
+     "actor_id": "controller",
+     "event_id": 41,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-3",
+    "done_rule_json": {},
+    "state_event_id": 41,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-4",
+    "state": "done",
+    "title": "只有标题没有竖线的一步",
+    "ordinal": 3,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.026491-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 43,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-4",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.2b-4"
+    },
+    "state_event_id": 43,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-5",
+    "state": "done",
+    "title": "（你）定：交付失败或没记录、",
+    "ordinal": 4,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "owner",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": true,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.027675-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 45,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-5",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.2b-5"
+    },
+    "state_event_id": 45,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 2,
+    "label": "2.2b-6",
+    "state": "planned",
+    "title": "导航第二片：Needs you 并进 For you",
+    "ordinal": 5,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.013266-05:00",
+     "body": {
+      "label": "2.2b-6",
+      "title": "导航第二片：Needs you 并进 For you",
+      "ordinal": 5,
+      "node_kind": "step"
+     },
+     "actor_id": "controller",
+     "event_id": 20,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.2b-6",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.2b"
+   },
+   {
+    "depth": 1,
+    "label": "2.3",
+    "state": null,
+    "title": "交互总线与叫停",
+    "ordinal": 3,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "item",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.013702-05:00",
+     "body": {
+      "label": "2.3",
+      "title": "交互总线与叫停",
+      "ordinal": 3,
+      "node_kind": "item"
+     },
+     "actor_id": "controller",
+     "event_id": 21,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.3",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2"
+   },
+   {
+    "depth": 2,
+    "label": "2.3-1",
+    "state": "done",
+    "title": "（补强）★ 手机上问参谋长一句",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": true,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.028815-05:00",
+     "body": {
+      "to": "done",
+      "from": "planned",
+      "cause": "done_rule_manual"
+     },
+     "actor_id": "controller",
+     "event_id": 47,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.3-1",
+    "done_rule_json": {
+     "manual": "imported from the work ledger: R2:2.3-1"
+    },
+    "state_event_id": 47,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.3"
+   },
+   {
+    "depth": 2,
+    "label": "2.3-2",
+    "state": "planned",
+    "title": "（补强）★ Gate B",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": true,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.014716-05:00",
+     "body": {
+      "label": "2.3-2",
+      "title": "（补强）★ Gate B",
+      "ordinal": 1,
+      "node_kind": "step"
+     },
+     "actor_id": "controller",
+     "event_id": 23,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.3-2",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.3"
+   },
+   {
+    "depth": 1,
+    "label": "2.4",
+    "state": null,
+    "title": "缩进用不换行空格",
+    "ordinal": 4,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "item",
+    "step_kind": null,
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.015064-05:00",
+     "body": {
+      "label": "2.4",
+      "title": "缩进用不换行空格",
+      "ordinal": 4,
+      "node_kind": "item"
+     },
+     "actor_id": "controller",
+     "event_id": 24,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.4",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2"
+   },
+   {
+    "depth": 2,
+    "label": "2.4-1",
+    "state": "planned",
+    "title": "（补强）（你）批准",
+    "ordinal": 0,
+    "usual_s": null,
+    "version": 0,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.015424-05:00",
+     "body": {
+      "label": "2.4-1",
+      "title": "（补强）（你）批准",
+      "ordinal": 0,
+      "node_kind": "step"
+     },
+     "actor_id": "controller",
+     "event_id": 25,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.4-1",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.4"
+   },
+   {
+    "depth": 2,
+    "label": "2.4-2",
+    "state": "active",
+    "title": "（补强）★（你）批准",
+    "ordinal": 1,
+    "usual_s": null,
+    "version": 1,
+    "work_id": "W-31",
+    "node_kind": "step",
+    "step_kind": "agent",
+    "created_at": "2026-10-19T19:41:15.00205-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": true,
+    "state_event": {
+     "at": "2026-10-19T19:41:15.029181-05:00",
+     "body": {
+      "to": "active",
+      "from": "planned",
+      "cause": "legacy_imported"
+     },
+     "actor_id": "controller",
+     "event_id": 48,
+     "event_type": "plan_node_state_changed"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2:2.4-2",
+    "done_rule_json": {},
+    "state_event_id": 48,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": "R2:2.4"
+   }
+  ]
+ },
+ "progress": {
+  "as_of_event_id": 48,
+  "controls": [],
+  "generated_at": "2026-10-20T00:41:15.034982Z",
+  "hosts": [],
+  "live": [],
+  "needs_you": {
+   "count": 0,
+   "items": [],
+   "truncated": false
+  },
+  "plan": [
+   {
+    "count": {
+     "done": 9,
+     "manual": 9,
+     "state": "active",
+     "stopped": 0,
+     "total": 18
+    },
+    "items": [
+     {
+      "active_steps": [],
+      "count": {
+       "done": 3,
+       "manual": 3,
+       "state": "done",
+       "stopped": 0,
+       "total": 3
+      },
+      "label": "2.0",
+      "plan_node_id": "R2:2.0",
+      "title": "设计对齐：v4 到 v5"
+     },
+     {
+      "active_steps": [
+       "R2:2.1-3"
+      ],
+      "count": {
+       "done": 2,
+       "manual": 2,
+       "state": "active",
+       "stopped": 0,
+       "total": 5
+      },
+      "label": "2.1",
+      "plan_node_id": "R2:2.1",
+      "title": "数据层：状态库"
+     },
+     {
+      "active_steps": [
+       "R2:2.2b-2",
+       "R2:2.2b-3"
+      ],
+      "count": {
+       "done": 3,
+       "manual": 3,
+       "state": "active",
+       "stopped": 0,
+       "total": 6
+      },
+      "label": "2.2b",
+      "plan_node_id": "R2:2.2b",
+      "title": "第一版拉通"
+     },
+     {
+      "active_steps": [],
+      "count": {
+       "done": 1,
+       "manual": 1,
+       "state": "active",
+       "stopped": 0,
+       "total": 2
+      },
+      "label": "2.3",
+      "plan_node_id": "R2:2.3",
+      "title": "交互总线与叫停"
+     },
+     {
+      "active_steps": [
+       "R2:2.4-2"
+      ],
+      "count": {
+       "done": 0,
+       "manual": 0,
+       "state": "active",
+       "stopped": 0,
+       "total": 2
+      },
+      "label": "2.4",
+      "plan_node_id": "R2:2.4",
+      "title": "缩进用不换行空格"
+     }
+    ],
+    "kind": "round",
+    "plan_node_id": "R2",
+    "title": "第 2 轮"
+   }
+  ],
+  "recent": {
+   "failed_attempts": [],
+   "tasks": []
+  },
+  "work": {
+   "missions": [],
+   "truncated": false
+  }
+ },
+ "request": {
+  "format": "agentrt.plan_import/v1",
+  "nodes": [
+   {
+    "evidence": {
+     "line": "      - 2.0 设计对齐：v4 到 v5（W-31）",
+     "line_no": 15,
+     "note": "W-31"
+    },
+    "id": "R2:2.0",
+    "kind": "item",
+    "label": "2.0",
+    "ordinal": 0,
+    "parent": "R2",
+    "title": "设计对齐：v4 到 v5",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "commits": [
+      "1de0ce5"
+     ],
+     "line": "        - [x] 起草 v5：每一步写验收测试（`work/multi-agent/DESIGN-v5.md`）｜10-14 00:30 定稿 `1de0ce5`",
+     "line_no": 16,
+     "mark": "x",
+     "marked_at": "2026-10-14 00:30"
+    },
+    "id": "R2:2.0-1",
+    "kind": "step",
+    "label": "2.0-1",
+    "ordinal": 0,
+    "parent": "R2:2.0",
+    "state": "done",
+    "step_kind": "agent",
+    "title": "起草 v5：每一步写验收测试（`work/multi-agent/DESIGN-v5.md`）",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "commits": [
+      "7ac856c",
+      "0a42b1f"
+     ],
+     "line": "        - [x] Codex 独立复核 v5（两轮）｜第 1 轮（复核 141）23:42「先改」；复核 142 `7ac856c..0a42b1f`",
+     "line_no": 17,
+     "mark": "x",
+     "reviews": [
+      "141",
+      "142"
+     ]
+    },
+    "id": "R2:2.0-2",
+    "kind": "step",
+    "label": "2.0-2",
+    "ordinal": 1,
+    "parent": "R2:2.0",
+    "state": "done",
+    "step_kind": "review",
+    "title": "Codex 独立复核 v5（两轮）",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [x] （你）确认 v5 和 §7 八条｜10-14 00:30：Owner「确认 v5」",
+     "line_no": 18,
+     "mark": "x",
+     "marked_at": "2026-10-14 00:30"
+    },
+    "id": "R2:2.0-3",
+    "kind": "step",
+    "label": "2.0-3",
+    "ordinal": 2,
+    "owner_step": true,
+    "parent": "R2:2.0",
+    "state": "done",
+    "step_kind": "owner",
+    "title": "（你）确认 v5 和 §7 八条",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "      - 2.1 数据层：状态库（v5 §5.1；Claude 写、Codex 复核）",
+     "line_no": 19,
+     "note": "v5 §5.1；Claude 写、Codex 复核"
+    },
+    "id": "R2:2.1",
+    "kind": "item",
+    "label": "2.1",
+    "ordinal": 1,
+    "parent": "R2",
+    "title": "数据层：状态库",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [x] 迁移器：pgx 接入｜10-14 01:09：`Append` 落地，`bifrost-deliver-platform-1792307543` 跑通",
+     "line_no": 20,
+     "mark": "x",
+     "marked_at": "2026-10-14 01:09"
+    },
+    "id": "R2:2.1-1",
+    "kind": "step",
+    "label": "2.1-1",
+    "ordinal": 0,
+    "parent": "R2:2.1",
+    "state": "done",
+    "step_kind": "agent",
+    "title": "迁移器：pgx 接入",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [ ] （补强）复核 145 的 B6、B7｜",
+     "line_no": 21,
+     "mark": " ",
+     "reviews": [
+      "145"
+     ]
+    },
+    "id": "R2:2.1-2",
+    "kind": "step",
+    "label": "2.1-2",
+    "ordinal": 1,
+    "parent": "R2:2.1",
+    "state": "planned",
+    "step_kind": "review",
+    "title": "（补强）复核 145 的 B6、B7",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "approvals": [
+      "#16",
+      "#22"
+     ],
+     "line": "        - [~] （你）批 PROD 迁移作业（O10、O11）｜O10 完成：10-14 11:06 你跑了 PROD 迁移，审批单 #16 与 #22",
+     "line_no": 22,
+     "mark": "~",
+     "marked_at": "2026-10-14 11:06"
+    },
+    "id": "R2:2.1-3",
+    "kind": "step",
+    "label": "2.1-3",
+    "ordinal": 2,
+    "owner_step": true,
+    "parent": "R2:2.1",
+    "state": "active",
+    "step_kind": "owner",
+    "title": "（你）批 PROD 迁移作业（O10、O11）",
+    "work_id": "W-31"
+   },
+   {
+    "effect_step": true,
+    "evidence": {
+     "line": "        - [ ] （补强）★ PROD 库可用：T19 的 PROD 部分",
+     "line_no": 23,
+     "mark": " "
+    },
+    "id": "R2:2.1-4",
+    "kind": "step",
+    "label": "2.1-4",
+    "ordinal": 3,
+    "parent": "R2:2.1",
+    "state": "planned",
+    "step_kind": "agent",
+    "title": "（补强）★ PROD 库可用：T19 的 PROD 部分",
+    "work_id": "W-31"
+   },
+   {
+    "effect_step": true,
+    "evidence": {
+     "line": "        - [x] ★ 本机测试库可用｜2026-10-13 22:58 起",
+     "line_no": 24,
+     "mark": "x",
+     "marked_at": "2026-10-13 22:58"
+    },
+    "id": "R2:2.1-5",
+    "kind": "step",
+    "label": "2.1-5",
+    "ordinal": 4,
+    "parent": "R2:2.1",
+    "state": "done",
+    "step_kind": "agent",
+    "title": "本机测试库可用",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "      - 2.2b 第一版拉通（Owner 2026-10-15 18:1x 确认「草案 2」；`work/PLAN.md`）",
+     "line_no": 25,
+     "note": "Owner 2026-10-15 18:1x 确认「草案 2」；`work/PLAN.md`"
+    },
+    "id": "R2:2.2b",
+    "kind": "item",
+    "label": "2.2b",
+    "ordinal": 2,
+    "parent": "R2",
+    "title": "第一版拉通",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "commits": [
+      "9872f36"
+     ],
+     "line": "        - [x] （你）（补强）批发布单｜**10-18 11:59 你批**，`agentd-9872f36-linux-amd64` 已编好",
+     "line_no": 26,
+     "mark": "x",
+     "marked_at": "2026-10-18 11:59"
+    },
+    "id": "R2:2.2b-1",
+    "kind": "step",
+    "label": "2.2b-1",
+    "ordinal": 0,
+    "owner_step": true,
+    "parent": "R2:2.2b",
+    "state": "done",
+    "step_kind": "owner",
+    "title": "（你）（补强）批发布单",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [~] **（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入｜现状：拉取镜像",
+     "line_no": 27,
+     "mark": "~"
+    },
+    "id": "R2:2.2b-2",
+    "kind": "step",
+    "label": "2.2b-2",
+    "ordinal": 1,
+    "parent": "R2:2.2b",
+    "state": "active",
+    "step_kind": "agent",
+    "title": "**（你 10-17 10:2x 定：A，做「Gitea 做主」）**新仓库接入",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [~] （补强，10-16 晚提到 2.3 之前）agentd 工作区能跑检查｜复核 263–270",
+     "line_no": 28,
+     "mark": "~",
+     "reviews": [
+      "263",
+      "264",
+      "265",
+      "266",
+      "267",
+      "268",
+      "269",
+      "270"
+     ]
+    },
+    "id": "R2:2.2b-3",
+    "kind": "step",
+    "label": "2.2b-3",
+    "ordinal": 2,
+    "parent": "R2:2.2b",
+    "state": "active",
+    "step_kind": "agent",
+    "title": "（补强，10-16 晚提到 2.3 之前）agentd 工作区能跑检查",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [x] 只有标题没有竖线的一步",
+     "line_no": 29,
+     "mark": "x"
+    },
+    "id": "R2:2.2b-4",
+    "kind": "step",
+    "label": "2.2b-4",
+    "ordinal": 3,
+    "parent": "R2:2.2b",
+    "state": "done",
+    "step_kind": "agent",
+    "title": "只有标题没有竖线的一步",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [x] （你）定：交付失败或没记录、｜**10-14 15:49 你回「162 A」**｜13-45 不是日期",
+     "line_no": 30,
+     "mark": "x",
+     "marked_at": "2026-10-14 15:49"
+    },
+    "id": "R2:2.2b-5",
+    "kind": "step",
+    "label": "2.2b-5",
+    "ordinal": 4,
+    "owner_step": true,
+    "parent": "R2:2.2b",
+    "state": "done",
+    "step_kind": "owner",
+    "title": "（你）定：交付失败或没记录、",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [ ] 导航第二片：Needs you 并进 For you",
+     "line_no": 31,
+     "mark": " "
+    },
+    "id": "R2:2.2b-6",
+    "kind": "step",
+    "label": "2.2b-6",
+    "ordinal": 5,
+    "parent": "R2:2.2b",
+    "state": "planned",
+    "step_kind": "agent",
+    "title": "导航第二片：Needs you 并进 For you",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "      - 2.3 交互总线与叫停",
+     "line_no": 34
+    },
+    "id": "R2:2.3",
+    "kind": "item",
+    "label": "2.3",
+    "ordinal": 3,
+    "parent": "R2",
+    "title": "交互总线与叫停",
+    "work_id": "W-31"
+   },
+   {
+    "effect_step": true,
+    "evidence": {
+     "line": "        - [x] （补强）★ 手机上问参谋长一句｜10-18 12:09 走通",
+     "line_no": 35,
+     "mark": "x",
+     "marked_at": "2026-10-18 12:09"
+    },
+    "id": "R2:2.3-1",
+    "kind": "step",
+    "label": "2.3-1",
+    "ordinal": 0,
+    "parent": "R2:2.3",
+    "state": "done",
+    "step_kind": "agent",
+    "title": "（补强）★ 手机上问参谋长一句",
+    "work_id": "W-31"
+   },
+   {
+    "effect_step": true,
+    "evidence": {
+     "line": "        - [ ] （补强）★ Gate B",
+     "line_no": 36,
+     "mark": " "
+    },
+    "id": "R2:2.3-2",
+    "kind": "step",
+    "label": "2.3-2",
+    "ordinal": 1,
+    "parent": "R2:2.3",
+    "state": "planned",
+    "step_kind": "agent",
+    "title": "（补强）★ Gate B",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "      - 2.4 缩进用不换行空格",
+     "line_no": 37
+    },
+    "id": "R2:2.4",
+    "kind": "item",
+    "label": "2.4",
+    "ordinal": 4,
+    "parent": "R2",
+    "title": "缩进用不换行空格",
+    "work_id": "W-31"
+   },
+   {
+    "evidence": {
+     "line": "        - [ ] （补强）（你）批准｜复核 235、236，审批单 #1234567",
+     "line_no": 38,
+     "mark": " ",
+     "reviews": [
+      "235",
+      "236"
+     ]
+    },
+    "id": "R2:2.4-1",
+    "kind": "step",
+    "label": "2.4-1",
+    "ordinal": 0,
+    "parent": "R2:2.4",
+    "state": "planned",
+    "step_kind": "agent",
+    "title": "（补强）（你）批准",
+    "work_id": "W-31"
+   },
+   {
+    "effect_step": true,
+    "evidence": {
+     "line": "　　　　　　　　- [~] （补强）★（你）批准｜复核 12345；复核 263–270",
+     "line_no": 39,
+     "mark": "~",
+     "reviews": [
+      "263",
+      "264",
+      "265",
+      "266",
+      "267",
+      "268",
+      "269",
+      "270"
+     ]
+    },
+    "id": "R2:2.4-2",
+    "kind": "step",
+    "label": "2.4-2",
+    "ordinal": 1,
+    "parent": "R2:2.4",
+    "state": "active",
+    "step_kind": "agent",
+    "title": "（补强）★（你）批准",
+    "work_id": "W-31"
+   }
+  ],
+  "root": {
+   "evidence": {
+    "line": "    - **第 2 轮逐项（核对于 2026-10-19 01:20）**。说明文字：编号是「项-第几步」。",
+    "line_no": 14
+   },
+   "id": "R2",
+   "kind": "round",
+   "label": "2",
+   "ordinal": 2,
+   "title": "第 2 轮",
+   "work_id": "W-31"
+  },
+  "source": {
+   "checked_at": "2026-10-19 01:20",
+   "file": "WORK.md",
+   "first_line": 14,
+   "last_line": 39,
+   "section": "第 2 轮逐项",
+   "sha256": "8f795bdc5c9ba4d57c9f17a23487e75e8e945cdc4bb0fc189ce2d448e1a2bbb0"
+  }
+ }
+}

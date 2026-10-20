@@ -4,6 +4,9 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
+import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
+import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
+import { parseRoadmap } from '@/api/agentProgressBoard'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
 import evidenceFixture from './fixtures/standby-evidence.prod.json'
 
@@ -28,9 +31,11 @@ vi.mock('@/hooks/useIbGatewayLiveProbe', () => ({ useIbGatewayLiveProbe: (_ms?: 
 vi.mock('@/hooks/useMarketDataLiveProbe', () => ({ useMarketDataLiveProbe: () => ({ probeReach: 'ok', readFailed: false, isLoading: false }) }))
 vi.mock('@/hooks/useFlexQueryLiveProbe', () => ({ useFlexQueryLiveProbe: () => ({ probeReach: 'ok', readFailed: false, isLoading: false }) }))
 const runtime = parseRuntimeProgress(progressFixture)
+// The board's document, when a test publishes one.
+const boardDoc = vi.hoisted(() => ({ value: undefined as unknown }))
 vi.mock('@/pages/shell/needs-you/useNeedsYou', () => ({ useNeedsYou: () => ({
   count: { state: 'known', count: 0 }, openCount: { state: 'known', count: 0 }, decisionItems: [], silentItems: [], decide: [], openQuestions: [], runtimeItems: [],
-  recentCount: { state: 'known', count: 0 }, runtimeQuery: { data: runtime, isError: false, isPaused: false }, progressQuery: { data: undefined }, query: { dataUpdatedAt: 0 },
+  recentCount: { state: 'known', count: 0 }, runtimeQuery: { data: runtime, isError: false, isPaused: false }, progressQuery: { data: boardDoc.value }, query: { dataUpdatedAt: 0 },
 }) }))
 
 const { useOwnerConsole } = await import('../useOwnerConsole')
@@ -57,7 +62,7 @@ beforeEach(() => {
   api.goal.mockResolvedValue({ mission: { goal: 'Add a comment' }, tasks: [], events: [] })
 })
 
-afterEach(() => onlineManager.setOnline(true))
+afterEach(() => { onlineManager.setOnline(true); vi.unstubAllGlobals(); boardDoc.value = undefined })
 
 describe('useOwnerConsole', () => {
   it('nothing waiting and every source read: Nothing needs you', async () => {
@@ -166,6 +171,37 @@ describe('useOwnerConsole', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('reads the plan from the runtime once it holds the round, the board only while it holds none, a failed read as failed (2.5 slice 2)', async () => {
+    boardDoc.value = { document: { roadmap: parseRoadmap(roadmap) } }
+    // jsdom here has no working localStorage; the sign-in token is read from it on every request.
+    Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined } })
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+    const serve = (plan: 'imported' | 'absent' | 'fail') => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/agentrt/plan?')) return plan === 'imported' ? json(planFixture.plan) : plan === 'absent' ? json(planFixture.absent.body, 404) : json({ error: 'unavailable' }, 503)
+      if (url.includes('/agentrt/events?stream=plan')) return json(planFixture.events)
+      if (url.includes('/agentrt/artifacts/')) return new Response(JSON.stringify(planFixture.request))
+      if (url.includes('/agentrt/progress')) return json(planFixture.progress)
+      return json({ error: 'not this test' }, 500)
+    }))
+    serve('imported')
+    const read = run({ system: false, work: true, chief: false })
+    await waitFor(() => expect(read.result.current.planSource.from).toBe('runtime'))
+    expect(read.result.current.plan.map(r => [r.key, r.done, r.total])).toEqual(planFixture.progress.plan[0].items.map(i => [i.label, i.count.done, i.count.total]))
+    expect(read.result.current.planRound?.source).toBe('runtime')
+
+    serve('absent')
+    const absent = run({ system: false, work: true, chief: false })
+    await waitFor(() => expect(absent.result.current.planSource.from).toBe('board'))
+    expect(absent.result.current.plan.map(r => r.key)).toEqual(roadmap.round.items.map(i => i.key))
+
+    serve('fail')
+    const failed = run({ system: false, work: true, chief: false })
+    await waitFor(() => expect(failed.result.current.planSource).toEqual({ from: 'error', error: 'Plan: unavailable' }))
+    expect(failed.result.current.plan).toEqual([])
+    expect(failed.result.current.planRound).toBeUndefined()
   })
 
   it('with a node on standby, the cluster\'s evidence moves its alerts to noise; without it they stay', async () => {

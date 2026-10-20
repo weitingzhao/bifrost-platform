@@ -27,6 +27,8 @@ function enter(value: string) { fireEvent.change(screen.getByLabelText('Goal'), 
 function mockPageFetch() {
   return vi.fn(async (url: RequestInfo | URL) => {
     const path = String(url)
+    // The runtime holds no plan yet, as PROD and STG on 2026-10-19: the plan is read from the board (2.5 slice 2).
+    if (path.includes('/agentrt/plan?')) return json({ error: 'not_found', message: 'no such record' }, 404)
     if (path.includes('/agentrt/progress')) return json(progress)
     if (path.includes('/agentrt/events?')) return json(events)
     if (path.includes('/agentrt/artifacts/')) return new Response('# Report\nDone <script>unsafe()</script>', { headers: { 'Content-Type': 'text/markdown' } })
@@ -195,10 +197,13 @@ describe('Merged Progress page', () => {
     wrap(<ProgressPage />)
     expect(await screen.findByText(/Count is incomplete:/)).toBeInTheDocument()
     expect(screen.getAllByText(/Could not load agent runtime:/).length).toBeGreaterThan(0)
-    expect(await screen.findByText(/Could not load plan and architecture:/)).toBeInTheDocument()
+    // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
+    expect(await screen.findAllByText('Plan unavailable: Plan: unavailable')).toHaveLength(2)
+    expect(await screen.findByText(/Could not load architecture:/)).toBeInTheDocument()
   })
   it('shows empty data and an unpublished plan', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => json(String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
+    vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('/agentrt/plan?') ? json({ error: 'not_found', message: 'no such record' }, 404)
+      : json(String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
     wrap(<ProgressPage />)
     expect(await screen.findByText('No goals yet.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()

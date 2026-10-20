@@ -18,6 +18,7 @@ import {
   releaseWindowView,
   splitReleaseRuns,
 } from '@/pages/shell/releases/releaseView'
+import { useRuntimePlan } from '../agents/useRuntimePlan'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile, type ProbeReach } from './dataTiles'
 import {
   ownerVerdict,
@@ -61,6 +62,9 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const runtime = current(needsYou.runtimeQuery)
   const board = needsYou.progressQuery.data?.document ?? null
   const work = workNow(runtime)
+  // The plan from the runtime once it holds the round; the board's only while the runtime has none (2.5 slice 2).
+  const planSource = useRuntimePlan(blocks.work)
+  const planRound = planSource.from === 'runtime' ? planSource.round : planSource.from === 'board' ? board?.roadmap?.round : undefined
   const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
     enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
@@ -131,7 +135,9 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
       : { state: 'read' as const, note: coordinatorQ.data.note, full: coordinatorQ.data.full },
     board,
     boardStale: needsYou.progressQuery.data?.stale === true,
-    plan: planRows(board?.roadmap?.round),
+    planSource,
+    planRound,
+    plan: planRows(planRound),
     arch: board?.roadmap?.arch?.rows ?? [],
     hosts: runtime?.hosts ?? [],
     missions: runtime?.work.missions ?? [],
