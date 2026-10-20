@@ -266,3 +266,13 @@ func TestRecordPrunes(t *testing.T) {
 		t.Fatalf("after the pause: %v (%v)", until, err)
 	}
 }
+
+// TD-383: an attempt branch whose task is over goes a day after the event
+// that let it go (Owner 10-20 14:4x), not seven; this keeps the Owner's
+// number from drifting back.
+func TestPruneAfterIsADay(t *testing.T) {
+	t.Parallel()
+	if store.PruneAfter != 24*time.Hour {
+		t.Fatalf("PruneAfter = %s, the Owner set a day", store.PruneAfter)
+	}
+}

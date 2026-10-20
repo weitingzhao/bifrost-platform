@@ -17,7 +17,9 @@ import (
 // attempt pushes agent/<task>/a<n>; nothing deleted them. The rule
 // (agent-config/work/multi-agent/PLAN-td383-merge-and-prune-2026-10-20.md
 // 2.4): a branch goes PruneAfter after the event that made it go, counted on
-// the runtime's own records:
+// the runtime's own records. PruneAfter is a day (Owner 10-20 14:4x 「已结束
+// 任务的 agent/ 分支保留期改成 1 天」; it was seven): the result and its
+// reports stay in the platform, so the branch is not the record.
 //
 //   - its task moved to cancelled or rejected (the move's event);
 //   - its task is accepted and this is another attempt than the accepted one
@@ -45,7 +47,7 @@ import (
 // PruneRetry), and a refusal is a record, not an error.
 
 const (
-	PruneAfter = 7 * 24 * time.Hour
+	PruneAfter = 24 * time.Hour
 	PrunePause = 6 * time.Hour
 	PruneRetry = 30 * time.Minute
 	MaxPrunes  = 50 // handed out at a time
@@ -362,7 +364,7 @@ func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult
 // RecordLandings records, for each accepted implementation not yet seen on
 // main, whether main now holds its accepted attempt's very commit (merged as
 // a cherry-pick of it, or as it is; a reverted landing does not count; review
-// 436 A2). The first sighting is the note the seven days count from. A
+// 436 A2). The first sighting is the note PruneAfter counts from. A
 // mission not to be merged is passed over; a repository whose main cannot be
 // read now is tried again next time. It returns how many it recorded.
 func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, error) {
