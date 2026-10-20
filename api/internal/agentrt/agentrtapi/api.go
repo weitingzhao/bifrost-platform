@@ -511,10 +511,13 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	var media, kind string
 	var body []byte
 	var exam bool
+	host := actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd
 	err := store.InTx(r.Context(), a.DB, func(tx pgx.Tx) error {
+		// Whether the exams' stream names it is read for an Agent host only
+		// (review 412 C1: the stream is read by its id, then its bodies).
 		return tx.QueryRow(r.Context(), `SELECT a.media_type, a.artifact_kind, b.body,
-		    EXISTS (SELECT 1 FROM agentrt.event e WHERE e.event_stream_id = $2 AND e.body_json->>'artifact_id' = a.artifact_id)
-		  FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id) WHERE a.artifact_id = $1`, id, store.ExamsStream).
+		    $3 AND EXISTS (SELECT 1 FROM agentrt.event e WHERE e.event_stream_id = $2 AND e.body_json->>'artifact_id' = a.artifact_id)
+		  FROM agentrt.artifact a JOIN agentrt.artifact_blob b USING (artifact_id) WHERE a.artifact_id = $1`, id, store.ExamsStream, host).
 			Scan(&media, &kind, &body, &exam)
 	})
 	if err != nil {
@@ -527,7 +530,7 @@ func (a *API) getArtifact(w http.ResponseWriter, r *http.Request) {
 	// exams' stream names, whatever kind its first upload gave it (the same
 	// bytes put earlier as "other", review 409 A1). agentd keeps the paper
 	// it was handed.
-	if (kind == "exam" || exam) && actuation.PrincipalFromContext(r.Context()).Role == actuation.RoleAgentd {
+	if host && (kind == "exam" || exam) {
 		writeError(w, http.StatusForbidden, "forbidden", "an agentd token does not read exam artifacts")
 		return
 	}
