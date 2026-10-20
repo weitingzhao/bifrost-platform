@@ -45,7 +45,7 @@ type Sources struct {
 	// card-auto-answer rule in force (store.AnswerByRule, TD-390); nil
 	// answers nothing.
 	Cards      func(ctx context.Context) ([]store.RuntimeCard, error)
-	RuleAnswer func(ctx context.Context, id, option, rule string) error
+	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time) error
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -366,8 +366,8 @@ func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
 			x := bounded(c, ctx, func(ctx context.Context) list { cs, err := c.Sources.Cards(ctx); return list{cs, err} })
 			return x.cards, x.err
 		},
-		Answer: func(ctx context.Context, id, option, rule string) error {
-			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule) })
+		Answer: func(ctx context.Context, id, option, rule string, until time.Time) error {
+			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule, until) })
 		},
 		Ack: c.ack(),
 	})

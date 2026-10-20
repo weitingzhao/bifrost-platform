@@ -136,9 +136,10 @@ var bodies = map[string][]field{
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
-	// ended (blockedcard.go).
+	// ended (blockedcard.go); by names the rule that answered it for the
+	// Owner (cardauto.go, TD-390), never present when he answered.
 	"owner_wait_opened": {{"question_id", kID, false}, {"blocked_event_id", kInt, false}, {"card", kInt, false}},
-	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}},
+	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}, {"by", kStr, true}},
 }
 
 func checkBody(eventType string, body map[string]any) error {

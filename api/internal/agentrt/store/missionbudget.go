@@ -180,19 +180,20 @@ func roundFor(ctx context.Context, tx pgx.Tx, t taskRow) (spend, grant, bool, er
 }
 
 // grantRound makes room in the mission's budget for one more round of task
-// t, which the Owner gave it on its card (question): mission_amended by the
-// Owner, and the budget raised, its own figures written out (a mission that
-// stated none had the rule's) with what he added kept apart. The caller
+// t, which its card's answer gave it (question): mission_amended by the
+// Owner, or by the controller for the rule that answered for him (review 442
+// A3), and the budget raised, its own figures written out (a mission that
+// stated none had the rule's) with what the card added kept apart. The caller
 // holds t and its mission's row FOR NO KEY UPDATE.
-func grantRound(ctx context.Context, tx pgx.Tx, t taskRow, question string) error {
+func grantRound(ctx context.Context, tx pgx.Tx, t taskRow, question string, by answerer) error {
 	s, g, ok, err := roundFor(ctx, tx, t)
 	if err != nil || !ok || g == (grant{}) {
 		return err
 	}
 	b := s.budget
 	set := map[string]any{"max_attempts": b.MaxAttempts + g.attempts, "max_wall_hours": b.MaxWallHours + g.hours}
-	body := map[string]any{"reason": fmt.Sprintf("the Owner gave task %s one more round on its card (question %s); %s",
-		t.id, question, s.added(g))}
+	body := map[string]any{"reason": fmt.Sprintf("%s gave task %s one more round on its card (question %s); %s",
+		by.who, t.id, question, s.added(g))}
 	if g.attempts > 0 {
 		set["owner_granted_attempts"] = b.OwnerAttempts + g.attempts
 		body["max_attempts"] = b.MaxAttempts + g.attempts
@@ -205,7 +206,7 @@ func grantRound(ctx context.Context, tx pgx.Tx, t taskRow, question string) erro
 	if err != nil {
 		return err
 	}
-	if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "mission_amended", Actor: "owner",
+	if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "mission_amended", Actor: by.actor,
 		MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
 		return err
 	}

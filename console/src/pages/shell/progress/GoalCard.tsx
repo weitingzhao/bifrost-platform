@@ -9,7 +9,7 @@ import type { Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
 import { useNow } from './progressClock'
-import { currentVerdict, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
+import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 const stageColor = { done: 'var(--color-success)', running: 'var(--color-info)', waiting: 'var(--color-warning)', failed: 'var(--color-danger)', future: 'var(--border)', skipped: 'var(--border)' }
 function Lines({ value }: { value: unknown }) {
@@ -42,7 +42,7 @@ function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Qu
   const budget = record(data.mission.budget_json)
   const decisions = data.events.filter(e => e.event_type === 'decision_recorded')
   const asked = goalQuestions(data, questions)
-  const dropped = droppedTasks(data)
+  const dropped = droppedTasks(data), byRule = droppedByRule(data)
   return <details key={done ? 'closed' : 'open'} open={!done} className="text-sm">
     <summary className="cursor-pointer font-semibold">What the chief of staff wrote</summary>
     <div className="mt-3 grid gap-4 md:grid-cols-2">
@@ -50,7 +50,7 @@ function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Qu
       <section aria-label="Not doing"><h4 className="font-medium">Not doing</h4><Lines value={scope} /></section>
       <section aria-label="Budget"><h4 className="font-medium">Budget</h4><p>{String(budget.max_attempts ?? amendment?.max_attempts ?? '?')} attempts · {String(budget.max_wall_hours ?? amendment?.max_wall_hours ?? '?')} h maximum</p>
         <dl>{Object.entries(budget).filter(([k]) => !['max_attempts', 'max_wall_hours'].includes(k)).map(([k, v]) => <div key={k}><dt>{k.replaceAll('_', ' ')}</dt><dd>{JSON.stringify(v)}</dd></div>)}</dl></section>
-      <section aria-label="Implementation tasks"><h4 className="font-medium">Implementation tasks</h4><ul className="space-y-2">{data.tasks.filter(t => t.role === 'implement').map(t => <li key={t.task_id}>{t.title} · {t.state === 'accepted' ? 'Done' : dropped.has(t.task_id) ? 'Dropped by you' : t.state === 'verifying' ? 'Checking' : t.state === 'ready' ? 'Queued' : t.state} · {taskWho(data, t)}</li>)}</ul></section>
+      <section aria-label="Implementation tasks"><h4 className="font-medium">Implementation tasks</h4><ul className="space-y-2">{data.tasks.filter(t => t.role === 'implement').map(t => <li key={t.task_id}>{t.title} · {t.state === 'accepted' ? 'Done' : dropped.has(t.task_id) ? (byRule.has(t.task_id) ? 'Dropped by rule' : 'Dropped by you') : t.state === 'verifying' ? 'Checking' : t.state === 'ready' ? 'Queued' : t.state} · {taskWho(data, t)}</li>)}</ul></section>
       <section aria-label="Decisions" className="md:col-span-2"><h4 className="font-medium">Decisions</h4><ol className="list-decimal space-y-3 pl-5">{decisions.map((e, i) => <li key={i}><strong>{text(e.body_json.decision)}</strong><p>Why: {text(e.body_json.why)}</p>{e.body_json.dropped != null && <p>Dropped: {text(e.body_json.dropped)}</p>}{e.body_json.reverse != null && <p>How to reverse: {text(e.body_json.reverse)}</p>}</li>)}</ol>{!decisions.length && <p>No decisions recorded yet.</p>}</section>
       <section aria-label="Questions asked"><h4 className="font-medium">Questions asked</h4><ul>{asked.map(q => <li key={q.id}><a href={questionHref(q.id)} className="underline">Q{q.number} · {q.title}</a> · {q.status}</li>)}</ul>{!asked.length && <p>No questions recorded.</p>}</section>
     </div>
@@ -94,7 +94,8 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
       <ol aria-label="Goal stages" className="flex flex-wrap gap-2">{goalStages(data).map(stage => <li key={stage.label} aria-label={`${stage.label}: ${stage.state}`} className="min-w-32 flex-1 rounded border border-[var(--card-border)] border-t-4 p-2 text-sm" style={{ borderTopColor: stageColor[stage.state] }}>
         <div className="flex items-center gap-2"><span aria-hidden="true" style={{ color: stageColor[stage.state] }}>{stageMarks[stage.state]}</span><strong>{stage.label}</strong>{stage.tasks.length > 1 && <span>{stage.completed}/{stage.tasks.length}</span>}</div>
         {stage.state === 'skipped' && !stage.dropped && <p className="text-xs text-muted-foreground">Skipped</p>}
-        {stage.dropped > 0 && <p className="text-xs text-muted-foreground">{stage.dropped} dropped by you</p>}
+        {stage.dropped - (stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.dropped - (stage.droppedByRule ?? 0)} dropped by you</p>}
+        {(stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.droppedByRule} dropped by rule</p>}
         {stage.tasks.map(t => { const timing = taskTiming(data, t, now), lease = latestLease(data, t)
           const live = runtime?.live.find(a => a.task_id === t.task_id)
           return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p>{taskWho(data, t)}</p><p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>

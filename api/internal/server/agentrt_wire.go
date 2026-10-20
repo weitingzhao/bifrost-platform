@@ -115,8 +115,14 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			}
 			return
 		}
-		// The STG test switch that forces a rework is STG's alone (T26).
-		c := &controller.Controller{DB: pool, Sources: s.agentRuntimeSources(), Briefs: true, FailFirstVerify: env == "stg", Logf: func(format string, args ...any) {
+		// The STG test switch that forces a rework is STG's alone (T26), and
+		// so is answering cards by rule (TD-390: 「PROD 不变」; no PROD rule
+		// file names the kind either, review 442 C1).
+		src := s.agentRuntimeSources()
+		if env != "stg" {
+			src.Cards, src.RuleAnswer = nil, nil
+		}
+		c := &controller.Controller{DB: pool, Sources: src, Briefs: true, FailFirstVerify: env == "stg", Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
 		wait := c.Start(ctx)

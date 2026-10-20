@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
@@ -42,18 +43,26 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	if err != nil || len(list) != 1 || list[0].ID != id || list[0].TaskID != task || list[0].Recommended != "c" || list[0].CreatedAt.IsZero() {
 		t.Fatalf("the runtime's cards: %+v %v", list, err)
 	}
-	if err = answer(ctx, id, "a", "rule card-auto-answer v1"); err == nil {
+	until := time.Now().Add(time.Hour)
+	if err = answer(ctx, id, "a", "rule card-auto-answer v1", until); err == nil {
 		t.Fatal("the rule answered with an option the card does not recommend")
 	}
-	if err = answer(ctx, id, "c", "rule card-auto-answer v1"); err != nil {
+	if err = answer(ctx, id, "c", "rule card-auto-answer v1", until); err != nil {
 		t.Fatal(err)
 	}
 	q, ok := read(ctx, id)
-	if !ok || q.Status != store.QuestionAnswered || q.Option != "c" || q.AnsweredBy != "rule card-auto-answer v1" || q.Options != 3 {
+	if !ok || q.Status != store.QuestionAnswered || q.Option != "c" || q.AnsweredBy != "rule card-auto-answer v1" || q.Options != 3 ||
+		q.Channel != "rule" {
 		t.Fatalf("read back: %+v %v", q, ok)
 	}
+	if list, err = cards(ctx); err != nil || len(list) != 1 || !list[0].Answered || list[0].By != "rule card-auto-answer v1" {
+		t.Fatalf("after the answer, before the runtime read it: %+v %v", list, err)
+	}
+	if err = rt.agentRuntimeAck()(ctx, id); err != nil {
+		t.Fatal(err)
+	}
 	if list, err = cards(ctx); err != nil || len(list) != 0 {
-		t.Fatalf("after the answer: %+v %v", list, err)
+		t.Fatalf("after the runtime read it: %+v %v", list, err)
 	}
 	if os.Getenv("CONSOLE_QUESTION_FIXTURE_WRITE") == "1" {
 		res := rt.svc.Get(ctx, "owner-console", "admin", "admin", id)

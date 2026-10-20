@@ -70,9 +70,10 @@ const (
 	blockOther      = "other"
 )
 
-// chainBlockPrefix starts the reason of a task blocked because the Owner
-// dropped its only check (decideBlocked).
-const chainBlockPrefix = "the Owner chose not to do its "
+// chainBlockMark is in the reason of a task blocked because its only check
+// was dropped on its card, by the Owner or by a rule for him (decideBlocked:
+// "the Owner chose not to do its review t_… (question q_…)").
+const chainBlockMark = " chose not to do its "
 
 // blockKind is the kind of a block, from its reason and whether it was failed
 // work.
@@ -80,7 +81,7 @@ func blockKind(reason string, failed bool, effect string) string {
 	switch {
 	case failed:
 		return blockFailed
-	case strings.HasPrefix(reason, chainBlockPrefix):
+	case strings.Contains(reason, chainBlockMark):
 		return blockChain
 	case strings.HasSuffix(reason, budgetBlockSuffix):
 		return blockBudget

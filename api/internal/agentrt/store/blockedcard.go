@@ -694,9 +694,13 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 				return err
 			}
 		}
+		by := answerOf(q)
 		closed := map[string]any{"question_id": c.question, "outcome": acted}
 		if q.Option != "" {
 			closed["answer"] = q.Option
+		}
+		if by.rule != "" {
+			closed["by"] = by.rule
 		}
 		if q.Text != "" {
 			closed["text"] = q.Text
@@ -710,10 +714,10 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		case OutcomeRetried:
 			// Room in the budget for the round, before the task is ready
 			// (TD-384).
-			if err = grantRound(ctx, tx, t, c.question); err != nil {
+			if err = grantRound(ctx, tx, t, c.question, by); err != nil {
 				return err
 			}
-			if err = moveTask(ctx, tx, "controller", t, "ready", fmt.Sprintf("the Owner gave it one more round (question %s)", c.question)); err != nil {
+			if err = moveTask(ctx, tx, "controller", t, "ready", fmt.Sprintf("%s gave it one more round (question %s)", by.who, c.question)); err != nil {
 				return err
 			}
 			if failed {
@@ -723,7 +727,7 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			}
 			return err
 		case OutcomeDropped:
-			if err = moveTask(ctx, tx, "controller", t, "cancelled", fmt.Sprintf("the Owner chose not to do it (question %s)", c.question)); err != nil {
+			if err = moveTask(ctx, tx, "controller", t, "cancelled", fmt.Sprintf("%s chose not to do it (question %s)", by.who, c.question)); err != nil {
 				return err
 			}
 			if subject == "" || s.state != "verifying" {
@@ -737,8 +741,8 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			if err != nil || checked {
 				return err
 			}
-			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf(chainBlockPrefix+"%s %s (question %s)",
-				t.role, t.id, c.question))
+			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("%s"+chainBlockMark+"%s %s (question %s)",
+				by.who, t.role, t.id, c.question))
 		}
 		return nil
 	})

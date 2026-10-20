@@ -104,7 +104,8 @@ func SeeApproval(ctx context.Context, db DB, number int64, status func(context.C
 // option, who answered and when, and the text when there is one.
 type Question struct {
 	ID, Status, Option, Text, AnsweredBy, AnsweredAt string
-	Options                                          int // how many options the card offers; 0 when the reader does not say
+	Options                                          int    // how many options the card offers; 0 when the reader does not say
+	Channel                                          string // how it was answered: the console, or a rule (questions.RuleChannel)
 }
 
 // SeeQuestion reads a question and records a change of its status and, once

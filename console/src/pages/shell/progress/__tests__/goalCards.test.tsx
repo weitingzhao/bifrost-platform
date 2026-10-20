@@ -173,6 +173,17 @@ describe('a task dropped on its blocked card', () => {
     expect(screen.getByText('1 dropped by you')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Implementation tasks')).getByText(/Fifth · Dropped by you/)).toBeInTheDocument()
   })
+  // Review 442 A3: a STG card-auto-answer rule's drop (owner_wait_closed names it in by) is never the Owner's.
+  it('says a rule dropped the task, not the Owner', async () => {
+    mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const byRule = { ...dropEvent, body_json: { ...dropEvent.body_json, by: 'rule card-auto-answer v1' } }
+    client.setQueryData(['agent-runtime-goal', 'M-2'], withFifth('cancelled', [byRule]))
+    wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />, client)
+    expect(await screen.findByText('1 dropped by rule')).toBeInTheDocument()
+    expect(screen.queryByText('1 dropped by you')).toBeNull()
+    expect(within(screen.getByLabelText('Implementation tasks')).getByText(/Fifth · Dropped by rule/)).toBeInTheDocument()
+  })
 })
 
 describe('goal cards and source links', () => {

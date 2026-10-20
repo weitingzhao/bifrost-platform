@@ -40,7 +40,7 @@ func (s *Service) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	session, principal, role, ok := callerFrom(w, r)
+	session, principal, role, ok := writerFrom(w, r)
 	if !ok {
 		return
 	}
@@ -69,7 +69,7 @@ func (s *Service) HandleWithdraw(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	session, principal, role, ok := callerFrom(w, r)
+	session, principal, role, ok := writerFrom(w, r)
 	if !ok {
 		return
 	}
@@ -81,7 +81,7 @@ func (s *Service) HandleAck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	session, principal, role, ok := callerFrom(w, r)
+	session, principal, role, ok := writerFrom(w, r)
 	if !ok {
 		return
 	}
@@ -98,6 +98,17 @@ func (s *Service) HandleAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeResult(w, s.Answer(r.Context(), session, principal, role, chi.URLParam(r, "id"), raw))
+}
+
+// writerFrom is callerFrom for a route that writes as its session: the
+// runtime's own session is not one a request may name.
+func writerFrom(w http.ResponseWriter, r *http.Request) (session, principal, role string, ok bool) {
+	session, principal, role, ok = callerFrom(w, r)
+	if ok && session == RuntimeSession {
+		writeResult(w, fail(http.StatusForbidden, "session "+RuntimeSession+" is the agent runtime's own", nil))
+		return "", "", "", false
+	}
+	return session, principal, role, ok
 }
 
 func callerFrom(w http.ResponseWriter, r *http.Request) (session, principal, role string, ok bool) {

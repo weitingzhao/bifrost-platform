@@ -99,6 +99,9 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 		}
 		f, ok := questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
 		f.Options = len(q.Options)
+		if q.Answer != nil {
+			f.Channel = q.Answer.Channel
+		}
 		return f, ok
 	}
 }
@@ -179,8 +182,9 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 	}
 }
 
-// agentRuntimeCards lists the runtime's open cards for its card-auto-answer
-// rule (TD-390), by OpenOf, which writes nothing; nil without a question
+// agentRuntimeCards lists the runtime's cards for its card-auto-answer rule
+// (TD-390): the open ones and those its rule answered that it has not
+// acknowledged, by RuleCards, which writes nothing; nil without a question
 // store.
 func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.RuntimeCard, error) {
 	if rt == nil || rt.svc == nil || rt.reads == nil {
@@ -192,7 +196,7 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 			err error
 		}
 		x, ok, err := within(ctx, rt.reads, func() (r, bool, error) {
-			qs, err := rt.svc.OpenOf(agentRuntimeRequester)
+			qs, err := rt.svc.RuleCards(agentRuntimeRequester)
 			return r{qs, err}, true, nil
 		})
 		if err != nil || !ok {
@@ -203,21 +207,26 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		}
 		cards := make([]store.RuntimeCard, 0, len(x.qs))
 		for _, q := range x.qs {
-			cards = append(cards, store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt})
+			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
+			if q.Status == questions.StatusAnswered && q.Answer != nil {
+				c.Answered, c.By = true, q.Answer.By
+			}
+			cards = append(cards, c)
 		}
 		return cards, nil
 	}
 }
 
 // agentRuntimeRuleAnswer answers one of the runtime's cards as its rule
-// (questions.AnswerAsRule: the option the card recommends, by the rule, on
-// the rule channel); nil without a question store.
-func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id, option, rule string) error {
+// while the rule holds (questions.AnswerAsRule: the option the card
+// recommends, by the rule, on the rule channel); nil without a question
+// store.
+func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id, option, rule string, until time.Time) error {
 	if rt == nil || rt.svc == nil {
 		return nil
 	}
-	return func(ctx context.Context, id, option, rule string) error {
-		res := rt.svc.AnswerAsRule(ctx, agentRuntimeRequester, rule, id, option)
+	return func(ctx context.Context, id, option, rule string, until time.Time) error {
+		res := rt.svc.AnswerAsRule(ctx, agentRuntimeRequester, rule, id, option, until)
 		if res.Code != http.StatusOK {
 			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 		}
@@ -240,8 +249,9 @@ func sameCard(q questions.Question, c store.Card) bool {
 	return true
 }
 
-// agentRuntimeRequester is the session the runtime asks the Owner as.
-const agentRuntimeRequester = "agentrt"
+// agentRuntimeRequester is the session the runtime asks the Owner as, which
+// no route may name (questions.RuntimeSession).
+const agentRuntimeRequester = questions.RuntimeSession
 
 // agentRuntimeWithdraw withdraws, as the runtime, a card a plan asked whose
 // round was refused (W-31 2.2b, review 216 B2). A card that is no longer

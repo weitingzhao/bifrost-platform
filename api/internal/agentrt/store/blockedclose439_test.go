@@ -184,7 +184,7 @@ func TestCancelAfterClose(t *testing.T) {
 	if s, o := w.state(t, "task", late), w.state(t, "task", other); s != "cancelled" || o != "proposed" {
 		t.Fatalf("the late task is %s, M-4's %s", s, o)
 	}
-	if r := w.lastMove(t, late); r != "the Owner closed mission M-3 on a card (question "+q+"); this task came after the close" {
+	if r := w.lastMove(t, late); r != "mission M-3 was closed on a card (question "+q+"); this task came after the close" {
 		t.Fatalf("cancelled because %q", r)
 	}
 	if n, err := store.CancelAfterClose(ctx, w.rt); err != nil || n != 0 {

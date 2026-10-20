@@ -160,9 +160,13 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 		if (mstate != "active" && mstate != "paused") || t.mission != mission || t.state != "blocked" || latest != c.block {
 			acted = OutcomeMoot
 		}
+		by := answerOf(q)
 		body := map[string]any{"question_id": c.question, "outcome": acted, "answer": q.Option}
 		if q.Text != "" {
 			body["text"] = q.Text
+		}
+		if by.rule != "" {
+			body["by"] = by.rule
 		}
 		if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "owner_wait_closed", Actor: "controller",
 			MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
@@ -172,7 +176,7 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 		if acted == OutcomeMoot {
 			return nil
 		}
-		why := fmt.Sprintf("the Owner closed mission %s on the card of task %s (question %s)", mission, c.task, c.question)
+		why := fmt.Sprintf("%s closed mission %s on the card of task %s (question %s)", by.who, mission, c.task, c.question)
 		if err = cancelAll(ctx, tx, attempts, open, why); err != nil {
 			return err
 		}
@@ -183,7 +187,7 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 		  FROM agentrt.task WHERE mission_id = $1`, mission).Scan(&accepted, &delivered); err != nil {
 			return err
 		}
-		on := fmt.Sprintf("the Owner closed it on the card of task %s (question %s)", c.task, c.question)
+		on := fmt.Sprintf("%s closed it on the card of task %s (question %s)", by.who, c.task, c.question)
 		to, reason := "stopped", fmt.Sprintf("%s; %s cancelled with it, nothing the goal asked for was accepted", on, tasks(len(open)))
 		switch {
 		case delivered && mstate == "active":
@@ -322,7 +326,7 @@ func cancelAfterClose(ctx context.Context, db DB, ids []string) (int, error) {
 				return err
 			}
 			did = true
-			return cancelAll(ctx, tx, attempts, []string{id}, fmt.Sprintf("the Owner closed mission %s on a card (question %s); "+
+			return cancelAll(ctx, tx, attempts, []string{id}, fmt.Sprintf("mission %s was closed on a card (question %s); "+
 				"this task came after the close", t.mission, question))
 		})
 		if err != nil {

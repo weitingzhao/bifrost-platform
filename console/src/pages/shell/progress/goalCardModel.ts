@@ -4,7 +4,7 @@ import type { Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
 export type StageState = 'done' | 'running' | 'waiting' | 'failed' | 'future' | 'skipped'
-export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number; dropped: number }
+export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number; dropped: number; droppedByRule?: number }
 export const stageMarks: Record<StageState, string> = { done: '✓', running: '●', waiting: '⏸', failed: '✗', future: '○', skipped: '—' }
 export const terminalMission = (state: string) => ['done', 'accepted', 'stopped', 'failed', 'cancelled'].includes(state)
 export const executorName = (id: string) => ({ 'exec:claude': 'Claude', 'exec:codex': 'Codex', 'exec:cursor': 'Cursor', 'exec:deterministic': 'Checks' })[id] || id || 'Unassigned'
@@ -38,6 +38,15 @@ export function taskTiming(data: GoalData, task: GoalTask, now: number): { label
 export function droppedTasks(data: GoalData): Set<string> {
   const closed = new Set(data.events.filter(e => e.event_type === 'owner_wait_closed' && e.body_json.outcome === 'dropped').map(e => e.task_id))
   return new Set(data.tasks.filter(t => t.state === 'cancelled' && closed.has(t.task_id)).map(t => t.task_id))
+}
+/**
+ * Of the dropped tasks, those a STG card-auto-answer rule dropped for the Owner (TD-390: owner_wait_closed names the rule
+ * in `by`): never shown as dropped by him.
+ */
+export function droppedByRule(data: GoalData): Set<string> {
+  const dropped = droppedTasks(data)
+  return new Set(data.events.filter(e => e.event_type === 'owner_wait_closed' && e.body_json.outcome === 'dropped' && text(e.body_json.by) !== ''
+    && dropped.has(e.task_id)).map(e => e.task_id))
 }
 function verdicts(data: GoalData, method: string) {
   // Verification events refer to the implementation, not the verification task.
@@ -93,6 +102,7 @@ export function goalDone(data: GoalData): boolean {
 export function goalStages(data: GoalData): GoalStage[] {
   const done = goalDone(data)
   const dropped = droppedTasks(data)
+  const byRule = droppedByRule(data)
   const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1, dropped: 0 }]
   for (const [role, label] of [['plan', 'Plan'], ['implement', 'Implement'], ['verify', 'Verify'], ['review', 'Review']]) {
     // A stage counts the tasks still in play; the ones the Owner dropped are counted apart.
@@ -112,7 +122,8 @@ export function goalStages(data: GoalData): GoalStage[] {
     else if (tasks.some(t => ['ready', 'leased', 'running', 'submitted', 'verifying', 'rework'].includes(t.state))) state = 'running'
     else if (role === 'plan' && !tasks.length) state = 'skipped'
     else if (!done && ['done', 'skipped'].includes(stages.at(-1)?.state || '') && (!tasks.length || tasks.some(t => t.state === 'proposed'))) state = 'running'
-    stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed, dropped: all.length - tasks.length })
+    stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed, dropped: all.length - tasks.length,
+      droppedByRule: all.filter(t => byRule.has(t.task_id)).length })
   }
   stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
   return stages

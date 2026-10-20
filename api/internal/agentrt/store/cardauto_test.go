@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -22,11 +23,14 @@ type cardStore struct {
 	order   []string
 	answers int
 	acked   map[string]int
+	during  func(id string) // runs as an answer is written, before it lands
+	ackErr  error           // what the next acknowledgement answers
 }
 
 type storedCard struct {
 	card                     store.RuntimeCard
 	status, option, by, text string
+	read                     bool
 }
 
 func (s *cardStore) put(c store.RuntimeCard) {
@@ -66,16 +70,27 @@ func (s *cardStore) open(context.Context) ([]store.RuntimeCard, error) {
 	defer s.mu.Unlock()
 	var out []store.RuntimeCard
 	for _, id := range s.order {
-		if c := s.cards[id]; c.status == "open" {
+		switch c := s.cards[id]; {
+		case c.status == "open":
 			out = append(out, c.card)
+		case c.status == store.QuestionAnswered && !c.read && strings.HasPrefix(c.by, "rule "):
+			card := c.card
+			card.Answered, card.By = true, c.by
+			out = append(out, card)
 		}
 	}
 	return out, nil
 }
 
-func (s *cardStore) answer(_ context.Context, id, option, rule string) error {
+func (s *cardStore) answer(ctx context.Context, id, option, rule string, until time.Time) error {
+	if s.during != nil {
+		s.during(id)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !time.Now().Before(until) {
+		return errors.New("the rule no longer holds")
+	}
 	c := s.cards[id]
 	c.status, c.option, c.by = store.QuestionAnswered, option, rule
 	s.answers++
@@ -85,7 +100,12 @@ func (s *cardStore) answer(_ context.Context, id, option, rule string) error {
 func (s *cardStore) ack(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.ackErr; err != nil {
+		s.ackErr = nil
+		return err
+	}
 	s.acked[id]++
+	s.cards[id].read = true
 	return nil
 }
 
@@ -99,7 +119,8 @@ func (s *cardStore) question(_ context.Context, id string) (store.Question, bool
 	if c.status != store.QuestionAnswered {
 		return store.Question{ID: id, Status: c.status, Options: 3}, true
 	}
-	return store.Question{ID: id, Status: c.status, Option: c.option, AnsweredBy: c.by, AnsweredAt: "2026-10-20T20:00:00Z", Options: 3}, true
+	return store.Question{ID: id, Status: c.status, Option: c.option, AnsweredBy: c.by, AnsweredAt: "2026-10-20T20:00:00Z", Options: 3,
+		Channel: "rule"}, true
 }
 
 func (s *cardStore) rule() store.CardRule {
