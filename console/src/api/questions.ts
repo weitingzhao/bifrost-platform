@@ -597,3 +597,13 @@ export function questionLink(link: string, linkText?: string): ActionLinkView {
 export function questionNumberLabel(number: number): string {
   return `Q${number}`
 }
+
+/**
+ * The option a question recommends and why (its detail), as one line: a blocked task's card says why
+ * the runtime's rules recommend it (blockedrecommend.go). Null when it recommends none.
+ */
+export function recommendedLine(question: Pick<Question, 'options' | 'recommended'>): string | null {
+  const option = question.options.find(o => o.key === question.recommended)
+  if (option == null) return null
+  return option.detail != null && option.detail !== '' ? `Recommended: ${option.label} — ${option.detail}` : `Recommended: ${option.label}`
+}

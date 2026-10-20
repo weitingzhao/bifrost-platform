@@ -1,6 +1,6 @@
 import { formatTimeRemaining, formatWaited } from '@/api/approvals'
 import type { LineageThread } from '@/api/lineage'
-import { questionNumberLabel, type Question } from '@/api/questions'
+import { questionNumberLabel, recommendedLine, type Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { Tick } from '@/pages/shell/progress/progressClock'
 
@@ -32,6 +32,7 @@ export function QuestionRow({
   const thread = askingThread(question.requester, threads)
   const who = thread.kind === 'title' ? thread.text : `Agent-reported session: ${thread.text}`
   const work = question.work_id ?? ''
+  const recommended = recommendedLine(question)
   return (
     <li className="list-none min-w-0 max-w-full">
       <a
@@ -50,6 +51,11 @@ export function QuestionRow({
             text={now => `waited ${formatWaited(question.created_at, now)} · ${formatTimeRemaining(question.expires_at, now)}`}
           />
         </span>
+        {recommended != null ? (
+          <span className="min-w-0 break-words text-sm text-foreground" data-question-recommended>
+            {recommended}
+          </span>
+        ) : null}
         {question.requester_thread != null && question.requester_thread !== '' ? (
           <span className="min-w-0 break-words text-sm text-muted-foreground">
             {`Agent-reported: ${question.requester_thread}`}

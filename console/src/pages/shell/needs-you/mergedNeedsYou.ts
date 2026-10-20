@@ -1,9 +1,14 @@
 import { record, text } from '@/api/agentRuntime'
-import type { Question } from '@/api/questions'
+import { recommendedLine, type Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 import type { NeedsYouCount } from './needsYouModel'
 
 export type WaitingItem = { id: string; title: string; href: string; instruction: string; kind?: string; since?: string }
+
+/** An open question as a waiting item: what it recommends and why, when it recommends an option. */
+export function openQuestionItem(q: Question): WaitingItem {
+  return { id: q.id, title: q.title, href: questionHref(q.id), instruction: `Console question · ${recommendedLine(q) ?? 'Choose an option or write an answer'}` }
+}
 
 export function runtimeWaiting(items: unknown[], questions: readonly Question[]): WaitingItem[] {
   const open = new Set(questions.filter(q => q.status === 'open').map(q => q.id))

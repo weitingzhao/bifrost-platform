@@ -595,11 +595,16 @@ var ErrAsk = errors.New("store: the Owner cannot be asked now")
 // own options, the one it goes with when nobody answers (1-based), what
 // happens meanwhile, which of the Owner's duties it is and the task that asks
 // (planresult.go); a mission's (missiondecide.go) names its options, what
-// happens meanwhile, the duty and how soon (Urgency), with no default.
+// happens meanwhile, the duty and how soon (Urgency), with no default; a
+// blocked task's (blockedcard.go) names its options, the one its rules
+// recommend (1-based, nothing done on it unanswered) and why (the
+// recommended option's detail in the question store), what happens
+// meanwhile, the duty, the task and how soon.
 type Card struct {
 	Key, Title, Body             string
 	Options                      []string
 	Recommended                  int
+	RecommendedWhy               string
 	Meanwhile, OwnerDuty, TaskID string
 	Urgency                      string
 }

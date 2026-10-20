@@ -28,10 +28,12 @@ import (
 // open card, and a task blocked again gets a new one. The card has two
 // answers: one more round (blocked -> ready; a task blocked for failing its
 // last round gets one round more, round_no and max_rounds + 1) or not doing
-// it (blocked -> cancelled). DecideBlocked reads the answer and acts on it in
-// one transaction with owner_wait_closed, which says how the card ended; a
+// it (blocked -> cancelled), and a third closes its whole mission
+// (blockedclose.go). DecideBlocked reads the answer and acts on it in one
+// transaction with owner_wait_closed, which says how the card ended; a
 // dropped task (outcome dropped) no longer holds its mission open
-// (close.go). "None of these" with the Owner's words, a card that expired or
+// (close.go). Each card recommends one answer, or says why it recommends
+// none, by fixed rules (blockedrecommend.go). "None of these" with the Owner's words, a card that expired or
 // was withdrawn, closes the card and moves nothing: the task is still
 // blocked, and the next pass asks again with a new card (his words on it).
 //
@@ -71,7 +73,8 @@ import (
 
 // The options of a blocked task's card, in the order the question store keys
 // them: the first (CardApplyKey) gives it one more round, the second
-// (CardRefuseKey) does not do it.
+// (CardRefuseKey) does not do it, the third (CardCloseKey, BlockedClose)
+// closes its mission.
 const (
 	BlockedRetry = "Give it one more round"
 	BlockedDrop  = "Do not do this task"
@@ -206,17 +209,25 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		if err != nil {
 			return err
 		}
-		s, g, _, err := roundFor(ctx, tx, t)
+		s, g, budgeted, err := roundFor(ctx, tx, t)
+		if err != nil {
+			return err
+		}
+		r, err := recommendBlocked(ctx, tx, t, d, reason, failed, s, budgeted)
 		if err != nil {
 			return err
 		}
 		card := asked + 1
 		body := blockedCardBody(blockedCard{task: t, title: title, repo: d.repo, subject: d.subject, round: d.round, maxRounds: d.maxRounds,
-			reason: reason, failed: failed, check: check, words: words, card: card, budget: s.says(g)})
-		q, err := ask(ctx, Card{Key: blockedCardKey(taskID, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
-			Body: body, Options: []string{BlockedRetry, BlockedDrop}, OwnerDuty: "goal", TaskID: taskID,
+			reason: reason, failed: failed, check: check, words: words, card: card, budget: s.says(g), rec: r})
+		c := Card{Key: blockedCardKey(taskID, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
+			Body: body, Options: blockedOptions(t.mission), OwnerDuty: "goal", TaskID: taskID,
 			Meanwhile: "the task stays blocked and mission " + t.mission + " stays open",
-			Urgency:   "when you can: only this task waits for you, and its mission cannot finish without your answer"})
+			Urgency:   "when you can: only this task waits for you, and its mission cannot finish without your answer"}
+		if r.option != recNone {
+			c.Recommended, c.RecommendedWhy = r.option, r.why
+		}
+		q, err := ask(ctx, c)
 		if err != nil {
 			if errors.Is(err, ErrInvalid) {
 				return err
@@ -346,6 +357,7 @@ type blockedCard struct {
 	check                        *checkSummary
 	words                        string // the Owner's last "none of these" on a card of this block
 	budget                       string // what one more round adds to the mission's budget, "" for nothing (spend.says)
+	rec                          recommendation
 }
 
 // excerptRunes is the most of a report a card quotes; it is cut further to
@@ -438,6 +450,7 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		return string(parts[i])
 	}
 	var b strings.Builder
+	b.WriteString(c.rec.line(blockedOptions(c.task.mission)) + "\n\n")
 	// A repository is any name a proposal gave (review 421 B3): cut, as it is
 	// the only other part of no fixed length.
 	repo := oneLineRunes(c.repo, 100)
@@ -488,7 +501,7 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		drop = fmt.Sprintf("this check is cancelled; when it is the only check of the latest work of task %s, that task is "+
 			"blocked, since it cannot be accepted unchecked, and gets a card of its own", c.subject)
 	}
-	fmt.Fprintf(&b, "\n%s: %s.\n%s: %s.\n", BlockedRetry, more, BlockedDrop, drop)
+	fmt.Fprintf(&b, "\n%s: %s.\n%s: %s.\n%s: %s.\n", BlockedRetry, more, BlockedDrop, drop, BlockedClose(c.task.mission), closeSays(c.task.mission))
 	return b.String()
 }
 
@@ -564,6 +577,8 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		outcome = OutcomeRetried
 	case q.Status == QuestionAnswered && q.Option == CardRefuseKey:
 		outcome = OutcomeDropped
+	case q.Status == QuestionAnswered && q.Option == CardCloseKey:
+		outcome = OutcomeClosed
 	case q.Status == QuestionAnswered && q.Option == "none":
 		// The question store always offers "none of these" with the Owner's
 		// words (review 190 A2): nothing the runtime can act on.
@@ -582,6 +597,11 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 	key, err := canon.Encode(map[string]any{"question": c.question})
 	if err != nil {
 		return false, err
+	}
+	if outcome == OutcomeClosed {
+		// The whole mission, in a transaction of its own that takes its locks
+		// in the kernel's order (blockedclose.go).
+		return closeOnCard(ctx, db, c, q, seenBody, string(key))
 	}
 	did := false
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
@@ -696,7 +716,7 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			if err != nil || checked {
 				return err
 			}
-			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("the Owner chose not to do its %s %s (question %s)",
+			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf(chainBlockPrefix+"%s %s (question %s)",
 				t.role, t.id, c.question))
 		}
 		return nil

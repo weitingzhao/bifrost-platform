@@ -82,28 +82,35 @@ export function QuestionAnswerForm({
           {blocked}
         </p>
       ) : null}
-      {question.options.map(choice => (
-        <button
-          key={choice.key}
-          type="button"
-          disabled={locked}
-          aria-pressed={selected === choice.key}
-          data-option={choice.key}
-          style={{ minHeight: 44 }}
-          className="flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[var(--card-radius)] border border-[var(--card-border)] px-3 py-2 text-left text-sm"
-          onClick={() => choose(choice.key)}
-        >
-          <span className="break-words">
-            {choice.key} {choice.label}
-          </span>
-          {choice.detail != null && choice.detail !== '' ? (
-            <span className="break-words text-muted-foreground">{choice.detail}</span>
-          ) : null}
-          {question.recommended === choice.key ? (
-            <span className="text-muted-foreground">Recommended by the agent</span>
-          ) : null}
-        </button>
-      ))}
+      {question.options.map(choice => {
+        // The recommended option is the main button, its why (the option's detail) beside it.
+        const recommended = question.recommended === choice.key
+        return (
+          <button
+            key={choice.key}
+            type="button"
+            disabled={locked}
+            aria-pressed={selected === choice.key}
+            data-option={choice.key}
+            data-recommended={recommended ? 'true' : undefined}
+            style={{ minHeight: 44 }}
+            className={`flex w-full min-w-0 flex-col items-start gap-0.5 rounded-[var(--card-radius)] border px-3 py-2 text-left text-sm ${
+              recommended ? 'border-foreground bg-foreground font-semibold text-background' : 'border-[var(--card-border)]'
+            }`}
+            onClick={() => choose(choice.key)}
+          >
+            <span className="break-words">
+              {choice.key} {choice.label}
+            </span>
+            {choice.detail != null && choice.detail !== '' ? (
+              <span className={`break-words font-normal ${recommended ? 'opacity-80' : 'text-muted-foreground'}`}>{choice.detail}</span>
+            ) : null}
+            {recommended ? (
+              <span className="font-normal opacity-80">{question.requester === 'agentrt' ? 'Recommended by the runtime' : 'Recommended by the agent'}</span>
+            ) : null}
+          </button>
+        )
+      })}
       <button
         type="button"
         disabled={locked}

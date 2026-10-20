@@ -21,7 +21,7 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 	return s.apply(ctx, c, func(doc *document, now time.Time) applied {
 		if prev, ok := protectedByKey(doc, session, canon.Key, now); ok {
 			if prev.RequestFP != canon.RequestFP {
-				return applied{res: fail(http.StatusConflict, "idempotency key reused with different content", nil)}
+				return applied{res: fail(http.StatusConflict, KeyReused, nil)}
 			}
 			return applied{res: Result{Code: http.StatusOK, Body: createBody(prev, true)}}
 		}

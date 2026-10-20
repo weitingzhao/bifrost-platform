@@ -1,7 +1,7 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
-import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
-import { mergedWaitingCount, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
+import { approvalHref } from '@/lib/shell/consoleRoutes'
+import { mergedWaitingCount, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
 import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
@@ -118,7 +118,7 @@ export function useNeedsYou() {
       id: item.id, title: item.summary || item.id, href: approvalHref(item.id),
       instruction: group === 'decide' ? 'Console request · Approve or reject' : group === 'terminal' ? 'Request page · Run in a terminal and report the result' : 'Request page · Check and report what happened',
     }))),
-    ...openQuestions.map(q => ({ id: q.id, title: q.title, href: questionHref(q.id), instruction: 'Console question · Choose an option or write an answer' })),
+    ...openQuestions.map(openQuestionItem),
     ...silent.map(t => ({ id: t.thread, title: t.title || t.thread, href: NEEDS_YOU_HREF, kind: 'silent_thread', instruction: 'For you · Check the silent thread' })),
     ...lost.map(h => ({ id: h.host, title: h.host, href: NEEDS_YOU_HREF, instruction: 'For you · Check the host heartbeat' })),
     ...(capacityActive ? [{ id: 'capacity', title: capacityText, href: NEEDS_YOU_HREF, instruction: 'For you · Restore thread monitoring capacity' }] : []),

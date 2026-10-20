@@ -337,7 +337,7 @@ var fieldValues = map[string]map[string]value{
 	"rule_proposed":            {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
 	"candidate_status_changed": {"from": oneOf(candidateStatus...), "to": oneOf(candidateStatus...)},
 	"question_seen":            {"answered_at": instant},
-	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
+	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch},

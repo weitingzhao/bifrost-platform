@@ -36,6 +36,10 @@ import (
 // would wait in ready again (allows). The envelope's hosts, executors and
 // highest action still hold.
 
+// budgetBlockSuffix ends the reason of a task blocked for its mission's
+// budget (a card's recommendation tells such a block by it).
+const budgetBlockSuffix = ": no host may take this task until the budget grows"
+
 // roundAttempts is what one more round of a task needs: its implementation,
 // the deterministic verification and the review (v5 §5.2 验收编排).
 const roundAttempts = 3
@@ -308,7 +312,7 @@ func blockOverBudget(ctx context.Context, db DB, mission string) (int, error) {
 				return err
 			}
 			did = true
-			return moveTask(ctx, tx, "controller", t, "blocked", s.why()+": no host may take this task until the budget grows")
+			return moveTask(ctx, tx, "controller", t, "blocked", s.why()+budgetBlockSuffix)
 		})
 		if err != nil {
 			errs = append(errs, fmt.Errorf("task %s: %w", id, err))

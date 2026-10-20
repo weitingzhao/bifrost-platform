@@ -109,11 +109,13 @@ func TestBlockedTaskCard(t *testing.T) {
 		t.Fatalf("a second pass asked %d (%v): the block has its card", n, err)
 	}
 	c := a.cards[0]
-	if !slices.Equal(c.Options, []string{store.BlockedRetry, store.BlockedDrop}) || c.TaskID != impl || c.OwnerDuty != "goal" ||
-		c.Recommended != 0 || !strings.Contains(c.Meanwhile, "M-3") || c.Urgency == "" || c.Title != "Blocked in M-3: t" {
+	if !slices.Equal(c.Options, []string{store.BlockedRetry, store.BlockedDrop, "Close mission M-3"}) || c.TaskID != impl || c.OwnerDuty != "goal" ||
+		c.Recommended != 2 || c.RecommendedWhy != "its checks failed in its last round (2 of 2)" || !strings.Contains(c.Meanwhile, "M-3") ||
+		c.Urgency == "" || c.Title != "Blocked in M-3: t" {
 		t.Fatalf("card %+v", c)
 	}
-	for _, want := range []string{"Task " + impl + " (implement, bifrost-platform) of mission M-3 is blocked; card 1 for this block",
+	for _, want := range []string{"Recommended: Do not do this task — its checks failed in its last round (2 of 2)\n\nTask " + impl +
+		" (implement, bifrost-platform) of mission M-3 is blocked; card 1 for this block",
 		"Why: deterministic failed in round 2 of 2", "Last check: deterministic, fail, on attempt 2", "Its report begins:\n\nh4failed",
 		store.BlockedRetry + ": it goes back to ready for round 3 of 3", store.BlockedDrop + ": the task is cancelled"} {
 		if !strings.Contains(c.Body, want) {
@@ -131,7 +133,7 @@ func TestBlockedTaskCard(t *testing.T) {
 	action, _ := item["action"].(map[string]any)
 	blocks, _ := item["blocks"].(map[string]any)
 	if item == nil || item["id"] != "question:"+q1 || item["task_id"] != impl || item["mission_id"] != "M-3" || action["question_id"] != q1 ||
-		fmt.Sprint(action["options"]) != fmt.Sprint([]string{store.BlockedRetry, store.BlockedDrop}) || fmt.Sprint(blocks["missions"]) != "[M-3]" ||
+		fmt.Sprint(action["options"]) != fmt.Sprint([]string{store.BlockedRetry, store.BlockedDrop, "Close mission M-3"}) || fmt.Sprint(blocks["missions"]) != "[M-3]" ||
 		blocks["why"] != "deterministic failed in round 2 of 2" {
 		t.Fatalf("needs_you %v; want the blocked task on its card", doc.NeedsYou.Items)
 	}
@@ -460,8 +462,10 @@ func TestBlockedCardFitsTheQuestionStore(t *testing.T) {
 		if n := questions.BodyBytes(body); n > questions.BodyLimit {
 			t.Errorf("%s: %d bytes, more than the question store's %d", name, n, questions.BodyLimit)
 		}
-		for _, want := range []string{store.BlockedRetry + ": it goes back to ready for round 3 of 3, and a host takes it as usual.",
-			store.BlockedDrop + ": the task is cancelled; mission M-9 finishes once every other task is accepted"} {
+		for _, want := range []string{"Recommended: Close mission M-9 — " + store.BlockedCardWhyForTest + "\n\n",
+			store.BlockedRetry + ": it goes back to ready for round 3 of 3, and a host takes it as usual.",
+			store.BlockedDrop + ": the task is cancelled; mission M-9 finishes once every other task is accepted",
+			"Close mission M-9: every task of mission M-9 that has not ended is cancelled"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: the card lacks %q:\n%s", name, want, body)
 			}

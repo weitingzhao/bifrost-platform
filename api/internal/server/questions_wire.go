@@ -97,7 +97,9 @@ func (rt *questionRuntime) agentRuntimeQuestion() func(context.Context, string) 
 		if q.Answer != nil {
 			option, text, by, at = q.Answer.Option, q.Answer.Text, q.Answer.By, q.Answer.At
 		}
-		return questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
+		f, ok := questionFact(q.ID, q.Status, q.Status == questions.StatusAnswered, option, text, by, at)
+		f.Options = len(q.Options)
+		return f, ok
 	}
 }
 
@@ -127,8 +129,14 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		// options, no default, and how soon it says (missiondecide.go).
 		if len(card.Options) > 0 {
 			options := make([]map[string]string, 0, len(card.Options))
-			for _, o := range card.Options {
-				options = append(options, map[string]string{"label": o})
+			for i, o := range card.Options {
+				opt := map[string]string{"label": o}
+				// A blocked task's card says why its rules recommend an option
+				// (blockedrecommend.go): the option's detail, beside it.
+				if i == card.Recommended-1 && card.RecommendedWhy != "" {
+					opt["detail"] = card.RecommendedWhy
+				}
+				options = append(options, opt)
 			}
 			req["options"], req["recommended"], req["meanwhile"] = options, card.Recommended, card.Meanwhile
 			req["owner_duty"], req["task_id"] = card.OwnerDuty, card.TaskID
@@ -154,6 +162,16 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			// A planner's question the store holds under another key, open or
 			// answered (review 217 B2): the Owner has it; the plan goes on.
 			return "", fmt.Errorf("%w: %s", store.ErrAsked, msg)
+		case res.Code == http.StatusConflict && msg == questions.KeyReused:
+			// The card this key names was made by an earlier try whose
+			// transaction then failed, in words that have changed since (a
+			// blocked card says how long ago its mission started): it is that
+			// card, as a retry with the same words would get.
+			q, ok, lerr := rt.svc.LookupKey(agentRuntimeRequester, card.Key)
+			if lerr != nil || !ok {
+				return "", fmt.Errorf("the question store answered %d: %v (and the card under its key could not be read: %v)", res.Code, res.Body, lerr)
+			}
+			return q.ID, nil
 		case (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "":
 			return "", fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 		}

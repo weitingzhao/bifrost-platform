@@ -151,6 +151,22 @@ func (s *Service) Lookup(ref string) (Question, bool, error) {
 	return doc.Questions[i], true, nil
 }
 
+// KeyReused is how Create refuses a key that names a question created with
+// other content.
+const KeyReused = "idempotency key reused with different content"
+
+// LookupKey is the question requester holds under key, as Create finds it:
+// the newest while the key is protected (open, or answered and unread). It
+// writes nothing.
+func (s *Service) LookupKey(requester, key string) (Question, bool, error) {
+	doc, err := s.load()
+	if err != nil {
+		return Question{}, false, err
+	}
+	q, ok := protectedByKey(doc, requester, key, s.clock())
+	return q, ok, nil
+}
+
 func (s *Service) load() (*document, error) {
 	raw, err := s.store.readBytes()
 	if err != nil {

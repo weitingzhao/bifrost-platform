@@ -1,0 +1,45 @@
+{
+  "body": {
+    "id": "q_b0c437dc2d6b98db",
+    "number": 1,
+    "status": "open",
+    "requester": "agentrt",
+    "requester_principal": "agentrt",
+    "owner_duty": "goal",
+    "task_id": "t_01M5DBJNNHMGZGZ6N2EBZS6GQT",
+    "title": "Blocked in M-3: STG walk: a check that always fails",
+    "body": "Recommended: Close mission M-3 — started 30 hours ago, used 15× its 2 hours, nothing has run\n\nTask t_01M5DBJNNHMGZGZ6N2EBZS6GQT (implement, bifrost-platform) of mission M-3 is blocked; card 1 for this block.\n\nTitle: STG walk: a check that always fails\n\nWhy: mission M-3 is past its 2 hours (it started 30.2 hours ago): no host may take this task until the budget grows\n\nGive it one more round: it goes back to ready as it is, and a host takes it as usual. One round needs up to 3 attempts (implementation, verification, review); mission M-3 has used 0 of its 9 attempts and 30.2 of its 2 hours, so this answer also raises its budget to 34 hours, recorded as yours.\nDo not do this task: the task is cancelled; mission M-3 finishes once every other task is accepted (a task that depends on this one is then blocked and gets a card of its own).\nClose mission M-3: every task of mission M-3 that has not ended is cancelled (an attempt still running is stopped), its other open cards are withdrawn, and it ends: done when an implementation of it was accepted, else stopped.",
+    "options": [
+      {
+        "key": "a",
+        "label": "Give it one more round"
+      },
+      {
+        "key": "b",
+        "label": "Do not do this task"
+      },
+      {
+        "key": "c",
+        "label": "Close mission M-3",
+        "detail": "started 30 hours ago, used 15× its 2 hours, nothing has run"
+      }
+    ],
+    "recommended": "c",
+    "allow_text": false,
+    "urgency": "when you can: only this task waits for you, and its mission cannot finish without your answer",
+    "meanwhile": "the task stays blocked and mission M-3 stays open",
+    "created_at": "2026-10-20T19:10:58.246089Z",
+    "expires_at": "2026-10-21T19:10:58.246089Z",
+    "deliveries": [
+      {
+        "kind": "created",
+        "channel": "ntfy",
+        "target": "relay",
+        "at": "2026-10-20T19:10:58.246903Z",
+        "result": "skipped",
+        "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+      }
+    ]
+  },
+  "status": 200
+}
