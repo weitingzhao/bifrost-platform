@@ -291,8 +291,9 @@ func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute, 
 				if b, ok := body.([]byte); ok && rt.method == http.MethodPut && f.r.Intn(2) == 0 {
 					path = "artifacts/" + artifactID(b) // under its own hash, so the upload is weighed on what it is
 				}
+				header = append([]string{session, f.pick([]string{sessionOf(caller), sessionOf(caller), "shared"})}, header...)
 				before, digest, since := f.snapshot(t), f.digest(t), f.lastEvent(t)
-				code, _ := call(t, s, caller, rt.method, path, body, append([]string{session, f.pick([]string{sessionOf(caller), sessionOf(caller), "shared"})}, header...)...)
+				code, _ := call(t, s, caller, rt.method, path, body, header...)
 				f.requests++
 				doc, _ := json.Marshal(body)
 				if b, ok := body.([]byte); ok {
