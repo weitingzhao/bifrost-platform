@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/controller"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -44,10 +45,10 @@ func TestCardRuleOnTheStore(t *testing.T) {
 		t.Fatalf("the runtime's cards: %+v %v", list, err)
 	}
 	until := time.Now().Add(time.Hour)
-	if err = answer(ctx, id, "a", "rule card-auto-answer v1", until); err == nil {
+	if err = answer(ctx, id, "a", "rule card-auto-answer v1", until, ""); err == nil {
 		t.Fatal("the rule answered with an option the card does not recommend")
 	}
-	if err = answer(ctx, id, "c", "rule card-auto-answer v1", until); err != nil {
+	if err = answer(ctx, id, "c", "rule card-auto-answer v1", until, ""); err != nil {
 		t.Fatal(err)
 	}
 	q, ok := read(ctx, id)
@@ -73,5 +74,29 @@ func TestCardRuleOnTheStore(t *testing.T) {
 		if err = os.WriteFile(consoleRuleAnsweredFixture, append(raw, '\n'), 0o644); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TD-393: the card-auto-answer loop (every kind, every five seconds) is
+// wired on STG alone; PROD's and DEV's controllers get no card list and no
+// rule's answer, so the loop never starts there (controller.Start needs
+// both), while the assessments stay.
+func TestOnlySTGAnswersCardsByRule(t *testing.T) {
+	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	full := controller.Sources{Cards: rt.agentRuntimeCards(), RuleAnswer: rt.agentRuntimeRuleAnswer(),
+		Assessable: assessable(rt.agentRuntimeOpenCards(), nil)}
+	if full.Cards == nil || full.RuleAnswer == nil || full.Assessable == nil {
+		t.Fatal("the sources are nil before the environment is applied")
+	}
+	for _, env := range []string{"prod", "dev", "", "STG"} {
+		if src := cardRuleOnlyOnSTG(env, full); src.Cards != nil || src.RuleAnswer != nil || src.Assessable == nil {
+			t.Errorf("%q: cards %v, rule answer %v, assessments %v", env, src.Cards != nil, src.RuleAnswer != nil, src.Assessable != nil)
+		}
+	}
+	if src := cardRuleOnlyOnSTG("stg", full); src.Cards == nil || src.RuleAnswer == nil {
+		t.Fatal("STG lost the card rule's sources")
+	}
+	if controller.CardRuleEvery != 5*time.Second {
+		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)
 	}
 }

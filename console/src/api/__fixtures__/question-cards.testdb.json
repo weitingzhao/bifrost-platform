@@ -1,0 +1,239 @@
+{
+  "blocked": {
+    "body": {
+      "id": "q_1929dbed8929ae5d",
+      "number": 3,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "goal",
+      "task_id": "t_01M5DP91CCRBGK22M558Q4RZMH",
+      "title": "Blocked in M-5: a task of M-5",
+      "body": "Recommended: Close mission M-5 — started 30 hours ago, used 15× its 2 hours, nothing has run\n\nTask t_01M5DP91CCRBGK22M558Q4RZMH (implement, bifrost-platform) of mission M-5 is blocked; card 1 for this block.\n\nTitle: a task of M-5\n\nWhy: mission M-5 is past its 2 hours (it started 30.0 hours ago): no host may take this task until the budget grows\n\nGive it one more round: it goes back to ready as it is, and a host takes it as usual. One round needs up to 3 attempts (implementation, verification, review); mission M-5 has used 0 of its 9 attempts and 30.0 of its 2 hours, so this answer also raises its budget to 34 hours, recorded with this card's answer.\nDo not do this task: the task is cancelled; mission M-5 finishes once every other task is accepted (a task that depends on this one is then blocked and gets a card of its own).\nClose mission M-5: every task of mission M-5 that has not ended is cancelled (an attempt still running is stopped), its other open cards are withdrawn, and it ends: done when an implementation of it was accepted, else stopped.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Give it one more round"
+        },
+        {
+          "key": "b",
+          "label": "Do not do this task"
+        },
+        {
+          "key": "c",
+          "label": "Close mission M-5",
+          "detail": "started 30 hours ago, used 15× its 2 hours, nothing has run"
+        }
+      ],
+      "recommended": "c",
+      "allow_text": false,
+      "urgency": "when you can: only this task waits for you, and its mission cannot finish without your answer",
+      "meanwhile": "the task stays blocked and mission M-5 stays open",
+      "created_at": "2026-10-20T22:17:56.890491Z",
+      "expires_at": "2026-10-21T22:17:56.890491Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.890657Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "mission": {
+    "body": {
+      "id": "q_a6e6d98e6ac0ea43",
+      "number": 1,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "goal",
+      "title": "Mission: a mission a",
+      "body": "thread:buttons proposes a mission (tenant dev), proposal 52c3a585fb5d.\n\nTitle: a mission a\n\nGoal: g\n\nSuccess:\n- done\n\nRepos: none named\nDeadline: the default (7 days from when it is made)\nUp to: branch\nBudget: not stated; the tenant's signed budget rule gives it when the mission is made (the mission's record has the numbers)\n\nIt needs you because it does not fit the standing envelope in force, or none is in force; the mission's record says which bound.\n\nStarting it lets its tasks be dispatched; not starting it stops it.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Start the mission"
+        },
+        {
+          "key": "b",
+          "label": "Do not start it"
+        }
+      ],
+      "allow_text": false,
+      "urgency": "when you can: only this mission waits for you",
+      "meanwhile": "the mission does not start",
+      "created_at": "2026-10-20T22:17:56.953663Z",
+      "expires_at": "2026-10-21T22:17:56.953663Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.953822Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "plan_change": {
+    "body": {
+      "id": "q_75930516d97dfb85",
+      "number": 1,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "goal",
+      "title": "Plan change to R9: move R9:1-1",
+      "body": "A thread proposes to change plan R9.\n\nWhy: move R9:1-1\n\nChanges:\n- {\"op\":\"rebind_step\",\"node\":\"R9:1-1\",\"mission_id\":\"M-4\"}\n\nApplying it writes the change under your decision; not applying it leaves the plan as it is.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Apply the change"
+        },
+        {
+          "key": "b",
+          "label": "Do not apply it"
+        }
+      ],
+      "allow_text": false,
+      "urgency": "when you can: only this change waits for you",
+      "meanwhile": "the plan stays as it is",
+      "created_at": "2026-10-20T22:17:56.906225Z",
+      "expires_at": "2026-10-21T22:17:56.906225Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.906408Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "plan_import": {
+    "body": {
+      "id": "q_765c6226d7ef88b8",
+      "number": 3,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "irreversible",
+      "title": "Import plan R2: round 2 into the runtime",
+      "body": "thread:buttons proposes to import plan R2 (第 2 轮), proposal 59845626407f.\n\nWhy: round 2 into the runtime\n\n5 items, 18 steps: 9 done (each with its ledger line as evidence; Progress counts them as manual), 4 in progress, 5 not started.\n\nFrom WORK.md, 第 2 轮逐项, lines 14-39, checked at 2026-10-19 01:20.\nSection sha256 8f795bdc5c9ba4d57c9f17a23487e75e8e945cdc4bb0fc189ce2d448e1a2bbb0; request sha256:31b4f36d6e6ec9fd9e3bc57758c5bf27044feeb426c1a2923f7a17b494446559.\n\nImporting writes the plan under your decision; its nodes and numbers are then fixed and can only change by plan changes. Not importing writes nothing; the board keeps reading the ledger.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Import the plan"
+        },
+        {
+          "key": "b",
+          "label": "Do not import it"
+        }
+      ],
+      "allow_text": false,
+      "urgency": "when you can: only this import waits for you",
+      "meanwhile": "the plan is not imported; the board keeps reading the ledger",
+      "created_at": "2026-10-20T22:17:56.934131Z",
+      "expires_at": "2026-10-21T22:17:56.934131Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.93439Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "plan_question": {
+    "body": {
+      "id": "q_dd83b168739401bd",
+      "number": 4,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "goal",
+      "task_id": "t_01M5DP91C15NCZTT9HZJFJBF1G",
+      "title": "Which page first?",
+      "body": "The plan starts with one of two pages.",
+      "options": [
+        {
+          "key": "a",
+          "label": "The work page"
+        },
+        {
+          "key": "b",
+          "label": "The chief page"
+        }
+      ],
+      "recommended": "a",
+      "allow_text": false,
+      "urgency": "when you can: the work goes on with the recommended option",
+      "meanwhile": "the plan starts with the work page",
+      "created_at": "2026-10-20T22:17:56.963899Z",
+      "expires_at": "2026-10-21T22:17:56.963899Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.964077Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "recorder_import": {
+    "body": {
+      "id": "q_077f639589d3ada7",
+      "number": 4,
+      "status": "open",
+      "requester": "agentrt",
+      "requester_principal": "agentrt",
+      "owner_duty": "irreversible",
+      "title": "Import recorder log td-901: retire the recorder",
+      "body": "thread:buttons proposes to import the recorder log of td-901, proposal 5be84ec82f9e.\n\nWhy: retire the recorder\n\n2 events: 1 work_closed, 1 work_opened. The hash chain holds from the first line to the last.\n\nFrom td-901/events.jsonl, sha256 847b5f3776999f9909feefc1299ecb20b1b7dd23b32714995f611e3a0474357e; kept log sha256:5293e0d371533663d0fc3c45bf5c29c62905453b043f816559016ebaba3b180a.\n\nImporting writes the log as the stream legacy:recorder:td-901, one event per line, under your decision; it is then fixed. Not importing writes nothing; the recorder keeps its log as it is.",
+      "options": [
+        {
+          "key": "a",
+          "label": "Import the log"
+        },
+        {
+          "key": "b",
+          "label": "Do not import it"
+        }
+      ],
+      "allow_text": false,
+      "urgency": "when you can: only this import waits for you",
+      "meanwhile": "the log is not imported; the recorder keeps it as it is",
+      "created_at": "2026-10-20T22:17:56.937533Z",
+      "expires_at": "2026-10-21T22:17:56.937533Z",
+      "deliveries": [
+        {
+          "kind": "created",
+          "channel": "ntfy",
+          "target": "relay",
+          "at": "2026-10-20T22:17:56.937814Z",
+          "result": "skipped",
+          "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
+        }
+      ]
+    },
+    "status": 200
+  }
+}

@@ -241,8 +241,9 @@ type MissionProposal struct {
 	// a benchmark replay; TD-383 「不合 A」); scope_json.no_merge, prune.go.
 	NoMerge string
 	// NeedsOwner: why its cards wait for the Owner himself, "" for none (a
-	// walk that tests his buttons; TD-390): a card-auto-answer rule never
-	// answers them. scope_json.needs_owner.
+	// mission that must wait for him; TD-390): a card-auto-answer rule never
+	// answers them. Walks do not set it (TD-393: the paths behind his buttons
+	// are covered by the Console's tests). scope_json.needs_owner.
 	NeedsOwner string
 	// bases are a goal's, by repository (ProposeGoal); no route sets them.
 	bases map[string]string

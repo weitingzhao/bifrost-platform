@@ -209,7 +209,7 @@ func (rt *questionRuntime) agentRuntimeCards() func(context.Context) ([]store.Ru
 		for _, q := range x.qs {
 			c := store.RuntimeCard{ID: q.ID, TaskID: q.TaskID, Recommended: q.Recommended, CreatedAt: q.CreatedAt}
 			if q.Status == questions.StatusAnswered && q.Answer != nil {
-				c.Answered, c.By = true, q.Answer.By
+				c.Answered, c.By, c.Option = true, q.Answer.By, q.Answer.Option
 			}
 			cards = append(cards, c)
 		}
@@ -258,14 +258,14 @@ func (rt *questionRuntime) agentRuntimeOpenCards() func(context.Context) ([]stor
 
 // agentRuntimeRuleAnswer answers one of the runtime's cards as its rule
 // while the rule holds (questions.AnswerAsRule: the option the card
-// recommends, by the rule, on the rule channel); nil without a question
-// store.
-func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id, option, rule string, until time.Time) error {
+// recommends, or another with why, by the rule, on the rule channel); nil
+// without a question store.
+func (rt *questionRuntime) agentRuntimeRuleAnswer() func(ctx context.Context, id, option, rule string, until time.Time, why string) error {
 	if rt == nil || rt.svc == nil {
 		return nil
 	}
-	return func(ctx context.Context, id, option, rule string, until time.Time) error {
-		res := rt.svc.AnswerAsRule(ctx, agentRuntimeRequester, rule, id, option, until)
+	return func(ctx context.Context, id, option, rule string, until time.Time, why string) error {
+		res := rt.svc.AnswerAsRule(ctx, agentRuntimeRequester, rule, id, option, until, why)
 		if res.Code != http.StatusOK {
 			return fmt.Errorf("the question store answered %d: %v", res.Code, res.Body)
 		}

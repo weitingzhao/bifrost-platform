@@ -165,13 +165,17 @@ func decideMission(ctx context.Context, db DB, w waitingMission, question func(c
 		return false, nil
 	}
 	to, reason, answer := "stopped", fmt.Sprintf("its card %s was %s unanswered", w.question, q.Status), ""
+	by := answerOf(q)
 	if q.Status == QuestionAnswered {
 		answer = q.Option
 		switch q.Option {
 		case CardApplyKey:
-			to, reason = "active", fmt.Sprintf("the Owner started it (question %s)", w.question)
+			to, reason = "active", fmt.Sprintf("%s started it (question %s)", by.who, w.question)
 		case CardRefuseKey:
-			reason = fmt.Sprintf("the Owner did not start it (question %s)", w.question)
+			reason = fmt.Sprintf("%s did not start it (question %s)", by.who, w.question)
+			if by.rule != "" && q.Text != "" {
+				reason += ": " + firstLine(q.Text)
+			}
 		case "none":
 			// The question store always offers "none of these" with the
 			// Owner's own words (review 190 A2): it does not start the
@@ -205,7 +209,12 @@ func decideMission(ctx context.Context, db DB, w waitingMission, question func(c
 			return rerr
 		}
 		did = true
-		return moveMission(ctx, tx, "controller", w.mission, to, reason, w.question, answer)
+		if merr := moveMission(ctx, tx, "controller", w.mission, to, reason, w.question, answer); merr != nil {
+			return merr
+		}
+		// A rule's answer (TD-393) is noted on the mission once, here when
+		// its own pass did not keep it.
+		return ensureRuleNoteOn(ctx, tx, cardOn{kind: CardMission, mission: w.mission, stream: MissionStream(w.mission)}, by, w.question, answer)
 	})
 	return did && err == nil, err
 }

@@ -96,24 +96,6 @@ func assessStateOf(ctx context.Context, tx pgx.Tx, stream string) (assessState, 
 	return st, rows.Err()
 }
 
-// lets says whether a rule may answer a card that recommends rec on what its
-// assessment says now, and why: when none was asked, none can be had, or it
-// agrees; not while it may still come, nor when it recommends another option
-// (the Owner's, TD-391).
-func (st assessState) lets(rec string, now time.Time) (bool, string) {
-	switch {
-	case !st.asked:
-		return true, "no AI assessment was asked"
-	case st.done && st.unavailable != "":
-		return true, "its AI assessment is unavailable (" + st.unavailable + ")"
-	case st.done:
-		return st.recommended == rec, "its AI assessment agrees"
-	case st.late(now):
-		return true, "no AI assessment came within " + timeoutText()
-	}
-	return false, ""
-}
-
 // late says whether an assessment asked and not in has run past its time.
 func (st assessState) late(now time.Time) bool {
 	return st.asked && !st.done && now.Sub(st.askedAt) >= AssessTimeout

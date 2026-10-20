@@ -118,10 +118,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		// The STG test switch that forces a rework is STG's alone (T26), and
 		// so is answering cards by rule (TD-390: 「PROD 不变」; no PROD rule
 		// file names the kind either, review 442 C1).
-		src := s.agentRuntimeSources()
-		if env != "stg" {
-			src.Cards, src.RuleAnswer = nil, nil
-		}
+		src := cardRuleOnlyOnSTG(env, s.agentRuntimeSources())
 		c := &controller.Controller{DB: pool, Sources: src, Briefs: true, FailFirstVerify: env == "stg", Logf: func(format string, args ...any) {
 			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
 		}}
@@ -149,6 +146,17 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		cancel()
 		<-done
 	}
+}
+
+// cardRuleOnlyOnSTG leaves the controller the card-auto-answer loop's
+// sources on STG alone (TD-390 「PROD 不变」, TD-393: every kind, every five
+// seconds, still STG's only): elsewhere it reads no cards and answers none.
+// The assessments (TD-391) stay: they answer nothing.
+func cardRuleOnlyOnSTG(env string, src controller.Sources) controller.Sources {
+	if env != "stg" {
+		src.Cards, src.RuleAnswer = nil, nil
+	}
+	return src
 }
 
 // examSetFromEnv is the chief exam's question set (W-31 2.4 ④; the exam's

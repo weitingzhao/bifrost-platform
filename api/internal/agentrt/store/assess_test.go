@@ -167,10 +167,10 @@ func report(recommended string, reasons [][2]string, unchecked ...string) string
 // the chief of staff's seat once, read-only, with the commit and the ledger
 // item in its spec; the seat recommends b citing them; the assessment is
 // recorded on the card's stream with each ref resolved to its record, and
-// its mission closes. On STG the card-auto-answer rule leaves the card to the
-// Owner, since the assessment differs from the card's own recommendation; a
-// card whose assessment agrees, and one never assessed, are answered; one
-// whose assessment is under way waits.
+// its mission closes. On STG the card-auto-answer rule (TD-393) answers a
+// card whose assessment differs from its own recommendation with the option
+// that changes nothing, saying why; one whose assessment agrees, one whose
+// assessment is under way, and one never assessed, with its recommendation.
 func TestAssessmentOfWorkOnMain(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -261,15 +261,19 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 		s.aged(id, 31*time.Minute)
 	}
 	signCardAuto(t, w, "30", "[blocked]")
-	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 2 {
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 4 {
 		t.Fatalf("answered %d (%v)", n, err)
 	}
-	for task, want := range map[string]string{differs: "open", agrees: store.QuestionAnswered, pending: "open", never: store.QuestionAnswered} {
-		if got := s.cards[s.cardOf(t, task)].status; got != want {
-			t.Errorf("the card of %s is %s; want %s", task, got, want)
+	for task, want := range map[string]string{differs: "b", agrees: "c", pending: "c", never: "c"} {
+		if got := s.cards[s.cardOf(t, task)]; got.status != store.QuestionAnswered || got.option != want {
+			t.Errorf("the card of %s: %s %q; want answered %q", task, got.status, got.option, want)
 		}
 	}
-	for m, want := range map[string]string{"M-4": "; its AI assessment agrees", "M-6": "; no AI assessment was asked"} {
+	if why := s.cards[card].text; why != "the card recommends c and its AI assessment b: the rule takes the option that changes nothing" {
+		t.Errorf("why the differing card was answered b: %q", why)
+	}
+	for m, want := range map[string]string{"M-3": "; the card recommends c and its AI assessment b: the rule takes the option that changes nothing",
+		"M-4": "; its AI assessment agrees", "M-5": "; its AI assessment has not come yet", "M-6": "; no AI assessment was asked"} {
 		var note string
 		ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'text' FROM agentrt.event WHERE event_type = 'note' AND mission_id = $1
 		  AND body_json->>'text' LIKE 'rule %'`, m).Scan(&note))
@@ -416,8 +420,8 @@ func TestAssessmentUnavailable(t *testing.T) {
 
 // An assessment not in within AssessTimeout of its ask is recorded
 // unavailable: its live attempt is cancelled with its task, its mission
-// stopped, and the rule answers by the card. One still within it holds the
-// rule's answer.
+// stopped, and the rule answers by the card. TD-393: one still within it
+// does not hold the rule's answer either (a card is answered within seconds).
 // Serial: it sets the package's event clock (FreezeEventClock).
 func TestAssessmentTimesOut(t *testing.T) {
 	w := newKernelWorld(t)
@@ -452,8 +456,9 @@ func TestAssessmentTimesOut(t *testing.T) {
 		s.aged(id, 31*time.Minute)
 	}
 	signCardAuto(t, w, "30", "[blocked]")
-	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 || s.cards[s.cardOf(t, late)].status != store.QuestionAnswered {
-		t.Fatalf("answered %d (%v); the late one's card is %s", n, err, s.cards[s.cardOf(t, late)].status)
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 2 || s.cards[s.cardOf(t, late)].option != "c" ||
+		s.cards[s.cardOf(t, inTime)].option != "c" {
+		t.Fatalf("answered %d (%v); the late one's card %+v, the one in time %+v", n, err, s.cards[s.cardOf(t, late)], s.cards[s.cardOf(t, inTime)])
 	}
 }
 

@@ -38,10 +38,11 @@ import (
 // the ask.
 //
 // It is advice only, and nothing acts on it. A card is answered by the Owner
-// or, on STG, by the card-auto-answer rule, which answers only when the
-// assessment agrees with the card's own recommendation or there is none
-// (cardauto.go); an approval is decided by the Owner alone. What the item
-// says is data in the spec, never instructions.
+// or, on STG, by the card-auto-answer rule, which takes the card's own
+// recommendation unless an assessment that has come recommends another
+// option, and then the option that changes nothing (cardkinds.go ruleChoice,
+// TD-393); an approval is decided by the Owner alone. What the item says is
+// data in the spec, never instructions.
 
 // The kinds of item assessed.
 const (

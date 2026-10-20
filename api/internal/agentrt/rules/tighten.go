@@ -48,8 +48,8 @@ func Tightens(prev, next Rule) error {
 		}
 	case KindCardAuto:
 		// It waits no less long and answers no new kind of card.
-		if next.CardAuto.AfterMinutes < prev.CardAuto.AfterMinutes {
-			return errors.New("after_minutes goes down")
+		if next.CardAuto.AfterSeconds < prev.CardAuto.AfterSeconds {
+			return errors.New("the wait goes down")
 		}
 		return subset(next.CardAuto.Kinds, prev.CardAuto.Kinds, "kinds")
 	case KindRouting:

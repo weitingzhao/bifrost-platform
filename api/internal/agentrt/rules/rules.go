@@ -38,17 +38,23 @@ const (
 	KindCardAuto    = "card-auto-answer"
 )
 
-// The kinds of card a card-auto-answer rule may list: a blocked task's card
-// (store/blockedcard.go) and a planner's question (store/planresult.go).
-// Plan changes and missions outside the standing envelope are the Owner's
-// decisions and are never answered by a rule.
-var cardKinds = []string{"blocked", "plan_question"}
+// The kinds of card a card-auto-answer rule may list (store/cardauto.go):
+// a blocked task's card (store/blockedcard.go), a planner's question
+// (store/planresult.go), a plan change's, a plan import's and a recorder
+// import's card (planchange.go, planimportcard.go, recorderimport.go), and
+// a mission's card outside the standing envelope (missiondecide.go). TD-393
+// (the Owner 2026-10-20 「STG 上所有种类的运行时卡都归规则管」) added all but the
+// first two; a rule answers a card with its recommendation, or with the
+// option that changes nothing when it has none or its AI assessment differs.
+var cardKinds = []string{"blocked", "mission", "plan_change", "plan_import", "plan_question", "recorder_import"}
 
-// Bounds of a card-auto-answer rule's wait: at least five minutes, at most a
-// week (a card expires before then).
+// Bounds of a card-auto-answer rule's wait: after_seconds from 0 to a week
+// (a card expires before then; TD-393); after_minutes, the form of the
+// first versions, from five minutes to a week.
 const (
 	MinCardWaitMinutes = 5
 	MaxCardWaitMinutes = 7 * 24 * 60
+	MaxCardWaitSeconds = 7 * 24 * 3600
 )
 
 // Directions as the rule table has them.
@@ -158,13 +164,16 @@ type PlanStanding struct {
 	DoneRules, ActiveOnLease bool
 }
 
-// CardAuto lets the platform answer a card the runtime asked with the
-// option the card recommends, once it has been open AfterMinutes unanswered,
-// when the card is of one of Kinds and its mission does not need the Owner
-// (TD-390, the Owner 2026-10-20 「STG 用 A」: STG only; PROD has no such rule).
+// CardAuto lets the platform answer a card the runtime asked, once it has
+// been open AfterSeconds unanswered, when the card is of one of Kinds and
+// its mission does not need the Owner (TD-390, the Owner 2026-10-20 「STG 用
+// A」: STG only; PROD has no such rule; TD-393: in seconds, every kind).
 type CardAuto struct {
-	AfterMinutes int
+	AfterSeconds int
 	Kinds        []string
+	// minutes: the rule says after_minutes (versions before TD-393), and
+	// its canonical body says so again.
+	minutes bool
 }
 
 // Rule is a parsed rule: its header and the one part its kind has.
@@ -314,13 +323,27 @@ func (r *Rule) envelope(o *object, arg string) error {
 	return nil
 }
 
-// cardAuto reads a card-auto-answer rule: after_minutes, and kinds, a list of
-// the card kinds it answers, at least one, none twice (kept sorted).
+// cardAuto reads a card-auto-answer rule: after_seconds (or, as the first
+// versions say it, after_minutes; one of them), and kinds, a list of the
+// card kinds it answers, at least one, none twice (kept sorted).
 func (r *Rule) cardAuto(o *object) error {
 	c := &CardAuto{}
 	var err error
-	if c.AfterMinutes, err = o.integer("after_minutes", MinCardWaitMinutes, MaxCardWaitMinutes); err != nil {
-		return err
+	_, seconds := o.fields["after_seconds"]
+	_, minutes := o.fields["after_minutes"]
+	switch {
+	case seconds && minutes:
+		return fmt.Errorf("%s gives after_seconds or after_minutes, not both", o.where)
+	case seconds:
+		if c.AfterSeconds, err = o.integer("after_seconds", 0, MaxCardWaitSeconds); err != nil {
+			return err
+		}
+	default:
+		var m int
+		if m, err = o.integer("after_minutes", MinCardWaitMinutes, MaxCardWaitMinutes); err != nil {
+			return err
+		}
+		c.AfterSeconds, c.minutes = m*60, true
 	}
 	if c.Kinds, err = o.strings("kinds", false); err != nil {
 		return err
@@ -562,7 +585,12 @@ func (r Rule) Doc() map[string]any {
 	case KindPlan:
 		doc["done_rules"], doc["active_on_lease"] = r.Plan.DoneRules, r.Plan.ActiveOnLease
 	case KindCardAuto:
-		doc["after_minutes"], doc["kinds"] = r.CardAuto.AfterMinutes, anyList(r.CardAuto.Kinds)
+		if r.CardAuto.minutes {
+			doc["after_minutes"] = r.CardAuto.AfterSeconds / 60
+		} else {
+			doc["after_seconds"] = r.CardAuto.AfterSeconds
+		}
+		doc["kinds"] = anyList(r.CardAuto.Kinds)
 	case KindRouting:
 		doc["tenant"], doc["order"], doc["quota_stop_percent"] = r.Routing.Tenant, anyList(r.Routing.Order), r.Routing.QuotaStopPercent
 		if c := r.Routing.Competence; c != nil {

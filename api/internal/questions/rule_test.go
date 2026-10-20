@@ -35,20 +35,23 @@ func TestAnswerAsRule(t *testing.T) {
 		t.Fatalf("open of agentrt: %d %v", len(open), err)
 	}
 	for name, c := range map[string]struct {
-		requester, ref, option string
-		code                   int
+		requester, ref, option, why string
+		code                        int
 	}{
-		"another option":     {"agentrt", card, "b", http.StatusConflict},
-		"no recommendation":  {"agentrt", bare, "a", http.StatusConflict},
-		"another requester":  {"agentrt", other, "a", http.StatusForbidden},
-		"as another session": {"thread-a", card, "c", http.StatusForbidden},
-		"no such question":   {"agentrt", "q_0000000000000000", "a", http.StatusNotFound},
+		"another option":             {"agentrt", card, "b", "", http.StatusConflict},
+		"no recommendation":          {"agentrt", bare, "a", "", http.StatusConflict},
+		"why but no such option":     {"agentrt", bare, "d", "the card recommends nothing", http.StatusConflict},
+		"why but blank":              {"agentrt", bare, "b", "  ", http.StatusConflict},
+		"another requester":          {"agentrt", other, "a", "", http.StatusForbidden},
+		"another requester, and why": {"agentrt", other, "b", "the card recommends nothing", http.StatusForbidden},
+		"as another session":         {"thread-a", card, "c", "", http.StatusForbidden},
+		"no such question":           {"agentrt", "q_0000000000000000", "a", "", http.StatusNotFound},
 	} {
-		if r := s.AnswerAsRule(ctx, c.requester, "rule card-auto-answer v1", c.ref, c.option, far); r.Code != c.code {
+		if r := s.AnswerAsRule(ctx, c.requester, "rule card-auto-answer v1", c.ref, c.option, far, c.why); r.Code != c.code {
 			t.Errorf("%s: %d %v; want %d", name, r.Code, r.Body, c.code)
 		}
 	}
-	if r := s.AnswerAsRule(ctx, "agentrt", "rule card-auto-answer v1", card, "c", far); r.Code != http.StatusOK {
+	if r := s.AnswerAsRule(ctx, "agentrt", "rule card-auto-answer v1", card, "c", far, ""); r.Code != http.StatusOK {
 		t.Fatalf("the rule's answer: %d %v", r.Code, r.Body)
 	}
 	q, ok, err := s.Lookup(card)
@@ -56,7 +59,7 @@ func TestAnswerAsRule(t *testing.T) {
 		q.Answer.Channel != RuleChannel || q.Answer.Approval {
 		t.Fatalf("the answer: %+v %+v %v %v", q, q.Answer, ok, err)
 	}
-	if r := s.AnswerAsRule(ctx, "agentrt", "rule card-auto-answer v1", card, "c", far); r.Code != http.StatusConflict {
+	if r := s.AnswerAsRule(ctx, "agentrt", "rule card-auto-answer v1", card, "c", far, ""); r.Code != http.StatusConflict {
 		t.Fatalf("a second answer: %d %v", r.Code, r.Body)
 	}
 	if open, err = s.RuleCards("agentrt"); err != nil || len(open) != 2 || open[0].ID != card || open[1].ID != bare {
@@ -79,16 +82,16 @@ func TestAnswerAsRuleOnlyInTime(t *testing.T) {
 	card := r.Body.(map[string]any)["id"].(string)
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
-	if r := s.AnswerAsRule(gone, "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(time.Hour)); r.Code != http.StatusServiceUnavailable {
+	if r := s.AnswerAsRule(gone, "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(time.Hour), ""); r.Code != http.StatusServiceUnavailable {
 		t.Fatalf("after its caller gave up: %d %v", r.Code, r.Body)
 	}
-	if r := s.AnswerAsRule(context.Background(), "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(-time.Second)); r.Code != http.StatusConflict {
+	if r := s.AnswerAsRule(context.Background(), "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(-time.Second), ""); r.Code != http.StatusConflict {
 		t.Fatalf("after the rule expired: %d %v", r.Code, r.Body)
 	}
 	if q, _, _ := s.Lookup(card); q.Status != StatusOpen {
 		t.Fatalf("a late answer was written: %+v", q)
 	}
-	if r := s.AnswerAsRule(context.Background(), "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(time.Hour)); r.Code != http.StatusOK {
+	if r := s.AnswerAsRule(context.Background(), "agentrt", "rule card-auto-answer v1", card, "a", time.Now().Add(time.Hour), ""); r.Code != http.StatusOK {
 		t.Fatalf("in time: %d %v", r.Code, r.Body)
 	}
 	if listed, err := s.RuleCards("agentrt"); err != nil || len(listed) != 1 || listed[0].Status != StatusAnswered {
@@ -125,5 +128,28 @@ func TestRuntimeSessionIsReserved(t *testing.T) {
 		if w.Code != http.StatusForbidden {
 			t.Errorf("%s as %s: %d %s", c.path, RuntimeSession, w.Code, w.Body.String())
 		}
+	}
+}
+
+// TD-393: a rule may take an option the question does not recommend only by
+// saying why, and the answer keeps why as its text, on one line, bounded; it
+// is still the rule's, on the rule channel.
+func TestAnswerAsRuleSaysWhyItTakesAnother(t *testing.T) {
+	s := testSvc(t)
+	ctx := context.Background()
+	opts := []map[string]string{{"label": "Start the mission"}, {"label": "Do not start it"}}
+	r := ask(t, s, "agentrt", "k-mission-card-none", map[string]any{"title": "Mission: a walk", "options": opts})
+	if r.Code != http.StatusCreated {
+		t.Fatalf("create: %d %v", r.Code, r.Body)
+	}
+	card := r.Body.(map[string]any)["id"].(string)
+	why := "the card recommends nothing:\n the rule takes the option that changes nothing " + strings.Repeat("x", 600)
+	if r = s.AnswerAsRule(ctx, "agentrt", "rule card-auto-answer v3", card, "b", time.Now().Add(time.Hour), why); r.Code != http.StatusOK {
+		t.Fatalf("the rule's answer: %d %v", r.Code, r.Body)
+	}
+	q, ok, err := s.Lookup(card)
+	if err != nil || !ok || q.Answer.Option != "b" || q.Answer.By != "rule card-auto-answer v3" || q.Answer.Channel != RuleChannel ||
+		!strings.HasPrefix(q.Answer.Text, "the card recommends nothing: the rule takes") || len(q.Answer.Text) > 500 || strings.Contains(q.Answer.Text, "\n") {
+		t.Fatalf("the answer: %+v %v %v", q.Answer, ok, err)
 	}
 }

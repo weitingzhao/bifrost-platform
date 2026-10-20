@@ -157,7 +157,7 @@ func TestAnswerByRuleInTheController(t *testing.T) {
 		})
 		return out, nil
 	}
-	src.RuleAnswer = func(_ context.Context, id, option, rule string, _ time.Time) error {
+	src.RuleAnswer = func(_ context.Context, id, option, rule string, _ time.Time, _ string) error {
 		w.set(func() { answers = append(answers, answer{id, option, rule}) })
 		return nil
 	}

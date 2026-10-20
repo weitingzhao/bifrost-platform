@@ -66,7 +66,7 @@ func TestFixtureRule(t *testing.T) {
 	}
 	_, err := w.rt.Exec(ctx, agentrttest.CardAutoRule)
 	ok(t, err)
-	if c := inForce(t, w, "card-auto-answer", time.Now()); c == nil || c.CardAuto.AfterMinutes != 30 || len(c.CardAuto.Kinds) != 1 {
+	if c := inForce(t, w, "card-auto-answer", time.Now()); c == nil || c.CardAuto.AfterSeconds != 30*60 || len(c.CardAuto.Kinds) != 1 {
 		t.Fatalf("the fixture card-auto-answer rule reads as %+v", c)
 	}
 }

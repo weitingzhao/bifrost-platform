@@ -45,9 +45,12 @@ func (s *Service) RuleCards(requester string) ([]Question, error) {
 // AnswerAsRule answers question ref of requester with option, as rule, while
 // the rule holds (until) and ctx has not ended: both are checked when the
 // answer is written (review 442 A2, B2). It refuses a question another
-// requester asked, one that is not open, and an option that is not the one
-// the question recommends: a rule picks nothing itself.
-func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option string, until time.Time) Result {
+// requester asked and one that is not open. The option is the one the
+// question recommends, or, with why (TD-393: the runtime's option that
+// changes nothing, when the card recommends none or its AI assessment
+// differs), another of the question's options; why is kept as the answer's
+// text, so the record says why the rule took it.
+func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option string, until time.Time, why string) Result {
 	if err := ValidSession(requester); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
@@ -70,11 +73,17 @@ func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option
 			return applied{res: fail(http.StatusForbidden, "a rule answers only its own runtime's questions", nil)}
 		case q.Status != StatusOpen:
 			return applied{res: fail(http.StatusConflict, "not open", map[string]any{"status": q.Status})}
-		case q.Recommended == "" || option != q.Recommended:
-			return applied{res: fail(http.StatusConflict, "a rule answers only with the option the question recommends", nil)}
+		case option == q.Recommended && option != "":
+		case strings.TrimSpace(why) == "":
+			return applied{res: fail(http.StatusConflict, "a rule answers with the option the question recommends, or says why it takes another", nil)}
+		case !q.hasOption(option):
+			return applied{res: fail(http.StatusConflict, "no such option", map[string]any{"option": option})}
 		}
 		q.Status = StatusAnswered
 		q.Answer = &Answer{Option: option, By: c.principal, At: now, Channel: RuleChannel}
+		if option != q.Recommended {
+			q.Answer.Text = clipRuleWhy(why)
+		}
 		doc.Questions[i] = q
 		return applied{
 			res:     Result{Code: http.StatusOK, Body: answerBody(q, false)},
@@ -82,4 +91,27 @@ func (s *Service) AnswerAsRule(ctx context.Context, requester, rule, ref, option
 			extra:   []event{{"question.answer", q.ID, StatusAnswered, "rule=" + c.principal}},
 		}
 	})
+}
+
+// hasOption says whether key is one of the question's options.
+func (q Question) hasOption(key string) bool {
+	for _, o := range q.Options {
+		if o.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// ruleWhyLimit bounds the text a rule's answer keeps.
+const ruleWhyLimit = 500
+
+// clipRuleWhy is why on one line, at most ruleWhyLimit bytes, whole runes.
+func clipRuleWhy(why string) string {
+	why = strings.Join(strings.Fields(why), " ")
+	for len(why) > ruleWhyLimit {
+		r := []rune(why)
+		why = string(r[:len(r)-1])
+	}
+	return why
 }

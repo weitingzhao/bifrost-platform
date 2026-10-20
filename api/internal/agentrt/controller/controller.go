@@ -45,7 +45,7 @@ type Sources struct {
 	// card-auto-answer rule in force (store.AnswerByRule, TD-390); nil
 	// answers nothing.
 	Cards      func(ctx context.Context) ([]store.RuntimeCard, error)
-	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time) error
+	RuleAnswer func(ctx context.Context, id, option, rule string, until time.Time, why string) error
 	// Assessable lists what is assessed now (TD-391): the runtime's open
 	// cards and the approvals waiting for the Owner; with an error, those it
 	// could read. Evidence reads what an assessment reads outside the
@@ -352,9 +352,11 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 }
 
 // CardRuleEvery is how often the cards are answered by rule: a loop of its
-// own, so a slow question store never holds up dispatch; a rule waits at
-// least five minutes, so a minute late is no matter.
-const CardRuleEvery = time.Minute
+// own, so a slow question store never holds up dispatch; every five seconds
+// (TD-393, the Owner 2026-10-20 「循环每 5 秒」), so a card is answered within
+// ten of opening on a rule that waits five. Only STG wires it
+// (server/agentrt_wire.go).
+const CardRuleEvery = 5 * time.Second
 
 // AnswerByRule answers the runtime's cards by the card-auto-answer rule in
 // force (store.AnswerByRule, TD-390): none without the rule, the lister or the
@@ -373,8 +375,8 @@ func (c *Controller) AnswerByRule(ctx context.Context) (int, error) {
 			x := bounded(c, ctx, func(ctx context.Context) list { cs, err := c.Sources.Cards(ctx); return list{cs, err} })
 			return x.cards, x.err
 		},
-		Answer: func(ctx context.Context, id, option, rule string, until time.Time) error {
-			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule, until) })
+		Answer: func(ctx context.Context, id, option, rule string, until time.Time, why string) error {
+			return bounded(c, ctx, func(ctx context.Context) error { return c.Sources.RuleAnswer(ctx, id, option, rule, until, why) })
 		},
 		Ack: c.ack(),
 	})

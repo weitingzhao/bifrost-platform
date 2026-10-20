@@ -76,14 +76,14 @@ func (s *cardStore) open(context.Context) ([]store.RuntimeCard, error) {
 			out = append(out, c.card)
 		case c.status == store.QuestionAnswered && !c.read && strings.HasPrefix(c.by, "rule "):
 			card := c.card
-			card.Answered, card.By = true, c.by
+			card.Answered, card.By, card.Option = true, c.by, c.option
 			out = append(out, card)
 		}
 	}
 	return out, nil
 }
 
-func (s *cardStore) answer(ctx context.Context, id, option, rule string, until time.Time) error {
+func (s *cardStore) answer(ctx context.Context, id, option, rule string, until time.Time, why string) error {
 	if s.during != nil {
 		s.during(id)
 	}
@@ -93,7 +93,11 @@ func (s *cardStore) answer(ctx context.Context, id, option, rule string, until t
 		return errors.New("the rule no longer holds")
 	}
 	c := s.cards[id]
-	c.status, c.option, c.by = store.QuestionAnswered, option, rule
+	if option != c.card.Recommended && why == "" {
+		s.mu.Unlock()
+		return errors.New("the question store answered 409: a rule answers with the option the question recommends, or says why it takes another")
+	}
+	c.status, c.option, c.by, c.text = store.QuestionAnswered, option, rule, why
 	s.answers++
 	s.mu.Unlock()
 	if s.after != nil {
@@ -124,7 +128,7 @@ func (s *cardStore) question(_ context.Context, id string) (store.Question, bool
 	if c.status != store.QuestionAnswered {
 		return store.Question{ID: id, Status: c.status, Options: 3}, true
 	}
-	return store.Question{ID: id, Status: c.status, Option: c.option, AnsweredBy: c.by, AnsweredAt: "2026-10-20T20:00:00Z", Options: 3,
+	return store.Question{ID: id, Status: c.status, Option: c.option, Text: c.text, AnsweredBy: c.by, AnsweredAt: "2026-10-20T20:00:00Z", Options: 3,
 		Channel: "rule"}, true
 }
 
@@ -160,10 +164,11 @@ func (w *world) overBudget(t *testing.T, m, needsOwner string) string {
 // TD-390 (Owner 10-20 「STG 用 A」): with no signed rule nothing is answered;
 // with one, a blocked card the runtime asked is answered with the option it
 // recommends once it has been open 30 minutes, as the rule, once; a card of
-// a mission marked as needing the Owner, a card younger than the wait, a card
-// with no recommendation, a planner's question the rule does not list and a
-// card that is no runtime card of either kind are left open. The answer then
-// does what the Owner's would: it closes the mission.
+// a mission marked as needing the Owner, a card younger than the wait, a
+// planner's question the rule does not list and a card that is no runtime
+// card are left open. TD-393: a card with no recommendation is answered with
+// the option that changes nothing (b, "Do not do this task"), saying why.
+// The answer then does what the Owner's would: it closes the mission.
 func TestAnswerByRule(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -196,14 +201,18 @@ func TestAnswerByRule(t *testing.T) {
 		t.Fatalf("with no rule: answered %d (%v)", n, err)
 	}
 	signCardAuto(t, w, "30", "[blocked]")
-	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 || s.answers != 1 {
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 2 || s.answers != 2 {
 		t.Fatalf("answered %d (%v), %d answers", n, err, s.answers)
 	}
 	got := s.cards[card[answered]]
-	if got.status != store.QuestionAnswered || got.option != "c" || got.by != "rule card-auto-answer v1" {
+	if got.status != store.QuestionAnswered || got.option != "c" || got.by != "rule card-auto-answer v1" || got.text != "" {
 		t.Fatalf("the card: %+v", got)
 	}
-	for _, id := range []string{card[marked], card[young], card[plain], "q_plannerquestion1", "q_planchange00001"} {
+	if got = s.cards[card[plain]]; got.status != store.QuestionAnswered || got.option != "b" ||
+		got.text != "the card recommends nothing: the rule takes the option that changes nothing" {
+		t.Fatalf("the card that recommends nothing: %+v", got)
+	}
+	for _, id := range []string{card[marked], card[young], "q_plannerquestion1", "q_planchange00001"} {
 		if s.cards[id].status != "open" {
 			t.Errorf("card %s was answered", id)
 		}
@@ -214,13 +223,17 @@ func TestAnswerByRule(t *testing.T) {
 	if !strings.HasPrefix(note, "rule card-auto-answer v1 answered question "+card[answered]+" with c, the option it recommends, after 3") {
 		t.Fatalf("the note: %q", note)
 	}
-	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 0 || s.answers != 1 {
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 0 || s.answers != 2 {
 		t.Fatalf("a second pass answered %d (%v)", n, err)
 	}
-	// The answer acts as the Owner's: the mission is closed, the answer kept
-	// as the rule's and acknowledged.
-	if n, err := store.DecideBlocked(ctx, w.rt, s.question, s.ack); err != nil || n != 1 {
+	// The answers act as the Owner's would: the mission is closed, the task
+	// of the card that recommended nothing is not done; each answer kept as
+	// the rule's and acknowledged.
+	if n, err := store.DecideBlocked(ctx, w.rt, s.question, s.ack); err != nil || n != 2 {
 		t.Fatalf("decided %d (%v)", n, err)
+	}
+	if w.state(t, "task", plain) != "cancelled" || s.acked[card[plain]] != 1 {
+		t.Fatalf("the task of the card that recommended nothing is %s, its card acknowledged %d", w.state(t, "task", plain), s.acked[card[plain]])
 	}
 	var by string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'answered_by' FROM agentrt.event WHERE event_type = 'question_seen' AND body_json->>'question' = $1`,

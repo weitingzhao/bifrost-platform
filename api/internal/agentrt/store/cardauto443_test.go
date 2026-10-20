@@ -128,13 +128,13 @@ func TestRuleNoteWrittenByTheDecision(t *testing.T) {
 	}
 	card := s.order[0]
 	// Answered by the rule in the question store; the database kept nothing.
-	ok(t, s.answer(ctx, card, "c", "rule card-auto-answer v1", time.Now().Add(time.Hour)))
+	ok(t, s.answer(ctx, card, "c", "rule card-auto-answer v1", time.Now().Add(time.Hour), ""))
 	if n, err := store.DecideBlocked(ctx, w.rt, s.question, s.ack); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v)", n, err)
 	}
 	var notes int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND mission_id = 'M-3'
-	  AND body_json->>'text' = 'rule card-auto-answer v1 answered question ' || $1 || ' with c, the option it recommends'`, card).Scan(&notes))
+	  AND body_json->>'text' = 'rule card-auto-answer v1 answered question ' || $1 || ' with c'`, card).Scan(&notes))
 	if notes != 1 || s.acked[card] != 1 || w.state(t, "mission", "M-3") != "stopped" {
 		t.Fatalf("%d notes, acknowledged %d, M-3 %s", notes, s.acked[card], w.state(t, "mission", "M-3"))
 	}

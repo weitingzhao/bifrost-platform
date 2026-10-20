@@ -158,19 +158,21 @@ func decideOne(ctx context.Context, db DB, p pendingChange, question func(contex
 	case !ok:
 		return false, nil
 	case q.Status == QuestionAnswered && q.Option == CardApplyKey:
-		return decide(ctx, db, p, "applied", "")
+		return decide(ctx, db, p, "applied", "", answerOf(q), q.Option)
 	case q.Status == QuestionAnswered:
-		return decide(ctx, db, p, "refused", "")
+		return decide(ctx, db, p, "refused", "", answerOf(q), q.Option)
 	case q.Status == "withdrawn" || q.Status == "expired":
-		return decide(ctx, db, p, q.Status, "")
+		return decide(ctx, db, p, q.Status, "", answerer{who: "the Owner", actor: "owner"}, "")
 	}
 	return false, nil
 }
 
 // decide records a decision under the tree's lock, once, and applies the
 // change when it is applied; a change the database refuses then is decided
-// failed instead, with its reason.
-func decide(ctx context.Context, db DB, p pendingChange, decision, reason string) (bool, error) {
+// failed instead, with its reason. by is who answered the card: the Owner,
+// or the card-auto-answer rule (TD-393), which the decision names, with its
+// note on the proposal's stream when its own pass did not keep it.
+func decide(ctx context.Context, db DB, p pendingChange, decision, reason string, by answerer, option string) (bool, error) {
 	hook("plan change deciding", p.stream)
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -199,12 +201,19 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		  AND event_stream_id = $1 AND (body_json->>'proposal_event_id')::bigint = $2)`, p.stream, p.event).Scan(&done); err != nil || done {
 			return err
 		}
-		body := map[string]any{"proposal_event_id": p.event, "decision": decision, "by": "owner", "question_id": p.question}
+		who := "owner"
+		if by.rule != "" {
+			who = by.rule
+		}
+		body := map[string]any{"proposal_event_id": p.event, "decision": decision, "by": who, "question_id": p.question}
 		if reason != "" {
 			body["error"] = reason
 		}
 		ev, err := Append(ctx, tx, Event{Stream: p.stream, Type: "plan_change_decided", Actor: "controller", Body: body})
 		if err != nil {
+			return err
+		}
+		if err = ensureRuleNoteOn(ctx, tx, cardOn{stream: p.stream}, by, p.question, option); err != nil {
 			return err
 		}
 		switch {
@@ -229,7 +238,7 @@ func decide(ctx context.Context, db DB, p pendingChange, decision, reason string
 		return false, nil
 	}
 	if err != nil && decision == "applied" && refusedByRules(err) {
-		return decide(ctx, db, p, "failed", err.Error())
+		return decide(ctx, db, p, "failed", err.Error(), by, option)
 	}
 	return did, err
 }
