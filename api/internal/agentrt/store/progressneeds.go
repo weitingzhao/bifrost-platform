@@ -15,8 +15,9 @@ import (
 // changes waiting on a decision card, and what each holds up.
 
 // needsYou lists what the Owner may act on (SPEC §2.1): plan changes on a
-// decision card no decision is recorded for, and missions outside the
-// standing envelope waiting on their card. Whether the card is still open
+// decision card no decision is recorded for, missions outside the standing
+// envelope waiting on their card, and blocked tasks on their open card
+// (blockedcard.go). Whether the card is still open
 // is the question store's to say, which this read does not reach: an item is
 // a candidate, and the Console keeps it only while that question is open.
 // Waits he cannot act on are the missions' statuses.
@@ -108,7 +109,12 @@ func needsYou(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]any, er
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range cards {
+	blocked, moreBlocked, err := blockedTaskCards(ctx, tx, now, byQuestion)
+	if err != nil {
+		return nil, err
+	}
+	more = more || moreBlocked
+	for _, c := range append(cards, blocked...) {
 		entries = append(entries, entry{c.at, c.question, c.it})
 	}
 	slices.SortFunc(entries, func(a, b entry) int {
@@ -175,6 +181,57 @@ func missionCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[stri
 			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
 			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
 			"after": "Start: the controller makes it active on its next pass (about 15 seconds). Do not start: it stops."}
+		listed[c.question] = it
+		cards = append(cards, missionCard{c.at, c.question, it})
+	}
+	return cards, more, nil
+}
+
+// blockedTaskCards are the blocked tasks whose card is open, oldest card
+// first, at most the bound (more says there were more), leaving out a card
+// already listed. Each names its task and mission, so the Console's goal card
+// shows it on that goal.
+func blockedTaskCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[string]map[string]any) ([]missionCard, bool, error) {
+	rows, err := tx.Query(ctx, `SELECT t.task_id, t.mission_id, t.title, o.body_json->>'question_id', o.at,
+	    COALESCE(b.body_json->>'reason', ''),
+	    (SELECT count(*) FROM agentrt.task u WHERE u.mission_id = t.mission_id AND u.state NOT IN ('accepted','rejected','cancelled'))
+	  FROM agentrt.event o JOIN agentrt.task t ON t.task_id = o.task_id
+	  LEFT JOIN agentrt.event b ON b.event_id = (o.body_json->>'blocked_event_id')::bigint
+	  WHERE o.event_type = 'owner_wait_opened' AND t.state = 'blocked' AND `+cardOpen+`
+	  ORDER BY o.at, o.event_id LIMIT $1`, pendingChangeLimit+1)
+	if err != nil {
+		return nil, false, err
+	}
+	type row struct {
+		task, mission, title, question, why string
+		at                                  time.Time
+		open                                int
+	}
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+		var c row
+		return c, r.Scan(&c.task, &c.mission, &c.title, &c.question, &c.at, &c.why, &c.open)
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	more := len(list) > pendingChangeLimit
+	if more {
+		list = list[:pendingChangeLimit]
+	}
+	var cards []missionCard
+	for _, c := range list {
+		if _, seen := listed[c.question]; seen {
+			continue
+		}
+		it := map[string]any{"id": "question:" + c.question, "kind": "blocked_task", "ref": c.task, "also_refs": []string{},
+			"task_id": c.task, "mission_id": c.mission,
+			"title": "Blocked in " + c.mission + ": " + firstLine(c.title), "since": c.at.UTC().Format(time.RFC3339Nano),
+			"waiting_min": int64(now.Sub(c.at) / time.Minute),
+			"action":      map[string]any{"where": "console", "question_id": c.question, "options": []string{BlockedRetry, BlockedDrop}},
+			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
+			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
+			"after": "One more round: the controller readies it on its next pass (about 15 seconds). Do not do it: it is cancelled, " +
+				"and its mission finishes once every other task is accepted."}
 		listed[c.question] = it
 		cards = append(cards, missionCard{c.at, c.question, it})
 	}

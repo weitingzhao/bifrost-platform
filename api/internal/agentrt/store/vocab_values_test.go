@@ -75,6 +75,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"candidate_status_changed", "to", "probation", "paused"},
 		{"candidate_status_changed", "from", "qualifying", "trial"},
 		{"question_seen", "answered_at", "2026-10-19T11:40:00Z", "now"},
+		{"owner_wait_closed", "outcome", "dropped", "skipped"},
 		{"ci_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "42bb2c9"},
 		{"deploy_seen", "env", "prod", "production"},
 		{"deploy_seen", "commit", "42bb2c9672b94b1178797d062df0e72dd789f200", "main"},

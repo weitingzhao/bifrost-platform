@@ -128,6 +128,12 @@ var bodies = map[string][]field{
 	"deploy_seen":              {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
 	"owner_signoff":            {{"ref", kStr, false}},
 	"note":                     {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}},
+	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
+	// are about): a blocked task's decision card, asked for the block its
+	// blocked_event_id names (the card-th asked for it), and how the card
+	// ended (blockedcard.go).
+	"owner_wait_opened": {{"question_id", kID, false}, {"blocked_event_id", kInt, false}, {"card", kInt, false}},
+	"owner_wait_closed": {{"question_id", kID, false}, {"outcome", kStr, false}, {"answer", kStr, true}, {"text", kStr, true}},
 }
 
 func checkBody(eventType string, body map[string]any) error {
@@ -325,6 +331,7 @@ var fieldValues = map[string]map[string]value{
 	"rule_proposed":            {"direction": oneOf("initial", "loosen", "tighten"), "text_artifact_id": artifactID},
 	"candidate_status_changed": {"from": oneOf(candidateStatus...), "to": oneOf(candidateStatus...)},
 	"question_seen":            {"answered_at": instant},
+	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
 	"route_decided":            {"fingerprint": fingerprint},

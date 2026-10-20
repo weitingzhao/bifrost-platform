@@ -458,3 +458,73 @@ func TestAcceptLeavesTheScheduledBrief(t *testing.T) {
 		}
 	}
 }
+
+// T26's first run: a blocked task had no way out. The loops give it a card
+// in the pass after it is blocked and act on the answer: here the Owner does
+// not do it, and its mission, which had nothing else, stops.
+func TestStartGivesABlockedTaskACard(t *testing.T) {
+	pool := setup(t)
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "goal", Goal: "g",
+			Deadline: time.Now().Add(time.Hour), Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}}); err != nil {
+			return err
+		}
+		return store.MoveMission(ctx, tx, "controller", "M-2", "active", "test")
+	}))
+	task := store.NewTaskID()
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/plain", []byte("spec"))
+		if err != nil {
+			return err
+		}
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-2", OffPlanReason: "a goal",
+			Role: "implement", Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform"}); err != nil {
+			return err
+		}
+		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
+			return err
+		}
+		return store.MoveTask(ctx, tx, "controller", task, "blocked", "test")
+	}))
+	w := &world{questions: map[string]store.Question{}}
+	src := w.sources()
+	var cards []store.Card
+	src.Ask = func(_ context.Context, c store.Card) (string, error) {
+		w.set(func() {
+			cards = append(cards, c)
+			w.questions["q_9"] = store.Question{ID: "q_9", Status: store.QuestionAnswered, Option: store.CardRefuseKey,
+				AnsweredBy: "owner", AnsweredAt: "2026-10-19T20:00:00Z"}
+		})
+		return "q_9", nil
+	}
+	c := &controller.Controller{DB: pool, Sources: src, LeaseEvery: time.Hour, FactsEvery: 20 * time.Millisecond}
+	run, cancel := context.WithCancel(ctx)
+	wait := c.Start(run)
+	defer wait()
+	defer cancel()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		var state, mission string
+		must(t, pool.QueryRow(ctx, `SELECT t.state, m.state FROM agentrt.task t JOIN agentrt.mission m USING (mission_id)
+		  WHERE t.task_id = $1`, task).Scan(&state, &mission))
+		if state == "cancelled" && mission == "stopped" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the loops left the task %s and its mission %s", state, mission)
+		}
+	}
+	w.set(func() {
+		if len(cards) != 1 || cards[0].TaskID != task {
+			t.Fatalf("cards %+v", cards)
+		}
+	})
+}
+
+// Without a question store the pass asks nothing and moves nothing.
+func TestBlockedCardsNeedAQuestionStore(t *testing.T) {
+	pool := setup(t)
+	c := &controller.Controller{DB: pool, Sources: (&world{}).sources()}
+	if n, err := c.BlockedCards(ctx); n != 0 || err != nil {
+		t.Fatalf("%d %v", n, err)
+	}
+}

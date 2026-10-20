@@ -8,7 +8,7 @@ import events from '@/api/__fixtures__/agentrt-events-mission-M-2.prod.json'
 import { fetchRuntimeEvents, parseRuntimeEvents, parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseGoalTasks, type GoalData } from '@/api/agentRuntimeGoals'
 import type { Question } from '@/api/questions'
-import { resolveConsoleHash } from '@/lib/shell/consoleRoutes'
+import { questionHref, resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 import { GoalCard } from '../GoalCard'
 import { goalDone, goalStages, goalStatus, goalWaitingLinks, missionIds, relative, taskTiming } from '../goalCardModel'
 import { whoseMove } from '../mergedProgressModel'
@@ -111,6 +111,55 @@ describe('goal stages from the production stream', () => {
     const runtime = parseRuntimeProgress({ work: { missions: [{ mission_id: 'M-2' }, { mission_id: 'M-12' }] }, recent: { tasks: [{ mission_id: 'M-10' }, { mission_id: 'M-2' }] } })
     expect(missionIds(runtime)).toEqual(['M-12', 'M-10', 'M-2'])
     expect(missionIds(runtime, 'M-20')[0]).toBe('M-20')
+  })
+})
+
+// T26's first run (PROD M-9): the fifth task failed its review in its last round and was blocked. Once
+// the Owner drops it on its card the mission is done; the dropped task's failed review says nothing of
+// the goal, and the card counts it apart.
+function withFifth(state: string, extra: GoalData['events'] = [], missionState = 'done'): GoalData {
+  const impl = full.tasks.find(t => t.role === 'implement')!
+  const review = full.events.find(e => e.event_type === 'verification_recorded' && e.body_json.method === 'review')!
+  const fifth = { ...impl, task_id: 't_fifth', title: 'Fifth', state }
+  const lease = { ...full.events.find(e => e.event_type === 'attempt_leased' && e.task_id === impl.task_id)!, seq: 990, task_id: 't_fifth', attempt_id: 'a_fifth' }
+  const failed = { ...review, seq: 991, task_id: 't_fifth', attempt_id: 'a_fifth', body_json: { ...review.body_json, verdict: 'fail' } }
+  return { mission: { ...mission, state: missionState }, tasks: [...full.tasks, fifth], events: [...full.events, lease, failed, ...extra] }
+}
+const dropEvent = { seq: 992, event_type: 'owner_wait_closed', at: '2026-10-20T01:00:00Z', actor_id: 'controller', task_id: 't_fifth',
+  attempt_id: '', body_json: { question_id: 'q_9', outcome: 'dropped', answer: 'b' } }
+describe('a task dropped on its blocked card', () => {
+  it('lets the goal be done and counts the dropped task apart', () => {
+    const dropped = withFifth('cancelled', [dropEvent])
+    expect(goalDone(dropped)).toBe(true)
+    expect(goalStatus(dropped, false)).toBe('Done')
+    const stages = goalStages(dropped)
+    expect(stages.map(s => s.state)).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
+    expect(stages.find(s => s.label === 'Implement')?.dropped).toBe(1)
+  })
+  it('keeps a task cancelled any other way, and a blocked one, holding the goal', () => {
+    expect(goalDone(withFifth('cancelled', [], 'active'))).toBe(false)
+    const blocked = withFifth('blocked', [], 'active')
+    expect(goalDone(blocked)).toBe(false)
+    const runtime = parseRuntimeProgress({ needs_you: { items: [{ kind: 'blocked_task', title: 'Blocked in M-2: Fifth', task_id: 't_fifth',
+      mission_id: 'M-2', blocks: { missions: ['M-2'] }, action: { where: 'console', question_id: 'q_9' } }] } })
+    expect(goalWaitingLinks('M-2', blocked, [], runtime)).toEqual([{ title: 'Blocked in M-2: Fifth', href: questionHref('q_9') }])
+    expect(goalStatus(blocked, true)).toBe('Waiting for you')
+  })
+  it('stops a goal whose plan the Owner dropped', () => {
+    const plan = full.tasks.find(t => t.role === 'plan')!
+    const stopped: GoalData = { mission: { ...mission, state: 'stopped' }, tasks: [{ ...plan, state: 'cancelled' }],
+      events: [...full.events.filter(e => e.task_id === plan.task_id), { ...dropEvent, task_id: plan.task_id }] }
+    expect(goalStatus(stopped, false)).toBe('Stopped')
+    expect(goalStages(stopped).find(s => s.label === 'Plan')).toMatchObject({ state: 'skipped', dropped: 1 })
+  })
+  it('says on the card which task was dropped', async () => {
+    mockFetch()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['agent-runtime-goal', 'M-2'], withFifth('cancelled', [dropEvent]))
+    wrap(<GoalCard id="M-2" updatedAt={1} questions={[]} />, client)
+    expect(await screen.findByText('Done', { selector: 'strong.text-lg' })).toBeInTheDocument()
+    expect(screen.getByText('1 dropped by you')).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Implementation tasks')).getByText(/Fifth · Dropped by you/)).toBeInTheDocument()
   })
 })
 

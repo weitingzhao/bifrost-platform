@@ -4,7 +4,7 @@ import type { Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 
 export type StageState = 'done' | 'running' | 'waiting' | 'failed' | 'future' | 'skipped'
-export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number }
+export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number; dropped: number }
 export const stageMarks: Record<StageState, string> = { done: '✓', running: '●', waiting: '⏸', failed: '✗', future: '○', skipped: '—' }
 export const terminalMission = (state: string) => ['done', 'accepted', 'stopped', 'failed', 'cancelled'].includes(state)
 export const executorName = (id: string) => ({ 'exec:claude': 'Claude', 'exec:codex': 'Codex', 'exec:cursor': 'Cursor', 'exec:deterministic': 'Checks' })[id] || id || 'Unassigned'
@@ -31,6 +31,14 @@ export function taskTiming(data: GoalData, task: GoalTask, now: number): { label
   if (!start) return { label: 'Time unknown', title: '' }
   return { label: `${end ? 'took' : 'elapsed'} ${duration(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000)}`, title: [start, end].filter(Boolean).join(' → ') }
 }
+/**
+ * The tasks the Owner dropped on their blocked task's card (owner_wait_closed with outcome dropped, the
+ * cancel in the same transaction): finished with, never done, and they no longer hold the goal open.
+ */
+export function droppedTasks(data: GoalData): Set<string> {
+  const closed = new Set(data.events.filter(e => e.event_type === 'owner_wait_closed' && e.body_json.outcome === 'dropped').map(e => e.task_id))
+  return new Set(data.tasks.filter(t => t.state === 'cancelled' && closed.has(t.task_id)).map(t => t.task_id))
+}
 function verdicts(data: GoalData, method: string) {
   // Verification events refer to the implementation, not the verification task.
   const latest = new Map<string, RuntimeEvent>()
@@ -55,7 +63,8 @@ export function currentVerdict(data: GoalData, impl: GoalTask, method: 'determin
 }
 function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageState; completed: number } {
   const method = role === 'verify' ? 'deterministic' : 'review'
-  const impls = data.tasks.filter(t => t.role === 'implement')
+  const dropped = droppedTasks(data)
+  const impls = data.tasks.filter(t => t.role === 'implement' && !dropped.has(t.task_id))
   const checks = data.tasks.filter(t => t.role === role)
   let passed = 0, failed = false, running = false
   for (const impl of impls) {
@@ -72,17 +81,23 @@ function checkStage(data: GoalData, role: 'verify' | 'review'): { state: StageSt
 }
 export function goalDone(data: GoalData): boolean {
   if (['stopped', 'failed', 'cancelled'].includes(text(data.mission.state))) return false
-  if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail'))) return false
-  return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.length > 0 && data.tasks.every(t => t.state === 'accepted'))
+  // A failed check of a task the Owner dropped says nothing of the goal.
+  const dropped = droppedTasks(data)
+  if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail' && !dropped.has(e.task_id)))) return false
+  return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.some(t => t.state === 'accepted')
+    && data.tasks.every(t => t.state === 'accepted' || dropped.has(t.task_id)))
 }
 export function goalStages(data: GoalData): GoalStage[] {
   const done = goalDone(data)
-  const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1 }]
+  const dropped = droppedTasks(data)
+  const stages: GoalStage[] = [{ label: 'Goal', state: 'done', tasks: [], completed: 1, dropped: 0 }]
   for (const [role, label] of [['plan', 'Plan'], ['implement', 'Implement'], ['verify', 'Verify'], ['review', 'Review']]) {
-    const tasks = data.tasks.filter(t => t.role === role)
+    // A stage counts the tasks still in play; the ones the Owner dropped are counted apart.
+    const all = data.tasks.filter(t => t.role === role)
+    const tasks = all.filter(t => !dropped.has(t.task_id))
     if (role === 'verify' || role === 'review') {
       const check = checkStage(data, role)
-      stages.push({ label: label!, tasks, ...check })
+      stages.push({ label: label!, tasks, ...check, dropped: 0 })
       continue
     }
     const results = role === 'verify' || role === 'review' ? verdicts(data, role === 'verify' ? 'deterministic' : 'review') : []
@@ -94,9 +109,9 @@ export function goalStages(data: GoalData): GoalStage[] {
     else if (tasks.some(t => ['ready', 'leased', 'running', 'submitted', 'verifying', 'rework'].includes(t.state))) state = 'running'
     else if (role === 'plan' && !tasks.length) state = 'skipped'
     else if (!done && ['done', 'skipped'].includes(stages.at(-1)?.state || '') && (!tasks.length || tasks.some(t => t.state === 'proposed'))) state = 'running'
-    stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed })
+    stages.push({ label: label!, state, tasks, completed: results.length && state === 'done' ? tasks.length : completed, dropped: all.length - tasks.length })
   }
-  stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0 })
+  stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
   return stages
 }
 export function goalStatus(data: GoalData, waiting: boolean): string {

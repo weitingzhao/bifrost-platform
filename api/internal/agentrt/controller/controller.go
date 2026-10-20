@@ -308,9 +308,25 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 	}
 }
 
+// BlockedCards is one pass over the blocked tasks' decision cards (design v5
+// §5.2 「验收编排」): an answered card gives its task one more round or drops
+// it (store.DecideBlocked), then every blocked task that needs a card and has
+// none open gets one (store.AskBlocked), the tasks blocked before this pass
+// included. Without a question store there are no cards. It returns how many
+// cards it closed and asked.
+func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
+	if c.Sources.Question == nil || c.Sources.Ask == nil {
+		return 0, nil
+	}
+	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
+	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
+	return decided + asked, errors.Join(derr, aerr)
+}
+
 // Close is one pass of closing the missions whose goal is done: every task
-// accepted, an implementation among them, no plan step bound
-// (store.CloseMissions). It returns how many it closed.
+// accepted or dropped by the Owner on its card, an implementation among the
+// accepted, no plan step bound (store.CloseMissions). It returns how many it
+// closed.
 func (c *Controller) Close(ctx context.Context) (int, error) {
 	closed, err := store.CloseMissions(ctx, c.DB)
 	return len(closed), err
@@ -392,8 +408,9 @@ func (c *Controller) Activate(ctx context.Context) (int, error) {
 
 // Start runs the loops until ctx ends and returns a function that waits for
 // them to stop, for a clean shutdown. In one pass: facts, routes of ready
-// tasks whose job's candidates changed, acceptance, dispatch of proposed
-// tasks, the closing of missions whose goal is done, plan decisions, the
+// tasks whose job's candidates changed, acceptance, blocked tasks' cards (a
+// task blocked by acceptance gets its card in the same pass), dispatch of
+// proposed tasks, the closing of missions whose goal is done, plan decisions, the
 // steps whose work has started, then rules, so a change seen or a task
 // accepted is
 // evaluated at once, a task whose last dependency was just accepted is
@@ -412,13 +429,14 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, ferr := c.Facts(ctx)
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
+		_, berr := c.BlockedCards(ctx)
 		_, derr := store.Dispatch(ctx, c.DB)
 		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, merr := c.MissionDecisions(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, derr, cerr, perr, merr, verr, rerr)
+		return errors.Join(ferr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
 	})
 	return wg.Wait
 }
