@@ -22,8 +22,12 @@ export function crewRows(hosts: RuntimeHost[], live: RuntimeAttempt[]): CrewRow[
   return [...rows.values()].sort((a, b) => (b.attempts.length > 0 ? 1 : 0) - (a.attempts.length > 0 ? 1 : 0) || a.id.localeCompare(b.id))
 }
 
-/** The first line of a goal or title, cut for a line of the card. */
+/** The first line of a goal or title, capped in UTF-16 units without splitting a surrogate pair. */
 export function firstLine(s: string, max = 80): string {
   const line = s.split('\n')[0].trim()
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line
+  if (line.length <= max) return line
+  let end = max - 1
+  const last = line.charCodeAt(end - 1)
+  if (last >= 0xD800 && last <= 0xDBFF) end--
+  return `${line.slice(0, end)}…`
 }

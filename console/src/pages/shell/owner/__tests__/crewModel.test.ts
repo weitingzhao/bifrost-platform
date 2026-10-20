@@ -56,6 +56,26 @@ describe('firstLine', () => {
     expect(firstLine('abcde', 5)).toBe('abcde')
     expect(firstLine('abcdef', 5)).toBe('abcd…')
   })
+
+  it('omits an emoji that straddles the cut without leaving a lone surrogate', () => {
+    const result = firstLine(`${'x'.repeat(78)}😀more text`)
+    expect(result).toBe(`${'x'.repeat(78)}…`)
+    expect(result.length).toBeLessThanOrEqual(80)
+    expect(decodeURIComponent(encodeURIComponent(result))).toBe(result)
+  })
+
+  it('keeps an emoji that fits entirely before the cut', () => {
+    const result = firstLine(`${'x'.repeat(77)}😀more text`)
+    expect(result).toBe(`${'x'.repeat(77)}😀…`)
+    expect(result).toHaveLength(80)
+    expect(decodeURIComponent(encodeURIComponent(result))).toBe(result)
+  })
+
+  it('honours a custom maximum in UTF-16 units with an emoji', () => {
+    expect(firstLine('xx😀more', 4)).toBe('xx…')
+    expect(firstLine('xx😀more', 5)).toBe('xx😀…')
+    expect(firstLine('xx😀', 4)).toBe('xx😀')
+  })
 })
 
 const host = (id: string, state = 'active'): RuntimeHost => ({ host_id: id, state, last_poll_at: '' })
