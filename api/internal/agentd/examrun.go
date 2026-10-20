@@ -13,7 +13,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -52,6 +51,7 @@ type examSitting struct {
 	Task  string `json:"task"`
 	PGID  int    `json:"pgid,omitempty"`
 	Start string `json:"start,omitempty"`
+	ID    string `json:"id,omitempty"` // the leader's procIdentity, when this system gives one
 }
 
 // keepSitting writes the record durably: a host that stops loses neither it
@@ -197,7 +197,8 @@ func (e *Exam) round(ctx context.Context, dir string, it store.ExamPaperItem, sp
 	pgid := 0
 	code, timedOut, err := launchRecorded(ctx, e.Self, sp, orDefault(e.Limit, 15*time.Minute), e.KillGrace, func(g int, at string) error {
 		pgid = g
-		return keepSitting(dir, examSitting{Task: task, PGID: g, Start: at})
+		id, _ := procIdentity(g) // none: the record names the group, but never ends it alone
+		return keepSitting(dir, examSitting{Task: task, PGID: g, Start: at, ID: id})
 	})
 	_ = log.Close()
 	r.wallS = int(time.Since(start).Seconds())
@@ -374,7 +375,7 @@ func examReads(log, dir string) (model, outside string, err error) {
 		return "", "", err
 	}
 	defer func() { _ = f.Close() }()
-	tooLong := func(_, _ []byte) {
+	tooLong := func() {
 		if outside == "" {
 			outside = fmt.Sprintf("an event of its log over %d MiB, not read", maxExamEvent>>20)
 		}
@@ -407,25 +408,29 @@ func examReads(log, dir string) (model, outside string, err error) {
 	return model, outside, err
 }
 
-// resultTooLong: the executor's stream-json log has a line over maxBody that
-// starts as a result event that is not an error, which streamResultReport
-// skips.
+// resultTooLong: the last result event of the executor's stream-json log,
+// the one streamResultReport takes the report from, is over maxBody (so it
+// skipped it), not an error, and holds an answer. Each event is read whole,
+// up to maxExamEvent, its fields where they are (review 419 B1); one longer
+// is not known to be anything, so it is no answer.
 func resultTooLong(log string) bool {
 	f, err := openBounded(log, 1<<62, false)
 	if err != nil {
 		return false
 	}
 	defer func() { _ = f.Close() }()
-	found := false
-	_ = eachLineOr(f, maxBody, func([]byte) {}, func(head, tail []byte) {
-		// Its keys in any order: one is at the line's start or at its end,
-		// outside the long value (a quote inside a string is escaped).
-		ends := append(append(slices.Clip(head), ' '), tail...)
-		if bytes.Contains(ends, []byte(`"type":"result"`)) && !bytes.Contains(ends, []byte(`"is_error":true`)) {
-			found = true
+	long := false
+	_ = eachLine(f, maxExamEvent, func(line []byte) {
+		var ev struct {
+			Type    string `json:"type"`
+			Result  string `json:"result"`
+			IsError bool   `json:"is_error"`
+		}
+		if json.Unmarshal(line, &ev) == nil && ev.Type == "result" && ev.Result != "" {
+			long = len(line) > maxBody && !ev.IsError
 		}
 	})
-	return found
+	return long
 }
 
 // toolPaths are the paths a tool call reads: the file a Read names, the

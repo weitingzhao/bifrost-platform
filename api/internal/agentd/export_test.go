@@ -17,3 +17,7 @@ func (e *Exam) ConfineForTest(f func(a *Attempt, sp Spawn) (Spawn, string)) { e.
 
 // GroupAliveForTest stands f for GroupAlive after each of e's runs ends.
 func (e *Exam) GroupAliveForTest(f func(pgid int) bool) { e.groupAlive = f }
+
+// ProcIdentity is procIdentity: a process's identity as an exam run's record
+// keeps its leader's.
+var ProcIdentity = procIdentity

@@ -653,7 +653,8 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 	}
 	sitting := func(task string, pgid int, start string) {
 		must(t, os.MkdirAll(filepath.Join(root, "tasks", task, "a1"), 0o700))
-		b, merr := json.Marshal(map[string]any{"task": task, "pgid": pgid, "start": start})
+		id, _ := agentd.ProcIdentity(pgid) // none once the leader is gone
+		b, merr := json.Marshal(map[string]any{"task": task, "pgid": pgid, "start": start, "id": id})
 		must(t, merr)
 		must(t, os.WriteFile(filepath.Join(dir, "sitting"), b, 0o600))
 	}

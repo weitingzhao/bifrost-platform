@@ -585,7 +585,7 @@ func (d *Daemon) Recover(ctx context.Context) error {
 	// What an exam sitting cut short left running is ended as well, before
 	// anything is sent; one not known gone blocks the host (Blocked; review
 	// 417 A1).
-	if _, why := ExamRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
+	if why := ExamRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
 		d.logf("%v; this host takes no new work until then", why)
 	}
 	for _, id := range ids {

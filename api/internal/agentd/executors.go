@@ -466,30 +466,20 @@ func eachLine(r io.Reader, max int, fn func([]byte)) error {
 	return eachLineOr(r, max, fn, nil)
 }
 
-// eachLineOr is eachLine that calls over with the first and the last bytes
-// (512 at most of each) of each line it skips, one longer than max (nil: none
-// is told).
-func eachLineOr(r io.Reader, max int, fn func([]byte), over func(head, tail []byte)) error {
-	const keep = 512
+// eachLineOr is eachLine that calls over for each line it skips, one longer
+// than max (nil: none is told).
+func eachLineOr(r io.Reader, max int, fn func([]byte), over func()) error {
 	br := bufio.NewReaderSize(r, 64<<10)
-	var line, head, tail []byte
+	var line []byte
 	skip := false
 	for {
 		chunk, err := br.ReadSlice('\n')
 		if !skip {
 			if len(line)+len(chunk) > max {
-				if over != nil {
-					head = append(head[:0], line[:min(len(line), keep)]...)
-					head = append(head, chunk[:min(len(chunk), keep-len(head))]...)
-					tail = append(tail[:0], lastBytes(line, keep)...)
-				}
 				skip, line = true, line[:0]
 			} else {
 				line = append(line, chunk...)
 			}
-		}
-		if skip && over != nil {
-			tail = lastBytes(append(tail, chunk...), keep)
 		}
 		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
@@ -498,7 +488,7 @@ func eachLineOr(r io.Reader, max int, fn func([]byte), over func(head, tail []by
 			fn(bytes.TrimRight(line, "\r\n"))
 		}
 		if skip && over != nil {
-			over(head, bytes.TrimRight(tail, "\r\n"))
+			over()
 		}
 		line, skip = line[:0], false
 		if errors.Is(err, io.EOF) {
@@ -508,14 +498,6 @@ func eachLineOr(r io.Reader, max int, fn func([]byte), over func(head, tail []by
 			return err
 		}
 	}
-}
-
-// lastBytes is the last n bytes of b, or b when it is shorter.
-func lastBytes(b []byte, n int) []byte {
-	if len(b) > n {
-		return b[len(b)-n:]
-	}
-	return b
 }
 
 // RunVerify is the deterministic executor (agentd verify --spec <file> --out
