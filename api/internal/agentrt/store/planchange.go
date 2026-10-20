@@ -463,6 +463,18 @@ func applyChanges(ctx context.Context, tx pgx.Tx, actor, root string, decided in
 		case "retitle":
 			_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET title = $2, version = version + 1 WHERE plan_node_id = $1`, c.Node, c.Title)
 		case "set_done_rule":
+			// An architecture row is ticked by gate tests only, as it is
+			// imported (planimport.ParseArch); a fact that stays true once
+			// recorded would tick it whatever runs (review 427 A2).
+			var kind string
+			if err = tx.QueryRow(ctx, `SELECT node_kind FROM agentrt.plan_node WHERE plan_node_id = $1`, c.Node).Scan(&kind); err != nil {
+				return nil, err
+			}
+			if kind == "arch_row" {
+				if rule, perr := plan.Parse(c.Rule); perr != nil || !(rule.Empty() || rule.OnlyStanding()) {
+					return nil, invalid("%s is an architecture row: its done rule is gate tests only (gates_passed)", c.Node)
+				}
+			}
 			var doc []byte
 			if doc, err = canonRule(c.Rule); err == nil {
 				_, err = tx.Exec(ctx, `UPDATE agentrt.plan_node SET done_rule_json = $2::jsonb, version = version + 1 WHERE plan_node_id = $1`, c.Node, string(doc))

@@ -25,6 +25,11 @@ import (
 // ReasonNoGate is the reason of a row with no done rule.
 const ReasonNoGate = "no gate test yet"
 
+// ReasonNotGates is the reason of a row whose done rule names more than gate
+// tests: a table row's tick is its gates against what runs now, never a fact
+// that stays true once recorded (review 427 A2).
+const ReasonNotGates = "its done rule is not gate tests only"
+
 // archRow is a row of the architecture table as planView read it.
 type archRow struct{ id, title string }
 
@@ -76,8 +81,11 @@ func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *record
 	if err = nrows.Err(); err != nil {
 		return nil, err
 	}
+	// One reading of a gate per projection, whichever rows name it: what each
+	// environment runs is the same for every row (review 427 B2).
+	gates := map[string]plan.Tri{}
 	for _, r := range rows {
-		tick, reason, err := archTick(ctx, tx, r.id, rules[r.id], deploys)
+		tick, reason, err := archTick(ctx, tx, r.id, rules[r.id], deploys, gates)
 		if err != nil {
 			return nil, err
 		}
@@ -92,16 +100,18 @@ func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *record
 
 // archTick evaluates a row's done rule now: true, false or unknown, and the
 // reason, which names the atoms that decided it.
-func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedDeploys) (string, string, error) {
+func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedDeploys, gates map[string]plan.Tri) (string, string, error) {
 	rule, err := plan.Parse([]byte(doc))
 	switch {
 	case err != nil:
 		return plan.Unknown.String(), "its done rule does not parse: " + err.Error(), nil
 	case rule.Empty():
 		return plan.Unknown.String(), ReasonNoGate, nil
+	case !rule.OnlyStanding():
+		return plan.Unknown.String(), ReasonNotGates, nil
 	}
 	facts := &stepFacts{ctx: ctx, tx: tx, step: id, deployed: deploys.read}
-	seen := &explained{Facts: facts}
+	seen := &explained{Facts: facts, gates: gates}
 	res := rule.Eval(seen)
 	if facts.err != nil {
 		return "", "", facts.err
@@ -126,7 +136,12 @@ type recordedDeploy struct {
 	commit string
 	ref    map[string]any
 	at     time.Time
-	ok     bool
+	// found: a deploy_seen event names the environment; ok: it identifies
+	// what runs (a commit and a reference object that is not empty);
+	// invalid: why a record found does not (review 427 A1, B1).
+	found   bool
+	ok      bool
+	invalid string
 }
 
 func newRecordedDeploys(ctx context.Context, tx pgx.Tx) *recordedDeploys {
@@ -149,7 +164,7 @@ func (r *recordedDeploys) get(env string) recordedDeploy {
 		return d
 	}
 	var refDoc []byte
-	err := r.tx.QueryRow(r.ctx, `SELECT body_json->>'commit', (body_json->'deploy_ref')::text, at FROM agentrt.event
+	err := r.tx.QueryRow(r.ctx, `SELECT COALESCE(body_json->>'commit', ''), (body_json->'deploy_ref')::text, at FROM agentrt.event
 	  WHERE event_type = 'deploy_seen' AND body_json @> jsonb_build_object('env', $1::text) ORDER BY event_id DESC LIMIT 1`,
 		env).Scan(&d.commit, &refDoc, &d.at)
 	switch {
@@ -158,12 +173,26 @@ func (r *recordedDeploys) get(env string) recordedDeploy {
 		r.err = err
 		return d
 	default:
-		// The reference as SeeDeploy recorded it: an object, or null when
-		// the delivery record gave none.
+		// The reference as SeeDeploy recorded it. Only an object that names
+		// something identifies a deployment: a null reference would encode as
+		// {} and match a pass recorded against {} (review 427 A1).
+		d.found = true
 		v, perr := canon.Parse(refDoc)
 		ref, isObject := v.(map[string]any)
-		d.ok = perr == nil && (isObject || v == nil)
-		d.ref = ref
+		switch {
+		case perr != nil || refDoc == nil:
+			d.invalid = "it has no reference"
+		case v == nil:
+			d.invalid = "its reference is null"
+		case !isObject:
+			d.invalid = "its reference is not an object"
+		case len(ref) == 0:
+			d.invalid = "its reference is empty"
+		case strings.TrimSpace(d.commit) == "":
+			d.invalid = "it names no commit"
+		default:
+			d.ok, d.ref = true, ref
+		}
 	}
 	r.m[env] = d
 	return d
@@ -175,6 +204,9 @@ func (r *recordedDeploys) get(env string) recordedDeploy {
 type explained struct {
 	plan.Facts
 	atoms []atomReading
+	// gates is the projection's readings of gates, by environment, test and
+	// spec: the deployment they are read against is the projection's.
+	gates map[string]plan.Tri
 }
 
 type atomReading struct {
@@ -216,7 +248,14 @@ func (e *explained) ManualRecorded(note string) bool {
 }
 
 func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
-	v := e.Facts.GatePassed(env, test, specSHA256)
+	key := env + "\x00" + test + "\x00" + specSHA256
+	v, read := e.gates[key]
+	if !read {
+		v = e.Facts.GatePassed(env, test, specSHA256)
+		if e.gates != nil {
+			e.gates[key] = v
+		}
+	}
 	e.atoms = append(e.atoms, atomReading{what: test, env: env, value: v})
 	return v
 }
@@ -251,8 +290,10 @@ func (e *explained) reason(value plan.Tri, deploys *recordedDeploys) string {
 		d := deploys.get(env)
 		at := fmt.Sprintf("%s at %s, the deployment recorded %s", env, short(d.commit), d.at.UTC().Format(time.RFC3339))
 		switch {
-		case value == plan.Unknown && !d.ok:
+		case value == plan.Unknown && !d.found:
 			gates = append(gates, list+": what "+env+" runs is not recorded yet")
+		case value == plan.Unknown && !d.ok:
+			gates = append(gates, fmt.Sprintf("%s: the deployment recorded for %s at %s does not identify what runs: %s", list, env, d.at.UTC().Format(time.RFC3339), d.invalid))
 		case value == plan.Unknown:
 			gates = append(gates, list+": the deployment recorded for "+env+" cannot be read")
 		case value == plan.True:

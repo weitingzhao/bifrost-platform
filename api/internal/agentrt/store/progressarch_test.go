@@ -102,8 +102,9 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	}
 	wantTick(t, rows["ARCH:state-db"], "unknown", "T19, T20: what stg runs is not recorded yet")
 
-	refA := map[string]any{"run": "deliver-1", "digests": []any{"sha256:aa"}}
-	refB := map[string]any{"run": "deliver-2", "digests": []any{"sha256:bb"}}
+	// What SeeDeploy records from a delivery record (server/agentrt_sources.go deployedFrom; review 427 C1).
+	refA := map[string]any{"delivery_run": "bifrost-deliver-platform-1", "images": map[string]any{"platform-api": "sha256:aa", "platform-workers": "sha256:aa"}}
+	refB := map[string]any{"delivery_run": "bifrost-deliver-platform-2", "images": map[string]any{"platform-api": "sha256:bb", "platform-workers": "sha256:bb"}}
 	deploy := func(env string, ref map[string]any) {
 		t.Helper()
 		_, err := store.SeeDeploy(ctx, w.rt, env, deployedIs(commitA, ref))
@@ -127,7 +128,7 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	gate := func(test, env, commit string, ref map[string]any) {
 		t.Helper()
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
-			ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(test+env+commit+ref["run"].(string)))
+			ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte(test+env+commit+ref["delivery_run"].(string)))
 			if err != nil {
 				return err
 			}
@@ -316,4 +317,103 @@ func TestArchImportRefusesALocalPath(t *testing.T) {
 	if after := rows(t, pool); after != before {
 		t.Fatalf("a refused import wrote: %v, then %v", before, after)
 	}
+}
+
+// Review 427 A1, B1: a deployment recorded without a usable reference (null,
+// not an object, empty) identifies nothing that runs (deploy_seen itself
+// requires a commit):
+// the row is unknown, and says the record is there but does not identify,
+// never "not recorded"; a null reference never matches a pass recorded
+// against {}.
+func TestArchRecordedDeploymentThatIdentifiesNothing(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.arch(t, [2]string{"ARCH:state-db", archGates("prod", "T19")})
+	task := store.NewTaskID()
+	var attempt string
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, err := store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-1", PlanNode: s1, Role: "implement",
+			Class: "go", Title: "t", SpecArtifact: w.spec, Effect: "none"}); err != nil {
+			return err
+		}
+		var err error
+		attempt, _, err = store.LeaseAttempt(ctx, tx, "controller", "M-1", task, "exec:deterministic", "", 1, time.Minute)
+		if err != nil {
+			return err
+		}
+		ev, err := store.PutArtifact(ctx, tx, "controller", "verify", "text/plain", []byte("T19 against {}"))
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, check_ref, env, verdict,
+		  evidence_artifact_id, subject_commit, deploy_ref_json, spec_sha256) VALUES ($1,$2,$3,'gate','T19','prod','pass',$4,$5,'{}'::jsonb,$6)`,
+			store.NewVerificationID(), task, attempt, ev, commitA, archSpec)
+		return err
+	}))
+	for _, c := range []struct {
+		name string
+		body map[string]any
+		why  string
+	}{
+		{"a null reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": nil}, "its reference is null"},
+		{"a string reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": "bad"}, "its reference is not an object"},
+		{"an empty reference", map[string]any{"env": "prod", "commit": commitA, "deploy_ref": map[string]any{}}, "its reference is empty"},
+	} {
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+			_, err := store.Append(ctx, tx, store.Event{Stream: "deploy:prod", Type: "deploy_seen", Actor: "controller", Body: c.body})
+			return err
+		}))
+		row := w.archRows(t)["ARCH:state-db"]
+		wantTick(t, row, "unknown", "T19: the deployment recorded for prod at ")
+		if !strings.Contains(row["reason"].(string), c.why) || strings.Contains(row["reason"].(string), "not recorded yet") {
+			t.Errorf("%s: reason %q; want it to say %q", c.name, row["reason"], c.why)
+		}
+	}
+}
+
+// Review 427 A2: an architecture row is ticked by gate tests only. A rule
+// that names a fact which stays true once recorded is unknown on the page,
+// and a plan change that would give a row one is refused: when proposed
+// (its trial apply) and so before any card reaches the Owner.
+func TestArchRowRuleIsGatesOnly(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.arch(t, [2]string{"ARCH:state-db", `{"ci_succeeded":{"repo":"bifrost-platform","commit":"` + commitA + `"}}`}, [2]string{"ARCH:bus", ""})
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "unknown", store.ReasonNotGates)
+
+	a := &asker{}
+	propose := func(key, rule string) (map[string]any, error) {
+		return store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), key, "ARCH", "test",
+			[]store.PlanChange{{Op: "set_done_rule", Node: "ARCH:bus", Rule: []byte(rule)}}, a.ask)
+	}
+	if _, err := propose("k-ci", `{"ci_succeeded":{"repo":"bifrost-platform","commit":"`+commitA+`"}}`); err == nil ||
+		!strings.Contains(err.Error(), "gate tests only") {
+		t.Fatalf("a CI rule on an architecture row was proposed: %v", err)
+	}
+	if len(a.cards) != 0 {
+		t.Fatalf("a refused change reached the Owner: %v", a.cards)
+	}
+	out, err := propose("k-gates", archGates("stg", "T21"))
+	ok(t, err)
+	gates := out["question_id"].(string)
+	a.answer(gates, store.QuestionAnswered, store.CardApplyKey)
+	n, err := store.DecidePlanChanges(ctx, w.rt, a.question, a.ack)
+	ok(t, err)
+	if n != 1 {
+		t.Fatalf("decided %d; want 1", n)
+	}
+	decided := map[string][2]string{}
+	rows, err := w.rt.Query(ctx, `SELECT body_json->>'question_id', body_json->>'decision', COALESCE(body_json->>'error', '')
+	  FROM agentrt.event WHERE event_type = 'plan_change_decided'`)
+	ok(t, err)
+	for rows.Next() {
+		var q, d, e string
+		ok(t, rows.Scan(&q, &d, &e))
+		decided[q] = [2]string{d, e}
+	}
+	ok(t, rows.Err())
+	if d := decided[gates]; d[0] != "applied" {
+		t.Fatalf("a gates rule on an architecture row: %v", d)
+	}
+	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: what stg runs is not recorded yet")
 }
