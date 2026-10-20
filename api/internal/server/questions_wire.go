@@ -162,14 +162,14 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 			// A planner's question the store holds under another key, open or
 			// answered (review 217 B2): the Owner has it; the plan goes on.
 			return "", fmt.Errorf("%w: %s", store.ErrAsked, msg)
-		case res.Code == http.StatusConflict && msg == questions.KeyReused:
-			// The card this key names was made by an earlier try whose
-			// transaction then failed, in words that have changed since (a
-			// blocked card says how long ago its mission started): it is that
-			// card, as a retry with the same words would get.
+		case card.SameByKey && res.Code == http.StatusConflict && msg == questions.KeyReused:
+			// A blocked card made by an earlier try whose transaction then
+			// failed, in words that have changed since (it says how long ago
+			// its mission started): the card under its key is this card when
+			// it names the same task and options (review 439 A3).
 			q, ok, lerr := rt.svc.LookupKey(agentRuntimeRequester, card.Key)
-			if lerr != nil || !ok {
-				return "", fmt.Errorf("the question store answered %d: %v (and the card under its key could not be read: %v)", res.Code, res.Body, lerr)
+			if lerr != nil || !ok || !sameCard(q, card) {
+				return "", fmt.Errorf("the question store answered %d: %v (the card under its key is not this one: %v)", res.Code, res.Body, lerr)
 			}
 			return q.ID, nil
 		case (res.Code != http.StatusCreated && res.Code != http.StatusOK) || id == "":
@@ -177,6 +177,21 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		}
 		return id, nil
 	}
+}
+
+// sameCard says whether a question the store holds is the card c: the same
+// task and option labels (a blocked card's third names its mission). The
+// title is not compared: the store cleans it, and it is the task's anyway.
+func sameCard(q questions.Question, c store.Card) bool {
+	if q.TaskID != c.TaskID || len(q.Options) != len(c.Options) {
+		return false
+	}
+	for i, o := range q.Options {
+		if o.Label != c.Options[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // agentRuntimeRequester is the session the runtime asks the Owner as.

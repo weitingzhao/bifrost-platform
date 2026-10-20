@@ -27,7 +27,10 @@ func TestRecommendRules(t *testing.T) {
 		why    string
 	}{
 		// R1: over a day old and at least 3× its hours, whatever blocked it.
-		{"R1 old and far over", with(base(blockFailed), func(f *recFacts) { f.created, f.lastWork = ago(115), ago(100); f.check, f.verdict = "deterministic", "fail" }),
+		{"R1 old and far over", with(base(blockFailed), func(f *recFacts) {
+			f.created, f.lastWork = ago(115), ago(100)
+			f.check, f.verdict = "deterministic", "fail"
+		}),
 			recClose, "R1", "started 4 days ago, used 14× its 8 hours, nothing ran since 10-16"},
 		{"R1 nothing ever ran", with(base(blockBudget), func(f *recFacts) { f.created, f.budgetHours, f.lastWork = ago(30), 2, time.Time{} }),
 			recClose, "R1", "started 30 hours ago, used 15× its 2 hours, nothing has run"},

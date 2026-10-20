@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -72,73 +73,74 @@ var closeMoves = func() map[string][]string {
 	return m
 }()
 
-// closeTries is how often a close starts again when an attempt became live
-// between its locks; the next pass tries again after that.
-const closeTries = 3
-
-// closeOnCard closes the mission of card c's task on the Owner's answer q;
-// did is whether it closed the card.
+// closeOnCard closes the mission of card c on the Owner's answer q; did is
+// whether it closed the card. A close that finds a task's row locked, or the
+// mission's tasks or live attempts changed between its reads, starts again,
+// a few times; after that the next pass tries again.
 func closeOnCard(ctx context.Context, db DB, c openCard, q Question, seen map[string]any, key string) (bool, error) {
 	for try := 1; ; try++ {
 		did, err := closeOnCardOnce(ctx, db, c, q, seen, key)
-		if !errors.Is(err, errLiveMoved) || try == closeTries {
+		if !errors.Is(err, errLiveMoved) && !retryable(err) {
 			return did, err
 		}
+		if try == busyTries {
+			return false, fmt.Errorf("%w: closing the mission of card %s: %v", ErrBusy, c.question, err)
+		}
+		time.Sleep(time.Duration(try*try) * 20 * time.Millisecond)
 	}
 }
 
-// closeOnCardOnce takes its locks in the kernel's order: the live attempts
-// of the mission's tasks, then the tasks that have not ended (the work
-// before its checks: a check's subject before the check), then the mission.
-// An attempt leased between the first two is not locked: the close starts
-// again (errLiveMoved).
+// closeOnCardOnce closes the mission the card was asked in (the one its
+// option names; owner_wait_opened records it), never the one its task is in
+// now, if a plan change moved the task since (review 439 A4). Its locks, in
+// the kernel's order: the live attempts of the mission's tasks; the tasks
+// that have not ended, NOWAIT, since Dispatch takes a dependent before what
+// it waits for and no fixed order fits every graph (review 439 A2: a row
+// locked elsewhere starts the close again); then the mission. Reads after
+// the mission's lock see what was committed before it: a live attempt or an
+// unfinished task that is not among those locked starts the close again
+// (review 439 A1). A task that lands in the mission after this commits (a
+// proposal reads the mission without its lock) is cancelled by
+// CancelAfterClose.
 func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen map[string]any, key string) (bool, error) {
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = false
 		var mission string
-		if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, c.task).Scan(&mission); err != nil {
+		if err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.event WHERE event_id = $1`, c.event).Scan(&mission); err != nil {
 			return err
 		}
-		live := func(lock string) ([]attemptRow, error) {
-			rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.task_id FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
-			  WHERE t.mission_id = $1 AND a.state IN ('leased','running','stale') ORDER BY a.attempt_id `+lock, mission)
-			if err != nil {
-				return nil, err
-			}
-			return pgx.CollectRows(rows, func(r pgx.CollectableRow) (attemptRow, error) {
-				var a attemptRow
-				return a, r.Scan(&a.id, &a.task)
-			})
-		}
-		attempts, err := live("FOR UPDATE OF a")
+		attempts, err := liveOf(ctx, tx, mission, "FOR UPDATE OF a")
 		if err != nil {
 			return err
 		}
 		hook("close: attempts locked", mission)
-		rows, err := tx.Query(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1 AND state NOT IN ('accepted','rejected','cancelled')
-		  ORDER BY subject_task_id IS NOT NULL, task_id FOR NO KEY UPDATE`, mission)
+		open, err := unfinishedOf(ctx, tx, mission, "FOR NO KEY UPDATE NOWAIT")
 		if err != nil {
 			return err
 		}
-		open, err := pgx.CollectRows(rows, pgx.RowTo[string])
-		if err != nil {
-			return err
-		}
+		hook("close: tasks locked", mission)
 		var mstate string
 		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE`, mission).Scan(&mstate); err != nil {
 			return err
 		}
-		now, err := live("")
+		nowLive, err := liveOf(ctx, tx, mission, "")
 		if err != nil {
 			return err
 		}
-		if !slices.Equal(now, attempts) {
+		nowOpen, err := unfinishedOf(ctx, tx, mission, "")
+		if err != nil {
+			return err
+		}
+		if !slices.Equal(nowLive, attempts) || !slices.Equal(nowOpen, open) {
 			return errLiveMoved
 		}
 		var closed bool
+		var latest int64
 		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE task_id = $1 AND event_type = 'owner_wait_closed'
-		  AND body_json->>'question_id' = $2)`, c.task, c.question).Scan(&closed); err != nil || closed {
+		    AND body_json->>'question_id' = $2),
+		  COALESCE((SELECT e.event_id FROM agentrt.event e WHERE e.task_id = $1 AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1), 0)`,
+			c.task, c.question).Scan(&closed, &latest); err != nil || closed {
 			return err // another pass decided it
 		}
 		if _, err = recordIfChanged(ctx, tx, "question_seen", key, func(context.Context) (map[string]any, bool, error) {
@@ -150,16 +152,20 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 		if err != nil {
 			return err
 		}
+		// Nothing moves when the mission has ended (a second close
+		// included), the task is in another mission now (its next card names
+		// that one), or the task left the block the card is about (review
+		// 439 C2, as one more round and not doing it go).
 		acted := OutcomeClosed
-		if mstate != "active" && mstate != "paused" {
-			acted = OutcomeMoot // closed already, or ended some other way: nothing moves
+		if (mstate != "active" && mstate != "paused") || t.mission != mission || t.state != "blocked" || latest != c.block {
+			acted = OutcomeMoot
 		}
 		body := map[string]any{"question_id": c.question, "outcome": acted, "answer": q.Option}
 		if q.Text != "" {
 			body["text"] = q.Text
 		}
-		if _, err = Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "owner_wait_closed", Actor: "controller",
-			MissionID: mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
+		if _, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "owner_wait_closed", Actor: "controller",
+			MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
 			return err
 		}
 		did = true
@@ -167,22 +173,8 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 			return nil
 		}
 		why := fmt.Sprintf("the Owner closed mission %s on the card of task %s (question %s)", mission, c.task, c.question)
-		for _, a := range attempts {
-			if err = attemptEvent(ctx, tx, "controller", a, "attempt_cancelled", map[string]any{"reason": why}); err != nil {
-				return err
-			}
-			if _, err = tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'cancelled' WHERE attempt_id = $1`, a.id); err != nil {
-				return err
-			}
-		}
-		for _, id := range open {
-			o, err := readTask(ctx, tx, id, false)
-			if err != nil {
-				return err
-			}
-			if err = moveTaskBy(ctx, tx, "controller", o, "cancelled", why, closeMoves); err != nil {
-				return err
-			}
+		if err = cancelAll(ctx, tx, attempts, open, why); err != nil {
+			return err
 		}
 		var accepted int
 		var delivered bool
@@ -204,6 +196,122 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 	return did && err == nil, err
 }
 
+// liveOf is the live attempts of a mission's tasks, with the given lock
+// clause ("" for none).
+func liveOf(ctx context.Context, tx pgx.Tx, mission, lock string) ([]attemptRow, error) {
+	rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.task_id FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+	  WHERE t.mission_id = $1 AND a.state IN ('leased','running','stale') ORDER BY a.attempt_id `+lock, mission)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (attemptRow, error) {
+		var a attemptRow
+		return a, r.Scan(&a.id, &a.task)
+	})
+}
+
+// unfinishedOf is a mission's tasks that have not ended, the work before
+// its checks, with the given lock clause ("" for none).
+func unfinishedOf(ctx context.Context, tx pgx.Tx, mission, lock string) ([]string, error) {
+	rows, err := tx.Query(ctx, `SELECT task_id FROM agentrt.task WHERE mission_id = $1 AND state NOT IN ('accepted','rejected','cancelled')
+	  ORDER BY subject_task_id IS NOT NULL, task_id `+lock, mission)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// cancelAll cancels the given live attempts (attempt_cancelled; their hosts'
+// next calls are refused and agentd ends them) and then the given tasks, all
+// locked by the caller, with why.
+func cancelAll(ctx context.Context, tx pgx.Tx, attempts []attemptRow, ids []string, why string) error {
+	for _, a := range attempts {
+		if err := attemptEvent(ctx, tx, "controller", a, "attempt_cancelled", map[string]any{"reason": why}); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE agentrt.attempt SET state = 'cancelled' WHERE attempt_id = $1`, a.id); err != nil {
+			return err
+		}
+	}
+	for _, id := range ids {
+		o, err := readTask(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		if err = moveTaskBy(ctx, tx, "controller", o, "cancelled", why, closeMoves); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// closedOnCard is a mission (m) the Owner closed on a blocked card: its last
+// move names a question and the answer that closes (c; a mission's own card
+// has a and b only).
+const closedOnCard = `m.state IN ('done','stopped') AND EXISTS (SELECT 1 FROM (SELECT e.body_json FROM agentrt.event e
+    WHERE e.mission_id = m.mission_id AND e.event_type = 'mission_state_changed' ORDER BY e.event_id DESC LIMIT 1) s
+  WHERE s.body_json->>'answer' = 'c' AND s.body_json ? 'question_id')`
+
+// CancelAfterClose is one pass cancelling every task that has not ended in a
+// mission the Owner closed on a card: one that landed after the close
+// committed (a proposal or a check made without the mission's lock; review
+// 439 A1). Such a task cannot have run: a claim takes only an active
+// mission's tasks. It returns how many it cancelled.
+func CancelAfterClose(ctx context.Context, db DB) (int, error) {
+	var ids []string
+	if err := InTx(ctx, db, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+		  WHERE t.state NOT IN ('accepted','rejected','cancelled') AND `+closedOnCard+` ORDER BY t.task_id LIMIT 100`)
+		if err != nil {
+			return err
+		}
+		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+		return err
+	}); err != nil {
+		return 0, err
+	}
+	n := 0
+	var errs []error
+	for _, id := range ids {
+		did := false
+		err := InTx(ctx, db, func(tx pgx.Tx) error {
+			did = false
+			var attempts []attemptRow
+			live, err := liveAttempt(ctx, tx, id, "FOR UPDATE")
+			if err != nil {
+				return err
+			}
+			if live != "" {
+				attempts = append(attempts, attemptRow{id: live, task: id})
+			}
+			t, err := readTask(ctx, tx, id, true)
+			if err != nil || slices.Contains([]string{"accepted", "rejected", "cancelled"}, t.state) {
+				return err
+			}
+			var question string
+			err = tx.QueryRow(ctx, `SELECT s.body_json->>'question_id' FROM agentrt.mission m
+			  JOIN LATERAL (SELECT e.body_json FROM agentrt.event e WHERE e.mission_id = m.mission_id AND e.event_type = 'mission_state_changed'
+			    ORDER BY e.event_id DESC LIMIT 1) s ON true
+			  WHERE m.mission_id = $1 AND `+closedOnCard+` FOR SHARE OF m`, t.mission).Scan(&question)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			did = true
+			return cancelAll(ctx, tx, attempts, []string{id}, fmt.Sprintf("the Owner closed mission %s on a card (question %s); "+
+				"this task came after the close", t.mission, question))
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+		} else if did {
+			n++
+		}
+	}
+	return n, errors.Join(errs...)
+}
+
 // tasks is n tasks, in words.
 func tasks(n int) string {
 	if n == 1 {
@@ -213,8 +321,10 @@ func tasks(n int) string {
 }
 
 // WithdrawStaleCards withdraws every open blocked card of a mission that has
-// ended (done, stopped or expired), on which no answer can move anything,
-// and every one that offers fewer options than a card does now. Only a card
+// ended (done, stopped or expired), on which no answer can move anything;
+// every one whose task a plan change moved to another mission since (its
+// third option names the old one); and every one that offers fewer options
+// than a card does now. Only a card
 // the question store says is open is withdrawn; one answered, expired or
 // withdrawn is the next DecideBlocked's to close, and one it cannot read is
 // left alone. A card the store does not withdraw now is tried again by the
@@ -229,14 +339,16 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 	size := int(blockedPage.Load())
 	for {
 		type card struct {
-			event             int64
-			question, mission string
-			state             string
+			event                    int64
+			question, mission, state string
+			now                      string // the mission the card's task is in now
 		}
 		var page []card
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
-			rows, err := tx.Query(ctx, `SELECT o.event_id, o.body_json->>'question_id', m.mission_id, m.state FROM agentrt.event o
-			  JOIN agentrt.task t ON t.task_id = o.task_id JOIN agentrt.mission m ON m.mission_id = t.mission_id
+			// The mission the card was asked in, the one its option names
+			// (review 439 A4).
+			rows, err := tx.Query(ctx, `SELECT o.event_id, o.body_json->>'question_id', m.mission_id, m.state, t.mission_id FROM agentrt.event o
+			  JOIN agentrt.task t ON t.task_id = o.task_id JOIN agentrt.mission m ON m.mission_id = o.mission_id
 			  WHERE o.event_type = 'owner_wait_opened' AND o.event_id > $1 AND `+cardOpen+`
 			  ORDER BY o.event_id LIMIT $2`, after, size)
 			if err != nil {
@@ -244,7 +356,7 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 			}
 			page, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (card, error) {
 				var c card
-				return c, r.Scan(&c.event, &c.question, &c.mission, &c.state)
+				return c, r.Scan(&c.event, &c.question, &c.mission, &c.state, &c.now)
 			})
 			return err
 		}); err != nil {
@@ -259,6 +371,8 @@ func WithdrawStaleCards(ctx context.Context, db DB, question func(context.Contex
 			switch {
 			case c.state == "done" || c.state == "stopped" || c.state == "expired":
 				why = fmt.Sprintf("mission %s has ended (%s); this card no longer decides anything", c.mission, c.state)
+			case c.now != c.mission:
+				why = fmt.Sprintf("its task is in mission %s now; a card naming that mission takes its place", c.now)
 			case q.Options > 0 && q.Options < len(blockedOptions(c.mission)):
 				why = "replaced by a card that can also close mission " + c.mission + " and says what it recommends"
 			default:

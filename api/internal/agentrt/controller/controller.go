@@ -314,7 +314,9 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 
 // BlockedCards is one pass over the blocked tasks' decision cards (design v5
 // §5.2 「验收编排」): an answered card gives its task one more round, drops
-// it or closes its mission (store.DecideBlocked), the open cards of missions
+// it or closes its mission (store.DecideBlocked), a task that landed in a
+// mission after the Owner closed it is cancelled (store.CancelAfterClose),
+// the open cards of missions
 // that have ended are withdrawn, and so are cards asked before the third
 // option (store.WithdrawStaleCards: the other cards of a mission closed on a
 // card, so their places in the question store are free for this pass), a
@@ -330,10 +332,11 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
+	late, lerr := store.CancelAfterClose(ctx, c.DB)
 	withdrawn, werr := store.WithdrawStaleCards(ctx, c.DB, c.question, c.boundedWithdraw())
 	spent, serr := store.BlockOverBudget(ctx, c.DB)
 	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + withdrawn + spent + asked, errors.Join(derr, werr, serr, aerr)
+	return decided + late + withdrawn + spent + asked, errors.Join(derr, lerr, werr, serr, aerr)
 }
 
 // LandingsEvery is how often the landings pass reads main: a loop of its own,

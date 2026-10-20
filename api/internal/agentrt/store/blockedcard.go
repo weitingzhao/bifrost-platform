@@ -33,9 +33,10 @@ import (
 // transaction with owner_wait_closed, which says how the card ended; a
 // dropped task (outcome dropped) no longer holds its mission open
 // (close.go). Each card recommends one answer, or says why it recommends
-// none, by fixed rules (blockedrecommend.go). "None of these" with the Owner's words, a card that expired or
-// was withdrawn, closes the card and moves nothing: the task is still
-// blocked, and the next pass asks again with a new card (his words on it).
+// none, by fixed rules (blockedrecommend.go). "None of these" with the
+// Owner's words, a card that expired or was withdrawn, closes the card and
+// moves nothing: the task is still blocked, and the next pass asks again
+// with a new card (his words on it).
 //
 // One more round also makes room in the mission's budget for that round
 // when it has none, as the Owner's mission_amended (missionbudget.go,
@@ -223,7 +224,7 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		c := Card{Key: blockedCardKey(taskID, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
 			Body: body, Options: blockedOptions(t.mission), OwnerDuty: "goal", TaskID: taskID,
 			Meanwhile: "the task stays blocked and mission " + t.mission + " stays open",
-			Urgency:   "when you can: only this task waits for you, and its mission cannot finish without your answer"}
+			Urgency:   "when you can: only this task waits for you, and its mission cannot finish without your answer", SameByKey: true}
 		if r.option != recNone {
 			c.Recommended, c.RecommendedWhy = r.option, r.why
 		}
@@ -378,6 +379,9 @@ const (
 
 var cutFloors = [4]int{0, 0, 40, 40}
 
+// reportOnPage stands for a report too long to quote on a card at all.
+const reportOnPage = "Its report is too long to quote here; the whole report is on the task's page."
+
 // lastLineRunes is the most of an end's last line (a review's VERDICT, the
 // last line of a failed command's output) a card keeps however it is cut.
 const lastLineRunes = 100
@@ -407,8 +411,22 @@ func blockedCardBody(c blockedCard) string {
 	}
 	for i := 0; ; {
 		body := blockedCardText(c, parts, full)
-		if questions.BodyBytes(body) <= questions.BodyLimit || i == len(parts) {
+		if questions.BodyBytes(body) <= questions.BodyLimit {
 			return body
+		}
+		if i == len(parts) {
+			if c.check == nil || c.check.excerpt.lead == reportOnPage {
+				return body
+			}
+			// Every part at its floor and still too long (review 439 B1: a
+			// failed command's line and an output line JSON escapes, beside
+			// the recommendation and three answers): the report is not
+			// quoted, and what is left is bounded.
+			short := *c.check
+			short.excerpt = checkExcerpt{lead: reportOnPage}
+			c.check = &short
+			parts[cutReport], full[cutReport] = nil, nil
+			continue
 		}
 		if len(parts[i]) <= floors[i] {
 			i++
@@ -479,10 +497,10 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		}
 	}
 	if len(parts[cutWords]) > 0 {
-		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the two.\n",
+		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the options.\n",
 			text(cutWords))
 	} else if c.words != "" {
-		b.WriteString("\nYour last answer on this block's card was none of these (your words are on that card). The runtime does not act on words; choose one of the two.\n")
+		b.WriteString("\nYour last answer on this block's card was none of these (your words are on that card). The runtime does not act on words; choose one of the options.\n")
 	}
 	more := "it goes back to ready as it is, and a host takes it as usual"
 	switch {

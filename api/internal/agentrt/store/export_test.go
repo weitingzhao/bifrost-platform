@@ -194,6 +194,28 @@ func BlockedCardBodyWithCheckForTest(method, report, title, reason, words string
 		rec: recommendation{option: recClose, rule: "R1", why: BlockedCardWhyForTest}})
 }
 
+// BlockedCardBodyFullForTest is the card of an implementation in repo, M-3,
+// blocked for failing round 2 of 2, whose last check by method failed with
+// report: its title, its block's reason, the Owner's last words, what one
+// more round adds to the budget and the recommendation's why (closing M-3).
+func BlockedCardBodyFullForTest(repo, method, report, title, reason, words, budget, why string) string {
+	check := &checkSummary{method: method, verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
+		excerpt: checkExcerptOf(method, []byte(report))}
+	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-3", role: "implement", effect: "branch"},
+		title: title, repo: repo, reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 1, check: check,
+		budget: budget, rec: recommendation{option: recClose, rule: "R1", why: why}})
+}
+
+// BlockedCardBodyLeadForTest is BlockedCardBodyFullForTest's card whose
+// last check's quote is led by lead, which is never cut.
+func BlockedCardBodyLeadForTest(lead, budget, why string) string {
+	check := &checkSummary{method: "deterministic", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
+		excerpt: checkExcerpt{lead: lead, text: "the output's end", fromEnd: true}}
+	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-3", role: "implement", effect: "branch"},
+		title: "t", repo: "bifrost-platform", reason: "r", round: 2, maxRounds: 2, failed: true, card: 1, check: check,
+		budget: budget, rec: recommendation{option: recClose, rule: "R1", why: why}})
+}
+
 // BlockedPageForTest sets how many blocked tasks a pass reads at a time and
 // returns the function that restores it.
 func BlockedPageForTest(n int) func() {

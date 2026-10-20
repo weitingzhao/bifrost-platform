@@ -599,7 +599,11 @@ var ErrAsk = errors.New("store: the Owner cannot be asked now")
 // blocked task's (blockedcard.go) names its options, the one its rules
 // recommend (1-based, nothing done on it unanswered) and why (the
 // recommended option's detail in the question store), what happens
-// meanwhile, the duty, the task and how soon.
+// meanwhile, the duty, the task and how soon. Its body may change between a
+// try that made it and a retry (it says how long ago its mission started):
+// SameByKey lets the store's card under its key stand for it when that card
+// names the same task and options (review 439 A3: no other card's
+// retry may take a card made for other content).
 type Card struct {
 	Key, Title, Body             string
 	Options                      []string
@@ -607,6 +611,7 @@ type Card struct {
 	RecommendedWhy               string
 	Meanwhile, OwnerDuty, TaskID string
 	Urgency                      string
+	SameByKey                    bool
 }
 
 // Options of a plan change's card, as the Owner reads them, and the keys
