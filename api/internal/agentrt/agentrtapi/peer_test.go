@@ -36,7 +36,7 @@ func TestPeerReachesNoOtherAttempt(t *testing.T) {
 	var before int
 	must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE attempt_id = $1`, attempt).Scan(&before))
 
-	result := map[string]any{"report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA}
+	result := map[string]any{"report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt}
 	for action, extra := range map[string]map[string]any{
 		"heartbeat":  nil,
 		"start":      {"model_provider": "cursor-mix"},

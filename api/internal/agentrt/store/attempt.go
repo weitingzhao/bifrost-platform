@@ -375,10 +375,14 @@ func (r Result) checkHead(db DB, attemptID string, head BranchHead) func(context
 
 // fits checks the result against the attempt and the database: the branch is
 // the attempt's own, a branch task pushed one and a none task did not, every
-// artifact is stored here, and the report is one (reportFits).
+// artifact is stored here, and the report is one (reportFits). A branch
+// implementation whose task has a base commit must push something else than
+// that base: a commit equal to it means the attempt changed nothing (TD-360),
+// whatever agentd says.
 func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
-	var effect string
-	if err := tx.QueryRow(ctx, `SELECT effect_class FROM agentrt.task WHERE task_id = $1`, a.task).Scan(&effect); err != nil {
+	var effect, role, base string
+	if err := tx.QueryRow(ctx, `SELECT effect_class, role, COALESCE(base_commit, '') FROM agentrt.task WHERE task_id = $1`,
+		a.task).Scan(&effect, &role, &base); err != nil {
 		return err
 	}
 	switch {
@@ -388,6 +392,8 @@ func (r Result) fits(ctx context.Context, tx pgx.Tx, a attemptRow) error {
 		return fmt.Errorf("%w: a branch task's result is a pushed branch", ErrState)
 	case effect == "none" && r.Ref != "":
 		return fmt.Errorf("%w: a task of effect none pushes nothing", ErrState)
+	case effect == "branch" && role == "implement" && base != "" && r.Commit == base:
+		return fmt.Errorf("%w: the pushed commit is the task's base %s: the attempt changed nothing", ErrState, base)
 	}
 	if err := haveArtifacts(ctx, tx, r.all()); err != nil {
 		return err

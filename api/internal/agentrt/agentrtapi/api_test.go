@@ -30,6 +30,11 @@ var ctx = context.Background()
 
 const commitA = "2333e00753f91c74c8b2f4d693a803f8e89e7892"
 
+// pushedAt is the commit the fake Gitea says every branch is at: not the
+// tasks' base commitA, since an implementation that pushes its base changed
+// nothing and is refused (TD-360).
+const pushedAt = "0b9e1f3c7a1d2e4f5a6b7c8d9e0f1a2b3c4d5e6f"
+
 func must(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
@@ -174,7 +179,7 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 	api := &agentrtapi.API{DB: db, ClaimWait: time.Second, ClaimPoll: 50 * time.Millisecond,
 		Head: func(_ context.Context, repo, ref string) (string, error) {
 			heads = append(heads, repo+"|"+ref)
-			return commitA, nil
+			return pushedAt, nil
 		},
 		Ask: func(_ context.Context, c store.Card) (string, error) {
 			if askFails {
@@ -331,7 +336,7 @@ func TestAgentdPath(t *testing.T) {
 	}
 	heads = nil
 	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
-		fence(map[string]any{"report": artifactID(log), "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})); code != http.StatusConflict || out["error"] != "state" {
+		fence(map[string]any{"report": artifactID(log), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})); code != http.StatusConflict || out["error"] != "state" {
 		t.Fatalf("a log tail as the report: %d %v", code, out)
 	}
 	if fmt.Sprint(heads) != fmt.Sprintf("[bifrost-platform|%s]", claim["pushed_ref"]) {
@@ -345,7 +350,7 @@ func TestAgentdPath(t *testing.T) {
 		return err
 	}))
 	if code, out := call(t, s, "agentd:h1", "POST", "attempts/"+attempt+"/persist",
-		fence(map[string]any{"report": planted, "pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})); code != http.StatusConflict || out["error"] != "state" {
+		fence(map[string]any{"report": planted, "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})); code != http.StatusConflict || out["error"] != "state" {
 		t.Fatalf("a report with a local path: %d %v", code, out)
 	}
 	for _, step := range []struct {
@@ -353,7 +358,7 @@ func TestAgentdPath(t *testing.T) {
 		body   map[string]any
 	}{
 		{"persist", fence(map[string]any{"report": artifactID(report), "artifacts": []string{artifactID(log)},
-			"pushed_ref": claim["pushed_ref"], "pushed_commit": commitA})},
+			"pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})},
 		{"submit", fence(nil)},
 		{"submit", fence(nil)},
 	} {
