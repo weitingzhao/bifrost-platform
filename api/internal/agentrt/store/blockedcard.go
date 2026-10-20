@@ -485,8 +485,8 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 	drop := fmt.Sprintf("the task is cancelled; mission %s finishes once every other task is accepted "+
 		"(a task that depends on this one is then blocked and gets a card of its own)", c.task.mission)
 	if c.subject != "" {
-		drop = fmt.Sprintf("this check is cancelled and task %s, whose work it checks, is blocked, since it cannot be accepted "+
-			"unchecked; that task then gets a card of its own", c.subject)
+		drop = fmt.Sprintf("this check is cancelled; when it is the only check of the latest work of task %s, that task is "+
+			"blocked, since it cannot be accepted unchecked, and gets a card of its own", c.subject)
 	}
 	fmt.Fprintf(&b, "\n%s: %s.\n%s: %s.\n", BlockedRetry, more, BlockedDrop, drop)
 	return b.String()
@@ -685,12 +685,19 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			if err = moveTask(ctx, tx, "controller", t, "cancelled", fmt.Sprintf("the Owner chose not to do it (question %s)", c.question)); err != nil {
 				return err
 			}
-			if subject != "" && s.state == "verifying" {
-				// With no check the work can never be accepted: it waits on a
-				// card of its own instead of in verifying for ever (TD-384).
-				return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("the Owner chose not to do its %s %s (question %s)",
-					t.role, t.id, c.question))
+			if subject == "" || s.state != "verifying" {
+				return nil
 			}
+			// With no check the work can never be accepted: it waits on a
+			// card of its own instead of in verifying for ever (TD-384); a
+			// check of an older or a lost attempt is dropped alone (review
+			// 428 A2).
+			alone, err := dropLeavesUnchecked(ctx, tx, s, t.id)
+			if err != nil || !alone {
+				return err
+			}
+			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("the Owner chose not to do its %s %s (question %s)",
+				t.role, t.id, c.question))
 		}
 		return nil
 	})

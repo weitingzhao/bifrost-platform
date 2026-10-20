@@ -423,6 +423,12 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 	return did, err
 }
 
+// openCheck are the states of a verification or review that is still open:
+// one that may yet be leased or used, a blocked one included (a pass blocks a
+// check its mission's budget will not let run, TD-384; review 428 A1). Every
+// test of "another check of the subject is open" reads this one list.
+const openCheck = `('proposed','awaiting_owner','ready','leased','running','submitted','paused','blocked')`
+
 // ensureCheck proposes a pinned verification of the subject's attempt under
 // verification when the subject is verifying and no other check of it is
 // still open (except is the one being closed).
@@ -432,7 +438,7 @@ func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, excep
 	}
 	var open bool
 	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
-	  AND role IN ('verify','review') AND state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused'))`,
+	  AND role IN ('verify','review') AND state IN `+openCheck+`)`,
 		s.id, except).Scan(&open); err != nil || open {
 		return err
 	}
@@ -446,6 +452,52 @@ func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, excep
 	_, err = proposeChecker(ctx, tx, s, sd, checkSpec{check: "verify", subject: s.id, attempt: sa, round: int64(sd.round),
 		commit: commit, repo: sd.repo, taskSpec: sd.spec})
 	return err
+}
+
+// dropLeavesUnchecked says whether not doing check, a verification or review
+// of s, leaves the attempt of s under verification with no check: the check
+// pins the latest submitted attempt of s (not a salvaged one), and no other
+// open check of s pins it (review 428 A2: an old round's or a lost attempt's
+// check is dropped alone). s and the check are locked; the attempt is read
+// without a lock (attempts come before tasks), and with s locked and
+// verifying no attempt of it is submitted meanwhile.
+func dropLeavesUnchecked(ctx context.Context, tx pgx.Tx, s taskRow, check string) (bool, error) {
+	var latest string
+	err := tx.QueryRow(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE task_id = $1 AND state = 'submitted'
+	  ORDER BY attempt_no DESC LIMIT 1`, s.id).Scan(&latest)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	rows, err := tx.Query(ctx, `SELECT task_id, spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1
+	  AND role IN ('verify','review') AND (task_id = $2 OR state IN `+openCheck+`)`, s.id, check)
+	if err != nil {
+		return false, err
+	}
+	type row struct{ task, spec string }
+	checks, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
+		var x row
+		return x, r.Scan(&x.task, &x.spec)
+	})
+	if err != nil {
+		return false, err
+	}
+	mine, other := false, false
+	for _, c := range checks {
+		spec, pinned, err := readCheckSpec(ctx, tx, c.spec)
+		if err != nil {
+			return false, err
+		}
+		current := pinned && !spec.salvage && spec.attempt == latest
+		if c.task == check {
+			mine = current
+		} else if current {
+			other = true
+		}
+	}
+	return mine && !other, nil
 }
 
 // Pending lists the tasks the acceptance pass has to look at: submitted

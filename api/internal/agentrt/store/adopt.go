@@ -35,13 +35,20 @@ var adoptMoves = map[string][]string{"ready": {"accepted"}, "leased": {"accepted
 var adoptable = []string{"ready", "leased", "running"}
 
 // salvagedOpen is the condition on attempt a (and its task t) under which its
-// salvaged result is still to be checked.
+// salvaged result is still to be checked: not while a check of t is open, and
+// never again once the Owner chose not to do a check that names the attempt
+// (a check is cancelled only on its card, blockedcard.go; its spec names the
+// attempt it pins, and attempt ids are unique), else every pass would make a
+// new check and a new card for the result he dropped (review 428 A1).
 const salvagedOpen = `a.state = 'lost' AND a.persisted_at IS NOT NULL AND t.role = 'implement' AND t.state IN ('ready','leased','running')
   AND NOT EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no
                   AND b.state IN ('submitted','finished'))
   AND NOT EXISTS (SELECT 1 FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id)
   AND NOT EXISTS (SELECT 1 FROM agentrt.task c WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review')
-                  AND c.state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused'))`
+                  AND c.state IN ` + openCheck + `)
+  AND NOT EXISTS (SELECT 1 FROM agentrt.task c JOIN agentrt.artifact_blob s ON s.artifact_id = c.spec_artifact_id
+                  WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review') AND c.state = 'cancelled'
+                    AND position(convert_to(a.attempt_id, 'UTF8') in s.body) > 0)`
 
 // PendingSalvaged lists the lost attempts whose salvaged result the
 // acceptance pass is to check.
@@ -145,7 +152,7 @@ func salvageStale(ctx context.Context, tx pgx.Tx, spec checkSpec, s taskRow, sd 
 	if err := tx.QueryRow(ctx, `SELECT a.persisted_at IS NOT NULL,
 	  EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no AND b.state IN ('submitted','finished')),
 	  EXISTS (SELECT 1 FROM agentrt.task c WHERE c.subject_task_id = a.task_id AND c.task_id <> $3 AND c.role IN ('verify','review')
-	          AND c.state IN ('proposed','awaiting_owner','ready','leased','running','submitted','paused')),
+	          AND c.state IN `+openCheck+`),
 	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id),
 	  (SELECT count(*) FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id AND v.verification_id = $2
 	     AND v.method = 'deterministic' AND v.verdict = 'pass')

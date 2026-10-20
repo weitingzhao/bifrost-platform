@@ -123,6 +123,10 @@ type Mission struct {
 	Token                   string // the token that proposed it, when a route did (review 176 B2)
 }
 
+// defaultHardLimitS is an attempt's hard limit when its task states none: a
+// verification's and a review's always (proposeChecker states none).
+const defaultHardLimitS = 3600
+
 // CreateMission writes mission_proposed and the mission row.
 func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (Appended, error) {
 	if m.Tenant == "" {
@@ -300,7 +304,7 @@ func ProposeTask(ctx context.Context, tx pgx.Tx, actor string, t Task) (Appended
 	}
 	limit := int(t.HardLimit / time.Second)
 	if limit <= 0 {
-		limit = 3600
+		limit = defaultHardLimitS
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO agentrt.task (task_id, mission_id, plan_node_id, off_plan, off_plan_reason,
 	  subject_task_id, role, task_class, title, spec_artifact_id, effect_class, state, hard_limit_s, created_by_actor_id,

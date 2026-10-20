@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -52,10 +51,10 @@ type budgetDoc struct {
 // spend is a mission's budget and what it has used.
 type spend struct {
 	mission string
-	budget  budgetDoc     // its own, or its tenant rule's when it states none
-	used    int           // attempts of all its tasks
-	elapsed time.Duration // since it was created
-	limitS  int           // the tenant rule's hard limit on an attempt
+	budget  budgetDoc // its own, or its tenant rule's when it states none
+	used    int       // attempts of all its tasks
+	hours   float64   // since it was created; hours, not a Duration, which a budget of a million hours would overflow (review 428 C1)
+	limitS  int       // the tenant rule's hard limit on an attempt
 }
 
 // spend reads m's budget; ok is false when there is none to spend: no budget
@@ -85,7 +84,7 @@ func (m missionBudget) spend(ctx context.Context, tx pgx.Tx, rc ruleCache, missi
 	    EXTRACT(EPOCH FROM clock_timestamp() - $2::timestamptz)::float8`, mission, m.created).Scan(&s.used, &secs); err != nil {
 		return spend{}, false, err
 	}
-	s.elapsed = time.Duration(secs * float64(time.Second))
+	s.hours = secs / 3600
 	return s, true, nil
 }
 
@@ -95,8 +94,8 @@ func (s spend) why() string {
 	switch {
 	case s.used >= s.budget.MaxAttempts:
 		return fmt.Sprintf("mission %s has used %d of its %d attempts", s.mission, s.used, s.budget.MaxAttempts)
-	case s.elapsed >= time.Duration(s.budget.MaxWallHours)*time.Hour:
-		return fmt.Sprintf("mission %s is past its %d hours (it started %.1f hours ago)", s.mission, s.budget.MaxWallHours, s.elapsed.Hours())
+	case s.hours >= float64(s.budget.MaxWallHours):
+		return fmt.Sprintf("mission %s is past its %d hours (it started %.1f hours ago)", s.mission, s.budget.MaxWallHours, s.hours)
 	}
 	return ""
 }
@@ -105,20 +104,22 @@ func (s spend) why() string {
 type grant struct{ attempts, hours int }
 
 // roundGrant is what the budget needs for one more round of a task whose
-// attempts may run taskLimitS each (capped by the rule's limit, as a claim
-// caps it): roundAttempts more attempts than it has used, and hours for them
-// to run their limit one after the other. Zero when it has room.
+// attempts may run taskLimitS each: roundAttempts more attempts than it has
+// used, and hours for those attempts to run one after the other. Each may run
+// the longer of the task's limit and a check's (a verification and a review
+// have the default, review 428 B1), capped by the rule's limit, as a claim
+// caps it. Zero when it has room.
 func (s spend) roundGrant(taskLimitS int) grant {
 	var g grant
 	if need := s.used + roundAttempts; need > s.budget.MaxAttempts {
 		g.attempts = need - s.budget.MaxAttempts
 	}
-	limit := taskLimitS
-	if s.limitS > 0 && s.limitS < limit {
-		limit = s.limitS
+	limit := max(taskLimitS, defaultHardLimitS)
+	if s.limitS > 0 {
+		limit = min(limit, s.limitS)
 	}
-	need := s.elapsed + time.Duration(roundAttempts*limit)*time.Second
-	if hours := int(math.Ceil(need.Hours())); hours > s.budget.MaxWallHours {
+	need := s.hours + float64(roundAttempts*limit)/3600
+	if hours := int(math.Ceil(need)); hours > s.budget.MaxWallHours {
 		g.hours = hours - s.budget.MaxWallHours
 	}
 	return g
@@ -132,7 +133,7 @@ func (s spend) says(g grant) string {
 	text := fmt.Sprintf("One round needs up to %d attempts (implementation, verification, review); mission %s has used %d of its %d attempts",
 		roundAttempts, s.mission, s.used, s.budget.MaxAttempts)
 	if g.hours > 0 {
-		text += fmt.Sprintf(" and %.1f of its %d hours", s.elapsed.Hours(), s.budget.MaxWallHours)
+		text += fmt.Sprintf(" and %.1f of its %d hours", s.hours, s.budget.MaxWallHours)
 	}
 	text += ", so this answer also raises its budget to "
 	switch {
@@ -213,7 +214,7 @@ func grantRound(ctx context.Context, tx pgx.Tx, t taskRow, question string) erro
 func (s spend) added(g grant) string {
 	text := fmt.Sprintf("it had used %d of %d attempts", s.used, s.budget.MaxAttempts)
 	if g.hours > 0 {
-		text += fmt.Sprintf(" and %.1f of %d hours", s.elapsed.Hours(), s.budget.MaxWallHours)
+		text += fmt.Sprintf(" and %.1f of %d hours", s.hours, s.budget.MaxWallHours)
 	}
 	text += "; a round needs up to " + fmt.Sprint(roundAttempts) + " attempts"
 	if g.attempts > 0 {

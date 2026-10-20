@@ -230,8 +230,9 @@ func blockedTaskCards(ctx context.Context, tx pgx.Tx, now time.Time, listed map[
 			"action":      map[string]any{"where": "console", "question_id": c.question, "options": []string{BlockedRetry, BlockedDrop}},
 			"can_act_now": nil, "can_act_now_reason": "the card's state is the question store's: open there, it can be answered now",
 			"deadline": nil, "blocks": map[string]any{"missions": []string{c.mission}, "unfinished_tasks": c.open, "why": c.why},
-			"after": "One more round: the controller readies it on its next pass (about 15 seconds). Do not do it: it is cancelled, " +
-				"and its mission finishes once every other task is accepted."}
+			"after": "One more round: the controller readies it on its next pass (about 15 seconds), with room in its mission's " +
+				"budget for the round. Do not do it: it is cancelled, and its mission finishes once every other task is accepted; " +
+				"work left with no check of its latest result is blocked and gets a card of its own."}
 		listed[c.question] = it
 		cards = append(cards, missionCard{c.at, c.question, it})
 	}

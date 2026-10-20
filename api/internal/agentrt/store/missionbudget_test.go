@@ -48,20 +48,17 @@ func (w *world) lastMove(t *testing.T, task string) string {
 // TD-384, PROD M-9 (2026-10-19): the Owner gave a blocked task one more round
 // when its mission had used every attempt of its budget; the task went back
 // to ready and no claim ever took it. Now the card says the round raises the
-// budget, the answer raises it by what one round needs as the Owner's
-// mission_amended, and a host takes the task in the next claim. A mission
-// with room for the round gets nothing added and the card says nothing of it.
+// budget, the answer raises it to what one round needs (three attempts more
+// than used) as the Owner's mission_amended, and a host takes the task in the
+// next claim. A mission with room for a whole round gets nothing added and the
+// card says nothing of it; one with room for part of a round gets the rest
+// (review 428: "room left" is room for a round).
 func TestRetryOnSpentBudgetLeases(t *testing.T) {
 	t.Parallel()
-	for name, c := range map[string]struct {
-		budget string
-		grows  bool
-	}{
-		"spent":     {`{"max_attempts": 4, "max_wall_hours": 48}`, true},
-		"room left": {`{"max_attempts": 40, "max_wall_hours": 48}`, false},
-	} {
+	for name, max := range map[string]int{"spent": 4, "one short of a round": 6, "room for a round": 7, "room left": 40} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			grows := max < 7
 			w := newKernelWorld(t)
 			w.goalMission(t, "M-3")
 			impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
@@ -72,14 +69,14 @@ func TestRetryOnSpentBudgetLeases(t *testing.T) {
 				t.Fatalf("round 2 did %q", did)
 			}
 			// Four attempts used: two implementations, two verifications.
-			w.legacy(t, `UPDATE agentrt.mission SET budget_json = '`+c.budget+`' WHERE mission_id = 'M-3'`)
+			w.legacy(t, fmt.Sprintf(`UPDATE agentrt.mission SET budget_json = '{"max_attempts": %d, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`, max))
 			a := &asker{}
 			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
 				t.Fatalf("asked %d (%v)", n, err)
 			}
-			raise := "mission M-3 has used 4 of its 4 attempts, so this answer also raises its budget to 7 attempts, recorded as yours"
-			if body := a.cards[0].Body; strings.Contains(body, raise) != c.grows || strings.Contains(body, "raises its budget") != c.grows {
-				t.Fatalf("the card (budget grows: %v):\n%s", c.grows, body)
+			raise := fmt.Sprintf("mission M-3 has used 4 of its %d attempts, so this answer also raises its budget to 7 attempts, recorded as yours", max)
+			if body := a.cards[0].Body; strings.Contains(body, raise) != grows || strings.Contains(body, "raises its budget") != grows {
+				t.Fatalf("the card (budget grows: %v):\n%s", grows, body)
 			}
 			q := a.lastID()
 			a.answer(q, store.QuestionAnswered, store.CardApplyKey)
@@ -87,11 +84,11 @@ func TestRetryOnSpentBudgetLeases(t *testing.T) {
 				t.Fatalf("one more round: decided %d (%v), task %s", n, err, w.state(t, "task", impl))
 			}
 			b, amended := w.budget(t, "M-3"), w.amended(t, "M-3")
-			if !c.grows {
-				if len(amended) != 0 || fmt.Sprint(b) != "map[max_attempts:40 max_wall_hours:48]" {
+			if !grows {
+				if len(amended) != 0 || fmt.Sprint(b) != fmt.Sprintf("map[max_attempts:%d max_wall_hours:48]", max) {
 					t.Fatalf("with room left: amended %v, budget %v", amended, b)
 				}
-			} else if fmt.Sprint(b) != "map[max_attempts:7 max_wall_hours:48 owner_granted_attempts:3]" || len(amended) != 1 ||
+			} else if fmt.Sprint(b) != fmt.Sprintf("map[max_attempts:7 max_wall_hours:48 owner_granted_attempts:%d]", 7-max) || len(amended) != 1 ||
 				!strings.HasPrefix(amended[0], "owner "+impl+" ") || !strings.Contains(amended[0], `"max_attempts": 7`) ||
 				!strings.Contains(amended[0], "one more round on its card (question "+q+")") || strings.Contains(amended[0], "max_wall_hours") {
 				t.Fatalf("budget %v, amended %v", b, amended)
@@ -157,7 +154,7 @@ func TestSpentBudgetBlocksReadyTask(t *testing.T) {
 		t.Fatalf("asked %d (%v)", n, err)
 	}
 	for _, want := range []string{"Why: " + why, "so this answer also raises its budget to 4 attempts",
-		store.BlockedDrop + ": this check is cancelled and task " + impl + ", whose work it checks, is blocked"} {
+		store.BlockedDrop + ": this check is cancelled; when it is the only check of the latest work of task " + impl + ", that task is blocked"} {
 		if !strings.Contains(a.cards[0].Body, want) {
 			t.Errorf("the card lacks %q:\n%s", want, a.cards[0].Body)
 		}
@@ -214,7 +211,9 @@ func TestSpentHoursBlockReadyTask(t *testing.T) {
 	w := newKernelWorld(t)
 	w.goalMission(t, "M-3")
 	w.goalMission(t, "M-4")
-	late := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	// A one-minute implementation: its verification and review still have an
+	// hour each (review 428 B1), so a round needs three hours.
+	late := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal", HardLimit: time.Minute})
 	fresh := w.ready(t, store.Task{MissionID: "M-4", OffPlanReason: "a goal"})
 	w.legacy(t, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours',
 	  budget_json = '{"max_attempts": 9, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`,
@@ -234,11 +233,157 @@ func TestSpentHoursBlockReadyTask(t *testing.T) {
 	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v)", n, err)
 	}
-	// A little over 49 hours gone and three attempts of an hour each: 53.
+	// A little over 49 hours gone and three attempts of up to an hour each: 53.
 	if b := w.budget(t, "M-3"); fmt.Sprint(b) != "map[max_attempts:9 max_wall_hours:53 owner_granted_wall_hours:5]" {
 		t.Fatalf("budget %v", b)
 	}
 	if c := w.claim(t, "h1", time.Hour, cursor); c == nil || c.TaskID != late {
 		t.Fatalf("after one more round the claim took %+v; want %s", c, late)
+	}
+}
+
+// salvageChecks makes the checks the acceptance pass makes for salvaged
+// results now, and returns how many it made.
+func (w *world) salvageChecks(t *testing.T) int {
+	t.Helper()
+	ids, err := store.PendingSalvaged(ctx, w.rt)
+	ok(t, err)
+	n := 0
+	for _, id := range ids {
+		v, err := store.StartSalvageCheck(ctx, w.rt, id)
+		ok(t, err)
+		if v != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// checkOf is the one check of subject in a state.
+func (w *world) checkOf(t *testing.T, subject, state string) string {
+	t.Helper()
+	var id string
+	ok(t, w.rt.QueryRow(ctx, `SELECT task_id FROM agentrt.task WHERE subject_task_id = $1 AND state = $2`, subject, state).Scan(&id))
+	return id
+}
+
+// Review 428 A1: the check of a lost attempt's salvaged result that the pass
+// blocked for want of budget is still an open check: the acceptance pass
+// makes no second one while it waits on its card, and once the Owner drops
+// it, none for that attempt again. The work, running a new attempt, is left
+// as it is.
+func TestBlockedSalvageCheckIsNotMadeAgain(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	task, _, _ := w.salvagedTask(t, true) // two attempts: the lost one and one running
+	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 2, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`)
+	if n := w.salvageChecks(t); n != 1 {
+		t.Fatalf("checks of the salvaged result: %d", n)
+	}
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	check := w.checkOf(t, task, "blocked")
+	if n := w.salvageChecks(t); n != 0 {
+		t.Fatalf("%d more checks of the salvaged result while its check waits blocked", n)
+	}
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+		t.Fatalf("asked %d (%v)", n, err)
+	}
+	a.answer(a.lastID(), store.QuestionAnswered, store.CardRefuseKey)
+	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
+		t.Fatalf("decided %d (%v)", n, err)
+	}
+	if c, s := w.state(t, "task", check), w.state(t, "task", task); c != "cancelled" || s != "running" {
+		t.Fatalf("the check is %s, the work %s; want cancelled, running", c, s)
+	}
+	if n := w.salvageChecks(t); n != 0 {
+		t.Fatalf("%d checks of the salvaged result the Owner chose not to check", n)
+	}
+}
+
+// Review 428 A2: dropping the blocked check of a lost attempt's salvaged
+// result while the work's latest attempt is under its own check leaves that
+// check and the work alone.
+func TestDroppingAnOldCheckLeavesTheWork(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	task, _, fresh := w.salvagedTask(t, true)
+	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 2, "max_wall_hours": 48}' WHERE mission_id = 'M-1'`)
+	if n := w.salvageChecks(t); n != 1 {
+		t.Fatalf("checks of the salvaged result: %d", n)
+	}
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	old := w.checkOf(t, task, "blocked")
+	// The new attempt hands in and goes to its own verification.
+	f := fence(fresh, "h2")
+	exit := 0
+	_, err := store.Computed(ctx, w.rt, f, &exit, "exit", "done")
+	ok(t, err)
+	calls := 0
+	_, err = store.Persist(ctx, w.rt, f, store.Result{Report: w.artifact(t, "report", "a2"), Ref: fresh.PushedRef, Commit: commitB},
+		heads(map[string]string{fresh.PushedRef: commitB}, &calls))
+	ok(t, err)
+	_, err = store.Submit(ctx, w.rt, f)
+	ok(t, err)
+	current, err := store.StartVerification(ctx, w.rt, task)
+	ok(t, err)
+	if current == "" || w.state(t, "task", task) != "verifying" {
+		t.Fatalf("verification %q, the work %s", current, w.state(t, "task", task))
+	}
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[0].TaskID != old {
+		t.Fatalf("asked %d (%v): %+v", n, err, a.cards)
+	}
+	a.answer(a.lastID(), store.QuestionAnswered, store.CardRefuseKey)
+	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
+		t.Fatalf("decided %d (%v)", n, err)
+	}
+	if o, s, c := w.state(t, "task", old), w.state(t, "task", task), w.state(t, "task", current); o != "cancelled" || s != "verifying" || c != "ready" {
+		t.Fatalf("the old check is %s, the work %s, its own check %s; want cancelled, verifying, ready", o, s, c)
+	}
+}
+
+// Review 428 C1: a budget of millions of hours is not read as spent.
+func TestHugeHoursAreNotSpent(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 9, "max_wall_hours": 3000000}' WHERE mission_id = 'M-3'`)
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 0 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	if c := w.claim(t, "h1", time.Hour, cursor); c == nil || c.TaskID != task {
+		t.Fatalf("claimed %+v; want %s", c, task)
+	}
+}
+
+// Review 428: what the Owner added is the only part of a budget the standing
+// envelope does not bound. After his grant, an envelope tightened below the
+// hours the mission started with stops it again.
+func TestEnvelopeStillBoundsWhatTheMissionStartedWith(t *testing.T) {
+	t.Parallel()
+	w, mission, _, check := spentEnvelope(t)
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+		t.Fatalf("asked %d (%v)", n, err)
+	}
+	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", check) != "ready" {
+		t.Fatalf("decided %d (%v)", n, err)
+	}
+	_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), "standing-envelope:dev", []byte(ruleText("standing-envelope:dev", 2,
+		rules.Tighten, since, until, "tenant: dev\nmax_action: branch\nbudget: {max_attempts: 1, max_wall_hours: 24}\n"+
+			"executors: [exec:codex, exec:deterministic]\nhosts: [h1, h2, h3, h4]\n")))
+	ok(t, err)
+	if c := w.claim(t, "h2", time.Hour, deterministic); c != nil {
+		t.Fatalf("claimed %s of %s though its 48 hours are above the envelope's 24", c.TaskID, mission)
 	}
 }
