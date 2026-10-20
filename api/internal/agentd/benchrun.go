@@ -568,10 +568,18 @@ func (b *Bench) launch(ctx context.Context, sp Spawn, limit time.Duration) (code
 
 // launchWithin starts sp through the launcher at self, waits for it within
 // limit (TERM, then KILL after grace, 10 s by default), and clears its group
-// afterwards; ctx ending ends it the same way. agentd bench and agentd exam
-// run their executors with it.
+// afterwards; ctx ending ends it the same way. agentd bench runs its
+// executors with it.
 func launchWithin(ctx context.Context, self string, sp Spawn, limit, grace time.Duration) (code int, timedOut bool, err error) {
-	proc, err := Launch(self, sp, func(int, string) error { return nil })
+	return launchRecorded(ctx, self, sp, limit, grace, func(int, string) error { return nil })
+}
+
+// launchRecorded is launchWithin with record called with the group before
+// the group is released (Launch): agentd exam keeps it, so that a sitting
+// cut short can end what it left running (review 415 A2).
+func launchRecorded(ctx context.Context, self string, sp Spawn, limit, grace time.Duration,
+	record func(pgid int, start string) error) (code int, timedOut bool, err error) {
+	proc, err := Launch(self, sp, record)
 	if err != nil {
 		return 0, false, err
 	}

@@ -2,6 +2,7 @@ package agentd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -45,15 +46,23 @@ import (
 //  3. Where the seat read: every path its Read, Grep and Glob calls name (the
 //     stream-json) must be in its workspace, and no canary's content in its
 //     answer. A run that strays is sat once more, and handed in as out of its
-//     workspace (not passed) when it strays again.
+//     workspace (not passed) when it strays again. This finds a read after
+//     it: no wall keeps the seat from reading what agentd's user can (the
+//     paper kept here among it; the exam's unit hides the rest), and an event
+//     too long to read counts as a stray (review 415 B2, C1).
 //  4. The answer, masked as a report is (handText) and so that the platform's
 //     scans of it as kept take it (examText), is handed in at once, alone;
 //     the run is recorded as handed in, and its directories go. Nothing of an
 //     answer stays on the host.
 //
-// A run cut short (SIGTERM), or whose executor left no answer of its own (a
-// login or a vendor that failed), is not handed in and is sat again next
-// time.
+// A run cut short (SIGTERM, or agentd killed: its record names the
+// executor's process group, ended before the run is sat again), or whose
+// executor left no answer of its own (a login or a vendor that failed), is
+// not handed in and is sat again next time. A run out of its time is handed
+// in failed and with no text, as the controller takes nothing of such an
+// attempt; the platform passes no run that did not end done (review 415 A1,
+// A2). A host that stops between the platform issuing a paper and keeping
+// it here cannot go on with that paper: it waits for it to lapse (C2).
 
 // examExecutors are the executors that sit an exam: claude, the chief of
 // staff's seat.
@@ -161,6 +170,11 @@ func (e *Exam) Paper(ctx context.Context, job string) (*store.ExamPaper, error) 
 		handed, _ := readHanded(dir)
 		e.logf("agentd exam: paper %s lapsed at %s with %d of %d runs handed in: the platform grades it when the next paper is asked "+
 			"for, each run without an answer not passed", p.RunID, p.ExpiresAt.Format(time.RFC3339), len(handed), runsOf(p))
+		// What a run of it cut short left goes first: the record of it goes
+		// with the paper (review 415 B1).
+		if err = e.clearSitting(dir); err != nil {
+			return nil, err
+		}
 		if err = forceRemove(dir); err != nil {
 			return nil, err
 		}
@@ -296,13 +310,33 @@ type examHanded struct {
 	At         time.Time `json:"at"`
 }
 
+// readHanded reads the runs handed in. A last line cut short (the host
+// stopped while it was written) is cut off the file: that run is sat again,
+// and the platform keeps the answer it took first (review 415 B1).
 func readHanded(dir string) (map[examKey]bool, error) {
-	rows, err := readJSONLines[examHanded](filepath.Join(dir, "handed.jsonl"))
+	path := filepath.Join(dir, "handed.jsonl")
 	out := map[examKey]bool{}
-	for _, r := range rows {
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return out, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if end := bytes.LastIndexByte(b, '\n') + 1; end < len(b) {
+		if err = os.Truncate(path, int64(end)); err != nil {
+			return nil, err
+		}
+		b = b[:end]
+	}
+	for line := range bytes.Lines(b) {
+		var r examHanded
+		if err = json.Unmarshal(line, &r); err != nil {
+			return nil, fmt.Errorf("agentd: %s: %w", path, err)
+		}
 		out[examKey{r.Item, r.RunNo}] = true
 	}
-	return out, err
+	return out, nil
 }
 
 // readJSONLines reads a file of one JSON value a line; none is no file.
@@ -469,20 +503,12 @@ func (e *Exam) handIn(ctx context.Context, p *store.ExamPaper, s sat) (map[strin
 	return out, err
 }
 
-// clearLeft removes what a run cut short left (its task, which dir names),
-// and, but in a trial, refuses to sit beside any other work under
-// <root>/tasks: a seat could read another task's checkout there (the exam's
-// unit hides it all).
+// clearLeft ends what a run cut short left (clearSitting), and, but in a
+// trial, refuses to sit beside any other work under <root>/tasks: a seat
+// could read another task's checkout there (the exam's unit hides it all).
 func (e *Exam) clearLeft(dir string) error {
-	if b, err := os.ReadFile(filepath.Join(dir, "sitting")); err == nil {
-		if task := strings.TrimSpace(string(b)); taskName.MatchString(task) {
-			if err = forceRemove(filepath.Join(e.Root, "tasks", task)); err != nil {
-				return err
-			}
-		}
-		if err = os.Remove(filepath.Join(dir, "sitting")); err != nil {
-			return err
-		}
+	if err := e.clearSitting(dir); err != nil {
+		return err
 	}
 	if e.Dev {
 		return nil
@@ -496,4 +522,33 @@ func (e *Exam) clearLeft(dir string) error {
 			filepath.Join(e.Root, "tasks"), len(entries), entries[0].Name())
 	}
 	return nil
+}
+
+// clearSitting ends what a run cut short left, as its record in dir has it:
+// its executor's process group while that is still the run's (ClearGroup),
+// then its task's directories, then the record. A group that cannot be
+// shown gone keeps all three, and nothing is sat (review 415 A2).
+func (e *Exam) clearSitting(dir string) error {
+	path := filepath.Join(dir, "sitting")
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var s examSitting
+	if json.Unmarshal(b, &s) != nil || !taskName.MatchString(s.Task) || s.PGID < 0 || (s.PGID > 0) != (s.Start != "") {
+		return fmt.Errorf("agentd: %s is not a run's record: what that run left cannot be found; look and remove it by hand", path)
+	}
+	if s.PGID > 0 {
+		if state, pids := ClearGroup(s.PGID, s.Start, time.Time{}, orDefault(e.KillGrace, 10*time.Second)); state != GroupCleared {
+			return fmt.Errorf("agentd: the run cut short in task %s left its process group %d (%s; processes %v): end them by hand; "+
+				"nothing is sat until they are gone", s.Task, s.PGID, state, pids)
+		}
+	}
+	if err = forceRemove(filepath.Join(e.Root, "tasks", s.Task)); err != nil {
+		return err
+	}
+	return os.Remove(path)
 }

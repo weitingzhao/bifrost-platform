@@ -34,15 +34,33 @@ type sat struct {
 	outside     string
 }
 
-// examRound is one round of a run: the answer as handed in, the report as
-// the platform keeps a report (ParsePlan reads it), how it ended and what
-// the seat read.
+// examRound is one round of a run: the answer as handed in (ParsePlan reads
+// it), how it ended and what the seat read.
 type examRound struct {
 	text, conclusion string
-	report           []byte
 	wallS            int
 	model, pins      string
 	outside          string
+}
+
+// examSitting is the run being sat, kept so that what a sitting cut short
+// leaves can be found and ended (clearSitting): its task, and while its
+// executor may run, that executor's process group and its leader's start
+// (review 415 A2).
+type examSitting struct {
+	Task  string `json:"task"`
+	PGID  int    `json:"pgid,omitempty"`
+	Start string `json:"start,omitempty"`
+}
+
+// keepSitting writes the record durably: a host that stops loses neither it
+// nor half of it (review 415 B1).
+func keepSitting(dir string, s examSitting) error {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return writeDurably(filepath.Join(dir, "sitting"), b)
 }
 
 // sitRun sits run n of item: its rounds, and all of them once more when the
@@ -64,11 +82,11 @@ func (e *Exam) sitRun(ctx context.Context, dir string, it store.ExamPaperItem, s
 // back (store.ReworkText).
 func (e *Exam) rounds(ctx context.Context, dir string, it store.ExamPaperItem, spec TaskSpec, n int) (sat, error) {
 	task := store.NewTaskID()
-	// What a run cut short leaves is found again by its task (clearLeft).
-	if err := os.WriteFile(filepath.Join(dir, "sitting"), []byte(task+"\n"), 0o600); err != nil {
+	// What a run cut short leaves is found again by its task (clearSitting).
+	if err := keepSitting(dir, examSitting{Task: task}); err != nil {
 		return sat{}, err
 	}
-	r, err := e.round(ctx, it, spec, task, 1)
+	r, err := e.round(ctx, dir, it, spec, task, 1)
 	if err != nil {
 		return sat{}, err
 	}
@@ -78,7 +96,7 @@ func (e *Exam) rounds(ctx context.Context, dir string, it store.ExamPaperItem, s
 		e.logf("agentd exam: %s run %d: the controller would not use the plan (%s): round 2", it.Item, n, oneLine(why, 200))
 		next := spec
 		next.Text = store.ReworkText(spec.Text, 2, why)
-		if r, err = e.round(ctx, it, next, task, 2); err != nil {
+		if r, err = e.round(ctx, dir, it, next, task, 2); err != nil {
 			return sat{}, err
 		}
 		round, wall, s.model = 2, wall+r.wallS, r.model
@@ -101,9 +119,9 @@ func firstSet(a, b string) string {
 
 // planRefused is why the controller would send a plan back, as AcceptPlan
 // does before it looks at the mission: the attempt did not end done, or
-// ParsePlan refuses the report as the platform keeps it, for the item's
-// repository; "" when it would go on with it, or when the item has no
-// second round (not a plan).
+// ParsePlan refuses the answer as it is handed in (review 415 B3), for the
+// item's repository; "" when it would go on with it, or when the item has
+// no second round (not a plan).
 func planRefused(it store.ExamPaperItem, r examRound) string {
 	if it.Rounds < 2 || it.Repo == "" {
 		return ""
@@ -115,16 +133,16 @@ func planRefused(it store.ExamPaperItem, r examRound) string {
 	if _, ok := store.Repos[it.Repo]; ok {
 		repos = append(repos, it.Repo)
 	}
-	if _, err := store.ParsePlan(r.report, repos); err != nil {
+	if _, err := store.ParsePlan([]byte(r.text), repos); err != nil {
 		return err.Error()
 	}
 	return ""
 }
 
 // round sits one round: a working task's directories, the executor walled
-// and pinned, its answer and what it read; the directories go however it
-// ends.
-func (e *Exam) round(ctx context.Context, it store.ExamPaperItem, spec TaskSpec, task string, no int) (r examRound, err error) {
+// and pinned, its group kept in dir's record while it may run, its answer
+// and what it read; the directories go however it ends.
+func (e *Exam) round(ctx context.Context, dir string, it store.ExamPaperItem, spec TaskSpec, task string, no int) (r examRound, err error) {
 	role := "brief"
 	if it.Repo != "" {
 		role = "plan"
@@ -171,9 +189,18 @@ func (e *Exam) round(ctx context.Context, it store.ExamPaperItem, spec TaskSpec,
 	}
 	sp.Stdout, sp.Stderr = log, log
 	start := time.Now()
-	code, timedOut, err := launchWithin(ctx, e.Self, sp, orDefault(e.Limit, 15*time.Minute), e.KillGrace)
+	pgid := 0
+	code, timedOut, err := launchRecorded(ctx, e.Self, sp, orDefault(e.Limit, 15*time.Minute), e.KillGrace, func(g int, at string) error {
+		pgid = g
+		return keepSitting(dir, examSitting{Task: task, PGID: g, Start: at})
+	})
 	_ = log.Close()
 	r.wallS = int(time.Since(start).Seconds())
+	// The group is ended (launchRecorded); a record of it is kept only
+	// while some of it is left, for clearSitting to end.
+	if pgid == 0 || !GroupAlive(pgid) {
+		err = errors.Join(err, keepSitting(dir, examSitting{Task: task}))
+	}
 	if err != nil {
 		return r, err
 	}
@@ -183,7 +210,19 @@ func (e *Exam) round(ctx context.Context, it store.ExamPaperItem, spec TaskSpec,
 		after = sp.After()
 	}
 	report, rerr := readAtMost(filepath.Join(a.Out, "report.md"), maxBody)
-	if rerr != nil || len(report) == 0 {
+	if timedOut {
+		// At work the controller takes nothing of an attempt out of its
+		// time: what it said before it was stopped is not handed in
+		// (review 415 A1).
+		report, rerr = nil, nil
+	}
+	if errors.Is(rerr, errTooLarge) {
+		// The seat's own answer, too long to hand in whole: handed in
+		// failed (no report), as one too long once masked is (examText).
+		r.text = fmt.Sprintf(tooLongAnswer, fmt.Sprintf("a report of over %d bytes", maxBody), maxExamText)
+		report, rerr = nil, nil
+	}
+	if rerr != nil || (len(report) == 0 && r.text == "") {
 		report = nil
 		if !timedOut {
 			// No answer of the seat's own: a login or a vendor that failed is
@@ -207,8 +246,10 @@ func (e *Exam) round(ctx context.Context, it store.ExamPaperItem, spec TaskSpec,
 		}
 	}
 	if report != nil {
-		r.report = a.handText("report", report)
-		r.text = examText(r.report)
+		var whole bool
+		if r.text, whole = examText(a.handText("report", report)); !whole {
+			r.conclusion = "failed"
+		}
 	}
 	return r, nil
 }
@@ -299,16 +340,26 @@ func (e *Exam) canaries(a *Attempt) ([]string, func(), error) {
 	return out, gone, nil
 }
 
+// maxExamEvent bounds one event of an executor's log as examReads reads it.
+const maxExamEvent = 16 << 20
+
 // examReads reads an executor's stream-json log, all of it: the model its
 // init event names, and the first path a tool call names outside dir ("" when
-// none does).
+// none does). An event too long to read is one whose tool calls are not
+// known, so the run is not known to have kept to its workspace: it counts as
+// read outside it (review 415 B2).
 func examReads(log, dir string) (model, outside string, err error) {
 	f, err := openBounded(log, 1<<62, false)
 	if err != nil {
 		return "", "", err
 	}
 	defer func() { _ = f.Close() }()
-	err = eachLine(f, maxBody, func(line []byte) {
+	tooLong := func() {
+		if outside == "" {
+			outside = fmt.Sprintf("an event of its log over %d MiB, not read", maxExamEvent>>20)
+		}
+	}
+	err = eachLineOr(f, maxExamEvent, func(line []byte) {
 		var ev map[string]any
 		if json.Unmarshal(line, &ev) != nil {
 			return
@@ -332,7 +383,7 @@ func examReads(log, dir string) (model, outside string, err error) {
 				}
 			}
 		}
-	})
+	}, tooLong)
 	return model, outside, err
 }
 
@@ -412,12 +463,19 @@ var escapedDrive = regexp.MustCompile(`((?:^|[^A-Za-z])[A-Za-z]:)([\x00-\x1f"<>&
 // of at most 1 MiB with the run's other fields.
 const maxExamText = maxBody - 8<<10
 
-// examText is a masked report as an answer is handed in. The platform keeps
-// it in a JSON document and scans that (H8, T11): a space goes after a drive
-// letter's colon the encoder would follow with an escape, an answer too long
-// as JSON is cut at a line, and one the scans still refuse is withheld, as
-// handText withholds a report.
-func examText(masked []byte) string {
+// tooLongAnswer stands for an answer that cannot be handed in whole.
+const tooLongAnswer = "(not handed in by agentd: the answer was %s, over the %d bytes an answer can be as JSON; a cut one " +
+	"would lose what is graded at its end)\n"
+
+// examText is a masked report as an answer is handed in, and whether it is
+// the whole of it. The platform keeps it in a JSON document and scans that
+// (H8, T11): a space goes after a drive letter's colon the encoder would
+// follow with an escape, and one the scans still refuse is withheld, as
+// handText withholds a report. An answer too long as JSON is not cut,
+// which would drop what is graded at its end (a CANNOT: line, a plan, a
+// verdict): a note stands in its place, and the run is handed in failed
+// (review 415 B3).
+func examText(masked []byte) (string, bool) {
 	s := strings.ToValidUTF8(string(masked), "\uFFFD")
 	for range len(s) + 1 {
 		next := escapedDrive.ReplaceAllString(s, "$1 $2")
@@ -427,20 +485,15 @@ func examText(masked []byte) string {
 		s = next
 	}
 	doc, _ := json.Marshal(s)
-	for len(doc) > maxExamText {
-		keep := strings.ToValidUTF8(s[:len(s)*maxExamText/len(doc)-len(truncatedNote)-64], "")
-		if i := strings.LastIndexByte(keep, '\n'); i > 0 {
-			keep = keep[:i+1]
-		}
-		s = keep + truncatedNote
-		doc, _ = json.Marshal(s)
+	if len(doc) > maxExamText {
+		return fmt.Sprintf(tooLongAnswer, fmt.Sprintf("%d bytes as JSON", len(doc)), maxExamText), false
 	}
 	_, local := localpath.Find(doc)
 	_, names := localpath.WorkspaceRef(doc)
 	if local || names {
-		return withheldReport
+		return withheldReport, true
 	}
-	return s
+	return s, true
 }
 
 // ToolVersion is what the executor's program says it is (claude --version,

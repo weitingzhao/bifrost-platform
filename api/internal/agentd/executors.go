@@ -463,6 +463,12 @@ func oneLine(s string, max int) string {
 // eachLine calls fn with each line of r up to max bytes long; longer lines
 // are skipped without being kept.
 func eachLine(r io.Reader, max int, fn func([]byte)) error {
+	return eachLineOr(r, max, fn, nil)
+}
+
+// eachLineOr is eachLine that calls over for each line it skips, one longer
+// than max (nil: none is told).
+func eachLineOr(r io.Reader, max int, fn func([]byte), over func()) error {
 	br := bufio.NewReaderSize(r, 64<<10)
 	var line []byte
 	skip := false
@@ -480,6 +486,9 @@ func eachLine(r io.Reader, max int, fn func([]byte)) error {
 		}
 		if !skip && len(line) > 0 {
 			fn(bytes.TrimRight(line, "\r\n"))
+		}
+		if skip && over != nil {
+			over()
 		}
 		line, skip = line[:0], false
 		if errors.Is(err, io.EOF) {

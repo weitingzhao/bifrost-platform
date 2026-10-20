@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -549,7 +551,7 @@ func TestExamClearsWhatWasLeft(t *testing.T) {
 	dir := filepath.Join(root, "exam", "chief_of_staff-claude")
 	left := store.NewTaskID()
 	must(t, os.MkdirAll(filepath.Join(root, "tasks", left, "a1"), 0o700))
-	must(t, os.WriteFile(filepath.Join(dir, "sitting"), []byte(left+"\n"), 0o600))
+	must(t, os.WriteFile(filepath.Join(dir, "sitting"), []byte(`{"task":"`+left+`"}`), 0o600))
 	other := filepath.Join(root, "tasks", store.NewTaskID(), "a1")
 	must(t, os.MkdirAll(other, 0o700))
 	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "holds 1 entries of other work") || len(runs()) != 0 {
@@ -559,7 +561,12 @@ func TestExamClearsWhatWasLeft(t *testing.T) {
 		t.Fatalf("what a run cut short left is there: %v", err)
 	}
 	must(t, os.RemoveAll(filepath.Dir(other)))
-	// The paper lapses here: the next sitting asks for a new one.
+	// The paper lapses here, with a run of it cut short: the next sitting
+	// ends what that run left before it lets the paper go, and asks for a
+	// new one (review 415 B1).
+	left = store.NewTaskID()
+	must(t, os.MkdirAll(filepath.Join(root, "tasks", left, "a1"), 0o700))
+	must(t, os.WriteFile(filepath.Join(dir, "sitting"), []byte(`{"task":"`+left+`"}`), 0o600))
 	p.ExpiresAt = time.Now().Add(-time.Minute)
 	b, err := json.Marshal(p)
 	must(t, err)
@@ -572,6 +579,9 @@ func TestExamClearsWhatWasLeft(t *testing.T) {
 	if f.gets != 2 || !p.ExpiresAt.After(time.Now()) {
 		t.Fatalf("after a lapsed paper: %d papers asked for, %s", f.gets, p.ExpiresAt)
 	}
+	if _, err = os.Stat(filepath.Join(root, "tasks", left)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("what a run of the lapsed paper left is there: %v", err)
+	}
 	must(t, e.Sit(ctx, p, nil))
 	if len(runs()) != 1 || len(f.parts) != 1 {
 		t.Fatalf("%d runs, %d parts", len(runs()), len(f.parts))
@@ -580,14 +590,17 @@ func TestExamClearsWhatWasLeft(t *testing.T) {
 
 // A run whose executor leaves no answer of its own (a login, a vendor that
 // failed) is not handed in: the sitting stops and the run is sat again. A
-// run out of its time is the seat's: handed in, failed.
+// run out of its time is the seat's: handed in, failed, with no text even
+// when it said something before its time ran out.
 func TestExamNoAnswerAndOutOfTime(t *testing.T) {
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1), briefItem("B2", 1))
 	failing := true
 	ex, runs := fakeClaude(t, root, func(a *agentd.Attempt, _ int) ([]any, string) {
 		if strings.Contains(a.Spec.Text, "Item B2.") {
-			return nil, "sleep 30"
+			// It says something, then runs out of its time: nothing of it is
+			// handed in (review 415 A1).
+			return []any{initEv("claude-test-5"), resultEv("PASS, said before the time ran out.")}, `cat "$STREAM"; sleep 30`
 		}
 		if failing {
 			return []any{initEv("claude-test-5"), map[string]any{"type": "result", "is_error": true, "result": "Failed to authenticate"}}, ""
@@ -606,5 +619,78 @@ func TestExamNoAnswerAndOutOfTime(t *testing.T) {
 	b2 := f.answers()["B2/1"]
 	if len(runs()) != 3 || f.answers()["B1/1"].Conclusion != "done" || b2.Conclusion != "failed" || b2.Text != "" {
 		t.Fatalf("%d runs; B2 handed in as %+v", len(runs()), b2)
+	}
+}
+
+// A sitting cut short while its executor ran (agentd killed, the host's
+// unit gone): the next one ends the executor's process group, as the record
+// names it, before it removes the run's directories; a group it cannot show
+// to be the run's keeps everything there and nothing is sat (review 415 A2).
+func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
+	root := t.TempDir()
+	f, srv := newExamPlatform(t, briefItem("B1", 1))
+	ex, runs := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) { return []any{resultEv("Fine.")}, "" })
+	e := newExam(t, root, srv, ex)
+	p, err := e.Paper(ctx, "chief_of_staff")
+	must(t, err)
+	dir := filepath.Join(root, "exam", "chief_of_staff-claude")
+	group := func(sh string) (int, string) {
+		cmd := exec.Command("sh", "-c", sh)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		must(t, cmd.Start())
+		go func() { _ = cmd.Wait() }()
+		start, serr := agentd.StartTime(cmd.Process.Pid)
+		must(t, serr)
+		t.Cleanup(func() {
+			if agentd.Alive(cmd.Process.Pid, start) {
+				agentd.KillGroup(cmd.Process.Pid)
+			}
+		})
+		return cmd.Process.Pid, start
+	}
+	sitting := func(task string, pgid int, start string) {
+		must(t, os.MkdirAll(filepath.Join(root, "tasks", task, "a1"), 0o700))
+		b, merr := json.Marshal(map[string]any{"task": task, "pgid": pgid, "start": start})
+		must(t, merr)
+		must(t, os.WriteFile(filepath.Join(dir, "sitting"), b, 0o600))
+	}
+
+	// A record that does not read is no run's: nothing is sat.
+	must(t, os.WriteFile(filepath.Join(dir, "sitting"), []byte("t_x\n"), 0o600))
+	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "not a run's record") || len(runs()) != 0 {
+		t.Fatalf("a record that does not read: %v", err)
+	}
+
+	// Its leader gone, a process of the group left: not known to be the
+	// run's, so nothing is killed, removed or sat.
+	pgid, start := group("sleep 60 & exit 0")
+	for agentd.Alive(pgid, start) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	left := store.NewTaskID()
+	sitting(left, pgid, start)
+	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "end them by hand") || len(runs()) != 0 {
+		t.Fatalf("a group not known to be the run's: %v, %d runs", err, len(runs()))
+	}
+	if _, err = os.Stat(filepath.Join(root, "tasks", left)); err != nil || !agentd.GroupAlive(pgid) {
+		t.Fatalf("the run's directories went (%v) or its group was ended", err)
+	}
+	agentd.KillGroup(pgid)
+	for agentd.GroupAlive(pgid) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	must(t, os.RemoveAll(filepath.Join(root, "tasks", left)))
+
+	// Its leader the recorded one: the group is ended, then the run's
+	// directories go, then the run is sat.
+	pgid, start = group("sleep 60")
+	left = store.NewTaskID()
+	sitting(left, pgid, start)
+	must(t, e.Sit(ctx, p, nil))
+	if agentd.GroupAlive(pgid) || len(runs()) != 1 || len(f.parts) != 1 {
+		t.Fatalf("group alive %v, %d runs, %d parts", agentd.GroupAlive(pgid), len(runs()), len(f.parts))
+	}
+	if _, err = os.Stat(filepath.Join(root, "tasks", left)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("what the run cut short left is there: %v", err)
 	}
 }

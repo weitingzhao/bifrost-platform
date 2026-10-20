@@ -167,8 +167,8 @@ func gradeLapsed(ctx context.Context, tx pgx.Tx, set ExamSet, p issued, now time
 }
 
 // gradePaper grades every run of paper p with set, each item at the t0 it was
-// rendered at: a run without an answer, or whose seat read outside its
-// workspace, is not passed. It records capability_scored on the exams stream,
+// rendered at: a run without an answer, whose seat read outside its
+// workspace, or whose executor did not end done, is not passed. It records capability_scored on the exams stream,
 // caused by the paper's event, and one capability_score row a question.
 func gradePaper(ctx context.Context, tx pgx.Tx, set ExamSet, p issued, had map[runKey]taken, now time.Time) (Appended, int, error) {
 	classOf := map[string]string{}
@@ -201,6 +201,12 @@ func gradePaper(ctx context.Context, tx pgx.Tx, set ExamSet, p issued, had map[r
 				r["verdict"] = "missing"
 			case a.OutOfWork:
 				r["verdict"] = "out_of_workspace"
+			case a.Conclusion != "done":
+				// The executor timed out, failed or left no report: at work the
+				// controller takes nothing of such an attempt, so its text is
+				// not graded (review 415 A1: a rule that asks only for no
+				// alert would pass an empty answer).
+				r["verdict"], r["conclusion"] = "not_done", a.Conclusion
 			default:
 				v, err := set.Grade(it.Item, a.Text, it.T0)
 				if err != nil {

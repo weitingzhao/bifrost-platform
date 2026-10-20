@@ -103,7 +103,11 @@ func TestExamIssueAnswerGrade(t *testing.T) {
 	}
 	oow := ans("F3", 3, "PASS")
 	oow.OutOfWorkspace = true
-	second := part(p, ans("F2", 2, "PASS"), ans("F2", 3, "PASS"), ans("F3", 1, "PASS"), ans("F3", 2, "no"), oow)
+	// An executor that timed out (or failed) is not passed, whatever its
+	// text says (review 415 A1).
+	late := ans("F2", 3, "PASS")
+	late.Conclusion = "failed"
+	second := part(p, ans("F2", 2, "PASS"), late, ans("F3", 1, "PASS"), ans("F3", 2, "no"), oow)
 	out, err = store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", second, set)
 	ok(t, err)
 	if out["graded"] != true || out["rows"] != 2 || out["answered"] != 9 || out["duplicate"] != false {
@@ -115,9 +119,10 @@ func TestExamIssueAnswerGrade(t *testing.T) {
 		}
 	}
 	// Graded at the paper's t0s, never the clock's; the run that read
-	// outside its workspace is not graded at all.
-	if len(set.t0s) != 8 {
-		t.Fatalf("graded %d runs, want 8", len(set.t0s))
+	// outside its workspace, and the one that did not end done, are not
+	// graded at all.
+	if len(set.t0s) != 7 {
+		t.Fatalf("graded %d runs, want 7", len(set.t0s))
 	}
 	for _, t0 := range set.t0s {
 		if !t0.Equal(p.T0.Add(-61 * time.Minute)) {
@@ -138,7 +143,7 @@ func TestExamIssueAnswerGrade(t *testing.T) {
 	}
 	ok(t, rows.Err())
 	want := []string{fmt.Sprintf("exam-alert 1/3 chief_of_staff false 2.1.0 (Claude Code) %.4f", store.Wilson(1, 3)),
-		fmt.Sprintf("exam-brief 5/6 chief_of_staff false 2.1.0 (Claude Code) %.4f", store.Wilson(5, 6))}
+		fmt.Sprintf("exam-brief 4/6 chief_of_staff false 2.1.0 (Claude Code) %.4f", store.Wilson(4, 6))}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Fatalf("rows %v, want %v", got, want)
 	}
@@ -148,7 +153,8 @@ func TestExamIssueAnswerGrade(t *testing.T) {
 		store.ExamsStream).Scan(&body, &cause))
 	results, _ := body["results"].([]any)
 	if body["source"] != "exam" || body["run_id"] != p.RunID || body["questions"] != set.digest || body["host"] != "h1" || len(results) != 9 ||
-		!strings.Contains(fmt.Sprint(results), "verdict:out_of_workspace") || !strings.Contains(fmt.Sprint(results), "failed:[says-pass]") {
+		!strings.Contains(fmt.Sprint(results), "verdict:out_of_workspace") || !strings.Contains(fmt.Sprint(results), "failed:[says-pass]") ||
+		!strings.Contains(fmt.Sprint(results), "conclusion:failed item:F2 round:1 run_no:3 verdict:not_done") {
 		t.Fatalf("capability_scored %v", body)
 	}
 	var paperEvent int64
@@ -164,7 +170,7 @@ func TestExamIssueAnswerGrade(t *testing.T) {
 	}
 	var n int
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.capability_score WHERE source = 'exam'`).Scan(&n))
-	if n != 2 || len(set.t0s) != 8 {
+	if n != 2 || len(set.t0s) != 7 {
 		t.Fatalf("handing a graded run in again recorded %d rows, graded %d runs", n, len(set.t0s))
 	}
 	if _, err = store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", part(p, ans("F1", 1, "PASS, said otherwise")), set); !errors.Is(err, store.ErrConflict) {
