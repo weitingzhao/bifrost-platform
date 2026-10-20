@@ -185,12 +185,18 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			}
 		}
 		var made, asked []string // cards this round made; questions asked before
+		byRule := false
+		if len(p.Questions) > 0 {
+			if byRule, err = ruleAnswers(ctx, tx, CardPlanQuestion, t.mission); err != nil {
+				return err
+			}
+		}
 		for i, q := range p.Questions {
 			if ask == nil {
 				return fmt.Errorf("%w: no question store is configured", ErrAsk)
 			}
 			id, err := ask(ctx, Card{Key: planCardKey(taskID, d.round, i), Title: q.Question, Body: q.Body, Options: q.Options,
-				Recommended: q.Recommended, Meanwhile: q.Meanwhile, OwnerDuty: q.OwnerDuty, TaskID: taskID})
+				Recommended: q.Recommended, Meanwhile: q.Meanwhile, OwnerDuty: q.OwnerDuty, TaskID: taskID, ByRule: byRule})
 			switch {
 			case errors.Is(err, ErrAsked):
 				asked = append(asked, strings.TrimPrefix(err.Error(), ErrAsked.Error()+": "))

@@ -612,6 +612,10 @@ type Card struct {
 	Meanwhile, OwnerDuty, TaskID string
 	Urgency                      string
 	SameByKey                    bool
+	// ByRule: a card-auto-answer rule in force answers a card of its kind
+	// (ruleAnswers, TD-393), so the question store may take it past its
+	// quotas: the rule, not the Owner, answers it within seconds.
+	ByRule bool
 }
 
 // Options of a plan change's card, as the Owner reads them, and the keys
@@ -719,6 +723,9 @@ func proposePlanChange(ctx context.Context, db DB, w Writer, key, root, reason s
 		// rules (review 182 B2); a card that does not fit comes back invalid.
 		card := Card{Key: canonKey(w.Actor, key), Title: "Plan change to " + root + ": " + firstLine(reason),
 			Body: cardBody(root, reason, changes)}
+		if card.ByRule, err = ruleAnswers(ctx, tx, CardPlanChange, ""); err != nil {
+			return nil, err
+		}
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}

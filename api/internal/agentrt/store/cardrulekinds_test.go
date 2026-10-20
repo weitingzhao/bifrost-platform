@@ -94,7 +94,7 @@ func TestEveryKindIsAnsweredAfterItsWait(t *testing.T) {
 	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 5 {
 		t.Fatalf("at six seconds: answered %d (%v)", n, err)
 	}
-	nothing := "the card recommends nothing: the rule takes the option that changes nothing"
+	nothing := "the card recommends nothing and no AI assessment has come: the rule takes the option that changes nothing"
 	for id, want := range map[string][2]string{s.cardOf(t, stale): {"c", ""}, s.cardOf(t, plain): {"b", nothing}, "q_plannerquestion1": {"b", ""},
 		planCard: {"b", nothing}, missionCard: {"b", nothing}} {
 		if got := s.cards[id]; got.status != store.QuestionAnswered || got.option != want[0] || got.text != want[1] || got.by != "rule card-auto-answer v1" {
@@ -192,6 +192,85 @@ func TestARuleAnswersOnlyTheKindsItLists(t *testing.T) {
 	for _, id := range s.order {
 		if id != missionCard && s.cards[id].status != "open" {
 			t.Errorf("card %s of a kind the rule does not list was answered", id)
+		}
+	}
+}
+
+// The coordinating thread 2026-10-20 for the Owner (「STG 不等评估」): a card
+// that recommends nothing takes its AI assessment's option when one has come,
+// saying why, and the decision acts on it as on the Owner's; with none come,
+// the option that changes nothing.
+func TestACardWithoutRecommendationTakesItsAssessment(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	assessed, bare := w.ready(t, store.Task{}), w.ready(t, store.Task{MissionID: "M-1"})
+	for _, id := range []string{assessed, bare} {
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, id) }))
+	}
+	var s seenCards
+	if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 2 {
+		t.Fatalf("asked %d (%v)", n, err)
+	}
+	card := s.cardOf(t, assessed)
+	if rec := s.item(card).Recommended; rec != "" {
+		t.Fatalf("the card recommends %q", rec)
+	}
+	task, _ := w.askAndReady(t, s.item(card), ratchetEvidence())
+	w.work(t, task, report("a", [][2]string{{"再来一轮就够。", "commit:bifrost-platform@6b9507328434"}, {"失败只是一次。", w.waitEvent(t, assessed)}}), "done")
+	if did, err := store.AcceptBrief(ctx, w.rt, task); err != nil || did != "assessed" {
+		t.Fatalf("accept: %q %v", did, err)
+	}
+	signCardAutoSeconds(t, w.rt, "0", "[blocked]")
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 2 {
+		t.Fatalf("answered %d (%v)", n, err)
+	}
+	took := "the card recommends nothing and its AI assessment recommends a: the rule takes the assessment's"
+	if got := s.cards[card]; got.option != "a" || got.text != took {
+		t.Fatalf("the assessed card: %+v", got)
+	}
+	if got := s.cards[s.cardOf(t, bare)]; got.option != "b" {
+		t.Fatalf("the card with no assessment: %+v", got)
+	}
+	if n, err := store.DecideBlocked(ctx, w.rt, s.question, s.ack); err != nil || n != 2 {
+		t.Fatalf("decided %d (%v)", n, err)
+	}
+	if w.state(t, "task", assessed) != "ready" || w.state(t, "task", bare) != "cancelled" {
+		t.Fatalf("the assessed task is %s, the other %s", w.state(t, "task", assessed), w.state(t, "task", bare))
+	}
+	notes := strings.Join(ruleNotes(t, w.rt, store.MissionStream("M-1")), "|")
+	if !strings.Contains(notes, "answered question "+card+" with a, the option its AI assessment recommends, after ") || !strings.Contains(notes, "; "+took) {
+		t.Fatalf("notes: %q", notes)
+	}
+}
+
+// TD-393 (the coordinating thread 2026-10-20: STG's runtime was held by the
+// question store's quotas, no card open for the rule to answer): a card is
+// asked ByRule, so the question store may take it past its quotas, exactly
+// when a card-auto-answer rule in force lists its kind and its mission does
+// not need the Owner; with no rule, none is.
+func TestCardsAreAskedByRuleWhenTheRuleAnswersThem(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	var s seenCards
+	_, before := proposeOutside(t, w, s.ask, "before")
+	signCardAutoSeconds(t, w.rt, "5", "[blocked, mission]")
+	_, mission := proposeOutside(t, w, s.ask, "after")
+	marked, err := store.ProposeMission(ctx, w.rt, wr("thread:s1"), "marked", store.MissionProposal{Title: "m marked", Goal: "g",
+		Success: []string{"done"}, NeedsOwner: "it must wait for the Owner"}, s.ask)
+	ok(t, err)
+	markedCard, _ := marked["question_id"].(string)
+	out, err := store.ProposePlanChange(ctx, w.rt, wr("thread:s1"), "k1", root, "rebind", []store.PlanChange{{Op: "rebind_step", Node: s1,
+		MissionID: "M-2"}}, s.ask)
+	ok(t, err)
+	planCard, _ := out["question_id"].(string)
+	plain := w.ready(t, store.Task{})
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, plain) }))
+	if _, err = store.AskBlocked(ctx, w.rt, s.ask); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[string]bool{before: false, mission: true, markedCard: false, planCard: false, s.cardOf(t, plain): true} {
+		if got := s.asked[id].ByRule; got != want {
+			t.Errorf("card %s (%s) asked ByRule %v; want %v", id, s.asked[id].Title, got, want)
 		}
 	}
 }

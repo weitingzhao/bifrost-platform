@@ -10,6 +10,24 @@ import (
 )
 
 func (s *Service) Create(ctx context.Context, session, principal, role string, raw []byte) Result {
+	return s.create(ctx, session, principal, role, raw, false)
+}
+
+// CreateForRule creates a card the agent runtime asks that a card-auto-answer
+// rule in force answers within seconds (TD-393, STG only: the server takes
+// this path only there): the requester's and the store's quotas do not hold
+// it, and it does not count against them, so the runtime's cards are not
+// held while the rule, not the Owner, answers them, and other requesters
+// keep their quotas. Only the runtime's own session may; everything else
+// (the key, a duplicate, the size) is as Create.
+func (s *Service) CreateForRule(ctx context.Context, session, principal, role string, raw []byte) Result {
+	if session != RuntimeSession {
+		return fail(http.StatusForbidden, "only the agent runtime asks past the quotas, for cards its rule answers", nil)
+	}
+	return s.create(ctx, session, principal, role, raw, true)
+}
+
+func (s *Service) create(ctx context.Context, session, principal, role string, raw []byte, byRule bool) Result {
 	if err := ValidSession(session); err != nil {
 		return fail(http.StatusBadRequest, err.Error(), nil)
 	}
@@ -33,21 +51,23 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 		}
 		marks := recentHourly(doc.Hourly, now)
 		hash := requesterHash(session)
-		if len(marks) >= hourlyGlobal {
-			return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 30 questions created in the last hour", nil)}
-		}
-		if countHash(marks, hash) >= hourlyPerRequester {
-			return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 6 questions from this requester in the last hour", nil)}
-		}
-		t := tally(doc, session, now)
-		if t.openReq >= openPerRequester || t.protReq >= protectedPerRequester {
-			return applied{res: fail(http.StatusTooManyRequests, ackList(t.nums), nil)}
-		}
-		if t.openAll >= openGlobal {
-			return applied{res: fail(http.StatusTooManyRequests, "store full: 20 questions are open", nil)}
-		}
-		if t.protAll >= protectedGlobal {
-			return applied{res: fail(http.StatusTooManyRequests, "store full: 40 questions are open or unread", nil)}
+		if !byRule {
+			if len(marks) >= hourlyGlobal {
+				return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 30 questions created in the last hour", nil)}
+			}
+			if countHash(marks, hash) >= hourlyPerRequester {
+				return applied{res: fail(http.StatusTooManyRequests, "hourly quota: 6 questions from this requester in the last hour", nil)}
+			}
+			t := tally(doc, session, now)
+			if t.openReq >= openPerRequester || t.protReq >= protectedPerRequester {
+				return applied{res: fail(http.StatusTooManyRequests, ackList(t.nums), nil)}
+			}
+			if t.openAll >= openGlobal {
+				return applied{res: fail(http.StatusTooManyRequests, "store full: 20 questions are open", nil)}
+			}
+			if t.protAll >= protectedGlobal {
+				return applied{res: fail(http.StatusTooManyRequests, "store full: 40 questions are open or unread", nil)}
+			}
 		}
 		id, err := s.freshID(doc)
 		if err != nil {
@@ -84,7 +104,10 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 			return applied{res: fail(http.StatusBadRequest, "question exceeds 16384 bytes", nil)}
 		}
 		doc.Questions = append(doc.Questions, q)
-		doc.Hourly = append(marks, hourlyMark{At: now, RequesterHash: hash})
+		doc.Hourly = marks
+		if !byRule {
+			doc.Hourly = append(marks, hourlyMark{At: now, RequesterHash: hash})
+		}
 		cp := q.clone()
 		return applied{
 			res:     Result{Code: http.StatusCreated, Body: createBody(q, false)},

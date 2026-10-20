@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 )
 
 // The kinds of card the runtime asks, as the card-auto-answer rule tells
@@ -162,6 +165,24 @@ func cardFor(ctx context.Context, tx pgx.Tx, card RuntimeCard) (cardOn, bool, er
 	return on, (state == "active" || state == "paused") && needsOwner == "", nil
 }
 
+// ruleAnswers says whether a card-auto-answer rule in force answers cards of
+// kind, and the card's mission ("" for a proposal's card) does not need the
+// Owner: the card is then asked ByRule (TD-393, the coordinating thread
+// 2026-10-20: the runtime's cards were held by the question store's quotas
+// while no card was open for the rule to answer).
+func ruleAnswers(ctx context.Context, tx pgx.Tx, kind, mission string) (bool, error) {
+	r, err := inForce(ctx, tx, rules.KindCardAuto)
+	if err != nil || r == nil || !slices.Contains(r.CardAuto.Kinds, kind) {
+		return false, err
+	}
+	if mission == "" {
+		return true, nil
+	}
+	var needsOwner string
+	err = tx.QueryRow(ctx, `SELECT COALESCE(scope_json->>'needs_owner', '') FROM agentrt.mission WHERE mission_id = $1`, mission).Scan(&needsOwner)
+	return err == nil && needsOwner == "", ignoreNoRows(err)
+}
+
 // inaction is the option of a card of kind that changes nothing; rec is the
 // option the card recommends.
 func inaction(kind, rec string) string {
@@ -172,14 +193,20 @@ func inaction(kind, rec string) string {
 }
 
 // ruleChoice is the option a rule answers a card of kind with, given the
-// option the card recommends (rec, "" for none) and its AI assessment: the
-// recommendation when the assessment agrees, or none has come (none asked,
-// one under way, or one that cannot come: a card is answered within seconds
-// of its wait, before an assessment can be in); the option that changes
-// nothing when the card recommends nothing or the assessment recommends
-// another option (TD-393, replacing TD-391's 「不一致时 STG 也不自动答」). why
-// is what the card's answer says of an option it does not recommend ("" for
-// the one it does); said is what the note adds.
+// option the card recommends (rec, "" for none) and its AI assessment
+// (TD-393; the coordinating thread 2026-10-20 for the Owner, 「STG 不等评
+// 估」): a card is answered when its wait passes, whatever the assessment's
+// state then.
+//   - The card recommends an option: that option, when the assessment agrees
+//     or has not come (none asked, one under way, one that cannot come);
+//     when an assessment that has come recommends another, the option that
+//     changes nothing.
+//   - The card recommends nothing: the assessment's option when one has come
+//     with it; otherwise the option that changes nothing.
+//
+// why is what the card's answer says of an option the card does not
+// recommend ("" for the one it does); said is what the note adds: which case
+// it was.
 func ruleChoice(kind, rec string, st assessState, now time.Time) (option, why, said string) {
 	nothing := inaction(kind, rec)
 	ai := st.done && st.recommended != ""
@@ -194,12 +221,12 @@ func ruleChoice(kind, rec string, st assessState, now time.Time) (option, why, s
 		why = fmt.Sprintf("the card recommends %s and its AI assessment %s: the rule takes the option that changes nothing", rec, st.recommended)
 		return nothing, why, why
 	case ai:
-		why = fmt.Sprintf("the card recommends nothing (its AI assessment recommends %s): the rule takes the option that changes nothing", st.recommended)
-		return nothing, why, why
+		why = fmt.Sprintf("the card recommends nothing and its AI assessment recommends %s: the rule takes the assessment's", st.recommended)
+		return st.recommended, why, why
 	case rec != "":
 		return rec, "", assessmentSaid(st, now)
 	}
-	why = "the card recommends nothing: the rule takes the option that changes nothing"
+	why = "the card recommends nothing and no AI assessment has come: the rule takes the option that changes nothing"
 	return nothing, why, why + "; " + assessmentSaid(st, now)
 }
 

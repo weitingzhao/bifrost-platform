@@ -141,9 +141,13 @@ func ProposeRecorderImport(ctx context.Context, db DB, w Writer, key, reason str
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
+		byRule, err := ruleAnswers(ctx, tx, CardRecorderImport, "")
+		if err != nil {
+			return nil, err
+		}
 		q, err := ask(ctx, Card{Key: cardKey, Title: "Import recorder log " + work + ": " + firstLine(reason), Body: body,
 			Options: []string{RecorderApply, RecorderRefuse}, Meanwhile: "the log is not imported; the recorder keeps it as it is",
-			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you"})
+			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you", ByRule: byRule})
 		if errors.Is(err, ErrInvalid) {
 			return nil, err
 		}

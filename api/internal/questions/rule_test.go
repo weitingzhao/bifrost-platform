@@ -3,6 +3,7 @@ package questions
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -151,5 +152,36 @@ func TestAnswerAsRuleSaysWhyItTakesAnother(t *testing.T) {
 	if err != nil || !ok || q.Answer.Option != "b" || q.Answer.By != "rule card-auto-answer v3" || q.Answer.Channel != RuleChannel ||
 		!strings.HasPrefix(q.Answer.Text, "the card recommends nothing: the rule takes") || len(q.Answer.Text) > 500 || strings.Contains(q.Answer.Text, "\n") {
 		t.Fatalf("the answer: %+v %v %v", q.Answer, ok, err)
+	}
+}
+
+// TD-393: the runtime's cards that STG's rule answers are taken past the
+// quotas, ten in a row, and leave the quotas of other requesters and of the
+// runtime's own other cards as they were; nobody else may ask so.
+func TestCreateForRuleTakesTheRuntimeCardsPastTheQuotas(t *testing.T) {
+	s := testSvc(t)
+	ctx := context.Background()
+	for i := range 10 {
+		raw := mustJSON(t, map[string]any{"idempotency_key": fmt.Sprintf("k-rule-card-%02d-padding", i), "title": fmt.Sprintf("Card %d", i),
+			"urgency": "u", "meanwhile": "m"})
+		if res := s.CreateForRule(ctx, RuntimeSession, RuntimeSession, "operator", raw); res.Code != http.StatusCreated {
+			t.Fatalf("card %d: %d %v", i, res.Code, res.Body)
+		}
+	}
+	raw := mustJSON(t, map[string]any{"idempotency_key": "k-thread-past-quota", "title": "A thread's", "urgency": "u", "meanwhile": "m"})
+	if res := s.CreateForRule(ctx, "thread-a", "reporter", "reporter", raw); res.Code != http.StatusForbidden {
+		t.Fatalf("a thread asked past the quotas: %d %v", res.Code, res.Body)
+	}
+	// Another requester's quota is untouched: the rule's cards left no
+	// hourly marks.
+	for i := range 3 {
+		if res := ask(t, s, "thread-b", fmt.Sprintf("k-thread-b-%02d-padding", i), map[string]any{"title": fmt.Sprintf("B %d", i)}); res.Code != http.StatusCreated {
+			t.Fatalf("thread-b's question %d: %d %v", i, res.Code, res.Body)
+		}
+	}
+	// The runtime's own card through Create is held as before: ten of its
+	// questions are open.
+	if res := ask(t, s, RuntimeSession, "k-runtime-plain-padding", nil); res.Code != http.StatusTooManyRequests {
+		t.Fatalf("a runtime card through Create: %d %v", res.Code, res.Body)
 	}
 }

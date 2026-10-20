@@ -95,6 +95,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	env := strings.TrimSpace(os.Getenv("AGENTRT_ENV"))
+	// STG's card-auto-answer rule answers the runtime's cards within
+	// seconds: there the question store takes them past its quotas (TD-393).
+	s.questionRuntime.takeCardsByRule(env == "stg")
 	safego.Go("agentrt-connect", func() {
 		defer close(done)
 		pool := connectAgentRuntime(ctx, func(ctx context.Context) (*pgxpool.Pool, error) {

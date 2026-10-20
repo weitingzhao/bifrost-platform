@@ -105,9 +105,13 @@ func ProposePlanImport(ctx context.Context, db DB, w Writer, key, reason string,
 		if ask == nil {
 			return nil, fmt.Errorf("%w: no question store is configured", ErrAsk)
 		}
+		byRule, err := ruleAnswers(ctx, tx, CardPlanImport, "")
+		if err != nil {
+			return nil, err
+		}
 		q, err := ask(ctx, Card{Key: cardKey, Title: "Import plan " + root + ": " + firstLine(reason), Body: body,
 			Options: []string{ImportApply, ImportRefuse}, Meanwhile: "the plan is not imported; the board keeps reading the ledger",
-			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you"})
+			OwnerDuty: "irreversible", Urgency: "when you can: only this import waits for you", ByRule: byRule})
 		if errors.Is(err, ErrInvalid) {
 			return nil, err
 		}

@@ -209,7 +209,7 @@ func TestAnswerByRule(t *testing.T) {
 		t.Fatalf("the card: %+v", got)
 	}
 	if got = s.cards[card[plain]]; got.status != store.QuestionAnswered || got.option != "b" ||
-		got.text != "the card recommends nothing: the rule takes the option that changes nothing" {
+		got.text != "the card recommends nothing and no AI assessment has come: the rule takes the option that changes nothing" {
 		t.Fatalf("the card that recommends nothing: %+v", got)
 	}
 	for _, id := range []string{card[marked], card[young], "q_plannerquestion1", "q_planchange00001"} {

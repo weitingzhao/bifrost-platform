@@ -227,6 +227,9 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		if r.option != recNone {
 			c.Recommended, c.RecommendedWhy = r.option, r.why
 		}
+		if c.ByRule, err = ruleAnswers(ctx, tx, CardBlocked, t.mission); err != nil {
+			return err
+		}
 		q, err := ask(ctx, c)
 		if err != nil {
 			if errors.Is(err, ErrInvalid) {

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,5 +99,45 @@ func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 	}
 	if controller.CardRuleEvery != 5*time.Second {
 		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)
+	}
+}
+
+// TD-393 (the coordinating thread 2026-10-20: STG's runtime held by the
+// question store's 429 while no card was open for the rule to answer): on
+// STG the runtime asks ten cards its rule answers in a row; a card no rule
+// answers, and any card on PROD, is held by the quotas as before.
+func TestRuntimeCardsTheRuleAnswersSkipTheQuotas(t *testing.T) {
+	ctx := context.Background()
+	card := func(i int, byRule bool) store.Card {
+		return store.Card{Key: fmt.Sprintf("%032x", i), Title: fmt.Sprintf("Blocked in M-%d: a task", i), Body: "b",
+			Options: []string{store.BlockedRetry, store.BlockedDrop}, OwnerDuty: "goal", TaskID: "t_01M5192P0JPMJAP63ZKRPXJ2VV",
+			Meanwhile: "m", ByRule: byRule}
+	}
+	stg := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	stg.takeCardsByRule(true)
+	for i := range 10 {
+		if _, err := stg.agentRuntimeAsk()(ctx, card(i, true)); err != nil {
+			t.Fatalf("STG, card %d the rule answers: %v", i, err)
+		}
+	}
+	held := func(rt *questionRuntime, byRule bool) int {
+		t.Helper()
+		for i := range 10 {
+			if _, err := rt.agentRuntimeAsk()(ctx, card(100+i, byRule)); err != nil {
+				if !strings.Contains(err.Error(), "429") {
+					t.Fatalf("card %d: %v", i, err)
+				}
+				return i
+			}
+		}
+		return 10
+	}
+	if n := held(newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil), true); n != 3 {
+		t.Fatalf("PROD (no lift) took %d cards before the quota; want 3", n)
+	}
+	lifted := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
+	lifted.takeCardsByRule(true)
+	if n := held(lifted, false); n != 3 {
+		t.Fatalf("STG took %d cards no rule answers before the quota; want 3", n)
 	}
 }

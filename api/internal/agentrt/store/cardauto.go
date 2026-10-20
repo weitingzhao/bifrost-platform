@@ -175,8 +175,12 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 // known), unless that is recorded already.
 func ruleNote(ctx context.Context, tx pgx.Tx, on cardOn, by string, card RuntimeCard, option string, now time.Time, said string) error {
 	what := "the option it recommends"
-	if option != card.Recommended {
+	switch {
+	case option == card.Recommended:
+	case option == inaction(on.kind, card.Recommended):
 		what = "the option that changes nothing"
+	default:
+		what = "the option its AI assessment recommends"
 	}
 	text := fmt.Sprintf("%s answered question %s with %s, %s, after %s unanswered", by, card.ID, option, what, waited(now.Sub(card.CreatedAt)))
 	if said != "" {

@@ -26,12 +26,12 @@ describe('an answer a rule gave', () => {
     expect(screen.getByText('Close mission M-3')).toBeTruthy()
   })
 
-  it('says when the rule took the option that changes nothing, and why (TD-393)', () => {
+  it('says when the rule took an option the card does not recommend, and why (TD-393)', () => {
     const q = read(open.body)
     const why = 'the card recommends c and its AI assessment b: the rule takes the option that changes nothing'
     const ruled = { option: 'b', text: why, by: 'rule card-auto-answer v3', at: q.created_at, channel: 'rule', approval: false }
     render(<StoredAnswer question={q} answer={ruled} />)
-    expect(screen.getByText('Answered by rule card-auto-answer v3, with the option that changes nothing; not by you')).toBeTruthy()
+    expect(screen.getByText('Answered by rule card-auto-answer v3, with an option the card does not recommend, for the reason above; not by you')).toBeTruthy()
     expect(screen.getByText(`b — ${why}`)).toBeTruthy()
     expect(screen.getByText('Do not do this task')).toBeTruthy()
   })

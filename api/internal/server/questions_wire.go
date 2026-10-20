@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +27,18 @@ type questionRuntime struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	stop   sync.Once
+	// byRule: a card the runtime asks ByRule (a card-auto-answer rule in
+	// force answers its kind) is taken past the question store's quotas
+	// (questions.CreateForRule, TD-393). STG's alone (agentrt_wire.go).
+	byRule atomic.Bool
+}
+
+// takeCardsByRule says whether this platform takes the runtime's cards a
+// rule answers past the question store's quotas.
+func (rt *questionRuntime) takeCardsByRule(on bool) {
+	if rt != nil {
+		rt.byRule.Store(on)
+	}
 }
 
 func newQuestionRuntime(path string, audit *actuation.AuditLog) *questionRuntime {
@@ -152,7 +165,13 @@ func (rt *questionRuntime) agentRuntimeAsk() store.Ask {
 		if err != nil {
 			return "", err
 		}
-		res := rt.svc.Create(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", raw)
+		create := rt.svc.Create
+		if card.ByRule && rt.byRule.Load() {
+			// STG's rule answers it within seconds; the quotas guard the
+			// Owner from what waits for him (TD-393).
+			create = rt.svc.CreateForRule
+		}
+		res := create(ctx, agentRuntimeRequester, agentRuntimeRequester, "operator", raw)
 		body, _ := res.Body.(map[string]any)
 		id, _ := body["id"].(string)
 		msg, _ := body["error"].(string)

@@ -87,12 +87,12 @@ export function StoredAnswer({ question, answer }: { question: Question; answer:
       <p className="m-0 break-words text-sm">{storedAnswerWords(answer)}</p>
       {label != null && label !== '' ? <p className="m-0 break-words text-sm">{label}</p> : null}
       {answer.channel === 'rule' ? (
-        // A signed card-auto-answer rule's answer (STG, TD-390): the card's own recommendation, or (TD-393) the
-        // option that changes nothing, its why the answer's text; never the Owner's.
+        // A signed card-auto-answer rule's answer (STG, TD-390): the card's own recommendation, or (TD-393) another
+        // option (the one that changes nothing, or its AI assessment's), its why the answer's text; never the Owner's.
         <p className="m-0 break-words text-sm" data-answer-by-rule>
           {answer.option === question.recommended
             ? `Answered by ${answer.by}, with the option the card recommends; not by you`
-            : `Answered by ${answer.by}, with the option that changes nothing; not by you`}
+            : `Answered by ${answer.by}, with an option the card does not recommend, for the reason above; not by you`}
         </p>
       ) : null}
       <p className="m-0 text-sm">{readReportLine(answer)}</p>

@@ -44,9 +44,13 @@ func askMission(ctx context.Context, tx pgx.Tx, w Writer, key, id string, asked 
 		return "", invalid("the Owner's card for this mission would be %d bytes, more than the question store's %d: %s",
 			n, questions.BodyLimit, tooLong)
 	}
+	byRule, err := ruleAnswers(ctx, tx, CardMission, id)
+	if err != nil {
+		return "", err
+	}
 	q, err := ask(ctx, Card{Key: cardKey, Title: "Mission: " + firstLine(asked.Title), Body: body,
 		Options: []string{MissionStart, MissionNotStart}, Meanwhile: "the mission does not start", OwnerDuty: "goal",
-		Urgency: "when you can: only this mission waits for you"})
+		Urgency: "when you can: only this mission waits for you", ByRule: byRule})
 	if err != nil {
 		if errors.Is(err, ErrInvalid) {
 			return "", err
