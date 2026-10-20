@@ -15,18 +15,23 @@ import { fromPlanWithRequest, importHead, requestOf, type PlanView } from '../ag
 // import, no items). agentrt-plan-view.go.json holds planimport.FromPlanWithRequest's outputs on those
 // answers and on edited copies of them (inputs), with and without the request.
 //
-// Regenerating them (review 416 C3): a temporary _test.go in api/internal/agentrt/agentrtapi (package
-// agentrtapi_test, so it has seeded, server, get, ledger and importHead) run once with AGENTRT_TEST_PG
+// The Go outputs (review 416 C3, 418): api/internal/agentrt/planimport/console_test.go
+// (TestConsolePlanViewFixture) runs FromPlanWithRequest on every case's stored input and fails while any
+// output differs from this fixture, so a Go change to the view's rule or refusals is red there until
+//   CONSOLE_PLAN_VIEW_WRITE=1 go test ./internal/agentrt/planimport/ -run TestConsolePlanViewFixture
+// (from api/) rewrites the outputs, and then red here until the port is brought along. A case added or
+// lost on either side fails "holds every case" below.
+//
+// The inputs are captured once from the handlers: a temporary _test.go in api/internal/agentrt/agentrtapi
+// (package agentrtapi_test, so it has seeded, server, get, ledger and importHead) run with AGENTRT_TEST_PG
 // set, then deleted. It (1) reads GET plan?root=R2 before anything is imported (the 404, "absent");
 // (2) store.ImportPlan of ledger(t, fixtureLedger), then writes plan?root=R2, events?stream=plan:R2&
 // after_seq=0, artifacts/<importHead> and progress ("imported"); (3) ProposePlanChange add_node of a step
 // under R2:2.1 (applied at once) and drop_step R2:2.3-2 (asked, DecidePlanChanges with Apply), then plan
 // and progress ("moved"); (4) in a fresh database, CreatePlanNode of round R2 alone, then plan, events
-// and progress ("root-only"); (5) runs FromPlanWithRequest on each case of GO_CASES below, the edited
-// inputs being the imported answer with the edits each case names (for "mutated": the rule, cause, state
-// and event changes of steps 2.0-1 to 2.2b-6 that its view shows), and writes the cases and the inputs.
-// A Go change to the view's rule or refusals shows here only once they are regenerated; a case added or
-// lost on either side fails "holds every case" below.
+// and progress ("root-only"); (5) writes the cases of GO_CASES below with their inputs, the edited ones
+// being the imported answer with the edits each case names (for "mutated": the rule, cause, state and
+// event changes of steps 2.0-1 to 2.2b-6 that its view shows); then the Go test above writes the outputs.
 const GO_CASES = ['imported, with the request', 'imported, no request', 'moved on, with the request', 'moved on, no request',
   'mutated, with the request', 'another root', 'listed-twice', 'step-before-item', 'wrong-id', 'no-root', 'bad-type', 'bad-kind',
   'step-no-state', 'item-under-item', 'root only, no import head']
@@ -124,10 +129,51 @@ describe('the import head and its request', () => {
     expect(urls()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE), `/api/v1/agentrt/artifacts/${encodeURIComponent(importHead(imported.events).artifact)}`])
   })
 
-  it('a plan stream with no import head is read to its end: no request', async () => {
+  it('a plan stream with no import head is read to its end, a page short of 500: no request', async () => {
     const urls = serve(url => streamPage(rootOnly.events, url))
     expect(await fetchImportRequest()).toBeNull()
-    expect(urls()).toEqual([eventsUrl(0), eventsUrl(rootOnly.events.at(-1)!.seq)])
+    expect(urls()).toEqual([eventsUrl(0)])
+    // A stream that ends on a full page is read once more, to its empty page.
+    const full = planStream(STREAM_PAGE, false).slice(0, STREAM_PAGE)
+    const more = serve(url => streamPage(full, url))
+    expect(await fetchImportRequest()).toBeNull()
+    expect(more()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE)])
+  })
+
+  // The page budget counts full pages only (review 418): a head on the last page read is found, one a page
+  // later is not, and a head-less stream that ends on a short page within the budget has no head.
+  const pagesUpTo = (n: number) => Array.from({ length: n }, (_, i) => eventsUrl(i * STREAM_PAGE))
+  it(`finds a head that is the last event of page ${IMPORT_HEAD_PAGES}`, async () => {
+    const stream = planStream(IMPORT_HEAD_PAGES * STREAM_PAGE - 1)
+    expect(stream[IMPORT_HEAD_PAGES * STREAM_PAGE - 1].event_type).toBe('legacy_imported')
+    const urls = serve(url => streamPage(stream, url))
+    expect(await fetchImportRequest()).toEqual(request)
+    expect(urls()).toEqual([...pagesUpTo(IMPORT_HEAD_PAGES), `/api/v1/agentrt/artifacts/${encodeURIComponent(importHead(imported.events).artifact)}`])
+  })
+
+  it(`does not read on for a head that is the first event of page ${IMPORT_HEAD_PAGES + 1}`, async () => {
+    const stream = planStream(IMPORT_HEAD_PAGES * STREAM_PAGE)
+    const urls = serve(url => streamPage(stream, url))
+    await expect(fetchImportRequest()).rejects.toThrow(`Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2.`)
+    expect(urls()).toEqual(pagesUpTo(IMPORT_HEAD_PAGES))
+  })
+
+  it(`a head-less stream of ${(IMPORT_HEAD_PAGES - 1) * STREAM_PAGE + 1} events ends on its short page ${IMPORT_HEAD_PAGES}: no request`, async () => {
+    const stream = planStream((IMPORT_HEAD_PAGES - 1) * STREAM_PAGE + 1, false).slice(0, (IMPORT_HEAD_PAGES - 1) * STREAM_PAGE + 1)
+    const urls = serve(url => streamPage(stream, url))
+    expect(await fetchImportRequest()).toBeNull()
+    expect(urls()).toEqual(pagesUpTo(IMPORT_HEAD_PAGES))
+  })
+
+  it('the stream model refuses what it does not model', () => {
+    const stream = planStream(2)
+    expect(() => streamPage(stream, '?after_seq=abc')).toThrow('not a non-negative safe integer')
+    expect(() => streamPage(stream, '?after_seq=-1')).toThrow('not a non-negative safe integer')
+    expect(() => streamPage(stream, `?after_seq=${2 ** 53}`)).toThrow('not a non-negative safe integer')
+    expect(() => streamPage([stream[1], stream[0]], '?after_seq=0')).toThrow('not sorted by seq')
+    expect(() => streamPage([stream[0], { ...stream[1], event_stream_id: 'plan:R3' }], '?after_seq=0')).toThrow('it models one')
+    expect(() => streamPage(stream, '?stream=plan%3AR3&after_seq=0')).toThrow('asked for plan:R3')
+    expect(streamPage(stream, '?stream=plan%3AR2&after_seq=1').map(e => e.seq)).toEqual(stream.slice(1).map(e => e.seq))
   })
 
   it('a cursor that does not move on is an error', async () => {

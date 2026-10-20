@@ -71,22 +71,26 @@ export function parsePlanRequest(value: unknown, root: string): PlanRequest {
   }) }
 }
 
-/** How many pages of the plan's stream (up to 500 events each) are read for its import head. */
+/** The events GET /events?stream= answers a page with: its fixed LIMIT (agentrtapi getEvents). */
+export const PLAN_STREAM_PAGE = 500
+/** How many full pages of the plan's stream are read for its import head. */
 export const IMPORT_HEAD_PAGES = 20
 /**
  * The import request the plan's import head names (CUT-plan-import §6): the plan's stream read from the
  * start, page by page, for its first legacy_imported event that names a request, and that request read
  * once. null when the stream has no such event: the plan was not imported, and each step shows the time
- * of its state event. A stream read IMPORT_HEAD_PAGES pages on without the head is an error, not a plan
- * without one (review 416 B1): the import writes its head near the start of the plan's stream, after
- * its proposal, its decision and whatever the stream held before.
+ * of its state event. The stream ends at a page short of PLAN_STREAM_PAGE (review 418). A stream read
+ * IMPORT_HEAD_PAGES full pages on without the head is an error, not a plan without one (review 416 B1):
+ * the import writes its head near the start of the plan's stream, after its proposal, its decision and
+ * whatever the stream held before.
  */
 export async function fetchImportRequest(root = PLAN_ROOT, signal?: AbortSignal): Promise<PlanRequest | null> {
   let after = 0
   for (let pages = 0; ; pages++) {
     if (pages === IMPORT_HEAD_PAGES) throw new Error(`Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:${root}.`)
     const page = await authedFetch('Plan events', `/api/v1/agentrt/events?${new URLSearchParams({ stream: `plan:${root}`, after_seq: String(after) })}`, { signal })
-    const head = importHead(await page.json())
+    const events: unknown = await page.json()
+    const head = importHead(events)
     if (head.artifact !== '') {
       const r = await authedFetch('Plan import request', `/api/v1/agentrt/artifacts/${encodeURIComponent(head.artifact)}`, { signal })
       let body: unknown
@@ -95,6 +99,7 @@ export async function fetchImportRequest(root = PLAN_ROOT, signal?: AbortSignal)
     }
     if (head.next === 0) return null
     if (head.next <= after) throw new Error('Plan events: invalid pagination cursor')
+    if (Array.isArray(events) && events.length < PLAN_STREAM_PAGE) return null
     after = head.next
   }
 }

@@ -1,16 +1,28 @@
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
 
-/** The most events GET /agentrt/events?stream= answers a page with (agentrtapi/api.go getEvents). */
+/** The most events GET /agentrt/events?stream= answers a page with: the handler's fixed LIMIT (agentrtapi/api.go getEvents). */
 export const STREAM_PAGE = 500
 
-type StreamEvent = { seq: number } & Record<string, unknown>
+type StreamEvent = { seq: number; event_stream_id?: unknown } & Record<string, unknown>
 
 /**
- * One page of GET /agentrt/events?stream=<s>&after_seq=<n> as the handler answers it: a bare array of
- * the stream's events with seq above after_seq, ascending by seq, at most STREAM_PAGE of them.
+ * One page of GET /agentrt/events?stream=<s>&after_seq=<n> as the handler answers it: the events with
+ * seq above after_seq, ascending by seq, at most STREAM_PAGE of them, as a bare array.
+ *
+ * It models only that one path (review 418): events already of one stream and sorted by seq, and an
+ * after_seq that is a non-negative safe integer. It does not sort, filter by stream or answer the
+ * handler's 400s, so it refuses whatever it does not model rather than answer unlike the handler.
  */
 export function streamPage(events: readonly StreamEvent[], url: string): StreamEvent[] {
-  const after = Number(new URL(url, 'http://console.test').searchParams.get('after_seq') ?? '0')
+  const params = new URL(url, 'http://console.test').searchParams
+  const raw = params.get('after_seq') ?? '0'
+  const after = Number(raw)
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(after)) throw new Error(`streamPage: after_seq ${raw} is not a non-negative safe integer`)
+  const streams = new Set(events.map(e => e.event_stream_id))
+  if (streams.size > 1) throw new Error(`streamPage: events of ${streams.size} streams; it models one`)
+  const stream = params.get('stream')
+  if (stream !== null && events.length > 0 && !streams.has(stream)) throw new Error(`streamPage: asked for ${stream}, given ${[...streams].join()}`)
+  if (events.some((e, i) => !Number.isSafeInteger(e.seq) || (i > 0 && e.seq <= events[i - 1].seq))) throw new Error('streamPage: events not sorted by seq')
   return events.filter(e => e.seq > after).slice(0, STREAM_PAGE)
 }
 

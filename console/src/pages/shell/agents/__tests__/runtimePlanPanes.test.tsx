@@ -150,6 +150,20 @@ describe('the plan pane on Progress', () => {
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })
 
+  it('a request that fails on a read after a good one makes the plan unavailable in both panes, not the plan read before (review 418)', async () => {
+    const { client } = show(<><Overview /><AgentsPlan /></>)
+    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    const steps = `${counted(imported).count.done}/${counted(imported).count.total} steps`
+    expect(screen.getByText(steps)).toBeInTheDocument()
+    source.artifact = 'fail'
+    await client.refetchQueries({ queryKey: ['agent-runtime-plan-request', 'R2'] })
+    expect(await screen.findAllByText('Plan unavailable: Plan import request: internal')).toHaveLength(2)
+    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
+    expect(screen.queryByText(steps)).not.toBeInTheDocument()
+    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
+    expect(screen.queryByText(PLAN_FROM_BOARD)).not.toBeInTheDocument()
+  })
+
   it.each([
     ['the request cannot be read', { artifact: 'fail' }, 'Plan unavailable: Plan import request: internal'],
     ['the request is not one', { artifact: 'not json' }, 'Plan unavailable: Plan import request: invalid artifact.'],
