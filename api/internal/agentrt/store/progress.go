@@ -659,6 +659,8 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 	}
 	rows.Close()
 	deploys := newRecordedDeploys(ctx, tx)
+	// One reading of each gate for the whole projection, every root's rows (review 427 B2, 429 C).
+	gates := map[string]plan.Tri{}
 	out := make([]any, 0, len(roots))
 	for _, r := range roots {
 		doc := map[string]any{"plan_node_id": r.id, "kind": r.kind, "title": r.title}
@@ -667,7 +669,7 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 			for _, it := range r.items {
 				arch = append(arch, archRow{id: it.id, title: it.title})
 			}
-			if doc["rows"], err = archRowsDoc(ctx, tx, arch, deploys); err != nil {
+			if doc["rows"], err = archRowsDoc(ctx, tx, arch, deploys, gates); err != nil {
 				return nil, err
 			}
 			out = append(out, doc)

@@ -36,7 +36,7 @@ type archRow struct{ id, title string }
 // archRowsDoc is the rows of an architecture root, each with its tick, the
 // reason for it and its latest note. A read that fails is an error; a rule
 // that does not parse is unknown, with why.
-func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *recordedDeploys) ([]any, error) {
+func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *recordedDeploys, gates map[string]plan.Tri) ([]any, error) {
 	out := make([]any, 0, len(rows))
 	if len(rows) == 0 {
 		return out, nil
@@ -81,9 +81,8 @@ func archRowsDoc(ctx context.Context, tx pgx.Tx, rows []archRow, deploys *record
 	if err = nrows.Err(); err != nil {
 		return nil, err
 	}
-	// One reading of a gate per projection, whichever rows name it: what each
-	// environment runs is the same for every row (review 427 B2).
-	gates := map[string]plan.Tri{}
+	// gates is the projection's: one reading of a gate whichever rows name it,
+	// since what each environment runs is the same for every row (review 427 B2).
 	for _, r := range rows {
 		tick, reason, err := archTick(ctx, tx, r.id, rules[r.id], deploys, gates)
 		if err != nil {

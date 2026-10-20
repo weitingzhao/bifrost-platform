@@ -2,7 +2,9 @@ package store_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -416,4 +418,33 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 		t.Fatalf("a gates rule on an architecture row: %v", d)
 	}
 	wantTick(t, w.archRows(t)["ARCH:bus"], "unknown", "T21: what stg runs is not recorded yet")
+}
+
+// Review 427 C1, 429: the latest note is the one appended last (event_id),
+// whatever its time says. Serial: it freezes the event clock.
+func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
+	w := newWorld(t)
+	w.arch(t, [2]string{"ARCH:state-db", ""})
+	thread := store.Writer{Actor: "thread:night", Token: "fixture-operator-1"}
+	later := time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC)
+	restore := store.FreezeEventClock(later)
+	first, err := store.PostPlanNote(ctx, w.rt, thread, "n1", "ARCH:state-db", "written first, stamped later")
+	restore()
+	ok(t, err)
+	restore = store.FreezeEventClock(later.Add(-time.Hour))
+	second, err := store.PostPlanNote(ctx, w.rt, thread, "n2", "ARCH:state-db", "written second, stamped earlier")
+	restore()
+	ok(t, err)
+	id := func(v any) int64 {
+		n, err := strconv.ParseInt(fmt.Sprint(v), 10, 64)
+		ok(t, err)
+		return n
+	}
+	if id(second["event_id"]) <= id(first["event_id"]) || second["at"].(string) >= first["at"].(string) {
+		t.Fatalf("not staged as wanted: first %v, second %v", first, second)
+	}
+	note, _ := w.archRows(t)["ARCH:state-db"]["note"].(map[string]any)
+	if note == nil || note["text"] != "written second, stamped earlier" {
+		t.Fatalf("the latest note = %v; want the one appended last", note)
+	}
 }
