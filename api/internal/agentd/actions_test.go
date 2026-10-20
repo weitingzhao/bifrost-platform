@@ -566,6 +566,14 @@ func TestTargetsNameTheAttemptsDirectories(t *testing.T) {
 		"TOKEN=" + task + "/a1.out/home/x'FIXTUREVALUE'":            "TOKEN=<secret>",
 		task + "/a1.out/tmp/curl -u user:FIXTUREVALUE https://host": "$TMPDIR/<local path> -u <secret> https://host",
 		"cat $HOME/x": "cat $HOME/<local path>",
+		// review 410 A1: the path goes on in quotes of the same word
+		`cat $HOME/ghp_1234567890"/more/FIXTUREVALUE" NEXT`:                withheldRoot,
+		`cat $HOME/ghp_1234567890'/more/FIXTUREVALUE' NEXT`:                withheldRoot,
+		`cat $TMPDIR/eyJabcdefghij.abcdefghijk.abcdef"/FIXTUREVALUE" NEXT`: withheldRoot,
+		`cat "$HOME/x"'/more/FIXTUREVALUE'`:                                withheldRoot,
+		`cat "$HOME/cache" NEXT`:                                           `cat "$HOME/<local path>" NEXT`,
+		`cat '$TMPDIR/x'`:                                                  `cat '$TMPDIR/<local path>'`,
+		`cat "$HOME/x";ls`:                                                 `cat "$HOME/<local path>";ls`,
 		// review 408 A1: what follows a mark scrub wrote in a root's path
 		"cat $HOME/ghp_1234567890/path/FIXTUREVALUE":                     "cat $HOME/<local path>",
 		"cat $TMPDIR/eyJabcdefghij.abcdefghijk.abcdef/FIXTUREVALUE":      "cat $TMPDIR/<local path>",

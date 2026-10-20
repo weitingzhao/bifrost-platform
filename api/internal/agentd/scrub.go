@@ -84,6 +84,29 @@ var (
 // withheldTarget stands for a target that named a task's workspace.
 const withheldTarget = "(withheld by agentd: it named a task's workspace)"
 
+// withheldRoot stands for a target whose path under $HOME or $TMPDIR went on
+// in quotes of the same shell word, where its end is not read.
+const withheldRoot = "(withheld by agentd: a path under the attempt's home or temporary directory went on in quotes)"
+
+// maskRoots masks what follows each root local named, scrub's marks inside
+// it included (review 408 A1). Where that path stops at a quote and the same
+// shell word goes on after it ("$HOME/x\"/more\"", "$HOME/x'/more'"), the
+// rest of the word is not read here, so the target is withheld whole
+// (review 410 A1); a quote that closes a word wrapping the path ("…" then a
+// blank, a separator or the end) is kept.
+func maskRoots(target string) string {
+	locs := namedRoot.FindAllStringIndex(target, -1)
+	for _, l := range locs {
+		end := l[1]
+		if end < len(target) && (target[end] == '"' || target[end] == '\'') {
+			if end+1 < len(target) && !strings.ContainsRune(" \t\r\n;|&)<>", rune(target[end+1])) {
+				return withheldRoot
+			}
+		}
+	}
+	return namedRoot.ReplaceAllString(target, "${1}/<local path>")
+}
+
 func scrub(s string) string {
 	s = privateKey.ReplaceAllString(s, "<secret>")
 	for _, m := range valueMasks {
@@ -398,8 +421,9 @@ func (t *actionTail) clean(target string) (string, bool) {
 	}
 	target = strings.TrimSpace(scrub(target))
 	// After scrub, which reads the command's words whole: what follows a
-	// root local named is masked (review 407 A1).
-	target = namedRoot.ReplaceAllString(target, "${1}/<local path>")
+	// root local named is masked (review 407 A1); a root's path that goes on
+	// in quotes of the same word is withheld whole (review 410 A1).
+	target = maskRoots(target)
 	// A target that still names a task's workspace (T11, as the platform
 	// reads an artifact) is withheld whole (review 405 A1).
 	if _, names := localpath.WorkspaceRef([]byte(target)); names {
