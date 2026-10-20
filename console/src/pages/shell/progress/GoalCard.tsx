@@ -1,4 +1,5 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -71,7 +72,8 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     if (!finished) void refetch()
   }, [updatedAt, finished, refetch])
   const card = useRef<HTMLElement>(null)
-  useEffect(() => { if (highlighted) card.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }) }, [highlighted])
+  // After the shell's scroll to the top when Work was just opened at `#work?goal=` (review 424 B5).
+  useEffect(() => highlighted ? scrollAfterShell(() => card.current, { behavior: 'smooth', block: 'start' }) : undefined, [highlighted])
   const now = useNow() || Date.now()
   const summary = runtime?.work.missions.find(m => m.mission_id === id)
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'

@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { RecordsPage } from '@/pages/shell/records/RecordsPage'
 import { recordsTabFromHash } from '@/pages/shell/records/recordsTabs'
+// GET /agentrt/progress on STG and GET /agentrt/events across streams on a test database.
+import runtimeFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
+import eventsFixture from '@/api/__fixtures__/agentrt-events-across.testdb.json'
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -95,6 +98,25 @@ describe('RecordsPage', () => {
     expect(recordsTabFromHash('#records?tab=audit')).toBe('audit')
     expect(recordsTabFromHash('#records?tab=patrol')).toBe('patrol')
     expect(recordsTabFromHash('#records?tab=nope')).toBe('closed')
+    expect(recordsTabFromHash('#records?tab=work')).toBe('work')
+  })
+
+  // What was Progress's History (W-31 2.2b, finished work goes to Records).
+  it('holds finished work: older goals, the runtime timeline, recent tasks and failed attempts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/agentrt/progress')) return json(runtimeFixture)
+      if (url.includes('/agentrt/events?stream=')) return json([])
+      if (url.includes('/agentrt/events?')) return json(eventsFixture)
+      return json({ error: url }, 500)
+    }))
+    window.location.hash = '#records?tab=work'
+    render(wrapper(<RecordsPage />))
+    const history = await screen.findByRole('region', { name: 'Work history' })
+    expect(await within(history).findByText('Recent runtime tasks')).toBeTruthy()
+    expect(within(history).getByText('Failed attempts')).toBeTruthy()
+    expect(await within(history).findByText('Host h1 had a report refused: it named a local path (H8)')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Work history' })).toBeTruthy()
   })
 
   it('lists only closed requests, each linking to its page', async () => {

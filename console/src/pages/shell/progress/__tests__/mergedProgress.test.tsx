@@ -19,6 +19,7 @@ import { needsYouBadge } from '../../needs-you/needsYouModel'
 import { useNeedsYou } from '../../needs-you/useNeedsYou'
 import { NeedsYouPage } from '../../needs-you/NeedsYouPage'
 import { ProgressPage } from '../ProgressPage'
+import { ProgressHistory } from '../ProgressHistory'
 import { whoseMove } from '../mergedProgressModel'
 import { TaskRow } from '../RuntimeWork'
 
@@ -137,7 +138,11 @@ describe('whose move (A8), from the runtime alone (2.5 slice 4)', () => {
 describe('Progress with the board stopped (2.5 slice 4)', () => {
   it('builds History from the runtime\'s events and shows no board lines', async () => {
     mockSources('/agent/progress'); wrap()
-    const history = screen.getByRole('region', { name: 'History' })
+    // Finished work is in Records › Work history (W-31 2.2b); Work's History points there.
+    expect(within(screen.getByRole('region', { name: 'History' })).getByRole('link', { name: 'Records › Work history' })).toHaveAttribute('href', '#records?tab=work')
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client)
+    render(<QueryClientProvider client={client}><ProgressHistory /></QueryClientProvider>)
+    const history = screen.getByRole('region', { name: 'Work history' })
     expect(await within(history).findByText('Host h1 had a report refused: it named a local path (H8)')).toBeInTheDocument()
     expect(within(history).getByText('An executor failed t_01M5B8AZ5TQWK0H9F14562Y9XX three times in a row; it is not offered that task again')).toBeInTheDocument()
     for (const gone of ['Done today', 'Activity', 'Finished works', 'Coordinator works']) expect(screen.queryByText(gone)).not.toBeInTheDocument()

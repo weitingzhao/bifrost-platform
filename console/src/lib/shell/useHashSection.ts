@@ -8,22 +8,31 @@ export function hashNamesSection(hash: string, id: string): boolean {
 }
 
 /**
+ * Scroll an element into view once the shell is done: the shell scrolls a newly opened place
+ * to its top in its own effect (ConsolePage), which runs after the effects of the place it just
+ * drew and would undo a scroll made there. Returns a cancel for an effect's cleanup.
+ */
+export function scrollAfterShell(target: () => Element | null | undefined, options: ScrollIntoViewOptions = { block: 'start' }): () => void {
+  const timer = window.setTimeout(() => target()?.scrollIntoView?.(options), 0)
+  return () => window.clearTimeout(timer)
+}
+
+/**
  * Scroll a section of an entry into view when the address names it (`#you?section=waiting`), on
- * arrival and on every later hash change. The scroll waits a tick: the shell scrolls a newly
- * opened place to its top after the place has drawn (ConsolePage), and would undo it.
+ * arrival and on every later hash change.
  */
 export function useHashSection(id: string, ref: RefObject<HTMLElement | null>): void {
   useEffect(() => {
-    let timer: number | undefined
+    let cancel = () => {}
     const go = () => {
       if (!hashNamesSection(window.location.hash, id)) return
-      window.clearTimeout(timer)
-      timer = window.setTimeout(() => ref.current?.scrollIntoView?.({ block: 'start' }), 0)
+      cancel()
+      cancel = scrollAfterShell(() => ref.current)
     }
     go()
     window.addEventListener('hashchange', go)
     return () => {
-      window.clearTimeout(timer)
+      cancel()
       window.removeEventListener('hashchange', go)
     }
   }, [id, ref])

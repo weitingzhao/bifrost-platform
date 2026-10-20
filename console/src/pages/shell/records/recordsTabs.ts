@@ -2,6 +2,8 @@ import { hashQueryParam, hashQueryWithoutTaskMode } from '@/lib/shell/consoleRou
 
 export const RECORDS_TABS = [
   { value: 'closed', label: 'Closed requests' },
+  // Finished work: what was Progress's History (W-31 2.2b).
+  { value: 'work', label: 'Work history' },
   { value: 'audit', label: 'Audit' },
   { value: 'patrol', label: 'Patrol' },
 ] as const

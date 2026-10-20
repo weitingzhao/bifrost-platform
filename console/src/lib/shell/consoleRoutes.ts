@@ -30,7 +30,7 @@ export const SHELL_NAV = [
   {
     id: 'records',
     label: 'Records',
-    question: 'History: closed requests, audit, and patrol runs.',
+    question: 'History: closed requests, finished work, audit, and patrol runs.',
     group: 'detail',
   },
 ] as const

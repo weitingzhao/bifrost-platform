@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useEffect, type ReactNode } from 'react'
 import mission from '@/api/__fixtures__/agentrt-mission-M-2.prod.json'
 import tasks from '@/api/__fixtures__/agentrt-tasks-M-2.prod.json'
 import events from '@/api/__fixtures__/agentrt-events-mission-M-2.prod.json'
@@ -220,11 +221,38 @@ describe('Progress composition', () => {
     wrap(<ProgressPage />)
     expect(document.getElementById('commit-lineage')).toHaveAttribute('open')
     expect(document.getElementById('code-health')).not.toHaveAttribute('open')
-    expect(screen.getByText('History').closest('details')).not.toHaveAttribute('open')
+    // Finished work is in Records (W-31 2.2b): Work's History points there.
+    expect(screen.getByRole('link', { name: 'Records › Work history' })).toHaveAttribute('href', '#records?tab=work')
     expect(screen.getByText('Plan and architecture').closest('details')).not.toHaveAttribute('open')
     expect(resolveConsoleHash('commit-lineage').canonical).toBe('#work?section=commit-lineage')
     expect(resolveConsoleHash('code-health').canonical).toBe('#work?section=code-health')
     await act(async () => { window.location.hash = '#work?section=code-health'; window.dispatchEvent(new Event('hashchange')) })
+    expect(document.getElementById('code-health')).toHaveAttribute('open')
+  })
+  // Review 424 B5: the shell scrolls a newly opened place to its top in its own effect, which runs
+  // after the place's effects; a scroll made there is undone. Work opened at #work?goal= or at a
+  // reference's ?section= must end there.
+  it('ends on the goal card or the reference the address names, after the shell has scrolled to the top', async () => {
+    mockFetch()
+    const log: string[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { log.push(`into:${this.id}`) })
+    function Shell({ children }: { children: ReactNode }) {
+      useEffect(() => { log.push('top') }, [])
+      return <>{children}</>
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    // The runtime already read (For you read it), so the card is drawn in the same pass as the shell.
+    client.setQueryData(['agent-runtime-progress'], parseRuntimeProgress({ work: { missions: [{ mission_id: 'M-2' }] }, needs_you: { items: [] } }))
+    window.history.replaceState(null, '', '#work?goal=M-2')
+    wrap(<Shell><ProgressPage /></Shell>, client)
+    await waitFor(() => expect(log.at(-1)).toBe('into:goal-M-2'))
+    expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf('into:goal-M-2'))
+    cleanup()
+    log.length = 0
+    window.history.replaceState(null, '', '#work?section=code-health')
+    wrap(<Shell><ProgressPage /></Shell>, client)
+    await waitFor(() => expect(log.at(-1)).toBe('into:code-health'))
+    expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf('into:code-health'))
     expect(document.getElementById('code-health')).toHaveAttribute('open')
   })
   it('a goal given on Chief of staff links to its card on Work, which comes first and into view', async () => {

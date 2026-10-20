@@ -7,6 +7,7 @@ import { formatShellHash } from '@/lib/shell/consoleRoutes'
 import { AuditPage } from '@/pages/AuditPage'
 import { AutonomousSkillsPage } from '@/pages/AutonomousSkillsPage'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
+import { ProgressHistory } from '@/pages/shell/progress/ProgressHistory'
 import { RECORDS_TABS, recordsTabFromHash, type RecordsTab } from '@/pages/shell/records/recordsTabs'
 
 
@@ -73,6 +74,7 @@ export function RecordsPage() {
         }}
       />
       {tab === 'closed' ? <ClosedRequests /> : null}
+      {tab === 'work' ? <ProgressHistory /> : null}
       {tab === 'audit' ? <Audit /> : null}
       {tab === 'patrol' ? <AutonomousSkillsPage /> : null}
     </div>

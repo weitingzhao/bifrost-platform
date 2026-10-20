@@ -192,7 +192,8 @@ describe('Merged Progress page', () => {
     // What waits on the Owner is For you's; new goals are given on Chief of staff (W-31 2.2b).
     expect(screen.queryByText('All on Needs you')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
-    expect(screen.getByRole('heading', { name: 'History' }).closest('details')).not.toHaveAttribute('open')
+    // Finished work is in Records (W-31 2.2b).
+    expect(screen.getByRole('link', { name: 'Records › Work history' })).toHaveAttribute('href', '#records?tab=work')
   })
   it('shows source failures and an incomplete count', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'unavailable' }, 503)))
