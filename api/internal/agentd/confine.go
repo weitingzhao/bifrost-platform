@@ -60,7 +60,11 @@ type Wall struct {
 
 // CodexBin is the codex program PATH in environ finds, an absolute path, or
 // "" when there is none.
-func CodexBin(environ []string) string {
+func CodexBin(environ []string) string { return binOnPath(environ, "codex") }
+
+// binOnPath is the program name the absolute directories of PATH in environ
+// find, or "".
+func binOnPath(environ []string, name string) string {
 	v := envValues(environ, "PATH")
 	if len(v) == 0 {
 		return ""
@@ -69,7 +73,7 @@ func CodexBin(environ []string) string {
 		if !filepath.IsAbs(dir) {
 			continue
 		}
-		p := filepath.Join(dir, "codex")
+		p := filepath.Join(dir, name)
 		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() && fi.Mode()&0o111 != 0 {
 			return p
 		}

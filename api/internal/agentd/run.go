@@ -663,6 +663,12 @@ func (d *Daemon) putRetried(ctx context.Context, kind, media string, body []byte
 // retry runs a platform step until it is taken or refused: only an
 // unavailable platform is retried, a few times.
 func (d *Daemon) retry(ctx context.Context, step func() error) error {
+	return retryUnavailable(ctx, orDefault(d.Retry, 5*time.Second), step)
+}
+
+// retryUnavailable runs step up to five times, pause apart, while the
+// platform is unavailable.
+func retryUnavailable(ctx context.Context, pause time.Duration, step func() error) error {
 	var err error
 	for i := 0; i < 5; i++ {
 		if err = step(); err == nil || !errors.Is(err, ErrUnavailable) {
@@ -671,7 +677,7 @@ func (d *Daemon) retry(ctx context.Context, step func() error) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(orDefault(d.Retry, 5*time.Second)):
+		case <-time.After(pause):
 		}
 	}
 	return err

@@ -1,7 +1,6 @@
 package agentd
 
 import (
-	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -205,40 +204,11 @@ func (q BenchQuestion) RepoName() string { return filepath.Base(filepath.Clean(q
 
 // ReadBenchResults reads a run's results so far.
 func ReadBenchResults(root string) ([]BenchResult, error) {
-	f, err := os.Open(filepath.Join(root, "results.jsonl"))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	var out []BenchResult
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		var r BenchResult
-		if err = json.Unmarshal(sc.Bytes(), &r); err != nil {
-			return nil, fmt.Errorf("agentd: %s: %w", f.Name(), err)
-		}
-		out = append(out, r)
-	}
-	return out, sc.Err()
+	return readJSONLines[BenchResult](filepath.Join(root, "results.jsonl"))
 }
 
 func appendBenchResult(root string, r BenchResult) error {
-	b, err := json.Marshal(r)
-	if err != nil {
-		return err
-	}
-	f, err := os.OpenFile(filepath.Join(root, "results.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	if _, err = f.Write(append(b, '\n')); err != nil {
-		_ = f.Close()
-		return err
-	}
-	return f.Close()
+	return appendJSONLine(filepath.Join(root, "results.jsonl"), r)
 }
 
 // WriteBenchMeta writes what the run is, once; a run resumed keeps its own,

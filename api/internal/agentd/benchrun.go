@@ -563,13 +563,20 @@ func (b *Bench) runTail(ctx context.Context, dir string, env []string, argv ...s
 // launch starts sp through the launcher, waits for it within limit, and
 // clears its group afterwards.
 func (b *Bench) launch(ctx context.Context, sp Spawn, limit time.Duration) (code int, timedOut bool, err error) {
-	proc, err := Launch(b.Self, sp, func(int, string) error { return nil })
+	return launchWithin(ctx, b.Self, sp, limit, b.KillGrace)
+}
+
+// launchWithin starts sp through the launcher at self, waits for it within
+// limit (TERM, then KILL after grace, 10 s by default), and clears its group
+// afterwards; ctx ending ends it the same way. agentd bench and agentd exam
+// run their executors with it.
+func launchWithin(ctx context.Context, self string, sp Spawn, limit, grace time.Duration) (code int, timedOut bool, err error) {
+	proc, err := Launch(self, sp, func(int, string) error { return nil })
 	if err != nil {
 		return 0, false, err
 	}
 	exited := make(chan int, 1)
 	safego.Go("agentd-bench-wait", func() { exited <- proc.Wait() })
-	grace := b.KillGrace
 	if grace <= 0 {
 		grace = 10 * time.Second
 	}

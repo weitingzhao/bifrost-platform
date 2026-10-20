@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/actions"
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
 // Client calls the platform's agentrt routes (design v5 §5.2 路由草图) as
@@ -163,6 +165,34 @@ func (c *Client) Benchmark(ctx context.Context, m BenchMeta, results []BenchResu
 	}
 	var out map[string]any
 	_, err := c.post(ctx, "/benchmark", body, &out)
+	return out, err
+}
+
+// ExamPaper asks for a paper of job's exam for executor, as this host (agentd
+// exam). The platform answers 409 while the executor has a paper open, and
+// never reads one back to an Agent host: agentd keeps the paper it was
+// handed.
+func (c *Client) ExamPaper(ctx context.Context, job, executor string) (*store.ExamPaper, error) {
+	var p store.ExamPaper
+	q := url.Values{"host_id": {c.Host}, "executor": {executor}}
+	if _, err := c.call(ctx, http.MethodGet, "/exams/"+url.PathEscape(job)+"?"+q.Encode(), nil, nil, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ExamAnswers hands in a part of a run's answers as this host and returns
+// the platform's counts.
+func (c *Client) ExamAnswers(ctx context.Context, sub store.ExamSubmission) (map[string]any, error) {
+	b, err := json.Marshal(struct {
+		HostID string `json:"host_id"`
+		store.ExamSubmission
+	}{c.Host, sub})
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]any
+	_, err = c.call(ctx, http.MethodPost, "/exams", bytes.NewReader(b), nil, &out)
 	return out, err
 }
 
