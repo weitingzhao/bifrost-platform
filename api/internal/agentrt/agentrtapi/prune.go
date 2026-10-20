@@ -3,9 +3,11 @@ package agentrtapi
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/safego"
 )
 
 // Cleaning attempt branches (TD-383; store/prune.go has the rule). agentd
@@ -19,14 +21,24 @@ import (
 // nothing.
 type AgentHeads func(ctx context.Context, repo string) ([]store.AgentHead, error)
 
-// pruneReadBudget bounds one answer's reads of Gitea, all repositories
-// together; a repository not read in it is passed over this time.
-const pruneReadBudget = time.Minute
+// pruneReadTimeout bounds each repository's read of Gitea, its branches or
+// its main, on its own: a slow repository holds up no other (review 437 B3);
+// pruneReaders is how many repositories are read at once.
+var pruneReadTimeout = 30 * time.Second
+
+const pruneReaders = 4
+
+// unreadRepo is a repository passed over this time, and which read failed.
+type unreadRepo struct {
+	Repo string `json:"repo"`
+	What string `json:"what"` // branches, main
+}
 
 // prunes is GET /prunes?host_id=: the branches the rule lets go now, or none
-// while a refusal's pause holds (paused_until says until when). A repository
-// whose branches or main cannot be read now is passed over and named in
-// unread; the others are answered (review 436 B3).
+// while a refusal's pause holds (paused_until says until when). Each
+// repository's branches are read, then main where it decides something
+// (store.PruneMainsNeeded), each read on its own clock; a repository whose
+// read fails is named in unread and keeps what that read would decide.
 func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	host := r.URL.Query().Get("host_id")
 	if !boundHost(w, r, host) {
@@ -58,23 +70,36 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), pruneReadBudget)
-	defer cancel()
-	var heads []store.AgentHead
-	onMain := map[string]store.OnMain{}
-	unread := []string{}
-	for _, repo := range repos {
+	unread := []unreadRepo{}
+	branches := readEach(r.Context(), repos, func(ctx context.Context, repo string) ([]store.AgentHead, bool) {
 		hs, err := a.AgentHeads(ctx, repo)
 		if err != nil {
-			a.logf("agentrt prunes: %s: %v", repo, err)
-			unread = append(unread, repo)
-			continue
+			a.logf("agentrt prunes: branches of %s: %v", repo, err)
 		}
-		heads = append(heads, hs...)
-		if a.MainResults != nil {
-			if m, ok := a.MainResults(ctx, repo); ok {
-				onMain[repo] = m
-			}
+		return hs, err == nil
+	})
+	var heads []store.AgentHead
+	for _, repo := range repos {
+		if hs, ok := branches[repo]; ok {
+			heads = append(heads, hs...)
+		} else {
+			unread = append(unread, unreadRepo{repo, "branches"})
+		}
+	}
+	need, err := store.PruneMainsNeeded(r.Context(), a.DB, heads, now)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	onMain := map[string]store.OnMain{}
+	if a.MainResults != nil {
+		onMain = readEach(r.Context(), need, func(ctx context.Context, repo string) (store.OnMain, bool) {
+			return a.MainResults(ctx, repo)
+		})
+	}
+	for _, repo := range need {
+		if _, ok := onMain[repo]; !ok {
+			unread = append(unread, unreadRepo{repo, "main"})
 		}
 	}
 	ps, err := store.Prunable(r.Context(), a.DB, heads, onMain, now)
@@ -89,6 +114,32 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 		out["unread"] = unread
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// readEach reads each repository, pruneReaders at a time, each within
+// pruneReadTimeout; the map holds the reads that succeeded.
+func readEach[T any](ctx context.Context, repos []string, read func(context.Context, string) (T, bool)) map[string]T {
+	out := map[string]T{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, pruneReaders)
+	for _, repo := range repos {
+		wg.Add(1)
+		slots <- struct{}{}
+		safego.Go("agentrt-prunes-read", func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			rctx, cancel := context.WithTimeout(ctx, pruneReadTimeout)
+			defer cancel()
+			if v, ok := read(rctx, repo); ok && rctx.Err() == nil {
+				mu.Lock()
+				out[repo] = v
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return out
 }
 
 type pruneReport struct {
@@ -106,7 +157,11 @@ func (a *API) reportPrunes(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "more results than prunes are handed out at once")
 		return
 	}
-	if err := store.RecordPrunes(r.Context(), a.DB, b.HostID, b.Results); err != nil {
+	now := time.Now()
+	if a.Now != nil {
+		now = a.Now()
+	}
+	if err := store.RecordPrunes(r.Context(), a.DB, b.HostID, b.Results, now); err != nil {
 		a.fail(w, err)
 		return
 	}

@@ -38,10 +38,13 @@ const (
 
 // agentRuntimeMainResults reads a repository's main where agentd clones it
 // from (the delivery's organization) for the runtime's results that stand
-// there (lineage.MainResults), each read kept for mainTTL; nil without the
-// delivery service.
+// there (lineage.MainResults). A read is kept while main's head stays where
+// it was, and at most mainTTL; main's head is read every time, so a revert
+// is seen at once and main out of reach is no read (review 437 A1). nil
+// without the delivery service.
 func (s *Server) agentRuntimeMainResults() store.MainResults {
-	if s.delivery == nil {
+	tip := s.agentRuntimeMains()
+	if s.delivery == nil || tip == nil {
 		return nil
 	}
 	access, client := s.delivery.GiteaAccess, &http.Client{Timeout: 20 * time.Second}
@@ -52,23 +55,31 @@ func (s *Server) agentRuntimeMainResults() store.MainResults {
 		}
 		return lineage.MainResults(ctx, lineage.Access{Base: a.Base, Org: a.Org, User: a.User, Pass: a.Pass}, client, repo,
 			time.Now().Add(-mainHorizon), mainPages)
-	}, mainTTL)
+	}, tip, mainTTL)
 }
 
-// cachedMainResults keeps each repository's last good read for ttl; a failed
-// read is not kept (ok false, and the next pass reads again).
-func cachedMainResults(read func(context.Context, string) (store.OnMain, error), ttl time.Duration) store.MainResults {
+// cachedMainResults keeps each repository's last good read with main's head
+// when it was read, and gives it again only while the head, read anew each
+// time, is the same and the read is younger than ttl. A head or a read that
+// fails is no read (ok false), and nothing is kept for it.
+func cachedMainResults(read func(context.Context, string) (store.OnMain, error), tip func(context.Context, string) (string, error),
+	ttl time.Duration) store.MainResults {
 	type entry struct {
 		at      time.Time
+		head    string
 		results store.OnMain
 	}
 	var mu sync.Mutex
 	cache := map[string]entry{}
 	return func(ctx context.Context, repo string) (store.OnMain, bool) {
+		head, err := tip(ctx, repo)
+		if err != nil || head == "" {
+			return nil, false
+		}
 		mu.Lock()
 		e, ok := cache[repo]
 		mu.Unlock()
-		if ok && time.Since(e.at) < ttl {
+		if ok && e.head == head && time.Since(e.at) < ttl {
 			return e.results, true
 		}
 		results, err := read(ctx, repo)
@@ -76,7 +87,7 @@ func cachedMainResults(read func(context.Context, string) (store.OnMain, error),
 			return nil, false
 		}
 		mu.Lock()
-		cache[repo] = entry{time.Now(), results}
+		cache[repo] = entry{time.Now(), head, results}
 		mu.Unlock()
 		return results, true
 	}

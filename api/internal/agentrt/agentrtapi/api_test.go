@@ -142,6 +142,8 @@ var examSet store.ExamSet
 // set, is the cleanup's clock (prune_test.go).
 var (
 	agentHeads map[string][]store.AgentHead
+	slowHeads  map[string]bool // read until the read's time runs out
+	mainRead   store.MainResults
 	pruneNow   func() time.Time
 )
 
@@ -198,11 +200,21 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
 	if agentHeads != nil {
 		heads := agentHeads
-		api.AgentHeads = func(_ context.Context, repo string) ([]store.AgentHead, error) {
+		api.AgentHeads = func(ctx context.Context, repo string) ([]store.AgentHead, error) {
+			if slowHeads[repo] {
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
 			if hs, ok := heads[repo]; ok && hs == nil {
 				return nil, fmt.Errorf("%s cannot be read", repo)
 			}
 			return heads[repo], nil
+		}
+		api.MainResults = func(ctx context.Context, repo string) (store.OnMain, bool) {
+			if mainRead == nil {
+				return nil, false
+			}
+			return mainRead(ctx, repo)
 		}
 		api.Now = func() time.Time {
 			if pruneNow != nil {

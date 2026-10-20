@@ -56,13 +56,21 @@ type PruneResult struct {
 	Detail  string `json:"detail,omitempty"`
 }
 
-// Prunes asks which branches this host may delete now.
-func (c *Client) Prunes(ctx context.Context) ([]Prune, error) {
+// Prunes asks which branches this host may delete now; unread is the
+// repositories the platform could not read this time, and what of them.
+func (c *Client) Prunes(ctx context.Context) (prunes []Prune, unread []string, err error) {
 	var out struct {
 		Prunes []Prune `json:"prunes"`
+		Unread []struct {
+			Repo string `json:"repo"`
+			What string `json:"what"`
+		} `json:"unread"`
 	}
-	_, err := c.call(ctx, http.MethodGet, "/prunes?host_id="+url.QueryEscape(c.Host), nil, nil, &out)
-	return out.Prunes, err
+	_, err = c.call(ctx, http.MethodGet, "/prunes?host_id="+url.QueryEscape(c.Host), nil, nil, &out)
+	for _, u := range out.Unread {
+		unread = append(unread, u.Repo+" ("+u.What+")")
+	}
+	return out.Prunes, unread, err
 }
 
 // errReportRefused is the platform refusing a report as it is: sending it
@@ -96,7 +104,9 @@ var (
 // how many it deleted.
 func (d *Daemon) Prune(ctx context.Context) (int, error) {
 	pending := filepath.Join(d.Root, prunePending)
-	if b, err := os.ReadFile(pending); err == nil {
+	if b, err := os.ReadFile(pending); err != nil && !os.IsNotExist(err) {
+		return 0, fmt.Errorf("results of an earlier round cannot be read: %w", err) // never written over
+	} else if err == nil {
 		var left []PruneResult
 		if json.Unmarshal(b, &left) != nil {
 			_ = os.Remove(pending) // not ours to read: nothing more can be done with it
@@ -106,7 +116,10 @@ func (d *Daemon) Prune(ctx context.Context) (int, error) {
 	}
 	wctx, cancel := context.WithTimeout(ctx, PruneWork)
 	defer cancel()
-	ps, err := d.Client.Prunes(wctx)
+	ps, unread, err := d.Client.Prunes(wctx)
+	if len(unread) > 0 {
+		d.logf("agentd: prune: the platform could not read %s this time; their branches wait", strings.Join(unread, ", "))
+	}
 	if err != nil || len(ps) == 0 {
 		return 0, err
 	}

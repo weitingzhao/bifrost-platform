@@ -210,6 +210,24 @@ func TestPruneReportsLaterWhatThePlatformDidNotTake(t *testing.T) {
 	}
 }
 
+// Review 437 B1: results of an earlier round that cannot be read are never
+// written over: the round stops and asks for nothing new.
+func TestPruneStopsWhenPendingCannotBeRead(t *testing.T) {
+	t.Parallel()
+	w := newPruneWorld(t)
+	w.handed = []Prune{{Repo: "bifrost-platform", Ref: w.ref(pruneTask, "1"), Commit: w.commit}}
+	d := w.daemon(t)
+	if err := os.Mkdir(filepath.Join(d.Root, prunePending), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := d.Prune(context.Background()); err == nil || n != 0 {
+		t.Fatalf("deleted %d (%v); want an error and nothing done", n, err)
+	}
+	if !strings.Contains(w.heads(t), w.ref(pruneTask, "1")) || len(w.reports) != 0 {
+		t.Fatalf("heads %s, reports %v", w.heads(t), w.reports)
+	}
+}
+
 // TD-383: what git says goes into an event: an address with a credential in
 // it, or a local path, does not.
 func TestGitWordsKeepNoCredential(t *testing.T) {

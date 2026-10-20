@@ -132,7 +132,7 @@ func Prunable(ctx context.Context, db DB, heads []AgentHead, onMain map[string]O
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		out = nil
 		for _, h := range heads {
-			p, ok, err := prunable(ctx, tx, h, onMain, now)
+			p, ok, _, err := prunable(ctx, tx, h, onMain, now)
 			if err != nil {
 				return err
 			}
@@ -148,10 +148,42 @@ func Prunable(ctx context.Context, db DB, heads []AgentHead, onMain map[string]O
 	return out, err
 }
 
-func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnMain, now time.Time) (Prune, bool, error) {
+// PruneMainsNeeded is the repositories whose main must be read now before
+// Prunable can answer for heads: those with an accepted attempt's branch
+// whose result was first seen on main PruneAfter ago (review 437 B3: main is
+// read only where it decides something).
+func PruneMainsNeeded(ctx context.Context, db DB, heads []AgentHead, now time.Time) ([]string, error) {
+	need := map[string]bool{}
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		for _, h := range heads {
+			if need[h.Repo] {
+				continue
+			}
+			_, _, main, err := prunable(ctx, tx, h, nil, now)
+			if err != nil {
+				return err
+			}
+			need[h.Repo] = main
+		}
+		return nil
+	})
+	var repos []string
+	for repo, n := range need {
+		if n {
+			repos = append(repos, repo)
+		}
+	}
+	sort.Strings(repos)
+	return repos, err
+}
+
+// prunable says whether the rule lets h go at now: ok, or needMain when only
+// main, not in onMain, is left to decide it.
+func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnMain, now time.Time) (Prune, bool, bool, error) {
+	no := func(err error) (Prune, bool, bool, error) { return Prune{}, false, false, err }
 	m := agentRef.FindStringSubmatch(h.Ref)
 	if m == nil {
-		return Prune{}, false, nil
+		return no(nil)
 	}
 	task := m[1]
 	n, _ := strconv.Atoi(m[2])
@@ -162,13 +194,13 @@ func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnM
 	  LEFT JOIN agentrt.attempt a ON a.task_id = t.task_id AND a.attempt_no = $2
 	  WHERE t.task_id = $1`, task, n).Scan(&state, &repo, &noMerge, &attempt, &ref, &commit)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return Prune{}, false, nil // another environment's task
+		return no(nil) // another environment's task
 	}
 	if err != nil {
-		return Prune{}, false, err
+		return no(err)
 	}
 	if attempt == "" || ref != h.Ref || commit != h.Commit || repo != h.Repo {
-		return Prune{}, false, nil
+		return no(nil)
 	}
 	var since *time.Time
 	why := ""
@@ -180,11 +212,11 @@ func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnM
 		var accepted string
 		if err = tx.QueryRow(ctx, `SELECT COALESCE((SELECT attempt_id FROM agentrt.verification WHERE task_id = $1 AND accepts_attempt
 		  ORDER BY created_at DESC LIMIT 1), '')`, task).Scan(&accepted); err != nil {
-			return Prune{}, false, err
+			return no(err)
 		}
 		switch {
 		case accepted == "":
-			return Prune{}, false, nil // accepted with no accepting verification: nothing here says which attempt
+			return no(nil) // accepted with no accepting verification: nothing here says which attempt
 		case accepted != attempt:
 			since, err = lastMove(ctx, tx, task, "accepted")
 			why = "superseded: another attempt was accepted"
@@ -194,24 +226,31 @@ func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnM
 		default:
 			// The first sighting starts the clock; main must still hold this
 			// very commit now.
-			stands := onMain[h.Repo][task][h.Commit]
-			if stands == "" {
-				return Prune{}, false, nil
-			}
 			err = tx.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
 			  AND body_json ? 'landed' ORDER BY event_id LIMIT 1`, task).Scan(&since)
 			if errors.Is(err, pgx.ErrNoRows) {
-				return Prune{}, false, nil
+				return no(nil)
+			}
+			if err != nil || now.Sub(*since) < PruneAfter {
+				return no(err)
+			}
+			om, read := onMain[h.Repo]
+			if !read {
+				return Prune{}, false, true, nil
+			}
+			stands := om[task][h.Commit]
+			if stands == "" {
+				return no(nil)
 			}
 			why = "accepted and on main as " + stands[:min(12, len(stands))]
 		}
 	default:
-		return Prune{}, false, nil
+		return no(nil)
 	}
 	if err != nil || since == nil || now.Sub(*since) < PruneAfter {
-		return Prune{}, false, err
+		return no(err)
 	}
-	return Prune{Repo: h.Repo, Ref: h.Ref, Commit: h.Commit, Task: task, Why: fmt.Sprintf("%s (%s)", why, since.UTC().Format(time.RFC3339))}, true, nil
+	return Prune{Repo: h.Repo, Ref: h.Ref, Commit: h.Commit, Task: task, Why: fmt.Sprintf("%s (%s)", why, since.UTC().Format(time.RFC3339))}, true, false, nil
 }
 
 // lastMove is when task last moved to state, nil for never.
@@ -239,9 +278,9 @@ const maxPruneDetail = 500
 // stream (prune_refused), which pauses the handing out for PrunePause, and a
 // failed one likewise (prune_failed, PruneRetry). Each result must be of an
 // attempt this runtime has, as it pushed it (repository, branch, commit), of
-// a task the rule may let go (review 436 B2); one that is not is refused,
-// with the whole report.
-func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult) error {
+// a task the rule may let go, of a branch the rule lets go at now, main aside
+// (review 436 B2, 437 B2); one that is not is refused, with the whole report.
+func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult, now time.Time) error {
 	for _, r := range results {
 		switch {
 		case !repoName.MatchString(r.Repo):
@@ -274,6 +313,14 @@ func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult
 			}
 			if state != "cancelled" && state != "rejected" && state != "accepted" {
 				return invalid("task %s is %s: its branches are not let go", task, state)
+			}
+			// What the rule lets go stays let go, but for main (read when it is
+			// handed out); a report of a branch it does not let go is refused
+			// (review 437 B2).
+			if _, ok, needMain, err := prunable(ctx, tx, AgentHead{Repo: r.Repo, Ref: r.Ref, Commit: r.Commit}, nil, now); err != nil {
+				return err
+			} else if !ok && !needMain {
+				return invalid("the rule does not let %s go now", r.Ref)
 			}
 			detail := userinfo.ReplaceAllString(strings.Join(strings.Fields(strings.ToValidUTF8(r.Detail, "?")), " "), "://<secret>@")
 			if len(detail) > maxPruneDetail {

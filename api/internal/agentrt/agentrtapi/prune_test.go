@@ -1,45 +1,81 @@
 package agentrtapi_test
 
 import (
+	"context"
 	"net/http"
+	"slices"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/agentrtapi"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
+// proposeIn proposes a task of M-1 in repo, as readyTask does, and leaves it
+// proposed.
+func proposeIn(t *testing.T, tx pgx.Tx, id, repo string) {
+	t.Helper()
+	spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# "+repo+"\n"))
+	must(t, err)
+	_, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
+		Class: "go", Title: repo, SpecArtifact: spec, Effect: "branch", Repo: repo, BaseCommit: commitA})
+	must(t, err)
+}
+
+// handedOut is the refs of a GET /prunes answer, sorted, and its unread.
+func handedOut(t *testing.T, out map[string]any) ([]string, []string) {
+	t.Helper()
+	var refs, unread []string
+	for _, p := range out["prunes"].([]any) {
+		refs = append(refs, p.(map[string]any)["ref"].(string))
+	}
+	sort.Strings(refs)
+	for _, u := range asList(out["unread"]) {
+		unread = append(unread, u.(map[string]any)["repo"].(string)+" "+u.(map[string]any)["what"].(string))
+	}
+	return refs, unread
+}
+
+func asList(v any) []any {
+	l, _ := v.([]any)
+	return l
+}
+
 // TD-383: agentd asks which attempt branches its host may delete and says
-// what it did; only its own host's token may; a branch is handed out once
-// the rule lets it go, a repository that cannot be read is passed over and
-// named (review 436 B3); a report of a branch the runtime did not push, or
-// of a task still open, is refused (B2); a refusal is recorded and pauses the
-// handing out (the rule itself is the store's, prune_test.go there).
+// what it did; only its own host's token may. A branch is handed out once the
+// rule lets it go; the accepted attempt's only while main, read now, holds
+// its result (review 437 A1); a repository whose branches or main cannot be
+// read, or are slow, is passed over and named, the others answered (436 B3,
+// 437 B3). A report of a branch the runtime did not push, of a task still
+// open, is refused (436 B2); a refusal is recorded and pauses the handing
+// out (the rule itself is the store's, prune_test.go there).
 func TestPruneRoutes(t *testing.T) {
 	pool, _ := world(t)
-	agentHeads = map[string][]store.AgentHead{}
-	defer func() { agentHeads, pruneNow = nil, nil }()
+	agentHeads, slowHeads = map[string][]store.AgentHead{}, map[string]bool{"bifrost-api": true}
+	defer agentrtapi.SetPruneReadTimeoutForTest(200 * time.Millisecond)()
+	defer func() { agentHeads, slowHeads, mainRead, pruneNow = nil, nil, nil, nil }()
 	s := server(t, pool)
 	task, open := readyTask(t, pool), readyTask(t, pool)
 	ref := store.AttemptRef(task, 1)
-	// The task's first attempt pushed its branch; the task is cancelled. A
-	// task of another repository, whose branches cannot be read now.
-	ui := store.NewTaskID()
+	// task: cancelled after its first attempt pushed. acc: accepted, its
+	// result seen on main. ui, api: tasks of repositories whose branches
+	// cannot be read now, or only slowly.
+	acc, ui, api := store.NewTaskID(), store.NewTaskID(), store.NewTaskID()
+	accRef := store.AttemptRef(acc, 1)
 	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
-		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/markdown", []byte("# ui\n"))
-		if err != nil {
-			return err
-		}
-		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: ui, MissionID: "M-1", PlanNode: "R2:1-1", Role: "implement",
-			Class: "go", Title: "ui", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-ui", BaseCommit: commitA}); err != nil {
-			return err
-		}
+		proposeIn(t, tx, acc, "bifrost-platform")
+		proposeIn(t, tx, ui, "bifrost-ui")
+		proposeIn(t, tx, api, "bifrost-api")
+		evidence, err := store.PutArtifact(ctx, tx, "controller", "report", "text/plain", []byte("pass\n"))
+		must(t, err)
 		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
 			Body: map[string]any{"source": "test"}}); err != nil {
 			return err
 		}
-		for _, id := range []string{task, ui} {
+		for _, id := range []string{task, ui, api} {
 			if _, err = tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch,
 			    lease_expires_at, heartbeat_at, state, conclusion, pushed_ref, pushed_commit)
 			  VALUES ($1, $2, 1, 'controller', 1, now(), now(), 'failed', 'failed', $3, $4)`,
@@ -47,10 +83,30 @@ func TestPruneRoutes(t *testing.T) {
 				return err
 			}
 		}
-		return nil
+		attempt := store.NewAttemptID()
+		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.attempt (attempt_id, task_id, attempt_no, executor_actor_id, lease_epoch,
+		    lease_expires_at, heartbeat_at, state, conclusion, pushed_ref, pushed_commit, computed_at, persisted_at, report_artifact_id)
+		  VALUES ($1, $2, 1, 'controller', 1, now(), now(), 'finished', 'done', $3, $4, now(), now(), $5)`,
+			attempt, acc, accRef, commitA, evidence); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO agentrt.verification (verification_id, task_id, attempt_id, method, verdict,
+		    evidence_artifact_id, accepts_attempt) VALUES ($1, $2, $3, 'review', 'pass', $4, true)`,
+			store.NewVerificationID(), acc, attempt, evidence); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE agentrt.task SET state = 'accepted' WHERE task_id = $1`, acc)
+		return err
 	}))
-	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", task, "cancelled", "test") }))
-	agentHeads["bifrost-platform"] = []store.AgentHead{{Repo: "bifrost-platform", Ref: ref, Commit: commitA}}
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "note", Actor: "controller",
+			MissionID: "M-1", TaskID: acc, Body: map[string]any{"text": "on main", "landed": commitA}}); err != nil {
+			return err
+		}
+		return store.MoveTask(ctx, tx, "controller", task, "cancelled", "test")
+	}))
+	agentHeads["bifrost-platform"] = []store.AgentHead{{Repo: "bifrost-platform", Ref: ref, Commit: commitA},
+		{Repo: "bifrost-platform", Ref: accRef, Commit: commitA}}
 	agentHeads["bifrost-ui"] = nil // cannot be read
 	// The host is registered by its first claim.
 	if code, _ := call(t, s, "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 0, "tools": []any{}}); code != http.StatusNoContent && code != http.StatusOK {
@@ -66,13 +122,26 @@ func TestPruneRoutes(t *testing.T) {
 		t.Fatalf("prunes: %d %v; want an empty list (nothing is seven days old)", code, out)
 	}
 	pruneNow = func() time.Time { return time.Now().Add(store.PruneAfter + time.Hour) }
-	code, out = call(t, s, "agentd:h1", "GET", "prunes?host_id=h1", nil)
-	list, _ := out["prunes"].([]any)
-	if code != http.StatusOK || len(list) != 1 || list[0].(map[string]any)["ref"] != ref || list[0].(map[string]any)["commit"] != commitA {
-		t.Fatalf("prunes a week on: %d %v; want the cancelled task's branch", code, out)
-	}
-	if unread, _ := out["unread"].([]any); len(unread) != 1 || unread[0] != "bifrost-ui" {
-		t.Fatalf("unread %v; want bifrost-ui, passed over", out["unread"])
+	for name, c := range map[string]struct {
+		main   store.MainResults
+		refs   []string
+		unread []string
+	}{
+		"main holds the result": {func(context.Context, string) (store.OnMain, bool) {
+			return store.OnMain{acc: {commitA: commitA}}, true
+		}, []string{accRef, ref}, []string{"bifrost-api branches", "bifrost-ui branches"}},
+		"reverted since": {func(context.Context, string) (store.OnMain, bool) { return store.OnMain{}, true },
+			[]string{ref}, []string{"bifrost-api branches", "bifrost-ui branches"}},
+		"main not read now": {func(context.Context, string) (store.OnMain, bool) { return nil, false },
+			[]string{ref}, []string{"bifrost-api branches", "bifrost-ui branches", "bifrost-platform main"}},
+	} {
+		mainRead = c.main
+		code, out = call(t, s, "agentd:h1", "GET", "prunes?host_id=h1", nil)
+		refs, unread := handedOut(t, out)
+		sort.Strings(c.refs)
+		if code != http.StatusOK || !slices.Equal(refs, c.refs) || !slices.Equal(unread, c.unread) {
+			t.Errorf("%s: %d, handed out %v, unread %v; want %v, %v", name, code, refs, unread, c.refs, c.unread)
+		}
 	}
 	report := func(results ...map[string]any) (int, map[string]any) {
 		return call(t, s, "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": results})
