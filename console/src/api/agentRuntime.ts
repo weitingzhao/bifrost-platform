@@ -39,6 +39,8 @@ export type RuntimeProgress = {
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
   controls: RuntimeRecord[]; plan: unknown[]
+  /** The answer had a plan list: an empty plan is only one that was read empty (review 431 B1). */
+  planRead?: boolean
 }
 export type RuntimeEvent = {
   seq?: number; event_type: string; at: string; actor_id: string; task_id: string; attempt_id: string; body_json: RuntimeRecord
@@ -95,7 +97,7 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
       next_steps: Array.isArray(m.next_steps) ? m.next_steps : [], waiting_on: text(m.waiting_on),
       waiting_roles: strings(m.waiting_roles), tasks: records(m.tasks).map(parseRuntimeTask) })) },
     recent: { tasks: records(recent.tasks), failed_attempts: records(recent.failed_attempts) },
-    controls: records(r.controls), plan: Array.isArray(r.plan) ? r.plan : [],
+    controls: records(r.controls), plan: Array.isArray(r.plan) ? r.plan : [], planRead: Array.isArray(r.plan),
   }
 }
 export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {

@@ -205,7 +205,8 @@ describe('Merged Progress page', () => {
   })
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('/agentrt/plan?') ? json({ error: 'not_found', message: 'no such record' }, 404)
-      : json(String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
+      // An empty runtime answers an empty plan list (store.Progress), not no list.
+      : json(String(url).includes('/agentrt/progress') ? { generated_at: 'now', plan: [] } : String(url).includes('/agentrt/') ? { generated_at: 'now' } : { document: null })))
     wrap(<ProgressPage />)
     expect(await screen.findByText('No goals yet.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()

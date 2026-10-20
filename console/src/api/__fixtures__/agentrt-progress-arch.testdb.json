@@ -1,7 +1,7 @@
 {
   "as_of_event_id": 33,
   "controls": [],
-  "generated_at": "2026-10-20T15:39:47.153891Z",
+  "generated_at": "2026-10-20T16:09:11.165234Z",
   "hosts": [
     {
       "state": "active",
@@ -126,9 +126,9 @@
   ],
   "live": [
     {
-      "attempt_id": "a_01M5CZFZJBRYRCGNH75R9GGJAH",
+      "attempt_id": "a_01M5D15T7BKQP5SAXS7QN8RJGJ",
       "attempt_no": 1,
-      "task_id": "t_01M5CZFZJAQSDZBNQRQSGAYGBC",
+      "task_id": "t_01M5D15T79YQA41DMDQ4BCT7FS",
       "mission_id": "M-1",
       "executor": "exec:deterministic",
       "state": "leased",
@@ -149,25 +149,25 @@
       "rows": [
         {
           "note": {
-            "at": "2026-10-20T15:39:47.152627Z",
+            "at": "2026-10-20T16:09:11.161001Z",
             "by": "thread:night",
             "text": "PROD 与 STG 都在用；PROD 重建演练还欠"
           },
           "plan_node_id": "ARCH:state-db",
-          "reason": "T19, T20 passed on stg at 2333e00753f9, the deployment recorded 2026-10-20T15:39:47Z",
+          "reason": "T19, T20 passed on stg at 2333e00753f9, the deployment recorded 2026-10-20T16:09:11Z",
           "tick": "true",
           "title": "状态库（PostgreSQL agentrt 模式）"
         },
         {
           "note": null,
           "plan_node_id": "ARCH:bus",
-          "reason": "T21: no pass on stg at 2333e00753f9, the deployment recorded 2026-10-20T15:39:47Z",
+          "reason": "T21: no pass on stg at 2333e00753f9, the deployment recorded 2026-10-20T16:09:11Z",
           "tick": "false",
           "title": "redis-agents 总线"
         },
         {
           "note": {
-            "at": "2026-10-20T15:39:47.153449Z",
+            "at": "2026-10-20T16:09:11.164326Z",
             "by": "owner",
             "text": "还没有：模型直连厂商"
           },
@@ -221,7 +221,7 @@
   "work": {
     "missions": [
       {
-        "deadline_at": "2026-10-27T15:39:47Z",
+        "deadline_at": "2026-10-27T16:09:11Z",
         "eta": {
           "reason": "no usual time for implement go tasks: fewer than 3 accepted in 30 days",
           "state": "unknown"
@@ -241,7 +241,7 @@
           }
         ],
         "reason": "the attempt names no host the runtime knows",
-        "since": "2026-10-20T15:39:47.146832Z",
+        "since": "2026-10-20T16:09:11.145545Z",
         "slices": {
           "done": 0,
           "manual": 0,
@@ -253,7 +253,7 @@
         "status": "unknown",
         "tasks": [
           {
-            "task_id": "t_01M5CZFZJAQSDZBNQRQSGAYGBC",
+            "task_id": "t_01M5D15T79YQA41DMDQ4BCT7FS",
             "title": "t",
             "role": "implement",
             "plan_node_id": "R2:2.1-1",
@@ -263,12 +263,12 @@
             "state": "proposed",
             "status": "unknown",
             "reason": "the attempt names no host the runtime knows",
-            "since": "2026-10-20T15:39:47.146832Z",
+            "since": "2026-10-20T16:09:11.145545Z",
             "depends_on": [],
             "attempt": {
-              "attempt_id": "a_01M5CZFZJBRYRCGNH75R9GGJAH",
+              "attempt_id": "a_01M5D15T7BKQP5SAXS7QN8RJGJ",
               "attempt_no": 1,
-              "task_id": "t_01M5CZFZJAQSDZBNQRQSGAYGBC",
+              "task_id": "t_01M5D15T79YQA41DMDQ4BCT7FS",
               "mission_id": "M-1",
               "executor": "exec:deterministic",
               "state": "leased",
@@ -285,7 +285,7 @@
         "work_id": "W-31"
       },
       {
-        "deadline_at": "2026-10-27T15:39:47Z",
+        "deadline_at": "2026-10-27T16:09:11Z",
         "eta": {
           "reason": "the mission is proposed: a wait for a decision has no usual time",
           "state": "unknown"
@@ -294,7 +294,7 @@
         "mission_id": "M-2",
         "next_steps": [],
         "reason": "the mission is proposed: it waits for a signed standing-envelope rule, which nothing the Owner can click gives yet",
-        "since": "2026-10-20T15:39:47.122645Z",
+        "since": "2026-10-20T16:09:11.091714Z",
         "slices": {
           "done": 0,
           "manual": 0,

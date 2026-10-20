@@ -18,7 +18,8 @@ import rootOnly from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
 import { STREAM_PAGE, planStream, streamPage } from '@/test/agentrtPlanStream'
 import { ProgressOverview } from '../../progress/ProgressOverview'
 import { AgentsPlan } from '../AgentsPlan'
-import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, useRuntimeArch, useRuntimePlan } from '../useRuntimePlan'
+import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead, useRuntimeArch, useRuntimePlan } from '../useRuntimePlan'
+import { parseRuntimeProgress } from '@/api/agentRuntime'
 
 // The plan panes read the runtime's plan (2.5 slice 2): GET /plan?root=R2, the import request its head
 // names, and GET /progress's counts, as the platform answered them on a test database (agentrtapi over
@@ -231,7 +232,10 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
       expect(el, row.plan_node_id).toHaveAttribute('data-tick', row.tick)
       expect(el).toHaveTextContent(row.title)
       expect(el).toHaveTextContent(row.reason)
-      if (row.note) expect(el).toHaveTextContent(`${row.note.text} · ${row.note.by}`)
+      if (row.note) {
+        expect(el).toHaveTextContent(`${row.note.text} · ${row.note.by}, ${row.note.at.slice(0, 16).replace('T', ' ')}Z`)
+        expect(el.querySelector(`[title="${row.note.at}"]`)).not.toBeNull()
+      }
       else expect(el).toHaveTextContent('No note on what it is now.')
     }
     expect(container.querySelector('[data-arch-row="ARCH:state-db"]')).toHaveTextContent('passed')
@@ -262,10 +266,31 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
   it('a tick it does not know is unknown, never a pass', () => {
     const odd = runtimeArch([{ kind: 'arch_root', plan_node_id: 'ARCH', title: 't', rows: [
       { plan_node_id: 'ARCH:a', title: 'a', tick: true, reason: '' }, { plan_node_id: 'ARCH:b', title: 'b', tick: 'maybe' },
-      { plan_node_id: 'ARCH:c', title: 'c', tick: 'false', note: { text: '' } },
+      { plan_node_id: 'ARCH:c', title: 'c', tick: 'false', note: { text: '' } }, { plan_node_id: 'ARCH:d', title: 'd' },
     ] }])
-    expect(odd?.rows.map(r => r.tick)).toEqual(['unknown', 'unknown', 'false'])
+    expect(odd?.rows.map(r => r.tick)).toEqual(['unknown', 'unknown', 'false', 'unknown'])
     expect(odd?.rows[2].note).toBeNull()
     expect(runtimeArch([{ kind: 'round', plan_node_id: 'R2' }])).toBeNull()
+  })
+})
+
+// Review 431 B1, B2: what is read decides what is said. An answer that is not a progress answer is a failed
+// read, never "not imported" or a table of no rows; a plan read empty is not imported; a paused read is
+// offline, with or without an answer before it.
+describe('reading the architecture table (review 431)', () => {
+  const ok = (data: unknown) => ({ data: parseRuntimeProgress(data), error: null, isError: false, isPaused: false })
+  it('is a failed read when the answer has no plan list, or its architecture root no rows list', () => {
+    for (const body of [{}, { plan: null }, { plan: {} }]) {
+      expect(archRead(ok(body)), JSON.stringify(body)).toEqual({ from: 'error', error: 'Agent runtime: the progress answer has no plan list' })
+    }
+    expect(archRead(ok({ plan: [{ kind: 'arch_root', plan_node_id: 'ARCH' }] }))).toEqual({ from: 'error', error: 'Agent runtime: the architecture root has no rows list' })
+    expect(archRead(ok({ plan: [] }))).toEqual({ from: 'absent' })
+    expect(archRead(ok({ plan: [{ kind: 'arch_root', plan_node_id: 'ARCH', rows: [] }] }))).toMatchObject({ from: 'runtime', table: { rows: [] } })
+  })
+  it('is offline when paused, with or without an answer read before', () => {
+    const answer = parseRuntimeProgress(archFixture)
+    expect(archRead({ data: answer, error: null, isError: false, isPaused: true })).toEqual({ from: 'error', error: 'offline' })
+    expect(archRead({ data: undefined, error: null, isError: false, isPaused: true })).toEqual({ from: 'error', error: 'offline' })
+    expect(archRead({ data: undefined, error: null, isError: false, isPaused: false })).toEqual({ from: 'loading' })
   })
 })

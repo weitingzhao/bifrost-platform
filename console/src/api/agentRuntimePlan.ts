@@ -46,12 +46,14 @@ export const ARCH_ROOT = 'ARCH'
 /**
  * The architecture table from GET /progress's plan: the arch_root with its rows, each ticked by its done rule
  * evaluated now (store/progressarch.go); null when the runtime holds no architecture root (not imported). A
- * tick the page does not know is unknown, never a pass.
+ * tick the page does not know is unknown, never a pass; a root without its rows list is not a table, and
+ * throws (review 431 B1).
  */
 export function runtimeArch(plan: unknown[]): RuntimeArchTable | null {
   const roots = plan.map(record).filter(r => text(r.kind) === 'arch_root')
   const root = roots.find(r => text(r.plan_node_id) === ARCH_ROOT) ?? roots[0]
   if (root == null) return null
+  if (!Array.isArray(root.rows)) throw new Error('Agent runtime: the architecture root has no rows list')
   return { id: text(root.plan_node_id), title: text(root.title), rows: records(root.rows).map(row => {
     const tick = text(row.tick)
     const note = row.note === null || typeof row.note !== 'object' ? null : record(row.note)

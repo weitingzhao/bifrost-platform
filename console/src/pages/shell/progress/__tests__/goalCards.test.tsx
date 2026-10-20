@@ -295,6 +295,26 @@ describe('Progress composition', () => {
     }
   })
 
+  // Work's "Plan ›" (review 431 B2): arriving at #work?section=plan opens the plan pane and ends on it.
+  it('opens the plan pane and ends on it when the address names it', async () => {
+    mockFetch()
+    const log: string[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { log.push(`into:${this.id}`) })
+    function Shell({ children }: { children: ReactNode }) {
+      useEffect(() => { log.push('top') }, [])
+      return <>{children}</>
+    }
+    window.history.replaceState(null, '', '#work?section=plan')
+    wrap(<Shell><ProgressPage /></Shell>)
+    await waitFor(() => expect(log.at(-1)).toBe('into:plan'))
+    expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf('into:plan'))
+    expect(document.querySelector('#plan details')).toHaveAttribute('open')
+    cleanup()
+    window.history.replaceState(null, '', '#work')
+    wrap(<ProgressPage />)
+    expect(document.querySelector('#plan details')).not.toHaveAttribute('open')
+  })
+
   it('a goal given on Chief of staff links to its card on Work, which comes first and into view', async () => {
     mockFetch()
     const scroll = vi.fn()

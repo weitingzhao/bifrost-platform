@@ -75,8 +75,14 @@ export function archRead(progress: Read<RuntimeProgress>): ArchRead {
   const failed = failure(progress)
   if (failed !== null) return { from: 'error', error: failed }
   if (progress.data === undefined) return { from: 'loading' }
-  const table = runtimeArch(progress.data.plan)
-  return table ? { from: 'runtime', table } : { from: 'absent' }
+  // An answer with no plan list is not one that holds no architecture root (review 431 B1).
+  if (progress.data.planRead === false) return { from: 'error', error: 'Agent runtime: the progress answer has no plan list' }
+  try {
+    const table = runtimeArch(progress.data.plan)
+    return table ? { from: 'runtime', table } : { from: 'absent' }
+  } catch (e) {
+    return { from: 'error', error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /** The architecture table for a pane, from GET /progress under the key Needs you and the plan read it with. */
