@@ -64,6 +64,7 @@ func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 	tally := map[string]*routeTally{}
 	moves := map[string]int{}
 	for _, st := range fuzzStages {
+		t.Logf("stage %q: seed %d", st, seed)
 		f := newStateFuzz(t, seed, n, tally, moves)
 		s := f.stage(t, st)
 		f.round(t, s, routes, st)
@@ -89,16 +90,22 @@ func TestRoutesMoveStateOnlyByEvents(t *testing.T) {
 		for _, k := range routeKeys(rt) {
 			want, ok := routeExpect[k]
 			c := tally[k]
+			if c == nil {
+				c = &routeTally{}
+			}
+			if rt.method == http.MethodGet && want != expectWrites && c.wrote > 0 {
+				t.Errorf("%s: a read appended events %d times", k, c.wrote)
+			}
 			switch {
 			case !ok && rt.method != http.MethodGet:
 				t.Errorf("%s: a write route nobody classified; add its valid request and its expectation", k)
-			case !ok && c != nil && c.wrote > 0:
-				t.Errorf("%s: a read route appended events %d times", k, c.wrote)
 			case !ok:
-			case c == nil || c.valid == 0:
+			case c.valid == 0:
 				t.Errorf("%s: its valid request was never answered", k)
 			case want == expectWrites && c.validWrote == 0:
 				t.Errorf("%s: its valid request never appended an event", k)
+			case want == expectAnswers && c.validWrote > 0:
+				t.Errorf("%s: its valid request, which writes nothing, appended events", k)
 			}
 		}
 	}
@@ -257,7 +264,7 @@ func (f *stateFuzz) send(t *testing.T, s *httptest.Server, key string, valid boo
 	if b, ok := body.([]byte); ok {
 		doc = b
 	}
-	f.check(t, key, valid, fmt.Sprintf("%s %s as %q (%d), body %.300s", method, path, caller, code, doc), code, before, digest, since)
+	f.check(t, key, valid, fmt.Sprintf("%s %s as %q (%d), headers %q, body %s", method, path, caller, code, header, doc), code, before, digest, since)
 	return code, out
 }
 
@@ -360,9 +367,18 @@ func attemptStateEvents() []string {
 type fuzzEvent struct {
 	id       int64
 	typ      string
-	cause    bool // cause_event_id is set
-	siblings int  // other events of its transaction about the same row, not state moves
+	cause    bool     // cause_event_id is set
+	siblings []string // the types of the other events of its transaction about the same row
 	body     map[string]any
+}
+
+// The moves that may leave their reason to another event of their
+// transaction about the same row, by the state moved to, and that event's
+// type: a task runs because its attempt started, is submitted because its
+// attempt was, is ready with its route (STG 10-20: every task move without a
+// reason is one of these three). Every other move says why.
+var fuzzImplicitCause = map[string]map[string]string{
+	"task": {"running": "attempt_started", "submitted": "attempt_submitted", "ready": "route_decided"},
 }
 
 // replay checks one row's events since the request began against its states
@@ -371,8 +387,7 @@ func (f *stateFuzz) replay(t *testing.T, k rowKey, old, now string, existed bool
 	t.Helper()
 	col := k.table + "_id"
 	rows, err := f.pool.Query(ctx, `SELECT e.event_id, e.event_type, e.cause_event_id IS NOT NULL, e.body_json,
-	    (SELECT count(*) FROM agentrt.event o WHERE o.txid = e.txid AND o.event_id <> e.event_id AND o.`+col+` = $2
-	       AND o.event_type NOT LIKE '%\_state\_changed')
+	    ARRAY(SELECT o.event_type FROM agentrt.event o WHERE o.txid = e.txid AND o.event_id <> e.event_id AND o.`+col+` = $2 ORDER BY o.event_id)
 	  FROM agentrt.event e WHERE e.event_id > $1 AND e.`+col+` = $2 ORDER BY e.event_id`, since, k.id)
 	must(t, err)
 	var evs []fuzzEvent
@@ -424,14 +439,12 @@ func (f *stateFuzz) created(t *testing.T, k rowKey, evs []fuzzEvent, since int64
 		}
 		return "proposed", nil
 	}
-	// A plan node: plan_node_created names it; a plan change lists it; an
-	// import's head is on its tree's stream.
-	root, _, _ := strings.Cut(k.id, ":")
+	// A plan node: plan_node_created names it (an import writes one for each
+	// node, store/planimport.go importNode), or a plan change lists it.
 	var n int
 	must(t, f.pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_id > $1 AND (
 	    (event_type = 'plan_node_created' AND plan_node_id = $2)
-	    OR (event_type = 'plan_changed' AND body_json->'nodes' ? $2)
-	    OR (event_type = 'legacy_imported' AND event_stream_id = 'plan:' || $3))`, since, k.id, root).Scan(&n))
+	    OR (event_type = 'plan_changed' AND body_json->'nodes' ? $2))`, since, k.id).Scan(&n))
 	if n == 0 {
 		return "", fmt.Errorf("a new plan node that no event of the request creates")
 	}
@@ -461,7 +474,7 @@ func replayChain(table string, evs []fuzzEvent, from, now string) (int64, error)
 		if !slices.Contains(moves[ef], et) {
 			return 0, fmt.Errorf("event %d makes %q -> %q, which no transition table has", e.id, ef, et)
 		}
-		if !hasCause(e) {
+		if !hasCause(table, e) {
 			return 0, fmt.Errorf("event %d (%s) has no reason, no cause and no event of its transaction about this row", e.id, e.typ)
 		}
 		from, last = et, e.id
@@ -472,11 +485,10 @@ func replayChain(table string, evs []fuzzEvent, from, now string) (int64, error)
 	return last, nil
 }
 
-// hasCause: a move says why (reason, cause or cause_event_id), or another
-// event of its transaction about the same row is its cause (attempt_started
-// for running, attempt_submitted for submitted, route_decided for ready).
-func hasCause(e fuzzEvent) bool {
-	if e.cause || e.siblings > 0 {
+// hasCause: a move says why (reason, cause or cause_event_id), or it is one
+// of fuzzImplicitCause's and its transaction has that event about the row.
+func hasCause(table string, e fuzzEvent) bool {
+	if e.cause {
 		return true
 	}
 	for _, key := range []string{"reason", "cause"} {
@@ -484,7 +496,8 @@ func hasCause(e fuzzEvent) bool {
 			return true
 		}
 	}
-	return false
+	by, ok := fuzzImplicitCause[table][fmt.Sprint(e.body["to"])]
+	return ok && slices.Contains(e.siblings, by)
 }
 
 // replayAttempt runs an attempt's state events from where it was; a renewal
@@ -534,12 +547,17 @@ func keysOf(m map[string]bool) []string {
 	return out
 }
 
-// The checker catches what it is there to catch (review 449): a step moved
-// out of dropped; a wrong move whose row ends where it began; a move whose
-// only other event in its transaction is about something else; a refused
-// request that changed a row's other columns; an attempt event out of order.
+// The checker catches what it is there to catch. Reviews 449 and 451 found
+// each of these passing an earlier checker (a regression case): a step moved
+// out of dropped; a wrong move inside a round trip that ends where it began;
+// a move whose only other event in its transaction is about something else,
+// or is about the task but is not what causes that move; a refused request
+// that changed a row's other columns; a plan node no event of the request
+// creates beside an import head on its tree; an attempt that submits without
+// starting. Two retained cases held before too: a move with no reason and
+// nothing else in its transaction, and events that end elsewhere than the row.
 func TestStateEventCheckerCatches(t *testing.T) {
-	ev := func(id int64, typ, from, to string, reason bool, siblings int) fuzzEvent {
+	ev := func(id int64, typ, from, to string, reason bool, siblings ...string) fuzzEvent {
 		body := map[string]any{"from": from, "to": to}
 		if reason {
 			body["reason"] = "test"
@@ -552,21 +570,33 @@ func TestStateEventCheckerCatches(t *testing.T) {
 		from, now string
 		want      string
 	}{
-		"a step out of dropped": {"plan_node", []fuzzEvent{ev(1, "plan_node_state_changed", "dropped", "active", true, 0)}, "dropped", "active", "no transition table"},
-		"a round trip with a wrong second move": {"task", []fuzzEvent{ev(1, "task_state_changed", "ready", "paused", true, 0),
-			ev(2, "task_state_changed", "blocked", "ready", true, 0)}, "ready", "ready", `moves from "blocked"`},
-		"no reason, nothing else about the row": {"task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false, 0)}, "leased", "running", "no reason"},
-		"events that end elsewhere":             {"mission", []fuzzEvent{ev(1, "mission_state_changed", "active", "paused", true, 0)}, "active", "stopped", "end at"},
+		"regression: a step out of dropped": {"plan_node", []fuzzEvent{ev(1, "plan_node_state_changed", "dropped", "active", true)}, "dropped", "active", "no transition table"},
+		"regression: a round trip with a wrong second move": {"task", []fuzzEvent{ev(1, "task_state_changed", "ready", "paused", true),
+			ev(2, "task_state_changed", "blocked", "ready", true)}, "ready", "ready", `moves from "blocked"`},
+		"regression: paused, its only sibling a checkpoint of the task": {"task", []fuzzEvent{ev(1, "task_state_changed", "ready", "paused", false, "attempt_checkpointed")},
+			"ready", "paused", "no reason"},
+		"regression: running, its only sibling the route": {"task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false, "route_decided")},
+			"leased", "running", "no reason"},
+		"retained: no reason, nothing else about the row": {"task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false)}, "leased", "running", "no reason"},
+		"retained: events that end elsewhere":             {"mission", []fuzzEvent{ev(1, "mission_state_changed", "active", "paused", true)}, "active", "stopped", "end at"},
 	} {
 		if _, err := replayChain(c.table, c.evs, c.from, c.now); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v; want %q", name, err, c.want)
 		}
 	}
-	if _, err := replayChain("task", []fuzzEvent{ev(1, "task_state_changed", "leased", "running", false, 1)}, "leased", "running"); err != nil {
-		t.Errorf("a move caused by another event about the row: %v", err)
+	for name, e := range map[string]fuzzEvent{
+		"running, its attempt started":   ev(1, "task_state_changed", "leased", "running", false, "attempt_started"),
+		"submitted, its attempt was":     ev(1, "task_state_changed", "running", "submitted", false, "attempt_submitted"),
+		"ready, with its route":          ev(1, "task_state_changed", "proposed", "ready", false, "route_decided"),
+		"paused, with its reason":        ev(1, "task_state_changed", "ready", "paused", true),
+		"a move with its cause_event_id": {id: 1, typ: "task_state_changed", cause: true, body: map[string]any{"from": "ready", "to": "paused"}},
+	} {
+		if !hasCause("task", e) {
+			t.Errorf("%s: refused", name)
+		}
 	}
 	if err := replayAttempt([]fuzzEvent{{id: 1, typ: "attempt_submitted"}}, "leased", "submitted", true); err == nil {
-		t.Error("a submit of an attempt that never started passed")
+		t.Error("regression: a submit of an attempt that never started passed")
 	}
 
 	f := newStateFuzz(t, 1, 1, map[string]*routeTally{}, map[string]int{})
@@ -596,8 +626,20 @@ func TestStateEventCheckerCatches(t *testing.T) {
 		return move(tx, "ready", "paused", false)
 	})
 	if err == nil || !strings.Contains(err.Error(), "no reason") {
-		t.Errorf("a move caused by an unrelated upload: %v", err)
+		t.Errorf("regression: a move caused by an unrelated upload: %v", err)
 	}
+	// A move whose transaction's other event is about the task but is a note.
+	err = judge(http.StatusOK, func(tx pgx.Tx) error {
+		if _, nerr := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "note", Actor: "controller",
+			MissionID: "M-1", TaskID: f.task, Body: map[string]any{"text": "unrelated"}}); nerr != nil {
+			return nerr
+		}
+		return move(tx, "paused", "ready", false)
+	})
+	if err == nil || !strings.Contains(err.Error(), "no reason") {
+		t.Errorf("regression: a move caused by a note about the task: %v", err)
+	}
+	must(t, store.InTx(ctx, f.pool, func(tx pgx.Tx) error { return move(tx, "ready", "paused", true) }))
 	// A round trip back to where the task began (paused), its second move
 	// recorded wrong: the state is the same before and after.
 	if st := f.snapshot(t)[rowKey{"task", f.task}]; st != "paused" {
@@ -610,7 +652,24 @@ func TestStateEventCheckerCatches(t *testing.T) {
 		return move(tx, "blocked", "paused", true)
 	})
 	if err == nil || !strings.Contains(err.Error(), `moves from "blocked"`) {
-		t.Errorf("a wrong move inside a round trip: %v", err)
+		t.Errorf("regression: a wrong move inside a round trip: %v", err)
+	}
+	// A node written beside an import head on its tree, with no event of its own.
+	must(t, store.InTx(ctx, f.pool, func(tx pgx.Tx) error {
+		_, cerr := store.CreatePlanNode(ctx, tx, "controller", store.PlanNode{ID: "ARCH", Kind: "arch_root", Label: "A", Title: "architecture", Root: "ARCH"})
+		return cerr
+	}))
+	err = judge(http.StatusOK, func(tx pgx.Tx) error {
+		if _, ierr := store.Append(ctx, tx, store.Event{Stream: store.PlanStream("ARCH"), Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: an import head"}}); ierr != nil {
+			return ierr
+		}
+		_, ierr := tx.Exec(ctx, `INSERT INTO agentrt.plan_node (plan_node_id, parent_plan_node_id, node_kind, ordinal, label, title, created_by_actor_id)
+		  VALUES ('ARCH:extra', 'ARCH', 'arch_row', 9, 'extra', 'not in the document', 'controller')`)
+		return ierr
+	})
+	if err == nil || !strings.Contains(err.Error(), "no event of the request creates") {
+		t.Errorf("regression: a node beside an import head: %v", err)
 	}
 	// A refused request that changed a column other than the state.
 	var db string
@@ -624,6 +683,6 @@ func TestStateEventCheckerCatches(t *testing.T) {
 		must(t, err)
 	}
 	if err = f.judge(t, "test", false, http.StatusConflict, before, digest, since); err == nil || !strings.Contains(err.Error(), "agentrt.task changed") {
-		t.Errorf("a refused request that edited a title: %v", err)
+		t.Errorf("regression: a refused request that edited a title: %v", err)
 	}
 }

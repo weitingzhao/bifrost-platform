@@ -82,7 +82,8 @@ func (d *dieAt) proxy(t *testing.T, base string) string {
 }
 
 // sendHalf sends r to host with its whole length declared and half its body,
-// waits for the platform to be reading it, and cuts the connection.
+// then closes its side of the connection and waits for the platform's
+// answer: the platform has read the half and found the body cut short.
 func sendHalf(host string, r *http.Request, body []byte) error {
 	conn, err := net.Dial("tcp", host)
 	if err != nil {
@@ -103,7 +104,17 @@ func sendHalf(host string, r *http.Request, body []byte) error {
 	if _, err = conn.Write(append([]byte(head.String()), body[:len(body)/2]...)); err != nil {
 		return err
 	}
-	time.Sleep(200 * time.Millisecond)
+	if err = conn.(*net.TCPConn).CloseWrite(); err != nil {
+		return err
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+	answer, err := io.ReadAll(conn)
+	if err != nil {
+		return err
+	}
+	if line, _, _ := strings.Cut(string(answer), "\r\n"); !strings.HasPrefix(line, "HTTP/1.1 4") {
+		return fmt.Errorf("the platform answered half a body with %q", line)
+	}
 	return nil
 }
 

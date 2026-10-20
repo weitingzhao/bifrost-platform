@@ -197,6 +197,20 @@ func (f *stateFuzz) stage(t *testing.T, name string) *httptest.Server {
 		}
 		act("salvage", map[string]any{"host_id": "h1", "report": artifactID(report), "pushed_ref": claim["pushed_ref"], "pushed_commit": pushedAt})
 		act("ended", map[string]any{"host_id": "h1", "end_how": "lease_lost", "group_cleared": true})
+		// The task is ready again: a second attempt, live, ends with a
+		// restart of agentd: failed, the task released (review 451 A-2).
+		again := ok("POST claim", "agentd:h1", "POST", "claim", map[string]any{"host_id": "h1", "free_slots": 1, "tools": []any{cursor}})
+		if again["task_id"] != f.task || again["attempt_no"] != float64(2) {
+			t.Fatalf("stage %q: claimed again %v", name, again)
+		}
+		second := again["attempt_id"].(string)
+		ok("POST attempts/{id}/start", "agentd:h1", "POST", "attempts/"+second+"/start",
+			map[string]any{"host_id": "h1", "lease_epoch": again["lease_epoch"], "model_provider": "cursor-mix"})
+		ok("POST attempts/{id}/ended", "agentd:h1", "POST", "attempts/"+second+"/ended",
+			map[string]any{"host_id": "h1", "end_how": "daemon_restart", "group_cleared": true})
+		if st := f.snapshot(t)[rowKey{"attempt", second}]; st != "failed" {
+			t.Fatalf("stage %q: the live attempt that ended is %s", name, st)
+		}
 	}
 	want := map[string]string{"running": "running", "submitted": "submitted", "lost": "ready"}[name]
 	if got := f.snapshot(t)[rowKey{"task", f.task}]; got != want {
@@ -284,7 +298,7 @@ func (f *stateFuzz) round(t *testing.T, s *httptest.Server, routes []fuzzRoute, 
 				if b, ok := body.([]byte); ok {
 					doc = b
 				}
-				f.check(t, keyFor(rt, path), false, fmt.Sprintf("stage %q: %s %s as %q (%d), body %.300s", stage, rt.method, path, caller, code, doc),
+				f.check(t, keyFor(rt, path), false, fmt.Sprintf("stage %q: %s %s as %q (%d), headers %q, body %s", stage, rt.method, path, caller, code, header, doc),
 					code, before, digest, since)
 			}
 		}
@@ -369,7 +383,8 @@ const (
 	idsNodes    = `SELECT plan_node_id FROM agentrt.plan_node x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.plan_node_id = x.plan_node_id), plan_node_id`
 	idsControls = `SELECT control_id FROM agentrt.control x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.body_json->>'control_id' = x.control_id), control_id`
 	idsPools    = `SELECT vendor_pool_id FROM agentrt.vendor_pool ORDER BY 1`
-	idsArts     = `SELECT artifact_id FROM agentrt.artifact ORDER BY 1`
+	idsArts     = `SELECT artifact_id FROM agentrt.artifact x ORDER BY (SELECT min(event_id) FROM agentrt.event e WHERE e.event_type = 'artifact_put'
+	  AND e.body_json->>'artifact_id' = x.artifact_id), artifact_id`
 )
 
 // path fills a route's parameters with ids of the world and some that are not.
