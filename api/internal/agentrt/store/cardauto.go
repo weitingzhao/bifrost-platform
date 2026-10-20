@@ -28,9 +28,11 @@ import (
 //     must wait for him; cardFor);
 //   - that has been open after_seconds unanswered;
 //   - with the option it recommends when its AI assessment (assess.go,
-//     TD-391) agrees or has not come, else with the option that changes
-//     nothing: when it recommends nothing, or the assessment recommends
-//     another option (ruleChoice), saying why on the card's answer.
+//     TD-391) agrees or has not come, and the option that changes nothing
+//     when an assessment that has come recommends another; a card that
+//     recommends nothing takes the option of an assessment that has come,
+//     else the option that changes nothing (ruleChoice); an option it does
+//     not recommend says why on the card's answer.
 //
 // The answer is the rule's, never the Owner's: the question store records it
 // as answered by "rule <id> v<version>" on the rule channel, a note on the

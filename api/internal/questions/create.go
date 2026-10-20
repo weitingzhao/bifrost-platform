@@ -16,10 +16,12 @@ func (s *Service) Create(ctx context.Context, session, principal, role string, r
 // CreateForRule creates a card the agent runtime asks that a card-auto-answer
 // rule in force answers within seconds (TD-393, STG only: the server takes
 // this path only there): the requester's and the store's quotas do not hold
-// it, and it does not count against them, so the runtime's cards are not
-// held while the rule, not the Owner, answers them, and other requesters
-// keep their quotas. Only the runtime's own session may; everything else
-// (the key, a duplicate, the size) is as Create.
+// it, and it leaves no mark in the hourly quotas, so the runtime's cards are
+// not held while the rule, not the Owner, answers them, and other
+// requesters keep their hourly quotas. While it is open or unread it still
+// counts in the store's capacity (20 open, 40 open or unread) like any
+// question. Only the runtime's own session may; everything else (the key, a
+// duplicate, the size) is as Create.
 func (s *Service) CreateForRule(ctx context.Context, session, principal, role string, raw []byte) Result {
 	if session != RuntimeSession {
 		return fail(http.StatusForbidden, "only the agent runtime asks past the quotas, for cards its rule answers", nil)

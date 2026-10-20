@@ -184,4 +184,26 @@ func TestCreateForRuleTakesTheRuntimeCardsPastTheQuotas(t *testing.T) {
 	if res := ask(t, s, RuntimeSession, "k-runtime-plain-padding", nil); res.Code != http.StatusTooManyRequests {
 		t.Fatalf("a runtime card through Create: %d %v", res.Code, res.Body)
 	}
+	// Past every quota (review 456 C2): thirty more, which no hourly quota,
+	// 20 open nor 40 open or unread holds, and which leave no hourly mark;
+	// as open questions they count in the store's capacity for the others.
+	doc, err := s.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	marks := len(doc.Hourly)
+	for i := 10; i < 40; i++ {
+		raw := mustJSON(t, map[string]any{"idempotency_key": fmt.Sprintf("k-rule-card-%02d-padding", i), "title": fmt.Sprintf("Card %d", i),
+			"urgency": "u", "meanwhile": "m"})
+		if res := s.CreateForRule(ctx, RuntimeSession, RuntimeSession, "operator", raw); res.Code != http.StatusCreated {
+			t.Fatalf("card %d: %d %v", i, res.Code, res.Body)
+		}
+	}
+	if doc, err = s.load(); err != nil || len(doc.Hourly) != marks {
+		t.Fatalf("hourly marks %d, %d before (%v)", len(doc.Hourly), marks, err)
+	}
+	if res := ask(t, s, "thread-c", "k-thread-c-padding", nil); res.Code != http.StatusTooManyRequests ||
+		!strings.Contains(fmt.Sprint(res.Body), "store full") {
+		t.Fatalf("another requester with forty open: %d %v", res.Code, res.Body)
+	}
 }
