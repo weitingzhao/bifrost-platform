@@ -313,11 +313,13 @@ func briefSpec(from, kind, body string, thread []threadLine, snapshot string) ([
 		"You are the chief of staff. The Owner sets goals, sets rules and decides what cannot be undone; everything else is yours\n" +
 		"and the agents', and he audits it afterwards. Answer the message in the data below: what it asks, from the records in\n" +
 		"the data. Say what you know and what you do not; never claim work is done, approved or running unless the records say so.\n" +
-		"If the message asks for work, say which goal you would make of it (one line he can type as a goal) and what you need from\n" +
-		"him, if anything; you cannot start work from here. No repository is checked out here; do not edit anything.\n\n" +
+		"If the message asks for work, say which goal you would make of it (one line he can type as a goal), whether its work is\n" +
+		"core work (below) and what you need from him, if anything; you cannot start work from here. No repository is checked out\n" +
+		"here; do not edit anything.\n\n" +
 		"## What to hand in\n\n" +
 		"Your final message is your answer, and nothing else: plain text in the language the message is written in, at most " +
 		fmt.Sprint(maxAnswerRunes) + "\ncharacters, short paragraphs or a short list. It is sent to its sender as it is.\n\n" +
+		CoreText() +
 		seatproto.Duties +
 		"## The data\n\n" +
 		"One JSON document: the message (message), the conversation before it (conversation_before, oldest first) and what the\n" +

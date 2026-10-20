@@ -240,7 +240,7 @@ func AcceptPlan(ctx context.Context, db DB, taskID string, ask Ask, withdraw Wit
 			}
 			tasks = append(tasks, TaskProposal{Ref: pt.Ref, OffPlanReason: "planned by task " + taskID, Role: "implement",
 				Class: "goal", Title: pt.Title, SpecArtifact: id, Effect: "branch", Repo: pt.Repo, BaseCommit: baseOf(pt.Repo),
-				DependsOn: pt.DependsOn})
+				Core: pt.IsCore(), DependsOn: pt.DependsOn})
 		}
 		if err = checkBatch(tasks); err != nil {
 			return refuse(err.Error())

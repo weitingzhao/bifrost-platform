@@ -279,8 +279,10 @@ func TestProposeTasks(t *testing.T) {
 	existing := w.ready(t, store.Task{})
 	b := proposal("b", w.spec, "a")
 	b.PlanNode, b.OffPlanReason = "", "found while doing a"
+	// Core work is an implementation in a repository with core directories
+	// (core.go; a plan task marked core is refused, TestBatchHoldsCoreToImplementations).
 	c := proposal("c", w.spec, existing)
-	c.Role, c.Core, c.Needs = "plan", true, []string{"git_commit"}
+	c.Core, c.Needs = true, []string{"git_commit"}
 	batch := []store.TaskProposal{proposal("a", w.spec), b, c}
 	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k1", "M-1", batch)
 	ok(t, err)

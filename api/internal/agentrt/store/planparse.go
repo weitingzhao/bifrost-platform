@@ -61,15 +61,21 @@ type PlannedMission struct {
 	MaxWallHours int      `json:"max_wall_hours"`
 }
 
-// PlannedTask is one implementation task of a plan.
+// PlannedTask is one implementation task of a plan. Core marks it core work
+// (core.go): true or false, false when left out; kept as written so that a
+// null or another type is refused, not read as false.
 type PlannedTask struct {
-	Ref       string     `json:"ref"`
-	Title     string     `json:"title"`
-	Repo      string     `json:"repo"`
-	Text      string     `json:"text"`
-	Verify    [][]string `json:"verify"`
-	DependsOn []string   `json:"depends_on"`
+	Ref       string          `json:"ref"`
+	Title     string          `json:"title"`
+	Repo      string          `json:"repo"`
+	Text      string          `json:"text"`
+	Verify    [][]string      `json:"verify"`
+	DependsOn []string        `json:"depends_on"`
+	Core      json.RawMessage `json:"core,omitempty"`
 }
+
+// IsCore says whether a checked task is core work.
+func (t PlannedTask) IsCore() bool { return string(t.Core) == "true" }
 
 // PlannedQuestion is a decision card for the Owner.
 type PlannedQuestion struct {
@@ -153,6 +159,9 @@ func (d PlanDoc) check(repos []string) error {
 		if name := outsideCheckout(t.Text, t.Repo); name != "" {
 			return fmt.Errorf("%s: its text names ../%s, which a task in %s does not have (it has %s); what needs %s is a task "+
 				"in %s, or no part of this plan", at, name, t.Repo, CheckoutOf(t.Repo), name, name)
+		}
+		if err := checkPlannedCore(at, t); err != nil {
+			return err
 		}
 	}
 	for i, t := range d.Tasks {

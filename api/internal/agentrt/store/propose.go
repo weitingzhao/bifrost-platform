@@ -479,6 +479,11 @@ func checkBatch(tasks []TaskProposal) error {
 		if _, ok := effectRank[t.Effect]; !ok {
 			return invalid("task %s: effect_class %q is not none, branch or external", t.Ref, t.Effect)
 		}
+		if t.Core {
+			if err := checkCore(t.Role, t.Repo); err != nil {
+				return invalid("task %s: %v", t.Ref, err)
+			}
+		}
 		refs[t.Ref] = true
 	}
 	return nil

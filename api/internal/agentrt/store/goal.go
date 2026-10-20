@@ -225,22 +225,25 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
 		scope +
 		checkouts(repos) +
+		coreRule(repos) +
 		"- Ask the Owner only what is his: a goal he left open, a rule, something that cannot be undone. Give 2 to 4 options and the\n" +
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +
 		"- Do not repeat work an open mission above already does.\n\n" +
+		CoreText() +
 		seatproto.Duties +
 		"## What to hand in\n\n" +
 		"Your final message is your report: a few lines on the plan, then exactly one fenced block ```json holding:\n\n" +
 		"    {\"mission\": {\"success\": [\"...\"], \"out_of_scope\": [\"...\"], \"max_attempts\": 10, \"max_wall_hours\": 24},\n" +
 		"     \"tasks\": [{\"ref\": \"t1\", \"title\": \"...\", \"repo\": \"" + first + "\", \"text\": \"...\",\n" +
-		"                \"verify\": " + verifyExample(Repos[first]) + ", \"depends_on\": []}],\n" +
+		"                \"verify\": " + verifyExample(Repos[first]) + ", \"depends_on\": [], \"core\": false}],\n" +
 		"     \"questions\": [{\"question\": \"...\", \"body\": \"...\", \"options\": [\"...\", \"...\"], \"recommended\": 1,\n" +
 		"                    \"meanwhile\": \"what goes on until he answers\", \"owner_duty\": \"goal\"}],\n" +
 		"     \"decisions\": [{\"decision\": \"...\", \"why\": \"...\", \"dropped\": \"...\", \"reverse\": \"...\"}]}\n\n" +
 		"success: 1 to " + fmt.Sprint(PlanMaxCriteria) + " criteria. out_of_scope: up to " + fmt.Sprint(PlanMaxCriteria) + ". max_attempts and max_wall_hours\n" +
 		"are optional and may only lower this mission's budget. tasks: 1 to " + fmt.Sprint(PlanMaxTasks) + "; ref is short and unique;\n" +
-		"verify holds only the checks you add (maybe none). questions: up to " + fmt.Sprint(PlanMaxQuestions) + "; recommended is the\n" +
+		"verify holds only the checks you add (maybe none); core is true or false (left out: false). questions: up to " +
+		fmt.Sprint(PlanMaxQuestions) + "; recommended is the\n" +
 		"1-based option; owner_duty is goal, rule or irreversible. decisions: up to " + fmt.Sprint(PlanMaxDecisions) + ". The controller\n" +
 		"checks the block; one that does not read blocks this task and the Owner sees why.\n"
 	spec := map[string]any{"text": text}
@@ -252,6 +255,38 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		spec["siblings"] = sibs
 	}
 	return canon.Encode(spec)
+}
+
+// coreRule tells a planner when a task is core work (core.go, CoreText):
+// the label routing reads, and what the plan's check holds it to.
+func coreRule(repos []string) string {
+	var with []string
+	for _, r := range repos {
+		if len(Repos[r].Core) > 0 {
+			with = append(with, r)
+		}
+	}
+	if len(with) == 0 {
+		return "- No task of this goal is core work (its repositories have none; see Core work below): leave core out.\n"
+	}
+	return "- Mark a task \"core\": true when it is core work (see Core work below) and false otherwise; you judge which by that\n" +
+		"  section, nothing else. A core task's text names the files it changes under its repository's core directories. Core is\n" +
+		"  refused on a task in a repository with no core work (" + noCore(repos) + "), on one whose text names no such file,\n" +
+		"  and as anything but true or false.\n"
+}
+
+// noCore lists the repositories of a goal that have no core work.
+func noCore(repos []string) string {
+	var out []string
+	for _, r := range repos {
+		if len(Repos[r].Core) == 0 {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return "none of this goal's"
+	}
+	return strings.Join(out, ", ")
 }
 
 // checkouts tells a planner what each task works in (T26's first run, PROD

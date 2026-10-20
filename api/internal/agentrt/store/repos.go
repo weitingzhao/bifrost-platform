@@ -17,12 +17,15 @@ import (
 // (checkTest); and what agentd prepares before an attempt starts: Siblings,
 // repositories cloned beside the checkout at a branch's head, and Setup,
 // commands run in the checkout with the network a sandboxed executor lacks
-// (CUT-agentd-console-checks-2026-10-16).
+// (CUT-agentd-console-checks-2026-10-16). Core are the directories that hold
+// the runtime's core, where core work is (CoreText); a repository with none
+// has no core work.
 type Repo struct {
 	Verify   [][]string
 	TestDirs []string
 	Setup    [][]string
 	Siblings []Sibling
+	Core     []string
 }
 
 // Sibling is a repository beside a task's checkout, at the head of Ref.
@@ -68,6 +71,7 @@ var Repos = map[string]Repo{
 			{"npm", "--prefix", "console", "ci", "--no-audit", "--no-fund"},
 		},
 		Siblings: []Sibling{{Repo: "bifrost-ui", Ref: "main"}},
+		Core:     []string{"api/internal/agentrt", "api/internal/agentd", "api/cmd/agentd"},
 	},
 	"bifrost-trade-infra": {
 		Verify: [][]string{{"sh", "-c", infraCheck()}},
