@@ -1,7 +1,9 @@
 package agentd
 
 import (
+	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -319,6 +321,60 @@ func TestPromptSaysNoNetworkToCodexOnly(t *testing.T) {
 		}
 		if !strings.Contains(p, "keep them as they are, so that whatever the task's setup fetched is used") {
 			t.Errorf("%s's prompt lost the cache note: %q", ex, p)
+		}
+	}
+}
+
+// refusals is a shell script that tries each write and says, in results,
+// which went through ("WROTE"), which the kernel refused ("denied": Permission
+// denied, Operation not permitted, a cross-device link) and which failed
+// otherwise ("failed", with its error): a missing directory or a shell
+// error is no refusal (review 422 C1). Each write's error goes to
+// $TMPDIR/err, which the script must be able to write.
+func refusals(results string, writes map[string]string) string {
+	var b strings.Builder
+	b.WriteString("#!/bin/sh\n")
+	for _, name := range slices.Sorted(maps.Keys(writes)) {
+		b.WriteString("if (" + writes[name] + ") 2>\"$TMPDIR/err\"; then echo 'WROTE " + name + "'; " +
+			"elif grep -qE 'Permission denied|Operation not permitted|Invalid cross-device link' \"$TMPDIR/err\"; then echo 'denied " + name + "'; " +
+			"else echo \"failed " + name + ": $(cat \"$TMPDIR/err\")\"; fi >> '" + results + "'\n")
+	}
+	return b.String()
+}
+
+// Review 423 C1: a write that fails for want of its directory is no
+// refusal; one the permissions refuse is (as root, which the permissions do
+// not hold, that case is left out).
+func TestRefusalsTellARefusalFromAFailure(t *testing.T) {
+	dir, tmp := t.TempDir(), t.TempDir()
+	closed := filepath.Join(dir, "closed")
+	must(t, os.Mkdir(closed, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(closed, 0o700) })
+	results := filepath.Join(dir, "results")
+	writes := map[string]string{"missing": "echo x > '" + filepath.Join(dir, "no", "such", "x") + "'", "open": "echo x > '" + filepath.Join(dir, "x") + "'"}
+	want := []string{"failed missing:", "WROTE open"}
+	if os.Geteuid() != 0 {
+		writes["closed"] = "echo x > '" + filepath.Join(closed, "x") + "'"
+		want = []string{"denied closed", "failed missing:", "WROTE open"}
+	}
+	script := filepath.Join(dir, "try")
+	must(t, os.WriteFile(script, []byte(refusals(results, writes)), 0o700))
+	cmd := exec.Command("/bin/sh", script)
+	cmd.Env = append(os.Environ(), "TMPDIR="+tmp)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	b, err := os.ReadFile(results)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(got) != len(want) {
+		t.Fatalf("results:\n%s", b)
+	}
+	for i, w := range want {
+		if !strings.HasPrefix(got[i], w) {
+			t.Errorf("%q, want it to start %q", got[i], w)
 		}
 	}
 }

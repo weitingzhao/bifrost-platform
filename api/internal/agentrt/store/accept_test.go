@@ -194,9 +194,26 @@ func TestCoreWorkIsAccepted(t *testing.T) {
 // this build runs (its algorithm differs, so its fingerprint does), and the
 // deterministic check claims it. Had the checks changed without the
 // algorithm, its fingerprint would match and it would stay unclaimed.
+// The verifier job has the deterministic check alone, as the STG and PROD
+// rules give it; the build before decided that input as staged here
+// (review 423 B1). Reroute reads a task's last route_decided only, so the
+// event this build wrote before it does not count.
 func TestCoreVerificationRoutedBeforeIsRoutedAgain(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.LockCapabilities(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test: the verifier job as the rules give it"}}); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE agentrt.job_candidate SET status = 'retired'
+		  WHERE job_id = 'verifier' AND executor_actor_id <> 'exec:deterministic'`)
+		return err
+	}))
+	const check = "verifier/exec:deterministic/local/*"
 	impl := w.ready(t, store.Task{Repo: "bifrost-platform", Core: true})
 	w.run(t, "h1", claude, "done")
 	v, err := store.StartVerification(ctx, w.rt, impl)
@@ -207,9 +224,12 @@ func TestCoreVerificationRoutedBeforeIsRoutedAgain(t *testing.T) {
 		sum := sha256.Sum256(doc)
 		return "sha256:" + hex.EncodeToString(sum[:])
 	}
-	var fp, inputs string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'fingerprint', (body_json->'inputs')::text FROM agentrt.event
-	  WHERE task_id = $1 AND event_type = 'route_decided' ORDER BY event_id DESC LIMIT 1`, v).Scan(&fp, &inputs))
+	var fp, inputs, route string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'fingerprint', (body_json->'inputs')::text, (body_json->'candidates')::text
+	  FROM agentrt.event WHERE task_id = $1 AND event_type = 'route_decided' ORDER BY event_id DESC LIMIT 1`, v).Scan(&fp, &inputs, &route))
+	if route != `["`+check+`"]` {
+		t.Fatalf("this build routes the core verification to %s, want the check alone", route)
+	}
 	doc, err := canon.Parse([]byte(inputs))
 	ok(t, err)
 	rec := doc.(map[string]any)
@@ -217,11 +237,14 @@ func TestCoreVerificationRoutedBeforeIsRoutedAgain(t *testing.T) {
 		t.Fatalf("the recorded fingerprint %s is not its input's %s", fp, got)
 	}
 	// The route as the build before decided it: the same input under
-	// algorithm 2, and nobody to take it.
+	// algorithm 2; the check, its one candidate, excluded for want of
+	// review_core, with the reasons that build gave (04e815f6^ route.go).
 	rec["algorithm"] = json.Number("2")
+	excluded := []any{map[string]any{"candidate": check, "reason": "a need only others may take",
+		"reasons": []any{"a need only others may take", "core work needs only review_core"}}}
 	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
 		if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "route_decided", Actor: "controller",
-			MissionID: "M-1", PlanNode: s1, TaskID: v, Body: map[string]any{"job": "verifier", "candidates": []any{}, "excluded": []any{},
+			MissionID: "M-1", PlanNode: s1, TaskID: v, Body: map[string]any{"job": "verifier", "candidates": []any{}, "excluded": excluded,
 				"inputs": rec, "fingerprint": fingerprint(rec)}}); aerr != nil {
 			return aerr
 		}
