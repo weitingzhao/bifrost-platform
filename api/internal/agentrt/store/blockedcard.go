@@ -221,7 +221,7 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		card := asked + 1
 		body := blockedCardBody(blockedCard{task: t, title: title, repo: d.repo, subject: d.subject, round: d.round, maxRounds: d.maxRounds,
 			reason: reason, failed: failed, check: check, words: words, card: card, budget: s.says(g), rec: r})
-		c := Card{Key: blockedCardKey(taskID, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
+		c := Card{Key: blockedCardKey(taskID, t.mission, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
 			Body: body, Options: blockedOptions(t.mission), OwnerDuty: "goal", TaskID: taskID,
 			Meanwhile: "the task stays blocked and mission " + t.mission + " stays open",
 			Urgency:   "when you can: only this task waits for you, and its mission cannot finish without your answer", SameByKey: true}
@@ -246,11 +246,14 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 	return did && err == nil, err
 }
 
-// blockedCardKey is the card's key in the question store: one per task, block
-// and card number, so a retried pass finds the card it made and a card asked
-// again after an unusable answer is a new one.
-func blockedCardKey(taskID string, block int64, card int) string {
-	sum, _ := canon.Sum(map[string]any{"task": taskID, "block": block, "card": card, "route": "blocked"})
+// blockedCardKey is the card's key in the question store: one per task,
+// mission, block and card number, so a retried pass finds the card it made, a
+// card asked again after an unusable answer is a new one, and so is one for a
+// task a plan change moved to another mission (whose third option names
+// that mission; review 440 A1: a card made by a pass that then failed, and the
+// task moved before the next, held its key for ever).
+func blockedCardKey(taskID, mission string, block int64, card int) string {
+	sum, _ := canon.Sum(map[string]any{"task": taskID, "mission": mission, "block": block, "card": card, "route": "blocked"})
 	return strings.TrimPrefix(sum, "sha256:")
 }
 

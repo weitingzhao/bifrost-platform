@@ -222,7 +222,9 @@ func TestCloseNamesTheCardsMission(t *testing.T) {
 		t.Fatalf("the task is in %s after the rebind", now)
 	}
 	var wd withdrawals
-	open := func(ctx context.Context, id string) (store.Question, bool) { return store.Question{ID: id, Status: "open", Options: 3}, true }
+	open := func(ctx context.Context, id string) (store.Question, bool) {
+		return store.Question{ID: id, Status: "open", Options: 3}, true
+	}
 	if n, err := store.WithdrawStaleCards(ctx, w.rt, open, wd.withdraw); err != nil || n != 1 ||
 		wd.why[0] != "its task is in mission M-2 now; a card naming that mission takes its place" {
 		t.Fatalf("withdrew %d (%v) %v", n, err, wd.why)

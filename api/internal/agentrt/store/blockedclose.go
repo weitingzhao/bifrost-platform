@@ -256,20 +256,42 @@ const closedOnCard = `m.state IN ('done','stopped') AND EXISTS (SELECT 1 FROM (S
 // mission the Owner closed on a card: one that landed after the close
 // committed (a proposal or a check made without the mission's lock; review
 // 439 A1). Such a task cannot have run: a claim takes only an active
-// mission's tasks. It returns how many it cancelled.
+// mission's tasks. It reads them page by page, so one that cannot be
+// cancelled now does not hold up the ones after it (review 440 B1). It
+// returns how many it cancelled.
 func CancelAfterClose(ctx context.Context, db DB) (int, error) {
-	var ids []string
-	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
-		  WHERE t.state NOT IN ('accepted','rejected','cancelled') AND `+closedOnCard+` ORDER BY t.task_id LIMIT 100`)
-		if err != nil {
+	n := 0
+	var errs []error
+	after := ""
+	page := int(blockedPage.Load())
+	for {
+		var ids []string
+		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+			  WHERE t.task_id > $1 AND t.state NOT IN ('accepted','rejected','cancelled') AND `+closedOnCard+` ORDER BY t.task_id LIMIT $2`, after, page)
+			if err != nil {
+				return err
+			}
+			ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
 			return err
+		}); err != nil {
+			return n, errors.Join(append(errs, err)...)
 		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	}); err != nil {
-		return 0, err
+		k, err := cancelAfterClose(ctx, db, ids)
+		n += k
+		if err != nil {
+			errs = append(errs, err)
+		}
+		if len(ids) < page {
+			return n, errors.Join(errs...)
+		}
+		after = ids[len(ids)-1]
 	}
+}
+
+// cancelAfterClose cancels the given tasks, each in a transaction of its
+// own, read again under its locks.
+func cancelAfterClose(ctx context.Context, db DB, ids []string) (int, error) {
 	n := 0
 	var errs []error
 	for _, id := range ids {
