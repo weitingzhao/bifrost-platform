@@ -566,6 +566,11 @@ func TestTargetsNameTheAttemptsDirectories(t *testing.T) {
 		"TOKEN=" + task + "/a1.out/home/x'FIXTUREVALUE'":            "TOKEN=<secret>",
 		task + "/a1.out/tmp/curl -u user:FIXTUREVALUE https://host": "$TMPDIR/<local path> -u <secret> https://host",
 		"cat $HOME/x": "cat $HOME/<local path>",
+		// review 408 A1: what follows a mark scrub wrote in a root's path
+		"cat $HOME/ghp_1234567890/path/FIXTUREVALUE":                     "cat $HOME/<local path>",
+		"cat $TMPDIR/eyJabcdefghij.abcdefghijk.abcdef/FIXTUREVALUE":      "cat $TMPDIR/<local path>",
+		"cat $HOME/https://user:password@host/FIXTUREVALUE":              "cat $HOME/<local path>",
+		"cat " + task + "/a1.out/tmp/ghp_1234567890/path/FIXTUREVALUE x": "cat $TMPDIR/<local path> x",
 	} {
 		if got, _ := tail.clean(in); got != want {
 			t.Errorf("clean(%q) = %q; want %q", in, got, want)

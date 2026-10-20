@@ -270,8 +270,9 @@ func (t *actionTail) local(s string) string {
 	return t.paths.rewrite(s)
 }
 
-// namedRoot is a path under a root local names, with what follows it.
-var namedRoot = regexp.MustCompile(`(\$HOME|\$TMPDIR)/[^\s"'<>|;&)]*`)
+// namedRoot is a path under a root local names, with what follows it,
+// scrub's marks inside it included: they end no path (review 408 A1).
+var namedRoot = regexp.MustCompile(`(\$HOME|\$TMPDIR)/(?:<secret>|<local path>|[^\s"'<>|;&)])*`)
 
 func str(v any) string {
 	s, _ := v.(string)
