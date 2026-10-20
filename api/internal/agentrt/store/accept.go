@@ -334,7 +334,7 @@ func ConcludeWith(ctx context.Context, db DB, taskID string, opts ConcludeOption
 		// The check ran on what it pins, and pins what the attempt is (review
 		// 152 A1): the attempt's own commit, the subject's repo and task
 		// spec, and a checkout of that repo at that commit.
-		case spec.commit != pinnedCommit || spec.repo != sd.repo || spec.taskSpec != sd.spec || vd.repo != sd.repo || vd.base != base:
+		case !checkVersion(spec, pinnedCommit, sd, vd):
 			return closeCheck("the check's version is not the attempt's")
 		case v.role == "review":
 			var passed bool
@@ -454,45 +454,75 @@ func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, excep
 	return err
 }
 
+// checkVersion says whether a check (spec, and vd its task) ran on what it
+// pins and pins what the attempt is (review 152 A1): the attempt's own commit
+// (pinnedCommit), the subject's repo and task spec (sd), and a checkout of
+// that repo at that commit, or at the subject's base when the attempt pushed
+// none. Conclude uses a check's result only when it does; stillChecked counts
+// a check only when it does (review 432 A1).
+func checkVersion(spec checkSpec, pinnedCommit string, sd, vd taskDetail) bool {
+	base := pinnedCommit
+	if base == "" {
+		base = sd.base
+	}
+	return spec.commit == pinnedCommit && spec.repo == sd.repo && spec.taskSpec == sd.spec && vd.repo == sd.repo && vd.base == base
+}
+
 // stillChecked says whether an open check of s other than dropped can
 // still accept s: it pins s itself, s's latest submitted attempt and s's
 // round, is a check of its own role, and is not a salvaged result's (one
-// cannot accept a task that is verifying). Not doing a check blocks s when
-// none is left (reviews 428 A2, 430 A1: a check that only names the latest
-// attempt, of an older round, say, is closed as stale and accepts nothing).
+// cannot accept a task that is verifying), and its version is the attempt's
+// (checkVersion); a review needs the attempt's deterministic pass. Not doing
+// a check blocks s when none is left (reviews 428 A2, 430 A1, 432 A1: a check
+// that only names the latest attempt, of an older round or another task spec,
+// say, is closed by Conclude and accepts nothing).
 // s and dropped are locked; the attempt is read without a lock (attempts
 // come before tasks), and with s locked and verifying none of its attempts
 // is submitted meanwhile.
 func stillChecked(ctx context.Context, tx pgx.Tx, s taskRow, dropped string) (bool, error) {
-	var latest string
-	var round int64
-	err := tx.QueryRow(ctx, `SELECT a.attempt_id, t.round_no FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
-	  WHERE a.task_id = $1 AND a.state = 'submitted' ORDER BY a.attempt_no DESC LIMIT 1`, s.id).Scan(&latest, &round)
+	var latest, commit string
+	err := tx.QueryRow(ctx, `SELECT attempt_id, COALESCE(pushed_commit, '') FROM agentrt.attempt WHERE task_id = $1 AND state = 'submitted'
+	  ORDER BY attempt_no DESC LIMIT 1`, s.id).Scan(&latest, &commit)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	rows, err := tx.Query(ctx, `SELECT role, spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
+	sd, err := readDetail(ctx, tx, s.id)
+	if err != nil {
+		return false, err
+	}
+	var passed bool
+	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.verification WHERE attempt_id = $1
+	  AND method = 'deterministic' AND verdict = 'pass')`, latest).Scan(&passed); err != nil {
+		return false, err
+	}
+	rows, err := tx.Query(ctx, `SELECT task_id, role FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
 	  AND role IN ('verify','review') AND state IN `+openCheck, s.id, dropped)
 	if err != nil {
 		return false, err
 	}
-	type row struct{ role, spec string }
+	type row struct{ task, role string }
 	checks, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
 		var x row
-		return x, r.Scan(&x.role, &x.spec)
+		return x, r.Scan(&x.task, &x.role)
 	})
 	if err != nil {
 		return false, err
 	}
 	for _, c := range checks {
-		spec, pinned, err := readCheckSpec(ctx, tx, c.spec)
+		vd, err := readDetail(ctx, tx, c.task)
 		if err != nil {
 			return false, err
 		}
-		if pinned && !spec.salvage && spec.check == c.role && spec.subject == s.id && spec.attempt == latest && spec.round == round {
+		spec, pinned, err := readCheckSpec(ctx, tx, vd.spec)
+		if err != nil {
+			return false, err
+		}
+		// What Conclude requires of a check before it uses its result.
+		if pinned && !spec.salvage && spec.check == c.role && spec.subject == s.id && spec.attempt == latest &&
+			spec.round == int64(sd.round) && checkVersion(spec, commit, sd, vd) && (c.role != "review" || passed) {
 			return true, nil
 		}
 	}

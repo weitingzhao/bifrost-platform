@@ -434,38 +434,60 @@ func (w *world) handCheckOf(t *testing.T, mission, step, role, subject string, b
 	return id
 }
 
-// Review 430 A1: a check that only names the work's latest attempt does not
-// keep the work checked: a hand check pinned to an older round is closed as
-// stale and accepts nothing. Not doing the work's own check blocks the work.
+// Reviews 430 A1, 432 A1: a check that only names the work's latest attempt
+// does not keep the work checked: a hand check pinned to an older round, or
+// to the latest round with another task spec, or a review before the
+// attempt's deterministic pass, is closed by Conclude and accepts nothing, so
+// not doing the work's own check blocks the work. A hand check Conclude would
+// use keeps it checked, and the work stays verifying.
 func TestDroppingTheLastCurrentCheckBlocksTheWork(t *testing.T) {
 	t.Parallel()
-	w := newKernelWorld(t)
-	w.goalMission(t, "M-3")
-	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
-	c := w.run(t, "h1", codex, "done")
-	own, err := store.StartVerification(ctx, w.rt, impl)
-	ok(t, err)
-	stale := w.handCheckOf(t, "M-3", "", "verify", impl, []byte(fmt.Sprintf(
-		`{"attempt":%q,"check":"verify","commit":%q,"repo":"bifrost-platform","round":0,"subject_task":%q,"task_spec":%q}`,
-		c.AttemptID, commitA, impl, w.spec)))
-	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
-		t.Fatalf("blocked %d (%v); want the work's check and the hand check", n, err)
-	}
-	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 2 {
-		t.Fatalf("asked %d (%v)", n, err)
-	}
-	for i, card := range a.cards {
-		if card.TaskID == own {
-			a.answer(fmt.Sprintf("q_%c", 'a'+i), store.QuestionAnswered, store.CardRefuseKey)
-		}
-	}
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
-		t.Fatalf("decided %d (%v)", n, err)
-	}
-	if o, s, h := w.state(t, "task", own), w.state(t, "task", impl), w.state(t, "task", stale); o != "cancelled" || s != "blocked" || h != "blocked" {
-		t.Fatalf("its own check is %s, the work %s, the stale hand check %s; want cancelled, blocked, blocked", o, s, h)
+	for name, c := range map[string]struct {
+		role      string
+		round     int
+		otherSpec bool
+		work      string
+	}{
+		"an older round":                       {"verify", 0, false, "blocked"},
+		"another task spec":                    {"verify", 1, true, "blocked"},
+		"a review before a deterministic pass": {"review", 1, false, "blocked"},
+		"a check Conclude would use":           {"verify", 1, false, "verifying"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w := newKernelWorld(t)
+			w.goalMission(t, "M-3")
+			impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+			cl := w.run(t, "h1", codex, "done")
+			own, err := store.StartVerification(ctx, w.rt, impl)
+			ok(t, err)
+			spec := w.spec
+			if c.otherSpec {
+				spec = w.artifact(t, "task_spec", "another task spec")
+			}
+			hand := w.handCheckOf(t, "M-3", "", c.role, impl, []byte(fmt.Sprintf(
+				`{"attempt":%q,"check":%q,"commit":%q,"repo":"bifrost-platform","round":%d,"subject_task":%q,"task_spec":%q}`,
+				cl.AttemptID, c.role, commitA, c.round, impl, spec)))
+			w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`)
+			if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+				t.Fatalf("blocked %d (%v); want the work's check and the hand check", n, err)
+			}
+			a := &asker{}
+			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 2 {
+				t.Fatalf("asked %d (%v)", n, err)
+			}
+			for i, card := range a.cards {
+				if card.TaskID == own {
+					a.answer(fmt.Sprintf("q_%c", 'a'+i), store.QuestionAnswered, store.CardRefuseKey)
+				}
+			}
+			if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
+				t.Fatalf("decided %d (%v)", n, err)
+			}
+			if o, s, h := w.state(t, "task", own), w.state(t, "task", impl), w.state(t, "task", hand); o != "cancelled" || s != c.work || h != "blocked" {
+				t.Fatalf("its own check is %s, the work %s, the hand check %s; want cancelled, %s, blocked", o, s, h, c.work)
+			}
+		})
 	}
 }
 
