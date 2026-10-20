@@ -137,6 +137,10 @@ var actionStore *actions.Store
 // examSet, when set, is the API's exam set (exams_test.go).
 var examSet store.ExamSet
 
+// agentHeads, when set, are the attempt branches the API reads, by
+// repository (prune_test.go).
+var agentHeads map[string][]store.AgentHead
+
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
 // reporter, an operator, an admin and two seat tokens (one registered).
@@ -188,6 +192,10 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 			cards = append(cards, c)
 			return fmt.Sprintf("q_%d", len(cards)), nil
 		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
+	if agentHeads != nil {
+		heads := agentHeads
+		api.AgentHeads = func(_ context.Context, repo string) ([]store.AgentHead, error) { return heads[repo], nil }
+	}
 	if !noMain {
 		api.MainHead = func(_ context.Context, repo string) (string, error) {
 			mainsMu.Lock()

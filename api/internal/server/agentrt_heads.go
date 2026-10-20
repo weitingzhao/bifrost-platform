@@ -85,41 +85,9 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 				return "", fmt.Errorf("%w: %q is not a branch name", store.ErrState, ref)
 			}
 		}
-		acc, err := access(ctx)
-		if err != nil {
-			return "", fmt.Errorf("gitea access: %w", err)
-		}
-		u := strings.TrimRight(acc.Base, "/") + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) +
-			".git/info/refs?service=git-upload-pack"
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		body, err := readAdvertisement(ctx, access, org, repo, client)
 		if err != nil {
 			return "", err
-		}
-		if acc.User != "" || acc.Pass != "" {
-			req.SetBasicAuth(acc.User, acc.Pass)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return "", fmt.Errorf("gitea: %w", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		// Gitea answers 401 or 404 for a repository it does not show this
-		// credential; only an advertisement of the one asked for refuses
-		// (review 194 A1).
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("gitea: %s/%s refs: HTTP %d", org, repo, resp.StatusCode)
-		}
-		if ct := resp.Header.Get("Content-Type"); ct != uploadPackAdvertisement {
-			return "", fmt.Errorf("gitea: %s/%s refs: %q is not an upload-pack advertisement", org, repo, ct)
-		}
-		// The whole body, read to its end, or none of it (review 204 A1): an
-		// answer cut short or longer than the bound is not an advertisement.
-		body, err := io.ReadAll(io.LimitReader(resp.Body, maxAdvertisement+1))
-		if err != nil {
-			return "", fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
-		}
-		if len(body) > maxAdvertisement {
-			return "", fmt.Errorf("gitea: %s/%s refs: more than %d bytes", org, repo, maxAdvertisement)
 		}
 		commit, found, err := advertisedRef(body, ref)
 		if err != nil {
@@ -129,6 +97,78 @@ func giteaBranchHead(access func(context.Context) (delivery.GiteaAccess, error),
 			return "", fmt.Errorf("%w: %s is not on %s/%s", store.ErrState, ref, org, repo)
 		}
 		return commit, nil
+	}
+}
+
+// readAdvertisement is <org>/<repo>'s smart-HTTP advertisement of
+// git-upload-pack (info/refs), whole. client must not follow redirects.
+func readAdvertisement(ctx context.Context, access func(context.Context) (delivery.GiteaAccess, error), org, repo string,
+	client *http.Client) ([]byte, error) {
+	acc, err := access(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("gitea access: %w", err)
+	}
+	u := strings.TrimRight(acc.Base, "/") + "/" + url.PathEscape(org) + "/" + url.PathEscape(repo) +
+		".git/info/refs?service=git-upload-pack"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, err
+	}
+	if acc.User != "" || acc.Pass != "" {
+		req.SetBasicAuth(acc.User, acc.Pass)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("gitea: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	// Gitea answers 401 or 404 for a repository it does not show this
+	// credential; only an advertisement of the one asked for refuses
+	// (review 194 A1).
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gitea: %s/%s refs: HTTP %d", org, repo, resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != uploadPackAdvertisement {
+		return nil, fmt.Errorf("gitea: %s/%s refs: %q is not an upload-pack advertisement", org, repo, ct)
+	}
+	// The whole body, read to its end, or none of it (review 204 A1): an
+	// answer cut short or longer than the bound is not an advertisement.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxAdvertisement+1))
+	if err != nil {
+		return nil, fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
+	}
+	if len(body) > maxAdvertisement {
+		return nil, fmt.Errorf("gitea: %s/%s refs: more than %d bytes", org, repo, maxAdvertisement)
+	}
+	return body, nil
+}
+
+// giteaAgentHeads reads every attempt branch (refs/heads/agent/…) of
+// <org>/<repo> and the commit it names, from the same advertisement (TD-383:
+// the branches the cleanup may hand out).
+func giteaAgentHeads(access func(context.Context) (delivery.GiteaAccess, error), org string, client *http.Client) func(context.Context, string) ([]store.AgentHead, error) {
+	c := *client
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	client = &c
+	return func(ctx context.Context, repo string) ([]store.AgentHead, error) {
+		if !giteaName.MatchString(repo) || strings.HasSuffix(repo, ".git") {
+			return nil, fmt.Errorf("%w: %q is not a repository", store.ErrState, repo)
+		}
+		body, err := readAdvertisement(ctx, access, org, repo, client)
+		if err != nil {
+			return nil, err
+		}
+		refs, err := advertisedRefs(body)
+		if err != nil {
+			return nil, fmt.Errorf("gitea: %s/%s refs: %w", org, repo, err)
+		}
+		var out []store.AgentHead
+		for name, oid := range refs {
+			if strings.HasPrefix(name, "refs/heads/agent/") {
+				out = append(out, store.AgentHead{Repo: repo, Ref: name, Commit: oid})
+			}
+		}
+		return out, nil
 	}
 }
 
@@ -145,34 +185,45 @@ const (
 // well-formed advertisement leaves it out; one cut off, followed by more, or
 // with a line that is not a ref (review 204 A2) is an error.
 func advertisedRef(body []byte, ref string) (string, bool, error) {
+	refs, err := advertisedRefs(body)
+	if err != nil {
+		return "", false, err
+	}
+	oid, found := refs[ref]
+	return oid, found, nil
+}
+
+// advertisedRefs is every ref of a whole, well-formed advertisement and the
+// object it points at (advertisedRef's checks, all of them).
+func advertisedRefs(body []byte) (map[string]string, error) {
 	// No buffer between the body and the parser: what is left after the last
 	// flush is what the body has left (review 206 A1).
 	br := bytes.NewReader(body)
 	line, flush, err := pktLine(br)
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
 	if flush || strings.TrimSuffix(string(line), "\n") != "# service=git-upload-pack" {
-		return "", false, errors.New("not an upload-pack advertisement")
+		return nil, errors.New("not an upload-pack advertisement")
 	}
 	if _, flush, err = pktLine(br); err != nil || !flush {
-		return "", false, errors.Join(errors.New("no flush after the service line"), err)
+		return nil, errors.Join(errors.New("no flush after the service line"), err)
 	}
-	var got string
-	found, empty, seen, prev := false, false, map[string]bool{}, ""
+	refs := map[string]string{}
+	empty, seen, prev := false, map[string]bool{}, ""
 	for n := 0; ; n++ {
 		line, flush, err := pktLine(br)
 		if err != nil {
-			return "", false, err
+			return nil, err
 		}
 		if flush {
 			// No refs at all is an empty repository as git before 2.41 (the
 			// CI image's 2.39) advertises it; later git sends the one
 			// capabilities^{} line instead.
 			if br.Len() > 0 {
-				return "", false, errors.New("more after the last flush")
+				return nil, errors.New("more after the last flush")
 			}
-			return got, found, nil
+			return refs, nil
 		}
 		text := strings.TrimSuffix(string(line), "\n")
 		if n == 0 { // the first ref carries the capabilities after a NUL
@@ -181,16 +232,16 @@ func advertisedRef(body []byte, ref string) (string, bool, error) {
 		oid, name, ok := strings.Cut(text, " ")
 		// An empty repository's line is its only one (review 206 A2).
 		if !ok || !commitID.MatchString(oid) || !advertisedName(name, oid, n) || seen[name] || empty {
-			return "", false, fmt.Errorf("not a ref line: %q", line)
+			return nil, fmt.Errorf("not a ref line: %q", line)
 		}
 		// git writes a peeled line right after the ref it peels.
 		if peeled, ok := strings.CutSuffix(name, "^{}"); ok && name != "capabilities^{}" && peeled != prev {
-			return "", false, fmt.Errorf("a peeled line not after its ref: %q", line)
+			return nil, fmt.Errorf("a peeled line not after its ref: %q", line)
 		}
 		seen[name], prev = true, name
 		empty = name == "capabilities^{}"
-		if name == ref {
-			got, found = oid, true
+		if name != "capabilities^{}" && !strings.HasSuffix(name, "^{}") {
+			refs[name] = oid
 		}
 	}
 }

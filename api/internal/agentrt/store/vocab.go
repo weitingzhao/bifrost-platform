@@ -127,7 +127,11 @@ var bodies = map[string][]field{
 	"ci_seen":                  {{"repo", kStr, false}, {"commit", kStr, false}, {"status", kStr, false}, {"run", kStr, true}},
 	"deploy_seen":              {{"env", kStr, false}, {"commit", kStr, false}, {"deploy_ref", kAny, false}},
 	"owner_signoff":            {{"ref", kStr, false}},
-	"note":                     {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}},
+	// note: landed, the commit an accepted result first stood on main as, when
+	// the controller first saw it there; pruned, an attempt branch its host
+	// deleted; prune_refused, one Gitea would not let it delete (prune.go).
+	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
+		{"pruned", kStr, true}, {"prune_refused", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -289,6 +293,7 @@ var (
 	verifyID    = shaped("a verification id", regexp.MustCompile(`^v_`+ulid+`$`))
 	artifactID  = shaped("an artifact id (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	commit      = shaped("a commit (40 hex)", regexp.MustCompile(`^[0-9a-f]{40}$`))
+	agentBranch = shaped("an attempt branch (refs/heads/agent/<task>/a<n>)", agentRef)
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
 	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost"}
@@ -334,6 +339,7 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
+	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch},
 	"route_decided":            {"fingerprint": fingerprint},
 	"legacy_imported":          {"digest": fingerprint},
 }

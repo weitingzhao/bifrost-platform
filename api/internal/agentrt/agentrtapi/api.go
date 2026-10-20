@@ -55,6 +55,9 @@ type API struct {
 	// Exams is the chief exam's question set (W-31 2.4 ④, exams.go), loaded
 	// once at start; nil answers the exam routes 503.
 	Exams store.ExamSet
+	// AgentHeads reads the attempt branches agentd may be given to delete
+	// (TD-383, prune.go); nil gives none.
+	AgentHeads AgentHeads
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
@@ -103,6 +106,8 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(agentd, cfg).Post("/claim", a.claim)
 		r.With(agentd, cfg).Post("/attempts/{id}/{action}", a.attempt)
 		r.With(agentd, cfg).Post("/benchmark", a.recordBenchmark)
+		r.With(agentd, cfg).Get("/prunes", a.prunes)
+		r.With(agentd, cfg).Post("/prunes", a.reportPrunes)
 		r.With(agentd, cfg).Get("/exams/{job}", a.issueExam)
 		r.With(agentd, cfg).Post("/exams", a.recordExam)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)

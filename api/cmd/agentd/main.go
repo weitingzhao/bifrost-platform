@@ -153,12 +153,25 @@ func run() error {
 	// its own goroutine; on SIGTERM every one hands over before agentd exits.
 	var runs sync.WaitGroup
 	defer runs.Wait()
+	var lastPrune time.Time
 	for ctx.Err() == nil {
 		// what a previous run left, and hand-overs that waited for the platform
 		if err := d.Recover(ctx); err != nil {
 			log.Printf("agentd: takeover: %v", err)
 			sleep(ctx, 15*time.Second)
 			continue
+		}
+		// The attempt branches the platform lets go (TD-383): a refusal is
+		// the platform's to record, never a reason to stop.
+		if time.Since(lastPrune) >= agentd.PruneEvery {
+			lastPrune = time.Now()
+			pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			if n, err := d.Prune(pctx); err != nil {
+				log.Printf("agentd: prune: %v", err)
+			} else if n > 0 {
+				log.Printf("agentd: deleted %d attempt branches", n)
+			}
+			cancel()
 		}
 		if id, err := d.Blocked(); err != nil || id != "" || len(offered) == 0 {
 			if id != "" {

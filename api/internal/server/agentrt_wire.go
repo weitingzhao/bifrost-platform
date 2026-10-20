@@ -67,7 +67,7 @@ type agentRuntime struct {
 func (s *Server) wireAgentRuntime(role config.Role) {
 	rt := &agentRuntime{api: &agentrtapi.API{Logf: func(format string, args ...any) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
-	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(),
+	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		Exams: examSetFromEnv()}}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
@@ -352,6 +352,7 @@ func (s *Server) agentRuntimeSources() controller.Sources {
 	src.Ack = s.questionRuntime.agentRuntimeAck()
 	src.Ask = s.questionRuntime.agentRuntimeAsk()
 	src.Withdraw = s.questionRuntime.agentRuntimeWithdraw()
+	src.MainTasks = s.agentRuntimeMainTasks()
 	return src
 }
 
