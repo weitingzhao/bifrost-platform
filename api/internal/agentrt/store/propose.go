@@ -237,6 +237,9 @@ type MissionProposal struct {
 	MaxAction           string // none or branch (the default); round 2 dispatches nothing above branch
 	MaxAttempts         int
 	MaxWallHours        int
+	// NoMerge: why its accepted results stay off main, "" for none (a drill,
+	// a benchmark replay; TD-383 「不合 A」); scope_json.no_merge, prune.go.
+	NoMerge string
 	// bases are a goal's, by repository (ProposeGoal); no route sets them.
 	bases map[string]string
 }
@@ -272,6 +275,7 @@ func (p MissionProposal) check() (MissionProposal, error) {
 	if p.MaxAttempts < 0 || p.MaxWallHours < 0 {
 		return p, invalid("a budget is not negative")
 	}
+	p.NoMerge = strings.TrimSpace(p.NoMerge)
 	return p, nil
 }
 
@@ -283,9 +287,14 @@ func (p MissionProposal) request() map[string]any {
 	if !p.Deadline.IsZero() {
 		deadline = timeText(p.Deadline)
 	}
-	return map[string]any{"work_id": p.WorkID, "title": p.Title, "goal": p.Goal, "tenant": p.Tenant,
+	req := map[string]any{"work_id": p.WorkID, "title": p.Title, "goal": p.Goal, "tenant": p.Tenant,
 		"deadline_at": deadline, "success": nonNil(p.Success), "repos": nonNil(p.Repos),
 		"max_action": p.MaxAction, "max_attempts": p.MaxAttempts, "max_wall_hours": p.MaxWallHours}
+	if p.NoMerge != "" {
+		// Only when given: a key taken before the field was has the same digest.
+		req["no_merge"] = p.NoMerge
+	}
+	return req
 }
 
 // EnvelopePending is why a proposed mission stays proposed when no signed
@@ -304,6 +313,7 @@ const (
 	MaxMissionSuccess      = 10
 	MaxMissionSuccessBytes = 200
 	MaxMissionRepos        = 12
+	MaxNoMergeBytes        = 200
 )
 
 // tooLong is the advice a proposal that does not fit is given.
@@ -322,6 +332,8 @@ func (p MissionProposal) bounded() error {
 		return invalid("%d success criteria, more than %d: %s", len(p.Success), MaxMissionSuccess, tooLong)
 	case len(p.Repos) > MaxMissionRepos:
 		return invalid("%d repos, more than %d: propose a mission for fewer", len(p.Repos), MaxMissionRepos)
+	case len(p.NoMerge) > MaxNoMergeBytes:
+		return invalid("no_merge is %d bytes, more than %d: say in a sentence why the results stay off main", len(p.NoMerge), MaxNoMergeBytes)
 	}
 	for i, c := range p.Success {
 		if len(c) > MaxMissionSuccessBytes {
@@ -401,7 +413,7 @@ func proposeMissionTx(ctx context.Context, tx pgx.Tx, w Writer, p MissionProposa
 	}
 	if _, err := CreateMission(ctx, tx, w.Actor, Mission{ID: id, WorkID: p.WorkID, Title: p.Title, Goal: p.Goal,
 		Deadline: deadline, Tenant: p.Tenant, Success: p.Success, Repos: p.Repos, Bases: p.bases, MaxAction: p.MaxAction,
-		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, Token: w.Token}); err != nil {
+		MaxAttempts: p.MaxAttempts, MaxWallHours: p.MaxWallHours, NoMerge: p.NoMerge, Token: w.Token}); err != nil {
 		return nil, err
 	}
 	inside, why := envelopeFit(env, p)

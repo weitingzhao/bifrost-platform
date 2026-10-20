@@ -34,6 +34,7 @@ import (
 type Goal struct {
 	Title, Text string
 	Repos       []string
+	NoMerge     string // why its accepted results stay off main, "" for none (MissionProposal.NoMerge)
 	Main        func(ctx context.Context, repo string) (string, error)
 }
 
@@ -94,9 +95,12 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 		return nil, invalid("a goal has a title, a text and a reader for main")
 	}
 	bases := map[string]string{}
-	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: repos, Success: []string{GoalSuccess}, bases: bases}.check()
+	mp, err := MissionProposal{Title: g.Title, Goal: g.Text, Repos: repos, Success: []string{GoalSuccess}, NoMerge: g.NoMerge, bases: bases}.check()
 	if err != nil {
 		return nil, err
+	}
+	if len(mp.NoMerge) > MaxNoMergeBytes {
+		return nil, invalid("no_merge is %d bytes, more than %d: say in a sentence why the results stay off main", len(mp.NoMerge), MaxNoMergeBytes)
 	}
 	title := cutRunes("Plan: "+g.Title, maxTaskTitle)
 	readMain := func(ctx context.Context) error {
@@ -112,6 +116,9 @@ func ProposeGoal(ctx context.Context, db DB, w Writer, key string, g Goal) (map[
 	request := map[string]any{"goal": g.Text, "repo": repos[0]}
 	if len(repos) > 1 {
 		request = map[string]any{"goal": g.Text, "repos": repos}
+	}
+	if mp.NoMerge != "" {
+		request["no_merge"] = mp.NoMerge // only when given: an older key's digest stays the same
 	}
 	return idempotentAs(ctx, db, w, "goals", key, request, readMain,
 		func(tx pgx.Tx) (map[string]any, error) {

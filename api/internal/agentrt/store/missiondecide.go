@@ -73,6 +73,9 @@ func missionCardBody(w Writer, cardKey string, p MissionProposal) string {
 	if p.WorkID != "" {
 		fmt.Fprintf(&b, "Work: %s\n", p.WorkID)
 	}
+	if p.NoMerge != "" {
+		fmt.Fprintf(&b, "Not to be merged into main: %s\n", p.NoMerge)
+	}
 	deadline := fmt.Sprintf("the default (%d days from when it is made)", DefaultMissionDays)
 	if !p.Deadline.IsZero() {
 		deadline = p.Deadline.UTC().Format(time.RFC3339)

@@ -120,6 +120,7 @@ type Mission struct {
 	Bases                   map[string]string
 	MaxAttempts             int
 	MaxWallHours            int
+	NoMerge                 string // why its accepted results stay off main, "" for none (scope_json.no_merge, TD-383)
 	Token                   string // the token that proposed it, when a route did (review 176 B2)
 }
 
@@ -145,6 +146,9 @@ func CreateMission(ctx context.Context, tx pgx.Tx, actor string, m Mission) (App
 	}
 	if len(m.Bases) > 0 {
 		scope["bases"] = anyMap(m.Bases)
+	}
+	if m.NoMerge != "" {
+		scope["no_merge"] = m.NoMerge
 	}
 	budget := map[string]any{}
 	if m.MaxAttempts > 0 {

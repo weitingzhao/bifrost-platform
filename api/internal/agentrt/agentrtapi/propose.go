@@ -56,6 +56,7 @@ type missionBody struct {
 	Repos          []string    `json:"repos"`
 	MaxAction      string      `json:"max_action"`
 	Budget         *budgetBody `json:"budget"`
+	NoMerge        string      `json:"no_merge"` // why its accepted results stay off main (TD-383)
 }
 
 // proposeMission is POST /missions: mission_proposed with a number the
@@ -76,7 +77,7 @@ func (a *API) proposeMission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := store.MissionProposal{WorkID: b.WorkID, Title: b.Title, Goal: b.Goal, Tenant: b.Tenant, Success: b.Success,
-		Repos: b.Repos, MaxAction: b.MaxAction}
+		Repos: b.Repos, MaxAction: b.MaxAction, NoMerge: b.NoMerge}
 	if b.DeadlineAt != nil {
 		p.Deadline = *b.DeadlineAt
 	}

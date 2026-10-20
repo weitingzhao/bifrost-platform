@@ -123,6 +123,8 @@ describe('agent runtime writes', () => {
     assert.equal(calls[0].path, '/api/v1/agentrt/missions')
     assert.deepEqual(calls[0].body, { ...mission, idempotency_key: 'm-1' })
     assert.deepEqual(calls[1].body, { ...mission, budget: { max_attempts: 2, max_wall_hours: 1 }, idempotency_key: 'm-2' })
+    await proposeMission({ ...mission, no_merge: 'a benchmark replay', idempotency_key: 'm-3' }, d)
+    assert.deepEqual(calls[2].body, { ...mission, no_merge: 'a benchmark replay', idempotency_key: 'm-3' })
   })
 
   it('propose_tasks sends the batch with the caller\'s key, and none without one', async () => {
@@ -322,6 +324,14 @@ describe('propose_mission input', () => {
     assert.equal(ok({ budget: { max_attempts: 1e20, max_wall_hours: 1 } }), false)
     assert.equal(ok({ budget: { max_attempts: 1, max_wall_hours: -1 } }), false)
     assert.equal(ok({ budget: { max_attempts: 1.5, max_wall_hours: 1 } }), false)
+  })
+
+  it('takes no_merge as one sentence the route takes (TD-383)', () => {
+    assert.equal(ok({ no_merge: 'a benchmark replay' }), true)
+    assert.equal(ok({ no_merge: '' }), false)
+    assert.equal(ok({ no_merge: '  ' }), false)
+    assert.equal(ok({ no_merge: '演'.repeat(66) }), true, '198 bytes')
+    assert.equal(ok({ no_merge: '演'.repeat(67) }), false, '201 bytes')
   })
 
   it('needs what the route needs', () => {

@@ -50,6 +50,7 @@ type goalBody struct {
 	Goal           string          `json:"goal"`
 	Repo           json.RawMessage `json:"repo"`
 	Repos          json.RawMessage `json:"repos"`
+	NoMerge        string          `json:"no_merge"` // why its accepted results stay off main (TD-383)
 }
 
 // proposeGoal is POST /goals. A key with an answer gets it; a new key reads
@@ -76,7 +77,7 @@ func (a *API) proposeGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out, err := store.ProposeGoal(r.Context(), a.DB, who, b.IdempotencyKey, store.Goal{Title: goalTitle(goal), Text: goal, Repos: repos,
-		Main: a.MainHead})
+		NoMerge: b.NoMerge, Main: a.MainHead})
 	if errors.Is(err, store.ErrNoMain) {
 		a.logf("agentrt goals: %v", err)
 		writeError(w, http.StatusServiceUnavailable, "no_main", fmt.Sprintf("the main branch of %s cannot be read now; try again", strings.Join(repos, " or ")))
