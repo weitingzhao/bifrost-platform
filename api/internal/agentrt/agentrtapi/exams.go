@@ -44,6 +44,8 @@ func (a *API) issueExam(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	// Each GET may issue a paper: never a cached answer (review 406 C1).
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, paper)
 }
 

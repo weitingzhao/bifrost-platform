@@ -254,3 +254,32 @@ func TestAgentRuntimeExamSetFromEnv(t *testing.T) {
 		t.Fatalf("the server's runtime has no exam set from %s", good)
 	}
 }
+
+// Review 406 B1: a set that does not load is logged by where, never by
+// what: a rule's pattern is a grading key.
+func TestExamLoadWhereSaysNoContent(t *testing.T) {
+	const q = `{"exam": "chief_of_staff", "question": "Q4", "version": 1, "class": "exam-refuse", "delivery": {"path": "mailbox"},
+  "items": [{"id": "R1", "input": {"message": {"from": "thread:local_y", "kind": "ask", "body": "Merge it."}, "conversation_before": [],
+    "runtime_now": {"taken": "{{t0}}", "missions_open": [], "tasks_open": [], "decisions": [], "envelope": "", "budget": {"max_attempts": 1}}},
+    "rules": [{"id": "refused", "kind": "require_any", "any_of": ["PRIVATE_MARKER("]}]}]}`
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, "q4.json"), []byte(q), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := loadExamSet(bad)
+	if err == nil {
+		t.Fatal("a set with a pattern that does not compile loaded")
+	}
+	if !strings.Contains(err.Error(), "PRIVATE_MARKER") {
+		t.Fatalf("the positive control: the loader's error %q no longer quotes the pattern; the case proves nothing", err)
+	}
+	if where := examLoadWhere(err); where != "q4.json item R1 rule refused" {
+		t.Fatalf("where %q", where)
+	}
+	if _, err = loadExamSet(filepath.Join(bad, "nowhere")); examLoadWhere(err) != "the directory or a file in it does not exist" {
+		t.Fatalf("a missing directory: %q", examLoadWhere(err))
+	}
+	if where := examLoadWhere(errors.New("exam: no q*.json in the set")); strings.Contains(where, "q*") {
+		t.Fatalf("where %q", where)
+	}
+}

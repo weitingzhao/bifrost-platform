@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -208,12 +209,57 @@ func TestExams(t *testing.T) {
 			t.Fatalf("%s read %d events of the exams' stream across streams", who, exams)
 		}
 	}
+	// Reading on lists a transaction once every older one has ended, and the
+	// horizon is the server's (other databases' tests hold it back): wait
+	// until a viewer reads the exams' events on, then read on as agentd.
+	examsIn := func(out map[string]any) int {
+		n := 0
+		for _, e := range out["events"].([]any) {
+			if e.(map[string]any)["event_stream_id"] == store.ExamsStream {
+				n++
+			}
+		}
+		return n
+	}
+	readOn := "events?after=0.0&limit=500&types=capability_scored"
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		_, out := call(t, s, "viewer", "GET", readOn, nil)
+		if examsIn(out) > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("a viewer never read the exams' events on; the case proves nothing")
+		}
+	}
+	if code, out := call(t, s, "agentd:h1", "GET", readOn, nil); code != http.StatusOK || examsIn(out) != 0 {
+		t.Fatalf("agentd read the exams' events on: %d, %d of them", code, examsIn(out))
+	}
+	// No exam artifact is read by an Agent host, an answer whose id it knows
+	// included (review 406 A1); a viewer reads it.
+	var answer string
+	must(t, pool.QueryRow(ctx, `SELECT artifact_id FROM agentrt.artifact WHERE artifact_kind = 'exam' AND created_by_actor_id <> 'controller'
+	  ORDER BY created_at LIMIT 1`).Scan(&answer))
+	if code, out := call(t, s, "agentd:h1", "GET", "artifacts/"+answer, nil); code != http.StatusForbidden {
+		t.Fatalf("agentd read an exam answer: %d %v", code, out)
+	}
+	if code, _ := call(t, s, "viewer", "GET", "artifacts/"+answer, nil); code != http.StatusOK {
+		t.Fatalf("a viewer read an exam answer: %d", code)
+	}
 	if code, out := call(t, s, "viewer", "GET", "events?stream="+store.ExamsStream, nil); code != http.StatusOK {
 		t.Fatalf("a viewer reading the exams' stream: %d %v", code, out)
 	}
-	// The next paper of the executor is handed out once the run is graded.
-	if code, out := call(t, s, "agentd:h1", "GET", paperPath, nil); code != http.StatusOK || out["run_id"] == paper.RunID {
-		t.Fatalf("the next paper: %d %v", code, out["run_id"])
+	// The next paper of the executor is handed out once the run is graded,
+	// never from a cache (review 406 C1).
+	req, rerr := http.NewRequest("GET", s.URL+"/api/v1/agentrt/"+paperPath, nil)
+	must(t, rerr)
+	req.Header.Set("Authorization", "Bearer "+tokens["agentd:h1"])
+	resp, rerr2 := http.DefaultClient.Do(req)
+	must(t, rerr2)
+	var next map[string]any
+	must(t, json.NewDecoder(resp.Body).Decode(&next))
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || next["run_id"] == paper.RunID || resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("the next paper: %d %v, Cache-Control %q", resp.StatusCode, next["run_id"], resp.Header.Get("Cache-Control"))
 	}
 }
 

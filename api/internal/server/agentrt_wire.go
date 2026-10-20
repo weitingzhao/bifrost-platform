@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"regexp"
@@ -158,11 +159,37 @@ func examSetFromEnv() store.ExamSet {
 	}
 	set, err := loadExamSet(dir)
 	if err != nil {
-		slog.Error("agentrt: the exam set did not load; the exam routes answer 503", "dir", dir, "err", err)
+		// Where, never what: a loader's error can quote a rule's pattern,
+		// which is a grading key (review 406 B1).
+		slog.Error("agentrt: the exam set did not load; the exam routes answer 503", "dir", dir, "where", examLoadWhere(err))
 		return nil
 	}
 	slog.Info("agentrt: exam set loaded", "dir", dir, "sha256", set.Digest())
 	return set
+}
+
+// examWhere reads the place out of an exam loader's error: the file, and
+// the item and rule ids when it names them ("exam: q3.json: item Q3a rule
+// r2: …"); ids are names, not content.
+var examWhere = regexp.MustCompile(`^exam: (q[A-Za-z0-9._-]*\.json)(?:: item "?([A-Za-z0-9._-]+)"?(?: rule ([A-Za-z0-9._-]+))?)?`)
+
+// examLoadWhere is where a set failed to load, without the error's text.
+func examLoadWhere(err error) string {
+	m := examWhere.FindStringSubmatch(err.Error())
+	if m == nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "the directory or a file in it does not exist"
+		}
+		return "the set (no file named)"
+	}
+	where := m[1]
+	if m[2] != "" {
+		where += " item " + m[2]
+	}
+	if m[3] != "" {
+		where += " rule " + m[3]
+	}
+	return where
 }
 
 // loadExamSet reads the set in dir (its q*.json files) as the platform gives

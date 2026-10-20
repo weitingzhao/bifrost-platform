@@ -216,6 +216,7 @@ func TestExamRefusals(t *testing.T) {
 		"a conclusion":        func(s *store.ExamSubmission) { s.Answers[0].Conclusion = "maybe" },
 		"no tool version":     func(s *store.ExamSubmission) { s.ToolVersion = "" },
 		"a local path":        func(s *store.ExamSubmission) { s.Answers[0].Text = "PASS, see /home/bifrost-agentd-stg/x" },
+		"a workspace":         func(s *store.ExamSubmission) { s.Answers[0].Text = "PASS, see tasks/t_01M5B2WKM1CYDFE4PWGE4D3D42/a1/x" },
 		"no answers":          func(s *store.ExamSubmission) { s.Answers = nil },
 		"a run id not a hash": func(s *store.ExamSubmission) { s.RunID = "run-0001" },
 	} {
@@ -241,10 +242,16 @@ func TestExamRefusals(t *testing.T) {
 	if _, err = store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", part(p, ans("F1", 1, "PASS, better")), set); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("another answer to a run answered: %v", err)
 	}
-	sonnet := part(p, ans("F1", 3, "PASS"))
-	sonnet.Model = "sonnet"
-	if _, err = store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", sonnet, set); !errors.Is(err, store.ErrInvalid) {
-		t.Fatalf("another model halfway: %v", err)
+	for name, mutate := range map[string]func(*store.ExamSubmission){
+		"another model":        func(s *store.ExamSubmission) { s.Model = "sonnet" },
+		"another provider":     func(s *store.ExamSubmission) { s.Provider = "cursor-mix" },
+		"another tool version": func(s *store.ExamSubmission) { s.ToolVersion = "2.2.0 (Claude Code)" },
+	} {
+		halfway := part(p, ans("F1", 3, "PASS"))
+		mutate(&halfway)
+		if _, err = store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", halfway, set); !errors.Is(err, store.ErrInvalid) {
+			t.Fatalf("%s halfway: %v", name, err)
+		}
 	}
 	moved := newFakeExam()
 	moved.digest = strings.Repeat("e2", 32)
@@ -327,5 +334,111 @@ func TestRoutingIgnoresExams(t *testing.T) {
 	ok(t, err)
 	if body := w.lastRoute(t, task); n == 0 || strings.Contains(fmt.Sprint(body["candidates"]), "implementer/exec:codex/openai/*") {
 		t.Fatalf("the same record on the benchmarks' stream left codex routed (%d rerouted): %v", n, body["candidates"])
+	}
+}
+
+// all answers every run of every item of p with "PASS".
+func all(p *store.ExamPaper) []store.ExamAnswer {
+	var out []store.ExamAnswer
+	for _, it := range p.Items {
+		for _, r := range it.Runs {
+			out = append(out, ans(it.Item, r, "PASS"))
+		}
+	}
+	return out
+}
+
+// Review 406 B2: the same executor and model sat twice in a day: the second
+// run is graded and recorded beside the first, not over it.
+func TestExamSameDayRetake(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	set := newFakeExam()
+	for i := 1; i <= 2; i++ {
+		p, err := store.IssueExam(ctx, w.rt, examAsk("h1", "exec:claude"), set)
+		ok(t, err)
+		out, err := store.RecordExamAnswers(ctx, w.rt, "h1", "agentd:h1", part(p, all(p)...), set)
+		ok(t, err)
+		if out["graded"] != true {
+			t.Fatalf("run %d: %v", i, out)
+		}
+	}
+	var rows, ends int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*), count(DISTINCT window_end) FROM agentrt.capability_score WHERE source = 'exam'`).Scan(&rows, &ends))
+	if rows != 4 || ends != 2 || w.examEvents(t, "capability_scored") != 2 {
+		t.Fatalf("%d rows over %d window ends, %d records; want 4 over 2, 2", rows, ends, w.examEvents(t, "capability_scored"))
+	}
+}
+
+// Review 406 B2: what the exams' lock orders, raced: two papers asked for
+// one executor at once give one paper and one refusal; the two halves of a
+// run handed in at once are graded once. The test holds the lock while both
+// calls wait on it.
+func TestExamRaces(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	set := newFakeExam()
+	pool := w.db.Pool(t, w.db.Runtime)
+	race := func(what string, calls ...func() error) []error {
+		t.Helper()
+		// On a connection of its own: the waits are read on w.rt, outside
+		// any transaction (pg_stat_activity is a snapshot inside one).
+		holder, err := pool.Begin(ctx)
+		ok(t, err)
+		_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742113)`)
+		ok(t, err)
+		errs := make([]error, len(calls))
+		done := make(chan struct{}, len(calls))
+		for i, c := range calls {
+			go func() { errs[i] = c(); done <- struct{}{} }()
+		}
+		w.waitForN(t, "pg_advisory_xact_lock", len(calls), time.Now().Add(20*time.Second))
+		ok(t, holder.Rollback(ctx))
+		for range calls {
+			select {
+			case <-done:
+			case <-time.After(30 * time.Second):
+				t.Fatalf("%s: a call never returned", what)
+			}
+		}
+		return errs
+	}
+	var papers [2]*store.ExamPaper
+	errs := race("two papers", func() (err error) {
+		papers[0], err = store.IssueExam(ctx, pool, examAsk("h1", "exec:claude"), set)
+		return
+	},
+		func() (err error) {
+			papers[1], err = store.IssueExam(ctx, pool, examAsk("h2", "exec:claude"), set)
+			return
+		})
+	issued := 0
+	var p *store.ExamPaper
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			issued, p = issued+1, papers[i]
+		case !errors.Is(err, store.ErrState):
+			t.Fatalf("a paper raced: %v", err)
+		}
+	}
+	if issued != 1 {
+		t.Fatalf("%d papers for one executor at once", issued)
+	}
+	answers := all(p)
+	half := len(answers) / 2
+	var outs [2]map[string]any
+	errs = race("two halves", func() (err error) {
+		outs[0], err = store.RecordExamAnswers(ctx, pool, p.Host, "agentd:"+p.Host, part(p, answers[:half]...), set)
+		return
+	}, func() (err error) {
+		outs[1], err = store.RecordExamAnswers(ctx, pool, p.Host, "agentd:"+p.Host, part(p, answers[half:]...), set)
+		return
+	})
+	for _, err := range errs {
+		ok(t, err)
+	}
+	if (outs[0]["graded"] == true) == (outs[1]["graded"] == true) || w.examEvents(t, "capability_scored") != 1 {
+		t.Fatalf("the halves: %v / %v, %d records", outs[0], outs[1], w.examEvents(t, "capability_scored"))
 	}
 }
