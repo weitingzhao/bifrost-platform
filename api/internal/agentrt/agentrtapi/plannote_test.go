@@ -99,11 +99,12 @@ func TestArchTableThroughTheInterface(t *testing.T) {
 	}
 
 	note := func(key, text string) map[string]any { return map[string]any{"idempotency_key": key, "text": text} }
-	// Who may write one: those who propose plan changes.
+	// Who may write one: those who propose plan changes. Each caller names a
+	// session no token holds yet, so only the role can refuse it.
 	for _, who := range []string{"viewer", "agentd:h1", ""} {
-		if code, _ := call(t, s, who, "POST", "plan/ARCH:state-db/notes", note("n0", "x"), session, "s1"); code != http.StatusUnauthorized &&
-			code != http.StatusForbidden {
-			t.Fatalf("%q wrote a note: %d", who, code)
+		if code, out := call(t, s, who, "POST", "plan/ARCH:state-db/notes", note("n0", "x"), session, "fresh-"+strings.ReplaceAll(who, ":", "-")); code != http.StatusUnauthorized &&
+			code != http.StatusForbidden || out["error"] == "not_yours" {
+			t.Fatalf("%q wrote a note: %d %v", who, code, out)
 		}
 	}
 	if code, out := call(t, s, "operator", "POST", "plan/ARCH:state-db/notes", note("n0", "x")); code != http.StatusUnprocessableEntity {
