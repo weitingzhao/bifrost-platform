@@ -1,15 +1,15 @@
 {
   "blocked": {
     "body": {
-      "id": "q_1929dbed8929ae5d",
+      "id": "q_3f1b629653566116",
       "number": 3,
       "status": "open",
       "requester": "agentrt",
       "requester_principal": "agentrt",
       "owner_duty": "goal",
-      "task_id": "t_01M5DP91CCRBGK22M558Q4RZMH",
+      "task_id": "t_01M5DQ06W0R48NBEGK2BH7Q83F",
       "title": "Blocked in M-5: a task of M-5",
-      "body": "Recommended: Close mission M-5 — started 30 hours ago, used 15× its 2 hours, nothing has run\n\nTask t_01M5DP91CCRBGK22M558Q4RZMH (implement, bifrost-platform) of mission M-5 is blocked; card 1 for this block.\n\nTitle: a task of M-5\n\nWhy: mission M-5 is past its 2 hours (it started 30.0 hours ago): no host may take this task until the budget grows\n\nGive it one more round: it goes back to ready as it is, and a host takes it as usual. One round needs up to 3 attempts (implementation, verification, review); mission M-5 has used 0 of its 9 attempts and 30.0 of its 2 hours, so this answer also raises its budget to 34 hours, recorded with this card's answer.\nDo not do this task: the task is cancelled; mission M-5 finishes once every other task is accepted (a task that depends on this one is then blocked and gets a card of its own).\nClose mission M-5: every task of mission M-5 that has not ended is cancelled (an attempt still running is stopped), its other open cards are withdrawn, and it ends: done when an implementation of it was accepted, else stopped.",
+      "body": "Recommended: Close mission M-5 — started 30 hours ago, used 15× its 2 hours, nothing has run\n\nTask t_01M5DQ06W0R48NBEGK2BH7Q83F (implement, bifrost-platform) of mission M-5 is blocked; card 1 for this block.\n\nTitle: a task of M-5\n\nWhy: mission M-5 is past its 2 hours (it started 30.0 hours ago): no host may take this task until the budget grows\n\nGive it one more round: it goes back to ready as it is, and a host takes it as usual. One round needs up to 3 attempts (implementation, verification, review); mission M-5 has used 0 of its 9 attempts and 30.0 of its 2 hours, so this answer also raises its budget to 34 hours, recorded with this card's answer.\nDo not do this task: the task is cancelled; mission M-5 finishes once every other task is accepted (a task that depends on this one is then blocked and gets a card of its own).\nClose mission M-5: every task of mission M-5 that has not ended is cancelled (an attempt still running is stopped), its other open cards are withdrawn, and it ends: done when an implementation of it was accepted, else stopped.",
       "options": [
         {
           "key": "a",
@@ -29,14 +29,14 @@
       "allow_text": false,
       "urgency": "when you can: only this task waits for you, and its mission cannot finish without your answer",
       "meanwhile": "the task stays blocked and mission M-5 stays open",
-      "created_at": "2026-10-20T22:17:56.890491Z",
-      "expires_at": "2026-10-21T22:17:56.890491Z",
+      "created_at": "2026-10-20T22:30:36.179345Z",
+      "expires_at": "2026-10-21T22:30:36.179345Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.890657Z",
+          "at": "2026-10-20T22:30:36.17955Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
@@ -46,7 +46,7 @@
   },
   "mission": {
     "body": {
-      "id": "q_a6e6d98e6ac0ea43",
+      "id": "q_7625e8432ac6478b",
       "number": 1,
       "status": "open",
       "requester": "agentrt",
@@ -67,14 +67,14 @@
       "allow_text": false,
       "urgency": "when you can: only this mission waits for you",
       "meanwhile": "the mission does not start",
-      "created_at": "2026-10-20T22:17:56.953663Z",
-      "expires_at": "2026-10-21T22:17:56.953663Z",
+      "created_at": "2026-10-20T22:30:36.282791Z",
+      "expires_at": "2026-10-21T22:30:36.282791Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.953822Z",
+          "at": "2026-10-20T22:30:36.282946Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
@@ -84,7 +84,7 @@
   },
   "plan_change": {
     "body": {
-      "id": "q_75930516d97dfb85",
+      "id": "q_d08c8cd1ba4d5e8b",
       "number": 1,
       "status": "open",
       "requester": "agentrt",
@@ -105,14 +105,14 @@
       "allow_text": false,
       "urgency": "when you can: only this change waits for you",
       "meanwhile": "the plan stays as it is",
-      "created_at": "2026-10-20T22:17:56.906225Z",
-      "expires_at": "2026-10-21T22:17:56.906225Z",
+      "created_at": "2026-10-20T22:30:36.197818Z",
+      "expires_at": "2026-10-21T22:30:36.197818Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.906408Z",
+          "at": "2026-10-20T22:30:36.198019Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
@@ -122,7 +122,7 @@
   },
   "plan_import": {
     "body": {
-      "id": "q_765c6226d7ef88b8",
+      "id": "q_5b38504b5e971a36",
       "number": 3,
       "status": "open",
       "requester": "agentrt",
@@ -143,14 +143,14 @@
       "allow_text": false,
       "urgency": "when you can: only this import waits for you",
       "meanwhile": "the plan is not imported; the board keeps reading the ledger",
-      "created_at": "2026-10-20T22:17:56.934131Z",
-      "expires_at": "2026-10-21T22:17:56.934131Z",
+      "created_at": "2026-10-20T22:30:36.226467Z",
+      "expires_at": "2026-10-21T22:30:36.226467Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.93439Z",
+          "at": "2026-10-20T22:30:36.226759Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
@@ -160,37 +160,37 @@
   },
   "plan_question": {
     "body": {
-      "id": "q_dd83b168739401bd",
+      "id": "q_34f4931ee2eb447d",
       "number": 4,
       "status": "open",
       "requester": "agentrt",
       "requester_principal": "agentrt",
       "owner_duty": "goal",
-      "task_id": "t_01M5DP91C15NCZTT9HZJFJBF1G",
-      "title": "Which page first?",
-      "body": "The plan starts with one of two pages.",
+      "task_id": "t_01M5DQ0704NNVZ8SFASGMREFNP",
+      "title": "Document the Console too?",
+      "body": "It has no goal docs.",
       "options": [
         {
           "key": "a",
-          "label": "The work page"
+          "label": "Not now"
         },
         {
           "key": "b",
-          "label": "The chief page"
+          "label": "Yes, a third task"
         }
       ],
       "recommended": "a",
       "allow_text": false,
       "urgency": "when you can: the work goes on with the recommended option",
-      "meanwhile": "the plan starts with the work page",
-      "created_at": "2026-10-20T22:17:56.963899Z",
-      "expires_at": "2026-10-21T22:17:56.963899Z",
+      "meanwhile": "the task goes on without the Console",
+      "created_at": "2026-10-20T22:30:36.29729Z",
+      "expires_at": "2026-10-21T22:30:36.29729Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.964077Z",
+          "at": "2026-10-20T22:30:36.297544Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
@@ -200,7 +200,7 @@
   },
   "recorder_import": {
     "body": {
-      "id": "q_077f639589d3ada7",
+      "id": "q_4582b8b7ecab6c1e",
       "number": 4,
       "status": "open",
       "requester": "agentrt",
@@ -221,14 +221,14 @@
       "allow_text": false,
       "urgency": "when you can: only this import waits for you",
       "meanwhile": "the log is not imported; the recorder keeps it as it is",
-      "created_at": "2026-10-20T22:17:56.937533Z",
-      "expires_at": "2026-10-21T22:17:56.937533Z",
+      "created_at": "2026-10-20T22:30:36.230897Z",
+      "expires_at": "2026-10-21T22:30:36.230897Z",
       "deliveries": [
         {
           "kind": "created",
           "channel": "ntfy",
           "target": "relay",
-          "at": "2026-10-20T22:17:56.937814Z",
+          "at": "2026-10-20T22:30:36.231202Z",
           "result": "skipped",
           "error": "APPROVAL_NOTIFY_URL or APPROVAL_NOTIFY_TOKEN unset"
         }
