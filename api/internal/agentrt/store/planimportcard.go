@@ -167,6 +167,9 @@ func tryImport(ctx context.Context, tx pgx.Tx, req planimport.Request, doc []byt
 // importCardBody is the import card's text: who proposes, what the plan is,
 // where it comes from, and what each answer does.
 func importCardBody(w Writer, cardKey, reason string, req planimport.Request, reqID string) string {
+	if req.Root.Kind == "arch_root" {
+		return archCardBody(w, cardKey, reason, req, reqID)
+	}
 	items, done, active, planned := 0, 0, 0, 0
 	for _, n := range req.Nodes {
 		switch {
@@ -192,6 +195,33 @@ func importCardBody(w Writer, cardKey, reason string, req planimport.Request, re
 	fmt.Fprintf(&b, ".\nSection sha256 %s; request %s.\n\n", s.SHA256, reqID)
 	b.WriteString("Importing writes the plan under your decision; its nodes and numbers are then fixed and can only change by plan changes. " +
 		"Not importing writes nothing; the board keeps reading the ledger.")
+	return b.String()
+}
+
+// archCardBody is the import card's text for the architecture table.
+func archCardBody(w Writer, cardKey, reason string, req planimport.Request, reqID string) string {
+	ruled, noted := 0, 0
+	for _, n := range req.Nodes {
+		if len(n.Rule) > 0 {
+			ruled++
+		}
+		if planimport.ArchNow(n.Evidence.Line) != "" {
+			noted++
+		}
+	}
+	s := req.Source
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s proposes to import the architecture table %s (%s), proposal %s.\n\nWhy: %s\n\n", w.Actor, req.Root.ID, req.Root.Title,
+		cardKey[:12], reason)
+	fmt.Fprintf(&b, "%d rows: %d with gate tests, ticked by whether those tests passed for what is deployed now; %d with none yet, shown unknown (no gate test yet). "+
+		"%d rows get what their line says they are now as their first note.\n\n", len(req.Nodes), ruled, len(req.Nodes)-ruled, noted)
+	fmt.Fprintf(&b, "From %s, %s, lines %d-%d, checked at %s", s.File, s.Section, s.FirstLine, s.LastLine, s.CheckedAt)
+	if s.Commit != "" {
+		fmt.Fprintf(&b, ", commit %s", s.Commit)
+	}
+	fmt.Fprintf(&b, ".\nSection sha256 %s; request %s.\n\n", s.SHA256, reqID)
+	b.WriteString("Importing writes the table under your decision; its rows and numbers are then fixed, their rules change only by plan changes, " +
+		"and their notes are added to, never changed. Not importing writes nothing; the board keeps reading the ledger.")
 	return b.String()
 }
 

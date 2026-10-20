@@ -113,6 +113,27 @@ func (r Rule) Standing() bool { return r.node != nil && r.node.standing() }
 // Empty reports whether the rule has no condition.
 func (r Rule) Empty() bool { return r.node == nil }
 
+// OnlyStanding reports whether the rule has a condition and every atom in it
+// is a standing condition (gates_passed, under any all and any): the rule of
+// an architecture row, whose tick is the rule evaluated now against what is
+// deployed now (design v5 §5.1.2).
+func (r Rule) OnlyStanding() bool { return r.node != nil && r.node.onlyStanding() }
+
+func (n *node) onlyStanding() bool {
+	switch n.kind {
+	case kGates:
+		return true
+	case kAll, kAny:
+		for _, c := range n.children {
+			if !c.onlyStanding() {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // Atoms a rule may name, for Names.
 const (
 	AtomTask     = "task_accepted"

@@ -597,7 +597,8 @@ func nonNilAny(s []any) []any {
 }
 
 // planView is each round with its count and its items' counts, and each
-// architecture root with its rows, unevaluated (SPEC §2.4).
+// architecture root with its rows, each ticked by its done rule evaluated
+// now and with its latest note (SPEC §2.4; progressarch.go).
 func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 	rows, err := tx.Query(ctx, `SELECT r.plan_node_id, r.node_kind, r.title, i.plan_node_id, i.label, i.title,
 	    s.plan_node_id, s.state, COALESCE(e.body_json->>'cause', '')
@@ -656,16 +657,19 @@ func planView(ctx context.Context, tx pgx.Tx) ([]any, error) {
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
+	deploys := newRecordedDeploys(ctx, tx)
 	out := make([]any, 0, len(roots))
 	for _, r := range roots {
 		doc := map[string]any{"plan_node_id": r.id, "kind": r.kind, "title": r.title}
 		if r.kind == "arch_root" {
-			rowsDoc := make([]any, 0, len(r.items))
+			arch := make([]archRow, 0, len(r.items))
 			for _, it := range r.items {
-				rowsDoc = append(rowsDoc, map[string]any{"plan_node_id": it.id, "title": it.title, "tick": "unknown",
-					"reason": "not evaluated against the current deployment yet"})
+				arch = append(arch, archRow{id: it.id, title: it.title})
 			}
-			doc["rows"] = rowsDoc
+			if doc["rows"], err = archRowsDoc(ctx, tx, arch, deploys); err != nil {
+				return nil, err
+			}
 			out = append(out, doc)
 			continue
 		}

@@ -6,6 +6,7 @@
 package planimport
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
@@ -48,21 +49,25 @@ type Source struct {
 }
 
 // Node is a plan node. A step has a step kind and a state (planned, active
-// or done); items and the root have neither. Evidence is the ledger line the
+// or done); items and the root have neither. An architecture row may have a
+// done rule (arch.go); no other node does. Evidence is the ledger line the
 // node was read from.
 type Node struct {
-	ID       string    `json:"id"`
-	Parent   string    `json:"parent,omitempty"`
-	Kind     string    `json:"kind"`
-	Label    string    `json:"label"`
-	Title    string    `json:"title"`
-	Ordinal  int       `json:"ordinal"`
-	WorkID   string    `json:"work_id,omitempty"`
-	StepKind string    `json:"step_kind,omitempty"`
-	State    string    `json:"state,omitempty"`
-	Owner    bool      `json:"owner_step,omitempty"`
-	Effect   bool      `json:"effect_step,omitempty"`
-	Evidence *Evidence `json:"evidence,omitempty"`
+	ID       string `json:"id"`
+	Parent   string `json:"parent,omitempty"`
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Title    string `json:"title"`
+	Ordinal  int    `json:"ordinal"`
+	WorkID   string `json:"work_id,omitempty"`
+	StepKind string `json:"step_kind,omitempty"`
+	State    string `json:"state,omitempty"`
+	Owner    bool   `json:"owner_step,omitempty"`
+	Effect   bool   `json:"effect_step,omitempty"`
+	// Rule is an architecture row's done rule, gates_passed only; none
+	// until the row's gate tests are settled.
+	Rule     json.RawMessage `json:"rule,omitempty"`
+	Evidence *Evidence       `json:"evidence,omitempty"`
 }
 
 // Evidence is what the ledger line says, kept as it was written: the line,
@@ -120,12 +125,24 @@ var (
 
 // Validate checks a request by itself: the shape the store writes and the
 // numbering of design v5 §5.1.2 (an item is <round>.<n>, a step <item>-<n>
-// with n its place from 1; ids are <root>:<label>). The database checks the
-// rest when the request is imported.
+// with n its place from 1; ids are <root>:<label>), or, for the architecture
+// table, its rows (arch.go). The database checks the rest when the request
+// is imported.
 func (r Request) Validate() error {
 	if r.Format != Format {
 		return fmt.Errorf("format is %q, not %q", r.Format, Format)
 	}
+	if err := r.validateSource(); err != nil {
+		return err
+	}
+	if r.Root.Kind == "arch_root" {
+		return r.validateArch()
+	}
+	return r.validateRound()
+}
+
+// validateSource checks where the request says it was read from.
+func (r Request) validateSource() error {
 	s := r.Source
 	switch {
 	case s.File == "" || s.Section == "":
@@ -142,6 +159,12 @@ func (r Request) Validate() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// validateRound checks a round's request.
+func (r Request) validateRound() error {
+	s := r.Source
 	root := r.Root
 	switch {
 	case root.Kind != "round":
@@ -154,6 +177,8 @@ func (r Request) Validate() error {
 		return fmt.Errorf("root ordinal is the round number %s, not %d", root.Label, root.Ordinal)
 	case root.Parent != "" || root.StepKind != "" || root.State != "" || root.Owner || root.Effect:
 		return fmt.Errorf("root has no parent, step kind, state or step marks")
+	case len(root.Rule) > 0:
+		return fmt.Errorf("only an architecture row carries a rule")
 	}
 	if err := r.checkCommon(root); err != nil {
 		return err
@@ -196,6 +221,8 @@ func (r Request) Validate() error {
 			return fmt.Errorf("%s: every node has the root's work id %q", at, root.WorkID)
 		case n.Evidence == nil:
 			return fmt.Errorf("%s: a node carries the line it was read from", at)
+		case len(n.Rule) > 0:
+			return fmt.Errorf("%s: only an architecture row carries a rule; a round's steps get theirs from the ledger", at)
 		}
 		switch n.Kind {
 		case "item":

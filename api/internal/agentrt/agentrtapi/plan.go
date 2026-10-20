@@ -97,6 +97,35 @@ func (a *API) proposePlanChange(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+type planNoteBody struct {
+	IdempotencyKey string `json:"idempotency_key"`
+	Text           string `json:"text"`
+}
+
+// postPlanNote is POST /plan/{id}/notes: what an architecture row actually
+// is now, in words (W-31 2.5 G2 A), appended as a note event on the row;
+// GET /progress shows the latest beside the row's tick. Only an architecture
+// row takes one: a node there is not is 404, another kind 422. Who may
+// propose a plan change may write one, recorded as the proposer is; the key
+// is the writer's, as for proposals.
+func (a *API) postPlanNote(w http.ResponseWriter, r *http.Request) {
+	var b planNoteBody
+	if !decode(w, r, &b) {
+		return
+	}
+	who, err := writer(r)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	out, err := store.PostPlanNote(r.Context(), a.DB, who, b.IdempotencyKey, chi.URLParam(r, "id"), b.Text)
+	if err != nil {
+		a.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 type planImportBody struct {
 	IdempotencyKey string          `json:"idempotency_key"`
 	Reason         string          `json:"reason"`

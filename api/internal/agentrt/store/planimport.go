@@ -25,6 +25,10 @@ import (
 // §5.1.2); a step in progress is moved to active by the import. Importing the
 // same request again changes nothing; a different request for a root that
 // exists is refused: after the import, the plan changes through proposals.
+// The architecture table (planimport/arch.go) imports the same way: its rows
+// start with the done rules the request gives them, and what each row's
+// line says it actually is now becomes its first note, held to a note's
+// rules (plannote.go).
 // The route (POST /plan/imports, planimportcard.go) proposes an import and
 // puts it to the Owner on a decision card; the controller's plan decision
 // pass lands it with importOnce, its head caused by the decision.
@@ -134,6 +138,10 @@ func importTree(ctx context.Context, tx pgx.Tx, actor string, req planimport.Req
 	noDeployment := func(context.Context, string) (string, map[string]any, bool) { return "", nil, false }
 	for _, n := range req.Nodes {
 		switch {
+		case n.Kind == "arch_row":
+			if err := archNote(ctx, tx, actor, root, head.EventID, reqID, n); err != nil {
+				return fmt.Errorf("plan import: row %s: %w", n.ID, err)
+			}
 		case n.Kind != "step":
 		case n.State == planimport.StateDone:
 			ev, err := evidenceDoc(n.Evidence)
@@ -184,6 +192,12 @@ func importNode(ctx context.Context, tx pgx.Tx, actor, root string, head int64, 
 	}
 	var state any
 	rule := []byte("{}")
+	if n.Kind == "arch_row" && len(n.Rule) > 0 {
+		var err error
+		if rule, err = canonRule(n.Rule); err != nil {
+			return err
+		}
+	}
 	if n.Kind == "step" {
 		state = planimport.StatePlanned
 		if n.State == planimport.StateDone {
@@ -198,6 +212,22 @@ func importNode(ctx context.Context, tx pgx.Tx, actor, root string, head int64, 
 	  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13)`,
 		n.ID, nullable(n.Parent), n.Kind, n.Ordinal, n.Label, n.Title, nullable(n.WorkID), nullable(n.StepKind),
 		n.Owner, n.Effect, string(rule), state, actor)
+	return err
+}
+
+// archNote records what a row's line says the row actually is now as its
+// first note, caused by the import's head, with the request as its evidence.
+// A line with nothing after its title gives no note.
+func archNote(ctx context.Context, tx pgx.Tx, actor, root string, head int64, reqID string, n planimport.Node) error {
+	text := planimport.ArchNow(n.Evidence.Line)
+	if text == "" {
+		return nil
+	}
+	if err := checkNoteText(text); err != nil {
+		return err
+	}
+	_, err := Append(ctx, tx, Event{Stream: PlanStream(root), Type: "note", Actor: actor, PlanNode: n.ID, Cause: head,
+		Body: map[string]any{"text": text, "evidence": []string{reqID}}})
 	return err
 }
 

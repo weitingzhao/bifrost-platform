@@ -123,6 +123,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/plan", a.getPlan)
 		r.With(read, cfg).Get("/plan/{id}", a.getPlanNode)
 		r.With(propose, cfg).Post("/plan/proposals", a.proposePlanChange)
+		r.With(propose, cfg).Post("/plan/{id}/notes", a.postPlanNote)
 		r.With(propose, cfg).Post("/plan/imports", a.proposePlanImport)
 		r.With(read, cfg).Get("/controls", a.listControls)
 		r.With(gate("stop"), cfg).Post("/controls", a.setControl)

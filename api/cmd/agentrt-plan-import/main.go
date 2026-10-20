@@ -6,6 +6,13 @@
 //	agentrt-plan-import generate -ledger WORK.md [-round 2] [-file name] [-commit sha] [-o request.json]
 //	agentrt-plan-import diff -ledger WORK.md -plan plan.json [-board board.json] [-round 2]
 //	agentrt-plan-import recorder -root DIR -work ID [-o request.json]
+//	agentrt-plan-import arch -ledger WORK.md -rows rows.json [-file name] [-commit sha] [-o request.json]
+//
+// arch makes the request that imports the ledger's architecture table
+// (「架构对照」) as the ARCH root (W-31 2.5 G2 A). rows.json lists, for each row
+// of the table in order, what its line does not say: its label and, once
+// its gate tests are settled, its done rule (gates_passed only):
+// [{"label":"state-db","rule":{"gates_passed":[{"test":"T19","spec_sha256":"…"}],"env":"prod"}},{"label":"bus"}].
 //
 // recorder makes the request that imports one work's log of the infra event
 // recorder (DIR/ID/events.jsonl; format agentrt.recorder_import/v1,
@@ -22,6 +29,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -41,11 +49,14 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		say(stderr, "usage: agentrt-plan-import generate|diff|recorder [flags]")
+		say(stderr, "usage: agentrt-plan-import generate|diff|recorder|arch [flags]")
 		return 2
 	}
-	if args[0] == "recorder" {
+	switch args[0] {
+	case "recorder":
 		return recorder(args[1:], stdout, stderr)
+	case "arch":
+		return archTable(args[1:], stdout, stderr)
 	}
 	fs := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -88,20 +99,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func generate(req planimport.Request, out string, stdout, stderr io.Writer) int {
-	doc, err := json.MarshalIndent(req, "", "  ")
-	if err != nil {
-		say(stderr, err)
-		return 1
-	}
-	doc = append(doc, '\n')
-	if out == "" {
-		_, err = stdout.Write(doc)
-	} else {
-		err = os.WriteFile(out, doc, 0o644)
-	}
-	if err != nil {
-		say(stderr, err)
-		return 1
+	if code := write(req, out, stdout, stderr); code != 0 {
+		return code
 	}
 	done, active, planned := 0, 0, 0
 	for _, n := range req.Nodes {
@@ -117,6 +116,26 @@ func generate(req planimport.Request, out string, stdout, stderr io.Writer) int 
 	sayf(stderr, "%s: %d items, %d steps (%d done, %d active, %d planned), lines %d-%d, section sha256 %s\n",
 		req.Root.ID, len(req.Nodes)-done-active-planned, done+active+planned, done, active, planned,
 		req.Source.FirstLine, req.Source.LastLine, req.Source.SHA256)
+	return 0
+}
+
+// write writes a request to out, or to standard output.
+func write(req planimport.Request, out string, stdout, stderr io.Writer) int {
+	doc, err := json.MarshalIndent(req, "", "  ")
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	doc = append(doc, '\n')
+	if out == "" {
+		_, err = stdout.Write(doc)
+	} else {
+		err = os.WriteFile(out, doc, 0o644)
+	}
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
 	return 0
 }
 
@@ -209,5 +228,57 @@ func recorder(args []string, stdout, stderr io.Writer) int {
 		say(stderr, err)
 		return 1
 	}
+	return 0
+}
+
+// archTable writes the request for the ledger's architecture table.
+func archTable(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("arch", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	ledger := fs.String("ledger", "", "path of the work ledger (WORK.md)")
+	rowsFile := fs.String("rows", "", "each row's label and rule, in the table's order, as JSON")
+	file := fs.String("file", defaultFile, "the ledger's name in the request")
+	commit := fs.String("commit", "", "the 40-character commit the ledger was read at")
+	out := fs.String("o", "", "write the request here instead of to standard output")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *ledger == "" || *rowsFile == "" {
+		say(stderr, "-ledger and -rows are required")
+		return 2
+	}
+	text, err := os.ReadFile(*ledger)
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	raw, err := os.ReadFile(*rowsFile)
+	if err != nil {
+		say(stderr, err)
+		return 1
+	}
+	var rows []planimport.ArchRow
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err = dec.Decode(&rows); err != nil {
+		sayf(stderr, "%s: %v\n", *rowsFile, err)
+		return 1
+	}
+	req, err := planimport.ParseArch(string(text), rows, planimport.LedgerOptions{File: *file, Commit: *commit})
+	if err != nil {
+		sayf(stderr, "%s: %v\n", *ledger, err)
+		return 1
+	}
+	ruled := 0
+	for _, n := range req.Nodes {
+		if len(n.Rule) > 0 {
+			ruled++
+		}
+	}
+	if code := write(req, *out, stdout, stderr); code != 0 {
+		return code
+	}
+	sayf(stderr, "%s: %d rows (%d with gate rules, %d with none yet), lines %d-%d, section sha256 %s\n", req.Root.ID, len(req.Nodes), ruled,
+		len(req.Nodes)-ruled, req.Source.FirstLine, req.Source.LastLine, req.Source.SHA256)
 	return 0
 }

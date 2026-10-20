@@ -146,3 +146,41 @@ func TestRecorder(t *testing.T) {
 		t.Fatalf("no -work = %d", code)
 	}
 }
+
+// arch: the ledger's architecture table and the rows file become a request
+// that validates; the rows must match the table; flags are required.
+func TestArch(t *testing.T) {
+	dir := t.TempDir()
+	rows := filepath.Join(dir, "rows.json")
+	spec := strings.Repeat("ab", 32)
+	if err := os.WriteFile(rows, []byte(`[{"label":"release-guard","rule":{"gates_passed":[{"test":"T05","spec_sha256":"`+spec+`"}],"env":"prod"}},`+
+		`{"label":"state-db"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errs := runIt("arch", "-ledger", ledger, "-rows", rows)
+	if code != 0 || !strings.Contains(errs, "ARCH: 2 rows (1 with gate rules, 1 with none yet), lines 11-13") {
+		t.Fatalf("arch = %d, %s", code, errs)
+	}
+	var req planimport.Request
+	if err := json.Unmarshal([]byte(out), &req); err != nil {
+		t.Fatal(err)
+	}
+	if err := req.Validate(); err != nil || req.Root.ID != "ARCH" || req.Nodes[1].ID != "ARCH:state-db" || req.Nodes[1].Rule != nil {
+		t.Fatalf("request %+v: %v", req, err)
+	}
+	if err := os.WriteFile(rows, []byte(`[{"label":"state-db"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs = runIt("arch", "-ledger", ledger, "-rows", rows); code != 1 || !strings.Contains(errs, "more rows than the 1 given") {
+		t.Fatalf("too few rows = %d %s", code, errs)
+	}
+	if err := os.WriteFile(rows, []byte(`[{"label":"state-db","tests":["T19"]}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs = runIt("arch", "-ledger", ledger, "-rows", rows); code != 1 || !strings.Contains(errs, "unknown field") {
+		t.Fatalf("an unknown field = %d %s", code, errs)
+	}
+	if code, _, _ = runIt("arch", "-ledger", ledger); code != 2 {
+		t.Fatalf("no -rows = %d", code)
+	}
+}

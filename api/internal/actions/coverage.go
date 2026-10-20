@@ -67,7 +67,7 @@ func init() {
 		"POST /api/v1/agentrt/attempts/{id}/{action}",
 		"PUT /api/v1/agentrt/artifacts/{id}",
 	)
-	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card), a control only stops or pauses work, and only the Owner (admin) lifts one; not a cluster write",
+	exempt("agent runtime proposals and controls (design v5 §5.2): runtime state the store writes with its events in one transaction; a proposal starts nothing by itself (a mission waits for a signed standing envelope or the Owner, a task for the controller to ready it, a plan change outside the standing authorization and a plan's first import for the Owner's decision card), a note on an architecture row only adds words beside the tick its done rule decides, a control only stops or pauses work, and only the Owner (admin) lifts one; not a cluster write",
 		"POST /api/v1/agentrt/missions",
 		"POST /api/v1/agentrt/missions/{id}/tasks",
 		"POST /api/v1/agentrt/goals",
@@ -78,6 +78,7 @@ func init() {
 		"POST /api/v1/agentrt/hosts/{id}/drain",
 		"POST /api/v1/agentrt/plan/proposals",
 		"POST /api/v1/agentrt/plan/imports",
+		"POST /api/v1/agentrt/plan/{id}/notes",
 	)
 	exempt("agent runtime rules (design v5 §5.2): a rule takes effect only with the Owner's signature over its exact text, checked against the compiled-in key in the runtime's own namespace, or as a tightening the store proves by comparing it with the version before; check and proposals start nothing; runtime state the store writes with its events in one transaction; not a cluster write",
 		"POST /api/v1/agentrt/rules/{rule_id}/check",

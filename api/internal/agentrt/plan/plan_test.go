@@ -141,6 +141,28 @@ func TestGateUsesTheExactTestID(t *testing.T) {
 	}
 }
 
+// An architecture row's rule is standing conditions only (W-31 2.5 G2 A):
+// gates under any all and any; one other atom anywhere, or no condition,
+// is not.
+func TestOnlyStanding(t *testing.T) {
+	gate := func(test string) string {
+		return `{"gates_passed":[{"test":"` + test + `","spec_sha256":"` + spec + `"}],"env":"prod"}`
+	}
+	for doc, want := range map[string]bool{
+		gate("T19"): true,
+		`{"all":[` + gate("T19") + `,{"any":[` + gate("T20") + `,` + gate("T21") + `]}]}`: true,
+		`{}`: false,
+		`{"all":[` + gate("T19") + `,{"manual":"by hand"}]}`:                                   false,
+		`{"any":[` + gate("T19") + `,{"task_accepted":"` + taskA + `"}]}`:                      false,
+		`{"all":[{"any":[` + gate("T19") + `,{"owner_signoff":"TD-1"}]},` + gate("T20") + `]}`: false,
+		`{"approval_executed":3}`: false,
+	} {
+		if got := mustParse(t, doc).OnlyStanding(); got != want {
+			t.Errorf("OnlyStanding(%s) = %v, want %v", doc, got, want)
+		}
+	}
+}
+
 func TestRefsListsEveryBoundObject(t *testing.T) {
 	r := mustParse(t, `{"all":[{"task_accepted":"`+taskB+`"},{"any":[{"approval_executed":16},{"question_answered":{"question":"Q3","option":"A"}}]},{"owner_signoff":"TD-295"},{"task_accepted":"`+taskA+`"}]}`)
 	want := []Ref{{RefApproval, "16"}, {RefSignoff, "TD-295"}, {RefQuestion, "Q3"}, {RefTask, taskA}, {RefTask, taskB}}
