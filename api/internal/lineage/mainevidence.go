@@ -25,16 +25,17 @@ type MainCommit struct {
 }
 
 // MainCommits reads repo's main back to since (at most maxPages pages of
-// Gitea's commit list), newest first, each with its subject and trailers.
-func MainCommits(ctx context.Context, acc Access, client *http.Client, repo string, since time.Time, maxPages int) ([]MainCommit, error) {
+// Gitea's commit list), newest first, each with its subject and trailers;
+// cut says the pages ran out before since.
+func MainCommits(ctx context.Context, acc Access, client *http.Client, repo string, since time.Time, maxPages int) (commits []MainCommit, cut bool, err error) {
 	g := &gitea{acc: acc, client: client}
-	commits, err := g.commits(ctx, repo, "main", since, maxPages, nil)
-	out := make([]MainCommit, 0, len(commits))
-	for _, c := range commits {
+	read, err := g.commits(ctx, repo, "main", since, maxPages, nil)
+	commits = make([]MainCommit, 0, len(read))
+	for _, c := range read {
 		subject, t := parseMessage(c.Msg)
-		out = append(out, MainCommit{SHA: c.SHA, Subject: subject, At: c.At, ChangeID: t.changeID, Task: t.task, Work: t.work})
+		commits = append(commits, MainCommit{SHA: c.SHA, Subject: subject, At: c.At, ChangeID: t.changeID, Task: t.task, Work: t.work})
 	}
-	return out, err
+	return commits, err == nil && len(read) >= maxPages*pageLimit, err
 }
 
 // maxRawFile bounds a file RawFile reads.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"time"
@@ -107,11 +108,21 @@ func (st assessState) lets(rec string, now time.Time) (bool, string) {
 		return true, "its AI assessment is unavailable (" + st.unavailable + ")"
 	case st.done:
 		return st.recommended == rec, "its AI assessment agrees"
-	case now.Sub(st.askedAt) >= AssessTimeout:
-		return true, fmt.Sprintf("no AI assessment came within %d minutes", int(AssessTimeout/time.Minute))
+	case st.late(now):
+		return true, "no AI assessment came within " + timeoutText()
 	}
 	return false, ""
 }
+
+// late says whether an assessment asked and not in has run past its time.
+func (st assessState) late(now time.Time) bool {
+	return st.asked && !st.done && now.Sub(st.askedAt) >= AssessTimeout
+}
+
+func timeoutText() string { return fmt.Sprintf("%d minutes", int(AssessTimeout/time.Minute)) }
+
+// noneInTime is why an assessment past its time has none.
+func noneInTime() string { return "none came within " + timeoutText() }
 
 // cardAssessment reads a card's assessment, its stream held.
 func cardAssessment(ctx context.Context, tx pgx.Tx, question string) (assessState, error) {
@@ -149,6 +160,15 @@ func acceptAssessment(ctx context.Context, tx pgx.Tx, t taskRow, stream, attempt
 	}
 	if st.done || !st.asked || st.task != t.id {
 		return "late", endAssessmentTask(ctx, tx, t, "its assessment came after "+stream+" had its outcome, or was not its ask")
+	}
+	// Past its time a report is not taken, whoever reaches the stream first
+	// (review 448 A1): the same outcome as EndAssessments'.
+	var now time.Time
+	if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		return "", err
+	}
+	if st.late(now) {
+		return "unavailable", recordUnavailable(ctx, tx, t, stream, noneInTime())
 	}
 	switch {
 	case conclusion != "done":
@@ -240,6 +260,12 @@ func parseAssessment(text string, options []string, refs map[string]any) (map[st
 	var r assessmentReport
 	if err := dec.Decode(&r); err != nil {
 		return nil, "not the assessment's shape: " + oneLineRunes(err.Error(), 120)
+	}
+	// One object and nothing after it (review 448 B1): a second, a
+	// correction or a contradiction, is not chosen between.
+	var more json.RawMessage
+	if err := dec.Decode(&more); !errors.Is(err, io.EOF) {
+		return nil, "more than one JSON object"
 	}
 	if !slices.Contains(options, r.Recommended) {
 		return nil, fmt.Sprintf("recommended %q is not one of %v", oneLineRunes(r.Recommended, 40), options)
@@ -406,8 +432,8 @@ func endAssessment(ctx context.Context, db DB, mission, stream string) (bool, er
 				why = "its task was blocked: " + oneLineRunes(reason, 200)
 			case slices.Contains([]string{"cancelled", "rejected", "accepted"}, state):
 				why = "its task ended " + state + " without one"
-			case now.Sub(st.askedAt) >= AssessTimeout:
-				why = fmt.Sprintf("none came within %d minutes", int(AssessTimeout/time.Minute))
+			case st.late(now):
+				why = noneInTime()
 			default:
 				return nil
 			}

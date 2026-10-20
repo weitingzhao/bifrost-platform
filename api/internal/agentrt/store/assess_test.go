@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -294,12 +295,24 @@ func TestAssessmentOfAnApproval(t *testing.T) {
 	if !fresh || len(q.Commits) != 1 || q.Commits[0] != "8f30a9f6" || len(q.Repos) != 1 {
 		t.Fatalf("the query: %+v", q)
 	}
+	// Review 448 B2: a commit only its key params name is looked for too.
+	quiet := item
+	quiet.ID, quiet.Body = "9", "Deliver it."
+	quiet.Record = map[string]any{"action": "deliver_platform", "key_params": map[string]any{"repo": "bifrost-platform", "sha": "1c81a70a"}}
+	if q, _, err = store.AssessmentQuery(ctx, w.rt, quiet); err != nil || len(q.Commits) != 1 || q.Commits[0] != "1c81a70a" {
+		t.Fatalf("the query of an approval naming its commit in its key params alone: %+v (%v)", q, err)
+	}
 	ev := store.Evidence{Org: "bifrost", Commits: []store.EvidenceCommit{{Repo: "bifrost-platform", SHA: "8f30a9f6" + strings.Repeat("0", 32),
 		Subject: "agentrt: review 444", At: time.Now()}}, NotRead: []string{"the ledger (AGENTRT_LEDGER is not set on this platform)"}}
+	// Review 448 C2: what the bounds leave out is said.
+	for i := range 16 {
+		ev.Commits = append(ev.Commits, store.EvidenceCommit{Repo: "bifrost-platform", SHA: fmt.Sprintf("%040x", i+1), Subject: "older", At: time.Now()})
+	}
 	task, _ := w.askAndReady(t, item, ev)
 	spec := specText(t, w, task)
 	for _, want := range []string{`"ref": "approval:#7"`, `"ref": "approval:#6"`, `"ref": "commit:bifrost-platform@8f30a9f60000"`,
-		`"recommended": "<key>"`, `"approve" or "reject"`, "AGENTRT_LEDGER is not set"} {
+		`"recommended": "<key>"`, `"approve" or "reject"`, "AGENTRT_LEDGER is not set",
+		`"2 more commits on main that tie to it, the oldest: not given"`} {
 		if !strings.Contains(spec, want) {
 			t.Fatalf("the spec lacks %q:\n%.3000s", want, spec)
 		}
@@ -337,6 +350,11 @@ func TestAssessmentReportShape(t *testing.T) {
 		{"six unchecked", report("b", good, "1", "2", "3", "4", "5", "6"), "6 unchecked; at most 5"},
 		{"too long", report("b", append(good[:1:1], [2]string{strings.Repeat("长", 301), "event:2"})), "1 reasons with evidence"},
 		{"a field it does not know", strings.Replace(report("b", good), `"confidence"`, `"vote":"b","confidence"`, 1), "not the assessment's shape"},
+		// Review 448 B1: one object, not the first of several.
+		{"two objects", strings.Trim(strings.TrimPrefix(report("a", good), "```json"), "`\n") + "\n" +
+			strings.Trim(strings.TrimPrefix(report("b", good), "```json"), "`\n"), "more than one JSON object"},
+		{"two objects in a fence", "```json\n" + strings.Trim(strings.TrimPrefix(report("a", good), "```json"), "`\n") + "\n" +
+			strings.Trim(strings.TrimPrefix(report("b", good), "```json"), "`\n") + "\n```", "more than one JSON object"},
 	} {
 		a, why := store.ParseAssessmentForTest(c.text, opts, refs)
 		if c.why == "" && (why != "" || a == nil) || c.why != "" && !strings.Contains(why, c.why) {
@@ -432,5 +450,40 @@ func TestAssessmentTimesOut(t *testing.T) {
 	signCardAuto(t, w, "30", "[blocked]")
 	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 || s.cards[s.cardOf(t, late)].status != store.QuestionAnswered {
 		t.Fatalf("answered %d (%v); the late one's card is %s", n, err, s.cards[s.cardOf(t, late)].status)
+	}
+}
+
+// Review 448 A1: a report that comes after AssessTimeout is not taken, even
+// when it reaches the stream before the pass that ends the assessment: it is
+// recorded unavailable, as that pass would, and the rule answers by the
+// card. Before the fix it was taken, and one that differed held the card
+// from the rule for good.
+// Serial: it sets the package's event clock (FreezeEventClock).
+func TestALateReportIsNotTaken(t *testing.T) {
+	w := newKernelWorld(t)
+	late := w.ledgerMission(t, "M-3")
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	var s seenCards
+	if _, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil {
+		t.Fatal(err)
+	}
+	card := s.cardOf(t, late)
+	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - 5*time.Minute))
+	task, mission := w.askAndReady(t, s.item(card), ratchetEvidence())
+	unfreeze()
+	w.work(t, task, report("b", [][2]string{{"已在 main 上。", "commit:bifrost-platform@6b9507328434"}, {"台账等签收。", "ledger:TD-378"}}), "done")
+	if did, err := store.AcceptBrief(ctx, w.rt, task); err != nil || did != "unavailable" {
+		t.Fatalf("accept a late report: %q %v", did, err)
+	}
+	if a, why := w.assessed(t, store.AssessCard, card); a != nil || why != "none came within 45 minutes" ||
+		w.state(t, "task", task) != "cancelled" || w.state(t, "mission", mission) != "stopped" {
+		t.Fatalf("assessment %v, unavailable %q; its task %s, its mission %s", a, why, w.state(t, "task", task), w.state(t, "mission", mission))
+	}
+	s.aged(card, 31*time.Minute)
+	signCardAuto(t, w, "30", "[blocked]")
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 {
+		t.Fatalf("answered %d (%v)", n, err)
 	}
 }

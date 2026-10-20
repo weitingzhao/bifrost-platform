@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strconv"
@@ -192,11 +193,7 @@ func assessFactsOf(ctx context.Context, tx pgx.Tx, item AssessItem) (assessFacts
 	f := assessFacts{eventRefs: map[string]map[string]any{}, since: item.CreatedAt.Add(-14 * 24 * time.Hour)}
 	f.text = append(f.text, item.Title, item.Body)
 	f.repos = append(f.repos, item.Repos...)
-	for _, v := range item.Record {
-		if s, ok := v.(string); ok {
-			f.text = append(f.text, s)
-		}
-	}
+	f.text = append(f.text, recordText(item.Record)...)
 	if item.Kind != AssessCard {
 		return f, nil
 	}
@@ -256,6 +253,27 @@ func assessFactsOf(ctx context.Context, tx pgx.Tx, item AssessItem) (assessFacts
 	f.tasks = all
 	f.events, err = missionEvents(ctx, tx, mission, f.eventRefs)
 	return f, err
+}
+
+// recordText is the strings of an approval's record, in a fixed order, a
+// nested map's (its key params) included (review 448 B2: a commit only its
+// key params name is evidence too).
+func recordText(rec map[string]any) []string {
+	var out []string
+	keys := slices.Sorted(maps.Keys(rec))
+	for _, k := range keys {
+		switch v := rec[k].(type) {
+		case string:
+			out = append(out, v)
+		case map[string]any:
+			out = append(out, recordText(v)...)
+		case map[string]string:
+			for _, kk := range slices.Sorted(maps.Keys(v)) {
+				out = append(out, v[kk])
+			}
+		}
+	}
+	return out
 }
 
 // cardPlace is the mission and task a card is about: a blocked card's (its
@@ -483,9 +501,11 @@ func assessData(item AssessItem, f assessFacts, ev Evidence) (map[string]any, ma
 			data["task"] = f.task
 		}
 	}
+	notRead := []string{}
 	commits := []map[string]any{}
 	for i, c := range ev.Commits {
 		if i == assessCommits {
+			notRead = append(notRead, fmt.Sprintf("%d more commits on main that tie to it, the oldest: not given", len(ev.Commits)-assessCommits))
 			break
 		}
 		r := "commit:" + c.Repo + "@" + c.SHA[:min(12, len(c.SHA))]
@@ -507,6 +527,7 @@ func assessData(item AssessItem, f assessFacts, ev Evidence) (map[string]any, ma
 	ledger := []map[string]any{}
 	for i, l := range ev.Ledger {
 		if i == assessLedger {
+			notRead = append(notRead, fmt.Sprintf("%d more ledger items it names: not given", len(ev.Ledger)-assessLedger))
 			break
 		}
 		r := "ledger:" + l.ID
@@ -515,7 +536,6 @@ func assessData(item AssessItem, f assessFacts, ev Evidence) (map[string]any, ma
 			"label": l.ID + " " + oneLineRunes(l.Title, 80)}
 	}
 	data["ledger"] = ledger
-	notRead := []string{}
 	for _, n := range ev.NotRead {
 		notRead = append(notRead, oneLineRunes(n, assessFieldRunes))
 	}

@@ -170,9 +170,14 @@ func evidenceReader(access func(context.Context) (lineage.Access, error), client
 		}
 		var all []store.EvidenceCommit
 		for _, repo := range repos {
-			commits, err := lineage.MainCommits(ctx, acc, client, repo, q.Since, evidencePages)
+			commits, cut, err := lineage.MainCommits(ctx, acc, client, repo, q.Since, evidencePages)
 			if err != nil {
 				ev.NotRead = append(ev.NotRead, "main of "+repo+" ("+oneLine(err.Error())+")")
+			}
+			if cut && len(commits) > 0 {
+				// The pages ran out before the window's start (review 448 C2).
+				ev.NotRead = append(ev.NotRead, fmt.Sprintf("main of %s before %s (only its latest %d commits are read)", repo,
+					commits[len(commits)-1].At.UTC().Format(time.RFC3339), len(commits)))
 			}
 			for _, c := range commits {
 				all = append(all, store.EvidenceCommit{Repo: repo, SHA: c.SHA, Subject: c.Subject, At: c.At, ChangeID: c.ChangeID, Task: c.Task, Work: c.Work})

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -78,7 +79,12 @@ func evidenceGitea(t *testing.T, commits map[string][]map[string]any, ledger str
 		repo, rest, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, prefix), "/")
 		switch {
 		case rest == "commits" && commits[repo] != nil:
-			_ = json.NewEncoder(w).Encode(commits[repo])
+			// Gitea's paging: limit per page, pages from 1.
+			all := commits[repo]
+			page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+			limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+			from, to := min((page-1)*limit, len(all)), min(page*limit, len(all))
+			_ = json.NewEncoder(w).Encode(all[from:to])
 		case repo == "bifrost-trade-infra" && rest == "raw/agent-config/TECH_DEBT.md" && r.URL.Query().Get("ref") == "main":
 			raws.Add(1)
 			_, _ = w.Write([]byte(ledger))
@@ -147,5 +153,25 @@ func TestEvidenceFromGitea(t *testing.T) {
 	t.Setenv("AGENTRT_LEDGER", "bifrost-trade-infra/agent-config/TECH_DEBT.md")
 	if repo, path := ledgerFromEnv(); repo != "bifrost-trade-infra" || path != "agent-config/TECH_DEBT.md" {
 		t.Fatalf("AGENTRT_LEDGER: %q %q", repo, path)
+	}
+}
+
+// Review 448 C2: a main whose pages run out before the window's start says
+// so, with the oldest commit it read.
+func TestEvidenceSaysWhereMainWasCut(t *testing.T) {
+	now := time.Now()
+	var main []map[string]any
+	for i := range evidencePages*50 + 5 {
+		main = append(main, giteaCommit(fmt.Sprintf("%040x", i+1), "work", now.Add(-time.Duration(i)*time.Minute)))
+	}
+	var raws atomic.Int32
+	g := evidenceGitea(t, map[string][]map[string]any{"bifrost-platform": main}, "", &raws)
+	access := func(context.Context) (lineage.Access, error) { return lineage.Access{Base: g.URL, Org: "bifrost"}, nil }
+	ev := evidenceReader(access, g.Client(), "", "")(context.Background(), store.EvidenceQuery{Repos: []string{"bifrost-platform"},
+		Since: now.Add(-48 * time.Hour)})
+	want := fmt.Sprintf("main of bifrost-platform before %s (only its latest %d commits are read)",
+		now.Add(-time.Duration(evidencePages*50-1)*time.Minute).UTC().Format(time.RFC3339), evidencePages*50)
+	if len(ev.NotRead) != 2 || ev.NotRead[0] != want {
+		t.Fatalf("not read: %q; want %q first", ev.NotRead, want)
 	}
 }
