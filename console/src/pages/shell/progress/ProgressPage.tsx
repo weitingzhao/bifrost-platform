@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { computedAgeLine, generationIsSkewed, publishedAgeSeconds, receivedIsStale, skewSentence, staleSentence } from '@/api/agentProgress'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
@@ -11,12 +11,18 @@ import { GoalCard } from './GoalCard'
 import { missionIds, relative } from './goalCardModel'
 import { CodeHealthPage } from '@/pages/CodeHealthPage'
 import { CommitLineagePage } from '@/pages/CommitLineagePage'
-import { GOALS_SECTION, formatShellHash } from '@/lib/shell/consoleRoutes'
-import { scrollAfterShell, useHashSection } from '@/lib/shell/useHashSection'
+import { GOALS_SECTION, formatShellHash, hashQueryParam } from '@/lib/shell/consoleRoutes'
+import { canonicalQuery, hashNamesSection, scrollAfterShell } from '@/lib/shell/useHashSection'
 
 function goalInHash(): string {
-  const id = new URLSearchParams(window.location.hash.split('?')[1]).get('goal')
+  const id = hashQueryParam(canonicalQuery(window.location.hash), 'goal')
   return id && /^M-\d+$/.test(id) ? id : ''
+}
+
+/** What the address points at on Work: a goal's card before a section (review 425 B1). */
+function addressTarget(): string | null {
+  const goal = goalInHash()
+  return goal ? `goal-${goal}` : hashQueryParam(canonicalQuery(window.location.hash), 'section')
 }
 
 /**
@@ -28,8 +34,20 @@ function goalInHash(): string {
 export function ProgressPage() {
   const needs = useNeedsYou()
   const plan = useRuntimePlan()
-  const goals = useRef<HTMLElement>(null)
-  useHashSection(GOALS_SECTION, goals)
+  // One scroll per address, on arrival and on every hash change, to what the address points at:
+  // returning to the same goal scrolls again, and goal and section together scroll once (review 425 B1).
+  useEffect(() => {
+    let cancel = () => {}
+    const go = () => {
+      const target = addressTarget()
+      if (target == null) return
+      cancel()
+      cancel = scrollAfterShell(() => document.getElementById(target))
+    }
+    go()
+    window.addEventListener('hashchange', go)
+    return () => { cancel(); window.removeEventListener('hashchange', go) }
+  }, [])
   const [submitted, setSubmitted] = useState<{ id: string; goal: string } | null>(() => {
     const id = goalInHash()
     return id ? { id, goal: '' } : null
@@ -74,7 +92,7 @@ export function ProgressPage() {
     </>
   }
   return <NowClock><div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
-    <section id={GOALS_SECTION} ref={goals} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
+    <section id={GOALS_SECTION} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
       <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
@@ -90,25 +108,18 @@ export function ProgressPage() {
   </div></NowClock>
 }
 
-// targeted: the location names this section (#<id>, or a redirect's ?section=<id>).
+// targeted: the address names this section (`?section=<id>`, or the old `#<id>` in its new form).
 function targeted(id: string): boolean {
-  return window.location.hash === `#${id}` || new URLSearchParams(window.location.hash.split('?')[1]).get('section') === id
+  return hashNamesSection(window.location.hash, id)
 }
 
 function ProgressReference({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   const [open, setOpen] = useState(() => targeted(id))
-  // Open and scroll to it on arrival too, not only on a later hash change (review 424 B5).
+  // Opened on arrival and on a later hash change; Work's one scroll brings it into view (review 425 B1).
   useEffect(() => {
-    let cancel = () => {}
-    const change = () => {
-      if (!targeted(id)) return
-      setOpen(true)
-      cancel()
-      cancel = scrollAfterShell(() => document.getElementById(id))
-    }
-    change()
+    const change = () => { if (targeted(id)) setOpen(true) }
     window.addEventListener('hashchange', change)
-    return () => { cancel(); window.removeEventListener('hashchange', change) }
+    return () => window.removeEventListener('hashchange', change)
   }, [id])
   return <details id={id} open={open} onToggle={event => setOpen(event.currentTarget.open)} className="panel-elevated ops-section"><summary className="cursor-pointer p-3 text-sm font-medium">{title}</summary>{open && children}</details>
 }

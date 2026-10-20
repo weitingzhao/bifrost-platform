@@ -255,6 +255,46 @@ describe('Progress composition', () => {
     expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf('into:code-health'))
     expect(document.getElementById('code-health')).toHaveAttribute('open')
   })
+  it('scrolls again when the address returns to the same goal, and once when it names a goal and a section (review 425 B1)', async () => {
+    mockFetch()
+    const log: string[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { log.push(`into:${this.id}`) })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['agent-runtime-progress'], parseRuntimeProgress({ work: { missions: [{ mission_id: 'M-2' }] }, needs_you: { items: [] } }))
+    window.history.replaceState(null, '', '#work?goal=M-2')
+    wrap(<ProgressPage />, client)
+    await waitFor(() => expect(log).toEqual(['into:goal-M-2']))
+    await act(async () => { window.history.replaceState(null, '', '#work?section=code-health'); window.dispatchEvent(new Event('hashchange')) })
+    await waitFor(() => expect(log.at(-1)).toBe('into:code-health'))
+    await act(async () => { window.history.replaceState(null, '', '#work?goal=M-2'); window.dispatchEvent(new Event('hashchange')) })
+    await waitFor(() => expect(log.at(-1)).toBe('into:goal-M-2'))
+    cleanup()
+    log.length = 0
+    window.history.replaceState(null, '', '#work?goal=M-2&section=code-health')
+    wrap(<ProgressPage />, client)
+    await waitFor(() => expect(log.length).toBeGreaterThan(0))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 150)) })
+    expect(log).toEqual(['into:goal-M-2'])
+  })
+
+  it('a first load of an old bookmark lands on its section, though the shell rewrites the address only later (review 425 B2)', async () => {
+    mockFetch()
+    const log: string[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { log.push(`into:${this.id}`) })
+    function Shell({ children }: { children: ReactNode }) {
+      useEffect(() => { log.push('top') }, [])
+      return <>{children}</>
+    }
+    for (const [bookmark, target] of [['#progress', 'into:goals'], ['#code-health', 'into:code-health'], ['#progress?goal=M-2', 'into:goal-M-2']] as const) {
+      log.length = 0
+      window.history.replaceState(null, '', bookmark)
+      wrap(<Shell><ProgressPage /></Shell>)
+      await waitFor(() => expect(log.at(-1), bookmark).toBe(target))
+      expect(log.indexOf('top'), bookmark).toBeLessThan(log.lastIndexOf(target))
+      cleanup()
+    }
+  })
+
   it('a goal given on Chief of staff links to its card on Work, which comes first and into view', async () => {
     mockFetch()
     const scroll = vi.fn()

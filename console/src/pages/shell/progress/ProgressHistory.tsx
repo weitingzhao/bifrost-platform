@@ -18,7 +18,6 @@ export function ProgressHistory() {
   const runtimeQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
   const runtime = runtimeQ.data
   const ids = missionIds(runtime)
-  const empty = !runtime?.recent.tasks.length && !runtime?.recent.failed_attempts.length
   return <NowClock><section aria-label="Work history" className="flex w-full min-w-0 flex-col gap-3">
     <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime?.generated_at}><Tick text={now => relative(runtime?.generated_at || '', now)} /></time></p>
     {runtimeQ.isPending && <p role="status">Loading agent runtime…</p>}
@@ -30,7 +29,6 @@ export function ProgressHistory() {
     </>}
     <ProgressTimeline runtime={runtime} now={Date.now()} />
     {runtime && <>
-      {empty && <p>No runtime history.</p>}
       <h4>Recent runtime tasks</h4>{runtime.recent.tasks.length === 0 && <p>No recent tasks.</p>}
       {runtime.recent.tasks.map((task, i) => <details key={i}><summary className="cursor-pointer break-words text-sm">{text(task.title) || text(task.task_id)} · {text(task.state)} · {text(task.ended_at)}</summary><TaskRow mission={text(task.mission_id)} task={parseRuntimeTask(task)} /></details>)}
       <h4>Failed attempts</h4>{runtime.recent.failed_attempts.length === 0 && <p>No failed attempts.</p>}

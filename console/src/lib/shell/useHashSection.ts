@@ -1,19 +1,35 @@
 import { useEffect, type RefObject } from 'react'
-import { hashQueryParam } from './consoleRoutes'
+import { hashQueryParam, resolveConsoleHash } from './consoleRoutes'
+
+/**
+ * The address's query as the shell will show it. On a first load of an old bookmark (`#progress`,
+ * `#needs-you`) the page draws before the shell rewrites the address to `#work?section=goals`, and
+ * the rewrite raises no hash change, so a page reads the address in its new form (review 425 B2).
+ */
+export function canonicalQuery(hash: string): string {
+  return resolveConsoleHash(hash.replace(/^#/, '')).canonical.split('?')[1] ?? ''
+}
 
 /** `section=<id>` in the address names this section. */
 export function hashNamesSection(hash: string, id: string): boolean {
-  const query = hash.split('?')[1] ?? ''
-  return hashQueryParam(query, 'section') === id
+  return hashQueryParam(canonicalQuery(hash), 'section') === id
 }
 
 /**
  * Scroll an element into view once the shell is done: the shell scrolls a newly opened place
  * to its top in its own effect (ConsolePage), which runs after the effects of the place it just
- * drew and would undo a scroll made there. Returns a cancel for an effect's cleanup.
+ * drew and would undo a scroll made there. An element the same hash change is still drawing is
+ * looked for again for up to a second. Returns a cancel for an effect's cleanup.
  */
 export function scrollAfterShell(target: () => Element | null | undefined, options: ScrollIntoViewOptions = { block: 'start' }): () => void {
-  const timer = window.setTimeout(() => target()?.scrollIntoView?.(options), 0)
+  let tries = 0
+  let timer = 0
+  const attempt = () => {
+    const element = target()
+    if (element != null) element.scrollIntoView?.(options)
+    else if (++tries < 20) timer = window.setTimeout(attempt, 50)
+  }
+  timer = window.setTimeout(attempt, 0)
   return () => window.clearTimeout(timer)
 }
 

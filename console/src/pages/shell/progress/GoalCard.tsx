@@ -1,5 +1,4 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
-import { scrollAfterShell } from '@/lib/shell/useHashSection'
 import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -71,9 +70,6 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     previousPoll.current = updatedAt
     if (!finished) void refetch()
   }, [updatedAt, finished, refetch])
-  const card = useRef<HTMLElement>(null)
-  // After the shell's scroll to the top when Work was just opened at `#work?goal=` (review 424 B5).
-  useEffect(() => highlighted ? scrollAfterShell(() => card.current, { behavior: 'smooth', block: 'start' }) : undefined, [highlighted])
   const now = useNow() || Date.now()
   const summary = runtime?.work.missions.find(m => m.mission_id === id)
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'
@@ -84,7 +80,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const start = text(data?.mission.created_at)
   const accepted = data?.events.filter(e => e.event_type === 'task_state_changed' && e.body_json.to === 'accepted').at(-1)?.at
   const end = done ? accepted : finished ? data?.events.at(-1)?.at : undefined
-  return <article ref={card} id={`goal-${id}`} aria-label={`Goal ${id}`} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${highlighted ? 'border-[var(--color-info)] ring-2 ring-[var(--color-info)]' : 'border-[var(--card-border)]'}`}>
+  return <article id={`goal-${id}`} aria-label={`Goal ${id}`} className={`min-w-0 scroll-mt-4 rounded-[var(--card-radius)] border bg-[var(--card-fill)] p-4 ${highlighted ? 'border-[var(--color-info)] ring-2 ring-[var(--color-info)]' : 'border-[var(--card-border)]'}`}>
     <header className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : 'degraded'} /><strong className="text-lg">{status}</strong></div>
       <h3 className="break-words text-base font-semibold">{goal.split('\n')[0]}</h3>
