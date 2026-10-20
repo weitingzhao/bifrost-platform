@@ -307,3 +307,14 @@ func TestExamLoadWhereSaysNoContent(t *testing.T) {
 		t.Fatalf("where %q", where)
 	}
 }
+
+// TD-392: two processes (platform-api and platform-workers) share the
+// runtime role's connection limit (10 on PROD, 5 on STG and DEV); their pools
+// together stay under it, with room for a restarted process.
+func TestAgentRuntimePoolsFitTheRoleLimit(t *testing.T) {
+	for env, limit := range map[string]int32{"prod": 10, "stg": 5, "dev": 5} {
+		if n := agentrtMaxConns(env); n < 2 || 2*n >= limit {
+			t.Errorf("%s: two pools of %d against a limit of %d", env, n, limit)
+		}
+	}
+}

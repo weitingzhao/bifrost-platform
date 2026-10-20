@@ -290,6 +290,20 @@ func (l *lateDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) {
 	return p.BeginTx(ctx, o)
 }
 
+// agentrtMaxConns bounds one process's pool. The environment's runtime role
+// allows 10 connections on PROD and 5 on STG and DEV (infra db-step
+// 2026-10-14-w31-agentrt-1-roles), shared by platform-api and
+// platform-workers; pgxpool's default is one per CPU, 16 on the cluster's
+// nodes, so the two processes sat at the limit at rest and a restarted one was
+// refused ("too many connections for role") for up to a minute on every
+// release (TD-392). Two processes at this size leave room under the limit.
+func agentrtMaxConns(env string) int32 {
+	if env == "prod" {
+		return 4
+	}
+	return 2
+}
+
 // openAgentRuntime opens the pool and refuses an identity or a database that
 // is not the environment's runtime ones.
 func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, error) {
@@ -303,6 +317,7 @@ func openAgentRuntime(ctx context.Context, dsn, env string) (*pgxpool.Pool, erro
 	if pw := os.Getenv("AGENTRT_DB_PASSWORD"); pw != "" {
 		cfg.ConnConfig.Password = pw
 	}
+	cfg.MaxConns = agentrtMaxConns(env)
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
