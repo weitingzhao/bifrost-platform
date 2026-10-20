@@ -35,33 +35,47 @@ var adoptMoves = map[string][]string{"ready": {"accepted"}, "leased": {"accepted
 var adoptable = []string{"ready", "leased", "running"}
 
 // salvagedOpen is the condition on attempt a (and its task t) under which its
-// salvaged result is still to be checked: not while a check of t is open, and
-// never again once the Owner chose not to do a check that names the attempt
-// (a check is cancelled only on its card, blockedcard.go; its spec names the
-// attempt it pins, and attempt ids are unique), else every pass would make a
-// new check and a new card for the result he dropped (review 428 A1).
+// salvaged result is still to be checked: not while a check of t is open (a
+// blocked one included). Discovery and StartSalvageCheck then pass over an
+// attempt whose check the Owner chose not to do (droppedPin), else every pass
+// would make a new check and a new card for the result he dropped (review
+// 428 A1).
 const salvagedOpen = `a.state = 'lost' AND a.persisted_at IS NOT NULL AND t.role = 'implement' AND t.state IN ('ready','leased','running')
   AND NOT EXISTS (SELECT 1 FROM agentrt.attempt b WHERE b.task_id = a.task_id AND b.attempt_no > a.attempt_no
                   AND b.state IN ('submitted','finished'))
   AND NOT EXISTS (SELECT 1 FROM agentrt.verification v WHERE v.attempt_id = a.attempt_id)
   AND NOT EXISTS (SELECT 1 FROM agentrt.task c WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review')
-                  AND c.state IN ` + openCheck + `)
-  AND NOT EXISTS (SELECT 1 FROM agentrt.task c JOIN agentrt.artifact_blob s ON s.artifact_id = c.spec_artifact_id
-                  WHERE c.subject_task_id = t.task_id AND c.role IN ('verify','review') AND c.state = 'cancelled'
-                    AND position(convert_to(a.attempt_id, 'UTF8') in s.body) > 0)`
+                  AND c.state IN ` + openCheck + `)`
 
 // PendingSalvaged lists the lost attempts whose salvaged result the
 // acceptance pass is to check.
 func PendingSalvaged(ctx context.Context, db DB) ([]string, error) {
 	var ids []string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT a.attempt_id FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+		rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.task_id FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
 		  WHERE `+salvagedOpen+` ORDER BY a.persisted_at, a.attempt_id`)
 		if err != nil {
 			return err
 		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
+		type pair struct{ attempt, task string }
+		found, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (pair, error) {
+			var p pair
+			return p, r.Scan(&p.attempt, &p.task)
+		})
+		if err != nil {
+			return err
+		}
+		ids = ids[:0]
+		for _, p := range found {
+			dropped, err := droppedPin(ctx, tx, p.task, p.attempt)
+			if err != nil {
+				return err
+			}
+			if !dropped {
+				ids = append(ids, p.attempt)
+			}
+		}
+		return nil
 	})
 	return ids, err
 }
@@ -93,6 +107,9 @@ func StartSalvageCheck(ctx context.Context, db DB, attemptID string) (string, er
 		var open bool
 		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
 		  WHERE a.attempt_id = $1 AND `+salvagedOpen+`)`, attemptID).Scan(&open); err != nil || !open {
+			return err
+		}
+		if dropped, err := droppedPin(ctx, tx, taskID, attemptID); err != nil || dropped {
 			return err
 		}
 		d, err := readDetail(ctx, tx, taskID)

@@ -689,11 +689,11 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 				return nil
 			}
 			// With no check the work can never be accepted: it waits on a
-			// card of its own instead of in verifying for ever (TD-384); a
-			// check of an older or a lost attempt is dropped alone (review
-			// 428 A2).
-			alone, err := dropLeavesUnchecked(ctx, tx, s, t.id)
-			if err != nil || !alone {
+			// card of its own instead of in verifying for ever (TD-384); while
+			// another open check can still accept it, the drop is the check's
+			// alone (reviews 428 A2, 430 A1).
+			checked, err := stillChecked(ctx, tx, s, t.id)
+			if err != nil || checked {
 				return err
 			}
 			return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("the Owner chose not to do its %s %s (question %s)",

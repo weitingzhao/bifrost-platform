@@ -454,50 +454,76 @@ func ensureCheck(ctx context.Context, tx pgx.Tx, s taskRow, sd taskDetail, excep
 	return err
 }
 
-// dropLeavesUnchecked says whether not doing check, a verification or review
-// of s, leaves the attempt of s under verification with no check: the check
-// pins the latest submitted attempt of s (not a salvaged one), and no other
-// open check of s pins it (review 428 A2: an old round's or a lost attempt's
-// check is dropped alone). s and the check are locked; the attempt is read
-// without a lock (attempts come before tasks), and with s locked and
-// verifying no attempt of it is submitted meanwhile.
-func dropLeavesUnchecked(ctx context.Context, tx pgx.Tx, s taskRow, check string) (bool, error) {
+// stillChecked says whether an open check of s other than dropped can
+// still accept s: it pins s itself, s's latest submitted attempt and s's
+// round, is a check of its own role, and is not a salvaged result's (one
+// cannot accept a task that is verifying). Not doing a check blocks s when
+// none is left (reviews 428 A2, 430 A1: a check that only names the latest
+// attempt, of an older round, say, is closed as stale and accepts nothing).
+// s and dropped are locked; the attempt is read without a lock (attempts
+// come before tasks), and with s locked and verifying none of its attempts
+// is submitted meanwhile.
+func stillChecked(ctx context.Context, tx pgx.Tx, s taskRow, dropped string) (bool, error) {
 	var latest string
-	err := tx.QueryRow(ctx, `SELECT attempt_id FROM agentrt.attempt WHERE task_id = $1 AND state = 'submitted'
-	  ORDER BY attempt_no DESC LIMIT 1`, s.id).Scan(&latest)
+	var round int64
+	err := tx.QueryRow(ctx, `SELECT a.attempt_id, t.round_no FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
+	  WHERE a.task_id = $1 AND a.state = 'submitted' ORDER BY a.attempt_no DESC LIMIT 1`, s.id).Scan(&latest, &round)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	rows, err := tx.Query(ctx, `SELECT task_id, spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1
-	  AND role IN ('verify','review') AND (task_id = $2 OR state IN `+openCheck+`)`, s.id, check)
+	rows, err := tx.Query(ctx, `SELECT role, spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1 AND task_id <> $2
+	  AND role IN ('verify','review') AND state IN `+openCheck, s.id, dropped)
 	if err != nil {
 		return false, err
 	}
-	type row struct{ task, spec string }
+	type row struct{ role, spec string }
 	checks, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (row, error) {
 		var x row
-		return x, r.Scan(&x.task, &x.spec)
+		return x, r.Scan(&x.role, &x.spec)
 	})
 	if err != nil {
 		return false, err
 	}
-	mine, other := false, false
 	for _, c := range checks {
 		spec, pinned, err := readCheckSpec(ctx, tx, c.spec)
 		if err != nil {
 			return false, err
 		}
-		current := pinned && !spec.salvage && spec.attempt == latest
-		if c.task == check {
-			mine = current
-		} else if current {
-			other = true
+		if pinned && !spec.salvage && spec.check == c.role && spec.subject == s.id && spec.attempt == latest && spec.round == round {
+			return true, nil
 		}
 	}
-	return mine && !other, nil
+	return false, nil
+}
+
+// droppedPin says whether the Owner chose not to do a check that pins
+// attempt of task: a check is cancelled only on its card (close.go). Its
+// salvaged result is then not checked again (review 428 A1); the pin is read
+// as Conclude reads it (readCheckSpec), so a spec that only mentions the
+// attempt pins nothing (review 430 B1).
+func droppedPin(ctx context.Context, tx pgx.Tx, task, attempt string) (bool, error) {
+	rows, err := tx.Query(ctx, `SELECT spec_artifact_id FROM agentrt.task WHERE subject_task_id = $1 AND role IN ('verify','review')
+	  AND state = 'cancelled'`, task)
+	if err != nil {
+		return false, err
+	}
+	specs, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return false, err
+	}
+	for _, id := range specs {
+		spec, pinned, err := readCheckSpec(ctx, tx, id)
+		if err != nil {
+			return false, err
+		}
+		if pinned && spec.subject == task && spec.attempt == attempt {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // Pending lists the tasks the acceptance pass has to look at: submitted

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/rules"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 	"github.com/weitingzhao/bifrost-platform/api/internal/releasepolicy/rptest"
@@ -362,28 +364,138 @@ func TestHugeHoursAreNotSpent(t *testing.T) {
 	}
 }
 
-// Review 428: what the Owner added is the only part of a budget the standing
-// envelope does not bound. After his grant, an envelope tightened below the
-// hours the mission started with stops it again.
+// Review 428, 430 C2: what the Owner added is the only part of a budget the
+// standing envelope does not bound. After his grant and a plan that lowers
+// the mission's attempts (his grant stays recorded), the check is taken under
+// the envelope as it was, and not once the envelope is tightened below the
+// hours the mission started with.
 func TestEnvelopeStillBoundsWhatTheMissionStartedWith(t *testing.T) {
 	t.Parallel()
-	w, mission, _, check := spentEnvelope(t)
-	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
-		t.Fatalf("blocked %d (%v)", n, err)
+	for name, tighten := range map[string]bool{"as it was": false, "tightened": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w, mission, _, check := spentEnvelope(t)
+			if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+				t.Fatalf("blocked %d (%v)", n, err)
+			}
+			a := &asker{}
+			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+				t.Fatalf("asked %d (%v)", n, err)
+			}
+			a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+			if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", check) != "ready" {
+				t.Fatalf("decided %d (%v)", n, err)
+			}
+			// A plan lowers the attempts as amendMission writes it: the
+			// Owner's grant stays.
+			w.legacy(t, `UPDATE agentrt.mission SET budget_json = budget_json || '{"max_attempts": 3}' WHERE mission_id = '`+mission+`'`)
+			if b := w.budget(t, mission); fmt.Sprint(b) != "map[max_attempts:3 max_wall_hours:48 owner_granted_attempts:3]" {
+				t.Fatalf("budget %v", b)
+			}
+			if tighten {
+				_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), "standing-envelope:dev", []byte(ruleText("standing-envelope:dev", 2,
+					rules.Tighten, since, until, "tenant: dev\nmax_action: branch\nbudget: {max_attempts: 1, max_wall_hours: 24}\n"+
+						"executors: [exec:codex, exec:deterministic]\nhosts: [h1, h2, h3, h4]\n")))
+				ok(t, err)
+			}
+			c := w.claim(t, "h2", time.Hour, deterministic)
+			if tighten && c != nil {
+				t.Fatalf("claimed %s of %s though its 48 hours are above the envelope's 24", c.TaskID, mission)
+			}
+			if !tighten && (c == nil || c.TaskID != check) {
+				t.Fatalf("under the envelope as it was the claim took %+v; want %s", c, check)
+			}
+		})
+	}
+}
+
+// handCheckOf proposes, by hand, a check of subject in mission, where its
+// subject sits (step, "" off the plan), whose spec is body as given, and
+// makes it ready.
+func (w *world) handCheckOf(t *testing.T, mission, step, role, subject string, body []byte) string {
+	t.Helper()
+	id := store.NewTaskID()
+	off := ""
+	if step == "" {
+		off = "a hand check"
+	}
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "application/json", body)
+		if err != nil {
+			return err
+		}
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: id, MissionID: mission, PlanNode: step, OffPlanReason: off,
+			Subject: subject, Role: role, Class: "go", Title: role, SpecArtifact: spec, Effect: "none", Repo: "bifrost-platform",
+			BaseCommit: commitA}); err != nil {
+			return err
+		}
+		return store.MarkReady(ctx, tx, "controller", id)
+	}))
+	return id
+}
+
+// Review 430 A1: a check that only names the work's latest attempt does not
+// keep the work checked: a hand check pinned to an older round is closed as
+// stale and accepts nothing. Not doing the work's own check blocks the work.
+func TestDroppingTheLastCurrentCheckBlocksTheWork(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	c := w.run(t, "h1", codex, "done")
+	own, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	stale := w.handCheckOf(t, "M-3", "", "verify", impl, []byte(fmt.Sprintf(
+		`{"attempt":%q,"check":"verify","commit":%q,"repo":"bifrost-platform","round":0,"subject_task":%q,"task_spec":%q}`,
+		c.AttemptID, commitA, impl, w.spec)))
+	w.legacy(t, `UPDATE agentrt.mission SET budget_json = '{"max_attempts": 1, "max_wall_hours": 48}' WHERE mission_id = 'M-3'`)
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 2 {
+		t.Fatalf("blocked %d (%v); want the work's check and the hand check", n, err)
 	}
 	a := &asker{}
-	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 2 {
 		t.Fatalf("asked %d (%v)", n, err)
 	}
-	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
-	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 || w.state(t, "task", check) != "ready" {
+	for i, card := range a.cards {
+		if card.TaskID == own {
+			a.answer(fmt.Sprintf("q_%c", 'a'+i), store.QuestionAnswered, store.CardRefuseKey)
+		}
+	}
+	if n, err := store.DecideBlocked(ctx, w.rt, a.question, a.ack); err != nil || n != 1 {
 		t.Fatalf("decided %d (%v)", n, err)
 	}
-	_, err := store.TightenRule(ctx, w.rt, wr("thread:s1"), "standing-envelope:dev", []byte(ruleText("standing-envelope:dev", 2,
-		rules.Tighten, since, until, "tenant: dev\nmax_action: branch\nbudget: {max_attempts: 1, max_wall_hours: 24}\n"+
-			"executors: [exec:codex, exec:deterministic]\nhosts: [h1, h2, h3, h4]\n")))
-	ok(t, err)
-	if c := w.claim(t, "h2", time.Hour, deterministic); c != nil {
-		t.Fatalf("claimed %s of %s though its 48 hours are above the envelope's 24", c.TaskID, mission)
+	if o, s, h := w.state(t, "task", own), w.state(t, "task", impl), w.state(t, "task", stale); o != "cancelled" || s != "blocked" || h != "blocked" {
+		t.Fatalf("its own check is %s, the work %s, the stale hand check %s; want cancelled, blocked, blocked", o, s, h)
+	}
+}
+
+// Review 430 B1: whether the Owner dropped a check of a salvaged attempt is
+// read from the check's pin as Conclude reads it: a cancelled check whose
+// spec only mentions the attempt in text pins nothing and does not stop its
+// discovery; one whose JSON writes the attempt's id with an escape pins it.
+func TestDroppedPinIsReadAsTheCheckReadsIt(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct {
+		spec  func(task, attempt, spec string) []byte
+		found int
+	}{
+		"text that mentions the attempt": {func(task, attempt, _ string) []byte {
+			return []byte("Compare " + attempt + " of " + task + " with the next attempt.")
+		}, 1},
+		"a pin written with an escape": {func(task, attempt, spec string) []byte {
+			return []byte(fmt.Sprintf(`{"attempt":"\u0061%s","check":"verify","commit":%q,"repo":"bifrost-platform","round":1,`+
+				`"salvage":true,"subject_task":%q,"task_spec":%q}`, attempt[1:], commitA, task, spec))
+		}, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w := newKernelWorld(t)
+			task, old, _ := w.salvagedTask(t, true)
+			hand := w.handCheckOf(t, "M-1", s1, "verify", task, c.spec(task, old, w.spec))
+			ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", hand, "cancelled", "test") }))
+			if n := w.salvageChecks(t); n != c.found {
+				t.Fatalf("%d checks of the salvaged result; want %d", n, c.found)
+			}
+		})
 	}
 }
