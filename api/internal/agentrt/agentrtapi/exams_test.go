@@ -232,7 +232,9 @@ func TestExams(t *testing.T) {
 	}
 	// Reading on lists a transaction once every older one has ended, and the
 	// horizon is the server's (other databases' tests hold it back): wait
-	// until a viewer reads the exams' events on, then read on as agentd.
+	// until a viewer reads the exams' events on, then read on as agentd. The
+	// whole suite on one server can hold it back past 10 s (seen twice on
+	// 10-19 under load), so the wait allows a minute; it ends at the first read.
 	examsIn := func(out map[string]any) int {
 		n := 0
 		for _, e := range out["events"].([]any) {
@@ -243,7 +245,7 @@ func TestExams(t *testing.T) {
 		return n
 	}
 	readOn := "events?after=0.0&limit=500&types=capability_scored"
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+	for deadline := time.Now().Add(time.Minute); ; time.Sleep(100 * time.Millisecond) {
 		_, out := call(t, s, "viewer", "GET", readOn, nil)
 		if examsIn(out) > 0 {
 			break
