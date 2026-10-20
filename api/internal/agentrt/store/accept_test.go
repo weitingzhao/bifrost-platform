@@ -1,11 +1,17 @@
 package store_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
+
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
 )
 
@@ -180,6 +186,58 @@ func TestCoreWorkIsAccepted(t *testing.T) {
 	}
 	if did, err = store.Conclude(ctx, w.rt, review); err != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
 		t.Fatalf("conclude did %q (%v); implementation %s", did, err, w.state(t, "task", impl))
+	}
+}
+
+// Review 422 A1: a core verification made ready by the build before, whose
+// last route_decided (algorithm 2) sent it to nobody, is decided again once
+// this build runs (its algorithm differs, so its fingerprint does), and the
+// deterministic check claims it. Had the checks changed without the
+// algorithm, its fingerprint would match and it would stay unclaimed.
+func TestCoreVerificationRoutedBeforeIsRoutedAgain(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	impl := w.ready(t, store.Task{Repo: "bifrost-platform", Core: true})
+	w.run(t, "h1", claude, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	fingerprint := func(rec map[string]any) string {
+		doc, eerr := canon.Encode(rec)
+		ok(t, eerr)
+		sum := sha256.Sum256(doc)
+		return "sha256:" + hex.EncodeToString(sum[:])
+	}
+	var fp, inputs string
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'fingerprint', (body_json->'inputs')::text FROM agentrt.event
+	  WHERE task_id = $1 AND event_type = 'route_decided' ORDER BY event_id DESC LIMIT 1`, v).Scan(&fp, &inputs))
+	doc, err := canon.Parse([]byte(inputs))
+	ok(t, err)
+	rec := doc.(map[string]any)
+	if got := fingerprint(rec); got != fp {
+		t.Fatalf("the recorded fingerprint %s is not its input's %s", fp, got)
+	}
+	// The route as the build before decided it: the same input under
+	// algorithm 2, and nobody to take it.
+	rec["algorithm"] = json.Number("2")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, aerr := store.Append(ctx, tx, store.Event{Stream: store.MissionStream("M-1"), Type: "route_decided", Actor: "controller",
+			MissionID: "M-1", PlanNode: s1, TaskID: v, Body: map[string]any{"job": "verifier", "candidates": []any{}, "excluded": []any{},
+				"inputs": rec, "fingerprint": fingerprint(rec)}}); aerr != nil {
+			return aerr
+		}
+		_, xerr := tx.Exec(ctx, `UPDATE agentrt.task SET route_json = '[]'::jsonb WHERE task_id = $1`, v)
+		return xerr
+	}))
+	if c := w.claim(t, "h2", store.LeaseTTL, deterministic); c != nil {
+		t.Fatalf("%s was claimed on an empty route", c.TaskID)
+	}
+	n, err := store.Reroute(ctx, w.rt)
+	ok(t, err)
+	if n != 1 {
+		t.Fatalf("Reroute decided %d routes, want the stale verification's", n)
+	}
+	if c := w.claim(t, "h2", store.LeaseTTL, deterministic); c == nil || c.TaskID != v {
+		t.Fatalf("the check's claim after the reroute = %+v; want %s", c, v)
 	}
 }
 

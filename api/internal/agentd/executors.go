@@ -84,7 +84,13 @@ func Prompt(a *Attempt) string {
 	// R2-2 (STG walks 2 and 3, 2026-10-19): told to keep caches out of the
 	// checkout, codex made new empty ones and its offline build failed. What
 	// the caches hold depends on the task's setup (review 405 B1).
-	b.WriteString("Go's cache locations (GOCACHE, GOMODCACHE) are set for this attempt, outside this directory; keep them as they are, so that whatever the task's setup fetched is used (commands have no network to fetch it again), unless the task asks for a fresh cache.\n")
+	// Only codex's commands have no network (its sandbox); cursor's and
+	// claude's have the host's (review 422 B1).
+	noNetwork := ""
+	if a.Claim != nil && a.Claim.Tool.Executor == "exec:codex" {
+		noNetwork = " (your commands have no network to fetch it again)"
+	}
+	b.WriteString("Go's cache locations (GOCACHE, GOMODCACHE) are set for this attempt, outside this directory; keep them as they are, so that whatever the task's setup fetched is used" + noNetwork + ", unless the task asks for a fresh cache.\n")
 	if a.Spec.Check == "review" {
 		fmt.Fprintf(&b, "End the report with exactly one line: %q if the work is correct and complete as its spec asks, or %q if anything must change. A report without that line counts as no verdict.\n",
 			VerdictPass, VerdictFail)

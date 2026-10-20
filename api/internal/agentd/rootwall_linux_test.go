@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -199,8 +200,18 @@ func TestClaudeImplementerWritesOnlyItsOwn(t *testing.T) {
 		"/tmp":                    "echo x > /tmp/claude-planted-$$",
 	}
 	may := map[string]bool{"its checkout": true, "its configuration": true, "its temporary root": true, "its temporary directory": true}
+	// A write counts as refused only when the kernel refused it (review 422
+	// C1): any other failure, a missing directory or a shell error, is
+	// written as failed, which the test does not take.
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\n")
+	for _, name := range slices.Sorted(maps.Keys(writes)) {
+		script.WriteString("if (" + writes[name] + ") 2>\"$TMPDIR/err\"; then echo 'WROTE " + name + "'; " +
+			"elif grep -qE 'Permission denied|Operation not permitted|Invalid cross-device link' \"$TMPDIR/err\"; then echo 'denied " + name + "'; " +
+			"else echo \"failed " + name + ": $(cat \"$TMPDIR/err\")\"; fi >> '" + results + "'\n")
+	}
 	bin := t.TempDir()
-	must(t, os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"+tries(results, writes)), 0o755))
+	must(t, os.WriteFile(filepath.Join(bin, "claude"), []byte(script.String()), 0o755))
 	rootBefore, homeBefore := listing(t, root, a.Dir, a.Out), listing(t, home, root)
 
 	sp, err := Executors(os.Args[0], []string{"PATH=" + bin + ":/usr/bin:/bin"}, Secrets{ClaudeOAuthToken: "fixture-token"})["exec:claude"](a)

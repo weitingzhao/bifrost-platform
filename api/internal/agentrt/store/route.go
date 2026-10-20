@@ -81,7 +81,12 @@ func (r ruleRef) record() any {
 
 // routeAlgorithm names the hard checks and the input format below; a recorded
 // input of another algorithm is not replayed by this one (review 155 B1).
-const routeAlgorithm = 2
+// Each change of what the checks decide raises it: every ready task's
+// fingerprint then differs from its last route_decided, and Reroute decides
+// it again under the new checks. 3: agentd's deterministic check verifies
+// core work without holding review_core (W-31 2.4; review 422 A1: a core
+// verification routed to nobody before it would otherwise stay so).
+const routeAlgorithm = 3
 
 // fits reports whether a host's tool is this candidate: same executor, same
 // model provider, and a model the pattern matches.

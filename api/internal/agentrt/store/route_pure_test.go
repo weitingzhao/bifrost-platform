@@ -196,6 +196,12 @@ func TestRecordReplays(t *testing.T) {
 	if _, err := replayInput(rec); err == nil {
 		t.Fatal("replayed a record of another algorithm")
 	}
+	// Review 422 A1: a record of algorithm 2, before the deterministic check
+	// could verify core work, is not replayed by this build's checks.
+	rec["algorithm"] = 2
+	if _, err := replayInput(rec); err == nil {
+		t.Fatal("replayed a record of algorithm 2")
+	}
 }
 
 // W-31 2.4 slice ② ⑤: below the threshold over enough samples is out; with

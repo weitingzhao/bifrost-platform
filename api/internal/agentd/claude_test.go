@@ -308,3 +308,17 @@ func TestAfterExecutorRemovesClaudesTemporaryRoot(t *testing.T) {
 		t.Errorf("claude's configuration directory went: %v", err)
 	}
 }
+
+// Review 422 B1: only codex's commands have no network (its sandbox), and
+// only codex is told so; claude's and cursor's commands have the host's.
+func TestPromptSaysNoNetworkToCodexOnly(t *testing.T) {
+	for _, ex := range []string{"exec:codex", "exec:claude", "exec:cursor", "exec:deterministic"} {
+		p := Prompt(&Attempt{Claim: &Claimed{Tool: Tool{Executor: ex}}, Spec: TaskSpec{Text: "# do it"}})
+		if strings.Contains(p, "no network") != (ex == "exec:codex") {
+			t.Errorf("%s's prompt on the network: %q", ex, p)
+		}
+		if !strings.Contains(p, "keep them as they are, so that whatever the task's setup fetched is used") {
+			t.Errorf("%s's prompt lost the cache note: %q", ex, p)
+		}
+	}
+}
