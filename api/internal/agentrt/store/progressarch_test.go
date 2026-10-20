@@ -421,7 +421,8 @@ func TestArchRowRuleIsGatesOnly(t *testing.T) {
 }
 
 // Review 427 C1, 429: the latest note is the one appended last (event_id),
-// whatever its time says. Serial: it freezes the event clock.
+// whatever its time says.
+// Serial: FreezeEventClock
 func TestArchLatestNoteIsTheLastAppended(t *testing.T) {
 	w := newWorld(t)
 	w.arch(t, [2]string{"ARCH:state-db", ""})

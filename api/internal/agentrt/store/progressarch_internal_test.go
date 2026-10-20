@@ -20,6 +20,7 @@ func (c *countingFacts) GatePassed(env, test, spec string) plan.Tri {
 // Review 427 B2: rows that name the same gate share one reading per
 // projection; each row still names it in its reason.
 func TestArchGateReadOncePerProjection(t *testing.T) {
+	t.Parallel()
 	facts := &countingFacts{reads: map[string]int{}}
 	gates := map[string]plan.Tri{}
 	var rows []*explained
