@@ -11,6 +11,9 @@ import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
 import { useNow } from './progressClock'
 import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
+/** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
+const budgetLabels: Record<string, string> = { owner_granted_attempts: 'attempts granted on its cards', owner_granted_wall_hours: 'hours granted on its cards' }
+
 const stageColor = { done: 'var(--color-success)', running: 'var(--color-info)', waiting: 'var(--color-warning)', failed: 'var(--color-danger)', future: 'var(--border)', skipped: 'var(--border)' }
 function Lines({ value }: { value: unknown }) {
   const lines = Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : []
@@ -49,7 +52,7 @@ function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Qu
       <section aria-label="Done when"><h4 className="font-medium">Done when</h4><Lines value={success} /></section>
       <section aria-label="Not doing"><h4 className="font-medium">Not doing</h4><Lines value={scope} /></section>
       <section aria-label="Budget"><h4 className="font-medium">Budget</h4><p>{String(budget.max_attempts ?? amendment?.max_attempts ?? '?')} attempts · {String(budget.max_wall_hours ?? amendment?.max_wall_hours ?? '?')} h maximum</p>
-        <dl>{Object.entries(budget).filter(([k]) => !['max_attempts', 'max_wall_hours'].includes(k)).map(([k, v]) => <div key={k}><dt>{k.replaceAll('_', ' ')}</dt><dd>{JSON.stringify(v)}</dd></div>)}</dl></section>
+        <dl>{Object.entries(budget).filter(([k]) => !['max_attempts', 'max_wall_hours'].includes(k)).map(([k, v]) => <div key={k}><dt>{budgetLabels[k] ?? k.replaceAll('_', ' ')}</dt><dd>{JSON.stringify(v)}</dd></div>)}</dl></section>
       <section aria-label="Implementation tasks"><h4 className="font-medium">Implementation tasks</h4><ul className="space-y-2">{data.tasks.filter(t => t.role === 'implement').map(t => <li key={t.task_id}>{t.title} · {t.state === 'accepted' ? 'Done' : dropped.has(t.task_id) ? (byRule.has(t.task_id) ? 'Dropped by rule' : 'Dropped by you') : t.state === 'verifying' ? 'Checking' : t.state === 'ready' ? 'Queued' : t.state} · {taskWho(data, t)}</li>)}</ul></section>
       <section aria-label="Decisions" className="md:col-span-2"><h4 className="font-medium">Decisions</h4><ol className="list-decimal space-y-3 pl-5">{decisions.map((e, i) => <li key={i}><strong>{text(e.body_json.decision)}</strong><p>Why: {text(e.body_json.why)}</p>{e.body_json.dropped != null && <p>Dropped: {text(e.body_json.dropped)}</p>}{e.body_json.reverse != null && <p>How to reverse: {text(e.body_json.reverse)}</p>}</li>)}</ol>{!decisions.length && <p>No decisions recorded yet.</p>}</section>
       <section aria-label="Questions asked"><h4 className="font-medium">Questions asked</h4><ul>{asked.map(q => <li key={q.id}><a href={questionHref(q.id)} className="underline">Q{q.number} · {q.title}</a> · {q.status}</li>)}</ul>{!asked.length && <p>No questions recorded.</p>}</section>

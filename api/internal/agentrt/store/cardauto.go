@@ -133,8 +133,20 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 		if on, ok, err = cardFor(ctx, tx, card); err != nil || !ok || !slices.Contains(rule.CardAuto.Kinds, on.kind) {
 			return err
 		}
+		// The rule holds until it expires or a later version stored already
+		// takes effect (review 443 A2: the question store may be reached
+		// after that instant).
+		until := rule.Expires
+		var next *time.Time
+		if err = tx.QueryRow(ctx, `SELECT min(effective_at) FROM agentrt.rule WHERE rule_id = $1 AND rule_version > $2`, rule.ID, rule.Version).
+			Scan(&next); err != nil {
+			return err
+		}
+		if next != nil && next.Before(until) {
+			until = *next
+		}
 		by := fmt.Sprintf("rule %s v%d", rule.ID, rule.Version)
-		if err = c.Answer(ctx, card.ID, card.Recommended, by, rule.Expires); err != nil {
+		if err = c.Answer(ctx, card.ID, card.Recommended, by, until); err != nil {
 			return err
 		}
 		did = true
@@ -152,6 +164,36 @@ func ruleNote(ctx context.Context, tx pgx.Tx, on cardOn, by string, card Runtime
 	return err
 }
 
+// ruleNoted says whether the mission has a note that a rule answered the
+// question. The caller holds the mission's stream, so two passes never both
+// find none (review 443 B2).
+func ruleNoted(ctx context.Context, tx pgx.Tx, mission, question string) (bool, error) {
+	var noted bool
+	err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'note' AND mission_id = $1
+	  AND body_json->>'text' LIKE 'rule % answered question ' || $2 || ' %')`, mission, question).Scan(&noted)
+	return noted, err
+}
+
+// ensureRuleNote is the note of a card a rule answered, written by whoever
+// uses the answer when the rule's own transaction did not keep it: the card's
+// decision, which acknowledges the answer, so the note is never left to a
+// scan of unacknowledged answers (review 443 B1). Nothing for the Owner's.
+func ensureRuleNote(ctx context.Context, tx pgx.Tx, t taskRow, by answerer, question, option string) error {
+	if by.rule == "" {
+		return nil
+	}
+	if err := lockStream(ctx, tx, MissionStream(t.mission)); err != nil {
+		return err
+	}
+	if noted, err := ruleNoted(ctx, tx, t.mission, question); err != nil || noted {
+		return err
+	}
+	_, err := Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "note", Actor: "controller", MissionID: t.mission,
+		PlanNode: t.step, TaskID: t.id, Body: map[string]any{"text": fmt.Sprintf("%s answered question %s with %s, the option it recommends",
+			by.rule, question, option)}})
+	return err
+}
+
 // finishRuleAnswer finishes a card a rule answered that the runtime has not
 // acknowledged: the note, when the answer's transaction did not keep it, and
 // a planner question's acknowledgement (a blocked card's answer is
@@ -164,11 +206,13 @@ func finishRuleAnswer(ctx context.Context, db DB, c CardRule, card RuntimeCard) 
 		if on, ok, err = cardKind(ctx, tx, card); err != nil || !ok {
 			return err
 		}
-		var noted bool
-		if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'note' AND mission_id = $1
-		    AND body_json->>'text' LIKE 'rule % answered question ' || $2 || ' %')`, on.mission, card.ID).Scan(&noted); err != nil || noted {
+		if err = lockStream(ctx, tx, MissionStream(on.mission)); err != nil {
 			return err
 		}
+		if noted, err := ruleNoted(ctx, tx, on.mission, card.ID); err != nil || noted {
+			return err
+		}
+		hook("rule note: none yet", card.ID)
 		var now time.Time
 		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 			return err

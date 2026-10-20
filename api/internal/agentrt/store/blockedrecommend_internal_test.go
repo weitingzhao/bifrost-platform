@@ -45,17 +45,17 @@ func TestRecommendRules(t *testing.T) {
 			f.check, f.verdict = "deterministic", "fail"
 		}), recDrop, "R5", "its checks failed in its last round (2 of 2)"},
 		{"not R1 with no budget", with(base(blockChain), func(f *recFacts) { f.created, f.budgetHours, f.lastWork = ago(100), 0, ago(2) }),
-			recDrop, "R2", "the Owner dropped its only check; other work in M-3 ran 2 hours ago, so drop only this task"},
+			recDrop, "R2", "its only check was dropped on its card; other work in M-3 ran 2 hours ago, so drop only this task"},
 
-		// R2: the Owner dropped its only check.
+		// R2: its only check was dropped on its card.
 		{"R2 quiet", with(base(blockChain), func(f *recFacts) { f.lastWork = ago(25) }),
-			recClose, "R2", "the Owner dropped its only check, and nothing in M-3 ran since 10-19"},
+			recClose, "R2", "its only check was dropped on its card, and nothing in M-3 ran since 10-19"},
 		{"R2 nothing ran", with(base(blockChain), func(f *recFacts) { f.lastWork = time.Time{} }),
-			recClose, "R2", "the Owner dropped its only check, and nothing in M-3 has run"},
+			recClose, "R2", "its only check was dropped on its card, and nothing in M-3 has run"},
 		{"R2 a day exactly", with(base(blockChain), func(f *recFacts) { f.lastWork = ago(24) }),
-			recClose, "R2", "the Owner dropped its only check, and nothing in M-3 ran since 10-19"},
+			recClose, "R2", "its only check was dropped on its card, and nothing in M-3 ran since 10-19"},
 		{"R2 busy", with(base(blockChain), func(f *recFacts) { f.lastWork = ago(23.9) }),
-			recDrop, "R2", "the Owner dropped its only check; other work in M-3 ran 23 hours ago, so drop only this task"},
+			recDrop, "R2", "its only check was dropped on its card; other work in M-3 ran 23 hours ago, so drop only this task"},
 
 		// R3: only the budget, a young mission, nothing failed this round.
 		{"R3 not tried this round", base(blockBudget), recRetry, "R3", "only the budget stopped it"},

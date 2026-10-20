@@ -325,11 +325,11 @@ func TestBlockedCardRecommends(t *testing.T) {
 			a.answer(a.lastID(), store.QuestionAnswered, store.CardRefuseKey)
 			_, err = store.DecideBlocked(ctx, w.rt, a.question, a.ack)
 			ok(t, err)
-			want := "Recommended: Do not do this task — the Owner dropped its only check; other work in " + mission +
+			want := "Recommended: Do not do this task — its only check was dropped on its card; other work in " + mission +
 				" ran under an hour ago, so drop only this task"
 			if quiet {
 				w.legacy(t, `UPDATE agentrt.attempt SET heartbeat_at = clock_timestamp() - interval '2 days'`)
-				want = "Recommended: Close mission " + mission + " — the Owner dropped its only check, and nothing in " + mission +
+				want = "Recommended: Close mission " + mission + " — its only check was dropped on its card, and nothing in " + mission +
 					" ran since " + time.Now().UTC().Add(-48*time.Hour).Format("01-02")
 			}
 			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[1].TaskID != impl || first(a.cards[1].Body) != want {

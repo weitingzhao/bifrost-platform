@@ -117,9 +117,9 @@ func recommend(f recFacts) recommendation {
 		return rec(recClose, "R1", fmt.Sprintf("started %s, used %d× its %d hours, %s", ago(age), int(age.Hours())/f.budgetHours,
 			f.budgetHours, lastWorkText(f)))
 	case f.kind == blockChain && quiet:
-		return rec(recClose, "R2", "the Owner dropped its only check, and "+quietText(f))
+		return rec(recClose, "R2", "its only check was dropped on its card, and "+quietText(f))
 	case f.kind == blockChain:
-		return rec(recDrop, "R2", fmt.Sprintf("the Owner dropped its only check; other work in %s %s, so drop only this task", f.mission, lastWorkText(f)))
+		return rec(recDrop, "R2", fmt.Sprintf("its only check was dropped on its card; other work in %s %s, so drop only this task", f.mission, lastWorkText(f)))
 	case f.kind == blockBudget && age < recOldMission && (!f.checkedThisRound || f.verdict == "pass"):
 		return rec(recRetry, "R3", "only the budget stopped it")
 	case f.kind == blockBudget && age >= recOldMission:

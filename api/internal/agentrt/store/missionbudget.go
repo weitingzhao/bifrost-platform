@@ -148,7 +148,7 @@ func (s spend) says(g grant) string {
 	default:
 		text += fmt.Sprintf("%d hours", s.budget.MaxWallHours+g.hours)
 	}
-	return text + ", recorded as yours."
+	return text + ", recorded with this card's answer."
 }
 
 // readMissionBudget reads a mission as a budget check needs it, with the

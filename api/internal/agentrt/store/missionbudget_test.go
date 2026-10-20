@@ -76,7 +76,7 @@ func TestRetryOnSpentBudgetLeases(t *testing.T) {
 			if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
 				t.Fatalf("asked %d (%v)", n, err)
 			}
-			raise := fmt.Sprintf("mission M-3 has used 4 of its %d attempts, so this answer also raises its budget to 7 attempts, recorded as yours", max)
+			raise := fmt.Sprintf("mission M-3 has used 4 of its %d attempts, so this answer also raises its budget to 7 attempts, recorded with this card's answer", max)
 			if body := a.cards[0].Body; strings.Contains(body, raise) != grows || strings.Contains(body, "raises its budget") != grows {
 				t.Fatalf("the card (budget grows: %v):\n%s", grows, body)
 			}
