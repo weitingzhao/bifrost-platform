@@ -229,10 +229,21 @@ func TestPlatformPollingErrorRequiresSeenPresent(t *testing.T) {
 		for _, mode := range []string{"poll error missing", "poll error recover"} {
 			t.Run(name+"/"+mode, func(t *testing.T) {
 				s, dyn, m := pinnedService(t, name, platformRefs(factSHA1, factSHA2), []string{"bifrost-ui"}, mode)
-				ctx, cancel := context.WithTimeout(context.Background(), 4500*time.Millisecond)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 				defer cancel()
+				if mode == "poll error missing" {
+					m.onGet = func(repo string) {
+						// afterSync advances before this deferred callback runs.
+						if repo == "bifrost-ui" && m.afterSync[repo] == 3 {
+							cancel()
+						}
+					}
+				}
 				resp, _, err := s.StartPipelineRun(ctx, name, factSHA1, "", "tester", map[string]string{"uiRevision": factSHA2})
 				if mode == "poll error missing" {
+					if ctx.Err() != context.Canceled {
+						t.Fatal("third post-sync read did not cancel the context", ctx.Err(), m.paths)
+					}
 					if err == nil || resp.OK || resp.Changed || !strings.Contains(resp.Message, "mirror was synced but the ref is still not present") || strings.Contains(resp.Message, "mirror sync did not complete") {
 						t.Fatal(resp, err)
 					}
