@@ -251,9 +251,9 @@ type assessmentReport struct {
 // whose refs are not all the spec's is dropped; fewer than two good reasons
 // is no assessment.
 func parseAssessment(text string, options []string, refs map[string]any) (map[string]any, string) {
-	raw := jsonOf(text)
-	if raw == "" {
-		return nil, "no JSON object"
+	raw, why := jsonOf(text)
+	if why != "" {
+		return nil, why
 	}
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.DisallowUnknownFields()
@@ -328,23 +328,32 @@ func refRecord(ref string, rec map[string]any) map[string]any {
 	return out
 }
 
-// jsonOf is the JSON object a report holds: the inside of its first ```
-// fence when it has one, else from its first { to its last }.
-func jsonOf(text string) string {
-	if i := strings.Index(text, "```"); i >= 0 {
-		rest := text[i+3:]
-		if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-			rest = rest[nl+1:]
+// jsonOf is the JSON object a report holds: the inside of its one ```
+// fence when it has one, else from its first { to its last }. A second
+// fence, or an object outside the one fence, is more than one object
+// (review 450 B1: the first of two fences was taken, the second ignored);
+// why says so.
+func jsonOf(text string) (raw, why string) {
+	if strings.Contains(text, "```") {
+		if strings.Count(text, "```") != 2 {
+			return "", "more than one JSON object"
 		}
-		if j := strings.Index(rest, "```"); j >= 0 {
-			text = rest[:j]
+		i := strings.Index(text, "```")
+		j := i + 3 + strings.Index(text[i+3:], "```")
+		inside, outside := text[i+3:j], text[:i]+text[j+3:]
+		if strings.Contains(outside, "{") {
+			return "", "more than one JSON object"
 		}
+		if nl := strings.IndexByte(inside, '\n'); nl >= 0 {
+			inside = inside[nl+1:]
+		}
+		text = inside
 	}
 	i, j := strings.Index(text, "{"), strings.LastIndex(text, "}")
 	if i < 0 || j < i {
-		return ""
+		return "", "no JSON object"
 	}
-	return text[i : j+1]
+	return text[i : j+1], ""
 }
 
 // EndAssessments records unavailable every assessment that can no longer

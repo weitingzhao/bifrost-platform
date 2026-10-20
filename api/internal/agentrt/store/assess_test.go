@@ -355,6 +355,10 @@ func TestAssessmentReportShape(t *testing.T) {
 			strings.Trim(strings.TrimPrefix(report("b", good), "```json"), "`\n"), "more than one JSON object"},
 		{"two objects in a fence", "```json\n" + strings.Trim(strings.TrimPrefix(report("a", good), "```json"), "`\n") + "\n" +
 			strings.Trim(strings.TrimPrefix(report("b", good), "```json"), "`\n") + "\n```", "more than one JSON object"},
+		// Review 450 B1: nor the first of two fences, nor a fence and a bare one.
+		{"two fences", report("a", good) + "\nCorrection:\n" + report("b", good), "more than one JSON object"},
+		{"a fence and a bare object", report("a", good) + "\nCorrection: " + strings.Trim(strings.TrimPrefix(report("b", good), "```json"), "`\n"),
+			"more than one JSON object"},
 	} {
 		a, why := store.ParseAssessmentForTest(c.text, opts, refs)
 		if c.why == "" && (why != "" || a == nil) || c.why != "" && !strings.Contains(why, c.why) {
