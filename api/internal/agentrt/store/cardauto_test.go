@@ -24,6 +24,7 @@ type cardStore struct {
 	answers int
 	acked   map[string]int
 	during  func(id string) // runs as an answer is written, before it lands
+	after   func(id string) // runs once an answer has landed, before the rule's caller hears so
 	ackErr  error           // what the next acknowledgement answers
 }
 
@@ -87,13 +88,17 @@ func (s *cardStore) answer(ctx context.Context, id, option, rule string, until t
 		s.during(id)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !time.Now().Before(until) {
+		s.mu.Unlock()
 		return errors.New("the rule no longer holds")
 	}
 	c := s.cards[id]
 	c.status, c.option, c.by = store.QuestionAnswered, option, rule
 	s.answers++
+	s.mu.Unlock()
+	if s.after != nil {
+		s.after(id)
+	}
 	return nil
 }
 

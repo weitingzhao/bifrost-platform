@@ -616,7 +616,7 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: closed}); err != nil {
 			return err
 		}
-		if err = ensureRuleNote(ctx, tx, t, by, c.question, q.Option); err != nil {
+		if err = ensureRuleNote(ctx, tx, asked, t, by, c.question, q.Option); err != nil {
 			return err
 		}
 		did = true

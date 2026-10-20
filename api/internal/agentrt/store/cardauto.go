@@ -155,12 +155,29 @@ func answerOne(ctx context.Context, db DB, c CardRule, card RuntimeCard) (cardOn
 	return on, did && err == nil, err
 }
 
-// ruleNote records on the card's mission that a rule answered it.
+// ruleNote records on the card's mission that a rule answered it, unless
+// that is recorded already.
 func ruleNote(ctx context.Context, tx pgx.Tx, on cardOn, by string, card RuntimeCard, now time.Time) error {
-	text := fmt.Sprintf("%s answered question %s with %s, the option it recommends, after %d minutes unanswered",
-		by, card.ID, card.Recommended, int(now.Sub(card.CreatedAt)/time.Minute))
-	_, err := Append(ctx, tx, Event{Stream: MissionStream(on.mission), Type: "note", Actor: "controller", MissionID: on.mission,
-		PlanNode: on.step, TaskID: on.task, Body: map[string]any{"text": text}})
+	return noteRuleAnswer(ctx, tx, on.mission, on.step, on.task, card.ID, fmt.Sprintf(
+		"%s answered question %s with %s, the option it recommends, after %d minutes unanswered",
+		by, card.ID, card.Recommended, int(now.Sub(card.CreatedAt)/time.Minute)))
+}
+
+// noteRuleAnswer is the one way a rule's answer is noted: on the mission the
+// card was asked in, its stream held from the look for a note to its writing,
+// and only when there is none (reviews 443 B2, 444 B1, B2: the rule's own
+// transaction, the decision that uses the answer and a later pass all come
+// through here, so the answer is noted once, wherever its task is now).
+func noteRuleAnswer(ctx context.Context, tx pgx.Tx, mission, step, task, question, text string) error {
+	if err := lockStream(ctx, tx, MissionStream(mission)); err != nil {
+		return err
+	}
+	if noted, err := ruleNoted(ctx, tx, mission, question); err != nil || noted {
+		return err
+	}
+	hook("rule note: none yet", question)
+	_, err := Append(ctx, tx, Event{Stream: MissionStream(mission), Type: "note", Actor: "controller", MissionID: mission,
+		PlanNode: step, TaskID: task, Body: map[string]any{"text": text}})
 	return err
 }
 
@@ -177,21 +194,14 @@ func ruleNoted(ctx context.Context, tx pgx.Tx, mission, question string) (bool, 
 // ensureRuleNote is the note of a card a rule answered, written by whoever
 // uses the answer when the rule's own transaction did not keep it: the card's
 // decision, which acknowledges the answer, so the note is never left to a
-// scan of unacknowledged answers (review 443 B1). Nothing for the Owner's.
-func ensureRuleNote(ctx context.Context, tx pgx.Tx, t taskRow, by answerer, question, option string) error {
+// scan of unacknowledged answers (review 443 B1). mission is the one the card
+// was asked in. Nothing for the Owner's.
+func ensureRuleNote(ctx context.Context, tx pgx.Tx, mission string, t taskRow, by answerer, question, option string) error {
 	if by.rule == "" {
 		return nil
 	}
-	if err := lockStream(ctx, tx, MissionStream(t.mission)); err != nil {
-		return err
-	}
-	if noted, err := ruleNoted(ctx, tx, t.mission, question); err != nil || noted {
-		return err
-	}
-	_, err := Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "note", Actor: "controller", MissionID: t.mission,
-		PlanNode: t.step, TaskID: t.id, Body: map[string]any{"text": fmt.Sprintf("%s answered question %s with %s, the option it recommends",
-			by.rule, question, option)}})
-	return err
+	return noteRuleAnswer(ctx, tx, mission, t.step, t.id, question, fmt.Sprintf("%s answered question %s with %s, the option it recommends",
+		by.rule, question, option))
 }
 
 // finishRuleAnswer finishes a card a rule answered that the runtime has not
@@ -206,13 +216,6 @@ func finishRuleAnswer(ctx context.Context, db DB, c CardRule, card RuntimeCard) 
 		if on, ok, err = cardKind(ctx, tx, card); err != nil || !ok {
 			return err
 		}
-		if err = lockStream(ctx, tx, MissionStream(on.mission)); err != nil {
-			return err
-		}
-		if noted, err := ruleNoted(ctx, tx, on.mission, card.ID); err != nil || noted {
-			return err
-		}
-		hook("rule note: none yet", card.ID)
 		var now time.Time
 		if err = tx.QueryRow(ctx, `SELECT clock_timestamp()`).Scan(&now); err != nil {
 			return err

@@ -172,7 +172,7 @@ func closeOnCardOnce(ctx context.Context, db DB, c openCard, q Question, seen ma
 			MissionID: t.mission, PlanNode: t.step, TaskID: t.id, Body: body}); err != nil {
 			return err
 		}
-		if err = ensureRuleNote(ctx, tx, t, by, c.question, q.Option); err != nil {
+		if err = ensureRuleNote(ctx, tx, mission, t, by, c.question, q.Option); err != nil {
 			return err
 		}
 		did = true

@@ -72,6 +72,14 @@ func TestRuleAnswerThenMoveIsMoot(t *testing.T) {
 			if after := w.budget(t, "M-2"); len(w.amended(t, "M-2")) != 0 || len(after) != len(before) {
 				t.Fatalf("M-2's budget %v -> %v, amended %v", before, after, w.amended(t, "M-2"))
 			}
+			// Review 444 B1: the answer is noted once, on the mission the card
+			// was asked in, though its task is in another now.
+			var m1, all int
+			ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FILTER (WHERE mission_id = 'M-1'), count(*) FROM agentrt.event WHERE event_type = 'note'
+			  AND body_json->>'text' LIKE '% answered question ' || $1 || ' %'`, card).Scan(&m1, &all))
+			if m1 != 1 || all != 1 {
+				t.Fatalf("%d notes of the answer, %d on M-1", all, m1)
+			}
 		})
 	}
 }
@@ -165,5 +173,39 @@ func TestRuleNoteOnceForTwoPasses(t *testing.T) {
 	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json->>'text' LIKE '% answered question q_plannerquestion1 %'`).Scan(&notes))
 	if notes != 1 {
 		t.Fatalf("%d notes", notes)
+	}
+}
+
+// Review 444 B2: a pass that wrote a rule's answer and has not noted it yet,
+// and a later pass that finds the answer unacknowledged and notes it first:
+// the answer is noted once.
+func TestRuleNoteOnceWhenAPassFinishesFirst(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.overBudget(t, "M-3", "")
+	if n, err := store.BlockOverBudget(ctx, w.rt); err != nil || n != 1 {
+		t.Fatalf("blocked %d (%v)", n, err)
+	}
+	var s cardStore
+	if n, err := store.AskBlocked(ctx, w.rt, s.ask); err != nil || n != 1 {
+		t.Fatalf("asked %d (%v)", n, err)
+	}
+	card := s.order[0]
+	s.aged(card, time.Hour)
+	signCardAuto(t, w, "30", "[blocked]")
+	pool := w.db.Pool(t, w.db.Runtime) // the later pass: the first's transaction is on w.rt
+	var later error
+	s.after = func(string) {
+		s.after = nil
+		_, later = store.AnswerByRule(ctx, pool, s.rule())
+	}
+	if n, err := store.AnswerByRule(ctx, w.rt, s.rule()); err != nil || n != 1 || later != nil {
+		t.Fatalf("answered %d (%v); the later pass: %v", n, err, later)
+	}
+	var notes int
+	ok(t, w.rt.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_type = 'note' AND body_json->>'text' LIKE '% answered question ' || $1 || ' %'`,
+		card).Scan(&notes))
+	if notes != 1 {
+		t.Fatalf("%d notes of the answer", notes)
 	}
 }
