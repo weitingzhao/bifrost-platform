@@ -21,6 +21,8 @@ import {
   proposeMission,
   proposePlanChange,
   proposePlanImport,
+  postPlanNote,
+  NOTE_KEY_RULE,
   defaultRequestFiles,
   readRequestFile,
   nodeRequestFs,
@@ -154,6 +156,26 @@ describe('agent runtime writes', () => {
     ]
     await proposePlanChange({ root: 'R2', reason: 'r', changes, idempotency_key: 'c-2' }, d)
     assert.deepEqual(calls[0].body, { idempotency_key: 'c-2', root: 'R2', reason: 'r', changes })
+  })
+
+  it('post_plan_note posts to the row with the caller\'s key, and nothing without one, a session or writes on', async () => {
+    const { d, calls } = deps()
+    const missing = await postPlanNote({ plan_node_id: 'ARCH:state-db', text: 'both environments', idempotency_key: '' }, d)
+    assert.deepEqual(missing, { error: 'idempotency_key is required', hint: NOTE_KEY_RULE })
+    assert.equal(calls.length, 0)
+    await postPlanNote({ plan_node_id: 'ARCH:state-db', text: 'both environments', idempotency_key: 'n-1' }, d)
+    // The row's ':' as the platform stores it, the rest escaped.
+    await postPlanNote({ plan_node_id: 'ARCH:a/b', text: 'x', idempotency_key: 'n-2' }, d)
+    assert.deepEqual(calls, [
+      { kind: 'send', path: '/api/v1/agentrt/plan/ARCH:state-db/notes', body: { idempotency_key: 'n-1', text: 'both environments' } },
+      { kind: 'send', path: '/api/v1/agentrt/plan/ARCH:a%2Fb/notes', body: { idempotency_key: 'n-2', text: 'x' } },
+    ])
+    for (const over of [{ fellBack: true }, { mode: 'off' as WritesMode }]) {
+      const { d: d2, calls: c2 } = deps(over)
+      const out = (await postPlanNote({ plan_node_id: 'ARCH:state-db', text: 'x', idempotency_key: 'n-3' }, d2)) as { error?: string }
+      assert.ok(out.error)
+      assert.equal(c2.length, 0)
+    }
   })
 
   it('propose_plan_import reads a request only from its folder and sends it with the caller\'s key', async () => {
@@ -324,7 +346,7 @@ describe('agent runtime tools are served', () => {
     assert.match(index, /registerPlanImportTools\(reg\)/)
     const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

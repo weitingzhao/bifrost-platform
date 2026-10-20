@@ -223,6 +223,28 @@ export async function proposePlanChange(
   })
 }
 
+export const NOTE_KEY_RULE =
+  'idempotency_key names this one note: reuse it only to retry the same note; a new note needs a new key, or the platform answers with the old one (another text under a used key is refused).'
+
+/**
+ * Write what an architecture row (ARCH:…) actually is now: a note appended
+ * to the row (POST /plan/{id}/notes, W-31 2.5 G2 A); the platform shows the
+ * latest beside the row's tick, which the row's gate tests decide. The key
+ * is the caller's, as for proposals.
+ */
+export async function postPlanNote(
+  input: { plan_node_id: string; text: string; idempotency_key: string },
+  d: RuntimeDeps = defaultRuntimeDeps(),
+): Promise<unknown> {
+  const refused = refuseWrite(d)
+  if (refused) return refused
+  if (!input.idempotency_key) return { error: 'idempotency_key is required', hint: NOTE_KEY_RULE }
+  return d.send('POST', `${BASE}/plan/${id(input.plan_node_id)}/notes`, {
+    idempotency_key: input.idempotency_key,
+    text: input.text,
+  })
+}
+
 /** The plan import request format (planimport.Format on the platform). */
 export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
 
