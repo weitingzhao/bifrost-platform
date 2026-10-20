@@ -41,7 +41,8 @@ func TestPlanCoreLabel(t *testing.T) {
 		"true, agentd":       {corePlan, true},
 		"true, the store":    {first("true", "Change ./api/internal/agentrt/store/route.go.", "bifrost-platform"), true},
 		"true, cmd":          {first("true", "Add a flag to `api/cmd/agentd/main.go`.", "bifrost-platform"), true},
-		"true, a directory.": {first("true", "Everything stays in api/internal/agentd.", "bifrost-platform"), true},
+		"true, a directory.": {first("true", "Everything stays in api/internal/agentrt/store/.", "bifrost-platform"), true},
+		"true, in brackets":  {first("true", "Two files (api/internal/agentd/run.go, api/internal/agentd/x.go).", "bifrost-platform"), true},
 		"false, core files":  {first("false", agentd, "bifrost-platform"), false},
 	} {
 		p, err := store.ParsePlan([]byte(c.report), repos)
@@ -64,12 +65,42 @@ func TestPlanCoreLabel(t *testing.T) {
 		"a longer name":  {first("true", "Change api/internal/agentdx/a.go.", "bifrost-platform"), "names none"},
 		"inside another": {first("true", "Change vendor/api/internal/agentd/a.go.", "bifrost-platform"), "names none"},
 		"a file named":   {first("true", "Change api/internal/agentd.go.", "bifrost-platform"), "names none"},
+		// Review 426 B1, C1: a whole path from the repository's root, beneath
+		// a core directory, not the directory alone.
+		"the directory alone": {first("true", "Everything stays in api/internal/agentd.", "bifrost-platform"), "names none"},
+		"only mentioned":      {first("true", "The term api/internal/agentrt is mentioned; change console/src/a.ts.", "bifrost-platform"), "names none"},
+		"out by ..":           {first("true", "Change api/internal/agentd/../../other.go.", "bifrost-platform"), "names none"},
+		"backslashes":         {first("true", `Change api\\internal\\agentd\\a.go.`, "bifrost-platform"), "names none"},
+		"behind a backslash":  {first("true", `Change vendor\\api/internal/agentd/a.go.`, "bifrost-platform"), "names none"},
+		"a URL's query":       {first("true", "See https://example.com/?path=api/internal/agentd/a.go.", "bifrost-platform"), "names none"},
+		"a URL's path":        {first("true", "See https://example.com/api/internal/agentd/a.go.", "bifrost-platform"), "names none"},
+		"from the root":       {first("true", "Change /api/internal/agentd/a.go.", "bifrost-platform"), "names none"},
 	} {
 		if _, err := store.ParsePlan([]byte(c.report), repos); err == nil || !strings.Contains(err.Error(), c.why) {
 			t.Errorf("%s: %v (want %q)", name, err, c.why)
 		} else if !strings.HasPrefix(err.Error(), "tasks[0]") {
 			t.Errorf("%s: the error does not say which task: %v", name, err)
 		}
+	}
+	// Review 426 C2: a key named twice in one object, in any case, is refused
+	// (the decoder would keep the last); C3: a refused value is quoted cut.
+	for name, report := range map[string]string{
+		"core twice":        strings.Replace(corePlan, `"core": true,`, `"core": true, "core": false,`, 1),
+		"Core and core":     strings.Replace(corePlan, `"core": true,`, `"core": true, "Core": false,`, 1),
+		"a bad then a good": strings.Replace(corePlan, `"core": true,`, `"core": null, "core": true,`, 1),
+		"a title twice":     strings.Replace(goodPlan, `"title": "Document MainHead",`, `"title": "Document MainHead", "title": "x",`, 1),
+	} {
+		if _, err := store.ParsePlan([]byte(report), repos); err == nil || !strings.Contains(err.Error(), "twice in one object") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	long := first(strings.Repeat("9", 100000), "Change api/internal/agentd/a.go.", "bifrost-platform")
+	if _, err := store.ParsePlan([]byte(long), repos); err == nil || len(err.Error()) > 200 {
+		t.Errorf("a long refused value: %d bytes of error", len(err.Error()))
+	}
+	// The same keys in different objects, and arrays of objects, still read.
+	if _, err := store.ParsePlan([]byte(goodPlan), repos); err != nil {
+		t.Errorf("goodPlan: %v", err)
 	}
 }
 

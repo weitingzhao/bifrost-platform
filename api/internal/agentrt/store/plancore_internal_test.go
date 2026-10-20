@@ -67,7 +67,8 @@ func TestSpecsSayWhatCoreWorkIs(t *testing.T) {
 		}
 	}
 	for _, want := range []string{`Mark a task \"core\": true when it is core work`, `\"core\": false}`,
-		"in a repository with no core work (bifrost-trade-infra)", "core is true or false (left out: false)"} {
+		"in a\\n  repository with no core work (bifrost-trade-infra)", "as a path from the repository's root",
+		"core is true or false (left out: false)"} {
 		if !strings.Contains(plan, want) {
 			t.Errorf("the plan spec lacks %q", want)
 		}

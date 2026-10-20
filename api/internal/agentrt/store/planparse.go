@@ -106,7 +106,11 @@ func ParsePlan(report []byte, repos []string) (PlanDoc, error) {
 	if len(blocks) == 0 {
 		return d, errors.New("the report has no ```json block")
 	}
-	dec := json.NewDecoder(bytes.NewReader(blocks[len(blocks)-1][1]))
+	block := blocks[len(blocks)-1][1]
+	if err := oneOfEachKey(block); err != nil {
+		return d, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(block))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&d); err != nil {
 		return d, fmt.Errorf("the plan does not read: %v", err)
@@ -115,6 +119,53 @@ func ParsePlan(report []byte, repos []string) (PlanDoc, error) {
 		return d, errors.New("the plan block holds more than one value")
 	}
 	return d, d.check(repos)
+}
+
+// oneOfEachKey refuses a plan in which one object names a key twice: Go's
+// decoder keeps the last, and matches a key to a field whatever its case, so
+// "core": true then "Core": false would read as false (review 426 C2). A
+// block that does not read is left to the decoder to say why.
+func oneOfEachKey(block []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(block))
+	type frame struct {
+		object bool
+		keys   map[string]bool
+		key    bool // the next token is a key
+	}
+	var stack []*frame
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil
+		}
+		var top *frame
+		if len(stack) > 0 {
+			top = stack[len(stack)-1]
+		}
+		if top != nil && top.object && top.key {
+			if k, ok := tok.(string); ok {
+				if top.keys[strings.ToLower(k)] {
+					return fmt.Errorf("the plan names %q twice in one object", cutBytes(k, 40))
+				}
+				top.keys[strings.ToLower(k)] = true
+				top.key = false
+				continue
+			}
+		}
+		switch tok {
+		case json.Delim('{'):
+			stack = append(stack, &frame{object: true, keys: map[string]bool{}, key: true})
+			continue
+		case json.Delim('['):
+			stack = append(stack, &frame{})
+			continue
+		case json.Delim('}'), json.Delim(']'):
+			stack = stack[:len(stack)-1]
+		}
+		if len(stack) > 0 && stack[len(stack)-1].object {
+			stack[len(stack)-1].key = true // a value ended: a key comes next
+		}
+	}
 }
 
 func (d PlanDoc) check(repos []string) error {

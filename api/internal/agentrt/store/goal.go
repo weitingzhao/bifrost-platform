@@ -270,9 +270,10 @@ func coreRule(repos []string) string {
 		return "- No task of this goal is core work (its repositories have none; see Core work below): leave core out.\n"
 	}
 	return "- Mark a task \"core\": true when it is core work (see Core work below) and false otherwise; you judge which by that\n" +
-		"  section, nothing else. A core task's text names the files it changes under its repository's core directories. Core is\n" +
-		"  refused on a task in a repository with no core work (" + noCore(repos) + "), on one whose text names no such file,\n" +
-		"  and as anything but true or false.\n"
+		"  section, nothing else. A core task's text names the files it changes under its repository's core directories, each\n" +
+		"  as a path from the repository's root (for example api/internal/agentd/run.go). Core is refused on a task in a\n" +
+		"  repository with no core work (" + noCore(repos) + "), on one whose text names no such file, and as anything but\n" +
+		"  true or false.\n"
 }
 
 // noCore lists the repositories of a goal that have no core work.

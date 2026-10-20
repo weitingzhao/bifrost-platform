@@ -3,9 +3,11 @@ package store
 import (
 	"fmt"
 	"maps"
+	"path"
 	"regexp"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // Core work (Owner 2026-10-19 「核心字段 A」: a plan may mark a task core; the
@@ -44,14 +46,30 @@ func withSlash(dirs []string) []string {
 	return out
 }
 
-// coreDirNamed says whether text names a path under one of dirs: the
-// directory itself or a path beneath it, as a whole path (not
-// "api/internal/agentdx", nor "x/api/internal/agentd").
+// repoPath is a path a text names relative to its repository: a run of path
+// characters that starts the text or follows a space, a quote, a backtick, a
+// bracket or a list's punctuation (not "=", "/", "\\" or ":", so a URL's path
+// or query and a path inside another are not one), and that a backslash does
+// not continue (review 426 B1).
+var repoPath = regexp.MustCompile("(?:^|[\\s\"'`(\\[{<,;*])([A-Za-z0-9_./-]+)")
+
+// coreDirNamed says whether text names a path beneath one of dirs: a file or
+// a directory under it, as a whole path relative to the repository, read
+// after "./" and a sentence's full stops are taken off and "." and ".." are
+// resolved (so not "api/internal/agentdx/a.go", "x/api/internal/agentd/a.go",
+// "api/internal/agentd/../../a.go", nor the directory alone; review 426 B1,
+// C1).
 func coreDirNamed(text string, dirs []string) bool {
-	for _, d := range dirs {
-		re := regexp.MustCompile(`(?:^|[^A-Za-z0-9_./-])(?:\./)?` + regexp.QuoteMeta(d) + `(?:/|[^A-Za-z0-9_.-]|\.(?:[^A-Za-z0-9_-]|$)|$)`)
-		if re.MatchString(text) {
-			return true
+	for _, m := range repoPath.FindAllStringSubmatchIndex(text, -1) {
+		p := text[m[2]:m[3]]
+		if m[3] < len(text) && text[m[3]] == '\\' {
+			continue
+		}
+		p = path.Clean(strings.TrimRight(p, "."))
+		for _, d := range dirs {
+			if strings.HasPrefix(p, d+"/") {
+				return true
+			}
 		}
 	}
 	return false
@@ -70,6 +88,19 @@ func checkCore(role, repo string) error {
 	return nil
 }
 
+// cutBytes is s cut to at most n bytes on a character's boundary, marked when
+// cut: a refused value is quoted in the next round's spec, not copied whole
+// (review 426 C3).
+func cutBytes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n] + "…"
+}
+
 func orNone(repo string) string {
 	if repo == "" {
 		return "a task with no repository"
@@ -86,14 +117,14 @@ func checkPlannedCore(at string, t PlannedTask) error {
 		return nil
 	case "true":
 	default:
-		return fmt.Errorf("%s: core is true or false, or left out; not %s", at, t.Core)
+		return fmt.Errorf("%s: core is true or false, or left out; not %s", at, cutBytes(string(t.Core), 40))
 	}
 	if err := checkCore("implement", t.Repo); err != nil {
 		return fmt.Errorf("%s: %v", at, err)
 	}
 	if dirs := Repos[t.Repo].Core; !coreDirNamed(t.Text, dirs) {
-		return fmt.Errorf("%s: a core task names in its text the files it changes under %s; this one names none, so it is not core "+
-			"work, or its text does not say where", at, strings.Join(withSlash(dirs), ", "))
+		return fmt.Errorf("%s: a core task names in its text the files it changes under %s, each as a path from the "+
+			"repository's root; this one names none, so it is not core work, or its text does not say where", at, strings.Join(withSlash(dirs), ", "))
 	}
 	return nil
 }
