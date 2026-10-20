@@ -528,3 +528,72 @@ func TestBlockedCardsNeedAQuestionStore(t *testing.T) {
 		t.Fatalf("%d %v", n, err)
 	}
 }
+
+// TD-384: a ready task its mission's budget lets no longer run is blocked in
+// one pass and asked about in the same pass, its card naming the budget; one
+// more round makes room for a round, and the next pass leaves it ready.
+func TestBlockedCardsBlockATaskOverBudget(t *testing.T) {
+	pool := setup(t)
+	task := store.NewTaskID()
+	must(t, store.InTx(ctx, pool, func(tx pgx.Tx) error {
+		if _, err := store.CreateMission(ctx, tx, "controller", store.Mission{ID: "M-2", Title: "goal", Goal: "g", Deadline: time.Now().Add(time.Hour),
+			Repos: []string{"bifrost-platform"}, Success: []string{store.GoalSuccess}, MaxAttempts: 9, MaxWallHours: 48}); err != nil {
+			return err
+		}
+		if err := store.MoveMission(ctx, tx, "controller", "M-2", "active", "test"); err != nil {
+			return err
+		}
+		spec, err := store.PutArtifact(ctx, tx, "controller", "task_spec", "text/plain", []byte("spec"))
+		if err != nil {
+			return err
+		}
+		if _, err = store.ProposeTask(ctx, tx, "controller", store.Task{ID: task, MissionID: "M-2", OffPlanReason: "a goal",
+			Role: "implement", Class: "go", Title: "t", SpecArtifact: spec, Effect: "branch", Repo: "bifrost-platform"}); err != nil {
+			return err
+		}
+		if err = store.MarkReady(ctx, tx, "controller", task); err != nil {
+			return err
+		}
+		// The mission started 49 hours ago: its 48 are spent.
+		if _, err = store.Append(ctx, tx, store.Event{Stream: "system", Type: "legacy_imported", Actor: "controller",
+			Body: map[string]any{"source": "test"}}); err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE agentrt.mission SET created_at = clock_timestamp() - interval '49 hours' WHERE mission_id = 'M-2'`)
+		return err
+	}))
+	w := &world{questions: map[string]store.Question{}}
+	src := w.sources()
+	var cards []store.Card
+	src.Ask = func(_ context.Context, c store.Card) (string, error) {
+		w.set(func() { cards = append(cards, c) })
+		return "q_8", nil
+	}
+	c := &controller.Controller{DB: pool, Sources: src}
+	state := func() string {
+		var s string
+		must(t, pool.QueryRow(ctx, `SELECT state FROM agentrt.task WHERE task_id = $1`, task).Scan(&s))
+		return s
+	}
+	if _, err := c.BlockedCards(ctx); err != nil || state() != "blocked" {
+		t.Fatalf("one pass: %v, the task is %s", err, state())
+	}
+	w.set(func() {
+		if len(cards) != 1 || cards[0].TaskID != task || !strings.Contains(cards[0].Body, "Why: mission M-2 is past its 48 hours") ||
+			!strings.Contains(cards[0].Body, "raises its budget to 53 hours") {
+			t.Fatalf("cards %+v", cards)
+		}
+		w.questions["q_8"] = store.Question{ID: "q_8", Status: store.QuestionAnswered, Option: store.CardApplyKey,
+			AnsweredBy: "owner", AnsweredAt: "2026-10-20T15:00:00Z"}
+	})
+	for i := 0; i < 2; i++ {
+		if _, err := c.BlockedCards(ctx); err != nil || state() != "ready" {
+			t.Fatalf("pass %d after one more round: %v, the task is %s", i+1, err, state())
+		}
+	}
+	var hours int
+	must(t, pool.QueryRow(ctx, `SELECT (budget_json->>'max_wall_hours')::int FROM agentrt.mission WHERE mission_id = 'M-2'`).Scan(&hours))
+	if hours != 53 {
+		t.Fatalf("max_wall_hours %d; want 53", hours)
+	}
+}

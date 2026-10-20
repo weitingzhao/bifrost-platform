@@ -310,17 +310,21 @@ func (c *Controller) boundedWithdraw() store.Withdraw {
 
 // BlockedCards is one pass over the blocked tasks' decision cards (design v5
 // §5.2 「验收编排」): an answered card gives its task one more round or drops
-// it (store.DecideBlocked), then every blocked task that needs a card and has
-// none open gets one (store.AskBlocked), the tasks blocked before this pass
-// included. Without a question store there are no cards. It returns how many
-// cards it closed and asked.
+// it (store.DecideBlocked), a ready task its mission's budget no longer lets
+// run is blocked with the reason (store.BlockOverBudget, TD-384), then every
+// blocked task that needs a card and has none open gets one
+// (store.AskBlocked), the tasks blocked before this pass included. Without a
+// question store there are no cards, and nothing is blocked for want of
+// budget (no answer could release it). It returns how many cards it closed
+// and asked and how many tasks it blocked.
 func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	if c.Sources.Question == nil || c.Sources.Ask == nil {
 		return 0, nil
 	}
 	decided, derr := store.DecideBlocked(ctx, c.DB, c.question, c.ack())
+	spent, serr := store.BlockOverBudget(ctx, c.DB)
 	asked, aerr := store.AskBlocked(ctx, c.DB, c.boundedAsk())
-	return decided + asked, errors.Join(derr, aerr)
+	return decided + spent + asked, errors.Join(derr, serr, aerr)
 }
 
 // Close is one pass of closing the missions whose goal is done: every task

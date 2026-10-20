@@ -35,6 +35,12 @@ import (
 // was withdrawn, closes the card and moves nothing: the task is still
 // blocked, and the next pass asks again with a new card (his words on it).
 //
+// One more round also makes room in the mission's budget for that round
+// when it has none, as the Owner's mission_amended (missionbudget.go,
+// TD-384); the card says so beforehand. Not doing a verification or a
+// review blocks the work it checks too (with no check it can never be
+// accepted), and that task then gets a card of its own.
+//
 // Which blocked tasks get a card:
 //   - an implementation whose checks failed in its last round (accept.go) and
 //     a planning task whose plan was refused in its last round
@@ -42,6 +48,8 @@ import (
 //     added to its spec as a rework round adds it;
 //   - a task blocked at dispatch because a task it depends on was rejected or
 //     cancelled (propose.go): one more round runs it without that work;
+//   - a ready task its mission's budget lets no longer run (missionbudget.go):
+//     one more round runs it on the room it makes in the budget;
 //   - an external task whose attempt was lost or ended on its host
 //     (attempt.go), once every such attempt has a confirmed end: an
 //     attempt_ended whose host cleared the process group (group_cleared).
@@ -198,9 +206,13 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		if err != nil {
 			return err
 		}
+		s, g, _, err := roundFor(ctx, tx, t)
+		if err != nil {
+			return err
+		}
 		card := asked + 1
-		body := blockedCardBody(blockedCard{task: t, title: title, repo: d.repo, round: d.round, maxRounds: d.maxRounds,
-			reason: reason, failed: failed, check: check, words: words, card: card})
+		body := blockedCardBody(blockedCard{task: t, title: title, repo: d.repo, subject: d.subject, round: d.round, maxRounds: d.maxRounds,
+			reason: reason, failed: failed, check: check, words: words, card: card, budget: s.says(g)})
 		q, err := ask(ctx, Card{Key: blockedCardKey(taskID, block, card), Title: "Blocked in " + t.mission + ": " + firstLine(title),
 			Body: body, Options: []string{BlockedRetry, BlockedDrop}, OwnerDuty: "goal", TaskID: taskID,
 			Meanwhile: "the task stays blocked and mission " + t.mission + " stays open",
@@ -327,12 +339,13 @@ func lastCheck(ctx context.Context, tx pgx.Tx, taskID string) (*checkSummary, er
 }
 
 type blockedCard struct {
-	task                   taskRow
-	title, repo, reason    string
-	round, maxRounds, card int
-	failed                 bool // blocked for failing its last round: one more round is round + 1
-	check                  *checkSummary
-	words                  string // the Owner's last "none of these" on a card of this block
+	task                         taskRow
+	title, repo, reason, subject string // subject: the task a verification or review checks
+	round, maxRounds, card       int
+	failed                       bool // blocked for failing its last round: one more round is round + 1
+	check                        *checkSummary
+	words                        string // the Owner's last "none of these" on a card of this block
+	budget                       string // what one more round adds to the mission's budget, "" for nothing (spend.says)
 }
 
 // excerptRunes is the most of a report a card quotes; it is cut further to
@@ -466,8 +479,16 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 	case c.failed:
 		more = fmt.Sprintf("it goes back to ready for round %d of %d, and a host takes it as usual", c.round+1, c.round+1)
 	}
-	fmt.Fprintf(&b, "\n%s: %s.\n%s: the task is cancelled; mission %s finishes once every other task is accepted "+
-		"(a task that depends on this one is then blocked and gets a card of its own).\n", BlockedRetry, more, BlockedDrop, c.task.mission)
+	if c.budget != "" {
+		more += ". " + strings.TrimSuffix(c.budget, ".")
+	}
+	drop := fmt.Sprintf("the task is cancelled; mission %s finishes once every other task is accepted "+
+		"(a task that depends on this one is then blocked and gets a card of its own)", c.task.mission)
+	if c.subject != "" {
+		drop = fmt.Sprintf("this check is cancelled and task %s, whose work it checks, is blocked, since it cannot be accepted "+
+			"unchecked; that task then gets a card of its own", c.subject)
+	}
+	fmt.Fprintf(&b, "\n%s: %s.\n%s: %s.\n", BlockedRetry, more, BlockedDrop, drop)
 	return b.String()
 }
 
@@ -565,14 +586,33 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 	did := false
 	err = InTx(ctx, db, func(tx pgx.Tx) error {
 		did = false
+		// A verification or review is locked after the work it checks, as
+		// Conclude locks them; not doing the check blocks that work.
+		var subject string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE(subject_task_id, '') FROM agentrt.task WHERE task_id = $1`, c.task).Scan(&subject); err != nil {
+			return err
+		}
+		var s taskRow
+		if subject != "" {
+			var err error
+			if s, err = readTask(ctx, tx, subject, true); err != nil {
+				return err
+			}
+		}
 		t, err := readTask(ctx, tx, c.task, true)
 		if err != nil {
 			return err
 		}
-		// The mission after the task (kernel.go's order), shared: it cannot
-		// stop or end between this read and the move below (review 420 B2).
+		// The mission after the task (kernel.go's order): it cannot stop or
+		// end between this read and the move below (review 420 B2); held for
+		// update when one more round may write its budget (TD-384), shared
+		// otherwise.
+		lock := "FOR SHARE"
+		if outcome == OutcomeRetried {
+			lock = "FOR NO KEY UPDATE"
+		}
 		var mstate string
-		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, t.mission).Scan(&mstate); err != nil {
+		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 `+lock, t.mission).Scan(&mstate); err != nil {
 			return err
 		}
 		var open bool
@@ -627,6 +667,11 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		did = true
 		switch acted {
 		case OutcomeRetried:
+			// Room in the budget for the round, before the task is ready
+			// (TD-384).
+			if err = grantRound(ctx, tx, t, c.question); err != nil {
+				return err
+			}
 			if err = moveTask(ctx, tx, "controller", t, "ready", fmt.Sprintf("the Owner gave it one more round (question %s)", c.question)); err != nil {
 				return err
 			}
@@ -637,7 +682,15 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 			}
 			return err
 		case OutcomeDropped:
-			return moveTask(ctx, tx, "controller", t, "cancelled", fmt.Sprintf("the Owner chose not to do it (question %s)", c.question))
+			if err = moveTask(ctx, tx, "controller", t, "cancelled", fmt.Sprintf("the Owner chose not to do it (question %s)", c.question)); err != nil {
+				return err
+			}
+			if subject != "" && s.state == "verifying" {
+				// With no check the work can never be accepted: it waits on a
+				// card of its own instead of in verifying for ever (TD-384).
+				return moveTask(ctx, tx, "controller", s, "blocked", fmt.Sprintf("the Owner chose not to do its %s %s (question %s)",
+					t.role, t.id, c.question))
+			}
 		}
 		return nil
 	})

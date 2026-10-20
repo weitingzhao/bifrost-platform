@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -88,46 +87,28 @@ type missionBudget struct {
 // allows says whether a task of the mission may be leased now, and its hard
 // time limit (proposal §2, T10; review 186 A3, A4): the tenant's budget rule
 // is in force (none: nothing is dispatched) and caps the limit; the mission
-// states a budget, has attempts left and time left; and a mission that
-// started inside a standing envelope still fits the envelope in force, with
-// the task's effect too.
+// states a budget, has attempts left and time left (missionbudget.go); and a
+// mission that started inside a standing envelope still fits the envelope in
+// force, with the task's effect too. The budget the envelope bounds is the
+// one the mission started with: what the Owner added on a blocked card is
+// his own decision (TD-384).
 func (m missionBudget) allows(ctx context.Context, tx pgx.Tx, rc ruleCache, c candidate) (int, bool, error) {
-	rule, err := rc.get(ctx, tx, rules.KindBudget+":"+m.tenant)
-	if err != nil || rule == nil {
+	s, ok, err := m.spend(ctx, tx, rc, c.mission)
+	if err != nil || !ok || s.why() != "" {
 		return 0, false, err
-	}
-	// A mission that states no budget has the rule's, as a proposal that
-	// states none is given it.
-	var b rules.Budget
-	if err = json.Unmarshal(m.budget, &b); err != nil {
-		return 0, false, nil
-	}
-	if b.MaxAttempts == 0 && b.MaxWallHours == 0 {
-		b = rule.Budget.Mission
-	}
-	if b.MaxAttempts <= 0 || b.MaxWallHours <= 0 {
-		return 0, false, nil
-	}
-	var used int
-	var over bool
-	if err = tx.QueryRow(ctx, `SELECT (SELECT count(*) FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id WHERE t.mission_id = $1),
-	    clock_timestamp() >= $2::timestamptz + make_interval(hours => $3)`, c.mission, m.created, b.MaxWallHours).Scan(&used, &over); err != nil {
-		return 0, false, err
-	}
-	if used >= b.MaxAttempts || over {
-		return 0, false, nil
 	}
 	if m.envelope != "" {
 		env, err := rc.get(ctx, tx, m.envelope)
 		if err != nil || env == nil {
 			return 0, false, err
 		}
-		e := env.Envelope
-		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts > e.Budget.MaxAttempts || b.MaxWallHours > e.Budget.MaxWallHours {
+		e, b := env.Envelope, s.budget
+		if effectRank[c.effect] > effectRank[e.MaxAction] || b.MaxAttempts-b.OwnerAttempts > e.Budget.MaxAttempts ||
+			b.MaxWallHours-b.OwnerHours > e.Budget.MaxWallHours {
 			return 0, false, nil
 		}
 	}
-	return min(c.limitS, rule.Budget.AttemptLimitSec), true, nil
+	return min(c.limitS, s.limitS), true, nil
 }
 
 // envelopeTools narrows a claim to the envelope a mission started under: the
