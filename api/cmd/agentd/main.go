@@ -165,13 +165,11 @@ func run() error {
 		// the platform's to record, never a reason to stop.
 		if time.Since(lastPrune) >= agentd.PruneEvery {
 			lastPrune = time.Now()
-			pctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-			if n, err := d.Prune(pctx); err != nil {
+			if n, err := d.Prune(ctx); err != nil {
 				log.Printf("agentd: prune: %v", err)
 			} else if n > 0 {
 				log.Printf("agentd: deleted %d attempt branches", n)
 			}
-			cancel()
 		}
 		if id, err := d.Blocked(); err != nil || id != "" || len(offered) == 0 {
 			if id != "" {

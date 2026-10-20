@@ -129,9 +129,10 @@ var bodies = map[string][]field{
 	"owner_signoff":            {{"ref", kStr, false}},
 	// note: landed, the commit an accepted result first stood on main as, when
 	// the controller first saw it there; pruned, an attempt branch its host
-	// deleted; prune_refused, one Gitea would not let it delete (prune.go).
+	// deleted; prune_refused, one Gitea would not let it delete; prune_failed,
+	// one it could not reach Gitea to delete (prune.go).
 	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
-		{"pruned", kStr, true}, {"prune_refused", kStr, true}},
+		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -339,7 +340,7 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
-	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch},
+	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch},
 	"route_decided":            {"fingerprint": fingerprint},
 	"legacy_imported":          {"digest": fingerprint},
 }

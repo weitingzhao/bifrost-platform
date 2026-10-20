@@ -89,11 +89,11 @@ func TestPrunableFollowsTheRule(t *testing.T) {
 	others := []store.AgentHead{head(store.NewTaskID(), 1, commitA), {Repo: "bifrost-platform", Ref: "refs/heads/agent/manual/x", Commit: commitA}}
 
 	now := time.Now()
-	if ps, err := store.Prunable(ctx, w.rt, append(heads, others...), now); err != nil || len(ps) != 0 {
+	if ps, err := store.Prunable(ctx, w.rt, append(heads, others...), nil, now); err != nil || len(ps) != 0 {
 		t.Fatalf("today: %v %v; want none before seven days", ps, err)
 	}
 	later := now.Add(store.PruneAfter + time.Hour)
-	ps, err := store.Prunable(ctx, w.rt, append(heads, others...), later)
+	ps, err := store.Prunable(ctx, w.rt, append(heads, others...), nil, later)
 	ok(t, err)
 	got := prunedRefs(ps)
 	want := map[string]string{
@@ -111,45 +111,75 @@ func TestPrunableFollowsTheRule(t *testing.T) {
 		}
 	}
 	// A branch moved since names another commit than its attempt pushed.
-	if moved, err := store.Prunable(ctx, w.rt, []store.AgentHead{head(cancelled, 1, commitB)}, later); err != nil || len(moved) != 0 {
+	if moved, err := store.Prunable(ctx, w.rt, []store.AgentHead{head(cancelled, 1, commitB)}, nil, later); err != nil || len(moved) != 0 {
 		t.Fatalf("a moved branch: %v %v", moved, err)
 	}
 
-	// The accepted attempt of M-3 goes seven days after its result is first
-	// seen on main, once.
+	// The accepted attempt of M-3 goes seven days after its very commit is
+	// first seen on main, and only while main still holds it (review 436).
+	// Main holding another commit of the task, or not read, is no landing.
+	for name, read := range map[string]store.MainResults{
+		"another commit of the task": func(context.Context, string) (store.OnMain, bool) {
+			return store.OnMain{accepted: {commitB: commitB}}, true
+		},
+		"main not read": func(context.Context, string) (store.OnMain, bool) { return nil, false },
+	} {
+		if n, err := store.RecordLandings(ctx, w.rt, read); err != nil || n != 0 {
+			t.Fatalf("%s: %d landings (%v)", name, n, err)
+		}
+	}
 	reads := 0
-	mainTasks := func(_ context.Context, repo string) (map[string]string, bool) {
+	onMain := store.OnMain{accepted: {commitA: commitB}, replay: {commitA: commitB}}
+	mainResults := func(_ context.Context, repo string) (store.OnMain, bool) {
 		reads++
 		if repo != "bifrost-platform" {
 			return nil, false
 		}
-		return map[string]string{accepted: commitB, replay: commitB}, true
+		return onMain, true
 	}
-	if n, err := store.RecordLandings(ctx, w.rt, mainTasks); err != nil || n != 1 || reads != 1 {
+	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 1 || reads != 1 {
 		t.Fatalf("landings: %d (%v), %d reads; want M-3's one (M-4 is not merged), main read once", n, err, reads)
 	}
-	if n, err := store.RecordLandings(ctx, w.rt, mainTasks); err != nil || n != 0 {
+	if n, err := store.RecordLandings(ctx, w.rt, mainResults); err != nil || n != 0 {
 		t.Fatalf("landings again: %d (%v)", n, err)
 	}
-	ps, err = store.Prunable(ctx, w.rt, heads, later)
+	mains := map[string]store.OnMain{"bifrost-platform": onMain}
+	ps, err = store.Prunable(ctx, w.rt, heads, mains, later)
 	ok(t, err)
 	if why := prunedRefs(ps)[store.AttemptRef(accepted, 2)]; !strings.HasPrefix(why, "accepted and on main as "+commitB[:12]+" (") {
 		t.Fatalf("the accepted attempt after its landing: %q", why)
 	}
-	if ps, err = store.Prunable(ctx, w.rt, heads, now.Add(time.Hour)); err != nil || len(ps) != 0 {
+	for name, m := range map[string]map[string]store.OnMain{"reverted since": {"bifrost-platform": {}}, "main not read now": nil} {
+		ps, err := store.Prunable(ctx, w.rt, heads, m, later)
+		ok(t, err)
+		if why, given := prunedRefs(ps)[store.AttemptRef(accepted, 2)]; given {
+			t.Errorf("%s: the accepted attempt is handed out (%q)", name, why)
+		}
+	}
+	if ps, err = store.Prunable(ctx, w.rt, heads, mains, now.Add(time.Hour)); err != nil || len(ps) != 0 {
 		t.Fatalf("an hour after the landing: %v %v", ps, err)
 	}
 }
 
 // TD-383: what the host did is recorded: a deleted (or already gone) branch
-// on its task's mission, a refusal on the host's stream; a refusal pauses the
-// handing out for PrunePause. A report that is not of an attempt branch, a
-// commit or a known outcome is refused whole.
+// on its task's mission, once; a refusal on the host's stream, which pauses
+// the handing out for PrunePause; Gitea out of reach likewise, for
+// PruneRetry. A report that is not of an attempt as this runtime pushed it,
+// of a task the rule may let go, is refused whole (review 436 B2).
 func TestRecordPrunes(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
 	w.goalMission(t, "M-3")
 	task := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.run(t, "h1", cursor, "done")
+	open := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.run(t, "h2", cursor, "done")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if err := store.MoveTaskForTest(ctx, tx, "controller", task, "blocked"); err != nil {
+			return err
+		}
+		return store.MoveTaskForTest(ctx, tx, "controller", task, "cancelled")
+	}))
 	ref := store.AttemptRef(task, 1)
 	now := time.Now()
 	if until, err := store.PrunePausedUntil(ctx, w.rt, now); err != nil || !until.IsZero() {
@@ -159,26 +189,54 @@ func TestRecordPrunes(t *testing.T) {
 		{Repo: "bifrost-platform", Ref: "refs/heads/main", Commit: commitA, Outcome: "deleted"},
 		{Repo: "bifrost-platform", Ref: ref, Commit: "HEAD", Outcome: "deleted"},
 		{Repo: "bifrost-platform", Ref: ref, Commit: commitA, Outcome: "kept"},
-		{Repo: "bifrost-platform", Ref: store.AttemptRef(store.NewTaskID(), 1), Commit: commitA, Outcome: "deleted"},
+		{Repo: "bifrost platform", Ref: ref, Commit: commitA, Outcome: "deleted"},
+		{Repo: strings.Repeat("r", 101), Ref: ref, Commit: commitA, Outcome: "refused"},
+		{Repo: "bifrost-ui", Ref: ref, Commit: commitA, Outcome: "deleted"},
+		{Repo: "bifrost-platform", Ref: ref, Commit: commitB, Outcome: "deleted"},
+		{Repo: "bifrost-platform", Ref: store.AttemptRef(task, 9), Commit: commitA, Outcome: "deleted"},
+		{Repo: "bifrost-platform", Ref: store.AttemptRef(store.NewTaskID(), 1), Commit: commitA, Outcome: "refused"},
+		{Repo: "bifrost-platform", Ref: store.AttemptRef(open, 1), Commit: commitA, Outcome: "deleted"},
+		{Repo: "bifrost-platform", Ref: store.AttemptRef(open, 1), Commit: commitA, Outcome: "refused"},
 	} {
 		if err := store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{bad}); !errors.Is(err, store.ErrInvalid) {
 			t.Errorf("%+v: %v; want invalid", bad, err)
 		}
 	}
-	ok(t, store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{
-		{Repo: "bifrost-platform", Ref: ref, Commit: commitA, Outcome: "deleted"},
-		{Repo: "bifrost-platform", Ref: store.AttemptRef(task, 2), Commit: commitA, Outcome: "refused",
-			Detail: "! [remote rejected] agent/x (pre-receive hook declined) | remote: Gitea: branch is protected"},
-	}))
-	var pruned, refused string
-	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'pruned' FROM agentrt.event WHERE event_type = 'note' AND task_id = $1
-	  AND event_stream_id = 'mission:M-3'`, task).Scan(&pruned))
+	if until, err := store.PrunePausedUntil(ctx, w.rt, now); err != nil || !until.IsZero() {
+		t.Fatalf("paused %v (%v) after refused reports only", until, err)
+	}
+	deleted := store.PruneResult{Repo: "bifrost-platform", Ref: ref, Commit: commitA, Outcome: "deleted"}
+	ok(t, store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{deleted}))
+	ok(t, store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{deleted})) // sent again: its answer was lost
+	var pruned []string
+	rows, err := w.rt.Query(ctx, `SELECT body_json->>'pruned' FROM agentrt.event WHERE event_type = 'note' AND task_id = $1
+	  AND event_stream_id = 'mission:M-3' AND body_json ? 'pruned'`, task)
+	ok(t, err)
+	pruned, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	ok(t, err)
+	if len(pruned) != 1 || pruned[0] != ref {
+		t.Fatalf("pruned notes %v; want one of %s", pruned, ref)
+	}
+
+	// Gitea out of reach pauses for PruneRetry; a refusal for PrunePause.
+	ok(t, store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{{Repo: "bifrost-platform", Ref: ref, Commit: commitA, Outcome: "failed",
+		Detail: "fatal: unable to access 'https://agentd:0123456789abcdef@gitea.example/x.git/': Could not resolve host"}}))
+	until, err := store.PrunePausedUntil(ctx, w.rt, now)
+	if err != nil || until.Before(now.Add(store.PruneRetry-time.Minute)) || until.After(now.Add(store.PruneRetry+time.Minute)) {
+		t.Fatalf("paused until %v (%v) after a failure; want about %v", until, err, store.PruneRetry)
+	}
+	ok(t, store.RecordPrunes(ctx, w.rt, "h1", []store.PruneResult{{Repo: "bifrost-platform", Ref: ref, Commit: commitA, Outcome: "refused",
+		Detail: "! [remote rejected] agent/x (pre-receive hook declined) | remote: Gitea: branch is protected"}}))
+	var refused, failed string
 	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'text' FROM agentrt.event WHERE event_type = 'note' AND event_stream_id = 'host:h1'
 	  AND body_json ? 'prune_refused'`).Scan(&refused))
-	if pruned != ref || !strings.Contains(refused, "Gitea refused to delete "+store.AttemptRef(task, 2)) || !strings.Contains(refused, "protected") {
-		t.Fatalf("pruned %q, refused %q", pruned, refused)
+	ok(t, w.rt.QueryRow(ctx, `SELECT body_json->>'text' FROM agentrt.event WHERE event_type = 'note' AND event_stream_id = 'host:h1'
+	  AND body_json ? 'prune_failed'`).Scan(&failed))
+	if !strings.Contains(refused, "Gitea refused to delete "+ref) || !strings.Contains(refused, "protected") ||
+		!strings.Contains(failed, "could not reach Gitea") || strings.Contains(failed, "0123456789abcdef") {
+		t.Fatalf("refused %q, failed %q", refused, failed)
 	}
-	until, err := store.PrunePausedUntil(ctx, w.rt, now)
+	until, err = store.PrunePausedUntil(ctx, w.rt, now)
 	if err != nil || until.Before(now.Add(store.PrunePause-time.Minute)) {
 		t.Fatalf("paused until %v (%v); want about %v", until, err, store.PrunePause)
 	}

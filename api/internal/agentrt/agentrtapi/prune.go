@@ -19,14 +19,23 @@ import (
 // nothing.
 type AgentHeads func(ctx context.Context, repo string) ([]store.AgentHead, error)
 
+// pruneReadBudget bounds one answer's reads of Gitea, all repositories
+// together; a repository not read in it is passed over this time.
+const pruneReadBudget = time.Minute
+
 // prunes is GET /prunes?host_id=: the branches the rule lets go now, or none
-// while a refusal's pause holds (paused_until says until when).
+// while a refusal's pause holds (paused_until says until when). A repository
+// whose branches or main cannot be read now is passed over and named in
+// unread; the others are answered (review 436 B3).
 func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	host := r.URL.Query().Get("host_id")
 	if !boundHost(w, r, host) {
 		return
 	}
 	now := time.Now()
+	if a.Now != nil {
+		now = a.Now()
+	}
 	out := map[string]any{"prunes": []store.Prune{}}
 	if a.AgentHeads == nil {
 		out["why"] = "the platform has no reader for the repositories' branches"
@@ -40,7 +49,7 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	}
 	if !until.IsZero() {
 		out["paused_until"] = until.UTC().Format(time.RFC3339)
-		out["why"] = "Gitea refused a deletion lately (agent/** may still be protected)"
+		out["why"] = "Gitea refused a deletion, or could not be reached, lately (agent/** may still be protected)"
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
@@ -49,23 +58,35 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 		a.fail(w, err)
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), pruneReadBudget)
+	defer cancel()
 	var heads []store.AgentHead
+	onMain := map[string]store.OnMain{}
+	unread := []string{}
 	for _, repo := range repos {
-		hs, err := a.AgentHeads(r.Context(), repo)
+		hs, err := a.AgentHeads(ctx, repo)
 		if err != nil {
 			a.logf("agentrt prunes: %s: %v", repo, err)
-			writeError(w, http.StatusServiceUnavailable, "no_heads", "the branches of "+repo+" cannot be read now; ask again later")
-			return
+			unread = append(unread, repo)
+			continue
 		}
 		heads = append(heads, hs...)
+		if a.MainResults != nil {
+			if m, ok := a.MainResults(ctx, repo); ok {
+				onMain[repo] = m
+			}
+		}
 	}
-	ps, err := store.Prunable(r.Context(), a.DB, heads, now)
+	ps, err := store.Prunable(r.Context(), a.DB, heads, onMain, now)
 	if err != nil {
 		a.fail(w, err)
 		return
 	}
 	if ps != nil {
 		out["prunes"] = ps
+	}
+	if len(unread) > 0 {
+		out["unread"] = unread
 	}
 	writeJSON(w, http.StatusOK, out)
 }

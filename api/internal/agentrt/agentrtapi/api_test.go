@@ -138,8 +138,12 @@ var actionStore *actions.Store
 var examSet store.ExamSet
 
 // agentHeads, when set, are the attempt branches the API reads, by
-// repository (prune_test.go).
-var agentHeads map[string][]store.AgentHead
+// repository, a nil list for a repository it cannot read; pruneNow, when
+// set, is the cleanup's clock (prune_test.go).
+var (
+	agentHeads map[string][]store.AgentHead
+	pruneNow   func() time.Time
+)
 
 // server serves the API behind the platform's own authentication, loaded
 // from a fixture file: two agentd tokens bound to h1 and h2, a viewer, a
@@ -194,7 +198,18 @@ func server(t *testing.T, db store.DB) *httptest.Server {
 		}, Anchor: anchor, Actions: actionStore, Exams: examSet}
 	if agentHeads != nil {
 		heads := agentHeads
-		api.AgentHeads = func(_ context.Context, repo string) ([]store.AgentHead, error) { return heads[repo], nil }
+		api.AgentHeads = func(_ context.Context, repo string) ([]store.AgentHead, error) {
+			if hs, ok := heads[repo]; ok && hs == nil {
+				return nil, fmt.Errorf("%s cannot be read", repo)
+			}
+			return heads[repo], nil
+		}
+		api.Now = func() time.Time {
+			if pruneNow != nil {
+				return pruneNow()
+			}
+			return time.Now()
+		}
 	}
 	if !noMain {
 		api.MainHead = func(_ context.Context, repo string) (string, error) {

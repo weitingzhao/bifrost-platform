@@ -37,10 +37,10 @@ type Sources struct {
 	Withdraw store.Withdraw
 	CI       func(ctx context.Context, repo, commit string) (status, run string, ok bool)
 	Deployed store.Deployed
-	// MainTasks reads a repository's main for agent work: each task an
-	// Agentrt-Task trailer names, to the newest commit naming it; ok false
-	// when it cannot be read now. nil records no landings (TD-383).
-	MainTasks func(ctx context.Context, repo string) (map[string]string, bool)
+	// MainResults reads a repository's main for the runtime's results that
+	// stand there (store.OnMain); ok false when it cannot be read now. nil
+	// records no landings (TD-383).
+	MainResults store.MainResults
 }
 
 // Controller holds what the loops need. Zero intervals take the design's
@@ -60,9 +60,6 @@ type Controller struct {
 	// (T26's rework path, the Owner 2026-10-18).
 	FailFirstVerify bool
 	Now             func() time.Time
-
-	landingsMu   sync.Mutex
-	lastLandings time.Time
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done
@@ -334,32 +331,21 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 	return decided + spent + asked, errors.Join(derr, serr, aerr)
 }
 
-// LandingsEvery is how often the landings pass reads main: a scan of main is
-// many reads of Gitea, and the seven days it starts are counted in days.
+// LandingsEvery is how often the landings pass reads main: a loop of its own,
+// so a slow Gitea never holds up dispatch and the decisions (review 436 B4).
 const LandingsEvery = 5 * time.Minute
 
 // Landings records accepted results first seen on main (store.RecordLandings,
-// TD-383), at most once in LandingsEvery; each repository's main is read with
-// a minute's bound. It returns how many it recorded.
+// TD-383); each repository's main is read with a minute's bound. It returns
+// how many it recorded.
 func (c *Controller) Landings(ctx context.Context) (int, error) {
-	if c.Sources.MainTasks == nil {
+	if c.Sources.MainResults == nil {
 		return 0, nil
 	}
-	now := time.Now()
-	if c.Now != nil {
-		now = c.Now()
-	}
-	c.landingsMu.Lock()
-	if !c.lastLandings.IsZero() && now.Sub(c.lastLandings) < LandingsEvery {
-		c.landingsMu.Unlock()
-		return 0, nil
-	}
-	c.lastLandings = now
-	c.landingsMu.Unlock()
-	return store.RecordLandings(ctx, c.DB, func(ctx context.Context, repo string) (map[string]string, bool) {
+	return store.RecordLandings(ctx, c.DB, func(ctx context.Context, repo string) (store.OnMain, bool) {
 		rctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()
-		return c.Sources.MainTasks(rctx, repo)
+		return c.Sources.MainResults(rctx, repo)
 	})
 }
 
@@ -470,15 +456,20 @@ func (c *Controller) Start(ctx context.Context) (wait func()) {
 		_, oerr := store.Reroute(ctx, c.DB)
 		_, aerr := c.Accept(ctx)
 		_, berr := c.BlockedCards(ctx)
-		_, lerr := c.Landings(ctx)
 		_, derr := store.Dispatch(ctx, c.DB)
 		_, cerr := c.Close(ctx)
 		_, perr := c.PlanDecisions(ctx)
 		_, merr := c.MissionDecisions(ctx)
 		_, verr := c.Activate(ctx)
 		_, rerr := c.Rules(ctx)
-		return errors.Join(ferr, oerr, aerr, berr, lerr, derr, cerr, perr, merr, verr, rerr)
+		return errors.Join(ferr, oerr, aerr, berr, derr, cerr, perr, merr, verr, rerr)
 	})
+	if c.Sources.MainResults != nil {
+		c.every(ctx, &wg, "agentrt-landings", LandingsEvery, func() error {
+			_, err := c.Landings(ctx)
+			return err
+		})
+	}
 	return wg.Wait
 }
 

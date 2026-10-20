@@ -56,8 +56,14 @@ type API struct {
 	// once at start; nil answers the exam routes 503.
 	Exams store.ExamSet
 	// AgentHeads reads the attempt branches agentd may be given to delete
-	// (TD-383, prune.go); nil gives none.
-	AgentHeads AgentHeads
+	// (TD-383, prune.go); nil gives none. MainResults reads what a
+	// repository's main holds of the runtime's results; nil keeps the
+	// branches of accepted results that landed. Now is the clock the
+	// cleanup's rule reads,
+	// time.Now when nil.
+	AgentHeads  AgentHeads
+	MainResults store.MainResults
+	Now         func() time.Time
 }
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller

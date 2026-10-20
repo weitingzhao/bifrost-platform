@@ -3,6 +3,7 @@ package agentd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,10 @@ type pruneWorld struct {
 	mu                    sync.Mutex
 	handed                []Prune
 	reports               [][]PruneResult
+	// unavailable makes that many reports fail with 503; refuse answers
+	// every report 422.
+	unavailable int
+	refuse      bool
 }
 
 func newPruneWorld(t *testing.T) *pruneWorld {
@@ -96,6 +101,16 @@ func (w *pruneWorld) daemon(t *testing.T) *Daemon {
 				rw.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			if w.unavailable > 0 {
+				w.unavailable--
+				rw.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			if w.refuse {
+				rw.WriteHeader(http.StatusUnprocessableEntity)
+				_ = json.NewEncoder(rw).Encode(map[string]any{"error": map[string]any{"code": "invalid", "message": "not pushed so"}})
+				return
+			}
 			w.reports = append(w.reports, b.Results)
 			_ = json.NewEncoder(rw).Encode(map[string]any{"recorded": len(b.Results)})
 		default:
@@ -160,14 +175,51 @@ func TestPruneStopsAtARefusal(t *testing.T) {
 	}
 }
 
+// Review 436 B1: what a round did reaches the platform though the platform
+// did not take it at first: the results wait on disk and go first next
+// round. A report the platform refuses as it is does not wait.
+func TestPruneReportsLaterWhatThePlatformDidNotTake(t *testing.T) {
+	t.Parallel()
+	w := newPruneWorld(t)
+	w.handed = []Prune{{Repo: "bifrost-platform", Ref: w.ref(pruneTask, "1"), Commit: w.commit}}
+	w.unavailable = 1
+	d := w.daemon(t)
+	pending := filepath.Join(d.Root, prunePending)
+	if _, err := d.Prune(context.Background()); err == nil {
+		t.Fatal("a report the platform did not take is no error")
+	}
+	if _, err := os.Stat(pending); err != nil || strings.Contains(w.heads(t), w.ref(pruneTask, "1")) {
+		t.Fatalf("after the first round: pending %v, heads %s", err, w.heads(t))
+	}
+	w.handed = nil // deleted: the platform no longer hands it out
+	if _, err := d.Prune(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(w.reports) != 1 || len(w.reports[0]) != 1 || w.reports[0][0].Outcome != "deleted" || w.reports[0][0].Ref != w.ref(pruneTask, "1") {
+		t.Fatalf("reported %+v", w.reports)
+	}
+	if _, err := os.Stat(pending); !os.IsNotExist(err) {
+		t.Fatalf("pending after the report was taken: %v", err)
+	}
+	w.handed, w.refuse = []Prune{{Repo: "bifrost-platform", Ref: w.ref(pruneTask, "2"), Commit: w.commit}}, true
+	if _, err := d.Prune(context.Background()); !errors.Is(err, errReportRefused) {
+		t.Fatalf("a refused report: %v", err)
+	}
+	if _, err := os.Stat(pending); !os.IsNotExist(err) {
+		t.Fatalf("a refused report waits: %v", err)
+	}
+}
+
 // TD-383: what git says goes into an event: an address with a credential in
 // it, or a local path, does not.
 func TestGitWordsKeepNoCredential(t *testing.T) {
 	t.Parallel()
 	got := gitWords("To https://agentd:abcdef0123456789@gitea.example/bifrost/x.git\n"+
 		"fatal: unable to access 'https://agentd:abcdef0123456789@gitea.example/bifrost/x.git/': Could not resolve host\n"+
+		"fatal: unable to access 'https://fedcba9876543210@gitea.example/bifrost/x.git/': Could not resolve host\n"+
 		"error: failed to push some refs to '/Users/someone/x.git'\n", nil)
-	if strings.Contains(got, "abcdef0123456789") || strings.Contains(got, "/Users/someone") || !strings.Contains(got, "Could not resolve host") {
+	if strings.Contains(got, "abcdef0123456789") || strings.Contains(got, "fedcba9876543210") || strings.Contains(got, "/Users/someone") ||
+		!strings.Contains(got, "Could not resolve host") {
 		t.Fatalf("gitWords: %q", got)
 	}
 }

@@ -3,6 +3,8 @@ package agentd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -22,8 +24,19 @@ import (
 // refusal ends the round and is reported, and the platform pauses the
 // handing out; it is never an error that stops agentd.
 
-// PruneEvery is how often agentd asks.
-const PruneEvery = 10 * time.Minute
+// PruneEvery is how often agentd asks; PruneWork bounds a round's asking and
+// git; PruneReport bounds sending what it did, on a clock of its own, so a
+// round that ran out still reports (review 436 B1).
+const (
+	PruneEvery  = 10 * time.Minute
+	PruneWork   = 2 * time.Minute
+	PruneReport = 30 * time.Second
+)
+
+// prunePending is where a round's results wait until the platform has them:
+// written before they are sent, removed once they are; the next round sends
+// what is there first.
+const prunePending = "prune-pending.json"
 
 // Prune is a branch the platform lets this host delete.
 type Prune struct {
@@ -52,9 +65,16 @@ func (c *Client) Prunes(ctx context.Context) ([]Prune, error) {
 	return out.Prunes, err
 }
 
+// errReportRefused is the platform refusing a report as it is: sending it
+// again cannot help.
+var errReportRefused = errors.New("the platform refused the report")
+
 // ReportPrunes says what became of them.
 func (c *Client) ReportPrunes(ctx context.Context, results []PruneResult) error {
-	_, err := c.post(ctx, "/prunes", map[string]any{"results": results}, nil)
+	code, err := c.post(ctx, "/prunes", map[string]any{"results": results}, nil)
+	if err != nil && (code == http.StatusBadRequest || code == http.StatusUnprocessableEntity) {
+		return fmt.Errorf("%w: %v", errReportRefused, err)
+	}
 	return err
 }
 
@@ -63,14 +83,30 @@ var (
 	objectID      = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	// unreached is git's way of saying it did not get an answer from Gitea.
 	unreached = regexp.MustCompile(`(?i)could not resolve host|failed to connect|unable to access|connection (refused|reset|timed out)|operation timed out|could not read from remote`)
+	// userinfo is whatever an address carries before its host: a token
+	// given as the user name too (review 436 C2).
+	userinfo = regexp.MustCompile(`://[^/\s@'"]+@`)
 )
 
 // Prune asks the platform which branches to delete, deletes each that still
 // names its commit (one that is gone is reported gone; one that names another
 // commit is left and not reported: the platform does not give it again), and
-// reports what happened. It returns how many it deleted.
+// reports what happened. Results not yet taken by the platform are kept on
+// disk and sent first next time, before anything new is asked. It returns
+// how many it deleted.
 func (d *Daemon) Prune(ctx context.Context) (int, error) {
-	ps, err := d.Client.Prunes(ctx)
+	pending := filepath.Join(d.Root, prunePending)
+	if b, err := os.ReadFile(pending); err == nil {
+		var left []PruneResult
+		if json.Unmarshal(b, &left) != nil {
+			_ = os.Remove(pending) // not ours to read: nothing more can be done with it
+		} else if err = d.reportPrunes(ctx, pending, left); err != nil {
+			return 0, fmt.Errorf("results of an earlier round not taken yet: %w", err)
+		}
+	}
+	wctx, cancel := context.WithTimeout(ctx, PruneWork)
+	defer cancel()
+	ps, err := d.Client.Prunes(wctx)
 	if err != nil || len(ps) == 0 {
 		return 0, err
 	}
@@ -79,19 +115,22 @@ func (d *Daemon) Prune(ctx context.Context) (int, error) {
 	scratch := filepath.Join(d.Root, "prune.git")
 	env := isolatedGit(d.GitEnv)
 	if _, err := os.Stat(filepath.Join(scratch, "HEAD")); err != nil {
-		if _, err = gitRaw(ctx, d.Root, env, "init", "--quiet", "--bare", scratch); err != nil {
+		if _, err = gitRaw(wctx, d.Root, env, "init", "--quiet", "--bare", scratch); err != nil {
 			return 0, err
 		}
 	}
 	deleted := 0
 	var results []PruneResult
 	for _, p := range ps {
+		if wctx.Err() != nil {
+			break // out of time: what was done is reported
+		}
 		if !attemptBranch.MatchString(p.Ref) || !objectID.MatchString(p.Commit) || !taskName.MatchString(p.Repo) {
 			continue // not something agentd deletes
 		}
 		remote := d.pushRemote(p.Repo)
 		r := PruneResult{Repo: p.Repo, Ref: p.Ref, Commit: p.Commit}
-		head, ok, detail := lsRemote(ctx, scratch, env, remote, p.Ref)
+		head, ok, detail := lsRemote(wctx, scratch, env, remote, p.Ref)
 		switch {
 		case !ok:
 			r.Outcome, r.Detail = "failed", detail
@@ -100,7 +139,7 @@ func (d *Daemon) Prune(ctx context.Context) (int, error) {
 		case head != p.Commit:
 			continue // moved since: not this attempt's result any more
 		default:
-			r.Outcome, r.Detail = deleteBranch(ctx, scratch, env, remote, p.Ref, p.Commit)
+			r.Outcome, r.Detail = deleteBranch(wctx, scratch, env, remote, p.Ref, p.Commit)
 		}
 		results = append(results, r)
 		if r.Outcome == "deleted" {
@@ -113,7 +152,29 @@ func (d *Daemon) Prune(ctx context.Context) (int, error) {
 	if len(results) == 0 {
 		return 0, nil
 	}
-	return deleted, d.Client.ReportPrunes(ctx, results)
+	return deleted, d.reportPrunes(ctx, pending, results)
+}
+
+// reportPrunes keeps results at pending, sends them on a clock of their own,
+// and removes pending once the platform has them, or has refused them as
+// they are.
+func (d *Daemon) reportPrunes(ctx context.Context, pending string, results []PruneResult) error {
+	b, err := json.Marshal(results)
+	if err != nil {
+		return err
+	}
+	if err = writeDurably(pending, b); err != nil {
+		return err
+	}
+	rctx, cancel := context.WithTimeout(ctx, PruneReport)
+	defer cancel()
+	if err = d.Client.ReportPrunes(rctx, results); err != nil {
+		if errors.Is(err, errReportRefused) {
+			_ = os.Remove(pending) // kept, it would stop every later round
+		}
+		return err
+	}
+	return os.Remove(pending)
 }
 
 // lsRemote is the commit ref names on remote, "" when there is no such ref;
@@ -164,7 +225,7 @@ func gitWords(text string, err error) string {
 	if len(keep) == 0 {
 		return fmt.Sprintf("git: %v", err)
 	}
-	words := scrub(strings.Join(keep, " | "))
+	words := userinfo.ReplaceAllString(scrub(strings.Join(keep, " | ")), "://<secret>@")
 	if len(words) > 400 {
 		words = strings.ToValidUTF8(words[:400], "") + "…"
 	}

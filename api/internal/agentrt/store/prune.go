@@ -25,36 +25,53 @@ import (
 //   - it is the accepted attempt, and its mission is not to be merged
 //     (no_merge; from the acceptance), or its result stands on main: from when
 //     the controller first saw it there (RecordLandings), since git's history
-//     does not say when a commit reached main.
+//     does not say when a commit reached main, and only while main still holds
+//     it when the branch is handed out (a landing reverted since keeps it;
+//     review 436 A1).
 //
-// Kept: a task still open; an accepted result not seen on main; a branch whose
-// task this runtime does not have (PROD and STG push to the same
-// repositories; each cleans its own); a branch that names something other
-// than its attempt's pushed commit (moved since: nothing here says what it now
-// holds).
+// Kept: a task still open; an accepted result not on main, or reverted there;
+// a branch whose task this runtime does not have (PROD and STG push to the
+// same repositories; each cleans its own); a branch that names something
+// other than its attempt's pushed commit (moved since: nothing here says what
+// it now holds); whatever cannot be read now.
 //
 // The host's agentd deletes (Prunable, through GET /agentrt/prunes), with its
 // own Gitea identity and only while the branch still names that commit, and
 // reports each (RecordPrunes): a deletion is a note on the task's mission
-// (pruned), a refusal a note on the host's stream (prune_refused). Gitea
-// refuses to delete a protected branch, and agent/** is protected until the
-// Owner lifts it; so after a refusal nothing is handed out for PrunePause,
-// and a refusal is a record, not an error.
+// (pruned), a refusal a note on the host's stream (prune_refused), Gitea out
+// of reach another (prune_failed). Gitea refuses to delete a protected branch,
+// and agent/** is protected until the Owner lifts it; so after a refusal
+// nothing is handed out for PrunePause (after Gitea was out of reach, for
+// PruneRetry), and a refusal is a record, not an error.
 
 const (
 	PruneAfter = 7 * 24 * time.Hour
 	PrunePause = 6 * time.Hour
+	PruneRetry = 30 * time.Minute
 	MaxPrunes  = 50 // handed out at a time
 )
 
-// agentRef is an attempt branch: AttemptRef's shape.
 var (
+	// agentRef is an attempt branch: AttemptRef's shape.
 	agentRef  = regexp.MustCompile(`^refs/heads/agent/(t_[0-9A-HJKMNP-TV-Z]{26})/a([1-9][0-9]{0,5})$`)
 	commitHex = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	// repoName is a repository's name as a report may give it.
+	repoName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$`)
+	// userinfo is a credential in an address that git's words may carry.
+	userinfo = regexp.MustCompile(`://[^/\s@'"]+@`)
 )
 
 // AgentHead is a branch of a repository on Gitea and the commit it names.
 type AgentHead struct{ Repo, Ref, Commit string }
+
+// OnMain is what a repository's main holds of the runtime's work: task → a
+// result commit (an attempt's own commit) → the main commit it stands on main
+// as (lineage.MainResults). A landing reverted on main is not in it.
+type OnMain map[string]map[string]string
+
+// MainResults reads a repository's main as OnMain; ok false when it cannot be
+// read now.
+type MainResults func(ctx context.Context, repo string) (OnMain, bool)
 
 // Prune is a branch the rule lets go: its host deletes it if it still names
 // Commit.
@@ -81,21 +98,32 @@ func PruneRepos(ctx context.Context, db DB) ([]string, error) {
 	return repos, err
 }
 
-// PrunePausedUntil is when a refusal's pause ends, zero when none holds now.
+// PrunePausedUntil is when the last refusal's pause, or the last failure's
+// shorter one, ends; zero when none holds now.
 func PrunePausedUntil(ctx context.Context, db DB, now time.Time) (time.Time, error) {
-	var last *time.Time
+	var refused, failed *time.Time
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT max(at) FROM agentrt.event WHERE event_type = 'note' AND body_json ? 'prune_refused'`).Scan(&last)
+		return tx.QueryRow(ctx, `SELECT max(at) FILTER (WHERE body_json ? 'prune_refused'), max(at) FILTER (WHERE body_json ? 'prune_failed')
+		  FROM agentrt.event WHERE event_type = 'note' AND (body_json ? 'prune_refused' OR body_json ? 'prune_failed')`).Scan(&refused, &failed)
 	})
-	if err != nil || last == nil || !last.Add(PrunePause).After(now) {
+	var until time.Time
+	if refused != nil {
+		until = refused.Add(PrunePause)
+	}
+	if failed != nil && failed.Add(PruneRetry).After(until) {
+		until = failed.Add(PruneRetry)
+	}
+	if err != nil || !until.After(now) {
 		return time.Time{}, err
 	}
-	return last.Add(PrunePause), nil
+	return until, nil
 }
 
 // Prunable is the heads the rule lets go at now, at most MaxPrunes, in the
-// order of their refs.
-func Prunable(ctx context.Context, db DB, heads []AgentHead, now time.Time) ([]Prune, error) {
+// order of their refs. onMain is each repository's main as read now; a
+// repository missing from it keeps the accepted attempts' branches whose
+// results landed (whether they still stand cannot be told).
+func Prunable(ctx context.Context, db DB, heads []AgentHead, onMain map[string]OnMain, now time.Time) ([]Prune, error) {
 	heads = append([]AgentHead(nil), heads...)
 	sort.Slice(heads, func(i, j int) bool {
 		return heads[i].Repo < heads[j].Repo || heads[i].Repo == heads[j].Repo && heads[i].Ref < heads[j].Ref
@@ -104,7 +132,7 @@ func Prunable(ctx context.Context, db DB, heads []AgentHead, now time.Time) ([]P
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		out = nil
 		for _, h := range heads {
-			p, ok, err := prunable(ctx, tx, h, now)
+			p, ok, err := prunable(ctx, tx, h, onMain, now)
 			if err != nil {
 				return err
 			}
@@ -120,7 +148,7 @@ func Prunable(ctx context.Context, db DB, heads []AgentHead, now time.Time) ([]P
 	return out, err
 }
 
-func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, now time.Time) (Prune, bool, error) {
+func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, onMain map[string]OnMain, now time.Time) (Prune, bool, error) {
 	m := agentRef.FindStringSubmatch(h.Ref)
 	if m == nil {
 		return Prune{}, false, nil
@@ -164,13 +192,18 @@ func prunable(ctx context.Context, tx pgx.Tx, h AgentHead, now time.Time) (Prune
 			since, err = lastMove(ctx, tx, task, "accepted")
 			why = "accepted; its mission is not merged: " + noMerge
 		default:
-			var landed string
-			err = tx.QueryRow(ctx, `SELECT at, body_json->>'landed' FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
-			  AND body_json ? 'landed' ORDER BY event_id LIMIT 1`, task).Scan(&since, &landed)
+			// The first sighting starts the clock; main must still hold this
+			// very commit now.
+			stands := onMain[h.Repo][task][h.Commit]
+			if stands == "" {
+				return Prune{}, false, nil
+			}
+			err = tx.QueryRow(ctx, `SELECT at FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
+			  AND body_json ? 'landed' ORDER BY event_id LIMIT 1`, task).Scan(&since)
 			if errors.Is(err, pgx.ErrNoRows) {
 				return Prune{}, false, nil
 			}
-			why = "accepted and on main as " + landed[:min(12, len(landed))]
+			why = "accepted and on main as " + stands[:min(12, len(stands))]
 		}
 	default:
 		return Prune{}, false, nil
@@ -202,13 +235,18 @@ type PruneResult struct {
 const maxPruneDetail = 500
 
 // RecordPrunes records what host did: a deleted or gone branch as a note on
-// its task's mission (pruned), a refused or failed one as a note on the
-// host's stream (prune_refused), which pauses the handing out (PrunePause).
+// its task's mission (pruned; once), a refused one as a note on the host's
+// stream (prune_refused), which pauses the handing out for PrunePause, and a
+// failed one likewise (prune_failed, PruneRetry). Each result must be of an
+// attempt this runtime has, as it pushed it (repository, branch, commit), of
+// a task the rule may let go (review 436 B2); one that is not is refused,
+// with the whole report.
 func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult) error {
 	for _, r := range results {
-		m := agentRef.FindStringSubmatch(r.Ref)
 		switch {
-		case m == nil:
+		case !repoName.MatchString(r.Repo):
+			return invalid("%q is not a repository's name", r.Repo)
+		case agentRef.FindStringSubmatch(r.Ref) == nil:
 			return invalid("%q is not an attempt branch", r.Ref)
 		case !commitHex.MatchString(r.Commit):
 			return invalid("%q is not a commit", r.Commit)
@@ -218,27 +256,48 @@ func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult
 	}
 	return InTx(ctx, db, func(tx pgx.Tx) error {
 		for _, r := range results {
-			task := agentRef.FindStringSubmatch(r.Ref)[1]
-			detail := strings.Join(strings.Fields(strings.ToValidUTF8(r.Detail, "?")), " ")
+			m := agentRef.FindStringSubmatch(r.Ref)
+			task := m[1]
+			n, _ := strconv.Atoi(m[2])
+			var mission, state, repo, ref, commit string
+			err := tx.QueryRow(ctx, `SELECT t.mission_id, t.state, COALESCE(t.repo, ''), COALESCE(a.pushed_ref, ''), COALESCE(a.pushed_commit, '')
+			  FROM agentrt.task t JOIN agentrt.attempt a ON a.task_id = t.task_id AND a.attempt_no = $2 WHERE t.task_id = $1`,
+				task, n).Scan(&mission, &state, &repo, &ref, &commit)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return invalid("no attempt %d of task %s", n, task)
+			}
+			if err != nil {
+				return err
+			}
+			if repo != r.Repo || ref != r.Ref || commit != r.Commit {
+				return invalid("%s of %s naming %s is not what attempt %d of %s pushed", r.Ref, r.Repo, r.Commit[:12], n, task)
+			}
+			if state != "cancelled" && state != "rejected" && state != "accepted" {
+				return invalid("task %s is %s: its branches are not let go", task, state)
+			}
+			detail := userinfo.ReplaceAllString(strings.Join(strings.Fields(strings.ToValidUTF8(r.Detail, "?")), " "), "://<secret>@")
 			if len(detail) > maxPruneDetail {
 				detail = strings.ToValidUTF8(detail[:maxPruneDetail], "") + "…"
 			}
 			if r.Outcome == "refused" || r.Outcome == "failed" {
-				verb := map[string]string{"refused": "Gitea refused to delete", "failed": "could not reach Gitea to delete"}[r.Outcome]
+				text, field := "Gitea refused to delete", "prune_refused"
+				if r.Outcome == "failed" {
+					text, field = "could not reach Gitea to delete", "prune_failed"
+				}
 				if _, err := Append(ctx, tx, Event{Stream: "host:" + host, Type: "note", Actor: hostActor(host),
-					Body: map[string]any{"text": fmt.Sprintf("%s %s of %s (%s): %s", verb, r.Ref, r.Repo, r.Commit[:12], detail),
-						"prune_refused": r.Ref}}); err != nil {
+					Body: map[string]any{"text": fmt.Sprintf("%s %s of %s (%s): %s", text, r.Ref, r.Repo, r.Commit[:12], detail),
+						field: r.Ref}}); err != nil {
 					return err
 				}
 				continue
 			}
-			var mission string
-			err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, task).Scan(&mission)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return invalid("no task %s", task)
-			}
-			if err != nil {
+			var told bool
+			if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE task_id = $1 AND event_type = 'note'
+			  AND body_json->>'pruned' = $2)`, task, r.Ref).Scan(&told); err != nil {
 				return err
+			}
+			if told {
+				continue // a report sent again after its answer was lost
 			}
 			text := fmt.Sprintf("host %s deleted %s of %s (it named %s)", host, r.Ref, r.Repo, r.Commit[:12])
 			if r.Outcome == "gone" {
@@ -254,20 +313,24 @@ func RecordPrunes(ctx context.Context, db DB, host string, results []PruneResult
 }
 
 // RecordLandings records, for each accepted implementation not yet seen on
-// main, whether main now holds it (mainTasks: a repository's main, task to the
-// newest commit whose Agentrt-Task names it; ok false when it cannot be read
-// now). The first sighting is the note the seven days count from. A mission
-// not to be merged is passed over. It returns how many it recorded.
-func RecordLandings(ctx context.Context, db DB, mainTasks func(context.Context, string) (map[string]string, bool)) (int, error) {
-	if mainTasks == nil {
+// main, whether main now holds its accepted attempt's very commit (merged as
+// a cherry-pick of it, or as it is; a reverted landing does not count; review
+// 436 A2). The first sighting is the note the seven days count from. A
+// mission not to be merged is passed over; a repository whose main cannot be
+// read now is tried again next time. It returns how many it recorded.
+func RecordLandings(ctx context.Context, db DB, mainResults MainResults) (int, error) {
+	if mainResults == nil {
 		return 0, nil
 	}
-	type open struct{ task, repo string }
+	type open struct{ task, repo, commit string }
 	var tasks []open
 	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT t.task_id, t.repo FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
+		rows, err := tx.Query(ctx, `SELECT t.task_id, t.repo, a.pushed_commit FROM agentrt.task t
+		  JOIN agentrt.mission m ON m.mission_id = t.mission_id
+		  JOIN LATERAL (SELECT v.attempt_id FROM agentrt.verification v WHERE v.task_id = t.task_id AND v.accepts_attempt
+		    ORDER BY v.created_at DESC LIMIT 1) v ON true
+		  JOIN agentrt.attempt a ON a.attempt_id = v.attempt_id AND a.pushed_commit IS NOT NULL
 		  WHERE t.role = 'implement' AND t.state = 'accepted' AND t.repo IS NOT NULL AND COALESCE(m.scope_json->>'no_merge', '') = ''
-		    AND EXISTS (SELECT 1 FROM agentrt.attempt a WHERE a.task_id = t.task_id AND a.pushed_ref IS NOT NULL)
 		    AND NOT EXISTS (SELECT 1 FROM agentrt.event e WHERE e.task_id = t.task_id AND e.event_type = 'note' AND e.body_json ? 'landed')
 		  ORDER BY t.repo, t.task_id`)
 		if err != nil {
@@ -275,7 +338,7 @@ func RecordLandings(ctx context.Context, db DB, mainTasks func(context.Context, 
 		}
 		tasks, err = pgx.CollectRows(rows, func(r pgx.CollectableRow) (open, error) {
 			var o open
-			return o, r.Scan(&o.task, &o.repo)
+			return o, r.Scan(&o.task, &o.repo, &o.commit)
 		})
 		return err
 	}); err != nil {
@@ -283,17 +346,17 @@ func RecordLandings(ctx context.Context, db DB, mainTasks func(context.Context, 
 	}
 	n := 0
 	var errs []error
-	mains := map[string]map[string]string{}
+	mains := map[string]OnMain{}
 	for _, o := range tasks {
 		main, read := mains[o.repo]
 		if !read {
 			var ok bool
-			if main, ok = mainTasks(ctx, o.repo); !ok {
+			if main, ok = mainResults(ctx, o.repo); !ok {
 				main = nil
 			}
 			mains[o.repo] = main
 		}
-		sha := main[o.task]
+		sha := main[o.task][o.commit]
 		if sha == "" {
 			continue
 		}
@@ -312,7 +375,7 @@ func RecordLandings(ctx context.Context, db DB, mainTasks func(context.Context, 
 			did = true
 			_, err = Append(ctx, tx, Event{Stream: MissionStream(t.mission), Type: "note", Actor: "controller", MissionID: t.mission,
 				PlanNode: t.step, TaskID: t.id, Body: map[string]any{
-					"text": fmt.Sprintf("its accepted result is on main of %s as %s", o.repo, sha[:12]), "landed": sha}})
+					"text": fmt.Sprintf("its accepted result %s is on main of %s as %s", o.commit[:12], o.repo, sha[:12]), "landed": sha}})
 			return err
 		})
 		if err != nil {

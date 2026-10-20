@@ -44,17 +44,17 @@ func TestGiteaAgentHeadsListsTheAttemptBranches(t *testing.T) {
 }
 
 // A read of main is kept for its time to live; a failed one is not kept.
-func TestCachedMainTasksKeepsAGoodRead(t *testing.T) {
+func TestCachedMainResultsKeepsAGoodRead(t *testing.T) {
 	reads, fail := 0, false
-	read := cachedMainTasks(func(context.Context, string) (map[string]string, error) {
+	read := cachedMainResults(func(context.Context, string) (store.OnMain, error) {
 		reads++
 		if fail {
 			return nil, errors.New("gitea unreachable")
 		}
-		return map[string]string{"t_x": headSHA}, nil
+		return store.OnMain{"t_x": {headSHA: otherSHA}}, nil
 	}, time.Hour)
 	for i := 0; i < 3; i++ {
-		if got, ok := read(context.Background(), "bifrost-platform"); !ok || got["t_x"] != headSHA {
+		if got, ok := read(context.Background(), "bifrost-platform"); !ok || got["t_x"][headSHA] != otherSHA {
 			t.Fatalf("read %d: %v %v", i, got, ok)
 		}
 	}
