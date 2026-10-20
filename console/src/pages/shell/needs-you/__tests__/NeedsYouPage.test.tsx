@@ -191,7 +191,7 @@ describe('NeedsYouPage', () => {
 
     render(wrapper(<NeedsYouPage />))
 
-    expect(await screen.findByText('2 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="2"]')).toBeTruthy())
     const decide = screen.getByRole('region', { name: 'Decide' })
     const links = within(decide).getAllByRole('link')
     expect(links.map(link => link.getAttribute('href'))).toEqual([
@@ -204,14 +204,15 @@ describe('NeedsYouPage', () => {
     expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
     expect(within(screen.getByRole('region', { name: 'Sign off' })).getByText('Not connected yet.')).toBeTruthy()
-    expect(await screen.findByText('Degraded — 1 warning alert')).toBeTruthy()
+    // The system verdict is the shell header's and For you's, not repeated in this section (W-31 2.2b).
+    expect(screen.queryByText('Degraded — 1 warning alert')).toBeNull()
   })
 
   it('says nothing needs you when the list is empty', async () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(() => json(buildApprovalListResponse([])))
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(await screen.findByText('Nothing is waiting in these lists.')).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
@@ -226,8 +227,8 @@ describe('NeedsYouPage', () => {
         : json(buildApprovalListResponse([])),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
     expect(screen.getByText(/Could not read approvals/)).toBeTruthy()
     expect(screen.queryByText(/This device has no approval token/)).toBeNull()
     expect(screen.queryByLabelText('Set approval token')).toBeNull()
@@ -242,7 +243,7 @@ describe('NeedsYouPage', () => {
         : json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-7' })]))
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
   })
 
@@ -257,7 +258,7 @@ describe('NeedsYouPage', () => {
       ]),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('2 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="2"]')).toBeTruthy())
     const group = screen.getByRole('region', { name: 'Silent threads' })
     expect(
       within(group).getByText(
@@ -296,7 +297,7 @@ describe('NeedsYouPage', () => {
       ]),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const group = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(group).getByText('Silent threads · 1')).toBeTruthy()
     expect(within(group).getByText('claude 0b8e2f4a-1111-2222-3333-444455556666')).toBeTruthy()
@@ -329,7 +330,7 @@ describe('NeedsYouPage', () => {
         ),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const group = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(group).getByText('mbp')).toBeTruthy()
     expect(within(group).getByText('not monitored: codex')).toBeTruthy()
@@ -348,7 +349,7 @@ describe('NeedsYouPage', () => {
         }),
     )
     const { unmount } = render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const group = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(group).getByText('monitoring is full: 2 threads refused, last at 2026-10-10T07:00:00Z')).toBeTruthy()
     unmount()
@@ -363,7 +364,7 @@ describe('NeedsYouPage', () => {
         }),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(await screen.findByText('Nothing is waiting in these lists.')).toBeTruthy()
     expect(screen.queryByText(/monitoring is full/)).toBeNull()
     expect(screen.queryByText(/monitoring refused/)).toBeNull()
   })
@@ -387,7 +388,7 @@ describe('NeedsYouPage', () => {
         ),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const group = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(group).getByText('Never reported')).toBeTruthy()
     expect(within(group).getByText('no heartbeat yet')).toBeTruthy()
@@ -401,7 +402,7 @@ describe('NeedsYouPage', () => {
       () => json({ error: 'boom' }, 500),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(within(screen.getByRole('region', { name: 'Decide' })).getAllByRole('link')).toHaveLength(1)
     const silent = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(silent).getByText(/Could not read agent threads/)).toBeTruthy()
@@ -420,7 +421,7 @@ describe('NeedsYouPage', () => {
       },
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(seen.some(value => value === 'Bearer admin-token')).toBe(false)
     await waitFor(() => expect(window.localStorage.getItem(APPROVAL_TOKEN_STORAGE_KEY)).toBeNull())
   })
@@ -460,7 +461,7 @@ describe('NeedsYouPage', () => {
     const { unmount } = render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Heartbeat work')).toBeTruthy()
     const group = screen.getByRole('region', { name: 'Silent threads' })
-    expect(screen.getByText('2 waiting for you')).toBeTruthy()
+    expect(document.querySelector('[data-needs-you-count="2"]')).toBeTruthy()
     expect(within(group).getByRole('link', { name: 'Open thread' }).getAttribute('href')).toBe(
       'https://claude.example/t/1',
     )
@@ -478,7 +479,7 @@ describe('NeedsYouPage', () => {
       () => json({ error: 'lineage down' }, 500),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const failed = screen.getByRole('region', { name: 'Silent threads' })
     expect(within(failed).getByText('Silent threads · 1')).toBeTruthy()
     expect(within(failed).queryByText('Silent threads · 0')).toBeNull()
@@ -493,7 +494,7 @@ describe('NeedsYouPage', () => {
     window.localStorage.setItem(APPROVAL_TOKEN_STORAGE_KEY, secret)
     stubFetch(() => json({ error: 'down' }, 500))
     const { container } = render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(screen.queryByLabelText('Set approval token')).toBeNull()
     expect(container.innerHTML).not.toContain(secret)
     expect(container.textContent ?? '').not.toContain(secret)
@@ -544,7 +545,7 @@ describe('NeedsYouPage', () => {
     )
     render(wrapper(<NeedsYouPage />))
 
-    expect(await screen.findByText('4 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="4"]')).toBeTruthy())
     expect(document.querySelector('[data-needs-you-count]')?.getAttribute('data-needs-you-count')).toBe('4')
     expect(needsYouBadge({ state: 'known', count: 4 })).toEqual({
       text: '4',
@@ -564,7 +565,7 @@ describe('NeedsYouPage', () => {
     expect(within(check).getByText('Open it and say what happened.')).toBeTruthy()
     expect(screen.queryByText('Platform runs this itself.')).toBeNull()
     expect(screen.queryByText('Already running in the terminal.')).toBeNull()
-    expect(screen.queryByText('0 waiting for you')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="0"]')).toBeNull()
   })
 
   it('keeps a notification under Recently handled after the groups are empty', async () => {
@@ -639,7 +640,7 @@ describe('NeedsYouPage', () => {
     )
     render(wrapper(<NeedsYouPage />))
 
-    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(await screen.findByText('Nothing is waiting in these lists.')).toBeTruthy()
     expect(screen.getByText('Notifications you received earlier are under Recently handled.')).toBeTruthy()
     const block = document.getElementById('recently-handled')
     expect(block?.tagName).toBe('DETAILS')
@@ -661,10 +662,10 @@ describe('NeedsYouPage', () => {
     window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
     stubFetch(() => json({ error: 'boom' }, 500))
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(screen.getByText(/Could not read approvals/)).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
-    expect(screen.queryByText('0 waiting for you')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="0"]')).toBeNull()
     expect(screen.queryByText(/Decide · 0/)).toBeNull()
     expect(screen.queryByText(/Run in a terminal · 0/)).toBeNull()
     expect(screen.queryByText(/Check · 0/)).toBeNull()
@@ -679,12 +680,12 @@ describe('NeedsYouPage', () => {
       () => json({ error: 'boom' }, 500),
     )
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const block = document.getElementById('recently-handled')
     expect(block?.textContent).toContain('Recently handled · Unknown')
     expect(block?.textContent).toContain('Could not read handled requests')
     expect(block?.textContent).not.toContain('Recently handled · 0')
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
   })
 
   it('shows a failed approvals read and recovers it on the next interval', async () => {
@@ -699,14 +700,14 @@ describe('NeedsYouPage', () => {
     })
     render(wrapper(<NeedsYouPage />))
     expect(await screen.findByText('Could not read approvals — last tried 21:36:08')).toBeTruthy()
-    expect(screen.getByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
     expect(screen.queryByRole('region', { name: 'Decide' })).toBeNull()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000)
     })
     expect(await screen.findByRole('region', { name: 'Decide' })).toBeTruthy()
-    expect(screen.getByText('1 waiting for you')).toBeTruthy()
+    expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy()
     expect(openCalls).toBeGreaterThanOrEqual(2)
   })
 })

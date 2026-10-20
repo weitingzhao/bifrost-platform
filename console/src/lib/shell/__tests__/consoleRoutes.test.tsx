@@ -8,7 +8,9 @@ import {
   SHELL_ROUTE_IDS,
   approvalHref,
   entryOf,
+  NEEDS_YOU_HREF,
   formatShellHash,
+  goalHref,
   hashQueryWithoutTaskMode,
   isQuestionId,
   isShellRouteId,
@@ -19,7 +21,7 @@ import {
 } from '@/lib/shell/consoleRoutes'
 
 const ENTRIES = ['For you', 'Chief of staff', 'Work', 'System']
-const DETAILS = ['Needs you', 'Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Progress', 'Records']
+const DETAILS = ['Status', 'Data', 'IB', 'Releases', 'Infrastructure', 'Records']
 
 describe('shell navigation', () => {
   it('has four entries, For you first, then the detail pages with Records last', () => {
@@ -103,13 +105,45 @@ describe('legacy hash redirects', () => {
   })
 })
 
+describe('Needs you and Progress, now part of For you and Work (W-31 2.2b)', () => {
+  it('lands their hashes on the entry, at the same section, keeping what the link carried', () => {
+    const cases: [string, string, string][] = [
+      ['needs-you', 'you', '#you?section=waiting'],
+      ['needs-you?section=recently-handled', 'you', '#you?section=recently-handled'],
+      ['progress', 'work', '#work?section=goals'],
+      ['progress?goal=M-12', 'work', '#work?goal=M-12'],
+      ['progress?section=code-health', 'work', '#work?section=code-health'],
+      ['code-health', 'work', '#work?section=code-health'],
+      ['commit-lineage', 'work', '#work?section=commit-lineage'],
+      ['agents', 'work', '#work'],
+      ['queue', 'you', '#you?section=waiting'],
+      ['agent-desk', 'you', '#you?section=waiting'],
+    ]
+    for (const [from, id, canonical] of cases) {
+      expect(resolveConsoleHash(from), from).toEqual({ location: { kind: 'shell', id }, canonical })
+    }
+    expect(isShellRouteId('needs-you')).toBe(false)
+    expect(isShellRouteId('progress')).toBe(false)
+  })
+
+  it('links to them by their new place', () => {
+    expect(NEEDS_YOU_HREF).toBe('#you?section=waiting')
+    expect(goalHref()).toBe('#work?section=goals')
+    expect(goalHref('M-3')).toBe('#work?goal=M-3')
+    for (const href of [NEEDS_YOU_HREF, goalHref(), goalHref('M-3')]) {
+      const resolved = resolveConsoleHash(href.slice(1))
+      expect(resolved.canonical, href).toBe(href)
+    }
+  })
+})
+
 describe('which entry a place lights', () => {
-  it('lights the entry itself, For you for Needs you and a request, Work for Progress, System for the rest, none for More', () => {
+  it('lights the entry itself, For you for a request or a question, System for the detail pages, none for More', () => {
     expect(entryOf({ kind: 'shell', id: 'chief' })).toBe('chief')
-    expect(entryOf({ kind: 'shell', id: 'needs-you' })).toBe('you')
+    expect(entryOf({ kind: 'shell', id: 'you' })).toBe('you')
     expect(entryOf({ kind: 'approval' })).toBe('you')
     expect(entryOf({ kind: 'question' })).toBe('you')
-    expect(entryOf({ kind: 'shell', id: 'progress' })).toBe('work')
+    expect(entryOf({ kind: 'shell', id: 'work' })).toBe('work')
     for (const id of ['status', 'data', 'ib', 'releases', 'infrastructure', 'records'] as const) {
       expect(entryOf({ kind: 'shell', id }), id).toBe('system')
     }
@@ -134,10 +168,10 @@ describe('request links', () => {
     expect(resolveConsoleHash('maintenance?id=ap-1&taskMode=ops').canonical).toBe('#approvals?id=ap-1')
   })
 
-  it('sends #maintenance and #approvals without an id to Needs you', () => {
-    expect(resolveConsoleHash('maintenance').canonical).toBe('#needs-you')
-    expect(resolveConsoleHash('approvals').canonical).toBe('#needs-you')
-    expect(resolveConsoleHash('approvals?id=').location).toEqual({ kind: 'shell', id: 'needs-you' })
+  it('sends #maintenance and #approvals without an id to For you, at everything waiting', () => {
+    expect(resolveConsoleHash('maintenance').canonical).toBe('#you?section=waiting')
+    expect(resolveConsoleHash('approvals').canonical).toBe('#you?section=waiting')
+    expect(resolveConsoleHash('approvals?id=').location).toEqual({ kind: 'shell', id: 'you' })
   })
 
   it('keeps a Records tab in the address', () => {
@@ -153,7 +187,7 @@ describe('request links', () => {
 })
 
 describe('question links', () => {
-  it('opens #questions?id=q_… and sends #questions without an id to Needs you', () => {
+  it('opens #questions?id=q_… and sends #questions without an id to For you, at everything waiting', () => {
     const id = 'q_0123456789abcdef'
     expect(isQuestionId(id)).toBe(true)
     expect(resolveConsoleHash(`questions?id=${id}`)).toEqual({
@@ -162,10 +196,10 @@ describe('question links', () => {
     })
     expect(questionHref(id)).toBe(`#questions?id=${id}`)
     expect(resolveConsoleHash('questions')).toEqual({
-      location: { kind: 'shell', id: 'needs-you' },
-      canonical: '#needs-you',
+      location: { kind: 'shell', id: 'you' },
+      canonical: '#you?section=waiting',
     })
-    expect(resolveConsoleHash('questions?id=').location).toEqual({ kind: 'shell', id: 'needs-you' })
+    expect(resolveConsoleHash('questions?id=').location).toEqual({ kind: 'shell', id: 'you' })
     expect(resolveHashTab('questions').location).toEqual({ kind: 'question' })
     expect(isQuestionId('Q12')).toBe(false)
     expect(isQuestionId('q_0123456789ABCDE')).toBe(false)

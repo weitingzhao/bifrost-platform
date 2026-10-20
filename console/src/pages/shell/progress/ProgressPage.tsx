@@ -1,9 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { record, text, parseRuntimeTask } from '@/api/agentRuntime'
 import { computedAgeLine, generationIsSkewed, publishedAgeSeconds, receivedIsStale, skewSentence, staleSentence } from '@/api/agentProgress'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
-import { GoalForm } from '../agents/GoalForm'
 import { AgentsPlan } from '../agents/AgentsPlan'
 import { useRuntimePlan } from '../agents/useRuntimePlan'
 import { TaskRow } from './RuntimeWork'
@@ -12,27 +11,40 @@ import { NowClock, Tick } from './progressClock'
 import { ProgressTimeline } from './ProgressTimeline'
 import { GoalCard } from './GoalCard'
 import { missionIds, relative } from './goalCardModel'
-import { ProgressNeedsPreview } from './ProgressNeedsPreview'
 import { CodeHealthPage } from '@/pages/CodeHealthPage'
 import { CommitLineagePage } from '@/pages/CommitLineagePage'
+import { GOALS_SECTION, formatShellHash, goalHref } from '@/lib/shell/consoleRoutes'
+import { useHashSection } from '@/lib/shell/useHashSection'
 
-/** One project surface, ordered by the Owner's questions. */
+function goalInHash(): string {
+  const id = new URLSearchParams(window.location.hash.split('?')[1]).get('goal')
+  return id && /^M-\d+$/.test(id) ? id : ''
+}
+
+/**
+ * Work's detail, below its cards (it was the Progress page; W-31 2.2b): the goal cards, the
+ * overview, plan and architecture, hosts, history, commit lineage and code health. What waits on
+ * the Owner is For you's; new goals are given on Chief of staff. `#work?goal=M-n` puts that goal's
+ * card first and brings it into view.
+ */
 export function ProgressPage() {
   const needs = useNeedsYou()
   const plan = useRuntimePlan()
+  const goals = useRef<HTMLElement>(null)
+  useHashSection(GOALS_SECTION, goals)
   const [submitted, setSubmitted] = useState<{ id: string; goal: string } | null>(() => {
-    const id = new URLSearchParams(window.location.hash.split('?')[1]).get('goal')
-    return id && /^M-\d+$/.test(id) ? { id, goal: '' } : null
+    const id = goalInHash()
+    return id ? { id, goal: '' } : null
   })
   useEffect(() => {
     const change = () => {
-      const id = new URLSearchParams(window.location.hash.split('?')[1]).get('goal')
-      if (id && /^M-\d+$/.test(id)) { setSubmitted(current => current?.id === id ? current : { id, goal: '' }); setHighlighted(id) }
+      const id = goalInHash()
+      if (id) { setSubmitted(current => current?.id === id ? current : { id, goal: '' }); setHighlighted(id) }
     }
     window.addEventListener('hashchange', change)
     return () => window.removeEventListener('hashchange', change)
   }, [])
-  const [highlighted, setHighlighted] = useState('')
+  const [highlighted, setHighlighted] = useState(goalInHash)
   useEffect(() => {
     if (!highlighted) return
     const timer = window.setTimeout(() => setHighlighted(''), 6000)
@@ -64,9 +76,8 @@ export function ProgressPage() {
     </>
   }
   return <NowClock><div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
-    <section aria-label="Needs you"><ProgressNeedsPreview needs={needs} /></section>
-    <section aria-label="Goals" className="flex min-w-0 flex-col gap-4">
-      <GoalForm onCreated={(result, goal) => { setSubmitted({ id: result.mission_id, goal }); setHighlighted(result.mission_id) }} />
+    <section id={GOALS_SECTION} ref={goals} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
+      <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, 8).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
@@ -74,7 +85,7 @@ export function ProgressPage() {
     <section aria-label="Plan and architecture"><AgentsPlan /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" collapsible defaultCollapsed bodyPadding="compact">
-      {ids.slice(8).map(id => <p key={id} className="text-sm">{id} · {runtime?.work.missions.find(m => m.mission_id === id)?.title || text(runtime?.recent.tasks.find(t => text(t.mission_id) === id)?.title) || 'Finished goal'} · <a href={`#progress?goal=${encodeURIComponent(id)}`} className="underline" onClick={() => { setSubmitted({ id, goal: '' }); setHighlighted(id) }}>View goal</a></p>)}
+      {ids.slice(8).map(id => <p key={id} className="text-sm">{id} · {runtime?.work.missions.find(m => m.mission_id === id)?.title || text(runtime?.recent.tasks.find(t => text(t.mission_id) === id)?.title) || 'Finished goal'} · <a href={goalHref(id)} className="underline" onClick={() => { setSubmitted({ id, goal: '' }); setHighlighted(id) }}>View goal</a></p>)}
       <ProgressTimeline runtime={runtime} now={Date.now()} />
       {runtimeState(<>
         <h4>Recent runtime tasks</h4>{runtime?.recent.tasks.length === 0 && <p>No recent tasks.</p>}

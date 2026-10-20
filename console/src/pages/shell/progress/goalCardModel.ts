@@ -1,7 +1,7 @@
 import { record, text, type RuntimeEvent, type RuntimeProgress } from '@/api/agentRuntime'
 import type { GoalData, GoalTask } from '@/api/agentRuntimeGoals'
 import type { Question } from '@/api/questions'
-import { questionHref } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
 
 export type StageState = 'done' | 'running' | 'waiting' | 'failed' | 'future' | 'skipped'
 export type GoalStage = { label: string; state: StageState; tasks: GoalTask[]; completed: number; dropped: number }
@@ -139,7 +139,7 @@ export function goalWaitingLinks(id: string, data: GoalData, questions: Question
     if (item.mission_id !== id && !ids.has(text(item.task_id)) && !(Array.isArray(record(item.blocks).missions) && (record(item.blocks).missions as unknown[]).includes(id))) continue
     const qid = text(action.question_id)
     if (qid && links.some(l => l.href === questionHref(qid))) continue
-    links.push({ title: text(item.title) || 'Review the runtime request', href: qid ? questionHref(qid) : '#needs-you' })
+    links.push({ title: text(item.title) || 'Review the runtime request', href: qid ? questionHref(qid) : NEEDS_YOU_HREF })
   }
   return links
 }

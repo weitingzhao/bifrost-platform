@@ -1,3 +1,4 @@
+import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { RuntimeProgress } from '@/api/agentRuntime'
@@ -103,7 +104,7 @@ export function ProgressTimeline({ runtime, now }: { runtime: RuntimeProgress | 
         <time dateTime={row.at} title={row.at} className="shrink-0 font-mono text-xs text-muted-foreground">{clockTime(Date.parse(row.at), now)}</time>
         <span className="shrink-0 font-semibold" style={{ color: TONE[row.kind] }}>{row.label}</span>
         <span className="min-w-0 [overflow-wrap:anywhere]">{row.text}</span>
-        {row.mission && <a href={`#progress?goal=${encodeURIComponent(row.mission)}`} className="shrink-0 text-xs">{row.mission}</a>}
+        {row.mission && <a href={goalHref(row.mission)} className="shrink-0 text-xs">{row.mission}</a>}
       </div>
       {row.detail && <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{row.detail}</span>}
     </li>)}</ol>

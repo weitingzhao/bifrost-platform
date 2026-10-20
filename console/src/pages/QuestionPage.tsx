@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchQuestion, type QuestionStatus } from '@/api/questions'
 import { usePlatformAuth } from '@/hooks/usePlatformAuth'
-import { isQuestionId } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF, isQuestionId } from '@/lib/shell/consoleRoutes'
 import { decisionBlockReason } from '@/pages/decisionSignIn'
 import { NEEDS_YOU_REFRESH_MS } from '@/pages/shell/needs-you/useNeedsYou'
 import { QuestionAnswerForm } from '@/pages/question/QuestionAnswerForm'
@@ -39,8 +39,8 @@ function Frame({
 }) {
   return (
     <div data-testid="question-page" data-question-state={state} className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
-      <a href="#needs-you" className="text-sm text-muted-foreground no-underline">
-        ← Needs you
+      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline">
+        ← For you
       </a>
       <p className="m-0 text-sm">{FROM_AN_AGENT}</p>
       {children}

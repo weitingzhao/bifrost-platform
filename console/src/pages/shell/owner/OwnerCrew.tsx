@@ -1,3 +1,4 @@
+import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useQueries } from '@tanstack/react-query'
 import { fetchRuntimeTaskDetail, type RuntimeAttempt, type RuntimeHost, type RuntimeMission, type RuntimeTaskDetail } from '@/api/agentRuntime'
 import { AttemptActionLine } from './AttemptActionLine'
@@ -51,7 +52,7 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
   const known = rows.filter(r => r.host)
   const online = known.filter(r => r.host?.online === true).length
   const title = read === 'ok' && known.length ? `Crew · ${online} of ${known.length} hosts online` : 'Crew'
-  return <Card label="Crew" title={title} more={{ href: '#progress', text: 'Goals' }}>
+  return <Card label="Crew" title={title} more={{ href: goalHref(), text: 'Goals' }}>
     {read === 'loading' && <p className="m-0 text-sm text-muted-foreground">Reading the agent runtime…</p>}
     {read === 'error' && <p role="alert" className="m-0 text-sm">The agent runtime could not be read: hosts and what they run are not known.</p>}
     {read === 'ok' && rows.length === 0 && <p className="m-0 text-sm text-muted-foreground">No agent host has polled this platform.</p>}

@@ -183,20 +183,21 @@ describe('runtime timeline', () => {
 
 describe('Merged Progress page', () => {
   it('redirects the former Agents route and renders hosts and the published plan', async () => {
-    expect(SHELL_NAV.map(n => n.id).slice(-2)).toEqual(['progress', 'records'])
-    expect(resolveConsoleHash('agents')).toEqual({ location: { kind: 'shell', id: 'progress' }, canonical: '#progress' })
+    expect(SHELL_NAV.map(n => n.id).slice(-2)).toEqual(['infrastructure', 'records'])
+    expect(resolveConsoleHash('agents')).toEqual({ location: { kind: 'shell', id: 'work' }, canonical: '#work' })
     wrap(<ProgressPage />)
     expect(await screen.findByText(/mbp-dev · Online/)).toBeInTheDocument()
     expect(await screen.findByText(/Round 2 · Checked:/)).toBeInTheDocument()
     expect(screen.getByText(/2.0 设计对齐：v4 到 v5 · 3\/3/)).toBeInTheDocument()
-    expect(screen.getByText('All on Needs you')).toHaveAttribute('href', '#needs-you')
+    // What waits on the Owner is For you's; new goals are given on Chief of staff (W-31 2.2b).
+    expect(screen.queryByText('All on Needs you')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
     expect(screen.getByRole('heading', { name: 'History' }).closest('details')).not.toHaveAttribute('open')
   })
   it('shows source failures and an incomplete count', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'unavailable' }, 503)))
     wrap(<ProgressPage />)
-    expect(await screen.findByText(/Count is incomplete:/)).toBeInTheDocument()
-    expect(screen.getAllByText(/Could not load agent runtime:/).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/Could not load agent runtime:/)).length).toBeGreaterThan(0)
     // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
     expect(await screen.findAllByText('Plan unavailable: Plan: unavailable')).toHaveLength(2)
     expect(await screen.findByText(/Could not load architecture:/)).toBeInTheDocument()

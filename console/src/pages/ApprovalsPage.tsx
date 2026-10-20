@@ -16,6 +16,7 @@ import {
   type ApprovalItem,
   type ResolveOutcome,
 } from '@/api/approvals'
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { CloseUnknownForm } from '@/pages/CloseUnknownForm'
 import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
@@ -703,8 +704,8 @@ export function ApprovalsPage() {
   return (
     <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <ConsoleBuildBanner stale={staleBuild} holdReload={reloadHeld} />
-      <a href="#needs-you" className="text-sm text-muted-foreground no-underline hover:text-foreground">
-        ← Needs you
+      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline hover:text-foreground">
+        ← For you
       </a>
       {id == null ? (
         <p className="m-0 text-sm text-muted-foreground">No request named in the link.</p>

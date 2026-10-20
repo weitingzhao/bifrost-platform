@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
@@ -585,20 +585,20 @@ describe('Needs you names the progress work', () => {
     })
     render(wrap(<NeedsYouPage />))
     const line = await screen.findByRole('link', { name: 'Agent-reported: Console 下一片 — 你批 #6' })
-    expect(line.getAttribute('href')).toBe('#progress')
+    expect(line.getAttribute('href')).toBe('#work')
   })
 
   it('shows no part line when the document is absent or does not name the request', async () => {
     stub(null, true)
     const missing = render(wrap(<NeedsYouPage />))
     // The board is not a source of what waits for the Owner (2.5 slice 3): unread, it leaves the count whole.
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     expect(screen.queryByText(/Agent-reported:/)).toBeNull()
     missing.unmount()
 
     stub({ owner_now: [{ name: 'Other', work: 'Else', approval: { id: 'appr_aaaaaaaaaaaaaaaa', number: 1 } }] })
     render(wrap(<NeedsYouPage />))
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     expect(screen.queryByText(/Agent-reported:/)).toBeNull()
   })
 })

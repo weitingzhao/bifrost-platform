@@ -1,9 +1,10 @@
+import { goalHref } from '@/lib/shell/consoleRoutes'
 import type { RuntimeMission } from '@/api/agentRuntime'
 import { firstLine } from './crewModel'
 import { Card } from './OwnerParts'
 import { etaBasis, etaLine } from './ownerModel'
 
-/** How many open goals the card lists; the rest are on Progress. */
+/** How many open goals the card lists; the rest are in Goals, further down Work. */
 const SHOWN = 6
 
 /**
@@ -12,14 +13,14 @@ const SHOWN = 6
  */
 export function OwnerGoals({ missions, now, read }: { missions: RuntimeMission[]; now: number; read: 'ok' | 'loading' | 'error' }) {
   const open = [...missions].sort((a, b) => b.mission_id.localeCompare(a.mission_id, undefined, { numeric: true }))
-  return <Card label="Open goals" title={read === 'ok' ? `Open goals · ${open.length}` : 'Open goals'} more={{ href: '#progress', text: 'Goals' }}>
+  return <Card label="Open goals" title={read === 'ok' ? `Open goals · ${open.length}` : 'Open goals'} more={{ href: goalHref(), text: 'Goals' }}>
     {read === 'loading' && <p className="m-0 text-sm text-muted-foreground">Reading the agent runtime…</p>}
     {read === 'error' && <p role="alert" className="m-0 text-sm">The agent runtime could not be read: open goals and when they finish are not known.</p>}
     {read === 'ok' && open.length === 0 && <p className="m-0 text-sm text-muted-foreground">No open goals.</p>}
     {read === 'ok' && <ul className="m-0 flex list-none flex-col gap-2 p-0">{open.slice(0, SHOWN).map(m => {
       const basis = etaBasis(m.eta)
       return <li key={m.mission_id} className="flex min-w-0 flex-col gap-1 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5">
-        <a href={`#progress?goal=${encodeURIComponent(m.mission_id)}`} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+        <a href={goalHref(m.mission_id)} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
           <strong>{m.mission_id}</strong> {firstLine(m.title || m.goal)}</a>
         <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{m.status || m.state}{m.reason ? ` · ${m.reason}` : ''}</span>
         {basis.length === 0
@@ -31,6 +32,6 @@ export function OwnerGoals({ missions, now, read }: { missions: RuntimeMission[]
             </ul></details>}
       </li>
     })}</ul>}
-    {read === 'ok' && open.length > SHOWN && <a href="#progress" className="text-sm">{open.length - SHOWN} more on Progress</a>}
+    {read === 'ok' && open.length > SHOWN && <a href={goalHref()} className="text-sm">{open.length - SHOWN} more in Goals</a>}
   </Card>
 }

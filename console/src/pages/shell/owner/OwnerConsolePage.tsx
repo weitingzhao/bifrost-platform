@@ -1,11 +1,13 @@
 import { ChiefConversation } from './ChiefConversation'
 import { useState } from 'react'
 import { DetailPageLinks } from '@/components/shell/DetailPageLinks'
-import { formatShellHash, type EntryRouteId } from '@/lib/shell/consoleRoutes'
+import { formatShellHash, goalHref, type EntryRouteId } from '@/lib/shell/consoleRoutes'
 import { GoalForm } from '@/pages/shell/agents/GoalForm'
+import { ProgressPage } from '@/pages/shell/progress/ProgressPage'
 import { OwnerData } from './OwnerData'
 import { Dot } from './OwnerParts'
 import { OwnerSystem } from './OwnerSystem'
+import { OwnerWaiting } from './OwnerWaiting'
 import { OwnerWork } from './OwnerWork'
 import { OwnerYou } from './OwnerYou'
 import { TONE_COLOR, ago, lastResultLine, type Verdict } from './ownerModel'
@@ -45,7 +47,7 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
         {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
           : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}
-        {last && <a href={`#progress?goal=${encodeURIComponent(last.mission)}`}>What it wrote and did</a>}
+        {last && <a href={goalHref(last.mission)}>What it wrote and did</a>}
       </div>
     </div>
   </section>
@@ -55,8 +57,9 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
  * The Owner's four entries (Owner 2026-10-16; design system v2 §10): For you, Chief of staff,
  * Work and System are one page each, with the verdict first — whole on For you, one line that
  * goes there on the others. The shell keeps this component mounted while the Owner moves between
- * entries, so a goal drafted from "Make it a goal" is still in the chief's box on arrival.
- * Details stay on their own pages.
+ * entries, so a goal drafted from "Make it a goal" is still in the chief's box on arrival. For you
+ * goes on to everything waiting (what was Needs you), Work to the goal cards and the rest of what
+ * was Progress (W-31 2.2b); the other details stay on their own pages.
  */
 export function OwnerConsolePage({ entry = 'you' }: { entry?: EntryRouteId }) {
   const blocks = entryBlocks(entry)
@@ -71,9 +74,11 @@ export function OwnerConsolePage({ entry = 'you' }: { entry?: EntryRouteId }) {
   return <div id="owner-console" data-testid="owner-console" data-entry={entry} className="@container flex w-full min-w-0 flex-col gap-5 pb-8">
     <VerdictBanner verdict={data.verdict} compact={entry !== 'you'} updatedAt={data.updatedAt} now={data.now} />
     {blocks.you && <OwnerYou data={data} onGoal={makeGoal} />}
+    {blocks.you && <OwnerWaiting />}
     {/* Hidden, not unmounted, on the other entries: an edited draft and a goal just sent outlive moving away (review 224 B-224-1). */}
     <div hidden={!blocks.chief} className={blocks.chief ? 'contents' : 'hidden'}><OwnerChief active={blocks.chief} data={data} draft={draft.text} draftKey={draft.key} /></div>
     {blocks.work && <OwnerWork data={data} />}
+    {blocks.work && <ProgressPage />}
     {blocks.system && <OwnerSystem data={data} />}
     {blocks.system && <OwnerData data={data} />}
     {blocks.system && <DetailPageLinks />}

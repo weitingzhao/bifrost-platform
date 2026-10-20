@@ -1,5 +1,6 @@
 import { OwnerStop } from './OwnerStop'
 import { useState } from 'react'
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
 import { ActionLink, Card, Dot } from './OwnerParts'
 import { plural, waitingRow, type OwnerRow } from './ownerModel'
@@ -30,7 +31,7 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   const silent = needsYou.silentItems.length
   const worth: OwnerRow[] = [...(alerts?.worth ?? []), ...(silent > 0 ? [{
     id: 'silent-threads', title: `${plural(silent, 'Claude thread')} went quiet mid-turn`, detail: 'Claude sessions, not system work',
-    tone: 'muted' as const, whose: 'The coordinator checks them', href: '#needs-you', action: 'See them',
+    tone: 'muted' as const, whose: 'The coordinator checks them', href: NEEDS_YOU_HREF, action: 'See them',
   }] : [])]
   // One count for the title, the verdict and the tab: Needs you's decisions and the alerts only he can clear.
   const count = data.yours
@@ -41,7 +42,7 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
     <h2 className="m-0 text-lg font-semibold">For you</h2>
     <div className="grid gap-4 @3xl:grid-cols-2">
       <OwnerStop controls={data.controls ?? []} readable={data.controlsReadable === true} />
-      <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: '#needs-you', text: 'Needs you' }}>
+      <Card label="Yours" title={`Yours · ${title}`} accent={yours.length > 0 || count.state === 'unknown'} more={{ href: NEEDS_YOU_HREF, text: 'All waiting' }}>
         {unknown && <p role="alert" className="m-0 text-sm">Not everything could be read, so this list may be short: {unknown}</p>}
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>

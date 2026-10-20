@@ -1,3 +1,4 @@
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { useState } from 'react'
 import { StatusLamp } from '@bifrost/ui'
 import {
@@ -23,7 +24,7 @@ export function TaskRow({ mission, task }: { mission: string; task: RuntimeTask 
       <span className="break-all text-xs text-muted-foreground">{task.task_id}</span>
       <span className="w-full break-words">{task.reason || 'No reason reported'} · Since {task.since || 'unknown'}</span>
     </button>
-    {(task.state === 'awaiting_owner' || task.status === 'waiting_owner') && <a href="#needs-you" className="text-sm underline">Waiting for you · See Needs you</a>}
+    {(task.state === 'awaiting_owner' || task.status === 'waiting_owner') && <a href={NEEDS_YOU_HREF} className="text-sm underline">Waiting for you · See For you</a>}
     {open && <TaskTimeline mission={mission} task={task.task_id} finished={['accepted', 'cancelled', 'rejected', 'failed'].includes(task.state)} />}
   </div>
 }
@@ -43,7 +44,7 @@ export function Missions({ data, history = false }: { data: RuntimeProgress; his
       return <details open={active} key={`${mission.mission_id}-${i}`} className="flex min-w-0 flex-col gap-2">
         <summary className="cursor-pointer text-sm font-medium">{mission.mission_id} · {mission.title || 'Untitled mission'}</summary>
         <State state={mission.state} status={mission.status} />
-        {mission.waiting_on === 'owner' && <a href="#needs-you" className="text-sm underline">Waiting for you · See Needs you</a>}
+        {mission.waiting_on === 'owner' && <a href={NEEDS_YOU_HREF} className="text-sm underline">Waiting for you · See For you</a>}
         <p className="break-words text-sm">{mission.reason || 'No reason reported'}</p>
         {mission.goal && <p className="break-words text-sm text-muted-foreground">{mission.goal}</p>}
         {controls.map((control, j) => <p key={j} className="text-sm">Control: {text(control.control_kind)} · {text(control.reason)}</p>)}

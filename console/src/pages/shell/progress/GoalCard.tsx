@@ -1,3 +1,4 @@
+import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
 import { AttemptActions } from './AttemptActions'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
@@ -75,7 +76,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const summary = runtime?.work.missions.find(m => m.mission_id === id)
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'
   const links = data ? goalWaitingLinks(id, data, questions, runtime) : []
-  if (data?.mission.state === 'awaiting_owner' && !links.length) links.push({ title: 'Review the mission request', href: '#needs-you' })
+  if (data?.mission.state === 'awaiting_owner' && !links.length) links.push({ title: 'Review the mission request', href: NEEDS_YOU_HREF })
   const status = data ? goalStatus(data, links.length > 0) : 'Planning'
   const done = data ? goalDone(data) : false
   const start = text(data?.mission.created_at)

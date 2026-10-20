@@ -3,7 +3,8 @@
  * (home), Chief of staff, Work, System — then the detail pages, which hang off an entry and are
  * listed under "Detail pages" (a desktop's side nav, a phone's More). Old bookmarks resolve through
  * LEGACY_HASH_REDIRECTS; `#owner?tab=` lands on the matching entry. `#approvals?id=` is the request
- * page; it has no nav row.
+ * page; it has no nav row. Needs you and Progress are part of For you and Work (W-31 2.2b, the
+ * navigation's second slice): their hashes land on that entry, at the same section.
  */
 
 export const SHELL_NAV = [
@@ -11,7 +12,6 @@ export const SHELL_NAV = [
   { id: 'chief', label: 'Chief of staff', question: 'What do I ask the chief of staff, and what came back?', group: 'entry' },
   { id: 'work', label: 'Work', question: 'Is the work moving?', group: 'entry' },
   { id: 'system', label: 'System', question: 'Is the machine fine?', group: 'entry' },
-  { id: 'needs-you', label: 'Needs you', question: 'Everything waiting for you, and how to answer it.', group: 'detail' },
   { id: 'status', label: 'Status', question: 'Is everything okay right now?', group: 'detail' },
   { id: 'data', label: 'Data', question: "Has today's data arrived?", group: 'detail' },
   { id: 'ib', label: 'IB', question: 'Is the IB connection healthy?', group: 'detail' },
@@ -27,7 +27,6 @@ export const SHELL_NAV = [
     question: 'How are the cluster, network, and machines?',
     group: 'detail',
   },
-  { id: 'progress', label: 'Progress', question: 'How far along is the project?', group: 'detail' },
   {
     id: 'records',
     label: 'Records',
@@ -48,8 +47,22 @@ export const DETAIL_ROUTE_IDS: readonly ShellRouteId[] = SHELL_NAV.filter(item =
 
 export const HOME_ROUTE: ShellRouteId = 'you'
 
-/** Every waiting item. A request or question link without an id lands here. */
-export const NEEDS_YOU_ROUTE: ShellRouteId = 'needs-you'
+/** Every waiting item, on For you. A request or question link without an id lands here. */
+export const NEEDS_YOU_ROUTE: ShellRouteId = 'you'
+
+/** The section of For you that lists every waiting item (what was the Needs you page). */
+export const WAITING_SECTION = 'waiting'
+
+/** The section of Work that holds the goal cards (what was the top of the Progress page). */
+export const GOALS_SECTION = 'goals'
+
+/** Every waiting item, in full: For you, at its waiting section. */
+export const NEEDS_YOU_HREF = `#${NEEDS_YOU_ROUTE}?section=${WAITING_SECTION}`
+
+/** Work, at the goal cards; with an id, that goal's card. */
+export function goalHref(id?: string): string {
+  return id ? `#work?goal=${encodeURIComponent(id)}` : `#work?section=${GOALS_SECTION}`
+}
 
 /** The list of detail pages, for a phone or a tablet (a desktop lists them in the side nav). */
 export const MORE_ROUTE = 'more'
@@ -110,6 +123,8 @@ export const FORMER_CONSOLE_TABS = [
   'flex-query-manage',
   'research-engine',
   'defects',
+  'needs-you',
+  'progress',
 ] as const
 
 export type ConsoleLocation =
@@ -121,18 +136,20 @@ export type ConsoleLocation =
 
 /**
  * Old hash → new hash. Choices that the destination table left open:
- * - maintenance → needs-you (the old approvals home; `#maintenance?id=` opens the request)
- * - queue / agent-desk → needs-you (operator inbox)
+ * - maintenance → For you's waiting items (the old approvals home; `#maintenance?id=` opens the request)
+ * - queue / agent-desk → For you's waiting items (operator inbox)
  * - defects, audit, execution-log, insight-log → records audit tab
  * - autonomous-skills, agent-governance → records patrol tab (trust policy for patrol)
  * - agent-capability → infrastructure (runner readiness sat with the mini card)
  * - analysis-workspace / hermes-status → infrastructure (已退役 former tab)
- * - eight Guides + agent-system → progress (project direction, not a live system)
+ * - eight Guides + agent-system → Work (project direction, not a live system)
  * - console → infrastructure (the old hash opened Network)
  */
 export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
-  agents: 'progress',
-  maintenance: 'needs-you',
+  'needs-you': 'you',
+  progress: 'work',
+  agents: 'work',
+  maintenance: 'you',
   'control-room': 'status',
   observability: 'status',
   'rocket-health': 'status',
@@ -142,8 +159,8 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   telemetry: 'status',
   'task-cc': 'status',
   'runtime-map': 'infrastructure',
-  'code-health': 'progress',
-  'commit-lineage': 'progress',
+  'code-health': 'work',
+  'commit-lineage': 'work',
   defects: 'records',
   audit: 'records',
   'autonomous-skills': 'records',
@@ -162,27 +179,27 @@ export const LEGACY_HASH_REDIRECTS: Record<string, ShellRouteId> = {
   'plugin-gallery': 'data',
   'market-data-manage': 'data',
   'flex-query-manage': 'data',
-  queue: 'needs-you',
+  queue: 'you',
   'agent-capability': 'infrastructure',
   'agent-governance': 'records',
   'analysis-workspace': 'infrastructure',
   'insight-log': 'records',
   'hermes-status': 'infrastructure', // 已退役 former tab hash
-  'flywheel-vision': 'progress',
-  blueprint: 'progress',
-  roadmap: 'progress',
-  'platform-standards': 'progress',
-  'agent-system': 'progress',
-  'mcp-contract': 'progress',
-  'design-system': 'progress',
-  'ai-compute': 'progress',
+  'flywheel-vision': 'work',
+  blueprint: 'work',
+  roadmap: 'work',
+  'platform-standards': 'work',
+  'agent-system': 'work',
+  'mcp-contract': 'work',
+  'design-system': 'work',
+  'ai-compute': 'work',
   console: 'infrastructure',
-  'agent-desk': 'needs-you',
+  'agent-desk': 'you',
   'dev-agent': 'status',
   briefing: 'status',
   'active-session': 'status',
   'delivery-board': 'status',
-  'briefing-reconciliation': 'progress',
+  'briefing-reconciliation': 'work',
   topology: 'infrastructure',
   matrix: 'infrastructure',
   pulse: 'status',
@@ -215,8 +232,12 @@ export const OWNER_TAB_ENTRY: Record<string, EntryRouteId> = {
   data: 'system',
 }
 
-/** Records tab a legacy hash lands on. */
+/** The section or Records tab a legacy hash lands on. */
 export const LEGACY_HASH_QUERY: Record<string, string> = {
+  'needs-you': `section=${WAITING_SECTION}`,
+  progress: `section=${GOALS_SECTION}`,
+  queue: `section=${WAITING_SECTION}`,
+  'agent-desk': `section=${WAITING_SECTION}`,
   'commit-lineage': 'section=commit-lineage',
   'code-health': 'section=code-health',
   defects: 'tab=audit',
@@ -236,18 +257,18 @@ export function isEntryRoute(value: string): value is EntryRouteId {
 }
 
 /**
- * The entry a place belongs to, lit in the tab bar or the rail while it is open: Needs you and a
- * request or a question under For you, Progress under Work, every other detail page under System.
- * More belongs to none.
+ * The entry a place belongs to, lit in the tab bar or the rail while it is open: a request or a
+ * question under For you, every detail page under System. More belongs to none.
  */
 export function entryOf(location: ConsoleLocation): EntryRouteId | null {
   if (location.kind === 'more' || location.kind === 'dev-sessions') return null
   if (location.kind === 'approval' || location.kind === 'question') return 'you'
   if (isEntryRoute(location.id)) return location.id
-  if (location.id === 'needs-you') return 'you'
-  if (location.id === 'progress') return 'work'
   return 'system'
 }
+
+/** Hashes of pages now part of an entry: what they carried (`goal=`, `section=`, `id=`) still applies there. */
+const MERGED_PAGES: ReadonlySet<string> = new Set(['needs-you', 'progress'])
 
 export function shellNavEntry(id: ShellRouteId) {
   const entry = SHELL_NAV.find(item => item.id === id)
@@ -303,8 +324,8 @@ export function resolveHashTab(tab: string): { location: ConsoleLocation; legacy
 /**
  * Where a raw hash (without `#`) lands, and the hash the address bar should show.
  * `#approvals?id=` and `#maintenance?id=` open the request; either without an id
- * lands on Needs you. `#questions?id=` opens the question; `#questions` with no
- * id lands on Needs you. A malformed id still opens the question page, which
+ * lands on For you's waiting items. `#questions?id=` opens the question; `#questions` with no
+ * id lands on For you's waiting items. A malformed id still opens the question page, which
  * does not request it.
  */
 export function resolveConsoleHash(raw: string): { location: ConsoleLocation; canonical: string } {
@@ -314,7 +335,7 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
   if (tab === QUESTION_ROUTE) {
     const questionId = hashQueryParam(query, 'id')
     if (questionId == null) {
-      return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
+      return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: NEEDS_YOU_HREF }
     }
     return { location: { kind: 'question' }, canonical: formatShellHash(QUESTION_ROUTE, query) }
   }
@@ -322,7 +343,7 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
     if (approvalId != null) {
       return { location: { kind: 'approval' }, canonical: formatShellHash(APPROVAL_ROUTE, query) }
     }
-    return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: formatShellHash(NEEDS_YOU_ROUTE) }
+    return { location: { kind: 'shell', id: NEEDS_YOU_ROUTE }, canonical: NEEDS_YOU_HREF }
   }
   if (tab === 'owner') {
     const tab = hashQueryParam(query, 'tab') ?? ''
@@ -332,6 +353,9 @@ export function resolveConsoleHash(raw: string): { location: ConsoleLocation; ca
   }
   const resolved = resolveHashTab(tab)
   const id = locationId(resolved.location)
+  if (MERGED_PAGES.has(tab) && query !== '') {
+    return { location: resolved.location, canonical: formatShellHash(id, query) }
+  }
   if (resolved.legacy || tab === '') {
     return { location: resolved.location, canonical: formatShellHash(id, LEGACY_HASH_QUERY[tab] ?? '') }
   }

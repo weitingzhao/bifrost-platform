@@ -1,3 +1,4 @@
+import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useRef, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { GOAL_REPOS, submitRuntimeGoal, type GoalResult } from '@/api/agentRuntime'
@@ -68,7 +69,7 @@ export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalR
       </div>
       {error && <p role="alert">{error}</p>}
       {result && <div role="status">
-        <p><a href={`#progress?goal=${encodeURIComponent(result.mission_id)}`} className="underline" onClick={() => document.getElementById(`goal-${result.mission_id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}>{result.mission_id} created · View goal</a></p>
+        <p><a href={goalHref(result.mission_id)} className="underline" onClick={() => document.getElementById(`goal-${result.mission_id}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })}>{result.mission_id} created · View goal</a></p>
         <details><summary>Details</summary><p>Task: {result.task_id || 'Not assigned'}</p></details>
         {result.mission_state !== 'active' && <p>{result.waiting || 'Waiting for the platform.'}</p>}
       </div>}

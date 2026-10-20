@@ -13,9 +13,7 @@ import {
   DataPage,
   IbPage,
   InfrastructurePage,
-  NeedsYouPage,
   OwnerConsolePage,
-  ProgressPage,
   RecordsPage,
   ReleasesPage,
   StatusPage,
@@ -28,6 +26,7 @@ import { useConsoleBuildDrift } from '@/pwa/useConsoleBuildDrift'
 import {
   HOME_ROUTE,
   MORE_ROUTE,
+  NEEDS_YOU_HREF,
   NEEDS_YOU_ROUTE,
   entryOf,
   formatShellHash,
@@ -47,13 +46,11 @@ import { useShellLayout } from '@/lib/shell/useShellLayout'
 type DetailRouteId = Exclude<ShellRouteId, EntryRouteId>
 
 const DETAIL_PAGES: Record<DetailRouteId, ComponentType> = {
-  'needs-you': NeedsYouPage,
   status: StatusPage,
   data: DataPage,
   ib: IbPage,
   releases: ReleasesPage,
   infrastructure: InfrastructurePage,
-  progress: ProgressPage,
   records: RecordsPage,
 }
 
@@ -83,12 +80,13 @@ function locationTitle(location: ConsoleLocation): { title: string; description:
 }
 
 /**
- * Where the header's back link goes on a phone or a tablet: a request or a question back to Needs
- * you, a detail page back to its entry. The entries and More have none (More takes its place).
+ * Where the header's back link goes on a phone or a tablet: a request or a question back to For
+ * you's waiting items, a detail page back to its entry. The entries and More have none (More takes
+ * its place).
  */
 function backFor(location: ConsoleLocation): HeaderBack | undefined {
   if (location.kind === 'approval' || location.kind === 'question') {
-    return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: formatShellHash(NEEDS_YOU_ROUTE) }
+    return { label: shellNavEntry(NEEDS_YOU_ROUTE).label, href: NEEDS_YOU_HREF }
   }
   if (location.kind !== 'shell' || isEntryRoute(location.id)) return undefined
   const entry = entryOf(location)

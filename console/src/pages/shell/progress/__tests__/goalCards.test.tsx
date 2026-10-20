@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import mission from '@/api/__fixtures__/agentrt-mission-M-2.prod.json'
 import tasks from '@/api/__fixtures__/agentrt-tasks-M-2.prod.json'
@@ -13,6 +13,7 @@ import { GoalCard } from '../GoalCard'
 import { goalDone, goalStages, goalStatus, goalWaitingLinks, missionIds, relative, taskTiming } from '../goalCardModel'
 import { whoseMove } from '../mergedProgressModel'
 import { ProgressPage } from '../ProgressPage'
+import { GoalForm } from '../../agents/GoalForm'
 vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => <p>Lineage content</p> }))
 vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => <p>Health content</p> }))
 const full: GoalData = { mission, tasks: parseGoalTasks(tasks), events: parseRuntimeEvents(events) }
@@ -191,7 +192,7 @@ describe('goal cards and source links', () => {
   it('matches only planning questions and runtime blocks for this mission', () => {
     const q = { id: 'q_123', title: 'Confirm scope', task_id: full.tasks[0]!.task_id, status: 'open' } as Question
     const runtime = parseRuntimeProgress({ needs_you: { items: [{ title: 'Change plan', blocks: { missions: ['M-2'] }, action: {} }] } })
-    expect(goalWaitingLinks('M-2', full, [q], runtime)).toEqual([{ title: q.title, href: '#questions?id=q_123' }, { title: 'Change plan', href: '#needs-you' }])
+    expect(goalWaitingLinks('M-2', full, [q], runtime)).toEqual([{ title: q.title, href: '#questions?id=q_123' }, { title: 'Change plan', href: '#you?section=waiting' }])
     expect(goalStatus(full, true)).toBe('Waiting for you')
     expect(goalWaitingLinks('M-1', full, [{ ...q, task_id: 'unrelated' }], runtime)).toEqual([])
   })
@@ -221,26 +222,31 @@ describe('Progress composition', () => {
     expect(document.getElementById('code-health')).not.toHaveAttribute('open')
     expect(screen.getByText('History').closest('details')).not.toHaveAttribute('open')
     expect(screen.getByText('Plan and architecture').closest('details')).not.toHaveAttribute('open')
-    expect(resolveConsoleHash('commit-lineage').canonical).toBe('#progress?section=commit-lineage')
-    expect(resolveConsoleHash('code-health').canonical).toBe('#progress?section=code-health')
-    await act(async () => { window.location.hash = '#progress?section=code-health'; window.dispatchEvent(new Event('hashchange')) })
+    expect(resolveConsoleHash('commit-lineage').canonical).toBe('#work?section=commit-lineage')
+    expect(resolveConsoleHash('code-health').canonical).toBe('#work?section=code-health')
+    await act(async () => { window.location.hash = '#work?section=code-health'; window.dispatchEvent(new Event('hashchange')) })
     expect(document.getElementById('code-health')).toHaveAttribute('open')
   })
-  it('puts a submitted card first, clears the form, links and scrolls to the card', async () => {
+  it('a goal given on Chief of staff links to its card on Work, which comes first and into view', async () => {
     mockFetch()
     const scroll = vi.fn()
     Element.prototype.scrollIntoView = scroll
-    wrap(<ProgressPage />)
-    await screen.findByLabelText('Goal M-2')
+    // Chief of staff: the form clears and links to the new goal's card on Work.
+    wrap(<GoalForm />)
     fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'A new goal' } })
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }))
-    await screen.findByLabelText('Goal M-20')
+    const link = await screen.findByRole('link', { name: 'M-20 created · View goal' })
+    expect(link).toHaveAttribute('href', '#work?goal=M-20')
     expect(screen.getByLabelText('Goal')).toHaveValue('')
+    cleanup()
+    // Work, opened at that link: the card is first, highlighted, and scrolled to.
+    window.history.replaceState(null, '', '#work?goal=M-20')
+    wrap(<ProgressPage />)
+    await screen.findByLabelText('Goal M-20')
     expect(screen.getAllByRole('article')[0]).toHaveAttribute('id', 'goal-M-20')
-    expect(screen.getByRole('link', { name: 'M-20 created · View goal' })).toHaveAttribute('href', '#progress?goal=M-20')
-    expect(scroll).toHaveBeenCalled()
-    expect(screen.getByLabelText('Decisions for you')).toBeInTheDocument()
-    expect(screen.getByText('Silent threads · 0').closest('details')).not.toHaveAttribute('open')
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(screen.getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
+    expect(screen.queryByLabelText('Decisions for you')).not.toBeInTheDocument()
   })
 })
 

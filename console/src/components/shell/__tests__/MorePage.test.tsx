@@ -16,7 +16,7 @@ describe('More', () => {
   it('lists every detail page, the Trade app in each environment and the external tools', () => {
     render(<MorePage viewerEnv="prod" />)
     const details = within(screen.getByRole('navigation', { name: 'Detail pages' })).getAllByRole('link')
-    expect(details).toHaveLength(8)
+    expect(details).toHaveLength(6)
     const urls = resolveTradeFrontendUrls()
     const trade = within(screen.getByRole('navigation', { name: 'Trade' })).getAllByRole('link')
     expect(trade.map(a => a.getAttribute('href'))).toEqual([urls.dev, urls.stg, urls.prod])

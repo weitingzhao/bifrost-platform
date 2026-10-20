@@ -5,7 +5,6 @@ import { fetchLineage } from '@/api/lineage'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { HostHeartbeatRow } from '@/components/shell/HostHeartbeatRow'
-import { SystemVerdictLine } from '@/components/shell/SystemVerdictLine'
 import { AnswerGroup } from '@/pages/shell/needs-you/AnswerGroup'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ApprovalRow } from '@/pages/shell/needs-you/ApprovalRow'
@@ -95,9 +94,10 @@ function RecentlyHandled({ count, rows }: { count: NeedsYouCount; rows: HandledR
 }
 
 /**
- * Home. Lists what waits for the Owner: decide, run in a terminal, check,
- * and silent threads. Recently handled keeps a notification findable after
- * the item has closed. No approve or reject here.
+ * For you's waiting section (it was the Needs you page; W-31 2.2b). Lists what waits for the
+ * Owner: decide, run in a terminal, check, questions, agent cards and silent threads. Recently
+ * handled keeps a notification findable after the item has closed. No approve or reject here.
+ * For you carries the one count and the verdict above it, so this section shows neither.
  */
 export function NeedsYouPage() {
   const {
@@ -180,17 +180,10 @@ export function NeedsYouPage() {
   }
 
   return (
-    <div data-testid="needs-you-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
-      <SystemVerdictLine link />
-      <p className="m-0 text-base font-medium text-foreground" data-needs-you-count={needsYouCountText(count)}>
-        {count.state === 'known' && count.count === 0
-          ? 'Nothing needs you right now'
-          : count.state === 'known'
-            ? `${count.count} waiting for you`
-            : count.state === 'unknown'
-              ? 'Needs you: Unknown — count is incomplete'
-              : 'Checking what needs you…'}
-      </p>
+    <div data-testid="needs-you-page" data-needs-you-count={needsYouCountText(count)} className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
+      {count.state === 'known' && count.count === 0 ? (
+        <p className="m-0 text-sm text-muted-foreground">Nothing is waiting in these lists.</p>
+      ) : null}
       {count.state === 'known' && count.count === 0 && recentCount.state === 'known' && recentCount.count > 0 ? (
         <p className="m-0 text-sm text-muted-foreground">{EARLIER_NOTIFICATIONS}</p>
       ) : null}

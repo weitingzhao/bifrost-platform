@@ -68,9 +68,10 @@ describe('one Needs you list', () => {
     expect(runtimeWaiting([request], [{ ...question, status: 'answered' }])).toMatchObject([{ href: `#questions?id=${question.id}`, kind: 'plan_change', since: question.created_at }])
     expect(runtimeWaiting([{ ...request, action: {}, kind: 'future' }], [question])).toMatchObject([{ title: request.title, kind: 'future' }])
   })
-  it('uses the same three-item count in the sidebar, home and Progress, without the board\'s hand-written requests', async () => {
+  it('uses the same three-item count in the sidebar and For you\'s waiting section, without the board\'s hand-written requests', async () => {
     mockSources(); wrap()
-    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(2))
+    // Work no longer previews what waits on the Owner: that is For you's (W-31 2.2b).
+    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(1))
     expect(within(screen.getByLabelText('Sidebar')).getByText('3')).toBeInTheDocument()
     expect(within(screen.getByLabelText('Agent runtime')).getByText('Future request')).toBeInTheDocument()
     // The board's owner_now has no way in: what waits for the Owner is a card, a request or a runtime item (2.5 slice 3).
@@ -78,21 +79,19 @@ describe('one Needs you list', () => {
     expect(screen.queryByText(boardFixture.owner_now[0]!.actions[0]!.text)).not.toBeInTheDocument()
     expect(screen.queryByText('Already an approval')).not.toBeInTheDocument()
     const blocks = Array.from(screen.getByTestId('merged-progress').children)
-    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Needs you', 'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
-    const preview = within(blocks[0] as HTMLElement)
-    expect(preview.getAllByRole('listitem')).toHaveLength(3)
-    expect(preview.getByRole('link', { name: /Where is the quota/ })).toHaveAttribute('href', `#questions?id=${question.id}`)
+    expect(blocks.map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    // The question it previewed is listed, to answer, in the waiting section.
+    expect(within(screen.getByTestId('needs-you-page')).getAllByText(/Where is the quota/).length).toBeGreaterThan(0)
   })
   it('marks all three counts incomplete when the runtime fails', async () => {
     mockSources('/agentrt/progress'); wrap()
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeInTheDocument()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(within(screen.getByLabelText('Sidebar')).getByText('?')).toBeInTheDocument()
-    expect(screen.getByText(/Count is incomplete:/)).toBeInTheDocument()
     expect(within(screen.getByLabelText('Agent runtime')).getByText(/Could not load/)).toBeInTheDocument()
   })
   it('keeps the count whole when the board fails: it is not a source of what waits for the Owner', async () => {
     mockSources('/agent/progress'); wrap()
-    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(2))
+    await waitFor(() => expect(document.querySelectorAll('[data-needs-you-count="3"]')).toHaveLength(1))
     expect(within(screen.getByLabelText('Sidebar')).getByText('3')).toBeInTheDocument()
   })
   it('makes a failed source outrank loading, and counts the complete list', () => {

@@ -6,7 +6,7 @@ import {
   formatWaited,
   type ApprovalItem,
 } from '@/api/approvals'
-import { approvalHref } from '@/lib/shell/consoleRoutes'
+import { approvalHref, formatShellHash } from '@/lib/shell/consoleRoutes'
 import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
 import { partOfLine, type ProgressPart } from '@/pages/shell/progress/progressPart'
 
@@ -68,7 +68,7 @@ export function ApprovalRow({
       </a>
       {pending && partOf != null ? (
         <a
-          href="#progress"
+          href={formatShellHash('work')}
           data-agent-reported=""
           className="mt-1 block max-h-5 min-w-0 max-w-full truncate text-sm text-muted-foreground underline"
         >

@@ -100,7 +100,7 @@ describe('ApprovalRow', () => {
     expect(line.startsWith('Agent-reported:')).toBe(true)
     for (const mark of marks) expect(line.includes(mark)).toBe(false)
     const agent = screen.getByRole('link', { name: line })
-    expect(agent.getAttribute('href')).toBe('#progress')
+    expect(agent.getAttribute('href')).toBe('#work')
     expect(agent.className).toContain('text-muted-foreground')
     expect(agent.className).toContain('truncate')
     const title = container.querySelector('[data-approval-row-title]')

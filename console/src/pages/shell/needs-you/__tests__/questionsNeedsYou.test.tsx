@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
@@ -164,27 +164,27 @@ describe('Needs you questions', () => {
     const more = within(answer).getByRole('button', { name: 'Show 2 more' })
     fireEvent.click(more)
     expect(within(answer).getAllByRole('link')).toHaveLength(7)
-    expect(screen.getByText('7 waiting for you')).toBeTruthy()
+    expect(document.querySelector('[data-needs-you-count="7"]')).toBeTruthy()
   })
 
   it('says Needs you: Unknown, not 0, when the question list cannot be read', async () => {
     stub(() => json({ error: 'boom' }, 500), () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-1' })])))
     render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(screen.getByText('Could not read questions: boom')).toBeTruthy()
-    expect(screen.queryByText('0 waiting for you')).toBeNull()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
-    expect(screen.queryByText('1 waiting for you')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="0"]')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="1"]')).toBeNull()
   })
 
   it('shows Loading… while questions are loading, and a stale line when a refresh fails', async () => {
     let release: (value: Response) => void = () => undefined
     stub(() => new Promise(resolve => { release = resolve }))
     const { unmount } = render(wrapper(<NeedsYouPage />))
-    expect(await screen.findByText('Checking what needs you…')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="…"]')).toBeTruthy())
     expect(document.querySelector('[data-questions-state="loading"]')?.textContent).toBe('Loading…')
-    expect(screen.queryByText('0 waiting for you')).toBeNull()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="0"]')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
     release(json({ questions: [] }))
     unmount()
 
@@ -198,9 +198,9 @@ describe('Needs you questions', () => {
     const stale = await screen.findByText('Could not refresh questions: boom')
     expect(stale.getAttribute('data-questions-state')).toBe('stale')
     expect(screen.getByText('Q12 Where is the quota?')).toBeTruthy()
-    expect(screen.getByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
-    expect(screen.queryByText('1 waiting for you')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
+    expect(document.querySelector('[data-needs-you-count="1"]')).toBeNull()
   })
 
   it('lists unread answers, and one Recently handled line per finished question', async () => {
@@ -229,7 +229,7 @@ describe('Needs you questions', () => {
     const answerGroup = await screen.findByRole('region', { name: 'Answer' })
     expect(within(answerGroup).getByText('Answered, not reported as read: Q3')).toBeTruthy()
     expect(within(answerGroup).getByText('Answered, never read by the thread: Q2')).toBeTruthy()
-    expect(screen.getByText('Nothing needs you right now')).toBeTruthy()
+    expect(screen.getByText('Nothing is waiting in these lists.')).toBeTruthy()
     const handled = document.getElementById('recently-handled')
     expect(handled?.textContent).toContain('Q3 answered')
     expect(handled?.textContent).toContain('Q13 expired with no answer')
@@ -319,16 +319,16 @@ describe('Needs you questions', () => {
         client,
       ),
     )
-    expect(await screen.findByText('1 waiting for you')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     const badgeText = () =>
       [...document.querySelectorAll('[data-nav-badge]')].map(badge => badge.textContent?.trim() ?? '')
     expect(badgeText()).toEqual(['1'])
     fail = true
     await client.refetchQueries({ queryKey: ['questions', 'all'] })
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(await screen.findByText('Could not refresh questions: boom')).toBeTruthy()
     expect(screen.getByText(/Q12 /)).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
     expect(badgeText().some(text => /\d/.test(text))).toBe(false)
     expect(badgeText()).toEqual(['?'])
   })
@@ -338,11 +338,11 @@ describe('Needs you questions', () => {
     let fail = false
     stub(() => (fail ? json({ error: 'boom' }, 500) : json({ questions: [] })))
     render(wrapper(<NeedsYouPage />, client))
-    expect(await screen.findByText('Nothing needs you right now')).toBeTruthy()
+    expect(await screen.findByText('Nothing is waiting in these lists.')).toBeTruthy()
     fail = true
     await client.refetchQueries({ queryKey: ['questions', 'all'] })
-    expect(await screen.findByText('Needs you: Unknown — count is incomplete')).toBeTruthy()
+    await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(screen.getByText('Could not refresh questions: boom')).toBeTruthy()
-    expect(screen.queryByText('Nothing needs you right now')).toBeNull()
+    expect(screen.queryByText('Nothing is waiting in these lists.')).toBeNull()
   })
 })

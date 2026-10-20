@@ -148,7 +148,39 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('region', { name: 'Release lane' })).toHaveTextContent('nobody holds it; nothing delivering')
     expect(screen.getByRole('region', { name: 'Health' })).toHaveTextContent('critical · yours')
     const details = within(screen.getByRole('navigation', { name: 'Detail pages' })).getAllByRole('link')
-    expect(details.map(a => a.getAttribute('href'))).toEqual(['#needs-you', '#status', '#data', '#ib', '#releases', '#infrastructure', '#progress', '#records'])
+    expect(details.map(a => a.getAttribute('href'))).toEqual(['#status', '#data', '#ib', '#releases', '#infrastructure', '#records'])
+  })
+
+  // Navigation, second slice (W-31 2.2b): what was Needs you is For you's lower half, what was Progress is Work's.
+  it('For you goes on to everything waiting, and the address can open it there', async () => {
+    stubRuntimeReads()
+    const scroll = vi.fn()
+    Element.prototype.scrollIntoView = scroll
+    show('#you?section=waiting')
+    const waiting = screen.getByRole('region', { name: 'Everything waiting on you' })
+    expect(waiting).toHaveAttribute('id', 'waiting')
+    expect(within(waiting).getByTestId('needs-you-page')).toBeInTheDocument()
+    expect(within(waiting).getByRole('region', { name: 'Sign off' })).toBeInTheDocument()
+    expect(within(screen.getByRole('region', { name: 'Yours' })).getByRole('link', { name: /All waiting/ })).toHaveAttribute('href', '#you?section=waiting')
+    await waitFor(() => expect(scroll).toHaveBeenCalled())
+    expect(scroll.mock.contexts.some(el => el === waiting)).toBe(true)
+  })
+
+  it('Work goes on to the goal cards and the rest of what was Progress; new goals are on Chief of staff', () => {
+    stubRuntimeReads()
+    show('#work')
+    expect(headings()).toEqual(['Work'])
+    const progress = screen.getByTestId('merged-progress')
+    expect(Array.from(progress.children).map(b => b.getAttribute('aria-label'))).toEqual(['Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History', 'Commit lineage', 'Code health'])
+    expect(within(progress).getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
+    expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
+  })
+
+  it('the other entries do not carry the merged sections', () => {
+    stubRuntimeReads()
+    show('#system')
+    expect(screen.queryByRole('region', { name: 'Everything waiting on you' })).toBeNull()
+    expect(screen.queryByTestId('merged-progress')).toBeNull()
   })
 
   it('lists what is his, then what is worth a look with whose it is', () => {
