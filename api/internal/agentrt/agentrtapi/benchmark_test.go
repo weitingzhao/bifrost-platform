@@ -12,9 +12,12 @@ import (
 func TestBenchmark(t *testing.T) {
 	pool, _ := world(t)
 	s := server(t, pool)
+	// One start time for every hand-in: read per call, two calls on either
+	// side of a second would differ and the second be refused as other results.
+	started := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
 	run := func(host string) map[string]any {
 		return map[string]any{"host_id": host, "run_id": "run-0001-codex", "executor": "exec:codex", "provider": "openai",
-			"model": "gpt-x", "questions_sha256": strings.Repeat("ab", 32), "started_at": time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
+			"model": "gpt-x", "questions_sha256": strings.Repeat("ab", 32), "started_at": started,
 			"question_ids": []string{"Q01", "Q12"},
 			"results": []any{map[string]any{"question": "Q01", "class": "go", "outcome": "pass", "wall_s": 300},
 				map[string]any{"question": "Q12", "class": "ts", "outcome": "unrunnable", "wall_s": 40, "reason": "npm ci failed"}}}
