@@ -1,6 +1,7 @@
 package store
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -82,6 +83,60 @@ func TestInputKeepsOnlyFactsOnTheTask(t *testing.T) {
 	}
 	if in = cp.input(candidate{role: "verify", core: true}, nil); in.core != "review_core" || in.job != "verifier" {
 		t.Fatalf("a verification of core work = %+v", in)
+	}
+}
+
+// W-31 2.4 「Claude 写核心代码」: claude's core work is verified by agentd's
+// deterministic check, the verifier job's only candidate, as any work is;
+// before, a core verification needed a holder of only review_core (codex,
+// not a verifier), so no core task could pass its check. The review of core
+// work stays codex's, and a model verifying core work still needs
+// review_core.
+func TestTheCheckVerifiesCoreWork(t *testing.T) {
+	t.Parallel()
+	det := Tool{Executor: "exec:deterministic", Provider: "local"}
+	cp := capabilities{candidates: map[string][]jobCandidate{
+		"verifier": {{id: "v", status: "active", executor: "exec:deterministic", provider: "local", pattern: "*"}},
+		"reviewer": {{id: "r1", status: "active", executor: "exec:codex", provider: "openai", pattern: "*"},
+			{id: "r2", status: "probation", executor: "exec:deterministic", provider: "local", pattern: "*"}}},
+		facts: []restriction{
+			{id: "core-author", executor: "exec:claude", kind: "only", subject: "author_core", grants: true},
+			{id: "core-review", executor: "exec:codex", kind: "only", subject: "review_core", grants: true},
+		}}
+	author := []priorAttempt{{id: "a1", executor: "exec:claude", provider: ptr("anthropic")}}
+	in := cp.input(candidate{role: "verify", core: true, subject: "t_S"}, author)
+	if route, excluded := in.decide(); len(route) != 1 || route[0] != "v" {
+		t.Fatalf("a core verification's route = %v, excluded %v", route, excluded)
+	}
+	if r := in.exclusion(claudeTool); len(r) == 0 {
+		t.Fatal("a model verifying core work without review_core passed")
+	}
+	if r := in.exclusion(codexTool); len(r) != 0 {
+		t.Fatalf("codex, review_core's holder, as a verifier: %v", r)
+	}
+	// Under a lapsed review_core fact the check still verifies; nobody else may.
+	lapsed := in
+	lapsed.facts = []restriction{{id: "core-review", executor: "exec:codex", kind: "only", subject: "review_core"}}
+	if r := lapsed.exclusion(det); len(r) != 0 {
+		t.Fatalf("the check under a lapsed fact: %v", r)
+	}
+	if r := lapsed.exclusion(codexTool); len(r) == 0 {
+		t.Fatal("codex under a lapsed fact passed")
+	}
+	// The check is no reviewer of core work: the review stays codex's.
+	rv := cp.input(candidate{role: "review", core: true, subject: "t_S"}, author)
+	if route, _ := rv.decide(); len(route) != 1 || route[0] != "r1" {
+		t.Fatalf("a core review's route = %v", route)
+	}
+	// The check stays held by its own facts and by independence.
+	held := in
+	held.facts = append(slices.Clone(in.facts), restriction{id: "x", executor: "exec:deterministic", kind: "must_not", subject: "review_core"})
+	if r := held.exclusion(det); len(r) != 1 || r[0] != "cannot or must_not on a need" {
+		t.Fatalf("a must_not on the check: %v", r)
+	}
+	own := cp.input(candidate{role: "verify", core: true, subject: "t_S"}, []priorAttempt{{id: "a1", executor: "exec:deterministic", provider: ptr("local")}})
+	if r := own.exclusion(det); len(r) != 1 || r[0] != "not independent of the subject's attempts" {
+		t.Fatalf("the check of its own executor's work: %v", r)
 	}
 }
 

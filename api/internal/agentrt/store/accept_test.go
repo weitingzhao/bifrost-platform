@@ -140,6 +140,49 @@ func TestAcceptanceFlow(t *testing.T) {
 	w.chainHolds(t, "mission:M-1")
 }
 
+// W-31 2.4 「Claude 写核心代码」: core work goes the whole way. Only claude
+// (only author_core) implements it; agentd's deterministic check verifies it
+// (before, its verification needed only review_core, which no verifier
+// holds, and stayed ready for ever); only codex (only review_core) reviews
+// it; it is accepted.
+func TestCoreWorkIsAccepted(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	impl := w.ready(t, store.Task{Repo: "bifrost-platform", Core: true})
+	if c := w.claim(t, "h1", store.LeaseTTL, codex, cursor); c != nil {
+		t.Fatalf("core work went to %s", c.Tool.Executor)
+	}
+	ic := w.run(t, "h1", claude, "done")
+	if ic.TaskID != impl {
+		t.Fatalf("claude claimed %s", ic.TaskID)
+	}
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	if c := w.claim(t, "h2", store.LeaseTTL, claude, cursor); c != nil {
+		t.Fatalf("the verification of core work went to %s", c.Tool.Executor)
+	}
+	vc := w.run(t, "h2", deterministic, "done")
+	if vc.TaskID != v {
+		t.Fatalf("the check claimed %s, not the verification %s", vc.TaskID, v)
+	}
+	did, err := store.Conclude(ctx, w.rt, v)
+	ok(t, err)
+	if did != "review" {
+		t.Fatalf("conclude did %q", did)
+	}
+	review := w.checker(t, impl, "review")
+	if c := w.claim(t, "h3", store.LeaseTTL, claude, cursor, deterministic); c != nil {
+		t.Fatalf("the review of core work went to %s", c.Tool.Executor)
+	}
+	rc := w.run(t, "h3", codex, "done")
+	if rc.TaskID != review {
+		t.Fatalf("codex claimed %s, not the review %s", rc.TaskID, review)
+	}
+	if did, err = store.Conclude(ctx, w.rt, review); err != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
+		t.Fatalf("conclude did %q (%v); implementation %s", did, err, w.state(t, "task", impl))
+	}
+}
+
 // A failed check sends the implementation back while rounds remain, then
 // blocks it; nothing is accepted.
 func TestAcceptanceRework(t *testing.T) {

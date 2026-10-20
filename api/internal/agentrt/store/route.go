@@ -289,13 +289,18 @@ func inputWith(ctx context.Context, tx pgx.Tx, cp capabilities, c candidate) (ro
 //   - a cannot or must_not fact on any need of the task excludes the tool;
 //   - a need that some executor holds an only fact on is open to holders only;
 //   - core work needs a holder of only author_core, or only review_core for a
-//     review or verification; with no holder nobody may take it;
+//     review or verification; with no holder nobody may take it. agentd's
+//     deterministic check verifies core work as it verifies any: it runs the
+//     spec's commands and judges nothing, and review_core is about judging
+//     (design v5 5.1.2 ④ gives the review of core work to codex, read-only),
+//     so it needs no holding; any other verifier of core work does;
 //   - a review or verification never goes to an executor or a model provider
 //     that made an attempt of its subject, nor to anyone when an attempt of
 //     the subject has no recorded provider (independence cannot be shown).
 func (in routeInput) exclusion(tl Tool) []string {
 	var reasons []string
 	restricted := false
+	check := in.job == "verifier" && in.core == "review_core" && tl.Executor == "exec:deterministic"
 	onlySubjects, held := map[string]bool{}, map[string]bool{}
 	for _, f := range in.facts {
 		switch f.kind {
@@ -303,7 +308,7 @@ func (in routeInput) exclusion(tl Tool) []string {
 			restricted = restricted || f.holds(tl)
 		case "only":
 			onlySubjects[f.subject] = true
-			held[f.subject] = held[f.subject] || (f.grants && f.holds(tl))
+			held[f.subject] = held[f.subject] || (f.grants && f.holds(tl)) || (check && f.subject == in.core)
 		}
 	}
 	if restricted {
@@ -315,7 +320,7 @@ func (in routeInput) exclusion(tl Tool) []string {
 			break
 		}
 	}
-	if in.core != "" && !held[in.core] {
+	if in.core != "" && !held[in.core] && !check {
 		reasons = append(reasons, "core work needs only "+in.core)
 	}
 	if in.subject != "" {
