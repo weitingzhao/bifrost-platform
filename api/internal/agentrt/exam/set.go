@@ -73,9 +73,9 @@ func (it *Item) Question() *Question { return it.question }
 // most 100 items, a planner's checkout by benchRepoRE and benchSHARE): a set
 // that would render a paper otherwise is one no host can sit, its paper open
 // for a day all the same, so it does not load (2026-10-20 STG: a seven-digit
-// commit refused paper 526ca46ad0db whole, before any run). Load is stricter
-// than checkPaper in one place: every repository a planner's item names is a
-// name, not only the first a paper carries (the planner's spec names them all).
+// commit refused paper 526ca46ad0db whole, before any run). Of a planner's
+// repositories Load checks every one the item names, not only the first a
+// paper carries (the planner's spec names them all).
 var (
 	itemID        = regexp.MustCompile(`^[0-9A-Za-z_-]{1,32}$`)
 	plannerRepo   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)

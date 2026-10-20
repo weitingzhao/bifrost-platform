@@ -184,12 +184,18 @@ func TestLoadRefuses(t *testing.T) {
 }
 
 // What a paper may hold, an Agent host takes (review 457): an item id of 32
-// characters, an item overridden onto another path it renders on, and up to
-// 100 items of a job across the set's files; 101 do not load.
+// characters, an item whose path only its override names, and up to 100
+// items of a job across the set's files; 101 do not load.
 func TestLoadTakesWhatAHostSits(t *testing.T) {
 	t.Parallel()
 	long := strings.Repeat("G", 32)
-	ov := strings.Replace(mail, `"id": "M1"`, `"id": "M1", "delivery_override": {"path": "mailbox"}`, 1)
+	// The mail question without a delivery of its own: only M1's override
+	// names the path, so a Load or Render that ignored it would refuse it.
+	ov := strings.Replace(strings.Replace(mail, `"delivery": {"path": "mailbox"},`, ``, 1),
+		`"id": "M1"`, `"id": "M1", "delivery_override": {"path": "mailbox"}`, 1)
+	if ov == mail || strings.Count(ov, `"path": "mailbox"`) != 1 {
+		t.Fatal("the override case is not built as meant")
+	}
 	s, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(brief)}, "q2.json": {Data: []byte(strings.Replace(goal, `"id": "G1"`, `"id": "`+long+`"`, 1))},
 		"q3.json": {Data: []byte(ov)}})
 	if err != nil {
