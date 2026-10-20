@@ -69,15 +69,21 @@ func (it *Item) Delivery() Delivery {
 // Question is the question the item belongs to.
 func (it *Item) Question() *Question { return it.question }
 
-// plannerRepo and plannerCommit are what an Agent host takes for a planner's
-// checkout (agentd's checkPaper: benchRepoRE, benchSHARE): an item that names
-// its repository or commit otherwise is a paper no host can sit, so the set
-// does not load (2026-10-20 STG: a seven-digit commit refused paper
-// 526ca46ad0db whole, before any run).
+// What an Agent host takes in a paper (agentd's checkPaper: examItemRE, at
+// most 100 items, a planner's checkout by benchRepoRE and benchSHARE): a set
+// that would render a paper otherwise is one no host can sit, its paper open
+// for a day all the same, so it does not load (2026-10-20 STG: a seven-digit
+// commit refused paper 526ca46ad0db whole, before any run). Load is stricter
+// than checkPaper in one place: every repository a planner's item names is a
+// name, not only the first a paper carries (the planner's spec names them all).
 var (
+	itemID        = regexp.MustCompile(`^[0-9A-Za-z_-]{1,32}$`)
 	plannerRepo   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 	plannerCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
+
+// maxPaperItems is the most items a paper holds: a job's items across the set.
+const maxPaperItems = 100
 
 // checkDelivery refuses a path the platform does not render, and a planner's
 // item without repositories that are names and a full hex commit.
@@ -189,6 +195,7 @@ func Load(fsys fs.FS) (*Set, error) {
 		return nil, fmt.Errorf("exam: no q*.json in the set")
 	}
 	slices.Sort(names)
+	perJob := map[string]int{}
 	h := sha256.New()
 	s := &Set{items: map[string]*Item{}}
 	for _, name := range names {
@@ -209,8 +216,11 @@ func Load(fsys fs.FS) (*Set, error) {
 			if it == nil || slices.Contains(it.Rules, nil) {
 				return nil, fmt.Errorf("exam: %s: a null item or rule", name)
 			}
-			if it.ID == "" || s.items[it.ID] != nil {
-				return nil, fmt.Errorf("exam: %s: item %q has no id or comes twice", name, it.ID)
+			if !itemID.MatchString(it.ID) || s.items[it.ID] != nil {
+				return nil, fmt.Errorf("exam: %s: item %q: an item's id is 1 to 32 letters, digits, _ or -, once in the set", name, it.ID)
+			}
+			if perJob[q.Exam]++; perJob[q.Exam] > maxPaperItems {
+				return nil, fmt.Errorf("exam: %s: job %s has more than %d items, more than a paper an Agent host sits", name, q.Exam, maxPaperItems)
 			}
 			it.question = &q
 			if err = it.checkDelivery(); err != nil {

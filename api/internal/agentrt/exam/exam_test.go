@@ -2,6 +2,7 @@ package exam_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -160,6 +161,11 @@ func TestLoadRefuses(t *testing.T) {
 		"no repo":        {brief, strings.Replace(goal, `"repos": ["bifrost-platform"]`, `"repos": []`, 1), mail},
 		"override short": {brief, goal, strings.Replace(mail, `"id": "M1"`, `"id": "M1", "delivery_override": {"path": "goal", "repos": ["bifrost-platform"], "base_commit": "abc1234"}`, 1)},
 		"unknown path":   {strings.Replace(brief, `"path": "controller_note"`, `"path": "chat"`, 1), goal, mail},
+		// review 457: what else an Agent host refuses in a paper, and the path an override replaces whole
+		"item id a dot":    {brief, strings.Replace(goal, `"id": "G1"`, `"id": "G.1"`, 1), mail},
+		"item id of 33":    {brief, strings.Replace(goal, `"id": "G1"`, `"id": "`+strings.Repeat("G", 33)+`"`, 1), mail},
+		"no path":          {strings.Replace(brief, `"delivery": {"path": "controller_note"},`, ``, 1), goal, mail},
+		"override no path": {brief, goal, strings.Replace(mail, `"id": "M1"`, `"id": "M1", "delivery_override": {"repos": ["bifrost-platform"], "base_commit": "`+strings.Repeat("a", 40)+`"}`, 1)},
 	} {
 		_, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(q.q1)}, "q2.json": {Data: []byte(q.q2)}, "q3.json": {Data: []byte(q.q3)}})
 		if err == nil {
@@ -174,6 +180,58 @@ func TestLoadRefuses(t *testing.T) {
 	a, b := miniSet(t), miniSet(t)
 	if a.SHA256 != b.SHA256 || len(a.SHA256) != 64 {
 		t.Fatalf("set digests %q %q", a.SHA256, b.SHA256)
+	}
+}
+
+// What a paper may hold, an Agent host takes (review 457): an item id of 32
+// characters, an item overridden onto another path it renders on, and up to
+// 100 items of a job across the set's files; 101 do not load.
+func TestLoadTakesWhatAHostSits(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("G", 32)
+	ov := strings.Replace(mail, `"id": "M1"`, `"id": "M1", "delivery_override": {"path": "mailbox"}`, 1)
+	s, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(brief)}, "q2.json": {Data: []byte(strings.Replace(goal, `"id": "G1"`, `"id": "`+long+`"`, 1))},
+		"q3.json": {Data: []byte(ov)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{long, "M1"} {
+		if _, err = s.Render(id, t0); err != nil {
+			t.Errorf("%s: %v", id, err)
+		}
+	}
+	// n items of the goal question, ids G<from> on.
+	many := func(from, n int) []byte {
+		t.Helper()
+		var q map[string]any
+		if jerr := json.Unmarshal([]byte(goal), &q); jerr != nil {
+			t.Fatal(jerr)
+		}
+		one := q["items"].([]any)[0].(map[string]any)
+		var items []any
+		for i := from; i < from+n; i++ {
+			it := map[string]any{}
+			for k, v := range one {
+				it[k] = v
+			}
+			it["id"] = fmt.Sprintf("G%03d", i)
+			items = append(items, it)
+		}
+		q["items"] = items
+		b, jerr := json.Marshal(q)
+		if jerr != nil {
+			t.Fatal(jerr)
+		}
+		return b
+	}
+	if _, err = exam.Load(fstest.MapFS{"q2.json": {Data: many(1, 100)}}); err != nil {
+		t.Errorf("100 items: %v", err)
+	}
+	if _, err = exam.Load(fstest.MapFS{"q2.json": {Data: many(1, 101)}}); err == nil {
+		t.Error("101 items loaded")
+	}
+	if _, err = exam.Load(fstest.MapFS{"q2.json": {Data: many(1, 60)}, "q4.json": {Data: many(61, 41)}}); err == nil {
+		t.Error("101 items of one job across two files loaded")
 	}
 }
 
