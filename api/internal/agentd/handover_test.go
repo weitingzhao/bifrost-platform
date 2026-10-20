@@ -632,6 +632,10 @@ func TestTakeOverIsBounded(t *testing.T) {
 	if _, err := Prepare(bg, e.Workdir, bare, base, env); err != nil {
 		t.Fatal(err)
 	}
+	// A real change: an attempt that changed nothing is never pushed (TD-360).
+	if err := os.WriteFile(filepath.Join(e.Workdir, "x.go"), []byte("package x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if err := d.Registry.Put(e); err != nil {
 		t.Fatal(err)
 	}

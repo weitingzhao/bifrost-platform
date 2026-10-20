@@ -80,8 +80,13 @@ type Entry struct {
 	// journalled so that a restart between the exit and the check checks.
 	Executor string `json:"executor,omitempty"`
 	Checked  bool   `json:"checked,omitempty"`
-	PGID     int    `json:"pgid"`
-	Start    string `json:"start"`
+	// Unchanged: the attempt is an implementation of effect branch whose
+	// checkout has no change against its base (TD-360). It concludes none,
+	// and nothing of it is pushed, persisted, submitted or salvaged: it is
+	// only ended.
+	Unchanged bool   `json:"unchanged,omitempty"`
+	PGID      int    `json:"pgid"`
+	Start     string `json:"start"`
 	// Phase: launching, running (the executor runs), exited (it exited; the
 	// result is here), computed, persisted, submitting (the submit is being
 	// sent; it is resent as it is), submitted; lost (salvage only);

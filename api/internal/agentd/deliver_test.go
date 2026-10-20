@@ -229,3 +229,66 @@ func TestStopAndHardLimit(t *testing.T) {
 		t.Fatalf("over the limit = %+v %v after %s", out, err, time.Since(start))
 	}
 }
+
+// TD-360: an implementation attempt whose executor writes a report and exits
+// 0 having changed nothing concludes none and is never handed in: nothing is
+// pushed, persisted or submitted, the platform's ended fails the attempt and
+// the task goes back to ready, with no verification of an unchanged tree.
+func TestRunNeverHandsInAnUnchangedImplementation(t *testing.T) {
+	unchangedRun(t, `printf '# done\nnothing to change\n' > "$OUT/report.md"`)
+}
+
+// TD-360: the tree is what counts, not the head: an executor that commits a
+// change and reverts it itself leaves HEAD past the base and the tree as the
+// base's, and the attempt is unchanged as well.
+func TestRunNeverHandsInAChangeRevertedByItsExecutor(t *testing.T) {
+	unchangedRun(t, `echo one > a.txt && git add a.txt && git commit -q -m "executor's own" && git revert --no-edit HEAD >/dev/null &&
+test "$(git rev-parse HEAD)" != "$(git rev-parse HEAD~2)" && printf '# done\n' > "$OUT/report.md"`)
+}
+
+// unchangedRun runs an implement task of effect branch whose executor runs
+// body, which must change nothing against the base, and checks it ended
+// unhanded.
+func unchangedRun(t *testing.T, body string) {
+	t.Helper()
+	w := branchPlatform(t)
+	d := daemon(t, w.base, script(body), w.bare, w.env)
+	d.Executors["exec:cursor"] = withEnv(d.Executors["exec:cursor"], w.env)
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil || cl.Role != "implement" || cl.EffectClass != "branch" {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	out, err := d.Run(ctx, cl)
+	if err != nil || out.Submitted || out.ExitCode != 0 || out.Conclusion != "none" {
+		t.Fatalf("run = %+v %v", out, err)
+	}
+	var state, conclusion string
+	var pushedNull bool
+	must(t, w.pool.QueryRow(ctx, `SELECT state, pushed_commit IS NULL FROM agentrt.attempt WHERE attempt_id = $1`, cl.AttemptID).
+		Scan(&state, &pushedNull))
+	must(t, w.pool.QueryRow(ctx, `SELECT COALESCE(string_agg(body_json->>'conclusion', ','), '') FROM agentrt.event
+	  WHERE attempt_id = $1 AND event_type = 'attempt_computed'`, cl.AttemptID).Scan(&conclusion))
+	if state != "failed" || !pushedNull || conclusion != "none" {
+		t.Fatalf("attempt %s, pushed_commit NULL %v, computed %q", state, pushedNull, conclusion)
+	}
+	var handed, verifies int
+	must(t, w.pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event
+	  WHERE attempt_id = $1 AND event_type IN ('attempt_persisted', 'attempt_submitted')`, cl.AttemptID).Scan(&handed))
+	must(t, w.pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.task WHERE subject_task_id = $1 AND role = 'verify'`, w.task).Scan(&verifies))
+	if handed != 0 || verifies != 0 {
+		t.Fatalf("%d persisted or submitted events, %d verify tasks", handed, verifies)
+	}
+	if task, _ := taskState(t, w.pool, w.task); task == "submitted" || task == "verifying" || task != "ready" {
+		t.Fatalf("task %s", task)
+	}
+	if pushed := sh(t, t.TempDir(), w.env, "git", "ls-remote", w.bare, cl.PushedRef); pushed != "" {
+		t.Fatalf("pushed to the attempt's branch: %s", pushed)
+	}
+	log, _ := os.ReadFile(filepath.Join(agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)+".out", "log.txt"))
+	if !strings.Contains(string(log), "the attempt changed nothing against its base "+w.baseCommit) {
+		t.Fatalf("the log does not say why:\n%s", log)
+	}
+	if m, err := d.Registry.Load(); err != nil || len(m) != 0 {
+		t.Fatalf("registry after the end = %v %v", m, err)
+	}
+}

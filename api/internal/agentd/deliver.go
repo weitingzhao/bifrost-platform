@@ -256,7 +256,16 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 				e.Phase = "computed"
 			}
 		case "computed":
-			if err = d.prepare(ctx, a, ws, e); err == nil {
+			if err = d.prepare(ctx, a, ws, e); err == nil && e.Unchanged {
+				// Nothing to hand in: not pushed, persisted or submitted; the
+				// platform's ended fails the attempt and releases the task
+				// (TD-360).
+				if l != nil {
+					l.release()
+				}
+				return out, d.end(ctx, e, e.EndHow)
+			}
+			if err == nil {
 				err = d.pushPrepared(ctx, ws, e)
 			}
 			if err == nil {
@@ -305,27 +314,44 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 // for the next pass, after a restart too (review 239 B3). A model's attempt
 // that pushes no branch (a review) may change nothing; agentd's own
 // deterministic check runs the spec's commands, and a journal from before
-// the executor was recorded is held to the configuration rule alone. The
-// reason goes into the log, whose tail the platform keeps.
+// the executor was recorded is held to the configuration rule alone. An
+// implementation of effect branch that changed nothing against its base is
+// marked unchanged and concludes none, a failed one staying failed (TD-360);
+// one cancelled is only classified. The reason goes into the log, whose tail
+// the platform keeps.
 func (d *Daemon) checkChanges(ctx context.Context, ws *Workspace, e *Entry) error {
-	if e.Checked || ws == nil || e.Conclusion == "none" {
+	implement := e.Role == "implement" && e.Effect == "branch"
+	if e.Checked || ws == nil || (e.Conclusion == "none" && !implement) {
 		return nil
 	}
 	readOnly := e.Effect != "branch" && e.Executor != "" && e.Executor != "exec:deterministic"
-	why, err := unwantedChanges(ctx, ws, readOnly)
+	why, unchanged, err := checkedChanges(ctx, ws, readOnly)
 	if err != nil {
 		return err
 	}
-	if why != "" {
+	if why != "" && e.Conclusion != "none" {
 		d.logf("agentd: %s: %s", e.AttemptID, why)
-		if r, oerr := ownDirAt(d.Root, e.Workdir+".out"); oerr == nil {
-			_ = appendOwn(r, "log.txt", fmt.Sprintf("\nagentd: the attempt is failed: %s\n", why))
-			_ = r.Close()
-		}
+		d.appendLog(e, fmt.Sprintf("\nagentd: the attempt is failed: %s\n", why))
 		e.Conclusion = "failed"
+	}
+	if implement && unchanged {
+		d.logf("agentd: %s: the attempt changed nothing against its base %s", e.AttemptID, ws.Base)
+		d.appendLog(e, fmt.Sprintf("\nagentd: the attempt changed nothing against its base %s\n", ws.Base))
+		e.Unchanged = true
+		if e.Conclusion == "done" {
+			e.Conclusion = "none"
+		}
 	}
 	e.Checked = true
 	return d.Registry.Put(*e)
+}
+
+// appendLog adds line to the attempt's log, whose tail the platform keeps.
+func (d *Daemon) appendLog(e *Entry, line string) {
+	if r, err := ownDirAt(d.Root, e.Workdir+".out"); err == nil {
+		_ = appendOwn(r, "log.txt", line)
+		_ = r.Close()
+	}
 }
 
 // prepare uploads the report and the log tail and makes the attempt's commit,
@@ -389,10 +415,12 @@ func (d *Daemon) prepare(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 		if err != nil {
 			return err
 		}
-		if commit == "" {
-			commit = ws.Base // nothing changed: the attempt's branch is its base
+		switch {
+		case commit != "":
+			e.PushedCommit, e.ChangeID = commit, cid
+		case e.Role == "implement":
+			e.Unchanged = true // nothing changed: nothing to hand in, never the base (TD-360)
 		}
-		e.PushedCommit, e.ChangeID = commit, cid
 	}
 	e.Prepared = true
 	return d.Registry.Put(*e)
@@ -436,7 +464,8 @@ func (e *Entry) result() Result {
 // here: the result is prepared and its branch pushed first, and salvage is
 // asked only then (review 164 A5). One try per call: a platform that says the
 // attempt is still in grace, or cannot be reached, leaves it pending for the
-// next takeover (review 164 A8).
+// next takeover (review 164 A8). An implementation that changed nothing is
+// neither pushed nor salvaged, only ended (TD-360).
 func (d *Daemon) lost(ctx context.Context, a *Attempt, ws *Workspace, e *Entry) (Outcome, error) {
 	out := Outcome{EndHow: "lease_lost", Conclusion: "none"}
 	if e.Phase != "lost" {
@@ -448,8 +477,13 @@ func (d *Daemon) lost(ctx context.Context, a *Attempt, ws *Workspace, e *Entry) 
 			return out, err
 		}
 	}
-	if err := d.prepare(ctx, a, ws, e); err != nil {
-		return out, fmt.Errorf("%w: %s: %w", ErrPending, e.AttemptID, err) // ErrRegistry stays visible (review 171 B1)
+	if !e.Unchanged {
+		if err := d.prepare(ctx, a, ws, e); err != nil {
+			return out, fmt.Errorf("%w: %s: %w", ErrPending, e.AttemptID, err) // ErrRegistry stays visible (review 171 B1)
+		}
+	}
+	if e.Unchanged {
+		return out, d.end(ctx, e, "lease_lost") // nothing to push or salvage (TD-360)
 	}
 	if err := d.pushPrepared(ctx, ws, e); err != nil {
 		return out, fmt.Errorf("%w: %s: the branch is not pushed: %v", ErrPending, e.AttemptID, err)

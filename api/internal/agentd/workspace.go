@@ -607,15 +607,25 @@ func ExecutorConfig(path string) bool {
 // short by its context returns the error, to be tried again (review 239 B3);
 // a checkout that cannot be read is a reason to fail.
 func unwantedChanges(ctx context.Context, ws *Workspace, readOnly bool) (string, error) {
+	why, _, err := checkedChanges(ctx, ws, readOnly)
+	return why, err
+}
+
+// checkedChanges is unwantedChanges from the same reading of the checkout,
+// and says as well whether the checkout was read and has no change git would
+// commit against its base (TD-360): the tree is compared, not the head, so
+// an executor's commit it reverted itself is no change.
+func checkedChanges(ctx context.Context, ws *Workspace, readOnly bool) (why string, unchanged bool, err error) {
 	changed, ignoredConfig, err := ws.Changes(ctx)
 	if err != nil {
 		if transient(err) {
-			return "", err
+			return "", false, err
 		}
-		return "the checkout could not be checked for what the executor changed: " + err.Error(), nil
+		return "the checkout could not be checked for what the executor changed: " + err.Error(), false, nil
 	}
+	unchanged = len(changed) == 0
 	if readOnly && len(changed) > 0 {
-		return "an attempt that pushes no branch changed the checkout: " + listed(changed), nil
+		return "an attempt that pushes no branch changed the checkout: " + listed(changed), unchanged, nil
 	}
 	var bad []string
 	for _, p := range append(changed, ignoredConfig...) {
@@ -624,9 +634,9 @@ func unwantedChanges(ctx context.Context, ws *Workspace, readOnly bool) (string,
 		}
 	}
 	if len(bad) == 0 {
-		return "", nil
+		return "", unchanged, nil
 	}
-	return "the executor changed an executor's own configuration: " + listed(bad), nil
+	return "the executor changed an executor's own configuration: " + listed(bad), unchanged, nil
 }
 
 // listed names up to ten paths and counts the rest.
