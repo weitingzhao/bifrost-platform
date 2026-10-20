@@ -83,11 +83,11 @@ export function releaseRow(r: ReleaseRecord): TimelineRow {
 
 const NO_TITLES = new Map<string, string>()
 
-/** Events kept from reading on: the newest this many shown events, plus what Show older loaded. */
+/** Events kept from reading on: the newest this many shown events. What Show older loaded is kept apart. */
 export const TIMELINE_KEEP = 300
 
 /** The earliest time among rows, by a loop: a long list is never spread into arguments. */
-export function earliestAt(rows: readonly { at: string }[]): number {
+export function earliestAt(rows: Iterable<{ at: string }>): number {
   let min = Infinity
   for (const r of rows) {
     const t = Date.parse(r.at)
@@ -98,32 +98,31 @@ export function earliestAt(rows: readonly { at: string }[]): number {
 
 /**
  * Events are kept once by id: a read on from a latest read's cursor may list some of them again. Only
- * events the timeline shows are kept; a task moving to running is read and let go. Says how many it added.
+ * events the timeline shows are kept; a task moving to running is read and let go.
  */
-export function mergeEvents(into: Map<number, RuntimeEventRow>, page: readonly RuntimeEventRow[]): number {
-  let added = 0
-  for (const e of page) {
-    if (eventRow(e, NO_TITLES) === null) continue
-    if (!into.has(e.event_id)) added++
-    into.set(e.event_id, e)
-  }
-  return added
+export function mergeEvents(into: Map<number, RuntimeEventRow>, page: readonly RuntimeEventRow[]): void {
+  for (const e of page) if (eventRow(e, NO_TITLES) !== null) into.set(e.event_id, e)
 }
 
 /**
  * Keeps the `limit` events of the largest ids and lets the rest go: they are behind Show older again.
- * Returns the smallest id kept and the latest time among those let go, or null when nothing went.
+ * Returns the smallest id kept, or null when nothing went. Every id let go is below it.
  */
-export function trimEvents(into: Map<number, RuntimeEventRow>, limit: number): { smallestKept: number; droppedUntil: number } | null {
+export function trimEvents(into: Map<number, RuntimeEventRow>, limit: number): number | null {
   if (into.size <= limit) return null
   const ids = [...into.keys()].sort((a, b) => b - a)
-  let droppedUntil = -Infinity
-  for (const id of ids.slice(limit)) {
-    const t = Date.parse(into.get(id)!.at)
-    if (t > droppedUntil) droppedUntil = t
-    into.delete(id)
-  }
-  return { smallestKept: ids[limit - 1], droppedUntil }
+  for (const id of ids.slice(limit)) into.delete(id)
+  return ids[limit - 1]
+}
+
+/**
+ * How far back release records show while older events are unread: the earliest time the raw latest and
+ * back pages reached, or of an event shown, whichever is earlier (review 413 B1). Event ids and times do
+ * not run together, so what was let go never moves it later; a timeline that never read a raw page back
+ * (its first latest page was empty) takes it from the events shown. -Infinity once every event is read.
+ */
+export function releasesFrom(rawFrom: number, shown: Iterable<{ at: string }>, complete: boolean): number {
+  return complete ? -Infinity : Math.min(rawFrom, earliestAt(shown))
 }
 
 /**

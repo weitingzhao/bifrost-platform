@@ -5,7 +5,7 @@ import { fetchEventsAfter, fetchLatestEvents, type RuntimeEventRow } from '@/api
 import { fetchReleaseRecords } from '@/api/releases'
 import { RELEASE_RECORD_LIMIT } from '@/pages/shell/releases/releaseView'
 import { clockTime } from '../owner/ownerModel'
-import { earliestAt, mergeEvents, taskTitles, timelineRows, trimEvents, TIMELINE_KEEP, TIMELINE_PAGE, TIMELINE_TYPES, type TimelineKind } from './timelineModel'
+import { earliestAt, mergeEvents, releasesFrom, taskTitles, timelineRows, trimEvents, TIMELINE_KEEP, TIMELINE_PAGE, TIMELINE_TYPES, type TimelineKind } from './timelineModel'
 
 /** A read on stops after this many full pages; the next poll goes on from where it stopped. */
 const READ_ON_PAGES = 5
@@ -22,41 +22,45 @@ const message = (e: unknown) => e instanceof Error ? e.message : 'Request failed
  * its id; back from the oldest event a latest or back read listed, never from one read on (an event
  * read on may have a lower id than events shown before it). The forward reads are the query: its error
  * and its last success are theirs alone, so a backward read publishes what it found without clearing a
- * failed refresh (review 411 A1). Reading on keeps the newest TIMELINE_KEEP shown events plus what Show
- * older loaded; the rest go behind Show older again (review 411 B2).
+ * failed refresh (review 411 A1).
+ *
+ * What reading on keeps is a window of the newest TIMELINE_KEEP shown events, cut after every page so a
+ * page that fails next cannot carry it past that (review 413 B2-a); what was let go is behind Show older
+ * again, whose cursor follows the window's lower edge. What Show older loaded is kept apart and shown
+ * with the window, so later reading on does not push it out (review 413 B2-b).
  */
 function useTimeline() {
-  const kept = useRef({ events: new Map<number, RuntimeEventRow>(), cursor: '', back: 0, complete: false, releasesFrom: Infinity,
-    limit: TIMELINE_KEEP, trimmed: false, seq: 0 })
+  const kept = useRef({ forward: new Map<number, RuntimeEventRow>(), older: new Map<number, RuntimeEventRow>(), cursor: '', back: 0,
+    complete: false, rawFrom: Infinity, trimmed: false, seq: 0 })
   const [backward, setBackward] = useState<{ pending: boolean; error: string; shown: Shown | null }>({ pending: false, error: '', shown: null })
   const publish = (): Shown => {
     const s = kept.current
-    return { seq: ++s.seq, events: [...s.events.values()], complete: s.complete, releasesFrom: s.complete ? -Infinity : s.releasesFrom, trimmed: s.trimmed }
+    const events = [...new Map([...s.older, ...s.forward]).values()]
+    return { seq: ++s.seq, events, complete: s.complete, releasesFrom: releasesFrom(s.rawFrom, events, s.complete), trimmed: s.trimmed }
   }
   const query = useQuery({ queryKey: ['agent-runtime-timeline'], retry: false, gcTime: 0, refetchInterval: 15_000,
     queryFn: async ({ signal }) => {
       const s = kept.current
       if (!s.cursor) {
         const page = await fetchLatestEvents({ types: TIMELINE_TYPES, limit: TIMELINE_PAGE }, signal)
-        mergeEvents(s.events, page.events)
+        mergeEvents(s.forward, page.events)
         s.back = page.events.at(-1)?.event_id ?? 0
         s.complete = page.events.length < TIMELINE_PAGE
         // How far back the raw page reaches, whatever of it is shown (review 411 B1).
-        s.releasesFrom = earliestAt(page.events)
+        s.rawFrom = earliestAt(page.events)
         s.cursor = page.next
       } else {
         for (let i = 0; i < READ_ON_PAGES; i++) {
           const page = await fetchEventsAfter(s.cursor, { types: TIMELINE_TYPES, limit: TIMELINE_PAGE }, signal)
-          mergeEvents(s.events, page.events)
+          mergeEvents(s.forward, page.events)
           s.cursor = page.next
+          const edge = trimEvents(s.forward, TIMELINE_KEEP)
+          if (edge !== null) {
+            s.back = Math.max(s.back, edge)
+            s.complete = false
+            s.trimmed = true
+          }
           if (page.events.length < TIMELINE_PAGE) break
-        }
-        const cut = trimEvents(s.events, s.limit)
-        if (cut) {
-          s.back = Math.max(s.back, cut.smallestKept)
-          s.releasesFrom = Math.max(s.releasesFrom, cut.droppedUntil)
-          s.complete = false
-          s.trimmed = true
         }
       }
       return publish()
@@ -70,10 +74,10 @@ function useTimeline() {
       const page = await fetchLatestEvents({ types: TIMELINE_TYPES, limit: TIMELINE_PAGE, before: from })
       // Reading on moved the window meanwhile: this page may not join what is kept; read again from there.
       if (s.back !== from) { setBackward(b => ({ ...b, pending: false })); return }
-      s.limit += mergeEvents(s.events, page.events)
+      mergeEvents(s.older, page.events)
       s.back = page.events.at(-1)?.event_id ?? s.back
       s.complete = page.events.length < TIMELINE_PAGE
-      s.releasesFrom = Math.min(s.releasesFrom, earliestAt(page.events))
+      s.rawFrom = Math.min(s.rawFrom, earliestAt(page.events))
       setBackward({ pending: false, error: '', shown: publish() })
     } catch (e) { setBackward(b => ({ ...b, pending: false, error: message(e) })) }
   }
