@@ -30,6 +30,9 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == CheckArg {
 		os.Exit(RunConfineCheck(os.Args[2:]))
 	}
+	if path := os.Getenv(TestDaemonEnv); path != "" {
+		os.Exit(runTestDaemon(path))
+	}
 	os.Exit(m.Run())
 }
 
