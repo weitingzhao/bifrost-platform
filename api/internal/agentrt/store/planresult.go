@@ -325,13 +325,26 @@ func reworkSpec(ctx context.Context, tx pgx.Tx, specID string, round int, why st
 		}
 	}
 	text, _ := doc["text"].(string)
-	doc["text"] = text + fmt.Sprintf("\n\n---\n## Round %d\n\nThe plan you handed in before was not used: %s\n\n"+
-		"Hand in a plan that passes; everything above still holds.\n", round, strings.TrimPrefix(why, "plan not used: "))
+	// why is worded as refusePlan words it: one line, "plan not used: " and
+	// the reason, cut; ReworkText words the reason the same way again, which
+	// leaves it as it is.
+	doc["text"] = ReworkText(text, round, strings.TrimPrefix(why, "plan not used: "))
 	b, err := canon.Encode(doc)
 	if err != nil {
 		return "", err
 	}
 	return PutArtifact(ctx, tx, "controller", "task_spec", "application/json", b)
+}
+
+// ReworkText is the text of a planning spec's next round: the text it had,
+// and why, the reason the plan handed in before was not used (as the check
+// that refused it gives it: ParsePlan's error), on one line and cut as
+// refusePlan words it. agentd exam gives a refused plan its second round
+// with it, as the controller would (the chief exam's cut §3.1, step 3).
+func ReworkText(text string, round int, why string) string {
+	why = oneLineRunes("plan not used: "+why, 500)
+	return text + fmt.Sprintf("\n\n---\n## Round %d\n\nThe plan you handed in before was not used: %s\n\n"+
+		"Hand in a plan that passes; everything above still holds.\n", round, strings.TrimPrefix(why, "plan not used: "))
 }
 
 // amendMission records what a plan says about its mission, when it says

@@ -193,3 +193,18 @@ func BlockedPageForTest(n int) func() {
 	old := blockedPage.Swap(int64(n))
 	return func() { blockedPage.Store(old) }
 }
+
+// ReworkSpecAsRefused is the spec refusePlan writes for the next round of
+// the planning spec specID, refused for why: reworkSpec with the reason
+// worded as refusePlan words it, read back.
+func ReworkSpecAsRefused(ctx context.Context, db DB, specID string, round int, why string) ([]byte, error) {
+	var body []byte
+	err := InTx(ctx, db, func(tx pgx.Tx) error {
+		id, err := reworkSpec(ctx, tx, specID, round, oneLineRunes("plan not used: "+why, 500))
+		if err != nil {
+			return err
+		}
+		return tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, id).Scan(&body)
+	})
+	return body, err
+}
