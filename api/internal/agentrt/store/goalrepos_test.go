@@ -102,7 +102,11 @@ func TestGoalOfTwoRepos(t *testing.T) {
 	}
 	for _, want := range []string{"repositories bifrost-platform, bifrost-trade-infra",
 		"bifrost-platform is checked out here at " + commitA, "bifrost-trade-infra is beside it, at ../bifrost-trade-infra (the head of its main; its tasks start from " + commitB,
-		"one task in each, ordered with depends_on", "  - bifrost-platform: a test of the package you change", "  - bifrost-trade-infra: none: leave verify empty."} {
+		"one task in each, ordered with depends_on", "  - bifrost-platform: a test of the package you change", "  - bifrost-trade-infra: none: leave verify empty.",
+		// What each task works in (T26's first run): its own checkout and nothing else.
+		"  - a task in bifrost-platform has bifrost-platform, with ../bifrost-ui at the head of its main beside it.\n",
+		"  - a task in bifrost-trade-infra has bifrost-trade-infra alone.\n", "The repositories beside you now are for your reading only; no task has them.",
+		"is a task in that repository", "never from another task's work", "names ../<repository> its checkout does not have is refused"} {
 		if !strings.Contains(spec.Text, want) {
 			t.Fatalf("the planning spec lacks %q:\n%s", want, spec.Text)
 		}
@@ -216,5 +220,43 @@ func TestGoalKeyStoredBeforeRepos(t *testing.T) {
 	}
 	if after := count(); after != before {
 		t.Fatalf("a stored key wrote: missions, tasks, events, artifacts, keys %s -> %s", before, after)
+	}
+}
+
+// T26's first run (PROD M-9): a planner that read the goal's repositories
+// side by side gave a platform task work only an infra checkout could do. A
+// task's text that names a repository beside its checkout that the checkout
+// does not have is refused, with what the task has; the siblings it has, its
+// own repository and paths that name no repository pass.
+func TestPlanTasksWorkInTheirCheckout(t *testing.T) {
+	t.Parallel()
+	text := func(repo, s string) string {
+		return strings.Replace(twoRepoPlan, `"repo": "`+repo+`", "text": "`, `"repo": "`+repo+`", "text": "`+s+` `, 1)
+	}
+	both := []string{"bifrost-platform", infra}
+	for name, c := range map[string]struct{ report, why string }{
+		"platform runs infra": {text("bifrost-platform", "Then run ../bifrost-trade-infra/scripts/agentrt/check.sh."),
+			"tasks[1]: its text names ../bifrost-trade-infra, which a task in bifrost-platform does not have " +
+				"(it has bifrost-platform, with ../bifrost-ui at the head of its main beside it); what needs bifrost-trade-infra is a task in bifrost-trade-infra"},
+		"infra reads the ui": {text(infra, "Compare with ../../bifrost-ui/src."), "tasks[0]: its text names ../bifrost-ui, which a task in bifrost-trade-infra does not have (it has bifrost-trade-infra alone)"},
+		"another repository": {text("bifrost-platform", "See ../bifrost-research."), "names ../bifrost-research"},
+		"a longer name":      {text("bifrost-platform", "Not ../bifrost-platform-plugin."), "names ../bifrost-platform-plugin"},
+	} {
+		if _, err := store.ParsePlan([]byte(c.report), both); err == nil || !strings.Contains(err.Error(), c.why) {
+			t.Errorf("%s: %v (want %q)", name, err, c.why)
+		}
+	}
+	for name, report := range map[string]string{
+		"its sibling":     text("bifrost-platform", "The UI is at ../bifrost-ui (file:../../bifrost-ui)."),
+		"its own":         text("bifrost-platform", "Not ../bifrost-platform."),
+		"a relative path": text("bifrost-platform", "Import it from ../lib/x and run go -C api test ../internal."),
+		"a name, no path": text("bifrost-platform", "After t1 lands in bifrost-trade-infra."),
+	} {
+		if _, err := store.ParsePlan([]byte(report), both); err != nil {
+			t.Errorf("%s refused: %v", name, err)
+		}
+	}
+	if got := store.CheckoutOf(infra); got != "bifrost-trade-infra alone" {
+		t.Errorf("CheckoutOf(infra) = %q", got)
 	}
 }

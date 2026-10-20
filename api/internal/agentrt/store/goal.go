@@ -224,6 +224,7 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		"- Each task is one change an implementer can make and hand in on its own: say what to change and why, where (files,\n" +
 		"  functions), and how to tell it is done. Keep tasks small; " + fmt.Sprint(PlanMaxTasks) + " at most. Order them with depends_on.\n" +
 		scope +
+		checkouts(repos) +
 		"- Ask the Owner only what is his: a goal he left open, a rule, something that cannot be undone. Give 2 to 4 options and the\n" +
 		"  one you go with; the work goes on with it while he has not answered, so plan the tasks for that option. Usually ask nothing.\n" +
 		"- Record each choice you made that he may want to audit: what, what you dropped, why, how to reverse it.\n" +
@@ -251,6 +252,26 @@ func planSpec(g Goal, repos []string, bases map[string]string, mission, snapshot
 		spec["siblings"] = sibs
 	}
 	return canon.Encode(spec)
+}
+
+// checkouts tells a planner what each task works in (T26's first run, PROD
+// M-9: a planner that read the goal's repositories side by side planned a
+// platform task whose done-when ran the infra checks on the infra tree, which
+// that task's checkout does not have, and it failed both rounds).
+func checkouts(repos []string) string {
+	var b strings.Builder
+	b.WriteString("- Each task works in a fresh checkout of its own repository at the commit named above, and in nothing else:\n")
+	for _, r := range repos {
+		fmt.Fprintf(&b, "  - a task in %s has %s.\n", r, CheckoutOf(r))
+	}
+	if len(repos) > 1 {
+		b.WriteString("  The repositories beside you now are for your reading only; no task has them.\n")
+	}
+	b.WriteString("  A task cannot read, run or change anything outside its checkout, and neither can its checks: a change, a command to\n" +
+		"  run, a check or a way to tell it is done that needs another repository is a task in that repository. depends_on orders\n" +
+		"  tasks and nothing more: every task starts from its repository's commit named above, never from another task's work,\n" +
+		"  so no task sees what another one changed. A task whose text names ../<repository> its checkout does not have is refused.\n")
+	return b.String()
 }
 
 // ownChecks says which checks of its own a plan may add to a task in repo:

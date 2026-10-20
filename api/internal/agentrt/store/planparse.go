@@ -150,6 +150,10 @@ func (d PlanDoc) check(repos []string) error {
 				return err
 			}
 		}
+		if name := outsideCheckout(t.Text, t.Repo); name != "" {
+			return fmt.Errorf("%s: its text names ../%s, which a task in %s does not have (it has %s); what needs %s is a task "+
+				"in %s, or no part of this plan", at, name, t.Repo, CheckoutOf(t.Repo), name, name)
+		}
 	}
 	for i, t := range d.Tasks {
 		for _, on := range t.DependsOn {
@@ -212,6 +216,25 @@ func (d PlanDoc) check(repos []string) error {
 		}
 	}
 	return nil
+}
+
+// siblingPath is a path to a repository beside a checkout, as a planner that
+// read the goal's repositories side by side writes it: ../bifrost-<name>.
+var siblingPath = regexp.MustCompile(`(?:^|[^A-Za-z0-9_.-])\.\./(bifrost-[A-Za-z0-9_-]*[A-Za-z0-9])`)
+
+// outsideCheckout is the first repository a task's text names by a path
+// beside its checkout that the checkout does not have (CheckoutOf), or "".
+// It is the part of "a task works in its own checkout" a program can see; a
+// text that asks for another repository in words ("on the infra tree", T26's
+// first run) reads like any other, and the planner's spec says what a task
+// has (goal.go checkouts).
+func outsideCheckout(text, repo string) string {
+	for _, m := range siblingPath.FindAllStringSubmatch(text, -1) {
+		if name := m[1]; name != repo && !inCheckout(repo, name) {
+			return name
+		}
+	}
+	return ""
 }
 
 var (

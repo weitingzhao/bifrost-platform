@@ -153,6 +153,27 @@ var infraTests = []string{
 	"scripts/test_scrub_config_secrets.py",
 }
 
+// CheckoutOf says what an implementation task in repo works in, as agentd
+// prepares it: a fresh checkout of repo at the task's base commit and, beside
+// it, the siblings Repos names, each at the head of its ref; nothing else.
+func CheckoutOf(repo string) string {
+	sibs := Repos[repo].Siblings
+	if len(sibs) == 0 {
+		return repo + " alone"
+	}
+	beside := make([]string, 0, len(sibs))
+	for _, s := range sibs {
+		beside = append(beside, "../"+s.Repo+" at the head of its "+s.Ref)
+	}
+	return repo + ", with " + strings.Join(beside, " and ") + " beside it"
+}
+
+// inCheckout says whether a task in repo has name at ../name: one of its
+// siblings.
+func inCheckout(repo, name string) bool {
+	return slices.ContainsFunc(Repos[repo].Siblings, func(s Sibling) bool { return s.Repo == name })
+}
+
 // RepoNames are the names of Repos, sorted.
 func RepoNames() []string {
 	names := make([]string, 0, len(Repos))
