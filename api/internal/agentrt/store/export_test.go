@@ -157,3 +157,23 @@ func EventTypesForTest() (vocabulary, written []string) {
 	}
 	return vocabulary, written
 }
+
+// BlockedCardBodyForTest is the card of a task of role in M-9 blocked for
+// failing round 2 of 2: its title, its block's reason, the Owner's last words
+// on a card of that block and the start of its last check's report ("" for
+// no check).
+func BlockedCardBodyForTest(role, title, reason, words, report string) string {
+	var check *checkSummary
+	if report != "" {
+		check = &checkSummary{method: "review", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2, report: report}
+	}
+	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-9", role: role, effect: "branch"},
+		title: title, repo: "bifrost-platform", reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 2, check: check})
+}
+
+// BlockedPageForTest sets how many blocked tasks a pass reads at a time and
+// returns the function that restores it.
+func BlockedPageForTest(n int) func() {
+	old := blockedPage.Swap(int64(n))
+	return func() { blockedPage.Store(old) }
+}

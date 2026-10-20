@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"unicode/utf8"
+	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 
@@ -41,9 +41,14 @@ import (
 //     added to its spec as a rework round adds it;
 //   - a task blocked at dispatch because a task it depends on was rejected or
 //     cancelled (propose.go): one more round runs it without that work;
-//   - an external task whose attempt was lost (attempt.go), once every lost
-//     attempt of it has a confirmed end (attempt_ended): never while an
-//     earlier attempt may still be acting.
+//   - an external task whose attempt was lost or ended on its host
+//     (attempt.go), once every such attempt has a confirmed end: an
+//     attempt_ended whose host cleared the process group (group_cleared).
+//     Never while an earlier attempt may still be acting: an end reported
+//     with the group not cleared gets no card, and since /ended takes one
+//     report per attempt, such a task waits for the Owner outside the
+//     runtime (v5 §6.2 「或 Owner 手工关闭」; round 2 dispatches no external
+//     work, claim.go).
 //
 // Not given one:
 //   - a brief (brief.go): its sender has already been answered that the
@@ -73,7 +78,11 @@ const (
 )
 
 // blockedPage is how many blocked tasks or open cards a pass reads at a time.
-var blockedPage = 50
+// The passes page through all of them, so any size gives the same result; a
+// test lowers it while others run.
+var blockedPage atomic.Int64
+
+func init() { blockedPage.Store(50) }
 
 // latestBlock is the task_state_changed that blocked t, as the task's last
 // state change (t is blocked).
@@ -84,8 +93,9 @@ const latestBlock = `JOIN LATERAL (SELECT e.event_id, e.body_json FROM agentrt.e
 // card now: as the comment above says, with no card of this block open.
 const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('active','paused')
   AND (t.effect_class <> 'external' OR NOT EXISTS (SELECT 1 FROM agentrt.attempt a WHERE a.task_id = t.task_id
-    AND (a.state IN ('leased','running','stale') OR (a.state = 'lost' AND NOT EXISTS (SELECT 1 FROM agentrt.event x
-      WHERE x.task_id = t.task_id AND x.attempt_id = a.attempt_id AND x.event_type = 'attempt_ended')))))
+    AND (a.state IN ('leased','running','stale') OR (a.state IN ('lost','failed') AND NOT EXISTS (SELECT 1 FROM agentrt.event x
+      WHERE x.task_id = t.task_id AND x.attempt_id = a.attempt_id AND x.event_type = 'attempt_ended'
+        AND (x.body_json->>'group_cleared')::boolean)))))
   AND NOT EXISTS (SELECT 1 FROM agentrt.event o WHERE o.task_id = t.task_id AND o.event_type = 'owner_wait_opened'
     AND (o.body_json->>'blocked_event_id')::bigint = b.event_id AND ` + cardOpen + `)`
 
@@ -93,37 +103,46 @@ const needsCard = `t.state = 'blocked' AND t.role <> 'brief' AND m.state IN ('ac
 const cardOpen = `NOT EXISTS (SELECT 1 FROM agentrt.event c WHERE c.task_id = o.task_id AND c.event_type = 'owner_wait_closed'
       AND c.body_json->>'question_id' = o.body_json->>'question_id')`
 
-// AskBlocked is one pass giving each blocked task that needs a card one. It
-// returns how many cards it asked. A task whose card cannot be made now (the
-// question store full or not answering) is tried again by the next pass.
+// AskBlocked is one pass giving each blocked task that needs a card one, page
+// by page, so a task whose card cannot be made does not hold up the ones
+// after it. It returns how many cards it asked. A task whose card cannot be
+// made now (the question store full or not answering) is tried again by the
+// next pass.
 func AskBlocked(ctx context.Context, db DB, ask Ask) (int, error) {
 	if ask == nil {
 		return 0, nil
 	}
-	var ids []string
-	if err := InTx(ctx, db, func(tx pgx.Tx) error {
-		rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id `+
-			latestBlock+` WHERE `+needsCard+` ORDER BY t.updated_at, t.task_id LIMIT $1`, blockedPage)
-		if err != nil {
-			return err
-		}
-		ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
-		return err
-	}); err != nil {
-		return 0, err
-	}
 	n := 0
 	var errs []error
-	for _, id := range ids {
-		did, err := askBlocked(ctx, db, id, ask)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+	after := ""
+	page := int(blockedPage.Load())
+	for {
+		var ids []string
+		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id `+
+				latestBlock+` WHERE t.task_id > $1 AND `+needsCard+` ORDER BY t.task_id LIMIT $2`, after, page)
+			if err != nil {
+				return err
+			}
+			ids, err = pgx.CollectRows(rows, pgx.RowTo[string])
+			return err
+		}); err != nil {
+			return n, errors.Join(append(errs, err)...)
 		}
-		if did {
-			n++
+		for _, id := range ids {
+			did, err := askBlocked(ctx, db, id, ask)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("task %s: %w", id, err))
+			}
+			if did {
+				n++
+			}
 		}
+		if len(ids) < page {
+			return n, errors.Join(errs...)
+		}
+		after = ids[len(ids)-1]
 	}
-	return n, errors.Join(errs...)
 }
 
 // askBlocked makes one task's card, under the task's lock, once the task is
@@ -136,6 +155,11 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 		did = false
 		t, err := readTask(ctx, tx, taskID, true)
 		if err != nil || t.state != "blocked" {
+			return err
+		}
+		// The mission after the task (kernel.go's order), shared: it cannot
+		// stop while this card is made for an open mission.
+		if _, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, t.mission); err != nil {
 			return err
 		}
 		var block int64
@@ -248,20 +272,40 @@ type blockedCard struct {
 // keep the card within the question store's limit.
 const excerptRunes = 1200
 
+// The parts of a card that may be cut to fit, in the order they are cut,
+// and how short each may get: the report's start, the Owner's last words,
+// the reason, the title (review 420 A2: a long reason and long words with no
+// report left made a card the question store refuses, on every pass).
+const (
+	cutReport = iota
+	cutWords
+	cutReason
+	cutTitle
+)
+
+var cutFloors = [4]int{0, 0, 40, 40}
+
 // blockedCardBody is the card's text: the task, why it is blocked, its last
 // check and the start of that check's report, what each answer does. The
-// report is cut until the body fits the question store's limit.
+// parts above are cut in that order until the body fits the question store's
+// limit; what each answer does is never cut.
 func blockedCardBody(c blockedCard) string {
-	excerpt := []rune(c.check.reportOrEmpty())
-	if len(excerpt) > excerptRunes {
-		excerpt = excerpt[:excerptRunes]
+	full := [4][]rune{[]rune(c.check.reportOrEmpty()), []rune(oneLineRunes(c.words, 300)), []rune(oneLineRunes(c.reason, 500)),
+		[]rune(oneLineRunes(c.title, 200))}
+	parts := full
+	if len(parts[cutReport]) > excerptRunes {
+		parts[cutReport] = parts[cutReport][:excerptRunes]
 	}
-	for {
-		body := blockedCardText(c, string(excerpt))
-		if questions.BodyBytes(body) <= questions.BodyLimit || len(excerpt) == 0 {
+	for i := 0; ; {
+		body := blockedCardText(c, parts, full)
+		if questions.BodyBytes(body) <= questions.BodyLimit || i == len(parts) {
 			return body
 		}
-		excerpt = excerpt[:len(excerpt)*3/4]
+		if len(parts[i]) <= cutFloors[i] {
+			i++
+			continue
+		}
+		parts[i] = parts[i][:max(cutFloors[i], len(parts[i])*3/4)]
 	}
 }
 
@@ -272,33 +316,46 @@ func (c *checkSummary) reportOrEmpty() string {
 	return c.report
 }
 
-func blockedCardText(c blockedCard, excerpt string) string {
+// blockedCardText is the card with each cuttable part as given; a part
+// shorter than it was ends in "…" (the report says it was cut).
+func blockedCardText(c blockedCard, parts, full [4][]rune) string {
+	text := func(i int) string {
+		if len(parts[i]) < len(full[i]) && i != cutReport {
+			return string(parts[i]) + "…"
+		}
+		return string(parts[i])
+	}
 	var b strings.Builder
 	repo := c.repo
 	if repo == "" {
 		repo = "no repository"
 	}
 	fmt.Fprintf(&b, "Task %s (%s, %s) of mission %s is blocked; card %d for this block.\n\nTitle: %s\n\nWhy: %s\n",
-		c.task.id, c.task.role, repo, c.task.mission, c.card, oneLineRunes(c.title, 200), oneLineRunes(c.reason, 500))
+		c.task.id, c.task.role, repo, c.task.mission, c.card, text(cutTitle), text(cutReason))
 	if c.check != nil {
 		fmt.Fprintf(&b, "\nLast check: %s, %s, on attempt %d (%s).\n", c.check.method, c.check.verdict, c.check.round, c.check.attempt)
-		if excerpt != "" {
+		if excerpt := text(cutReport); excerpt != "" {
 			cut := ""
-			if utf8.RuneCountInString(excerpt) < utf8.RuneCountInString(c.check.report) {
+			if len(parts[cutReport]) < len(full[cutReport]) {
 				cut = "\n(cut; the whole report is on the task's page)"
 			}
 			fmt.Fprintf(&b, "Its report begins:\n\n%s%s\n", excerpt, cut)
 		}
 	}
-	if c.words != "" {
-		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the two.\n",
-			oneLineRunes(c.words, 300))
+	if words := text(cutWords); words != "" {
+		fmt.Fprintf(&b, "\nYour last answer on this block's card was none of these: %q. The runtime does not act on words; choose one of the two.\n", words)
+	} else if c.words != "" {
+		b.WriteString("\nYour last answer on this block's card was none of these (your words are on that card). The runtime does not act on words; choose one of the two.\n")
 	}
-	more := "it goes back to ready as it is"
-	if c.failed {
-		more = fmt.Sprintf("it goes back to ready for round %d of %d", c.round+1, c.round+1)
+	more := "it goes back to ready as it is, and a host takes it as usual"
+	switch {
+	case c.task.effect == "external":
+		// claim.go dispatches no external work in round 2.
+		more = "it goes back to ready, where it waits: no host takes external work yet"
+	case c.failed:
+		more = fmt.Sprintf("it goes back to ready for round %d of %d, and a host takes it as usual", c.round+1, c.round+1)
 	}
-	fmt.Fprintf(&b, "\n%s: %s, and a host takes it as usual.\n%s: the task is cancelled; mission %s finishes once every other task is accepted "+
+	fmt.Fprintf(&b, "\n%s: %s.\n%s: the task is cancelled; mission %s finishes once every other task is accepted "+
 		"(a task that depends on this one is then blocked and gets a card of its own).\n", BlockedRetry, more, BlockedDrop, c.task.mission)
 	return b.String()
 }
@@ -324,12 +381,13 @@ func DecideBlocked(ctx context.Context, db DB, question func(context.Context, st
 	n := 0
 	var errs []error
 	var after int64
+	size := int(blockedPage.Load())
 	for {
 		var page []openCard
 		err := InTx(ctx, db, func(tx pgx.Tx) error {
 			rows, err := tx.Query(ctx, `SELECT o.task_id, o.body_json->>'question_id', (o.body_json->>'blocked_event_id')::bigint, o.event_id
 			  FROM agentrt.event o WHERE o.event_type = 'owner_wait_opened' AND o.task_id IS NOT NULL AND o.event_id > $1 AND `+cardOpen+`
-			  ORDER BY o.event_id LIMIT $2`, after, blockedPage)
+			  ORDER BY o.event_id LIMIT $2`, after, size)
 			if err != nil {
 				return err
 			}
@@ -351,7 +409,7 @@ func DecideBlocked(ctx context.Context, db DB, question func(context.Context, st
 				n++
 			}
 		}
-		if len(page) < blockedPage {
+		if len(page) < size {
 			break
 		}
 		after = page[len(page)-1].event
@@ -400,17 +458,22 @@ func decideBlocked(ctx context.Context, db DB, c openCard, question func(context
 		if err != nil {
 			return err
 		}
+		// The mission after the task (kernel.go's order), shared: it cannot
+		// stop or end between this read and the move below (review 420 B2).
+		var mstate string
+		if err = tx.QueryRow(ctx, `SELECT state FROM agentrt.mission WHERE mission_id = $1 FOR SHARE`, t.mission).Scan(&mstate); err != nil {
+			return err
+		}
 		var open bool
 		var latest int64
-		var mstate, reason string
+		var reason string
 		var failed bool
 		if err = tx.QueryRow(ctx, `SELECT NOT EXISTS (SELECT 1 FROM agentrt.event WHERE task_id = $1 AND event_type = 'owner_wait_closed'
 		    AND body_json->>'question_id' = $2),
-		  (SELECT m.state FROM agentrt.mission m WHERE m.mission_id = $3),
 		  COALESCE((SELECT e.event_id FROM agentrt.event e WHERE e.task_id = $1 AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1), 0),
-		  COALESCE((SELECT e.body_json->>'reason' FROM agentrt.event e WHERE e.event_id = $4), ''),
-		  COALESCE((SELECT (e.body_json->>'failed')::boolean FROM agentrt.event e WHERE e.event_id = $4), false)`,
-			c.task, c.question, t.mission, c.block).Scan(&open, &mstate, &latest, &reason, &failed); err != nil {
+		  COALESCE((SELECT e.body_json->>'reason' FROM agentrt.event e WHERE e.event_id = $3), ''),
+		  COALESCE((SELECT (e.body_json->>'failed')::boolean FROM agentrt.event e WHERE e.event_id = $3), false)`,
+			c.task, c.question, c.block).Scan(&open, &latest, &reason, &failed); err != nil {
 			return err
 		}
 		if !open {

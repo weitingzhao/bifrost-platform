@@ -145,6 +145,16 @@ describe('a task dropped on its blocked card', () => {
     expect(goalWaitingLinks('M-2', blocked, [], runtime)).toEqual([{ title: 'Blocked in M-2: Fifth', href: questionHref('q_9') }])
     expect(goalStatus(blocked, true)).toBe('Waiting for you')
   })
+  // Review 420 A1: the controller closes such a goal as stopped; read before it does, the card must not
+  // call it done (and so stop reading it).
+  it('never calls a goal done whose planning alone was accepted', () => {
+    const plan = full.tasks.find(t => t.role === 'plan')!
+    const impl = full.tasks.find(t => t.role === 'implement')!
+    const planned: GoalData = { mission: { ...mission, state: 'active' }, tasks: [{ ...plan, state: 'accepted' }, { ...impl, state: 'cancelled' }],
+      events: [...full.events.filter(e => e.task_id === plan.task_id), { ...dropEvent, task_id: impl.task_id }] }
+    expect(goalDone(planned)).toBe(false)
+    expect(goalStatus(planned, false)).not.toBe('Done')
+  })
   it('stops a goal whose plan the Owner dropped', () => {
     const plan = full.tasks.find(t => t.role === 'plan')!
     const stopped: GoalData = { mission: { ...mission, state: 'stopped' }, tasks: [{ ...plan, state: 'cancelled' }],

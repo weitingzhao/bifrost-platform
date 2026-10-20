@@ -1,6 +1,8 @@
 package store_test
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/store"
+	"github.com/weitingzhao/bifrost-platform/api/internal/questions"
 )
 
 // failRound carries impl, ready, through one round whose deterministic
@@ -262,7 +265,7 @@ func TestBlockedCardCoverage(t *testing.T) {
 	if n, err = store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[1].TaskID != external {
 		t.Fatalf("after the end is confirmed: asked %d (%v)", n, err)
 	}
-	if !strings.Contains(a.cards[1].Body, "it goes back to ready as it is") {
+	if !strings.Contains(a.cards[1].Body, "it goes back to ready, where it waits: no host takes external work yet") {
 		t.Fatalf("an external task's card:\n%s", a.cards[1].Body)
 	}
 
@@ -429,5 +432,207 @@ func TestBlockedCardWordsStayWithTheirBlock(t *testing.T) {
 	block()
 	if body := ask(3); strings.Contains(body, "old words") || !strings.Contains(body, "card 1 for this block") {
 		t.Fatalf("a later block's card:\n%s", body)
+	}
+}
+
+// Review 420 A2: a card whose reason and Owner's words are long, with no
+// report left to cut, still fits the question store; the reason, words and
+// title are cut in turn, and what each answer does is kept whole.
+func TestBlockedCardFitsTheQuestionStore(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct{ title, reason, words, report string }{
+		"no report":  {strings.Repeat("修", 60), "plan not used: " + strings.Repeat("🚧", 480), strings.Repeat("修", 300), ""},
+		"all of it":  {strings.Repeat("修", 200), strings.Repeat("🚧", 500), strings.Repeat(`"`, 300), strings.Repeat("報", 4000)},
+		"only words": {"t", "review failed in round 2 of 2", strings.Repeat("🚧", 300), strings.Repeat("報", 1000)},
+	} {
+		body := store.BlockedCardBodyForTest("plan", c.title, c.reason, c.words, c.report)
+		if n := questions.BodyBytes(body); n > questions.BodyLimit {
+			t.Errorf("%s: %d bytes, more than the question store's %d", name, n, questions.BodyLimit)
+		}
+		for _, want := range []string{store.BlockedRetry + ": it goes back to ready for round 3 of 3, and a host takes it as usual.",
+			store.BlockedDrop + ": the task is cancelled; mission M-9 finishes once every other task is accepted"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: the card lacks %q:\n%s", name, want, body)
+			}
+		}
+	}
+	short := store.BlockedCardBodyForTest("implement", "t", "review failed in round 2 of 2", "read it", "a short report")
+	if strings.Contains(short, "…") || strings.Contains(short, "(cut;") || !strings.Contains(short, `none of these: "read it"`) ||
+		!strings.Contains(short, "a short report") {
+		t.Errorf("a short card was cut:\n%s", short)
+	}
+}
+
+// Review 420 B1: an external task whose attempt ended with its process group
+// not cleared gets no card (the old process may still act); one whose end
+// cleared the group gets a card that says no host takes it yet.
+func TestBlockedExternalNeedsAClearedEnd(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	uncleared := w.ready(t, store.Task{Effect: "external"})
+	e := w.claimExternal(t, "h2", store.LeaseTTL, codex)
+	_, err := store.Ended(ctx, w.rt, e.AttemptID, "h2", "daemon_restart", false)
+	ok(t, err)
+	if e.TaskID != uncleared || w.state(t, "task", uncleared) != "blocked" {
+		t.Fatalf("the external task is %s", w.state(t, "task", uncleared))
+	}
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 0 {
+		t.Fatalf("an uncleared end asked %d (%v)", n, err)
+	}
+	cleared := w.ready(t, store.Task{Effect: "external"})
+	c := w.claimExternal(t, "h3", store.LeaseTTL, codex)
+	_, err = store.Ended(ctx, w.rt, c.AttemptID, "h3", "daemon_restart", true)
+	ok(t, err)
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 || a.cards[0].TaskID != cleared ||
+		!strings.Contains(a.cards[0].Body, "where it waits: no host takes external work yet") {
+		t.Fatalf("a cleared end: asked %d (%v) %+v", n, err, a.cards)
+	}
+}
+
+// Review 420 B2: a card is made, and an answer is used, under the mission's
+// lock: a stop waits for them, so neither lands on a mission that stopped
+// in between. Here the card is being asked when the stop comes.
+func TestBlockedCardAskedUnderTheMission(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, impl) }))
+	pool := w.db.Pool(t, w.db.Runtime)
+	inside, release := make(chan struct{}), make(chan struct{})
+	var released sync.Once
+	t.Cleanup(func() { released.Do(func() { close(release) }) })
+	a := &asker{}
+	slow := func(ctx context.Context, c store.Card) (string, error) {
+		close(inside)
+		<-release
+		return a.ask(ctx, c)
+	}
+	asked := make(chan error, 1)
+	go func() {
+		_, err := store.AskBlocked(ctx, pool, slow)
+		asked <- err
+	}()
+	select {
+	case <-inside:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the card was never asked")
+	}
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-3", "stopped", "test") })
+	}()
+	w.waitFor(t, "agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE", time.Now().Add(10*time.Second))
+	released.Do(func() { close(release) })
+	ok(t, <-asked)
+	ok(t, <-stopped)
+	var opened, stop int64
+	ok(t, w.rt.QueryRow(ctx, `SELECT (SELECT max(event_id) FROM agentrt.event WHERE event_type = 'owner_wait_opened' AND task_id = $1),
+	  (SELECT max(event_id) FROM agentrt.event WHERE event_type = 'mission_state_changed' AND mission_id = 'M-3' AND body_json->>'to' = 'stopped')`,
+		impl).Scan(&opened, &stop))
+	if opened == 0 || stop < opened {
+		t.Fatalf("the card (event %d) and the stop (event %d): the stop went first", opened, stop)
+	}
+}
+
+// Review 420 B2, the answer's side: a stop that comes while an answer is
+// used waits for it. The test holds the lock the answer's copy is kept under
+// (question_seen), which the pass takes after the mission's.
+func TestBlockedCardDecidesUnderTheMission(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, impl) }))
+	a := &asker{}
+	_, err := store.AskBlocked(ctx, w.rt, a.ask)
+	ok(t, err)
+	q := a.lastID()
+	a.answer(q, store.QuestionAnswered, store.CardApplyKey)
+	pool := w.db.Pool(t, w.db.Runtime)
+	holder, err := pool.Begin(ctx)
+	ok(t, err)
+	t.Cleanup(func() { _ = holder.Rollback(ctx) })
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742104, hashtext($1))`, `question_seen|{"question":"`+q+`"}`)
+	ok(t, err)
+	decided := make(chan error, 1)
+	go func() {
+		_, derr := store.DecideBlocked(ctx, pool, a.question, nil)
+		decided <- derr
+	}()
+	w.waitFor(t, "pg_advisory_xact_lock(742104", time.Now().Add(10*time.Second))
+	stopped := make(chan error, 1)
+	go func() {
+		stopped <- store.InTx(ctx, pool, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-3", "stopped", "test") })
+	}()
+	w.waitFor(t, "agentrt.mission WHERE mission_id = $1 FOR NO KEY UPDATE", time.Now().Add(10*time.Second))
+	ok(t, holder.Rollback(ctx))
+	ok(t, <-decided)
+	ok(t, <-stopped)
+	if o, _, _ := w.closedCard(t, q); o != store.OutcomeRetried || w.state(t, "task", impl) != "ready" || w.state(t, "mission", "M-3") != "stopped" {
+		t.Fatalf("the card closed %q; task %s, mission %s", o, w.state(t, "task", impl), w.state(t, "mission", "M-3"))
+	}
+}
+
+// A task whose card cannot be made does not hold up the ones after it. The
+// page it lowers gives every pass the same result, so other tests may run.
+func TestBlockedCardsPagePastAFailure(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	ids := []string{w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"}), w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})}
+	for _, id := range ids {
+		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.FailWorkForTest(ctx, tx, id) }))
+	}
+	slices.Sort(ids)
+	defer store.BlockedPageForTest(1)()
+	a := &asker{}
+	refuse := func(ctx context.Context, c store.Card) (string, error) {
+		if c.TaskID == ids[0] {
+			return "", errors.New("the question store refused this one")
+		}
+		return a.ask(ctx, c)
+	}
+	n, err := store.AskBlocked(ctx, w.rt, refuse)
+	if n != 1 || err == nil || !strings.Contains(err.Error(), ids[0]) || len(a.cards) != 1 || a.cards[0].TaskID != ids[1] {
+		t.Fatalf("asked %d (%v) %+v; want the second task's card and the first's error", n, err, a.cards)
+	}
+}
+
+// One more round, then the work passes: the third round is verified and
+// reviewed on its own attempt, the task is accepted and its mission is done.
+func TestBlockedRetryThenAccepted(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.goalMission(t, "M-3")
+	impl := w.ready(t, store.Task{MissionID: "M-3", OffPlanReason: "a goal"})
+	w.failRound(t, impl, "h1", "h2")
+	if did := w.failRound(t, impl, "h3", "h4"); did != "blocked" {
+		t.Fatalf("round 2 did %q", did)
+	}
+	a := &asker{}
+	_, err := store.AskBlocked(ctx, w.rt, a.ask)
+	ok(t, err)
+	a.answer(a.lastID(), store.QuestionAnswered, store.CardApplyKey)
+	_, err = store.DecideBlocked(ctx, w.rt, a.question, a.ack)
+	ok(t, err)
+	third := w.run(t, "h5", cursor, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	if pin := w.checkSpec(t, v); third.TaskID != impl || third.AttemptNo != 3 || pin["attempt"] != third.AttemptID || fmt.Sprint(pin["round"]) != "3" {
+		t.Fatalf("round 3: claim %+v, check pins %v", third, pin)
+	}
+	w.run(t, "h6", deterministic, "done")
+	if did, cerr := store.Conclude(ctx, w.rt, v); cerr != nil || did != "review" {
+		t.Fatalf("round 3's verification: %q %v", did, cerr)
+	}
+	review := w.checker(t, impl, "review")
+	w.run(t, "h7", codex, "done")
+	if did, cerr := store.Conclude(ctx, w.rt, review); cerr != nil || did != "accepted" || w.state(t, "task", impl) != "accepted" {
+		t.Fatalf("round 3's review: %q %v; task %s", did, cerr, w.state(t, "task", impl))
+	}
+	if closed, cerr := store.CloseMissions(ctx, w.rt); cerr != nil || !slices.Equal(closed, []string{"M-3"}) || w.state(t, "mission", "M-3") != "done" {
+		t.Fatalf("closed %v %v", closed, cerr)
 	}
 }

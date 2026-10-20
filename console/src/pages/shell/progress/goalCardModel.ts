@@ -84,7 +84,10 @@ export function goalDone(data: GoalData): boolean {
   // A failed check of a task the Owner dropped says nothing of the goal.
   const dropped = droppedTasks(data)
   if (['deterministic', 'review'].some(m => verdicts(data, m).some(e => e.body_json.verdict === 'fail' && !dropped.has(e.task_id)))) return false
-  return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.some(t => t.state === 'accepted')
+  // Without the mission's own word, done as the controller closes a goal (store/close.go): every task
+  // accepted or dropped, and an implementation or brief among the accepted. A goal whose planning alone
+  // was accepted and whose work was all dropped stops; it is never done (review 420 A1).
+  return ['done', 'accepted'].includes(text(data.mission.state)) || (data.tasks.some(t => ['implement', 'brief'].includes(t.role) && t.state === 'accepted')
     && data.tasks.every(t => t.state === 'accepted' || dropped.has(t.task_id)))
 }
 export function goalStages(data: GoalData): GoalStage[] {
