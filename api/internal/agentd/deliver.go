@@ -521,8 +521,9 @@ func (d *Daemon) settle(e *Entry) error {
 	return d.Registry.Put(*e)
 }
 
-// Blocked names an attempt whose process group is not known to be gone; the
-// host takes no new work while there is one (review 164 A2).
+// Blocked names an attempt whose process group is not known to be gone, or
+// an exam run's record that still names its group (or does not read); the
+// host takes no new work while there is one (review 164 A2, 417 A1).
 func (d *Daemon) Blocked() (string, error) {
 	entries, err := d.Registry.Load()
 	if err != nil {
@@ -532,6 +533,9 @@ func (d *Daemon) Blocked() (string, error) {
 		if g := entries[id].Group; g == GroupRemains || g == GroupUnknown {
 			return id, nil
 		}
+	}
+	if left := examRecordsLeft(d.Root); len(left) > 0 {
+		return "the exam run recorded in " + left[0], nil
 	}
 	return "", nil
 }
@@ -577,6 +581,12 @@ func (d *Daemon) Recover(ctx context.Context) error {
 	d.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	// What an exam sitting cut short left running is ended as well, before
+	// anything is sent; one not known gone blocks the host (Blocked; review
+	// 417 A1).
+	if _, why := ExamRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
+		d.logf("%v; this host takes no new work until then", why)
 	}
 	for _, id := range ids {
 		e := entries[id]

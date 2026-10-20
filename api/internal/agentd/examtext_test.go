@@ -65,8 +65,14 @@ func TestExamReadsOutsideTheWorkspace(t *testing.T) {
 	if err != nil || model != "claude-test-5" || outside != "Grep /var/lib" {
 		t.Fatalf("read the log as %q, %q, %v", model, outside, err)
 	}
-	// An event too long to read hides its tool calls: the run is not known
-	// to have kept to its workspace (review 415 B2).
+	// An event of a few MiB is read whole, its tool calls with it (review
+	// 417 §3); one too long to read hides them: the run is not known to have
+	// kept to its workspace (review 415 B2).
+	mid := use("Read", map[string]any{"file_path": "/etc/hosts", "note": strings.Repeat("x", 2<<20)})
+	must(t, os.WriteFile(log, []byte(mid+"\n"), 0o600))
+	if _, outside, err = examReads(log, ws); err != nil || outside != "Read /etc/hosts" {
+		t.Fatalf("a 2 MiB event: %q, %v", outside, err)
+	}
 	big := use("Read", map[string]any{"file_path": "a.go", "note": strings.Repeat("x", maxExamEvent)})
 	must(t, os.WriteFile(log, []byte(strings.Join([]string{`{"type":"system","subtype":"init","model":"claude-test-5"}`, big,
 		use("Read", map[string]any{"file_path": "a.go"})}, "\n")+"\n"), 0o600))

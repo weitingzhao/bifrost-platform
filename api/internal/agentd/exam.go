@@ -99,6 +99,8 @@ type Exam struct {
 	// confine, in tests, stands for the wall and checkPins: the spawn as it
 	// runs, and why its pins are not all there ("" when they are).
 	confine func(a *Attempt, sp Spawn) (Spawn, string)
+	// groupAlive, in tests, stands for GroupAlive after a run's executor ended.
+	groupAlive func(pgid int) bool
 }
 
 var (
@@ -525,30 +527,102 @@ func (e *Exam) clearLeft(dir string) error {
 }
 
 // clearSitting ends what a run cut short left, as its record in dir has it:
-// its executor's process group while that is still the run's (ClearGroup),
-// then its task's directories, then the record. A group that cannot be
-// shown gone keeps all three, and nothing is sat (review 415 A2).
+// its executor's process group (endSittingGroup), then its task's
+// directories, then the record. A group that cannot be shown gone keeps all
+// three, and nothing is sat (review 415 A2).
 func (e *Exam) clearSitting(dir string) error {
 	path := filepath.Join(dir, "sitting")
-	b, err := os.ReadFile(path)
+	s, err := readSitting(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	var s examSitting
-	if json.Unmarshal(b, &s) != nil || !taskName.MatchString(s.Task) || s.PGID < 0 || (s.PGID > 0) != (s.Start != "") {
-		return fmt.Errorf("agentd: %s is not a run's record: what that run left cannot be found; look and remove it by hand", path)
-	}
-	if s.PGID > 0 {
-		if state, pids := ClearGroup(s.PGID, s.Start, time.Time{}, orDefault(e.KillGrace, 10*time.Second)); state != GroupCleared {
-			return fmt.Errorf("agentd: the run cut short in task %s left its process group %d (%s; processes %v): end them by hand; "+
-				"nothing is sat until they are gone", s.Task, s.PGID, state, pids)
-		}
+	if err = endSittingGroup(dir, &s, orDefault(e.KillGrace, 10*time.Second)); err != nil {
+		return fmt.Errorf("%w; nothing is sat until then", err)
 	}
 	if err = forceRemove(filepath.Join(e.Root, "tasks", s.Task)); err != nil {
 		return err
 	}
 	return os.Remove(path)
+}
+
+// readSitting reads a run's record; one that does not read is refused, for
+// what that run left cannot be found by it.
+func readSitting(path string) (examSitting, error) {
+	var s examSitting
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return s, err
+	}
+	if json.Unmarshal(b, &s) != nil || !taskName.MatchString(s.Task) || s.PGID < 0 || (s.PGID > 0) != (s.Start != "") {
+		return s, fmt.Errorf("agentd: %s is not an exam run's record: what that run left cannot be found; look and remove it by hand", path)
+	}
+	return s, nil
+}
+
+// endSittingGroup ends the process group a run's record names, when it names
+// one, and keeps the record naming the task alone once the group is gone.
+// The group is gone when no process has its id, or when the process whose id
+// it is started at another time than the run's leader did: the system hands
+// out no process id a group still has, so the run's group went before that
+// process came (review 417 B2). While the leader is the recorded one the
+// group is ended (ClearGroup); otherwise processes of that id cannot be shown
+// to be the run's, nothing is killed, and the error says how to look.
+func endSittingGroup(dir string, s *examSitting, grace time.Duration) error {
+	if s.PGID == 0 {
+		return nil
+	}
+	state, pids := GroupCleared, []int(nil)
+	if now, err := StartTime(s.PGID); err != nil || now == s.Start {
+		state, pids = ClearGroup(s.PGID, s.Start, time.Time{}, grace)
+	}
+	if state != GroupCleared {
+		path := filepath.Join(dir, "sitting")
+		return fmt.Errorf("agentd: the exam's run in task %s, by its record %s, had process group %d led by a process started %s; "+
+			"processes %v of that group are left (%s), not known to be the run's. Do not end processes by that number alone: look "+
+			"(ps -o pid,lstart,args -g %d); if they are the run's (its claude, agentd launch), end them; if not, the record is stale: "+
+			"remove %s", s.Task, path, s.PGID, s.Start, pids, state, s.PGID, path)
+	}
+	s.PGID, s.Start = 0, ""
+	return keepSitting(dir, *s)
+}
+
+// ExamRunsLeft ends what a sitting cut short left running under root, for
+// agentd at start and before each claim: the process group each exam run's
+// record names (endSittingGroup). It returns the records whose group is
+// still not known gone, and why; the host takes no new work while there is
+// one (review 417 A1). The run's directories stay for the exam to remove.
+func ExamRunsLeft(root string, grace time.Duration) (left []string, why error) {
+	paths, err := filepath.Glob(filepath.Join(root, "exam", "*", "sitting"))
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range paths {
+		s, rerr := readSitting(path)
+		if errors.Is(rerr, fs.ErrNotExist) {
+			continue
+		}
+		if rerr == nil {
+			rerr = endSittingGroup(filepath.Dir(path), &s, grace)
+		}
+		if rerr != nil {
+			left, why = append(left, path), errors.Join(why, rerr)
+		}
+	}
+	return left, why
+}
+
+// examRecordsLeft are the exam runs' records under root that name a process
+// group, or do not read: what ExamRunsLeft could not end.
+func examRecordsLeft(root string) []string {
+	paths, _ := filepath.Glob(filepath.Join(root, "exam", "*", "sitting"))
+	var left []string
+	for _, path := range paths {
+		if s, err := readSitting(path); (err != nil && !errors.Is(err, fs.ErrNotExist)) || s.PGID > 0 {
+			left = append(left, path)
+		}
+	}
+	return left
 }

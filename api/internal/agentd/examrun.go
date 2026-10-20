@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -151,7 +152,11 @@ func (e *Exam) round(ctx context.Context, dir string, it store.ExamPaperItem, sp
 		Tool: e.Tool}, Spec: spec, Dir: WorkspaceDir(e.Root, task, no), root: e.Root}
 	a.Out = a.Dir + ".out"
 	taskDir := filepath.Dir(a.Dir)
+	kept := false // the group is not known gone: its directories stay with its record
 	defer func() {
+		if kept {
+			return
+		}
 		if rerr := forceRemove(taskDir); rerr != nil && err == nil {
 			err = rerr
 		}
@@ -196,13 +201,21 @@ func (e *Exam) round(ctx context.Context, dir string, it store.ExamPaperItem, sp
 	})
 	_ = log.Close()
 	r.wallS = int(time.Since(start).Seconds())
-	// The group is ended (launchRecorded); a record of it is kept only
-	// while some of it is left, for clearSitting to end.
-	if pgid == 0 || !GroupAlive(pgid) {
-		err = errors.Join(err, keepSitting(dir, examSitting{Task: task}))
+	// The group was ended (launchRecorded). While any of it is left, the
+	// record naming it and the run's directories stay, and the sitting stops
+	// here: the next one, or agentd, ends it first (clearSitting,
+	// ExamRunsLeft; review 417 A2).
+	alive := GroupAlive
+	if e.groupAlive != nil {
+		alive = e.groupAlive
 	}
-	if err != nil {
-		return r, err
+	if pgid != 0 && alive(pgid) {
+		kept = true
+		return r, errors.Join(err, fmt.Errorf("the executor's process group %d is not gone after it ended: its record and directories "+
+			"stay for the next sitting or agentd to end it", pgid))
+	}
+	if kerr := keepSitting(dir, examSitting{Task: task}); kerr != nil || err != nil {
+		return r, errors.Join(err, kerr)
 	}
 	afterExecutor(e.Tool.Executor, "", e.Root, a.Out, e.logf)
 	var after error
@@ -221,6 +234,13 @@ func (e *Exam) round(ctx context.Context, dir string, it store.ExamPaperItem, sp
 		// failed (no report), as one too long once masked is (examText).
 		r.text = fmt.Sprintf(tooLongAnswer, fmt.Sprintf("a report of over %d bytes", maxBody), maxExamText)
 		report, rerr = nil, nil
+	}
+	if errors.Is(rerr, fs.ErrNotExist) && !timedOut && resultTooLong(filepath.Join(a.Out, "log.txt")) {
+		// The seat's answer was there, in a result event over 1 MiB, which
+		// the report is not taken from (streamResultReport): handed in
+		// failed, as a report too long is (review 417 B1).
+		r.text = fmt.Sprintf(tooLongAnswer, fmt.Sprintf("a result event of over %d bytes", maxBody), maxExamText)
+		rerr = nil
 	}
 	if rerr != nil || (len(report) == 0 && r.text == "") {
 		report = nil
@@ -354,7 +374,7 @@ func examReads(log, dir string) (model, outside string, err error) {
 		return "", "", err
 	}
 	defer func() { _ = f.Close() }()
-	tooLong := func() {
+	tooLong := func(_, _ []byte) {
 		if outside == "" {
 			outside = fmt.Sprintf("an event of its log over %d MiB, not read", maxExamEvent>>20)
 		}
@@ -385,6 +405,27 @@ func examReads(log, dir string) (model, outside string, err error) {
 		}
 	}, tooLong)
 	return model, outside, err
+}
+
+// resultTooLong: the executor's stream-json log has a line over maxBody that
+// starts as a result event that is not an error, which streamResultReport
+// skips.
+func resultTooLong(log string) bool {
+	f, err := openBounded(log, 1<<62, false)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+	found := false
+	_ = eachLineOr(f, maxBody, func([]byte) {}, func(head, tail []byte) {
+		// Its keys in any order: one is at the line's start or at its end,
+		// outside the long value (a quote inside a string is escaped).
+		ends := append(append(slices.Clip(head), ' '), tail...)
+		if bytes.Contains(ends, []byte(`"type":"result"`)) && !bytes.Contains(ends, []byte(`"is_error":true`)) {
+			found = true
+		}
+	})
+	return found
 }
 
 // toolPaths are the paths a tool call reads: the file a Read names, the

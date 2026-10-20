@@ -622,10 +622,13 @@ func TestExamNoAnswerAndOutOfTime(t *testing.T) {
 	}
 }
 
-// A sitting cut short while its executor ran (agentd killed, the host's
-// unit gone): the next one ends the executor's process group, as the record
-// names it, before it removes the run's directories; a group it cannot show
-// to be the run's keeps everything there and nothing is sat (review 415 A2).
+// A run's record that names a process group, as a sitting cut short while its
+// executor ran leaves it (here written by hand, the group another shell's):
+// the next sitting ends the group while its leader is the recorded one,
+// before it removes the run's directories; a group it cannot show to be the
+// run's keeps everything there and nothing is sat (review 415 A2). The
+// executor's own end with its group left is TestExamKeepsARunWhoseGroupIsLeft;
+// agentd's side is TestExamRunLeftBlocksTheDaemon.
 func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 	root := t.TempDir()
 	f, srv := newExamPlatform(t, briefItem("B1", 1))
@@ -657,27 +660,31 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 
 	// A record that does not read is no run's: nothing is sat.
 	must(t, os.WriteFile(filepath.Join(dir, "sitting"), []byte("t_x\n"), 0o600))
-	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "not a run's record") || len(runs()) != 0 {
+	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "not an exam run's record") || len(runs()) != 0 {
 		t.Fatalf("a record that does not read: %v", err)
 	}
 
 	// Its leader gone, a process of the group left: not known to be the
 	// run's, so nothing is killed, removed or sat.
 	pgid, start := group("sleep 60 & exit 0")
-	for agentd.Alive(pgid, start) {
-		time.Sleep(10 * time.Millisecond)
+	for deadline := time.Now().Add(10 * time.Second); agentd.Alive(pgid, start); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the shell did not exit")
+		}
 	}
 	left := store.NewTaskID()
 	sitting(left, pgid, start)
-	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "end them by hand") || len(runs()) != 0 {
+	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "not known to be the run's. Do not end processes by that number alone") || len(runs()) != 0 {
 		t.Fatalf("a group not known to be the run's: %v, %d runs", err, len(runs()))
 	}
 	if _, err = os.Stat(filepath.Join(root, "tasks", left)); err != nil || !agentd.GroupAlive(pgid) {
 		t.Fatalf("the run's directories went (%v) or its group was ended", err)
 	}
 	agentd.KillGroup(pgid)
-	for agentd.GroupAlive(pgid) {
-		time.Sleep(10 * time.Millisecond)
+	for deadline := time.Now().Add(10 * time.Second); agentd.GroupAlive(pgid); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the group outlived KILL")
+		}
 	}
 	must(t, os.RemoveAll(filepath.Join(root, "tasks", left)))
 
@@ -692,5 +699,57 @@ func TestExamEndsWhatACutRunLeftRunning(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(root, "tasks", left)); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("what the run cut short left is there: %v", err)
+	}
+}
+
+// Review 417 A2: a run whose executor's group is still there after it ended
+// (a process the KILL did not end yet) is not handed in, and its record and
+// directories stay: nothing removes or overwrites what names that group; the
+// next sitting ends it first, then sits the run.
+func TestExamKeepsARunWhoseGroupIsLeft(t *testing.T) {
+	root := t.TempDir()
+	f, srv := newExamPlatform(t, briefItem("B1", 1))
+	ex, runs := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) { return []any{resultEv("Fine.")}, "" })
+	e := newExam(t, root, srv, ex)
+	e.GroupAliveForTest(func(int) bool { return true })
+	p, err := e.Paper(ctx, "chief_of_staff")
+	must(t, err)
+	if err = e.Sit(ctx, p, nil); err == nil || !strings.Contains(err.Error(), "is not gone after it ended") || len(f.parts) != 0 {
+		t.Fatalf("a group left: %v, %d parts", err, len(f.parts))
+	}
+	b, err := os.ReadFile(filepath.Join(root, "exam", "chief_of_staff-claude", "sitting"))
+	must(t, err)
+	var s struct {
+		Task string `json:"task"`
+		PGID int    `json:"pgid"`
+	}
+	must(t, json.Unmarshal(b, &s))
+	if _, serr := os.Stat(filepath.Join(root, "tasks", s.Task)); serr != nil || s.PGID == 0 {
+		t.Fatalf("the record %s, the run's directories: %v", b, serr)
+	}
+	e.GroupAliveForTest(agentd.GroupAlive)
+	must(t, e.Sit(ctx, p, nil))
+	if len(runs()) != 2 || len(f.parts) != 1 {
+		t.Fatalf("%d runs, %d parts", len(runs()), len(f.parts))
+	}
+	noAnswerKept(t, root, "Fine.")
+}
+
+// Review 417 B1: an answer in a result event over 1 MiB, which the report is
+// not taken from, is the seat's: handed in failed with a note, not taken for
+// no answer (which would stop every sitting at that run).
+func TestExamResultTooLong(t *testing.T) {
+	root := t.TempDir()
+	f, srv := newExamPlatform(t, briefItem("B1", 1))
+	ex, _ := fakeClaude(t, root, func(*agentd.Attempt, int) ([]any, string) {
+		return []any{initEv("claude-test-5"), map[string]any{"type": "result", "is_error": false, "result": strings.Repeat("x", 1<<20+1)}}, ""
+	})
+	e := newExam(t, root, srv, ex)
+	p, err := e.Paper(ctx, "chief_of_staff")
+	must(t, err)
+	must(t, e.Sit(ctx, p, nil))
+	a := f.answers()["B1/1"]
+	if a.Conclusion != "failed" || !strings.HasPrefix(a.Text, "(not handed in by agentd: the answer was a result event of over ") {
+		t.Fatalf("handed in as %s: %.200q", a.Conclusion, a.Text)
 	}
 }
