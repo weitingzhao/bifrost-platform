@@ -69,6 +69,37 @@ func (it *Item) Delivery() Delivery {
 // Question is the question the item belongs to.
 func (it *Item) Question() *Question { return it.question }
 
+// plannerRepo and plannerCommit are what an Agent host takes for a planner's
+// checkout (agentd's checkPaper: benchRepoRE, benchSHARE): an item that names
+// its repository or commit otherwise is a paper no host can sit, so the set
+// does not load (2026-10-20 STG: a seven-digit commit refused paper
+// 526ca46ad0db whole, before any run).
+var (
+	plannerRepo   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+	plannerCommit = regexp.MustCompile(`^[0-9a-f]{40}$`)
+)
+
+// checkDelivery refuses a path the platform does not render, and a planner's
+// item without repositories that are names and a full hex commit.
+func (it *Item) checkDelivery() error {
+	d := it.Delivery()
+	switch d.Path {
+	case "controller_note", "mailbox":
+		return nil
+	case "goal":
+		if len(d.Repos) == 0 || !plannerCommit.MatchString(d.BaseCommit) {
+			return fmt.Errorf("a planner's item names its repositories and a full hex commit")
+		}
+		for _, r := range d.Repos {
+			if !plannerRepo.MatchString(r) {
+				return fmt.Errorf("a planner's repository is a name")
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("its path is not one the platform renders")
+}
+
 // Rule is one rule as the set writes it; the fields a kind does not use are
 // empty. Patterns are compiled at load.
 type Rule struct {
@@ -182,6 +213,9 @@ func Load(fsys fs.FS) (*Set, error) {
 				return nil, fmt.Errorf("exam: %s: item %q has no id or comes twice", name, it.ID)
 			}
 			it.question = &q
+			if err = it.checkDelivery(); err != nil {
+				return nil, fmt.Errorf("exam: %s: item %s: %w", name, it.ID, err)
+			}
 			if len(it.Rules) == 0 {
 				return nil, fmt.Errorf("exam: %s: item %s has no rule", name, it.ID)
 			}

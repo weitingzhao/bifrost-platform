@@ -152,6 +152,14 @@ func TestLoadRefuses(t *testing.T) {
 		"card without meanwhile": {brief, strings.Replace(goal, `, "meanwhile_forbid": ["生效"]`, ``, 1), mail},
 		// a flag the translation does not take (review 372 B2)
 		"other flag": {brief, goal, strings.Replace(mail, `已(经)?合并`, `(?s)已.合并`, 1)},
+		// 2026-10-20 STG: an Agent host refuses a planner's checkout other than a repository's name and a full
+		// hex commit, so such a set never hands out a paper
+		"short commit":   {brief, strings.Replace(goal, strings.Repeat("a", 40), "aaaaaaa", 1), mail},
+		"no commit":      {brief, strings.Replace(goal, `, "base_commit": "`+strings.Repeat("a", 40)+`"`, ``, 1), mail},
+		"repo a path":    {brief, strings.Replace(goal, `"repos": ["bifrost-platform"]`, `"repos": ["../bifrost-platform"]`, 1), mail},
+		"no repo":        {brief, strings.Replace(goal, `"repos": ["bifrost-platform"]`, `"repos": []`, 1), mail},
+		"override short": {brief, goal, strings.Replace(mail, `"id": "M1"`, `"id": "M1", "delivery_override": {"path": "goal", "repos": ["bifrost-platform"], "base_commit": "abc1234"}`, 1)},
+		"unknown path":   {strings.Replace(brief, `"path": "controller_note"`, `"path": "chat"`, 1), goal, mail},
 	} {
 		_, err := exam.Load(fstest.MapFS{"q1.json": {Data: []byte(q.q1)}, "q2.json": {Data: []byte(q.q2)}, "q3.json": {Data: []byte(q.q3)}})
 		if err == nil {
