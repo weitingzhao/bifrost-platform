@@ -137,15 +137,16 @@ func infraCheck() string {
 // scripts/release three times, three need bifrost-platform beside the
 // checkout); scripts/agent-host/test_agent_06_owner.py (the Owner's Mac
 // script, with macOS's shasum); scripts/test_agentrt_infra.py (kubectl);
-// scripts/test_access_checks.py (fails on main);
 // scripts/test_audit_retention_archive.py and scripts/test_iv_gap_audit.py
-// (pyarrow, bifrost_research).
+// (pyarrow, bifrost_research). scripts/test_access_checks.py joined once its
+// fake answered the Application read (TD-378, infra d989dde).
 var infraTests = []string{
 	"agent-config/scripts/test_check_hardcoded_paths.py",
 	"k8s/data/role-matrix",
 	"scripts/agentrt",
 	"scripts/benchmark",
 	"scripts/k3s",
+	"scripts/test_access_checks.py",
 	"scripts/test_check_monitoring_persistence.py",
 	"scripts/test_check_registry_images.py",
 	"scripts/test_iv_depth_plan.py",

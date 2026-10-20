@@ -52,15 +52,14 @@ func TestInfraImplementSpec(t *testing.T) {
 		t.Fatalf("check = %q", check)
 	}
 	tests := strings.Fields(after)
-	for _, want := range []string{"scripts/agentrt", "scripts/benchmark", "scripts/k3s", "k8s/data/role-matrix"} {
+	for _, want := range []string{"scripts/agentrt", "scripts/benchmark", "scripts/k3s", "k8s/data/role-matrix", "scripts/test_access_checks.py"} {
 		if !slices.Contains(tests, want) {
 			t.Errorf("the check does not run %s: %v", want, tests)
 		}
 	}
-	// Each left out for a reason the cut gives: time, loopback, the host, or
-	// main.
+	// Each left out for a reason the cut gives: time, loopback or the host.
 	for _, out := range []string{"scripts/release", "scripts/gitea", "k8s/cicd/gitea-backup", "scripts/cicd", "agent-config/scripts/recorder",
-		"scripts/agent-host", "scripts/agent-host/test_probe_gitea_protection.py", "scripts/test_agentrt_infra.py", "scripts/test_access_checks.py"} {
+		"scripts/agent-host", "scripts/agent-host/test_probe_gitea_protection.py", "scripts/test_agentrt_infra.py"} {
 		if slices.Contains(tests, out) {
 			t.Errorf("the check runs %s", out)
 		}
