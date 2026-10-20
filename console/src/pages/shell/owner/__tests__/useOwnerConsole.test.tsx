@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import progressFixture from '@/api/__fixtures__/agentrt-progress.stg.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
+import archFixture from '@/api/__fixtures__/agentrt-progress-arch.testdb.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import { parseRoadmap } from '@/api/agentProgressBoard'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -173,17 +174,17 @@ describe('useOwnerConsole', () => {
     }
   })
 
-  it('reads the plan from the runtime once it holds the round, the board only while it holds none, a failed read as failed (2.5 slice 2)', async () => {
+  it('reads the plan and the architecture table from the runtime only, never the board; a failed read as failed (2.5 slice 2, ⑤)', async () => {
     boardDoc.value = { document: { roadmap: parseRoadmap(roadmap) } }
     // jsdom here has no working localStorage; the sign-in token is read from it on every request.
     Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined } })
     const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
-    const serve = (plan: 'imported' | 'absent' | 'fail') => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    const serve = (plan: 'imported' | 'absent' | 'fail', arch = false) => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/agentrt/plan?')) return plan === 'imported' ? json(planFixture.plan) : plan === 'absent' ? json(planFixture.absent.body, 404) : json({ error: 'unavailable' }, 503)
       if (url.includes('/agentrt/events?stream=plan')) return json(planFixture.events)
       if (url.includes('/agentrt/artifacts/')) return new Response(JSON.stringify(planFixture.request))
-      if (url.includes('/agentrt/progress')) return json(planFixture.progress)
+      if (url.includes('/agentrt/progress')) return json(arch ? { ...planFixture.progress, plan: [...planFixture.progress.plan, ...archFixture.plan.filter(r => r.kind === 'arch_root')] } : planFixture.progress)
       return json({ error: 'not this test' }, 500)
     }))
     serve('imported')
@@ -191,11 +192,21 @@ describe('useOwnerConsole', () => {
     await waitFor(() => expect(read.result.current.planSource.from).toBe('runtime'))
     expect(read.result.current.plan.map(r => [r.key, r.done, r.total])).toEqual(planFixture.progress.plan[0].items.map(i => [i.label, i.count.done, i.count.total]))
     expect(read.result.current.planRound?.source).toBe('runtime')
+    expect(read.result.current.arch).toEqual({ from: 'absent' })
 
+    serve('imported', true)
+    const withArch = run({ system: false, work: true, chief: false })
+    await waitFor(() => expect(withArch.result.current.arch.from).toBe('runtime'))
+    const table = withArch.result.current.arch
+    expect(table.from === 'runtime' && table.table.rows.map(r => [r.id, r.tick])).toEqual([
+      ['ARCH:state-db', 'true'], ['ARCH:bus', 'false'], ['ARCH:gateway', 'unknown'], ['ARCH:prod-runtime', 'unknown']])
+
+    // The board still holds a round (boardDoc): it is not read (the board is retired).
     serve('absent')
     const absent = run({ system: false, work: true, chief: false })
-    await waitFor(() => expect(absent.result.current.planSource.from).toBe('board'))
-    expect(absent.result.current.plan.map(r => r.key)).toEqual(roadmap.round.items.map(i => i.key))
+    await waitFor(() => expect(absent.result.current.planSource.from).toBe('absent'))
+    expect(absent.result.current.plan).toEqual([])
+    expect(absent.result.current.planRound).toBeUndefined()
 
     serve('fail')
     const failed = run({ system: false, work: true, chief: false })

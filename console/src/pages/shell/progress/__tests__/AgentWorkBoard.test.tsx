@@ -651,8 +651,9 @@ describe('AgentWorkBoard', () => {
   it('places the six project blocks in the Owner question order, then lineage and code health', async () => {
     stubProgress(envelope(null))
     render(wrap(<ProgressPage />))
-    expect(await screen.findAllByText('No progress has been published.')).not.toHaveLength(0)
-    const page = screen.getByTestId('merged-progress')
+    // Work's lower half reads the runtime only: the board is retired (2.5 ⑤), so nothing on it says the board published nothing.
+    const page = await screen.findByTestId('merged-progress')
+    expect(screen.queryByText('No progress has been published.')).toBeNull()
     expect(Array.from(page.children).map(child => child.getAttribute('aria-label'))).toEqual([
       'Goals', 'Overview', 'Plan and architecture', 'Hosts', 'History',
       'Commit lineage', 'Code health',

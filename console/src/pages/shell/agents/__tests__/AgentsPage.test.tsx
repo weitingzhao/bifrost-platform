@@ -7,10 +7,10 @@ vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => null }))
 import type { ReactNode } from 'react'
 import progress from '@/api/__fixtures__/agentrt-progress.stg.json'
 import events from '@/api/__fixtures__/agentrt-events-M-2.stg.json'
-import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import { ProgressPage } from '../../progress/ProgressPage'
 import { GoalForm } from '../GoalForm'
 import { TaskTimeline } from '../TaskTimeline'
+import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED } from '../useRuntimePlan'
 import { SHELL_NAV, resolveConsoleHash } from '@/lib/shell/consoleRoutes'
 
 const TASK = 't_01M50M1CZSDN8PNHRH8C2241RS'
@@ -27,12 +27,11 @@ function enter(value: string) { fireEvent.change(screen.getByLabelText('Goal'), 
 function mockPageFetch() {
   return vi.fn(async (url: RequestInfo | URL) => {
     const path = String(url)
-    // The runtime holds no plan yet, as PROD and STG on 2026-10-19: the plan is read from the board (2.5 slice 2).
+    // A runtime that holds no plan here: the panes say so; the board is retired and never read (2.5 ⑤).
     if (path.includes('/agentrt/plan?')) return json({ error: 'not_found', message: 'no such record' }, 404)
     if (path.includes('/agentrt/progress')) return json(progress)
     if (path.includes('/agentrt/events?')) return json(events)
     if (path.includes('/agentrt/artifacts/')) return new Response('# Report\nDone <script>unsafe()</script>', { headers: { 'Content-Type': 'text/markdown' } })
-    if (path.includes('/agent/progress')) return json({ document: { roadmap }, generated_at: progress.generated_at })
     if (path.includes('/approvals')) return json({ items: [] })
     if (path.includes('/questions')) return json({ questions: [] })
     if (path.includes('/agent/threads')) return json({ threads: [], hosts: [] })
@@ -187,8 +186,9 @@ describe('Merged Progress page', () => {
     expect(resolveConsoleHash('agents')).toEqual({ location: { kind: 'shell', id: 'work' }, canonical: '#work' })
     wrap(<ProgressPage />)
     expect(await screen.findByText(/mbp-dev · Online/)).toBeInTheDocument()
-    expect(await screen.findByText(/Round 2 · Checked:/)).toBeInTheDocument()
-    expect(screen.getByText(/2.0 设计对齐：v4 到 v5 · 3\/3/)).toBeInTheDocument()
+    expect((await screen.findAllByText(PLAN_NOT_IMPORTED)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(ARCH_NOT_IMPORTED)).length).toBeGreaterThan(0)
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).includes('/agent/progress'))).toBe(false)
     // What waits on the Owner is For you's; new goals are given on Chief of staff (W-31 2.2b).
     expect(screen.queryByText('All on Needs you')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Chief of staff' })).toHaveAttribute('href', '#chief')
@@ -201,7 +201,7 @@ describe('Merged Progress page', () => {
     expect((await screen.findAllByText(/Could not load agent runtime:/)).length).toBeGreaterThan(0)
     // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
     expect(await screen.findAllByText('Plan unavailable: Plan: unavailable')).toHaveLength(2)
-    expect(await screen.findByText(/Could not load architecture:/)).toBeInTheDocument()
+    expect(await screen.findAllByText('Architecture unavailable: Agent runtime: unavailable')).toHaveLength(2)
   })
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('/agentrt/plan?') ? json({ error: 'not_found', message: 'no such record' }, 404)
@@ -209,6 +209,7 @@ describe('Merged Progress page', () => {
     wrap(<ProgressPage />)
     expect(await screen.findByText('No goals yet.')).toBeInTheDocument()
     expect(screen.getByText('No hosts reported.')).toBeInTheDocument()
-    expect(await screen.findByText('The plan is not published in this environment.')).toBeInTheDocument()
+    expect((await screen.findAllByText(PLAN_NOT_IMPORTED)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(ARCH_NOT_IMPORTED)).length).toBeGreaterThan(0)
   })
 })

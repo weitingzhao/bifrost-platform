@@ -1,5 +1,4 @@
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
-import { AGENT_PROGRESS_POLL_MS, fetchAgentProgress } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref, questionHref } from '@/lib/shell/consoleRoutes'
 import { mergedWaitingCount, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
@@ -48,7 +47,6 @@ function knownOrPending(
 export function useNeedsYou() {
   const now = Date.now()
   const runtimeQuery = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal), refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
-  const progressQuery = useQuery({ queryKey: ['agent-progress'], queryFn: fetchAgentProgress, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
   const openQ = useQuery({
     queryKey: ['approvals', 'open'],
     queryFn: () => fetchApprovalList('open'),
@@ -147,7 +145,7 @@ export function useNeedsYou() {
   return {
     count,
     decisionItems, silentItems,
-    waitingItems, runtimeItems, runtimeCount, runtimeQuery, progressQuery,
+    waitingItems, runtimeItems, runtimeCount, runtimeQuery,
     openCount,
     silentCount,
     recentCount,

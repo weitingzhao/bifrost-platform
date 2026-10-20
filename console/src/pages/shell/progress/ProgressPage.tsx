@@ -1,9 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { computedAgeLine, generationIsSkewed, publishedAgeSeconds, receivedIsStale, skewSentence, staleSentence } from '@/api/agentProgress'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
 import { AgentsPlan } from '../agents/AgentsPlan'
-import { useRuntimePlan } from '../agents/useRuntimePlan'
+import { useRuntimeArch, useRuntimePlan } from '../agents/useRuntimePlan'
 import { ProgressOverview } from './ProgressOverview'
 import { NowClock, Tick } from './progressClock'
 import { WORK_GOAL_CARDS } from './ProgressHistory'
@@ -66,8 +65,9 @@ export function ProgressPage() {
     const timer = window.setTimeout(() => setHighlighted(''), 6000)
     return () => window.clearTimeout(timer)
   }, [highlighted])
-  const { count, runtimeQuery: runtimeQ, progressQuery: boardQ } = needs
-  const runtime = runtimeQ.data, board = boardQ.data?.document
+  const arch = useRuntimeArch()
+  const { count, runtimeQuery: runtimeQ } = needs
+  const runtime = runtimeQ.data
   const ids = missionIds(runtime, submitted?.id)
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
@@ -78,27 +78,14 @@ export function ProgressPage() {
       {runtime && children}
     </>
   }
-  function boardState() {
-    const env = boardQ.data, now = Date.now()
-    const stale = env && (env.stale || receivedIsStale(env.received_at, env.age_seconds, now))
-    const skewed = env && generationIsSkewed(board?.at, env.received_at, now)
-    return <>
-      <p className="text-xs text-muted-foreground">Board updated: <time title={env?.generated_at}><Tick text={now => relative(env?.generated_at || '', now)} /></time>{board?.at && <> · <Tick text={t => computedAgeLine(board.at!, t)} /></>}</p>
-      {boardQ.isPending && <p role="status">Loading coordinator board…</p>}
-      {boardQ.isError && <p role="alert">Could not load coordinator board: {boardQ.error.message}. Last known data may be shown.</p>}
-      {stale && <p>{staleSentence(publishedAgeSeconds(env.received_at, env.age_seconds, now))}</p>}
-      {skewed && board?.at && <p>{skewSentence(board.at, now)}</p>}
-      {boardQ.isSuccess && !board && <p>No progress has been published.</p>}
-    </>
-  }
   return <NowClock><div className="flex w-full min-w-0 flex-col gap-4 overflow-x-hidden" data-testid="merged-progress">
     <section id={GOALS_SECTION} aria-label="Goals" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
       <p className="m-0 text-sm text-muted-foreground">New goals are given on <a href={formatShellHash('chief')}>Chief of staff</a>.</p>
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
-    <section aria-label="Overview">{boardState()}<ProgressOverview count={count} runtime={runtime} board={board} plan={plan} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
-    <section aria-label="Plan and architecture"><AgentsPlan /></section>
+    <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
+    <section id="plan" aria-label="Plan and architecture" className="scroll-mt-4"><AgentsPlan /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" bodyPadding="compact">
       <p className="m-0 text-sm">Older goals, the runtime's event timeline, recent tasks and failed attempts are in <a href={formatShellHash('records', 'tab=work')}>Records › Work history</a>.</p>

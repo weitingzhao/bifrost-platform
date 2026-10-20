@@ -34,8 +34,10 @@ export function PlatformAuthProvider({ children }: { children: ReactNode }) {
     void qc.invalidateQueries({ queryKey: ['cluster'] })
     void qc.invalidateQueries({ queryKey: ['platform', 'audit'] })
     // Cancel GET observers before invalidating: an initial read without data can
-    // otherwise keep the old in-flight request instead of using the new login.
-    for (const queryKey of [['approvals'], ['questions'], ['agent-progress'], ['agent-threads'], ['lineage']] as const) {
+    // otherwise keep the old in-flight request instead of using the new login. The
+    // runtime's progress (its cards for the Owner, the plan's counts, the architecture
+    // table) replaces the retired board's here (2.5 ⑤).
+    for (const queryKey of [['approvals'], ['questions'], ['agent-runtime-progress'], ['agent-threads'], ['lineage']] as const) {
       void qc.cancelQueries({ queryKey }).then(() => qc.invalidateQueries({ queryKey }))
     }
   }, [qc])

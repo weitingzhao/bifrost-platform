@@ -18,7 +18,7 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
-import { partOfReference } from '@/pages/shell/progress/progressPart'
+import { approvalPart } from '@/pages/shell/progress/progressPart'
 
 function Group({
   label,
@@ -102,7 +102,7 @@ function RecentlyHandled({ count, rows }: { count: NeedsYouCount; rows: HandledR
 export function NeedsYouPage() {
   const {
     count,
-    runtimeItems, runtimeCount, runtimeQuery, progressQuery,
+    runtimeItems, runtimeCount, runtimeQuery,
     openCount,
     silentCount,
     silentOffline,
@@ -129,7 +129,6 @@ export function NeedsYouPage() {
     staleTime: 60_000,
     retry: false,
   })
-  const progressDoc = progressQuery.data?.document ?? null
   useEffect(() => {
     clearLegacyApprovalToken()
   }, [])
@@ -196,7 +195,7 @@ export function NeedsYouPage() {
                 key={item.id}
                 item={item}
                 now={now}
-                partOf={item.status === 'pending' ? partOfReference(progressDoc, item.id) : null}
+                partOf={item.status === 'pending' ? approvalPart(item) : null}
               />
             ))}
           </ApprovalList>

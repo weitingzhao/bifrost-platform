@@ -542,7 +542,7 @@ describe('Needs you names the progress work', () => {
     window.location.hash = ''
   })
 
-  function stub(document: unknown, failProgress = false) {
+  function stub(document: unknown, failProgress = false, workID = '') {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -551,7 +551,7 @@ describe('Needs you names the progress work', () => {
         const health = healthResponse(url)
         if (health != null) return health
         if (url.includes('/api/v1/approvals')) {
-          return json(buildApprovalListResponse([buildPlatformApproval({ id: PENDING_ID, number: 6 })]))
+          return json(buildApprovalListResponse([buildPlatformApproval({ id: PENDING_ID, number: 6, work_id: workID })]))
         }
         if (url.includes('/api/v1/agent/threads')) {
           return json({ generated_at: '2026-10-10T07:25:00Z', threads: [], hosts: [] })
@@ -579,24 +579,18 @@ describe('Needs you names the progress work', () => {
     )
   }
 
-  it('links a pending request back to Progress when the document names it', async () => {
-    stub({
-      owner_now: [{ name: '你批 #6', work: 'Console 下一片', approval: { id: PENDING_ID, number: 6 } }],
-    })
+  // The work a request names itself (work_id), not the board's hand-kept works: the board is retired (2.5 ⑤).
+  it('links a pending request to Work by the work it names', async () => {
+    stub({ owner_now: [{ name: '你批 #6', work: 'Console 下一片', approval: { id: PENDING_ID, number: 6 } }] }, false, 'W-31')
     render(wrap(<NeedsYouPage />))
-    const line = await screen.findByRole('link', { name: 'Agent-reported: Console 下一片 — 你批 #6' })
+    const line = await screen.findByRole('link', { name: 'Agent-reported: part of W-31' })
     expect(line.getAttribute('href')).toBe('#work')
+    expect(screen.queryByText(/Console 下一片/)).toBeNull()
+    expect(vi.mocked(fetch).mock.calls.some(call => String(call[0]).includes('/api/v1/agent/progress'))).toBe(false)
   })
 
-  it('shows no part line when the document is absent or does not name the request', async () => {
-    stub(null, true)
-    const missing = render(wrap(<NeedsYouPage />))
-    // The board is not a source of what waits for the Owner (2.5 slice 3): unread, it leaves the count whole.
-    await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
-    expect(screen.queryByText(/Agent-reported:/)).toBeNull()
-    missing.unmount()
-
-    stub({ owner_now: [{ name: 'Other', work: 'Else', approval: { id: 'appr_aaaaaaaaaaaaaaaa', number: 1 } }] })
+  it('shows no part line for a request that names no work, whatever the board says', async () => {
+    stub({ owner_now: [{ name: '你批 #6', work: 'Console 下一片', approval: { id: PENDING_ID, number: 6 } }] })
     render(wrap(<NeedsYouPage />))
     await waitFor(() => expect(document.querySelector('[data-needs-you-count="1"]')).toBeTruthy())
     expect(screen.queryByText(/Agent-reported:/)).toBeNull()

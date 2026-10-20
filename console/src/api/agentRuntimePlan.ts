@@ -34,6 +34,38 @@ export function parseRuntimeArchitecture(value: unknown): RuntimeArchitecture | 
   })) }
 }
 
+/** How an architecture row stands: its done rule (gates_passed) evaluated now against what is deployed. */
+export type ArchTick = 'true' | 'false' | 'unknown'
+/** An architecture row as GET /progress gives it (W-31 2.5 G2): the tick, why, and its latest note, what it actually is now. */
+export type RuntimeArchRow = { id: string; title: string; tick: ArchTick; reason: string; note: { text: string; at: string; by: string } | null }
+export type RuntimeArchTable = { id: string; title: string; rows: RuntimeArchRow[] }
+
+/** The architecture root (planimport.ArchRootID). */
+export const ARCH_ROOT = 'ARCH'
+
+/**
+ * The architecture table from GET /progress's plan: the arch_root with its rows, each ticked by its done rule
+ * evaluated now (store/progressarch.go); null when the runtime holds no architecture root (not imported). A
+ * tick the page does not know is unknown, never a pass.
+ */
+export function runtimeArch(plan: unknown[]): RuntimeArchTable | null {
+  const roots = plan.map(record).filter(r => text(r.kind) === 'arch_root')
+  const root = roots.find(r => text(r.plan_node_id) === ARCH_ROOT) ?? roots[0]
+  if (root == null) return null
+  return { id: text(root.plan_node_id), title: text(root.title), rows: records(root.rows).map(row => {
+    const tick = text(row.tick)
+    const note = row.note === null || typeof row.note !== 'object' ? null : record(row.note)
+    return { id: text(row.plan_node_id), title: text(row.title), tick: tick === 'true' || tick === 'false' ? tick : 'unknown', reason: text(row.reason),
+      note: note && text(note.text) ? { text: text(note.text), at: text(note.at), by: text(note.by) } : null }
+  }) }
+}
+
+/** An architecture table's rows by tick. */
+export function archCounts(table: RuntimeArchTable): { passed: number; notYet: number; unknown: number } {
+  const n = (tick: ArchTick) => table.rows.filter(r => r.tick === tick).length
+  return { passed: n('true'), notYet: n('false'), unknown: n('unknown') }
+}
+
 /** The round the plan panes read from the runtime (CUT-round2-2.5-interface §2: GET /plan?root=R2). */
 export const PLAN_ROOT = 'R2'
 export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'

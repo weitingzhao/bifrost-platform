@@ -18,7 +18,7 @@ import {
   releaseWindowView,
   splitReleaseRuns,
 } from '@/pages/shell/releases/releaseView'
-import { useRuntimePlan } from '../agents/useRuntimePlan'
+import { useRuntimeArch, useRuntimePlan } from '../agents/useRuntimePlan'
 import { backupTile, copiesTile, marketTile, pluginsTile, researchTile, type ProbeReach } from './dataTiles'
 import {
   ownerVerdict,
@@ -60,11 +60,11 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
 
   // A failed refresh voids the last answer: agents idle, nodes ready and so on are not shown from a cache (review 221 A7).
   const runtime = current(needsYou.runtimeQuery)
-  const board = needsYou.progressQuery.data?.document ?? null
   const work = workNow(runtime)
-  // The plan from the runtime once it holds the round; the board's only while the runtime has none (2.5 slice 2).
+  // The plan and the architecture table from the runtime only: the board is retired (2.5 ⑤).
   const planSource = useRuntimePlan(blocks.work)
-  const planRound = planSource.from === 'runtime' ? planSource.round : planSource.from === 'board' ? board?.roadmap?.round : undefined
+  const planRound = planSource.from === 'runtime' ? planSource.round : undefined
+  const arch = useRuntimeArch(blocks.work)
   const lastId = work?.lastAccepted?.mission ?? ''
   const lastGoalQ = useQuery({ queryKey: ['agent-runtime-goal', lastId], queryFn: ({ signal }) => fetchRuntimeGoal(lastId, signal),
     enabled: (blocks.work || blocks.chief) && lastId !== '', retry: false, staleTime: Infinity, refetchOnWindowFocus: false,
@@ -133,12 +133,10 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
       : coordinatorQ.isPaused ? { state: 'error' as const, error: 'offline' }
       : coordinatorQ.data === undefined ? { state: 'loading' as const }
       : { state: 'read' as const, note: coordinatorQ.data.note, full: coordinatorQ.data.full },
-    board,
-    boardStale: needsYou.progressQuery.data?.stale === true,
     planSource,
     planRound,
     plan: planRows(planRound),
-    arch: board?.roadmap?.arch?.rows ?? [],
+    arch,
     hosts: runtime?.hosts ?? [],
     missions: runtime?.work.missions ?? [],
     nodes,

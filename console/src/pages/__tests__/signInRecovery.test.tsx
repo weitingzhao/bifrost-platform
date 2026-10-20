@@ -416,9 +416,9 @@ describe('role reads that are still running or failed', () => {
 })
 
 describe('login rereads page data', () => {
-  it('rereads approvals, questions and progress on login, replacement and logout', async () => {
+  it('rereads approvals, questions and the runtime\'s progress on login, replacement and logout', async () => {
     mount(<NeedsYouPage />)
-    const roots = ['/approvals?', '/questions?', '/agent/progress']
+    const roots = ['/approvals?', '/questions?', '/agentrt/progress']
     const progressRead = () => vi.mocked(fetch).mock.calls.filter(call => String(call[0]).includes(roots[2]))
     await waitFor(() => expect(progressRead().length).toBeGreaterThan(0))
     for (const [action, token] of [['Login B', B], ['Login A', A], ['Logout', '']] as const) {

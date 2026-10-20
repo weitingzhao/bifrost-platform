@@ -1,4 +1,5 @@
 import type { ProgressDocument } from '@/api/agentProgress'
+import type { ApprovalItem } from '@/api/approvals'
 
 export type ProgressPart = { work: string; step: string }
 
@@ -29,6 +30,16 @@ export function partOfReference(doc: ProgressDocument | null | undefined, id: st
     }
   }
   return null
+}
+
+/**
+ * The work a request names itself (its work_id, set by whoever asked: W-31, TD-385), for the line under
+ * a pending request. It replaces the board's hand-kept works (2.5 ⑤: the board is retired); a request
+ * that names no work has no line.
+ */
+export function approvalPart(item: Pick<ApprovalItem, 'work_id'>): ProgressPart | null {
+  const work = item.work_id?.trim() ?? ''
+  return work === '' ? null : { work, step: '' }
 }
 
 function isHiddenChar(char: string): boolean {
@@ -64,5 +75,5 @@ export function boundDocumentText(value: string, max: number): string {
  * It is not a fact about the request.
  */
 export function partOfLine(part: ProgressPart): string {
-  return boundDocumentText(`Agent-reported: ${part.work} — ${part.step}`, 120)
+  return boundDocumentText(part.step === '' ? `Agent-reported: part of ${part.work}` : `Agent-reported: ${part.work} — ${part.step}`, 120)
 }

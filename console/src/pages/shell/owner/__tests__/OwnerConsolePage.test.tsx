@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { planRows, splitAlerts } from '../ownerModel'
-import { PLAN_FROM_BOARD, planRead, type PlanRead } from '../../agents/useRuntimePlan'
+import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead, planRead, type ArchRead, type PlanRead } from '../../agents/useRuntimePlan'
+import archFixture from '@/api/__fixtures__/agentrt-progress-arch.testdb.json'
 import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
 import rootOnlyFixture from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
 import { PLAN_ROOT, parsePlanRequest } from '@/api/agentRuntimePlan'
@@ -21,14 +22,14 @@ import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../stand
 
 const NOW = Date.parse('2026-10-16T20:10:43Z')
 const standbyKnown = vi.hoisted(() => ({ value: true }))
-// The round the board publishes, when a test sets one (CUT-plan-import §6).
-const boardRound = vi.hoisted(() => ({ value: undefined as Record<string, unknown> | undefined }))
+// The architecture table, when a test sets it; absent otherwise, as while the runtime holds no ARCH root (2.5 ⑤ G2).
+const archValue = vi.hoisted(() => ({ value: undefined as ArchRead | undefined }))
 // The coordinating thread's note as the hook reads it from the mailbox (2.5 G3).
 const coordinatorView = vi.hoisted(() => ({ value: undefined as unknown }))
 // The time the page is drawn at, when a test sets one; the open goals the runtime gives (2.5 G8).
 const nowValue = vi.hoisted(() => ({ value: undefined as number | undefined }))
 const missionsValue = vi.hoisted(() => ({ value: [] as unknown[] }))
-// Where the plan was read from, when a test sets it; the board otherwise, as while the runtime holds none (2.5 slice 2).
+// Where the plan was read from, when a test sets it; absent otherwise, as while the runtime holds none (2.5 slice 2; the board is retired, ⑤).
 const planValue = vi.hoisted(() => ({ value: undefined as PlanRead | undefined }))
 
 function fake(): OwnerConsoleData {
@@ -52,13 +53,10 @@ function fake(): OwnerConsoleData {
     last: { mission: 'M-2', at: '2026-10-16T04:17:22Z', status: 'done', state: 'done' },
     lastGoal: 'Add a comment above Repos.',
     coordinator: coordinatorView.value ?? { state: 'read', full: false, note: { body: 'Owner console, first version\nNext: 2.3 inbox', at: new Date(NOW - 7 * 60_000).toISOString() } },
-    board: { coordinator: { doing: 'Board text, not shown', next: '' }, roadmap: { round: boardRound.value ?? { n: 2, items: [] } } },
-    boardStale: false,
-    planSource: planValue.value ?? { from: 'board' },
-    planRound: planValue.value === undefined ? boardRound.value ?? { n: 2, items: [] } : planValue.value.from === 'runtime' ? planValue.value.round : undefined,
-    plan: planValue.value !== undefined ? planRows(planValue.value.from === 'runtime' ? planValue.value.round : undefined)
-      : boardRound.value?.unknown !== undefined ? [] : [{ key: '2.2b', name: 'First slice through', done: 10, total: 10, tone: 'ok', tag: '' }, { key: '2.3', name: 'Inbox', done: 0, total: 4, tone: 'muted', tag: 'next' }],
-    arch: [{ state: 'done', what: 'a', now: '' }, { state: 'part', what: 'b', now: '' }],
+    planSource: planValue.value ?? { from: 'absent' },
+    planRound: planValue.value?.from === 'runtime' ? planValue.value.round : undefined,
+    plan: planRows(planValue.value?.from === 'runtime' ? planValue.value.round : undefined),
+    arch: archValue.value ?? { from: 'absent' },
     hosts: [],
     missions: missionsValue.value,
     controlsReadable: true,
@@ -115,7 +113,7 @@ beforeEach(() => {
     getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
   } })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined; archValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
 /** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
@@ -251,19 +249,6 @@ describe('Owner Console entries', () => {
     expect(screen.getByRole('status')).toHaveTextContent('M-9 created')
   })
 
-  it('says why the plan is unavailable, and marks a plan from the runtime as not kept by hand', () => {
-    boardRound.value = { unknown: 'PG unavailable', source: 'runtime', items: [] }
-    try {
-      show('#work')
-      const plan = screen.getByRole('region', { name: 'The plan' })
-      expect(plan).toHaveTextContent('Plan unavailable: PG unavailable')
-      expect(plan).not.toHaveTextContent("No plan on the coordinator's board.")
-      expect(plan).not.toHaveTextContent('✎ by hand')
-    } finally {
-      boardRound.value = undefined
-    }
-  })
-
   it('shows the plan from the runtime, counted as GET /progress counts it, with no hand mark and no board note (2.5 slice 2)', () => {
     const read = (data: unknown) => ({ data, error: null, isError: false, isPaused: false })
     planValue.value = planRead(read({ found: true, doc: planFixture.plan }), read(parsePlanRequest(planFixture.request, PLAN_ROOT)), read(parseRuntimeProgress(planFixture.progress)))
@@ -273,7 +258,7 @@ describe('Owner Console entries', () => {
     const rows = within(plan).getAllByRole('listitem').map(li => li.textContent)
     expect(rows).toEqual(planFixture.progress.plan[0].items.map(i => `${i.label}${i.title}${i.count.done}/${i.count.total}`))
     expect(plan).not.toHaveTextContent('✎ by hand')
-    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
+    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
   })
 
   it('shows a runtime round with no items as empty, not unavailable and not the board\'s', () => {
@@ -284,15 +269,29 @@ describe('Owner Console entries', () => {
     expect(plan).toHaveTextContent("No items in the runtime's plan.")
     expect(within(plan).queryByRole('alert')).not.toBeInTheDocument()
     expect(within(plan).queryAllByRole('listitem')).toHaveLength(0)
-    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
+    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
   })
 
-  it('says the plan is read from the board while the runtime holds none, and marks it kept by hand', () => {
+  it('says the plan is not in the runtime while it holds none, with nothing kept by hand (the board is retired, 2.5 ⑤)', () => {
     show('#work')
     const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(plan).toHaveTextContent(PLAN_FROM_BOARD)
-    expect(plan).toHaveTextContent('✎ by hand')
-    expect(plan).toHaveTextContent('2.2b')
+    expect(plan).toHaveTextContent(PLAN_NOT_IMPORTED)
+    expect(plan).not.toHaveTextContent('✎')
+    expect(within(plan).queryAllByRole('listitem')).toHaveLength(0)
+    expect(plan).toHaveTextContent(ARCH_NOT_IMPORTED)
+  })
+
+  it('counts the architecture rows by their ticks, from GET /progress (2.5 ⑤ G2)', () => {
+    archValue.value = archRead({ data: parseRuntimeProgress(archFixture), error: null, isError: false, isPaused: false })
+    show('#work')
+    const plan = screen.getByRole('region', { name: 'The plan' })
+    expect(plan.querySelector('[data-arch-summary]')).toHaveTextContent('Architecture, 4 rows:1 passed1 not yet2 unknown')
+    expect(plan).not.toHaveTextContent(ARCH_NOT_IMPORTED)
+    cleanup()
+    archValue.value = { from: 'error', error: 'Agent runtime: unavailable' }
+    show('#work')
+    expect(screen.getByRole('region', { name: 'The plan' })).toHaveTextContent('Architecture unavailable: Agent runtime: unavailable')
+    expect(screen.getByRole('region', { name: 'The plan' }).querySelector('[data-arch-summary]')).toBeNull()
   })
 
   it('shows a failed read of the runtime\'s plan as unavailable, never the board\'s rows', () => {
@@ -302,7 +301,7 @@ describe('Owner Console entries', () => {
     expect(within(plan).getByRole('alert')).toHaveTextContent('Plan unavailable: Plan: unavailable')
     expect(plan).not.toHaveTextContent('2.2b')
     expect(plan).not.toHaveTextContent('✎ by hand')
-    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
+    expect(plan).not.toHaveTextContent(PLAN_NOT_IMPORTED)
   })
 
   it('shows the coordinating thread\'s latest note from the mailbox, not the board', () => {
@@ -341,7 +340,7 @@ describe('Owner Console entries', () => {
     expect(within(quota).getByText('no reading yet')).toBeInTheDocument()
     expect(within(quota).getByRole('link', { name: /System/ })).toHaveAttribute('href', '#system')
     expect(quota).not.toHaveTextContent('✎')
-    expect(screen.getByRole('region', { name: 'The plan' })).toHaveTextContent('✎ by hand')
+    expect(screen.getByRole('region', { name: 'The plan' })).not.toHaveTextContent('✎')
     expect(screen.getByRole('region', { name: 'Now' })).toHaveTextContent('M-2 Add a comment above Repos.')
   })
 
