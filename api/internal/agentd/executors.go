@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
@@ -442,11 +443,19 @@ func streamResultReport(vendor, root, out string) error {
 	return writeOwn(r, "report.md", []byte(result))
 }
 
-// oneLine is s on one line, cut to at most max bytes.
+// oneLine is s on one line, cut to at most max bytes without splitting a
+// character.
 func oneLine(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > max {
-		s = s[:max]
+		cut := max
+		for cut > 0 && cut > max-(utf8.UTFMax-1) && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		if !utf8.RuneStart(s[cut]) {
+			cut = max // not UTF-8 here: cut by bytes as before
+		}
+		s = s[:cut]
 	}
 	return s
 }

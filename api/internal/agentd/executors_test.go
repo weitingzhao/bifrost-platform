@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/weitingzhao/bifrost-platform/api/internal/localpath"
 )
@@ -377,5 +378,31 @@ func TestCursorReportSkipsLongLines(t *testing.T) {
 	}
 	if strings.Join(lines, ",") != "a,c" {
 		t.Fatalf("lines = %q", lines)
+	}
+}
+
+func TestOneLineKeepsWholeCharacters(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		max  int
+		want string
+	}{
+		{"abcdef", 4, "abcd"},
+		{"认证失败", 4, "认"},
+		{"认证失败", 5, "认"},
+		{"认证失败", 6, "认证"},
+		{"认证失败", 2, ""},
+		{"a😀b", 4, "a"},
+		{"a😀b", 5, "a😀"},
+		{"认证", 10, "认证"},
+		{" a \n\t b\r\n认 ", 5, "a b "},
+		{" a \n\t b\r\n认 ", 7, "a b 认"},
+		{"认证", 0, ""},
+		{"abc", 0, ""},
+	} {
+		got := oneLine(c.in, c.max)
+		if got != c.want || len(got) > c.max || !utf8.ValidString(got) {
+			t.Errorf("oneLine(%q, %d) = %q, want %q", c.in, c.max, got, c.want)
+		}
 	}
 }
