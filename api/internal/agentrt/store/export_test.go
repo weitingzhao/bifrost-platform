@@ -160,8 +160,8 @@ func EventTypesForTest() (vocabulary, written []string) {
 
 // BlockedCardBodyForTest is the card of a task of role in M-9 blocked for
 // failing round 2 of 2: its title, its block's reason, the Owner's last words
-// on a card of that block and the start of its last check's report ("" for
-// no check).
+// on a card of that block and its last check's report, a review's ("" for no
+// check).
 func BlockedCardBodyForTest(role, title, reason, words, report string) string {
 	return BlockedCardBodyInForTest("bifrost-platform", role, title, reason, words, report)
 }
@@ -170,10 +170,21 @@ func BlockedCardBodyForTest(role, title, reason, words, report string) string {
 func BlockedCardBodyInForTest(repo, role, title, reason, words, report string) string {
 	var check *checkSummary
 	if report != "" {
-		check = &checkSummary{method: "review", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2, report: report}
+		check = &checkSummary{method: "review", verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
+			excerpt: checkExcerptOf("review", []byte(report))}
 	}
 	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-9", role: role, effect: "branch"},
 		title: title, repo: repo, reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 2, check: check})
+}
+
+// BlockedCardBodyWithCheckForTest is the card of an implementation in M-9
+// blocked for failing round 2 of 2, whose last check by method failed with
+// report: its title, its block's reason and the Owner's last words.
+func BlockedCardBodyWithCheckForTest(method, report, title, reason, words string) string {
+	check := &checkSummary{method: method, verdict: "fail", attempt: "a_01M5B8BF2MZ2577S8MWMF0EJVQ", round: 2,
+		excerpt: checkExcerptOf(method, []byte(report))}
+	return blockedCardBody(blockedCard{task: taskRow{id: "t_01M5B8BF2MZ2577S8MWMF0EJVQ", mission: "M-9", role: "implement", effect: "branch"},
+		title: title, repo: "bifrost-platform", reason: reason, words: words, round: 2, maxRounds: 2, failed: true, card: 2, check: check})
 }
 
 // BlockedPageForTest sets how many blocked tasks a pass reads at a time and

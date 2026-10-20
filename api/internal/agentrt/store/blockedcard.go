@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -232,10 +233,74 @@ func blockedCardKey(taskID string, block int64, card int) string {
 type checkSummary struct {
 	method, verdict, attempt string
 	round                    int
-	report                   string // the start of the check's report, "" when it has none
+	excerpt                  checkExcerpt // what the card quotes of the check's report
 }
 
-// lastCheck is the task's last verification and the start of its report.
+// checkExcerpt is what a card quotes of a check's report: why the check
+// failed, where the report says it (TD-386), else the report's start.
+type checkExcerpt struct {
+	lead    string // what the text is, never cut: "Its report ends:", or the failed command and "Its output ends:"
+	text    string // the quote, "" for none
+	fromEnd bool   // the text is a report's or an output's end: it is cut from its front, so its last line stays
+}
+
+// commandRunes is the most of a failed command's argv a card quotes.
+const commandRunes = 300
+
+// reviewLines is how many lines before a review's last line a card quotes.
+const reviewLines = 8
+
+// checkExcerptOf is what a card quotes of report, a check's by method:
+//   - deterministic, agentd's verify.json (which stops at the first failure,
+//     so the failed command is its last): the first command that exited
+//     non-zero or timed out and the end of its output; with none, the
+//     report's reason;
+//   - review, whose last line is its VERDICT: the report's last lines;
+//   - else (a gate, a report that is not verify.json): the report's start.
+func checkExcerptOf(method string, report []byte) checkExcerpt {
+	text := strings.TrimSpace(strings.ToValidUTF8(string(report), "?"))
+	if text == "" {
+		return checkExcerpt{}
+	}
+	switch method {
+	case "deterministic":
+		var v struct {
+			Commands []struct {
+				Argv     []string `json:"argv"`
+				ExitCode int      `json:"exit_code"`
+				TimedOut bool     `json:"timed_out"`
+				Tail     string   `json:"tail"`
+			} `json:"commands"`
+			Reason string `json:"reason"`
+		}
+		if json.Unmarshal(report, &v) != nil {
+			break
+		}
+		for _, c := range v.Commands {
+			if c.ExitCode == 0 && !c.TimedOut {
+				continue
+			}
+			lead := fmt.Sprintf("First failed command: %s exited %d", oneLineRunes(strings.Join(c.Argv, " "), commandRunes), c.ExitCode)
+			if c.TimedOut {
+				lead += ", timed out"
+			}
+			if tail := strings.TrimRight(strings.ToValidUTF8(c.Tail, "?"), " \t\r\n"); tail != "" {
+				return checkExcerpt{lead: lead + ".\nIts output ends:", text: tail, fromEnd: true}
+			}
+			return checkExcerpt{lead: lead + "; it wrote nothing."}
+		}
+		if reason := strings.TrimSpace(strings.ToValidUTF8(v.Reason, "?")); reason != "" {
+			return checkExcerpt{lead: "No command failed; its reason:", text: reason}
+		}
+	case "review":
+		lines := strings.Split(text, "\n")
+		return checkExcerpt{lead: "Its report ends:", text: strings.Join(lines[max(0, len(lines)-reviewLines-1):], "\n"), fromEnd: true}
+	}
+	return checkExcerpt{lead: "Its report begins:", text: text}
+}
+
+// lastCheck is the task's last verification and what its card quotes of its
+// report.
 func lastCheck(ctx context.Context, tx pgx.Tx, taskID string) (*checkSummary, error) {
 	var c checkSummary
 	var evidence string
@@ -251,10 +316,12 @@ func lastCheck(ctx context.Context, tx pgx.Tx, taskID string) (*checkSummary, er
 	}
 	if evidence != "" {
 		var body []byte
-		if err = tx.QueryRow(ctx, `SELECT substring(body for 4096) FROM agentrt.artifact_blob WHERE artifact_id = $1`, evidence).Scan(&body); err != nil {
+		// The whole report (at most maxArtifactBytes): a check says why it
+		// failed at its end (TD-386).
+		if err = tx.QueryRow(ctx, `SELECT body FROM agentrt.artifact_blob WHERE artifact_id = $1`, evidence).Scan(&body); err != nil {
 			return nil, err
 		}
-		c.report = strings.TrimSpace(strings.ToValidUTF8(string(body), "?"))
+		c.excerpt = checkExcerptOf(c.method, body)
 	}
 	return &c, nil
 }
@@ -269,11 +336,12 @@ type blockedCard struct {
 }
 
 // excerptRunes is the most of a report a card quotes; it is cut further to
-// keep the card within the question store's limit.
+// keep the card within the question store's limit, from its front when it
+// is a report's or an output's end.
 const excerptRunes = 1200
 
 // The parts of a card that may be cut to fit, in the order they are cut,
-// and how short each may get: the report's start, the Owner's last words,
+// and how short each may get: the report's excerpt, the Owner's last words,
 // the reason, the title (review 420 A2: a long reason and long words with no
 // report left made a card the question store refuses, on every pass).
 const (
@@ -285,35 +353,66 @@ const (
 
 var cutFloors = [4]int{0, 0, 40, 40}
 
+// lastLineRunes is the most of an end's last line (a review's VERDICT, the
+// last line of a failed command's output) a card keeps however it is cut.
+const lastLineRunes = 100
+
 // blockedCardBody is the card's text: the task, why it is blocked, its last
-// check and the start of that check's report, what each answer does. The
-// parts above are cut in that order until the body fits the question store's
-// limit; what each answer does is never cut.
+// check and what of that check's report says why it failed (else the
+// report's start), what each answer does. The parts above are cut in that
+// order until the body fits the question store's limit; what each answer
+// does is never cut.
 func blockedCardBody(c blockedCard) string {
-	full := [4][]rune{[]rune(c.check.reportOrEmpty()), []rune(oneLineRunes(c.words, 300)), []rune(oneLineRunes(c.reason, 500)),
+	excerpt := c.check.excerptOrNone()
+	full := [4][]rune{[]rune(excerpt.text), []rune(oneLineRunes(c.words, 300)), []rune(oneLineRunes(c.reason, 500)),
 		[]rune(oneLineRunes(c.title, 200))}
-	parts := full
+	parts, floors := full, cutFloors
+	if excerpt.fromEnd {
+		last := excerpt.text[strings.LastIndex(excerpt.text, "\n")+1:]
+		floors[cutReport] = min(len([]rune(last)), lastLineRunes)
+	}
+	cut := func(i, n int) []rune {
+		if i == cutReport && excerpt.fromEnd {
+			return lastRunes(parts[i], n)
+		}
+		return parts[i][:n]
+	}
 	if len(parts[cutReport]) > excerptRunes {
-		parts[cutReport] = parts[cutReport][:excerptRunes]
+		parts[cutReport] = cut(cutReport, excerptRunes)
 	}
 	for i := 0; ; {
 		body := blockedCardText(c, parts, full)
 		if questions.BodyBytes(body) <= questions.BodyLimit || i == len(parts) {
 			return body
 		}
-		if len(parts[i]) <= cutFloors[i] {
+		if len(parts[i]) <= floors[i] {
 			i++
 			continue
 		}
-		parts[i] = parts[i][:max(cutFloors[i], len(parts[i])*3/4)]
+		parts[i] = cut(i, max(floors[i], len(parts[i])*3/4))
 	}
 }
 
-func (c *checkSummary) reportOrEmpty() string {
-	if c == nil {
-		return ""
+// lastRunes is at most the last n runes of r, from a line's start when that
+// keeps at least half of them.
+func lastRunes(r []rune, n int) []rune {
+	if len(r) <= n {
+		return r
 	}
-	return c.report
+	r = r[len(r)-n:]
+	for j, c := range r[:len(r)/2] {
+		if c == '\n' {
+			return r[j+1:]
+		}
+	}
+	return r
+}
+
+func (c *checkSummary) excerptOrNone() checkExcerpt {
+	if c == nil {
+		return checkExcerpt{}
+	}
+	return c.excerpt
 }
 
 // blockedCardText is the card with each cuttable part as given; a part
@@ -336,12 +435,21 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		c.task.id, c.task.role, repo, c.task.mission, c.card, text(cutTitle), text(cutReason))
 	if c.check != nil {
 		fmt.Fprintf(&b, "\nLast check: %s, %s, on attempt %d (%s).\n", c.check.method, c.check.verdict, c.check.round, c.check.attempt)
-		if excerpt := text(cutReport); excerpt != "" {
-			cut := ""
-			if len(parts[cutReport]) < len(full[cutReport]) {
-				cut = "\n(cut; the whole report is on the task's page)"
-			}
-			fmt.Fprintf(&b, "Its report begins:\n\n%s%s\n", excerpt, cut)
+		// An end cut from its front says so before it, a start after it; the
+		// line before an end (a failed command's) stays when it is cut to
+		// nothing.
+		x, excerpt := c.check.excerpt, text(cutReport)
+		cut := ""
+		if len(parts[cutReport]) < len(full[cutReport]) {
+			cut = "(cut; the whole report is on the task's page)\n"
+		}
+		switch {
+		case excerpt != "" && x.fromEnd:
+			fmt.Fprintf(&b, "%s\n\n%s%s\n", x.lead, cut, excerpt)
+		case excerpt != "":
+			fmt.Fprintf(&b, "%s\n\n%s\n%s", x.lead, excerpt, cut)
+		case x.lead != "" && (x.text == "" || x.fromEnd):
+			fmt.Fprintf(&b, "%s\n%s", x.lead, cut)
 		}
 	}
 	if len(parts[cutWords]) > 0 {
