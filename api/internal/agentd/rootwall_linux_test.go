@@ -158,3 +158,86 @@ func TestAWalledAttemptLeavesTheRootAsItWas(t *testing.T) {
 		t.Errorf("the home changed:\nbefore %v\nafter  %v", homeBefore, after)
 	}
 }
+
+// W-31 2.4 「Claude 写核心代码」 on a Linux host: an implementer's claude, as
+// its executor builds it and Run walls it, may write its checkout, its home
+// (its configuration and its temporary root) and its temporary directory,
+// and nothing else: not agentd's root, not another task's checkout, not
+// cursor's data directories, not the agent user's home, not /tmp. A program
+// named claude stands in for claude here: the wall holds whatever the
+// process tree is, and Edit, Write and Bash write as that tree.
+func TestClaudeImplementerWritesOnlyItsOwn(t *testing.T) {
+	if abi, err := landlockABI(); err != nil || abi < wallABI {
+		t.Skipf("no Landlock ABI %d here (%d, %v): the agent host's probe proves it", wallABI, abi, err)
+	}
+	home := t.TempDir()
+	root := filepath.Join(home, "agent-work", "agentd")
+	other := WorkspaceDir(root, "t_01M5AJ2GMV6RX45QVQ2FGNXYXV", 1)
+	a := &Attempt{Claim: &Claimed{Role: "implement", EffectClass: "branch", Tool: Tool{Executor: "exec:claude", Model: "opus"}},
+		Spec: TaskSpec{Text: "# implement it"}, Dir: WorkspaceDir(root, "t_01M57YSQN6B43ZFNESD9VQ2HA9", 1), Walled: true}
+	a.Out, a.root = a.Dir+".out", root
+	for _, d := range []string{a.Dir, a.Out, other, filepath.Join(root, "s"), filepath.Join(home, ".config")} {
+		must(t, os.MkdirAll(d, 0o700))
+	}
+	for p, body := range map[string]string{filepath.Join(root, "registry.json"): "{}\n", filepath.Join(other, "main.go"): "package theirs\n",
+		filepath.Join(home, ".profile"): "# the agent user's\n"} {
+		must(t, os.WriteFile(p, []byte(body), 0o600))
+	}
+	results := filepath.Join(a.Dir, "claude-results")
+	writes := map[string]string{
+		"its checkout":            "echo x > '" + filepath.Join(a.Dir, "main.go") + "'",
+		"its configuration":       "echo x > \"$CLAUDE_CONFIG_DIR/settings.json\"",
+		"its temporary root":      "mkdir -p \"$CLAUDE_CODE_TMPDIR/claude-1\" && echo x > \"$CLAUDE_CODE_TMPDIR/claude-1/cwd\"",
+		"its temporary directory": "echo x > \"$TMPDIR/inside\"",
+		"a file in the root":      "echo x > '" + filepath.Join(root, "planted") + "'",
+		"the registry":            "echo x >> '" + filepath.Join(root, "registry.json") + "'",
+		"another task checkout":   "echo x >> '" + filepath.Join(other, "main.go") + "'",
+		"cursor data directories": "mkdir '" + filepath.Join(root, "s", "planted") + "'",
+		"beside the checkout":     "echo x > '" + filepath.Join(filepath.Dir(a.Dir), "beside") + "'",
+		"the home profile":        "echo x >> '" + filepath.Join(home, ".profile") + "'",
+		"the home configuration":  "echo x > '" + filepath.Join(home, ".config", "hooks.json") + "'",
+		"/tmp":                    "echo x > /tmp/claude-planted-$$",
+	}
+	may := map[string]bool{"its checkout": true, "its configuration": true, "its temporary root": true, "its temporary directory": true}
+	bin := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\n"+tries(results, writes)), 0o755))
+	rootBefore, homeBefore := listing(t, root, a.Dir, a.Out), listing(t, home, root)
+
+	sp, err := Executors(os.Args[0], []string{"PATH=" + bin + ":/usr/bin:/bin"}, Secrets{ClaudeOAuthToken: "fixture-token"})["exec:claude"](a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(sp.Argv, claudeWriteTools) {
+		t.Fatalf("not an implementer's claude: %v", sp.Argv)
+	}
+	argv := append(wallArgv(os.Args[0], executorWrites("exec:claude", a, nil)), sp.Argv...)
+	if err = checkPins(&Wall{ABI: wallABI, Executors: map[string]bool{"exec:claude": true}}, "exec:claude", os.Args[0], a, nil,
+		Spawn{Argv: argv, Env: sp.Env, Dir: sp.Dir}); err != nil {
+		t.Fatalf("the spawn as Run builds it: %v", err)
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir, cmd.Env = sp.Dir, sp.Env
+	if out, cerr := cmd.CombinedOutput(); cerr != nil {
+		t.Fatalf("the walled claude: %v\n%s", cerr, out)
+	}
+	b, err := os.ReadFile(results)
+	if err != nil {
+		t.Fatalf("no results: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(b)), "\n")
+	if len(got) != len(writes) {
+		t.Fatalf("%d results, want %d:\n%s", len(got), len(writes), b)
+	}
+	for _, line := range got {
+		verb, name, _ := strings.Cut(line, " ")
+		if want := map[bool]string{true: "WROTE", false: "denied"}[may[name]]; verb != want {
+			t.Errorf("%s: %s, want %s", name, verb, want)
+		}
+	}
+	if after := listing(t, root, a.Dir, a.Out); !slices.Equal(after, rootBefore) {
+		t.Errorf("the root changed:\nbefore %v\nafter  %v", rootBefore, after)
+	}
+	if after := listing(t, home, root); !slices.Equal(after, homeBefore) {
+		t.Errorf("the home changed:\nbefore %v\nafter  %v", homeBefore, after)
+	}
+}

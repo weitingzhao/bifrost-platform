@@ -31,7 +31,8 @@ import (
 // goes on with the same --run-id; --post hands a run in again. --only makes
 // a trial, never handed in. Only exec:codex is offered for now: cursor runs
 // outside any sandbox (it could rewrite the run's results; TD-371) and
-// claude's executor has read-only tools.
+// claude edits only inside agentd's write wall, which the benchmark does not
+// raise.
 func runBench(args []string) int {
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	questions := fs.String("questions", "", "the question set (questions.json)")
@@ -107,7 +108,7 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 		}
 	}
 	if tool.Executor == "" || executor != "exec:codex" {
-		return fmt.Errorf("%s: only exec:codex of AGENTD_TOOLS runs the benchmark for now (cursor is not sandboxed, TD-371; claude's executor has read-only tools)", executor)
+		return fmt.Errorf("%s: only exec:codex of AGENTD_TOOLS runs the benchmark for now (cursor is not sandboxed, TD-371; claude edits only inside agentd's wall, which the benchmark does not raise)", executor)
 	}
 	bwrap, err := bubblewrap()
 	if err != nil {

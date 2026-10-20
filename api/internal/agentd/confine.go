@@ -147,6 +147,12 @@ func setupHome(out string) string   { return filepath.Join(attemptTmp(out), "hom
 func codexHomeOf(out string) string { return filepath.Join(attemptHome(out), ".codex") }
 func claudeDirOf(out string) string { return filepath.Join(attemptHome(out), ".claude") }
 
+// claudeTmpOf is claude's temporary root (CLAUDE_CODE_TMPDIR), in the
+// executor's home: not in the temporary directory, which the setup and the
+// checked code may write too, so that nothing they leave is where claude
+// keeps its own files.
+func claudeTmpOf(out string) string { return filepath.Join(attemptHome(out), "tmp") }
+
 // homePins are the variables every executor's environment has set to the
 // attempt's own directories.
 func homePins(out string) [][2]string {
@@ -273,7 +279,7 @@ func walledVerify(ctx context.Context, env []string, cmds [][]string, writes []s
 var envKeys = map[string][]string{
 	"exec:codex":         nil,
 	"exec:deterministic": nil,
-	"exec:claude":        {"CLAUDE_CONFIG_DIR", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_OAUTH_TOKEN"},
+	"exec:claude":        {"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_TMPDIR", "DISABLE_AUTOUPDATER", "CLAUDE_CODE_OAUTH_TOKEN"},
 	"exec:cursor":        {"CURSOR_API_KEY", "AGENT_CLI_CREDENTIAL_STORE", "CURSOR_DATA_DIR"},
 }
 
@@ -337,7 +343,7 @@ func checkPins(w *Wall, executor, self string, a *Attempt, sibs []string, sp Spa
 			want["PATH"] = w.Path
 		}
 	case "exec:claude":
-		want["CLAUDE_CONFIG_DIR"], want["DISABLE_AUTOUPDATER"] = claudeDirOf(a.Out), "1"
+		want["CLAUDE_CONFIG_DIR"], want["CLAUDE_CODE_TMPDIR"], want["DISABLE_AUTOUPDATER"] = claudeDirOf(a.Out), claudeTmpOf(a.Out), "1"
 	case "exec:cursor":
 		want["CURSOR_DATA_DIR"] = cursorDataDir(a.root, a.Out)
 		if len(envValues(sp.Env, "AGENT_CLI_CREDENTIAL_STORE")) > 0 {
@@ -385,11 +391,15 @@ func executorArgv(executor, self, codex string, a *Attempt, sibs []string, argv 
 			return "the deterministic check as agentd runs it, inside its own wall"
 		}
 	case "exec:claude":
+		// An implementer's tools only inside the wall (claudeExecutor).
+		if claudeWriter(a) && !a.Walled {
+			return "the wall around claude's edits and commands"
+		}
 		want := []string{"claude", "-p", "--output-format", "stream-json"}
 		for _, p := range claudePins {
 			want = append(want, p...)
 		}
-		want = append(want, claudeTools...)
+		want = append(want, claudeTools(claudeWriter(a))...)
 		if model != "" {
 			want = append(want, "--model", model)
 		}
@@ -484,8 +494,8 @@ func afterExecutor(executor, codexHome, root, out string, logf func(format strin
 		}
 	}
 	// home/.local: what cursor's updater downloads into the attempt's home
-	// (review 360).
-	for _, rel := range []string{"tmp", "home/.npm", "home/.cache", "home/.local"} {
+	// (review 360); home/tmp: claude's temporary root.
+	for _, rel := range []string{"tmp", "home/.npm", "home/.cache", "home/.local", "home/tmp"} {
 		if err := removeIn(r, rel); err != nil {
 			logf("agentd: %s/%s: %v", out, rel, err)
 		}

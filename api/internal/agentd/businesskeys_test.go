@@ -56,8 +56,9 @@ func TestNoExecutorSeesABusinessKey(t *testing.T) {
 		t.Fatalf("%d executors", len(ex))
 	}
 	for name, e := range ex {
+		// Walled: an implementer's claude starts only inside the wall.
 		a := &Attempt{Claim: &Claimed{Role: "implement", EffectClass: "branch"}, Spec: TaskSpec{Text: "# do it", Verify: [][]string{{"go", "test", "./..."}}},
-			Dir: t.TempDir(), Out: t.TempDir()}
+			Dir: t.TempDir(), Out: t.TempDir(), Walled: true}
 		sp, err := e(a)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)

@@ -30,7 +30,8 @@ import (
 // environment rebuilt from an allow list: no admin kubeconfig, no operator or
 // admin token, no business key reaches a task. Codex and cursor are offered
 // only where the host user has no MCP servers (mcpguard.go); claude ignores
-// the host's MCP configuration and has only read-only tools.
+// the host's MCP configuration and has only read-only tools, but for an
+// implementer's attempt inside agentd's wall.
 
 // allowedEnv are the variables an executor may see.
 var allowedEnv = map[string]bool{"PATH": true, "HOME": true, "USER": true, "LOGNAME": true, "SHELL": true, "LANG": true,
@@ -313,39 +314,73 @@ func cursorExecutor(env []string) Executor {
 // claudePins are the flags claude always runs with: no MCP server; no
 // user, project or local settings file read, the host user's nor the
 // checkout's, and their hooks and plugins' off: a hook is a command the
-// read-only tools do not govern, and a branch under review could carry one in
-// its .claude/settings.json (measured 10-18, claude 2.1.302: such a hook runs
-// without these, and with either alone it does not; TD-371). A managed policy
-// (/etc/claude-code, its managed-settings.d too) still applies, hooks and
-// all: only root writes it, and check-agent-06.sh requires there be none, or
-// one that turns every hook off (reviews 282, 283). tools limits the
-// available built-ins (allowedTools only grants permission).
+// tools agentd grants do not govern, and a branch under review could carry
+// one in its .claude/settings.json (measured 10-18, claude 2.1.302: such a
+// hook runs without these, and with either alone it does not; TD-371). A
+// managed policy (/etc/claude-code, its managed-settings.d too) still
+// applies, hooks and all: only root writes it, and check-agent-06.sh requires
+// there be none, or one that turns every hook off (reviews 282, 283).
 var claudePins = [][]string{{"--strict-mcp-config"}, {"--mcp-config", `{"mcpServers":{}}`},
-	{"--setting-sources", ""}, {"--settings", `{"disableAllHooks":true}`}, {"--tools", "Read,Grep,Glob"}}
+	{"--setting-sources", ""}, {"--settings", `{"disableAllHooks":true}`}}
 
-// claudeTools: read-only tools, granted, and every other built-in refused.
-var claudeTools = []string{"--allowedTools", "Read,Grep,Glob", "--disallowedTools", "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch", "--verbose"}
+// The built-ins claude may use (--tools limits the available ones,
+// --allowedTools only grants permission), and every other one refused: a
+// reader's are read-only; an implementer's (an attempt that pushes a branch,
+// W-31 2.4 「Claude 写核心代码」) also edit, write and run commands, which
+// agentd's wall holds to the attempt's own directories (claudeExecutor).
+const (
+	claudeReadTools    = "Read,Grep,Glob"
+	claudeWriteTools   = claudeReadTools + ",Edit,Write,Bash"
+	claudeReadRefused  = "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
+	claudeWriteRefused = "NotebookEdit,WebFetch,WebSearch"
+	claudeNoWall       = "agentd: claude edits and runs commands only inside agentd's write wall, and this host has none for it (TD-371): it implements nothing here"
+)
 
-// claudeExecutor runs claude with claudePins and read-only tools, its
-// configuration directory the attempt's own (CLAUDE_CONFIG_DIR) and its
-// updater off: an update writes beside the program, outside the wall. The
-// OAuth token comes from the environment.
+// claudeTools are the tool flags of a claude attempt: an implementer's when
+// it writes, a reader's otherwise.
+func claudeTools(writes bool) []string {
+	tools, refused := claudeReadTools, claudeReadRefused
+	if writes {
+		tools, refused = claudeWriteTools, claudeWriteRefused
+	}
+	return []string{"--tools", tools, "--allowedTools", tools, "--disallowedTools", refused, "--verbose"}
+}
+
+// claudeWriter says whether a claude attempt is an implementer's: it pushes
+// a branch, as cursor's agent mode does (an attempt that pushes none may
+// change nothing, checkChanges).
+func claudeWriter(a *Attempt) bool { return a.Claim.EffectClass == "branch" }
+
+// claudeExecutor runs claude with claudePins and its tools, its
+// configuration directory and its temporary root the attempt's own
+// (CLAUDE_CONFIG_DIR, CLAUDE_CODE_TMPDIR: claude 2.1.302 keeps its temporary
+// files under /tmp otherwise, which the wall refuses and every attempt
+// would share) and its updater off: an update writes beside the program,
+// outside the wall. An implementer's attempt starts only inside agentd's
+// wall (a.Walled): with no wall its edits and commands could write anywhere
+// the agent user may. The OAuth token comes from the environment.
 func claudeExecutor(env []string) Executor {
 	return func(a *Attempt) (Spawn, error) {
+		writes := claudeWriter(a)
+		if writes && !a.Walled {
+			return Spawn{}, errors.New(claudeNoWall)
+		}
 		own, err := attemptEnv(env, a.Out)
 		if err != nil {
 			return Spawn{}, err
 		}
-		dir := claudeDirOf(a.Out)
-		if err = ownDir(dir); err != nil {
-			return Spawn{}, err
+		dir, tmp := claudeDirOf(a.Out), claudeTmpOf(a.Out)
+		for _, d := range []string{dir, tmp} {
+			if err = ownDir(d); err != nil {
+				return Spawn{}, err
+			}
 		}
-		own = withEnv(withEnv(own, "CLAUDE_CONFIG_DIR", dir), "DISABLE_AUTOUPDATER", "1")
+		own = withEnv(withEnv(withEnv(own, "CLAUDE_CONFIG_DIR", dir), "CLAUDE_CODE_TMPDIR", tmp), "DISABLE_AUTOUPDATER", "1")
 		argv := []string{"claude", "-p", "--output-format", "stream-json"}
 		for _, p := range claudePins {
 			argv = append(argv, p...)
 		}
-		argv = append(argv, claudeTools...)
+		argv = append(argv, claudeTools(writes)...)
 		if m := a.Claim.Tool.Model; m != "" {
 			argv = append(argv, "--model", m)
 		}
