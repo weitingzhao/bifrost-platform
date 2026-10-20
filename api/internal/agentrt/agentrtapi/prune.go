@@ -22,9 +22,16 @@ import (
 type AgentHeads func(ctx context.Context, repo string) ([]store.AgentHead, error)
 
 // pruneReadTimeout bounds each repository's read of Gitea, its branches or
-// its main, on its own: a slow repository holds up no other (review 437 B3);
-// pruneReaders is how many repositories are read at once.
-var pruneReadTimeout = 30 * time.Second
+// its main, on its own: a slow repository holds up no other (review 437 B3).
+// pruneCollect bounds all the reads of one answer together, the branches
+// within pruneBranches of it: what is read by then is answered, the rest
+// named in unread, well within the 40 s agentd waits for the answer (review
+// 438 B3). pruneReaders is how many repositories are read at once.
+var (
+	pruneReadTimeout = 20 * time.Second
+	pruneCollect     = 30 * time.Second
+	pruneBranches    = 20 * time.Second
+)
 
 const pruneReaders = 4
 
@@ -71,7 +78,11 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	unread := []unreadRepo{}
-	branches := readEach(r.Context(), repos, func(ctx context.Context, repo string) ([]store.AgentHead, bool) {
+	collect, cancel := context.WithTimeout(r.Context(), pruneCollect)
+	defer cancel()
+	branchesBy, cancelBranches := context.WithTimeout(collect, pruneBranches)
+	defer cancelBranches()
+	branches := readEach(branchesBy, repos, func(ctx context.Context, repo string) ([]store.AgentHead, bool) {
 		hs, err := a.AgentHeads(ctx, repo)
 		if err != nil {
 			a.logf("agentrt prunes: branches of %s: %v", repo, err)
@@ -93,7 +104,7 @@ func (a *API) prunes(w http.ResponseWriter, r *http.Request) {
 	}
 	onMain := map[string]store.OnMain{}
 	if a.MainResults != nil {
-		onMain = readEach(r.Context(), need, func(ctx context.Context, repo string) (store.OnMain, bool) {
+		onMain = readEach(collect, need, func(ctx context.Context, repo string) (store.OnMain, bool) {
 			return a.MainResults(ctx, repo)
 		})
 	}

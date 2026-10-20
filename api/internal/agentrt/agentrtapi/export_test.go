@@ -13,3 +13,11 @@ func SetPruneReadTimeoutForTest(d time.Duration) func() {
 	pruneReadTimeout = d
 	return func() { pruneReadTimeout = old }
 }
+
+// SetPruneCollectForTest sets the bounds of all the reads of one GET
+// /prunes, and of its branches, and gives back the restore.
+func SetPruneCollectForTest(all, branches time.Duration) func() {
+	oldAll, oldBranches := pruneCollect, pruneBranches
+	pruneCollect, pruneBranches = all, branches
+	return func() { pruneCollect, pruneBranches = oldAll, oldBranches }
+}

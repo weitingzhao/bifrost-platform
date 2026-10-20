@@ -143,6 +143,23 @@ func TestPruneRoutes(t *testing.T) {
 			t.Errorf("%s: %d, handed out %v, unread %v; want %v, %v", name, code, refs, unread, c.refs, c.unread)
 		}
 	}
+	// Review 438 B3: however long a repository's own reads may take, the
+	// answer comes within the bound of all reads, with what was read by then.
+	restore := agentrtapi.SetPruneReadTimeoutForTest(10 * time.Second)
+	restoreCollect := agentrtapi.SetPruneCollectForTest(600*time.Millisecond, 300*time.Millisecond)
+	mainRead = func(ctx context.Context, _ string) (store.OnMain, bool) {
+		<-ctx.Done() // main is slow too
+		return nil, false
+	}
+	start := time.Now()
+	code, out = call(t, s, "agentd:h1", "GET", "prunes?host_id=h1", nil)
+	refs, unread := handedOut(t, out)
+	if took := time.Since(start); code != http.StatusOK || took > 5*time.Second || !slices.Equal(refs, []string{ref}) ||
+		!slices.Equal(unread, []string{"bifrost-api branches", "bifrost-ui branches", "bifrost-platform main"}) {
+		t.Fatalf("slow reads: %d after %v, handed out %v, unread %v", code, took, refs, unread)
+	}
+	restoreCollect()
+	restore()
 	report := func(results ...map[string]any) (int, map[string]any) {
 		return call(t, s, "agentd:h1", "POST", "prunes", map[string]any{"host_id": "h1", "results": results})
 	}
