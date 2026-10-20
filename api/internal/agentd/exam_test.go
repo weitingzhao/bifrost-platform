@@ -298,7 +298,7 @@ func TestExamGoesOnWhereItStopped(t *testing.T) {
 	for _, s := range f.parts {
 		a := s.Answers[0]
 		if !s.PinsOK || s.Model != "claude-test-5" || s.ToolVersion != "2.1.0 (Claude Code)" || a.Round != 1 || a.Conclusion != "done" ||
-			a.OutOfWorkspace || !strings.HasPrefix(a.Text, "Seat reply ") || !strings.HasSuffix(a.Text, " from ./notes.md.") {
+			a.OutOfWorkspace || !strings.HasPrefix(a.Text, agentd.RewrittenNote+"Seat reply ") || !strings.HasSuffix(a.Text, " from ./notes.md.") {
 			t.Fatalf("a part: %+v", s)
 		}
 	}
