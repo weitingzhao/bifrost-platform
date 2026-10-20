@@ -7,9 +7,13 @@ import { PLAN_FROM_BOARD, useRuntimePlan } from './useRuntimePlan'
 function checked(at?: number) {
   return at === undefined ? 'Unknown' : new Date(at * 1000).toISOString()
 }
+/** A step's mark from the runtime: Owner (owner_step) or ★ (effect_step), whatever its title says. */
+function Mark({ title, children }: { title: string; children: string }) {
+  return <span title={title} className="mr-1 rounded-full bg-[var(--control-fill)] px-1.5 text-xs font-semibold">{children}</span>
+}
 function Steps({ steps }: { steps: RuntimePlanStep[] }) {
   return <ol className="flex flex-col gap-2 pt-2 text-sm">{steps.map((step, j) => <li key={`${step.id}-${j}`} className="break-words">
-    <strong>{step.state || 'Unknown'}</strong> · {step.t || 'Untitled step'}{step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
+    <strong>{step.state || 'Unknown'}</strong> · {step.owner && <Mark title="The Owner's step (owner_step)">Owner</Mark>}{step.star && <Mark title="An effect step (effect_step)">★</Mark>}{step.t || 'Untitled step'}{step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
     {step.line && <details><summary className="cursor-pointer text-xs text-muted-foreground">Ledger line</summary><p className="whitespace-pre-wrap break-words text-xs">{step.line.trim()}</p></details>}
   </li>)}</ol>
 }

@@ -3,10 +3,11 @@ import { record, records, text } from '@/api/agentRuntime'
 import { boardState, importHead, type PlanRequest, type PlanView } from '@/api/agentRuntimePlanView'
 
 /**
- * A step as the plan panes show it. line is the step's ledger line as the import request kept it
- * (read from the runtime only; a step added after the import has none).
+ * A step as the plan panes show it. line is the step's ledger line as the import request kept it; owner
+ * and star are the step's Owner (owner_step) and ★ (effect_step) marks. All three are read from the
+ * runtime only: the board's round carries none, and a step added after the import has no line.
  */
-export type RuntimePlanStep = { id: string; t: string; state: string; when: string; line?: string }
+export type RuntimePlanStep = { id: string; t: string; state: string; when: string; line?: string; owner?: boolean; star?: boolean }
 export type RuntimePlanItem = { key: string; name: string; state: string; done?: number; total?: number; steps: RuntimePlanStep[] }
 /**
  * A round, as the board publishes it or as read from the runtime. source 'runtime' means it came from
@@ -70,15 +71,20 @@ export function parsePlanRequest(value: unknown, root: string): PlanRequest {
   }) }
 }
 
+/** How many pages of the plan's stream (up to 500 events each) are read for its import head. */
+export const IMPORT_HEAD_PAGES = 20
 /**
  * The import request the plan's import head names (CUT-plan-import §6): the plan's stream read from the
  * start, page by page, for its first legacy_imported event that names a request, and that request read
  * once. null when the stream has no such event: the plan was not imported, and each step shows the time
- * of its state event.
+ * of its state event. A stream read IMPORT_HEAD_PAGES pages on without the head is an error, not a plan
+ * without one (review 416 B1): the import writes its head near the start of the plan's stream, after
+ * its proposal, its decision and whatever the stream held before.
  */
 export async function fetchImportRequest(root = PLAN_ROOT, signal?: AbortSignal): Promise<PlanRequest | null> {
   let after = 0
-  for (;;) {
+  for (let pages = 0; ; pages++) {
+    if (pages === IMPORT_HEAD_PAGES) throw new Error(`Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:${root}.`)
     const page = await authedFetch('Plan events', `/api/v1/agentrt/events?${new URLSearchParams({ stream: `plan:${root}`, after_seq: String(after) })}`, { signal })
     const head = importHead(await page.json())
     if (head.artifact !== '') {
@@ -111,6 +117,7 @@ export function runtimeRound(view: PlanView, plan: unknown[], root: string, requ
     const c = counts.get(item.key) ?? {}
     if (!count(c.done) || !count(c.total) || typeof c.state !== 'string') throw new Error(`The runtime's count of ${root}:${item.key} does not read.`)
     return { key: item.key, name: item.name, state: boardState(c.state), done: c.done, total: c.total,
-      steps: item.steps.map(s => ({ id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined })) }
+      steps: item.steps.map(s => ({ id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined,
+        owner: s.owner, star: s.star })) }
   }) }
 }

@@ -8,7 +8,9 @@ import moved from '@/api/__fixtures__/agentrt-plan-moved.testdb.json'
 import roadmap from '@/api/__fixtures__/board-roadmap-round-arch.json'
 import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import type { ProgressDocument } from '@/api/agentProgress'
-import { parseRuntimeArchitecture, parseRuntimeRound } from '@/api/agentRuntimePlan'
+import { IMPORT_HEAD_PAGES, parseRuntimeArchitecture, parseRuntimeRound } from '@/api/agentRuntimePlan'
+import rootOnly from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
+import { STREAM_PAGE, planStream, streamPage } from '@/test/agentrtPlanStream'
 import { ProgressOverview } from '../../progress/ProgressOverview'
 import { AgentsPlan } from '../AgentsPlan'
 import { PLAN_FROM_BOARD, useRuntimePlan } from '../useRuntimePlan'
@@ -18,18 +20,28 @@ import { PLAN_FROM_BOARD, useRuntimePlan } from '../useRuntimePlan'
 // the round-2 ledger fixture). While the runtime holds no plan (404) they read the board and say so;
 // once it does, a failed read is shown as failed, never as the board's plan.
 
-const source = vi.hoisted(() => ({ plan: 'imported' as 'imported' | 'moved' | 'absent' | 'fail', progressFails: false }))
+const source = vi.hoisted(() => ({
+  plan: 'imported' as 'imported' | 'moved' | 'root-only' | 'absent' | 'fail', progressFails: false,
+  // The plan stream: as imported; a cursor that stays put; more pages than are read for the head, none of them with it.
+  events: 'imported' as 'imported' | 'stuck' | 'endless', artifact: 'ok' as 'ok' | 'fail' | 'not json',
+}))
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
+const stuck = planStream(2 * STREAM_PAGE, false), endless = planStream((IMPORT_HEAD_PAGES + 10) * STREAM_PAGE, false)
+const fixture = () => source.plan === 'moved' ? moved : source.plan === 'root-only' ? rootOnly : imported
 const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input)
   if (url.includes('/agentrt/plan?')) {
     if (source.plan === 'absent') return json(imported.absent.body, imported.absent.status)
     if (source.plan === 'fail') return json({ error: 'unavailable', message: 'the runtime is not connected' }, 503)
-    return json(source.plan === 'moved' ? moved.plan : imported.plan)
+    return json(fixture().plan)
   }
-  if (url.includes('/agentrt/events?stream=plan')) return json(url.includes('after_seq=0') ? imported.events : [])
-  if (url.includes('/agentrt/artifacts/')) return new Response(JSON.stringify(imported.request))
-  if (url.includes('/agentrt/progress')) return source.progressFails ? json({ error: 'unavailable' }, 503) : json(source.plan === 'moved' ? moved.progress : imported.progress)
+  if (url.includes('/agentrt/events?stream=plan')) {
+    if (source.events === 'stuck') return json(streamPage(stuck, '?after_seq=0'))
+    return json(streamPage(source.events === 'endless' ? endless : source.plan === 'root-only' ? rootOnly.events : imported.events, url))
+  }
+  if (url.includes('/agentrt/artifacts/')) return source.artifact === 'fail' ? json({ error: 'internal', message: 'internal error' }, 500)
+    : new Response(source.artifact === 'not json' ? '<html>proxy</html>' : JSON.stringify(imported.request))
+  if (url.includes('/agentrt/progress')) return source.progressFails ? json({ error: 'unavailable' }, 503) : json(fixture().progress)
   if (url.includes('/agent/progress')) return json({ document: { roadmap }, generated_at: 'now' })
   if (url.includes('/agentrt/pools')) return json(poolsFixture)
   throw new Error(`Unexpected URL ${url}`)
@@ -47,6 +59,8 @@ function show(node: ReactNode) {
 beforeEach(() => {
   source.plan = 'imported'
   source.progressFails = false
+  source.events = 'imported'
+  source.artifact = 'ok'
   // jsdom here has no working localStorage; the sign-in token is read from it on every request.
   Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined } })
   vi.stubGlobal('fetch', fetchMock)
@@ -96,6 +110,55 @@ describe('the plan pane on Progress', () => {
     source.plan = 'fail'
     await client.refetchQueries({ queryKey: ['agent-runtime-plan'] })
     expect(await screen.findByText('Plan unavailable: Plan: unavailable')).toBeInTheDocument()
+    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
+    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
+  })
+
+  it('shows each step\'s Owner and ★ marks from the runtime, whatever its title says (review 416 C2)', async () => {
+    show(<AgentsPlan />)
+    await screen.findByText('Round 2 · from the agent runtime')
+    // R2:2.1-5 is an effect step whose title carries no ★; R2:2.1-3 is the Owner's.
+    // The title and the ledger line under it are in the same row.
+    const effect = screen.getAllByText(/本机测试库可用/)[0].closest('li')!
+    expect(within(effect).getByTitle('An effect step (effect_step)')).toHaveTextContent('★')
+    expect(within(effect).queryByTitle("The Owner's step (owner_step)")).not.toBeInTheDocument()
+    const owners = screen.getAllByText(/批 PROD 迁移作业/)[0].closest('li')!
+    expect(within(owners).getByTitle("The Owner's step (owner_step)")).toHaveTextContent('Owner')
+    expect(within(owners).queryByTitle('An effect step (effect_step)')).not.toBeInTheDocument()
+  })
+
+  it('shows a round with no items as empty, with zero counts, not as unavailable', async () => {
+    source.plan = 'root-only'
+    show(<><Overview /><AgentsPlan /></>)
+    expect(await screen.findByText("No items in the runtime's plan.")).toBeInTheDocument()
+    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    expect(screen.getByText('0/0 items')).toBeInTheDocument()
+    expect(screen.getByText('0/0 steps')).toBeInTheDocument()
+    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
+    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
+  })
+
+  it('counts that fail after a good read make the plan unavailable in both panes, not the last counts (review 416 B2)', async () => {
+    const { client } = show(<><Overview /><AgentsPlan /></>)
+    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    expect(screen.getByText(`${counted(imported).count.done}/${counted(imported).count.total} steps`)).toBeInTheDocument()
+    source.progressFails = true
+    await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
+    expect(await screen.findAllByText('Plan unavailable: Agent runtime: unavailable')).toHaveLength(2)
+    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
+    expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument()
+    expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['the request cannot be read', { artifact: 'fail' }, 'Plan unavailable: Plan import request: internal'],
+    ['the request is not one', { artifact: 'not json' }, 'Plan unavailable: Plan import request: invalid artifact.'],
+    ['the plan stream\'s cursor does not move on', { events: 'stuck' }, 'Plan unavailable: Plan events: invalid pagination cursor'],
+    ['the import head is not within the pages read', { events: 'endless' }, `Plan unavailable: Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2.`],
+  ] as const)('a plan whose import request cannot be had is unavailable: %s', async (_, set, line) => {
+    Object.assign(source, set)
+    show(<AgentsPlan />)
+    expect(await screen.findByText(line)).toHaveAttribute('role', 'alert')
     expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })

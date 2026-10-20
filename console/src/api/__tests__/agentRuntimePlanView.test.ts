@@ -2,15 +2,34 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import goView from '../__fixtures__/agentrt-plan-view.go.json'
 import imported from '../__fixtures__/agentrt-plan-imported.testdb.json'
 import moved from '../__fixtures__/agentrt-plan-moved.testdb.json'
+import rootOnly from '../__fixtures__/agentrt-plan-root-only.testdb.json'
+import { STREAM_PAGE, planStream, streamPage } from '@/test/agentrtPlanStream'
 import { parseRuntimeProgress } from '../agentRuntime'
-import { PLAN_ROOT, fetchImportRequest, fetchRuntimePlan, parsePlanRequest, runtimeRound } from '../agentRuntimePlan'
+import { IMPORT_HEAD_PAGES, PLAN_ROOT, fetchImportRequest, fetchRuntimePlan, parsePlanRequest, runtimeRound } from '../agentRuntimePlan'
 import { fromPlanWithRequest, importHead, requestOf, type PlanView } from '../agentRuntimePlanView'
 
 // The fixtures are the platform's own answers on a test database: the round-2 ledger fixture
 // (planimport/testdata/ledger.md) imported by store.ImportPlan, then GET /plan?root=R2, GET
 // /events?stream=plan:R2, GET /artifacts/<request> and GET /progress through agentrtapi; "moved" after a
-// step was added and another dropped. agentrt-plan-view.go.json holds planimport.FromPlanWithRequest's
-// outputs on those answers and on edited copies of them (inputs), with and without the request.
+// step was added and another dropped; "root-only" a round R2 made by store.CreatePlanNode alone (no
+// import, no items). agentrt-plan-view.go.json holds planimport.FromPlanWithRequest's outputs on those
+// answers and on edited copies of them (inputs), with and without the request.
+//
+// Regenerating them (review 416 C3): a temporary _test.go in api/internal/agentrt/agentrtapi (package
+// agentrtapi_test, so it has seeded, server, get, ledger and importHead) run once with AGENTRT_TEST_PG
+// set, then deleted. It (1) reads GET plan?root=R2 before anything is imported (the 404, "absent");
+// (2) store.ImportPlan of ledger(t, fixtureLedger), then writes plan?root=R2, events?stream=plan:R2&
+// after_seq=0, artifacts/<importHead> and progress ("imported"); (3) ProposePlanChange add_node of a step
+// under R2:2.1 (applied at once) and drop_step R2:2.3-2 (asked, DecidePlanChanges with Apply), then plan
+// and progress ("moved"); (4) in a fresh database, CreatePlanNode of round R2 alone, then plan, events
+// and progress ("root-only"); (5) runs FromPlanWithRequest on each case of GO_CASES below, the edited
+// inputs being the imported answer with the edits each case names (for "mutated": the rule, cause, state
+// and event changes of steps 2.0-1 to 2.2b-6 that its view shows), and writes the cases and the inputs.
+// A Go change to the view's rule or refusals shows here only once they are regenerated; a case added or
+// lost on either side fails "holds every case" below.
+const GO_CASES = ['imported, with the request', 'imported, no request', 'moved on, with the request', 'moved on, no request',
+  'mutated, with the request', 'another root', 'listed-twice', 'step-before-item', 'wrong-id', 'no-root', 'bad-type', 'bad-kind',
+  'step-no-state', 'item-under-item', 'root only, no import head']
 
 const request = parsePlanRequest(imported.request, PLAN_ROOT)
 const docs: Record<string, unknown> = { imported: imported.plan, moved: moved.plan, ...goView.inputs }
@@ -27,6 +46,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the plan view, as the Go view gives it', () => {
+  it('holds every case the Go view was run on, and only those', () => {
+    expect(goView.cases.map(c => c.name)).toEqual(GO_CASES)
+    expect(goView.cases.filter(c => c.root === PLAN_ROOT).every(c => docs[c.plan] !== undefined)).toBe(true)
+  })
+
   it.each(goView.cases.map(c => [c.name, c] as const))('%s', (_, c) => {
     const run = () => fromPlanWithRequest(docs[c.plan], c.root, c.request ? request : null)
     if ('error' in c && c.error) {
@@ -63,6 +87,11 @@ describe('the import head and its request', () => {
     const other = { ...imported.events[1], body_json: { source: `plan-import sha256:${'0'.repeat(64)}` } }
     expect(importHead([other, imported.events[0]])).toEqual({ artifact: head.artifact, next: 0 })
     expect(() => importHead({ events: [] })).toThrow(/^the events do not read/)
+    // A seq is a cursor: one that is not a safe integer is refused, not read inexactly (review 416 C1).
+    const note = { ...imported.events[1], event_type: 'note' }
+    expect(() => importHead([{ ...note, seq: 1e30 }])).toThrow('the events do not read: events[0].seq is not a safe integer')
+    expect(() => importHead([{ ...note, seq: 2 ** 53 }])).toThrow(/is not a safe integer/)
+    expect(importHead([{ ...note, seq: 2 ** 53 - 1 }])).toEqual({ artifact: '', next: 2 ** 53 - 1 })
     expect(requestOf('plan-import sha256:abc')).toBeNull()
     expect(requestOf(`other ${head.artifact}`)).toBeNull()
   })
@@ -73,22 +102,46 @@ describe('the import head and its request', () => {
     expect(() => parsePlanRequest({ ...imported.request, format: 'other' }, PLAN_ROOT)).toThrow('Plan import request: invalid artifact.')
   })
 
-  it('pages the plan stream for the head, then reads the request it names once', async () => {
+  // The stream form of GET /events as the handler pages it: a bare array, ascending by seq, seq above
+  // after_seq, at most 500 a page (review 416 B2).
+  const eventsUrl = (after: number) => `/api/v1/agentrt/events?stream=plan%3AR2&after_seq=${after}`
+  function serve(page: (url: string) => unknown[]) {
     const head = importHead(imported.events).artifact
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      if (url.includes('after_seq=0')) return json(imported.events.slice(1, 3))
-      if (url.includes(`after_seq=${imported.events[2].seq}`)) return json([imported.events[0]])
-      if (url.endsWith(`/artifacts/${encodeURIComponent(head)}`)) return new Response(JSON.stringify(imported.request))
+      if (url.startsWith('/api/v1/agentrt/events?')) return json(page(url))
+      if (url === `/api/v1/agentrt/artifacts/${encodeURIComponent(head)}`) return new Response(JSON.stringify(imported.request))
       throw new Error(`Unexpected URL ${url}`)
     })
     vi.stubGlobal('fetch', fetch)
+    return () => fetch.mock.calls.map(c => String(c[0]))
+  }
+
+  it('reads on past 500 earlier events to the page with the head, then reads the request it names once', async () => {
+    const stream = planStream(STREAM_PAGE)
+    const urls = serve(url => streamPage(stream, url))
     expect(await fetchImportRequest()).toEqual(request)
-    expect(fetch.mock.calls.map(c => String(c[0]))).toEqual([
-      '/api/v1/agentrt/events?stream=plan%3AR2&after_seq=0', `/api/v1/agentrt/events?stream=plan%3AR2&after_seq=${imported.events[2].seq}`,
-      `/api/v1/agentrt/artifacts/${encodeURIComponent(head)}`])
-    vi.stubGlobal('fetch', vi.fn(async () => json([])))
+    expect(urls()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE), `/api/v1/agentrt/artifacts/${encodeURIComponent(importHead(imported.events).artifact)}`])
+  })
+
+  it('a plan stream with no import head is read to its end: no request', async () => {
+    const urls = serve(url => streamPage(rootOnly.events, url))
     expect(await fetchImportRequest()).toBeNull()
+    expect(urls()).toEqual([eventsUrl(0), eventsUrl(rootOnly.events.at(-1)!.seq)])
+  })
+
+  it('a cursor that does not move on is an error', async () => {
+    const stream = planStream(2 * STREAM_PAGE, false)
+    const urls = serve(() => streamPage(stream, eventsUrl(0)))
+    await expect(fetchImportRequest()).rejects.toThrow('Plan events: invalid pagination cursor')
+    expect(urls()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE)])
+  })
+
+  it(`reads at most ${IMPORT_HEAD_PAGES} pages for the head, then fails, never taking the plan for one not imported (review 416 B1)`, async () => {
+    const stream = planStream((IMPORT_HEAD_PAGES + 10) * STREAM_PAGE, false)
+    const urls = serve(url => streamPage(stream, url))
+    await expect(fetchImportRequest()).rejects.toThrow(`Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2.`)
+    expect(urls()).toEqual(Array.from({ length: IMPORT_HEAD_PAGES }, (_, i) => eventsUrl(i * STREAM_PAGE)))
   })
 })
 
@@ -123,6 +176,9 @@ describe('the round from the runtime', () => {
     expect(item.steps.map(s => s.state)).toEqual(['done', 'dropped'])
     expect([item.done, item.total, item.state]).toEqual([1, 1, 'done'])
     expect(round.items.find(i => i.key === '2.1')!.steps.at(-1)).toMatchObject({ id: '2.1-6', t: 'A step added after the import', line: undefined })
+    // The marks are the runtime's, not the title's: 2.1-5 is an effect step whose title has no ★ (review 416 C2).
+    expect(round.items.find(i => i.key === '2.1')!.steps.find(s => s.id === '2.1-5')).toMatchObject({ t: '本机测试库可用', star: true, owner: false })
+    expect(round.items.find(i => i.key === '2.1')!.steps.find(s => s.id === '2.1-3')).toMatchObject({ owner: true, star: false })
     expect(item.steps[0].line).toContain('手机上问参谋长一句')
   })
 
@@ -133,5 +189,11 @@ describe('the round from the runtime', () => {
     const fewer = [{ ...imported.progress.plan[0], items: imported.progress.plan[0].items.slice(1) }]
     expect(() => runtimeRound(view, fewer, PLAN_ROOT, request)).toThrow("The plan and the runtime's counts of R2 list different items; read again.")
     expect(runtimeRound(view, plan, PLAN_ROOT, null).items[0].steps[0].line).toBeUndefined()
+  })
+
+  it('a round with no items is an empty round with zero counts, not one that could not be read', () => {
+    const round = runtimeRound(fromPlanWithRequest(rootOnly.plan, PLAN_ROOT, null), parseRuntimeProgress(rootOnly.progress).plan, PLAN_ROOT, null)
+    expect(round).toEqual({ n: 2, source: 'runtime', items: [] })
+    expect(rootOnly.progress.plan[0].count).toMatchObject({ done: 0, total: 0 })
   })
 })

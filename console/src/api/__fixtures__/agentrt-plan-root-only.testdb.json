@@ -1,0 +1,101 @@
+{
+ "events": [
+  {
+   "at": "2026-10-19T20:03:17.113329-05:00",
+   "seq": 1,
+   "txid": 2308072,
+   "sha256": "859b3fc19e731471d634a781368a60e067d16d2324a0b62310eda2e13bc3af5a",
+   "task_id": null,
+   "actor_id": "controller",
+   "event_id": 2,
+   "body_json": {
+    "label": "2",
+    "title": "第 2 轮",
+    "ordinal": 2,
+    "node_kind": "round"
+   },
+   "attempt_id": null,
+   "event_type": "plan_node_created",
+   "mission_id": null,
+   "prev_sha256": "",
+   "plan_node_id": "R2",
+   "cause_event_id": null,
+   "event_stream_id": "plan:R2"
+  }
+ ],
+ "events_after": [],
+ "plan": {
+  "root": "R2",
+  "nodes": [
+   {
+    "depth": 0,
+    "label": "2",
+    "state": null,
+    "title": "第 2 轮",
+    "ordinal": 2,
+    "usual_s": null,
+    "version": 0,
+    "work_id": null,
+    "node_kind": "round",
+    "step_kind": null,
+    "created_at": "2026-10-19T20:03:17.111734-05:00",
+    "mission_id": null,
+    "owner_step": false,
+    "effect_step": false,
+    "state_event": {
+     "at": "2026-10-19T20:03:17.113329-05:00",
+     "body": {
+      "label": "2",
+      "title": "第 2 轮",
+      "ordinal": 2,
+      "node_kind": "round"
+     },
+     "actor_id": "controller",
+     "event_id": 2,
+     "event_type": "plan_node_created"
+    },
+    "task_counts": {},
+    "plan_node_id": "R2",
+    "done_rule_json": {},
+    "state_event_id": null,
+    "created_by_actor_id": "controller",
+    "parent_plan_node_id": null
+   }
+  ]
+ },
+ "progress": {
+  "as_of_event_id": 2,
+  "controls": [],
+  "generated_at": "2026-10-20T01:03:17.120863Z",
+  "hosts": [],
+  "live": [],
+  "needs_you": {
+   "count": 0,
+   "items": [],
+   "truncated": false
+  },
+  "plan": [
+   {
+    "count": {
+     "done": 0,
+     "manual": 0,
+     "state": "planned",
+     "stopped": 0,
+     "total": 0
+    },
+    "items": [],
+    "kind": "round",
+    "plan_node_id": "R2",
+    "title": "第 2 轮"
+   }
+  ],
+  "recent": {
+   "failed_attempts": [],
+   "tasks": []
+  },
+  "work": {
+   "missions": [],
+   "truncated": false
+  }
+ }
+}

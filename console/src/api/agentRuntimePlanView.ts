@@ -3,6 +3,11 @@
  * planimport.FromPlanWithRequest, ImportHead and RequestOf (api/internal/agentrt/planimport/view.go,
  * request.go). A test holds it to the Go functions' outputs on the same inputs
  * (__fixtures__/agentrt-plan-view.go.json, written by the Go view from the handlers' answers).
+ *
+ * It equals Go on the handlers' canonical JSON only (review 416 C1): Go's encoding/json also matches
+ * keys case-insensitively and reads a seq as an exact int64, neither of which the handlers' answers
+ * call on. Here keys are matched exactly, and a seq that is not a safe integer is refused rather than
+ * read inexactly.
  */
 export type PlanViewStep = { id: string; t: string; state: string; owner: boolean; star: boolean; when: string }
 export type PlanViewItem = { key: string; name: string; steps: PlanViewStep[] }
@@ -45,7 +50,7 @@ function decoder(prefix: string) {
     str: (v: unknown, at: string): string => v == null ? '' : typeof v === 'string' ? v : fail(at, 'a string'),
     ptr: (v: unknown, at: string): string | null => v == null ? null : typeof v === 'string' ? v : fail(at, 'a string'),
     bool: (v: unknown, at: string): boolean => v == null ? false : typeof v === 'boolean' ? v : fail(at, 'a boolean'),
-    int: (v: unknown, at: string): number => v == null ? 0 : typeof v === 'number' && Number.isInteger(v) ? v : fail(at, 'an integer'),
+    int: (v: unknown, at: string): number => v == null ? 0 : typeof v === 'number' && Number.isSafeInteger(v) ? v : fail(at, 'a safe integer'),
     obj: (v: unknown, at: string): Json | null => v == null ? null : isObject(v) ? v : fail(at, 'an object'),
     list: (v: unknown, at: string): unknown[] => v == null ? [] : Array.isArray(v) ? v : fail(at, 'a list'),
   }

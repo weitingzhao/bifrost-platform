@@ -7,6 +7,7 @@ import type { TelemetryAlertEntry } from '@/api/clusterTypes'
 import { planRows, splitAlerts } from '../ownerModel'
 import { PLAN_FROM_BOARD, planRead, type PlanRead } from '../../agents/useRuntimePlan'
 import planFixture from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
+import rootOnlyFixture from '@/api/__fixtures__/agentrt-plan-root-only.testdb.json'
 import { PLAN_ROOT, parsePlanRequest } from '@/api/agentRuntimePlan'
 import type { OwnerConsoleData } from '../useOwnerConsole'
 import alertsFixture from './fixtures/telemetry-alerts.prod.json'
@@ -240,6 +241,17 @@ describe('Owner Console entries', () => {
     const rows = within(plan).getAllByRole('listitem').map(li => li.textContent)
     expect(rows).toEqual(planFixture.progress.plan[0].items.map(i => `${i.label}${i.title}${i.count.done}/${i.count.total}`))
     expect(plan).not.toHaveTextContent('✎ by hand')
+    expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
+  })
+
+  it('shows a runtime round with no items as empty, not unavailable and not the board\'s', () => {
+    const read = (data: unknown) => ({ data, error: null, isError: false, isPaused: false })
+    planValue.value = planRead(read({ found: true, doc: rootOnlyFixture.plan }), read(null), read(parseRuntimeProgress(rootOnlyFixture.progress)))
+    show('#work')
+    const plan = screen.getByRole('region', { name: 'The plan' })
+    expect(plan).toHaveTextContent("No items in the runtime's plan.")
+    expect(within(plan).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(plan).queryAllByRole('listitem')).toHaveLength(0)
     expect(plan).not.toHaveTextContent(PLAN_FROM_BOARD)
   })
 

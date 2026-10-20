@@ -930,6 +930,15 @@
    "root": "R2",
    "request": true,
    "error": "item R2:2.0-1 sits under \"R2:2.0\", not the root"
+  },
+  {
+   "name": "root only, no import head",
+   "plan": "root-only",
+   "root": "R2",
+   "request": false,
+   "view": {
+    "items": null
+   }
   }
  ],
  "inputs": {
@@ -2429,6 +2438,45 @@
     }
    ],
    "root": "R2"
+  },
+  "root-only": {
+   "root": "R2",
+   "nodes": [
+    {
+     "depth": 0,
+     "label": "2",
+     "state": null,
+     "title": "第 2 轮",
+     "ordinal": 2,
+     "usual_s": null,
+     "version": 0,
+     "work_id": null,
+     "node_kind": "round",
+     "step_kind": null,
+     "created_at": "2026-10-19T20:03:17.111734-05:00",
+     "mission_id": null,
+     "owner_step": false,
+     "effect_step": false,
+     "state_event": {
+      "at": "2026-10-19T20:03:17.113329-05:00",
+      "body": {
+       "label": "2",
+       "title": "第 2 轮",
+       "ordinal": 2,
+       "node_kind": "round"
+      },
+      "actor_id": "controller",
+      "event_id": 2,
+      "event_type": "plan_node_created"
+     },
+     "task_counts": {},
+     "plan_node_id": "R2",
+     "done_rule_json": {},
+     "state_event_id": null,
+     "created_by_actor_id": "controller",
+     "parent_plan_node_id": null
+    }
+   ]
   },
   "step-before-item": {
    "nodes": [
