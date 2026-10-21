@@ -555,6 +555,9 @@ func (d *Daemon) settle(e *Entry) error {
 		// Every end comes here with its group gone: cursor's data directory,
 		// outside the attempt's output, goes before its entry (review 361 B1).
 		removeCursorData(d.Root, e.Workdir+".out", d.logf)
+		// So does what a test database left when its stage was ended with
+		// the group (TD-403).
+		removeTestDB(d.Root, e.Workdir+".out", d.logf)
 		return d.Registry.Delete(e.AttemptID)
 	}
 	e.Phase = "uncleared"

@@ -24,16 +24,32 @@ import (
 // attempt's artifacts finds it by.
 const prepareReportName = "# The attempt failed before its executor started"
 
-// setupFailure is the record of an attempt's setup when it failed: its
-// setup.json (RunSetup writes it once, a failed setup's with pass false), read
-// as any file the attempt's output holds, never through a link.
+// prepareRecords are the records of what runs before the executor, each
+// written once by its stage, a failed one's with pass false: the setup's
+// (RunSetup) and the test database's (RunTestDB, TD-403), with what the
+// report says failed.
+var prepareRecords = []struct{ file, what string }{
+	{"setup.json", "The task's setup failed"},
+	{"testdb.json", "The attempt's test database did not start"},
+}
+
+// setupFailure is the record of what failed before the attempt's executor,
+// and what it was, read as any file the attempt's output holds, never
+// through a link.
 func setupFailure(out string) (Verification, bool) {
-	var v Verification
-	b, err := readAtMost(filepath.Join(out, "setup.json"), maxBody)
-	if err != nil || json.Unmarshal(b, &v) != nil || v.Pass {
-		return Verification{}, false
+	v, _, failed := prepareFailure(out)
+	return v, failed
+}
+
+func prepareFailure(out string) (Verification, string, bool) {
+	for _, r := range prepareRecords {
+		var v Verification
+		b, err := readAtMost(filepath.Join(out, r.file), maxBody)
+		if err == nil && json.Unmarshal(b, &v) == nil && !v.Pass {
+			return v, r.what, true
+		}
 	}
-	return v, true
+	return Verification{}, "", false
 }
 
 // isSetupFailure says whether an executor's end is its setup's failure: the
@@ -46,11 +62,12 @@ func isSetupFailure(endHow string, code int, out string) bool {
 	return failed
 }
 
-// setupReportOf is the report of the failed setup whose record is in out.
+// setupReportOf is the report of what failed before the executor, whose
+// record is in out.
 func setupReportOf(out string) []byte {
-	v, _ := setupFailure(out)
+	v, what, _ := prepareFailure(out)
 	b, _ := json.Marshal(v)
-	return []byte(prepareReportName + "\n\nThe task's setup failed, so the executor did not start. " + failedCommand(b, tailBytes))
+	return []byte(prepareReportName + "\n\n" + what + ", so the executor did not start. " + failedCommand(b, tailBytes))
 }
 
 // beforeReport is the report of an attempt that ended before its executor

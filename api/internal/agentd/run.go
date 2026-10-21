@@ -42,7 +42,8 @@ type Attempt struct {
 	// walled whenever the host has a wall.
 	Walled bool
 	inner  []string
-	root   string // agentd's directory, which Dir and Out are in (openWithin)
+	root   string       // agentd's directory, which Dir and Out are in (openWithin)
+	testDB *TestDBTools // its test database's programs, when it has one (testdb.go)
 }
 
 // An Executor turns an attempt into the command agentd launches.
@@ -89,6 +90,9 @@ type Daemon struct {
 	// CodexHome is the host user's codex home, whose login each codex
 	// attempt gets a copy of and gives back refreshed (codexlogin.go).
 	CodexHome string
+	// TestDB is the programs a test database needs on this host (TD-403,
+	// testdb.go); nil: no attempt gets one, and its log says so.
+	TestDB *TestDBTools
 	// Confined, in tests, says which attempts may share the host instead of
 	// the wall (share.go).
 	Confined func(cl *Claimed, prep TaskSpec) bool
@@ -365,6 +369,12 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	if err != nil {
 		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
+	noDB := false
+	if ws != nil {
+		if sp, noDB, err = d.testDBFor(a, repo, sp); err != nil {
+			return d.failBefore(ctx, a, ws, &waiting, l, err)
+		}
+	}
 	if ws != nil && len(prep.Setup) > 0 {
 		// The setup has a home of its own and, on a host with a wall, a
 		// narrower wall, the executor in it or not (codex): it cannot leave
@@ -396,6 +406,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 		return d.failBefore(ctx, a, ws, &waiting, l, err)
 	}
 	defer func() { _ = logf.Close() }()
+	if noDB {
+		_, _ = fmt.Fprintln(logf, noTestDB)
+	}
 	sp.Stdout, sp.Stderr = logf, logf
 	if t := newActionTail(cl.Tool.Executor, filepath.Join(a.Out, "log.txt"), a.Dir, a.Out); t != nil {
 		l.tail.Store(t)

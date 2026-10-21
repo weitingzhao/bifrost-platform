@@ -21,6 +21,12 @@ func TestMain(m *testing.M) {
 	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == SetupArg {
 		os.Exit(RunSetup(os.Args[2:]))
 	}
+	if os.Getenv("AGENTD_TEST_DB_PROBE") == "1" && len(os.Args) == 1 {
+		os.Exit(probeTestDB())
+	}
+	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == TestDBArg {
+		os.Exit(RunTestDB(os.Args[2:]))
+	}
 	// The wall and its checks run with whatever environment they are given
 	// (a setup's commands have the allowed variables only); go test never
 	// passes these as the first argument.

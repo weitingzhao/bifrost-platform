@@ -193,6 +193,9 @@ func executorWrites(executor string, a *Attempt, sibs []string) []string {
 	if executor == "exec:cursor" {
 		w = append(w, cursorDataDir(a.root, a.Out))
 	}
+	if a.testDB != nil && a.root != "" {
+		w = append(w, testDBSockDir(a.root, a.Out)) // its stage makes the sockets there (TD-403)
+	}
 	return w
 }
 
@@ -323,6 +326,15 @@ func checkPins(w *Wall, executor, self string, a *Attempt, sibs []string, sp Spa
 			argv = argv[len(setup):]
 		} else {
 			lacks = append(lacks, "the setup's own home and wall")
+		}
+	}
+	// The test database's stage, after the setup, its programs walled
+	// (TD-403, testdb.go).
+	if a.testDB != nil {
+		if stage := testDBArgv(self, a.testDB, a.root, a.Out, w != nil); hasPrefix(argv, stage) {
+			argv = argv[len(stage):]
+		} else {
+			lacks = append(lacks, "the test database's stage and its wall")
 		}
 	}
 	codex := ""

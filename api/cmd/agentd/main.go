@@ -58,6 +58,8 @@ func main() {
 			os.Exit(agentd.RunVerify(os.Args[2:]))
 		case agentd.SetupArg:
 			os.Exit(agentd.RunSetup(os.Args[2:]))
+		case agentd.TestDBArg:
+			os.Exit(agentd.RunTestDB(os.Args[2:]))
 		case agentd.ConfineArg:
 			os.Exit(agentd.RunConfine(os.Args[2:]))
 		case agentd.CheckArg:
@@ -114,6 +116,11 @@ func run() error {
 		Logf:     log.Printf,
 	}
 	d.PushRemote = remoteAt(cfg.pushBase)
+	// The programs a test database needs (TD-403): without them, no attempt
+	// gets one, and its database tests skip as before.
+	if d.TestDB, err = agentd.FindTestDBTools(os.Getenv("AGENTD_PG_BIN")); err != nil {
+		log.Printf("agentd: no test database on this host: %v", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	// What a previous run left is ended first, whatever this host can offer

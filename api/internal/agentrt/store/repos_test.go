@@ -249,3 +249,14 @@ func TestPlatformSetupDownloadsGoModules(t *testing.T) {
 		t.Fatalf("spec = %s", body)
 	}
 }
+
+// TD-403: the platform's tests need a database, so agentd gives its
+// attempts one of their own; infra's need none.
+func TestOnlyThePlatformGetsATestDatabase(t *testing.T) {
+	t.Parallel()
+	for repo, r := range store.Repos {
+		if r.TestDB != (repo == "bifrost-platform") {
+			t.Errorf("%s: TestDB %v", repo, r.TestDB)
+		}
+	}
+}
