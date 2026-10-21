@@ -3,6 +3,7 @@ import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress } from '@/api/agentRuntime'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { mergedWaitingCount, openQuestionItem, runtimeWaiting, type WaitingItem } from './mergedNeedsYou'
 import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
 import { capacityRefusalActive, capacityRefusalText, hostsNeedingYou, silentThreads } from '@/api/agentThreads'
 import { fetchApprovalList } from '@/api/approvals'
 import { fetchQuestionList, type Question } from '@/api/questions'
@@ -67,8 +68,9 @@ export function useNeedsYou() {
     retry: false,
   })
   const groups: NeedsYouGroups = groupOpenApprovals(openQ.data ?? [], now)
-  const questions: Question[] = questionsQ.data ?? []
-  const openQuestions = questions.filter(question => question.status === 'open')
+  const questions: Question[] = useMemo(() => questionsQ.data ?? [], [questionsQ.data])
+  // The same list while the questions are the same: the Answer group does not repaint for another read (CI 2026-10-21).
+  const openQuestions = useMemo(() => questions.filter(question => question.status === 'open'), [questions])
   // A refresh paused offline is not a read: the last list is stale, as after an error (review 351 A1).
   const questionsFailed = questionsQ.isError || questionsQ.isPaused
   const questionsUnreadable = questionsFailed && questionsQ.data == null

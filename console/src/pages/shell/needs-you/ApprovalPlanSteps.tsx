@@ -11,6 +11,15 @@ export function PlanStepLinks({ steps, className = '' }: { steps: readonly Appro
 }
 
 /**
+ * Under a request in a list: the plan steps it is the approval for, read here and not by the list, so the plan read
+ * landing repaints only these lines (CI 2026-10-21: it repainted Needs you's Answer group). Nothing while unread.
+ */
+export function ApprovalRowPlanSteps({ number }: { number: number | undefined }) {
+  const plan = useApprovalSteps(number != null && number > 0)
+  return plan.read === 'ok' ? <PlanStepLinks steps={plan.stepsOf(number)} className="mt-1 text-sm text-muted-foreground" /> : null
+}
+
+/**
  * On a request's page: which step of the plan it is the approval for, read from the runtime's plan (a step whose done
  * rule names this request's number); that none is, or that the plan could not be read, is said too.
  */

@@ -1,4 +1,4 @@
-import { memo, useRef, useState, type ReactNode } from 'react'
+import { memo, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { LineageThread } from '@/api/lineage'
 import type { Question } from '@/api/questions'
 import { OpsSection } from '@/components/layout/OpsSection'
@@ -60,7 +60,8 @@ export function AnswerGroup({
   threads?: readonly LineageThread[]
 }) {
   const [expanded, setExpanded] = useState(false)
-  const shown = expanded ? open : open.slice(0, ANSWER_PREVIEW)
+  // The same rows while open is the same list, so QuestionList's memo holds when the page repaints for another read.
+  const shown = useMemo(() => (expanded ? open : open.slice(0, ANSWER_PREVIEW)), [expanded, open])
   const hidden = open.length - shown.length
   const unread = unreadAnswers(questions)
   if (open.length === 0 && unread.fresh.length === 0 && unread.aged.length === 0) return null

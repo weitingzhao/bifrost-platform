@@ -11,8 +11,7 @@ import { approvalHref, formatShellHash } from '@/lib/shell/consoleRoutes'
 import { AssessmentLines } from '@/pages/question/AssessmentPanel'
 import { approvalRowTitle, tierWords } from '@/pages/approvalDecision'
 import { partOfLine, type ProgressPart } from '@/pages/shell/progress/progressPart'
-import type { ApprovalStep } from '@/api/agentRuntimePlan'
-import { PlanStepLinks } from '@/pages/shell/needs-you/ApprovalPlanSteps'
+import { ApprovalRowPlanSteps } from '@/pages/shell/needs-you/ApprovalPlanSteps'
 
 /**
  * One request as a link to its page. No buttons here: approve and reject live on
@@ -24,7 +23,7 @@ export function ApprovalRow({
   now = Date.now(),
   lines,
   partOf = null,
-  steps = [],
+  planSteps = false,
 }: {
   item: ApprovalItem
   now?: number
@@ -32,8 +31,8 @@ export function ApprovalRow({
   lines?: readonly string[]
   /** Set when the current progress document names this pending request. */
   partOf?: ProgressPart | null
-  /** The plan steps whose done rule waits on this request (v4 §20.5 scenario 10). */
-  steps?: readonly ApprovalStep[]
+  /** Say under it which plan steps' done rule waits on it (v4 §20.5 scenario 10), read by the row itself. */
+  planSteps?: boolean
 }) {
   const env = approvalEnv(item)
   const pending = item.status === 'pending'
@@ -92,7 +91,7 @@ export function ApprovalRow({
           {partOfLine(partOf)}
         </a>
       ) : null}
-      <PlanStepLinks steps={steps} className="mt-1 text-sm text-muted-foreground" />
+      {planSteps ? <ApprovalRowPlanSteps number={item.number} /> : null}
     </li>
   )
 }

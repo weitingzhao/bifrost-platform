@@ -13,6 +13,7 @@ import { QuestionPage } from '@/pages/QuestionPage'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
+import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 
 const CONTRACT = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -81,12 +82,13 @@ function health(url: string): Response | null {
   return null
 }
 
-function stub(questions: () => Response, approvals?: () => Response) {
+function stub(questions: () => Response, approvals?: () => Response | Promise<Response>, plan?: () => Promise<Response>) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [], count: 0 } })
+      if (plan && url.includes('/api/v1/agentrt/plan?')) return plan()
       if (url.includes('/api/v1/agent/progress')) return json({ document: null })
       const probed = health(url)
       if (probed != null) return probed
@@ -250,6 +252,9 @@ describe('Needs you questions', () => {
     render(wrapper(<NeedsYouPage />))
     const group = await screen.findByRole('region', { name: 'Answer' })
     expect(within(group).getByText(/waited 2h · 22h left/)).toBeTruthy()
+    // The baseline is taken once what the group shows has been read: the asking thread's title comes from the lineage
+    // read, and its landing is a change the group must paint. Other reads landing late do not repaint it (tests below).
+    expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
     const list = group.querySelector('[data-answer-group]')
     const paints = list?.getAttribute('data-paints')
     await act(async () => {
@@ -258,6 +263,55 @@ describe('Needs you questions', () => {
     expect(list?.getAttribute('data-paints')).toBe(paints)
     expect(within(group).getByText(/waited 2h 1m · 21h 59m left/)).toBeTruthy()
     vi.useRealTimers()
+  })
+
+  // CI 2026-10-21 (ci-platform-ftvbf): the plan read Needs you makes for its requests' steps answered after the test
+  // above took its baseline, and the Answer group painted again. A read that lands late repaints only what shows it.
+  it('does not repaint the Answer group when the plan read answers late', async () => {
+    const question = openQuestion(12)
+    let release!: () => void
+    const late = new Promise<void>(resolve => { release = resolve })
+    stub(() => json({ questions: [question] }), () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-16', number: 16 })])),
+      async () => { await late; return json(planApprovals.plan) })
+    render(wrapper(<NeedsYouPage />))
+    const group = await screen.findByRole('region', { name: 'Answer' })
+    // Baseline once the group's own reads are in (the lineage title, as above) and the request is shown.
+    expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
+    await screen.findByRole('region', { name: 'Decide' }, { timeout: 5000 })
+    const list = group.querySelector('[data-answer-group]')
+    const paints = list?.getAttribute('data-paints')
+    release()
+    // The plan arrived and is shown under its request...
+    expect(await screen.findByRole('link', { name: /^Plan step 2\.1-3 \(yours\)/ }, { timeout: 5000 })).toBeTruthy()
+    // ...and the Answer group did not paint for it.
+    expect(list?.getAttribute('data-paints')).toBe(paints)
+  })
+
+  it('reads the plan only under the requests it shows', async () => {
+    stub(() => json({ questions: [openQuestion(12)] }), undefined, async () => json(planApprovals.plan))
+    render(wrapper(<NeedsYouPage />))
+    const group = await screen.findByRole('region', { name: 'Answer' })
+    expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
+    // No request, no step to name: the page itself does not read the plan, so its answer cannot repaint the page.
+    expect(vi.mocked(fetch).mock.calls.map(call => String(call[0])).filter(url => url.includes('/api/v1/agentrt/plan?'))).toEqual([])
+  })
+
+  it('does not repaint the Answer group when another read lands after it without changing its questions', async () => {
+    const question = openQuestion(12)
+    let release!: () => void
+    const late = new Promise<void>(resolve => { release = resolve })
+    stub(() => json({ questions: [question] }), async () => {
+      await late
+      return json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-2', number: 2, reason: 'Needs a decision.' })]))
+    })
+    render(wrapper(<NeedsYouPage />))
+    const group = await screen.findByRole('region', { name: 'Answer' })
+    expect(await within(group).findByText(/Quota work/, undefined, { timeout: 5000 })).toBeTruthy()
+    const list = group.querySelector('[data-answer-group]')
+    const paints = list?.getAttribute('data-paints')
+    release()
+    expect(await screen.findByRole('region', { name: 'Decide' }, { timeout: 5000 })).toBeTruthy()
+    expect(list?.getAttribute('data-paints')).toBe(paints)
   })
 
   it('labels a session id when no lineage title exists and does not use mine', async () => {

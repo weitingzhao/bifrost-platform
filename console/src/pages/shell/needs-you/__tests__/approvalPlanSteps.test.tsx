@@ -72,9 +72,26 @@ describe('the approvals a done rule waits on', () => {
 })
 
 describe('a request and its plan step', () => {
-  it('shows each step under the request in a Needs you row, as a link to the plan', () => {
-    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} steps={stepsOfApproval(plan, 16)} />)
-    for (const text of [STEP_16, STEP_16_TOO]) expect(screen.getByRole('link', { name: text })).toHaveAttribute('href', PLAN_SECTION_HREF)
+  it('shows each step under the request in a Needs you row, as a link to the plan', async () => {
+    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} planSteps />)
+    // The row reads the plan itself; a loaded machine (CI) can take past the 1 s default to answer.
+    expect(await screen.findByRole('link', { name: STEP_16 }, { timeout: 5000 })).toHaveAttribute('href', PLAN_SECTION_HREF)
+    expect(screen.getByRole('link', { name: STEP_16_TOO })).toHaveAttribute('href', PLAN_SECTION_HREF)
+  })
+
+  it('says nothing under a row until the plan is read, when it could not be read, or when not asked to', async () => {
+    source.plan = 'fail'
+    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} planSteps />)
+    await vi.waitFor(() => expect(fetchMock.mock.calls.some(c => String(c[0]).includes('/agentrt/plan?'))).toBe(true), { timeout: 5000 })
+    expect(screen.queryByRole('link', { name: /^Plan step/ })).not.toBeInTheDocument()
+    expect(screen.queryByText(/The plan could not be read/)).not.toBeInTheDocument()
+    cleanup()
+    fetchMock.mockClear()
+    source.plan = 'approvals'
+    show(<ApprovalRow item={buildPlatformApproval({ id: 'ap-16', number: 16 })} />)
+    expect(screen.queryByRole('link', { name: /^Plan step/ })).not.toBeInTheDocument()
+    // The row reads its assessment stream; the plan it does not read.
+    expect(fetchMock.mock.calls.map(c => String(c[0])).filter(url => url.includes('/agentrt/plan?'))).toEqual([])
   })
 
   it('says on the request\'s page which step waits on it, that none does, or that the plan could not be read', async () => {

@@ -20,7 +20,6 @@ import {
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
 import { approvalPart } from '@/pages/shell/progress/progressPart'
-import { useApprovalSteps } from '@/pages/shell/agents/useRuntimePlan'
 
 function Group({
   label,
@@ -135,9 +134,6 @@ export function NeedsYouPage() {
   useEffect(() => {
     clearLegacyApprovalToken()
   }, [])
-  // Which plan step each request is the approval for (v4 §20.5 scenario 10); said only once the plan is read.
-  const planSteps = useApprovalSteps()
-  const stepsOf = (n: number | undefined) => (planSteps.read === 'ok' ? planSteps.stepsOf(n) : [])
   const showRecent =
     recentCount.state === 'unknown' || (recentCount.state === 'known' && recentCount.count > 0)
 
@@ -202,7 +198,7 @@ export function NeedsYouPage() {
                 item={item}
                 now={now}
                 partOf={item.status === 'pending' ? approvalPart(item) : null}
-                steps={stepsOf(item.number)}
+                planSteps
               />
             ))}
           </ApprovalList>
@@ -212,7 +208,7 @@ export function NeedsYouPage() {
         <Group label="Run in a terminal" count={String(terminal.length)}>
           <ApprovalList>
             {terminal.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} steps={stepsOf(item.number)} />
+              <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} planSteps />
             ))}
           </ApprovalList>
         </Group>
@@ -221,7 +217,7 @@ export function NeedsYouPage() {
         <Group label="Check" count={String(check.length)}>
           <ApprovalList>
             {check.map(item => (
-              <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} steps={stepsOf(item.number)} />
+              <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} planSteps />
             ))}
           </ApprovalList>
         </Group>
