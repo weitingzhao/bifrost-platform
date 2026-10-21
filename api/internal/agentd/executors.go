@@ -81,7 +81,7 @@ func Prompt(a *Attempt) string {
 		rest = promptRestWith(a, q)
 	}
 	if len(a.Spec.Text)+len(rest) > promptMax {
-		rest = promptRestWith(a, 0)
+		rest = promptRestWith(a, -1) // nothing of the checked attempt: a prompt that fit before still fits (review td409-1 B1)
 	}
 	return a.Spec.Text + priorSection(a.Failed, promptMax-len(a.Spec.Text)-len(rest)) + rest
 }
@@ -91,13 +91,16 @@ func Prompt(a *Attempt) string {
 func promptRest(a *Attempt) string { return promptRestWith(a, subjectReportBytes) }
 
 // promptRestWith is promptRest with at most quota bytes of the checked
-// attempt's report.
+// attempt's report; with a quota below 0, nothing of the checked attempt
+// (writeSubject).
 func promptRestWith(a *Attempt, quota int) string {
 	var b strings.Builder
 	if a.Spec.Check != "" && a.Subject != nil {
 		fmt.Fprintf(&b, "\n\n---\nYou are checking task %s, attempt %s (round %d), at commit %s of %s, checked out here. Its spec:\n\n%s\n",
 			a.Spec.SubjectTask, a.Spec.Attempt, a.Spec.Round, a.Spec.Commit, a.Spec.Repo, a.Subject.Text)
-		writeSubject(&b, a, quota)
+		if quota >= 0 {
+			writeSubject(&b, a, quota)
+		}
 		if len(a.VerifyReport) > 0 {
 			fmt.Fprintf(&b, "\nIts deterministic check passed; its verify.json:\n\n%s\n", a.VerifyReport)
 		}

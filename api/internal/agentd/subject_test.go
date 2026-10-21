@@ -47,3 +47,22 @@ func TestAReviewIsToldWhatTheAttemptReported(t *testing.T) {
 		t.Fatal("a report over subjectReportBytes is not cut")
 	}
 }
+
+// Review td409-1 B1: a review prompt that fit its one argument before the
+// report and the line for effect none were added still fits with them: at
+// the last share neither is in it.
+func TestAReviewPromptThatFitBeforeStillFits(t *testing.T) {
+	for _, report := range []string{"# done", ""} {
+		a := &Attempt{Claim: &Claimed{Role: "review"}, Spec: TaskSpec{Text: "# Review it", Check: "review", SubjectTask: "t_1", Attempt: "a_1", Round: 1},
+			Subject: &TaskSpec{}, VerifyReport: []byte(`{"pass":true,"commands":[]}`)}
+		a.Subject.Text = strings.Repeat("s", promptMax-len(Prompt(a)))
+		before := Prompt(a)
+		if len(before) != promptMax {
+			t.Fatalf("the fixture's prompt is %d bytes, not %d", len(before), promptMax)
+		}
+		a.SubjectReport, a.Claim.SubjectEffect = []byte(report), "none"
+		if got := Prompt(a); len(got) > promptMax || got != before {
+			t.Errorf("report %q: a prompt of %d bytes (over %d: %v), or not the one that fit", report, len(got), promptMax, len(got) > promptMax)
+		}
+	}
+}
