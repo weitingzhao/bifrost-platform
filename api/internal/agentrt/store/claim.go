@@ -172,8 +172,10 @@ const ConfirmLimit = 3 * time.Second
 // confirmClaim reads back whether a claim whose commit failed (cerr) leased
 // its attempt, under a context of its own: it takes the task's row, which
 // the claim held to its end, so it reads once the claim's transaction has
-// ended, committed or not. A read-back that fails says the lease is not
-// known.
+// ended, committed or not. It needs a connection of its own, as a pool gives
+// (a single connection the cut closed cannot read anything). A read-back
+// that fails, or does not end within ConfirmLimit, says the lease is not
+// known: the commit may still have landed.
 func confirmClaim(ctx context.Context, db DB, claim *Claim, cerr error) (*Claim, error) {
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ConfirmLimit)
 	defer cancel()

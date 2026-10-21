@@ -69,10 +69,11 @@ type API struct {
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
 // claimPollLimit bounds one poll of a claim, which neither the long poll's
-// deadline nor the client cuts (TD-399). A claim answers within its wait
-// (at most 25 seconds from its start) and one last poll with the read-back
-// of a failed commit (store.ConfirmLimit): 36 seconds, inside agentd's
-// 40-second client timeout.
+// deadline nor the client cuts (TD-399). From the handler's start, a claim
+// works for at most its wait (25 seconds) and one last poll with the
+// read-back of a failed commit (store.ConfirmLimit): 36 seconds, which
+// leaves agentd's 40-second client timeout 4 for connecting, sending the
+// request and reading the answer. A body read is not bounded here.
 const claimPollLimit = 8 * time.Second
 
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
@@ -315,7 +316,7 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	}
 	for {
 		if r.Context().Err() != nil {
-			return // the client went away: lease nothing for it
+			return // the client went away: start no poll for it (one running may still lease it a task)
 		}
 		// Each poll runs to its end under its own bound, and the long poll
 		// stops only between polls (TD-399): cut by the deadline while it
