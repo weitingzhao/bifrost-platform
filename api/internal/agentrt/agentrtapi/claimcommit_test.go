@@ -10,8 +10,8 @@ import (
 )
 
 // A claim whose long poll ends while the poll that leased a task is still
-// committing answers that lease, or leases nothing: never a 204 for a commit
-// that landed, nor a lease the database rolled back (TD-399). pgx gives up on
+// committing answers that lease: never a 204 for a commit that landed, nor a
+// lease the database rolled back (TD-399). pgx gives up on
 // the connection at its deadline and sends a cancel request, so where the
 // deadline falls decides the commit: in a trigger deferred to COMMIT that
 // sleeps, the cancel rolls it back; in the WAL flush, which commit_delay
@@ -74,19 +74,14 @@ func claimAcrossTheDeadline(t *testing.T, body string) {
 	must(t, err)
 	leased, err = pgx.CollectRows(rows, pgx.RowTo[string])
 	must(t, err)
-	switch code {
-	case http.StatusOK:
-		if len(leased) != 1 || out["attempt_id"] != leased[0] || out["task_id"] != task {
-			t.Fatalf("the claim answered %v after %v, the database leased %v", out, took, leased)
-		}
-		if took < 900*time.Millisecond {
-			t.Fatalf("the claim answered after %v, well before the poll's deadline: the commit was not stretched to it", took)
-		}
-	case http.StatusNoContent:
-		if len(leased) != 0 {
-			t.Fatalf("the claim answered 204 after %v, yet %v was leased to h1 (TD-399)", took, leased)
-		}
-	default:
-		t.Fatalf("claim: %d %v", code, out)
+	// The poll found work and ran within its own bound: it leased it, and the
+	// claim says so.
+	switch {
+	case code == http.StatusNoContent && len(leased) != 0:
+		t.Fatalf("the claim answered 204 after %v, yet %v was leased to h1 (TD-399)", took, leased)
+	case code != http.StatusOK || len(leased) != 1 || out["attempt_id"] != leased[0] || out["task_id"] != task:
+		t.Fatalf("the claim answered %d %v after %v, the database leased %v", code, out, took, leased)
+	case took < 900*time.Millisecond:
+		t.Fatalf("the claim answered after %v, well before the poll's deadline: the commit was not stretched to it", took)
 	}
 }

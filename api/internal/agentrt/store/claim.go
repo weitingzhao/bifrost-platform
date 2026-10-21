@@ -155,9 +155,41 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 			after = &cands[len(cands)-1]
 		}
 	})
+	if err != nil && claim != nil {
+		// Its commit failed: cut while it commits, pgx gives up on a commit
+		// the server may still make (TD-399).
+		return confirmClaim(ctx, db, claim, err)
+	}
 	if err != nil {
-		// A claim whose commit failed was not made (TD-399).
 		return nil, err
+	}
+	return claim, nil
+}
+
+// ConfirmLimit bounds the read-back of a claim whose commit failed.
+const ConfirmLimit = 3 * time.Second
+
+// confirmClaim reads back whether a claim whose commit failed (cerr) leased
+// its attempt, under a context of its own: it takes the task's row, which
+// the claim held to its end, so it reads once the claim's transaction has
+// ended, committed or not. A read-back that fails says the lease is not
+// known.
+func confirmClaim(ctx context.Context, db DB, claim *Claim, cerr error) (*Claim, error) {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ConfirmLimit)
+	defer cancel()
+	var leased bool
+	err := InTx(rctx, db, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(rctx, `SELECT 1 FROM agentrt.task WHERE task_id = $1 FOR SHARE`, claim.TaskID); err != nil {
+			return err
+		}
+		return tx.QueryRow(rctx, `SELECT EXISTS (SELECT 1 FROM agentrt.attempt WHERE attempt_id = $1)`, claim.AttemptID).Scan(&leased)
+	})
+	switch {
+	case err != nil:
+		return nil, fmt.Errorf("store: the commit of the claim of task %s failed (%w), and whether attempt %s was leased is not known: %v",
+			claim.TaskID, cerr, claim.AttemptID, err)
+	case !leased:
+		return nil, cerr
 	}
 	return claim, nil
 }

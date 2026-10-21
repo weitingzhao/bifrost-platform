@@ -69,9 +69,11 @@ type API struct {
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
 // claimPollLimit bounds one poll of a claim, which neither the long poll's
-// deadline nor the client cuts (TD-399): a 25-second wait and one last poll
-// stay inside agentd's 40-second client timeout.
-const claimPollLimit = 10 * time.Second
+// deadline nor the client cuts (TD-399). A claim answers within its wait
+// (at most 25 seconds from its start) and one last poll with the read-back
+// of a failed commit (store.ConfirmLimit): 36 seconds, inside agentd's
+// 40-second client timeout.
+const claimPollLimit = 8 * time.Second
 
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
 // whoami both read them. agentd, whose token is bound to one host, claims,
@@ -282,6 +284,7 @@ type claimRequest struct {
 // claim is the long poll for work: it tries until a task is leased or the
 // wait is over (204).
 func (a *API) claim(w http.ResponseWriter, r *http.Request) {
+	entered := time.Now()
 	var req claimRequest
 	if !decode(w, r, &req) || !boundHost(w, r, req.HostID) {
 		return
@@ -294,11 +297,6 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		}
 		cr.Tools = append(cr.Tools, store.Tool{Executor: t.Executor, Provider: t.Provider, Model: t.Model})
 	}
-	// The first valid claim of a token registers the host it is bound to.
-	if err := store.RegisterAgentdHost(r.Context(), a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
-		a.fail(w, err)
-		return
-	}
 	wait, poll := a.ClaimWait, a.ClaimPoll
 	if wait <= 0 || wait > 25*time.Second {
 		wait = 25 * time.Second
@@ -306,8 +304,15 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	if poll <= 0 {
 		poll = time.Second
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), wait)
+	// The wait counts from the request's start, the host's registration in
+	// it, so the answer comes within the wait and one poll (TD-399).
+	ctx, cancel := context.WithDeadline(r.Context(), entered.Add(wait))
 	defer cancel()
+	// The first valid claim of a token registers the host it is bound to.
+	if err := store.RegisterAgentdHost(ctx, a.DB, req.HostID, actuation.PrincipalFromContext(r.Context()).Name); err != nil {
+		a.fail(w, err)
+		return
+	}
 	for {
 		if r.Context().Err() != nil {
 			return // the client went away: lease nothing for it
@@ -316,7 +321,8 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 		// stops only between polls (TD-399): cut by the deadline while it
 		// commits, pgx gives up on a commit whose outcome it does not know,
 		// and the claim answered a lease the server rolled back, or 204 for
-		// a poll the server committed.
+		// a poll the server committed. A commit that fails all the same (the
+		// bound, the connection) is read back by the store.
 		pctx, pcancel := context.WithTimeout(context.WithoutCancel(r.Context()), claimPollLimit)
 		cl, err := store.ClaimNext(pctx, a.DB, cr)
 		pcancel()
