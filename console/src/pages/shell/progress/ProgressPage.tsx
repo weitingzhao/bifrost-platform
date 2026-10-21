@@ -7,7 +7,7 @@ import { ProgressOverview } from './ProgressOverview'
 import { NowClock, Tick } from './progressClock'
 import { WORK_GOAL_CARDS } from './ProgressHistory'
 import { GoalCard } from './GoalCard'
-import { missionIds, relative } from './goalCardModel'
+import { goalTaskId, missionIds, relative } from './goalCardModel'
 import { CodeHealthPage } from '@/pages/CodeHealthPage'
 import { CommitLineagePage } from '@/pages/CommitLineagePage'
 import { GOALS_SECTION, formatShellHash, hashQueryParam } from '@/lib/shell/consoleRoutes'
@@ -18,10 +18,19 @@ function goalInHash(): string {
   return id && /^M-\d+$/.test(id) ? id : ''
 }
 
-/** What the address points at on Work: a goal's card before a section (review 425 B1). */
-function addressTarget(): string | null {
+/**
+ * What the address points at on Work: a goal's card before a section (review 425 B1); with a task of the goal
+ * (`&task=`, T36), that task's details on the card once the card has them, else the card. The card brings the
+ * task into view itself when its tasks come later.
+ */
+function addressTarget(): (() => HTMLElement | null) | null {
   const goal = goalInHash()
-  return goal ? `goal-${goal}` : hashQueryParam(canonicalQuery(window.location.hash), 'section')
+  if (goal) {
+    const task = hashQueryParam(canonicalQuery(window.location.hash), 'task')
+    return () => (task ? document.getElementById(goalTaskId(goal, task)) : null) ?? document.getElementById(`goal-${goal}`)
+  }
+  const section = hashQueryParam(canonicalQuery(window.location.hash), 'section')
+  return section ? () => document.getElementById(section) : null
 }
 
 /**
@@ -41,7 +50,7 @@ export function ProgressPage() {
       const target = addressTarget()
       if (target == null) return
       cancel()
-      cancel = scrollAfterShell(() => document.getElementById(target))
+      cancel = scrollAfterShell(target)
     }
     go()
     window.addEventListener('hashchange', go)

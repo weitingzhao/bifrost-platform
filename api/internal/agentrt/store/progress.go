@@ -134,7 +134,7 @@ func TaskStatus(in StatusInput) (string, string) {
 		case !a.hostKnown:
 			return StatusUnknown, "the attempt names no host the runtime knows"
 		case a.hostPolled == nil:
-			return StatusHostLost, "host " + a.HostID + " has never polled"
+			return StatusHostLost, "host " + a.HostID + " has never polled" + notPersisted(a)
 		case in.Now.Sub(*a.hostPolled) > HostLostAfter:
 			return StatusHostLost, fmt.Sprintf("host %s last polled %d minutes ago", a.HostID, int(in.Now.Sub(*a.hostPolled)/time.Minute)) +
 				notPersisted(a)

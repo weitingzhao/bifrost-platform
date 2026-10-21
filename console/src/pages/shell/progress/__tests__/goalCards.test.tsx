@@ -274,6 +274,29 @@ describe('Progress composition', () => {
     expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf('into:code-health'))
     expect(document.getElementById('code-health')).toHaveAttribute('open')
   })
+  // T36 (review 464 B1): an address naming a task of the goal ends on that task's details, also when the card
+  // already has its tasks (a goal read before) and the shell scrolls to the top after the card's effects.
+  it('ends on the task the address names when the card already has it', async () => {
+    mockFetch()
+    const impl = 't_01M51EHZ92V5F2PRB7JCZVHTQ3'
+    const log: string[] = []
+    Element.prototype.scrollIntoView = vi.fn(function (this: Element) { log.push(`into:${this.id}`) })
+    function Shell({ children }: { children: ReactNode }) {
+      useEffect(() => { log.push('top') }, [])
+      return <>{children}</>
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['agent-runtime-progress'], parseRuntimeProgress({ work: { missions: [{ mission_id: 'M-2' }] }, needs_you: { items: [] } }))
+    client.setQueryData(['agent-runtime-goal', 'M-2'], full)
+    window.history.replaceState(null, '', `#work?goal=M-2&task=${impl}`)
+    wrap(<Shell><ProgressPage /></Shell>, client)
+    await waitFor(() => expect(log.at(-1)).toBe(`into:${goalTaskId('M-2', impl)}`))
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 150)) })
+    expect(log.at(-1)).toBe(`into:${goalTaskId('M-2', impl)}`)
+    expect(log.indexOf('top')).toBeLessThan(log.lastIndexOf(`into:${goalTaskId('M-2', impl)}`))
+    expect((document.getElementById(goalTaskId('M-2', impl)) as HTMLDetailsElement).open).toBe(true)
+    window.history.replaceState(null, '', '#')
+  })
   it('scrolls again when the address returns to the same goal, and once when it names a goal and a section (review 425 B1)', async () => {
     mockFetch()
     const log: string[] = []

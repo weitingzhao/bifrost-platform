@@ -114,7 +114,9 @@ func lostAttempts(ctx context.Context, tx pgx.Tx, missions []string, now time.Ti
 			a.Reason += " at " + a.EndedAt
 		}
 		if persisted {
-			a.Reason += "; its result was persisted after (salvaged)"
+			// Before it was lost (persisted, then gone before it submitted) or
+			// after (salvaged): the row does not tell which (review 464 B2).
+			a.Reason += "; its result is persisted"
 		} else {
 			a.Reason += notPersisted(a)
 		}

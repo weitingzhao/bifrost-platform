@@ -93,10 +93,11 @@ func (d keptDoc) task(t *testing.T, id string) (status, reason string, attempt, 
 // persisted, in its fields and its reason, and so does its task; on a host
 // that stopped polling too. Once lost, the task, back in the queue, carries
 // that attempt and says it was lost with its result not persisted; never
-// done. Salvaged, the lost attempt says its result was persisted after. An
-// attempt that persisted its result before its lease lapsed says nothing of
-// the kind, and a working attempt with no checkpoint only counts from its
-// start.
+// done. Salvaged, the lost attempt says its result is persisted. An attempt
+// that persisted its result before its lease lapsed says nothing of the kind,
+// lost too (review 464 B2: not "salvaged"), and a working attempt with no
+// checkpoint only counts from its start. A host that never polled says it
+// too (review 464 C1).
 func TestProgressSaysWhatOfAnAttemptIsPersisted(t *testing.T) {
 	t.Parallel()
 	w := newKernelWorld(t)
@@ -189,11 +190,20 @@ func TestProgressSaysWhatOfAnAttemptIsPersisted(t *testing.T) {
 		ok(t, os.WriteFile(consolePersistFixture, append(raw, '\n'), 0o644))
 	}
 
-	// Salvaged: its result was persisted after.
+	// The attempt that persisted before its lease lapsed, lost too: persisted,
+	// and the task's reason adds nothing.
+	lapse(keptAttemptID, "1 hour")
+	status, reason, _, lost, _ = w.kept(t).task(t, kept)
+	if lost == nil || lost.AttemptID != keptAttemptID || !lost.Persisted ||
+		lost.Reason != "attempt 1 on h4 was lost at "+lost.EndedAt+"; its result is persisted" || reason != "ready for a host to claim" {
+		t.Fatalf("lost after it persisted: %s %q, lost %+v", status, reason, lost)
+	}
+
+	// Salvaged: its result is persisted.
 	_, err = store.Salvage(ctx, w.rt, goneAttempt, "h2", store.Result{Report: w.artifact(t, "report", "salvaged")}, heads(nil, new(int)))
 	ok(t, err)
 	status, reason, _, lost, _ = w.kept(t).task(t, gone)
-	if lost == nil || !lost.Persisted || lost.UnpersistedForS != nil || !strings.HasSuffix(lost.Reason, "; its result was persisted after (salvaged)") ||
+	if lost == nil || !lost.Persisted || lost.UnpersistedForS != nil || !strings.HasSuffix(lost.Reason, "; its result is persisted") ||
 		status != store.StatusQueued || reason != "ready for a host to claim" {
 		t.Fatalf("salvaged: %s %q, lost %+v", status, reason, lost)
 	}
@@ -211,5 +221,17 @@ func TestProgressSaysWhatOfAnAttemptIsPersisted(t *testing.T) {
 	ok(t, err)
 	if _, _, a, lost, _ = w.kept(t).task(t, gone); a == nil || a.AttemptNo != 2 || !a.Persisted || lost != nil {
 		t.Fatalf("after attempt 2 persisted: attempt %+v, lost %+v", a, lost)
+	}
+}
+
+// Review 464 C1: an attempt whose host never polled (imported rows) says its
+// result is not persisted too.
+func TestAHostThatNeverPolledSaysTheResultIsNotPersisted(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	status, reason := store.TaskStatus(store.StatusInput{TaskState: "running", Now: now,
+		Attempt: store.LiveForTest("a_1", "stale", true, nil, nil, now.Add(-time.Minute))})
+	if status != store.StatusHostLost || reason != "host h1 has never polled; result not persisted (no checkpoint)" {
+		t.Fatalf("%s %q", status, reason)
 	}
 }
