@@ -67,6 +67,11 @@ type Claimed struct {
 	// implementation in a round after the first (TD-405, lastround.go); a
 	// platform from before it sends none.
 	FailedChecks []FailedCheck `json:"failed_checks,omitempty"`
+	// SubjectReport is the report the attempt a check checks handed in, and
+	// SubjectEffect its task's effect class (TD-409, subject.go); a platform
+	// from before it sends neither.
+	SubjectReport string `json:"subject_report_id,omitempty"`
+	SubjectEffect string `json:"subject_effect,omitempty"`
 }
 
 // FailedCheck is a check an earlier round of the task failed: deterministic

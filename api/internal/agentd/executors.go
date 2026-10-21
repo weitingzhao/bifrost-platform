@@ -71,20 +71,33 @@ func absolutePath(path string) string {
 
 // Prompt is what an agent executor is asked: the spec's text, for an
 // implementation what the checks of its task's earlier rounds failed on
-// (TD-405), and how the result is handed over. What failed is fitted into
-// what the rest leaves of promptMax (lastround.go).
+// (TD-405), for a review what the attempt it checks handed in (TD-409), and
+// how the result is handed over. The checked attempt's report is cut to a
+// smaller share while the prompt is over promptMax (subject.go), and what
+// failed is fitted into what the rest leaves (lastround.go).
 func Prompt(a *Attempt) string {
-	rest := promptRest(a)
+	rest := promptRestWith(a, subjectReportBytes)
+	for q := subjectReportBytes / 2; len(a.Spec.Text)+len(rest) > promptMax && q >= priorMinQuota; q /= 2 {
+		rest = promptRestWith(a, q)
+	}
+	if len(a.Spec.Text)+len(rest) > promptMax {
+		rest = promptRestWith(a, 0)
+	}
 	return a.Spec.Text + priorSection(a.Failed, promptMax-len(a.Spec.Text)-len(rest)) + rest
 }
 
 // promptRest is the prompt after the spec and what failed: a check's
 // subject, the hand-in rules.
-func promptRest(a *Attempt) string {
+func promptRest(a *Attempt) string { return promptRestWith(a, subjectReportBytes) }
+
+// promptRestWith is promptRest with at most quota bytes of the checked
+// attempt's report.
+func promptRestWith(a *Attempt, quota int) string {
 	var b strings.Builder
 	if a.Spec.Check != "" && a.Subject != nil {
 		fmt.Fprintf(&b, "\n\n---\nYou are checking task %s, attempt %s (round %d), at commit %s of %s, checked out here. Its spec:\n\n%s\n",
 			a.Spec.SubjectTask, a.Spec.Attempt, a.Spec.Round, a.Spec.Commit, a.Spec.Repo, a.Subject.Text)
+		writeSubject(&b, a, quota)
 		if len(a.VerifyReport) > 0 {
 			fmt.Fprintf(&b, "\nIts deterministic check passed; its verify.json:\n\n%s\n", a.VerifyReport)
 		}

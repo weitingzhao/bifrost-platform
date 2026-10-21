@@ -39,6 +39,10 @@ type Claim struct {
 	// Failed are the checks the task's earlier rounds failed, for an
 	// implementation in a round after the first (TD-405, claimfailed.go).
 	Failed []FailedCheck
+	// SubjectReport is the report the attempt a check checks handed in, and
+	// SubjectEffect its task's effect class, for a check (TD-409,
+	// claimsubject.go).
+	SubjectReport, SubjectEffect string
 }
 
 // dispatched are the effect classes round 2 hands out. External work is not
@@ -423,8 +427,11 @@ func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, 
 	  JOIN agentrt.mission m ON m.mission_id = $2 WHERE a.attempt_id = $1`, id, c.mission).Scan(&cl.LeaseExpiresAt, &cl.WorkID); err != nil {
 		return nil, err
 	}
-	if c.role == "implement" {
+	switch {
+	case c.role == "implement":
 		cl.Failed, err = failedChecks(ctx, tx, c.id, n)
+	case c.subject != "":
+		cl.SubjectReport, cl.SubjectEffect, err = subjectOf(ctx, tx, c.spec)
 	}
 	return cl, err
 }

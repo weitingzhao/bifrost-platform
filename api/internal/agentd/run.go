@@ -33,10 +33,12 @@ type Attempt struct {
 	// follows.
 	VerifyReport []byte
 	// Failed are the checks the task's earlier rounds failed, with their
-	// reports, for an implementation (TD-405, lastround.go).
-	Failed []PriorCheck
-	Dir    string // the workspace
-	Out    string // where the executor writes report.md or verify.json
+	// reports, for an implementation (TD-405, lastround.go); SubjectReport
+	// is what the attempt a review checks handed in (TD-409, subject.go).
+	Failed        []PriorCheck
+	SubjectReport []byte
+	Dir           string // the workspace
+	Out           string // where the executor writes report.md or verify.json
 	// Walled: the executor runs inside agentd's write wall (confine.go);
 	// inner is what the code it runs besides itself may write (innerWrites),
 	// walled whenever the host has a wall.
@@ -279,7 +281,10 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 			}
 		}
 	}
-	if a.Failed, err = d.priorChecks(ctx, a); err != nil {
+	if a.Failed, err = d.priorChecks(ctx, a); err == nil {
+		a.SubjectReport, err = d.subjectReport(ctx, a)
+	}
+	if err != nil {
 		return Outcome{}, err
 	}
 	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)

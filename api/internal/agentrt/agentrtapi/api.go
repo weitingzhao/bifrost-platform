@@ -348,6 +348,14 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 				}
 				body["failed_checks"] = failed
 			}
+			// What the attempt a check checks handed in (TD-409); an agentd
+			// from before it ignores the fields.
+			if cl.SubjectReport != "" {
+				body["subject_report_id"] = cl.SubjectReport
+			}
+			if cl.SubjectEffect != "" {
+				body["subject_effect"] = cl.SubjectEffect
+			}
 			writeJSON(w, http.StatusOK, body)
 			return
 		}
