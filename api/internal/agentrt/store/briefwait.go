@@ -33,7 +33,10 @@ import (
 
 // briefWaitTold is the text of the record that the Owner was told of a
 // brief's wait: the task and when its wait began (the record's since). It is
-// formatted alike in Go and by the query (format's %s).
+// formatted alike in Go and by the query (format's %s). The record is written
+// after the wait's, so it is looked for from then on, by the (event_type, at)
+// index: what is read grows with the wait, not with the Owner's mailbox
+// (review 492 B).
 const briefWaitTold = "Told the Owner: brief task %s, ready since %s, waits with no host taking it."
 
 // briefWaitsPerPass bounds how many waits one pass tells.
@@ -66,8 +69,8 @@ func TellWaitingBriefs(ctx context.Context, db DB, now time.Time) (int, error) {
 		  FROM r JOIN LATERAL (SELECT w.body_json, w.at FROM agentrt.event w WHERE w.task_id = r.task_id
 		      AND w.event_type = 'wait_limit_passed' AND w.body_json->>'wait' = '`+WaitTaskReady+`'
 		      AND (w.body_json->>'since')::timestamptz = r.since ORDER BY w.event_id LIMIT 1) w ON true
-		  WHERE NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_stream_id = $1 AND n.event_type = 'note'
-		    AND n.body_json->>'text' = format($2, r.task_id, w.body_json->>'since'))
+		  WHERE NOT EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.at >= w.at
+		    AND n.event_stream_id = $1 AND n.body_json->>'text' = format($2, r.task_id, w.body_json->>'since'))
 		  ORDER BY w.at, r.task_id LIMIT $3`, MailboxTopic("owner"), briefWaitTold, briefWaitsPerPass)
 		if err != nil {
 			return err
@@ -109,8 +112,8 @@ func tellWaitingBrief(ctx context.Context, db DB, b briefWait) (bool, error) {
 		}
 		marker := fmt.Sprintf(briefWaitTold, b.task, b.since)
 		var seen bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
-		  AND body_json->>'text' = $2)`, MailboxTopic("owner"), marker).Scan(&seen); err != nil || seen {
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event WHERE event_type = 'note' AND at >= $3::timestamptz
+		  AND event_stream_id = $1 AND body_json->>'text' = $2)`, MailboxTopic("owner"), marker, b.since).Scan(&seen); err != nil || seen {
 			return err
 		}
 		// Still ready, and ready since the wait's own start: a brief taken,
