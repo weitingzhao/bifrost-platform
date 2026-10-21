@@ -98,7 +98,7 @@ func run() error {
 		return err
 	}
 	defer func() { _ = lock.Release() }()
-	reg, err := agentd.OpenRegistry(filepath.Join(cfg.root, "registry.json"))
+	reg, err := agentd.OpenRegistry(agentd.RegistryPath(cfg.root))
 	if err != nil {
 		return err
 	}

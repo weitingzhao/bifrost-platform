@@ -577,8 +577,9 @@ func (d *Daemon) settle(e *Entry) error {
 }
 
 // Blocked names an attempt whose process group is not known to be gone, or
-// an exam run's record that still names its group (or does not read); the
-// host takes no new work while there is one (review 164 A2, 417 A1).
+// an exam run's or a bench run's record that still names its group (or does
+// not read); the host takes no new work while there is one (review 164 A2,
+// 417 A1, 487 A2).
 func (d *Daemon) Blocked() (string, error) {
 	entries, err := d.Registry.Load()
 	if err != nil {
@@ -591,6 +592,9 @@ func (d *Daemon) Blocked() (string, error) {
 	}
 	if left := examRecordsLeft(d.Root); len(left) > 0 {
 		return "the exam run recorded in " + left[0], nil
+	}
+	if left := benchRecordsLeft(d.Root); len(left) > 0 {
+		return "the bench run recorded in " + left[0], nil
 	}
 	return "", nil
 }
@@ -641,10 +645,13 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		d.testDBSwept = time.Now()
 		d.sweepTestDBs() // what killed stages left (testdb.go)
 	}
-	// What an exam sitting cut short left running is ended as well, before
-	// anything is sent; one not known gone blocks the host (Blocked; review
-	// 417 A1).
+	// What an exam sitting or a bench run cut short left running is ended as
+	// well, before anything is sent; one not known gone blocks the host
+	// (Blocked; review 417 A1, 487 A2).
 	if why := ExamRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
+		d.logf("%v; this host takes no new work until then", why)
+	}
+	if why := BenchRunsLeft(d.Root, orDefault(d.KillGrace, 10*time.Second)); why != nil {
 		d.logf("%v; this host takes no new work until then", why)
 	}
 	for _, id := range ids {

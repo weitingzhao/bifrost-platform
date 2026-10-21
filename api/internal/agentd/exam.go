@@ -574,40 +574,14 @@ func readSitting(path string) (examSitting, error) {
 }
 
 // endSittingGroup ends the process group a run's record names, when it names
-// one, and keeps the record naming the task alone once the group is gone. The
-// group's leader is told by its identity (procIdentity), never by ps's start
-// time alone, which two processes can share (review 419 B2):
-//   - the process with the group's id is the recorded leader: the group is
-//     ended (ClearGroup);
-//   - it is another process: the system hands out no process id a group
-//     still has, so the run's group went before that process came; nothing
-//     is signalled;
-//   - no process has that id: the group is gone, or only processes of it are
-//     left, which cannot be shown to be the run's (ClearGroup says which);
-//   - the record has no identity, or the identity cannot be read now: the
-//     group counts as gone only when no process is in it.
-//
-// A group left that is not known to be the run's is not touched, and the
-// error says how to look.
+// one (endRecordedGroup), and keeps the record naming the task alone once the
+// group is gone. A group left that is not known to be the run's is not
+// touched, and the error says how to look.
 func endSittingGroup(dir string, s *examSitting, grace time.Duration) error {
 	if s.PGID == 0 {
 		return nil
 	}
-	state, pids := GroupCleared, []int(nil)
-	now, err := procIdentity(s.PGID)
-	_, serr := StartTime(s.PGID)
-	leaderGone := serr != nil
-	switch {
-	case s.ID != "" && err == nil && now == s.ID:
-		state, pids = ClearGroup(s.PGID, s.Start, time.Time{}, grace)
-	case s.ID != "" && err == nil:
-	case s.ID != "" && leaderGone:
-		state, pids = ClearGroup(s.PGID, s.Start, time.Time{}, grace)
-	case GroupAlive(s.PGID):
-		state = GroupUnknown
-		pids, _ = groupMembers(s.PGID, 0)
-	}
-	if state != GroupCleared {
+	if state, pids := endRecordedGroup(s.PGID, s.Start, s.ID, grace); state != GroupCleared {
 		path := filepath.Join(dir, "sitting")
 		return fmt.Errorf("agentd: the exam's run in task %s, by its record %s, had process group %d led by a process started %s; "+
 			"processes %v of that group are left (%s), not known to be the run's. Do not end processes by that number alone: look "+

@@ -46,6 +46,10 @@ type Bench struct {
 	Logf       func(format string, args ...any)
 
 	locks map[string][]byte // the question's npm resolutions by manifest (npmInstall)
+	// left is a command's group that was not gone after it ended: its record
+	// stays, and the run launches nothing more (launch, Run; review 487 A2).
+	left       error
+	groupAlive func(pgid int) bool // GroupAlive; tests replace it
 }
 
 // BwrapSandbox runs argv in bubblewrap (the one codex ships, which the agent
@@ -167,6 +171,9 @@ func (b *Bench) Run(ctx context.Context, qs []BenchQuestion) ([]BenchResult, err
 			return out, err
 		}
 		r, cerr := b.one(ctx, q)
+		if cerr == nil {
+			cerr = b.left
+		}
 		if cerr != nil {
 			return out, fmt.Errorf("agentd: %s: what it left cannot be removed, so no further question runs: %w", q.ID, cerr)
 		}
@@ -561,22 +568,44 @@ func (b *Bench) runTail(ctx context.Context, dir string, env []string, argv ...s
 }
 
 // launch starts sp through the launcher, waits for it within limit, and
-// clears its group afterwards.
+// clears its group afterwards. While it runs, its group is recorded in the
+// run's directory (benchRunning), so that a bench killed meanwhile leaves
+// what the next agentd, bench or exam ends first (LeftOnHost, Recover;
+// review 487 A2); the record goes once the group is gone. A group still
+// there after it ended keeps the record, and the run launches nothing more.
 func (b *Bench) launch(ctx context.Context, sp Spawn, limit time.Duration) (code int, timedOut bool, err error) {
-	return launchWithin(ctx, b.Self, sp, limit, b.KillGrace)
+	if b.left != nil {
+		return 0, false, b.left
+	}
+	pgid := 0
+	code, timedOut, err = launchRecorded(ctx, b.Self, sp, limit, b.KillGrace, func(g int, at string) error {
+		pgid = g
+		id, _ := procIdentity(g) // none: the record names the group, but never ends it alone
+		return keepBenchRunning(b.Root, benchRunning{PGID: g, Start: at, ID: id})
+	})
+	if pgid == 0 {
+		return code, timedOut, err
+	}
+	alive := GroupAlive
+	if b.groupAlive != nil {
+		alive = b.groupAlive
+	}
+	if alive(pgid) {
+		b.left = fmt.Errorf("agentd: process group %d of a bench command is not gone after it ended: its record %s stays for the "+
+			"next agentd, bench or exam to end it", pgid, filepath.Join(b.Root, benchRunningName))
+		return code, timedOut, errors.Join(err, b.left)
+	}
+	if rerr := os.Remove(filepath.Join(b.Root, benchRunningName)); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+		return code, timedOut, errors.Join(err, rerr)
+	}
+	return code, timedOut, err
 }
 
-// launchWithin starts sp through the launcher at self, waits for it within
+// launchRecorded starts sp through the launcher at self, waits for it within
 // limit (TERM, then KILL after grace, 10 s by default), and clears its group
-// afterwards; ctx ending ends it the same way. agentd bench runs its
-// executors with it.
-func launchWithin(ctx context.Context, self string, sp Spawn, limit, grace time.Duration) (code int, timedOut bool, err error) {
-	return launchRecorded(ctx, self, sp, limit, grace, func(int, string) error { return nil })
-}
-
-// launchRecorded is launchWithin with record called with the group before
-// the group is released (Launch): agentd exam keeps it, so that a sitting
-// cut short can end what it left running (review 415 A2).
+// afterwards; ctx ending ends it the same way. record is called with the
+// group before the group is released (Launch): agentd exam and agentd bench
+// keep it, so that a run cut short can be ended (review 415 A2, 487 A2).
 func launchRecorded(ctx context.Context, self string, sp Spawn, limit, grace time.Duration,
 	record func(pgid int, start string) error) (code int, timedOut bool, err error) {
 	proc, err := Launch(self, sp, record)

@@ -80,6 +80,11 @@ func sitExam(job, executor, only string, limit time.Duration, dev bool) error {
 		return err
 	}
 	defer func() { _ = lock.Release() }()
+	// What a bench, an exam or agentd killed left running is ended first, or
+	// nothing is sat beside it (review 487 A2).
+	if err = agentd.LeftOnHost(cfg.root, 10*time.Second); err != nil {
+		return fmt.Errorf("%w; nothing is sat until then", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	self, err := os.Executable()

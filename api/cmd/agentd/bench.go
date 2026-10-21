@@ -86,6 +86,11 @@ func bench(questions, executor, runID, only, post string, limit time.Duration) e
 	if questions == "" || executor == "" {
 		return errors.New("--questions and --executor are required (or --post)")
 	}
+	// What a bench, an exam or agentd killed left running is ended first, or
+	// nothing runs beside it (review 487 A2).
+	if err = agentd.LeftOnHost(cfg.root, 10*time.Second); err != nil {
+		return fmt.Errorf("%w; nothing runs until then", err)
+	}
 	qs, sum, err := agentd.ReadBenchQuestions(questions)
 	if err != nil {
 		return err
