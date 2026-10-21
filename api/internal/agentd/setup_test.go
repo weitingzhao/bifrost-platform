@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -226,6 +227,46 @@ func TestPrepareSibling(t *testing.T) {
 	}
 	if _, err = PrepareSibling(context.Background(), t.TempDir(), filepath.Join("tasks", "t_1", "x"), bare, "no-such-branch", env); err == nil {
 		t.Fatal("a branch the remote has not was checked out")
+	}
+}
+
+// TD-404 (PROD M-23): what the setup downloads into Go's caches is what the
+// executor finds there, for each executor as its builder makes it: codex's
+// sandbox has no network, so its offline go build and go vet use the
+// modules the setup fetched (store.Repos: go -C api mod download). Both
+// caches are in the attempt's temporary directory, which the setup's wall
+// lets it write (innerWrites) and codex's sandbox too (codexRoots).
+func TestSetupAndExecutorShareGoCaches(t *testing.T) {
+	env := append(slices.Clone(hostEnv[1:]), "PATH=/usr/bin:/bin")
+	for _, name := range pinnedExecutors {
+		t.Run(name, func(t *testing.T) {
+			out := t.TempDir()
+			a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: out}
+			sp, err := Executors(os.Args[0], env, Secrets{})[name](a)
+			must(t, err)
+			const caches = `printf '%s\n%s\n' "$GOMODCACHE" "$GOCACHE"`
+			sp.Argv = []string{"sh", "-c", `cat "$GOMODCACHE/cache/download/marker" > seen.txt && ` + caches + ` > exec-caches.txt`}
+			sp, err = withSetup(os.Args[0], out, [][]string{{"sh", "-c", `mkdir -p "$GOMODCACHE/cache/download" && ` +
+				`echo fetched > "$GOMODCACHE/cache/download/marker" && ` + caches + ` > setup-caches.txt`}}, sp, setupOpts{Home: setupHome(out)})
+			must(t, err)
+			cmd := exec.Command(sp.Argv[0], sp.Argv[1:]...)
+			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1")
+			if b, rerr := cmd.CombinedOutput(); rerr != nil {
+				t.Fatalf("%v\n%s", rerr, b)
+			}
+			tmp := attemptTmp(out)
+			want := filepath.Join(tmp, "go", "pkg", "mod") + "\n" + filepath.Join(tmp, "go-build") + "\n"
+			read := func(f string) string { b, _ := os.ReadFile(filepath.Join(a.Dir, f)); return string(b) }
+			if s, e := read("setup-caches.txt"), read("exec-caches.txt"); s != want || e != want {
+				t.Fatalf("the setup's caches %q, the executor's %q; want both %q", s, e, want)
+			}
+			if got := read("seen.txt"); got != "fetched\n" {
+				t.Fatalf("the executor did not find what the setup fetched: %q", got)
+			}
+			if inner := innerWrites(a, nil); !slices.Contains(inner, tmp) {
+				t.Fatalf("the setup's wall %q does not take the caches' directory %s", inner, tmp)
+			}
+		})
 	}
 }
 

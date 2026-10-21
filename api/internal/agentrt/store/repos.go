@@ -40,6 +40,11 @@ type Sibling struct {
 // the Console linted, tested and built. The Console's @bifrost/ui is
 // file:../../bifrost-ui, so bifrost-ui's main sits beside the checkout, as CI
 // clones it by default, and both are installed before the executor starts.
+// The API module's dependencies are downloaded first, into the attempt's
+// GOMODCACHE, which its executor shares (agentd's homePins): codex's sandbox
+// has no network, and with an empty cache it could not build or vet the
+// packages it changed, so it handed in work it had checked only file by file
+// (TD-404, PROD M-23).
 //
 // The infra repository has no CI test job and no Python manifest; its checks
 // are its own Python tests that need nothing but the repository, pytest and
@@ -67,6 +72,7 @@ var Repos = map[string]Repo{
 		},
 		TestDirs: []string{"api"},
 		Setup: [][]string{
+			{"go", "-C", "api", "mod", "download"},
 			{"npm", "--prefix", "../bifrost-ui", "ci", "--no-audit", "--no-fund"},
 			{"npm", "--prefix", "console", "ci", "--no-audit", "--no-fund"},
 		},

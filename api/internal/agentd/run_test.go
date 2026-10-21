@@ -507,6 +507,7 @@ func TestPlatformImplementSpecParses(t *testing.T) {
 		t.Fatalf("verify = %q, want %q", s.Verify, want)
 	}
 	wantSetup := [][]string{
+		{"go", "-C", "api", "mod", "download"}, // TD-404: codex's sandbox has no network
 		{"npm", "--prefix", "../bifrost-ui", "ci", "--no-audit", "--no-fund"},
 		{"npm", "--prefix", "console", "ci", "--no-audit", "--no-fund"},
 	}

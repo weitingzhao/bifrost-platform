@@ -226,3 +226,26 @@ func TestInfraGoalToImplementation(t *testing.T) {
 		ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTask(ctx, tx, "controller", plan, "cancelled", "test") }))
 	}
 }
+
+// TD-404 (PROD M-23): codex's sandbox has no network, so the platform's setup
+// downloads the API module's dependencies before the executor starts, first;
+// its spec tells the executor so. Without it codex's go build and go vet of
+// the packages it changed failed on an empty module cache.
+func TestPlatformSetupDownloadsGoModules(t *testing.T) {
+	t.Parallel()
+	r := store.Repos["bifrost-platform"]
+	if len(r.Setup) == 0 || !slices.Equal(r.Setup[0], []string{"go", "-C", "api", "mod", "download"}) {
+		t.Fatalf("the platform's setup does not download Go's modules first: %q", r.Setup)
+	}
+	body, err := store.ImplementSpec("t", "x", r, r.Verify)
+	ok(t, err)
+	var spec struct {
+		Text  string
+		Setup [][]string
+	}
+	ok(t, json.Unmarshal(body, &spec))
+	if !slices.EqualFunc(spec.Setup, r.Setup, slices.Equal) ||
+		!strings.Contains(spec.Text, "Dependencies were installed before you started, by:\n\n    go -C api mod download\n") {
+		t.Fatalf("spec = %s", body)
+	}
+}
