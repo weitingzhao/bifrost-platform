@@ -317,6 +317,8 @@ describe('pending release approvals', () => {
       approval({ id: 'd', action: 'start_pipeline_run', status: 'approved' }),
     ])
     expect(rows.map(row => row.id)).toEqual(['c', 'a'])
+    // A drill ships nothing and waits for no one (W-31 2.5 gap 2, review 480 B1).
+    expect(pendingReleaseApprovals([approval({ id: 'drill', action: 'start_pipeline_run', drill: true })])).toEqual([])
   })
 
   it('describes what the request ships and links to its detail page', () => {

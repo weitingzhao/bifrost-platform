@@ -13,6 +13,7 @@ import {
   splitReason,
   technicalParams,
   technicalResult,
+  tierWords,
   unknownFollowup,
   visibleTimestamp,
   workItems,
@@ -166,6 +167,15 @@ describe('decisionTitle', () => {
       'owner_run_command',
     )
     expect(decisionTitle({ number: 58, summary: '  ', action: 'owner_run_command' })).toBe('owner_run_command')
+  })
+  it('says a drill first in every title, and that nothing runs in place of the tier (W-31 2.5 gap 2, review 480 B2)', () => {
+    expect(decisionTitle({ number: 9, summary: 'Publish platform', action: 'start_pipeline_run', drill: true })).toBe('Drill · #9 · Publish platform')
+    expect(decisionTitle({ number: 0, summary: '', action: 'start_pipeline_run', drill: true })).toBe('Drill · start_pipeline_run')
+    expect(approvalRowTitle({ number: 9, reason: 'T24 scenario 9', summary: '', action: 'x', drill: true })).toBe('Drill · #9 · T24 scenario 9')
+    expect(approvalRowTitle({ number: undefined, reason: '', summary: '', action: 'x', drill: true })).toBe('Drill · x')
+    expect(approvalRowTitle({ number: 9, reason: 'T24', summary: '', action: 'x', drill: false })).toBe('#9 · T24')
+    for (const tier of ['C', 'D']) expect(tierWords(tier, true)).toBe('a drill: nothing runs, and it cannot be approved')
+    expect(tierWords('C')).toBe('runs as soon as you approve')
   })
 })
 

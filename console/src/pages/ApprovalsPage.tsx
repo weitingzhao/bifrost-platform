@@ -293,7 +293,7 @@ function ApprovalCard({
   const trimmed = reason.trim()
   const title = decisionTitle(item)
   const env = decisionEnv(item)
-  const words = tierWords(item.tier)
+  const words = tierWords(item.tier, item.drill === true)
   const { lead, rest } = splitReason(item.reason)
   const chips = workItems(item.reason)
   const command = commandText(item.params)

@@ -6,19 +6,28 @@ import {
   type ApprovalResolution,
 } from '@/api/approvals'
 
-/** `#n · summary`, or the action name when either piece is missing. */
-export function decisionTitle(item: Pick<ApprovalItem, 'number' | 'summary' | 'action'>): string {
+/** A drill says so first in every title (v4 §20.3 rule 8: the title says it; review 480 B2). */
+function drillTitle(drill: boolean | undefined, title: string): string {
+  return drill === true ? `Drill · ${title}` : title
+}
+
+/** `#n · summary`, or the action name when either piece is missing; a drill's starts with "Drill". */
+export function decisionTitle(item: Pick<ApprovalItem, 'number' | 'summary' | 'action'> & Partial<Pick<ApprovalItem, 'drill'>>): string {
   const summary = item.summary?.trim() ?? ''
   const number = item.number
   if (typeof number === 'number' && Number.isFinite(number) && number > 0 && summary !== '') {
-    return `#${number} · ${summary}`
+    return drillTitle(item.drill, `#${number} · ${summary}`)
   }
   const action = item.action.trim()
-  return action !== '' ? action : 'Request'
+  return drillTitle(item.drill, action !== '' ? action : 'Request')
 }
 
-/** What the tier letter means, in plain words. */
-export function tierWords(tier: string): string {
+/** What a drill's tier means: nothing, it is never approved. */
+export const DRILL_WORDS = 'a drill: nothing runs, and it cannot be approved'
+
+/** What the tier letter means, in plain words; for a drill, that nothing runs. */
+export function tierWords(tier: string, drill = false): string {
+  if (drill) return DRILL_WORDS
   switch (tier.trim().toUpperCase()) {
     case 'B':
       return 'runs without approval'
@@ -41,16 +50,16 @@ function requestNumber(value: number | undefined): number | null {
  * else the action name. No `#` when the request has no number.
  */
 export function approvalRowTitle(
-  item: Pick<ApprovalItem, 'number' | 'reason' | 'summary' | 'action'>,
+  item: Pick<ApprovalItem, 'number' | 'reason' | 'summary' | 'action'> & Partial<Pick<ApprovalItem, 'drill'>>,
 ): string {
   const lead = splitReason(item.reason ?? '').lead.trim()
   const summary = item.summary?.trim() ?? ''
   const action = item.action?.trim() ?? ''
   const body = lead !== '' ? lead : summary !== '' ? summary : action
   const number = requestNumber(item.number)
-  if (number == null) return body
-  if (body === '') return `#${number}`
-  return `#${number} · ${body}`
+  if (number == null) return drillTitle(item.drill, body)
+  if (body === '') return drillTitle(item.drill, `#${number}`)
+  return drillTitle(item.drill, `#${number} · ${body}`)
 }
 
 export function decisionEnv(item: Pick<ApprovalItem, 'env' | 'params'>): string {

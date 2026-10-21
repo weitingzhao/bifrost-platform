@@ -37,7 +37,7 @@ export function ApprovalRow({
 }) {
   const env = approvalEnv(item)
   const pending = item.status === 'pending'
-  const words = tierWords(item.tier)
+  const words = tierWords(item.tier, item.drill === true)
   const detail = lines != null && lines.length > 0 ? lines : null
   return (
     <li className="list-none min-w-0 max-w-full">

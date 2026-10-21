@@ -79,6 +79,32 @@ test('批 #57 on tier C: one POST to the stored id, channel chat only', async ()
   assert.equal(got.approval_line, LINE_C)
 })
 
+// A drill (W-31 2.5 gap 2, review 480 B3): approving one is refused on any tier, before tier D's Console route is
+// offered, with nothing sent; rejecting one below tier D still closes it; list_pending says what it is.
+test('a drill is never approved here, on tier C or D; reject still closes it', async () => {
+  for (const rec of [{ ...tierC, drill: true }, { ...tierD, drill: true }]) {
+    const { client, sends } = fakeClient(rec)
+    const got = (await approveRequest(`#${rec.number}`, rec.approval_line!, client)) as Record<string, unknown>
+    assert.equal(sends.length, 0, `tier ${rec.tier}`)
+    assert.equal(got.error, 'a drill cannot be approved')
+    assert.equal(got.sent, false)
+    assert.equal(got.drill, true)
+    assert.match(String(got.hint), new RegExp(`^#${rec.number} is a drill: nothing runs and it cannot be approved\\..* Reject closes it\\.$`))
+    assert.doesNotMatch(JSON.stringify(got), /approve or reject|Console only/)
+  }
+  const { client, sends } = fakeClient({ ...tierC, drill: true }, { status: 'rejected', id: tierC.id })
+  const got = (await rejectRequest('#57', LINE_C, 'drill seen', client)) as Record<string, unknown>
+  assert.equal(sends.length, 1)
+  assert.equal(sends[0].path, '/api/v1/approvals/appr_0123456789abcdef/reject')
+  assert.equal(got.status, 'rejected')
+  const listed = (await listPending(fakeClient({ approvals: [{ ...tierC, drill: true }, { ...tierD, drill: true }, tierC] }).client)) as {
+    approvals: Array<Record<string, unknown>>
+  }
+  assert.match(String(listed.approvals[0].drill_hint), /^#57 is a drill: nothing runs and it cannot be approved\./)
+  assert.match(String(listed.approvals[1].drill_hint), /^#58 is a drill/)
+  assert.equal(listed.approvals[2].drill_hint, undefined)
+})
+
 test('批 #58 on tier D: refused with the Console link, nothing sent', async () => {
   const { client, gets, sends } = fakeClient(tierD)
   const got = (await approveRequest('#58', LINE_D, client)) as Record<string, unknown>

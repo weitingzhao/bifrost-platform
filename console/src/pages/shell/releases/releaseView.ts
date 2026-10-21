@@ -314,10 +314,10 @@ export const RELEASE_APPROVAL_ACTIONS: ReadonlySet<string> = new Set([
   'gitops_rollback_app',
 ])
 
-/** Pending release requests, longest waiting first. */
+/** Pending release requests, longest waiting first. A drill is none: it ships nothing and waits for no one (review 480 B1). */
 export function pendingReleaseApprovals(items: ApprovalItem[]): ApprovalItem[] {
   return items
-    .filter(item => item.status === 'pending' && RELEASE_APPROVAL_ACTIONS.has(item.action))
+    .filter(item => item.status === 'pending' && item.drill !== true && RELEASE_APPROVAL_ACTIONS.has(item.action))
     .sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
 }
 

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { approvalRef } from './approvalTools.js'
-import { consoleApprovalUrl } from './approveHint.js'
+import { consoleApprovalUrl, drillHint } from './approveHint.js'
 import { jsonResult, platformGet, platformSend } from './platformClient.js'
 
 /**
@@ -35,6 +35,8 @@ export interface ApprovalRecord {
   /** Canonical line produced by the server. Shown and compared exactly. */
   approval_line?: string
   params_hash?: string
+  /** A drill: nothing to approve; reject closes it (W-31 2.5 gap 2). */
+  drill?: boolean
 }
 
 export interface ApproveClient {
@@ -80,14 +82,21 @@ function consoleOnly(rec: ApprovalRecord): Record<string, unknown> {
   }
 }
 
-/** Read the request and refuse unless id and approval line match it. Sends nothing on refusal. */
-async function checkDecision(id: string, approval: string, client: ApproveClient): Promise<Checked> {
+/**
+ * Read the request and refuse unless id and approval line match it. Sends nothing on refusal. A drill is never
+ * approved, on any tier: approving one is refused here, before tier D's Console route is offered (review 480 B3).
+ */
+async function checkDecision(id: string, approval: string, client: ApproveClient, decision: 'approve' | 'reject'): Promise<Checked> {
   const ref = approvalRef(id)
   const rec = asRecord(await client.get(`/api/v1/approvals/${encodeURIComponent(ref)}`))
   const line = approvalLine(rec)
   const refuse = (error: string, extra: Record<string, unknown> = {}) =>
     ({ ok: false, refusal: { error, sent: false, approval_line: line, ...extra } }) as const
   if (!rec.id) return refuse('not found', { id: ref })
+  if (decision === 'approve' && rec.drill === true) {
+    return refuse('a drill cannot be approved', { id: rec.id, ...(rec.number ? { number: rec.number } : {}), drill: true,
+      hint: `${drillHint(rec.id, rec.number)} Reject closes it.` })
+  }
   if (rec.tier === 'D') return { ok: false, refusal: consoleOnly(rec) }
   if (!rec.approval_line || !rec.params_hash) return refuse('approval line is not available from the server')
   if (rec.status !== 'pending') return refuse('not pending', { status: rec.status })
@@ -102,7 +111,7 @@ async function checkDecision(id: string, approval: string, client: ApproveClient
 
 /** Tiers below D only; tier D answers with its Console link and sends nothing. */
 export async function approveRequest(id: string, approval: string, client: ApproveClient = liveClient): Promise<unknown> {
-  const checked = await checkDecision(id, approval, client)
+  const checked = await checkDecision(id, approval, client, 'approve')
   if (!checked.ok) return checked.refusal
   const body = asRecord(
     await client.send(`/api/v1/approvals/${encodeURIComponent(checked.rec.id!)}/approve`, {
@@ -120,7 +129,7 @@ export async function rejectRequest(
   reason: string,
   client: ApproveClient = liveClient,
 ): Promise<unknown> {
-  const checked = await checkDecision(id, approval, client)
+  const checked = await checkDecision(id, approval, client, 'reject')
   if (!checked.ok) return checked.refusal
   const body = asRecord(
     await client.send(`/api/v1/approvals/${encodeURIComponent(checked.rec.id!)}/reject`, { reason }),
@@ -140,13 +149,15 @@ export async function listPending(client: ApproveClient = liveClient): Promise<u
   return {
     approvals: list.map((a) => {
       const rec = asRecord(a)
+      // A drill says so: nothing to approve; reject (on Console for tier D) closes it.
+      const drill = rec.drill === true && rec.id ? { drill_hint: drillHint(rec.id, rec.number) } : {}
       if (rec.tier === 'D') {
         const rest: ApprovalRecord = { ...rec }
         delete rest.approval_line
-        if (rec.id) return { ...rest, console_only: true, console_url: consoleApprovalUrl(rec.id) }
+        if (rec.id) return { ...rest, console_only: true, console_url: consoleApprovalUrl(rec.id), ...drill }
         return rest
       }
-      return { approval_line: approvalLine(rec), ...rec }
+      return { approval_line: approvalLine(rec), ...rec, ...drill }
     }),
   }
 }

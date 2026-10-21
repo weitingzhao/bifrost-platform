@@ -112,10 +112,11 @@ func TestOwnerNext(t *testing.T) {
 		}
 	}
 
-	// A dependency within the goal adds nothing; a cycle between goals (each waiting on the other's task) ends.
+	// A dependency within the goal adds nothing; goals that wait on each other end, with the tasks a DAG (the
+	// database refuses a cycle of tasks): M-6's t6a waits on M-7's t7b, M-7's t7c on M-6's t6b (review 480 C1).
 	ms = []*progressMission{
-		mission("M-6", "active", []any{step("f", true)}, task("t6", "t6b"), task("t6b", "t7")),
-		mission("M-7", "active", nil, task("t7", "t6")),
+		mission("M-6", "active", []any{step("f", true)}, task("t6a", "t7b"), task("t6b"), task("t6c", "t6b")),
+		mission("M-7", "active", nil, task("t7b"), task("t7c", "t6b")),
 	}
 	etas = map[string]map[string]any{"M-6": est(5, 10), "M-7": est(20, 30)}
 	check("cycle", ownerNext(ms, etas, false, now), want{state: "estimated", mission: "M-6", earliest: at(20), latest: at(30),
