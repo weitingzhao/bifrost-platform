@@ -6,7 +6,7 @@ import { PLAN_SECTION_HREF, planStepLine } from '@/pages/shell/progress/progress
 export function PlanStepLinks({ steps, className = '' }: { steps: readonly ApprovalStep[]; className?: string }) {
   return <>{steps.map(step => (
     <a key={step.id} href={PLAN_SECTION_HREF} data-plan-step={step.id} title={step.id}
-      className={`block min-w-0 max-w-full break-words underline ${className}`}>{planStepLine(step)}</a>
+      className={`block min-w-0 max-w-full break-words underline pointer-coarse:py-3 ${className}`}>{planStepLine(step)}</a>
   ))}</>
 }
 

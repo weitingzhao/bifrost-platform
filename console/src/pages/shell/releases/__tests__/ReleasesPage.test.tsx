@@ -64,6 +64,7 @@ function policyStatus(partial: Record<string, unknown> = {}) {
 }
 
 let policyResponse: () => Response = () => json(policyStatus())
+let gitopsFails = false
 
 function installFetch() {
   vi.stubGlobal(
@@ -111,6 +112,7 @@ function installFetch() {
         })
       }
       if (url.endsWith('/api/v1/gitops/apps')) {
+        if (gitopsFails) return json({ error: 'argocd unreachable' }, 503)
         return json({
           apps: [
             {
@@ -268,6 +270,7 @@ describe('ReleasesPage', () => {
   beforeEach(() => {
     installStorage()
     policyResponse = () => json(policyStatus())
+    gitopsFails = false
     installFetch()
   })
 
@@ -406,6 +409,14 @@ describe('ReleasesPage', () => {
     const banner = screen.getByTestId('release-policy-banner')
     expect(banner.getAttribute('data-tone')).toBe('danger')
     expect(banner.textContent).toContain('No valid release policy')
+  })
+
+  it('says the Argo CD applications could not be read, not that there is none to roll back (review 488 A5)', async () => {
+    gitopsFails = true
+    render(wrapper(<ReleasesPage />))
+    expect(await screen.findByText(/^Argo CD applications could not be read: .+; whether one can be rolled back is not known\.$/, undefined, { timeout: 4000 })).toBeTruthy()
+    expect(screen.queryByText('No PROD Argo CD application to roll back.')).toBeNull()
+    expect(screen.queryByRole('button', { name: /rollback/i })).toBeNull()
   })
 
   it('says Unknown when the release policy cannot be read', async () => {

@@ -2,11 +2,12 @@ import { COORDINATOR_WINDOW } from '@/api/agentRuntimeBus'
 import { archCounts } from '@/api/agentRuntimePlan'
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED } from '../agents/useRuntimePlan'
+import { LastRead } from './LastRead'
 import { Bar, Card, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
 import { OwnerGoals } from './OwnerGoals'
 import { PoolReadings } from './PoolReadings'
-import { ago, runtimeUnreadLine } from './ownerModel'
+import { ago, reasonText, runtimeUnreadLine } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 /**
@@ -63,7 +64,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
         {source.from === 'absent' && <p className="m-0 text-sm text-muted-foreground">{PLAN_NOT_IMPORTED}</p>}
         {source.from === 'loading' && <p role="status" className="m-0 text-sm text-muted-foreground">Reading the plan from the agent runtime…</p>}
         {source.from === 'error' || round?.unknown !== undefined
-          ? <p role="alert" className="m-0 break-words text-sm text-muted-foreground">Plan unavailable: {source.from === 'error' ? source.error : round?.unknown}</p>
+          ? <p role="alert" className="m-0 break-words text-sm text-muted-foreground">Plan unavailable: {source.from === 'error' ? <>{reasonText(source.error)}; <LastRead readAt={source.readAt} />.</> : round?.unknown}</p>
           : plan.length === 0 && source.from === 'runtime' && <p className="m-0 text-sm text-muted-foreground">No items in the runtime's plan.</p>}
         <ol className="m-0 flex list-none flex-col gap-1.5 p-0">{plan.map(row => <li key={row.key} className={`grid grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center gap-2 rounded px-1.5 py-1 ${row.tag === 'now' ? 'bg-[var(--control-fill)]' : ''}`}>
           <span className="font-mono text-sm font-semibold">{row.key}</span>
@@ -81,7 +82,7 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
         {counts && arch.from === 'runtime' && <p className="m-0 flex flex-wrap gap-2 border-t border-[var(--table-rule)] pt-2 text-sm" data-arch-summary>
           <strong>Architecture, {arch.table.rows.length} rows:</strong><span>{counts.passed} passed</span><span>{counts.notYet} not yet</span><span>{counts.noGate} no gate yet</span><span>{counts.unknown} unknown</span></p>}
         {arch.from === 'absent' && <p className="m-0 border-t border-[var(--table-rule)] pt-2 text-xs text-muted-foreground">{ARCH_NOT_IMPORTED}</p>}
-        {arch.from === 'error' && <p role="alert" className="m-0 break-words border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">Architecture unavailable: {arch.error}</p>}
+        {arch.from === 'error' && <p role="alert" className="m-0 break-words border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} />.</p>}
       </Card>
       <Card label="Quota" title="Quota" more={{ href: '#system', text: 'System' }}>
         <PoolReadings now={now} />

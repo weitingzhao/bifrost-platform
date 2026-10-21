@@ -21,14 +21,17 @@ export type PlanRead =
   | { from: 'loading' }
   | { from: 'absent' }
   | { from: 'runtime'; round: RuntimeRound }
-  | { from: 'error'; error: string }
+  | { from: 'error'; error: string; readAt?: number | null }
 
 /** The architecture table, from GET /progress only (2.5 ⑤ G2). absent: the runtime holds no architecture root. */
 export type ArchRead =
   | { from: 'loading' }
   | { from: 'absent' }
   | { from: 'runtime'; table: RuntimeArchTable }
-  | { from: 'error'; error: string }
+  | { from: 'error'; error: string; readAt?: number | null }
+
+/** When a read made of several last answered whole: the oldest of their answers; null before each has answered once. */
+const wholeAt = (...updatedAt: number[]): number | null => (updatedAt.every(at => at > 0) ? Math.min(...updatedAt) : null)
 
 type Read<T> = { data: T | undefined; error: unknown; isError: boolean; isPaused: boolean }
 const failure = (q: Read<unknown>) => q.isError ? (q.error instanceof Error ? q.error.message : 'Request failed') : q.isPaused ? 'offline' : null
@@ -65,11 +68,15 @@ export function useRuntimePlan(enabled = true): PlanRead {
   const { data: plan, error: planError, isError: planFailed, isPaused: planPaused } = planQ
   const { data: request, error: requestError, isError: requestFailed, isPaused: requestPaused } = requestQ
   const { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused } = progressQ
-  return useMemo(() => planRead(
+  const read = useMemo(() => planRead(
     { data: plan, error: planError, isError: planFailed, isPaused: planPaused },
     { data: request, error: requestError, isError: requestFailed, isPaused: requestPaused },
     { data: progress, error: progressError, isError: progressFailed, isPaused: progressPaused },
   ), [plan, planError, planFailed, planPaused, request, requestError, requestFailed, requestPaused, progress, progressError, progressFailed, progressPaused])
+  // A failed read says when the plan was last read whole (review 488 B1); a good one stays the same object across
+  // polls, so a pane does not repaint for a read that changed nothing.
+  const readAt = wholeAt(planQ.dataUpdatedAt, progressQ.dataUpdatedAt)
+  return useMemo(() => (read.from === 'error' ? { ...read, readAt } : read), [read, readAt])
 }
 
 /** The architecture table from one read of GET /progress: a failed or paused read is an error, never an empty table. */
@@ -91,8 +98,10 @@ export function archRead(progress: Read<RuntimeProgress>): ArchRead {
 export function useRuntimeArch(enabled = true): ArchRead {
   const progressQ = useQuery({ queryKey: ['agent-runtime-progress'], queryFn: ({ signal }) => fetchRuntimeProgress(signal),
     enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
-  const { data, error, isError, isPaused } = progressQ
-  return useMemo(() => archRead({ data, error, isError, isPaused }), [data, error, isError, isPaused])
+  const { data, error, isError, isPaused, dataUpdatedAt } = progressQ
+  const read = useMemo(() => archRead({ data, error, isError, isPaused }), [data, error, isError, isPaused])
+  const readAt = wholeAt(dataUpdatedAt)
+  return useMemo(() => (read.from === 'error' ? { ...read, readAt } : read), [read, readAt])
 }
 
 /**

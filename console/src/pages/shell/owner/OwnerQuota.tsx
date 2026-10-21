@@ -4,7 +4,7 @@ import { Button } from '@bifrost/ui'
 import { POOLS_QUERY_KEY, fetchPools, recordPoolReading } from '@/api/agentRuntimePools'
 import { PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { Card } from './OwnerParts'
-import { ago } from './ownerModel'
+import { ago, answeredAt, lastReadWords } from './ownerModel'
 
 const KNOWN_POOLS = ['codex:owner:short', 'codex:owner:weekly', 'claude:owner:short', 'claude:owner:weekly', 'cursor:owner:monthly']
 const localTime = (at: string | null) => at ? new Date(at).toLocaleString() : 'unknown'
@@ -23,8 +23,11 @@ export function OwnerQuota({ now }: { now: number }) {
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const busy = useRef(false)
-  const pools = query.data ?? []
-  const choices = [...new Set([...KNOWN_POOLS, ...pools.map(p => p.vendor_pool_id)])]
+  const openedAt = useRef(Date.now())
+  // Failed or paused offline: the last answer's readings are not shown as this one's, as on Work (review 488 A3).
+  const unreadable = query.isError || query.isPaused
+  const pools = unreadable ? [] : query.data ?? []
+  const choices = [...new Set([...KNOWN_POOLS, ...(query.data ?? []).map(p => p.vendor_pool_id)])]
   async function submit(event: FormEvent) {
     event.preventDefault()
     if (!owner || busy.current) return
@@ -40,9 +43,9 @@ export function OwnerQuota({ now }: { now: number }) {
     finally { busy.current = false; setPending(false) }
   }
   return <Card label="Quota" title="Quota">
-    {query.isPending && <p className="m-0 text-sm text-muted-foreground">Reading quota…</p>}
-    {query.isError && <p role="alert" className="m-0 text-sm [overflow-wrap:anywhere]">Quota could not be read: {query.error.message}</p>}
-    {query.isSuccess && pools.length === 0 && <p className="m-0 text-sm text-muted-foreground">No pools reported yet.</p>}
+    {query.isPending && !query.isPaused && <p className="m-0 text-sm text-muted-foreground">Reading quota…</p>}
+    {unreadable && <p role="alert" className="m-0 text-sm [overflow-wrap:anywhere]">Quota could not be read{query.error ? `: ${query.error.message}` : ' (offline)'}; {lastReadWords(answeredAt(query.dataUpdatedAt), openedAt.current, now)}.</p>}
+    {query.isSuccess && !unreadable && pools.length === 0 && <p className="m-0 text-sm text-muted-foreground">No pools reported yet.</p>}
     <ul className="m-0 flex min-w-0 list-none flex-col gap-2 p-0 text-sm">
       {pools.map(p => {
         // A reading whose window has reset since is the previous window's, not this one's (review 281 B1).

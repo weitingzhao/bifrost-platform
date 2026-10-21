@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlatformAuthContext, type PlatformAuthContextValue } from '@/hooks/platformAuthContext'
 import { fetchPools, parsePools, recordPoolReading } from '@/api/agentRuntimePools'
 import { OwnerQuota } from '../OwnerQuota'
+import { PoolReadings } from '../PoolReadings'
 import chicago from './fixtures/pools-chicago.json'
 import utc from './fixtures/pools-utc.json'
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }))
@@ -90,6 +91,25 @@ describe('quota card', () => {
   it('shows read errors', async () => {
     mocks.fetch.mockRejectedValue(new Error('Quota offline')); show()
     expect(await screen.findByRole('alert')).toHaveTextContent('Quota offline')
+  })
+  it('after a good read, a failed one shows no reading of the last answer and says when it was read (review 488 A3)', async () => {
+    const { client } = show()
+    expect(await screen.findByText('40.0% used')).toBeInTheDocument()
+    mocks.fetch.mockRejectedValue(new Error('Quota offline'))
+    await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-pools'] }) })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Quota could not be read: Quota offline; last read .+\.$/)
+    expect(screen.queryByRole('listitem')).toBeNull()
+    expect(screen.queryByText('40.0% used')).toBeNull()
+    expect(screen.queryByText('No pools reported yet.')).toBeNull()
+  })
+  it('on Work too: after a good read, a failed one shows no reading and says when it was read (review 488 A3, B1)', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client)
+    render(<QueryClientProvider client={client}><PoolReadings now={Date.now()} /></QueryClientProvider>)
+    expect(await screen.findByRole('list', { name: 'Quota readings' })).toBeInTheDocument()
+    mocks.fetch.mockRejectedValue(new Error('Quota offline'))
+    await act(async () => { await client.refetchQueries({ queryKey: ['agent-runtime-pools'] }) })
+    expect(await screen.findByRole('alert')).toHaveTextContent(/^Quota could not be read: Quota offline; last read \d\d:\d\d \(just now\)\.$/)
+    expect(screen.queryByRole('list', { name: 'Quota readings' })).toBeNull()
   })
   it('polls every 30 seconds and stops on unmount', async () => {
     vi.useFakeTimers(); const view = show()

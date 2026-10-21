@@ -12,7 +12,7 @@ export function ArtifactPanel({ id, close, label }: { id: string; close: () => v
   const query = useQuery({ queryKey: ['agent-runtime-artifact', id], queryFn: ({ signal }) => fetchRuntimeArtifact(id, signal) })
   return <section aria-label={`Artifact ${id}`} className="my-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
     <div className="flex flex-wrap justify-between gap-2"><strong className="break-all">{label || id}</strong><button type="button" onClick={close}>Close artifact</button></div>
-    {label && <details><summary>Details</summary><p className="break-all text-xs">{id}</p></details>}
+    {label && <details><summary className="cursor-pointer pointer-coarse:min-h-11 pointer-coarse:py-3">Details</summary><p className="break-all text-xs">{id}</p></details>}
     {query.isPending && <p role="status">Loading artifact…</p>}
     {query.isError && <p role="alert">Could not load artifact: {query.error.message}</p>}
     {query.data !== undefined && <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{query.data || 'Artifact is empty.'}</pre>}

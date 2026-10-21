@@ -41,7 +41,7 @@ function Frame({
 }) {
   return (
     <div data-testid="question-page" data-question-state={state} className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
-      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline">
+      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline pointer-coarse:py-3">
         ← For you
       </a>
       <p className="m-0 text-sm">{FROM_AN_AGENT}</p>

@@ -431,7 +431,7 @@ function ApprovalCard({
             Reject reason
             <input
               id={`reject-${item.id}`}
-              className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
+              className="min-h-11 w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-base outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
               value={reason}
               onChange={event => setReason(event.target.value)}
             />
@@ -441,7 +441,7 @@ function ApprovalCard({
             {item.drill === true ? null : (
               <Button
                 type="button"
-                className="h-11 w-full sm:h-auto sm:w-auto"
+                className="h-11 w-full sm:w-auto"
                 disabled={!canDecide}
                 title={blockedReason}
                 aria-describedby={staleBuild ? buildReasonId : undefined}
@@ -454,7 +454,7 @@ function ApprovalCard({
             <Button
               type="button"
               variant="outline"
-              className="h-11 w-full sm:h-auto sm:w-auto"
+              className="h-11 w-full sm:w-auto"
               disabled={!canDecide || trimmed === ''}
               title={blockedReason}
               aria-describedby={staleBuild ? buildReasonId : undefined}
@@ -467,7 +467,7 @@ function ApprovalCard({
         </div>
       ) : null}
       <details className="min-w-0 max-w-full">
-        <summary className="cursor-pointer text-sm">Technical details</summary>
+        <summary className="cursor-pointer text-sm pointer-coarse:py-3">Technical details</summary>
         <div className="mt-2 flex w-full min-w-0 max-w-full flex-col gap-3">
           {command != null ? (
             <div className="min-w-0 max-w-full">
@@ -715,7 +715,7 @@ export function ApprovalsPage() {
   return (
     <div data-testid="approvals-page" className="flex w-full min-w-0 max-w-3xl flex-col gap-4 overflow-x-clip">
       <ConsoleBuildBanner stale={staleBuild} holdReload={reloadHeld} />
-      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline hover:text-foreground">
+      <a href={NEEDS_YOU_HREF} className="text-sm text-muted-foreground no-underline hover:text-foreground pointer-coarse:py-3">
         ← For you
       </a>
       {id == null ? (

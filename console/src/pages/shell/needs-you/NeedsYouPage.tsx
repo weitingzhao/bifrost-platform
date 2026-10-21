@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { clearLegacyApprovalToken } from '@/api/approvals'
 import { fetchLineage } from '@/api/lineage'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
@@ -19,7 +19,9 @@ import {
 } from '@/pages/shell/needs-you/needsYouGroups'
 import { resolveSilentThread, SILENT_THREAD_EXPLANATION } from '@/pages/shell/needs-you/silentThread'
 import { useNeedsYou } from '@/pages/shell/needs-you/useNeedsYou'
-import { approvalPart } from '@/pages/shell/progress/progressPart'
+import { PLAN_SECTION_HREF, approvalPart } from '@/pages/shell/progress/progressPart'
+import { NowClock, Tick } from '@/pages/shell/progress/progressClock'
+import { runtimeUnreadLine } from '@/pages/shell/owner/ownerModel'
 
 function Group({
   label,
@@ -136,6 +138,11 @@ export function NeedsYouPage() {
   }, [])
   const showRecent =
     recentCount.state === 'unknown' || (recentCount.state === 'known' && recentCount.count > 0)
+  // A group's count is the approvals list's: unknown, not the last list's length, while it cannot be read (review 488 A2).
+  const openedAt = useRef(Date.now())
+  const groupCount = (n: number) => (openCount.state === 'unknown' ? '?' : String(n))
+  const runtimeUnreadable = runtimeQuery.isError || runtimeQuery.isPaused
+  const runtimeReadAt = runtimeQuery.dataUpdatedAt > 0 ? runtimeQuery.dataUpdatedAt : null
 
   let openBody: ReactNode = null
   if (openCount.state === 'loading') {
@@ -145,6 +152,7 @@ export function NeedsYouPage() {
       <div className="flex w-full min-w-0 flex-col gap-2">
         <Note>
           {query.isPaused ? 'Could not read approvals — offline.' : approvalsReadFailure(query.errorUpdatedAt)}
+          {query.data != null ? ' The requests below are from the last read.' : ''}
         </Note>
       </div>
     )
@@ -190,7 +198,7 @@ export function NeedsYouPage() {
       ) : null}
       {openBody}
       {decide.length > 0 ? (
-        <Group label="Decide" count={String(decide.length)}>
+        <Group label="Decide" count={groupCount(decide.length)}>
           <ApprovalList>
             {decide.map(item => (
               <ApprovalRow
@@ -205,7 +213,7 @@ export function NeedsYouPage() {
         </Group>
       ) : null}
       {terminal.length > 0 ? (
-        <Group label="Run in a terminal" count={String(terminal.length)}>
+        <Group label="Run in a terminal" count={groupCount(terminal.length)}>
           <ApprovalList>
             {terminal.map(item => (
               <ApprovalRow key={item.id} item={item} now={now} lines={[TERMINAL_NOT_RUN]} planSteps />
@@ -214,7 +222,7 @@ export function NeedsYouPage() {
         </Group>
       ) : null}
       {check.length > 0 ? (
-        <Group label="Check" count={String(check.length)}>
+        <Group label="Check" count={groupCount(check.length)}>
           <ApprovalList>
             {check.map(item => (
               <ApprovalRow key={item.id} item={item} now={now} lines={checkLines(item.error)} planSteps />
@@ -224,7 +232,7 @@ export function NeedsYouPage() {
       ) : null}
       {drills.length > 0 ? (
         // Drills (v4 §20.3 rule 8): shown as they would be, not counted; nothing runs and there is nothing to approve.
-        <Group label="Drills" count={String(drills.length)}>
+        <Group label="Drills" count={groupCount(drills.length)}>
           <Note>Not counted: a drill shows what a request looks like. Nothing runs, and it cannot be approved.</Note>
           <ApprovalList>
             {drills.map(item => (
@@ -249,12 +257,14 @@ export function NeedsYouPage() {
         </p>
       ) : null}
       {!questionsLoading && !questionsUnreadable ? (
-        <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} />
+        <AnswerGroup open={openQuestions} questions={questions} threads={lineageQ.data?.threads} stale={questionsStale} />
       ) : null}
       <Group label="Agent runtime" count={needsYouCountText(runtimeCount)}>
-        <Note>Generated: {runtimeQuery.data?.generated_at || 'Unknown'}</Note>
+        {runtimeUnreadable
+          ? <Note><NowClock><Tick text={at => `${runtimeUnreadLine(runtimeReadAt, openedAt.current, at)} Count is incomplete${runtimeQuery.data ? '; the requests below are from the last read' : ''}.`} /></NowClock></Note>
+          : <Note>Generated: {runtimeQuery.data?.generated_at || 'Unknown'}</Note>}
         {runtimeCount.state === 'loading' && <Note>Loading…</Note>}
-        {runtimeCount.state === 'unknown' && <Note>Could not load agent runtime: {runtimeCount.reason}. Count is incomplete.</Note>}
+        {runtimeCount.state === 'unknown' && !runtimeUnreadable && <Note>Could not load agent runtime: {runtimeCount.reason}. Count is incomplete.</Note>}
         {runtimeCount.state === 'known' && runtimeItems.length === 0 && <Note>No requests.</Note>}
         <ul className="m-0 flex flex-col gap-2 p-0">{runtimeItems.map(item => <li key={item.id} className="list-none text-sm">
           <strong>{item.title}</strong>{item.kind && ` · ${item.kind}`} {item.since && <time>{item.since}</time>}
@@ -265,8 +275,11 @@ export function NeedsYouPage() {
         <Note>Claude sessions that went quiet.</Note>
         {stalled}
       </Group>
+      {/* Steps the Owner signs off are signed on the plan; this list does not gather them (progress spec §4, review 488 C1). */}
       <Group label="Sign off" count="—">
-        <Note>Not connected yet.</Note>
+        <Note>
+          Steps waiting on your sign-off are signed on <a className="underline" href={PLAN_SECTION_HREF}>Work › Plan</a>; they are not listed here.
+        </Note>
       </Group>
       <Note>
         Closed requests, audit, and patrol runs are in{' '}

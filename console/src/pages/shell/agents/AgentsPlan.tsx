@@ -2,6 +2,8 @@ import { archCounts, manualAndStopped, type ArchTick, type RuntimeArchTable, typ
 import { OpsSection } from '@/components/layout/OpsSection'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
+import { LastRead } from '../owner/LastRead'
+import { reasonText } from '../owner/ownerModel'
 import { StepSignoffControls } from './StepSignoffs'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, useRuntimeArch, useRuntimePlan } from './useRuntimePlan'
 
@@ -13,18 +15,18 @@ function Steps({ steps }: { steps: RuntimePlanStep[] }) {
   return <ol className="flex flex-col gap-2 pt-2 text-sm">{steps.map((step, j) => <li key={`${step.id}-${j}`} className="break-words">
     <strong>{step.state || 'Unknown'}</strong> · {step.owner && <Mark title="The Owner's step (owner_step)">Owner</Mark>}{step.star && <Mark title="An effect step (effect_step)">★</Mark>}{step.t || 'Untitled step'}
     {/* The request this step is done by: the same request Needs you lists (v4 §20.5 scenario 10). */}
-    {step.approvals?.map(n => <a key={n} href={approvalHref(String(n))} data-step-approval={n} className="ml-1 text-xs">Request #{n}</a>)}
+    {step.approvals?.map(n => <a key={n} href={approvalHref(String(n))} data-step-approval={n} className="ml-1 text-xs pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center">Request #{n}</a>)}
     {/* The Owner's sign-off its done rule waits on: who signed and when, or the button while it can still move. */}
     {step.signoffs && <StepSignoffControls label={step.id} state={step.state} signoffs={step.signoffs} />}
     {step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
-    {step.line && <details><summary className="cursor-pointer text-xs text-muted-foreground">Ledger line</summary><p className="whitespace-pre-wrap break-words text-xs">{step.line.trim()}</p></details>}
+    {step.line && <details><summary className="cursor-pointer text-xs text-muted-foreground pointer-coarse:min-h-11 pointer-coarse:py-3">Ledger line</summary><p className="whitespace-pre-wrap break-words text-xs">{step.line.trim()}</p></details>}
   </li>)}</ol>
 }
 function Items({ round }: { round: RuntimeRound }) {
   return <>{round.items.map((item, i) => <details open={['doing', 'running', 'current'].includes(item.state)} key={`${item.key}-${i}`} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">
-    <summary className="cursor-pointer text-sm">{item.key} {item.name} · {item.done ?? '?'}/{item.total ?? '?'}{manualAndStopped(item)} · {item.state}</summary>
+    <summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">{item.key} {item.name} · {item.done ?? '?'}/{item.total ?? '?'}{manualAndStopped(item)} · {item.state}</summary>
     {item.steps.length === 0 && <p>No steps published.</p>}
-    {item.steps.some(s => s.state === 'done') && <details><summary className="cursor-pointer text-sm">Completed steps</summary><Steps steps={item.steps.filter(s => s.state === 'done')} /></details>}
+    {item.steps.some(s => s.state === 'done') && <details><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Completed steps</summary><Steps steps={item.steps.filter(s => s.state === 'done')} /></details>}
     <Steps steps={item.steps.filter(s => s.state !== 'done')} />
   </details>)}</>
 }
@@ -41,7 +43,7 @@ function Architecture({ table }: { table: RuntimeArchTable }) {
     <h4>{table.title || 'Architecture'} · {counts.passed} passed · {counts.notYet} not yet · {counts.noGate} no gate yet · {counts.unknown} unknown</h4>
     {table.rows.length === 0 && <p>No architecture rows in the runtime.</p>}
     {table.rows.map(row => <details key={row.id} data-arch-row={row.id} data-tick={row.tick} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 text-sm">
-      <summary className="cursor-pointer"><span aria-hidden style={{ color: TICK[row.tick].color }}>{TICK[row.tick].mark}</span> <strong>{TICK[row.tick].word}</strong> · {row.title || row.id}</summary>
+      <summary className="cursor-pointer pointer-coarse:min-h-11 pointer-coarse:py-3"><span aria-hidden style={{ color: TICK[row.tick].color }}>{TICK[row.tick].mark}</span> <strong>{TICK[row.tick].word}</strong> · {row.title || row.id}</summary>
       <p className="break-words text-xs text-muted-foreground">{row.reason}</p>
       {row.note ? <p className="break-words whitespace-pre-line">{row.note.text} <span className="text-xs text-muted-foreground" title={row.note.at}>· {row.note.by}, {row.note.at.slice(0, 16).replace('T', ' ')}Z</span></p>
         : <p className="text-xs text-muted-foreground">No note on what it is now.</p>}
@@ -56,7 +58,7 @@ export function AgentsPlan() {
   return <OpsSection title="Plan and architecture" description="From the agent runtime; each architecture row is ticked by its gate tests" collapsible
     defaultCollapsed={typeof window === 'undefined' || !hashNamesSection(window.location.hash, 'plan')} bodyPadding="compact">
     {plan.from === 'loading' && <p role="status">Reading the plan from the agent runtime…</p>}
-    {plan.from === 'error' && <p role="alert">Plan unavailable: {plan.error}</p>}
+    {plan.from === 'error' && <p role="alert">Plan unavailable: {reasonText(plan.error)}; <LastRead readAt={plan.readAt} />.</p>}
     {plan.from === 'absent' && <p>{PLAN_NOT_IMPORTED}</p>}
     {plan.from === 'runtime' && <div className="flex flex-col gap-3">
       <h4>Round {plan.round.n ?? 'unknown'} · from the agent runtime</h4>
@@ -64,7 +66,7 @@ export function AgentsPlan() {
       <Items round={plan.round} />
     </div>}
     {arch.from === 'loading' && <p role="status">Reading the architecture table…</p>}
-    {arch.from === 'error' && <p role="alert">Architecture unavailable: {arch.error}</p>}
+    {arch.from === 'error' && <p role="alert">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} />.</p>}
     {arch.from === 'absent' && <p>{ARCH_NOT_IMPORTED}</p>}
     {arch.from === 'runtime' && <Architecture table={arch.table} />}
   </OpsSection>

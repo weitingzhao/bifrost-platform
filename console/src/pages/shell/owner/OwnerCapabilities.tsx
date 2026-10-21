@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { fetchCapabilities, type CapabilityScore } from '@/api/agentRuntimeCapabilities'
 import { duration } from './crewModel'
 import { Bar, Card } from './OwnerParts'
-import { ago, plural, type Tone } from './ownerModel'
+import { ago, answeredAt, lastReadWords, plural, type Tone } from './ownerModel'
 
 const SOURCE: Record<CapabilityScore['source'], string> = { exam: 'exam', benchmark: 'benchmark', in_job: 'in the job' }
 const who = (executor: string, model: string) => `${executor.replace(/^exec:/, '')}${model ? ` (${model})` : ''}`
@@ -21,11 +22,14 @@ function byJob<T extends { job_id: string }>(rows: readonly T[]): [string, T[]][
  */
 export function OwnerCapabilities({ now }: { now: number }) {
   // This card mounts only in the System entry; unmounting removes its polling observer.
+  const openedAt = useRef(Date.now())
   const query = useQuery({ queryKey: ['agent-runtime-capabilities'], queryFn: ({ signal }) => fetchCapabilities(signal), refetchInterval: 60_000 })
-  const data = query.data
+  // Failed or paused offline: no score, candidate or fact of the last answer is shown as this one's (review 488 A3).
+  const unreadable = query.isError || query.isPaused
+  const data = unreadable ? undefined : query.data
   return <Card label="Capabilities" title="Capability scores">
-    {query.isPending && <p className="m-0 text-sm text-muted-foreground">Reading capability scores…</p>}
-    {query.isError && <p role="alert" className="m-0 text-sm [overflow-wrap:anywhere]">Capability scores could not be read: {query.error.message}</p>}
+    {query.isPending && !query.isPaused && <p className="m-0 text-sm text-muted-foreground">Reading capability scores…</p>}
+    {unreadable && <p role="alert" className="m-0 text-sm [overflow-wrap:anywhere]">Capability scores could not be read{query.error ? `: ${query.error.message}` : ' (offline)'}; {lastReadWords(answeredAt(query.dataUpdatedAt), openedAt.current, now)}.</p>}
     {data && data.scores.length === 0 && <p className="m-0 text-sm text-muted-foreground">No scores measured yet.</p>}
     {data && byJob(data.scores).map(([job, scores]) => <section key={job} aria-label={`Scores for ${job}`} className="flex min-w-0 flex-col gap-2">
       <h4 className="m-0 text-xs uppercase tracking-wide text-muted-foreground">{job}</h4>

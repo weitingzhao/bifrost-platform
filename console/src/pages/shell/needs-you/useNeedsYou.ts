@@ -42,7 +42,8 @@ function knownOrPending(
  * agent threads. The waiting total is Unknown when the open list, the thread
  * list, or the question list cannot be read. A failed question refresh is
  * Unknown even when the last list is still on screen. The handled list is
- * Unknown when the approvals `status=all` cannot be read.
+ * Unknown when any list it merges (approvals `status=all`, threads,
+ * questions) cannot be read (review 488 A2).
  * Running, and approved work the platform runs, are not part of the total.
  */
 export function useNeedsYou() {
@@ -135,10 +136,15 @@ export function useNeedsYou() {
   const questionRows = questionsQ.data != null ? recentlyHandledQuestions(questionsQ.data, now) : []
   const recent = mergeHandled([...approvalRows, ...threadRows, ...questionRows])
 
+  // Handled recently merges three lists: unknown when any of them cannot be read, never a count of the others.
   let recentCount: NeedsYouCount
   if (allQ.isError || allQ.isPaused) {
     recentCount = { state: 'unknown', reason: allQ.isPaused ? 'Could not read approvals — offline.' : reasonOf(allQ.error, 'approvals request failed') }
-  } else if (allQ.data == null || (threadsQuery.data == null && !threadsQuery.isError)) {
+  } else if (threadsQuery.isError || threadsQuery.isPaused) {
+    recentCount = { state: 'unknown', reason: threadsQuery.isPaused ? 'Could not read agent threads — offline.' : reasonOf(threadsQuery.error, 'agent threads request failed') }
+  } else if (questionsFailed) {
+    recentCount = { state: 'unknown', reason: questionsQ.isPaused ? 'Could not read questions — offline.' : reasonOf(questionsQ.error, 'questions request failed') }
+  } else if (allQ.data == null || threadsQuery.data == null || questionsQ.data == null) {
     recentCount = { state: 'loading' }
   } else {
     recentCount = { state: 'known', count: recent.length }

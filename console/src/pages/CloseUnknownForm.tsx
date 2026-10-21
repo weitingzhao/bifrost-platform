@@ -64,7 +64,7 @@ export function CloseUnknownForm({
           required
           value={note}
           onChange={event => setNote(event.target.value)}
-          className="w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
+          className="min-h-11 w-full min-w-0 rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] px-2 py-1 text-base outline-none focus-visible:ring-3 focus-visible:ring-[var(--focus-glow)]"
         />
       </label>
       <ServerContactStatus />
@@ -73,7 +73,7 @@ export function CloseUnknownForm({
           {notice}
         </p>
       ) : null}
-      <Button type="submit" className="h-11 w-full sm:h-auto sm:w-auto" disabled={!ready}>
+      <Button type="submit" className="h-11 w-full sm:w-auto" disabled={!ready}>
         Close this request
       </Button>
       {error != null ? (

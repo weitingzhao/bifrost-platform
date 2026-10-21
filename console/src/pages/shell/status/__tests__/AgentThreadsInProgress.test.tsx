@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentThread } from '@/api/agentThreads'
@@ -240,6 +240,19 @@ describe('AgentThreadsInProgress', () => {
     )
     render(wrapper(<AgentThreadsInProgress />))
     expect(await screen.findByText('No agent thread is mid-turn.')).toBeTruthy()
+  })
+
+  it('says the count is unknown when a read fails after a good one, as Needs you does (review 488 A6)', async () => {
+    let fail = false
+    stubThreads(() => fail ? json({ error: 'boom' }, 502)
+      : json({ generated_at: '2026-10-10T07:05:00Z', silent_after_seconds: 600, tool_grace_seconds: 120, threads: [thread({ thread: 'a' }), thread({ thread: 'b' })] }))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><AgentThreadsInProgress /></QueryClientProvider>)
+    expect(await screen.findByText('In progress · Agent threads · 2')).toBeTruthy()
+    fail = true
+    await act(async () => { await client.refetchQueries({ queryKey: ['agent-threads'] }) })
+    expect(await screen.findByText('In progress · Agent threads · ?')).toBeTruthy()
+    expect(screen.getByText(/Could not read agent threads/)).toBeTruthy()
   })
 
   it('reports a failed read instead of an empty list', async () => {

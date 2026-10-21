@@ -23,7 +23,10 @@ function ActionStream({ id }: { id: string }) {
   return <div className="min-w-0 space-y-2 pt-2">
     {query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}</p>}
     {query.data?.unavailable ? <p>actions are not kept on this platform</p> : <>
-      {!query.data?.actions.length && <p>{query.isPending ? 'Reading actions…' : 'no actions yet'}</p>}
+      {/* "no actions yet" only from a read that answered: a failed or paused one is not a stream with none (review 488 A4). */}
+      {query.isPaused && <p>Offline: the actions cannot be read now.</p>}
+      {query.isPending && !query.isPaused && <p>Reading actions…</p>}
+      {query.isSuccess && !query.isPaused && !query.data.actions.length && <p>no actions yet</p>}
       <ol className="space-y-2">{query.data?.actions.map(action => <li key={action.id} className="min-w-0">
         <div className="flex flex-wrap gap-2"><time>{new Date(action.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</time><ActionLabel action={action} />{action.truncated && <span>…cut</span>}</div>
         <code className="block whitespace-pre-wrap [overflow-wrap:anywhere]">{action.target}</code>

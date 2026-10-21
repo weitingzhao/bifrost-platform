@@ -6,6 +6,8 @@ import { SIGN_IN_REFUSED, ackMessages, fetchChiefThread, messageBytes, sendChief
 import { CAPABILITIES_QUERY_KEY, PlatformAuthContext } from '@/hooks/platformAuthContext'
 import { appendDictated, useDictation } from './dictation'
 import { Card } from './OwnerParts'
+import { LastRead } from './LastRead'
+import { answeredAt } from './ownerModel'
 
 const THREAD_KEY = ['agent-runtime-chief-thread']
 
@@ -106,7 +108,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
     {unchecked && <p role="alert" className="[overflow-wrap:anywhere]">Your sign-in could not be checked, so the conversation is not read until it is. <Button type="button" variant="outline" onClick={() => auth?.refreshCapabilities()}>Check again</Button></p>}
     {notOwner && <p role="status" className="[overflow-wrap:anywhere]">This browser is not signed in with the Owner token, so the conversation is not shown here. Each phone, tablet and computer keeps its own sign-in: sign in once on each (menu at the top right → Connect).</p>}
     {reading && query.isPending && <p>Reading conversation…</p>}
-    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}
+    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} />.{messages?.length ? ' The messages below are from then.' : ''}
       {refused && recovery === 'spent' && <> <Button type="button" variant="outline" onClick={() => { setRecovery('none'); void query.refetch() }}>Try again</Button></>}</p>}
     <ol className="min-w-0 space-y-3">{messages?.map(m => <li key={m.message_id} className="min-w-0 rounded bg-[var(--control-fill)] p-3">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><strong>{m.from === 'owner' ? 'You' : 'Chief of staff'}</strong><time dateTime={m.created_at}>{new Date(m.created_at).toLocaleString()}</time></div>
@@ -119,9 +121,9 @@ export function ChiefConversation({ active }: { active: boolean }) {
       <textarea id="chief-message" value={body} onChange={event => setBody(event.target.value)} rows={4} className="min-w-0 w-full rounded border border-[var(--card-border)] bg-background p-2 text-base" />
       <span className="text-xs" role={bytes > 8192 ? 'alert' : undefined}>{bytes} / 8192 bytes</span>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={pending || !body.trim() || bytes > 8192}>Send</Button>
+        <Button type="submit" className="min-h-11" disabled={pending || !body.trim() || bytes > 8192}>Send</Button>
         {dictation.supported
-          ? <Button type="button" variant="outline" aria-pressed={dictation.listening} onClick={() => dictation.listening ? dictation.stop() : dictation.start()}>{dictation.listening ? 'Stop dictating' : 'Speak'}</Button>
+          ? <Button type="button" variant="outline" className="min-h-11" aria-pressed={dictation.listening} onClick={() => dictation.listening ? dictation.stop() : dictation.start()}>{dictation.listening ? 'Stop dictating' : 'Speak'}</Button>
           : <span className="text-xs text-muted-foreground">To speak instead of typing, use the microphone key on your keyboard.</span>}
       </div>
       {dictation.error && <span role="alert" className="text-xs [overflow-wrap:anywhere]">{dictation.error}</span>}

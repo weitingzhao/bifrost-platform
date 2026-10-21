@@ -44,14 +44,14 @@ export function OwnerStop({ controls, readable }: { controls: RuntimeRecord[]; r
     {!readable && <p>Reading current work controls is required.</p>}
     {env === 'prod' && <p>Stop all and Resume are enabled on STG first</p>}
     {!env && !health.isPending && <p>Environment unknown (self-health did not answer); Stop all is disabled</p>}
-    {intent === null && <Button disabled={blocked || pending} onClick={() => setIntent(stop ? { lift: text(stop.control_id) } : { stop: true })}>{stop ? 'Resume' : 'Stop all'}</Button>}
+    {intent === null && <Button className="min-h-11" disabled={blocked || pending} onClick={() => setIntent(stop ? { lift: text(stop.control_id) } : { stop: true })}>{stop ? 'Resume' : 'Stop all'}</Button>}
     {/* The confirmation is in the card, not a dialog: @bifrost/ui's dialog
         brings a React of its own into the tests (W-31 2.3 slice 4). */}
     {intent !== null && <div role="group" aria-label={lifting ? 'Resume all work?' : 'Stop all work?'}>
       {changed ? <p role="alert">Work control changed while you were deciding; press again.</p>
         : <p>{lifting ? 'New work can start again after you resume.' : 'Every running attempt stops within about a minute and nothing new starts until you resume.'}</p>}
-      <Button variant="outline" disabled={pending} onClick={() => { if (!busy.current) setIntent(null) }}>Cancel</Button>{' '}
-      {!changed && <Button variant={lifting ? 'default' : 'destructive'} disabled={blocked || pending} onClick={() => void act()}>{lifting ? 'Resume work' : 'Stop all work'}</Button>}
+      <Button variant="outline" className="min-h-11" disabled={pending} onClick={() => { if (!busy.current) setIntent(null) }}>Cancel</Button>{' '}
+      {!changed && <Button variant={lifting ? 'default' : 'destructive'} className="min-h-11" disabled={blocked || pending} onClick={() => void act()}>{lifting ? 'Resume work' : 'Stop all work'}</Button>}
     </div>}
     {error && <p role="alert" className="[overflow-wrap:anywhere]">{error}</p>}
   </Card>

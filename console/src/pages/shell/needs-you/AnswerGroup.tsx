@@ -54,10 +54,13 @@ export function AnswerGroup({
   open,
   questions,
   threads,
+  stale = false,
 }: {
   open: readonly Question[]
   questions: readonly Question[]
   threads?: readonly LineageThread[]
+  /** The question list could not be refreshed: the rows are the last read, the count unknown (review 488 A2). */
+  stale?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   // The same rows while open is the same list, so QuestionList's memo holds when the page repaints for another read.
@@ -85,7 +88,7 @@ export function AnswerGroup({
   }
   return (
     <div role="region" aria-label="Answer">
-      <OpsSection title={`Answer · ${open.length}`} bodyPadding="compact">
+      <OpsSection title={`Answer · ${stale ? '?' : open.length}`} bodyPadding="compact">
         {body}
       </OpsSection>
     </div>

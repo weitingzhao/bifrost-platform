@@ -88,7 +88,7 @@ describe('one Needs you list', () => {
     mockSources('/agentrt/progress'); wrap()
     await waitFor(() => expect(document.querySelector('[data-needs-you-count="Unknown"]')).toBeTruthy())
     expect(within(screen.getByLabelText('Sidebar')).getByText('?')).toBeInTheDocument()
-    expect(within(screen.getByLabelText('Agent runtime')).getByText(/Could not load/)).toBeInTheDocument()
+    expect(within(screen.getByLabelText('Agent runtime')).getByText(/^The agent runtime could not be read; not read since this page opened at \d\d:\d\d\. Count is incomplete\.$/)).toBeInTheDocument()
   })
   it('keeps the count whole when the board fails: it is not a source of what waits for the Owner', async () => {
     mockSources('/agent/progress'); wrap()

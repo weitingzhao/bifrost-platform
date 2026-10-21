@@ -13,6 +13,8 @@ import { useNow } from './progressClock'
 import { unpersistedWords } from '../owner/crewModel'
 import { stalledWords } from '../owner/attemptActivity'
 import { OffPlanMark } from '../owner/OwnerParts'
+import { LastRead } from '../owner/LastRead'
+import { answeredAt } from '../owner/ownerModel'
 import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, latestLease, relative, stageMarks, stalledStage, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
@@ -34,7 +36,7 @@ function GoalResult({ data }: { data: GoalData }) {
     <h4 className="font-semibold">Result</h4>
     {persisted.map((e, i) => <div key={i}><p>Commit <code>{text(e.body_json.pushed_commit).slice(0, 7)}</code> · Branch {text(e.body_json.pushed_ref).replace(/t_[^/]+/g, '…')}</p>
       {/* Runtime branches contain task identifiers, so keep the full ref in Details. */}
-      <details><summary>Details · branch and commit</summary><p className="break-all">Branch: {text(e.body_json.pushed_ref)}</p><p className="break-all">{text(e.body_json.pushed_commit)}</p></details>
+      <details><summary className="cursor-pointer pointer-coarse:min-h-11 pointer-coarse:py-3">Details · branch and commit</summary><p className="break-all">Branch: {text(e.body_json.pushed_ref)}</p><p className="break-all">{text(e.body_json.pushed_commit)}</p></details>
     </div>)}
     {!persisted.length && <p>No implementation commit recorded.</p>}
     <p>Review verdict: {reviewed.join(', ') || 'Not recorded'}</p>
@@ -51,7 +53,7 @@ function ChiefOfStaff({ data, questions, done }: { data: GoalData; questions: Qu
   const asked = goalQuestions(data, questions)
   const dropped = droppedTasks(data), byRule = droppedByRule(data)
   return <details key={done ? 'closed' : 'open'} open={!done} className="text-sm">
-    <summary className="cursor-pointer font-semibold">What the chief of staff wrote</summary>
+    <summary className="cursor-pointer font-semibold pointer-coarse:min-h-11 pointer-coarse:py-3">What the chief of staff wrote</summary>
     <div className="mt-3 grid gap-4 md:grid-cols-2">
       <section aria-label="Done when"><h4 className="font-medium">Done when</h4><Lines value={success} /></section>
       <section aria-label="Not doing"><h4 className="font-medium">Not doing</h4><Lines value={scope} /></section>
@@ -114,10 +116,10 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
       <div className="flex flex-wrap items-center gap-3"><span className="rounded bg-[var(--control-fill)] px-2 py-1 font-mono text-sm font-semibold">{id}</span><StatusLamp value={status === 'Done' ? 'ok' : status === 'Blocked' ? 'fail' : 'degraded'} /><strong className="text-lg">{head}</strong></div>
       <h3 className="break-words text-base font-semibold">{goal.split('\n')[0]}</h3>
       <p className="text-xs text-muted-foreground">Given by {data?.mission.created_by_actor_id === 'owner' ? 'You' : text(data?.mission.created_by_actor_id) || 'Unknown'} · <time title={start}>started {relative(start, now)}</time>{start && <span title={[start, end].filter(Boolean).join(' → ')}> · {end ? 'took' : 'elapsed'} {duration(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000)}</span>}</p>
-      <details><summary className="cursor-pointer text-sm">Full goal</summary><p className="whitespace-pre-wrap break-words text-sm">{goal}</p></details>
+      <details><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Full goal</summary><p className="whitespace-pre-wrap break-words text-sm">{goal}</p></details>
     </header>
     {query.isPending && <p role="status">Loading mission details…</p>}
-    {query.isError && <p role="alert">Could not load {id}: {query.error.message}. {data ? 'Showing last known details.' : ''}<button onClick={() => void refetch()} className="ml-2 underline">Retry</button></p>}
+    {query.isError && <p role="alert">Could not load {id}: {query.error.message}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} />. {data ? 'Showing the details read then.' : ''}<button onClick={() => void refetch()} className="ml-2 min-h-11 underline">Retry</button></p>}
     {links.length > 0 && <ul className="my-3 text-sm">{links.map((l, i) => <li key={i}><a className="underline" href={l.href}>Waiting for you · {l.title}</a></li>)}</ul>}
     {data && <div className="mt-4 flex flex-col gap-4">
       <ol aria-label="Goal stages" className="flex flex-wrap gap-2">{stages.map(stage => { const stalled = stalledStage(stage, live), shown = stalled ? 'waiting' : stage.state
@@ -143,7 +145,7 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
       </li> })}</ol>
       {done && <GoalResult data={data} />}
       <ChiefOfStaff data={data} questions={questions} done={done} />
-      <details open={targeted || undefined}><summary className="cursor-pointer text-sm">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="break-all text-xs">{t.role} · {t.task_id} · {t.state}{t.off_plan === true ? ' · off plan' : ''}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>
+      <details open={targeted || undefined}><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="cursor-pointer break-all text-xs pointer-coarse:min-h-11 pointer-coarse:py-3">{t.role} · {t.task_id} · {t.state}{t.off_plan === true ? ' · off plan' : ''}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>
     </div>}
   </article>
 }

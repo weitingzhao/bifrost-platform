@@ -206,7 +206,11 @@ describe('NeedsYouPage', () => {
     expect(screen.queryByRole('button', { name: /Approve|Reject/ })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Run in a terminal' })).toBeNull()
     expect(screen.queryByRole('region', { name: 'Check' })).toBeNull()
-    expect(within(screen.getByRole('region', { name: 'Sign off' })).getByText('Not connected yet.')).toBeTruthy()
+    // Sign-off is on the plan, not gathered here (review 488 C1): the group says where.
+    const signOff = within(screen.getByRole('region', { name: 'Sign off' }))
+    expect(signOff.getByText(/^Steps waiting on your sign-off are signed on/)).toBeTruthy()
+    expect(signOff.getByRole('link', { name: 'Work › Plan' }).getAttribute('href')).toBe('#work?section=plan')
+    expect(screen.queryByText('Not connected yet.')).toBeNull()
     // The system verdict is the shell header's and For you's, not repeated in this section (W-31 2.2b).
     expect(screen.queryByText('Degraded — 1 warning alert')).toBeNull()
   })

@@ -210,7 +210,8 @@ describe('useOwnerConsole', () => {
 
     serve('fail')
     const failed = run({ system: false, work: true, chief: false })
-    await waitFor(() => expect(failed.result.current.planSource).toEqual({ from: 'error', error: 'Plan: unavailable' }))
+    // A failed read carries when the plan was last read whole: never, here (review 488 B1).
+    await waitFor(() => expect(failed.result.current.planSource).toEqual({ from: 'error', error: 'Plan: unavailable', readAt: null }))
     expect(failed.result.current.plan).toEqual([])
     expect(failed.result.current.planRound).toBeUndefined()
   })

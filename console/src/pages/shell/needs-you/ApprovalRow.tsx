@@ -86,7 +86,7 @@ export function ApprovalRow({
         <a
           href={formatShellHash('work')}
           data-agent-reported=""
-          className="mt-1 block max-h-5 min-w-0 max-w-full truncate text-sm text-muted-foreground underline"
+          className="mt-1 block max-h-5 min-w-0 max-w-full truncate text-sm text-muted-foreground underline pointer-coarse:max-h-none pointer-coarse:py-3"
         >
           {partOfLine(partOf)}
         </a>

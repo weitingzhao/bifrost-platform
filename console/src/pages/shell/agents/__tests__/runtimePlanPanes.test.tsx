@@ -21,6 +21,7 @@ import { ProgressOverview } from '../../progress/ProgressOverview'
 import { AgentsPlan } from '../AgentsPlan'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, archRead, useRuntimeArch, useRuntimePlan } from '../useRuntimePlan'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
+import { unavailableLine } from '@/test/lastRead'
 
 // The plan panes read the runtime's plan (2.5 slice 2): GET /plan?root=R2, the import request its head
 // names, and GET /progress's counts, as the platform answered them on a test database (agentrtapi over
@@ -125,7 +126,7 @@ describe('the plan pane on Progress', () => {
   it('shows a failed read as failed, never the board\'s plan', async () => {
     source.plan = 'fail'
     show(<AgentsPlan />)
-    expect(await screen.findByText('Plan unavailable: Plan: unavailable')).toHaveAttribute('role', 'alert')
+    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable', 'never'))).toHaveAttribute('role', 'alert')
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
     expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
   })
@@ -135,7 +136,8 @@ describe('the plan pane on Progress', () => {
     expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
     source.plan = 'fail'
     await client.refetchQueries({ queryKey: ['agent-runtime-plan'] })
-    expect(await screen.findByText('Plan unavailable: Plan: unavailable')).toBeInTheDocument()
+    // The plan was read whole before: the line says when (review 488 B1).
+    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable', 'last'))).toBeInTheDocument()
     expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })
@@ -170,7 +172,7 @@ describe('the plan pane on Progress', () => {
     expect(screen.getByText(`${counted(imported).count.done}/${counted(imported).count.total} steps`)).toBeInTheDocument()
     source.progressFails = true
     await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
-    expect(await screen.findAllByText('Plan unavailable: Agent runtime: unavailable')).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Plan unavailable: Agent runtime: unavailable'))).toHaveLength(2)
     expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
     expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
@@ -183,7 +185,7 @@ describe('the plan pane on Progress', () => {
     expect(screen.getByText(steps)).toBeInTheDocument()
     source.artifact = 'fail'
     await client.refetchQueries({ queryKey: ['agent-runtime-plan-request', 'R2'] })
-    expect(await screen.findAllByText('Plan unavailable: Plan import request: internal')).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Plan unavailable: Plan import request: internal'))).toHaveLength(2)
     expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
     expect(screen.queryByText(steps)).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
@@ -192,13 +194,13 @@ describe('the plan pane on Progress', () => {
 
   it.each([
     ['the request cannot be read', { artifact: 'fail' }, 'Plan unavailable: Plan import request: internal'],
-    ['the request is not one', { artifact: 'not json' }, 'Plan unavailable: Plan import request: invalid artifact.'],
+    ['the request is not one', { artifact: 'not json' }, 'Plan unavailable: Plan import request: invalid artifact'],
     ['the plan stream\'s cursor does not move on', { events: 'stuck' }, 'Plan unavailable: Plan events: invalid pagination cursor'],
-    ['the import head is not within the pages read', { events: 'endless' }, `Plan unavailable: Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2.`],
+    ['the import head is not within the pages read', { events: 'endless' }, `Plan unavailable: Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2`],
   ] as const)('a plan whose import request cannot be had is unavailable: %s', async (_, set, line) => {
     Object.assign(source, set)
     show(<AgentsPlan />)
-    expect(await screen.findByText(line)).toHaveAttribute('role', 'alert')
+    expect(await screen.findByText(unavailableLine(line))).toHaveAttribute('role', 'alert')
     expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })
@@ -230,7 +232,7 @@ describe('the round progress on the overview', () => {
     first.unmount()
     source.plan = 'fail'
     show(<Overview />)
-    expect(await screen.findByText('Plan unavailable: Plan: unavailable')).toBeInTheDocument()
+    expect(await screen.findByText(unavailableLine('Plan unavailable: Plan: unavailable'))).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText(/ steps$/)).not.toBeInTheDocument())
   })
 })
@@ -276,7 +278,7 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
     expect(await screen.findByText('1/4 passed')).toBeInTheDocument()
     source.progressFails = true
     await client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
-    expect(await screen.findAllByText('Architecture unavailable: Agent runtime: unavailable')).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2)
     expect(screen.queryByText('1/4 passed')).not.toBeInTheDocument()
     expect(document.querySelector('[data-arch-row]')).toBeNull()
   })

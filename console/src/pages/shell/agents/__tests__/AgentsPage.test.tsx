@@ -12,6 +12,7 @@ import { GoalForm } from '../GoalForm'
 import { TaskTimeline } from '../TaskTimeline'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED } from '../useRuntimePlan'
 import { SHELL_NAV, resolveConsoleHash } from '@/lib/shell/consoleRoutes'
+import { unavailableLine } from '@/test/lastRead'
 
 const TASK = 't_01M50M1CZSDN8PNHRH8C2241RS'
 const goalResult = { mission_id: 'M-6', mission_state: 'active', task_id: 't_new', repo: 'bifrost-platform' }
@@ -200,8 +201,8 @@ describe('Merged Progress page', () => {
     wrap(<ProgressPage />)
     expect((await screen.findAllByText(/The agent runtime could not be read; not read since this page opened at/)).length).toBeGreaterThan(0)
     // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
-    expect(await screen.findAllByText('Plan unavailable: Plan: unavailable')).toHaveLength(2)
-    expect(await screen.findAllByText('Architecture unavailable: Agent runtime: unavailable')).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Plan unavailable: Plan: unavailable'))).toHaveLength(2)
+    expect(await screen.findAllByText(unavailableLine('Architecture unavailable: Agent runtime: unavailable'))).toHaveLength(2)
   })
   it('shows empty data and an unpublished plan', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => String(url).includes('/agentrt/plan?') ? json({ error: 'not_found', message: 'no such record' }, 404)

@@ -16,6 +16,8 @@ export function AgentThreadsInProgress() {
         {fullText}
       </p>
     )
+  // Failed or paused offline: the title says unknown, as Needs you does, not the last list's count (review 488 A6).
+  const unreadable = q.isError || q.isPaused
   let body
   if (q.isError) {
     body = (
@@ -23,6 +25,8 @@ export function AgentThreadsInProgress() {
         {`Could not read agent threads: ${q.error instanceof Error ? q.error.message : 'request failed'}`}
       </p>
     )
+  } else if (q.isPaused) {
+    body = <p className="m-0 text-sm text-muted-foreground">Could not read agent threads — offline.</p>
   } else if (q.data == null) {
     body = <p className="m-0 text-sm text-muted-foreground">Loading…</p>
   } else if (mid.length === 0 && hosts.length === 0) {
@@ -58,7 +62,7 @@ export function AgentThreadsInProgress() {
   return (
     <section aria-label="In progress" className="flex w-full min-w-0 flex-col">
       <OpsSection
-        title={`In progress · Agent threads · ${q.data == null ? '…' : mid.length}`}
+        title={`In progress · Agent threads · ${unreadable ? '?' : q.data == null ? '…' : mid.length}`}
         bodyPadding="compact"
       >
         {body}

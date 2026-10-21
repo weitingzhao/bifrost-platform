@@ -352,9 +352,18 @@ export function yoursNavBadge(count: NeedsYouCount): ConsoleNavBadge | undefined
   return { text: count.count > 99 ? '99+' : String(count.count), title: `Yours: ${count.count}`, tone: 'attention' }
 }
 
+/** When a read last answered, or that it has not since this page opened: what every failed read says (gap 3, review 488 B1). */
+export function lastReadWords(readAt: number | null, openedAt: number, now: number): string {
+  return readAt != null ? `last read ${clockTime(readAt, now)} (${ago(readAt, now)})` : `not read since this page opened at ${clockTime(openedAt, now)}`
+}
+
+/** A reason followed by more of the sentence: its own full stop dropped. */
+export const reasonText = (reason: string): string => reason.replace(/\.+$/, '')
+
+/** A read's last answer time from React Query: none before its first answer. */
+export const answeredAt = (updatedAt: number): number | null => (updatedAt > 0 ? updatedAt : null)
+
 /** When the runtime was last read, or when this page began waiting for it. */
 export function runtimeUnreadLine(readAt: number | null, openedAt: number, now: number): string {
-  return readAt != null
-    ? `The agent runtime could not be read; last read ${clockTime(readAt, now)} (${ago(readAt, now)}).`
-    : `The agent runtime could not be read; not read since this page opened at ${clockTime(openedAt, now)}.`
+  return `The agent runtime could not be read; ${lastReadWords(readAt, openedAt, now)}.`
 }

@@ -209,6 +209,13 @@ export function ReleasesPage() {
                   Loading…
                 </DenseTableCell>
               </DenseTableRow>
+            ) : gitops.isError || gitops.isPaused ? (
+              // Not read is not none: no rollback is offered from a list that could not be read (review 488 A5).
+              <DenseTableRow>
+                <DenseTableCell colSpan={3} className="whitespace-normal [overflow-wrap:anywhere]">
+                  {`Argo CD applications could not be read${gitops.error ? `: ${gitops.error.message}` : ' (offline)'}; whether one can be rolled back is not known.`}
+                </DenseTableCell>
+              </DenseTableRow>
             ) : prodApps.length === 0 ? (
               <DenseTableRow>
                 <DenseTableCell colSpan={3} className="text-[var(--muted-foreground)]">

@@ -43,7 +43,7 @@ export function GoalForm({ onCreated, draft = '' }: { onCreated?: (result: GoalR
     <form onSubmit={event => { void submit(event) }} className="flex flex-col gap-3">
       <label htmlFor="agent-goal">Goal</label>
       <textarea id="agent-goal" value={goal} maxLength={2000} rows={3} disabled={sending}
-        aria-describedby="agent-goal-count" className="w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 text-base sm:text-sm"
+        aria-describedby="agent-goal-count" className="w-full rounded-[var(--control-radius)] border border-transparent bg-[var(--field-fill)] p-2 text-base"
         placeholder="Describe one goal in a sentence."
         onChange={e => {
           setGoal(e.target.value)
