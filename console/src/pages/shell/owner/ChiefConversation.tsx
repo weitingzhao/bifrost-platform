@@ -66,6 +66,7 @@ export function ChiefConversation({ active }: { active: boolean }) {
   const [ackError, setAckError] = useState('')
   const acknowledged = useRef(new Set<string>())
   const busy = useRef(false)
+  const openedAt = useRef(Date.now())
   const messages = reading ? query.data?.messages : undefined
   useEffect(() => {
     if (!reading || query.isError) return
@@ -107,8 +108,9 @@ export function ChiefConversation({ active }: { active: boolean }) {
     {checking && <p role="status">Checking your sign-in…</p>}
     {unchecked && <p role="alert" className="[overflow-wrap:anywhere]">Your sign-in could not be checked, so the conversation is not read until it is. <Button type="button" variant="outline" onClick={() => auth?.refreshCapabilities()}>Check again</Button></p>}
     {notOwner && <p role="status" className="[overflow-wrap:anywhere]">This browser is not signed in with the Owner token, so the conversation is not shown here. Each phone, tablet and computer keeps its own sign-in: sign in once on each (menu at the top right → Connect).</p>}
-    {reading && query.isPending && <p>Reading conversation…</p>}
-    {reading && query.isError && <p role="alert" className="[overflow-wrap:anywhere]">{query.error.message}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} />.{messages?.length ? ' The messages below are from then.' : ''}
+    {reading && query.isPending && !query.isPaused && <p>Reading conversation…</p>}
+    {/* Failed, or paused offline (review 493 B1): the messages below are said to be from the last read. */}
+    {reading && (query.isError || query.isPaused) && <p role="alert" className="[overflow-wrap:anywhere]">{query.error ? query.error.message : 'Offline: the conversation cannot be read now'}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} openedAt={openedAt.current} />.{messages?.length ? ' The messages below are from then.' : ''}
       {refused && recovery === 'spent' && <> <Button type="button" variant="outline" onClick={() => { setRecovery('none'); void query.refetch() }}>Try again</Button></>}</p>}
     <ol className="min-w-0 space-y-3">{messages?.map(m => <li key={m.message_id} className="min-w-0 rounded bg-[var(--control-fill)] p-3">
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground"><strong>{m.from === 'owner' ? 'You' : 'Chief of staff'}</strong><time dateTime={m.created_at}>{new Date(m.created_at).toLocaleString()}</time></div>

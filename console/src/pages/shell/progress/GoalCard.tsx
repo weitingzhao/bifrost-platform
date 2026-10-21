@@ -73,6 +73,7 @@ function taskInHash(goal: string): string {
 export function GoalCard({ id, runtime, updatedAt, questions, highlighted = false, submittedGoal = '' }: {
   id: string; runtime?: RuntimeProgress; updatedAt: number; questions: Question[]; highlighted?: boolean; submittedGoal?: string
 }) {
+  const openedAt = useRef(Date.now())
   const query = useQuery({ queryKey: ['agent-runtime-goal', id], queryFn: ({ signal }) => fetchRuntimeGoal(id, signal), retry: false,
     staleTime: Infinity, refetchOnWindowFocus: false })
   const previousPoll = useRef(updatedAt)
@@ -118,8 +119,9 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
       <p className="text-xs text-muted-foreground">Given by {data?.mission.created_by_actor_id === 'owner' ? 'You' : text(data?.mission.created_by_actor_id) || 'Unknown'} · <time title={start}>started {relative(start, now)}</time>{start && <span title={[start, end].filter(Boolean).join(' → ')}> · {end ? 'took' : 'elapsed'} {duration(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000)}</span>}</p>
       <details><summary className="cursor-pointer text-sm pointer-coarse:min-h-11 pointer-coarse:py-3">Full goal</summary><p className="whitespace-pre-wrap break-words text-sm">{goal}</p></details>
     </header>
-    {query.isPending && <p role="status">Loading mission details…</p>}
-    {query.isError && <p role="alert">Could not load {id}: {query.error.message}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} />. {data ? 'Showing the details read then.' : ''}<button onClick={() => void refetch()} className="ml-2 min-h-11 underline">Retry</button></p>}
+    {query.isPending && !query.isPaused && <p role="status">Loading mission details…</p>}
+    {/* Failed, or paused offline (review 493 B1): said with when the details were read, never as current. */}
+    {(query.isError || query.isPaused) && <p role="alert">Could not load {id}: {query.error ? query.error.message : 'offline'}; <LastRead readAt={answeredAt(query.dataUpdatedAt)} openedAt={openedAt.current} />. {data ? 'Showing the details read then.' : ''}<button onClick={() => void refetch()} className="ml-2 min-h-11 underline">Retry</button></p>}
     {links.length > 0 && <ul className="my-3 text-sm">{links.map((l, i) => <li key={i}><a className="underline" href={l.href}>Waiting for you · {l.title}</a></li>)}</ul>}
     {data && <div className="mt-4 flex flex-col gap-4">
       <ol aria-label="Goal stages" className="flex flex-wrap gap-2">{stages.map(stage => { const stalled = stalledStage(stage, live), shown = stalled ? 'waiting' : stage.state

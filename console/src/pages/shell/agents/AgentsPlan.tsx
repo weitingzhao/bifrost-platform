@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { archCounts, manualAndStopped, type ArchTick, type RuntimeArchTable, type RuntimePlanStep, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
@@ -52,13 +53,14 @@ function Architecture({ table }: { table: RuntimeArchTable }) {
 }
 /** The round's plan (GET /plan?root=R2 with GET /progress's counts) and the architecture table (GET /progress), both from the agent runtime. */
 export function AgentsPlan() {
+  const openedAt = useRef(Date.now())
   const plan = useRuntimePlan()
   const arch = useRuntimeArch()
   // Opened when the address names it (Work's "Plan ›", `#work?section=plan`).
   return <OpsSection title="Plan and architecture" description="From the agent runtime; each architecture row is ticked by its gate tests" collapsible
     defaultCollapsed={typeof window === 'undefined' || !hashNamesSection(window.location.hash, 'plan')} bodyPadding="compact">
     {plan.from === 'loading' && <p role="status">Reading the plan from the agent runtime…</p>}
-    {plan.from === 'error' && <p role="alert">Plan unavailable: {reasonText(plan.error)}; <LastRead readAt={plan.readAt} />.</p>}
+    {plan.from === 'error' && <p role="alert">Plan unavailable: {reasonText(plan.error)}; <LastRead readAt={plan.readAt} openedAt={openedAt.current} />.</p>}
     {plan.from === 'absent' && <p>{PLAN_NOT_IMPORTED}</p>}
     {plan.from === 'runtime' && <div className="flex flex-col gap-3">
       <h4>Round {plan.round.n ?? 'unknown'} · from the agent runtime</h4>
@@ -66,7 +68,7 @@ export function AgentsPlan() {
       <Items round={plan.round} />
     </div>}
     {arch.from === 'loading' && <p role="status">Reading the architecture table…</p>}
-    {arch.from === 'error' && <p role="alert">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} />.</p>}
+    {arch.from === 'error' && <p role="alert">Architecture unavailable: {reasonText(arch.error)}; <LastRead readAt={arch.readAt} openedAt={openedAt.current} />.</p>}
     {arch.from === 'absent' && <p>{ARCH_NOT_IMPORTED}</p>}
     {arch.from === 'runtime' && <Architecture table={arch.table} />}
   </OpsSection>

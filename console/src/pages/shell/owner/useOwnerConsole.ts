@@ -129,7 +129,8 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     runtime,
     controls: runtime?.controls ?? [],
     controlsReadable: runtime !== undefined,
-    runtimeError: needsYou.runtimeQuery.isError,
+    // Paused offline is not a read either (review 493 B1): Last result, Open goals and Crew say so, not "Reading".
+    runtimeError: needsYou.runtimeQuery.isError || needsYou.runtimeQuery.isPaused,
     runtimeReadAt: typeof needsYou.runtimeQuery.dataUpdatedAt === 'number' && needsYou.runtimeQuery.dataUpdatedAt > 0 ? needsYou.runtimeQuery.dataUpdatedAt : null,
     runtimeOpenedAt: openedAt.current,
     lastGoal: text(lastGoalQ.data?.mission.goal) || text(lastGoalQ.data?.mission.title),

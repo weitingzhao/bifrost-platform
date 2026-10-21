@@ -11,7 +11,7 @@ function eventsForTask(events: RuntimeEvent[], task: string): RuntimeEvent[] {
 export function ArtifactPanel({ id, close, label }: { id: string; close: () => void; label?: string }) {
   const query = useQuery({ queryKey: ['agent-runtime-artifact', id], queryFn: ({ signal }) => fetchRuntimeArtifact(id, signal) })
   return <section aria-label={`Artifact ${id}`} className="my-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-3">
-    <div className="flex flex-wrap justify-between gap-2"><strong className="break-all">{label || id}</strong><button type="button" onClick={close}>Close artifact</button></div>
+    <div className="flex flex-wrap justify-between gap-2"><strong className="break-all">{label || id}</strong><button type="button" className="pointer-coarse:min-h-11 pointer-coarse:px-2" onClick={close}>Close artifact</button></div>
     {label && <details><summary className="cursor-pointer pointer-coarse:min-h-11 pointer-coarse:py-3">Details</summary><p className="break-all text-xs">{id}</p></details>}
     {query.isPending && <p role="status">Loading artifact…</p>}
     {query.isError && <p role="alert">Could not load artifact: {query.error.message}</p>}
@@ -43,7 +43,7 @@ export function TaskTimeline({ mission, task, events: supplied, finished = false
       {events.map((event, index) => <li key={`${event.at}-${index}`} className="break-words text-xs" data-event-type={event.event_type}>
         <time>{event.at || 'Time unknown'}</time> · <strong>{event.event_type || 'Unknown event'}</strong> · {event.actor_id || 'Actor unknown'}
         <p>{eventBody(event)}</p>
-        {artifactIds(event).map((id, i) => <a key={`${id}-${i}`} className="mr-3 inline-block max-w-full break-all underline"
+        {artifactIds(event).map((id, i) => <a key={`${id}-${i}`} className="mr-3 inline-block max-w-full break-all underline pointer-coarse:py-3"
           href={`/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`}
           onClick={e => { e.preventDefault(); setArtifact(id) }}>{id}</a>)}
       </li>)}

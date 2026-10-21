@@ -1,11 +1,13 @@
 import '@testing-library/jest-dom/vitest'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/pages/CommitLineagePage', () => ({ CommitLineagePage: () => null }))
 vi.mock('@/pages/CodeHealthPage', () => ({ CodeHealthPage: () => null }))
 import marks from '@/api/__fixtures__/agentrt-progress-marks.testdb.json'
+import mission from '@/api/__fixtures__/agentrt-mission-M-2.prod.json'
+import tasks from '@/api/__fixtures__/agentrt-tasks-M-2.prod.json'
 import poolsFixture from '../../owner/__tests__/fixtures/pools-utc.json'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { useNeedsYou } from '../../needs-you/useNeedsYou'
@@ -13,6 +15,9 @@ import { NeedsYouPage } from '../../needs-you/NeedsYouPage'
 import { ProgressPage } from '../ProgressPage'
 import { ProgressHistory } from '../ProgressHistory'
 import { AttemptActions } from '../AttemptActions'
+import { GoalCard } from '../GoalCard'
+import { LastRead } from '../../owner/LastRead'
+import { useOwnerConsole } from '../../owner/useOwnerConsole'
 
 // Review 488 (W-31 2.5-2): a read that fails after a good one, or before any, is said as failed, and nothing on the
 // page goes on telling the last answer as the present. GET /progress is the marks moment the platform answered on a
@@ -30,6 +35,8 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   if (url.includes('/agent/threads')) return source.threads ? json({ threads: [], hosts: [] }) : json({ error: 'threads offline' }, 503)
   if (url.includes('/lineage')) return json({ threads: [], errors: [] })
   if (url.includes('/agentrt/plan?')) return json({ error: 'not_found', message: 'no such root' }, 404)
+  if (url.includes('/agentrt/missions/')) return json(mission)
+  if (url.includes('/agentrt/tasks?')) return json(tasks)
   if (url.includes('/agentrt/pools')) return json(poolsFixture)
   if (url.includes('/agentrt/events')) return json([])
   if (url.includes('/api/v1/releases')) return json({ status: {}, records: [] })
@@ -47,7 +54,7 @@ beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { configurable: true, value: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, clear: () => undefined } })
   vi.stubGlobal('fetch', fetchMock)
 })
-afterEach(() => { cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); fetchMock.mockClear() })
+afterEach(() => { onlineManager.setOnline(true); cleanup(); clients.forEach(c => c.clear()); clients.length = 0; vi.unstubAllGlobals(); fetchMock.mockClear() })
 
 const runningCard = () => within(screen.getByRole('region', { name: 'Overview' })).getByText('Running').parentElement as HTMLElement
 
@@ -122,5 +129,37 @@ describe('an attempt\'s actions that cannot be read (A4)', () => {
     expect(await screen.findByText(/the agent runtime database is not connected yet/)).toHaveAttribute('role', 'alert')
     expect(screen.queryByText('no actions yet')).toBeNull()
     expect(screen.queryByText('Reading actions…')).toBeNull()
+  })
+})
+
+// Review 493: a read paused offline is not a read either, and "not read since this page opened" counts from the
+// page's or the card's own opening.
+describe('reads paused offline (review 493 B1, C)', () => {
+  it('a goal card says it is offline and when its details were read, not that it is loading or current', async () => {
+    const { client } = show(<GoalCard id="M-2" updatedAt={0} questions={[]} />)
+    await waitFor(() => expect(screen.queryByText('Loading mission details…')).toBeNull())
+    expect(screen.queryByRole('alert')).toBeNull()
+    onlineManager.setOnline(false)
+    void client.refetchQueries({ queryKey: ['agent-runtime-goal', 'M-2'] })
+    expect(await screen.findByText(/^Could not load M-2: offline; last read \d\d:\d\d \(just now\)\. Showing the details read then\./)).toHaveAttribute('role', 'alert')
+    expect(screen.queryByText('Loading mission details…')).toBeNull()
+  })
+
+  it('Work\'s upper cards say the runtime could not be read while its read is paused, not "Reading"', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } }); clients.push(client)
+    const { result } = renderHook(() => useOwnerConsole({ system: false, work: true, chief: false }), {
+      wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> })
+    await waitFor(() => expect(result.current.runtimeReadAt).not.toBeNull())
+    expect(result.current.runtimeError).toBe(false)
+    onlineManager.setOnline(false)
+    void client.refetchQueries({ queryKey: ['agent-runtime-progress'] })
+    await waitFor(() => expect(result.current.runtimeError).toBe(true))
+  })
+
+  it('counts "not read since this page opened" from the opening it is given', () => {
+    const opened = new Date()
+    opened.setHours(10, 0, 0, 0)
+    render(<p data-testid="line"><LastRead readAt={null} openedAt={opened.getTime()} /></p>)
+    expect(screen.getByTestId('line')).toHaveTextContent(/^not read since this page opened at (\w+ \d+ )?10:00$/)
   })
 })
