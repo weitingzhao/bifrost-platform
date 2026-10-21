@@ -397,7 +397,14 @@ export async function proposePlanImport(
   if (typeof format !== 'string' || !IMPORT_FORMATS.includes(format)) {
     return { error: `${input.request_file} is not an import request (${IMPORT_FORMATS.join(' or ')})`, hint: 'No request was sent.' }
   }
-  return d.send('POST', `${BASE}/plan/imports`, { idempotency_key: input.idempotency_key, reason: input.reason, request })
+  // What is sent is bounded as the platform bounds its body (maxBody, 1 MiB): the request with its key and
+  // reason, as JSON, in UTF-8 bytes (review 491 B2).
+  const body = { idempotency_key: input.idempotency_key, reason: input.reason, request }
+  const bytes = Buffer.byteLength(JSON.stringify(body), 'utf8')
+  if (bytes > PLAN_IMPORT_MAX_BYTES) {
+    return { error: `the request with its key and reason is ${bytes} bytes; POST /plan/imports takes at most ${PLAN_IMPORT_MAX_BYTES}`, hint: 'No request was sent.' }
+  }
+  return d.send('POST', `${BASE}/plan/imports`, body)
 }
 
 /** Upload text as an artifact, addressed by its sha256; uploading it again is harmless. */

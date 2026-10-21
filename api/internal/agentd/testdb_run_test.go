@@ -106,17 +106,17 @@ func TestTheStageAddsNoBusinessKey(t *testing.T) {
 	env := gitEnvT(t.TempDir())
 	bare, baseCommit := bareRemote(t, env)
 	head := func(_ context.Context, _, ref string) (string, error) {
-		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+		out, lerr := exec.Command("git", "ls-remote", bare, ref).Output()
 		first, _, _ := strings.Cut(string(out), "\t")
-		return strings.TrimSpace(first), err
+		return strings.TrimSpace(first), lerr
 	}
 	_, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json", []byte(`{"text":"t"}`))
 	ex := script(`touch "$OUT/ran"; echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
 	d := daemon(t, base, func(a *agentd.Attempt) (agentd.Spawn, error) {
-		sp, err := ex(a)
+		sp, xerr := ex(a)
 		sp.Env = slices.DeleteFunc(sp.Env, func(kv string) bool { k, _, _ := strings.Cut(kv, "="); return agentd.BusinessKey(k) })
 		sp.Env = append(sp.Env, "KUBECONFIG=/home/agent/.kube/config")
-		return sp, err
+		return sp, xerr
 	}, bare, env)
 	root, err := os.MkdirTemp("", "a")
 	must(t, err)

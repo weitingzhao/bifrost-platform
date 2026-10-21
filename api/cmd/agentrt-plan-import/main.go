@@ -243,8 +243,10 @@ func recorder(args []string, stdout, stderr io.Writer) int {
 // each is 1 MiB.
 const importBytes = 1 << 20
 
-// envelopeRoom is what a body adds to its request: the idempotency key and
-// the reason, at most.
+// envelopeRoom is the room a request leaves for its body's idempotency key
+// and reason: a reservation, not their bound (review 491 B2) — the MCP tool
+// checks the body it sends, with the key and reason it is given, against
+// the route's 1 MiB.
 const envelopeRoom = 16 << 10
 
 // recorderFits says which layer a request (written as doc) would not pass,

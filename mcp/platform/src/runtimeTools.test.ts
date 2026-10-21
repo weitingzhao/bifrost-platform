@@ -234,6 +234,13 @@ describe('agent runtime writes', () => {
       await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'round 2', idempotency_key: 'i-1' }, d, files)
       assert.equal(calls[0].path, '/api/v1/agentrt/plan/imports')
       assert.deepEqual(calls[0].body, { idempotency_key: 'i-1', reason: 'round 2', request })
+      // The whole body is bounded, its key and reason with it, in UTF-8 bytes (review 491 B2).
+      const before = calls.length
+      const long = (await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'x'.repeat(1 << 20), idempotency_key: 'i-big' }, d, files)) as { error: string }
+      assert.match(long.error, /POST \/plan\/imports takes at most 1048576/)
+      const wide = (await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: '已'.repeat(350_000), idempotency_key: 'i-wide' }, d, files)) as { error: string }
+      assert.match(wide.error, /bytes; POST \/plan\/imports/, '350 000 characters of three bytes each are over 1 MiB')
+      assert.equal(calls.length, before, 'nothing is sent for a body over the bound')
       await proposePlanImport({ request_file: join(dir, 'recorder-td-336.json'), reason: 'retire the recorder', idempotency_key: 'i-3' }, d, files)
       assert.equal(calls[1].path, '/api/v1/agentrt/plan/imports')
       assert.deepEqual(calls[1].body, { idempotency_key: 'i-3', reason: 'retire the recorder', request: recorder })

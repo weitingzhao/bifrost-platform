@@ -185,8 +185,14 @@ func acceptAssessment(ctx context.Context, tx pgx.Tx, t taskRow, stream, attempt
 	}
 	// Its reasons are shown beside the card: one that says the Owner
 	// approved is recorded as a spec's or a message's is (T04; review 489
-	// B3).
-	if err = alertClaim(ctx, tx, Event{Stream: stream, MissionID: t.mission, TaskID: t.id}, noted.EventID, "assessment", report, body); err != nil {
+	// B3). The whole report is read, and the JSON the parser took out of it
+	// as JSON, so an escape in a fenced block hides nothing (review 491 B3).
+	readings := [][]byte{body}
+	if raw, why := jsonOf(seatproto.WithoutAlerts(text)); why == "" {
+		readings = append(readings, []byte(raw))
+	}
+	if err = alertClaimIn(ctx, tx, Event{Stream: stream, MissionID: t.mission, TaskID: t.id}, noted.EventID, "assessment", report,
+		readings...); err != nil {
 		return "", err
 	}
 	return "assessed", moveTask(ctx, tx, "controller", t, "accepted", "assessment recorded on "+stream)

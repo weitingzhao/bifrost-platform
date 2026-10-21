@@ -83,7 +83,20 @@ func ApprovalClaim(body []byte) (string, bool) {
 // or an approval). artifact is the text's artifact, "" for a plan note's,
 // whose text is in the note its alert is caused by.
 func alertClaim(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error {
-	phrase, found := ApprovalClaim(body)
+	return alertClaimIn(ctx, tx, ev, cause, source, artifact, body)
+}
+
+// alertClaimIn is alertClaim over readings of one text (an assessment's
+// whole report and the JSON its parser took out of it, decoded: review 491
+// B3): one alert, the first reading's phrase that claims an approval.
+func alertClaimIn(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, bodies ...[]byte) error {
+	var phrase string
+	found := false
+	for _, body := range bodies {
+		if phrase, found = ApprovalClaim(body); found {
+			break
+		}
+	}
 	if !found {
 		return nil
 	}
