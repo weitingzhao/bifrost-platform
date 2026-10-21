@@ -415,15 +415,19 @@ func (r Rule) Watches() []Watch {
 // spec's sha256.
 type GateRef struct{ Env, Test, Spec string }
 
-// Gates lists the gates the rule names, sorted, each once: what the runtime
-// runs for it (TD-397).
+// Gates lists the gates the rule names, in the rule's order, each once:
+// what the runtime runs for it (TD-397).
 func (r Rule) Gates() []GateRef {
 	seen := map[GateRef]bool{}
+	var out []GateRef
 	var walk func(*node)
 	walk = func(n *node) {
 		if n.kind == kGates {
 			for _, g := range n.gates {
-				seen[GateRef{n.s1, g.test, g.spec}] = true
+				if ref := (GateRef{n.s1, g.test, g.spec}); !seen[ref] {
+					seen[ref] = true
+					out = append(out, ref)
+				}
 			}
 		}
 		for _, c := range n.children {
@@ -433,20 +437,6 @@ func (r Rule) Gates() []GateRef {
 	if r.node != nil {
 		walk(r.node)
 	}
-	out := make([]GateRef, 0, len(seen))
-	for g := range seen {
-		out = append(out, g)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if a.Env != b.Env {
-			return a.Env < b.Env
-		}
-		if a.Test != b.Test {
-			return a.Test < b.Test
-		}
-		return a.Spec < b.Spec
-	})
 	return out
 }
 

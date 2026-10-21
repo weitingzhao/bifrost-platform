@@ -2,16 +2,20 @@ package gaterun
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"testing/iotest"
 )
 
 // A gate passes only when every named test ran and passed: a test that did
@@ -59,6 +63,21 @@ func TestCheck(t *testing.T) {
 		if c.why != "" && !strings.Contains(summary, c.why) {
 			t.Errorf("%s: the summary does not say %q:\n%s", name, c.why, summary)
 		}
+	}
+}
+
+// A stream that cannot be read ends the gate in a failure, its verdict
+// still the last line (review td397-4 B5).
+func TestFinishOnABrokenStream(t *testing.T) {
+	t.Parallel()
+	var out strings.Builder
+	stream := io.MultiReader(strings.NewReader(`{"Action":"run","Package":"p","Test":"TestA"}`+"\n"), iotest.ErrReader(errors.New("cut")))
+	if code := finish(&out, Command{Pkg: "./internal/x/", Tests: []string{"TestA"}}, stream, "", nil); code != 1 {
+		t.Fatalf("exit %d\n%s", code, out.String())
+	}
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if last := lines[len(lines)-1]; !strings.HasPrefix(last, VerdictPrefix+"FAIL ./internal/x/: ") || len(last) > VerdictMax {
+		t.Fatalf("last line %q", last)
 	}
 }
 
@@ -144,16 +163,22 @@ func TestCatalog(t *testing.T) {
 				t.Errorf("gate %s twice", g.ID)
 			}
 			ids[g.ID] = true
-			body, _, err := g.Spec()
+			body, sum, err := g.Spec()
 			if err != nil {
 				t.Fatalf("gate %s: %v", g.ID, err)
+			}
+			if h := sha256.Sum256(body); hex.EncodeToString(h[:]) != sum {
+				t.Fatalf("gate %s: its sha256 is not its spec's bytes'", g.ID)
+			}
+			if rule, err := r.Rule("prod"); err != nil || !strings.Contains(string(rule), `"spec_sha256":"`+sum+`"`) {
+				t.Fatalf("row %s: its rule %s does not pin gate %s's spec %s (%v)", r.Label, rule, g.ID, sum, err)
 			}
 			cmds, err := ParseSpec(body)
 			if err != nil || len(cmds) != len(g.Commands) {
 				t.Fatalf("gate %s reads back %v %v", g.ID, cmds, err)
 			}
 			for _, c := range g.Commands {
-				have := testFuncs(t, filepath.Join("..", "..", "..", strings.TrimPrefix(c.Pkg, "./")))
+				have := testFuncs(t, c.Pkg)
 				for _, name := range c.Tests {
 					if !have[name] {
 						t.Errorf("gate %s: %s has no test %s", g.ID, c.Pkg, name)
@@ -164,12 +189,26 @@ func TestCatalog(t *testing.T) {
 	}
 }
 
-// testFuncs is the top-level Test functions of a package's test files.
-func testFuncs(t *testing.T, dir string) map[string]bool {
+// testFuncs is the top-level Test functions of the test files a package
+// builds with on the agent host (linux/amd64: go list, so a test behind a
+// build tag or in a _windows_test.go is not counted; review td397-4 B4).
+func testFuncs(t *testing.T, pkg string) map[string]bool {
 	t.Helper()
-	files, err := filepath.Glob(filepath.Join(dir, "*_test.go"))
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no test files in %s: %v", dir, err)
+	root := filepath.Join("..", "..", "..")
+	cmd := exec.Command("go", "list", "-f", "{{.Dir}}|{{range .TestGoFiles}}{{.}} {{end}}{{range .XTestGoFiles}}{{.}} {{end}}", pkg)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GOOS=linux", "GOARCH=amd64", "CGO_ENABLED=0")
+	listed, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list %s: %v", pkg, err)
+	}
+	dir, names, _ := strings.Cut(strings.TrimSpace(string(listed)), "|")
+	var files []string
+	for _, n := range strings.Fields(names) {
+		files = append(files, filepath.Join(dir, n))
+	}
+	if len(files) == 0 {
+		t.Fatalf("no test files in %s on linux/amd64", pkg)
 	}
 	out := map[string]bool{}
 	fset := token.NewFileSet()

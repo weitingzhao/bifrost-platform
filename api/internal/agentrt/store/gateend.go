@@ -101,6 +101,7 @@ func endBatch(ctx context.Context, db DB, env, mission string) (int, error) {
 		if len(cancel) == 0 && !closing {
 			return nil
 		}
+		hook("gate end: read", mission)
 		lock := []string{}
 		for _, m := range members {
 			if closing || cancel[m.entry.Task] != "" {
@@ -128,6 +129,14 @@ func endBatch(ctx context.Context, db DB, env, mission string) (int, error) {
 				if err != nil {
 					return err
 				}
+				continue
+			}
+			// Read again under the locks: what was read before them may have
+			// changed (a budget grown, a deployment recorded).
+			if why, err = cannotRun(ctx, tx, b, id); err != nil {
+				return err
+			}
+			if why == "" {
 				continue
 			}
 			if err = moveTask(ctx, tx, "controller", t, "cancelled", "the gate could not run: "+why); err != nil {

@@ -110,11 +110,16 @@ func gateVerifyJSON(g gaterun.Gate, pass bool, code int, tail string) string {
 // in report as its verify.json with conclusion, and uses the result.
 func (w *world) runGate(t *testing.T, task, conclusion, report string) string {
 	t.Helper()
-	c := w.claim(t, "h1", store.LeaseTTL, deterministic)
+	return w.runGateOn(t, "h1", task, conclusion, report)
+}
+
+func (w *world) runGateOn(t *testing.T, host, task, conclusion, report string) string {
+	t.Helper()
+	c := w.claim(t, host, store.LeaseTTL, deterministic)
 	if c == nil || c.TaskID != task || c.Role != "verify" {
 		t.Fatalf("the gate task was not leased to the deterministic executor: %+v", c)
 	}
-	f := fence(c, "h1")
+	f := fence(c, host)
 	ok(t, store.Start(ctx, w.rt, f, "", ""))
 	exit := 0
 	if conclusion != "done" {
@@ -210,8 +215,8 @@ func TestGatesRunOnTheDeployedCommit(t *testing.T) {
 			t.Fatalf("task %v: %q", r, w.lastStateReason(t, r[0]))
 		}
 	}
-	// The rule stops at its first gate that has not passed: the reason names it.
-	wantTick(t, w.archRows(t)["ARCH:a"], "false", "T40 (not dispatched yet): no pass on dev at 4c1d3a5e7f9b")
+	// Every gate that has not passed, in the rule's order.
+	wantTick(t, w.archRows(t)["ARCH:a"], "false", "T40 (not dispatched yet), T41 (not dispatched yet): no pass on dev at 4c1d3a5e7f9b")
 }
 
 func (w *world) lastStateReason(t *testing.T, task string) string {
@@ -241,6 +246,8 @@ func TestGateVerdicts(t *testing.T) {
 		"a trace withheld":       {"done", withheld, "fail", "T40 (failed: command 1 is not its spec's (or its trace was withheld))"},
 		"pass but not concluded": {"failed", gateVerifyJSON(g, true, 0, ""), "fail", "T40 (failed: its check did not pass"},
 		"not verify.json":        {"done", "# a report\n", "fail", "T40 (failed: its verify.json does not read"},
+		"no exit code":           {"done", strings.Replace(gateVerifyJSON(g, true, 0, ""), `"exit_code":0,`, "", 1), "fail", "T40 (failed: command 1 has no exit code)"},
+		"a null exit code":       {"done", strings.Replace(gateVerifyJSON(g, true, 0, ""), `"exit_code":0`, `"exit_code":null`, 1), "fail", "T40 (failed: command 1 has no exit code)"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -526,5 +533,103 @@ func TestGateTaskConstraint(t *testing.T) {
 		if err := try(c.actor, c.task); err == nil || !strings.Contains(err.Error(), "23514") {
 			t.Errorf("%s: %v; want the CHECK to refuse it", name, err)
 		}
+	}
+}
+
+// Review td397-4 A1: the end of a batch reads why a member cannot run, then
+// takes its locks; what it read may be over by then (here a host took the
+// task, failed it and it is ready again, just now): it reads again under
+// the locks and cancels nothing on the old reading.
+//
+// Serial: it freezes the event clock and holds the package's test hook.
+func TestGateEndReadsAgainUnderItsLocks(t *testing.T) {
+	_, spec, sum := gateOf(t, "T40", "TestGrammarIsClosed")
+	w := gateWorld(t, [][]byte{spec}, [2]string{"ARCH:a", gateRule("dev", [2]string{"T40", sum})})
+	w.deploy(t, commitA, refA)
+	// Made ready three hours ago; the pass that made it reads that no host
+	// took it, and before it takes its locks a host takes it and fails it,
+	// now.
+	thaw := store.FreezeEventClock(time.Now().Add(-3 * time.Hour))
+	pool := w.db.Pool(t, w.db.Runtime)
+	once := false
+	unhook := store.SetHook(func(point, arg string) {
+		if point != "gate end: read" || once {
+			return
+		}
+		once = true
+		thaw()
+		c, err := store.ClaimFor(ctx, pool, store.ClaimRequest{HostID: "h1", FreeSlots: 1, Tools: []store.Tool{deterministic}}, store.LeaseTTL)
+		ok(t, err)
+		ok(t, store.Start(ctx, pool, fence(c, "h1"), "", ""))
+		_, err = store.Ended(ctx, pool, c.AttemptID, "h1", "exit", true)
+		ok(t, err)
+	})
+	n, err := store.RunGates(ctx, w.rt, "dev", "bifrost-platform", deployedIs(commitA, refA))
+	unhook()
+	thaw()
+	ok(t, err)
+	task := w.gateTasks(t, commitA)[0][0]
+	if !once || n != 1 || w.state(t, "task", task) != "ready" {
+		t.Fatalf("hooked %v, ended %d; the task is %s (%q)", once, n, w.state(t, "task", task), w.lastStateReason(t, task))
+	}
+}
+
+// Review td397-4 B1, B3: a row names each of its gates that has not passed,
+// in the rule's order, so one running does not hide one that failed; and
+// what became of a gate is its own environment's.
+func TestGateReasonNamesEveryGate(t *testing.T) {
+	t.Parallel()
+	g, spec, sum := gateOf(t, "T40", "TestGrammarIsClosed")
+	_, spec2, sum2 := gateOf(t, "T41", "TestGateUsesTheExactTestID")
+	w := gateWorld(t, [][]byte{spec, spec2}, [2]string{"ARCH:a", gateRule("dev", [2]string{"T40", sum}, [2]string{"T41", sum2})},
+		[2]string{"ARCH:s", gateRule("stg", [2]string{"T41", sum2})})
+	w.deploy(t, commitA, refA)
+	_, err := store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, refA))
+	ok(t, err)
+	w.runGates(t, commitA, refA)
+	if n, err := store.RunGates(ctx, w.rt, "stg", "bifrost-platform", deployedIs(commitA, refA)); err != nil || n != 1 {
+		t.Fatalf("stg dispatched %d (%v)", n, err)
+	}
+	gateTask := func(env, test string) (task, mission string) {
+		t.Helper()
+		ok(t, w.rt.QueryRow(ctx, `SELECT g->>'task', m.mission_id FROM agentrt.mission m, jsonb_array_elements(m.scope_json->'gate_run'->'gates') g
+		  WHERE m.scope_json->'gate_run'->>'env' = $1 AND g->>'test' = $2`, env, test).Scan(&task, &mission))
+		return task, mission
+	}
+	// T40 is running (leased to h1); T41 fails on h2.
+	devT40, devMission := gateTask("dev", "T40")
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error {
+		if _, _, err := store.LeaseAttempt(ctx, tx, "controller", devMission, devT40, "exec:deterministic", "h1", 1, time.Minute); err != nil {
+			return err
+		}
+		return store.MoveTaskForTest(ctx, tx, "controller", devT40, "leased")
+	}))
+	devT41, _ := gateTask("dev", "T41")
+	_ = g
+	if did := w.runGateOn(t, "h2", devT41, "failed", "{}"); did != "accepted" {
+		t.Fatalf("did %q", did)
+	}
+	rows := w.archRows(t)
+	wantTick(t, rows["ARCH:a"], "false", "T40 (running), T41 (failed: ")
+	wantTick(t, rows["ARCH:s"], "false", "T41 (not run yet): no pass on stg")
+}
+
+// Review td397-4 B2: a task whose fields are no longer what its batch lists
+// (here its repo) is no member: not kept from cards, not ended by the batch.
+func TestGateMemberIsEveryField(t *testing.T) {
+	t.Parallel()
+	_, spec, sum := gateOf(t, "T40", "TestGrammarIsClosed")
+	w := gateWorld(t, [][]byte{spec}, [2]string{"ARCH:a", gateRule("dev", [2]string{"T40", sum})})
+	w.deploy(t, commitA, refA)
+	w.runGates(t, commitA, refA)
+	task := w.gateTasks(t, commitA)[0][0]
+	w.legacy(t, `UPDATE agentrt.task SET repo = 'bifrost-trade-infra' WHERE task_id = '`+task+`'`)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.MoveTaskForTest(ctx, tx, "controller", task, "blocked") }))
+	a := &asker{}
+	if n, err := store.AskBlocked(ctx, w.rt, a.ask); err != nil || n != 1 {
+		t.Fatalf("asked %d (%v); a task that is no member is an ordinary one", n, err)
+	}
+	if n, err := store.EndGates(ctx, w.rt, "dev"); err != nil || n != 0 {
+		t.Fatalf("the batch ended %d (%v) of a task that is no member", n, err)
 	}
 }

@@ -26,7 +26,8 @@ import (
 //     (gaterun.Catalog) gives that row in this environment, every spec
 //     stored. Anything else recommends nothing. On STG the card-auto-answer
 //     rule answers with what a card recommends; PROD shows it and the Owner
-//     answers (the coordinating thread chose A, 2026-10-21, for the Owner).
+//     answers (CUT §7② A, the design's recommendation, which the
+//     coordinating thread is to confirm).
 //   - gatesStillRecommended: a change the rule answered for is applied only
 //     while it is still what gatesRecommend recommends (a row given a rule
 //     meanwhile is not overwritten).

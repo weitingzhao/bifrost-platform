@@ -17,12 +17,13 @@ import (
 // no test name is made up); could not run, with why it was cancelled;
 // running; not run yet; or not dispatched yet. "" when what the
 // environment runs is not recorded (the reason says so already).
-func gateStatus(ctx context.Context, tx pgx.Tx, d recordedDeploy, test, spec string) (string, error) {
+func gateStatus(ctx context.Context, tx pgx.Tx, env string, d recordedDeploy, test, spec string) (string, error) {
 	if !d.ok {
 		return "", nil
 	}
 	rows, err := tx.Query(ctx, `SELECT (scope_json->'gate_run')::text FROM agentrt.mission WHERE scope_json ? 'gate_run'
-	  AND created_by_actor_id = 'controller' AND scope_json->'gate_run'->>'commit' = $1 ORDER BY created_at DESC, mission_id DESC`, d.commit)
+	  AND created_by_actor_id = 'controller' AND scope_json->'gate_run'->>'env' = $1 AND scope_json->'gate_run'->>'commit' = $2
+	  ORDER BY created_at DESC, mission_id DESC`, env, d.commit)
 	if err != nil {
 		return "", err
 	}
@@ -37,7 +38,7 @@ func gateStatus(ctx context.Context, tx pgx.Tx, d recordedDeploy, test, spec str
 			continue
 		}
 		g, ok := parseGateRun(v)
-		if !ok || !sameRef(g.Ref, d.ref) {
+		if !ok || g.Env != env || !sameRef(g.Ref, d.ref) {
 			continue
 		}
 		for _, e := range g.Gates {

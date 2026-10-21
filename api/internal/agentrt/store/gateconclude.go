@@ -24,7 +24,11 @@ import (
 // deployment and spec, which GatePassed reads; a failure also leaves a note
 // with the runner's verdict line, which the architecture table quotes. The
 // task is then accepted: its gate ran. An attempt handed in with no report
-// records nothing (there is no evidence) and its task is cancelled.
+// records nothing (there is no evidence) and its task is cancelled. That the
+// report is this attempt's own run rests on agentd, which hands in what the
+// run wrote (review td397-4 C2): verify.json names no attempt, commit or
+// spec, and the lease's fence binds the hand-over to the attempt, not the
+// bytes to a run.
 
 // verifyReport is verify.json as agentd's deterministic executor writes it
 // (agentd/spec.go Verification).
@@ -32,7 +36,7 @@ type verifyReport struct {
 	Pass     bool `json:"pass"`
 	Commands []struct {
 		Argv     []string `json:"argv"`
-		ExitCode int      `json:"exit_code"`
+		ExitCode *int     `json:"exit_code"` // absent or null is no exit (review td397-4 A2)
 		TimedOut bool     `json:"timed_out"`
 		Tail     string   `json:"tail"`
 	} `json:"commands"`
@@ -143,8 +147,10 @@ func gateVerdict(ctx context.Context, tx pgx.Tx, spec, report, conclusion string
 			return fail(fmt.Sprintf("command %d is not its spec's (or its trace was withheld)", i+1))
 		case c.TimedOut:
 			return fail(fmt.Sprintf("command %d timed out", i+1))
-		case c.ExitCode != 0:
-			return fail(fmt.Sprintf("command %d exited %d", i+1, c.ExitCode))
+		case c.ExitCode == nil:
+			return fail(fmt.Sprintf("command %d has no exit code", i+1))
+		case *c.ExitCode != 0:
+			return fail(fmt.Sprintf("command %d exited %d", i+1, *c.ExitCode))
 		}
 	}
 	if !v.Pass || conclusion != "done" {

@@ -3,6 +3,7 @@ package gaterun
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,12 +31,18 @@ func Run(ctx context.Context, dir string, c Command, out io.Writer) int {
 	var stream, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stream, &stderr
 	runErr := cmd.Run()
-	rep, err := Check(&stream, c.Tests)
+	return finish(out, c, &stream, stderr.String(), runErr)
+}
+
+// finish reads the stream of a run that ended (runErr its end) and writes
+// what it found, the verdict last whatever went wrong reading it (review
+// td397-4 B5). It returns the exit code.
+func finish(out io.Writer, c Command, stream io.Reader, stderr string, runErr error) int {
+	rep, err := Check(stream, c.Tests)
 	if err != nil {
-		fmt.Fprintln(out, "gate: reading go test's output:", err)
-		return 2
+		runErr = errors.Join(runErr, fmt.Errorf("reading go test's output: %w", err))
 	}
-	if s := strings.TrimSpace(stderr.String()); s != "" {
+	if s := strings.TrimSpace(stderr); s != "" {
 		lines := strings.Split(s, "\n")
 		if len(lines) > 20 {
 			lines = lines[len(lines)-20:]

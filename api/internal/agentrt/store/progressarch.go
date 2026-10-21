@@ -115,11 +115,19 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 		if statusErr != nil {
 			return ""
 		}
-		s, err := gateStatus(ctx, tx, deploys.get(env), test, spec)
+		s, err := gateStatus(ctx, tx, env, deploys.get(env), test, spec)
 		statusErr = err
 		return s
 	}}
 	res := rule.Eval(seen)
+	if res.Value == plan.False {
+		// The rule stops at its first gate that has not passed; the row names
+		// every one, in the rule's order, so a gate still running does not
+		// hide one that failed (review td397-4 B1).
+		for _, g := range rule.Gates() {
+			seen.GatePassed(g.Env, g.Test, g.Spec)
+		}
+	}
 	if facts.err != nil {
 		return "", "", facts.err
 	}
@@ -220,6 +228,7 @@ type explained struct {
 	// status is what became of a gate that has not passed (gateStatus); nil
 	// for none.
 	status func(env, test, spec string) string
+	read   map[string]plan.Tri // the gates this evaluation read, by key
 }
 
 type atomReading struct {
@@ -262,6 +271,9 @@ func (e *explained) ManualRecorded(note string) bool {
 
 func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 	key := env + "\x00" + test + "\x00" + specSHA256
+	if v, done := e.read[key]; done {
+		return v // named once in the reason
+	}
 	v, read := e.gates[key]
 	if !read {
 		v = e.Facts.GatePassed(env, test, specSHA256)
@@ -269,6 +281,10 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 			e.gates[key] = v
 		}
 	}
+	if e.read == nil {
+		e.read = map[string]plan.Tri{}
+	}
+	e.read[key] = v
 	what := test
 	if v == plan.False && e.status != nil {
 		if s := e.status(env, test, specSHA256); s != "" {

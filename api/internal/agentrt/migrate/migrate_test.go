@@ -193,9 +193,11 @@ func TestUpgradeTo0006KeepsEvents(t *testing.T) {
 
 // TD-397: 0007 replaces the CHECK that ties verify and review to a subject
 // with one that also takes a gate task (role verify, no subject, class
-// gate, effect none, off the plan, made by the controller), and changes
-// nothing else; a second run applies nothing.
-func TestUpgradeTo0007TakesGateTasks(t *testing.T) {
+// gate, effect none, off the plan, made by the controller), and changes no
+// other CHECK; a second run applies nothing. Which tasks the new CHECK
+// takes is store's TestGateTaskConstraint; an older platform on the new
+// schema is not run here.
+func TestUpgradeTo0007ReplacesTheSubjectCheck(t *testing.T) {
 	ctx := context.Background()
 	db := agentrttest.New(t)
 	conn := db.Connect(t, db.Owner)

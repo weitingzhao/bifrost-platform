@@ -133,17 +133,23 @@ func sameRef(a, b map[string]any) bool {
 }
 
 // gateMember is the SQL condition that task t of mission m is a member of
-// its gate batch: both made by the controller, t of class gate with no
-// subject, and listed in m's gate_run (gateMemberOf checks every field).
+// its gate batch, the same as gateMemberOf (review td397-4 B2: what is kept
+// from cards and blocks is what the batch ends and uses): both made by the
+// controller; t a verify of class gate, effect none, off the plan, with no
+// subject; its base the batch's commit, its repo the batch's, its spec the
+// one its entry in the batch's list names.
 const gateMember = `(m.scope_json ? 'gate_run' AND m.created_by_actor_id = 'controller' AND t.created_by_actor_id = 'controller'
-  AND t.task_class = 'gate' AND t.subject_task_id IS NULL
-  AND m.scope_json->'gate_run'->'gates' @> jsonb_build_array(jsonb_build_object('task', t.task_id)))`
+  AND t.role = 'verify' AND t.task_class = 'gate' AND t.effect_class = 'none' AND t.off_plan AND t.subject_task_id IS NULL
+  AND t.base_commit = m.scope_json->'gate_run'->>'commit' AND t.repo = m.scope_json->'repos'->>0
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(CASE jsonb_typeof(m.scope_json->'gate_run'->'gates') WHEN 'array'
+      THEN m.scope_json->'gate_run'->'gates' ELSE '[]'::jsonb END) g
+    WHERE g->>'task' = t.task_id AND 'sha256:' || (g->>'spec_sha256') = t.spec_artifact_id))`
 
 // gateBatch is a batch mission as read: its run, and its own fields.
 type gateBatch struct {
-	mission, state, envelope string
-	run                      gateRun
-	created                  time.Time
+	mission, state, envelope, repo string
+	run                            gateRun
+	created                        time.Time
 }
 
 // readGateBatch reads a mission as a gate batch, with the given lock
@@ -152,9 +158,10 @@ func readGateBatch(ctx context.Context, tx pgx.Tx, mission, lock string) (gateBa
 	b := gateBatch{mission: mission}
 	var by string
 	var doc []byte
-	err := tx.QueryRow(ctx, `SELECT state, created_by_actor_id, created_at, COALESCE(envelope_rule_id, ''), (scope_json->'gate_run')::text
-	  FROM agentrt.mission WHERE mission_id = $1 `+lock, mission).Scan(&b.state, &by, &b.created, &b.envelope, &doc)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (doc == nil || by != "controller")) {
+	err := tx.QueryRow(ctx, `SELECT state, created_by_actor_id, created_at, COALESCE(envelope_rule_id, ''), (scope_json->'gate_run')::text,
+	    COALESCE(scope_json->'repos'->>0, '') FROM agentrt.mission WHERE mission_id = $1 `+lock, mission).
+		Scan(&b.state, &by, &b.created, &b.envelope, &doc, &b.repo)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (doc == nil || by != "controller" || b.repo == "")) {
 		return b, false, nil
 	}
 	if err != nil {
@@ -195,7 +202,7 @@ func gateMemberOf(ctx context.Context, tx pgx.Tx, b gateBatch, taskID string) (g
 		return e, false, err
 	}
 	ok := mission == b.mission && role == "verify" && class == GateClass && effect == "none" && spec == "sha256:"+e.Spec &&
-		repo != "" && base == b.run.Commit && by == "controller" && offPlan && subject == nil
+		repo == b.repo && base == b.run.Commit && by == "controller" && offPlan && subject == nil
 	return e, ok, nil
 }
 

@@ -114,7 +114,7 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	}
 	deploy("stg", refA)
 	// The rule stops at the first gate that fails: the reason names it.
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet): no pass on stg at 2333e00753f9, the deployment recorded 20")
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): no pass on stg at 2333e00753f9, the deployment recorded 20")
 
 	task := store.NewTaskID()
 	var attempt string
@@ -156,7 +156,7 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	gate("T20", "stg", commitA, refA)
 	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg at 2333e00753f9")
 	deploy("stg", refB)
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet): no pass on stg")
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): no pass on stg")
 	deploy("stg", refA)
 	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg")
 	// Evaluating changes nothing: the projection only reads.
