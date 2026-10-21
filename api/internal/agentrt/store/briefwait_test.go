@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -96,10 +97,11 @@ func TestABriefNoHostTakesIsToldToTheOwner(t *testing.T) {
 	}
 }
 
-// Review 487 A1: with nothing in the platform stopping the candidates, the
-// note says no host offering their executor and model asked; a brief taken
-// before the pass is not told.
-func TestAWaitingBriefNamesWhatNoHostOffered(t *testing.T) {
+// Review 487 A1, 490 A2: with nothing found that stops the candidates, the
+// note says what was looked at and that why no host took it is not known
+// here; it does not guess that no host asked. A brief told is answered as
+// usual once a host takes it. A brief taken before the pass is not told.
+func TestAWaitingBriefSaysWhatThePlatformDoesNotKnow(t *testing.T) {
 	t.Parallel()
 	w, ask := mailWorld(t, "Anything for me?")
 	task, _ := takeAndReady(t, w, ask)
@@ -109,9 +111,16 @@ func TestAWaitingBriefNamesWhatNoHostOffered(t *testing.T) {
 		t.Fatalf("told %d", n)
 	}
 	notes := platformNotes(t, w)
-	if len(notes) != 1 || !strings.Contains(notes[0].Body, "nothing in the platform stops it") ||
-		!strings.Contains(notes[0].Body, "asked for work") {
+	if len(notes) != 1 || !strings.Contains(notes[0].Body, "finds no cooldown and no quota stop") ||
+		!strings.Contains(notes[0].Body, "is not known here") || strings.Contains(notes[0].Body, "so no host") {
 		t.Fatalf("notes %+v", notes)
+	}
+	w.work(t, task, "All quiet.", "done")
+	if did, err := store.AcceptBrief(ctx, w.rt, task); err != nil || did != "answered" {
+		t.Fatalf("a brief told of, then taken: %q %v", did, err)
+	}
+	if ms := thread(t, w); !strings.Contains(ms[len(ms)-1].Body, "All quiet.") || ms[len(ms)-1].TaskID != task {
+		t.Fatalf("the answer: %+v", ms[len(ms)-1])
 	}
 
 	w2, ask2 := mailWorld(t, "Anything else?")
@@ -123,6 +132,71 @@ func TestAWaitingBriefNamesWhatNoHostOffered(t *testing.T) {
 	if n := tellAt(t, w2, now.Add(31*time.Minute)); n != 0 || len(platformNotes(t, w2)) != 0 {
 		t.Fatalf("a brief taken meanwhile was told: %d", n)
 	}
+}
 
-	_ = task
+// Review 490 A2: a drain in force for every host keeps work from every claim,
+// and the note names it rather than guessing at the hosts.
+func TestAWaitingBriefNamesADrain(t *testing.T) {
+	t.Parallel()
+	w, ask := mailWorld(t, "Status?")
+	takeAndReady(t, w, ask)
+	ok(t, store.InTx(ctx, w.rt, func(tx pgx.Tx) error { return store.SetControl(ctx, tx, "owner", "c1", "global", "", "drain", "test") }))
+	now := time.Now()
+	waitsAt(t, w, now.Add(31*time.Minute))
+	if n := tellAt(t, w, now.Add(31*time.Minute)); n != 1 {
+		t.Fatalf("told %d", n)
+	}
+	if notes := platformNotes(t, w); len(notes) != 1 || !strings.Contains(notes[0].Body, "A drain is in force for every host") {
+		t.Fatalf("notes %+v", notes)
+	}
+}
+
+// Review 490 A1: a wait recorded but not told (the telling failed, or the
+// controller stopped between the two) is told on a later pass however long
+// ago it was recorded, once.
+func TestAWaitNotToldIsToldADayLater(t *testing.T) {
+	t.Parallel()
+	w, ask := mailWorld(t, "Still there?")
+	task, _ := takeAndReady(t, w, ask)
+	now := time.Now()
+	if n := waitsAt(t, w, now.Add(31*time.Minute)); n != 1 {
+		t.Fatalf("%d waits recorded", n)
+	}
+	for _, later := range []time.Duration{25 * time.Hour, 26 * time.Hour} {
+		tellAt(t, w, now.Add(later))
+	}
+	if notes := platformNotes(t, w); len(notes) != 1 || !strings.Contains(notes[0].Body, task) {
+		t.Fatalf("notes %+v", notes)
+	}
+}
+
+// Review 490 B1: a pass that waits for the seat's lock (another transaction
+// holds it) gives up within its bounds and says so, so the controller's loop
+// goes on; once the lock is free a later pass tells the Owner.
+func TestATellingWaitsBoundedForTheSeatsLock(t *testing.T) {
+	t.Parallel()
+	w, ask := mailWorld(t, "Are you there?")
+	takeAndReady(t, w, ask)
+	now := time.Now()
+	waitsAt(t, w, now.Add(31*time.Minute))
+	// The lock is held from another session: an advisory lock is its own
+	// session's again.
+	holder, err := w.db.Pool(t, w.db.Runtime).Begin(ctx)
+	ok(t, err)
+	defer func() { _ = holder.Rollback(ctx) }()
+	_, err = holder.Exec(ctx, `SELECT pg_advisory_xact_lock(742107, hashtext($1))`, store.Seat)
+	ok(t, err)
+	bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	start := time.Now()
+	if _, err = store.TellWaitingBriefs(bounded, w.rt, now.Add(31*time.Minute)); err == nil {
+		t.Fatal("a pass told while the seat's lock was held")
+	}
+	if took := time.Since(start); took > 15*time.Second {
+		t.Fatalf("the pass waited %s for the seat's lock", took)
+	}
+	ok(t, holder.Rollback(ctx))
+	if n := tellAt(t, w, now.Add(32*time.Minute)); n != 1 || len(platformNotes(t, w)) != 1 {
+		t.Fatalf("told %d once the lock was free", n)
+	}
 }
