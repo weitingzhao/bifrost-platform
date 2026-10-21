@@ -81,3 +81,57 @@ func TestPriorChecksOnlyForAnImplementation(t *testing.T) {
 		}
 	}
 }
+
+// Review td404-1 A1: the prompt is one argument of the executor's command,
+// which Linux holds to 128 KiB with its NUL. What failed is fitted into what
+// the spec and the rest leave, cut to a smaller share, or left out when not
+// even the shortest fits: a retry starts wherever its first round could. An
+// output's tail is never quoted longer than agentd keeps one.
+func TestPriorChecksFitTheArgument(t *testing.T) {
+	ticks := strings.Repeat("`", 40)
+	review := []byte(ticks + "\n" + strings.Repeat("finding\n", 12<<10/8) + "VERDICT: FAIL")
+	line := "x_test.go:9:2: token redeclared in this block\n"
+	verify, err := json.Marshal(Verification{Commands: []CommandTrace{{Argv: []string{"go", "-C", "api", "vet", "./..."}, ExitCode: 1,
+		Tail: strings.Repeat(line, 200)}}})
+	must(t, err)
+	checks := []PriorCheck{{FailedCheck{"deterministic", 2, "a"}, verify}, {FailedCheck{"review", 1, "b"}, review}}
+	rest := promptRest(&Attempt{Claim: &Claimed{Role: "implement"}})
+	for name, c := range map[string]struct {
+		text      string
+		told, cut bool
+	}{
+		"a short spec":               {"# Do it", true, false},
+		"a large spec":               {strings.Repeat("spec line\n", 112<<10/10), true, true},
+		"a spec that leaves no room": {strings.Repeat("s", promptMax-len(rest)-300), false, false},
+	} {
+		plain := &Attempt{Claim: &Claimed{Role: "implement"}, Spec: TaskSpec{Text: c.text}}
+		with := *plain
+		with.Failed = checks
+		p := Prompt(&with)
+		if len(p) > promptMax {
+			t.Errorf("%s: a prompt of %d bytes, over the %d an argument holds", name, len(p), promptMax)
+		}
+		section := p[len(c.text) : len(p)-len(rest)]
+		if p[:len(c.text)]+p[len(p)-len(rest):] != Prompt(plain) {
+			t.Errorf("%s: the prompt changed beyond the inserted section", name)
+		}
+		if told := strings.Contains(section, "The last round failed its check"); told != c.told {
+			t.Errorf("%s: told %v, want %v; %d bytes of section", name, told, c.told, len(section))
+		}
+		if !c.told {
+			continue
+		}
+		if n := strings.Count(section, line); n == 0 || n*len(line) > tailBytes {
+			t.Errorf("%s: %d lines of the output quoted, more than agentd keeps (%d bytes)", name, n, tailBytes)
+		}
+		for _, want := range []string{"First failed command: go -C api vet ./... exited 1", "(cut: the output is", ticks + "`\n" + ticks + "\n",
+			"The review of attempt 1 failed it."} {
+			if !strings.Contains(section, want) {
+				t.Errorf("%s: the section lacks %q", name, want)
+			}
+		}
+		if full := strings.Contains(section, "VERDICT: FAIL"); full == c.cut {
+			t.Errorf("%s: the review's end quoted %v, want %v", name, full, !c.cut)
+		}
+	}
+}

@@ -244,6 +244,11 @@ func TestSetupAndExecutorShareGoCaches(t *testing.T) {
 			a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: t.TempDir(), Out: out}
 			sp, err := Executors(os.Args[0], env, Secrets{})[name](a)
 			must(t, err)
+			// codex's commands may write the caches: its sandbox's writable
+			// root is the directory they are in (review td404-1 B2).
+			if name == "exec:codex" && !hasRunT(sp.Argv, []string{"-c", codexRoots(attemptTmp(out))}) {
+				t.Fatalf("codex's sandbox does not take the caches' directory: %q", sp.Argv)
+			}
 			const caches = `printf '%s\n%s\n' "$GOMODCACHE" "$GOCACHE"`
 			sp.Argv = []string{"sh", "-c", `cat "$GOMODCACHE/cache/download/marker" > seen.txt && ` + caches + ` > exec-caches.txt`}
 			sp, err = withSetup(os.Args[0], out, [][]string{{"sh", "-c", `mkdir -p "$GOMODCACHE/cache/download" && ` +

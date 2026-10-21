@@ -25,10 +25,17 @@ type PriorCheck struct {
 	Report []byte
 }
 
-// priorReviewBytes is the most of a failed review's report a prompt quotes:
-// a prompt is one argument of the executor's command, which Linux holds to
-// 128 KiB.
+// priorReviewBytes is the most of a failed review's report a prompt quotes.
 const priorReviewBytes = 16 << 10
+
+// promptMax is the longest prompt an executor can be given: the prompt is
+// one argument of the executor's command, which Linux holds to
+// MAX_ARG_STRLEN, 128 KiB with its terminating NUL (review td404-1 A1).
+const promptMax = 128<<10 - 1
+
+// priorMinQuota is the smallest share of a report the section is cut to
+// before it is left out.
+const priorMinQuota = 256
 
 // priorChecks reads the reports of the checks an implementation's claim
 // names; a check's attempt is told none.
@@ -48,32 +55,50 @@ func (d *Daemon) priorChecks(ctx context.Context, a *Attempt) ([]PriorCheck, err
 	return out, nil
 }
 
-// writePriorChecks writes, after the spec, what the checks of the task's
-// earlier rounds failed on.
-func writePriorChecks(b *strings.Builder, checks []PriorCheck) {
+// priorSection is what Prompt inserts after the spec of an implementation
+// whose task's earlier rounds failed checks, in at most room bytes: each
+// report cut to a smaller share until the section fits, and none at all when
+// not even the shortest does, so a prompt that could be given without it can
+// be given with it (review td404-1 A1).
+func priorSection(checks []PriorCheck, room int) string {
 	if len(checks) == 0 {
-		return
+		return ""
 	}
+	for quota := priorReviewBytes; quota >= priorMinQuota; quota /= 2 {
+		if s := priorText(checks, quota); len(s) <= room {
+			return s
+		}
+	}
+	return ""
+}
+
+// priorText is the section with each report cut to quota bytes: a
+// deterministic check's first failed command and the end of its output, a
+// review's report from its start.
+func priorText(checks []PriorCheck, quota int) string {
+	var b strings.Builder
 	b.WriteString("\n\n---\nThe last round failed its check; fix that first. This round starts again from the same commit, " +
 		"without that round's changes: make sure yours do not fail the same way.\n")
 	for _, c := range checks {
 		switch c.Method {
 		case "deterministic":
-			fmt.Fprintf(b, "\nThe deterministic check of attempt %d failed. %s", c.AttemptNo, failedCommand(c.Report))
+			fmt.Fprintf(&b, "\nThe deterministic check of attempt %d failed. %s", c.AttemptNo, failedCommand(c.Report, quota))
 		case "review":
-			fmt.Fprintf(b, "\nThe review of attempt %d failed it. Its report:\n\n%s", c.AttemptNo, fenced(cutStart(c.Report, priorReviewBytes)))
+			fmt.Fprintf(&b, "\nThe review of attempt %d failed it. Its report:\n\n%s", c.AttemptNo, fenced(cutStart(c.Report, quota)))
 		}
 	}
+	return b.String()
 }
 
 // failedCommand is what a deterministic check's verify.json says failed: the
 // first command that exited non-zero or timed out and the end of its output
-// (the check stops at the first failure); with none, its reason; a report
+// (the check stops at the first failure), at most quota bytes and never more
+// than agentd keeps of an output (tailBytes); with none, its reason; a report
 // that is not verify.json, its start.
-func failedCommand(report []byte) string {
+func failedCommand(report []byte, quota int) string {
 	var v Verification
 	if json.Unmarshal(report, &v) != nil {
-		return "Its report:\n\n" + fenced(cutStart(report, priorReviewBytes))
+		return "Its report:\n\n" + fenced(cutStart(report, quota))
 	}
 	for _, c := range v.Commands {
 		if c.ExitCode == 0 && !c.TimedOut {
@@ -85,7 +110,7 @@ func failedCommand(report []byte) string {
 		}
 		head := "First failed command: " + oneLine(strings.Join(c.Argv, " "), 300) + " " + how
 		if tail := strings.TrimRight(strings.ToValidUTF8(c.Tail, "?"), " \t\r\n"); tail != "" {
-			return head + ". Its output ends:\n\n" + fenced(tail)
+			return head + ". Its output ends:\n\n" + fenced(cutEnd(tail, min(quota, tailBytes)))
 		}
 		return head + "; it wrote nothing.\n"
 	}
@@ -114,4 +139,17 @@ func cutStart(b []byte, max int) string {
 		cut--
 	}
 	return s[:cut] + fmt.Sprintf("\n(cut: the report is %d bytes; this is its start)", len(s))
+}
+
+// cutEnd is the end of s, at most max bytes without splitting a character,
+// saying so when it cut.
+func cutEnd(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	cut := len(s) - max
+	for cut < len(s) && !utf8.RuneStart(s[cut]) {
+		cut++
+	}
+	return fmt.Sprintf("(cut: the output is %d bytes; this is its end)\n", len(s)) + s[cut:]
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -83,5 +84,42 @@ func TestSetupWallKeepsTheExecutorsHome(t *testing.T) {
 		if _, err := os.Stat(p); err == nil {
 			t.Errorf("the setup wrote %s", p)
 		}
+	}
+}
+
+// TD-404 on a Linux host (review td404-1 B2): inside the walls, the setup's
+// narrower one and the executor's around both, what the setup fetches into
+// Go's module cache the executor reads, for each executor agentd walls.
+// codex has its own sandbox; TestSetupAndExecutorShareGoCaches holds its
+// writable root to the caches' directory.
+func TestWalledSetupFillsTheExecutorsGoCache(t *testing.T) {
+	if abi, err := landlockABI(); err != nil || abi < wallABI {
+		t.Skipf("no Landlock ABI %d here (%d, %v)", wallABI, abi, err)
+	}
+	env := append(slices.Clone(hostEnv[1:]), "PATH=/usr/bin:/bin")
+	for _, name := range []string{"exec:deterministic", "exec:cursor", "exec:claude"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: filepath.Join(root, "a1"), Out: filepath.Join(root, "a1.out"),
+				Walled: true}
+			for _, d := range []string{a.Dir, a.Out} {
+				must(t, os.MkdirAll(d, 0o700))
+			}
+			sp, err := Executors(os.Args[0], env, Secrets{})[name](a)
+			must(t, err)
+			sp.Argv = []string{"sh", "-c", `cat "$GOMODCACHE/cache/download/marker" > seen.txt`}
+			sp, err = withSetup(os.Args[0], a.Out, [][]string{{"sh", "-c", `mkdir -p "$GOMODCACHE/cache/download" && ` +
+				`echo fetched > "$GOMODCACHE/cache/download/marker"`}}, sp, setupOpts{Home: setupHome(a.Out), Writes: innerWrites(a, nil)})
+			must(t, err)
+			argv := append(wallArgv(os.Args[0], executorWrites(name, a, nil)), sp.Argv...)
+			cmd := exec.Command(argv[0], argv[1:]...)
+			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1")
+			if out, rerr := cmd.CombinedOutput(); rerr != nil {
+				t.Fatalf("%v\n%s", rerr, out)
+			}
+			if got, _ := os.ReadFile(filepath.Join(a.Dir, "seen.txt")); string(got) != "fetched\n" {
+				t.Fatalf("the executor did not find what the walled setup fetched: %q", got)
+			}
+		})
 	}
 }
