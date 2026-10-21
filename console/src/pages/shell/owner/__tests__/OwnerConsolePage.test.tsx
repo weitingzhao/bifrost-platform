@@ -16,6 +16,7 @@ import evidenceFixture from './fixtures/standby-evidence.prod.json'
 import poolsFixture from './fixtures/pools-utc.json'
 import capabilitiesFixture from '@/api/__fixtures__/agentrt-capabilities.testdb.json'
 import etaFixture from '@/api/__fixtures__/agentrt-progress-eta.testdb.json'
+import schemaFixture from '@/api/__fixtures__/agentrt-progress-schema.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import type { TelemetryTargetEntry } from '@/api/clusterTypes'
 import { parseDaemonSetGaps, parseDownTargets, parseStandbyPods } from '../standbyEvidence'
@@ -29,6 +30,8 @@ const coordinatorView = vi.hoisted(() => ({ value: undefined as unknown }))
 // The time the page is drawn at, when a test sets one; the open goals the runtime gives (2.5 G8).
 const nowValue = vi.hoisted(() => ({ value: undefined as number | undefined }))
 const missionsValue = vi.hoisted(() => ({ value: [] as unknown[] }))
+// The runtime as last read, when a test sets it (TD-411: what stops the controller is said on Work and System).
+const runtimeValue = vi.hoisted(() => ({ value: undefined as unknown }))
 // Where the plan was read from, when a test sets it; absent otherwise, as while the runtime holds none (2.5 slice 2; the board is retired, ⑤).
 const planValue = vi.hoisted(() => ({ value: undefined as PlanRead | undefined }))
 
@@ -59,6 +62,7 @@ function fake(): OwnerConsoleData {
     arch: archValue.value ?? { from: 'absent' },
     hosts: [],
     missions: missionsValue.value,
+    runtime: runtimeValue.value,
     controlsReadable: true,
     nodes: [{ name: 'ubt-k3s-02', status: 'Ready', roles: 'worker', internal_ip: '192.168.10.70', version: '', reachability: 'ok', cpu_usage_percent: 4.5, memory_usage_percent: 35.2 },
       { name: 'gpu-server', status: 'NotReady', roles: 'worker', internal_ip: '192.168.10.60', version: '', reachability: 'fail', elastic_mode: 'standby' }],
@@ -113,7 +117,7 @@ beforeEach(() => {
     getItem: (k: string) => values.get(k) ?? null, setItem: (k: string, v: string) => values.set(k, v), removeItem: (k: string) => values.delete(k), clear: () => values.clear(),
   } })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined; archValue.value = undefined })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); nowValue.value = undefined; missionsValue.value = []; planValue.value = undefined; archValue.value = undefined; runtimeValue.value = undefined })
 
 function json(body: unknown) { return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }) }
 /** GET /agentrt/pools and /capabilities as the platform answers them; anything else is not this page's. */
@@ -127,6 +131,20 @@ function stubRuntimeReads() {
 }
 
 describe('Owner Console entries', () => {
+  // TD-411 (STG 2026-10-20: a platform needing 0007 and 0008 on a database at 0006, the controller failing quietly):
+  // Work and System say the database misses them, from Progress as a database at 0006 answered it; For you does not.
+  it('Work and System say the agent runtime database misses migrations', async () => {
+    runtimeValue.value = parseRuntimeProgress(schemaFixture.behind)
+    stubRuntimeReads()
+    show('#system')
+    const text = "The agent runtime's database is missing migrations 0007_gate_tasks, 0008_attempt_prepare_failed"
+    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(text)
+    await go('#work', 'Work')
+    expect(screen.getByRole('alert', { name: 'Agent runtime health' })).toHaveTextContent(text)
+    await go('#you', 'For you')
+    expect(screen.queryByRole('alert', { name: 'Agent runtime health' })).toBeNull()
+  })
+
   it('For you: the whole verdict, then what is yours and what is worth a look', () => {
     show('#you')
     expect(screen.getByRole('region', { name: 'Verdict' })).toHaveTextContent('2 things are yours')

@@ -100,8 +100,11 @@ var bodies = map[string][]field{
 	// stored), or an executor
 	// that failed a task failuresToStop times in a row (repeated_failure,
 	// source attempt, no artifact: the event's attempt is the last failure;
-	// TD-381, TD-382). Every rule but repeated_failure names its artifact
-	// (checkBody).
+	// TD-381, TD-382), or a controller loop that failed the same way
+	// FailuresToAlert times in a row (controller_failing, source controller,
+	// on the controller stream: line_digest names the loop, the artifact
+	// holds its error; TD-411, loopalert.go). Every rule but repeated_failure
+	// names its artifact (checkBody).
 	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, true}, {"message_id", kID, true},
 		{"line_digest", kStr, true}},
 	"control_set":       {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
@@ -332,9 +335,10 @@ var fieldValues = map[string]map[string]value{
 	"artifact_put":            {"artifact_id": artifactID, "artifact_kind": oneOf(keysOf(ArtifactKinds)...)},
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
-	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure"),
-		"source":      oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt"),
-		"phrase":      oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase)...),
+	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing"),
+		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller"),
+		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
+			controllerFailingPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,
 		"line_digest": fingerprint},
 	"control_set":              {"scope": oneOf(keysOf(controlKinds)...), "kind": oneOf("stop", "pause", "drain")},

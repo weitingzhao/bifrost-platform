@@ -607,7 +607,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	// contained_panics is not decoration: a non-zero count means some worker
 	// died mid-flight and the surface it feeds may be stale while /health is ok.
 	role := config.CurrentRole()
-	writeJSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		"status":           "ok",
 		"service":          "bifrost-platform-api",
 		"role":             role.String(),
@@ -615,7 +615,13 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"contained_panics": safego.Contained(),
 		"operator_plane":   s.operatorPlaneMode(),
 		"auth_loaded":      s.authLoaded,
-	})
+	}
+	// Whether the database has this binary's agentrt migrations (TD-411):
+	// behind is said here, and the platform keeps serving.
+	for k, v := range s.agentRuntimeSchema() {
+		body[k] = v
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 // operatorPlaneMode tells an operator which process is answering the L-1 routes,

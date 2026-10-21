@@ -44,6 +44,9 @@ type agentRuntime struct {
 	// env is AGENTRT_ENV: whose runtime this platform runs (an approved
 	// void_exam_paper names it, agentrt_voidpaper.go).
 	env string
+	// schema is what the platform last read of the database's agentrt
+	// schema (TD-411, agentrt_schema.go); nil without AGENTRT_DSN.
+	schema *schemaWatch
 }
 
 // wireAgentRuntime connects the agent runtime (design v5 §5.2) when
@@ -79,6 +82,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Info("agentrt: AGENTRT_DSN is not set; its routes answer 503")
 		return
 	}
+	rt.schema = &schemaWatch{}
 	// The routes answer 503 until the database is connected; the platform
 	// keeps connecting in the background, so a refusal at start (a new pod
 	// the network policy does not know yet, a database restarting) heals by
@@ -113,6 +117,9 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			return
 		}
 		late.pool.Store(pool)
+		// Both processes say whether the database has this binary's
+		// migrations (TD-411), in their health and their log.
+		safego.Go("agentrt-schema", func() { rt.schema.run(ctx, pool) })
 		if !role.RunsWorkers() {
 			<-ctx.Done()
 			pool.Close()

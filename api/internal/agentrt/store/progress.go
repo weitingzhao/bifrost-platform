@@ -259,8 +259,13 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	for _, a := range sortedLive(live) {
 		liveDoc = append(liveDoc, a)
 	}
+	alerts, schema, err := controllerState(ctx, tx) // last: progressschema.go
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{"generated_at": now.UTC().Format(time.RFC3339Nano), "as_of_event_id": asOf, "needs_you": needs,
-		"work": work, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(hosts), "controls": rawJSON(controls), "recent": recent}, nil
+		"work": work, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(hosts), "controls": rawJSON(controls), "recent": recent,
+		"controller_alerts": alerts, "schema": schema}, nil
 }
 
 // rawJSON is a document the database built, passed through as it is.

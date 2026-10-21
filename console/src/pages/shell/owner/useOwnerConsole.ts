@@ -123,6 +123,8 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     standbyEvidence,
     work,
     live: runtime?.live ?? [],
+    /** The runtime as last read, for what stops its controller (RuntimeHealthNotice, TD-411). */
+    runtime,
     controls: runtime?.controls ?? [],
     controlsReadable: runtime !== undefined,
     runtimeError: needsYou.runtimeQuery.isError,

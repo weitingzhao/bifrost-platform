@@ -564,19 +564,25 @@ func (c *Controller) every(ctx context.Context, wg *sync.WaitGroup, name string,
 		defer wg.Done()
 		t := time.NewTicker(d)
 		defer t.Stop()
+		var run failureRun // the loop's failures in a row (loopalert.go, TD-411)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
 			}
+			var err error
 			completed := safego.Do(name, func() {
-				if err := pass(); err != nil && ctx.Err() == nil {
+				if err = pass(); err != nil && ctx.Err() == nil {
 					c.logf("%s: %v", name, err)
 				}
 			})
 			if !completed {
 				c.logf("%s: a pass panicked; the loop goes on", name)
+				err = errPanicked
+			}
+			if ctx.Err() == nil {
+				c.track(ctx, name, &run, err)
 			}
 		}
 	})

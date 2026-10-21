@@ -42,8 +42,18 @@ export type RuntimeAttempt = {
    */
   persisted?: boolean; last_checkpoint_seq?: number; last_checkpoint_at?: string; unpersisted_for_s?: number; ended_at?: string
 }
+/**
+ * The database's agentrt schema against the migrations this platform carries (TD-411; migrate.Check):
+ * missing, edited and unknown name the migrations. Unread is a platform before TD-411.
+ */
+export type RuntimeSchema = {
+  state: 'current' | 'behind' | 'ahead' | 'edited' | 'unknown' | 'unread'; missing: string[]; edited: string[]; unknown: number[]; reason: string
+}
+/** A controller loop that failed the same way several times in a row and has not passed since (TD-411). */
+export type RuntimeLoopAlert = { loop: string; since: string; error: string }
 export type RuntimeProgress = {
   as_of_event_id?: number; generated_at: string; hosts: RuntimeHost[]; live: RuntimeAttempt[]
+  schema: RuntimeSchema; controller_alerts: RuntimeLoopAlert[]
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
   controls: RuntimeRecord[]; plan: unknown[]
@@ -114,7 +124,18 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
       waiting_roles: strings(m.waiting_roles), tasks: records(m.tasks).map(parseRuntimeTask) })) },
     recent: { tasks: records(recent.tasks), failed_attempts: records(recent.failed_attempts) },
     controls: records(r.controls), plan: Array.isArray(r.plan) ? r.plan : [], planRead: Array.isArray(r.plan),
+    schema: parseRuntimeSchema(r.schema),
+    controller_alerts: records(r.controller_alerts).map(a => ({ loop: text(a.loop), since: text(a.since), error: text(a.error) })),
   }
+}
+const SCHEMA_STATES = ['current', 'behind', 'ahead', 'edited', 'unknown'] as const
+export function parseRuntimeSchema(v: unknown): RuntimeSchema {
+  const r = record(v)
+  const known = (SCHEMA_STATES as readonly string[]).includes(text(r.state))
+  return { state: v === undefined ? 'unread' : known ? text(r.state) as RuntimeSchema['state'] : 'unknown',
+    missing: strings(r.missing), edited: strings(r.edited),
+    unknown: Array.isArray(r.unknown) ? r.unknown.filter((n): n is number => typeof n === 'number') : [],
+    reason: text(r.reason) }
 }
 export function parseRuntimeEvents(v: unknown): RuntimeEvent[] {
   return records(v).map(e => ({ seq: number(e.seq), event_type: text(e.event_type), at: text(e.at), actor_id: text(e.actor_id),
