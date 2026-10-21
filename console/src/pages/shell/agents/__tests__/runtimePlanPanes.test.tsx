@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
 import moved from '@/api/__fixtures__/agentrt-plan-moved.testdb.json'
+import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 // GET /progress with an architecture root, as store.Progress answered on a test database: four rows,
 // ticked true (two gates passed on stg, a thread's note), false (no pass on stg), unknown with no gate
 // test (the Owner's note) and unknown with nothing recorded for prod (W-31 2.5 ⑤ G2). Captured once by a
@@ -27,13 +28,16 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 // retired: a root the runtime does not hold is said to be missing, never read from the board.
 
 const source = vi.hoisted(() => ({
-  plan: 'imported' as 'imported' | 'moved' | 'root-only' | 'absent' | 'fail', progressFails: false, arch: false,
+  plan: 'imported' as 'imported' | 'moved' | 'root-only' | 'approvals' | 'absent' | 'fail', progressFails: false, arch: false,
   // The plan stream: as imported; a cursor that stays put; more pages than are read for the head, none of them with it.
   events: 'imported' as 'imported' | 'stuck' | 'endless', artifact: 'ok' as 'ok' | 'fail' | 'not json',
 }))
 function json(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }) }
 const stuck = planStream(2 * STREAM_PAGE, false), endless = planStream((IMPORT_HEAD_PAGES + 10) * STREAM_PAGE, false)
-const fixture = () => source.plan === 'moved' ? moved : source.plan === 'root-only' ? rootOnly : imported
+// approvals: the same round with done rules naming requests (agentrtapi TestPlanStepsNameTheirApprovals); its counts,
+// stream and request are the imported round's: the same ledger.
+const fixture = () => source.plan === 'moved' ? moved : source.plan === 'root-only' ? rootOnly
+  : source.plan === 'approvals' ? { ...imported, plan: planApprovals.plan } : imported
 const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input)
   if (url.includes('/agentrt/plan?')) {
@@ -98,6 +102,15 @@ describe('the plan pane on Progress', () => {
     // This runtime holds no architecture root: said so, not read from the board.
     expect(await screen.findByText(ARCH_NOT_IMPORTED)).toBeInTheDocument()
     expect(boardRead()).toBe(false)
+  })
+
+  it('links a step done by a request to that request, by its number (v4 §20.5 scenario 10)', async () => {
+    source.plan = 'approvals'
+    const { container } = show(<AgentsPlan />)
+    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    const links = [...container.querySelectorAll('a[data-step-approval]')].map(a => [a.textContent, a.getAttribute('href')])
+    expect(links).toEqual([['Request #16', '#approvals?id=16'], ['Request #17', '#approvals?id=17'], ['Request #16', '#approvals?id=16'],
+      ['Request #18', '#approvals?id=18']])
   })
 
   it('says the plan is not in the runtime while it holds none (404), and never reads the board', async () => {

@@ -17,6 +17,7 @@ import {
   type ResolveOutcome,
 } from '@/api/approvals'
 import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { ApprovalPlanSteps } from '@/pages/shell/needs-you/ApprovalPlanSteps'
 import { approvalsReadFailure } from '@/pages/approvalsReadNotice'
 import { CloseUnknownForm } from '@/pages/CloseUnknownForm'
 import { ConnectionCheckError, withDecisionContact } from '@/pages/decisionContact'
@@ -360,6 +361,7 @@ function ApprovalCard({
         ) : (
           <RelatedRequests item={item} rows={rows} />
         )}
+        <ApprovalPlanSteps number={item.number} />
         {item.status === 'unknown' ? (
           <CloseUnknownForm
             blocked={blocked}

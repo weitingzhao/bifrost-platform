@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
-import { PLAN_ROOT, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 
 /** The one line a plan pane shows while the runtime holds no plan. */
@@ -42,7 +42,8 @@ export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | nul
   if (other !== null) return { from: 'error', error: other }
   if (progress.data === undefined || request.data === undefined) return { from: 'loading' }
   try {
-    return { from: 'runtime', round: runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, request.data), progress.data.plan, PLAN_ROOT, request.data) }
+    return { from: 'runtime', round: runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, request.data), progress.data.plan, PLAN_ROOT, request.data,
+      approvalsByStep(plan.data.doc)) }
   } catch (e) {
     return { from: 'error', error: e instanceof Error ? e.message : String(e) }
   }
@@ -91,4 +92,22 @@ export function useRuntimeArch(enabled = true): ArchRead {
     enabled, refetchInterval: AGENT_RUNTIME_POLL_MS, retry: false })
   const { data, error, isError, isPaused } = progressQ
   return useMemo(() => archRead({ data, error, isError, isPaused }), [data, error, isError, isPaused])
+}
+
+/**
+ * Which steps of the round a request is the approval for (v4 §20.5 scenario 10), from the same GET /plan?root= read the
+ * plan panes make: read is 'ok' with the steps (none when the plan holds none, or holds no such root), or the read is not
+ * done yet or failed, and nothing is said.
+ */
+export type ApprovalStepsRead = { read: 'ok'; stepsOf: (n: number | undefined) => ApprovalStep[] } | { read: 'loading' | 'error' }
+export function useApprovalSteps(enabled = true): ApprovalStepsRead {
+  const planQ = useQuery({ queryKey: ['agent-runtime-plan', PLAN_ROOT], queryFn: ({ signal }) => fetchRuntimePlan(PLAN_ROOT, signal),
+    enabled, refetchInterval: AGENT_PROGRESS_POLL_MS, retry: false })
+  const { data, isError, isPaused } = planQ
+  return useMemo((): ApprovalStepsRead => {
+    if (isError || isPaused) return { read: 'error' }
+    if (data === undefined) return { read: 'loading' }
+    const doc = data.found ? data.doc : null
+    return { read: 'ok', stepsOf: n => doc == null || n == null || n <= 0 ? [] : stepsOfApproval(doc, n) }
+  }, [data, isError, isPaused])
 }

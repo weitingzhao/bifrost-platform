@@ -1,5 +1,6 @@
 import { archCounts, manualAndStopped, type ArchTick, type RuntimeArchTable, type RuntimePlanStep, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { OpsSection } from '@/components/layout/OpsSection'
+import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, useRuntimeArch, useRuntimePlan } from './useRuntimePlan'
 
@@ -9,7 +10,10 @@ function Mark({ title, children }: { title: string; children: string }) {
 }
 function Steps({ steps }: { steps: RuntimePlanStep[] }) {
   return <ol className="flex flex-col gap-2 pt-2 text-sm">{steps.map((step, j) => <li key={`${step.id}-${j}`} className="break-words">
-    <strong>{step.state || 'Unknown'}</strong> · {step.owner && <Mark title="The Owner's step (owner_step)">Owner</Mark>}{step.star && <Mark title="An effect step (effect_step)">★</Mark>}{step.t || 'Untitled step'}{step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
+    <strong>{step.state || 'Unknown'}</strong> · {step.owner && <Mark title="The Owner's step (owner_step)">Owner</Mark>}{step.star && <Mark title="An effect step (effect_step)">★</Mark>}{step.t || 'Untitled step'}
+    {/* The request this step is done by: the same request Needs you lists (v4 §20.5 scenario 10). */}
+    {step.approvals?.map(n => <a key={n} href={approvalHref(String(n))} data-step-approval={n} className="ml-1 text-xs">Request #{n}</a>)}
+    {step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
     {step.line && <details><summary className="cursor-pointer text-xs text-muted-foreground">Ledger line</summary><p className="whitespace-pre-wrap break-words text-xs">{step.line.trim()}</p></details>}
   </li>)}</ol>
 }

@@ -7,6 +7,7 @@ import { APPROVAL_TOKEN_STORAGE_KEY } from '@/api/approvals'
 import { buildApprovalListResponse, buildPlatformApproval } from '@/api/approvalsApiFixture'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { NeedsYouPage } from '@/pages/shell/needs-you/NeedsYouPage'
+import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
 import { needsYouBadge } from '@/pages/shell/needs-you/needsYouModel'
 
 function json(body: unknown, status = 200): Response {
@@ -146,12 +147,14 @@ function stubFetch(
   threads: (headers: Headers) => Response = viewerThreads([]),
   lineage: () => Response = emptyLineage,
   handled: (headers: Headers) => Response = () => json(buildApprovalListResponse([])),
+  plan: () => Response = () => json({ error: 'unexpected plan read' }, 500),
 ) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.includes('/api/v1/agentrt/progress')) return json({ needs_you: { items: [], count: 0 } })
+      if (url.includes('/api/v1/agentrt/plan?')) return plan()
       if (url.includes('/api/v1/agent/progress')) return json({ document: null })
       const health = healthResponse(url)
       if (health != null) return health
@@ -206,6 +209,21 @@ describe('NeedsYouPage', () => {
     expect(within(screen.getByRole('region', { name: 'Sign off' })).getByText('Not connected yet.')).toBeTruthy()
     // The system verdict is the shell header's and For you's, not repeated in this section (W-31 2.2b).
     expect(screen.queryByText('Degraded — 1 warning alert')).toBeNull()
+  })
+
+  it('says under a request which plan step waits on it, from the runtime\'s plan (v4 §20.5 scenario 10)', async () => {
+    window.localStorage.setItem(PLATFORM_TOKEN_KEY, 'viewer-token')
+    stubFetch(
+      () => json(buildApprovalListResponse([buildPlatformApproval({ id: 'ap-16', number: 16 }), buildPlatformApproval({ id: 'ap-99', number: 99 })])),
+      undefined, undefined, undefined, () => json(planApprovals.plan),
+    )
+    render(wrapper(<NeedsYouPage />))
+    const step = await screen.findByRole('link', { name: 'Plan step 2.1-3 (yours): （你）批 PROD 迁移作业（O10、O11） — item 2.1 数据层：状态库' })
+    expect(step.getAttribute('href')).toBe('#work?section=plan')
+    const decide = screen.getByRole('region', { name: 'Decide' })
+    const rows = within(decide).getAllByRole('listitem')
+    expect(within(rows[0]).getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['#approvals?id=ap-16', '#work?section=plan', '#work?section=plan'])
+    expect(within(rows[1]).getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['#approvals?id=ap-99'])
   })
 
   it('says nothing needs you when the list is empty', async () => {

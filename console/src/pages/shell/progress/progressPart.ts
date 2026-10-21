@@ -1,5 +1,6 @@
 import type { ProgressDocument } from '@/api/agentProgress'
 import type { ApprovalItem } from '@/api/approvals'
+import type { ApprovalStep } from '@/api/agentRuntimePlan'
 
 export type ProgressPart = { work: string; step: string }
 
@@ -76,4 +77,17 @@ export function boundDocumentText(value: string, max: number): string {
  */
 export function partOfLine(part: ProgressPart): string {
   return boundDocumentText(part.step === '' ? `Agent-reported: part of ${part.work}` : `Agent-reported: ${part.work} — ${part.step}`, 120)
+}
+
+/** Where the plan pane opens (Work's "Plan ›"). */
+export const PLAN_SECTION_HREF = '#work?section=plan'
+
+/**
+ * A plan step a request is the approval for, in one line of at most 160 characters: its label, the Owner's mark, its
+ * title and the item it sits under. A fact of the runtime's plan (its done rule names the request), not what an agent
+ * says.
+ */
+export function planStepLine(step: ApprovalStep): string {
+  const item = [step.item, step.itemTitle].filter(Boolean).join(' ')
+  return boundDocumentText(`Plan step ${step.label}${step.owner ? ' (yours)' : ''}: ${step.title}${item ? ` — item ${item}` : ''}`, 160)
 }

@@ -7,7 +7,11 @@ import { boardState, importHead, type PlanRequest, type PlanView } from '@/api/a
  * and star are the step's Owner (owner_step) and ★ (effect_step) marks. All three are read from the
  * runtime only: the board's round carries none, and a step added after the import has no line.
  */
-export type RuntimePlanStep = { id: string; t: string; state: string; when: string; line?: string; owner?: boolean; star?: boolean }
+export type RuntimePlanStep = {
+  id: string; t: string; state: string; when: string; line?: string; owner?: boolean; star?: boolean
+  /** The approvals its done rule waits on (approval_executed), by number: the request the step is done by. */
+  approvals?: number[]
+}
 /**
  * An item with its count (store/progress.go, the one counting rule): done of total, and of the done ones how many by a
  * manual record (v5 §5.1.2: Progress marks them "manual"); stopped steps count as not done.
@@ -161,7 +165,8 @@ const count = (v: unknown): v is number => typeof v === 'number' && Number.isInt
  * /progress's plan, counted by the runtime's one rule (a dropped step leaves the total). They are two
  * reads; when they do not list the same items the round is not shown.
  */
-export function runtimeRound(view: PlanView, plan: unknown[], root: string, request: PlanRequest | null): RuntimeRound {
+export function runtimeRound(view: PlanView, plan: unknown[], root: string, request: PlanRequest | null,
+  approvals: ReadonlyMap<string, number[]> = new Map()): RuntimeRound {
   const round = records(plan).find(r => r.plan_node_id === root && r.kind === 'round')
   if (round === undefined) throw new Error(`The runtime's progress does not count ${root}.`)
   const counts = new Map(records(round.items).map(i => [text(i.label), record(i.count)]))
@@ -174,7 +179,58 @@ export function runtimeRound(view: PlanView, plan: unknown[], root: string, requ
     // A count without manual or stopped is from a platform before them: unset, never read as none.
     return { key: item.key, name: item.name, state: boardState(c.state), done: c.done, total: c.total,
       manual: count(c.manual) ? c.manual : undefined, stopped: count(c.stopped) ? c.stopped : undefined,
-      steps: item.steps.map(s => ({ id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined,
-        owner: s.owner, star: s.star })) }
+      steps: item.steps.map(s => {
+        const waits = approvals.get(`${root}:${s.id}`)
+        return { id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined,
+          owner: s.owner, star: s.star, ...(waits?.length ? { approvals: waits } : {}) }
+      }) }
   }) }
+}
+
+/** The deepest a done rule nests (plan/rule.go maxDepth). */
+const RULE_DEPTH = 8
+
+/**
+ * The approvals a done rule waits on: every approval_executed number in it, an atom or nested in all / any as
+ * plan/rule.go reads it, each once, in the order the rule names them. Anything else in the rule is passed over.
+ */
+export function approvalNumbers(rule: unknown, depth = 0): number[] {
+  if (depth > RULE_DEPTH || rule === null || typeof rule !== 'object' || Array.isArray(rule)) return []
+  const r = rule as Record<string, unknown>
+  const out: number[] = []
+  const n = r.approval_executed
+  if (typeof n === 'number' && Number.isSafeInteger(n) && n > 0) out.push(n)
+  for (const key of ['all', 'any']) {
+    const list = r[key]
+    if (Array.isArray(list)) for (const child of list) out.push(...approvalNumbers(child, depth + 1))
+  }
+  return [...new Set(out)]
+}
+
+/**
+ * A step of the round whose done rule waits on a request (v4 §20.5 scenario 10: a request says which work and which
+ * step it is): the step's id, label and title, whether it is the Owner's, and the item it sits under.
+ */
+export type ApprovalStep = { id: string; label: string; title: string; owner: boolean; item: string; itemTitle: string }
+
+/** Each step's approvals from a GET /plan?root= answer, keyed by the step's node id; steps that wait on none are left out. */
+export function approvalsByStep(doc: unknown): Map<string, number[]> {
+  const out = new Map<string, number[]>()
+  for (const node of records(record(doc).nodes)) {
+    if (text(node.node_kind) !== 'step') continue
+    const numbers = approvalNumbers(node.done_rule_json)
+    if (numbers.length) out.set(text(node.plan_node_id), numbers)
+  }
+  return out
+}
+
+/** The steps of a GET /plan?root= answer whose done rule waits on request n, in the plan's order. */
+export function stepsOfApproval(doc: unknown, n: number): ApprovalStep[] {
+  const nodes = records(record(doc).nodes)
+  const byId = new Map(nodes.map(node => [text(node.plan_node_id), node]))
+  return nodes.filter(node => text(node.node_kind) === 'step' && approvalNumbers(node.done_rule_json).includes(n)).map(node => {
+    const item = byId.get(text(node.parent_plan_node_id)) ?? {}
+    return { id: text(node.plan_node_id), label: text(node.label), title: text(node.title), owner: node.owner_step === true,
+      item: text(item.label), itemTitle: text(item.title) }
+  })
 }
