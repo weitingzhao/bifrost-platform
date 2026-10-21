@@ -402,6 +402,33 @@ export async function putArtifact(
   })
 }
 
+export interface ArtifactSearch {
+  kind?: string[]
+  task?: string
+  mission?: string
+  author?: string
+  since?: string
+  limit?: number
+  before?: string
+}
+
+/**
+ * Artifacts' metadata, newest first (W-31 2.3 search_artifacts): narrowed by
+ * kind, a task's or a mission's records, the actor that stored it, a time;
+ * before continues from a previous answer's next. Never a body: get_artifact
+ * reads one.
+ */
+export async function searchArtifacts(input: ArtifactSearch, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
+  const q: string[] = []
+  if (input.kind?.length) q.push(`kind=${input.kind.map(id).join(',')}`)
+  for (const k of ['task', 'mission', 'author', 'since', 'before'] as const) {
+    const v = input[k]
+    if (v) q.push(`${k}=${encodeURIComponent(v)}`)
+  }
+  if (input.limit != null) q.push(`limit=${input.limit}`)
+  return note(await d.get(`${BASE}/artifacts${q.length ? `?${q.join('&')}` : ''}`))
+}
+
 export async function getArtifact(artifactId: string, d: RuntimeDeps = defaultRuntimeDeps()): Promise<unknown> {
   const got = await d.getText(`${BASE}/artifacts/${id(artifactId)}`)
   return { artifact_id: artifactId, media_type: got.media_type, content: got.text, note: RUNTIME_DATA_NOTE }

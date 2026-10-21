@@ -14,6 +14,7 @@ import {
   RUNTIME_WRITES_OFF,
   STOP_KEY_RULE,
   getArtifact,
+  searchArtifacts,
   getMission,
   getPlan,
   getTask,
@@ -108,6 +109,11 @@ describe('agent runtime reads', () => {
     assert.deepEqual(art, { artifact_id: 'sha256:' + 'cd'.repeat(32), media_type: 'text/markdown', content: '# spec\n', note: RUNTIME_DATA_NOTE })
     // The id as the platform stores it, ':' unescaped (10-15: %3A named no record).
     assert.equal(calls.at(-1)?.path, '/api/v1/agentrt/artifacts/sha256:' + 'cd'.repeat(32))
+    // search_artifacts (W-31 2.3): every filter in the query, escaped; none, the bare route.
+    assert.deepEqual(await searchArtifacts({}, d), { ok: true, note: RUNTIME_DATA_NOTE })
+    assert.equal(calls.at(-1)?.path, '/api/v1/agentrt/artifacts')
+    await searchArtifacts({ kind: ['handover', 'report'], task: 't_x', mission: 'M-1', author: 'thread:s 1', since: '2026-10-21T12:00:00+02:00', limit: 20, before: '1792600000123456.' + 'ab'.repeat(32) }, d)
+    assert.equal(calls.at(-1)?.path, '/api/v1/agentrt/artifacts?kind=handover,report&task=t_x&mission=M-1&author=thread%3As%201&since=2026-10-21T12%3A00%3A00%2B02%3A00&before=1792600000123456.' + 'ab'.repeat(32) + '&limit=20')
   })
 })
 
@@ -366,7 +372,7 @@ describe('agent runtime tools are served', () => {
     assert.match(index, /registerPlanImportTools\(reg\)/)
     const served = index + messages + imports
     const listed = new Set<string>(PLATFORM_STDIO_TOOL_NAMES)
-    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
+    for (const name of ['whoami', 'get_plan', 'get_mission', 'list_tasks', 'get_task', 'propose_mission', 'propose_tasks', 'propose_plan_change', 'propose_plan_import', 'post_plan_note', 'put_artifact', 'search_artifacts', 'get_artifact', 'request_stop', 'send_message', 'wait_for_messages', 'ack_messages', 'get_attempt_actions']) {
       assert.equal(listed.has(name), true, name)
       assert.match(served, new RegExp(`reg\\(\\s*'${name}'`), name)
     }

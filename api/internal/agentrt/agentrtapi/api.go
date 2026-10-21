@@ -125,6 +125,7 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(agentd, cfg).Get("/exams/{job}", a.issueExam)
 		r.With(agentd, cfg).Post("/exams", a.recordExam)
 		r.With(upload, cfg).Put("/artifacts/{id}", a.putArtifact)
+		r.With(read, cfg).Get("/artifacts", a.searchArtifacts)
 		r.With(read, cfg).Get("/artifacts/{id}", a.getArtifact)
 		r.With(propose, cfg).Post("/missions", a.proposeMission)
 		r.With(read, cfg).Get("/missions/{id}", a.getMission)

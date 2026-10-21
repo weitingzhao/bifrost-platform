@@ -73,6 +73,7 @@ export const PLATFORM_STDIO_TOOL_NAMES = [
   'propose_plan_import',
   'post_plan_note',
   'put_artifact',
+  'search_artifacts',
   'get_artifact',
   'request_stop',
   'send_message',

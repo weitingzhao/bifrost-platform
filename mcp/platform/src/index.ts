@@ -30,6 +30,7 @@ import {
   RUNTIME_DATA_NOTE,
   STOP_KEY_RULE,
   getArtifact,
+  searchArtifacts,
   getMission,
   getPlan,
   getTask,
@@ -742,6 +743,21 @@ reg(
     media_type: z.string().optional().describe('Default text/markdown'),
   },
   async (input) => jsonResult(await putArtifact(input)),
+)
+
+reg(
+  'search_artifacts',
+  `Agent runtime artifacts' metadata, newest first, at most limit (1–100, default 50): narrowed by kind (any of them), task (t_…) or mission (M-n) — the artifacts its records name —, author (the actor that stored it), since (RFC 3339); before continues from a previous answer's next. No bodies: read one with get_artifact. ${RUNTIME_DATA_NOTE}`,
+  {
+    kind: z.array(z.enum(['task_spec', 'mission_spec', 'report', 'verify', 'review', 'log_tail', 'checkpoint_patch', 'handover', 'brief', 'message', 'exam', 'other'])).optional(),
+    task: z.string().optional(),
+    mission: z.string().optional(),
+    author: z.string().optional().describe('owner, controller, thread:<session>, seat:<name>, host:<id>, exec:<tool>'),
+    since: z.string().optional().describe('RFC 3339'),
+    limit: z.number().int().min(1).max(100).optional(),
+    before: z.string().optional().describe("A previous answer's next"),
+  },
+  async (input) => jsonResult(await searchArtifacts(input)),
 )
 
 reg(
