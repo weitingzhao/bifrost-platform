@@ -177,9 +177,16 @@ func acceptAssessment(ctx context.Context, tx pgx.Tx, t taskRow, stream, attempt
 		return "", err
 	}
 	a["by"], a["task"], a["report_artifact_id"] = executor, t.id, report
-	if _, err = Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: t.mission, TaskID: t.id,
+	noted, err := Append(ctx, tx, Event{Stream: stream, Type: "note", Actor: "controller", MissionID: t.mission, TaskID: t.id,
 		Body: map[string]any{"text": fmt.Sprintf("AI assessment: recommends %s, %s confidence", a["recommended"], a["confidence"]),
-			"assessment": a}}); err != nil {
+			"assessment": a}})
+	if err != nil {
+		return "", err
+	}
+	// Its reasons are shown beside the card: one that says the Owner
+	// approved is recorded as a spec's or a message's is (T04; review 489
+	// B3).
+	if err = alertClaim(ctx, tx, Event{Stream: stream, MissionID: t.mission, TaskID: t.id}, noted.EventID, "assessment", report, body); err != nil {
 		return "", err
 	}
 	return "assessed", moveTask(ctx, tx, "controller", t, "accepted", "assessment recorded on "+stream)

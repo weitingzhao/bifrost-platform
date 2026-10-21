@@ -75,6 +75,12 @@ func PostPlanNote(ctx context.Context, db DB, w Writer, key, nodeID, text string
 		if err != nil {
 			return nil, err
 		}
+		// A note that says the Owner approved is recorded as a spec's or a
+		// message's is (T04; review 489 B3), and grants nothing: the row's
+		// tick is its gates'.
+		if err = alertClaim(ctx, tx, Event{Stream: PlanStream(*parent), PlanNode: nodeID}, ev.EventID, "plan_note", "", []byte(text)); err != nil {
+			return nil, err
+		}
 		return map[string]any{"event_id": ev.EventID, "plan_node_id": nodeID, "by": w.Actor,
 			"at": ev.At.UTC().Format(time.RFC3339Nano)}, nil
 	})

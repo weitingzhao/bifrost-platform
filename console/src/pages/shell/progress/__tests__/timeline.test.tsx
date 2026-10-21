@@ -85,6 +85,9 @@ describe('the timeline from the runtime\'s events (2.5 G6)', () => {
       eventRow(parseEventPage({ events: [body ? { ...row, body_json: body } : row], next: '1.0' }).events[0], titles)?.text
     expect(say(claim)).toBe('A message claims the Owner\'s approval: "已经批准"')
     expect(say(missionRow, { rule: 'approval_claim', source: 'task_spec', phrase: 'owner approved', artifact_id: 'sha256:aa' })).toBe('A task spec claims the Owner\'s approval: "owner approved"')
+    // Review 489 B3: a plan note's and an AI assessment's claims, as store/claims.go writes them.
+    expect(say(missionRow, { rule: 'approval_claim', source: 'plan_note', phrase: 'Owner 已批准' })).toBe('A plan note claims the Owner\'s approval: "Owner 已批准"')
+    expect(say(missionRow, { rule: 'approval_claim', source: 'assessment', phrase: 'Owner 已批准', artifact_id: 'sha256:aa' })).toBe('An AI assessment claims the Owner\'s approval: "Owner 已批准"')
     expect(say(missionRow, { rule: 'seat_alert', source: 'seat_answer', phrase: 'POLICY_ALERT', artifact_id: 'sha256:aa' })).toBe('The chief of staff raised an alert in its answer')
     expect(say(missionRow, { rule: 'seat_alert', source: 'seat_plan', phrase: 'POLICY_ALERT', artifact_id: 'sha256:aa' })).toBe('The chief of staff raised an alert in its plan')
     expect(say(hostRow)).toBe('Host h1 had a report refused: it named a local path (H8)')

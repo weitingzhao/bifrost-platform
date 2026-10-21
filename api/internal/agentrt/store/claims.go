@@ -78,13 +78,19 @@ func ApprovalClaim(body []byte) (string, bool) {
 // alertClaim records a policy_alert on stream when body claims the Owner's
 // approval: the controller's record that a text said so, caused by the event
 // that brought the text in, and nothing more. source is where the text came
-// in (task_spec, message).
+// in (task_spec, message; since review 489 B3 also plan_note, an
+// architecture row's note, and assessment, a seat's AI assessment of a card
+// or an approval). artifact is the text's artifact, "" for a plan note's,
+// whose text is in the note its alert is caused by.
 func alertClaim(ctx context.Context, tx pgx.Tx, ev Event, cause int64, source, artifact string, body []byte) error {
 	phrase, found := ApprovalClaim(body)
 	if !found {
 		return nil
 	}
-	b := map[string]any{"rule": "approval_claim", "source": source, "phrase": phrase, "artifact_id": artifact}
+	b := map[string]any{"rule": "approval_claim", "source": source, "phrase": phrase}
+	if artifact != "" {
+		b["artifact_id"] = artifact
+	}
 	for k, v := range ev.Body {
 		b[k] = v
 	}

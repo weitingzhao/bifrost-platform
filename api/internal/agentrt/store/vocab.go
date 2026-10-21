@@ -104,7 +104,9 @@ var bodies = map[string][]field{
 	// FailuresToAlert times in a row (controller_failing, source controller,
 	// on the controller stream: line_digest names the loop, the artifact
 	// holds its error; TD-411, loopalert.go). Every rule but repeated_failure
-	// names its artifact (checkBody).
+	// names its artifact (checkBody), but an approval claim in a plan note
+	// (source plan_note, review 489 B3), whose text is in the note it is
+	// caused by.
 	"policy_alert": {{"rule", kStr, false}, {"source", kStr, false}, {"phrase", kStr, false}, {"artifact_id", kID, true}, {"message_id", kID, true},
 		{"line_digest", kStr, true}},
 	"control_set":       {{"control_id", kID, false}, {"scope", kStr, false}, {"kind", kStr, false}, {"reason", kStr, false}, {"scope_ref", kID, true}, {"token", kStr, true}},
@@ -190,7 +192,8 @@ func checkBody(eventType string, body map[string]any) error {
 		sort.Strings(extra)
 		return fmt.Errorf("store: %s does not take %v", eventType, extra)
 	}
-	if _, named := body["artifact_id"]; eventType == "policy_alert" && !named && body["rule"] != "repeated_failure" {
+	if _, named := body["artifact_id"]; eventType == "policy_alert" && !named && body["rule"] != "repeated_failure" &&
+		(body["rule"] != "approval_claim" || body["source"] != "plan_note") {
 		return fmt.Errorf("store: policy_alert needs \"artifact_id\"")
 	}
 	if eventType == "wait_limit_passed" {
@@ -350,7 +353,8 @@ var fieldValues = map[string]map[string]value{
 	"message_posted":          {"message_id": messageID, "kind": oneOf("ask", "answer", "help", "handover", "note", "wake")},
 	"message_acked":           {"message_id": messageID},
 	"policy_alert": {"rule": oneOf("approval_claim", "seat_alert", "local_path", "workspace_ref", "repeated_failure", "controller_failing"),
-		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller"),
+		"source": oneOf("task_spec", "message", "seat_answer", "seat_plan", "report", "verify", "review", "attempt", "controller",
+			"plan_note", "assessment"),
 		"phrase": oneOf(append(slices.Clone(approvalClaims), seatAlertPhrase, localPathPhrase, workspaceRefPhrase, repeatedFailurePhrase,
 			controllerFailingPhrase)...),
 		"artifact_id": artifactID, "message_id": messageID,

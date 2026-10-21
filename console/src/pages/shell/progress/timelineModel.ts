@@ -19,6 +19,8 @@ export type TimelineKind = 'step' | 'accepted' | 'rejected' | 'failed' | 'decisi
 export type TimelineRow = { key: string; at: string; kind: TimelineKind; label: string; text: string; detail: string; mission: string; order: number }
 
 const CONTROL: Record<string, string> = { stop: 'Stop', pause: 'Pause', drain: 'Drain' }
+/** Where a text claiming the Owner's approval came in (store claims.go alertClaim's sources). */
+const CLAIM_SOURCE: Record<string, string> = { message: 'message', task_spec: 'task spec', plan_note: 'plan note', assessment: 'AI assessment' }
 /** The kinds of report agentd uploads that the platform may refuse (store reportKinds). */
 const REPORT: Record<string, string> = { report: 'a report', verify: 'a verification report', review: 'a review report' }
 
@@ -60,7 +62,10 @@ function alertText(e: RuntimeEventRow, task: string): string {
     case 'repeated_failure': return `An executor failed ${task || 'a task'} three times in a row; it is not offered that task again`
     case 'local_path':
     case 'workspace_ref': return `${e.event_stream_id.replace(/^host:/, 'Host ')} had ${REPORT[source] ?? 'a report'} refused: it named ${phrase}`
-    case 'approval_claim': return `A ${source === 'message' ? 'message' : 'task spec'} claims the Owner's approval: "${phrase}"`
+    case 'approval_claim': {
+      const where = CLAIM_SOURCE[source] ?? 'task spec'
+      return `${/^[AEIOU]/i.test(where) ? 'An' : 'A'} ${where} claims the Owner's approval: "${phrase}"`
+    }
     case 'seat_alert': return `The chief of staff raised an alert in its ${source === 'seat_plan' ? 'plan' : 'answer'}`
     default: return [text(e.body.rule), phrase].filter(Boolean).join(': ') || 'Policy alert'
   }
