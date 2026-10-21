@@ -34,11 +34,17 @@ export function parseRuntimeArchitecture(value: unknown): RuntimeArchitecture | 
   })) }
 }
 
-/** How an architecture row stands: its done rule (gates_passed) evaluated now against what is deployed. */
-export type ArchTick = 'true' | 'false' | 'unknown'
+/**
+ * How an architecture row stands: its done rule (gates_passed) evaluated now against what is deployed; nogate when
+ * the row has no gate yet (TD-397: not unknown, nothing is unread).
+ */
+export type ArchTick = 'true' | 'false' | 'nogate' | 'unknown'
 /** An architecture row as GET /progress gives it (W-31 2.5 G2): the tick, why, and its latest note, what it actually is now. */
 export type RuntimeArchRow = { id: string; title: string; tick: ArchTick; reason: string; note: { text: string; at: string; by: string } | null }
 export type RuntimeArchTable = { id: string; title: string; rows: RuntimeArchRow[] }
+
+/** The reason of a row with no done rule (store.ReasonNoGate). */
+export const REASON_NO_GATE = 'no gate test yet'
 
 /** The architecture root (planimport.ArchRootID). */
 export const ARCH_ROOT = 'ARCH'
@@ -57,15 +63,17 @@ export function runtimeArch(plan: unknown[]): RuntimeArchTable | null {
   return { id: text(root.plan_node_id), title: text(root.title), rows: records(root.rows).map(row => {
     const tick = text(row.tick)
     const note = row.note === null || typeof row.note !== 'object' ? null : record(row.note)
-    return { id: text(row.plan_node_id), title: text(row.title), tick: tick === 'true' || tick === 'false' ? tick : 'unknown', reason: text(row.reason),
+    const reason = text(row.reason)
+    const known: ArchTick = tick === 'true' || tick === 'false' ? tick : 'unknown'
+    return { id: text(row.plan_node_id), title: text(row.title), tick: known === 'unknown' && reason === REASON_NO_GATE ? 'nogate' : known, reason,
       note: note && text(note.text) ? { text: text(note.text), at: text(note.at), by: text(note.by) } : null }
   }) }
 }
 
 /** An architecture table's rows by tick. */
-export function archCounts(table: RuntimeArchTable): { passed: number; notYet: number; unknown: number } {
+export function archCounts(table: RuntimeArchTable): { passed: number; notYet: number; noGate: number; unknown: number } {
   const n = (tick: ArchTick) => table.rows.filter(r => r.tick === tick).length
-  return { passed: n('true'), notYet: n('false'), unknown: n('unknown') }
+  return { passed: n('true'), notYet: n('false'), noGate: n('nogate'), unknown: n('unknown') }
 }
 
 /** The round the plan panes read from the runtime (CUT-round2-2.5-interface §2: GET /plan?root=R2). */

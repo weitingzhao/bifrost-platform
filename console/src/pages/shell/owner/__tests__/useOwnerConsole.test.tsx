@@ -199,7 +199,7 @@ describe('useOwnerConsole', () => {
     await waitFor(() => expect(withArch.result.current.arch.from).toBe('runtime'))
     const table = withArch.result.current.arch
     expect(table.from === 'runtime' && table.table.rows.map(r => [r.id, r.tick])).toEqual([
-      ['ARCH:state-db', 'true'], ['ARCH:bus', 'false'], ['ARCH:gateway', 'unknown'], ['ARCH:prod-runtime', 'unknown']])
+      ['ARCH:state-db', 'true'], ['ARCH:bus', 'false'], ['ARCH:gateway', 'nogate'], ['ARCH:prod-runtime', 'unknown']])
 
     // The board still holds a round (boardDoc): it is not read (the board is retired).
     serve('absent')

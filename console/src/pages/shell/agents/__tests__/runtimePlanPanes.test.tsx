@@ -226,10 +226,11 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
   it('shows each row ticked by its gate tests, why, and its latest note', async () => {
     source.arch = true
     const { container } = show(<AgentsPlan />)
-    expect(await screen.findByText('架构对照 · 1 passed · 1 not yet · 2 unknown')).toBeInTheDocument()
+    expect(await screen.findByText('架构对照 · 1 passed · 1 not yet · 1 no gate yet · 1 unknown')).toBeInTheDocument()
     for (const row of rows) {
       const el = container.querySelector(`[data-arch-row="${row.plan_node_id}"]`) as HTMLElement
-      expect(el, row.plan_node_id).toHaveAttribute('data-tick', row.tick)
+      // A row with no gate yet is that, not unknown (TD-397).
+      expect(el, row.plan_node_id).toHaveAttribute('data-tick', row.reason === 'no gate test yet' ? 'nogate' : row.tick)
       expect(el).toHaveTextContent(row.title)
       expect(el).toHaveTextContent(row.reason)
       if (row.note) {
@@ -240,6 +241,7 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
     }
     expect(container.querySelector('[data-arch-row="ARCH:state-db"]')).toHaveTextContent('passed')
     expect(container.querySelector('[data-arch-row="ARCH:bus"]')).toHaveTextContent('not yet')
+    expect(container.querySelector('[data-tick="nogate"]')).toHaveTextContent('no gate yet')
     expect(screen.queryByText(ARCH_NOT_IMPORTED)).not.toBeInTheDocument()
     expect(boardRead()).toBe(false)
   })
@@ -249,7 +251,8 @@ describe('the architecture table from the runtime (2.5 ⑤ G2)', () => {
     show(<Overview />)
     expect(await screen.findByText('1/4 passed')).toBeInTheDocument()
     expect(screen.getByText('1/4 not yet')).toBeInTheDocument()
-    expect(screen.getByText('2/4 unknown')).toBeInTheDocument()
+    expect(screen.getByText('1/4 no gate yet')).toBeInTheDocument()
+    expect(screen.getByText('1/4 unknown')).toBeInTheDocument()
   })
 
   it('a read that fails after a good one is unavailable, never the rows read before', async () => {

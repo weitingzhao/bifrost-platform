@@ -24,13 +24,14 @@ function Items({ round }: { round: RuntimeRound }) {
 const TICK: Record<ArchTick, { mark: string; word: string; color: string }> = {
   true: { mark: '✓', word: 'passed', color: 'var(--color-success)' },
   false: { mark: '✕', word: 'not yet', color: 'var(--color-lamp-red)' },
+  nogate: { mark: '–', word: 'no gate yet', color: 'var(--muted-foreground)' },
   unknown: { mark: '?', word: 'unknown', color: 'var(--muted-foreground)' },
 }
 /** Each row's tick is its gate tests against what is deployed now; the note is what it actually is, in words. */
 function Architecture({ table }: { table: RuntimeArchTable }) {
   const counts = archCounts(table)
   return <div className="mt-3 flex flex-col gap-3">
-    <h4>{table.title || 'Architecture'} · {counts.passed} passed · {counts.notYet} not yet · {counts.unknown} unknown</h4>
+    <h4>{table.title || 'Architecture'} · {counts.passed} passed · {counts.notYet} not yet · {counts.noGate} no gate yet · {counts.unknown} unknown</h4>
     {table.rows.length === 0 && <p>No architecture rows in the runtime.</p>}
     {table.rows.map(row => <details key={row.id} data-arch-row={row.id} data-tick={row.tick} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2 text-sm">
       <summary className="cursor-pointer"><span aria-hidden style={{ color: TICK[row.tick].color }}>{TICK[row.tick].mark}</span> <strong>{TICK[row.tick].word}</strong> · {row.title || row.id}</summary>

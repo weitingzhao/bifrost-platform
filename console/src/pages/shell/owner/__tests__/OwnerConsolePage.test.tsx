@@ -285,7 +285,7 @@ describe('Owner Console entries', () => {
     archValue.value = archRead({ data: parseRuntimeProgress(archFixture), error: null, isError: false, isPaused: false })
     show('#work')
     const plan = screen.getByRole('region', { name: 'The plan' })
-    expect(plan.querySelector('[data-arch-summary]')).toHaveTextContent('Architecture, 4 rows:1 passed1 not yet2 unknown')
+    expect(plan.querySelector('[data-arch-summary]')).toHaveTextContent('Architecture, 4 rows:1 passed1 not yet1 no gate yet1 unknown')
     expect(plan).not.toHaveTextContent(ARCH_NOT_IMPORTED)
     cleanup()
     archValue.value = { from: 'error', error: 'Agent runtime: unavailable' }
