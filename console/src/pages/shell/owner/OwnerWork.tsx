@@ -6,7 +6,7 @@ import { Bar, Card, Stat } from './OwnerParts'
 import { OwnerCrew } from './OwnerCrew'
 import { OwnerGoals } from './OwnerGoals'
 import { PoolReadings } from './PoolReadings'
-import { ago } from './ownerModel'
+import { ago, runtimeUnreadLine } from './ownerModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 /**
@@ -49,16 +49,16 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
                 <span className={`font-semibold ${data.last.status === 'done' ? 'text-[var(--color-success)]' : 'text-muted-foreground'}`} title={data.last.at}>
                   {data.last.status === 'done' ? `Done ${ago(data.last.at, now)}` : `Implementation accepted ${ago(data.last.at, now)}${data.last.status === 'open' ? `; goal ${data.last.state}` : ''}`}</span></div>
               <a href={goalHref(data.last.mission)} className="inline-flex min-h-11 items-center text-sm">Step by step</a></>
-            : <span className="text-sm text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</span>}
+            : <span className="text-sm text-muted-foreground">{data.runtimeError ? runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, data.now) : work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</span>}
         </div>
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Coordinator</span>
           <CoordinatorNote view={data.coordinator} now={now} />
         </div>
       </Card>
-      <OwnerGoals missions={data.missions ?? []} now={now} read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
+      <OwnerGoals missions={data.missions ?? []} now={now} read={data.controlsReadable ? 'ok' : data.runtimeError ? { error: runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, now) } : 'loading'} />
       <OwnerCrew hosts={data.hosts ?? []} live={data.live ?? []} missions={data.missions ?? []} now={now}
-        read={data.controlsReadable ? 'ok' : data.runtimeError ? 'error' : 'loading'} />
+        read={data.controlsReadable ? 'ok' : data.runtimeError ? { error: runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, now) } : 'loading'} />
       <Card label="The plan" title={<>The plan{round?.n != null && ` · Round ${round.n}`}</>} more={{ href: '#work?section=plan', text: 'Plan' }}>
         {source.from === 'absent' && <p className="m-0 text-sm text-muted-foreground">{PLAN_NOT_IMPORTED}</p>}
         {source.from === 'loading' && <p role="status" className="m-0 text-sm text-muted-foreground">Reading the plan from the agent runtime…</p>}

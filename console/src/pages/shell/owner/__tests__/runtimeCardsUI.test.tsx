@@ -41,8 +41,8 @@ describe('the capability scores card (2.5 G9)', () => {
 describe('the open goals card on Work (2.5 G8)', () => {
   const missions = parseRuntimeProgress(etaFixture).work.missions
   it('says the runtime could not be read, and shows no goals or times from before', () => {
-    show(<OwnerGoals missions={missions} now={Date.parse('2026-10-19T23:35:51Z')} read="error" />)
-    expect(screen.getByRole('alert')).toHaveTextContent('The agent runtime could not be read: open goals and when they finish are not known.')
+    show(<OwnerGoals missions={missions} now={Date.parse('2026-10-19T23:35:51Z')} read={{ error: 'The agent runtime could not be read; not read since this page opened at 00:00.' }} />)
+    expect(screen.getByRole('alert')).toHaveTextContent('The agent runtime could not be read; not read since this page opened at 00:00. Open goals and when they finish are not known.')
     expect(screen.getByRole('region', { name: 'Open goals' })).not.toHaveTextContent('M-1')
     expect(screen.getByRole('region', { name: 'Open goals' })).not.toHaveTextContent('Expected')
   })

@@ -11,7 +11,7 @@ import { RuntimeHealthNotice } from './RuntimeHealthNotice'
 import { OwnerWaiting } from './OwnerWaiting'
 import { OwnerWork } from './OwnerWork'
 import { OwnerYou } from './OwnerYou'
-import { TONE_COLOR, ago, lastResultLine, type Verdict } from './ownerModel'
+import { TONE_COLOR, ago, lastResultLine, runtimeUnreadLine, type Verdict } from './ownerModel'
 import { useOwnerConsole, type OwnerConsoleData } from './useOwnerConsole'
 
 /** Which blocks an entry shows. System carries the data tiles and the way into every detail page. */
@@ -47,7 +47,7 @@ function OwnerChief({ data, draft, draftKey, active }: { active: boolean; data: 
       <div className="flex min-w-0 flex-col gap-2 rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-4 text-sm">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">Its latest</span>
         {last ? <p className="m-0 break-words"><strong>{lastResultLine(last, data.now)}</strong>{data.lastGoal && ` · ${data.lastGoal.split('\n')[0]}`}</p>
-          : <p className="m-0 text-muted-foreground">{data.runtimeError ? 'The agent runtime could not be read.' : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}
+          : <p className="m-0 text-muted-foreground">{data.runtimeError ? runtimeUnreadLine(data.runtimeReadAt, data.runtimeOpenedAt, data.now) : data.work ? 'No implementation accepted recently.' : 'Reading the agent runtime…'}</p>}
         {last && <a href={goalHref(last.mission)}>What it wrote and did</a>}
       </div>
     </div>

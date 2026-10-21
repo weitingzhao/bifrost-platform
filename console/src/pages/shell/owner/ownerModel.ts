@@ -351,3 +351,10 @@ export function yoursNavBadge(count: NeedsYouCount): ConsoleNavBadge | undefined
   if (count.count === 0) return undefined
   return { text: count.count > 99 ? '99+' : String(count.count), title: `Yours: ${count.count}`, tone: 'attention' }
 }
+
+/** When the runtime was last read, or when this page began waiting for it. */
+export function runtimeUnreadLine(readAt: number | null, openedAt: number, now: number): string {
+  return readAt != null
+    ? `The agent runtime could not be read; last read ${clockTime(readAt, now)} (${ago(readAt, now)}).`
+    : `The agent runtime could not be read; not read since this page opened at ${clockTime(openedAt, now)}.`
+}

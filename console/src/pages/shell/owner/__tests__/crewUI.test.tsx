@@ -78,7 +78,7 @@ describe('crew', () => {
     expect(screen.queryByText(/No agent host/)).not.toBeInTheDocument()
     expect(screen.queryByText('Idle')).not.toBeInTheDocument()
     cleanup()
-    show(parseRuntimeProgress({}), 'error')
+    show(parseRuntimeProgress({}), { error: 'The agent runtime could not be read; not read since this page opened at 00:00.' })
     expect(screen.getByRole('alert')).toHaveTextContent('could not be read')
     expect(screen.queryByText(/No agent host/)).not.toBeInTheDocument()
     cleanup()

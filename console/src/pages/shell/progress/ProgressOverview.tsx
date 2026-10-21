@@ -12,7 +12,7 @@ function Meter({ label, done, total }: { label: string; done: number; total: num
   return <div><span>{done}/{total} {label}</span><progress aria-label={label} value={done} max={total || 1} className="block h-2 w-full" /></div>
 }
 /** plan and arch: the round and the architecture table, from the agent runtime only (2.5 slice 2 and ⑤). */
-export function ProgressOverview({ count, runtime, plan, arch, failed, silentThreads = 0 }: { count: NeedsYouCount; runtime?: RuntimeProgress; plan: PlanRead; arch: ArchRead; failed: boolean; silentThreads?: number }) {
+export function ProgressOverview({ count, runtime, plan, arch, failed, unread, silentThreads = 0 }: { count: NeedsYouCount; runtime?: RuntimeProgress; plan: PlanRead; arch: ArchRead; failed: boolean; unread?: string; silentThreads?: number }) {
   const move = whoseMove(count, runtime, failed, silentThreads)
   const round = plan.from === 'runtime' ? plan.round : undefined
   const items = round?.unknown === undefined ? round?.items : undefined
@@ -24,7 +24,7 @@ export function ProgressOverview({ count, runtime, plan, arch, failed, silentThr
   const manual = items?.reduce((n, i) => n + (i.manual ?? 0), 0) ?? 0
   return <OpsSection title="Overview" bodyPadding="compact">
     <div className="grid gap-3 md:grid-cols-5">
-      <div className={card}><strong>Whose move</strong><StatusLamp value={move === 'Unknown' ? 'unknown' : move === 'All done' ? 'ok' : 'degraded'} /><span>{move}</span></div>
+      <div className={card}><strong>Whose move</strong><StatusLamp value={move === 'Unknown' ? 'unknown' : move === 'All done' ? 'ok' : 'degraded'} /><span>{move}</span>{failed && move === 'Unknown' && unread && <span>{unread}</span>}</div>
       <div className={card}><strong>Running</strong><span className="text-2xl tabular-nums">{runtime ? runtime.live.length - stalled.length : '?'}</span><span>Agent attempts</span>
         {stalled.length > 0 && <span className="font-semibold text-[var(--color-warning)]" data-stalled>Not confirmed running: {activityCounts(stalled)}</span>}</div>
       <div className={card}><strong>Round progress</strong>{items ? <><Meter label="items" done={items.filter(i => i.state === 'done').length} total={items.length} /><Meter label="steps" done={items.reduce((n, i) => n + (i.done ?? i.steps.filter(s => s.state === 'done').length), 0)} total={items.reduce((n, i) => n + (i.total ?? i.steps.length), 0)} />{manual > 0 && <span className="text-xs text-muted-foreground">{manual} of the done steps manual</span>}</> : <span>{plan.from === 'error' ? `Plan unavailable: ${plan.error}` : plan.from === 'loading' ? 'Reading the plan from the agent runtime…' : round?.unknown !== undefined ? `Plan unavailable: ${round.unknown}` : plan.from === 'runtime' ? 'No items in the runtime\'s plan.' : plan.from === 'absent' ? PLAN_NOT_IMPORTED : 'Round unknown'}</span>}</div>

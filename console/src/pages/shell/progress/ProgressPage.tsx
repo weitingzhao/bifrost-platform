@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { runtimeUnreadLine } from '../owner/ownerModel'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { useNeedsYou } from '../needs-you/useNeedsYou'
 import { AgentsPlan } from '../agents/AgentsPlan'
@@ -40,6 +41,7 @@ function addressTarget(): (() => HTMLElement | null) | null {
  * card first and brings it into view.
  */
 export function ProgressPage() {
+  const openedAt = useRef(Date.now())
   const needs = useNeedsYou()
   const plan = useRuntimePlan()
   // One scroll per address, on arrival and on every hash change, to what the address points at:
@@ -76,13 +78,14 @@ export function ProgressPage() {
   }, [highlighted])
   const arch = useRuntimeArch()
   const { count, runtimeQuery: runtimeQ } = needs
+  const readAt = runtimeQ.dataUpdatedAt > 0 ? runtimeQ.dataUpdatedAt : null
   const runtime = runtimeQ.data
   const ids = missionIds(runtime, submitted?.id)
   function runtimeState(children: ReactNode, empty: boolean, message: string) {
     return <>
       <p className="text-xs text-muted-foreground">Runtime updated: <time title={runtime?.generated_at}><Tick text={now => relative(runtime?.generated_at || '', now)} /></time></p>
       {runtimeQ.isPending && <p role="status">Loading agent runtime…</p>}
-      {runtimeQ.isError && <p role="alert">Could not load agent runtime: {runtimeQ.error.message}</p>}
+      {runtimeQ.isError && <p role="alert"><Tick text={now => `${runtimeUnreadLine(readAt, openedAt.current, now)} Error: ${runtimeQ.error.message}`} /></p>}
       {runtime && empty && <p>{message}</p>}
       {runtime && children}
     </>
@@ -93,7 +96,7 @@ export function ProgressPage() {
       {runtimeState(null, !ids.length, 'No goals yet.')}
       {ids.slice(0, WORK_GOAL_CARDS).map(id => <GoalCard key={id} id={id} runtime={runtime} updatedAt={runtimeQ.dataUpdatedAt} questions={needs.questions} highlighted={highlighted === id} submittedGoal={submitted?.id === id ? submitted.goal : ''} />)}
     </section>
-    <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={runtimeQ.isError} silentThreads={needs.silent.length} /></section>
+    <section aria-label="Overview"><ProgressOverview count={count} runtime={runtime} plan={plan} arch={arch} failed={runtimeQ.isError} unread={runtimeUnreadLine(readAt, openedAt.current, Date.now())} silentThreads={needs.silent.length} /></section>
     <section id="plan" aria-label="Plan and architecture" className="scroll-mt-4"><AgentsPlan /></section>
     <section aria-label="Hosts"><OpsSection title="Hosts" bodyPadding="compact">{runtimeState(<ul className="flex flex-col gap-2">{runtime?.hosts.map(host => <li key={host.host_id} className="text-sm">{host.host_id} · Online: {host.online === undefined ? 'Unknown' : String(host.online)} · Last poll age: {host.poll_age_s ?? '?'} s · Live attempts: {host.live_attempts ?? '?'} · Last poll: <time title={host.last_poll_at}><Tick text={now => relative(host.last_poll_at, now)} /></time></li>)}</ul>, !runtime?.hosts.length, 'No hosts reported.')}</OpsSection></section>
     <section aria-label="History"><OpsSection title="History" bodyPadding="compact">

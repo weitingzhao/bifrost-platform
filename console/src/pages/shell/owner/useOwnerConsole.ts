@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { text } from '@/api/agentRuntime'
 import { COORDINATOR_SIGN_IN, COORDINATOR_THREAD, fetchCoordinatorNote } from '@/api/agentRuntimeBus'
@@ -35,6 +36,7 @@ import { current, errorText, useOwnerYours } from './useOwnerYours'
  * screen; everything that feeds the verdict is always read.
  */
 export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief: boolean }) {
+  const openedAt = useRef(Date.now())
   const now = Date.now()
   const { needsYou, alertsQ, nodesQ, nodes, standby, alerts, alertsError, standbyEvidence, yours } = useOwnerYours(now)
   const hasToken = operatorToken() !== ''
@@ -128,6 +130,8 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
     controls: runtime?.controls ?? [],
     controlsReadable: runtime !== undefined,
     runtimeError: needsYou.runtimeQuery.isError,
+    runtimeReadAt: typeof needsYou.runtimeQuery.dataUpdatedAt === 'number' && needsYou.runtimeQuery.dataUpdatedAt > 0 ? needsYou.runtimeQuery.dataUpdatedAt : null,
+    runtimeOpenedAt: openedAt.current,
     lastGoal: text(lastGoalQ.data?.mission.goal) || text(lastGoalQ.data?.mission.title),
     last: lastResult(work, current(lastGoalQ) ? text(lastGoalQ.data?.mission.state) : ''),
     coordinator: !hasToken ? { state: 'error' as const, error: COORDINATOR_SIGN_IN }

@@ -25,7 +25,7 @@ function hostTone(h: RuntimeHost | undefined): Tone {
 }
 
 /** How the runtime was read: the card says nothing about hosts it has not read (review 289 B1). */
-export type CrewRead = 'ok' | 'loading' | 'error'
+export type CrewRead = 'ok' | 'loading' | { error: string }
 
 /**
  * Crew (2.5, thin; the Owner 2026-10-18): which agent works on which host, on what, now. Each live
@@ -64,7 +64,7 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
   const title = read === 'ok' && known.length ? `Crew · ${online} of ${known.length} hosts online` : 'Crew'
   return <Card label="Crew" title={title} more={{ href: goalHref(), text: 'Goals' }}>
     {read === 'loading' && <p className="m-0 text-sm text-muted-foreground">Reading the agent runtime…</p>}
-    {read === 'error' && <p role="alert" className="m-0 text-sm">The agent runtime could not be read: hosts and what they run are not known.</p>}
+    {typeof read === 'object' && <p role="alert" className="m-0 text-sm">{read.error} Hosts and what they run are not known.</p>}
     {read === 'ok' && rows.length === 0 && <p className="m-0 text-sm text-muted-foreground">No agent host has polled this platform.</p>}
     {read === 'ok' && <ul className="m-0 flex list-none flex-col gap-3 p-0">{rows.map(row => {
       const h = row.host

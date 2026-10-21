@@ -198,7 +198,7 @@ describe('Merged Progress page', () => {
   it('shows source failures and an incomplete count', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => json({ error: 'unavailable' }, 503)))
     wrap(<ProgressPage />)
-    expect((await screen.findAllByText(/Could not load agent runtime:/)).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText(/The agent runtime could not be read; not read since this page opened at/)).length).toBeGreaterThan(0)
     // The plan could not be read from the runtime: unavailable in the overview and the plan pane, not the board's (2.5 slice 2).
     expect(await screen.findAllByText('Plan unavailable: Plan: unavailable')).toHaveLength(2)
     expect(await screen.findAllByText('Architecture unavailable: Agent runtime: unavailable')).toHaveLength(2)
