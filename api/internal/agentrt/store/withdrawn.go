@@ -53,7 +53,6 @@ func BlockWithdrawn(ctx context.Context, db DB) (int, error) {
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
 			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 			  WHERE t.state = 'ready' AND m.state = 'active' AND t.role <> 'brief' AND t.effect_class = ANY($1) AND t.task_id > $2
-			    AND NOT `+gateMember+`
 			    AND (SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
 			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = ANY($4)) = $3
 			  ORDER BY t.task_id LIMIT $5`, dispatched, after, failuresToStop, executorEnds, page)
@@ -95,6 +94,9 @@ func blockNoneLeft(ctx context.Context, db DB, taskID string) (bool, error) {
 		t, err := readTask(ctx, tx, taskID, true)
 		if err != nil || t.state != "ready" || t.role == "brief" {
 			return err
+		}
+		if member, err := isGateMember(ctx, tx, taskID); err != nil || member {
+			return err // its batch ends it (gateend.go)
 		}
 		m, err := readMissionBudget(ctx, tx, t.mission, "FOR SHARE")
 		if err != nil || m.state != "active" {

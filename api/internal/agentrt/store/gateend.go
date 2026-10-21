@@ -81,6 +81,12 @@ func endBatch(ctx context.Context, db DB, env, mission string) (int, error) {
 		}
 		cancel := map[string]string{}
 		for _, m := range members {
+			if m.state == "blocked" {
+				// Nothing blocks a gate (the passes leave members alone), but
+				// one blocked any way ends here rather than waiting for ever.
+				cancel[m.entry.Task] = "it was blocked"
+				continue
+			}
 			if m.state != "ready" {
 				continue
 			}
@@ -125,19 +131,23 @@ func endBatch(ctx context.Context, db DB, env, mission string) (int, error) {
 				continue
 			}
 			t, err := readTask(ctx, tx, id, false) // locked above
-			if err != nil || t.state != "ready" {
-				if err != nil {
-					return err
-				}
-				continue
-			}
-			// Read again under the locks: what was read before them may have
-			// changed (a budget grown, a deployment recorded).
-			if why, err = cannotRun(ctx, tx, b, id); err != nil {
+			if err != nil {
 				return err
 			}
-			if why == "" {
+			switch {
+			case t.state == "blocked":
+				why = "it was blocked"
+			case t.state != "ready":
 				continue
+			default:
+				// Read again under the locks: what was read before them may
+				// have changed (a budget grown, a deployment recorded).
+				if why, err = cannotRun(ctx, tx, b, id); err != nil {
+					return err
+				}
+				if why == "" {
+					continue
+				}
 			}
 			if err = moveTask(ctx, tx, "controller", t, "cancelled", "the gate could not run: "+why); err != nil {
 				return err

@@ -56,12 +56,21 @@ func concludeGate(ctx context.Context, tx pgx.Tx, taskID string) (string, error)
 		return "", err
 	}
 	b, ok, err := readGateBatch(ctx, tx, t.mission, "")
-	if err != nil || !ok {
+	if err != nil {
 		return "", err
 	}
-	e, member, err := gateMemberOf(ctx, tx, b, taskID)
-	if err != nil || !member {
-		return "", err
+	var e gateEntry
+	member := false
+	if ok {
+		if e, member, err = gateMemberOf(ctx, tx, b, taskID); err != nil {
+			return "", err
+		}
+	}
+	if !member {
+		// A verify with no subject that is no gate of a batch checks
+		// nothing anyone can use: blocked, it gets an ordinary card rather
+		// than waiting in submitted (review td397-5 B2).
+		return "blocked", moveTask(ctx, tx, "controller", t, "blocked", "a verification with no subject that is not a gate of its batch")
 	}
 	if report == "" {
 		if err = moveTask(ctx, tx, "controller", t, "blocked", "the gate could not run: its attempt handed in no report"); err != nil {

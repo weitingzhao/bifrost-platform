@@ -114,7 +114,7 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	}
 	deploy("stg", refA)
 	// The rule stops at the first gate that fails: the reason names it.
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): no pass on stg at 2333e00753f9, the deployment recorded 20")
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): not all passed on stg at 2333e00753f9, the deployment recorded 20")
 
 	task := store.NewTaskID()
 	var attempt string
@@ -143,12 +143,12 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	gate("T19", "stg", commitA, refA)
 	gate("T20", "stg", commitB, refA)
 	rows = w.archRows(t)
-	wantTick(t, rows["ARCH:state-db"], "false", "T20 (not dispatched yet): no pass on stg at 2333e00753f9")
+	wantTick(t, rows["ARCH:state-db"], "false", "T20 (not dispatched yet): not all passed on stg at 2333e00753f9")
 	// Only T20 fails, so the reason starts with it ("T19, T20: …" or
 	// "T19: …" would name the gate that passed). Not a search for "T19": the
 	// reason carries the deployment's time, and 2026-10-20T19:45:29Z holds
 	// "T19" for an hour every day.
-	if !strings.HasPrefix(rows["ARCH:state-db"]["reason"].(string), "T20 (") {
+	if !strings.HasPrefix(rows["ARCH:state-db"]["reason"].(string), "T19 passed, T20 (") {
 		t.Fatalf("a gate that passed is named as failing: %v", rows["ARCH:state-db"]["reason"])
 	}
 	// The same pass in another environment counts for nothing there.
@@ -156,7 +156,7 @@ func TestArchTickFollowsTheDeployment(t *testing.T) {
 	gate("T20", "stg", commitA, refA)
 	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg at 2333e00753f9")
 	deploy("stg", refB)
-	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): no pass on stg")
+	wantTick(t, w.archRows(t)["ARCH:state-db"], "false", "T19 (not dispatched yet), T20 (not dispatched yet): not all passed on stg")
 	deploy("stg", refA)
 	wantTick(t, w.archRows(t)["ARCH:state-db"], "true", "T19, T20 passed on stg")
 	// Evaluating changes nothing: the projection only reads.

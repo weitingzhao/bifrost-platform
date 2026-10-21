@@ -61,9 +61,8 @@ func gateGuard(ctx context.Context, tx pgx.Tx, c PlanChange) error {
 			return invalid("mission %s is a batch of gates: no step is bound to it", c.MissionID)
 		}
 	case c.Op == "move_task":
-		var member bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
-		  WHERE t.task_id = $1 AND `+gateMember+`)`, c.Task).Scan(&member); err != nil {
+		member, err := isGateMember(ctx, tx, c.Task)
+		if err != nil {
 			return err
 		}
 		if member {

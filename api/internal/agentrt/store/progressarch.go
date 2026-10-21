@@ -120,19 +120,18 @@ func archTick(ctx context.Context, tx pgx.Tx, id, doc string, deploys *recordedD
 		return s
 	}}
 	res := rule.Eval(seen)
+	var every string
 	if res.Value == plan.False {
-		// The rule stops at its first gate that has not passed; the row names
-		// every one, in the rule's order, so a gate still running does not
-		// hide one that failed (review td397-4 B1).
-		for _, g := range rule.Gates() {
-			seen.GatePassed(g.Env, g.Test, g.Spec)
-		}
+		every = seen.everyGate(rule, deploys)
 	}
 	if facts.err != nil {
 		return "", "", facts.err
 	}
 	if statusErr != nil {
 		return "", "", statusErr
+	}
+	if res.Value == plan.False {
+		return res.Value.String(), every, deploys.err
 	}
 	if deploys.err != nil {
 		return "", "", deploys.err
@@ -229,6 +228,7 @@ type explained struct {
 	// for none.
 	status func(env, test, spec string) string
 	read   map[string]plan.Tri // the gates this evaluation read, by key
+	whats  map[string]string   // and how the reason names each
 }
 
 type atomReading struct {
@@ -282,7 +282,7 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 		}
 	}
 	if e.read == nil {
-		e.read = map[string]plan.Tri{}
+		e.read, e.whats = map[string]plan.Tri{}, map[string]string{}
 	}
 	e.read[key] = v
 	what := test
@@ -291,8 +291,39 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 			what = test + " (" + s + ")"
 		}
 	}
+	e.whats[key] = what
 	e.atoms = append(e.atoms, atomReading{what: what, env: env, value: v})
 	return v
+}
+
+// everyGate is a false row's reason: each gate of its rule, in the rule's
+// order (not the order the rule read them, which stops at the first that
+// has not passed), passed or what became of it, by environment with the
+// deployment each was checked against (reviews td397-4 B1, td397-5 B1).
+func (e *explained) everyGate(rule plan.Rule, deploys *recordedDeploys) string {
+	var envs []string
+	named := map[string][]string{}
+	for _, g := range rule.Gates() {
+		v := e.GatePassed(g.Env, g.Test, g.Spec)
+		if _, ok := named[g.Env]; !ok {
+			envs = append(envs, g.Env)
+		}
+		what := e.whats[g.Env+"\x00"+g.Test+"\x00"+g.Spec]
+		switch v {
+		case plan.True:
+			what = g.Test + " passed"
+		case plan.Unknown:
+			what = g.Test + " (unknown)"
+		}
+		named[g.Env] = append(named[g.Env], what)
+	}
+	var parts []string
+	for _, env := range envs {
+		d := deploys.get(env)
+		parts = append(parts, fmt.Sprintf("%s: not all passed on %s at %s, the deployment recorded %s", strings.Join(named[env], ", "),
+			env, short(d.commit), d.at.UTC().Format(time.RFC3339)))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // reason names the atoms that read what the rule came to: the gates by

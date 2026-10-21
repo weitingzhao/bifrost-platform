@@ -42,7 +42,7 @@ import (
 // Which tasks are a batch's is the mission's scope_json.gate_run, written
 // when the controller makes it and never after: {env, commit, deploy_ref,
 // gates: [{task, test, spec_sha256}]}. No route sets it; a task is a gate
-// member only if every field of it is what that list says (gateMember).
+// member only if every field of it is what that list says (isGateMember).
 
 const (
 	// GateClass is a gate task's task class.
@@ -132,18 +132,26 @@ func sameRef(a, b map[string]any) bool {
 	return err1 == nil && err2 == nil && string(x) == string(y)
 }
 
-// gateMember is the SQL condition that task t of mission m is a member of
-// its gate batch, the same as gateMemberOf (review td397-4 B2: what is kept
-// from cards and blocks is what the batch ends and uses): both made by the
-// controller; t a verify of class gate, effect none, off the plan, with no
-// subject; its base the batch's commit, its repo the batch's, its spec the
-// one its entry in the batch's list names.
-const gateMember = `(m.scope_json ? 'gate_run' AND m.created_by_actor_id = 'controller' AND t.created_by_actor_id = 'controller'
-  AND t.role = 'verify' AND t.task_class = 'gate' AND t.effect_class = 'none' AND t.off_plan AND t.subject_task_id IS NULL
-  AND t.base_commit = m.scope_json->'gate_run'->>'commit' AND t.repo = m.scope_json->'repos'->>0
-  AND EXISTS (SELECT 1 FROM jsonb_array_elements(CASE jsonb_typeof(m.scope_json->'gate_run'->'gates') WHEN 'array'
-      THEN m.scope_json->'gate_run'->'gates' ELSE '[]'::jsonb END) g
-    WHERE g->>'task' = t.task_id AND 'sha256:' || (g->>'spec_sha256') = t.spec_artifact_id))`
+// isGateMember is whether a task is a member of its gate batch
+// (gateMemberOf): the one test of membership, wherever a gate task is kept
+// from what an ordinary task gets (cards, the withdrawal and budget passes,
+// moves) and wherever its batch uses it (review td397-5 B2).
+func isGateMember(ctx context.Context, tx pgx.Tx, taskID string) (bool, error) {
+	var mission string
+	err := tx.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, taskID).Scan(&mission)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	b, ok, err := readGateBatch(ctx, tx, mission, "")
+	if err != nil || !ok {
+		return false, err
+	}
+	_, member, err := gateMemberOf(ctx, tx, b, taskID)
+	return member, err
+}
 
 // gateBatch is a batch mission as read: its run, and its own fields.
 type gateBatch struct {
