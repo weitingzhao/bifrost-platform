@@ -43,7 +43,7 @@ export function TaskTimeline({ mission, task, events: supplied, finished = false
       {events.map((event, index) => <li key={`${event.at}-${index}`} className="break-words text-xs" data-event-type={event.event_type}>
         <time>{event.at || 'Time unknown'}</time> · <strong>{event.event_type || 'Unknown event'}</strong> · {event.actor_id || 'Actor unknown'}
         <p>{eventBody(event)}</p>
-        {artifactIds(event).map((id, i) => <a key={`${id}-${i}`} className="mr-3 inline-block max-w-full break-all underline pointer-coarse:py-3"
+        {artifactIds(event).map((id, i) => <a key={`${id}-${i}`} className="mr-3 inline-block max-w-full break-all underline pointer-coarse:min-h-11 pointer-coarse:py-3"
           href={`/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`}
           onClick={e => { e.preventDefault(); setArtifact(id) }}>{id}</a>)}
       </li>)}
