@@ -356,11 +356,14 @@ func (c *Controller) BlockedCards(ctx context.Context) (int, error) {
 }
 
 // CardRuleEvery is how often the cards are answered by rule: a loop of its
-// own, so a slow question store never holds up dispatch; every five seconds
-// (TD-393, the Owner 2026-10-20 「循环每 5 秒」), so a card is answered within
-// ten of opening on a rule that waits five. Only STG wires it
-// (server/agentrt_wire.go).
-const CardRuleEvery = 5 * time.Second
+// own, so a slow question store never holds up dispatch. Every second
+// (TD-402, the coordinating thread 2026-10-21; TD-393's 「循环每 5 秒」 ran it
+// with the facts loop, so a card the facts loop asked, a blocked card or a
+// planner's question, was first seen just under five seconds old and
+// answered on the next pass, about ten seconds after it opened): a card is
+// answered within its rule's wait and a second. With no card open a pass is
+// one read of the question store. Only STG wires it (server/agentrt_wire.go).
+const CardRuleEvery = time.Second
 
 // AnswerByRule answers the runtime's cards by the card-auto-answer rule in
 // force (store.AnswerByRule, TD-390): none without the rule, the lister or the

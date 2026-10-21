@@ -78,8 +78,8 @@ func TestCardRuleOnTheStore(t *testing.T) {
 	}
 }
 
-// TD-393: the card-auto-answer loop (every kind, every five seconds) is
-// wired on STG alone; PROD's and DEV's controllers get no card list and no
+// TD-393: the card-auto-answer loop (every kind; every second since TD-402)
+// is wired on STG alone; PROD's and DEV's controllers get no card list and no
 // rule's answer, so the loop never starts there (controller.Start needs
 // both), while the assessments stay.
 func TestOnlySTGAnswersCardsByRule(t *testing.T) {
@@ -97,7 +97,7 @@ func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 	if src := cardRuleOnlyOnSTG("stg", full); src.Cards == nil || src.RuleAnswer == nil {
 		t.Fatal("STG lost the card rule's sources")
 	}
-	if controller.CardRuleEvery != 5*time.Second {
+	if controller.CardRuleEvery != time.Second {
 		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)
 	}
 }
