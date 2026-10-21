@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"time"
 
@@ -114,8 +115,9 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 	gate := func(name string) func(http.Handler) http.Handler { return auth.RequireAny(may(name)...) }
 	read, agentd, propose, upload := gate("read"), gate("claim"), gate("propose"), gate("upload")
 	// Authentication first, so an anonymous write is refused as such even
-	// when the database is not configured.
-	cfg := a.configured
+	// when the database is not configured. Every route's parameters are read
+	// as the client meant them (pathParams).
+	cfg := func(next http.Handler) http.Handler { return a.configured(pathParams(next)) }
 	r.Route("/agentrt", func(r chi.Router) {
 		r.With(read, cfg).Get("/whoami", a.whoami)
 		r.With(agentd, cfg).Post("/claim", a.claim)
@@ -161,6 +163,30 @@ func Mount(r chi.Router, auth *actuation.AuthService, a *API) {
 		r.With(read, cfg).Get("/pools", a.listPools)
 		r.With(read, cfg).Get("/capabilities", a.capabilities)
 		r.With(gate("measure"), cfg).Post("/pools/{id}/reading", a.recordReading)
+	})
+}
+
+// pathParams unescapes a route's parameters when the client escaped the
+// path. The router then matches the escaped path (chi reads RawPath), so a
+// browser's encodeURIComponent sends sha256%3A…, R2%3A2.1-3 or routing%3Adev
+// and the parameter arrives escaped, naming no row: on 2026-10-21 the plan's
+// import request read 404 on PROD and Work showed no plan. Only an escaped
+// path is unescaped, once, so a parameter read from the decoded path is not
+// decoded twice (reviews 281 A1, 285). One not escaped right is a 400. Every
+// route of Mount takes it through cfg.
+func pathParams(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rctx := chi.RouteContext(r.Context()); r.URL.RawPath != "" && rctx != nil {
+			for i, v := range rctx.URLParams.Values {
+				u, err := url.PathUnescape(v)
+				if err != nil {
+					writeError(w, http.StatusBadRequest, "bad_request", fmt.Sprintf("the %s in the path is not escaped right", rctx.URLParams.Keys[i]))
+					return
+				}
+				rctx.URLParams.Values[i] = u
+			}
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 

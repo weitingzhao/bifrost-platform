@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   AGENT_RUNTIME_POLL_MS, fetchRuntimeArtifact, fetchRuntimeEvents, record, text, type RuntimeEvent,
 } from '@/api/agentRuntime'
+import { pathSegment } from '@/api/client'
 
 function eventsForTask(events: RuntimeEvent[], task: string): RuntimeEvent[] {
   return events.filter(e => e.task_id === task || text(record(e.body_json.inputs).subject) === task)
@@ -44,7 +45,7 @@ export function TaskTimeline({ mission, task, events: supplied, finished = false
         <time>{event.at || 'Time unknown'}</time> · <strong>{event.event_type || 'Unknown event'}</strong> · {event.actor_id || 'Actor unknown'}
         <p>{eventBody(event)}</p>
         {artifactIds(event).map((id, i) => <a key={`${id}-${i}`} className="mr-3 inline-block max-w-full break-all underline pointer-coarse:min-h-11 pointer-coarse:py-3"
-          href={`/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`}
+          href={`/api/v1/agentrt/artifacts/${pathSegment(id)}`}
           onClick={e => { e.preventDefault(); setArtifact(id) }}>{id}</a>)}
       </li>)}
     </ol>

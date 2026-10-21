@@ -1,4 +1,4 @@
-import { authedFetch, parseError } from '@/api/client'
+import { authedFetch, parseError, pathSegment } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
 import { signInSafeError } from '@/lib/signInError'
 import { record, records, text } from '@/api/agentRuntime'
@@ -30,7 +30,11 @@ export type RuntimePlanItem = { key: string; name: string; state: string; done?:
 export function manualAndStopped(item: { manual?: number; stopped?: number }): string {
   return `${item.manual ? ` · ${item.manual} manual` : ''}${item.stopped ? ` · ${item.stopped} stopped` : ''}`
 }
-export type RuntimeRound = { n?: number; checked?: number; items: RuntimePlanItem[]; source?: string; unknown?: string }
+export type RuntimeRound = {
+  n?: number; checked?: number; items: RuntimePlanItem[]; source?: string; unknown?: string
+  /** The import request could not be read: why. The steps stand without their ledger lines, an imported one without its date. */
+  ledgerUnread?: string
+}
 export type RuntimeArchitecture = { title: string; checked?: number; rows: { state: string; what: string; now: string }[] }
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : undefined
 export function parseRuntimeRound(value: unknown): RuntimeRound | undefined {
@@ -150,7 +154,7 @@ export async function fetchImportRequest(root = PLAN_ROOT, signal?: AbortSignal)
     const events: unknown = await page.json()
     const head = importHead(events)
     if (head.artifact !== '') {
-      const r = await authedFetch('Plan import request', `/api/v1/agentrt/artifacts/${encodeURIComponent(head.artifact)}`, { signal })
+      const r = await authedFetch('Plan import request', `/api/v1/agentrt/artifacts/${pathSegment(head.artifact)}`, { signal })
       let body: unknown
       try { body = JSON.parse(await r.text()) } catch { return invalidRequest() }
       return parsePlanRequest(body, root)
@@ -283,8 +287,6 @@ export function unsignedRefs(s: StepSignoffs): string[] {
 /** POST /plan/{id}/signoff's answer: the sign-off, and whether the step held it before the press (nothing was written then). */
 export type SignoffAnswer = StepSignoff & { node: string; alreadySigned: boolean }
 
-/** A node id in a path: its colon kept, as the platform's router reads the raw path (mcp runtimeTools id). */
-const nodePath = (node: string) => encodeURIComponent(node).replace(/%3A/gi, ':')
 
 /**
  * A refused sign-off with the platform's reason: its message says which state the step is in or which refs its rule
@@ -309,7 +311,7 @@ export async function postStepSignoff(node: string, ref: string, token: string):
   const headers = new Headers()
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
-  const r = await serverFetch(`/api/v1/agentrt/plan/${nodePath(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref }) })
+  const r = await serverFetch(`/api/v1/agentrt/plan/${pathSegment(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref }) })
   if (!r.ok) throw await signoffError(r, token)
   const body = record(await r.json())
   return { node: text(body.plan_node_id), ref: text(body.ref), by: text(body.by), at: text(body.at), alreadySigned: body.already_signed === true }

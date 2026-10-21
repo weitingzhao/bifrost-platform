@@ -91,7 +91,7 @@ const quote = (s: string) => JSON.stringify(s)
  * must be one round: the root once, each node's id <root>:<label>, no id twice, every item under the
  * root and every step under an item before it. Throws with the Go function's reasons.
  */
-export function fromPlanWithRequest(doc: unknown, root: string, req: PlanRequest | null): PlanView {
+export function fromPlanWithRequest(doc: unknown, root: string, req: PlanRequest | null, ledgerUnread = false): PlanView {
   const a = readPlan(doc)
   if (a.root !== root) throw new Error(`the plan is of root ${quote(a.root)}, not ${quote(root)}`)
   const marked = new Map<string, string>()
@@ -118,7 +118,7 @@ export function fromPlanWithRequest(doc: unknown, root: string, req: PlanRequest
       case 'step': {
         const i = at.get(parent)
         if (i === undefined || n.state === null) throw new Error(`step ${n.id} sits under ${quote(parent)}, which is not an item listed before it`)
-        view.items[i].steps.push({ id: n.label, t: n.title, state: boardState(n.state), owner: n.owner, star: n.effect, when: when(n, n.state, marked) })
+        view.items[i].steps.push({ id: n.label, t: n.title, state: boardState(n.state), owner: n.owner, star: n.effect, when: when(n, n.state, marked, ledgerUnread) })
         break
       }
       default:
@@ -129,10 +129,15 @@ export function fromPlanWithRequest(doc: unknown, root: string, req: PlanRequest
   return view
 }
 
-function when(n: PlanNode, state: string, marked: Map<string, string>): string {
+/**
+ * A step's date: the ledger's mark for a step the import brought in, else its state event's time. While the import
+ * request cannot be read (ledgerUnread), an imported step's date is not known: the import's own moment is not when
+ * the work was done, so none is told rather than that one (review 416/418's concern, kept when the plan is shown).
+ */
+function when(n: PlanNode, state: string, marked: Map<string, string>, ledgerUnread = false): string {
   if (n.event === null) return ''
   const m = marked.get(n.id)
-  if (m !== undefined) {
+  if (m !== undefined || ledgerUnread) {
     // Go reads the rule into a map of strings: every key counts, a value that is not a string reads as "".
     const rule = isObject(n.rule) ? n.rule : {}
     let imported = false
@@ -141,7 +146,7 @@ function when(n: PlanNode, state: string, marked: Map<string, string>): string {
       case 'active': imported = n.event.cause === 'legacy_imported'; break
       case 'planned': imported = n.event.type === 'plan_node_created'; break
     }
-    if (imported) return m
+    if (imported) return m ?? ''
   }
   return n.event.at
 }

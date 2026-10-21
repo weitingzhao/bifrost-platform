@@ -42,12 +42,18 @@ export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | nul
   if (failed !== null) return { from: 'error', error: failed }
   if (plan.data === undefined) return { from: 'loading' }
   if (!plan.data.found) return { from: 'absent' }
-  const other = failure(progress) ?? failure(request)
+  const other = failure(progress)
   if (other !== null) return { from: 'error', error: other }
-  if (progress.data === undefined || request.data === undefined) return { from: 'loading' }
+  // The import request gives only each step's ledger line and an imported step's date. One that cannot be read leaves
+  // the plan, its counts and its sign-offs standing, said without those (2026-10-21: a PROD 404 on it hid the plan and
+  // the Owner's Sign off).
+  const ledger = failure(request)
+  if (progress.data === undefined || (ledger === null && request.data === undefined)) return { from: 'loading' }
   try {
-    return { from: 'runtime', round: runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, request.data), progress.data.plan, PLAN_ROOT, request.data,
-      approvalsByStep(plan.data.doc), signoffsByStep(plan.data.doc)) }
+    const req = ledger === null ? request.data ?? null : null
+    const round = runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, req, ledger !== null), progress.data.plan, PLAN_ROOT, req,
+      approvalsByStep(plan.data.doc), signoffsByStep(plan.data.doc))
+    return { from: 'runtime', round: ledger === null ? round : { ...round, ledgerUnread: ledger } }
   } catch (e) {
     return { from: 'error', error: e instanceof Error ? e.message : String(e) }
   }

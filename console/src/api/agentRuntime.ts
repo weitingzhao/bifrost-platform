@@ -1,4 +1,4 @@
-import { authedFetch } from '@/api/client'
+import { authedFetch, pathSegment } from '@/api/client'
 import { signInSafeError } from '@/lib/signInError'
 
 export const AGENT_RUNTIME_POLL_MS = 5_000
@@ -220,7 +220,7 @@ export async function fetchRuntimeTaskDetail(id: string, signal?: AbortSignal): 
   return parseRuntimeTaskDetail(await r.json())
 }
 export async function fetchRuntimeArtifact(id: string, signal?: AbortSignal): Promise<string> {
-  const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`, { signal })
+  const r = await authedFetch('Agent artifact', `/api/v1/agentrt/artifacts/${pathSegment(id)}`, { signal })
   return r.text()
 }
 async function goalError(prefix: string, response: Response, token = ''): Promise<Error> {

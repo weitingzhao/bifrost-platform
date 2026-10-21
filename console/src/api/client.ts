@@ -2,6 +2,13 @@ import { serverFetch } from '@/api/serverContact'
 import { getPlatformOperatorToken } from '@/lib/platformAuth'
 import { containsSignInData, signInSafeError } from '@/lib/signInError'
 
+/**
+ * An id as one path segment, its colons kept: the platform's ids hold them (sha256:…, R2:2.1-3, routing:dev), and an
+ * escaped %3A once named no row (2026-10-21 PROD: the plan's import request read 404 and Work showed no plan). The
+ * platform now unescapes too; keeping the colon does not depend on it (mcp runtimeTools id does the same).
+ */
+export const pathSegment = (id: string): string => encodeURIComponent(id).replace(/%3A/gi, ':')
+
 /** Current operator bearer token (empty string when unauthenticated). */
 export function operatorToken(): string {
   return getPlatformOperatorToken()

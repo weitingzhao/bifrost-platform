@@ -50,6 +50,8 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     if (source.events === 'stuck') return json(streamPage(stuck, '?after_seq=0'))
     return json(streamPage(source.events === 'endless' ? endless : source.plan === 'root-only' ? rootOnly.events : imported.events, url))
   }
+  // An escaped id named no row on the platform until 2026-10-21 (PROD answered sha256%3A… with this 404).
+  if (url.includes('/agentrt/artifacts/') && /%3A/i.test(url)) return json({ error: 'not_found', message: 'no such record' }, 404)
   if (url.includes('/agentrt/artifacts/')) return source.artifact === 'fail' ? json({ error: 'internal', message: 'internal error' }, 500)
     : new Response(source.artifact === 'not json' ? '<html>proxy</html>' : JSON.stringify(imported.request))
   if (url.includes('/agentrt/progress')) {
@@ -178,30 +180,49 @@ describe('the plan pane on Progress', () => {
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })
 
-  it('a request that fails on a read after a good one makes the plan unavailable in both panes, not the plan read before (review 418)', async () => {
+  // 2026-10-21 PROD: the import request was read by sha256%3A…, the platform answered 404, and the whole plan, with the
+  // Owner's Sign off, was "Plan unavailable". The request only gives ledger lines and imported steps' dates.
+  it('reads the import request by its artifact id, colon kept, and shows each step\'s ledger line', async () => {
+    show(<AgentsPlan />)
+    expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    const reads = fetchMock.mock.calls.map(c => String(c[0])).filter(url => url.includes('/agentrt/artifacts/'))
+    expect(reads.length).toBeGreaterThan(0)
+    for (const url of reads) expect(url).toMatch(/\/api\/v1\/agentrt\/artifacts\/sha256:[0-9a-f]{64}$/)
+    expect(screen.getAllByText('Ledger line').length).toBeGreaterThan(0)
+    expect(screen.queryByText(/The ledger lines could not be read/)).not.toBeInTheDocument()
+  })
+
+  it('a request that fails on a read after a good one leaves the plan standing, without the lines read before (review 418)', async () => {
     const { client } = show(<><Overview /><AgentsPlan /></>)
     expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
     const steps = `${counted(imported).count.done}/${counted(imported).count.total} steps`
     expect(screen.getByText(steps)).toBeInTheDocument()
     source.artifact = 'fail'
     await client.refetchQueries({ queryKey: ['agent-runtime-plan-request', 'R2'] })
-    expect(await screen.findAllByText(unavailableLine('Plan unavailable: Plan import request: internal'))).toHaveLength(2)
-    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
-    expect(screen.queryByText(steps)).not.toBeInTheDocument()
+    expect(await screen.findByText(/^The ledger lines could not be read: Plan import request: internal\. The steps are shown without them/)).toBeInTheDocument()
+    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    expect(screen.getByText(steps)).toBeInTheDocument()
+    expect(screen.queryByText('Ledger line')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
-    expect(screen.queryByText(PLAN_NOT_IMPORTED)).not.toBeInTheDocument()
   })
 
   it.each([
-    ['the request cannot be read', { artifact: 'fail' }, 'Plan unavailable: Plan import request: internal'],
-    ['the request is not one', { artifact: 'not json' }, 'Plan unavailable: Plan import request: invalid artifact'],
-    ['the plan stream\'s cursor does not move on', { events: 'stuck' }, 'Plan unavailable: Plan events: invalid pagination cursor'],
-    ['the import head is not within the pages read', { events: 'endless' }, `Plan unavailable: Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2`],
-  ] as const)('a plan whose import request cannot be had is unavailable: %s', async (_, set, line) => {
+    ['the request cannot be read', { artifact: 'fail' }, 'Plan import request: internal'],
+    ['the request is not one', { artifact: 'not json' }, 'Plan import request: invalid artifact'],
+    ['the plan stream\'s cursor does not move on', { events: 'stuck' }, 'Plan events: invalid pagination cursor'],
+    ['the import head is not within the pages read', { events: 'endless' }, `Plan events: no import head in the first ${IMPORT_HEAD_PAGES} pages of plan:R2`],
+  ] as const)('a plan whose import request cannot be had stands without its ledger lines and imported dates: %s', async (_, set, reason) => {
     Object.assign(source, set)
     show(<AgentsPlan />)
-    expect(await screen.findByText(unavailableLine(line))).toHaveAttribute('role', 'alert')
-    expect(screen.queryByText('Round 2 · from the agent runtime')).not.toBeInTheDocument()
+    const escaped = reason.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    expect(await screen.findByText(new RegExp(`^The ledger lines could not be read: ${escaped}\\. The steps are shown without them`))).toHaveAttribute('role', 'status')
+    expect(screen.getByText('Round 2 · from the agent runtime')).toBeInTheDocument()
+    expect(screen.getByText('2.1 数据层：状态库 · 2/5 · 2 manual · doing')).toBeInTheDocument()
+    expect(screen.queryByText('Ledger line')).not.toBeInTheDocument()
+    // The ledger's date of an imported step is not known, and the import's own moment is not told in its place.
+    expect(screen.queryByText('2026-10-14 01:09')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
   })
 

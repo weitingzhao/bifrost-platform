@@ -64,6 +64,8 @@ export function AgentsPlan() {
     {plan.from === 'absent' && <p>{PLAN_NOT_IMPORTED}</p>}
     {plan.from === 'runtime' && <div className="flex flex-col gap-3">
       <h4>Round {plan.round.n ?? 'unknown'} · from the agent runtime</h4>
+      {plan.round.ledgerUnread !== undefined && <p role="status" className="m-0 break-words text-sm text-muted-foreground" data-ledger-unread>
+        The ledger lines could not be read: {reasonText(plan.round.ledgerUnread)}. The steps are shown without them, and an imported step without its date.</p>}
       {plan.round.items.length === 0 && <p>No items in the runtime's plan.</p>}
       <Items round={plan.round} />
     </div>}

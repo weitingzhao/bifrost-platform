@@ -77,6 +77,20 @@ describe('the plan view, as the Go view gives it', () => {
     expect(after.find(s => s.id === '2.3-2')?.state).toBe('dropped')
     expect(after.find(s => s.id === '2.3-2')?.when).toMatch(/^2026-10-19T/)
   })
+  // 2026-10-21: while the import request cannot be read the plan stands; an imported step's date is then not known, and
+  // the import's own moment is not told in its place. A step the plan moved since keeps its state event's time.
+  it('tells no date for an imported step while the ledger cannot be read', () => {
+    const read = fromPlanWithRequest(imported.plan, PLAN_ROOT, request).items.flatMap(i => i.steps)
+    const unread = fromPlanWithRequest(imported.plan, PLAN_ROOT, null, true).items.flatMap(i => i.steps)
+    const none = fromPlanWithRequest(imported.plan, PLAN_ROOT, null).items.flatMap(i => i.steps)
+    expect(read.find(s => s.id === '2.1-1')?.when).toBe('2026-10-14 01:09')
+    expect(unread.find(s => s.id === '2.1-1')?.when).toBe('')
+    expect(none.find(s => s.id === '2.1-1')?.when).toMatch(/^20\d\d-/)
+    expect(unread.map(s => s.id)).toEqual(read.map(s => s.id))
+    expect(unread.map(s => s.state)).toEqual(read.map(s => s.state))
+    const later = fromPlanWithRequest(moved.plan, PLAN_ROOT, null, true).items.flatMap(i => i.steps)
+    expect(later.find(s => s.id === '2.3-2')?.when).toMatch(/^2026-10-19T/)
+  })
 })
 
 describe('the import head and its request', () => {
@@ -115,7 +129,8 @@ describe('the import head and its request', () => {
     const fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.startsWith('/api/v1/agentrt/events?')) return json(page(url))
-      if (url === `/api/v1/agentrt/artifacts/${encodeURIComponent(head)}`) return new Response(JSON.stringify(imported.request))
+      // The request by its id as it is, colon kept (pathSegment): the escaped sha256%3A… read 404 on PROD on 2026-10-21.
+      if (url === `/api/v1/agentrt/artifacts/${head}`) return new Response(JSON.stringify(imported.request))
       throw new Error(`Unexpected URL ${url}`)
     })
     vi.stubGlobal('fetch', fetch)
@@ -126,7 +141,7 @@ describe('the import head and its request', () => {
     const stream = planStream(STREAM_PAGE)
     const urls = serve(url => streamPage(stream, url))
     expect(await fetchImportRequest()).toEqual(request)
-    expect(urls()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE), `/api/v1/agentrt/artifacts/${encodeURIComponent(importHead(imported.events).artifact)}`])
+    expect(urls()).toEqual([eventsUrl(0), eventsUrl(STREAM_PAGE), `/api/v1/agentrt/artifacts/${importHead(imported.events).artifact}`])
   })
 
   it('a plan stream with no import head is read to its end, a page short of 500: no request', async () => {
@@ -148,7 +163,7 @@ describe('the import head and its request', () => {
     expect(stream[IMPORT_HEAD_PAGES * STREAM_PAGE - 1].event_type).toBe('legacy_imported')
     const urls = serve(url => streamPage(stream, url))
     expect(await fetchImportRequest()).toEqual(request)
-    expect(urls()).toEqual([...pagesUpTo(IMPORT_HEAD_PAGES), `/api/v1/agentrt/artifacts/${encodeURIComponent(importHead(imported.events).artifact)}`])
+    expect(urls()).toEqual([...pagesUpTo(IMPORT_HEAD_PAGES), `/api/v1/agentrt/artifacts/${importHead(imported.events).artifact}`])
   })
 
   it(`does not read on for a head that is the first event of page ${IMPORT_HEAD_PAGES + 1}`, async () => {
