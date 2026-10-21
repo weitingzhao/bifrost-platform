@@ -82,7 +82,11 @@ func beforeReport(err error) []byte {
 // it is sent and resent as it is (as a sample's is, review 164 A6). An upload
 // or a checkpoint the platform refuses is logged and not tried again; a
 // transient failure is returned, so the hand-over is taken up again; so is a
-// fence.
+// fence. That holds for a failed setup, whose hand-over has a phase to go on
+// from (exited); an attempt that ended before its launch (failBefore) makes
+// one try, best effort: a transient failure there, or a restart before it is
+// sent, loses the report, and the attempt ends all the same (review td404-3
+// B3). PrepareReported says it was taken or given up, not that it arrived.
 func (d *Daemon) reportPrepare(ctx context.Context, a *Attempt, e *Entry, body []byte) error {
 	if e.PrepareReported {
 		return nil

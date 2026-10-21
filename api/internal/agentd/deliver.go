@@ -644,6 +644,7 @@ func (d *Daemon) Recover(ctx context.Context) error {
 		}
 		if e.Phase == "uncleared" && e.Group == GroupCleared {
 			removeCursorData(d.Root, e.Workdir+".out", d.logf)
+			removeTestDB(d.Root, e.Workdir+".out", d.logf) // as settle does (review td404-3 B1)
 			delete(entries, id)
 			if err := d.Registry.Delete(id); err != nil {
 				return err

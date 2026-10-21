@@ -294,3 +294,84 @@ func TestRemoveTestDB(t *testing.T) {
 	}
 	removeTestDB(root, filepath.Join(root, "none.out"), t.Logf) // nothing there: nothing to do
 }
+
+// Review td404-3 A1: the executor's wall takes only directories that are
+// there, and the stage inside it may not make one beside its own; so the
+// sockets' directory under agentd's root is made before the launch, outside
+// every wall, the attempt's own (0700), and the stage leaves it, emptied, for
+// settle to remove.
+func TestTestDBSocketDirIsMadeBeforeTheWall(t *testing.T) {
+	root := shortDir(t)
+	a := &Attempt{Out: filepath.Join(root, "tasks", "t_01M5E53AASSQBNFFHH29B3S79P", "a1.out"), root: root}
+	_, err := withTestDB("/opt/agentd", &TestDBTools{Initdb: "/x/initdb", Postgres: "/x/postgres", Redis: "/x/redis-server"}, a,
+		Spawn{Argv: []string{"executor"}}, true)
+	must(t, err)
+	sock := testDBSockDir(root, a.Out)
+	fi, err := os.Lstat(sock)
+	if err != nil || !fi.IsDir() || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("the sockets' directory before the launch: %v %v", fi, err)
+	}
+	must(t, os.WriteFile(filepath.Join(sock, "left"), []byte("x"), 0o600))
+	must(t, emptyDir(sock))
+	if left, _ := os.ReadDir(sock); len(left) != 0 {
+		t.Fatalf("emptied, it holds %v", left)
+	}
+	if _, err = os.Lstat(sock); err != nil {
+		t.Fatalf("the stage removed the directory itself: %v", err)
+	}
+	// A link where the directory goes is refused, not followed.
+	other := shortDir(t)
+	b := &Attempt{Out: filepath.Join(other, "a2.out"), root: other}
+	linked := testDBSockDir(other, b.Out)
+	must(t, os.MkdirAll(filepath.Dir(linked), 0o700))
+	must(t, os.Symlink(t.TempDir(), linked))
+	if _, err = withTestDB("/opt/agentd", &TestDBTools{}, b, Spawn{Argv: []string{"executor"}}, true); err == nil {
+		t.Fatal("a link for the sockets' directory was taken")
+	}
+}
+
+// Review td404-3 B2: Postgres and Redis are told to stop at once and share
+// one deadline; two that do not stop are both killed by it, not one after
+// the other.
+func TestTestDBStopSharesOneDeadline(t *testing.T) {
+	old := testDBStop
+	testDBStop = time.Second
+	t.Cleanup(func() { testDBStop = old })
+	dir := t.TempDir()
+	stubborn := []string{"sh", "-c", `trap '' INT TERM; while :; do sleep 1; done`}
+	db := &testDB{}
+	var err error
+	if db.postgres, db.pgDone, err = startIn(dir, "pg.log", os.Environ(), nil, stubborn); err != nil {
+		t.Fatal(err)
+	}
+	if db.redis, db.rdDone, err = startIn(dir, "redis.log", os.Environ(), nil, stubborn); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond) // both have set their traps
+	start := time.Now()
+	db.stop()
+	if took := time.Since(start); took > 1800*time.Millisecond {
+		t.Fatalf("stopping two that would not stop took %s, over one deadline of %s", took, testDBStop)
+	}
+}
+
+// Review td404-3 B1: an attempt left uncleared, whose group a later
+// takeover finds gone, leaves no test database behind either.
+func TestRecoverRemovesAnUnclearedAttemptsTestDB(t *testing.T) {
+	root := shortDir(t)
+	reg, err := OpenRegistry(filepath.Join(root, "registry.json"))
+	must(t, err)
+	d := &Daemon{Root: root, Registry: reg, Logf: t.Logf}
+	work := filepath.Join(root, "tasks", "t_01M5E53AASSQBNFFHH29B3S79P", "a1")
+	db, sock := testDBDir(work+".out"), testDBSockDir(root, work+".out")
+	for _, p := range []string{filepath.Join(db, "pg"), sock} {
+		must(t, os.MkdirAll(p, 0o700))
+	}
+	must(t, reg.Put(Entry{AttemptID: "a1", TaskID: "t1", Workdir: work, Phase: "uncleared", Group: GroupRemains}))
+	must(t, d.Recover(context.Background()))
+	for _, p := range []string{db, sock} {
+		if _, serr := os.Lstat(p); !errors.Is(serr, os.ErrNotExist) {
+			t.Fatalf("%s outlived the attempt: %v", p, serr)
+		}
+	}
+}

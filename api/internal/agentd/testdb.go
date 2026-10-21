@@ -153,9 +153,22 @@ func testDBArgv(self string, t *TestDBTools, root, out string, walled bool) []st
 
 // withTestDB makes sp start the attempt's test database first. A socket
 // path over what the system takes fails the attempt before anything starts.
+// The sockets' directory under root is made here, outside every wall, as
+// cursor's data directory is: the executor's wall takes only directories
+// that are there (agentd confine), and the stage inside it may write in the
+// directory but not beside it, so it empties it and leaves it, and settle
+// removes it (review td404-3 A1).
 func withTestDB(self string, t *TestDBTools, a *Attempt, sp Spawn, walled bool) (Spawn, error) {
-	if p := pgSocket(testDBSockDir(a.root, a.Out)); len(p) > sockMax() {
+	sock := testDBSockDir(a.root, a.Out)
+	if p := pgSocket(sock); len(p) > sockMax() {
 		return sp, fmt.Errorf("agentd: the test database's socket %s is %d bytes, over the %d a socket path takes", p, len(p), sockMax())
+	}
+	if a.root != "" {
+		for _, d := range []string{filepath.Dir(sock), sock} {
+			if err := ownDir(d); err != nil {
+				return sp, err
+			}
+		}
 	}
 	sp.Argv = append(testDBArgv(self, t, a.root, a.Out, walled), sp.Argv...)
 	return sp, nil
@@ -250,7 +263,7 @@ func RunTestDB(args []string) int {
 	} else {
 		err = merr
 	}
-	gone := func() error { return errors.Join(os.RemoveAll(*dir), os.RemoveAll(*sock)) }
+	gone := func() error { return errors.Join(os.RemoveAll(*dir), emptyDir(*sock)) }
 	if err != nil || !rec.Pass {
 		db.stop()
 		_ = gone()
@@ -307,13 +320,17 @@ func startTestDB(ctx context.Context, dir, sockDir string, t TestDBTools, writes
 		return fail([]string{"user"}, "the user's name: "+err.Error(), "")
 	}
 	db.user = u.Username
-	for _, d := range []string{dir, sockDir} {
-		if err = os.RemoveAll(d); err == nil {
-			err = os.MkdirAll(d, 0o700)
-		}
-		if err != nil {
-			return fail([]string{"mkdir", d}, err.Error(), "")
-		}
+	if err = os.RemoveAll(dir); err == nil {
+		err = os.MkdirAll(dir, 0o700)
+	}
+	if err == nil {
+		err = emptyDir(sockDir)
+	}
+	if err == nil {
+		err = os.MkdirAll(sockDir, 0o700)
+	}
+	if err != nil {
+		return fail([]string{"mkdir", dir, sockDir}, err.Error(), "")
 	}
 	// Postgres's postmaster refuses to start "multithreaded" without a
 	// valid locale on macOS; C is valid everywhere.
@@ -430,32 +447,65 @@ func logTail(dir, name string) string {
 	return string(b)
 }
 
-// testDBStop is how long the database's programs have to stop before they
-// are killed: within agentd's grace for a group it ends.
-const testDBStop = 8 * time.Second
+// testDBStop is how long the database's programs have, together, to stop
+// before they are killed: within agentd's grace for a group it ends.
+var testDBStop = 8 * time.Second
 
-// stop ends what started: Postgres by its fast shutdown, Redis by TERM, each
-// killed when it has not stopped in time.
+// stop ends what started: Postgres by its fast shutdown and Redis by TERM,
+// both told at once, and whatever has not stopped by one deadline killed
+// (review td404-3 B2: one after the other, the two waits made 16 s).
 func (db *testDB) stop() {
 	if db == nil {
 		return
 	}
-	for _, p := range []struct {
+	type prog struct {
 		cmd  *exec.Cmd
 		done chan struct{}
-		sig  syscall.Signal
-	}{{db.postgres, db.pgDone, syscall.SIGINT}, {db.redis, db.rdDone, syscall.SIGTERM}} {
-		if p.cmd == nil {
-			continue
+	}
+	var started []prog
+	for _, p := range []struct {
+		prog
+		sig syscall.Signal
+	}{{prog{db.postgres, db.pgDone}, syscall.SIGINT}, {prog{db.redis, db.rdDone}, syscall.SIGTERM}} {
+		if p.cmd != nil {
+			_ = p.cmd.Process.Signal(p.sig)
+			started = append(started, p.prog)
 		}
-		_ = p.cmd.Process.Signal(p.sig)
+	}
+	deadline := time.After(testDBStop)
+	for _, p := range started {
 		select {
 		case <-p.done:
-		case <-time.After(testDBStop):
+		case <-deadline:
+			deadline = closedClock
 			_ = p.cmd.Process.Kill()
 			<-p.done
 		}
 	}
+}
+
+// closedClock is a deadline already past.
+var closedClock = func() <-chan time.Time {
+	c := make(chan time.Time)
+	close(c)
+	return c
+}()
+
+// emptyDir makes dir hold nothing, leaving dir itself (a sockets' directory
+// under agentd's root, which the stage may write in but not beside).
+func emptyDir(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, e := range entries {
+		errs = append(errs, os.RemoveAll(filepath.Join(dir, e.Name())))
+	}
+	return errors.Join(errs...)
 }
 
 // removeTestDB removes what an attempt's test database left (an end that

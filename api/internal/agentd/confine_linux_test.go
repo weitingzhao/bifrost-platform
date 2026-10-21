@@ -123,3 +123,41 @@ func TestWalledSetupFillsTheExecutorsGoCache(t *testing.T) {
 		})
 	}
 }
+
+// Review td404-3 A1 on a Linux host: the stage runs inside the executor's
+// wall as Run puts it (the wall over the checkout, the output and the
+// sockets' directory made before it), its programs inside walls of their
+// own; the executor reaches the database as the tests do, and afterwards the
+// sockets' directory is there and empty and the database's is gone.
+func TestWalledTestDBStage(t *testing.T) {
+	if abi, err := landlockABI(); err != nil || abi < wallABI {
+		t.Skipf("no Landlock ABI %d here (%d, %v)", wallABI, abi, err)
+	}
+	tools := testDBTools(t)
+	root := shortDir(t)
+	a := &Attempt{Claim: &Claimed{}, Spec: TaskSpec{Text: "# do it"}, Dir: filepath.Join(root, "a1"), Out: filepath.Join(root, "a1.out"),
+		Walled: true, root: root}
+	for _, d := range []string{a.Dir, a.Out} {
+		must(t, os.MkdirAll(d, 0o700))
+	}
+	env := append(slices.Clone(hostEnv[1:]), "PATH=/usr/bin:/bin")
+	sp, err := Executors(os.Args[0], env, Secrets{})["exec:deterministic"](a)
+	must(t, err)
+	sp.Argv = []string{os.Args[0]} // the probe (TestMain)
+	sp, err = withTestDB(os.Args[0], tools, a, sp, true)
+	must(t, err)
+	a.testDB = tools
+	argv := append(wallArgv(os.Args[0], executorWrites("exec:deterministic", a, nil)), sp.Argv...)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1", "AGENTD_TEST_DB_PROBE=1")
+	if out, rerr := cmd.CombinedOutput(); rerr != nil {
+		t.Fatalf("%v\n%s", rerr, out)
+	}
+	sock := testDBSockDir(root, a.Out)
+	if left, rerr := os.ReadDir(sock); rerr != nil || len(left) != 0 {
+		t.Fatalf("the sockets' directory after the attempt: %v %v", left, rerr)
+	}
+	if _, serr := os.Stat(testDBDir(a.Out)); !os.IsNotExist(serr) {
+		t.Fatalf("the database's directory is still there: %v", serr)
+	}
+}
