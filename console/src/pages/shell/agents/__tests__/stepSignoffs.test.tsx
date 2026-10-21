@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
@@ -10,6 +10,7 @@ import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { fromPlanWithRequest } from '@/api/agentRuntimePlanView'
 import type { AuthCapabilities } from '@/api/matrixTypes'
 import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
+import { CAPABILITIES_QUERY_KEY } from '@/hooks/platformAuthContext'
 import { PLATFORM_TOKEN_KEY } from '@/lib/platformAuth'
 import { SIGN_IN_ABSENT, SIGN_IN_OPERATOR } from '@/pages/decisionSignIn'
 import { streamPage } from '@/test/agentrtPlanStream'
@@ -193,19 +194,47 @@ describe('Sign off on the plan page', () => {
     expect(sent).toEqual([])
   })
 
-  it('says a refused or failed press, and that pressing again is safe', async () => {
-    answer = () => json({ error: 'forbidden', message: 'admin role required' }, 403)
-    show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
+  it('says why a press was refused, in the platform\'s words, and that pressing again is safe', async () => {
+    const refusals: [Response, string | RegExp][] = [
+      // As the platform answers them (agentrtapi fail and RequireAny).
+      [json({ error: 'state', message: 'store: not allowed in the current state: R2:2.3-2 is dropped; a sign-off would move nothing' }, 409),
+        'Sign off: store: not allowed in the current state: R2:2.3-2 is dropped; a sign-off would move nothing'],
+      [json({ error: 'invalid', message: 'store: invalid request: the done rule of R2:2.1-3 waits on no sign-off "c"; it waits on a, b' }, 422),
+        'Sign off: store: invalid request: the done rule of R2:2.1-3 waits on no sign-off "c"; it waits on a, b'],
+      [json({ error: 'admin token required' }, 401), 'Sign off: admin token required'],
+      [new Response('<html>proxy</html>', { status: 502 }), 'Sign off: HTTP 502'],
+      // A reason that carries the sign-in is hidden whole.
+      [json({ error: 'internal', message: `bad bearer ${TOKEN}` }, 500), /^The server returned an error \(HTTP 500\)\. The details are hidden/],
+    ]
+    for (const [response, said] of refusals) {
+      answer = () => response
+      show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
+      const press = await screen.findByRole('button', { name: 'Sign off' })
+      await vi.waitFor(() => expect(press).toBeEnabled())
+      fireEvent.click(press)
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm sign-off' }))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveTextContent(typeof said === 'string' ? `${said} ${SIGNOFF_PRESS_AGAIN}` : said)
+      expect(alert).toHaveTextContent(SIGNOFF_PRESS_AGAIN)
+      expect(alert).not.toHaveTextContent(TOKEN)
+      expect(screen.getByRole('button', { name: 'Sign off' })).toBeEnabled()
+      expect(screen.queryByRole('status')).toBeNull()
+      cleanup()
+    }
+  })
+
+  it('cannot be confirmed once the sign-in is no longer the Owner\'s', async () => {
+    const { client } = show(<StepSignoffControls label="2.3-2" state="planned" signoffs={stepOf('R2:2.3-2')} />)
     const press = await screen.findByRole('button', { name: 'Sign off' })
     await vi.waitFor(() => expect(press).toBeEnabled())
     fireEvent.click(press)
+    expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeEnabled()
+    // The role is read again and is no longer admin (signed in as another token meanwhile).
+    act(() => { client.setQueryData([...CAPABILITIES_QUERY_KEY, TOKEN], OPERATOR) })
+    expect(await screen.findByText(SIGN_IN_OPERATOR)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Confirm sign-off' }))
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent(/^Sign off: forbidden/)
-    expect(alert).toHaveTextContent(SIGNOFF_PRESS_AGAIN)
-    expect(alert).not.toHaveTextContent(TOKEN)
-    expect(screen.getByRole('button', { name: 'Sign off' })).toBeEnabled()
-    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Confirm sign-off' })).toBeDisabled()
+    expect(sent).toEqual([])
   })
 
   it('offers nothing on a step that can no longer move', () => {

@@ -90,9 +90,10 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 	// Only the Owner: every token an agent holds is refused, with or without a
 	// session, and nothing is written.
 	for _, who := range []string{"", "viewer", "reporter", "operator", "seat:chief_of_staff", "agentd:h1"} {
-		// Refused by the route's role, before the store's own check of the writer (not_owner).
+		// Refused by the route's role (the platform's RequireAny: 401 for no token and for another role alike),
+		// before the store's own check of the writer (403 not_owner).
 		code, out := call(t, s, who, "POST", "plan/R2:2.4-1/signoff", map[string]any{}, session, "s1")
-		if code != http.StatusUnauthorized && code != http.StatusForbidden || out["error"] == "not_owner" || out["error"] == "not_yours" {
+		if code != http.StatusUnauthorized || out["error"] != "admin token required" {
 			t.Fatalf("%q signed a step off: %d %v", who, code, out)
 		}
 	}
@@ -122,8 +123,16 @@ func TestOwnerSignsAStepOff(t *testing.T) {
 		got.Signoffs[0].EventID != first["event_id"] || got.Signoffs[0].At == "" || got.State == "done" {
 		t.Fatalf("GET /plan has %+v", got)
 	}
-	if nodes()["R2:2.4-2"].Signoffs != nil {
-		t.Fatal("a step with no sign-off has a signoffs key")
+	// A node with no sign-off has no signoffs key at all, not a null (review 485 C2).
+	var raw struct {
+		Nodes []map[string]json.RawMessage `json:"nodes"`
+	}
+	mustJSON(t, get(t, s, "plan?root=R2"), &raw)
+	for _, n := range raw.Nodes {
+		_, has := n["signoffs"]
+		if id := strings.Trim(string(n["plan_node_id"]), `"`); has != (id == "R2:2.4-1") {
+			t.Fatalf("%s: signoffs key %v", id, has)
+		}
 	}
 	fixture := map[string]json.RawMessage{"plan": get(t, s, "plan?root=R2")}
 	fixture["signed"], _ = json.Marshal(first)

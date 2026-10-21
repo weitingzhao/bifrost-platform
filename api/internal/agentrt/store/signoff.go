@@ -44,20 +44,24 @@ func SignoffRefs(r plan.Rule) []string {
 // whose done rule has no owner_signoff atom, a ref the rule does not name, no
 // ref when it names more than one (ErrInvalid); a step that is done, stopped
 // or dropped (ErrState); a writer who is not the Owner (ErrNotOwner).
+//
+// The step's row is locked for update before anything is read of it and held
+// to the commit (review 485 A1): a plan change, a drop or the controller's
+// rules pass on the step waits for the sign-off or the sign-off waits for
+// it, so it never acts on a state or rule already gone; and the lock order is
+// theirs, the step and then its plan stream (Append), so none of them can
+// wait on the other in a ring. A second press waits on the same lock and
+// then reads the first (read committed: each statement sees what committed
+// before it).
 func SignOffStep(ctx context.Context, db DB, actor, stepID, ref string) (map[string]any, error) {
 	if actor != OwnerActor {
 		return nil, fmt.Errorf("%w: %s may not sign a step off", ErrNotOwner, actor)
 	}
 	var out map[string]any
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
-		// One sign-off of a step at a time, so a second press reads the first
-		// (read committed: each statement sees what committed before it).
-		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('agentrt.owner_signoff'), hashtext($1))`, stepID); err != nil {
-			return err
-		}
 		var kind, state, doc string
-		err := tx.QueryRow(ctx, `SELECT node_kind, COALESCE(state, ''), done_rule_json::text FROM agentrt.plan_node WHERE plan_node_id = $1`,
-			stepID).Scan(&kind, &state, &doc)
+		err := tx.QueryRow(ctx, `SELECT node_kind, COALESCE(state, ''), done_rule_json::text FROM agentrt.plan_node WHERE plan_node_id = $1
+		  FOR UPDATE`, stepID).Scan(&kind, &state, &doc)
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
 			return fmt.Errorf("store: no plan node %s: %w", stepID, err)

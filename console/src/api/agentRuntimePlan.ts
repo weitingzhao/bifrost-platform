@@ -1,5 +1,6 @@
 import { authedFetch, parseError } from '@/api/client'
 import { serverFetch } from '@/api/serverContact'
+import { signInSafeError } from '@/lib/signInError'
 import { record, records, text } from '@/api/agentRuntime'
 import { boardState, importHead, type PlanRequest, type PlanView } from '@/api/agentRuntimePlanView'
 
@@ -286,6 +287,21 @@ export type SignoffAnswer = StepSignoff & { node: string; alreadySigned: boolean
 const nodePath = (node: string) => encodeURIComponent(node).replace(/%3A/gi, ':')
 
 /**
+ * A refused sign-off with the platform's reason: its message says which state the step is in or which refs its rule
+ * waits on (parseError keeps only the error code; review 485 A2). The whole sentence is hidden if it holds the sign-in.
+ */
+async function signoffError(r: Response, token: string): Promise<Error> {
+  let reason = `HTTP ${r.status}`
+  try {
+    const body = record(await r.json())
+    reason = text(body.message) || text(body.error) || reason
+  } catch {
+    // keep the status
+  }
+  return new Error(signInSafeError(`Sign off: ${reason}`, token, r.status))
+}
+
+/**
  * The Owner signs ref of a step off: POST /plan/{id}/signoff with the admin sign-in. The route takes the admin role
  * only; a second press answers the first sign-off.
  */
@@ -294,7 +310,7 @@ export async function postStepSignoff(node: string, ref: string, token: string):
   headers.set('Content-Type', 'application/json')
   headers.set('Authorization', `Bearer ${token}`)
   const r = await serverFetch(`/api/v1/agentrt/plan/${nodePath(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref }) })
-  if (!r.ok) throw await parseError('Sign off', r, token)
+  if (!r.ok) throw await signoffError(r, token)
   const body = record(await r.json())
   return { node: text(body.plan_node_id), ref: text(body.ref), by: text(body.by), at: text(body.at), alreadySigned: body.already_signed === true }
 }
