@@ -52,6 +52,9 @@ import (
 //     cancelled (propose.go): one more round runs it without that work;
 //   - a ready task its mission's budget lets no longer run (missionbudget.go):
 //     one more round runs it on the room it makes in the budget;
+//   - a ready task whose preparation failed three times in a row, or that no
+//     executor may take any more (withdrawn.go, preparefailed.go): one more
+//     round tries it again;
 //   - an external task whose attempt was lost or ended on its host
 //     (attempt.go), once every such attempt has a confirmed end: an
 //     attempt_ended whose host cleared the process group (group_cleared).
@@ -210,6 +213,9 @@ func askBlocked(ctx context.Context, db DB, taskID string, ask Ask) (bool, error
 			return err
 		}
 		check, err := lastCheck(ctx, tx, taskID)
+		if err == nil && blockKind(reason, failed, t.effect) == blockPrepare {
+			check, err = lastPrepare(ctx, tx, taskID) // what failed is its preparation's report (TD-394)
+		}
 		if err != nil {
 			return err
 		}
@@ -391,7 +397,11 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 	fmt.Fprintf(&b, "Task %s (%s, %s) of mission %s is blocked; card %d for this block.\n\nTitle: %s\n\nWhy: %s\n",
 		c.task.id, c.task.role, repo, c.task.mission, c.card, text(cutTitle), text(cutReason))
 	if c.check != nil {
-		fmt.Fprintf(&b, "\nLast check: %s, %s, on attempt %d (%s).\n", c.check.method, c.check.verdict, c.check.round, c.check.attempt)
+		if c.check.method == "preparation" {
+			fmt.Fprintf(&b, "\nLast preparation: failed on attempt %d (%s), before its executor started.\n", c.check.round, c.check.attempt)
+		} else {
+			fmt.Fprintf(&b, "\nLast check: %s, %s, on attempt %d (%s).\n", c.check.method, c.check.verdict, c.check.round, c.check.attempt)
+		}
 		// An end cut from its front says so before it, a start after it; the
 		// line before an end (a failed command's) stays when it is cut to
 		// nothing.
@@ -424,6 +434,8 @@ func blockedCardText(c blockedCard, parts, full [4][]rune) string {
 		more = fmt.Sprintf("it goes back to ready for round %d of %d, and a host takes it as usual", c.round+1, c.round+1)
 	case blockKind(c.reason, c.failed, c.task.effect) == blockWithdrawn:
 		more = "it goes back to ready, offered once more to each executor withdrawn from it; one more failure withdraws it again"
+	case blockKind(c.reason, c.failed, c.task.effect) == blockPrepare:
+		more = fmt.Sprintf("it goes back to ready as it is, and its preparation is tried %d times more before it is blocked again", failuresToStop)
 	}
 	if c.budget != "" {
 		more += ". " + strings.TrimSuffix(c.budget, ".")

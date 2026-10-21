@@ -51,11 +51,14 @@ func BlockWithdrawn(ctx context.Context, db DB) (int, error) {
 		// Only tasks with a run of failuresToStop at their end are read
 		// further: most ready tasks have none.
 		if err := InTx(ctx, db, func(tx pgx.Tx) error {
+			// Or of one whose preparation failed: TD-394, preparefailed.go.
 			rows, err := tx.Query(ctx, `SELECT t.task_id FROM agentrt.task t JOIN agentrt.mission m ON m.mission_id = t.mission_id
 			  WHERE t.state = 'ready' AND m.state = 'active' AND t.role <> 'brief' AND t.effect_class = ANY($1) AND t.task_id > $2
-			    AND (SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
+			    AND ((SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
 			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = ANY($4)) = $3
-			  ORDER BY t.task_id LIMIT $5`, dispatched, after, failuresToStop, executorEnds, page)
+			    OR (SELECT count(*) FROM (SELECT a.state, a.end_how FROM agentrt.attempt a WHERE a.task_id = t.task_id
+			      ORDER BY a.attempt_no DESC LIMIT $3) l WHERE l.state = 'failed' AND l.end_how = $6) = $3)
+			  ORDER BY t.task_id LIMIT $5`, dispatched, after, failuresToStop, executorEnds, page, prepareFailed)
 			if err != nil {
 				return err
 			}
@@ -79,7 +82,8 @@ func BlockWithdrawn(ctx context.Context, db DB) (int, error) {
 	}
 }
 
-// blockNoneLeft blocks one task if no executor may take it any more, read
+// blockNoneLeft blocks one task if its preparation failed in a row, or no
+// executor may take it any more, read
 // under the locks a claim takes, in its order: the capability lock (what the
 // candidates and restrictions are), the task, then its mission. A claim
 // skips a task this holds, and one that holds the task first leases it or
@@ -105,7 +109,10 @@ func blockNoneLeft(ctx context.Context, db DB, taskID string) (bool, error) {
 		if stop, err := held(ctx, tx, []scope{{"mission", t.mission}, {"task", t.id}}, "stop", "pause"); err != nil || stop {
 			return err
 		}
-		why, err := noneLeft(ctx, tx, t.id, m.envelope)
+		why, err := preparesFailed(ctx, tx, t.id)
+		if err == nil && why == "" {
+			why, err = noneLeft(ctx, tx, t.id, m.envelope)
+		}
 		if err != nil || why == "" {
 			return err
 		}

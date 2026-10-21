@@ -258,6 +258,11 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 				}
 				return err
 			})
+			if olderPlatform(err, e.EndHow) {
+				e.EndHow = "exit" // the next turn sends that (TD-394)
+				err = nil
+				break
+			}
 			if err == nil {
 				e.Phase = "computed"
 			}
@@ -536,6 +541,13 @@ func (d *Daemon) end(ctx context.Context, e *Entry, endHow string) error {
 		}
 	}
 	err := d.retry(ctx, func() error { return d.Client.Ended(ctx, e.AttemptID, e.EndRequest.EndHow, e.EndRequest.Cleared) })
+	if olderPlatform(err, e.EndRequest.EndHow) {
+		e.EndRequest.EndHow = "exit" // as before TD-394
+		if err = d.Registry.Put(*e); err != nil {
+			return err
+		}
+		err = d.retry(ctx, func() error { return d.Client.Ended(ctx, e.AttemptID, "exit", e.EndRequest.Cleared) })
+	}
 	if transient(err) {
 		return fmt.Errorf("%w: %s not ended: %v", ErrPending, e.AttemptID, err)
 	}

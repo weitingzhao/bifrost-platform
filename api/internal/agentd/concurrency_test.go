@@ -193,7 +193,7 @@ func TestConfined(t *testing.T) {
 	cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
 		Epoch: 1, Tool: Tool{Executor: "exec:x"}}
 	out, err := d.Run(bg, cl)
-	if err == nil || !strings.Contains(err.Error(), "no pins") || out.EndHow != "exit" {
+	if err == nil || !strings.Contains(err.Error(), "no pins") || out.EndHow != prepareEnd {
 		t.Fatalf("run = %+v %v", out, err)
 	}
 	if _, serr := os.Stat(ran); serr == nil {
@@ -221,9 +221,10 @@ func TestConfined(t *testing.T) {
 }
 
 // Review 278 B: an attempt that fails after it waited for the host and
-// before its executor is released is ended as exit, not left to be ended as a
-// restart.
-func TestAFailureBeforeTheLaunchEndsAsExit(t *testing.T) {
+// before its executor is released is ended, not left to be ended as a
+// restart: as prepare_failed, its preparation's and never its executor's
+// (TD-394 B).
+func TestAFailureBeforeTheLaunchEndsAsPrepareFailed(t *testing.T) {
 	f := newFake()
 	d := fakeDaemon(t, f)
 	spec := []byte("# do it\n")
@@ -232,11 +233,11 @@ func TestAFailureBeforeTheLaunchEndsAsExit(t *testing.T) {
 	cl := &Claimed{TaskID: "t1", AttemptID: "a1", AttemptNo: 1, Role: "implement", SpecArtifact: ArtifactID(spec), EffectClass: "none",
 		Epoch: 1, Tool: Tool{Executor: "exec:x"}}
 	out, err := d.Run(bg, cl)
-	if err == nil || out.EndHow != "exit" {
+	if err == nil || out.EndHow != prepareEnd {
 		t.Fatalf("run = %+v %v", out, err)
 	}
 	ended := f.sent("ended")
-	if len(ended) != 1 || !strings.Contains(string(ended[0]), `"end_how":"exit"`) {
+	if len(ended) != 1 || !strings.Contains(string(ended[0]), `"end_how":"prepare_failed"`) {
 		t.Fatalf("ended %q", ended)
 	}
 	if _, ok := registered(t, d, "a1"); ok {

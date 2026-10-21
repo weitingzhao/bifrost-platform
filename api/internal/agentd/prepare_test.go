@@ -1,9 +1,16 @@
 package agentd_test
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -112,5 +119,73 @@ func TestASiblingThatCannotBeHadHandsInWhy(t *testing.T) {
 		if !strings.Contains(got["report"][0], want) {
 			t.Fatalf("the report lacks %q:\n%s", want, got["report"][0])
 		}
+	}
+}
+
+// endHow is how the platform recorded the attempt's end.
+func endHow(t *testing.T, pool *pgxpool.Pool, attempt string) string {
+	t.Helper()
+	var how string
+	must(t, pool.QueryRow(ctx, `SELECT COALESCE(end_how, '') FROM agentrt.attempt WHERE attempt_id = $1`, attempt).Scan(&how))
+	return how
+}
+
+// TD-394 B (the Owner 2026-10-20 21:3x): an attempt whose setup fails, or
+// whose sibling cannot be had, ends prepare_failed, the platform's mark of a
+// failure before any executor started.
+func TestAFailureBeforeTheExecutorEndsPrepareFailed(t *testing.T) {
+	pool, cl, out, err := prepareRun(t, `{"text":"t","setup":[["sh","-c","exit 9"]]}`, `printf '# done\n' > "$OUT/report.md"`)
+	if err != nil || out.EndHow != "prepare_failed" || endHow(t, pool, cl.AttemptID) != "prepare_failed" {
+		t.Fatalf("a failed setup: run = %+v %v, recorded %q", out, err, endHow(t, pool, cl.AttemptID))
+	}
+	pool, cl, _, _ = prepareRun(t, `{"text":"t","siblings":[{"repo":"ui","ref":"no-such-branch"}]}`, `true`)
+	if got := endHow(t, pool, cl.AttemptID); got != "prepare_failed" {
+		t.Fatalf("a sibling that cannot be had: recorded %q", got)
+	}
+}
+
+// A platform from before TD-394 refuses prepare_failed (409, state): agentd
+// ends the attempt as exit then, as it did, its report handed in all the
+// same.
+func TestAnOlderPlatformTakesExitInstead(t *testing.T) {
+	env := gitEnvT(t.TempDir())
+	bare, baseCommit := bareRemote(t, env)
+	head := func(_ context.Context, _, ref string) (string, error) {
+		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+		first, _, _ := strings.Cut(string(out), "\t")
+		return strings.TrimSpace(first), err
+	}
+	pool, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json",
+		[]byte(`{"text":"t","setup":[["sh","-c","echo 'registry down' >&2; exit 9"]]}`))
+	target, err := url.Parse(base)
+	must(t, err)
+	rp := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: target.Scheme, Host: target.Host})
+	var refused atomic.Int32
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if (strings.HasSuffix(r.URL.Path, "/computed") || strings.HasSuffix(r.URL.Path, "/ended")) && strings.Contains(string(body), `"prepare_failed"`) {
+			refused.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_, _ = w.Write([]byte(`{"error":"state","message":"store: not allowed in this state: end \"prepare_failed\" and conclusion \"failed\""}`))
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		rp.ServeHTTP(w, r)
+	}))
+	t.Cleanup(s.Close)
+	d := daemon(t, s.URL+target.Path, script(`printf '# done\n' > "$OUT/report.md"`), bare, env)
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	if out, rerr := d.Run(ctx, cl); rerr != nil || out.ExitCode != 3 {
+		t.Fatalf("run = %+v %v", out, rerr)
+	}
+	if got := endHow(t, pool, cl.AttemptID); refused.Load() == 0 || got != "exit" {
+		t.Fatalf("refused %d times, recorded %q; want exit after a refusal", refused.Load(), got)
+	}
+	if got := handedIn(t, pool, cl.AttemptID); len(got["report"]) != 1 || !strings.Contains(got["report"][0], "registry down") {
+		t.Fatalf("handed in %v", got)
 	}
 }

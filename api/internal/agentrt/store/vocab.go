@@ -305,7 +305,7 @@ var (
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
 	approvalRef = shaped("an approval (appr_<16 hex>)", approvalIDRE)
-	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost"}
+	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost", prepareFailed}
 )
 
 // fieldValues are the checked fields, by event type and field.

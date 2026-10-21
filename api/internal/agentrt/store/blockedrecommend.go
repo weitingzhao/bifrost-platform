@@ -75,6 +75,7 @@ const (
 	blockDependency = "dependency" // a task it depends on was rejected or cancelled (Dispatch)
 	blockLost       = "lost"       // an external task whose attempt ended on its host
 	blockWithdrawn  = "withdrawn"  // every executor on its route was withdrawn by its failures (BlockWithdrawn)
+	blockPrepare    = "prepare"    // its preparation failed in a row before any executor started (TD-394, BlockWithdrawn)
 	blockOther      = "other"
 )
 
@@ -95,6 +96,8 @@ func blockKind(reason string, failed bool, effect string) string {
 		return blockBudget
 	case strings.HasPrefix(reason, withdrawnBlockMark):
 		return blockWithdrawn
+	case strings.HasPrefix(reason, prepareBlockMark):
+		return blockPrepare
 	case strings.HasPrefix(reason, "dependency "):
 		return blockDependency
 	case effect == "external":
@@ -130,6 +133,8 @@ func recommend(f recFacts) recommendation {
 	case f.kind == blockWithdrawn:
 		return rec(recDrop, "R6", fmt.Sprintf("every executor on its route failed it in a row (%s); another round is worth it only once what failed is fixed",
 			strings.Join(f.withdrawn, ", ")))
+	case f.kind == blockPrepare:
+		return rec(recNone, "", "its preparation failed on the host (its setup, checkout or a sibling), not an executor: fix that, then give it one more round")
 	case f.kind == blockChain && quiet:
 		return rec(recClose, "R2", "its only check was dropped on its card, and "+quietText(f))
 	case f.kind == blockChain:

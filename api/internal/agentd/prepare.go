@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 )
 
 // What an attempt that failed before its executor started hands in
@@ -19,6 +20,19 @@ import (
 // and hands it in with the log's tail as one last
 // checkpoint, the route a running attempt already uses: the attempt names
 // them in its attempt_checkpointed event. The attempt still ends as it did.
+
+// prepareEnd is how an attempt that failed before its executor started
+// ends (the Owner 2026-10-20 21:3x 「TD-394 B」): the platform counts it
+// against the host's or the repository's preparation, never the executor's.
+// A platform from before it refuses the end (409, state), and the attempt
+// then ends as exit, as it did (olderPlatform).
+const prepareEnd = "prepare_failed"
+
+// olderPlatform says whether err is a platform's refusal of prepareEnd, an
+// end it does not have.
+func olderPlatform(err error, endHow string) bool {
+	return endHow == prepareEnd && errors.Is(err, ErrState) && strings.Contains(err.Error(), prepareEnd)
+}
 
 // prepareReportName is the report's title: the line a reader of the
 // attempt's artifacts finds it by.

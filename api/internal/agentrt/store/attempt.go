@@ -217,7 +217,9 @@ func Checkpoint(ctx context.Context, db DB, f Fence, seq int, artifacts []string
 		})
 }
 
-var endHows = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost"}
+// endHows are the ways an attempt ends; prepare_failed is before its
+// executor started (TD-394, preparefailed.go).
+var endHows = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost", prepareFailed}
 
 // Computed records that the executor ended and its result is on the host.
 // exitCode is nil when the process had none (killed by a signal).
