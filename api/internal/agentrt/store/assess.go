@@ -427,7 +427,8 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 // skipRuled (STG's controller, TD-401's second half) leaves out a card the
 // card-auto-answer rule in force answers (ruleAnswersItem), decided here
 // again since the rule or the mission may have changed while the evidence
-// was read; nothing is written for it.
+// was read; no event, mission or task is written for it (the stream's head
+// row lockStream makes may stay, empty).
 // Locks: the controller as a writer (every write's first), the item's stream,
 // then the mission's numbering (proposeMissionTx).
 func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool),
