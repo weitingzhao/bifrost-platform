@@ -41,6 +41,9 @@ var agentrtDatabase = map[string]string{
 type agentRuntime struct {
 	api  *agentrtapi.API
 	stop func()
+	// env is AGENTRT_ENV: whose runtime this platform runs (an approved
+	// void_exam_paper names it, agentrt_voidpaper.go).
+	env string
 }
 
 // wireAgentRuntime connects the agent runtime (design v5 §5.2) when
@@ -69,7 +72,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		slog.Warn("agentrt", "detail", fmt.Sprintf(format, args...))
 	}, Ask: s.questionRuntime.agentRuntimeAsk(), Anchor: releasepolicy.OwnerKeyFingerprint, Head: s.agentRuntimeHeads(), MainHead: s.agentRuntimeMains(), AgentHeads: s.agentRuntimeAgentHeads(),
 		MainResults: s.agentRuntimeMainResults(),
-		Exams:       examSetFromEnv()}}
+		Exams:       examSetFromEnv()}, env: strings.TrimSpace(os.Getenv("AGENTRT_ENV"))}
 	s.agentRuntime = rt
 	dsn := strings.TrimSpace(os.Getenv("AGENTRT_DSN"))
 	if dsn == "" {

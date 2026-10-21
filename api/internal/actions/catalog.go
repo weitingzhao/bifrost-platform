@@ -437,6 +437,17 @@ var catalog = []Action{
 		Classify: classifyProbe,
 	},
 	{
+		ID: "void_exam_paper", Tier: TierD,
+		Description: "Void a qualifying-exam paper no run was handed in for, so its executor can be handed a new paper (TD-407). Tier D: the Owner approves it on the Console. " +
+			"Request it on the platform whose runtime issued the paper: environment is that runtime's (stg or prod; another platform's executor refuses it), run_id the paper's sha256, reason one line. " +
+			"A paper with any answer, a graded one and a lapsed one are refused; the void is recorded with this approval's id, and nothing is graded or scored.",
+		Params: []Param{
+			{Name: "environment", Type: "string", Required: true, In: "body"},
+			{Name: "run_id", Type: "string", Required: true, In: "body"},
+			{Name: "reason", Type: "string", Required: true, In: "body"},
+		},
+	},
+	{
 		ID: "owner_run_command", Tier: TierD, Runner: RunnerOwner,
 		Description: "Approve an exact shell command. Tier D. The platform does not execute it. runner owner (default): the approval stays approved until scripts/owner/owner-run.sh <id> claims it and posts the result. runner host: the out-of-band executor claims it.",
 		Params: []Param{

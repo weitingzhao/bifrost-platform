@@ -84,6 +84,13 @@ func recordExamAnswers(ctx context.Context, db DB, host, token string, sub ExamS
 			}
 			fresh = append(fresh, doc)
 		}
+		voided, err := voidOf(ctx, tx, p.event)
+		if err != nil {
+			return err
+		}
+		if voided != nil {
+			return fmt.Errorf("%w: run %s was voided by %s; it takes no answer", ErrState, sub.RunID, voided["approval"])
+		}
 		graded, err := gradedRun(ctx, tx, p.event)
 		if err != nil {
 			return err

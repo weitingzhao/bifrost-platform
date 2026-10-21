@@ -64,6 +64,7 @@ var notifySafeKeys = map[string][]string{
 	"create_job_from_cronjob":    {"namespace", "cronjob"},
 	"delete_finished_jobs":       {"namespace", "names", "label_selector"},
 	"run_probe_pod":              {"namespace", "image", "timeout_seconds", "env_from"},
+	"void_exam_paper":            {"environment", "run_id"},
 }
 
 // Describe summarizes normalized params. approvalReason is the request's
@@ -114,6 +115,12 @@ func (a Action) Describe(ctx context.Context, params map[string]any, approvalRea
 		if b, ok := asBool(params["force"]); ok && b {
 			d.Summary += " (force)"
 		}
+	case "void_exam_paper":
+		run := p("run_id")
+		if len(run) > 12 {
+			run = run[:12]
+		}
+		d.Env, d.Summary = p("environment"), "Void the unanswered exam paper "+run
 	case "trigger_cnpg_backup":
 		d.Env, d.Summary = "data", "On-demand CNPG backup"
 	case "repair_cnpg_wal_store":

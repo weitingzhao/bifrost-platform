@@ -38,6 +38,11 @@ func IssueExamLater(ctx context.Context, db DB, req ExamRequest, set ExamSet, la
 	return issueExam(ctx, db, req, set, later)
 }
 
+// VoidExamPaperLater is VoidExamPaper with the clock moved on by later.
+func VoidExamPaperLater(ctx context.Context, db DB, runID, reason, approvalID string, later time.Duration) (map[string]any, error) {
+	return voidExamPaper(ctx, db, runID, reason, approvalID, later)
+}
+
 // RecordExamAnswersLater is RecordExamAnswers with the clock moved on by
 // later.
 func RecordExamAnswersLater(ctx context.Context, db DB, host, token string, sub ExamSubmission, set ExamSet, later time.Duration) (map[string]any, error) {

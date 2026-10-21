@@ -371,11 +371,13 @@ const paperSQL = `SELECT e.event_id, e.body_json->>'artifact_id', b.body FROM ag
 // ungradedPapers are the papers not graded that may still matter at now:
 // those issued in the last two lives (an open one is among them) and those
 // with answers (graded once they lapse). One that lapsed long ago with no
-// answer is left alone.
+// answer is left alone, and a voided one is settled (examvoid.go).
 func ungradedPapers(ctx context.Context, tx pgx.Tx, now time.Time) ([]issued, error) {
 	rows, err := tx.Query(ctx, paperSQL+`
 	  AND NOT EXISTS (SELECT 1 FROM agentrt.event g WHERE g.event_stream_id = $1 AND g.event_type = 'capability_scored'
 	    AND g.cause_event_id = e.event_id)
+	  AND NOT EXISTS (SELECT 1 FROM agentrt.event v WHERE v.event_stream_id = $1 AND v.event_type = 'note'
+	    AND v.cause_event_id = e.event_id AND v.body_json ? 'voided')
 	  AND (e.at > $2 OR EXISTS (SELECT 1 FROM agentrt.event a WHERE a.event_stream_id = $1 AND a.event_type = 'artifact_put'
 	    AND a.cause_event_id = e.event_id))
 	  ORDER BY e.seq`, ExamsStream, now.Add(-2*ExamPaperLife))

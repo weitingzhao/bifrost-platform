@@ -167,6 +167,7 @@ func (s *Server) handleProbe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bindActionExecutors() {
 	actions.RegisterExecutor("rolling_reboot", actions.ExecuteRollingReboot)
 	actions.RegisterExecutor("owner_run_command", actions.ExecuteOwnerRunCommand)
+	actions.RegisterExecutor("void_exam_paper", s.voidExamPaper)
 	if s.work != nil {
 		svc := s.work.Svc
 		actions.RegisterExecutor("apply_manifest", func(ctx context.Context, params map[string]any) (any, error) {

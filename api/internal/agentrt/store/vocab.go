@@ -133,10 +133,12 @@ var bodies = map[string][]field{
 	// one it could not reach Gitea to delete (prune.go).
 	// On an item's assessment stream (assess.go, TD-391): ask, the option
 	// keys and refs its spec gave; assessment, what the seat handed in, its
-	// refs resolved; unavailable, why there is none.
+	// refs resolved; unavailable, why there is none. On the exams stream,
+	// caused by a paper's issue (examvoid.go, TD-407): voided, the approval
+	// that voided the paper, which no run was handed in for.
 	"note": {{"text", kStr, false}, {"manual", kStr, true}, {"evidence", kIDs, true}, {"landed", kStr, true},
 		{"pruned", kStr, true}, {"prune_refused", kStr, true}, {"prune_failed", kStr, true},
-		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}},
+		{"ask", kAny, true}, {"assessment", kAny, true}, {"unavailable", kStr, true}, {"voided", kStr, true}},
 	// owner_wait_opened, owner_wait_closed (v5 §5.1.3, with the question they
 	// are about): a blocked task's decision card, asked for the block its
 	// blocked_event_id names (the card-th asked for it), and how the card
@@ -302,6 +304,7 @@ var (
 	agentBranch = shaped("an attempt branch (refs/heads/agent/<task>/a<n>)", agentRef)
 	fingerprint = shaped("a fingerprint (sha256:<64 hex>)", regexp.MustCompile(`^sha256:[0-9a-f]{64}$`))
 	executorID  = shaped("an executor (exec:<tool>)", regexp.MustCompile(`^exec:[a-z]+$`))
+	approvalRef = shaped("an approval (appr_<16 hex>)", approvalIDRE)
 	attemptEnds = []string{"exit", "hard_limit", "over_capacity", "cancelled", "daemon_restart", "host_reboot", "lease_lost"}
 )
 
@@ -345,7 +348,7 @@ var fieldValues = map[string]map[string]value{
 	"owner_wait_closed":        {"outcome": oneOf(OutcomeRetried, OutcomeDropped, OutcomeClosed, OutcomeNone, OutcomeMoot, "expired", "withdrawn")},
 	"ci_seen":                  {"commit": commit},
 	"deploy_seen":              {"env": oneOf("dev", "stg", "prod"), "commit": commit},
-	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch},
+	"note":                     {"landed": commit, "pruned": agentBranch, "prune_refused": agentBranch, "prune_failed": agentBranch, "voided": approvalRef},
 	"route_decided":            {"fingerprint": fingerprint},
 	"legacy_imported":          {"digest": fingerprint},
 }

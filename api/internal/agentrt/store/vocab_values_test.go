@@ -83,6 +83,7 @@ func TestEventFieldValues(t *testing.T) {
 		{"note", "pruned", "refs/heads/agent/t_" + ulid + "/a2", "refs/heads/main"},
 		{"note", "prune_refused", "refs/heads/agent/t_" + ulid + "/a1", "agent/t_" + ulid + "/a1"},
 		{"note", "prune_failed", "refs/heads/agent/t_" + ulid + "/a3", "refs/heads/agent/t_" + ulid + "/a0"},
+		{"note", "voided", "appr_0123456789abcdef", "#212"},
 		{"route_decided", "fingerprint", sha, "05851c9c"},
 	} {
 		covered[c.event+"."+c.field] = true
