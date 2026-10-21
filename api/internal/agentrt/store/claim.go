@@ -155,7 +155,11 @@ func claimNext(ctx context.Context, db DB, r ClaimRequest, o claimOpts) (*Claim,
 			after = &cands[len(cands)-1]
 		}
 	})
-	return claim, err
+	if err != nil {
+		// A claim whose commit failed was not made (TD-399).
+		return nil, err
+	}
+	return claim, nil
 }
 
 // candidates reads one page of ready tasks of active missions, oldest first,

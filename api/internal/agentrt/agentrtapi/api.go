@@ -68,6 +68,11 @@ type API struct {
 
 const maxBody = 1 << 20 // an artifact is at most 1 MiB; JSON bodies are smaller
 
+// claimPollLimit bounds one poll of a claim, which neither the long poll's
+// deadline nor the client cuts (TD-399): a 25-second wait and one last poll
+// stay inside agentd's 40-second client timeout.
+const claimPollLimit = 10 * time.Second
+
 // abilities are what each kind of caller may do (v5 §5.2 鉴权); Mount and
 // whoami both read them. agentd, whose token is bound to one host, claims,
 // keeps its leases and hands results over; threads and seats (reporter and
@@ -304,8 +309,18 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), wait)
 	defer cancel()
 	for {
-		cl, err := store.ClaimNext(ctx, a.DB, cr)
-		if err != nil && ctx.Err() == nil {
+		if r.Context().Err() != nil {
+			return // the client went away: lease nothing for it
+		}
+		// Each poll runs to its end under its own bound, and the long poll
+		// stops only between polls (TD-399): cut by the deadline while it
+		// commits, pgx gives up on a commit whose outcome it does not know,
+		// and the claim answered a lease the server rolled back, or 204 for
+		// a poll the server committed.
+		pctx, pcancel := context.WithTimeout(context.WithoutCancel(r.Context()), claimPollLimit)
+		cl, err := store.ClaimNext(pctx, a.DB, cr)
+		pcancel()
+		if err != nil {
 			a.fail(w, err)
 			return
 		}
