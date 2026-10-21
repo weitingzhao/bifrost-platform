@@ -47,7 +47,8 @@ describe('the approvals a done rule waits on', () => {
     expect(approvalNumbers({ any: [{ approval_executed: 16 }, { all: [{ approval_executed: 18 }, { approval_executed: 16 }] }] })).toEqual([16, 18])
     // Not an approval: another atom, a gate rule, a number that is not a positive integer, a string, a list at the top.
     for (const rule of [{ manual: 'by hand' }, { gates_passed: [{ test: 'T05' }], env: 'prod' }, { approval_executed: 0 },
-      { approval_executed: 1.5 }, { approval_executed: '16' }, { approval_executed: 9007199254740993 }, [{ approval_executed: 16 }],
+      // Past the safe integers, as JSON.parse reads one off the wire (it rounds).
+      { approval_executed: 1.5 }, { approval_executed: '16' }, JSON.parse('{"approval_executed":9007199254740993}'), [{ approval_executed: 16 }],
       null, undefined, {}]) {
       expect(approvalNumbers(rule)).toEqual([])
     }
