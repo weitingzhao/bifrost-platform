@@ -7,6 +7,8 @@ import { parseRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
 import { manualAndStopped, runtimeRound } from '@/api/agentRuntimePlan'
 import type { GoalData } from '@/api/agentRuntimeGoals'
 import { GoalCard } from '../../progress/GoalCard'
+import { stalledStage } from '../../progress/goalCardModel'
+import { whoseMove } from '../../progress/mergedProgressModel'
 import { ProgressOverview } from '../../progress/ProgressOverview'
 import { OwnerCrew } from '../OwnerCrew'
 import { OwnerGoals } from '../OwnerGoals'
@@ -45,6 +47,9 @@ describe('T24: attempts on a stopped host are not doing', () => {
     expect(stalledWords(onHost('h2'))).toBe('Host lost: host h2 last polled 10 minutes ago')
     expect(stalledWords(onHost('h4'))).toBe('Maybe stuck: the lease lapsed and was not renewed')
     expect(stalledWords(onHost('h1'))).toBe('')
+    // A platform before statuses (status ''): by its state, a stale one maybe stuck (review 471 C1).
+    expect(attemptActivity({ ...onHost('h1'), status: '' })).toBe('running')
+    expect(attemptActivity({ ...onHost('h1'), status: '', state: 'stale' })).toBe('maybe_stuck')
     // A stale attempt is maybe stuck whatever status it carries; an unknown status is not running either.
     expect(attemptActivity({ ...onHost('h1'), state: 'stale', status: 'working' })).toBe('maybe_stuck')
     expect(attemptActivity({ ...onHost('h1'), status: 'unknown', reason: 'the attempt names no host the runtime knows' })).toBe('unknown')
@@ -57,7 +62,7 @@ describe('T24: attempts on a stopped host are not doing', () => {
     render(<QueryClientProvider client={client()}><ProgressOverview count={{ state: 'known', count: 0 }} runtime={progress} plan={plan} arch={{ from: 'absent' }} failed={false} /></QueryClientProvider>)
     const running = screen.getByText('Running').parentElement!
     expect(within(running).getByText('2')).toBeInTheDocument()
-    expect(within(running).getByText('Not running: 1 host lost · 1 maybe stuck')).toBeInTheDocument()
+    expect(within(running).getByText('Not confirmed running: 1 host lost · 1 maybe stuck')).toBeInTheDocument()
     expect(screen.getByText('1 of the done steps manual')).toBeInTheDocument()
   })
 
@@ -65,11 +70,42 @@ describe('T24: attempts on a stopped host are not doing', () => {
     const work = workNow(progress)!
     expect(work).toMatchObject({ running: 2, stalled: 2, stalledWords: '1 host lost · 1 maybe stuck' })
     const base = { yours: { state: 'known' as const, count: 0 }, approvals: 0, lane: 'release lane free', nodes: { ready: 5, total: 5 } }
-    expect(ownerVerdict({ ...base, running: work.running, stalled: work.stalled }).line)
-      .toBe('Nothing to approve · 2 agents running, 2 agents not heard from · release lane free · 5 of 5 nodes ready')
-    expect(ownerVerdict({ ...base, running: 0, stalled: 1 }).line).toContain(' · 1 agent not heard from · ')
+    // Not counted as running is not called stopped: its executor may still run (T22 ②; review 471 B1).
+    expect(ownerVerdict({ ...base, running: work.running, stalled: work.stalled, stalledWords: work.stalledWords }).line)
+      .toBe('Nothing to approve · 2 agents running, 2 agents not confirmed running (1 host lost · 1 maybe stuck) · release lane free · 5 of 5 nodes ready')
+    expect(ownerVerdict({ ...base, running: 0, stalled: 1 }).line).toContain(' · 1 agent not confirmed running · ')
     expect(ownerVerdict({ ...base, running: 0, stalled: 0 }).line).toContain(' · agents idle · ')
     expect(ownerVerdict({ ...base, running: 0 }).line).toContain(' · agents idle · ')
+  })
+
+  it('says whose move it is from attempts confirmed running and tasks not stalled (review 471 A1)', () => {
+    const only = (hosts: string[], extraTasks: string[] = []): RuntimeProgress => {
+      const ids = new Set([...hosts.map(h => onHost(h).task_id), ...extraTasks])
+      return { ...progress, live: progress.live.filter(a => hosts.includes(a.host_id)),
+        work: { missions: progress.work.missions.filter(m => m.mission_id === 'M-1').map(m => ({ ...m, tasks: m.tasks.filter(t => ids.has(t.task_id)) })) } }
+    }
+    const zero = { state: 'known' as const, count: 0 }
+    expect(progress.work.missions.find(m => m.mission_id === 'M-1')!.waiting_on).toBe('coordinator')
+    expect(whoseMove(zero, only(['h2']))).toBe("Coordinator's move") // only an attempt on a lost host
+    expect(whoseMove(zero, only(['h4']))).toBe("Coordinator's move") // only one maybe stuck
+    expect(whoseMove(zero, only(['h2', 'h1']))).toBe("Agents' move") // one confirmed running beside it
+    expect(whoseMove(zero, only(['h2'], [offPlan.task_id]))).toBe("Agents' move") // a queued task a host can claim
+    expect(whoseMove(zero, progress)).toBe("Agents' move")
+  })
+
+  it('says a goal stage whose only work is on a lost host is host lost, not running (review 471 B2)', () => {
+    const gone = taskOn('h2')
+    const data: GoalData = { mission: { mission_id: 'M-1', state: 'active', goal: 'test', created_at: '2026-10-21T17:20:00Z', created_by_actor_id: 'controller' },
+      events: [], tasks: [{ ...gone, created_at: '2026-10-21T17:20:00Z', updated_at: '2026-10-21T17:20:00Z', subject_task_id: '' }] }
+    const c = client()
+    c.setQueryData(['agent-runtime-goal', 'M-1'], data)
+    render(<QueryClientProvider client={c}><GoalCard id="M-1" runtime={progress} updatedAt={1} questions={[]} /></QueryClientProvider>)
+    const stage = screen.getByRole('listitem', { name: 'Implement: 1 host lost' })
+    expect(within(stage).getByText('1 host lost: not confirmed running')).toBeInTheDocument()
+    expect(within(stage).getByText('Host lost: host h2 last polled 10 minutes ago')).toBeInTheDocument()
+    expect(screen.queryByRole('listitem', { name: 'Implement: running' })).not.toBeInTheDocument()
+    expect(screen.getByText('Implementing · 1 host lost')).toBeInTheDocument()
+    expect(stalledStage({ label: 'Implement', state: 'done', tasks: data.tasks, completed: 1, dropped: 0 }, progress.live)).toBe('')
   })
 
   it('shows the host that stopped polling with its attempt host lost, not running, and its result not persisted', () => {
@@ -104,8 +140,8 @@ describe('T24: the three marks', () => {
 
   it('marks the goal with work off plan on Work, with why on hover', () => {
     render(<OwnerGoals missions={progress.work.missions} now={now} read="ok" />)
-    const mark = screen.getByText('1 of 5 tasks off plan')
-    expect(mark).toHaveAttribute('title', 'T24 drill: an errand outside the plan')
+    // Why is in the text, not on hover only: a phone has no hover (review 471 B3).
+    expect(screen.getByText('1 of 5 tasks off plan').parentElement).toHaveTextContent('1 of 5 tasks off plan T24 drill: an errand outside the plan')
     expect(screen.getAllByText(/off plan/i)).toHaveLength(1) // M-2 has none
     // v4 §20.3 rule 7: while a task is on a lost host the goal's time is unknown, and says which task.
     expect(screen.getByText(`Done by: unknown — task ${onHost('h2').task_id} is host lost: no time can be told until it is heard from`)).toBeInTheDocument()
@@ -130,7 +166,7 @@ describe('T24: the three marks', () => {
     c.setQueryData(['agent-runtime-goal', 'M-1'], data)
     render(<QueryClientProvider client={c}><GoalCard id="M-1" runtime={progress} updatedAt={1} questions={[]} /></QueryClientProvider>)
     const stage = screen.getByRole('listitem', { name: 'Implement: running' })
-    expect(within(stage).getByText('Off plan')).toHaveAttribute('title', 'T24 drill: an errand outside the plan')
+    expect(within(stage).getByText('Off plan').parentElement).toHaveTextContent('Off plan T24 drill: an errand outside the plan')
     expect(within(stage).getByText('Host lost: host h2 last polled 10 minutes ago')).toBeInTheDocument()
     expect(within(stage).getByText('Maybe stuck: the lease lapsed and was not renewed')).toBeInTheDocument()
     expect(within(stage).getAllByText('Result computed on the host, not yet persisted on the platform')).toHaveLength(1)

@@ -293,9 +293,9 @@ describe('Owner Console entries', () => {
     show('#work')
     const now = screen.getByRole('region', { name: 'Now' })
     expect(within(now).getByText('running').previousSibling).toHaveTextContent('2')
-    expect(within(now).getByText('Not running: 1 host lost · 1 maybe stuck (Crew)')).toBeInTheDocument()
+    expect(within(now).getByText('Not confirmed running: 1 host lost · 1 maybe stuck (Crew)')).toBeInTheDocument()
     const goals = screen.getByRole('region', { name: 'Open goals' })
-    expect(within(goals).getByText('1 of 5 tasks off plan')).toHaveAttribute('title', 'T24 drill: an errand outside the plan')
+    expect(within(goals).getByText('1 of 5 tasks off plan').parentElement).toHaveTextContent('T24 drill: an errand outside the plan')
   })
 
   it('shows a runtime round with no items as empty, not unavailable and not the board\'s', () => {

@@ -39,8 +39,10 @@ func missionETA(m *progressMission, usual map[string]usualTime, now time.Time) m
 	// rule 7, §20.5: suspend a task and its goal's time is unknown).
 	for _, t := range m.tasks {
 		switch t.Status {
-		case StatusMaybeStuck, StatusHostLost, StatusUnknown:
+		case StatusMaybeStuck, StatusHostLost:
 			return unknownETA(fmt.Sprintf("task %s is %s: no time can be told until it is heard from", t.TaskID, strings.ReplaceAll(t.Status, "_", " ")))
+		case StatusUnknown:
+			return unknownETA(fmt.Sprintf("task %s is unknown: no time can be told until its state is known", t.TaskID))
 		}
 	}
 	var low, high time.Duration

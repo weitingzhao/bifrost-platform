@@ -79,12 +79,14 @@ func TestMissionETA(t *testing.T) {
 		"awaiting the Owner": {&progressMission{state: "awaiting_owner", tasks: m.tasks}, "the mission is awaiting_owner"},
 		// v4 §20.3 rule 7: a task maybe stuck, on a lost host or of unknown status makes the time unknown, whatever
 		// the others' usual times; it says which (T24, §20.5: suspend a task).
-		"maybe stuck": {&progressMission{state: "active", tasks: []*ProgressTask{task("t12", "implement", "go", "ready", nil),
-			{TaskID: "t13", Role: "implement", class: "go", State: "running", Status: StatusMaybeStuck, Attempt: spent(60)}}}, "task t13 is maybe stuck"},
+		// A task before it with no usual time does not hide it (review 471).
+		"maybe stuck": {&progressMission{state: "active", tasks: []*ProgressTask{task("t12", "implement", "python", "ready", nil),
+			{TaskID: "t13", Role: "implement", class: "go", State: "running", Status: StatusMaybeStuck, Attempt: spent(60)}}},
+			"task t13 is maybe stuck: no time can be told until it is heard from"},
 		"host lost": {&progressMission{state: "active", tasks: []*ProgressTask{
 			{TaskID: "t14", Role: "implement", class: "python", State: "running", Status: StatusHostLost, Attempt: spent(60)}}}, "task t14 is host lost"},
 		"status unknown": {&progressMission{state: "active", tasks: []*ProgressTask{
-			{TaskID: "t15", Role: "implement", class: "go", State: "running", Status: StatusUnknown}}}, "task t15 is unknown"},
+			{TaskID: "t15", Role: "implement", class: "go", State: "running", Status: StatusUnknown}}}, "task t15 is unknown: no time can be told until its state is known"},
 	} {
 		eta := missionETA(c.m, usual, now)
 		if eta["state"] != "unknown" || !strings.Contains(eta["reason"].(string), c.want) {

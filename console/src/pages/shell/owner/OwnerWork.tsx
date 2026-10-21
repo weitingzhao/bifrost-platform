@@ -39,8 +39,9 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <Stat value={work?.stuck ?? '?'} label="stuck" tone={work && work.stuck > 0 ? 'fail' : undefined} />
           <Stat value={work?.open ?? '?'} label="open goals" />
         </div>
-        {/* T24: an attempt on a host that stopped polling, or maybe stuck, is not counted as running; Crew says which. */}
-        {work && work.stalled > 0 && <p className="m-0 text-xs font-semibold text-[var(--color-warning)]" data-stalled>Not running: {work.stalledWords} (Crew)</p>}
+        {/* T24: an attempt on a host that stopped polling, or maybe stuck, is not counted as running; it may still run
+            (review 471 B1), so it is "not confirmed", by the runtime's own words; Crew says which. */}
+        {work && work.stalled > 0 && <p className="m-0 text-xs font-semibold text-[var(--color-warning)]" data-stalled>Not confirmed running: {work.stalledWords} (Crew)</p>}
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Last result</span>
           {data.last

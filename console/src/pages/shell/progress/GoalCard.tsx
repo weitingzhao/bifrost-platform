@@ -13,7 +13,7 @@ import { useNow } from './progressClock'
 import { unpersistedWords } from '../owner/crewModel'
 import { stalledWords } from '../owner/attemptActivity'
 import { OffPlanMark } from '../owner/OwnerParts'
-import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
+import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalTaskId, goalWaitingLinks, latestLease, relative, stageMarks, stalledStage, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
 const budgetLabels: Record<string, string> = { owner_granted_attempts: 'attempts granted on its cards', owner_granted_wall_hours: 'hours granted on its cards' }
@@ -98,7 +98,11 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
   const goal = text(data?.mission.goal) || submittedGoal || summary?.goal || summary?.title || 'Loading goal…'
   const links = data ? goalWaitingLinks(id, data, questions, runtime) : []
   if (data?.mission.state === 'awaiting_owner' && !links.length) links.push({ title: 'Review the mission request', href: NEEDS_YOU_HREF })
-  const status = data ? goalStatus(data, links.length > 0) : 'Planning'
+  const stages = data ? goalStages(data) : []
+  // A stage none of whose work the runtime can tell is moving says the runtime's words, not running (T24, review 471 B2).
+  const live = runtime?.live ?? []
+  const activeStalled = stalledStage(stages.find(s => s.state === 'running') ?? stages[0] ?? { label: '', state: 'future', tasks: [], completed: 0, dropped: 0 }, live)
+  const status = (data ? goalStatus(data, links.length > 0) : 'Planning') + (activeStalled ? ` · ${activeStalled}` : '')
   const done = data ? goalDone(data) : false
   const start = text(data?.mission.created_at)
   const accepted = data?.events.filter(e => e.event_type === 'task_state_changed' && e.body_json.to === 'accepted').at(-1)?.at
@@ -114,8 +118,10 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
     {query.isError && <p role="alert">Could not load {id}: {query.error.message}. {data ? 'Showing last known details.' : ''}<button onClick={() => void refetch()} className="ml-2 underline">Retry</button></p>}
     {links.length > 0 && <ul className="my-3 text-sm">{links.map((l, i) => <li key={i}><a className="underline" href={l.href}>Waiting for you · {l.title}</a></li>)}</ul>}
     {data && <div className="mt-4 flex flex-col gap-4">
-      <ol aria-label="Goal stages" className="flex flex-wrap gap-2">{goalStages(data).map(stage => <li key={stage.label} aria-label={`${stage.label}: ${stage.state}`} className="min-w-32 flex-1 rounded border border-[var(--card-border)] border-t-4 p-2 text-sm" style={{ borderTopColor: stageColor[stage.state] }}>
-        <div className="flex items-center gap-2"><span aria-hidden="true" style={{ color: stageColor[stage.state] }}>{stageMarks[stage.state]}</span><strong>{stage.label}</strong>{stage.tasks.length > 1 && <span>{stage.completed}/{stage.tasks.length}</span>}</div>
+      <ol aria-label="Goal stages" className="flex flex-wrap gap-2">{stages.map(stage => { const stalled = stalledStage(stage, live), shown = stalled ? 'waiting' : stage.state
+        return <li key={stage.label} aria-label={`${stage.label}: ${stalled || stage.state}`} className="min-w-32 flex-1 rounded border border-[var(--card-border)] border-t-4 p-2 text-sm" style={{ borderTopColor: stageColor[shown] }}>
+        <div className="flex items-center gap-2"><span aria-hidden="true" style={{ color: stageColor[shown] }}>{stageMarks[shown]}</span><strong>{stage.label}</strong>{stage.tasks.length > 1 && <span>{stage.completed}/{stage.tasks.length}</span>}</div>
+        {stalled && <p className="text-xs font-semibold text-[var(--color-warning)] [overflow-wrap:anywhere]">{stalled}: not confirmed running</p>}
         {stage.state === 'skipped' && !stage.dropped && <p className="text-xs text-muted-foreground">Skipped</p>}
         {stage.dropped - (stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.dropped - (stage.droppedByRule ?? 0)} dropped by you</p>}
         {(stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.droppedByRule} dropped by rule</p>}
@@ -128,11 +134,11 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
           const stalled = live ? stalledWords(live) : ''
           const computed = summary?.tasks.find(x => x.task_id === t.task_id)?.computed_not_persisted === true
           return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p className="flex flex-wrap items-center gap-1">{taskWho(data, t)}{t.off_plan === true && <OffPlanMark reasons={[t.off_plan_reason ?? '']} />}</p>
-            {stalled && <p className="font-semibold text-[var(--color-warning)]">{stalled}</p>}
-            {computed && <p className="font-semibold text-[var(--color-warning)]">Result computed on the host, not yet persisted on the platform</p>}
+            {stalled && <p className="font-semibold text-[var(--color-warning)] [overflow-wrap:anywhere]">{stalled}</p>}
+            {computed && <p className="font-semibold text-[var(--color-warning)] [overflow-wrap:anywhere]">Result computed on the host, not yet persisted on the platform</p>}
             {unpersisted && <p className="font-semibold text-[var(--color-warning)]">{lost ? `Attempt ${lost.attempt_no ?? '?'} lost on ${lost.host_id || 'no host'}, not done. ` : ''}{unpersisted}</p>}<p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
         })}
-      </li>)}</ol>
+      </li> })}</ol>
       {done && <GoalResult data={data} />}
       <ChiefOfStaff data={data} questions={questions} done={done} />
       <details open={targeted || undefined}><summary className="cursor-pointer text-sm">Details</summary><p className="break-words text-xs">Mission state: {text(data.mission.state)} · {summary?.reason}</p>{data.tasks.map(t => <details key={t.task_id} id={goalTaskId(id, t.task_id)} open={(targeted && t.task_id === target) || undefined} className="scroll-mt-4"><summary className="break-all text-xs">{t.role} · {t.task_id} · {t.state}{t.off_plan === true ? ' · off plan' : ''}</summary><TaskTimeline mission={id} task={t.task_id} events={data.events} finished={!!finished} /></details>)}</details>

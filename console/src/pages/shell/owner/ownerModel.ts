@@ -175,15 +175,17 @@ export function ownerVerdict(input: {
   yours: NeedsYouCount
   approvals: number | null
   running: number | null
-  /** Live attempts not counted as running: on a lost host, maybe stuck or unknown (T24). */
+  /** Live attempts not counted as running, and the runtime's words for them ("1 host lost · 1 maybe stuck"; T24). */
   stalled?: number | null
+  stalledWords?: string
   lane: string
   nodes: { ready: number; total: number } | null
 }): Verdict {
   const facts = [
     input.approvals == null ? 'approvals unknown' : input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
     input.running == null ? 'agents unknown' : input.running === 0 && !input.stalled ? 'agents idle'
-      : [input.running > 0 ? `${plural(input.running, 'agent')} running` : '', input.stalled ? `${plural(input.stalled, 'agent')} not heard from` : '']
+      : [input.running > 0 ? `${plural(input.running, 'agent')} running` : '',
+        input.stalled ? `${plural(input.stalled, 'agent')} not confirmed running${input.stalledWords ? ` (${input.stalledWords})` : ''}` : '']
         .filter(Boolean).join(', '),
     input.lane,
     input.nodes == null ? 'nodes unknown' : `${input.nodes.ready} of ${input.nodes.total} nodes ready`,

@@ -90,7 +90,7 @@ export function useOwnerConsole(blocks: { system: boolean; work: boolean; chief:
   const runsLoading = blocks.system && !runsRead && runsError == null
 
   const verdict = ownerVerdict({ yours, approvals: needsYou.openCount.state === 'known' ? needsYou.decide.length : null,
-    running: work ? work.running : null, stalled: work ? work.stalled : null, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
+    running: work ? work.running : null, stalled: work ? work.stalled : null, stalledWords: work?.stalledWords, lane: laneText, nodes: nodeCount ? { ready: nodeCount.ready, total: nodeCount.total } : null })
 
   const marketData = current(marketQ)
   const marketItems = marketData != null && !isProxyError(marketData) && marketData.ok !== false ? marketData.freshness_summary ?? [] : undefined

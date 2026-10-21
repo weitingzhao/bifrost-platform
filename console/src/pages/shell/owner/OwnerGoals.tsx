@@ -21,12 +21,10 @@ export function OwnerGoals({ missions, now, read }: { missions: RuntimeMission[]
       const basis = etaBasis(m.eta)
       const offPlan = m.tasks.filter(t => t.off_plan === true)
       return <li key={m.mission_id} className="flex min-w-0 flex-col gap-1 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5">
-        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <a href={goalHref(m.mission_id)} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
-            <strong>{m.mission_id}</strong> {firstLine(m.title || m.goal)}</a>
-          {offPlan.length > 0 && <OffPlanMark reasons={offPlan.map(t => t.off_plan_reason ?? '')}
-            label={offPlan.length === m.tasks.length ? 'Off plan' : `${offPlan.length} of ${m.tasks.length} tasks off plan`} />}
-        </span>
+        <a href={goalHref(m.mission_id)} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+          <strong>{m.mission_id}</strong> {firstLine(m.title || m.goal)}</a>
+        {offPlan.length > 0 && <OffPlanMark reasons={offPlan.map(t => t.off_plan_reason ?? '')}
+          label={offPlan.length === m.tasks.length ? 'Off plan' : `${offPlan.length} of ${m.tasks.length} tasks off plan`} />}
         <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{m.status || m.state}{m.reason ? ` · ${m.reason}` : ''}</span>
         {basis.length === 0
           ? <span className={`min-w-0 text-sm [overflow-wrap:anywhere] ${m.eta.state === 'unknown' ? 'text-muted-foreground' : ''}`}>{etaLine(m.eta, now)}</span>

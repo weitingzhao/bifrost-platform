@@ -1,4 +1,5 @@
-import { record, text, type RuntimeEvent, type RuntimeProgress } from '@/api/agentRuntime'
+import { record, text, type RuntimeAttempt, type RuntimeEvent, type RuntimeProgress } from '@/api/agentRuntime'
+import { activityCounts, attemptActivity } from '../owner/attemptActivity'
 import type { GoalData, GoalTask } from '@/api/agentRuntimeGoals'
 import type { Question } from '@/api/questions'
 import { NEEDS_YOU_HREF, questionHref } from '@/lib/shell/consoleRoutes'
@@ -127,6 +128,26 @@ export function goalStages(data: GoalData): GoalStage[] {
   }
   stages.push({ label: 'Done', state: done ? 'done' : 'future', tasks: [], completed: done ? 1 : 0, dropped: 0 })
   return stages
+}
+// Task states in which a stage moves without a live attempt of its own: waiting for the controller, a host or a check.
+const MOVES_WITHOUT_ATTEMPT = new Set(['proposed', 'ready', 'submitted', 'verifying', 'rework'])
+/**
+ * The runtime's words for a running stage none of whose work it can tell is moving (T24, review 471 B2): every live
+ * attempt of its tasks is on a lost host, maybe stuck or of unknown status, and no task of it moves otherwise
+ * ("1 host lost"); '' for any other stage. A stage with work moving beside stalled work stays running; the stalled
+ * task says so on its own line.
+ */
+export function stalledStage(stage: GoalStage, live: readonly RuntimeAttempt[]): string {
+  if (stage.state !== 'running') return ''
+  const stalled: RuntimeAttempt[] = []
+  for (const t of stage.tasks) {
+    const a = live.find(x => x.task_id === t.task_id)
+    if (a) {
+      if (attemptActivity(a) === 'running') return ''
+      stalled.push(a)
+    } else if (MOVES_WITHOUT_ATTEMPT.has(t.state)) return ''
+  }
+  return activityCounts(stalled)
 }
 export function goalStatus(data: GoalData, waiting: boolean): string {
   if (['stopped', 'cancelled'].includes(text(data.mission.state))) return 'Stopped'

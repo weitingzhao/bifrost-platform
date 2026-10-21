@@ -18,12 +18,13 @@ const consoleMarksFixture = "../../../../console/src/api/__fixtures__/agentrt-pr
 
 // marksAttempt is a live attempt as Progress lists it.
 type marksAttempt struct {
-	AttemptID string `json:"attempt_id"`
-	TaskID    string `json:"task_id"`
-	HostID    string `json:"host_id"`
-	State     string `json:"state"`
-	Status    string `json:"status"`
-	Persisted bool   `json:"persisted"`
+	AttemptID         string `json:"attempt_id"`
+	TaskID            string `json:"task_id"`
+	HostID            string `json:"host_id"`
+	State             string `json:"state"`
+	Status            string `json:"status"`
+	Persisted         bool   `json:"persisted"`
+	LastCheckpointSeq *int64 `json:"last_checkpoint_seq"`
 }
 
 // marksDoc is the part of Progress the marks are read from.
@@ -144,6 +145,9 @@ func TestProgressCarriesT24sMarks(t *testing.T) {
 	if len(doc.Live) != 4 {
 		t.Errorf("%d live attempts; want 4", len(doc.Live))
 	}
+	if seq := live[goneAttempt].LastCheckpointSeq; seq == nil || *seq != 1 {
+		t.Errorf("the host-lost attempt's last checkpoint %v; want 1", seq)
+	}
 	online := map[string]*bool{}
 	for _, h := range doc.Hosts {
 		online[h.HostID] = h.Online
@@ -155,7 +159,11 @@ func TestProgressCarriesT24sMarks(t *testing.T) {
 	}
 
 	tasks := map[string]bool{}
+	m1 := 0
 	for _, m := range doc.Work.Missions {
+		if m.MissionID == "M-1" {
+			m1++
+		}
 		// v4 §20.3 rule 7: a goal with a task on a lost host has no time; the first such task is named.
 		if m.MissionID == "M-1" && (m.ETA["state"] != "unknown" || m.ETA["reason"] != "task "+gone+" is host lost: no time can be told until it is heard from") {
 			t.Errorf("M-1's eta = %v; want unknown, naming %s as host lost", m.ETA, gone)
@@ -177,6 +185,9 @@ func TestProgressCarriesT24sMarks(t *testing.T) {
 				}
 			}
 		}
+	}
+	if m1 != 1 {
+		t.Errorf("M-1 is listed %d times; want once", m1)
 	}
 	for _, id := range []string{working, gone, computed, stuck, offPlan} {
 		if !tasks[id] {
