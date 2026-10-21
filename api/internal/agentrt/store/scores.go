@@ -251,8 +251,26 @@ func ComputeScores(ctx context.Context, db DB) (int, error) {
 	return n, err
 }
 
+// answeredBeforeAsked holds for a task t of a mission that assesses a card
+// the runtime had recorded answered before the assessment was asked (TD-401):
+// a rule's note of its answer (noteRuleAnswer) or the runtime's
+// acknowledgement of it ("acknowledged question …"), before the ask (the
+// assessment stream's first event) and within ten minutes of it, well over
+// what a pass takes from its list to an ask. Such an assessment could
+// inform nothing; GiveAssessment no longer asks one, and this keeps those
+// asked before it (STG M-79, 2026-10-21) out of the scores.
+const answeredBeforeAsked = `EXISTS (SELECT 1 FROM agentrt.mission am
+	  JOIN agentrt.event ask ON ask.event_stream_id = am.scope_json->>'assessment_of' AND ask.seq = 1
+	  WHERE am.mission_id = t.mission_id AND am.scope_json->>'assessment_of' LIKE 'assess:card:%'
+	    AND EXISTS (SELECT 1 FROM agentrt.event n WHERE n.event_type = 'note' AND n.event_id < ask.event_id
+	      AND n.at BETWEEN ask.at - interval '10 minutes' AND ask.at + interval '1 minute'
+	      AND (n.body_json->>'text' = 'acknowledged question ' || substr(am.scope_json->>'assessment_of', 13)
+	        OR (n.body_json->>'text' LIKE 'rule %'
+	          AND strpos(n.body_json->>'text', ' answered question ' || substr(am.scope_json->>'assessment_of', 13) || ' with ') > 0))))`
+
 // countOutcomes groups the outcomes of tasks that ended since then, and
-// returns when the earliest of them ended.
+// returns when the earliest of them ended. An assessment of a card answered
+// before it was asked is not counted (answeredBeforeAsked).
 func countOutcomes(ctx context.Context, tx pgx.Tx, since time.Time) (map[scoreKey]*scoreRow, *time.Time, error) {
 	rows, err := tx.Query(ctx, `SELECT t.role, t.task_class, t.core OR EXISTS (SELECT 1 FROM agentrt.task s
 	      WHERE s.task_id = t.subject_task_id AND s.core),
@@ -263,7 +281,8 @@ func countOutcomes(ctx context.Context, tx pgx.Tx, since time.Time) (map[scoreKe
 	    ORDER BY x.attempt_no DESC LIMIT 1) a ON true
 	  WHERE t.updated_at >= $1 AND (t.state IN ('accepted','rejected') OR (t.state = 'blocked' AND
 	    (SELECT (e.body_json->>'failed')::boolean FROM agentrt.event e WHERE e.task_id = t.task_id
-	      AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) IS TRUE))`, since)
+	      AND e.event_type = 'task_state_changed' ORDER BY e.event_id DESC LIMIT 1) IS TRUE))
+	    AND NOT `+answeredBeforeAsked, since)
 	if err != nil {
 		return nil, nil, err
 	}

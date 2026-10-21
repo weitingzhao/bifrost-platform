@@ -21,13 +21,19 @@ const EvidenceTimeout = 45 * time.Second
 // assessment that can no longer come is recorded unavailable; then each card
 // the runtime asked and each approval waiting for the Owner that has not been
 // asked for one is given to the chief of staff's seat, a few a pass, with
-// what the repositories hold about it. It only reads the cards and the
-// approvals: nothing here answers a card or decides an approval. It returns
-// how many it asked.
+// what the repositories hold about it. A card is read again when its task is
+// made, so one answered after the list (by the rule on STG, within seconds)
+// is not assessed (TD-401). It only reads the cards and the approvals:
+// nothing here answers a card or decides an approval. It returns how many it
+// asked.
 func (c *Controller) Assess(ctx context.Context) (int, error) {
 	_, eerr := store.EndAssessments(ctx, c.DB)
 	if c.Sources.Assessable == nil {
 		return 0, eerr
+	}
+	var question func(context.Context, string) (store.Question, bool)
+	if c.Sources.Question != nil {
+		question = c.question
 	}
 	type list struct {
 		items []store.AssessItem
@@ -57,7 +63,7 @@ func (c *Controller) Assess(ctx context.Context) (int, error) {
 			ev = c.Sources.Evidence(rctx, q)
 			cancel()
 		}
-		task, err := store.GiveAssessment(ctx, c.DB, it, ev)
+		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
 			continue

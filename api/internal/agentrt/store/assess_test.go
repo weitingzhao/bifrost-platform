@@ -97,7 +97,7 @@ func ratchetEvidence() store.Evidence {
 // askAndReady asks item's assessment with ev and readies its task.
 func (w *world) askAndReady(t *testing.T, item store.AssessItem, ev store.Evidence) (task, mission string) {
 	t.Helper()
-	task, err := store.GiveAssessment(ctx, w.rt, item, ev)
+	task, err := store.GiveAssessment(ctx, w.rt, item, ev, nil)
 	ok(t, err)
 	if task == "" {
 		t.Fatalf("%s %s was not asked", item.Kind, item.ID)
@@ -196,7 +196,7 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 		t.Fatalf("the query: %+v", q)
 	}
 	task, mission := w.askAndReady(t, item, ratchetEvidence())
-	if again, err := store.GiveAssessment(ctx, w.rt, item, ratchetEvidence()); err != nil || again != "" {
+	if again, err := store.GiveAssessment(ctx, w.rt, item, ratchetEvidence(), nil); err != nil || again != "" {
 		t.Fatalf("asked twice: %q %v", again, err)
 	}
 	if _, fresh, err = store.AssessmentQuery(ctx, w.rt, item); err != nil || fresh {
@@ -254,7 +254,7 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 	if did, err := store.AcceptBrief(ctx, w.rt, agreed); err != nil || did != "assessed" {
 		t.Fatalf("accept the agreeing one: %q %v", did, err)
 	}
-	if _, err = store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, pending)), ratchetEvidence()); err != nil {
+	if _, err = store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, pending)), ratchetEvidence(), s.question); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range s.order {
@@ -436,7 +436,7 @@ func TestAssessmentTimesOut(t *testing.T) {
 	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - 5*time.Minute))
 	task, mission := w.askAndReady(t, s.item(s.cardOf(t, late)), ratchetEvidence())
 	unfreeze()
-	if _, err := store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, inTime)), ratchetEvidence()); err != nil {
+	if _, err := store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, inTime)), ratchetEvidence(), s.question); err != nil {
 		t.Fatal(err)
 	}
 	c := w.claim(t, "h1", store.LeaseTTL, claude)

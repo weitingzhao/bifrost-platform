@@ -378,10 +378,21 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 // item's assessment with one brief task whose spec holds the item, the
 // runtime's facts and the evidence read, and on the item's stream the ask,
 // with the refs the spec gives. It returns the task, or "" when the item was
-// asked meanwhile.
+// asked meanwhile, or is a card that question (the question store) does not
+// read as open now.
+//
+// A card is read again under its stream, after the lists and the evidence
+// (TD-401: STG 2026-10-21 M-79, the rule answered a card at 00:10:52.540 and
+// its assessment was asked at 52.605, a paid run that could change nothing).
+// The card-auto-answer rule holds the same stream from its read of the
+// assessment to its answer's commit (answerOne, cardAssessment), so the
+// rule's answer and an ask are one after the other: an answer first leaves
+// no ask; an ask first is beside the card when the rule answers. A card the
+// question store cannot read now is not asked; the next pass lists it again
+// while it is open. nil question reads nothing again.
 // Locks: the controller as a writer (every write's first), the item's stream,
 // then the mission's numbering (proposeMissionTx).
-func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence) (string, error) {
+func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool)) (string, error) {
 	var task string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		task = ""
@@ -395,6 +406,11 @@ func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence) (s
 		}
 		if asked, err := assessed(ctx, tx, item.Kind, item.ID); err != nil || asked {
 			return err
+		}
+		if item.Kind == AssessCard && question != nil {
+			if q, ok := question(ctx, item.ID); !ok || q.Status != "open" {
+				return nil
+			}
 		}
 		f, err := assessFactsOf(ctx, tx, item)
 		if err != nil {

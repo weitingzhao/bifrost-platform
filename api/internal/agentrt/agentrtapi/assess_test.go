@@ -66,7 +66,7 @@ func TestAssessmentThroughTheRoutes(t *testing.T) {
 		`"unchecked": ["STG 是否已经跑着这个提交"]}` + "\n```\n", "I would approve it."}
 	codex := map[string]any{"executor": "exec:codex", "provider": "openai"}
 	for i, item := range items {
-		id, err := store.GiveAssessment(ctx, pool, item, ev)
+		id, err := store.GiveAssessment(ctx, pool, item, ev, nil)
 		must(t, err)
 		var mission string
 		must(t, pool.QueryRow(ctx, `SELECT mission_id FROM agentrt.task WHERE task_id = $1`, id).Scan(&mission))
