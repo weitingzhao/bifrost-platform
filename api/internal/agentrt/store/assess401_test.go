@@ -43,7 +43,7 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 	// All listed open, as the pass lists them before it reads their evidence.
 	first, second, third := s.item(s.cardOf(t, answered)), s.item(s.cardOf(t, unread)), s.item(s.cardOf(t, lapsed))
 	ok(t, s.answer(ctx, first.ID, first.Recommended, "the Owner", time.Now().Add(time.Hour), ""))
-	if task, err := store.GiveAssessment(ctx, w.rt, first, ratchetEvidence(), s.question); err != nil || task != "" {
+	if task, err := store.GiveAssessment(ctx, w.rt, first, ratchetEvidence(), s.question, false); err != nil || task != "" {
 		t.Fatalf("the answered card was asked: %q (%v)", task, err)
 	}
 	if events, missions := answeredAsks(t, w, first.ID); events != 0 || missions != 0 {
@@ -54,11 +54,11 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 		q.ExpiresAt = time.Now().Add(-time.Second) // still open in the store: its sweep has not come
 		return q, ok
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, third, ratchetEvidence(), expired); err != nil || task != "" {
+	if task, err := store.GiveAssessment(ctx, w.rt, third, ratchetEvidence(), expired, false); err != nil || task != "" {
 		t.Fatalf("a card past its expiry was asked: %q (%v)", task, err)
 	}
 	unreadable := func(context.Context, string) (store.Question, bool) { return store.Question{}, false }
-	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), unreadable); err != nil || task != "" {
+	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), unreadable, false); err != nil || task != "" {
 		t.Fatalf("a card the store cannot read was asked: %q (%v)", task, err)
 	}
 	for _, id := range []string{third.ID, second.ID} {
@@ -66,7 +66,7 @@ func TestAnAnsweredCardIsNotAssessed(t *testing.T) {
 			t.Fatalf("%s left %d events and %d missions", id, events, missions)
 		}
 	}
-	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), s.question); err != nil || task == "" {
+	if task, err := store.GiveAssessment(ctx, w.rt, second, ratchetEvidence(), s.question, false); err != nil || task == "" {
 		t.Fatalf("the open card was not asked once it reads open: %q (%v)", task, err)
 	}
 }
@@ -98,7 +98,7 @@ func TestTheRulesAnswerAndAnAskTakeTurns(t *testing.T) {
 	pass, probe := w.db.Connect(t, w.db.Runtime), w.db.Connect(t, w.db.Runtime) // the pass's connection, and one to look
 	s.during = func(string) {
 		go func() {
-			task, err := store.GiveAssessment(ctx, pass, item, ratchetEvidence(), s.question)
+			task, err := store.GiveAssessment(ctx, pass, item, ratchetEvidence(), s.question, false)
 			asked <- ask{task, err}
 		}()
 		// The ask's connection waits on the rule's transaction.

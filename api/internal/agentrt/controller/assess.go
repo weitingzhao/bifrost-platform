@@ -23,7 +23,8 @@ const EvidenceTimeout = 45 * time.Second
 // asked for one is given to the chief of staff's seat, a few a pass, with
 // what the repositories hold about it. A card is read again when its task is
 // made, so one answered after the list (by the rule on STG, within seconds)
-// is not assessed (TD-401). It only reads the cards and the approvals:
+// is not assessed (TD-401); on STG neither is a card the rule will answer
+// (SkipCardsTheRuleAnswers). It only reads the cards and the approvals:
 // nothing here answers a card or decides an approval. It returns how many it
 // asked.
 func (c *Controller) Assess(ctx context.Context) (int, error) {
@@ -49,7 +50,7 @@ func (c *Controller) Assess(ctx context.Context) (int, error) {
 		if asked == store.AssessPerPass {
 			break
 		}
-		q, fresh, err := store.AssessmentQuery(ctx, c.DB, it)
+		q, fresh, err := store.AssessmentQuery(ctx, c.DB, it, c.SkipCardsTheRuleAnswers)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
 			continue
@@ -63,7 +64,7 @@ func (c *Controller) Assess(ctx context.Context) (int, error) {
 			ev = c.Sources.Evidence(rctx, q)
 			cancel()
 		}
-		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question)
+		task, err := store.GiveAssessment(ctx, c.DB, it, ev, question, c.SkipCardsTheRuleAnswers)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s %s: %w", it.Kind, it.ID, err))
 			continue

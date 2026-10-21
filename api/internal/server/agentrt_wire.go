@@ -118,13 +118,7 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 			}
 			return
 		}
-		// The STG test switch that forces a rework is STG's alone (T26), and
-		// so is answering cards by rule (TD-390: 「PROD 不变」; no PROD rule
-		// file names the kind either, review 442 C1).
-		src := cardRuleOnlyOnSTG(env, s.agentRuntimeSources())
-		c := &controller.Controller{DB: pool, Sources: src, Briefs: true, FailFirstVerify: env == "stg", Logf: func(format string, args ...any) {
-			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
-		}}
+		c := agentRuntimeController(env, pool, s.agentRuntimeSources())
 		wait := c.Start(ctx)
 		relayDone := make(chan struct{})
 		if rdb == nil {
@@ -149,6 +143,20 @@ func (s *Server) wireAgentRuntime(role config.Role) {
 		cancel()
 		<-done
 	}
+}
+
+// agentRuntimeController is the platform-workers' controller for env
+// (AGENTRT_ENV). What is STG's alone: the test switch that forces a rework
+// (T26), answering cards by rule (TD-390: 「PROD 不变」; no PROD rule file
+// names the kind either, review 442 C1), and leaving unassessed the cards
+// that rule answers (TD-401's second half: the Owner 2026-10-20 20:0x
+// 「PROD 不变」). PROD and DEV assess every card, whatever rule is in force.
+func agentRuntimeController(env string, db store.DB, src controller.Sources) *controller.Controller {
+	stg := env == "stg"
+	return &controller.Controller{DB: db, Sources: cardRuleOnlyOnSTG(env, src), Briefs: true, FailFirstVerify: stg,
+		SkipCardsTheRuleAnswers: stg, Logf: func(format string, args ...any) {
+			slog.Warn("agentrt controller", "detail", fmt.Sprintf(format, args...))
+		}}
 }
 
 // cardRuleOnlyOnSTG leaves the controller the card-auto-answer loop's

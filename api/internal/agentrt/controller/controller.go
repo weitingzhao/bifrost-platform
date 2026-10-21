@@ -71,7 +71,13 @@ type Controller struct {
 	// FailFirstVerify honours store.TestNeedFailFirstVerify: on STG only
 	// (T26's rework path, the Owner 2026-10-18).
 	FailFirstVerify bool
-	Now             func() time.Time
+	// SkipCardsTheRuleAnswers leaves unassessed the cards the
+	// card-auto-answer rule in force answers (store.ruleAnswersItem): on STG
+	// only (TD-401's second half, the Owner 2026-10-20 20:0x 「STG 上规则会答
+	// 的卡不起评估；needs_owner 的卡和审批单照常评估；PROD 不变」). Unset, every
+	// card is assessed, whatever rule is in force.
+	SkipCardsTheRuleAnswers bool
+	Now                     func() time.Time
 }
 
 // boundedDeployed reads a deployment with the per-read timeout, for the done

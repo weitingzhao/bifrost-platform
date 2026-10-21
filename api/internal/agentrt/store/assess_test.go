@@ -97,7 +97,7 @@ func ratchetEvidence() store.Evidence {
 // askAndReady asks item's assessment with ev and readies its task.
 func (w *world) askAndReady(t *testing.T, item store.AssessItem, ev store.Evidence) (task, mission string) {
 	t.Helper()
-	task, err := store.GiveAssessment(ctx, w.rt, item, ev, nil)
+	task, err := store.GiveAssessment(ctx, w.rt, item, ev, nil, false)
 	ok(t, err)
 	if task == "" {
 		t.Fatalf("%s %s was not asked", item.Kind, item.ID)
@@ -189,17 +189,17 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 		t.Fatalf("the card: %+v", item)
 	}
 
-	q, fresh, err := store.AssessmentQuery(ctx, w.rt, item)
+	q, fresh, err := store.AssessmentQuery(ctx, w.rt, item, false)
 	ok(t, err)
 	if !fresh || !strings.Contains(strings.Join(q.Items, ","), "TD-378") || len(q.Repos) != 1 || q.Repos[0] != "bifrost-platform" ||
 		len(q.Tasks) != 1 || q.Tasks[0] != differs {
 		t.Fatalf("the query: %+v", q)
 	}
 	task, mission := w.askAndReady(t, item, ratchetEvidence())
-	if again, err := store.GiveAssessment(ctx, w.rt, item, ratchetEvidence(), nil); err != nil || again != "" {
+	if again, err := store.GiveAssessment(ctx, w.rt, item, ratchetEvidence(), nil, false); err != nil || again != "" {
 		t.Fatalf("asked twice: %q %v", again, err)
 	}
-	if _, fresh, err = store.AssessmentQuery(ctx, w.rt, item); err != nil || fresh {
+	if _, fresh, err = store.AssessmentQuery(ctx, w.rt, item, false); err != nil || fresh {
 		t.Fatalf("a second query: fresh %v (%v)", fresh, err)
 	}
 	var role, effect, class, of, job string
@@ -254,7 +254,7 @@ func TestAssessmentOfWorkOnMain(t *testing.T) {
 	if did, err := store.AcceptBrief(ctx, w.rt, agreed); err != nil || did != "assessed" {
 		t.Fatalf("accept the agreeing one: %q %v", did, err)
 	}
-	if _, err = store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, pending)), ratchetEvidence(), s.question); err != nil {
+	if _, err = store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, pending)), ratchetEvidence(), s.question, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range s.order {
@@ -294,7 +294,7 @@ func TestAssessmentOfAnApproval(t *testing.T) {
 		Body: "STG runs 8f30a9f6 since 14:00 and its CI is green.", Options: store.ApprovalOptions(), CreatedAt: time.Now(),
 		Record: map[string]any{"action": "deliver_platform", "tier": "C", "env": "prod", "key_params": map[string]any{"repo": "bifrost-platform"}},
 		Repos:  []string{"bifrost-platform"}, Others: []store.AssessOther{{Number: 6, Action: "rollout_restart", Status: "pending", CreatedAt: time.Now()}}}
-	q, fresh, err := store.AssessmentQuery(ctx, w.rt, item)
+	q, fresh, err := store.AssessmentQuery(ctx, w.rt, item, false)
 	ok(t, err)
 	if !fresh || len(q.Commits) != 1 || q.Commits[0] != "8f30a9f6" || len(q.Repos) != 1 {
 		t.Fatalf("the query: %+v", q)
@@ -303,7 +303,7 @@ func TestAssessmentOfAnApproval(t *testing.T) {
 	quiet := item
 	quiet.ID, quiet.Body = "9", "Deliver it."
 	quiet.Record = map[string]any{"action": "deliver_platform", "key_params": map[string]any{"repo": "bifrost-platform", "sha": "1c81a70a"}}
-	if q, _, err = store.AssessmentQuery(ctx, w.rt, quiet); err != nil || len(q.Commits) != 1 || q.Commits[0] != "1c81a70a" {
+	if q, _, err = store.AssessmentQuery(ctx, w.rt, quiet, false); err != nil || len(q.Commits) != 1 || q.Commits[0] != "1c81a70a" {
 		t.Fatalf("the query of an approval naming its commit in its key params alone: %+v (%v)", q, err)
 	}
 	ev := store.Evidence{Org: "bifrost", Commits: []store.EvidenceCommit{{Repo: "bifrost-platform", SHA: "8f30a9f6" + strings.Repeat("0", 32),
@@ -436,7 +436,7 @@ func TestAssessmentTimesOut(t *testing.T) {
 	unfreeze := store.FreezeEventClock(time.Now().Add(-store.AssessTimeout - 5*time.Minute))
 	task, mission := w.askAndReady(t, s.item(s.cardOf(t, late)), ratchetEvidence())
 	unfreeze()
-	if _, err := store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, inTime)), ratchetEvidence(), s.question); err != nil {
+	if _, err := store.GiveAssessment(ctx, w.rt, s.item(s.cardOf(t, inTime)), ratchetEvidence(), s.question, false); err != nil {
 		t.Fatal(err)
 	}
 	c := w.claim(t, "h1", store.LeaseTTL, claude)

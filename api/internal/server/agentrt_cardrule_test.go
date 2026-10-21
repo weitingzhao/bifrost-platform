@@ -81,7 +81,9 @@ func TestCardRuleOnTheStore(t *testing.T) {
 // TD-393: the card-auto-answer loop (every kind; every second since TD-402)
 // is wired on STG alone; PROD's and DEV's controllers get no card list and no
 // rule's answer, so the loop never starts there (controller.Start needs
-// both), while the assessments stay.
+// both), while the assessments stay. TD-401's second half: only STG's
+// controller leaves the cards that rule answers unassessed; PROD's and DEV's
+// assess every card, whatever rule is in force.
 func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 	rt := newQuestionRuntime(filepath.Join(t.TempDir(), "questions"), nil)
 	full := controller.Sources{Cards: rt.agentRuntimeCards(), RuleAnswer: rt.agentRuntimeRuleAnswer(),
@@ -90,12 +92,15 @@ func TestOnlySTGAnswersCardsByRule(t *testing.T) {
 		t.Fatal("the sources are nil before the environment is applied")
 	}
 	for _, env := range []string{"prod", "dev", "", "STG"} {
-		if src := cardRuleOnlyOnSTG(env, full); src.Cards != nil || src.RuleAnswer != nil || src.Assessable == nil {
-			t.Errorf("%q: cards %v, rule answer %v, assessments %v", env, src.Cards != nil, src.RuleAnswer != nil, src.Assessable != nil)
+		c := agentRuntimeController(env, nil, full)
+		if src := c.Sources; src.Cards != nil || src.RuleAnswer != nil || src.Assessable == nil || c.SkipCardsTheRuleAnswers || c.FailFirstVerify {
+			t.Errorf("%q: cards %v, rule answer %v, assessments %v, skips the rule's cards %v, fails the first verify %v", env,
+				src.Cards != nil, src.RuleAnswer != nil, src.Assessable != nil, c.SkipCardsTheRuleAnswers, c.FailFirstVerify)
 		}
 	}
-	if src := cardRuleOnlyOnSTG("stg", full); src.Cards == nil || src.RuleAnswer == nil {
-		t.Fatal("STG lost the card rule's sources")
+	if c := agentRuntimeController("stg", nil, full); c.Sources.Cards == nil || c.Sources.RuleAnswer == nil || c.Sources.Assessable == nil ||
+		!c.SkipCardsTheRuleAnswers || !c.FailFirstVerify {
+		t.Fatalf("STG's controller: %+v", c)
 	}
 	if controller.CardRuleEvery != time.Second {
 		t.Fatalf("the loop runs every %s", controller.CardRuleEvery)

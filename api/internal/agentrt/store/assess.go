@@ -155,9 +155,33 @@ func assessed(ctx context.Context, tx pgx.Tx, kind, id string) (bool, error) {
 	return asked, err
 }
 
+// ruleAnswersItem says whether item is a card of the runtime's that the
+// card-auto-answer rule in force answers: by the test that asks a card
+// ByRule (ruleAnswers: the rule lists its kind, and its mission, when it has
+// one, does not need the Owner). An approval, a card the runtime did not ask
+// and one of a kind or mission the rule leaves to the Owner are not.
+//
+// TD-401's second half (the Owner 2026-10-20 20:0x 「STG 上规则会答的卡（规则
+// 列着这种卡、mission 不是 needs_owner）不起评估；needs_owner 的卡和审批单照常评
+// 估；PROD 不变」): on STG the rule answers such a card within seconds, an
+// assessment takes minutes, so it could only arrive after the answer. Only
+// STG's controller asks for this (controller.SkipCardsTheRuleAnswers); PROD
+// and DEV assess every card, whatever rule is in force.
+func ruleAnswersItem(ctx context.Context, tx pgx.Tx, item AssessItem) (bool, error) {
+	if item.Kind != AssessCard {
+		return false, nil
+	}
+	on, ok, err := cardKind(ctx, tx, RuntimeCard{ID: item.ID, TaskID: item.TaskID})
+	if err != nil || !ok {
+		return false, err
+	}
+	return ruleAnswers(ctx, tx, on.kind, on.mission)
+}
+
 // AssessmentQuery is what the item's assessment reads outside the runtime;
-// fresh is false when it was asked for already.
-func AssessmentQuery(ctx context.Context, db DB, item AssessItem) (EvidenceQuery, bool, error) {
+// fresh is false when it was asked for already, or skipRuled leaves it out
+// (ruleAnswersItem), so nothing is read for it.
+func AssessmentQuery(ctx context.Context, db DB, item AssessItem, skipRuled bool) (EvidenceQuery, bool, error) {
 	var q EvidenceQuery
 	fresh := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
@@ -165,6 +189,11 @@ func AssessmentQuery(ctx context.Context, db DB, item AssessItem) (EvidenceQuery
 		asked, err := assessed(ctx, tx, item.Kind, item.ID)
 		if err != nil || asked {
 			return err
+		}
+		if skipRuled {
+			if ruled, err := ruleAnswersItem(ctx, tx, item); err != nil || ruled {
+				return err
+			}
 		}
 		f, err := assessFactsOf(ctx, tx, item)
 		if err != nil {
@@ -394,9 +423,15 @@ func (f assessFacts) query(item AssessItem) EvidenceQuery {
 // when the rule answers. The Owner's answer takes no lock here: one that
 // lands between this read and the commit still leaves an ask (its window is
 // that read and the writes after it). nil question reads nothing again.
+//
+// skipRuled (STG's controller, TD-401's second half) leaves out a card the
+// card-auto-answer rule in force answers (ruleAnswersItem), decided here
+// again since the rule or the mission may have changed while the evidence
+// was read; nothing is written for it.
 // Locks: the controller as a writer (every write's first), the item's stream,
 // then the mission's numbering (proposeMissionTx).
-func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool)) (string, error) {
+func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, question func(context.Context, string) (Question, bool),
+	skipRuled bool) (string, error) {
 	var task string
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		task = ""
@@ -414,6 +449,11 @@ func GiveAssessment(ctx context.Context, db DB, item AssessItem, ev Evidence, qu
 		if item.Kind == AssessCard && question != nil {
 			if q, ok := question(ctx, item.ID); !ok || q.Status != "open" || (!q.ExpiresAt.IsZero() && !time.Now().Before(q.ExpiresAt)) {
 				return nil
+			}
+		}
+		if skipRuled {
+			if ruled, err := ruleAnswersItem(ctx, tx, item); err != nil || ruled {
+				return err
 			}
 		}
 		f, err := assessFactsOf(ctx, tx, item)
