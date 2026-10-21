@@ -332,13 +332,23 @@ func (a *API) claim(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if cl != nil {
-			writeJSON(w, http.StatusOK, map[string]any{
+			body := map[string]any{
 				"task_id": cl.TaskID, "attempt_id": cl.AttemptID, "attempt_no": cl.AttemptNo, "mission_id": cl.MissionID,
 				"role": cl.Role, "repo": cl.Repo, "spec_artifact_id": cl.SpecArtifact, "base_commit": cl.BaseCommit, "work_id": cl.WorkID,
 				"pushed_ref": cl.PushedRef, "effect_class": cl.Effect, "lease_epoch": cl.Epoch,
 				"lease_expires_at": cl.LeaseExpiresAt, "hard_limit_s": int(cl.HardLimit / time.Second),
 				"tool": tool{Executor: cl.Tool.Executor, Provider: cl.Tool.Provider, Model: cl.Tool.Model},
-			})
+			}
+			// What the task's earlier rounds failed (TD-405); an agentd from
+			// before it ignores the field.
+			if len(cl.Failed) > 0 {
+				failed := make([]map[string]any, 0, len(cl.Failed))
+				for _, f := range cl.Failed {
+					failed = append(failed, map[string]any{"method": f.Method, "attempt_no": f.AttemptNo, "artifact_id": f.Evidence})
+				}
+				body["failed_checks"] = failed
+			}
+			writeJSON(w, http.StatusOK, body)
 			return
 		}
 		select {

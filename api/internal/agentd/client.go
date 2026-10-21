@@ -63,6 +63,18 @@ type Claimed struct {
 	LeaseExpiresAt time.Time `json:"lease_expires_at"`
 	HardLimitS     int       `json:"hard_limit_s"`
 	Tool           Tool      `json:"tool"`
+	// FailedChecks are the checks the task's earlier rounds failed, for an
+	// implementation in a round after the first (TD-405, lastround.go); a
+	// platform from before it sends none.
+	FailedChecks []FailedCheck `json:"failed_checks,omitempty"`
+}
+
+// FailedCheck is a check an earlier round of the task failed: deterministic
+// or review, the attempt it checked, and the artifact of its report.
+type FailedCheck struct {
+	Method    string `json:"method"`
+	AttemptNo int    `json:"attempt_no"`
+	Artifact  string `json:"artifact_id"`
 }
 
 // Result is what an attempt hands over: its report, other artifacts, and the

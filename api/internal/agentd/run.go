@@ -32,8 +32,11 @@ type Attempt struct {
 	// VerifyReport is the verify.json of the deterministic check a review
 	// follows.
 	VerifyReport []byte
-	Dir          string // the workspace
-	Out          string // where the executor writes report.md or verify.json
+	// Failed are the checks the task's earlier rounds failed, with their
+	// reports, for an implementation (TD-405, lastround.go).
+	Failed []PriorCheck
+	Dir    string // the workspace
+	Out    string // where the executor writes report.md or verify.json
 	// Walled: the executor runs inside agentd's write wall (confine.go);
 	// inner is what the code it runs besides itself may write (innerWrites),
 	// walled whenever the host has a wall.
@@ -265,6 +268,9 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 				return Outcome{}, err
 			}
 		}
+	}
+	if a.Failed, err = d.priorChecks(ctx, a); err != nil {
+		return Outcome{}, err
 	}
 	a.Dir = WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
 	a.Out, a.root = a.Dir+".out", d.Root

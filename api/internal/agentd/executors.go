@@ -69,11 +69,13 @@ func absolutePath(path string) string {
 	return strings.Join(dirs, string(filepath.ListSeparator))
 }
 
-// Prompt is what an agent executor is asked: the spec's text, and how the
-// result is handed over.
+// Prompt is what an agent executor is asked: the spec's text, for an
+// implementation what the checks of its task's earlier rounds failed on
+// (TD-405), and how the result is handed over.
 func Prompt(a *Attempt) string {
 	var b strings.Builder
 	b.WriteString(a.Spec.Text)
+	writePriorChecks(&b, a.Failed)
 	if a.Spec.Check != "" && a.Subject != nil {
 		fmt.Fprintf(&b, "\n\n---\nYou are checking task %s, attempt %s (round %d), at commit %s of %s, checked out here. Its spec:\n\n%s\n",
 			a.Spec.SubjectTask, a.Spec.Attempt, a.Spec.Round, a.Spec.Commit, a.Spec.Repo, a.Subject.Text)

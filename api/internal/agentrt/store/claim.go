@@ -36,6 +36,9 @@ type Claim struct {
 	Epoch                                                                                 int64
 	HardLimit                                                                             time.Duration
 	LeaseExpiresAt                                                                        time.Time
+	// Failed are the checks the task's earlier rounds failed, for an
+	// implementation in a round after the first (TD-405, claimfailed.go).
+	Failed []FailedCheck
 }
 
 // dispatched are the effect classes round 2 hands out. External work is not
@@ -416,7 +419,12 @@ func lease(ctx context.Context, tx pgx.Tx, hostID string, tl Tool, c candidate, 
 	cl := &Claim{TaskID: c.id, AttemptID: id, MissionID: c.mission, Role: c.role, Repo: c.repo, SpecArtifact: c.spec,
 		BaseCommit: c.base, PushedRef: AttemptRef(c.id, n), Effect: c.effect, Tool: tl, AttemptNo: n, Epoch: epoch,
 		HardLimit: time.Duration(c.limitS) * time.Second}
-	err = tx.QueryRow(ctx, `SELECT a.lease_expires_at, COALESCE(m.work_id, '') FROM agentrt.attempt a
-	  JOIN agentrt.mission m ON m.mission_id = $2 WHERE a.attempt_id = $1`, id, c.mission).Scan(&cl.LeaseExpiresAt, &cl.WorkID)
+	if err = tx.QueryRow(ctx, `SELECT a.lease_expires_at, COALESCE(m.work_id, '') FROM agentrt.attempt a
+	  JOIN agentrt.mission m ON m.mission_id = $2 WHERE a.attempt_id = $1`, id, c.mission).Scan(&cl.LeaseExpiresAt, &cl.WorkID); err != nil {
+		return nil, err
+	}
+	if c.role == "implement" {
+		cl.Failed, err = failedChecks(ctx, tx, c.id, n)
+	}
 	return cl, err
 }
