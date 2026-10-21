@@ -151,7 +151,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 	log := filepath.Join(t.TempDir(), "python.log")
 	must(t, os.WriteFile(filepath.Join(bin, "python3"), []byte(strings.Replace(fakePython, "LOG", log, 1)), 0o755))
 	procEnv := func(extra ...string) []string {
-		out := []string{"AGENTD_TEST_LAUNCHER=1"}
+		out := []string{"TESTMAIN_AGENTD_LAUNCHER=1"}
 		for _, kv := range os.Environ() {
 			if k, v, _ := strings.Cut(kv, "="); k == "PATH" {
 				kv = "PATH=" + bin + string(os.PathListSeparator) + v
@@ -176,7 +176,7 @@ func TestTwoRepoGoalToInfraCheck(t *testing.T) {
 	prod := agentd.Executors(os.Args[0], procEnv(), agentd.Secrets{})["exec:deterministic"]
 	deterministic := func(a *agentd.Attempt) (agentd.Spawn, error) {
 		sp, perr := prod(a)
-		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
+		sp.Env = append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1")
 		return sp, perr
 	}
 	d := daemon(t, s.URL+"/api/v1/agentrt", nil, platformBare, env)

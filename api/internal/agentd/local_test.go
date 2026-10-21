@@ -12,19 +12,19 @@ import (
 // The test binary is also the launcher: Launch starts it with LaunchArg and
 // this environment variable.
 func TestMain(m *testing.M) {
-	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 2 && os.Args[1] == LaunchArg {
+	if os.Getenv("TESTMAIN_AGENTD_LAUNCHER") == "1" && len(os.Args) > 2 && os.Args[1] == LaunchArg {
 		os.Exit(RunLauncher(os.Args[3:]))
 	}
-	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == "verify" {
+	if os.Getenv("TESTMAIN_AGENTD_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == "verify" {
 		os.Exit(RunVerify(os.Args[2:]))
 	}
-	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == SetupArg {
+	if os.Getenv("TESTMAIN_AGENTD_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == SetupArg {
 		os.Exit(RunSetup(os.Args[2:]))
 	}
-	if os.Getenv("AGENTD_TEST_DB_PROBE") == "1" && len(os.Args) == 1 {
+	if os.Getenv("TESTMAIN_TESTDB_PROBE") == "1" && len(os.Args) == 1 {
 		os.Exit(probeTestDB())
 	}
-	if os.Getenv("AGENTD_TEST_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == TestDBArg {
+	if os.Getenv("TESTMAIN_AGENTD_LAUNCHER") == "1" && len(os.Args) > 1 && os.Args[1] == TestDBArg {
 		os.Exit(RunTestDB(os.Args[2:]))
 	}
 	// The wall and its checks run with whatever environment they are given
@@ -43,7 +43,7 @@ func TestMain(m *testing.M) {
 }
 
 func launcherEnv() []string {
-	return append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")
+	return append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1")
 }
 
 func TestHostLock(t *testing.T) {

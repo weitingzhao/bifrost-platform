@@ -40,10 +40,10 @@ func TestAReviewOfEffectNoneSeesTheReport(t *testing.T) {
 		return nil
 	}))
 	d := daemon(t, base, script(`printf '# done\n\nslept 2700 s\n' > "$OUT/report.md"`), "", nil)
-	prod := agentd.Executors(os.Args[0], append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), agentd.Secrets{})["exec:deterministic"]
+	prod := agentd.Executors(os.Args[0], append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1"), agentd.Secrets{})["exec:deterministic"]
 	d.Executors["exec:deterministic"] = func(a *agentd.Attempt) (agentd.Spawn, error) {
 		sp, err := prod(a)
-		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
+		sp.Env = append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1")
 		return sp, err
 	}
 	var prompt string

@@ -65,7 +65,7 @@ func bareRemote(t *testing.T, env []string) (string, string) {
 func script(body string) agentd.Executor {
 	return func(a *agentd.Attempt) (agentd.Spawn, error) {
 		return agentd.Spawn{Argv: []string{"sh", "-c", body}, Dir: a.Dir,
-			Env: append(os.Environ(), "OUT="+a.Out, "AGENTD_TEST_LAUNCHER=1")}, nil
+			Env: append(os.Environ(), "OUT="+a.Out, "TESTMAIN_AGENTD_LAUNCHER=1")}, nil
 	}
 }
 
@@ -311,7 +311,7 @@ func TestRecover(t *testing.T) {
 	dir := agentd.WorkspaceDir(d.Root, cl.TaskID, cl.AttemptNo)
 	entry := agentd.Entry{AttemptID: cl.AttemptID, TaskID: cl.TaskID, AttemptNo: cl.AttemptNo, Epoch: cl.Epoch, Role: cl.Role,
 		Effect: cl.EffectClass, Workdir: dir, Phase: "running"}
-	p, err := agentd.Launch(os.Args[0], agentd.Spawn{Argv: []string{"sleep", "30"}, Env: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")},
+	p, err := agentd.Launch(os.Args[0], agentd.Spawn{Argv: []string{"sleep", "30"}, Env: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1")},
 		func(pgid int, start string) error {
 			entry.PGID, entry.Start = pgid, start
 			return d.Registry.Put(entry)

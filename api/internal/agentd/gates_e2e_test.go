@@ -183,11 +183,11 @@ func TestGateRunsOnTheDeployedCommit(t *testing.T) {
 
 	// agentd runs each with its own deterministic executor (the test binary
 	// is agentd, as its launcher, when told so).
-	prod := agentd.Executors(os.Args[0], append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), agentd.Secrets{})["exec:deterministic"]
+	prod := agentd.Executors(os.Args[0], append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1"), agentd.Secrets{})["exec:deterministic"]
 	d := daemon(t, s.URL+"/api/v1/agentrt", nil, bare, env)
 	d.Executors["exec:deterministic"] = func(a *agentd.Attempt) (agentd.Spawn, error) {
 		sp, perr := prod(a)
-		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
+		sp.Env = append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1")
 		return sp, perr
 	}
 	for i := 0; i < 2; i++ {

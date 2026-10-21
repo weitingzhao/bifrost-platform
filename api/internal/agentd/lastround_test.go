@@ -57,11 +57,11 @@ func TestRetriedImplementationIsToldWhatFailed(t *testing.T) {
 		return script(`echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)(a)
 	}
 	d := daemon(t, base, impl, bare, env)
-	launcher := append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")
+	launcher := append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1")
 	prod := agentd.Executors(os.Args[0], launcher, agentd.Secrets{})["exec:deterministic"]
 	d.Executors["exec:deterministic"] = func(a *agentd.Attempt) (agentd.Spawn, error) {
 		sp, err := prod(a)
-		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
+		sp.Env = append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1")
 		return sp, err
 	}
 	run := func(tool agentd.Tool, role string) *agentd.Claimed {

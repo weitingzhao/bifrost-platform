@@ -151,7 +151,7 @@ func TestDeterministicExecutor(t *testing.T) {
 		}
 		subject := TaskSpec{Text: "# the work", Verify: [][]string{{"sh", "-c", c.cmd}}}
 		a := &Attempt{Claim: &Claimed{Role: "verify"}, Spec: TaskSpec{Check: "verify"}, Subject: &subject, Dir: dir, Out: out}
-		sp, err := deterministicExecutor(os.Args[0], append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"))(a)
+		sp, err := deterministicExecutor(os.Args[0], append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1"))(a)
 		if err != nil {
 			t.Fatal(err)
 		}

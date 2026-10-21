@@ -42,7 +42,7 @@ func runTestDaemon(path string) int {
 		return 2
 	}
 	script := func(a *Attempt) (Spawn, error) {
-		return Spawn{Argv: []string{"sh", "-c", c.Script}, Dir: a.Dir, Env: append(os.Environ(), "OUT="+a.Out, "AGENTD_TEST_LAUNCHER=1")}, nil
+		return Spawn{Argv: []string{"sh", "-c", c.Script}, Dir: a.Dir, Env: append(os.Environ(), "OUT="+a.Out, "TESTMAIN_AGENTD_LAUNCHER=1")}, nil
 	}
 	d := &Daemon{
 		Client:    &Client{Base: c.Base, Host: c.Host, Token: c.Token},

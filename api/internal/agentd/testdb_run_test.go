@@ -36,13 +36,16 @@ func TestAPlatformAttemptHasATestDatabaseOfItsOwn(t *testing.T) {
 			}
 			_, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: repo, BaseCommit: baseCommit}, head, "application/json", []byte(`{"text":"t"}`))
 			// The script runs with this test's environment, which may name a
-			// database of its own; an executor's never does (AllowedEnv).
+			// database of its own and hold other names a real executor's
+			// never does (AllowedEnv, keyless): they go, as they would, so
+			// the environment checked behind the stage is an executor's
+			// (review 489 A2).
 			ex := script(`env | grep '^AGENTRT_TEST_' | sort > "$OUT/db-env.txt"; ` +
 				`{ [ -z "$AGENTRT_TEST_PG" ] || test -S "$(echo "$AGENTRT_TEST_PG" | sed 's/^host=\([^ ]*\) .*/\1/')/.s.PGSQL.5432"; } && ` +
 				`echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
 			d := daemon(t, base, func(a *agentd.Attempt) (agentd.Spawn, error) {
 				sp, err := ex(a)
-				sp.Env = slices.DeleteFunc(sp.Env, func(kv string) bool { return strings.HasPrefix(kv, "AGENTRT_TEST_") })
+				sp.Env = slices.DeleteFunc(sp.Env, func(kv string) bool { k, _, _ := strings.Cut(kv, "="); return agentd.BusinessKey(k) })
 				return sp, err
 			}, bare, env)
 			// A root short enough for the sockets under it (a test's own
@@ -88,5 +91,47 @@ func TestAPlatformAttemptHasATestDatabaseOfItsOwn(t *testing.T) {
 				t.Fatalf("Postgres still runs over the attempt's directory: %s", b)
 			}
 		})
+	}
+}
+
+// Review 489 A2: the environment the executor would have behind the stage is
+// checked before anything starts: a name on the deny list there (a test
+// executor's own environment is not keyless-checked, so it can hold one)
+// ends the attempt before its executor, and no database is started.
+func TestTheStageAddsNoBusinessKey(t *testing.T) {
+	tools, err := agentd.FindTestDBTools(os.Getenv("AGENTD_PG_BIN"))
+	if err != nil {
+		t.Skipf("no test database programs here: %v", err)
+	}
+	env := gitEnvT(t.TempDir())
+	bare, baseCommit := bareRemote(t, env)
+	head := func(_ context.Context, _, ref string) (string, error) {
+		out, err := exec.Command("git", "ls-remote", bare, ref).Output()
+		first, _, _ := strings.Cut(string(out), "\t")
+		return strings.TrimSpace(first), err
+	}
+	_, _, base := platformSpec(t, store.Task{Effect: "branch", Repo: "bifrost-platform", BaseCommit: baseCommit}, head, "application/json", []byte(`{"text":"t"}`))
+	ex := script(`touch "$OUT/ran"; echo 'package x' > x.go && printf '# done\n' > "$OUT/report.md"`)
+	d := daemon(t, base, func(a *agentd.Attempt) (agentd.Spawn, error) {
+		sp, err := ex(a)
+		sp.Env = slices.DeleteFunc(sp.Env, func(kv string) bool { k, _, _ := strings.Cut(kv, "="); return agentd.BusinessKey(k) })
+		sp.Env = append(sp.Env, "KUBECONFIG=/home/agent/.kube/config")
+		return sp, err
+	}, bare, env)
+	root, err := os.MkdirTemp("", "a")
+	must(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	d.Root, d.TestDB = root, tools
+	cl, err := d.Client.Claim(ctx, 1, []agentd.Tool{cursor})
+	if err != nil || cl == nil {
+		t.Fatalf("claim = %+v %v", cl, err)
+	}
+	out, err := d.Run(ctx, cl)
+	if out.EndHow != "prepare_failed" || err == nil || !strings.Contains(err.Error(), "KUBECONFIG") {
+		t.Fatalf("run = %+v %v; want it ended before its executor, naming KUBECONFIG", out, err)
+	}
+	attempt := agentd.WorkspaceDir(root, cl.TaskID, cl.AttemptNo) + ".out"
+	if _, serr := os.Stat(filepath.Join(attempt, "ran")); !errors.Is(serr, os.ErrNotExist) {
+		t.Fatalf("the executor ran: %v", serr)
 	}
 }

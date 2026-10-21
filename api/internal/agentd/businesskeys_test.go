@@ -73,3 +73,41 @@ func TestNoExecutorSeesABusinessKey(t *testing.T) {
 		}
 	}
 }
+
+// Review 489 A2: behind the test database stage the executor has three names
+// the deny list holds (AGENTRT_TEST_*), set by agentd's own stage and naming
+// only the attempt's own sockets: the one exception. Any other denied name,
+// one of the three pointing elsewhere, or another executor's login is refused.
+func TestStageKeyless(t *testing.T) {
+	sock, other := "/home/a/tasks/t_x/a1.out/tmp/db", "/home/a/tasks/t_y/a1.out/tmp/db"
+	base := []string{"HOME=/home/a/tasks/t_x/a1.out/home", "PATH=/usr/bin:/bin", "TMPDIR=/home/a/tasks/t_x/a1.out/tmp"}
+	if err := stageKeyless("exec:codex", stageEnv(append([]string(nil), base...), sock, "agent"), sock, "agent"); err != nil {
+		t.Fatalf("the stage's own three: %v", err)
+	}
+	got := stageEnv(append([]string(nil), base...), sock, "agent")
+	for _, k := range []string{"AGENTRT_TEST_PG", "AGENTRT_TEST_REDIS", "AGENTRT_TEST_REQUIRED"} {
+		if len(envValues(got, k)) != 1 {
+			t.Fatalf("%s is in the stage's environment %d times: %v", k, len(envValues(got, k)), got)
+		}
+	}
+	claude := append(append([]string(nil), base...), "CLAUDE_CODE_OAUTH_TOKEN=x")
+	if err := stageKeyless("exec:claude", stageEnv(claude, sock, "agent"), sock, "agent"); err != nil {
+		t.Fatalf("claude's own login: %v", err)
+	}
+	for name, env := range map[string][]string{
+		"another task's database": stageEnv(append([]string(nil), base...), other, "agent"),
+		"another host's database": append(append([]string(nil), base...), "AGENTRT_TEST_PG=host=192.168.10.73 port=30432 user=postgres",
+			"AGENTRT_TEST_REDIS=unix://"+sock+"/redis.sock", "AGENTRT_TEST_REQUIRED=1"),
+		"a kubeconfig":             stageEnv(append(append([]string(nil), base...), "KUBECONFIG=/home/a/.kube/config"), sock, "agent"),
+		"another user":             stageEnv(append([]string(nil), base...), sock, "postgres"),
+		"another executor's login": stageEnv(append([]string(nil), claude...), sock, "agent"),
+	} {
+		executor := "exec:claude"
+		if name == "another executor's login" {
+			executor = "exec:codex"
+		}
+		if err := stageKeyless(executor, env, sock, "agent"); err == nil {
+			t.Errorf("%s was taken", name)
+		}
+	}
+}

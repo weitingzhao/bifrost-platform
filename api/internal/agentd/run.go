@@ -378,7 +378,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	}
 	noDB := false
 	if ws != nil {
-		if sp, noDB, err = d.testDBFor(a, repo, sp); err != nil {
+		if sp, noDB, err = d.testDBFor(a, repo, cl.Tool.Executor, sp); err != nil {
 			return d.failBefore(ctx, a, ws, &waiting, l, err)
 		}
 	}

@@ -255,7 +255,7 @@ func TestSetupAndExecutorShareGoCaches(t *testing.T) {
 				`echo fetched > "$GOMODCACHE/cache/download/marker" && ` + caches + ` > setup-caches.txt`}}, sp, setupOpts{Home: setupHome(out)})
 			must(t, err)
 			cmd := exec.Command(sp.Argv[0], sp.Argv[1:]...)
-			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1")
+			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "TESTMAIN_AGENTD_LAUNCHER=1")
 			if b, rerr := cmd.CombinedOutput(); rerr != nil {
 				t.Fatalf("%v\n%s", rerr, b)
 			}

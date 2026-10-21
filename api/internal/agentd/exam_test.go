@@ -198,7 +198,7 @@ func fakeClaude(t *testing.T, root string, script func(a *agentd.Attempt, n int)
 			sh = `cat "$STREAM"`
 		}
 		sp.Argv = []string{"sh", "-c", sh}
-		sp.Env = append(sp.Env, "AGENTD_TEST_LAUNCHER=1", "STREAM="+stream, "EXAMROOT="+filepath.Join(root, "exam"))
+		sp.Env = append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1", "STREAM="+stream, "EXAMROOT="+filepath.Join(root, "exam"))
 		return sp, nil
 	}
 	return ex, func() []claudeRun {

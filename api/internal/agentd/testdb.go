@@ -184,19 +184,36 @@ func withTestDB(self string, t *TestDBTools, a *Attempt, sp Spawn, walled bool) 
 // testDBFor makes sp start the attempt's test database first when its
 // repository's tests need one (store.Repos: TestDB; for a check, the
 // subject's repository) and this host has the programs; it says when the
-// repository wants one and the host has none.
-func (d *Daemon) testDBFor(a *Attempt, repo string, sp Spawn) (Spawn, bool, error) {
+// repository wants one and the host has none. The environment executor will
+// have behind the stage is checked as keyless checked its spawn's (T13;
+// review 489 A2).
+func (d *Daemon) testDBFor(a *Attempt, repo, executor string, sp Spawn) (Spawn, bool, error) {
 	if !store.Repos[repo].TestDB {
 		return sp, false, nil
 	}
 	if d.TestDB == nil {
 		return sp, true, nil
 	}
+	if err := d.testDBKeyless(executor, a, sp); err != nil {
+		return sp, false, err
+	}
 	sp, err := withTestDB(d.Self, d.TestDB, a, sp, d.Wall != nil)
 	if err == nil {
 		a.testDB = d.TestDB
 	}
 	return sp, false, err
+}
+
+// testDBKeyless checks the environment the executor of sp will have behind
+// the attempt's test database stage (stageKeyless); the stage runs as
+// agentd's user, as its database does.
+func (d *Daemon) testDBKeyless(executor string, a *Attempt, sp Spawn) error {
+	u, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("agentd: the test database's user: %w", err)
+	}
+	sock := testDBSockDir(a.root, a.Out)
+	return stageKeyless(executor, stageEnv(slices.Clone(sp.Env), sock, u.Username), sock, u.Username)
 }
 
 // noTestDB is the line an attempt's log gets when its repository wants a
@@ -218,10 +235,15 @@ type testDB struct {
 }
 
 // env is what the executor gets to reach it.
-func (db *testDB) env() [][2]string {
+func (db *testDB) env() [][2]string { return testDBEnv(db.sock, db.user) }
+
+// testDBEnv is what the stage adds to the executor's environment for a
+// database on the sockets in sock, as user: these three names and nothing
+// else (stageKeyless holds agentd to it; review 489 A2).
+func testDBEnv(sock, user string) [][2]string {
 	return [][2]string{
-		{"AGENTRT_TEST_PG", fmt.Sprintf("host=%s port=5432 user=%s sslmode=disable", db.sock, db.user)},
-		{"AGENTRT_TEST_REDIS", "unix://" + filepath.Join(db.sock, "redis.sock")},
+		{"AGENTRT_TEST_PG", fmt.Sprintf("host=%s port=5432 user=%s sslmode=disable", sock, user)},
+		{"AGENTRT_TEST_REDIS", "unix://" + filepath.Join(sock, "redis.sock")},
 		{"AGENTRT_TEST_REQUIRED", "1"},
 	}
 }

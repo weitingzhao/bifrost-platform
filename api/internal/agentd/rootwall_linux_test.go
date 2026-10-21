@@ -134,7 +134,7 @@ func TestAWalledAttemptLeavesTheRootAsItWas(t *testing.T) {
 	}
 	argv := append(wallArgv(os.Args[0], []string{a.Dir, a.Out}), sp.Argv...)
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = sp.Dir, append(sp.Env, "AGENTD_TEST_LAUNCHER=1")
+	cmd.Dir, cmd.Env = sp.Dir, append(sp.Env, "TESTMAIN_AGENTD_LAUNCHER=1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Logf("the check exited %v:\n%s", err, out)
 	}

@@ -58,13 +58,16 @@ func TestTestDBStage(t *testing.T) {
 	out := filepath.Join(shortDir(t), "a1.out")
 	must(t, os.MkdirAll(attemptTmp(out), 0o700))
 	dir := testDBDir(out)
-	probe := filepath.Join(out, "probe.txt")
+	probe, names := filepath.Join(out, "probe.txt"), filepath.Join(out, "names.txt")
 	script := `printf '%s\n%s\n%s\n' "$AGENTRT_TEST_PG" "$AGENTRT_TEST_REDIS" "$AGENTRT_TEST_REQUIRED" > ` + probe +
+		` && env | cut -d= -f1 | sort -u > ` + names +
 		` && test -S "` + pgSocket(dir) + `" && test -S "` + filepath.Join(dir, "redis.sock") + `" && "$PROBE" && exit 7`
 	argv := append(testDBArgv(os.Args[0], tools, "", out, false), "sh", "-c", script)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = out
-	cmd.Env = append(launcherEnv(), "PROBE="+os.Args[0], "AGENTD_TEST_DB_PROBE=1")
+	// Without this test's own database names: the stage's are the only ones.
+	cmd.Env = append(slices.DeleteFunc(launcherEnv(), func(kv string) bool { return strings.HasPrefix(kv, "AGENTRT_TEST_") }),
+		"PROBE="+os.Args[0], "TESTMAIN_TESTDB_PROBE=1")
 	b, err := cmd.CombinedOutput()
 	var ee *exec.ExitError
 	if !errors.As(err, &ee) || ee.ExitCode() != 7 {
@@ -74,6 +77,23 @@ func TestTestDBStage(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(string(got)), "\n")
 	if len(lines) != 3 || !strings.HasPrefix(lines[0], "host="+dir+" ") || lines[1] != "unix://"+filepath.Join(dir, "redis.sock") || lines[2] != "1" {
 		t.Fatalf("the executor saw %q", lines)
+	}
+	// The stage adds the three names and nothing else (review 489 A2: what
+	// stageKeyless checks is what the executor has).
+	seen, _ := os.ReadFile(names)
+	parent := map[string]bool{"PWD": true, "SHLVL": true, "_": true, "OLDPWD": true} // the shell's own
+	for _, kv := range cmd.Env {
+		k, _, _ := strings.Cut(kv, "=")
+		parent[k] = true
+	}
+	var added []string
+	for _, k := range strings.Fields(string(seen)) {
+		if !parent[k] {
+			added = append(added, k)
+		}
+	}
+	if want := []string{"AGENTRT_TEST_PG", "AGENTRT_TEST_REDIS", "AGENTRT_TEST_REQUIRED"}; strings.Join(added, " ") != strings.Join(want, " ") {
+		t.Fatalf("the stage added %v to the executor's environment, want %v", added, want)
 	}
 	if _, serr := os.Stat(dir); !errors.Is(serr, os.ErrNotExist) {
 		t.Fatalf("the database's directory is still there: %v", serr)
@@ -331,7 +351,7 @@ func TestTestDBFor(t *testing.T) {
 		stage, noDB bool
 	}{{"bifrost-platform", tools, true, false}, {"bifrost-platform", nil, false, true}, {"bifrost-trade-infra", tools, false, false}} {
 		a := &Attempt{Out: filepath.Join(root, "a1.out")}
-		got, noDB, err := (&Daemon{Self: "/opt/agentd", TestDB: c.tools}).testDBFor(a, c.repo, sp)
+		got, noDB, err := (&Daemon{Self: "/opt/agentd", TestDB: c.tools}).testDBFor(a, c.repo, "exec:codex", sp)
 		must(t, err)
 		if staged := got.Argv[0] == "/opt/agentd" && got.Argv[1] == TestDBArg; staged != c.stage || noDB != c.noDB || (a.testDB != nil) != c.stage {
 			t.Errorf("%s with tools %v: argv %q, no database %v", c.repo, c.tools != nil, got.Argv, noDB)

@@ -50,6 +50,47 @@ var ownLogins = map[string][]string{
 	"exec:cursor": {"CURSOR_API_KEY"},
 }
 
+// T13 at the last spawn there is (review 489 A2): an executor behind the
+// test database stage (testdb.go) gets, on top of its spawn's environment
+// (keyless), the stage's three names: AGENTRT_TEST_PG, AGENTRT_TEST_REDIS,
+// AGENTRT_TEST_REQUIRED, which the AGENTRT prefix denies. They are the one
+// exception: set by agentd's own stage, never by a builder (keyless refuses
+// them in any spawn) nor taken from the host, and naming only the attempt's
+// own throwaway Postgres and Redis, on sockets in its own directory.
+// stageEnv is the environment the executor then has; stageKeyless refuses
+// it unless every denied name in it is the executor's own login or one of
+// the three with the value the stage gives it for this attempt.
+
+// stageEnv is the environment the test database stage gives the executor
+// whose spawn has env, on the sockets in sock, as user.
+func stageEnv(env []string, sock, user string) []string {
+	for _, kv := range testDBEnv(sock, user) {
+		env = withEnv(env, kv[0], kv[1])
+	}
+	return env
+}
+
+// stageKeyless is noBusinessKeys for an executor behind the test database
+// stage over sock, as user.
+func stageKeyless(executor string, env []string, sock, user string) error {
+	own := map[string]string{}
+	for _, kv := range testDBEnv(sock, user) {
+		own[kv[0]] = kv[1]
+	}
+	rest := make([]string, 0, len(env))
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		if want, ok := own[k]; ok {
+			if v != want {
+				return fmt.Errorf("agentd: %s's %s is %q, not this attempt's own test database's", executor, k, v)
+			}
+			continue
+		}
+		rest = append(rest, kv)
+	}
+	return noBusinessKeys(executor, rest)
+}
+
 // noBusinessKeys refuses an executor's environment that holds a name on the
 // deny list other than the executor's own login.
 func noBusinessKeys(executor string, env []string) error {

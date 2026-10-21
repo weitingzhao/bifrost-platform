@@ -73,7 +73,7 @@ case "$PWD" in
 esac`)
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0001")
 	b := &agentd.Bench{Root: root, Self: os.Args[0], Remote: func(string) string { return bare }, GitEnv: env,
-		CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1", "BENCH_MARK="+mark), Executor: exec,
+		CheckEnv: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1", "BENCH_MARK="+mark), Executor: exec,
 		Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"}, Limit: 3 * time.Second, KillGrace: time.Second, Logf: t.Logf}
 	ids := []string{}
 	for _, x := range qs {
@@ -268,7 +268,7 @@ func TestBenchSiblings(t *testing.T) {
 		_, _ = f.WriteString(a.Spec.Text + "\n=====\n")
 		_ = f.Close()
 		return agentd.Spawn{Argv: []string{"sh", "-c", "test -f ../ui/dist.txt && echo new > calc.txt"}, Dir: a.Dir,
-			Env: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1")}, nil
+			Env: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1")}, nil
 	}
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0002")
 	// A sandbox that confines nothing but records what each command may read
@@ -278,7 +278,7 @@ func TestBenchSiblings(t *testing.T) {
 		views = append(views, filepath.Base(tree)+" "+strings.Join(ro, " "))
 		return argv
 	}
-	b := &agentd.Bench{Root: root, Self: os.Args[0], GitEnv: env, CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), Executor: ex,
+	b := &agentd.Bench{Root: root, Self: os.Args[0], GitEnv: env, CheckEnv: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1"), Executor: ex,
 		Sandbox: sandbox,
 		Remote: func(repo string) string {
 			if repo == "ui" {
@@ -370,7 +370,7 @@ func TestBenchNpmResolvedOnce(t *testing.T) {
 		TestFiles: []string{"check.sh"}, Checks: []agentd.BenchCheck{{Cwd: ".", Argv: []string{"sh", "check.sh"}}}, TaskText: "fix: calc says new"}
 	root := filepath.Join(t.TempDir(), "bench", "run-test-0003")
 	b := &agentd.Bench{Root: root, Self: os.Args[0], Remote: func(string) string { return bare }, GitEnv: env,
-		CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1", "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"),
+		CheckEnv: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1", "PATH="+shim+string(os.PathListSeparator)+os.Getenv("PATH"),
 			"npm_config_offline=true", "npm_config_cache="+t.TempDir()),
 		Executor: script("echo new > calc.txt"), Tool: agentd.Tool{Executor: "exec:codex", Provider: "openai"},
 		Limit: 30 * time.Second, KillGrace: time.Second, Logf: t.Logf}
@@ -434,7 +434,7 @@ func TestBwrapSandbox(t *testing.T) {
 func TestBenchPreflight(t *testing.T) {
 	secret := filepath.Join(t.TempDir(), "agentd.token")
 	must(t, os.WriteFile(secret, []byte("x"), 0o600))
-	b := &agentd.Bench{Root: t.TempDir(), Self: os.Args[0], CheckEnv: append(os.Environ(), "AGENTD_TEST_LAUNCHER=1"), KillGrace: time.Second,
+	b := &agentd.Bench{Root: t.TempDir(), Self: os.Args[0], CheckEnv: append(os.Environ(), "TESTMAIN_AGENTD_LAUNCHER=1"), KillGrace: time.Second,
 		Secrets: []string{secret}}
 	if err := b.Preflight(context.Background()); err == nil {
 		t.Fatal("ran with no sandbox")

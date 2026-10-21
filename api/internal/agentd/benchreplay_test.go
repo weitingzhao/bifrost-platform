@@ -66,7 +66,7 @@ func TestBenchReplay(t *testing.T) {
 			body = "true"
 		}
 		return agentd.Spawn{Argv: []string{"sh", "-c", body}, Dir: a.Dir,
-			Env: append(os.Environ(), "PATCH="+filepath.Join(patches, a.Claim.TaskID+".patch"), "AGENTD_TEST_LAUNCHER=1")}, nil
+			Env: append(os.Environ(), "PATCH="+filepath.Join(patches, a.Claim.TaskID+".patch"), "TESTMAIN_AGENTD_LAUNCHER=1")}, nil
 	}
 	home, _ := os.UserHomeDir()
 	modCache := filepath.Join(home, "go", "pkg", "mod")
@@ -74,7 +74,7 @@ func TestBenchReplay(t *testing.T) {
 		modCache = strings.TrimSpace(string(out))
 	}
 	run := filepath.Join(root, "run")
-	env := append(agentd.AllowedEnv(os.Environ()), "AGENTD_TEST_LAUNCHER=1")
+	env := append(agentd.AllowedEnv(os.Environ()), "TESTMAIN_AGENTD_LAUNCHER=1")
 	b := &agentd.Bench{Root: run, Self: os.Args[0], GitEnv: append(agentd.AllowedEnv(os.Environ()), "GIT_TERMINAL_PROMPT=0"),
 		CheckEnv: env, Executor: ex, Tool: agentd.Tool{Executor: "exec:replay", Provider: "local"},
 		Limit: 5 * time.Minute, KillGrace: 5 * time.Second, Logf: t.Logf, GoModCache: modCache,

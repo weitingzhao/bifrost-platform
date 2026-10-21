@@ -113,7 +113,7 @@ func TestWalledSetupFillsTheExecutorsGoCache(t *testing.T) {
 			must(t, err)
 			argv := append(wallArgv(os.Args[0], executorWrites(name, a, nil)), sp.Argv...)
 			cmd := exec.Command(argv[0], argv[1:]...)
-			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1")
+			cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "TESTMAIN_AGENTD_LAUNCHER=1")
 			if out, rerr := cmd.CombinedOutput(); rerr != nil {
 				t.Fatalf("%v\n%s", rerr, out)
 			}
@@ -149,7 +149,7 @@ func TestWalledTestDBStage(t *testing.T) {
 	a.testDB = tools
 	argv := append(wallArgv(os.Args[0], executorWrites("exec:deterministic", a, nil)), sp.Argv...)
 	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "AGENTD_TEST_LAUNCHER=1", "AGENTD_TEST_DB_PROBE=1")
+	cmd.Dir, cmd.Env = a.Dir, append(slices.Clone(sp.Env), "TESTMAIN_AGENTD_LAUNCHER=1", "TESTMAIN_TESTDB_PROBE=1")
 	if out, rerr := cmd.CombinedOutput(); rerr != nil {
 		t.Fatalf("%v\n%s", rerr, out)
 	}
