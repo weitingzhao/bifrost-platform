@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import imported from '@/api/__fixtures__/agentrt-plan-imported.testdb.json'
 import moved from '@/api/__fixtures__/agentrt-plan-moved.testdb.json'
 import planApprovals from '@/api/__fixtures__/agentrt-plan-approvals.testdb.json'
+// signoffs: the same ledger with done rules waiting on the Owner's sign-off (agentrtapi TestOwnerSignsAStepOff).
+import planSignoffs from '@/api/__fixtures__/agentrt-plan-signoffs.testdb.json'
+import { PlatformAuthProvider } from '@/hooks/PlatformAuthProvider'
 // GET /progress with an architecture root, as store.Progress answered on a test database: four rows,
 // ticked true (two gates passed on stg, a thread's note), false (no pass on stg), unknown with no gate
 // test (the Owner's note) and unknown with nothing recorded for prod (W-31 2.5 ⑤ G2). Captured once by a
@@ -29,7 +32,7 @@ import { unavailableLine } from '@/test/lastRead'
 // retired: a root the runtime does not hold is said to be missing, never read from the board.
 
 const source = vi.hoisted(() => ({
-  plan: 'imported' as 'imported' | 'moved' | 'root-only' | 'approvals' | 'absent' | 'fail', progressFails: false, arch: false,
+  plan: 'imported' as 'imported' | 'moved' | 'root-only' | 'approvals' | 'signoffs' | 'absent' | 'fail', progressFails: false, arch: false,
   // The plan stream: as imported; a cursor that stays put; more pages than are read for the head, none of them with it.
   events: 'imported' as 'imported' | 'stuck' | 'endless', artifact: 'ok' as 'ok' | 'fail' | 'not json',
 }))
@@ -38,7 +41,8 @@ const stuck = planStream(2 * STREAM_PAGE, false), endless = planStream((IMPORT_H
 // approvals: the same round with done rules naming requests (agentrtapi TestPlanStepsNameTheirApprovals); its counts,
 // stream and request are the imported round's: the same ledger.
 const fixture = () => source.plan === 'moved' ? moved : source.plan === 'root-only' ? rootOnly
-  : source.plan === 'approvals' ? { ...imported, plan: planApprovals.plan } : imported
+  : source.plan === 'approvals' ? { ...imported, plan: planApprovals.plan }
+  : source.plan === 'signoffs' ? { ...imported, plan: planSignoffs.plan } : imported
 const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input)
   if (url.includes('/agentrt/plan?')) {
@@ -61,6 +65,7 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     return json(source.arch ? { ...progress, plan: [...progress.plan, ...archFixture.plan.filter(r => r.kind === 'arch_root')] } : progress)
   }
   if (url.includes('/agentrt/pools')) return json(poolsFixture)
+  if (url.includes('/auth/capabilities')) return json({ authenticated: false })
   throw new Error(`Unexpected URL ${url}`)
 })
 function Overview() {
@@ -224,6 +229,16 @@ describe('the plan pane on Progress', () => {
     expect(screen.queryByText('2026-10-14 01:09')).not.toBeInTheDocument()
     expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()
+  })
+
+  it('keeps the Owner\'s Sign off when the import request cannot be read (PROD 2026-10-21)', async () => {
+    source.plan = 'signoffs'
+    source.artifact = 'fail'
+    show(<PlatformAuthProvider><AgentsPlan /></PlatformAuthProvider>)
+    expect(await screen.findByText(/^The ledger lines could not be read: /)).toBeInTheDocument()
+    for (const name of ['Sign off a', 'Sign off b', 'Sign off']) expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    expect(screen.getByText(/^Signed off exam-2\.4-1 by the Owner, /)).toBeInTheDocument()
+    expect(screen.queryByText(/Plan unavailable/)).not.toBeInTheDocument()
   })
 
   it('a plan whose counts cannot be read is an error too', async () => {

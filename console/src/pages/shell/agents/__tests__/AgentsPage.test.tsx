@@ -171,7 +171,9 @@ describe('runtime timeline', () => {
     const persisted = expected.find(e => e.event_type === 'attempt_persisted')!
     const id = (persisted.body_json as { artifacts: string[] }).artifacts[0]!
     const link = within(timeline).getByRole('link', { name: id })
-    expect(link).toHaveAttribute('href', `/api/v1/agentrt/artifacts/${encodeURIComponent(id)}`)
+    // The id as it is, colon kept (pathSegment): an escaped sha256%3A… named no row on the platform (PROD 2026-10-21).
+    expect(id).toMatch(/^sha256:/)
+    expect(link).toHaveAttribute('href', `/api/v1/agentrt/artifacts/${id}`)
     fireEvent.click(link)
     const panel = await screen.findByRole('region', { name: `Artifact ${id}` })
     expect(await within(panel).findByText(/Done <script>unsafe/)).toBeInTheDocument()
