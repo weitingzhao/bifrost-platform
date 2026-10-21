@@ -77,12 +77,16 @@ describe('write mode', () => {
     }
     for (const mode of ['legacy', 'on', 'off'] as const) {
       const plan = planWrite('POST', '/api/v1/approvals/appr_x/resolve?x=1', { outcome: 'not_run', note: 'checked' }, mode)
-      assert.equal(plan.kind, 'refused', mode)
-      if (plan.kind !== 'refused') return
-      assert.equal(plan.body.error, RESOLVE_REFUSAL_ERROR)
-      assert.equal(plan.body.hint, RESOLVE_REFUSAL_HINT)
-      assert.equal(plan.body.path, '/api/v1/approvals/appr_x/resolve')
-      assert.equal(plan.kind === 'direct', false)
+      // The whole plan is the refusal, the same in every mode: nothing in it
+      // forwards the write, as 'direct' did before 10-10 (TD-412).
+      assert.deepEqual(
+        plan,
+        {
+          kind: 'refused',
+          body: { error: RESOLVE_REFUSAL_ERROR, method: 'POST', path: '/api/v1/approvals/appr_x/resolve', hint: RESOLVE_REFUSAL_HINT },
+        },
+        mode,
+      )
     }
     assert.equal(WRITE_SPECS.some((spec) => spec.pattern.test('/api/v1/approvals/appr_x/resolve')), false)
     assert.equal(ownerDecision('POST', '/api/v1/approvals/appr_x/approve'), 'approve')
