@@ -724,3 +724,26 @@ func TestGateNonMemberIsOrdinary(t *testing.T) {
 		t.Fatalf("asked %d (%v) for a task of a batch whose list does not read", n, err)
 	}
 }
+
+// Review td397-6 B1: a false row whose rule names gates in two environments
+// says of each what is true of it: all passed in one, not all in the other,
+// or what it runs is not recorded.
+func TestGateReasonByEnvironment(t *testing.T) {
+	t.Parallel()
+	g, spec, sum := gateOf(t, "T40", "TestGrammarIsClosed")
+	rule := `{"all":[{"gates_passed":[{"test":"T40","spec_sha256":"` + sum + `"}],"env":"dev"},` +
+		`{"gates_passed":[{"test":"T40","spec_sha256":"` + sum + `"}],"env":"stg"}]}`
+	w := gateWorld(t, [][]byte{spec}, [2]string{"ARCH:a", rule})
+	w.deploy(t, commitA, refA)
+	wantTick(t, w.archRows(t)["ARCH:a"], "false", "T40 (not dispatched yet): not all passed on dev at 2333e00753f9")
+	wantTick(t, w.archRows(t)["ARCH:a"], "false", "; T40 (unknown): what stg runs is not recorded yet")
+	w.runGates(t, commitA, refA)
+	if did := w.runGateTask(t, "h1", w.gateTasks(t, commitA)[0][0], "done", gateVerifyJSON(g, true, 0, "")); did != "accepted" {
+		t.Fatalf("did %q", did)
+	}
+	_, err := store.SeeDeploy(ctx, w.rt, "stg", deployedIs(commitA, refA))
+	ok(t, err)
+	row := w.archRows(t)["ARCH:a"]
+	wantTick(t, row, "false", "T40 passed: passed on dev at 2333e00753f9")
+	wantTick(t, row, "false", "; T40 (not dispatched yet): not all passed on stg at 2333e00753f9")
+}

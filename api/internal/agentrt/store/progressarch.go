@@ -303,11 +303,14 @@ func (e *explained) GatePassed(env, test, specSHA256 string) plan.Tri {
 func (e *explained) everyGate(rule plan.Rule, deploys *recordedDeploys) string {
 	var envs []string
 	named := map[string][]string{}
+	all := map[string]bool{} // every gate of the environment passed
 	for _, g := range rule.Gates() {
 		v := e.GatePassed(g.Env, g.Test, g.Spec)
 		if _, ok := named[g.Env]; !ok {
 			envs = append(envs, g.Env)
+			all[g.Env] = true
 		}
+		all[g.Env] = all[g.Env] && v == plan.True
 		what := e.whats[g.Env+"\x00"+g.Test+"\x00"+g.Spec]
 		switch v {
 		case plan.True:
@@ -317,11 +320,24 @@ func (e *explained) everyGate(rule plan.Rule, deploys *recordedDeploys) string {
 		}
 		named[g.Env] = append(named[g.Env], what)
 	}
+	// Each environment says what is true of it (review td397-6 B1): all its
+	// gates passed, or not, or what it runs is not known.
 	var parts []string
 	for _, env := range envs {
+		list := strings.Join(named[env], ", ")
 		d := deploys.get(env)
-		parts = append(parts, fmt.Sprintf("%s: not all passed on %s at %s, the deployment recorded %s", strings.Join(named[env], ", "),
-			env, short(d.commit), d.at.UTC().Format(time.RFC3339)))
+		at := fmt.Sprintf("%s at %s, the deployment recorded %s", env, short(d.commit), d.at.UTC().Format(time.RFC3339))
+		switch {
+		case !d.found:
+			parts = append(parts, list+": what "+env+" runs is not recorded yet")
+		case !d.ok:
+			parts = append(parts, fmt.Sprintf("%s: the deployment recorded for %s at %s does not identify what runs: %s", list, env,
+				d.at.UTC().Format(time.RFC3339), d.invalid))
+		case all[env]:
+			parts = append(parts, list+": passed on "+at)
+		default:
+			parts = append(parts, list+": not all passed on "+at)
+		}
 	}
 	return strings.Join(parts, "; ")
 }
