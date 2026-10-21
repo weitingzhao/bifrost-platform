@@ -3,6 +3,7 @@ package store_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -380,6 +381,34 @@ func TestAWaitAtItsEdge(t *testing.T) {
 	}
 	if o := waitsRecorded(t, w)[1]; o.body["ref"] != other || o.body["basis"] != "floor" || o.body["usual_s"] != nil {
 		t.Fatalf("the task of two samples %+v", o.body)
+	}
+
+	// A running attempt of a task with its own usual time below the floor,
+	// started at an instant with microseconds (review 475 C2).
+	w3 := newKernelWorld(t)
+	run := w3.ready(t, store.Task{})
+	w3.legacy(t, fmt.Sprintf(`UPDATE agentrt.task SET usual_s = 300 WHERE task_id = '%s'`, run))
+	c := w3.claimed(t, run, "h1", codex, true)
+	w3.legacy(t, fmt.Sprintf(`UPDATE agentrt.attempt SET started_at = date_trunc('second', started_at) + interval '0.123457 seconds'
+	  WHERE attempt_id = '%s'`, c.AttemptID))
+	var started time.Time
+	ok(t, w3.rt.QueryRow(ctx, `SELECT started_at FROM agentrt.attempt WHERE attempt_id = $1`, c.AttemptID).Scan(&started))
+	if started.Nanosecond() != 123457000 {
+		t.Fatalf("started at %s: the case needs microseconds", started.Format(time.RFC3339Nano))
+	}
+	if n := waitsAt(t, w3, started.Add(1800*time.Second).In(east)); n != 0 {
+		t.Fatalf("%d recorded for the attempt at exactly its limit", n)
+	}
+	for i, want := range []int{1, 0} {
+		if n := waitsAt(t, w3, started.Add(1801*time.Second).In(east)); n != want {
+			t.Fatalf("pass %d recorded %d for the attempt a second past its limit, want %d", i+1, n, want)
+		}
+	}
+	ws := waitsRecorded(t, w3)
+	if len(ws) != 1 || ws[0].body["wait"] != store.WaitAttemptRunning || ws[0].body["ref"] != c.AttemptID || ws[0].body["basis"] != "floor" ||
+		num(ws[0].body["limit_s"]) != 1800 || num(ws[0].body["usual_s"]) != 300 ||
+		ws[0].body["since"] != started.UTC().Format(time.RFC3339Nano) || !strings.HasSuffix(ws[0].body["since"].(string), ".123457Z") {
+		t.Fatalf("the running attempt's waits %+v", ws)
 	}
 }
 

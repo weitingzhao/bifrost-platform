@@ -113,7 +113,8 @@ describe('the timeline from the runtime\'s events (2.5 G6)', () => {
     expect(say({ wait: 'host_asleep', waited_s: 120 })).toMatchObject({ kind: 'wait', text: 'host_asleep: 2 min', detail: '' })
     // A second past the limit reads so, not as the limit itself.
     expect(say({ ...attempt.body, waited_s: 1801, limit_s: 1800 })?.text).toBe(`task ${attempt.task_id.slice(-4)} had run 30 min 1 s, past its limit of 30 min`)
-    expect([0, 59, 60, 3600, 5460, 7200, -1, '1'].map(span)).toEqual(['0 s', '59 s', '1 min', '1 h', '1 h 31 min', '2 h', '?', '?'])
+    expect([0, 59, 60, 3600, 3601, 5460, 7200, -1, '1'].map(span)).toEqual(['0 s', '59 s', '1 min', '1 h', '1 h 1 s', '1 h 31 min', '2 h', '?', '?'])
+    expect(say({ ...attempt.body, waited_s: 3601, limit_s: 3600 })?.text).toBe(`task ${attempt.task_id.slice(-4)} had run 1 h 1 s, past its limit of 1 h`)
   })
   it('says each plan change decision, with its error when it failed', () => {
     const planRow = latest.events.find(e => e.event_type === 'plan_node_state_changed')!

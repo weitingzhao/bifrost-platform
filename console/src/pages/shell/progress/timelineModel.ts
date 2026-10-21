@@ -25,13 +25,11 @@ const REPORT: Record<string, string> = { report: 'a report', verify: 'a verifica
 /** What a wait's limit came from (store/waits.go basis). */
 const LIMIT_FROM: Record<string, string> = { floor: 'the floor of its kind', task_usual: 'twice its usual time',
   history_usual: 'twice the usual time of its kind' }
-/** Seconds as hours and minutes, or minutes and seconds: a wait a second past its limit reads so (review 474 C1). */
+/** Seconds as hours, minutes and seconds, each part that is not zero: a wait a second past its limit reads so (reviews 474 C1, 475 C1). */
 export function span(v: unknown): string {
   if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return '?'
   const s = Math.floor(v), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
-  if (h > 0) return m ? `${h} h ${m} min` : `${h} h`
-  if (m > 0) return sec ? `${m} min ${sec} s` : `${m} min`
-  return `${sec} s`
+  return [h && `${h} h`, m && `${m} min`, sec && `${sec} s`].filter(Boolean).join(' ') || '0 s'
 }
 
 /**
