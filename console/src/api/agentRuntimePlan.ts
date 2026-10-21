@@ -1,4 +1,5 @@
 import { authedFetch, parseError } from '@/api/client'
+import { serverFetch } from '@/api/serverContact'
 import { record, records, text } from '@/api/agentRuntime'
 import { boardState, importHead, type PlanRequest, type PlanView } from '@/api/agentRuntimePlanView'
 
@@ -11,6 +12,8 @@ export type RuntimePlanStep = {
   id: string; t: string; state: string; when: string; line?: string; owner?: boolean; star?: boolean
   /** The approvals its done rule waits on (approval_executed), by number: the request the step is done by. */
   approvals?: number[]
+  /** Its done rule's owner_signoff atoms and the sign-offs it holds: what the Owner signs off on the plan page. */
+  signoffs?: StepSignoffs
 }
 /**
  * An item with its count (store/progress.go, the one counting rule): done of total, and of the done ones how many by a
@@ -166,7 +169,7 @@ const count = (v: unknown): v is number => typeof v === 'number' && Number.isInt
  * reads; when they do not list the same items the round is not shown.
  */
 export function runtimeRound(view: PlanView, plan: unknown[], root: string, request: PlanRequest | null,
-  approvals: ReadonlyMap<string, number[]> = new Map()): RuntimeRound {
+  approvals: ReadonlyMap<string, number[]> = new Map(), signoffs: ReadonlyMap<string, StepSignoffs> = new Map()): RuntimeRound {
   const round = records(plan).find(r => r.plan_node_id === root && r.kind === 'round')
   if (round === undefined) throw new Error(`The runtime's progress does not count ${root}.`)
   const counts = new Map(records(round.items).map(i => [text(i.label), record(i.count)]))
@@ -181,8 +184,9 @@ export function runtimeRound(view: PlanView, plan: unknown[], root: string, requ
       manual: count(c.manual) ? c.manual : undefined, stopped: count(c.stopped) ? c.stopped : undefined,
       steps: item.steps.map(s => {
         const waits = approvals.get(`${root}:${s.id}`)
+        const signs = signoffs.get(`${root}:${s.id}`)
         return { id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined,
-          owner: s.owner, star: s.star, ...(waits?.length ? { approvals: waits } : {}) }
+          owner: s.owner, star: s.star, ...(waits?.length ? { approvals: waits } : {}), ...(signs ? { signoffs: signs } : {}) }
       }) }
   }) }
 }
@@ -234,4 +238,63 @@ export function stepsOfApproval(doc: unknown, n: number): ApprovalStep[] {
     return { id: text(node.plan_node_id), label: text(node.label), title: text(node.title), owner: node.owner_step === true,
       item: text(item.label), itemTitle: text(item.title) }
   })
+}
+
+/** A sign-off the Owner gave a step (GET /plan's signoffs): the owner_signoff ref, who signed, and when. */
+export type StepSignoff = { ref: string; by: string; at: string }
+/**
+ * A step the Owner signs off (the Owner 2026-10-21): its node id, the refs of its done rule's owner_signoff atoms in the
+ * order the rule names them, and the sign-offs it holds, oldest first.
+ */
+export type StepSignoffs = { node: string; refs: string[]; signed: StepSignoff[] }
+
+/** The refs of a done rule's owner_signoff atoms, an atom or nested in all / any as plan/rule.go reads it, each once. */
+export function signoffRefs(rule: unknown, depth = 0): string[] {
+  if (depth > RULE_DEPTH || rule === null || typeof rule !== 'object' || Array.isArray(rule)) return []
+  const r = rule as Record<string, unknown>
+  const out: string[] = []
+  if (typeof r.owner_signoff === 'string' && r.owner_signoff !== '') out.push(r.owner_signoff)
+  for (const key of ['all', 'any']) {
+    const list = r[key]
+    if (Array.isArray(list)) for (const child of list) out.push(...signoffRefs(child, depth + 1))
+  }
+  return [...new Set(out)]
+}
+
+/** Each step's sign-offs from a GET /plan?root= answer, keyed by the step's node id; steps whose rule names no owner_signoff are left out. */
+export function signoffsByStep(doc: unknown): Map<string, StepSignoffs> {
+  const out = new Map<string, StepSignoffs>()
+  for (const node of records(record(doc).nodes)) {
+    if (text(node.node_kind) !== 'step') continue
+    const refs = signoffRefs(node.done_rule_json)
+    if (refs.length === 0) continue
+    const signed = records(node.signoffs).map(s => ({ ref: text(s.ref), by: text(s.by), at: text(s.at) })).filter(s => s.ref !== '')
+    out.set(text(node.plan_node_id), { node: text(node.plan_node_id), refs, signed })
+  }
+  return out
+}
+
+/** The refs of a step not signed off yet, in the rule's order. */
+export function unsignedRefs(s: StepSignoffs): string[] {
+  return s.refs.filter(ref => !s.signed.some(signed => signed.ref === ref))
+}
+
+/** POST /plan/{id}/signoff's answer: the sign-off, and whether the step held it before the press (nothing was written then). */
+export type SignoffAnswer = StepSignoff & { node: string; alreadySigned: boolean }
+
+/** A node id in a path: its colon kept, as the platform's router reads the raw path (mcp runtimeTools id). */
+const nodePath = (node: string) => encodeURIComponent(node).replace(/%3A/gi, ':')
+
+/**
+ * The Owner signs ref of a step off: POST /plan/{id}/signoff with the admin sign-in. The route takes the admin role
+ * only; a second press answers the first sign-off.
+ */
+export async function postStepSignoff(node: string, ref: string, token: string): Promise<SignoffAnswer> {
+  const headers = new Headers()
+  headers.set('Content-Type', 'application/json')
+  headers.set('Authorization', `Bearer ${token}`)
+  const r = await serverFetch(`/api/v1/agentrt/plan/${nodePath(node)}/signoff`, { method: 'POST', headers, body: JSON.stringify({ ref }) })
+  if (!r.ok) throw await parseError('Sign off', r, token)
+  const body = record(await r.json())
+  return { node: text(body.plan_node_id), ref: text(body.ref), by: text(body.by), at: text(body.at), alreadySigned: body.already_signed === true }
 }

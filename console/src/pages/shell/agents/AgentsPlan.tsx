@@ -2,6 +2,7 @@ import { archCounts, manualAndStopped, type ArchTick, type RuntimeArchTable, typ
 import { OpsSection } from '@/components/layout/OpsSection'
 import { approvalHref } from '@/lib/shell/consoleRoutes'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
+import { StepSignoffControls } from './StepSignoffs'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, useRuntimeArch, useRuntimePlan } from './useRuntimePlan'
 
 /** A step's mark from the runtime: Owner (owner_step) or ★ (effect_step), whatever its title says. */
@@ -13,6 +14,8 @@ function Steps({ steps }: { steps: RuntimePlanStep[] }) {
     <strong>{step.state || 'Unknown'}</strong> · {step.owner && <Mark title="The Owner's step (owner_step)">Owner</Mark>}{step.star && <Mark title="An effect step (effect_step)">★</Mark>}{step.t || 'Untitled step'}
     {/* The request this step is done by: the same request Needs you lists (v4 §20.5 scenario 10). */}
     {step.approvals?.map(n => <a key={n} href={approvalHref(String(n))} data-step-approval={n} className="ml-1 text-xs">Request #{n}</a>)}
+    {/* The Owner's sign-off its done rule waits on: who signed and when, or the button while it can still move. */}
+    {step.signoffs && <StepSignoffControls label={step.id} state={step.state} signoffs={step.signoffs} />}
     {step.when && <p className="text-xs text-muted-foreground">{step.when}</p>}
     {step.line && <details><summary className="cursor-pointer text-xs text-muted-foreground">Ledger line</summary><p className="whitespace-pre-wrap break-words text-xs">{step.line.trim()}</p></details>}
   </li>)}</ol>

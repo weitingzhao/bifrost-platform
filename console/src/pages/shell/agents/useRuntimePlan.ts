@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { AGENT_PROGRESS_POLL_MS } from '@/api/agentProgress'
 import { AGENT_RUNTIME_POLL_MS, fetchRuntimeProgress, type RuntimeProgress } from '@/api/agentRuntime'
-import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
+import { PLAN_ROOT, approvalsByStep, fetchImportRequest, fetchRuntimePlan, runtimeArch, runtimeRound, signoffsByStep, stepsOfApproval, type ApprovalStep, type PlanAnswer, type RuntimeArchTable, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { fromPlanWithRequest, type PlanRequest } from '@/api/agentRuntimePlanView'
 import { record } from '@/api/agentRuntime'
 
@@ -44,7 +44,7 @@ export function planRead(plan: Read<PlanAnswer>, request: Read<PlanRequest | nul
   if (progress.data === undefined || request.data === undefined) return { from: 'loading' }
   try {
     return { from: 'runtime', round: runtimeRound(fromPlanWithRequest(plan.data.doc, PLAN_ROOT, request.data), progress.data.plan, PLAN_ROOT, request.data,
-      approvalsByStep(plan.data.doc)) }
+      approvalsByStep(plan.data.doc), signoffsByStep(plan.data.doc)) }
   } catch (e) {
     return { from: 'error', error: e instanceof Error ? e.message : String(e) }
   }
