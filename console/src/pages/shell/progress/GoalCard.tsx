@@ -9,6 +9,7 @@ import type { Question } from '@/api/questions'
 import { questionHref } from '@/lib/shell/consoleRoutes'
 import { ArtifactPanel, TaskTimeline } from '../agents/TaskTimeline'
 import { useNow } from './progressClock'
+import { unpersistedWords } from '../owner/crewModel'
 import { currentVerdict, droppedByRule, droppedTasks, duration, goalDone, goalQuestions, goalStages, goalStatus, goalWaitingLinks, latestLease, relative, stageMarks, taskTiming, taskWho, terminalMission } from './goalCardModel'
 
 /** What a card's answer added to the budget: the Owner's, or a STG rule's for him (TD-390), so not called his. */
@@ -101,7 +102,10 @@ export function GoalCard({ id, runtime, updatedAt, questions, highlighted = fals
         {(stage.droppedByRule ?? 0) > 0 && <p className="text-xs text-muted-foreground">{stage.droppedByRule} dropped by rule</p>}
         {stage.tasks.map(t => { const timing = taskTiming(data, t, now), lease = latestLease(data, t)
           const live = runtime?.live.find(a => a.task_id === t.task_id)
-          return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p>{taskWho(data, t)}</p><p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
+          // TD-352: an attempt stale or lost with its result not persisted says so, and a lost one is not done.
+          const lost = live ? undefined : summary?.tasks.find(x => x.task_id === t.task_id)?.lost_attempt
+          const unpersisted = live ? unpersistedWords(live, now) : lost ? unpersistedWords(lost, now) : ''
+          return <div key={t.task_id} className="mt-1 text-xs text-muted-foreground"><p>{taskWho(data, t)}</p>{unpersisted && <p className="font-semibold text-[var(--color-warning)]">{lost ? `Attempt ${lost.attempt_no ?? '?'} lost on ${lost.host_id || 'no host'}, not done. ` : ''}{unpersisted}</p>}<p title={timing.title}>{timing.label}</p>{stage.state === 'running' && <p>{live?.host_id || text(lease?.body_json.host_id)}{live?.elapsed_s !== undefined && ` · elapsed ${duration(live.elapsed_s)}`}{live?.heartbeat_age_s !== undefined && ` · heartbeat ${duration(live.heartbeat_age_s)} ago`}</p>}{live?.attempt_id && <AttemptActions key={live.attempt_id} id={live.attempt_id} />}</div>
         })}
       </li>)}</ol>
       {done && <GoalResult data={data} />}

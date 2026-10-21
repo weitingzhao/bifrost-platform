@@ -2,7 +2,7 @@ import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useQueries } from '@tanstack/react-query'
 import { fetchRuntimeTaskDetail, type RuntimeAttempt, type RuntimeHost, type RuntimeMission, type RuntimeTaskDetail } from '@/api/agentRuntime'
 import { AttemptActionLine } from './AttemptActionLine'
-import { crewRows, duration, firstLine } from './crewModel'
+import { crewRows, duration, firstLine, unpersistedWords } from './crewModel'
 import { Card, Dot } from './OwnerParts'
 import { ago, type Tone } from './ownerModel'
 
@@ -48,7 +48,9 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
     return { role: ROLE[role] ?? (role || 'Task'), title, failed: details[ids.indexOf(a.task_id)]?.isError === true && !l }
   }
 
-  const rows = crewRows(hosts, live)
+  // A lost attempt whose result is not persisted stays under its host, never as done (TD-352).
+  const lost = missions.flatMap(m => m.tasks.flatMap(t => t.lost_attempt ? [t.lost_attempt] : []))
+  const rows = crewRows(hosts, live, lost)
   const known = rows.filter(r => r.host)
   const online = known.filter(r => r.host?.online === true).length
   const title = read === 'ok' && known.length ? `Crew · ${online} of ${known.length} hosts online` : 'Crew'
@@ -62,19 +64,30 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2"><Dot tone={hostTone(h)} /><strong className="truncate font-mono text-sm" title={row.id}>{row.id}</strong>
             <span className="text-xs text-muted-foreground">{!h ? 'not a registered host' : h.online ? 'online' : `last poll ${ago(h.last_poll_at, now)}`}</span></span>
-          <span className="text-xs font-semibold">{row.attempts.length ? `${row.attempts.length} running` : 'Idle'}</span>
+          <span className="text-xs font-semibold">{row.attempts.length ? `${row.attempts.length} running` : 'Idle'}{row.lost.length > 0 && ` · ${row.lost.length} lost`}</span>
         </div>
         {row.attempts.map(a => {
           const n = name(a)
           const late = a.heartbeat_age_s != null && a.heartbeat_age_s > LATE_HEARTBEAT_S
           const goal = goals.get(a.mission_id)
+          const unpersisted = unpersistedWords(a, now)
           return <div key={a.attempt_id} className="flex min-w-0 flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
             <span className="min-w-0 [overflow-wrap:anywhere] text-sm"><strong>{n.role}</strong> · {n.title}</span>
             <span className="min-w-0 [overflow-wrap:anywhere] text-xs text-muted-foreground">
               {a.executor.replace(/^exec:/, '')}{a.model ? ` (${a.model})` : ''} · {a.mission_id}{goal ? ` ${goal}` : ''} · {a.state} {duration(a.elapsed_s)}
               {late && <span className="font-semibold text-[var(--color-warning)]"> · no heartbeat for {duration(a.heartbeat_age_s)}</span>}
               {n.failed && <span> · its task could not be read</span>}</span>
+            {unpersisted && <span className="min-w-0 [overflow-wrap:anywhere] text-xs font-semibold text-[var(--color-warning)]">{unpersisted}</span>}
             <AttemptActionLine attempt={a} now={now} who={false} />
+          </div>
+        })}
+        {row.lost.map(a => {
+          const n = name(a)
+          return <div key={a.attempt_id} className="flex min-w-0 flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
+            <span className="min-w-0 [overflow-wrap:anywhere] text-sm"><strong>Lost</strong> · {n.role} · {n.title}</span>
+            <span className="min-w-0 [overflow-wrap:anywhere] text-xs text-muted-foreground">
+              Attempt {a.attempt_no ?? '?'} · {a.executor.replace(/^exec:/, '')} · {a.mission_id} · lost {ago(a.ended_at, now)} · not done</span>
+            <span className="min-w-0 [overflow-wrap:anywhere] text-xs font-semibold text-[var(--color-warning)]">{unpersistedWords(a, now)}</span>
           </div>
         })}
       </li>

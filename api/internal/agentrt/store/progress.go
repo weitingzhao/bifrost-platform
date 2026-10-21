@@ -74,13 +74,20 @@ type ProgressAttempt struct {
 	StartedAt     string `json:"started_at,omitempty"`
 	ElapsedS      *int64 `json:"elapsed_s,omitempty"`
 	HeartbeatAgeS int64  `json:"heartbeat_age_s"`
-	Status        string `json:"status"`
+	Status        string `json:"status,omitempty"`
 	Reason        string `json:"reason"`
-	started       time.Time
-	hostKnown     bool
-	hostPolled    *time.Time
-	role, class   string
-	taskState     string
+	// What of its work is persisted (TD-352, progresspersist.go); a lost
+	// attempt also says when it ended.
+	Persisted         bool   `json:"persisted"`
+	LastCheckpointSeq *int64 `json:"last_checkpoint_seq,omitempty"`
+	LastCheckpointAt  string `json:"last_checkpoint_at,omitempty"`
+	UnpersistedForS   *int64 `json:"unpersisted_for_s,omitempty"`
+	EndedAt           string `json:"ended_at,omitempty"`
+	started           time.Time
+	hostKnown         bool
+	hostPolled        *time.Time
+	role, class       string
+	taskState         string
 }
 
 // ProgressTask is an unfinished task of a mission.
@@ -102,9 +109,11 @@ type ProgressTask struct {
 	Attempt              *ProgressAttempt `json:"attempt,omitempty"`
 	UsualS               *int64           `json:"usual_s,omitempty"`
 	ComputedNotPersisted bool             `json:"computed_not_persisted"`
-	class                string
-	stateReason          string
-	checkers             []string
+	LostAttempt          *ProgressAttempt `json:"lost_attempt,omitempty"` // its latest lost attempt no later result superseded
+
+	class       string
+	stateReason string
+	checkers    []string
 }
 
 // StatusInput is what a task's status is decided from.
@@ -127,9 +136,10 @@ func TaskStatus(in StatusInput) (string, string) {
 		case a.hostPolled == nil:
 			return StatusHostLost, "host " + a.HostID + " has never polled"
 		case in.Now.Sub(*a.hostPolled) > HostLostAfter:
-			return StatusHostLost, fmt.Sprintf("host %s last polled %d minutes ago", a.HostID, int(in.Now.Sub(*a.hostPolled)/time.Minute))
+			return StatusHostLost, fmt.Sprintf("host %s last polled %d minutes ago", a.HostID, int(in.Now.Sub(*a.hostPolled)/time.Minute)) +
+				notPersisted(a)
 		case a.State == "stale":
-			return StatusMaybeStuck, "the lease lapsed and was not renewed"
+			return StatusMaybeStuck, "the lease lapsed and was not renewed" + notPersisted(a)
 		}
 	}
 	switch {
@@ -292,9 +302,11 @@ func usualTimes(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]usual
 
 func liveAttempts(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]*ProgressAttempt, error) {
 	rows, err := tx.Query(ctx, `SELECT a.attempt_id, a.attempt_no, a.task_id, t.mission_id, COALESCE(a.host_id, ''), h.host_id IS NOT NULL,
-	    h.last_poll_at, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at, a.heartbeat_at, t.role, t.task_class, t.state
+	    h.last_poll_at, a.executor_actor_id, COALESCE(a.model, ''), a.state, a.started_at, a.heartbeat_at, t.role, t.task_class, t.state,
+	    a.persisted_at IS NOT NULL, cp.seq, cp.at
 	  FROM agentrt.attempt a JOIN agentrt.task t ON t.task_id = a.task_id
 	  LEFT JOIN agentrt.host h ON h.host_id = a.host_id
+	  `+checkpointOf+`
 	  WHERE a.state IN ('leased','running','stale')`)
 	if err != nil {
 		return nil, err
@@ -303,10 +315,12 @@ func liveAttempts(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]*Pr
 	out := map[string]*ProgressAttempt{}
 	for rows.Next() {
 		a := &ProgressAttempt{}
-		var started *time.Time
+		var started, checkpoint *time.Time
 		var heartbeat time.Time
+		var persisted bool
+		var seq *int64
 		if err = rows.Scan(&a.AttemptID, &a.AttemptNo, &a.TaskID, &a.MissionID, &a.HostID, &a.hostKnown, &a.hostPolled, &a.Executor,
-			&a.Model, &a.State, &started, &heartbeat, &a.role, &a.class, &a.taskState); err != nil {
+			&a.Model, &a.State, &started, &heartbeat, &a.role, &a.class, &a.taskState, &persisted, &seq, &checkpoint); err != nil {
 			return nil, err
 		}
 		if started != nil {
@@ -316,6 +330,7 @@ func liveAttempts(ctx context.Context, tx pgx.Tx, now time.Time) (map[string]*Pr
 			a.ElapsedS = &e
 		}
 		a.HeartbeatAgeS = int64(now.Sub(heartbeat) / time.Second)
+		a.keep(persisted, seq, checkpoint, now)
 		out[a.TaskID] = a
 	}
 	return out, rows.Err()
@@ -448,6 +463,10 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	if err = srows.Err(); err != nil {
 		return nil, err
 	}
+	lost, err := lostAttempts(ctx, tx, ids, now)
+	if err != nil {
+		return nil, err
+	}
 	// The unfinished tasks, with when they came into their state (the event,
 	// not updated_at, which a plan migration moves), why, and the roles of
 	// the unfinished verifications and reviews of them.
@@ -478,7 +497,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		}
 		m := byID[missionID]
 		t.Since = stamp(since)
-		t.Attempt = live[t.TaskID]
+		t.Attempt, t.LostAttempt = live[t.TaskID], lost[t.TaskID]
 		u := usualOf(usual, t.Role, t.class)
 		if u != nil {
 			s := int64(*u / time.Second)
@@ -501,6 +520,8 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		}
 		if t.Attempt != nil {
 			t.Attempt.Status, t.Attempt.Reason = t.Status, t.Reason
+		} else if l := t.LostAttempt; l != nil && !l.Persisted {
+			t.Reason += "; " + l.Reason
 		}
 		m.tasks = append(m.tasks, t)
 	}

@@ -12,6 +12,8 @@ const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is 
 export type RuntimeTask = {
   task_id: string; title: string; role: string; state: string; status: string; reason: string
   since: string; round_no?: number; max_rounds?: number; depends_on: string[]
+  /** Its latest lost attempt that no later persisted result superseded (TD-352). */
+  lost_attempt?: RuntimeAttempt
 }
 /**
  * When a mission should be done (2.5 G8; store/progresseta.go): its unfinished tasks one after another,
@@ -31,8 +33,14 @@ export type RuntimeHost = {
   host_id: string; state: string; online?: boolean; poll_age_s?: number; last_poll_at: string; live_attempts?: number
 }
 export type RuntimeAttempt = {
-  attempt_id: string; task_id: string; mission_id: string; host_id: string; executor: string
+  attempt_id: string; attempt_no?: number; task_id: string; mission_id: string; host_id: string; executor: string
   model: string; state: string; elapsed_s?: number; heartbeat_age_s?: number; status: string; reason: string
+  /**
+   * What of its work is on the platform (TD-352; store/progresspersist.go): whether its result is persisted, the last
+   * checkpoint the platform confirmed, and how long nothing of it was persisted; a lost attempt says when it ended.
+   * Unset by a platform before TD-352.
+   */
+  persisted?: boolean; last_checkpoint_seq?: number; last_checkpoint_at?: string; unpersisted_for_s?: number; ended_at?: string
 }
 export type RuntimeProgress = {
   as_of_event_id?: number; generated_at: string; hosts: RuntimeHost[]; live: RuntimeAttempt[]
@@ -57,9 +65,20 @@ export const GOAL_REPOS = ['bifrost-platform', 'bifrost-trade-infra'] as const
 
 export function parseRuntimeTask(v: unknown): RuntimeTask {
   const r = record(v)
-  return { task_id: text(r.task_id), title: text(r.title), role: text(r.role), state: text(r.state),
+  const task: RuntimeTask = { task_id: text(r.task_id), title: text(r.title), role: text(r.role), state: text(r.state),
     status: text(r.status), reason: text(r.reason), since: text(r.since) || text(r.ended_at),
     round_no: number(r.round_no), max_rounds: number(r.max_rounds), depends_on: strings(r.depends_on) }
+  if (r.lost_attempt !== null && typeof r.lost_attempt === 'object') task.lost_attempt = parseRuntimeAttempt(r.lost_attempt)
+  return task
+}
+export function parseRuntimeAttempt(v: unknown): RuntimeAttempt {
+  const a = record(v)
+  return { attempt_id: text(a.attempt_id), attempt_no: number(a.attempt_no), task_id: text(a.task_id),
+    mission_id: text(a.mission_id), host_id: text(a.host_id), executor: text(a.executor), model: text(a.model),
+    state: text(a.state), elapsed_s: number(a.elapsed_s), heartbeat_age_s: number(a.heartbeat_age_s),
+    status: text(a.status), reason: text(a.reason), persisted: typeof a.persisted === 'boolean' ? a.persisted : undefined,
+    last_checkpoint_seq: number(a.last_checkpoint_seq), last_checkpoint_at: text(a.last_checkpoint_at) || undefined,
+    unpersisted_for_s: number(a.unpersisted_for_s), ended_at: text(a.ended_at) || undefined }
 }
 const count = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0
 /**
@@ -85,10 +104,7 @@ export function parseRuntimeProgress(v: unknown): RuntimeProgress {
     hosts: records(r.hosts).map(h => ({ host_id: text(h.host_id), state: text(h.state),
       online: typeof h.online === 'boolean' ? h.online : undefined, poll_age_s: number(h.poll_age_s),
       last_poll_at: text(h.last_poll_at), live_attempts: number(h.live_attempts) })),
-    live: records(r.live).map(a => ({ attempt_id: text(a.attempt_id), task_id: text(a.task_id),
-      mission_id: text(a.mission_id), host_id: text(a.host_id), executor: text(a.executor), model: text(a.model),
-      state: text(a.state), elapsed_s: number(a.elapsed_s), heartbeat_age_s: number(a.heartbeat_age_s),
-      status: text(a.status), reason: text(a.reason) })),
+    live: records(r.live).map(parseRuntimeAttempt),
     needs_you: { count: number(needs.count), items: Array.isArray(needs.items) ? needs.items : [],
       truncated: typeof needs.truncated === 'boolean' ? needs.truncated : undefined },
     work: { missions: records(record(r.work).missions).map(m => ({ mission_id: text(m.mission_id),

@@ -91,19 +91,19 @@ describe('crewRows', () => {
 
   it('puts an attempt with an empty host id in the no host row', () => {
     const live = attempt('a', '')
-    expect(crewRows([], [live])).toEqual([{ id: 'no host', host: undefined, attempts: [live] }])
+    expect(crewRows([], [live])).toEqual([{ id: 'no host', host: undefined, attempts: [live], lost: [] }])
   })
 
   it('gives an unregistered host a row without host metadata', () => {
     const live = attempt('a', 'unknown')
-    expect(crewRows([], [live])).toEqual([{ id: 'unknown', host: undefined, attempts: [live] }])
+    expect(crewRows([], [live])).toEqual([{ id: 'unknown', host: undefined, attempts: [live], lost: [] }])
   })
 
   it('omits idle retired hosts but gives their attempts a row without host metadata', () => {
     const retired = host('old', 'retired')
     const live = attempt('a', 'old')
     expect(crewRows([retired], [])).toEqual([])
-    expect(crewRows([retired], [live])).toEqual([{ id: 'old', host: undefined, attempts: [live] }])
+    expect(crewRows([retired], [live])).toEqual([{ id: 'old', host: undefined, attempts: [live], lost: [] }])
   })
 
   it('sorts busy rows first and then sorts each group by id', () => {
@@ -115,6 +115,14 @@ describe('crewRows', () => {
   it('keeps two attempts on the same host in one row', () => {
     const registered = host('shared')
     const live = [attempt('a', 'shared'), attempt('b', 'shared')]
-    expect(crewRows([registered], live)).toEqual([{ id: 'shared', host: registered, attempts: live }])
+    expect(crewRows([registered], live)).toEqual([{ id: 'shared', host: registered, attempts: live, lost: [] }])
+  })
+  it('keeps a lost attempt whose result is not persisted under its host, before idle hosts (TD-352)', () => {
+    const lost = { ...attempt('l', 'gone'), state: 'lost', persisted: false }
+    const kept = { ...attempt('k', 'gone'), state: 'lost', persisted: true }
+    const old = { ...attempt('o', 'gone'), state: 'lost' } // a platform before TD-352 says nothing of it
+    const rows = crewRows([host('idle'), host('gone')], [], [lost, kept, old])
+    expect(rows.map(r => r.id)).toEqual(['gone', 'idle'])
+    expect(rows[0]).toMatchObject({ attempts: [], lost: [lost] })
   })
 })
