@@ -37,6 +37,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/canon"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/planimport"
 	"github.com/weitingzhao/bifrost-platform/api/internal/agentrt/recorderimport"
 )
@@ -219,6 +220,10 @@ func recorder(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	doc = append(doc, '\n')
+	if why := recorderFits(req, log, doc); why != "" {
+		sayf(stderr, "%s: %s; nothing written\n", *work, why)
+		return 1
+	}
 	if *out == "" {
 		_, err = stdout.Write(doc)
 	} else {
@@ -229,6 +234,46 @@ func recorder(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// importBytes bounds what one recorder import may be, at each layer it
+// passes (review 489 B2): the request file the MCP tool reads
+// (PLAN_IMPORT_MAX_BYTES), the JSON body POST /plan/imports takes (its
+// maxBody), and the log the store keeps as one artifact (maxArtifactBytes);
+// each is 1 MiB.
+const importBytes = 1 << 20
+
+// envelopeRoom is what a body adds to its request: the idempotency key and
+// the reason, at most.
+const envelopeRoom = 16 << 10
+
+// recorderFits says which layer a request (written as doc) would not pass,
+// "" when it passes every one: a log too long for them needs to be split by
+// design, not by hand (a later part's chain does not start at seq 1, and a
+// work is imported once).
+func recorderFits(req recorderimport.Request, log recorderimport.Log, doc []byte) string {
+	if len(doc) > importBytes {
+		return fmt.Sprintf("the request is %d bytes, over the %d the MCP tool reads", len(doc), importBytes)
+	}
+	compact, err := json.Marshal(req)
+	if err != nil {
+		return err.Error()
+	}
+	if len(compact)+envelopeRoom > importBytes {
+		return fmt.Sprintf("the request sent is %d bytes with its envelope, over the %d POST /plan/imports takes", len(compact)+envelopeRoom, importBytes)
+	}
+	raw, err := json.Marshal(log)
+	if err != nil {
+		return err.Error()
+	}
+	kept, err := canon.Marshal(raw)
+	if err != nil {
+		return err.Error()
+	}
+	if len(kept) > importBytes {
+		return fmt.Sprintf("the log kept is %d bytes, over the %d an artifact is", len(kept), importBytes)
+	}
+	return ""
 }
 
 // archTable writes the request for the ledger's architecture table.

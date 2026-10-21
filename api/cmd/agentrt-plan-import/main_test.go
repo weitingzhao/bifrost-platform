@@ -147,6 +147,61 @@ func TestRecorder(t *testing.T) {
 	}
 }
 
+// sealedLog is a recorder log of n events, each with a detail of size bytes,
+// chained as the recorder's events.py chains them.
+func sealedLog(n, size int) string {
+	var b strings.Builder
+	prev := ""
+	for i := 1; i <= n; i++ {
+		ev := map[string]any{"at": 1791936767.5 + float64(i), "by": "coordinator", "detail": strings.Repeat("x", size),
+			"prev_sha256": prev, "seq": i, "type": "note", "v": 2, "work_id": "td-big"}
+		body, err := json.Marshal(ev) // keys sorted, no spaces: the recorder's canonical form here
+		if err != nil {
+			panic(err)
+		}
+		sum := sha256.Sum256(body)
+		prev = hex.EncodeToString(sum[:])
+		b.WriteString(prev + " " + string(body) + "\n")
+	}
+	return b.String()
+}
+
+// Review 489 B2: a log whose chain holds but whose request would not pass a
+// layer of the import (the 1 MiB the MCP tool reads, the route takes, the
+// store keeps) is refused here, naming the layer, and nothing is written; one
+// that fits is written.
+func TestRecorderTooLongForTheImport(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "td-big")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(root, "req.json")
+	if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(sealedLog(25, 50000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, _, errs := runIt("recorder", "-root", root, "-work", "td-big", "-o", out)
+	if code != 1 || !strings.Contains(errs, "chain holds") || !strings.Contains(errs, "over the 1048576 the MCP tool reads") ||
+		!strings.Contains(errs, "nothing written") {
+		t.Fatalf("a log too long = %d %s", code, errs)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatalf("the request was written: %v", err)
+	}
+	if why := recorderFits(recorderimport.Request{}, recorderimport.Log{}, make([]byte, 10)); why != "" {
+		t.Fatalf("an empty request does not fit: %s", why)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(sealedLog(5, 1000)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs = runIt("recorder", "-root", root, "-work", "td-big", "-o", out); code != 0 {
+		t.Fatalf("a log that fits = %d %s", code, errs)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("the request that fits was not written: %v", err)
+	}
+}
+
 // arch: the ledger's architecture table and the rows file become a request
 // that validates; the rows must match the table; flags are required.
 func TestArch(t *testing.T) {
