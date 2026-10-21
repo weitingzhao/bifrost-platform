@@ -1,9 +1,10 @@
 import { OwnerStop } from './OwnerStop'
 import { useState } from 'react'
-import { NEEDS_YOU_HREF } from '@/lib/shell/consoleRoutes'
+import { NEEDS_YOU_HREF, goalHref } from '@/lib/shell/consoleRoutes'
 import { needsYouCountText } from '@/pages/shell/needs-you/needsYouModel'
 import { ActionLink, Card, Dot } from './OwnerParts'
 import { plural, waitingRow, type OwnerRow } from './ownerModel'
+import { ownerNextLine } from './ownerNextModel'
 import type { OwnerConsoleData } from './useOwnerConsole'
 
 /** Worth a look shows this many first; the rest open below it. */
@@ -38,6 +39,8 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
   const unknown = count.state === 'unknown' ? count.reason : null
   const title = count.state === 'known' ? String(count.count) : count.state === 'unknown' ? 'Unknown' : '…'
   const recent = needsYou.recentCount.state === 'known' ? String(needsYou.recentCount.count) : needsYouCountText(needsYou.recentCount)
+  // After what waits now: when he is next needed, from the runtime (v4 §20.2's top line; W-31 2.5 gap 1).
+  const next = ownerNextLine(data.runtime?.owner_next, data.now)
   return <section aria-label="For you" className="flex flex-col gap-3">
     <h2 className="m-0 text-lg font-semibold">For you</h2>
     <div className="grid gap-4 @3xl:grid-cols-2">
@@ -47,6 +50,8 @@ export function OwnerYou({ data, onGoal }: { data: OwnerConsoleData; onGoal: (dr
         {yours.length > 0
           ? <ul className="m-0 flex list-none flex-col gap-2 p-0">{yours.map(row => <Row key={row.id} row={row} />)}</ul>
           : count.state === 'known' && <p className="m-0 text-sm">Nothing is yours right now.</p>}
+        {next && <p data-owner-next className="m-0 text-sm [overflow-wrap:anywhere]"><strong>Next time you are needed:</strong>{' '}
+          {next.mission ? <a href={goalHref(next.mission)}>{next.text}</a> : next.text}</p>}
         <div className="flex flex-wrap justify-between gap-2 border-t border-[var(--table-rule)] pt-2 text-sm text-muted-foreground">
           <span>{needsYou.count.state !== 'known' ? 'Approvals, questions and agent cards: not all read'
             : needsYou.decide.length === 0 && needsYou.openQuestions.length === 0 && needsYou.runtimeItems.length === 0

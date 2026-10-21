@@ -55,8 +55,20 @@ export type RuntimeSchema = {
 }
 /** A controller loop that failed the same way several times in a row and has not passed since (TD-411). */
 export type RuntimeLoopAlert = { loop: string; since: string; error: string }
+/**
+ * When the Owner is next needed after what waits for him now (W-31 2.5 gap 1; store/progressnext.go; v4 §20.2's top line,
+ * §20.5 scenario 8): the open goal whose next step is his and is due first, its step and when; unknown while any such
+ * goal cannot be timed; none when no goal's next step is his. candidates are every such goal, timed ones first.
+ */
+export type OwnerNextCandidate = {
+  mission_id: string; step: { plan_node_id: string; title: string }; state: 'estimated' | 'unknown'
+  earliest?: string; latest?: string; reason: string; after: string[]
+}
+export type OwnerNext = { state: 'estimated' | 'unknown' | 'none'; reason: string; next?: OwnerNextCandidate; candidates: OwnerNextCandidate[] }
 export type RuntimeProgress = {
   as_of_event_id?: number; generated_at: string; hosts: RuntimeHost[]; live: RuntimeAttempt[]
+  /** Unset by a platform before owner_next. */
+  owner_next?: OwnerNext
   schema: RuntimeSchema; controller_alerts: RuntimeLoopAlert[]
   needs_you: { count?: number; items: unknown[]; truncated?: boolean }
   work: { missions: RuntimeMission[] }; recent: { tasks: RuntimeRecord[]; failed_attempts: RuntimeRecord[] }
@@ -114,9 +126,32 @@ export function parseMissionEta(v: unknown): MissionEta {
   return { state: 'estimated', earliest, latest, reason, past_usual: strings(r.past_usual),
     basis: basis.map(b => ({ role: text(b.role), task_class: b.task_class as string, usual_s: b.usual_s as number, samples: b.samples as number })) }
 }
+function parseOwnerNextCandidate(v: unknown): OwnerNextCandidate | null {
+  const c = record(v), step = record(c.step)
+  const earliest = text(c.earliest), latest = text(c.latest)
+  // A time that does not read is unknown, never a guess (v4 §20.3 rule 7).
+  const timed = c.state === 'estimated' && Number.isFinite(Date.parse(earliest)) && Number.isFinite(Date.parse(latest))
+  if (!text(c.mission_id)) return null
+  return { mission_id: text(c.mission_id), step: { plan_node_id: text(step.plan_node_id), title: text(step.title) },
+    state: timed ? 'estimated' : 'unknown', ...(timed ? { earliest, latest } : {}),
+    reason: text(c.reason) || (c.state === 'estimated' ? 'its time does not read' : ''), after: strings(c.after) }
+}
+export function parseOwnerNext(v: unknown): OwnerNext | undefined {
+  if (v === undefined) return undefined
+  const r = record(v)
+  const candidates = records(r.candidates).map(parseOwnerNextCandidate).filter((c): c is OwnerNextCandidate => c !== null)
+  if (r.state === 'none') return { state: 'none', reason: text(r.reason), candidates }
+  if (r.state === 'estimated') {
+    const next = parseOwnerNextCandidate({ ...r, state: 'estimated' })
+    if (next?.state === 'estimated') return { state: 'estimated', reason: text(r.reason), next, candidates }
+    return { state: 'unknown', reason: 'the runtime\'s answer could not be read', candidates }
+  }
+  return { state: 'unknown', reason: text(r.reason) || 'the runtime gave no reason', candidates }
+}
 export function parseRuntimeProgress(v: unknown): RuntimeProgress {
   const r = record(v), needs = record(r.needs_you), recent = record(r.recent)
   return {
+    owner_next: parseOwnerNext(r.owner_next),
     as_of_event_id: number(r.as_of_event_id), generated_at: text(r.generated_at),
     hosts: records(r.hosts).map(h => ({ host_id: text(h.host_id), state: text(h.state),
       online: typeof h.online === 'boolean' ? h.online : undefined, poll_age_s: number(h.poll_age_s),

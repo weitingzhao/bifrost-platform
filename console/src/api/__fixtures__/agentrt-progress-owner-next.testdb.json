@@ -1,0 +1,390 @@
+{
+  "as_of_event_id": 50,
+  "controller_alerts": [],
+  "controls": [],
+  "generated_at": "2026-10-21T18:30:53.108384Z",
+  "hosts": [
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h1",
+      "version": 0,
+      "actor_id": "host:h1",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h2",
+      "version": 0,
+      "actor_id": "host:h2",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h3",
+      "version": 0,
+      "actor_id": "host:h3",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h4",
+      "version": 0,
+      "actor_id": "host:h4",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h5",
+      "version": 0,
+      "actor_id": "host:h5",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h6",
+      "version": 0,
+      "actor_id": "host:h6",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h7",
+      "version": 0,
+      "actor_id": "host:h7",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    },
+    {
+      "state": "active",
+      "online": false,
+      "host_id": "h8",
+      "version": 0,
+      "actor_id": "host:h8",
+      "controls": [],
+      "host_kind": "dev",
+      "poll_age_s": null,
+      "tools_json": {},
+      "last_poll_at": null,
+      "capacity_json": {},
+      "live_attempts": 0,
+      "agentd_version": null
+    }
+  ],
+  "live": [],
+  "needs_you": {
+    "count": 0,
+    "items": [],
+    "truncated": false
+  },
+  "owner_next": {
+    "after": [],
+    "candidates": [
+      {
+        "after": [],
+        "earliest": "2026-10-21T18:34:13Z",
+        "latest": "2026-10-21T18:35:53Z",
+        "mission_id": "M-1",
+        "reason": "M-1's next step is yours once its unfinished work is done",
+        "state": "estimated",
+        "step": {
+          "plan_node_id": "R2:2.1-1",
+          "title": "s1"
+        }
+      },
+      {
+        "after": [
+          "M-1"
+        ],
+        "earliest": "2026-10-21T18:34:13Z",
+        "latest": "2026-10-21T18:35:53Z",
+        "mission_id": "M-2",
+        "reason": "M-2's next step is yours once its unfinished work is done, after M-1",
+        "state": "estimated",
+        "step": {
+          "plan_node_id": "R2:2.1-6",
+          "title": "(you) approve M-2's release"
+        }
+      }
+    ],
+    "earliest": "2026-10-21T18:34:13Z",
+    "latest": "2026-10-21T18:35:53Z",
+    "mission_id": "M-1",
+    "reason": "M-1's next step is yours once its unfinished work is done",
+    "state": "estimated",
+    "step": {
+      "plan_node_id": "R2:2.1-1",
+      "title": "s1"
+    }
+  },
+  "plan": [
+    {
+      "count": {
+        "done": 0,
+        "manual": 0,
+        "state": "planned",
+        "stopped": 0,
+        "total": 4
+      },
+      "items": [
+        {
+          "active_steps": [],
+          "count": {
+            "done": 0,
+            "manual": 0,
+            "state": "planned",
+            "stopped": 0,
+            "total": 4
+          },
+          "label": "2.1",
+          "plan_node_id": "R2:2.1",
+          "title": "data layer"
+        }
+      ],
+      "kind": "round",
+      "plan_node_id": "R2",
+      "title": "round 2"
+    }
+  ],
+  "recent": {
+    "failed_attempts": [],
+    "tasks": [
+      {
+        "role": "implement",
+        "state": "accepted",
+        "title": "ended",
+        "task_id": "t_01M5FVNZX4NJSN1JCBGEHEZHYA",
+        "ended_at": "2026-10-21T13:30:53.093837-05:00",
+        "conclusion": "done",
+        "mission_id": "M-1",
+        "ended_event_id": 37,
+        "report_artifact_id": null
+      },
+      {
+        "role": "implement",
+        "state": "accepted",
+        "title": "ended",
+        "task_id": "t_01M5FVNZX1E1FQ0Z4PGAWZE5Z2",
+        "ended_at": "2026-10-21T13:30:53.09157-05:00",
+        "conclusion": "done",
+        "mission_id": "M-1",
+        "ended_event_id": 31,
+        "report_artifact_id": null
+      },
+      {
+        "role": "implement",
+        "state": "accepted",
+        "title": "ended",
+        "task_id": "t_01M5FVNZWV1B2RVVDENX9CM67F",
+        "ended_at": "2026-10-21T13:30:53.088439-05:00",
+        "conclusion": "done",
+        "mission_id": "M-1",
+        "ended_event_id": 25,
+        "report_artifact_id": null
+      }
+    ]
+  },
+  "schema": {
+    "state": "current"
+  },
+  "work": {
+    "missions": [
+      {
+        "deadline_at": "2026-10-28T18:30:53Z",
+        "eta": {
+          "basis": [
+            {
+              "role": "implement",
+              "samples": 3,
+              "task_class": "go",
+              "usual_s": 100
+            }
+          ],
+          "earliest": "2026-10-21T18:34:13Z",
+          "latest": "2026-10-21T18:35:53Z",
+          "reason": "the unfinished tasks one after another, each from its usual time to 1.5 times it; acceptance and review tasks not yet proposed are not counted",
+          "state": "estimated"
+        },
+        "goal": "test",
+        "mission_id": "M-1",
+        "next_steps": [
+          {
+            "owner_step": true,
+            "plan_node_id": "R2:2.1-1",
+            "title": "s1"
+          },
+          {
+            "owner_step": false,
+            "plan_node_id": "R2:2.1-3",
+            "title": "s3"
+          }
+        ],
+        "reason": "ready for a host to claim",
+        "since": "2026-10-21T18:30:53.097508Z",
+        "slices": {
+          "done": 0,
+          "manual": 0,
+          "state": "planned",
+          "stopped": 0,
+          "total": 2
+        },
+        "state": "active",
+        "status": "queued",
+        "tasks": [
+          {
+            "task_id": "t_01M5FVNZX835NPYWHF9B127DPK",
+            "title": "t",
+            "role": "implement",
+            "off_plan": true,
+            "off_plan_reason": "work before the Owner's step",
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "ready",
+            "status": "queued",
+            "reason": "ready for a host to claim",
+            "since": "2026-10-21T18:30:53.097508Z",
+            "depends_on": [],
+            "usual_s": 100,
+            "computed_not_persisted": false
+          },
+          {
+            "task_id": "t_01M5FVNZXEHKDWCSJ3PTZHKXQ0",
+            "title": "t",
+            "role": "implement",
+            "off_plan": true,
+            "off_plan_reason": "work before the Owner's step",
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "ready",
+            "status": "queued",
+            "reason": "ready for a host to claim",
+            "since": "2026-10-21T18:30:53.102819Z",
+            "depends_on": [],
+            "usual_s": 100,
+            "computed_not_persisted": false
+          }
+        ],
+        "title": "M-1",
+        "waiting_on": "coordinator",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      },
+      {
+        "deadline_at": "2026-10-28T18:30:53Z",
+        "eta": {
+          "basis": [
+            {
+              "role": "implement",
+              "samples": 3,
+              "task_class": "go",
+              "usual_s": 100
+            }
+          ],
+          "earliest": "2026-10-21T18:32:33Z",
+          "latest": "2026-10-21T18:33:23Z",
+          "reason": "the unfinished tasks one after another, each from its usual time to 1.5 times it; acceptance and review tasks not yet proposed are not counted",
+          "state": "estimated"
+        },
+        "goal": "test",
+        "mission_id": "M-2",
+        "next_steps": [
+          {
+            "owner_step": true,
+            "plan_node_id": "R2:2.1-6",
+            "title": "(you) approve M-2's release"
+          }
+        ],
+        "reason": "ready for a host to claim",
+        "since": "2026-10-21T18:30:53.105337Z",
+        "slices": {
+          "done": 0,
+          "manual": 0,
+          "state": "planned",
+          "stopped": 0,
+          "total": 1
+        },
+        "state": "active",
+        "status": "queued",
+        "tasks": [
+          {
+            "task_id": "t_01M5FVNZXGB8EF4JXY6V8EEDAT",
+            "title": "t",
+            "role": "implement",
+            "off_plan": true,
+            "off_plan_reason": "M-2's work, after M-1's",
+            "round_no": 1,
+            "max_rounds": 2,
+            "state": "ready",
+            "status": "queued",
+            "reason": "ready for a host to claim",
+            "since": "2026-10-21T18:30:53.105337Z",
+            "depends_on": [
+              "t_01M5FVNZX835NPYWHF9B127DPK"
+            ],
+            "usual_s": 100,
+            "computed_not_persisted": false
+          }
+        ],
+        "title": "M-2",
+        "waiting_on": "coordinator",
+        "waiting_roles": [],
+        "work_id": "W-31"
+      }
+    ],
+    "truncated": false
+  }
+}

@@ -230,7 +230,7 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	work, err := missionsInWork(ctx, tx, now, live, usual)
+	work, next, err := missionsInWork(ctx, tx, now, live, usual)
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +264,7 @@ func Progress(ctx context.Context, db DB) (map[string]any, error) {
 		return nil, err
 	}
 	return map[string]any{"generated_at": now.UTC().Format(time.RFC3339Nano), "as_of_event_id": asOf, "needs_you": needs,
-		"work": work, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(hosts), "controls": rawJSON(controls), "recent": recent,
+		"work": work, "owner_next": next, "live": liveDoc, "plan": planDoc, "hosts": rawJSON(hosts), "controls": rawJSON(controls), "recent": recent,
 		"controller_alerts": alerts, "schema": schema}, nil
 }
 
@@ -402,7 +402,9 @@ func stamp(t *time.Time) string {
 	return t.UTC().Format(time.RFC3339Nano)
 }
 
-func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]usualTime) (map[string]any, error) {
+// missionsInWork is the open missions, and when the Owner is next needed
+// after what waits for him now (progressnext.go), from the same etas.
+func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[string]*ProgressAttempt, usual map[string]usualTime) (map[string]any, map[string]any, error) {
 	rows, err := tx.Query(ctx, `SELECT m.mission_id, m.title, m.goal, m.state, m.deadline_at, COALESCE(m.work_id, ''),
 	    s.at, COALESCE(s.body_json->>'reason', ''), COALESCE(s.actor_id, ''), COALESCE(s.body_json->>'question_id', ''), l.at
 	  FROM agentrt.mission m
@@ -411,7 +413,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	  LEFT JOIN LATERAL (SELECT e.at FROM agentrt.event e WHERE e.mission_id = m.mission_id ORDER BY e.event_id DESC LIMIT 1) l ON true
 	  WHERE m.state IN ('proposed','awaiting_owner','active','paused') ORDER BY substr(m.mission_id, 3)::int LIMIT $1`, progressMissions+1)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var missions []*progressMission
 	byID := map[string]*progressMission{}
@@ -422,7 +424,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		if err = rows.Scan(&m.id, &m.title, &m.goal, &m.state, &deadline, &m.work, &stateAt, &m.stateReason, &m.stateBy,
 			&m.stateQuestion, &lastAt); err != nil {
 			rows.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		m.deadline = deadline.UTC().Format(time.RFC3339)
 		m.stateAt, m.lastAt = stamp(stateAt), stamp(lastAt)
@@ -430,7 +432,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	truncated := len(missions) > progressMissions
 	if truncated {
@@ -449,14 +451,14 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	  WHERE s.node_kind = 'step' AND s.mission_id = ANY($1)
 	  ORDER BY i.ordinal, s.ordinal, s.plan_node_id`, ids)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for srows.Next() {
 		var mission, id, title, state, cause string
 		var owner bool
 		if err = srows.Scan(&mission, &id, &title, &state, &cause, &owner); err != nil {
 			srows.Close()
-			return nil, err
+			return nil, nil, err
 		}
 		m := byID[mission]
 		m.steps = append(m.steps, plan.Step{ID: id, State: state, Manual: state == plan.StateDone && cause == "done_rule_manual"})
@@ -466,11 +468,11 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	}
 	srows.Close()
 	if err = srows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	lost, err := lostAttempts(ctx, tx, ids, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// The unfinished tasks, with when they came into their state (the event,
 	// not updated_at, which a plan migration moves), why, and the roles of
@@ -489,7 +491,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 	  WHERE t.mission_id = ANY($1) AND t.state NOT IN ('accepted','rejected','cancelled')
 	  ORDER BY t.created_at, t.task_id`, ids)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer trows.Close()
 	for trows.Next() {
@@ -498,7 +500,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		var since *time.Time
 		if err = trows.Scan(&t.TaskID, &missionID, &t.Title, &t.Role, &t.PlanNodeID, &t.OffPlan, &t.OffPlanReason, &t.RoundNo,
 			&t.MaxRounds, &t.State, &t.class, &since, &t.stateReason, &t.DependsOn, &t.ComputedNotPersisted, &t.checkers); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		m := byID[missionID]
 		t.Since = stamp(since)
@@ -531,7 +533,7 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		m.tasks = append(m.tasks, t)
 	}
 	if err = trows.Err(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// A live attempt of a mission not listed still gets its status.
 	for _, a := range live {
@@ -540,15 +542,17 @@ func missionsInWork(ctx context.Context, tx pgx.Tx, now time.Time, live map[stri
 		}
 	}
 	list := make([]any, 0, len(missions))
+	etas := make(map[string]map[string]any, len(missions))
 	for _, m := range missions {
-		list = append(list, missionDoc(m, usual, now))
+		etas[m.id] = missionETA(m, usual, now)
+		list = append(list, missionDoc(m, etas[m.id]))
 	}
-	return map[string]any{"missions": list, "truncated": truncated}, nil
+	return map[string]any{"missions": list, "truncated": truncated}, ownerNext(missions, etas, truncated, now), nil
 }
 
 // missionDoc is one mission with its status (SPEC §3.2) and when it should
 // be done (progresseta.go).
-func missionDoc(m *progressMission, usual map[string]usualTime, now time.Time) map[string]any {
+func missionDoc(m *progressMission, eta map[string]any) map[string]any {
 	statuses := make([]string, 0, len(m.tasks))
 	tasks := make([]any, 0, len(m.tasks))
 	for _, t := range m.tasks {
@@ -607,7 +611,7 @@ func missionDoc(m *progressMission, usual map[string]usualTime, now time.Time) m
 	return map[string]any{"mission_id": m.id, "title": m.title, "goal": m.goal, "state": m.state, "deadline_at": m.deadline,
 		"work_id": m.work, "slices": countDoc(count), "status": status, "reason": reason, "since": since, "waiting_on": waiting,
 		"waiting_roles": nonNil(roles), "tasks": tasks, "next_steps": nonNilAny(m.next),
-		"eta": missionETA(m, usual, now)}
+		"eta": eta}
 }
 
 // missionCardReason is why a mission on the Owner's card waits.
