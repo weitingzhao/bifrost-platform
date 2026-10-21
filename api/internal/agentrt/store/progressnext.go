@@ -18,10 +18,13 @@ import (
 // such goal cannot be timed, the next time cannot be told either, and each
 // goal says what it knows.
 
-// ownerNextCandidate is one open goal whose next step is the Owner's.
+// ownerNextCandidate is one open goal whose next step is the Owner's. ready:
+// an active goal with nothing unfinished before his step, so by the plan it
+// is his turn now; whether a request is up for him to act on is Needs you's
+// to say (review 477 B1).
 type ownerNextCandidate struct {
 	mission, stepID, stepTitle string
-	known                      bool
+	known, ready               bool
 	earliest, latest           time.Time
 	reason                     string
 	after                      []string
@@ -29,7 +32,7 @@ type ownerNextCandidate struct {
 
 func (c ownerNextCandidate) doc() map[string]any {
 	d := map[string]any{"mission_id": c.mission, "step": map[string]any{"plan_node_id": c.stepID, "title": c.stepTitle},
-		"reason": c.reason, "after": nonNil(c.after)}
+		"reason": c.reason, "after": nonNil(c.after), "ready": c.ready}
 	if c.known {
 		d["state"] = "estimated"
 		d["earliest"], d["latest"] = c.earliest.UTC().Format(time.RFC3339), c.latest.UTC().Format(time.RFC3339)
@@ -59,9 +62,10 @@ func ownerNext(missions []*progressMission, etas map[string]map[string]any, trun
 		c := ownerNextCandidate{mission: m.id, stepID: step[0], stepTitle: step[1]}
 		c.known, c.earliest, c.latest, c.reason = dueOf(m, etas[m.id], now)
 		if c.known {
-			c.reason = fmt.Sprintf("%s's next step is yours once its unfinished work is done", m.id)
-			if len(m.tasks) == 0 {
-				c.reason = fmt.Sprintf("%s's next step is yours and nothing unfinished comes before it", m.id)
+			// The eta counts the work proposed now; checks and reviews proposed later are not (progresseta.go).
+			c.reason = fmt.Sprintf("%s's next step is yours once its unfinished work is done; work not proposed yet is not counted", m.id)
+			if c.ready = len(m.tasks) == 0; c.ready {
+				c.reason = fmt.Sprintf("%s's next step is yours: nothing unfinished comes before it; whether a request is up for you, Needs you says", m.id)
 			}
 		} else {
 			c.reason = m.id + ": " + c.reason
@@ -169,7 +173,7 @@ func dueOf(m *progressMission, eta map[string]any, now time.Time) (bool, time.Ti
 	}
 	e, err1 := time.Parse(time.RFC3339, fmt.Sprint(eta["earliest"]))
 	l, err2 := time.Parse(time.RFC3339, fmt.Sprint(eta["latest"]))
-	if err1 != nil || err2 != nil {
+	if err1 != nil || err2 != nil || l.Before(e) {
 		return false, time.Time{}, time.Time{}, "its estimate does not read"
 	}
 	return true, e, l, ""

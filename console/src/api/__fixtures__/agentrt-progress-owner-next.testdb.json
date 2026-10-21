@@ -2,7 +2,7 @@
   "as_of_event_id": 50,
   "controller_alerts": [],
   "controls": [],
-  "generated_at": "2026-10-21T18:30:53.108384Z",
+  "generated_at": "2026-10-21T18:42:46.00168Z",
   "hosts": [
     {
       "state": "active",
@@ -136,10 +136,11 @@
     "candidates": [
       {
         "after": [],
-        "earliest": "2026-10-21T18:34:13Z",
-        "latest": "2026-10-21T18:35:53Z",
+        "earliest": "2026-10-21T18:46:06Z",
+        "latest": "2026-10-21T18:47:46Z",
         "mission_id": "M-1",
-        "reason": "M-1's next step is yours once its unfinished work is done",
+        "ready": false,
+        "reason": "M-1's next step is yours once its unfinished work is done; work not proposed yet is not counted",
         "state": "estimated",
         "step": {
           "plan_node_id": "R2:2.1-1",
@@ -150,10 +151,11 @@
         "after": [
           "M-1"
         ],
-        "earliest": "2026-10-21T18:34:13Z",
-        "latest": "2026-10-21T18:35:53Z",
+        "earliest": "2026-10-21T18:46:06Z",
+        "latest": "2026-10-21T18:47:46Z",
         "mission_id": "M-2",
-        "reason": "M-2's next step is yours once its unfinished work is done, after M-1",
+        "ready": false,
+        "reason": "M-2's next step is yours once its unfinished work is done; work not proposed yet is not counted, after M-1",
         "state": "estimated",
         "step": {
           "plan_node_id": "R2:2.1-6",
@@ -161,10 +163,11 @@
         }
       }
     ],
-    "earliest": "2026-10-21T18:34:13Z",
-    "latest": "2026-10-21T18:35:53Z",
+    "earliest": "2026-10-21T18:46:06Z",
+    "latest": "2026-10-21T18:47:46Z",
     "mission_id": "M-1",
-    "reason": "M-1's next step is yours once its unfinished work is done",
+    "ready": false,
+    "reason": "M-1's next step is yours once its unfinished work is done; work not proposed yet is not counted",
     "state": "estimated",
     "step": {
       "plan_node_id": "R2:2.1-1",
@@ -207,8 +210,8 @@
         "role": "implement",
         "state": "accepted",
         "title": "ended",
-        "task_id": "t_01M5FVNZX4NJSN1JCBGEHEZHYA",
-        "ended_at": "2026-10-21T13:30:53.093837-05:00",
+        "task_id": "t_01M5FWBR2Q09GFTYKW22122DHJ",
+        "ended_at": "2026-10-21T13:42:45.978354-05:00",
         "conclusion": "done",
         "mission_id": "M-1",
         "ended_event_id": 37,
@@ -218,8 +221,8 @@
         "role": "implement",
         "state": "accepted",
         "title": "ended",
-        "task_id": "t_01M5FVNZX1E1FQ0Z4PGAWZE5Z2",
-        "ended_at": "2026-10-21T13:30:53.09157-05:00",
+        "task_id": "t_01M5FWBR2J280HV7HN29P6EE4Y",
+        "ended_at": "2026-10-21T13:42:45.974165-05:00",
         "conclusion": "done",
         "mission_id": "M-1",
         "ended_event_id": 31,
@@ -229,8 +232,8 @@
         "role": "implement",
         "state": "accepted",
         "title": "ended",
-        "task_id": "t_01M5FVNZWV1B2RVVDENX9CM67F",
-        "ended_at": "2026-10-21T13:30:53.088439-05:00",
+        "task_id": "t_01M5FWBR2DHYHTP5AR8ECW05GK",
+        "ended_at": "2026-10-21T13:42:45.969487-05:00",
         "conclusion": "done",
         "mission_id": "M-1",
         "ended_event_id": 25,
@@ -244,7 +247,7 @@
   "work": {
     "missions": [
       {
-        "deadline_at": "2026-10-28T18:30:53Z",
+        "deadline_at": "2026-10-28T18:42:45Z",
         "eta": {
           "basis": [
             {
@@ -254,8 +257,8 @@
               "usual_s": 100
             }
           ],
-          "earliest": "2026-10-21T18:34:13Z",
-          "latest": "2026-10-21T18:35:53Z",
+          "earliest": "2026-10-21T18:46:06Z",
+          "latest": "2026-10-21T18:47:46Z",
           "reason": "the unfinished tasks one after another, each from its usual time to 1.5 times it; acceptance and review tasks not yet proposed are not counted",
           "state": "estimated"
         },
@@ -274,7 +277,7 @@
           }
         ],
         "reason": "ready for a host to claim",
-        "since": "2026-10-21T18:30:53.097508Z",
+        "since": "2026-10-21T18:42:45.984885Z",
         "slices": {
           "done": 0,
           "manual": 0,
@@ -286,7 +289,7 @@
         "status": "queued",
         "tasks": [
           {
-            "task_id": "t_01M5FVNZX835NPYWHF9B127DPK",
+            "task_id": "t_01M5FWBR2ZJJZH4Q5YZ1SBXYEG",
             "title": "t",
             "role": "implement",
             "off_plan": true,
@@ -296,13 +299,13 @@
             "state": "ready",
             "status": "queued",
             "reason": "ready for a host to claim",
-            "since": "2026-10-21T18:30:53.097508Z",
+            "since": "2026-10-21T18:42:45.984885Z",
             "depends_on": [],
             "usual_s": 100,
             "computed_not_persisted": false
           },
           {
-            "task_id": "t_01M5FVNZXEHKDWCSJ3PTZHKXQ0",
+            "task_id": "t_01M5FWBR37K8938QF3JXT6RF2R",
             "title": "t",
             "role": "implement",
             "off_plan": true,
@@ -312,7 +315,7 @@
             "state": "ready",
             "status": "queued",
             "reason": "ready for a host to claim",
-            "since": "2026-10-21T18:30:53.102819Z",
+            "since": "2026-10-21T18:42:45.992076Z",
             "depends_on": [],
             "usual_s": 100,
             "computed_not_persisted": false
@@ -324,7 +327,7 @@
         "work_id": "W-31"
       },
       {
-        "deadline_at": "2026-10-28T18:30:53Z",
+        "deadline_at": "2026-10-28T18:42:45Z",
         "eta": {
           "basis": [
             {
@@ -334,8 +337,8 @@
               "usual_s": 100
             }
           ],
-          "earliest": "2026-10-21T18:32:33Z",
-          "latest": "2026-10-21T18:33:23Z",
+          "earliest": "2026-10-21T18:44:26Z",
+          "latest": "2026-10-21T18:45:16Z",
           "reason": "the unfinished tasks one after another, each from its usual time to 1.5 times it; acceptance and review tasks not yet proposed are not counted",
           "state": "estimated"
         },
@@ -349,7 +352,7 @@
           }
         ],
         "reason": "ready for a host to claim",
-        "since": "2026-10-21T18:30:53.105337Z",
+        "since": "2026-10-21T18:42:45.996422Z",
         "slices": {
           "done": 0,
           "manual": 0,
@@ -361,7 +364,7 @@
         "status": "queued",
         "tasks": [
           {
-            "task_id": "t_01M5FVNZXGB8EF4JXY6V8EEDAT",
+            "task_id": "t_01M5FWBR3BA565XFSX75HMXQPQ",
             "title": "t",
             "role": "implement",
             "off_plan": true,
@@ -371,9 +374,9 @@
             "state": "ready",
             "status": "queued",
             "reason": "ready for a host to claim",
-            "since": "2026-10-21T18:30:53.105337Z",
+            "since": "2026-10-21T18:42:45.996422Z",
             "depends_on": [
-              "t_01M5FVNZX835NPYWHF9B127DPK"
+              "t_01M5FWBR2ZJJZH4Q5YZ1SBXYEG"
             ],
             "usual_s": 100,
             "computed_not_persisted": false

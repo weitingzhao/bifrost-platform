@@ -74,7 +74,7 @@ func TestProgressSaysWhenTheOwnerIsNextNeeded(t *testing.T) {
 	ok(t, json.Unmarshal(raw, &doc))
 	next := doc.OwnerNext
 	if next.State != "estimated" || next.MissionID != "M-1" || next.Step.PlanNodeID != s1 || len(next.After) != 0 ||
-		next.Reason != "M-1's next step is yours once its unfinished work is done" {
+		next.Reason != "M-1's next step is yours once its unfinished work is done; work not proposed yet is not counted" {
 		t.Fatalf("owner_next = %+v; want M-1 at %s", next, s1)
 	}
 	for field, d := range map[string]time.Duration{next.Earliest: 200 * time.Second, next.Latest: 300 * time.Second} {
@@ -89,7 +89,7 @@ func TestProgressSaysWhenTheOwnerIsNextNeeded(t *testing.T) {
 	}
 	m2 := next.Candidates[1]
 	if m2.MissionID != "M-2" || m2.State != "estimated" || !reflect.DeepEqual(m2.After, []string{"M-1"}) ||
-		m2.Earliest != next.Earliest || m2.Latest != next.Latest || m2.Reason != "M-2's next step is yours once its unfinished work is done, after M-1" {
+		m2.Earliest != next.Earliest || m2.Latest != next.Latest || m2.Reason != "M-2's next step is yours once its unfinished work is done; work not proposed yet is not counted, after M-1" {
 		t.Fatalf("M-2 = %+v; want it due when M-1 is, after M-1", m2)
 	}
 	if os.Getenv("CONSOLE_OWNER_NEXT_FIXTURE_WRITE") == "1" && !t.Failed() {

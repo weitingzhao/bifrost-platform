@@ -21,14 +21,16 @@ describe('when the Owner is next needed', () => {
   it('reads the runtime\'s answer: the goal due first, its step and time, and every goal whose next step is his', () => {
     const next = runtime.owner_next!
     expect(next.state).toBe('estimated')
-    expect(next.next).toMatchObject({ mission_id: 'M-1', step: { plan_node_id: 'R2:2.1-1', title: 's1' }, state: 'estimated', after: [] })
+    expect(next.next).toMatchObject({ mission_id: 'M-1', step: { plan_node_id: 'R2:2.1-1', title: 's1' }, state: 'estimated', after: [], ready: false })
     expect(next.candidates.map(c => [c.mission_id, c.after])).toEqual([['M-1', []], ['M-2', ['M-1']]])
     expect(next.candidates[1].earliest).toBe(next.next!.earliest)
     expect(next.candidates[1].latest).toBe(next.next!.latest)
     // A platform before owner_next says nothing; an estimate whose time does not read is unknown, never a guess.
     expect(parseRuntimeProgress({}).owner_next).toBeUndefined()
-    expect(parseOwnerNext({ state: 'estimated', mission_id: 'M-1', step: {}, earliest: 'soon', latest: 'later', candidates: [] }))
-      .toEqual({ state: 'unknown', reason: 'the runtime\'s answer could not be read', candidates: [] })
+    for (const [earliest, latest] of [['soon', 'later'], ['2026-10-21T18:20:00Z', '2026-10-21T18:10:00Z']]) { // unreadable; backwards
+      expect(parseOwnerNext({ state: 'estimated', mission_id: 'M-1', step: {}, earliest, latest, candidates: [] }))
+        .toEqual({ state: 'unknown', reason: 'the runtime\'s answer could not be read', candidates: [] })
+    }
   })
 
   it('says it in one line: the goal, its step and when; or why it cannot be told and the earliest that can', () => {
@@ -36,7 +38,11 @@ describe('when the Owner is next needed', () => {
     const lo = clockTime(Date.parse(next.next!.earliest!), now), hi = clockTime(Date.parse(next.next!.latest!), now)
     expect(ownerNextLine(next, now)).toEqual({ text: `M-1 · s1 — ${lo}–${hi}, in 3 min to 5 min`, mission: 'M-1' })
     expect(candidateWords(next.candidates[1], now)).toBe(`M-2 · (you) approve M-2's release — ${lo}–${hi}, in 3 min to 5 min, after M-1`)
-    expect(ownerNextLine(next, Date.parse(next.next!.latest!) + 1)?.text).toBe('M-1 · s1 — now')
+    // A time that has passed is not his turn: the work before it is not done (review 477 B1).
+    expect(ownerNextLine(next, Date.parse(next.next!.latest!) + 60_000)?.text).toBe(`M-1 · s1 — expected by ${hi}; that time has passed, waiting for progress`)
+    // Nothing unfinished before his step: his turn by the plan, and Needs you says whether a request is up.
+    const ready = { ...next.next!, ready: true, earliest: runtime.generated_at, latest: runtime.generated_at }
+    expect(candidateWords(ready, now + 3_600_000)).toBe('M-1 · s1 — your turn by the plan (nothing unfinished before it); Needs you lists any request')
     const unknown = parseOwnerNext({ state: 'unknown', reason: 'M-2: the mission is paused: a wait for a decision has no usual time',
       candidates: [next.candidates[0], { ...next.candidates[1], state: 'unknown', earliest: undefined, latest: undefined }] })
     expect(ownerNextLine(unknown, now)).toEqual({ mission: null,

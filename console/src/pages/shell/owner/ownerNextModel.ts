@@ -6,10 +6,14 @@ function within(ms: number): string {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`
 }
 
-/** When a timed goal is due: "14:20–14:40, in 20 to 40 min", or "now" once its time has come. */
+/**
+ * When a timed goal is due: "14:20–14:40, in 20 to 40 min". Its turn by the plan when nothing unfinished comes before
+ * it; a time that has passed is only that, never "now": the work before it is not done (review 477 B1).
+ */
 export function dueWords(c: OwnerNextCandidate, now: number): string {
   const lo = Date.parse(c.earliest ?? ''), hi = Date.parse(c.latest ?? '')
-  if (hi <= now) return 'now'
+  if (c.ready) return 'your turn by the plan (nothing unfinished before it); Needs you lists any request'
+  if (hi <= now) return `expected by ${clockTime(hi, now)}; that time has passed, waiting for progress`
   const range = clockTime(lo, now) === clockTime(hi, now) ? clockTime(hi, now) : `${clockTime(lo, now)}–${clockTime(hi, now)}`
   return lo <= now ? `by ${clockTime(hi, now)}, within ${within(hi - now)}` : `${range}, in ${within(lo - now)}${hi - lo >= 60_000 ? ` to ${within(hi - now)}` : ''}`
 }

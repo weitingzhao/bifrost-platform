@@ -63,6 +63,8 @@ export type RuntimeLoopAlert = { loop: string; since: string; error: string }
 export type OwnerNextCandidate = {
   mission_id: string; step: { plan_node_id: string; title: string }; state: 'estimated' | 'unknown'
   earliest?: string; latest?: string; reason: string; after: string[]
+  /** Nothing unfinished comes before his step: his turn by the plan. Whether a request is up for him is Needs you's. */
+  ready: boolean
 }
 export type OwnerNext = { state: 'estimated' | 'unknown' | 'none'; reason: string; next?: OwnerNextCandidate; candidates: OwnerNextCandidate[] }
 export type RuntimeProgress = {
@@ -129,12 +131,13 @@ export function parseMissionEta(v: unknown): MissionEta {
 function parseOwnerNextCandidate(v: unknown): OwnerNextCandidate | null {
   const c = record(v), step = record(c.step)
   const earliest = text(c.earliest), latest = text(c.latest)
-  // A time that does not read is unknown, never a guess (v4 §20.3 rule 7).
+  // A time that does not read, or a range that runs backwards, is unknown, never a guess (v4 §20.3 rule 7; review 477 C1).
   const timed = c.state === 'estimated' && Number.isFinite(Date.parse(earliest)) && Number.isFinite(Date.parse(latest))
+    && Date.parse(latest) >= Date.parse(earliest)
   if (!text(c.mission_id)) return null
   return { mission_id: text(c.mission_id), step: { plan_node_id: text(step.plan_node_id), title: text(step.title) },
     state: timed ? 'estimated' : 'unknown', ...(timed ? { earliest, latest } : {}),
-    reason: text(c.reason) || (c.state === 'estimated' ? 'its time does not read' : ''), after: strings(c.after) }
+    reason: text(c.reason) || (c.state === 'estimated' ? 'its time does not read' : ''), after: strings(c.after), ready: timed && c.ready === true }
 }
 export function parseOwnerNext(v: unknown): OwnerNext | undefined {
   if (v === undefined) return undefined
