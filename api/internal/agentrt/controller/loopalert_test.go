@@ -122,7 +122,8 @@ func (f *flakyDB) BeginTx(ctx context.Context, o pgx.TxOptions) (pgx.Tx, error) 
 // Review 466 A-1: an alert in the database is answered by a note once its
 // loop passes, whatever happened between: the error changed before it
 // passed; the note could not be written at the first pass; the workers
-// restarted, so the loop that passes is a new one.
+// restarted, so the loop that passes is a new one. One note an alert, however
+// many passes follow; none for a loop never alerted (review 467 C-467-1).
 func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 	pool := setup(t)
 	db := &flakyDB{DB: pool}
@@ -157,13 +158,20 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 		must(t, err)
 		return o
 	}
+	notes := func(loop string) int {
+		t.Helper()
+		var n int
+		must(t, pool.QueryRow(ctx, `SELECT count(*) FROM agentrt.event WHERE event_stream_id = $1 AND event_type = 'note'
+		  AND starts_with(body_json->>'text', $2)`, store.ControllerStream, loop+" passes again").Scan(&n))
+		return n
+	}
 	// The error changes after the alert, then the loop passes.
-	run("agentrt-card-rule", append(append(same(4, "the store is away"), errors.New("another error")), nil), nil)
+	run("agentrt-card-rule", append(append(same(4, "the store is away"), errors.New("another error")), nil, nil, nil), nil)
 	if open("agentrt-card-rule") {
 		t.Fatal("changed error: the alert stays open after the loop passed")
 	}
 	// The note cannot be written at the first pass; it is at the next.
-	run("agentrt-leases", append(same(4, "the lease read failed"), nil, nil), map[int]func(){4: func() { db.fail.Store(1) }})
+	run("agentrt-leases", append(same(4, "the lease read failed"), nil, nil, nil), map[int]func(){4: func() { db.fail.Store(1) }})
 	if open("agentrt-leases") {
 		t.Fatal("a note that failed once: the alert stays open")
 	}
@@ -172,9 +180,18 @@ func TestAnOpenAlertIsAnsweredOnceTheLoopPasses(t *testing.T) {
 	if !open("agentrt-landings") {
 		t.Fatal("the alert was not recorded")
 	}
-	run("agentrt-landings", []error{nil}, nil)
+	run("agentrt-landings", []error{nil, nil}, nil)
 	if open("agentrt-landings") {
 		t.Fatal("after a restart: the alert stays open")
+	}
+	run("agentrt-landings", []error{nil}, nil)
+	// A loop never alerted passes, also after a restart.
+	run("agentrt-assess", []error{nil, nil}, nil)
+	run("agentrt-assess", []error{nil}, nil)
+	for loop, want := range map[string]int{"agentrt-card-rule": 1, "agentrt-leases": 1, "agentrt-landings": 1, "agentrt-assess": 0} {
+		if got := notes(loop); got != want {
+			t.Errorf("%s: %d notes that it passes again, want %d", loop, got, want)
+		}
 	}
 	doc, err := store.Progress(ctx, pool)
 	must(t, err)
