@@ -8,12 +8,20 @@ import { boardState, importHead, type PlanRequest, type PlanView } from '@/api/a
  * runtime only: the board's round carries none, and a step added after the import has no line.
  */
 export type RuntimePlanStep = { id: string; t: string; state: string; when: string; line?: string; owner?: boolean; star?: boolean }
-export type RuntimePlanItem = { key: string; name: string; state: string; done?: number; total?: number; steps: RuntimePlanStep[] }
+/**
+ * An item with its count (store/progress.go, the one counting rule): done of total, and of the done ones how many by a
+ * manual record (v5 §5.1.2: Progress marks them "manual"); stopped steps count as not done.
+ */
+export type RuntimePlanItem = { key: string; name: string; state: string; done?: number; total?: number; manual?: number; stopped?: number; steps: RuntimePlanStep[] }
 /**
  * A round, as the board publishes it or as read from the runtime. source 'runtime' means it came from
  * the agent runtime (GET /plan); unknown is the reason the board could not read it, with no items
  * (CUT-plan-import §6): a round that could not be read is never shown as one with no items.
  */
+/** Of the done steps, those done by a manual record (v5 §5.1.2: Progress marks them "manual"), and the stopped ones; '' for none. */
+export function manualAndStopped(item: { manual?: number; stopped?: number }): string {
+  return `${item.manual ? ` · ${item.manual} manual` : ''}${item.stopped ? ` · ${item.stopped} stopped` : ''}`
+}
 export type RuntimeRound = { n?: number; checked?: number; items: RuntimePlanItem[]; source?: string; unknown?: string }
 export type RuntimeArchitecture = { title: string; checked?: number; rows: { state: string; what: string; now: string }[] }
 const num = (v: unknown) => typeof v === 'number' && Number.isFinite(v) ? v : undefined
@@ -163,7 +171,9 @@ export function runtimeRound(view: PlanView, plan: unknown[], root: string, requ
   return { n: n ? Number(n[1]) : undefined, source: 'runtime', items: view.items.map(item => {
     const c = counts.get(item.key) ?? {}
     if (!count(c.done) || !count(c.total) || typeof c.state !== 'string') throw new Error(`The runtime's count of ${root}:${item.key} does not read.`)
+    // A count without manual or stopped is from a platform before them: unset, never read as none.
     return { key: item.key, name: item.name, state: boardState(c.state), done: c.done, total: c.total,
+      manual: count(c.manual) ? c.manual : undefined, stopped: count(c.stopped) ? c.stopped : undefined,
       steps: item.steps.map(s => ({ id: s.id, t: s.t, state: s.state, when: s.when, line: lines.get(`${root}:${s.id}`) || undefined,
         owner: s.owner, star: s.star })) }
   }) }

@@ -65,9 +65,11 @@ describe('what of an attempt is persisted', () => {
     expect(unpersistedWords(a({ state: 'running', status: 'working' }), now)).toBe('')
   })
 
-  it('shows the stale attempt on its host with its result not persisted', () => {
+  it('shows the stale attempt on its host with its result not persisted, as maybe stuck and not running (T24)', () => {
     const h2 = crew(stale)
-    expect(within(h2).getByText('1 running')).toBeInTheDocument()
+    expect(within(h2).getByText('1 maybe stuck')).toBeInTheDocument()
+    expect(within(h2).queryByText(/running$/)).not.toBeInTheDocument()
+    expect(within(h2).getByText('Maybe stuck: the lease lapsed and was not renewed')).toBeInTheDocument()
     expect(within(h2).getByText(/^Result not persisted: last checkpoint 1 \d+ min ago, nothing persisted for /)).toBeInTheDocument()
   })
 

@@ -14,6 +14,10 @@ export type RuntimeTask = {
   since: string; round_no?: number; max_rounds?: number; depends_on: string[]
   /** Its latest lost attempt that no later persisted result superseded (TD-352). */
   lost_attempt?: RuntimeAttempt
+  /** Work outside the plan, with why (v5 §5.1.1: Progress marks it "off plan"); unset by an answer that does not say. */
+  off_plan?: boolean; off_plan_reason?: string
+  /** Its latest attempt computed a result the platform does not hold yet (GET /progress only; SPEC §2.2). */
+  computed_not_persisted?: boolean
 }
 /**
  * When a mission should be done (2.5 G8; store/progresseta.go): its unfinished tasks one after another,
@@ -79,6 +83,9 @@ export function parseRuntimeTask(v: unknown): RuntimeTask {
     status: text(r.status), reason: text(r.reason), since: text(r.since) || text(r.ended_at),
     round_no: number(r.round_no), max_rounds: number(r.max_rounds), depends_on: strings(r.depends_on) }
   if (r.lost_attempt !== null && typeof r.lost_attempt === 'object') task.lost_attempt = parseRuntimeAttempt(r.lost_attempt)
+  if (typeof r.off_plan === 'boolean') task.off_plan = r.off_plan
+  if (r.off_plan === true) task.off_plan_reason = text(r.off_plan_reason)
+  if (typeof r.computed_not_persisted === 'boolean') task.computed_not_persisted = r.computed_not_persisted
   return task
 }
 export function parseRuntimeAttempt(v: unknown): RuntimeAttempt {

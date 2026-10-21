@@ -1,4 +1,4 @@
-import { archCounts, type ArchTick, type RuntimeArchTable, type RuntimePlanStep, type RuntimeRound } from '@/api/agentRuntimePlan'
+import { archCounts, manualAndStopped, type ArchTick, type RuntimeArchTable, type RuntimePlanStep, type RuntimeRound } from '@/api/agentRuntimePlan'
 import { OpsSection } from '@/components/layout/OpsSection'
 import { hashNamesSection } from '@/lib/shell/useHashSection'
 import { ARCH_NOT_IMPORTED, PLAN_NOT_IMPORTED, useRuntimeArch, useRuntimePlan } from './useRuntimePlan'
@@ -15,7 +15,7 @@ function Steps({ steps }: { steps: RuntimePlanStep[] }) {
 }
 function Items({ round }: { round: RuntimeRound }) {
   return <>{round.items.map((item, i) => <details open={['doing', 'running', 'current'].includes(item.state)} key={`${item.key}-${i}`} className="rounded-[var(--card-radius)] border border-[var(--card-border)] bg-[var(--card-fill)] p-2">
-    <summary className="cursor-pointer text-sm">{item.key} {item.name} · {item.done ?? '?'}/{item.total ?? '?'} · {item.state}</summary>
+    <summary className="cursor-pointer text-sm">{item.key} {item.name} · {item.done ?? '?'}/{item.total ?? '?'}{manualAndStopped(item)} · {item.state}</summary>
     {item.steps.length === 0 && <p>No steps published.</p>}
     {item.steps.some(s => s.state === 'done') && <details><summary className="cursor-pointer text-sm">Completed steps</summary><Steps steps={item.steps.filter(s => s.state === 'done')} /></details>}
     <Steps steps={item.steps.filter(s => s.state !== 'done')} />

@@ -1,7 +1,7 @@
 import { goalHref } from '@/lib/shell/consoleRoutes'
 import type { RuntimeMission } from '@/api/agentRuntime'
 import { firstLine } from './crewModel'
-import { Card } from './OwnerParts'
+import { Card, OffPlanMark } from './OwnerParts'
 import { etaBasis, etaLine } from './ownerModel'
 
 /** How many open goals the card lists; the rest are in Goals, further down Work. */
@@ -19,9 +19,14 @@ export function OwnerGoals({ missions, now, read }: { missions: RuntimeMission[]
     {read === 'ok' && open.length === 0 && <p className="m-0 text-sm text-muted-foreground">No open goals.</p>}
     {read === 'ok' && <ul className="m-0 flex list-none flex-col gap-2 p-0">{open.slice(0, SHOWN).map(m => {
       const basis = etaBasis(m.eta)
+      const offPlan = m.tasks.filter(t => t.off_plan === true)
       return <li key={m.mission_id} className="flex min-w-0 flex-col gap-1 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5">
-        <a href={goalHref(m.mission_id)} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
-          <strong>{m.mission_id}</strong> {firstLine(m.title || m.goal)}</a>
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <a href={goalHref(m.mission_id)} className="min-w-0 text-sm text-foreground [overflow-wrap:anywhere]">
+            <strong>{m.mission_id}</strong> {firstLine(m.title || m.goal)}</a>
+          {offPlan.length > 0 && <OffPlanMark reasons={offPlan.map(t => t.off_plan_reason ?? '')}
+            label={offPlan.length === m.tasks.length ? 'Off plan' : `${offPlan.length} of ${m.tasks.length} tasks off plan`} />}
+        </span>
         <span className="min-w-0 text-xs text-muted-foreground [overflow-wrap:anywhere]">{m.status || m.state}{m.reason ? ` · ${m.reason}` : ''}</span>
         {basis.length === 0
           ? <span className={`min-w-0 text-sm [overflow-wrap:anywhere] ${m.eta.state === 'unknown' ? 'text-muted-foreground' : ''}`}>{etaLine(m.eta, now)}</span>

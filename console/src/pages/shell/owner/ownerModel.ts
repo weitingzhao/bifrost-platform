@@ -9,6 +9,7 @@ import { mergedWaitingCount, type WaitingItem } from '@/pages/shell/needs-you/me
 import type { NeedsYouCount } from '@/pages/shell/needs-you/needsYouModel'
 import type { ConsoleNavBadge } from '@/components/shell/ConsoleNavSlotItem'
 import { standbyVerdict, type StandbyEvidence } from './standbyEvidence'
+import { activityCounts, attemptActivity } from './attemptActivity'
 
 /**
  * The Owner Console (Owner 2026-10-16): what is his to do first, then what is worth a look, the
@@ -174,12 +175,16 @@ export function ownerVerdict(input: {
   yours: NeedsYouCount
   approvals: number | null
   running: number | null
+  /** Live attempts not counted as running: on a lost host, maybe stuck or unknown (T24). */
+  stalled?: number | null
   lane: string
   nodes: { ready: number; total: number } | null
 }): Verdict {
   const facts = [
     input.approvals == null ? 'approvals unknown' : input.approvals > 0 ? `${plural(input.approvals, 'request')} to approve` : 'Nothing to approve',
-    input.running == null ? 'agents unknown' : input.running > 0 ? `${plural(input.running, 'agent')} running` : 'agents idle',
+    input.running == null ? 'agents unknown' : input.running === 0 && !input.stalled ? 'agents idle'
+      : [input.running > 0 ? `${plural(input.running, 'agent')} running` : '', input.stalled ? `${plural(input.stalled, 'agent')} not heard from` : '']
+        .filter(Boolean).join(', '),
     input.lane,
     input.nodes == null ? 'nodes unknown' : `${input.nodes.ready} of ${input.nodes.total} nodes ready`,
   ]
@@ -194,7 +199,11 @@ export function ownerVerdict(input: {
 }
 
 export type WorkNow = {
+  /** Live attempts the runtime calls working or slow; one on a lost host, maybe stuck or unknown is not running (T24). */
   running: number
+  /** The other live attempts, and how many of each ("1 host lost · 1 maybe stuck"). */
+  stalled: number
+  stalledWords: string
   stuck: number
   open: number
   /** The latest accepted implementation, and its mission's state when the open list has it. Accepted is not done (review 224 A-224-1). */
@@ -212,8 +221,11 @@ export function workNow(runtime: RuntimeProgress | undefined): WorkNow | null {
     .filter(t => text(t.role) === 'implement' && text(t.state) === 'accepted' && text(t.mission_id))
     .sort((a, b) => text(b.ended_at).localeCompare(text(a.ended_at)))[0]
   const mission = text(accepted?.mission_id)
+  const stalled = runtime.live.filter(a => attemptActivity(a) !== 'running')
   return {
-    running: runtime.live.length,
+    running: runtime.live.length - stalled.length,
+    stalled: stalled.length,
+    stalledWords: activityCounts(stalled),
     stuck,
     open: missions.length,
     lastAccepted: accepted ? { mission, at: text(accepted.ended_at), openState: missions.find(m => m.mission_id === mission)?.state ?? '' } : null,
@@ -250,7 +262,7 @@ export function lastResultLine(r: LastResult, now: number): string {
   return r.status === 'open' ? `${accepted}; the goal is ${r.state}` : accepted
 }
 
-export type PlanRow = { key: string; name: string; done: number; total: number; tone: Tone; tag: '' | 'now' | 'next' }
+export type PlanRow = { key: string; name: string; done: number; total: number; manual: number; stopped: number; tone: Tone; tag: '' | 'now' | 'next' }
 
 export function planRows(round: RuntimeRound | undefined): PlanRow[] {
   if (!round || round.unknown !== undefined) return []
@@ -258,7 +270,7 @@ export function planRows(round: RuntimeRound | undefined): PlanRow[] {
   return round.items.map((item, i) => {
     const live = record(item).live === true
     const tone: Tone = item.state === 'done' ? 'ok' : item.state === 'todo' ? 'muted' : 'info'
-    return { key: item.key, name: item.name, done: item.done ?? 0, total: item.total ?? 0, tone,
+    return { key: item.key, name: item.name, done: item.done ?? 0, total: item.total ?? 0, manual: item.manual ?? 0, stopped: item.stopped ?? 0, tone,
       tag: live ? 'now' : i === firstTodo ? 'next' : '' }
   })
 }

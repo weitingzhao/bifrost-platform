@@ -86,8 +86,10 @@ describe('the plan pane on Progress', () => {
     const { container } = show(<AgentsPlan />)
     expect(await screen.findByText('Round 2 · from the agent runtime')).toBeInTheDocument()
     expect(screen.getByText('From the agent runtime; each architecture row is ticked by its gate tests')).toBeInTheDocument()
-    expect(screen.getByText('2.0 设计对齐：v4 到 v5 · 3/3 · done')).toBeInTheDocument()
-    expect(screen.getByText('2.1 数据层：状态库 · 2/5 · doing')).toBeInTheDocument()
+    // Imported done steps are done by their manual atom: counted as done and marked manual (v5 §5.1.2, T24).
+    expect(screen.getByText('2.0 设计对齐：v4 到 v5 · 3/3 · 3 manual · done')).toBeInTheDocument()
+    expect(screen.getByText('2.1 数据层：状态库 · 2/5 · 2 manual · doing')).toBeInTheDocument()
+    expect(screen.getByText('2.4 缩进用不换行空格 · 0/2 · doing')).toBeInTheDocument()
     expect(screen.getByText('2026-10-14 01:09')).toBeInTheDocument()
     expect(screen.getAllByText('Ledger line').length).toBeGreaterThan(0)
     expect(screen.queryByText(boardOnly)).not.toBeInTheDocument()

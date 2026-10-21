@@ -2,6 +2,7 @@ import { goalHref } from '@/lib/shell/consoleRoutes'
 import { useQueries } from '@tanstack/react-query'
 import { fetchRuntimeTaskDetail, type RuntimeAttempt, type RuntimeHost, type RuntimeMission, type RuntimeTaskDetail } from '@/api/agentRuntime'
 import { AttemptActionLine } from './AttemptActionLine'
+import { activityCounts, stalledWords } from './attemptActivity'
 import { crewRows, duration, firstLine, unpersistedWords } from './crewModel'
 import { Card, Dot } from './OwnerParts'
 import { ago, type Tone } from './ownerModel'
@@ -10,6 +11,13 @@ const ROLE: Record<string, string> = { implement: 'Implement', verify: 'Verify',
 /** A heartbeat older than this, on an attempt still live, is shown as late. */
 const LATE_HEARTBEAT_S = 120
 const TASK_STALE_MS = 10 * 60_000
+
+/** A host not online: lost when the runtime says it stopped polling (T24), with its last poll; one that never polled says so. */
+function hostWords(h: RuntimeHost, now: number): string {
+  if (!h.last_poll_at) return 'never polled'
+  const last = `last poll ${ago(h.last_poll_at, now)}`
+  return h.online === false ? `host lost · ${last}` : last
+}
 
 function hostTone(h: RuntimeHost | undefined): Tone {
   if (h?.online === true) return 'ok'
@@ -63,20 +71,23 @@ export function OwnerCrew({ hosts, live, missions, now, read }: {
       return <li key={row.id} className="flex min-w-0 flex-col gap-2 rounded-[var(--control-radius)] bg-[var(--control-fill)] p-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2"><Dot tone={hostTone(h)} /><strong className="truncate font-mono text-sm" title={row.id}>{row.id}</strong>
-            <span className="text-xs text-muted-foreground">{!h ? 'not a registered host' : h.online ? 'online' : `last poll ${ago(h.last_poll_at, now)}`}</span></span>
-          <span className="text-xs font-semibold">{row.attempts.length ? `${row.attempts.length} running` : 'Idle'}{row.lost.length > 0 && ` · ${row.lost.length} lost`}</span>
+            <span className="text-xs text-muted-foreground">{!h ? 'not a registered host' : h.online ? 'online' : hostWords(h, now)}</span></span>
+          {/* An attempt on a lost host, or maybe stuck, is not counted as running (T24). */}
+          <span className="text-xs font-semibold">{row.attempts.length ? activityCounts(row.attempts) : 'Idle'}{row.lost.length > 0 && ` · ${row.lost.length} lost`}</span>
         </div>
         {row.attempts.map(a => {
           const n = name(a)
           const late = a.heartbeat_age_s != null && a.heartbeat_age_s > LATE_HEARTBEAT_S
           const goal = goals.get(a.mission_id)
           const unpersisted = unpersistedWords(a, now)
+          const stalled = stalledWords(a)
           return <div key={a.attempt_id} className="flex min-w-0 flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
             <span className="min-w-0 [overflow-wrap:anywhere] text-sm"><strong>{n.role}</strong> · {n.title}</span>
             <span className="min-w-0 [overflow-wrap:anywhere] text-xs text-muted-foreground">
               {a.executor.replace(/^exec:/, '')}{a.model ? ` (${a.model})` : ''} · {a.mission_id}{goal ? ` ${goal}` : ''} · {a.state} {duration(a.elapsed_s)}
               {late && <span className="font-semibold text-[var(--color-warning)]"> · no heartbeat for {duration(a.heartbeat_age_s)}</span>}
               {n.failed && <span> · its task could not be read</span>}</span>
+            {stalled && <span className="min-w-0 [overflow-wrap:anywhere] text-xs font-semibold text-[var(--color-warning)]">{stalled}</span>}
             {unpersisted && <span className="min-w-0 [overflow-wrap:anywhere] text-xs font-semibold text-[var(--color-warning)]">{unpersisted}</span>}
             <AttemptActionLine attempt={a} now={now} who={false} />
           </div>

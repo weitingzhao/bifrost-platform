@@ -18,9 +18,10 @@ export function Card({ title, more, children, label, accent = false }: {
   </section>
 }
 
-/** Kept by hand by the coordinator thread: a mark, with where it came from on hover. */
-export function HandMark({ title }: { title: string }) {
-  return <span title={title} className="text-xs text-[var(--color-warning)]">✎ by hand</span>
+/** Work outside the plan (v5 §5.1.1: Progress marks it "off plan"), with why on hover. */
+export function OffPlanMark({ label = 'Off plan', reasons }: { label?: string; reasons: readonly string[] }) {
+  const why = [...new Set(reasons.filter(Boolean))].join('\n')
+  return <span title={why || 'No reason given'} data-off-plan className="rounded-full bg-[var(--control-fill)] px-2 text-xs font-semibold">{label}</span>
 }
 
 export function Bar({ percent, tone }: { percent: number; tone: Tone }) {

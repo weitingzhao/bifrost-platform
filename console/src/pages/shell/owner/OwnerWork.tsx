@@ -39,6 +39,8 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <Stat value={work?.stuck ?? '?'} label="stuck" tone={work && work.stuck > 0 ? 'fail' : undefined} />
           <Stat value={work?.open ?? '?'} label="open goals" />
         </div>
+        {/* T24: an attempt on a host that stopped polling, or maybe stuck, is not counted as running; Crew says which. */}
+        {work && work.stalled > 0 && <p className="m-0 text-xs font-semibold text-[var(--color-warning)]" data-stalled>Not running: {work.stalledWords} (Crew)</p>}
         <div className="flex flex-col gap-1 border-t border-[var(--table-rule)] pt-2">
           <span className="text-xs uppercase tracking-wide text-muted-foreground">Last result</span>
           {data.last
@@ -66,7 +68,10 @@ export function OwnerWork({ data }: { data: OwnerConsoleData }) {
           <span className="font-mono text-sm font-semibold">{row.key}</span>
           <div className="flex min-w-0 flex-col gap-1">
             <span className="flex flex-wrap items-center gap-1.5 text-sm"><span className="min-w-0 break-words">{row.name}</span>
-              {row.tag && <span className={`rounded-full px-2 text-xs font-bold ${row.tag === 'now' ? 'bg-[var(--color-info)] text-background' : 'bg-[var(--control-fill)]'}`}>{row.tag}</span>}</span>
+              {row.tag && <span className={`rounded-full px-2 text-xs font-bold ${row.tag === 'now' ? 'bg-[var(--color-info)] text-background' : 'bg-[var(--control-fill)]'}`}>{row.tag}</span>}
+              {/* Done by a manual record, counted as done and marked apart (v5 §5.1.2). */}
+              {row.manual > 0 && <span className="text-xs text-muted-foreground" title="Steps done by a manual record (an import from the work ledger, or one recorded by hand)">{row.manual} manual</span>}
+              {row.stopped > 0 && <span className="text-xs text-muted-foreground">{row.stopped} stopped</span>}</span>
             <Bar percent={row.total ? (row.done / row.total) * 100 : 0} tone={row.tone} />
           </div>
           <span className="text-right font-mono text-xs text-muted-foreground">{row.done}/{row.total}</span>
