@@ -262,6 +262,16 @@ export async function postPlanNote(
 /** The plan import request format (planimport.Format on the platform). */
 export const PLAN_IMPORT_FORMAT = 'agentrt.plan_import/v1'
 
+/**
+ * A recorder log's import request (recorderimport.Format; agentrt-plan-import
+ * recorder writes it): the same route takes it by its format (W-31 2.3, the
+ * Owner's 2.3 第 4 条 A, 2026-10-21).
+ */
+export const RECORDER_IMPORT_FORMAT = 'agentrt.recorder_import/v1'
+
+/** The request formats POST /plan/imports takes. */
+export const IMPORT_FORMATS: readonly string[] = [PLAN_IMPORT_FORMAT, RECORDER_IMPORT_FORMAT]
+
 /** The largest request file read, as the platform's artifact bound. */
 export const PLAN_IMPORT_MAX_BYTES = 1 << 20
 
@@ -383,8 +393,9 @@ export async function proposePlanImport(
   } catch (e) {
     return { error: `${input.request_file} is not JSON: ${(e as Error).message}`, hint: 'No request was sent.' }
   }
-  if (request == null || typeof request !== 'object' || (request as { format?: unknown }).format !== PLAN_IMPORT_FORMAT) {
-    return { error: `${input.request_file} is not a plan import request (${PLAN_IMPORT_FORMAT})`, hint: 'No request was sent.' }
+  const format = request != null && typeof request === 'object' ? (request as { format?: unknown }).format : undefined
+  if (typeof format !== 'string' || !IMPORT_FORMATS.includes(format)) {
+    return { error: `${input.request_file} is not an import request (${IMPORT_FORMATS.join(' or ')})`, hint: 'No request was sent.' }
   }
   return d.send('POST', `${BASE}/plan/imports`, { idempotency_key: input.idempotency_key, reason: input.reason, request })
 }

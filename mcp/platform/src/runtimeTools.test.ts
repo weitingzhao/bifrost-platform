@@ -29,6 +29,7 @@ import {
   nodeRequestFs,
   PLAN_IMPORT_MAX_BYTES,
   PLAN_IMPORT_FORMAT,
+  RECORDER_IMPORT_FORMAT,
   proposeTasks,
   putArtifact,
   requestStop,
@@ -188,12 +189,22 @@ describe('agent runtime writes', () => {
     }
   })
 
+  it('the import formats are the platform\'s (planimport.Format, recorderimport.Format)', () => {
+    const go = (file: string) => readFileSync(new URL(`../../../api/internal/agentrt/${file}`, import.meta.url), 'utf8')
+    assert.match(go('planimport/request.go'), new RegExp(`const Format = "${PLAN_IMPORT_FORMAT.replace(/[./]/g, '\\$&')}"`))
+    assert.match(go('recorderimport/recorder.go'), new RegExp(`const Format = "${RECORDER_IMPORT_FORMAT.replace(/[./]/g, '\\$&')}"`))
+  })
+
   it('propose_plan_import reads a request only from its folder and sends it with the caller\'s key', async () => {
     const base = mkdtempSync(join(tmpdir(), 'plan-import-'))
     const dir = join(base, 'plan-import')
     mkdirSync(dir)
     const request = { format: PLAN_IMPORT_FORMAT, root: { id: 'R2' }, nodes: [] }
     writeFileSync(join(dir, 'r2.json'), JSON.stringify(request))
+    // A recorder log's request goes to the same route (W-31 2.3).
+    const recorder = { format: RECORDER_IMPORT_FORMAT, source: { work_id: 'td-336' }, lines: [] }
+    writeFileSync(join(dir, 'recorder-td-336.json'), JSON.stringify(recorder))
+    writeFileSync(join(dir, 'formatless.json'), JSON.stringify({ root: { id: 'R2' } }))
     writeFileSync(join(dir, 'other.json'), JSON.stringify({ format: 'something else' }))
     writeFileSync(join(dir, 'bad.json'), '{not json')
     writeFileSync(join(base, 'outside.json'), JSON.stringify(request))
@@ -206,7 +217,8 @@ describe('agent runtime writes', () => {
       const refusals: Array<[string, RegExp]> = [
         [join(base, 'outside.json'), /the only folder request files are read from/],
         [join(dir, 'link.json'), /cannot read .*link\.json/],
-        [join(dir, 'other.json'), /is not a plan import request/],
+        [join(dir, 'other.json'), /is not an import request \(agentrt\.plan_import\/v1 or agentrt\.recorder_import\/v1\)/],
+        [join(dir, 'formatless.json'), /is not an import request/],
         [join(dir, 'bad.json'), /is not JSON/],
         [join(dir, 'missing.json'), /cannot read/],
         ['r2.json', /an absolute path/],
@@ -222,6 +234,9 @@ describe('agent runtime writes', () => {
       await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'round 2', idempotency_key: 'i-1' }, d, files)
       assert.equal(calls[0].path, '/api/v1/agentrt/plan/imports')
       assert.deepEqual(calls[0].body, { idempotency_key: 'i-1', reason: 'round 2', request })
+      await proposePlanImport({ request_file: join(dir, 'recorder-td-336.json'), reason: 'retire the recorder', idempotency_key: 'i-3' }, d, files)
+      assert.equal(calls[1].path, '/api/v1/agentrt/plan/imports')
+      assert.deepEqual(calls[1].body, { idempotency_key: 'i-3', reason: 'retire the recorder', request: recorder })
       const off = deps({ mode: 'off' })
       await proposePlanImport({ request_file: join(dir, 'r2.json'), reason: 'r', idempotency_key: 'i-2' }, off.d, files)
       assert.equal(off.calls.length, 0, 'writes off sends nothing')
