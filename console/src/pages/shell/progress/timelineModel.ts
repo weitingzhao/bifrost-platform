@@ -25,15 +25,25 @@ const REPORT: Record<string, string> = { report: 'a report', verify: 'a verifica
 /** What a wait's limit came from (store/waits.go basis). */
 const LIMIT_FROM: Record<string, string> = { floor: 'the floor of its kind', task_usual: 'twice its usual time',
   history_usual: 'twice the usual time of its kind' }
-const minutes = (v: unknown) => `${typeof v === 'number' ? Math.round(v / 60) : '?'} min`
+/** Seconds as hours and minutes, or minutes and seconds: a wait a second past its limit reads so (review 474 C1). */
+export function span(v: unknown): string {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return '?'
+  const s = Math.floor(v), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
+  if (h > 0) return m ? `${h} h ${m} min` : `${h} h`
+  if (m > 0) return sec ? `${m} min ${sec} s` : `${m} min`
+  return `${sec} s`
+}
 
-/** A wait past its limit (store/waits.go): what waited, how long, the limit. */
+/**
+ * A wait past its limit (store/waits.go), as it was when recorded: what waited, how long, the limit. Said in
+ * the past: the row is history, and the wait may have ended since (review 474 C1).
+ */
 function waitText(e: RuntimeEventRow, task: string): string {
-  const b = e.body, waited = minutes(b.waited_s), limit = minutes(b.limit_s)
+  const b = e.body, waited = span(b.waited_s), limit = span(b.limit_s)
   switch (text(b.wait)) {
-    case 'attempt_running': return `${task || 'An attempt'} has run ${waited}, past its limit of ${limit}`
-    case 'task_ready': return `${task || 'A task'} has been ready ${waited} with no host taking it, past its limit of ${limit}`
-    case 'message_unread': return `A message to ${text(b.calls) || 'a thread'} has not been read in ${waited}, past its limit of ${limit}`
+    case 'attempt_running': return `${task || 'An attempt'} had run ${waited}, past its limit of ${limit}`
+    case 'task_ready': return `${task || 'A task'} had been ready ${waited} with no host taking it, past its limit of ${limit}`
+    case 'message_unread': return `A message to ${text(b.calls) || 'a thread'} had not been read in ${waited}, past its limit of ${limit}`
     default: return [text(b.wait), waited].filter(Boolean).join(': ') || 'Waited past its limit'
   }
 }

@@ -58,6 +58,17 @@ const (
 	WaitMessageLimit   = 10 * time.Minute
 	WaitMessageHorizon = 7 * 24 * time.Hour // older unread mail is no longer a wait anyone is in
 	waitsPerPass       = 20                 // of each wait, the oldest first; the rest on the next pass
+	// A pass is bounded in time and in each lock it waits for (review 474
+	// B3): a record waits at its commit for a row another transaction
+	// holds; past the bound the pass fails, its loop says so, and the next
+	// pass tries again.
+	waitsPassTimeout = 30 * time.Second
+	waitsLockTimeout = "5s"
+	// A record is written at least its limit (10 minutes or more) after its
+	// wait began, so the records of a wait are looked for from a day before
+	// it began: the (event_type, at) index bounds the look-up whatever the
+	// clocks' skew (review 474 B1).
+	waitsLookBack = "1 day"
 )
 
 // What a wait's limit came from.
@@ -79,9 +90,14 @@ type passedWait struct {
 // WaitLimits is one pass: it records the waits that passed their limit at
 // now and were not recorded yet, and returns how many it recorded.
 func WaitLimits(ctx context.Context, db DB, now time.Time) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, waitsPassTimeout)
+	defer cancel()
 	var found []passedWait
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		found = nil
+		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+waitsLockTimeout+`'`); err != nil {
+			return err
+		}
 		usual, err := usualTimes(ctx, tx, now)
 		if err != nil {
 			return err
@@ -142,11 +158,15 @@ func recordWait(ctx context.Context, db DB, p passedWait, now time.Time) (bool, 
 	did := false
 	err := InTx(ctx, db, func(tx pgx.Tx) error {
 		did = false
+		if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+waitsLockTimeout+`'`); err != nil {
+			return err
+		}
 		if err := lockStream(ctx, tx, WaitsStream); err != nil {
 			return err
 		}
 		var seen bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM agentrt.event w WHERE w.event_type = 'wait_limit_passed'
+		  AND w.at >= $3::timestamptz - interval '`+waitsLookBack+`'
 		  AND w.body_json->>'wait' = $1 AND w.body_json->>'ref' = $2 AND (w.body_json->>'since')::timestamptz = $3)`,
 			p.wait, p.ref, p.since).Scan(&seen); err != nil || seen {
 			return err
@@ -158,7 +178,8 @@ func recordWait(ctx context.Context, db DB, p passedWait, now time.Time) (bool, 
 		did = true
 		return nil
 	})
-	return did, err
+	// A record whose commit failed is not one (review 474 B2).
+	return did && err == nil, err
 }
 
 // The calls of a task's wait: whoever proposed the work it is part of, the
@@ -228,5 +249,6 @@ const mailPastLimit = `SELECT m.message_id, COALESCE(m.mission_id, ''), COALESCE
 	  AND m.created_at < $1::timestamptz - make_interval(secs => $2::bigint)
 	  AND m.created_at > $1::timestamptz - make_interval(secs => $3::bigint)
 	  AND NOT EXISTS (SELECT 1 FROM agentrt.event w WHERE w.event_type = 'wait_limit_passed'
+	    AND w.at >= m.created_at - interval '` + waitsLookBack + `'
 	    AND w.body_json->>'wait' = 'message_unread' AND w.body_json->>'ref' = m.message_id)
 	ORDER BY m.created_at, m.message_id LIMIT $4`

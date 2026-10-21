@@ -10,7 +10,7 @@ import waits from '@/api/__fixtures__/agentrt-events-waits.testdb.json'
 import { parseRuntimeProgress } from '@/api/agentRuntime'
 import { parseEventPage } from '@/api/agentRuntimeEvents'
 import type { ReleaseRecord } from '@/api/releases'
-import { earliestAt, eventRow, mergeEvents, taskTitles, timelineRows } from '../timelineModel'
+import { earliestAt, eventRow, mergeEvents, span, taskTitles, timelineRows } from '../timelineModel'
 
 // The events are GET /agentrt/events without a stream as the handler answered it on a test database
 // (store's kernel world: three accepted implementations, one rejected after a failed attempt, an executor
@@ -101,16 +101,19 @@ describe('the timeline from the runtime\'s events (2.5 G6)', () => {
     const byWait = Object.fromEntries(events.map(e => [String(e.body.wait), eventRow(e, named)]))
     const attempt = events.find(e => e.body.wait === 'attempt_running')!, ready = events.find(e => e.body.wait === 'task_ready')!
     expect(byWait.attempt_running).toMatchObject({ kind: 'wait', label: 'Waited past limit',
-      text: `task ${attempt.task_id.slice(-4)} has run 31 min, past its limit of 30 min`, detail: 'calls controller · limit from the floor of its kind' })
+      text: `task ${attempt.task_id.slice(-4)} had run 31 min, past its limit of 30 min`, detail: 'calls controller · limit from the floor of its kind' })
     expect(byWait.task_ready).toMatchObject({ kind: 'wait',
-      text: `task ${ready.task_id.slice(-4)} has been ready 31 min with no host taking it, past its limit of 30 min` })
+      text: `task ${ready.task_id.slice(-4)} had been ready 31 min with no host taking it, past its limit of 30 min` })
     expect(byWait.message_unread).toMatchObject({ kind: 'wait',
-      text: 'A message to thread:s1 has not been read in 31 min, past its limit of 10 min', detail: 'calls thread:s1 · limit from the floor of its kind' })
+      text: 'A message to thread:s1 had not been read in 31 min, past its limit of 10 min', detail: 'calls thread:s1 · limit from the floor of its kind' })
     // A limit from a usual time says so; a wait the Console does not know is still said, not dropped.
     const say = (body: Record<string, unknown>) => eventRow({ ...attempt, body }, named)
     expect(say({ ...attempt.body, basis: 'history_usual' })?.detail).toBe('calls controller · limit from twice the usual time of its kind')
     expect(say({ ...attempt.body, basis: 'task_usual' })?.detail).toBe('calls controller · limit from twice its usual time')
     expect(say({ wait: 'host_asleep', waited_s: 120 })).toMatchObject({ kind: 'wait', text: 'host_asleep: 2 min', detail: '' })
+    // A second past the limit reads so, not as the limit itself.
+    expect(say({ ...attempt.body, waited_s: 1801, limit_s: 1800 })?.text).toBe(`task ${attempt.task_id.slice(-4)} had run 30 min 1 s, past its limit of 30 min`)
+    expect([0, 59, 60, 3600, 5460, 7200, -1, '1'].map(span)).toEqual(['0 s', '59 s', '1 min', '1 h', '1 h 31 min', '2 h', '?', '?'])
   })
   it('says each plan change decision, with its error when it failed', () => {
     const planRow = latest.events.find(e => e.event_type === 'plan_node_state_changed')!

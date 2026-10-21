@@ -318,8 +318,8 @@ func TestARecordWaitsForNoMissionsStream(t *testing.T) {
 	pass := w.db.Connect(t, w.db.Runtime)
 	done := make(chan error, 1)
 	go func() {
-		_, err := store.WaitLimits(ctx, pass, time.Now().Add(31*time.Minute))
-		done <- err
+		_, werr := store.WaitLimits(ctx, pass, time.Now().Add(31*time.Minute))
+		done <- werr
 	}()
 	// The pass waits at its commit for the attempt's row.
 	w.waitFor(t, "commit", time.Now().Add(10*time.Second))
@@ -330,5 +330,173 @@ func TestARecordWaitsForNoMissionsStream(t *testing.T) {
 	ok(t, <-done)
 	if ws := waitsRecorded(t, w); len(ws) != 1 || ws[0].attempt != c.AttemptID {
 		t.Fatalf("records %+v", ws)
+	}
+}
+
+// sinceOf is when a ready task last became ready, or an attempt started, as
+// the database has it.
+func (w *world) readySince(t *testing.T, task string) time.Time {
+	t.Helper()
+	var at time.Time
+	ok(t, w.rt.QueryRow(ctx, `SELECT max(at) FROM agentrt.event WHERE task_id = $1 AND event_type = 'task_state_changed'
+	  AND body_json->>'to' = 'ready'`, task).Scan(&at))
+	return at
+}
+
+// Review 474 B4: the limit at its edge (a wait exactly at its limit is not
+// past it); a task's own usual time below the floor gives the floor and is
+// still said; a role and class with fewer than three accepted attempts has
+// no usual time; a clock in another zone reads the same instants.
+func TestAWaitAtItsEdge(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	w.ended(t, "done")
+	w.ended(t, "done") // two samples: no usual time
+	w.legacy(t, `UPDATE agentrt.attempt SET started_at = started_at - interval '5000 seconds' WHERE state = 'finished'`)
+	own := w.ready(t, store.Task{})
+	w.legacy(t, fmt.Sprintf(`UPDATE agentrt.task SET usual_s = 300 WHERE task_id = '%s'`, own))
+	since := w.readySince(t, own)
+	east := time.FixedZone("UTC+5", 5*3600)
+	if n := waitsAt(t, w, since.Add(1800*time.Second).In(east)); n != 0 {
+		t.Fatalf("%d recorded at exactly the limit", n)
+	}
+	if n := waitsAt(t, w, since.Add(1801*time.Second).In(east)); n != 1 {
+		t.Fatalf("%d recorded a second past the limit", n)
+	}
+	for range 2 {
+		if n := waitsAt(t, w, since.Add(time.Hour)); n != 0 {
+			t.Fatalf("recorded again (%d)", n)
+		}
+	}
+	r := waitsRecorded(t, w)[0]
+	if r.body["ref"] != own || r.body["basis"] != "floor" || num(r.body["limit_s"]) != 1800 || num(r.body["usual_s"]) != 300 ||
+		num(r.body["waited_s"]) != 1801 {
+		t.Fatalf("the wait %+v", r.body)
+	}
+	// Two samples of the role and class: a task of it has no usual time.
+	other := w.ready(t, store.Task{})
+	if n := waitsAt(t, w, w.readySince(t, other).Add(1801*time.Second)); n != 1 {
+		t.Fatalf("%d recorded for the task of two samples", n)
+	}
+	if o := waitsRecorded(t, w)[1]; o.body["ref"] != other || o.body["basis"] != "floor" || o.body["usual_s"] != nil {
+		t.Fatalf("the task of two samples %+v", o.body)
+	}
+}
+
+// Review 474 B4: a check of a thread's work calls that thread, ready and
+// running; a pause on the work it checks holds its ready wait; a paused
+// mission holds a ready task, a control on a host does not.
+func TestAChecksWaitCallsTheWorksProposer(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	p := proposal("impl", w.spec)
+	p.BaseCommit = "" // the run pushes commitA: a change only against no base
+	out, err := store.ProposeTasks(ctx, w.rt, wr("thread:s1"), "k", "M-1", []store.TaskProposal{p})
+	ok(t, err)
+	impl := taskIDs(out)["impl"]
+	_, err = store.Dispatch(ctx, w.rt)
+	ok(t, err)
+	w.run(t, "h1", cursor, "done")
+	v, err := store.StartVerification(ctx, w.rt, impl)
+	ok(t, err)
+	w.control(t, "c1", "task", impl, "pause")
+	since := w.readySince(t, v)
+	if n := waitsAt(t, w, since.Add(31*time.Minute)); n != 0 {
+		t.Fatalf("%d recorded while the work it checks is paused", n)
+	}
+	w.clear(t, "c1")
+	if n := waitsAt(t, w, since.Add(31*time.Minute)); n != 1 {
+		t.Fatalf("%d recorded once lifted", n)
+	}
+	if r := waitsRecorded(t, w)[0]; r.body["ref"] != v || r.body["calls"] != "thread:s1" {
+		t.Fatalf("the ready check %+v", r.body)
+	}
+	vc := w.claim(t, "h2", time.Hour, deterministic)
+	if vc == nil || vc.TaskID != v {
+		t.Fatalf("the check's claim %+v", vc)
+	}
+	ok(t, store.Start(ctx, w.rt, fence(vc, "h2"), "", ""))
+	if n := waitsAt(t, w, time.Now().Add(21*time.Minute)); n != 1 {
+		t.Fatalf("%d recorded for the running check", n)
+	}
+	if r := waitsRecorded(t, w)[1]; r.body["ref"] != vc.AttemptID || r.body["calls"] != "thread:s1" {
+		t.Fatalf("the running check %+v", r.body)
+	}
+
+	w2 := newKernelWorld(t)
+	ready := w2.ready(t, store.Task{})
+	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "paused", "test") }))
+	at := w2.readySince(t, ready).Add(31 * time.Minute)
+	if n := waitsAt(t, w2, at); n != 0 {
+		t.Fatalf("%d recorded in a paused mission", n)
+	}
+	ok(t, store.InTx(ctx, w2.rt, func(tx pgx.Tx) error { return store.MoveMission(ctx, tx, "controller", "M-1", "active", "test") }))
+	w2.control(t, "c2", "host", "h1", "pause")
+	w2.control(t, "c3", "host", "h2", "drain")
+	if n := waitsAt(t, w2, at); n != 1 {
+		t.Fatalf("%d recorded with only hosts held, want the ready task", n)
+	}
+}
+
+// Review 474 B4: a pass records at most twenty of a wait, the oldest first,
+// and the next passes the rest: what is on record leaves room for the next.
+func TestAPassIsBounded(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	var ids []string
+	for range 41 {
+		ids = append(ids, w.ready(t, store.Task{}))
+	}
+	at := time.Now().Add(31 * time.Minute)
+	for i, want := range []int{20, 20, 1, 0} {
+		if n := waitsAt(t, w, at); n != want {
+			t.Fatalf("pass %d recorded %d, want %d", i+1, n, want)
+		}
+	}
+	ws := waitsRecorded(t, w)
+	for i, r := range ws {
+		if r.body["ref"] != ids[i] {
+			t.Fatalf("record %d is of %v, want %s: the oldest first", i, r.body["ref"], ids[i])
+		}
+	}
+	// So with mail to a thread.
+	w2 := newKernelWorld(t)
+	_, err := store.SendMessage(ctx, w2.rt, wr("thread:s1"), "owner", "note", []byte("hello"))
+	ok(t, err)
+	for i := range 21 {
+		_, err = store.SendMessage(ctx, w2.rt, owner, "thread:s1", "note", []byte(fmt.Sprint("note ", i)))
+		ok(t, err)
+	}
+	at = time.Now().Add(11 * time.Minute)
+	for i, want := range []int{20, 1, 0} {
+		if n := waitsAt(t, w2, at); n != want {
+			t.Fatalf("mail pass %d recorded %d, want %d", i+1, n, want)
+		}
+	}
+}
+
+// Review 474 B2, B3: a pass waiting for a row another transaction holds
+// gives up within its bound and says so, and the record whose commit failed
+// (its references are checked at the commit, which waited for the row) is
+// not counted; the next pass records the wait.
+func TestAPassThatCannotRecordSaysSo(t *testing.T) {
+	t.Parallel()
+	w := newKernelWorld(t)
+	id := w.ready(t, store.Task{})
+	c := w.claimed(t, id, "h1", codex, true)
+	at := time.Now().Add(31 * time.Minute)
+	holder := w.db.Connect(t, w.db.Runtime)
+	tx, err := holder.Begin(ctx)
+	ok(t, err)
+	_, err = tx.Exec(ctx, `SELECT 1 FROM agentrt.attempt WHERE attempt_id = $1 FOR UPDATE`, c.AttemptID)
+	ok(t, err)
+	start := time.Now()
+	n, err := store.WaitLimits(ctx, w.rt, at)
+	if n != 0 || err == nil || time.Since(start) > 20*time.Second {
+		t.Fatalf("held: %d recorded, %v, after %s", n, err, time.Since(start))
+	}
+	ok(t, tx.Rollback(ctx))
+	if n = waitsAt(t, w, at); n != 1 {
+		t.Fatalf("%d recorded once the row was let go", n)
 	}
 }
