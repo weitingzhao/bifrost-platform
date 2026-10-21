@@ -118,6 +118,13 @@ type Entry struct {
 	Artifacts    []string `json:"artifacts,omitempty"`
 	PushedCommit string   `json:"pushed_commit,omitempty"`
 	ChangeID     string   `json:"change_id,omitempty"`
+	// SetupFailed: the attempt ended in its setup, before its executor
+	// started; PrepareSeq is the checkpoint that hands in what failed, and
+	// PrepareReported says it was taken or refused for good (TD-394,
+	// prepare.go).
+	SetupFailed     bool `json:"setup_failed,omitempty"`
+	PrepareSeq      int  `json:"prepare_seq,omitempty"`
+	PrepareReported bool `json:"prepare_reported,omitempty"`
 	// EndRequest is the ended request, written before it is first sent and
 	// resent as it is (review 164 A2).
 	EndRequest *EndRequest `json:"end_request,omitempty"`

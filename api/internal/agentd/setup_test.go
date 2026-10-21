@@ -377,3 +377,31 @@ func TestACheckPreparesItsSubject(t *testing.T) {
 		t.Fatalf("a task prepares %+v", p)
 	}
 }
+
+// TD-394: a setup refused for what it left in the checkout is recorded as
+// failed, its reason the path; an attempt's end is its setup's failure only
+// with the launcher's setupFailed exit and such a record (an executor's own
+// exit 3 after a setup that passed is the executor's).
+func TestARefusedSetupIsRecordedAsFailed(t *testing.T) {
+	dir, out := t.TempDir(), t.TempDir()
+	sp, err := withSetup(os.Args[0], out, [][]string{{"sh", "-c", `mkdir -p .cursor && echo '{}' > .cursor/hooks.json`}},
+		Spawn{Argv: []string{"sh", "-c", "exit 0"}}, setupOpts{Home: setupHome(out), Refuse: cursorRefused})
+	must(t, err)
+	cmd := exec.Command(sp.Argv[0], sp.Argv[1:]...)
+	cmd.Dir, cmd.Env = dir, launcherEnv()
+	if b, rerr := cmd.CombinedOutput(); rerr == nil {
+		t.Fatalf("the setup passed:\n%s", b)
+	}
+	v, failed := setupFailure(out)
+	if !failed || !strings.Contains(v.Reason, ".cursor/hooks.json") {
+		t.Fatalf("setup.json = %+v (failed %v)", v, failed)
+	}
+	if !isSetupFailure("exit", setupFailed, out) || isSetupFailure("exit", 1, out) || isSetupFailure("hard_limit", setupFailed, out) {
+		t.Fatal("isSetupFailure does not hold to the launcher's exit and the record")
+	}
+	passed := t.TempDir()
+	must(t, os.WriteFile(filepath.Join(passed, "setup.json"), []byte(`{"pass":true,"commands":[]}`), 0o600))
+	if isSetupFailure("exit", setupFailed, passed) || isSetupFailure("exit", setupFailed, t.TempDir()) {
+		t.Fatal("an exit 3 after a setup that passed, or with no setup, counted as the setup's")
+	}
+}

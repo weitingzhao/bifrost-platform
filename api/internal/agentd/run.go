@@ -144,6 +144,10 @@ func (d *Daemon) failBefore(ctx context.Context, a *Attempt, ws *Workspace, e *E
 		return out, errors.Join(err, serr)
 	}
 	d.logf("agentd: %s ends before its executor started: %v", e.AttemptID, err)
+	// Why goes to the platform first (TD-394); the attempt ends however that goes.
+	if rerr := d.reportPrepare(ctx, a, e, beforeReport(err)); rerr != nil {
+		d.logf("agentd: %s: what failed before its executor started was not handed in: %v", e.AttemptID, rerr)
+	}
 	return Outcome{EndHow: "exit", Conclusion: "none"}, errors.Join(err, d.end(ctx, e, "exit"))
 }
 
@@ -469,6 +473,7 @@ func (d *Daemon) Run(ctx context.Context, cl *Claimed) (Outcome, error) {
 	exit := code
 	entry.Phase, entry.ExitCode, entry.EndHow = "exited", &exit, endHow
 	entry.Conclusion = a.conclusion(endHow, code, a.results())
+	entry.SetupFailed = isSetupFailure(endHow, code, a.Out)
 	if err := d.Registry.Put(entry); err != nil {
 		return Outcome{}, err
 	}

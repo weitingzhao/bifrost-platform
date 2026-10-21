@@ -180,6 +180,17 @@ func RunSetup(args []string) int {
 		fmt.Fprintln(os.Stderr, "agentd setup:", err)
 		return 2
 	}
+	// A path that may not be in the checkout fails the setup as a command
+	// does, on its record too: setup.json is how agentd tells a failed setup
+	// from its executor's failure (TD-394, prepare.go).
+	for _, r := range refuse {
+		if !v.Pass {
+			break
+		}
+		if _, lerr := os.Lstat(r); !errors.Is(lerr, os.ErrNotExist) {
+			v.Pass, v.Reason = false, fmt.Sprintf("the checkout has %s after the setup (or it cannot be looked at: %v)", r, lerr)
+		}
+	}
 	if out, merr := json.MarshalIndent(v, "", "  "); merr != nil {
 		err = merr
 	} else {
@@ -191,16 +202,10 @@ func RunSetup(args []string) int {
 	}
 	if !v.Pass {
 		fmt.Fprintf(os.Stderr, "agentd setup: %s; the executor did not start\n", v.Reason)
-		if n := len(v.Commands); n > 0 {
+		if n := len(v.Commands); n > 0 && (v.Commands[n-1].ExitCode != 0 || v.Commands[n-1].TimedOut) {
 			fmt.Fprintln(os.Stderr, v.Commands[n-1].Tail)
 		}
 		return setupFailed
-	}
-	for _, r := range refuse {
-		if _, lerr := os.Lstat(r); !errors.Is(lerr, os.ErrNotExist) {
-			fmt.Fprintf(os.Stderr, "agentd setup: the checkout has %s after the setup (or it cannot be looked at: %v); the executor did not start\n", r, lerr)
-			return setupFailed
-		}
 	}
 	argv := args[i+1:]
 	path, err := exec.LookPath(argv[0])

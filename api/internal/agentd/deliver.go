@@ -242,6 +242,12 @@ func (d *Daemon) deliver(ctx context.Context, a *Attempt, ws *Workspace, e *Entr
 			if err != nil {
 				break
 			}
+			// A failed setup's record goes in while the attempt is live (TD-394).
+			if e.SetupFailed {
+				if err = d.reportPrepare(ctx, a, e, setupReportOf(e.Workdir+".out")); err != nil {
+					break
+				}
+			}
 			// What the attempt used, read from its output each time this phase
 			// runs (again after a restart: the output is still there).
 			m := measure(cl.Tool.Executor, e.Workdir+".out")
