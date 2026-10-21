@@ -33,6 +33,9 @@ import (
 // and the runtime records nothing of external waits (class 6) in round 2.
 // The record is the first of the rule's three steps; it names whom the wait
 // calls (calls) and changes nothing else: no state, no message, no notice.
+// One wait is told apart from its record: a brief of the chief of staff's
+// ready past its limit is told to the Owner by the platform, for the seat
+// that would tell him is what does not run (briefwait.go; review 487 A1).
 
 // WaitsStream is the stream the records are on, apart from the missions':
 // a record's references (its mission, task, attempt) are checked at its

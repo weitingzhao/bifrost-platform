@@ -498,14 +498,23 @@ func (c *Controller) Rules(ctx context.Context) (int, error) {
 }
 
 // Waits is one pass recording the waits that passed their limit
-// (store.WaitLimits: RULE-waits 总则 4, the platform keeps the clock), read
-// at Now.
+// (store.WaitLimits: RULE-waits 总则 4, the platform keeps the clock) and
+// telling the Owner of the chief of staff's briefs among them
+// (store.TellWaitingBriefs), read at Now.
 func (c *Controller) Waits(ctx context.Context) (int, error) {
 	now := time.Now()
 	if c.Now != nil {
 		now = c.Now()
 	}
-	return store.WaitLimits(ctx, c.DB, now)
+	n, err := store.WaitLimits(ctx, c.DB, now)
+	// A brief past its wait is told to the Owner by the platform itself: the
+	// chief of staff, who would tell him, is what does not run (review 487
+	// A1).
+	told, terr := store.TellWaitingBriefs(ctx, c.DB, now)
+	if terr != nil {
+		terr = fmt.Errorf("waiting briefs: %w", terr)
+	}
+	return n + told, errors.Join(err, terr)
 }
 
 // Activate is one pass moving to active the planned steps whose work has
